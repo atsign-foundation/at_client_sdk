@@ -6,7 +6,10 @@
 - fix: ensure AtRpcResp and AtRpcReq `.toString()` methods are JSON serialized
   strings
 - feat: use responseJson variable so that log is consistent
-- feat: improved resilience for notifications monitor
+- fix: fixed rare race condition caused by the handling of legacy shared 
+  symmetric keys
+- feat: improved resilience of the notifications monitor to weird network 
+  conditions
 
 ## 3.9.2
 

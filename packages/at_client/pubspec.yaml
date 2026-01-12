@@ -36,6 +36,7 @@ dependencies:
   at_persistence_secondary_server: ^4.2.0
   meta: ^1.16.0
   version: ^3.0.2
+  mutex: ^3.1.0
 
 dev_dependencies:
   collection: ^1.16.0

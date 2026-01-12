@@ -332,6 +332,9 @@ void main() {
           .build();
       var value = 'hello';
 
+      // Note that in the above we're not setting the iv
+      expect(atKey.metadata.ivNonce, isNull);
+
       when(() => mockLocalSecondary
               .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptedSharedKey));
@@ -344,8 +347,11 @@ void main() {
       var atChopsImpl = AtChopsImpl(atChopsKeys);
       when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
       var encryptedValue = await sharedKeyEncryption.encrypt(atKey, value);
-      expect(atKey.metadata.sharedKeyEnc.isNotNull, true);
-      expect(atKey.metadata.pubKeyCS.isNotNull, true);
+      expect(atKey.metadata.sharedKeyEnc, isNotNull);
+      expect(atKey.metadata.pubKeyCS, isNotNull);
+
+      // But now we always generate IVs
+      expect(atKey.metadata.ivNonce, isNotNull);
 
       var decryptedSharedKey =
           // ignore: deprecated_member_use_from_same_package
@@ -353,7 +359,7 @@ void main() {
       expect(decryptedSharedKey, sharedKey);
       var decryptedValue = EncryptionUtil.decryptValue(
           encryptedValue, decryptedSharedKey,
-          ivBase64: null);
+          ivBase64: atKey.metadata.ivNonce);
       expect(decryptedValue, value);
     });
 
@@ -436,13 +442,14 @@ void main() {
 
       var encryptedValue =
           await sharedKeyEncryption.encrypt(atKey, originalValue);
+      expect(atKey.metadata.sharedKeyEnc, isNotNull);
+      expect(atKey.metadata.pubKeyCS, isNotNull);
+      expect(atKey.metadata.ivNonce, isNotNull);
       expect(
           EncryptionUtil.decryptValue(
               encryptedValue, sharedKeyEncryption.sharedKey,
-              ivBase64: null),
+              ivBase64: atKey.metadata.ivNonce),
           originalValue);
-      expect(atKey.metadata.sharedKeyEnc.isNotNull, true);
-      expect(atKey.metadata.pubKeyCS.isNotNull, true);
     });
 
     test('test to verify encryption when a new shared key is generated',

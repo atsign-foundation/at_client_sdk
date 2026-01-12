@@ -4,11 +4,8 @@ import 'package:at_client/src/decryption_service/decryption.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_utils/at_logger.dart';
 
-/// Class responsible for decrypting the value of self key's
-/// Example:
-/// CurrentAtSign: @bob and
-/// llookup:phone.wavi@bob
-/// llookup:@bob:phone@bob
+/// Class responsible for decrypting values shared with myself
+/// If I am @alice then an example would be @alice:foo.bar@alice
 class SelfKeyDecryption implements AtKeyDecryption {
   late final AtSignLogger _logger;
 

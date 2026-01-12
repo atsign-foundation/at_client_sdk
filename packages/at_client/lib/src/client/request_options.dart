@@ -18,6 +18,7 @@ class GetRequestOptions extends RequestOptions {
 class PutRequestOptions extends RequestOptions {
   /// Whether to set the `sharedKeyEnc` and `pubKeyCS` properties on the
   /// Metadata for this put request
+  @Deprecated('Ignored. Always true.')
   bool storeSharedKeyEncryptedMetadata = true;
 
   /// Whether to send this update request directly to the remote atServer

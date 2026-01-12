@@ -13,8 +13,7 @@ class SharedKeyEncryption extends AbstractAtKeyEncryption {
   }
 
   @override
-  Future<dynamic> encrypt(AtKey atKey, dynamic value,
-      {bool storeSharedKeyEncryptedWithData = true}) async {
+  Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
     if (value is! String) {
       throw AtEncryptionException(
           'Invalid value type found: ${value.runtimeType}. Valid value type is String');
@@ -22,16 +21,12 @@ class SharedKeyEncryption extends AbstractAtKeyEncryption {
 
     // Call super.encrypt to take care of getting hold of the correct
     // encryption key and setting it in super.sharedKey
-    await super.encrypt(atKey, value,
-        storeSharedKeyEncryptedWithData: storeSharedKeyEncryptedWithData);
+    await super.encrypt(atKey, value);
     AtEncryptionResult encryptionResultFromAtChops;
     try {
       InitialisationVector iV;
-      if (atKey.metadata.ivNonce != null) {
-        iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
-      } else {
-        iV = AtChopsUtil.generateIVLegacy();
-      }
+      atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
+      iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
       var encryptionAlgo = AESEncryptionAlgo(AESKey(sharedKey));
       encryptionResultFromAtChops = _atClient.atChops!.encryptString(
           value, EncryptionKeyType.aes256,

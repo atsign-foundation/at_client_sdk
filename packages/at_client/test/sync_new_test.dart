@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
-import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
+import 'package:at_client/src/decryption_service/shared_with_me_decryption.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -44,7 +44,7 @@ class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {}
 class MockAtKeyDecryptionManager extends Mock
     implements AtKeyDecryptionManager {}
 
-class MockSharedKeyDecryption extends Mock implements SharedKeyDecryption {}
+class MockSharedKeyDecryption extends Mock implements SharedWithMeDecryption {}
 
 class FakeSyncVerbBuilder extends Fake implements SyncVerbBuilder {}
 
@@ -2891,8 +2891,8 @@ void main() {
               AtKey.fromString('@alice:shared_key${TestResources.atsign}')))
           .thenAnswer((invocation) =>
               Future.value(AtValue()..value = 'shared_key_local_value'));
-      when(() => mockAtKeyDecryptionManager.get(
-              any(that: ConflictKeyMatcher()), TestResources.atsign))
+      when(() =>
+              mockAtKeyDecryptionManager.get(any(that: ConflictKeyMatcher())))
           .thenAnswer((_) => mockSharedKeyDecryption);
       when(() => mockSharedKeyDecryption.decrypt(
               any(that: ConflictKeyMatcher()), 'shared_key_remote_value'))
@@ -2973,8 +2973,8 @@ void main() {
               '@alice:conflict_phone_key.demo${TestResources.atsign}')))
           .thenAnswer((invocation) =>
               Future.value(AtValue()..value = 'phone_key_local_value'));
-      when(() => mockAtKeyDecryptionManager.get(
-              any(that: ConflictKeyMatcher()), TestResources.atsign))
+      when(() =>
+              mockAtKeyDecryptionManager.get(any(that: ConflictKeyMatcher())))
           .thenAnswer((_) => mockSharedKeyDecryption);
       when(() => mockSharedKeyDecryption.decrypt(
               any(that: ConflictKeyMatcher()), 'phone_key_remote_value'))
