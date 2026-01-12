@@ -16,7 +16,6 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
     hide AtNotification;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/decryption_service/shared_with_me_decryption.dart';
 import 'package:uuid/uuid.dart';
 
@@ -518,9 +517,11 @@ void main() {
           // ignore: deprecated_member_use
           MessageTypeEnum.text.toString(),
           isEncrypted);
-      var notificationResponseTransformer =
-          NotificationResponseTransformer(mockAtClientImpl);
-      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+      var notificationResponseTransformer = NotificationResponseTransformer(
+          mockAtClientImpl,
+          decrypterManager: mockDecryptionManager);
+      when(() => mockDecryptionManager.get(any()))
+          .thenReturn(mockSharedKeyDecryption);
 
       var transformedNotification =
           await notificationResponseTransformer.transform(Tuple()
@@ -544,9 +545,11 @@ void main() {
           // ignore: deprecated_member_use
           MessageTypeEnum.text.toString(),
           isEncrypted);
-      var notificationResponseTransformer =
-          NotificationResponseTransformer(mockAtClientImpl);
-      notificationResponseTransformer.atKeyDecryption = mockSharedKeyDecryption;
+      var notificationResponseTransformer = NotificationResponseTransformer(
+          mockAtClientImpl,
+          decrypterManager: mockDecryptionManager);
+      when(() => mockDecryptionManager.get(any()))
+          .thenReturn(mockSharedKeyDecryption);
 
       var transformedNotification =
           await notificationResponseTransformer.transform(Tuple()
