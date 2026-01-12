@@ -1,5 +1,5 @@
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/src/decryption_service/local_key_decryption.dart';
+import 'package:at_client/src/decryption_service/shared_by_me_decryption.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -52,7 +52,7 @@ void main() {
       var testValue = 'abc!@123';
       var encryptedTestValue =
           EncryptionUtil.encryptValue(testValue, sharedSymmetricKey);
-      var localKeyDecryption = LocalKeyDecryption(mockAtClient);
+      var localKeyDecryption = SharedByMeDecryption(mockAtClient);
       var decryptedTestValue =
           await localKeyDecryption.decrypt(localKey, encryptedTestValue);
       expect(decryptedTestValue, testValue);
@@ -60,7 +60,7 @@ void main() {
 
     test('test to check AtDecryptionException when encrypted value is null',
         () async {
-      var localKeyDecryption = LocalKeyDecryption(mockAtClient);
+      var localKeyDecryption = SharedByMeDecryption(mockAtClient);
       var localKey = AtKey()
         ..sharedBy = '@alice'
         ..sharedWith = '@bob'
@@ -94,7 +94,7 @@ void main() {
       var testValue = 'abc!@123';
       var encryptedTestValue =
           EncryptionUtil.encryptValue(testValue, sharedSymmetricKey);
-      var localKeyDecryption = LocalKeyDecryption(mockAtClient);
+      var localKeyDecryption = SharedByMeDecryption(mockAtClient);
       expect(
           () async =>
               await localKeyDecryption.decrypt(localKey, encryptedTestValue),

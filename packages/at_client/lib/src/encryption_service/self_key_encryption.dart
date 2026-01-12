@@ -17,8 +17,7 @@ class SelfKeyEncryption implements AtKeyEncryption {
   }
 
   @override
-  Future<dynamic> encrypt(AtKey atKey, dynamic value,
-      {bool storeSharedKeyEncryptedWithData = true}) async {
+  Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
     String? selfEncryptionKey;
     if (value is! String) {
       _logger.severe(

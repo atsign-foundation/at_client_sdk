@@ -14,8 +14,7 @@ class TestSuiteInitializer {
   static final TestSuiteInitializer _singleton = TestSuiteInitializer._internal();
 
   TestSuiteInitializer._internal() {
-    AtSignLogger.root_level = 'warning';
-    // AtSignLogger.root_level = 'finest';
+    AtSignLogger.root_level = 'shout';
     AtSignLogger.defaultLoggingHandler = AtSignLogger.consoleLoggingHandler;
   }
 

@@ -34,7 +34,6 @@ import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
-import 'package:version/version.dart';
 
 /// Implementation of [AtClient] interface and [AtSignChangeListener] interface
 ///
@@ -96,7 +95,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   SyncService get syncService => _syncService;
 
-  late NotificationService _notificationService;
+  NotificationService? _notificationService;
 
   @override
   set notificationService(NotificationService notificationService) {
@@ -114,7 +113,13 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   EnrollmentService? get enrollmentService => _enrollmentService;
 
   @override
-  NotificationService get notificationService => _notificationService;
+  NotificationService get notificationService {
+    if (_notificationService == null) {
+      throw StateError('notificationService has not yet been set');
+    } else {
+      return _notificationService!;
+    }
+  }
 
   @override
   EncryptionService? get encryptionService => _encryptionService;
@@ -551,10 +556,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       atKey.namespace ??= preference?.namespace;
     }
 
-    // ignore: deprecated_member_use_from_same_package
-    if (preference!.atProtocolEmitted >= Version(2, 0, 0)) {
-      atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
-    }
+    atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
     ensureLowerCase(atKey);
 
     // validate the atKey

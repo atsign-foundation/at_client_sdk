@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 class TestUtil {
   static AtClientPreference getPreferenceRemote() {
     var preference = AtClientPreference();
+    // ignore: deprecated_member_use_from_same_package
     preference.isLocalStoreRequired = false;
     preference.rootDomain = 'vip.ve.atsign.zone';
     preference.outboundConnectionTimeout = 60000;
@@ -17,7 +18,6 @@ class TestUtil {
     var preference = AtClientPreference();
     preference.hiveStoragePath = 'hive/client';
     preference.commitLogPath = 'hive/client/commit';
-    preference.isLocalStoreRequired = true;
     preference.rootDomain = 'test.do-sf2.atsign.zone';
     preference.keyStoreSecret =
         _getKeyStoreSecret(''); // path of hive encryption key filefor client
@@ -28,7 +28,6 @@ class TestUtil {
     var preference = AtClientPreference();
     preference.hiveStoragePath = '/home/murali/work/2020/hive/client';
     preference.commitLogPath = '/home/murali/work/2020/hive/client/commit';
-    preference.isLocalStoreRequired = true;
     preference.rootDomain = 'vip.ve.atsign.zone';
     var hashFile = _getShaForAtSign('@alice🛠');
     preference.keyStoreSecret =
@@ -40,7 +39,6 @@ class TestUtil {
     var preference = AtClientPreference();
     preference.hiveStoragePath = '/home/murali/work/2020/hive/client';
     preference.commitLogPath = '/home/murali/work/2020/hive/client/commit';
-    preference.isLocalStoreRequired = true;
     preference.rootDomain = 'vip.ve.atsign.zone';
     var hashFile = _getShaForAtSign('@bob🛠');
     preference.keyStoreSecret =
