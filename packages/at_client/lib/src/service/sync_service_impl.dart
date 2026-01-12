@@ -8,8 +8,6 @@ import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
-import 'package:at_client/src/service/notification_service_impl.dart';
-import 'package:at_client/src/service/sync/sync_request.dart';
 import 'package:at_client/src/util/logger_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -25,9 +23,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       syncRequestTriggerInSeconds = 3,
       syncRunIntervalSeconds = 5,
       queueSize = 5;
-  late final AtClient _atClient;
-  late final RemoteSecondary _remoteSecondary;
-  late final NotificationServiceImpl _statsNotificationListener;
+  final AtClient _atClient;
+  final RemoteSecondary _remoteSecondary;
   @visibleForTesting
   late AtKeyDecryptionManager atKeyDecryptionManager;
 
@@ -52,7 +49,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   late final AtSignLogger _logger;
 
-  late AtClientManager _atClientManager;
+  final AtClientManager _atClientManager;
 
   // "^shared_key\..+@.+" matches the key that starts-with shared_key.<someone>@<me>
   // "@.+:shared_key@.+" matches the key that starts-with @<someone>:shared_key@<me>
@@ -71,28 +68,20 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   static Future<SyncService> create(AtClient atClient,
       {required AtClientManager atClientManager,
-      required NotificationService notificationService,
       RemoteSecondary? remoteSecondary}) async {
     remoteSecondary ??= RemoteSecondary(
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
         atChops: atClient.atChops, enrollmentId: atClient.enrollmentId);
-    final syncService = SyncServiceImpl._(
-        atClientManager, atClient, notificationService, remoteSecondary);
+    final syncService =
+        SyncServiceImpl._(atClientManager, atClient, remoteSecondary);
     await syncService.statsServiceListener();
     syncService._scheduleSyncRun();
     return syncService;
   }
 
   SyncServiceImpl._(
-      AtClientManager atClientManager,
-      AtClient atClient,
-      NotificationService notificationService,
-      RemoteSecondary remoteSecondary) {
-    _atClientManager = atClientManager;
-    _atClient = atClient;
+      this._atClientManager, this._atClient, this._remoteSecondary) {
     _logger = AtSignLogger('SyncService (${_atClient.getCurrentAtSign()})');
-    _remoteSecondary = remoteSecondary;
-    _statsNotificationListener = notificationService as NotificationServiceImpl;
     _lastReceivedServerCommitIdAtKey =
         AtKey.local('lastreceivedservercommitid', currentAtSign).build();
     _skipDeletesUntilCommitId =
@@ -147,7 +136,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   Future<void> statsServiceListener() async {
     // Setting the regex to 'statsNotification' to receive only the notifications
     // from stats notification service.
-    _statsNotificationListener
+    _atClient.notificationService
         .subscribe(regex: 'statsNotification')
         .listen((notification) async {
       _logger.finer(_logger.getLogMessageWithClientParticulars(
@@ -158,16 +147,20 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       try {
         lastReceivedServerCommitId = await getLastReceivedServerCommitId();
       } on FormatException catch (e) {
-        _logger.finer('Exception occurred in statsListener ${e.message}');
+        String msg = 'Exception in SyncService statsNotification listener:'
+            ' ${e.message}';
+        _logger.warning(msg);
 
-        _statsNotificationListener.stopAllSubscriptions();
+        // TODO Need to revisit this code, it's not clear how we could get a
+        // FormatException, nor is it clear what the behaviour should be if
+        // we do
         var syncRequest = SyncRequest()
           ..result = (SyncResult()
-            ..atClientException = AtClientException.message(e.message));
+            ..atClientException = AtClientException.message(msg));
         _syncError(syncRequest);
 
         SyncProgress syncProgress = SyncProgress()
-          ..atClientException = AtClientException.message(e.message)
+          ..atClientException = AtClientException.message(msg)
           ..syncStatus = SyncStatus.failure;
         _informSyncProgress(syncProgress);
       }
@@ -1090,10 +1083,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
     _syncRequests.clear();
 
-    _logger.finer(
-        'stopping stats notification listener for ${_atClient.getCurrentAtSign()}');
-    _statsNotificationListener.stopAllSubscriptions();
-
     _logger.finer('stopping cron');
     _cron.close();
 
@@ -1135,19 +1124,3 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     return _syncRequests.length;
   }
 }
-
-class KeyInfo {
-  String key;
-  SyncDirection syncDirection;
-  ConflictInfo? conflictInfo;
-  late CommitOp commitOp;
-
-  KeyInfo(this.key, this.syncDirection, this.commitOp);
-
-  @override
-  String toString() {
-    return 'KeyInfo{key: $key, syncDirection: $syncDirection , conflictInfo: $conflictInfo, commitOp: $commitOp}';
-  }
-}
-
-enum SyncDirection { localToRemote, remoteToLocal }

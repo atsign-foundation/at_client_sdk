@@ -95,7 +95,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   SyncService get syncService => _syncService;
 
-  late NotificationService _notificationService;
+  NotificationService? _notificationService;
 
   @override
   set notificationService(NotificationService notificationService) {
@@ -113,7 +113,13 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   EnrollmentService? get enrollmentService => _enrollmentService;
 
   @override
-  NotificationService get notificationService => _notificationService;
+  NotificationService get notificationService {
+    if (_notificationService == null) {
+      throw StateError('notificationService has not yet been set');
+    } else {
+      return _notificationService!;
+    }
+  }
 
   @override
   EncryptionService? get encryptionService => _encryptionService;

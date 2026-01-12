@@ -1,7 +1,8 @@
-import 'package:at_client/src/listener/sync_progress_listener.dart';
-import 'package:at_client/src/service/sync/sync_status.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
+    show CommitOp;
 import 'package:meta/meta.dart';
+import 'package:uuid/uuid.dart';
 
 abstract class SyncService {
   /// Sync local secondary and cloud secondary.
@@ -54,6 +55,117 @@ abstract class SyncService {
 
   /// Remove all progress listeners
   void removeAllProgressListeners();
+}
+
+class KeyInfo {
+  String key;
+  SyncDirection syncDirection;
+  ConflictInfo? conflictInfo;
+  late CommitOp commitOp;
+
+  KeyInfo(this.key, this.syncDirection, this.commitOp);
+
+  @override
+  String toString() {
+    return 'KeyInfo{key: $key, syncDirection: $syncDirection , conflictInfo: $conflictInfo, commitOp: $commitOp}';
+  }
+}
+
+enum SyncDirection { localToRemote, remoteToLocal }
+
+enum ResolutionStrategy { useLocal, useRemote }
+
+enum SyncType {
+  initialPushToRemote,
+  initialPullFromRemote,
+  pullFromRemote,
+  pushToRemote
+}
+
+class SyncEntry {
+  String commitID;
+  String decryptedValue;
+  SyncEntry(this.commitID, this.decryptedValue);
+}
+
+class ResolutionContext {
+  AtKey? key;
+  SyncEntry? localEntry;
+  SyncEntry? remoteEntry;
+  SyncType? syncType;
+}
+
+class ConflictInfo {
+  dynamic remoteValue;
+  dynamic localValue;
+  String? errorOrExceptionMessage;
+
+  @override
+  String toString() {
+    return 'ConflictInfo{remoteValue: $remoteValue, localValue: $localValue, errorOrExceptionMessage: $errorOrExceptionMessage}';
+  }
+}
+
+class SyncResult {
+  SyncStatus syncStatus = SyncStatus.notStarted;
+  AtClientException? atClientException;
+  DateTime? lastSyncedOn;
+  bool dataChange = true;
+  List<KeyInfo> keyInfoList = [];
+
+  @override
+  String toString() {
+    return 'Sync status: $syncStatus lastSyncedOn: $lastSyncedOn Exception: $atClientException';
+  }
+}
+
+enum SyncRequestSource { app, system }
+
+class SyncRequest {
+  late String id;
+  SyncRequestSource requestSource = SyncRequestSource.app;
+  late DateTime requestedOn;
+  Function? onDone;
+  Function? onError;
+  SyncResult? result;
+
+  SyncRequest({this.onDone, this.onError}) {
+    id = Uuid().v4();
+    requestedOn = DateTime.now().toUtc();
+  }
+}
+
+///Enum to represent the sync status
+enum SyncStatus { started, notStarted, success, failure }
+
+class SyncProgress {
+  SyncStatus? syncStatus;
+  bool isInitialSync = false;
+  DateTime? startedAt;
+  DateTime? completedAt;
+  String? message;
+  String? atSign;
+  List<KeyInfo>? keyInfoList;
+  int? localCommitIdBeforeSync;
+  int? localCommitId;
+  int? serverCommitId;
+  AtClientException? atClientException;
+
+  @override
+  String toString() {
+    return 'SyncProgress{atSign: $atSign, syncStatus: $syncStatus,'
+        '\n\t isInitialSync: $isInitialSync, startedAt: $startedAt,'
+        ' completedAt: $completedAt, message: $message, '
+        '\n\t keyInfoList:$keyInfoList,'
+        '\n\t localCommitIdBeforeSync:$localCommitIdBeforeSync, localCommitId:$localCommitId, serverCommitId:$serverCommitId}';
+  }
+}
+
+abstract class SyncProgressListener {
+  /// Notifies the registered listener for the [SyncProgress]
+  /// Caller has to register the listener using  atClientManager.syncService.addProgressListener(...)
+  /// Caller can use [SyncProgress.atSign] to know for which atSign the event was triggered.
+  void onSyncProgressEvent(SyncProgress syncProgress);
 }
 
 @experimental

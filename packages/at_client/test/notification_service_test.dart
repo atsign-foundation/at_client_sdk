@@ -12,10 +12,10 @@ import 'package:at_client/src/transformer/request_transformer/notify_request_tra
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
+    hide AtNotification;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/decryption_service/shared_with_me_decryption.dart';
 import 'package:uuid/uuid.dart';
 
@@ -44,18 +44,25 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
   }
 }
 
-class MockMonitor extends Mock implements Monitor {
+class FakeMonitor extends Fake implements Monitor {
   @override
-  MonitorStatus status = MonitorStatus.started;
+  NotificationListenerState currentState =
+      NotificationListenerState.notConnected;
 
   @override
-  Future<void> start({int? lastNotificationTime}) async {
-    print('Monitor started');
+  NotificationListenerState targetState =
+      NotificationListenerState.notConnected;
+
+  @override
+  void start() {
+    currentState = NotificationListenerState.listening;
+    targetState = NotificationListenerState.listening;
   }
 
   @override
-  MonitorStatus getStatus() {
-    return status;
+  Future<void> stop() async {
+    currentState = NotificationListenerState.notConnected;
+    targetState = NotificationListenerState.notConnected;
   }
 }
 
@@ -102,7 +109,7 @@ void main() {
   AtKeyDecryptionManager mockDecryptionManager = MockAtKeyDecryptionManager();
   SharedWithMeDecryption mockSharedKeyDecryption = MockSharedKeyDecryption();
   AtClientManager mockAtClientManager = MockAtClientManager();
-  MockMonitor mockMonitor = MockMonitor();
+  FakeMonitor fakeMonitor = FakeMonitor();
   SecondaryAddressFinder mockSecondaryAddressFinder =
       MockSecondaryAddressFinder();
   AtKeyEncryptionManager mockEncryptionManager = MockAtKeyEncryptionManager();
@@ -502,7 +509,7 @@ void main() {
         'A test to verify notification value is decrypted when isEncrypted is set to null',
         () async {
       bool? isEncrypted;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           '124',
           '@bob:key-1.foo@alice',
           '@alice',
@@ -530,7 +537,7 @@ void main() {
         'A test to verify notification value is decrypted when isEncrypted is set to true',
         () async {
       bool isEncrypted = true;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           '124',
           '@bob:key-1.foo@alice',
           '@alice',
@@ -558,7 +565,7 @@ void main() {
         'A test to verify notification value is not decrypted when isEncrypted is set to false',
         () async {
       var isEncrypted = false;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           '124',
           '@bob:key-1.foo@alice',
           '@alice',
@@ -586,7 +593,7 @@ void main() {
         'A test to verify notification value is not decrypted when isEncrypted is set to true and should decrypt is false',
         () async {
       var isEncrypted = true;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           '124',
           '@bob:key-1.foo@alice',
           '@alice',
@@ -612,7 +619,7 @@ void main() {
 
     test('A test to verify notification is returned as is', () async {
       var isEncrypted = false;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           '124',
           '@bob:key-1.foo@alice',
           '@alice',
@@ -636,7 +643,7 @@ void main() {
 
     test('A test to verify the reserved key is not decrypted', () async {
       var isEncrypted = true;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           '124',
           '@bob:shared_key@alice',
           '@alice',
@@ -698,7 +705,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       notificationServiceImpl.atKeyEncryptionManager = mockEncryptionManager;
 
@@ -739,7 +746,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       notificationServiceImpl.atKeyEncryptionManager = mockEncryptionManager;
 
@@ -758,7 +765,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       when(() => mockAtClientImpl.getPreferences())
           .thenAnswer((_) => AtClientPreference()..maxDataSize = 1);
@@ -790,7 +797,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       NotificationParams notificationParams =
           NotificationParams.forText('Hello bob', '@bob');
@@ -817,7 +824,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       var notificationParams = NotificationParams.forUpdate(
           (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@bob')
@@ -832,13 +839,89 @@ void main() {
     });
   });
 
+  group('Verify basic monitor interactions', () {
+    setUp(() {
+      when(() => mockAtClientManager.secondaryAddressFinder)
+          .thenAnswer((_) => mockSecondaryAddressFinder);
+
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..fetchOfflineNotifications = false
+            ..monitorAutoStart = false);
+
+      registerFallbackValue(AtKey());
+      when(() => mockAtClientImpl.put(any(), any()))
+          .thenAnswer((_) async => true);
+    });
+
+    test('Verify lastReceipt', () async {
+      DateTime testStartTime = DateTime.now().toUtc();
+
+      var ns = await NotificationServiceImpl.create(mockAtClientImpl,
+          atClientManager: mockAtClientManager) as NotificationServiceImpl;
+
+      var atNotification = AtNotification(
+          '124',
+          '@bob:some.thing.lolz.app@alice',
+          '@alice',
+          '@bob',
+          DateTime.now().millisecondsSinceEpoch,
+          MessageTypeEnum.key.toString(),
+          false,
+          value: 'Got it');
+
+      String fromAtServer =
+          'notification: ${jsonEncode(atNotification.toJson())}\n'
+          '@${mockAtClientImpl.getCurrentAtSign()}@';
+      ns.monitor.onSocketDataReceipt(fromAtServer.codeUnits);
+
+      expect(ns.lastReceipt, isNotNull);
+      expect(ns.lastReceipt!.microsecondsSinceEpoch,
+          lessThan(DateTime.now().microsecondsSinceEpoch));
+      expect(ns.lastReceipt!.microsecondsSinceEpoch,
+          greaterThan(testStartTime.microsecondsSinceEpoch));
+    });
+
+    test('Verify monitor delivers notification', () async {
+      var ns = await NotificationServiceImpl.create(mockAtClientImpl,
+          atClientManager: mockAtClientManager) as NotificationServiceImpl;
+
+      var atNotification = AtNotification(
+          '124',
+          '@bob:some.thing.lolz.app@alice',
+          '@alice',
+          '@bob',
+          DateTime.now().millisecondsSinceEpoch,
+          MessageTypeEnum.key.toString(),
+          false,
+          value: 'Got it');
+
+      List<AtNotification> received = [];
+      var notificationStream =
+          ns.subscribe(regex: '.lolz.app', shouldDecrypt: false);
+      notificationStream.listen((AtNotification n) async {
+        received.add(n);
+      });
+
+      String fromAtServer =
+          'notification: ${jsonEncode(atNotification.toJson())}\n'
+          '@${mockAtClientImpl.getCurrentAtSign()}@';
+      ns.monitor.onSocketDataReceipt(fromAtServer.codeUnits);
+
+      await Future.delayed(Duration(milliseconds: 1));
+      expect(received, isNotEmpty);
+      expect(received[0].value, 'Got it');
+    });
+  });
+
   group('A group of tests to validate notification subscribe method', () {
     test('NotificationService subscribe returns a new stream for a new regex',
         () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       var notificationStream = notificationServiceImpl.subscribe(
           regex: '.wavi', shouldDecrypt: false);
@@ -861,7 +944,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       var notificationStream = notificationServiceImpl.subscribe(
           regex: '.wavi', shouldDecrypt: false);
@@ -885,7 +968,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
       remoteSecondary.atLookUp = mockAtLookupImpl;
@@ -912,7 +995,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
       remoteSecondary.atLookUp = mockAtLookupImpl;
@@ -952,7 +1035,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
       remoteSecondary.atLookUp = mockAtLookupImpl;
@@ -976,7 +1059,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
       remoteSecondary.atLookUp = mockAtLookupImpl;
@@ -1018,7 +1101,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       notificationServiceImpl.stopAllSubscriptions();
       expect(await notificationServiceImpl.getLastNotificationTime(), null);
@@ -1042,7 +1125,7 @@ void main() {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       notificationServiceImpl.stopAllSubscriptions();
 
@@ -1069,13 +1152,13 @@ void main() {
             ..fetchOfflineNotifications = true);
 
       int epochMillis = DateTime.now().millisecondsSinceEpoch;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       when(() => mockAtClientImpl
               .get(notificationServiceImpl.lastReceivedNotificationAtKey))
@@ -1108,13 +1191,13 @@ void main() {
         () async {
       registerFallbackValue(FakeAtKey());
       int epochMillis = DateTime.now().millisecondsSinceEpoch;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       when(() => mockAtClientImpl
               .get(notificationServiceImpl.lastReceivedNotificationAtKey))
@@ -1147,13 +1230,13 @@ void main() {
 
       registerFallbackValue(lastNotificationAtKey);
       int epochMillis = DateTime.now().millisecondsSinceEpoch;
-      var atNotification = at_notification.AtNotification(
+      var atNotification = AtNotification(
           Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           atClientManager: mockAtClientManager,
-          monitor: mockMonitor) as NotificationServiceImpl;
+          monitor: fakeMonitor) as NotificationServiceImpl;
 
       when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.isKeyExists(
               notificationServiceImpl.lastReceivedNotificationAtKey.toString()))
@@ -1202,197 +1285,6 @@ void main() {
       expect(lastReceivedNotification.toString(),
           service.lastReceivedNotificationAtKey.toString());
       expect(lastReceivedNotification.isLocal, true);
-    });
-  });
-
-  group('Tests for monitorRetry', () {
-    setUpAll(() {
-      when(() => mockAtClientManager.atClient)
-          .thenAnswer((_) => mockAtClientImpl);
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(any())).thenAnswer((_) => true);
-
-      registerFallbackValue(FakeAtKey());
-      when(() => mockAtClientImpl.get(any()))
-          .thenAnswer((_) async => Future.value(AtValue()));
-
-      when(() => mockAtClientImpl.put(any(), any()))
-          .thenAnswer((_) async => true);
-    });
-
-    test('Test initial state related to monitorRetry', () async {
-      NotificationServiceImpl notificationServiceImpl =
-          await NotificationServiceImpl.create(mockAtClientImpl,
-              atClientManager: mockAtClientManager,
-              monitor: mockMonitor) as NotificationServiceImpl;
-      expect(notificationServiceImpl.callsToMonitorRetry, 0);
-      expect(notificationServiceImpl.monitorRestartQueued, false);
-      expect(notificationServiceImpl.monitorRetryCallsToMonitorStart, 0);
-    });
-
-    test(
-        'Test that _monitorRetry will queue a call to Monitor.start if monitorRestartQueued is false',
-        () async {
-      NotificationServiceImpl notificationServiceImpl =
-          await NotificationServiceImpl.create(mockAtClientImpl,
-              atClientManager: mockAtClientManager,
-              monitor: mockMonitor) as NotificationServiceImpl;
-
-      // Set monitorIsPaused to false, since it isn't explicitly set to false
-      // until NotificationServiceImpl._init runs.
-      notificationServiceImpl.monitorIsPaused = false;
-
-      notificationServiceImpl.monitorRetryInterval = Duration(milliseconds: 50);
-      notificationServiceImpl.monitorRetry();
-      expect(notificationServiceImpl.callsToMonitorRetry, 1);
-      expect(notificationServiceImpl.monitorRestartQueued, true);
-      // Let's also verify that Monitor.start hasn't yet been actually called.
-      await (Future.delayed(Duration(milliseconds: 10)));
-      expect(notificationServiceImpl.monitorRetryCallsToMonitorStart, 0);
-      // Let's wait for monitorRetryInterval
-      await (Future.delayed(notificationServiceImpl.monitorRetryInterval));
-      // The call to monitor.start() should now have happened
-      expect(notificationServiceImpl.monitorRetryCallsToMonitorStart, 1);
-    });
-
-    test(
-        'Test that _monitorRetry will NOT queue a call to Monitor.start if monitorRestartQueued is true',
-        () async {
-      NotificationServiceImpl notificationServiceImpl =
-          await NotificationServiceImpl.create(mockAtClientImpl,
-              atClientManager: mockAtClientManager,
-              monitor: mockMonitor) as NotificationServiceImpl;
-
-      // Set monitorIsPaused to false, since it isn't explicitly set to false
-      // until NotificationServiceImpl._init runs.
-      notificationServiceImpl.monitorIsPaused = false;
-
-      expect(notificationServiceImpl.monitorRestartQueued, false);
-
-      // First call to monitorRetry should queue a call to Monitor.start and therefore return true
-      expect(notificationServiceImpl.monitorRetry(), true);
-      expect(notificationServiceImpl.callsToMonitorRetry, 1);
-      // and monitorRestartQueued should now be true
-      expect(notificationServiceImpl.monitorRestartQueued, true);
-
-      // Now let's call monitorRetry() again. This time, as there is already a call queued, it should return false
-      expect(notificationServiceImpl.monitorRetry(), false);
-      expect(notificationServiceImpl.callsToMonitorRetry, 2);
-      // monitorRestartQueued should still be true
-      expect(notificationServiceImpl.monitorRestartQueued, true);
-    });
-
-    test(
-        'Test that _monitorRetry will NOT queue a call to Monitor.start if the monitor has been paused',
-        () async {
-      NotificationServiceImpl notificationServiceImpl =
-          await NotificationServiceImpl.create(mockAtClientImpl,
-              atClientManager: mockAtClientManager,
-              monitor: mockMonitor) as NotificationServiceImpl;
-
-      // Set monitorIsPaused to false, since it isn't explicitly set to false
-      // until NotificationServiceImpl._init runs.
-      notificationServiceImpl.monitorIsPaused = false;
-
-      expect(notificationServiceImpl.monitorIsPaused, false);
-      expect(notificationServiceImpl.monitorRestartQueued, false);
-
-      // NotificationServiceImpl sets monitorIsPaused to true when all of its subscriptions are stopped
-      notificationServiceImpl.stopAllSubscriptions();
-
-      expect(notificationServiceImpl.monitorIsPaused, true);
-      expect(notificationServiceImpl.monitorRestartQueued, false);
-
-      // let's call monitorRetry(). Since the notification service's monitor is paused, monitorRetry
-      // will return false, and will not try to queue a monitor restart
-      expect(notificationServiceImpl.monitorRetry(), false);
-      expect(notificationServiceImpl.callsToMonitorRetry, 1);
-      // monitorRestartQueued should still be true
-      expect(notificationServiceImpl.monitorRestartQueued, false);
-    });
-
-    test(
-        'Test that the delayed future will NOT call Monitor.start if the monitor has since been paused',
-        () async {
-      NotificationServiceImpl notificationServiceImpl =
-          await NotificationServiceImpl.create(mockAtClientImpl,
-              atClientManager: mockAtClientManager,
-              monitor: mockMonitor) as NotificationServiceImpl;
-
-      // Set monitorIsPaused to false, since it isn't explicitly set to false
-      // until NotificationServiceImpl._init runs.
-      notificationServiceImpl.monitorIsPaused = false;
-
-      notificationServiceImpl.monitorRetryInterval = Duration(milliseconds: 50);
-
-      expect(notificationServiceImpl.monitorIsPaused, false);
-      expect(notificationServiceImpl.monitorRestartQueued, false);
-
-      expect(notificationServiceImpl.monitorRetry(), true);
-
-      // NotificationServiceImpl sets monitorIsPaused to true when all of its subscriptions are stopped
-      notificationServiceImpl.stopAllSubscriptions();
-
-      expect(notificationServiceImpl.monitorIsPaused, true);
-      expect(notificationServiceImpl.monitorRetryCallsToMonitorStart, 0);
-      expect(notificationServiceImpl.monitorRestartQueued, true);
-
-      // Let's wait for slightly longer than monitorRetryInterval
-      await (Future.delayed(notificationServiceImpl.monitorRetryInterval +
-          Duration(milliseconds: 10)));
-      //
-      expect(notificationServiceImpl.monitorRetryCallsToMonitorStart, 0);
-      expect(notificationServiceImpl.monitorRestartQueued, false);
-    });
-
-    test(
-        'Test that _monitorRetry will reset monitorRestartQueued to false when it finally makes its call to Monitor.start',
-        () async {
-      NotificationServiceImpl notificationServiceImpl =
-          await NotificationServiceImpl.create(mockAtClientImpl,
-              atClientManager: mockAtClientManager,
-              monitor: mockMonitor) as NotificationServiceImpl;
-
-      // Set monitorIsPaused to false, since it isn't explicitly set to false
-      // until NotificationServiceImpl._init runs.
-      notificationServiceImpl.monitorIsPaused = false;
-
-      notificationServiceImpl.monitorRetryInterval = Duration(milliseconds: 50);
-
-      notificationServiceImpl.monitorRetry();
-      expect(notificationServiceImpl.callsToMonitorRetry, 1);
-      expect(notificationServiceImpl.monitorRestartQueued, true);
-
-      notificationServiceImpl.monitorRetry();
-      expect(notificationServiceImpl.callsToMonitorRetry, 2);
-      expect(notificationServiceImpl.monitorRestartQueued, true);
-
-      // Let's wait for monitorRetryInterval
-      await (Future.delayed(notificationServiceImpl.monitorRetryInterval));
-      // We should have had one call to Monitor.start()
-      expect(notificationServiceImpl.monitorRetryCallsToMonitorStart, 1);
-      // And we should have no calls queued
-      expect(notificationServiceImpl.monitorRestartQueued, false);
-
-      // Let's wait for monitorRetryInterval again
-      await (Future.delayed(notificationServiceImpl.monitorRetryInterval));
-      // We should still only have had one call to Monitor.start()
-      expect(notificationServiceImpl.monitorRetryCallsToMonitorStart, 1);
-      // And we should have no calls queued
-      expect(notificationServiceImpl.monitorRestartQueued, false);
-
-      // Let's request another retry
-      notificationServiceImpl.monitorRetry();
-      expect(notificationServiceImpl.callsToMonitorRetry, 3);
-      expect(notificationServiceImpl.monitorRestartQueued, true);
-      // Let's wait for monitorRetryInterval
-      await (Future.delayed(notificationServiceImpl.monitorRetryInterval));
-      // We should have had one more call to Monitor.start()
-      expect(notificationServiceImpl.monitorRetryCallsToMonitorStart, 2);
-      // And we should have no calls queued
-      expect(notificationServiceImpl.monitorRestartQueued, false);
     });
   });
 }

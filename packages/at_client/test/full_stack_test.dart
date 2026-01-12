@@ -40,7 +40,6 @@ void main() {
   group('Test with full client stack except mockRemoteSecondary', () {
     final fullStackPrefs = AtClientPreference()
       ..namespace = namespace
-      ..isLocalStoreRequired = true
       ..hiveStoragePath = '$namespace/put/hive'
       ..commitLogPath = '$namespace/put/commitLog';
 

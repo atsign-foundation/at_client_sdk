@@ -6,7 +6,6 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
-import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_functional_test/src/config_util.dart';
@@ -74,10 +73,9 @@ void main() {
 
       // create atclient instance
       var atClientPreference = AtClientPreference()
-        ..rootDomain = 'vip.ve.atsign.zone'
         ..commitLogPath = 'test/hive/commit/'
         ..hiveStoragePath = 'test/hive/client'
-        ..isLocalStoreRequired = true;
+        ..rootDomain = 'vip.ve.atsign.zone';
 
       final atClientManager = await AtClientManager(apkamAtSign)
           .setCurrentAtSign(apkamAtSign, namespace, atClientPreference,
@@ -616,8 +614,8 @@ void main() {
           .listen((_) {});
       while ((atClientManager.atClient.notificationService
                   as NotificationServiceImpl)
-              .getMonitorStatus() !=
-          MonitorStatus.started) {
+              .monitor.currentState !=
+          NotificationListenerState.listening) {
         await Future.delayed(Duration(milliseconds: 100));
       }
 
@@ -663,7 +661,6 @@ AtClientPreference getClient2Preferences() {
   return AtClientPreference()
     ..commitLogPath = 'test/hive/client_2/commit'
     ..hiveStoragePath = 'test/hive/client_2'
-    ..isLocalStoreRequired = true
     ..rootDomain = 'vip.ve.atsign.zone';
 }
 

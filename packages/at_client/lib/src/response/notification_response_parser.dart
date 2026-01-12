@@ -7,7 +7,7 @@ import 'package:at_utils/at_logger.dart';
 class NotificationResponseParser extends DefaultResponseParser {
   // ignore: unused_field
   final _logger = AtSignLogger('NotificationResponseParser');
-  Future<List<AtNotification>> getAtNotifications(AtResponse response) async {
+  List<AtNotification> getAtNotifications(AtResponse response) {
     final notificationList = <AtNotification>[];
     if (response.isError) {
       return [];
