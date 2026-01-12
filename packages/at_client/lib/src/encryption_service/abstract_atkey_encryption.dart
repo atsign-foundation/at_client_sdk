@@ -31,34 +31,31 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
 
   /// - Fetches the appropriate shared symmetric key by calling
   /// [getMyCopyOfSharedSymmetricKey]
-  /// - Calls [createMyCopyOfSharedSymmetricKey] if
+  /// - Calls [createLegacySharedSymmetricKey] if
   ///   [getMyCopyOfSharedSymmetricKey] returns the empty string
-  /// - Calls [verifyTheirCopyOfSharedSymmetricKey]
+  /// - Calls [getTheirCopyOfLegacySharedSymmetricKey]
   /// - Doesn't actually encrypt the value, leaves that to the relevant
   ///   subclass.
   @override
-  Future<dynamic> encrypt(AtKey atKey, dynamic value,
-      {bool storeSharedKeyEncryptedWithData = true}) async {
+  Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
     _sharedKey = await getMyCopyOfSharedSymmetricKey(atKey);
     if (_sharedKey.isEmpty) {
-      _sharedKey = await createMyCopyOfSharedSymmetricKey(atKey);
+      _sharedKey = await createLegacySharedSymmetricKey(atKey);
     }
 
     var theirEncryptedSymmetricKeyCopy =
-        await verifyTheirCopyOfSharedSymmetricKey(atKey, _sharedKey);
+        await getTheirCopyOfLegacySharedSymmetricKey(atKey, _sharedKey);
 
-    if (storeSharedKeyEncryptedWithData) {
-      atKey.metadata.sharedKeyEnc = theirEncryptedSymmetricKeyCopy;
-      // This is a legacy checksum with MD5 algo.
-      atKey.metadata.pubKeyCS =
-          EncryptionUtil.md5CheckSum(await _getSharedWithPublicKey(atKey));
-      // Hashed the encryption public key with sha512. This is to ensure the encryption
-      // public key of the receiver are same during encryption and decryption process.
-      String hash = await AtChops.hashWith(HashingAlgoType.sha512)
-          .hash((await _getSharedWithPublicKey(atKey)).codeUnits);
-      atKey.metadata.pubKeyHash =
-          PublicKeyHash(hash, HashingAlgoType.sha512.name);
-    }
+    atKey.metadata.sharedKeyEnc = theirEncryptedSymmetricKeyCopy;
+    // This is a legacy checksum with MD5 algo.
+    atKey.metadata.pubKeyCS =
+        EncryptionUtil.md5CheckSum(await _getSharedWithPublicKey(atKey));
+    // Hashed the encryption public key with sha512. This is to ensure the encryption
+    // public key of the receiver are same during encryption and decryption process.
+    String hash = await AtChops.hashWith(HashingAlgoType.sha512)
+        .hash((await _getSharedWithPublicKey(atKey)).codeUnits);
+    atKey.metadata.pubKeyHash =
+        PublicKeyHash(hash, HashingAlgoType.sha512.name);
   }
 
   /// Fetches existing shared symmetric key
@@ -80,14 +77,10 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     }
     try {
       /// If not found in local storage, look in atServer
-      /// Also, delete *their* copy from our local storage
       if (encryptedSharedKey.isNull || encryptedSharedKey == 'data:null') {
         _logger.info(
             'Encrypted shared symmetric key for ${atKey.sharedBy} not found in local storage');
-        // Defensive code to ensure that 'their' copy is not in local storage
-        // if 'our' copy is not in local storage
-        await deleteTheirCopyOfEncryptedSharedKey(
-            atKey, _atClient.getLocalSecondary()!);
+
         _logger.info(
             'Fetching shared symmetric key for ${atKey.sharedBy} from atServer');
         encryptedSharedKey = await _getMyEncryptedCopyOfSharedSymmetricKey(
@@ -121,10 +114,11 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   /// Create a new symmetric shared key and share it.
   /// - cut key, encrypt copy for self, and save to remote atServer, then to
   ///   local storage, return the unencrypted symmetric key
-  /// - If atServer save rejects it because it already exists, then call
-  ///   [getMyCopyOfSharedSymmetricKey] again and return that value
+  ///
+  /// This is 'legacy' because it is a singleton, and we should and will have
+  /// many many symmetric keys.
   @visibleForTesting
-  Future<String> createMyCopyOfSharedSymmetricKey(AtKey atKey) async {
+  Future<String> createLegacySharedSymmetricKey(AtKey atKey) async {
     _logger.info(
         "Creating new shared symmetric key as ${atKey.sharedBy} for ${atKey.sharedWith}");
     // Generate new symmetric key
@@ -136,9 +130,6 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     var encryptedSharedKeyMyCopy = atChopsEncryptionResult.result;
     _logger.info(
         'encryptedSharedKeyMyCopy from atChops: $encryptedSharedKeyMyCopy');
-    // Defensive code to ensure that we do not have an old 'their' copy on atServer
-    await deleteTheirCopyOfEncryptedSharedKey(
-        atKey, _atClient.getRemoteSecondary()!);
 
     // Store my copy for future use
     // First, store to atServer
@@ -146,65 +137,39 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     _logger.info("Storing new shared symmetric key to atServer");
     await _storeMyEncryptedCopyOfSharedSymmetricKey(
         atKey, encryptedSharedKeyMyCopy, _atClient.getRemoteSecondary()!);
-    // // TODO
-    // } on KeyAlreadyExistsException catch (e) {
-    //  return await getMyCopyOfSharedSymmetricKey(atKey);
-    // }
 
     // Now store to local
     _logger.info("Storing new shared symmetric key to local storage");
     await _storeMyEncryptedCopyOfSharedSymmetricKey(
         atKey, encryptedSharedKeyMyCopy, _atClient.getLocalSecondary()!);
 
+    // Store 'their' copy - this is for backwards compatibility.
+    await _shareEncryptedCopyOfLegacySymmetricKey(atKey,
+        await encryptSymmetricKeyForRecipient(atKey, newSymmetricKeyBase64));
     // Return the unencrypted symmetric key
     return newSymmetricKeyBase64;
   }
 
-  /// - Verifies that 'their' copy is where it should be
-  /// - Check if encrypted copy exists in local storage
-  /// - If not in local storage, check atServer
-  /// - If in atServer, save to local storage
-  /// - If not in atServer
-  ///   - (a) encrypt the unencrypted copy with their public key
-  ///   - (b) save encrypted copy to atServer
-  ///   - (c) save encrypted copy to local storage, and return
-  Future<String> verifyTheirCopyOfSharedSymmetricKey(
+  Future<void> _shareEncryptedCopyOfLegacySymmetricKey(
+    AtKey atKey,
+    String encryptedSharedKeyValue,
+  ) async {
+    var updateSharedKeyBuilder = UpdateVerbBuilder()
+      ..atKey = (AtKey()
+        ..key = AtConstants.atEncryptionSharedKey
+        ..sharedWith = atKey.sharedWith
+        ..sharedBy = atKey.sharedBy
+        ..metadata = (Metadata()..ttr = 3888000))
+      ..value = encryptedSharedKeyValue;
+    await _atClient
+        .getRemoteSecondary()!
+        .executeVerb(updateSharedKeyBuilder, sync: false);
+  }
+
+  /// Fetch public key of recipient
+  /// Encrypt symmetric key with their public key
+  Future<String> encryptSymmetricKeyForRecipient(
       AtKey atKey, String symmetricKeyBase64) async {
-    /// - Check if encrypted copy exists in local storage
-    String? theirEncryptedCopy =
-        await _getTheirEncryptedCopyOfSharedSymmetricKey(
-            _atClient.getLocalSecondary()!, atKey);
-    // Found it in local storage. Return it.
-    if (theirEncryptedCopy != null) {
-      return theirEncryptedCopy;
-    }
-
-    /// - If not in local storage, check atServer
-    _logger.info("'Their' copy of shared symmetric key for ${atKey.sharedWith}"
-        " not found in local storage - will check atServer");
-    theirEncryptedCopy = await _getTheirEncryptedCopyOfSharedSymmetricKey(
-        _atClient.getRemoteSecondary()!, atKey);
-
-    /// - If in atServer, save to local storage and return
-    if (theirEncryptedCopy != null) {
-      _logger.info(
-          "Found 'their' copy of shared symmetric key for ${atKey.sharedWith}"
-          " in atServer - saving to local storage");
-      await storeTheirCopyOfEncryptedSharedKeyToSecondary(
-          atKey, theirEncryptedCopy,
-          secondary: _atClient.getLocalSecondary()!);
-
-      return theirEncryptedCopy;
-    }
-
-    /// - If not in atServer
-    ///   - (a) encrypt the unencrypted copy with their public key
-    ///         (i) Fetch their public key
-    ///         (ii) Encrypt the symmetric key with their public key
-    ///   - (b) save encrypted copy to atServer
-    ///   - (c) save encrypted copy to local storage and return
-
-    ///   - (a) encrypt the unencrypted copy with their public key
     ///         (i) Fetch their public key
     late String sharedWithPublicKey;
     try {
@@ -221,23 +186,22 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     var encryptionResult = _atClient.atChops!.encryptString(
         symmetricKeyBase64, EncryptionKeyType.rsa2048,
         encryptionAlgorithm: rsaEncryptionAlgo);
-    theirEncryptedCopy = encryptionResult.result;
+    String encryptedSharedSymmetricKey = encryptionResult.result!;
+    return encryptedSharedSymmetricKey;
+  }
 
-    ///   - (b) save encrypted copy to atServer
-    _logger.info(
-        "Saving 'their' copy of shared symmetric key for ${atKey.sharedWith} to atServer");
-    await storeTheirCopyOfEncryptedSharedKeyToSecondary(
-        atKey, theirEncryptedCopy!,
-        secondary: _atClient.getRemoteSecondary()!);
-
-    ///   - (c) save encrypted copy to local storage and return
-    _logger.info(
-        "Saving 'their' copy of shared symmetric key for ${atKey.sharedWith} to local storage");
-    await storeTheirCopyOfEncryptedSharedKeyToSecondary(
-        atKey, theirEncryptedCopy,
-        secondary: _atClient.getLocalSecondary()!);
-
-    return theirEncryptedCopy;
+  /// There was a whole set of legacy code here which has been removed
+  /// since it is not actually useful other than causing race conditions.
+  ///
+  /// In order to mitigate race conditions caused by the soon-to-be-legacy
+  /// behaviour of having a single symmetric key, we will always
+  /// encrypt the actual symmetric key we are using and set it in the
+  /// metadata, rather than storing it to data stores etc. It is safe to do
+  /// this because for a long time, clients have been decrypting using the
+  /// `sharedKeyEnc` in the metadata, which we are always setting.
+  Future<String> getTheirCopyOfLegacySharedSymmetricKey(
+      AtKey atKey, String symmetricKeyBase64) async {
+    return await encryptSymmetricKeyForRecipient(atKey, symmetricKeyBase64);
   }
 
   /// Returns sharedWith atSign publicKey.
@@ -334,59 +298,5 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
       myCopy = myCopy.replaceFirst(RegExp('^data:'), '');
     }
     return myCopy;
-  }
-
-  /// Gets the encrypted shared key from the given secondary instance - Local Secondary or Remote Secondary
-  ///
-  /// Throws [KeyNotFoundException] is key is not found the secondary
-  Future<String?> _getTheirEncryptedCopyOfSharedSymmetricKey(
-      Secondary secondary, AtKey atKey) async {
-    var llookupVerbBuilder = LLookupVerbBuilder()
-      ..atKey = (AtKey()
-        ..key = AtConstants.atEncryptionSharedKey
-        ..sharedBy = atKey.sharedBy
-        ..sharedWith = atKey.sharedWith);
-    String? theirCopy;
-    try {
-      theirCopy = await secondary.executeVerb(llookupVerbBuilder);
-      // ignore: empty_catches, unused_catch_clause
-    } on KeyNotFoundException catch (ignore) {}
-    if (theirCopy == 'data:null') {
-      theirCopy = null;
-    }
-    if (theirCopy != null && theirCopy.startsWith('data:')) {
-      theirCopy = theirCopy.replaceFirst(RegExp('^data:'), '');
-    }
-    return theirCopy;
-  }
-
-  Future<String?> storeTheirCopyOfEncryptedSharedKeyToSecondary(
-      AtKey atKey, String encryptedSharedKeyValue,
-      {Secondary? secondary}) async {
-    secondary ??= _atClient.getLocalSecondary()!;
-    var updateSharedKeyBuilder = UpdateVerbBuilder()
-      ..atKey = (AtKey()
-        ..key = AtConstants.atEncryptionSharedKey
-        ..sharedWith = atKey.sharedWith
-        ..sharedBy = atKey.sharedBy
-        ..metadata = (Metadata()..ttr = 3888000))
-      ..value = encryptedSharedKeyValue;
-    return await secondary.executeVerb(updateSharedKeyBuilder, sync: false);
-  }
-
-  /// Called in two situations, for defensive purposes:
-  /// 1. When we don't find 'our' copy in local storage, we also remove 'their' copy from local storage
-  /// 2. When we have determined that we are creating a new shared key, we try to remove from remote atServer
-  Future<void> deleteTheirCopyOfEncryptedSharedKey(
-      AtKey atKey, Secondary secondary) async {
-    var deleteBuilder = DeleteVerbBuilder()
-      ..atKey = (AtKey()
-        ..key = AtConstants.atEncryptionSharedKey
-        ..sharedWith = atKey.sharedWith
-        ..sharedBy = atKey.sharedBy);
-
-    _logger.info(
-        'Deleting ${deleteBuilder.buildKey()} from ${secondary.runtimeType}');
-    await secondary.executeVerb(deleteBuilder, sync: false);
   }
 }

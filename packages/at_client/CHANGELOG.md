@@ -6,6 +6,8 @@
 - fix: ensure AtRpcResp and AtRpcReq `.toString()` methods are JSON serialized
   strings
 - feat: use responseJson variable so that log is consistent
+- fix: fixed rare race condition caused by the handling of legacy shared 
+  symmetric keys
 
 ## 3.9.2
 

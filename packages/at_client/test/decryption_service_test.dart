@@ -1,9 +1,9 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
-import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
+import 'package:at_client/src/decryption_service/shared_with_me_decryption.dart';
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
-import 'package:at_client/src/decryption_service/local_key_decryption.dart';
+import 'package:at_client/src/decryption_service/shared_by_me_decryption.dart';
 import 'package:at_client/src/decryption_service/self_key_decryption.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -28,6 +28,8 @@ class MockSecondaryManager extends Mock implements SecondaryManager {}
 class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
 
 void main() {
+  Atsign theseTestsMyAtsign = '@charlie'.toAtsign();
+  Atsign theseTestsOtherAtsign = '@delta'.toAtsign();
   AtLookupImpl mockAtLookup = MockAtLookup();
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
   AtChops mockAtChops = MockAtChops();
@@ -46,8 +48,9 @@ void main() {
             throw AtExceptionUtils.get('AT0015', 'Connection timeout'));
     when(() => mockAtClientImpl.getLocalSecondary())
         .thenAnswer((_) => mockLocalSecondary);
-    when(() => mockAtClientImpl.getCurrentAtSign()).thenAnswer((_) => '@xyz');
-    when(() => mockLocalSecondary.getEncryptionPublicKey('@xyz'))
+    when(() => mockAtClientImpl.getCurrentAtSign())
+        .thenAnswer((_) => theseTestsMyAtsign);
+    when(() => mockLocalSecondary.getEncryptionPublicKey(theseTestsMyAtsign))
         .thenAnswer((_) => Future.value('dummy_encryption_public_key'));
     when(() => mockLocalSecondary.executeVerb(any<LLookupVerbBuilder>()))
         .thenAnswer((_) async => 'dummy_shared_key');
@@ -78,7 +81,7 @@ void main() {
           AtEncryptionKeyPair.create('', encryptionPrivateKey), null);
       when(() => mockAtClientImpl.atChops)
           .thenAnswer((_) => AtChopsImpl(atChopsKeys));
-      var sharedKeyDecryption = SharedKeyDecryption(mockAtClientImpl);
+      var sharedKeyDecryption = SharedWithMeDecryption(mockAtClientImpl);
       var result = await sharedKeyDecryption.decrypt(atKey, encryptedValue);
       expect(result, 'hello');
       when(() => mockAtClientImpl.getPreferences())
@@ -98,11 +101,11 @@ void main() {
       atKey.metadata = Metadata()
         ..pubKeyCS = 'd4f6d9483907286a0563b9fdeb01aa61';
 
-      when(() => mockLocalSecondary.getEncryptionPublicKey('@xyz')).thenAnswer(
-          (_) => throw KeyNotFoundException(
-              'public:publickey@xyz is not found in keystore'));
+      when(() => mockLocalSecondary.getEncryptionPublicKey(theseTestsMyAtsign))
+          .thenAnswer((_) => throw KeyNotFoundException(
+              'public:publickey$theseTestsMyAtsign is not found in keystore'));
 
-      var sharedKeyDecryption = SharedKeyDecryption(mockAtClientImpl);
+      var sharedKeyDecryption = SharedWithMeDecryption(mockAtClientImpl);
       expect(
           () => sharedKeyDecryption.decrypt(atKey, '123'),
           throwsA(predicate((dynamic e) =>
@@ -124,7 +127,7 @@ void main() {
       when(() => mockAtClientImpl.getPreferences())
           .thenAnswer((_) => atClientPreferenceWithAtChops);
       var sharedKeyDecryptionWithAtChops =
-          SharedKeyDecryption(mockAtClientImpl);
+          SharedWithMeDecryption(mockAtClientImpl);
       final atChopsKeys =
           AtChopsKeys.create(AtEncryptionKeyPair.create('', ''), null);
       when(() => mockAtClientImpl.atChops)
@@ -152,61 +155,50 @@ void main() {
   });
 
   group('A group of test to validate the decryption service manager', () {
-    test(
-        'Test to verify the SharedKeyDecryption instance is returned for shared key',
-        () {
-      var currentAtSign = '@bob';
+    test('Test to verify the SharedWithMeDecryption instance is returned', () {
       var atKey = AtKey()
+        ..sharedWith = theseTestsMyAtsign
         ..key = 'phone.wavi'
-        ..sharedBy = '@alice';
+        ..sharedBy = theseTestsOtherAtsign;
 
-      var decryptionService =
-          AtKeyDecryptionManager(mockAtClientImpl).get(atKey, currentAtSign);
-      expect(decryptionService, isA<SharedKeyDecryption>());
+      var decrypter = AtKeyDecryptionManager(mockAtClientImpl).get(atKey);
+      expect(decrypter, isA<SharedWithMeDecryption>());
     });
 
-    test(
-        'Test to verify the LocalKeyDecryption instance is returned for local key',
-        () {
-      var currentAtSign = '@bob';
+    test('Test to verify the SharedByMeDecryption instance is returned', () {
       var atKey = AtKey()
         ..key = 'phone.wavi'
-        ..sharedWith = '@alice'
-        ..sharedBy = '@bob'
+        ..sharedWith = theseTestsOtherAtsign
+        ..sharedBy = theseTestsMyAtsign
         ..metadata = Metadata();
 
-      var decryptionService =
-          AtKeyDecryptionManager(mockAtClientImpl).get(atKey, currentAtSign);
-      expect(decryptionService, isA<LocalKeyDecryption>());
+      var decrypter = AtKeyDecryptionManager(mockAtClientImpl).get(atKey);
+      expect(decrypter, isA<SharedByMeDecryption>());
     });
 
     test(
         'Test to verify SelfKeyDecryption instance is returned for '
         'self key when sharedWith is populated', () {
-      var currentAtSign = '@alice';
       var atKey = AtKey()
         ..key = '_phone.wavi'
-        ..sharedWith = '@alice'
-        ..sharedBy = '@alice'
+        ..sharedWith = theseTestsMyAtsign
+        ..sharedBy = theseTestsMyAtsign
         ..metadata = Metadata();
 
-      var decryptionService =
-          AtKeyDecryptionManager(mockAtClientImpl).get(atKey, currentAtSign);
-      expect(decryptionService, isA<SelfKeyDecryption>());
+      var decrypter = AtKeyDecryptionManager(mockAtClientImpl).get(atKey);
+      expect(decrypter, isA<SelfKeyDecryption>());
     });
 
     test(
         'Test to verify SelfKeyDecryption instance is returned for '
         'self key when sharedWith is not populated', () {
-      var currentAtSign = '@alice';
       var atKey = AtKey()
         ..key = 'phone.wavi'
-        ..sharedBy = '@alice'
+        ..sharedBy = theseTestsMyAtsign
         ..metadata = Metadata();
 
-      var decryptionService =
-          AtKeyDecryptionManager(mockAtClientImpl).get(atKey, currentAtSign);
-      expect(decryptionService, isA<SelfKeyDecryption>());
+      var decrypter = AtKeyDecryptionManager(mockAtClientImpl).get(atKey);
+      expect(decrypter, isA<SelfKeyDecryption>());
     });
   });
 
@@ -217,7 +209,7 @@ void main() {
         'Test to verify IllegalArgumentException is thrown when encrypted value is null - SharedKeyDecryption',
         () {
       expect(
-          () => SharedKeyDecryption(mockAtClientImpl).decrypt(AtKey(), ''),
+          () => SharedWithMeDecryption(mockAtClientImpl).decrypt(AtKey(), ''),
           throwsA(predicate((dynamic e) =>
               e is AtDecryptionException &&
               e.message == 'Decryption failed. Encrypted value is null')));
@@ -237,7 +229,7 @@ void main() {
         'Test to verify IllegalArgumentException is thrown when encrypted value is null - LocalKeyDecryption',
         () {
       expect(
-          () => LocalKeyDecryption(mockAtClientImpl).decrypt(AtKey(), ''),
+          () => SharedByMeDecryption(mockAtClientImpl).decrypt(AtKey(), ''),
           throwsA(predicate((dynamic e) =>
               e is AtDecryptionException &&
               e.message == 'Decryption failed. Encrypted value is null')));

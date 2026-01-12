@@ -7,16 +7,13 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
-/// Class responsible for decrypting the value of shared key's that are not owned
-/// by currentAtSign
-/// Example:
-/// CurrentAtSign: @bob
-/// lookup:phone@alice
-class SharedKeyDecryption implements AtKeyDecryption {
+/// Class responsible for decrypting values shared BY others with me
+/// If I am @alice then an example would be @alice:foo.bar@charlie
+class SharedWithMeDecryption implements AtKeyDecryption {
   final AtClient _atClient;
   late final AtSignLogger _logger;
 
-  SharedKeyDecryption(this._atClient) {
+  SharedWithMeDecryption(this._atClient) {
     _logger =
         AtSignLogger('SharedKeyDecryption (${_atClient.getCurrentAtSign()})');
   }

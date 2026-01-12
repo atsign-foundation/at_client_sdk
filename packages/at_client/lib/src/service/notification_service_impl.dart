@@ -20,7 +20,6 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
     as at_persistence_secondary_server;
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
-import 'package:version/version.dart';
 
 class NotificationServiceImpl
     implements NotificationService, AtSignChangeListener {
@@ -360,10 +359,7 @@ class NotificationServiceImpl
       ..notificationID = notificationParams.id
       ..atKey = notificationParams.atKey;
 
-    // ignore: deprecated_member_use_from_same_package
-    if (_atClient.getPreferences()!.atProtocolEmitted >= Version(2, 0, 0)) {
-      notificationParams.atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
-    }
+    notificationParams.atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
 
     try {
       notificationParams.atKey.metadata.isEncrypted = encryptValue;

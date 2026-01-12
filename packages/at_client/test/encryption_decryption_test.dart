@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
+import 'package:at_client/src/decryption_service/shared_with_me_decryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
@@ -87,7 +87,8 @@ void main() {
       expect(sharedKey.metadata.pubKeyCS, null);
 
       // Decryption
-      SharedKeyDecryption sharedKeyDecryption = SharedKeyDecryption(atClient);
+      SharedWithMeDecryption sharedKeyDecryption =
+          SharedWithMeDecryption(atClient);
       String decryptedValue =
           await sharedKeyDecryption.decrypt(sharedKey, encryptedValue);
       expect(decryptedValue, value);
@@ -132,7 +133,8 @@ void main() {
           PublicKeyHash('dummy_hash_value', HashingAlgoType.sha512.name);
 
       // Decryption
-      SharedKeyDecryption sharedKeyDecryption = SharedKeyDecryption(atClient);
+      SharedWithMeDecryption sharedKeyDecryption =
+          SharedWithMeDecryption(atClient);
       expect(
           () async =>
               await sharedKeyDecryption.decrypt(sharedKey, encryptedValue),
