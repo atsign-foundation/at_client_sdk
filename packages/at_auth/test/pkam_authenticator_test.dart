@@ -1,4 +1,4 @@
-import 'package:at_auth/src/auth/at_auth_response.dart';
+import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -16,18 +16,21 @@ void main() {
 
     setUp(() {
       mockAtLookup = MockAtLookup();
-      pkamAuthenticator = PkamAuthenticator(atSign, mockAtLookup);
+      pkamAuthenticator = PkamAuthenticator();
     });
 
     test('authenticate() should return a successful AtAuthResponse', () async {
       when(() => mockAtLookup.pkamAuthenticate(enrollmentId: testEnrollmentId))
           .thenAnswer((_) async => true);
 
-      final result =
-          await pkamAuthenticator.authenticate(enrollmentId: testEnrollmentId);
+      final result = await pkamAuthenticator.authenticate(
+        atSign,
+        mockAtLookup,
+        enrollmentId: testEnrollmentId,
+      );
 
       expect(result, isA<AtAuthResponse>());
-      expect(result.isSuccessful, isTrue);
+      expect(result, isTrue);
     });
 
     test('authenticate() should throw UnAuthenticatedException on failure',
@@ -38,7 +41,10 @@ void main() {
 
       expect(
           () async => await pkamAuthenticator.authenticate(
-              enrollmentId: AtConstants.enrollmentId),
+                atSign,
+                mockAtLookup,
+                enrollmentId: AtConstants.enrollmentId,
+              ),
           throwsA(isA<UnAuthenticatedException>()));
     });
   });

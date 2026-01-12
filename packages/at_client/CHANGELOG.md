@@ -1,3 +1,7 @@
+## NEXT
+
+- chore(deps): at_chops ^3.0.0
+
 ## 3.10.0
 
 - build(deps): Updated archive dependency to ^4.0.7
@@ -26,7 +30,7 @@
 - feat: introduce single-responder mode in AtRpc enabling redundancy support in
   request-response services relying on AtRpc. This feature is coupled with
   `enableRequestMutex` flag that controls it.
-  
+
 ## 3.8.0
 
 - feat: add optional `useRemoteAtServer` flag to AtClient `getKeys` and

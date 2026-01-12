@@ -39,4 +39,3 @@ jobs:
         with:
           scan-args: |-
             --lockfile=./pubspec.lock
-            --lockfile=./packages/at_chops/pubspec.lock

@@ -8,17 +8,16 @@ documentation: https://docs.atsign.com/
 environment:
   sdk: ^3.6.0
   flutter: ">=3.29.2"
-resolution: workspace
 
 dependencies:
-  at_client_mobile: ^3.3.0
-  at_common_flutter: ^2.1.0
   at_utils: ^3.0.19
   flutter:
     sdk: flutter
   pin_code_fields: ^8.0.1
   url_launcher: ^6.2.4
   uuid: ^4.0.0
+  at_client_mobile: ^3.3.0
+  at_common_flutter: ^2.1.0
 
 dev_dependencies:
   uni_links: ^0.5.1 # FIXME: discontinued, replace with app_links

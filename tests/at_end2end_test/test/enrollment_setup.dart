@@ -46,15 +46,15 @@ void main() {
       expect(atResponse.response, 'ok');
 
       // Submit an enrollment request with at_auth package
-      AtEnrollmentBase atEnrollmentBase =
-          atAuthBase.atEnrollment(currentAtSign);
+      AtEnrollment atEnrollmentBase = AtEnrollment.create();
       int random = Uuid().v4().hashCode;
       AtLookUp atLookUp = AtLookupImpl(
           currentAtSign,
           AtClientManager.getInstance().atClient.getPreferences()!.rootDomain,
           AtClientManager.getInstance().atClient.getPreferences()!.rootPort);
 
-      EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+      AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
+          atSign: currentAtSign,
           appName: 'wavi-$random',
           deviceName: 'iphone',
           otp: 'ABC123',
@@ -80,34 +80,39 @@ void main() {
           await AtClientManager.getInstance()
               .atClient
               .enrollmentService
-              ?.approve(EnrollmentRequestDecision.approved(
-                  ApprovedRequestDecisionBuilder(
-                      enrollmentId: atEnrollmentResponse.enrollmentId,
-                      encryptedAPKAMSymmetricKey:
-                          enrollment.encryptedAPKAMSymmetricKey!)));
+              ?.approve(
+                EnrollmentRequestDecision.approved(
+                    enrollmentId: atEnrollmentResponse.enrollmentId,
+                    apkamSymmetricKey: AtBytes.fromString(
+                        enrollment.encryptedAPKAMSymmetricKey!),
+                    atSign: currentAtSign),
+              );
       expect(
           approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.approved);
 
       // Get AtChops from the AtAuthKeys
       AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
-          atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!, '');
+          atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!
+              .toString(),
+          '');
 
       AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
-          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!,
-          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!);
+          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
+          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!.toString());
 
       AtChopsKeys atChopsKeys =
           AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
 
       AtChops atChops = AtChopsImpl(atChopsKeys);
-      atChops.atChopsKeys.apkamSymmetricKey =
-          AESKey(atEnrollmentResponse.atAuthKeys!.apkamSymmetricKey!);
+      atChops.atChopsKeys.apkamSymmetricKey = AESKey(
+          atEnrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString());
       atLookUp.atChops = atChops;
       atLookUp.enrollmentId = atEnrollmentResponse.enrollmentId;
 
       // Fetch the encryption private key and self encryption key from the remote secondary.
       atChops.atChopsKeys.atEncryptionKeyPair = AtEncryptionKeyPair.create(
-          atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!,
+          atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!
+              .toString(),
           await getDefaultEncryptionPrivateKey(
               currentAtSign, atEnrollmentResponse.enrollmentId, atLookUp));
 
@@ -120,16 +125,22 @@ void main() {
       AtClientImpl.atClientInstanceMap.clear();
 
       // Authenticate the atSign
-      AtAuth atAuth = atAuthBase.atAuth(atChops: atChops);
-      AtAuthRequest atAuthRequest = AtAuthRequest(currentAtSign);
+      AtAuth atAuth = AtAuth.create(atChops: atChops);
+      AtAuthRequest atAuthRequest = AtAuthRequest(currentAtSign,
+          atKeysIo: FileAtKeysIo(
+            filePath: (_) =>
+                '${ConfigUtil.getYaml()['filePath']}/${currentAtSign}_key.atKeys',
+          ));
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
       atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
-          atChops.atChopsKeys.atEncryptionKeyPair?.atPrivateKey.privateKey;
+          AtBytes.fromString(
+              atChops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
-          atChops.atChopsKeys.selfEncryptionKey?.key;
-      atAuthRequest.rootDomain =
-          AtClientManager.getInstance().atClient.getPreferences()!.rootDomain;
+          AtBytes.fromString(atChops.atChopsKeys.selfEncryptionKey!.key);
+      atAuthRequest.rootDomain = AtRootDomain(
+          AtClientManager.getInstance().atClient.getPreferences()!.rootDomain,
+          AtClientManager.getInstance().atClient.getPreferences()!.rootPort);
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);
@@ -151,31 +162,35 @@ void main() {
 }
 
 /// Writes the atKeys to the file.
-void writeAtKeysToFile(String atSign, AtAuthKeys atAuthKeys) {
+void writeAtKeysToFile(String atSign, AtKeys atAuthKeys) {
   // Encrypt the keys
   Map<String, String> encryptedAtKeysMap = <String, String>{};
 
   String encryptedPkamPublicKey = EncryptionUtil.encryptValue(
-      atAuthKeys.apkamPublicKey!, atAuthKeys.defaultSelfEncryptionKey!);
+      atAuthKeys.apkamPublicKey!.toString(),
+      atAuthKeys.defaultSelfEncryptionKey!.toString());
   encryptedAtKeysMap[pkamPublicKey] = encryptedPkamPublicKey;
 
   String encryptedPkamPrivateKey = EncryptionUtil.encryptValue(
-      atAuthKeys.apkamPrivateKey!, atAuthKeys.defaultSelfEncryptionKey!);
+      atAuthKeys.apkamPrivateKey!.toString(),
+      atAuthKeys.defaultSelfEncryptionKey!.toString());
   encryptedAtKeysMap[pkamPrivateKey] = encryptedPkamPrivateKey;
 
   String encryptedEncryptionPublicKey = EncryptionUtil.encryptValue(
-      atAuthKeys.defaultEncryptionPublicKey!,
-      atAuthKeys.defaultSelfEncryptionKey!);
+      atAuthKeys.defaultEncryptionPublicKey!.toString(),
+      atAuthKeys.defaultSelfEncryptionKey!.toString());
   encryptedAtKeysMap[encryptionPublicKey] = encryptedEncryptionPublicKey;
 
   String encryptedEncryptionPrivateKey = EncryptionUtil.encryptValue(
-      atAuthKeys.defaultEncryptionPrivateKey!,
-      atAuthKeys.defaultSelfEncryptionKey!);
+      atAuthKeys.defaultEncryptionPrivateKey!.toString(),
+      atAuthKeys.defaultSelfEncryptionKey!.toString());
   encryptedAtKeysMap[encryptionPrivateKey] = encryptedEncryptionPrivateKey;
 
-  encryptedAtKeysMap[selfEncryptionKey] = atAuthKeys.defaultSelfEncryptionKey!;
-  encryptedAtKeysMap[apkamSymmetricKey] = atAuthKeys.apkamSymmetricKey!;
-  encryptedAtKeysMap[enrollmentId] = atAuthKeys.enrollmentId!;
+  encryptedAtKeysMap[selfEncryptionKey] =
+      atAuthKeys.defaultSelfEncryptionKey!.toString();
+  encryptedAtKeysMap[apkamSymmetricKey] =
+      atAuthKeys.apkamSymmetricKey!.toString();
+  encryptedAtKeysMap[enrollmentId] = atAuthKeys.enrollmentId!.toString();
 
   // Write keys to file
   String keysString = jsonEncode(encryptedAtKeysMap);
@@ -207,10 +222,10 @@ Future<String> getDefaultEncryptionPrivateKey(
     throw AtEnrollmentException(
         'Exception while getting encrypted private key/self key from server: $e');
   }
-  AtEncryptionResult? atEncryptionResult = atLookUp.atChops?.decryptString(
-      encryptionPrivateKeyFromServer, EncryptionKeyType.aes256,
-      keyName: 'apkamSymmetricKey',
-      iv: AtChopsUtil.generateIVFromBase64String(encryptionPrivateKeyIV));
+  AtEncryptionResult? atEncryptionResult = await atLookUp.atChops
+      ?.decryptString(encryptionPrivateKeyFromServer, EncryptionKeyType.aes256,
+          keyName: 'apkamSymmetricKey',
+          iv: AtChopsUtil.generateIVFromBase64String(encryptionPrivateKeyIV));
   return atEncryptionResult?.result;
 }
 
@@ -240,9 +255,9 @@ Future<String> getDefaultSelfEncryptionKey(
     throw AtEnrollmentException(
         'Exception while getting encrypted private key/self key from server: $e');
   }
-  AtEncryptionResult? atEncryptionResult = atLookUp.atChops?.decryptString(
-      selfEncryptionKeyFromServer, EncryptionKeyType.aes256,
-      keyName: 'apkamSymmetricKey',
-      iv: AtChopsUtil.generateIVFromBase64String(selfEncryptionKeyIV));
+  AtEncryptionResult? atEncryptionResult = await atLookUp.atChops
+      ?.decryptString(selfEncryptionKeyFromServer, EncryptionKeyType.aes256,
+          keyName: 'apkamSymmetricKey',
+          iv: AtChopsUtil.generateIVFromBase64String(selfEncryptionKeyIV));
   return atEncryptionResult?.result;
 }

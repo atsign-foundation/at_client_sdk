@@ -61,7 +61,7 @@ jobs:
       #          file: packages/at_client/unit_test_coverage.lcov
       #          flags: at_client_unit_tests
 
-  unit_at_client_mobile:
+  unit_at_client_flutter:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -74,36 +74,36 @@ jobs:
         with:
           dart-channel: ${{ matrix.dart-channel}}
 
-      # Install dependencies of at_client_mobile
+      # Install dependencies of at_client_flutter
       - name: Installing dependencies
-        working-directory: packages/at_client_mobile
+        working-directory: packages/at_client_flutter
         run: flutter pub get --no-example
 
-      # Analyze at_client_mobile package
+      # Analyze at_client_flutter package
       - name: flutter analyze
-        working-directory: packages/at_client_mobile
+        working-directory: packages/at_client_flutter
         run: flutter analyze --no-fatal-infos
 
       # Check formatting
       - name: Check that code in packages is correctly formatted
-        working-directory: packages/at_client_mobile
+        working-directory: packages/at_client_flutter
         run: dart format . -o none --set-exit-if-changed
 
       # Run unit tests
-      - name: Run at_client_mobile unit tests, with code coverage measurement
-        working-directory: packages/at_client_mobile
+      - name: Run at_client_flutter unit tests, with code coverage measurement
+        working-directory: packages/at_client_flutter
         run: flutter test --concurrency=1 --coverage
 
-      - name: Convert at_client_mobile coverage to LCOV format
-        working-directory: packages/at_client_mobile
+      - name: Convert at_client_flutter coverage to LCOV format
+        working-directory: packages/at_client_flutter
         run: dart run coverage:format_coverage --lcov --check-ignore --in=coverage --out=unit_test_coverage.lcov --report-on=lib
 
       #      Commenting out for now
-      #      - name: Upload at_client_mobile coverage to Codecov
+      #      - name: Upload at_client_flutter coverage to Codecov
       #        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
       #        with:
-      #          file: packages/at_client_mobile/unit_test_coverage.lcov
-      #          flags: at_client_mobile_unit_tests
+      #          file: packages/at_client_flutter/unit_test_coverage.lcov
+      #          flags: at_client_flutter_unit_tests
 
   functional_tests:
     runs-on: ubuntu-latest

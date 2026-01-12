@@ -13,6 +13,7 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
+import 'sync_multiple_client_test.dart';
 import 'test_utils.dart';
 
 void main() {
@@ -45,11 +46,13 @@ void main() {
     test('A test to verify onboarding and initial enrollment using at_auth',
         () async {
       var apkamAtSign = ConfigUtil.getYaml()['atSign']['apkamFirstAtSign'];
-      var atAuth = atAuthBase.atAuth();
+      var atAuth = AtAuth.create();
       final onBoardingRequest = AtOnboardingRequest(apkamAtSign)
         ..appName = 'wavi'
         ..deviceName = 'pixel1'
-        ..rootDomain = 'vip.ve.atsign.zone';
+        ..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64)
+        ..atKeysIo =
+            FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys');
       // onboard with enable enrollment set
       var atOnboardingResponse =
           await atAuth.onboard(onBoardingRequest, cramKeyMap[apkamAtSign]!);
@@ -57,17 +60,12 @@ void main() {
       expect(atOnboardingResponse.atAuthKeys, isNotNull);
       expect(atOnboardingResponse.atAuthKeys!.apkamSymmetricKey, isNotNull);
       expect(atOnboardingResponse.enrollmentId, isNotEmpty);
-      // generate keys file
-      await _generateAtKeysFile(
-          apkamAtSign,
-          atOnboardingResponse.enrollmentId,
-          atOnboardingResponse.atAuthKeys!,
-          'test/testData/$apkamAtSign.atKeys');
 
       // auth using generated keysFile
-      var atAuthResponse = await atAuth.authenticate(AtAuthRequest(apkamAtSign)
-        ..atKeysFilePath = 'test/testData/$apkamAtSign.atKeys'
-        ..rootDomain = 'vip.ve.atsign.zone');
+      var atAuthResponse = await atAuth.authenticate(AtAuthRequest(
+        apkamAtSign,
+        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
+      )..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64));
       expect(atAuthResponse.isSuccessful, true);
       expect(atAuthResponse.atAuthKeys, isNotNull);
 
@@ -174,12 +172,13 @@ void main() {
 
     test('A test to verify invalid OTP results in error response from server',
         () async {
-      EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+      AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
+          atSign: atSign,
           appName: 'buzz',
           deviceName: 'iphone-${Uuid().v4().hashCode}',
           namespaces: {'buzz': 'rw'},
           otp: 'a1b2c3'); //random invalid OTP
-      var atEnrollment = atAuthBase.atEnrollment(atSign);
+      var atEnrollment = AtEnrollment.create();
       var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
       expect(
           () async => atEnrollment.submit(enrollmentRequest, newAtLookup),
@@ -198,12 +197,13 @@ void main() {
       expect(atResponse.response.isNotEmpty, true);
       var otp = atResponse.response;
       expect(otp.length, 6);
-      EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+      AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
+          atSign: atSign,
           appName: 'buzz',
           deviceName: 'iphone-${Uuid().v4().hashCode}',
           namespaces: {'buzz': 'rw'},
           otp: otp); //random invalid OTP
-      var atEnrollment = atAuthBase.atEnrollment(atSign);
+      var atEnrollment = AtEnrollment.create();
       var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
       var enrollmentResponse =
           await atEnrollment.submit(enrollmentRequest, newAtLookup);
@@ -299,14 +299,15 @@ void main() {
         'A test to validate client can authenticate with an approved enrollment and perform put operation',
         () async {
       // Submit an enrollment request with at_auth package
-      AtEnrollmentBase atEnrollmentBase = atAuthBase.atEnrollment(atSign);
+      AtEnrollment atEnrollmentBase = AtEnrollment.create();
       int random = Uuid().v4().hashCode;
       AtLookUp atLookUp = AtLookupImpl(
           atSign,
           atClientManager.atClient.getPreferences()!.rootDomain,
           atClientManager.atClient.getPreferences()!.rootPort);
 
-      EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+      AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
+          atSign: atSign,
           appName: 'wavi-$random',
           deviceName: 'iphone',
           otp: 'ABC123',
@@ -333,10 +334,10 @@ void main() {
               .atClient
               .enrollmentService
               ?.approve(EnrollmentRequestDecision.approved(
-                  ApprovedRequestDecisionBuilder(
-                      enrollmentId: atEnrollmentResponse.enrollmentId,
-                      encryptedAPKAMSymmetricKey:
-                          enrollment.encryptedAPKAMSymmetricKey!)));
+                  enrollmentId: atEnrollmentResponse.enrollmentId,
+                  atSign: atSign,
+                  apkamSymmetricKey: AtBytes.fromString(
+                      enrollment.encryptedAPKAMSymmetricKey!)));
       expect(
           approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.approved);
 
@@ -348,22 +349,26 @@ void main() {
       AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
           encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
       AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
-          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!,
-          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!);
+          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
+          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!.toString());
       AtChopsKeys atChopsKeys =
           AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
       atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
       AtChops atChops = AtChopsImpl(atChopsKeys);
 
       // Authenticate the atSign
-      AtAuth atAuth = atAuthBase.atAuth(atChops: atChops);
-      AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
+      AtAuth atAuth = AtAuth.create(atChops: atChops);
+      AtAuthRequest atAuthRequest = AtAuthRequest(
+        atSign,
+        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
+      );
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
       atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
-          encryptionPrivateKeyMap[atSign]!;
-      atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey = aesKeyMap[atSign];
-      atAuthRequest.rootDomain = 'vip.ve.atsign.zone';
+          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
+      atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
+          AtBytes.fromString(aesKeyMap[atSign]!);
+      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', 64);
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);
@@ -398,14 +403,15 @@ void main() {
         'A test to validate client fails to authenticate with an denied enrollment',
         () async {
       // Submit an enrollment request with at_auth package
-      AtEnrollmentBase atEnrollmentBase = atAuthBase.atEnrollment(atSign);
+      AtEnrollment atEnrollmentBase = AtEnrollment.create();
       int random = Uuid().v4().hashCode;
       AtLookUp atLookUp = AtLookupImpl(
           atSign,
           atClientManager.atClient.getPreferences()!.rootDomain,
           atClientManager.atClient.getPreferences()!.rootPort);
 
-      EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+      AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
+          atSign: atSign,
           appName: 'wavi-$random',
           deviceName: 'iphone',
           otp: 'ABC123',
@@ -429,7 +435,7 @@ void main() {
       AtEnrollmentResponse? approveEnrollmentResponse =
           await AtClientManager.getInstance().atClient.enrollmentService?.deny(
               EnrollmentRequestDecision.denied(
-                  atEnrollmentResponse.enrollmentId));
+                  atEnrollmentResponse.enrollmentId, currentAtSign));
       expect(approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.denied);
 
       // Set AtClient to null and authenticate with the new auth keys generated for enrollment
@@ -440,21 +446,25 @@ void main() {
       AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
           encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
       AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
-          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!,
-          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!);
+          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
+          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!.toString());
       AtChopsKeys atChopsKeys =
           AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
       AtChops atChops = AtChopsImpl(atChopsKeys);
 
       // Authenticate the atSign
-      AtAuth atAuth = atAuthBase.atAuth(atChops: atChops);
-      AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
+      AtAuth atAuth = AtAuth.create(atChops: atChops);
+      AtAuthRequest atAuthRequest = AtAuthRequest(
+        atSign,
+        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
+      );
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
       atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
-          encryptionPrivateKeyMap[atSign]!;
-      atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey = aesKeyMap[atSign];
-      atAuthRequest.rootDomain = 'vip.ve.atsign.zone';
+          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
+      atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
+          AtBytes.fromString(aesKeyMap[atSign]!);
+      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', 64);
 
       expect(
           () async => await atAuth.authenticate(atAuthRequest),
@@ -468,14 +478,15 @@ void main() {
         'A test to verify atclient get when enrollment request has only read access',
         () async {
       // Submit an enrollment request with at_auth package
-      AtEnrollmentBase atEnrollmentBase = atAuthBase.atEnrollment(atSign);
+      AtEnrollment atEnrollmentBase = AtEnrollment.create();
       int random = Uuid().v4().hashCode;
       AtLookUp atLookUp = AtLookupImpl(
           atSign,
           atClientManager.atClient.getPreferences()!.rootDomain,
           atClientManager.atClient.getPreferences()!.rootPort);
 
-      EnrollmentRequest enrollmentRequest = EnrollmentRequest(
+      AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
+          atSign: atSign,
           appName: 'wavi-$random',
           deviceName: 'iphone',
           otp: 'ABC123',
@@ -502,10 +513,10 @@ void main() {
               .atClient
               .enrollmentService
               ?.approve(EnrollmentRequestDecision.approved(
-                  ApprovedRequestDecisionBuilder(
-                      enrollmentId: atEnrollmentResponse.enrollmentId,
-                      encryptedAPKAMSymmetricKey:
-                          enrollment.encryptedAPKAMSymmetricKey!)));
+                  enrollmentId: atEnrollmentResponse.enrollmentId,
+                  atSign: atSign,
+                  apkamSymmetricKey: AtBytes.fromString(
+                      enrollment.encryptedAPKAMSymmetricKey!)));
       expect(
           approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.approved);
       // Insert a key with wavi and buzz namespace for atClient.get to fetch the data
@@ -533,22 +544,23 @@ void main() {
       AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
           encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
       AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
-          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!,
-          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!);
+          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
+          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!.toString());
       AtChopsKeys atChopsKeys =
           AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
       // atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
       AtChops atChops = AtChopsImpl(atChopsKeys);
 
       // Authenticate the atSign
-      AtAuth atAuth = atAuthBase.atAuth(atChops: atChops);
-      AtAuthRequest atAuthRequest = AtAuthRequest(atSign);
+      AtAuth atAuth = AtAuth.create(atChops: atChops);
+      AtAuthRequest atAuthRequest = AtAuthRequest(atSign, atKeysIo: FileAtKeysIo());
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
       atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
-          encryptionPrivateKeyMap[atSign]!;
-      atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey = aesKeyMap[atSign];
-      atAuthRequest.rootDomain = 'vip.ve.atsign.zone';
+          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
+      atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
+          AtBytes.fromString(aesKeyMap[atSign]!);
+      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', 64);
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);
@@ -601,7 +613,7 @@ void main() {
     test('A test to verify enrollment request is received via the notification',
         () async {
       String random = Uuid().v4().hashCode.toString();
-      AtEnrollmentBase atEnrollmentBase = atAuthBase.atEnrollment(atSign);
+      AtEnrollment atEnrollmentBase = AtEnrollment.create();
       AtLookUp atLookUp = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
 
       AtClientManager atClientManager =
@@ -632,7 +644,8 @@ void main() {
 
       AtResponse otpResponse = await atClientManager.atClient.getOTP();
       AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.submit(
-        EnrollmentRequest(
+        AtEnrollmentRequest(
+            atSign: atSign,
             appName: 'wavi',
             deviceName: 'device-$random',
             otp: otpResponse.response,
@@ -665,21 +678,23 @@ AtClientPreference getClient2Preferences() {
 }
 
 Future<void> _generateAtKeysFile(String atSign, String? currentEnrollmentId,
-    AtAuthKeys atAuthKeys, String keysFilePath) async {
+    AtKeys atAuthKeys, String keysFilePath) async {
   final atKeysMap = <String, String>{
     'aesPkamPublicKey': EncryptionUtil.encryptValue(
-        atAuthKeys.apkamPublicKey!, atAuthKeys.defaultSelfEncryptionKey!),
+        atAuthKeys.apkamPublicKey!.toString(),
+        atAuthKeys.defaultSelfEncryptionKey!.toString()),
     'aesPkamPrivateKey': EncryptionUtil.encryptValue(
-        atAuthKeys.apkamPrivateKey!, atAuthKeys.defaultSelfEncryptionKey!),
+        atAuthKeys.apkamPrivateKey!.toString(),
+        atAuthKeys.defaultSelfEncryptionKey!.toString()),
     'aesEncryptPublicKey': EncryptionUtil.encryptValue(
-        atAuthKeys.defaultEncryptionPublicKey!,
-        atAuthKeys.defaultSelfEncryptionKey!),
+        atAuthKeys.defaultEncryptionPublicKey!.toString(),
+        atAuthKeys.defaultSelfEncryptionKey!.toString()),
     'aesEncryptPrivateKey': EncryptionUtil.encryptValue(
-        atAuthKeys.defaultEncryptionPrivateKey!,
-        atAuthKeys.defaultSelfEncryptionKey!),
-    'selfEncryptionKey': atAuthKeys.defaultSelfEncryptionKey!,
-    atSign: atAuthKeys.defaultSelfEncryptionKey!,
-    'apkamSymmetricKey': atAuthKeys.apkamSymmetricKey!
+        atAuthKeys.defaultEncryptionPrivateKey!.toString(),
+        atAuthKeys.defaultSelfEncryptionKey!.toString()),
+    'selfEncryptionKey': atAuthKeys.defaultSelfEncryptionKey!.toString(),
+    atSign: atAuthKeys.defaultSelfEncryptionKey!.toString(),
+    'apkamSymmetricKey': atAuthKeys.apkamSymmetricKey!.toString()
   };
 
   if (currentEnrollmentId != null) {

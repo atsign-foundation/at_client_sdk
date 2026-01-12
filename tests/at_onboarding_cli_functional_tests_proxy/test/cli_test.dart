@@ -20,7 +20,7 @@ final Uuid _uuid = Uuid();
 final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
 
 void main() {
-  group('System Readiness', () {
+	group('System Readiness', () {
     test('fresh docker environment setup', () async {
       logger.info('Checking current docker state...');
 

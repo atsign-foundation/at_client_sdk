@@ -54,8 +54,9 @@ void main() {
         ?.keyStore
         ?.put(localEnrollmentKey.toString(), atData);
 
-    AtEncryptionResult? atEncryptionResult = atClient.atChops?.encryptString(
-        atChops.atChopsKeys.selfEncryptionKey!.key, EncryptionKeyType.rsa2048);
+    AtEncryptionResult? atEncryptionResult = await atClient.atChops
+        ?.encryptString(atChops.atChopsKeys.selfEncryptionKey!.key,
+            EncryptionKeyType.rsa2048);
 
     // Store "currentAtSign" encrypted symmetric key : shared_key.bob@alice
     await atClient.getLocalSecondary()?.keyStore?.put(
@@ -127,7 +128,7 @@ void main() {
       AtClient? client = await AtClientImpl.create(currentAtsign, 'buzz', pref,
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
-          EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
+          EnrollmentServiceImpl(client, AtEnrollment.create());
       AtClientImpl? clientImpl = client as AtClientImpl;
 
       List<Enrollment> requests =
@@ -182,7 +183,7 @@ void main() {
           currentAtsign, 'random_namespace', pref,
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
-          EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
+          EnrollmentServiceImpl(client, AtEnrollment.create());
       AtClientImpl? clientImpl = client as AtClientImpl;
 
       List<Enrollment> requests = await clientImpl.enrollmentService!
@@ -228,7 +229,7 @@ void main() {
           currentAtsign, 'random_namespace_1', pref,
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
-          EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
+          EnrollmentServiceImpl(client, AtEnrollment.create());
       AtClientImpl? clientImpl = client as AtClientImpl;
 
       List<Enrollment> requests = await clientImpl.enrollmentService!
@@ -263,9 +264,9 @@ void main() {
     test(
         'A test to verify get operation is successful for the authorized namespace',
         () async {
-      AtEncryptionResult? encryptedValue = atClient.atChops?.encryptString(
-          '1234', EncryptionKeyType.aes256,
-          iv: AtChopsUtil.generateIVLegacy());
+      AtEncryptionResult? encryptedValue = await atClient.atChops
+          ?.encryptString('1234', EncryptionKeyType.aes256,
+              iv: AtChopsUtil.generateIVLegacy());
       FakeLookupVerbBuilder fakeLookupVerbBuilder = FakeLookupVerbBuilder();
       registerFallbackValue(fakeLookupVerbBuilder);
       when(() => mockRemoteSecondary.executeVerb(any(that: LookupKeyMatcher())))
