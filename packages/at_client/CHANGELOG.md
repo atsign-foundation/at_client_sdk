@@ -5,6 +5,7 @@
   to enable apps to easily default to using the remote atServer
 - fix: ensure AtRpcResp and AtRpcReq `.toString()` methods are JSON serialized
   strings
+- feat: use responseJson variable so that log is consistent
 - feat: improved resilience for notifications monitor
 
 ## 3.9.2
