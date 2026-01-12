@@ -199,8 +199,8 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   /// behaviour of having a single symmetric key, we will always
   /// encrypt the actual symmetric key we are using, caching it in memory for
   /// reuse, rather than storing it to data stores etc. It is safe to do this
-  /// because for a long time, clients will decrypt using the `sharedKeyEnc`
-  /// in the metadata, which we are always setting.
+  /// because for a long time, clients have been decrypting using the
+  /// `sharedKeyEnc` in the metadata, which we are always setting.
   Future<String> getTheirCopyOfLegacySharedSymmetricKey(
       AtKey atKey, String symmetricKeyBase64) async {
     // If it's not already in the cache, do the encryption.
