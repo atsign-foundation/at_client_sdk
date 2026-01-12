@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:args/args.dart';
 import 'package:at_cli_commons/at_cli_commons.dart';
 import 'package:at_client/at_client.dart';
 
@@ -11,14 +12,18 @@ import 'package:at_client/at_client.dart';
 /// - fetch it back as it is stored
 /// - fetch it back and decrypt it
 Future<void> main(List<String> args) async {
+  final ArgParser parser = CLIBase.createArgsParser(
+      namespace: 'example', addLegacyRootDomainArg: false);
   try {
-    AtClient atClient = (await CLIBase.fromCommandLineArgs(args)).atClient;
+    AtClient atClient =
+        (await CLIBase.fromCommandLineArgs(args, parser: parser)).atClient;
 
     String example = 'put_and_get_example';
     AtKey id = AtKey()
       ..namespace = atClient.getPreferences()!.namespace!
       ..key = example
-      ..sharedBy = atClient.getCurrentAtSign();
+      ..sharedBy = atClient.getCurrentAtSign()
+      ..metadata = (Metadata()..ttl = 5000); // ttl 5 seconds
 
     // Store it. Will talk direct to the remote atServer rather than use the
     // local datastore, so we don't have to wait for a local-to-atServer sync
@@ -26,26 +31,33 @@ Future<void> main(List<String> args) async {
     PutRequestOptions pro = PutRequestOptions()..useRemoteAtServer = true;
     await atClient.put(id, 'hello, world', putRequestOptions: pro);
 
-    var scanResult = (await atClient
-            .getRemoteSecondary()!
-            .executeCommand('scan $example\n'))!
-        .replaceFirst(RegExp(r'^data:'), '');
+    var scanResult =
+        (await atClient.getAtKeys(regex: example, useRemoteAtServer: true));
     print("Stored to: $scanResult");
 
     print('Fetching $id');
 
-    // Fetch it direct from remote
+    // Fetch it via atProtocol llookup command
     var asStored =
         (await atClient.getRemoteSecondary()!.executeCommand('llookup:$id\n'))!
             .replaceFirst(RegExp(r'^data:'), '');
     print('As stored: $asStored');
 
-    // Fetch it from local
-    print("Decrypted: ${(await atClient.get(id)).value}");
+    // Fetch it via atClient
+    GetRequestOptions gro = GetRequestOptions()..useRemoteAtServer = true;
+    print(
+        "Decrypted: ${(await atClient.get(id, getRequestOptions: gro)).value}");
 
+    await atClient.delete(id,
+        deleteRequestOptions: DeleteRequestOptions()..useRemoteAtServer = true);
     exit(0);
-  } catch (e) {
+  } catch (e, st) {
     print(e);
-    print(CLIBase.argsParser.usage);
+    if (e is ArgumentError || e is FormatException) {
+      print(parser.usage);
+    } else {
+      print('Stack Trace:\n$st');
+    }
+    exit(1);
   }
 }

@@ -1,8 +1,6 @@
 import 'package:at_client/src/client/remote_secondary.dart';
-import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 
-@experimental
 class AtClientParticulars {
   final String _clientId = Uuid().v4();
 

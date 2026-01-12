@@ -41,11 +41,11 @@ dependencies:
   # meta and intl are pinned in flutter test, be diligent to ensure you
   # never bump this past flutter stable's current pinned version
   meta: ^1.16.0
-  intl: ^0.19.0 # TODO: pin to the Flutter SDK and assess the damage
+  intl: ^0.20.2 # TODO: pin to the Flutter SDK and assess the damage
   flutter:
     sdk: flutter
   # normal dependencies
-  archive: ^3.6.1
+  archive: ^4.0.7
   args: ^2.6.0
   asn1lib: ^1.5.3
   async: ^2.9.0

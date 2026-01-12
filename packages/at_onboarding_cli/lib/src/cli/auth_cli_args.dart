@@ -73,10 +73,6 @@ enum AuthCliCommand {
   final String usage;
 }
 
-void main() {
-  print(AuthCliCommand.values);
-}
-
 class AuthCliArgs {
   static const defaultAtDirectoryFqdn = 'root.atsign.org';
   static const defaultAtRegistrarFqdn = 'my.atsign.com';

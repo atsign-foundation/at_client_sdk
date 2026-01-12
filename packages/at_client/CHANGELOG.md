@@ -1,8 +1,38 @@
+## 3.10.0
+
+- build(deps): Updated archive dependency to ^4.0.7
+- feat: Add RemoteLocalPref enum and AtClientPreference.remoteLocalPref field
+  to enable apps to easily default to using the remote atServer
+- fix: ensure AtRpcResp and AtRpcReq `.toString()` methods are JSON serialized
+  strings
+- feat: use responseJson variable so that log is consistent
+
+## 3.9.2
+
+- fix: AtRpc - prevent NACK/ACK race when handling request mutex acquisition
+
+## 3.9.1
+
+- chore: removed `@experimental` annotation from AtRpc and AtCollection
+- chore: added `// ignore: experimental_member_use` for usages of the 
+  still-experimental AtTelemetry
+
+## 3.9.0
+
+- feat: introduce single-responder mode in AtRpc enabling redundancy support in
+  request-response services relying on AtRpc. This feature is coupled with
+  `enableRequestMutex` flag that controls it.
+  
 ## 3.8.0
 
 - feat: add optional `useRemoteAtServer` flag to AtClient `getKeys` and
   `getAtKeys` so that apps can ask to fetch directly from atServer rather
   than the local datastore.
+- fix: set `isClient` to true and `isServer` to false in AtRpcClient,
+  enabling same atSign communication of AtRpc clients and servers.
+- fix!: fixed a bug where at_rpc was adding the AtClientPreference's namespace
+  to the notifications used by at_rpc
+  (https://github.com/atsign-foundation/at_client_sdk/pull/1670).
 
 ## 3.7.0
 

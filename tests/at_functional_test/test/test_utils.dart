@@ -21,7 +21,6 @@ class TestUtils {
     preference.isLocalStoreRequired = true;
     preference.rootDomain = 'vip.ve.atsign.zone';
     preference.decryptPackets = false;
-    preference.pathToCerts = 'test/testData/cert.pem';
     preference.tlsKeysSavePath = 'test/tlsKeysFile';
     preference.fetchOfflineNotifications = true;
     return preference;

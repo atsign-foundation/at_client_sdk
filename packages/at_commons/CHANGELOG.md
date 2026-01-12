@@ -1,3 +1,11 @@
+## 5.7.0
+
+- feat: extend syntax of `info` verb, adding `info:mtls` and `info:mtlsbrief`
+
+## 5.6.2
+
+- chore: remove `@experimental` annotation from `EnrollVerbBuilder.otp`
+
 ## 5.6.1
 
 - chore: fix lint from the new `strict_top_level_inference` rule

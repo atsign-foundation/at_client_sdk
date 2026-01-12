@@ -10,7 +10,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/util/create_at_client_cli.dart';
-import 'package:at_onboarding_cli/src/util/print_full_parser_usage.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:chalkdart/chalk.dart';
@@ -19,7 +18,6 @@ import 'package:meta/meta.dart';
 
 import '../util/onboarding_util.dart';
 import 'auth_cli_arg_validation.dart';
-import 'auth_cli_args.dart';
 
 final AtSignLogger logger = AtSignLogger(' CLI ');
 
@@ -220,7 +218,7 @@ Future<int> wrappedMain(List<String> arguments) async {
         // already-authenticated authorized atClient - the passcode on
         // enrollment requests is used solely to defend against ddos attacks
         // where users are bombarded with spurious enrollment requests.
-        await generateOtp(
+        await outputOtp(
             commandArgResults,
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
@@ -361,10 +359,10 @@ Future<int> wrappedMain(List<String> arguments) async {
 ///  - 0 if the atServer is reachable and `public:publickey@<atsign>` exists
 Future<int> status(ArgResults ar) async {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
-  
+
   // rootServer is now an alias of root-server, ArgParser handles both automatically
   String rootServer = ar[AuthCliArgs.argNameRootServer];
-  
+
   // Parse rootServer using AtRootDomain
   AtRootDomain rootDomain;
   try {
@@ -425,8 +423,7 @@ Future<int> status(ArgResults ar) async {
 @visibleForTesting
 Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
   svc ??= createOnboardingService(argResults);
-  logger
-      .info('Root server is ${argResults[AuthCliArgs.argNameRootServer]}');
+  logger.info('Root server is ${argResults[AuthCliArgs.argNameRootServer]}');
   logger.info(
       'Registrar url provided is ${argResults[AuthCliArgs.argNameRegistrarFqdn]}');
 
@@ -589,22 +586,13 @@ Future<void> setSpp(ArgResults argResults, AtClient atClient) async {
 }
 
 @visibleForTesting
-Future<void> generateOtp(ArgResults argResults, AtClient atClient) async {
+Future<void> outputOtp(ArgResults argResults, AtClient atClient) async {
   String? otpExpiry = argResults[AuthCliArgs.argNameExpiry];
-  StringBuffer otpCommandBuffer = StringBuffer()..append('otp:get');
-  if (otpExpiry != null && otpExpiry.isNotEmpty) {
-    otpCommandBuffer.append(':ttl:${parseDuration(otpExpiry).inMilliseconds}');
-  }
-  otpCommandBuffer.append('\n');
-
-  AtLookUp atLookup = atClient.getRemoteSecondary()!.atLookUp;
-  // send command 'otp:get[:ttl:$ttl]'
-  String? response =
-      await atLookup.executeCommand(otpCommandBuffer.getData()!, auth: true);
-  if (response != null && response.startsWith('data:')) {
-    stdout.writeln(response.substring('data:'.length));
-  } else {
-    stderr.writeln('Failed to generate OTP: server response was $response');
+  try {
+    String otp = await requestEnrollmentOtp(atClient, otpExpiry: otpExpiry);
+    stdout.writeln(otp);
+  } catch (e) {
+    stderr.writeln(e);
   }
 }
 
@@ -674,7 +662,7 @@ Future<void> interactive(ArgResults argResults, AtClient atClient) async {
           await setSpp(commandArgResults, atClient);
 
         case AuthCliCommand.otp:
-          await generateOtp(commandArgResults, atClient);
+          await outputOtp(commandArgResults, atClient);
 
         case AuthCliCommand.list:
           await list(commandArgResults, atClient);
@@ -1049,7 +1037,7 @@ Future<void> unrevoke(ArgResults ar, AtClient atClient) async {
 
   Map toUnRevoke = await _fetchOrListAndFilter(
     atLookup,
-    EnrollmentStatus.approved.name, // must be status approved
+    EnrollmentStatus.revoked.name, // must be status revoked
     eId: ar[AuthCliArgs.argNameEnrollmentId],
     arx: ar[AuthCliArgs.argNameAppNameRegex],
     drx: ar[AuthCliArgs.argNameDeviceNameRegex],
@@ -1084,10 +1072,10 @@ Future<void> deleteEnrollment(ArgResults ar, AtClient atClient) async {
 @visibleForTesting
 AtOnboardingService createOnboardingService(ArgResults ar) {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
-  
+
   // rootServer is now an alias of root-server, ArgParser handles both automatically
   String rootServer = ar[AuthCliArgs.argNameRootServer];
-  
+
   // Parse rootServer using AtRootDomain
   AtRootDomain rootDomain;
   try {
@@ -1096,7 +1084,7 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
     stderr.writeln('Error: Invalid root server domain "$rootServer": $e');
     throw ArgumentError('Invalid root server domain: $e');
   }
-  
+
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..rootDomain = rootDomain.rootDomain
     ..rootPort = rootDomain.rootPort

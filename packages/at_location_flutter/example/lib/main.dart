@@ -57,7 +57,7 @@ class _MyAppState extends State<MyApp> {
             colorScheme: ThemeData.light().colorScheme.copyWith(
                   primary: const Color(0xFFf4533d),
                 ),
-            bottomAppBarTheme: const BottomAppBarTheme(color: Colors.white),
+            bottomAppBarTheme: const BottomAppBarThemeData(color: Colors.white),
             scaffoldBackgroundColor: Colors.white,
           ),
           darkTheme: ThemeData().copyWith(
@@ -66,7 +66,7 @@ class _MyAppState extends State<MyApp> {
             colorScheme: ThemeData.dark().colorScheme.copyWith(
                   primary: Colors.blue,
                 ),
-            bottomAppBarTheme: BottomAppBarTheme(color: Colors.grey[850]),
+            bottomAppBarTheme: BottomAppBarThemeData(color: Colors.grey[850]),
             scaffoldBackgroundColor: Colors.grey[850],
           ),
           themeMode: themeMode,

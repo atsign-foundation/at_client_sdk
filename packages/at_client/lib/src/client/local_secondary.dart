@@ -27,18 +27,14 @@ class LocalSecondary implements Secondary {
         .getSecondaryKeyStore();
   }
 
-  @experimental
-  AtTelemetryService? telemetry;
-
   // temporarily cache enrollmentDetails until we store in local secondary
   @visibleForTesting
   Enrollment? enrollment;
 
-  /// Executes a verb builder on the local secondary. For update and delete operation, if [sync] is
-  /// set to true then data is synced from local to remote.
-  /// if [sync] is set to false, no sync operation is done.
+  /// Executes a verb builder on the local secondary.
+  /// If [sync] is true then a sync request will be queued.
   @override
-  Future<String?> executeVerb(VerbBuilder builder, {sync}) async {
+  Future<String?> executeVerb(VerbBuilder builder, {bool? sync}) async {
     String? verbResult;
 
     try {
@@ -94,6 +90,8 @@ class LocalSecondary implements Secondary {
           updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
           break;
       }
+      // If we've already sent to remote atServer, update the commit log so we
+      // don't send the update again via the sync process
       return 'data:$updateResult';
     } on DataStoreException catch (e) {
       _logger.severe('exception in local update:${e.toString()}');

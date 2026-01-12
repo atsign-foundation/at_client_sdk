@@ -27,7 +27,6 @@ import 'package:at_client/src/transformer/response_transformer/get_response_tran
 import 'package:at_client/src/transformer/response_transformer/put_response_transformer.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/constants.dart';
-import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -45,9 +44,9 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   AtClientPreference? get preference => _preference;
   late final String _atSign;
-  String? _namespace;
   SecondaryKeyStore? _localSecondaryKeyStore;
-  LocalSecondary? _localSecondary;
+  @visibleForTesting
+  LocalSecondary? localSecondary;
   RemoteSecondary? _remoteSecondary;
   AtClientCommitLogCompaction? _atClientCommitLogCompaction;
   AtClientConfig? _atClientConfig;
@@ -187,7 +186,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
     _preference?.namespace ??= namespace;
-    _namespace = namespace;
     _atClientManager = atClientManager;
     _localSecondaryKeyStore = localSecondaryKeyStore;
 
@@ -209,7 +207,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
         await storageManager.init(_atSign, preference!.keyStoreSecret);
       }
 
-      _localSecondary = LocalSecondary(this, keyStore: _localSecondaryKeyStore);
+      localSecondary = LocalSecondary(this, keyStore: _localSecondaryKeyStore);
       _atChops ??= await _createAtChops(_atSign);
     }
 
@@ -223,7 +221,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     // Using ??= because we may be injecting an EncryptionService
     _encryptionService ??= EncryptionService(_atSign);
     _encryptionService!.remoteSecondary = _remoteSecondary;
-    _encryptionService!.localSecondary = _localSecondary;
+    _encryptionService!.localSecondary = localSecondary;
 
     putRequestTransformer.atClient = this;
 
@@ -260,23 +258,16 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
 
   /// Does nothing unless a telemetry service has been injected
   void _cascadeSetTelemetryService() {
-    if (telemetry != null) {
-      _encryptionService?.telemetry = telemetry;
-      _localSecondary?.telemetry = telemetry;
-      _remoteSecondary?.telemetry = telemetry;
-    }
-  }
-
-  Secondary getSecondary() {
-    if (_preference!.isLocalStoreRequired) {
-      return _localSecondary!;
-    }
-    return _remoteSecondary!;
+    // if (telemetry != null) {
+    //   _encryptionService?.telemetry = telemetry;
+    //   _localSecondary?.telemetry = telemetry;
+    //   _remoteSecondary?.telemetry = telemetry;
+    // }
   }
 
   @override
   LocalSecondary? getLocalSecondary() {
-    return _localSecondary;
+    return localSecondary;
   }
 
   @override
@@ -292,7 +283,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   Future<bool> persistPrivateKey(String privateKey) async {
     var atData = AtData();
     atData.data = privateKey.toString();
-    await _localSecondary!.keyStore!.put(AtConstants.atPkamPrivateKey, atData);
+    await localSecondary!.keyStore!.put(AtConstants.atPkamPrivateKey, atData);
     return true;
   }
 
@@ -315,13 +306,18 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   Future<bool> delete(AtKey atKey,
       {bool isDedicated = false, DeleteRequestOptions? deleteRequestOptions}) {
-    _telemetry?.controller.sink
-        .add(AtTelemetryEvent('AtClient.delete called', {"key": atKey}));
+    _telemetry?.controller.sink.add(
+      // ignore: experimental_member_use
+      AtTelemetryEvent('AtClient.delete called', {"key": atKey}),
+    );
     // ignore: no_leading_underscores_for_local_identifiers
     var _deleteResult =
         _delete(atKey, deleteRequestOptions: deleteRequestOptions);
-    _telemetry?.controller.sink.add(AtTelemetryEvent('AtClient.delete complete',
-        {"key": atKey, "_deleteResult": _deleteResult}));
+    _telemetry?.controller.sink.add(
+      // ignore: experimental_member_use
+      AtTelemetryEvent('AtClient.delete complete',
+          {"key": atKey, "_deleteResult": _deleteResult}),
+    );
     return _deleteResult;
   }
 
@@ -334,14 +330,25 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       atKey.namespace ??= preference?.namespace;
     }
     var builder = DeleteVerbBuilder()..atKey = atKey;
-    var secondary = getSecondary();
-    if (deleteRequestOptions != null &&
-        deleteRequestOptions.useRemoteAtServer) {
-      secondary = getRemoteSecondary()!;
-    }
-    var deleteResult = await secondary.executeVerb(builder, sync: true);
+
+    var deleteResult = await executeVerb(
+        builder,
+        SecondaryManager.getRemoteLocalPrefForOp(
+          deleteRequestOptions?.useRemoteAtServer,
+          preference?.remoteLocalPref,
+        ));
 
     return deleteResult != null;
+  }
+
+  Future<String?> executeVerb(
+      VerbBuilder builder, RemoteLocalPref prefForOp) async {
+    switch (prefForOp) {
+      case RemoteLocalPref.localOnly:
+        return await localSecondary!.executeVerb(builder, sync: true);
+      case RemoteLocalPref.remoteOnly:
+        return await _remoteSecondary!.executeVerb(builder);
+    }
   }
 
   @override
@@ -358,7 +365,13 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       if (getRequestOptions?.useRemoteAtServer == true) {
         secondary = getRemoteSecondary()!;
       } else {
-        secondary = SecondaryManager.getSecondary(this, verbBuilder);
+        secondary = SecondaryManager.getSecondary(
+            this,
+            verbBuilder,
+            SecondaryManager.getRemoteLocalPrefForOp(
+              getRequestOptions?.useRemoteAtServer,
+              preference?.remoteLocalPref,
+            ));
       }
       var getResponse = await secondary.executeVerb(verbBuilder);
       // Return empty value if getResponse is null.
@@ -397,22 +410,28 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     String? sharedBy,
     String? sharedWith,
     bool showHiddenKeys = false,
-    bool useRemoteAtServer = false,
+    bool? useRemoteAtServer,
   }) async {
-    var builder = ScanVerbBuilder()
+    var scanBuilder = ScanVerbBuilder()
       ..sharedWith = sharedWith
       ..sharedBy = sharedBy
       ..regex = regex
       ..showHiddenKeys = showHiddenKeys
       ..auth = true;
     Secondary secondary;
-    if (useRemoteAtServer) {
+    if (useRemoteAtServer == true) {
       secondary = getRemoteSecondary()!;
     } else {
-      secondary = SecondaryManager.getSecondary(this, builder);
+      secondary = SecondaryManager.getSecondary(
+          this,
+          scanBuilder,
+          SecondaryManager.getRemoteLocalPrefForOp(
+            useRemoteAtServer,
+            preference?.remoteLocalPref,
+          ));
     }
 
-    var scanResult = await secondary.executeVerb(builder);
+    var scanResult = await secondary.executeVerb(scanBuilder);
     scanResult = _formatResult(scanResult);
     var result = [];
     if (scanResult.isNotEmpty) {
@@ -427,7 +446,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     String? sharedBy,
     String? sharedWith,
     bool showHiddenKeys = false,
-    bool useRemoteAtServer = false,
+    bool? useRemoteAtServer,
   }) async {
     var getKeysResult = await getKeys(
       regex: regex,
@@ -455,8 +474,10 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   Future<bool> put(AtKey atKey, dynamic value,
       {bool isDedicated = false, PutRequestOptions? putRequestOptions}) async {
-    _telemetry?.controller.sink
-        .add(AtTelemetryEvent('AtClient.put called', {"key": atKey}));
+    _telemetry?.controller.sink.add(
+      // ignore: experimental_member_use
+      AtTelemetryEvent('AtClient.put called', {"key": atKey}),
+    );
     // If the value is neither String nor List<int> throw exception
     if (value is! String && value is! List<int>) {
       throw AtValueException(
@@ -471,8 +492,10 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       atResponse =
           await putBinary(atKey, value, putRequestOptions: putRequestOptions);
     }
-    _telemetry?.controller.sink
-        .add(AtTelemetryEvent('AtClient.put complete', {"atKey": atKey}));
+    _telemetry?.controller.sink.add(
+      // ignore: experimental_member_use
+      AtTelemetryEvent('AtClient.put complete', {"atKey": atKey}),
+    );
     return atResponse.response.isNotEmpty;
   }
 
@@ -560,30 +583,28 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     //Get encryptionPrivateKey for public key to signData
     String? encryptionPrivateKey;
     if (atKey.metadata.isPublic == true) {
-      encryptionPrivateKey = await _localSecondary?.getEncryptionPrivateKey();
+      encryptionPrivateKey = await localSecondary?.getEncryptionPrivateKey();
     }
     // Transform put request
     // Optionally passing encryption private key to sign the public data.
-    UpdateVerbBuilder verbBuilder = await putRequestTransformer.transform(tuple,
+    UpdateVerbBuilder putBuilder = await putRequestTransformer.transform(tuple,
         encryptionPrivateKey: encryptionPrivateKey,
         requestOptions: putRequestOptions);
     // Validate the size of the value after encryption/encoding
     // Since AtClientPreference is mandatory argument in create method, _preference
     // will not be null.
-    if (verbBuilder.value.length > _preference!.maxDataSize) {
+    if (putBuilder.value.length > _preference!.maxDataSize) {
       throw BufferOverFlowException(
           'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference!.maxDataSize} bytes. Found ${value.toString().length} bytes');
     }
 
-    Secondary secondary = SecondaryManager.getSecondary(this, verbBuilder);
-    if (putRequestOptions != null && putRequestOptions.useRemoteAtServer) {
-      secondary = getRemoteSecondary()!;
-    }
-    // DO NOT sync local keys to server
-    bool shouldSync = atKey.isLocal ? false : SyncUtil.shouldSync(atKey.key);
+    var putResponse = await executeVerb(
+        putBuilder,
+        SecondaryManager.getRemoteLocalPrefForOp(
+          putRequestOptions?.useRemoteAtServer,
+          preference?.remoteLocalPref,
+        ));
 
-    var putResponse =
-        await secondary.executeVerb(verbBuilder, sync: shouldSync);
     // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
       return AtResponse()..isError = true;
@@ -617,28 +638,20 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   }
 
   @override
-  Future<bool> putMeta(AtKey atKey) async {
-    var updateKey = atKey.key;
-    var metadata = atKey.metadata;
-    if (metadata.namespaceAware) {
-      updateKey = _getKeyWithNamespace(atKey.key);
-    }
+  Future<bool> putMeta(AtKey atKey,
+      {PutRequestOptions? putRequestOptions}) async {
     var builder = UpdateVerbBuilder();
     builder
       ..atKey = atKey
       ..operation = AtConstants.updateMeta;
 
-    var updateMetaResult = await getSecondary()
-        .executeVerb(builder, sync: SyncUtil.shouldSync(updateKey));
+    var updateMetaResult = await executeVerb(
+        builder,
+        SecondaryManager.getRemoteLocalPrefForOp(
+          putRequestOptions?.useRemoteAtServer,
+          preference?.remoteLocalPref,
+        ));
     return updateMetaResult != null;
-  }
-
-  String _getKeyWithNamespace(String key) {
-    var keyWithNamespace = key;
-    if (_namespace != null && _namespace!.isNotEmpty) {
-      keyWithNamespace = '$keyWithNamespace.$_namespace';
-    }
-    return keyWithNamespace;
   }
 
   String? getOperation(dynamic value, Metadata? data) {
@@ -677,9 +690,9 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     AtPkamKeyPair? atPkamKeyPair;
     try {
       var encryptionPublicKey =
-          await _localSecondary!.getEncryptionPublicKey(atSign);
+          await localSecondary!.getEncryptionPublicKey(atSign);
       var encryptionPrivateKey =
-          await _localSecondary!.getEncryptionPrivateKey();
+          await localSecondary!.getEncryptionPrivateKey();
       if (encryptionPublicKey != null && encryptionPrivateKey != null) {
         atEncryptionKeyPair = AtEncryptionKeyPair.create(
             encryptionPublicKey, encryptionPrivateKey);
@@ -689,8 +702,8 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
           '_createAtChops  - Exception while getting encryption key pair from local secondary: ${e.toString()}');
     }
     try {
-      var pkamPublicKey = await _localSecondary!.getPkamPublicKey();
-      var pkamPrivateKey = await _localSecondary!.getPkamPrivateKey();
+      var pkamPublicKey = await localSecondary!.getPkamPublicKey();
+      var pkamPrivateKey = await localSecondary!.getPkamPrivateKey();
 
       if (pkamPublicKey != null && pkamPrivateKey != null) {
         atPkamKeyPair = AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);

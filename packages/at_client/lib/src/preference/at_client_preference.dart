@@ -1,7 +1,6 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
-import 'package:meta/meta.dart';
 import 'package:version/version.dart';
 
 /// Class to hold attributes for client preferences.
@@ -19,7 +18,9 @@ class AtClientPreference {
   SyncStrategy? syncStrategy;
 
   /// Specify whether local store is required
-  bool isLocalStoreRequired = false;
+  /// [Deprecated] LocalSecondary will be required as default
+  @Deprecated("LocalSecondary will be required as default")
+  bool isLocalStoreRequired = true;
 
   /// Shared secret of the atSign
   String? cramSecret;
@@ -102,14 +103,36 @@ class AtClientPreference {
   @Deprecated('Ignored. Will be removed in next major version')
   Version atProtocolEmitted = Version(2, 0, 0);
 
-  @experimental
   AtClientParticulars atClientParticulars = AtClientParticulars();
 
-  //signing algorithm to use for pkam authentication
+  /// signing algorithm to use for pkam authentication
   SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
 
-  //hashing algorithm to use for pkam authentication
+  /// hashing algorithm to use for pkam authentication
   HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
+
+  /// Set this to [RemoteLocalPref.remoteFirst] or [RemoteLocalPref.remoteOnly]
+  /// if you require all data operations (get / put / delete) to be performed
+  /// on the remote atServer first.
+  RemoteLocalPref remoteLocalPref = RemoteLocalPref.localOnly;
+}
+
+/// Default preference on how to handle get, put and delete requests with
+/// regards to use of local storage vs the remote atServer.
+enum RemoteLocalPref {
+  /// The default - operate on local storage, and rely on the background
+  /// sync processing to push changes to the remote atServer.
+  localOnly,
+
+  // /// Operate on remote first. If there is an exception, rethrow it back to
+  // /// application code. If remote operation was successful, then perform the
+  // /// operation on local storage.
+  // remoteFirst,
+  //
+  /// Operate on remote only - i.e. do not interact with local storage at all.
+  /// Note that if the application is syncing, then the change will be pulled
+  /// to local from remote as part of the sync process.
+  remoteOnly,
 }
 
 @Deprecated("Use SyncService")
