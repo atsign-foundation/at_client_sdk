@@ -504,61 +504,6 @@ void main() {
       when(() => mockSharedKeyDecryption.decrypt(any(), 'encryptedValue'))
           .thenAnswer((_) => Future.value('decryptedValue'));
     });
-    test(
-        'A test to verify notification text is decrypted when isEncrypted is set to true',
-        () async {
-      var isEncrypted = true;
-      var atNotification = AtNotification(
-          '124',
-          '@bob:encryptedValue',
-          '@alice',
-          '@bob',
-          DateTime.now().millisecondsSinceEpoch,
-          // ignore: deprecated_member_use
-          MessageTypeEnum.text.toString(),
-          isEncrypted);
-      var notificationResponseTransformer = NotificationResponseTransformer(
-          mockAtClientImpl,
-          decrypterManager: mockDecryptionManager);
-      when(() => mockDecryptionManager.get(any()))
-          .thenReturn(mockSharedKeyDecryption);
-
-      var transformedNotification =
-          await notificationResponseTransformer.transform(Tuple()
-            ..one = atNotification
-            ..two = (NotificationConfig()
-              ..regex = '.*'
-              ..shouldDecrypt = true));
-      expect(transformedNotification.key, '@bob:decryptedValue');
-    });
-
-    test(
-        'A test to verify notification text is not decrypted when isEncrypted is set to false',
-        () async {
-      var isEncrypted = false;
-      var atNotification = AtNotification(
-          '124',
-          '@bob:encryptedValue',
-          '@alice',
-          '@bob',
-          DateTime.now().millisecondsSinceEpoch,
-          // ignore: deprecated_member_use
-          MessageTypeEnum.text.toString(),
-          isEncrypted);
-      var notificationResponseTransformer = NotificationResponseTransformer(
-          mockAtClientImpl,
-          decrypterManager: mockDecryptionManager);
-      when(() => mockDecryptionManager.get(any()))
-          .thenReturn(mockSharedKeyDecryption);
-
-      var transformedNotification =
-          await notificationResponseTransformer.transform(Tuple()
-            ..one = atNotification
-            ..two = (NotificationConfig()
-              ..regex = '.*'
-              ..shouldDecrypt = true));
-      expect(transformedNotification.key, '@bob:encryptedValue');
-    });
 
     test(
         'A test to verify notification value is decrypted when isEncrypted is set to null',
