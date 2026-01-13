@@ -1,5 +1,8 @@
 # CHANGELOG
 
-## 1.0.0
+## 0.1.0
 
-- Initial version, created by Stagehand
+- Initial version, consolidating in functionality from legacy packages
+- feat: `KeychainAtKeysIo` defines authentication via keychain for `at_auth`
+- feat: Dialog widgets for flutter applications
+- feat: Use case focused services for onboarding

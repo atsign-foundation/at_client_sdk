@@ -1,6 +1,13 @@
-## 2.5.0 (unreleased tech-debt-removal branch changes)
+
+
+## 3.0.0 
 
 - chore(deps): at_chops ^3.0.0
+- refactor: remove all singletons, injecting dependecies via `AuthRequest`
+- feat: `AtKeysIo` interface which defines interaction between stored/generated keys and at_auth
+- feat: `FileAtKeysIo` class which defines implementation
+- feat: authentication returns `AtLookup` and `AtChops` via `AuthResponse`
+- feat: `AtAuth` exposes a `ProgressStream` to consume status of at_auth
 
 ## 2.4.0
 
