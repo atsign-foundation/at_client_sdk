@@ -162,6 +162,8 @@ abstract class AtServiceFactory {
   Future<NotificationService> notificationService(
       AtClient atClient, AtClientManager atClientManager);
 
+  /// [notificationService] parameter is ignored, the sync service should
+  /// get that from the [atClient]
   Future<SyncService> syncService(AtClient atClient,
       AtClientManager atClientManager, NotificationService notificationService);
 
@@ -193,8 +195,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
       AtClientManager atClientManager,
       NotificationService notificationService) async {
     return await SyncServiceImpl.create(atClient,
-        atClientManager: atClientManager,
-        notificationService: notificationService);
+        atClientManager: atClientManager);
   }
 
   @override

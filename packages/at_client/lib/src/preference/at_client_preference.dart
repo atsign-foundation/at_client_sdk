@@ -17,8 +17,12 @@ class AtClientPreference {
   @Deprecated("Use [SyncService]")
   SyncStrategy? syncStrategy;
 
-  /// Specify whether local store is required
-  bool isLocalStoreRequired = false;
+  bool _isLocalStoreRequired = true;
+
+  bool get isLocalStoreRequired => _isLocalStoreRequired;
+
+  @Deprecated("LocalStore is always required")
+  set isLocalStoreRequired(bool b) => _isLocalStoreRequired = b;
 
   /// Shared secret of the atSign
   String? cramSecret;
@@ -60,10 +64,31 @@ class AtClientPreference {
   /// The number of keys to pull from cloud secondary to local secondary in a single call.
   int syncPageLimit = 25;
 
-  // Default chunk size for file encryption and decryption
+  /// Default chunk size for file encryption and decryption
   int fileEncryptionChunkSize = 4096;
 
-  Duration monitorHeartbeatInterval = Duration(seconds: 10);
+  /// The NotificationService maintains a connection which monitors for new
+  /// notifications being delivered from the atServer. Because network weather
+  /// is real, and because it is generally essential for client programs to
+  /// receive notifications consistently, a heartbeat `no-op` command is sent
+  /// to the atServer periodically, at this interval
+  Duration monitorHeartbeatInterval = Duration(seconds: 59);
+
+  /// When a heartbeat is sent by the notifications monitor, we wait for this
+  /// length of time to receive a response. If no response is received, then
+  /// the connection is closed, and the notifications monitor will reconnect.
+  ///
+  /// See also [monitorHeartbeatInterval]
+  Duration monitorHeartbeatResponseTimeout = Duration(seconds: 10);
+
+  /// - when true, then the notifications monitor will be started either the
+  /// first time that [NotificationService.subscribe] is called by the
+  /// application code, or 30 seconds after creation of the
+  /// [NotificationService] if there have been no subscriptions.
+  /// - when false, then the notifications monitor
+  /// will not be started until explicitly requested to do so by the
+  /// application calling [NotificationService.startListening]
+  bool monitorAutoStart = true;
 
   /// Time interval for the scheduled task that removes expired keys from local keyStore
   ///
@@ -96,9 +121,9 @@ class AtClientPreference {
   @Deprecated('No longer needed. at_chops will be used by default')
   bool useAtChops = true;
 
-  /// Poorly named variable which controls some aspects of at_client's
-  /// default data encryption
-  @Deprecated('Will be removed in next major version')
+  /// Poorly named variable which used to control some aspects of at_client's
+  /// default data encryption. Is now fully ignored.
+  @Deprecated('Ignored. Will be removed in next major version')
   Version atProtocolEmitted = Version(2, 0, 0);
 
   AtClientParticulars atClientParticulars = AtClientParticulars();

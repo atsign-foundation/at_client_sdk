@@ -18,7 +18,6 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
-import 'package:at_client/at_client.dart' show AtClientImpl, AtClientPreference;
 
 class AtAuthImpl implements AtAuth {
   final AtSignLogger _logger = AtSignLogger('AtAuthServiceImpl');
@@ -85,7 +84,7 @@ class AtAuthImpl implements AtAuth {
       );
     }
 
-		atAuthRequest.enrollmentId ??= atAuthKeys.enrollmentId;
+    atAuthRequest.enrollmentId ??= atAuthKeys.enrollmentId;
     atLookUp ??= AtLookupImpl(
       atAuthRequest.atSign,
       atAuthRequest.rootDomain.rootDomain,
@@ -99,10 +98,14 @@ class AtAuthImpl implements AtAuth {
     pkamAuthenticator ??= PkamAuthenticator();
     var pkamResponse = AtAuthResponse(atAuthRequest.atSign);
     try {
-      pkamResponse.isSuccessful = (await pkamAuthenticator!.authenticate(
-          atAuthRequest.atSign, atLookUp!,
-          enrollmentId: atAuthRequest.enrollmentId));
-      pkamResponse.atAuthKeys = atAuthKeys;
+      pkamResponse
+        ..isSuccessful = (await pkamAuthenticator!.authenticate(
+            atAuthRequest.atSign, atLookUp!,
+            enrollmentId: atAuthRequest.enrollmentId))
+        ..atAuthKeys = atAuthKeys
+        ..atLookUp = atLookUp
+        ..atChops = atChops;
+
       if (!pkamResponse.isSuccessful) {
         _addProgress(
           "authentication",
@@ -122,18 +125,10 @@ class AtAuthImpl implements AtAuth {
         "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
         ProgressEventType.error,
       );
-      throw AtAuthenticationException('Unable to authenticate | Cause: $e \n $s');
-    } 
-		AtClientPreference acp = AtClientPreference()
-			..rootDomain = atAuthRequest.rootDomain.rootDomain
-			..rootPort = atAuthRequest.rootDomain.rootPort;
-		pkamResponse.atClient = await AtClientImpl.create(
-			atAuthRequest.atSign,
-			atAuthRequest.namespace,
-			acp,
-			atChops: atChops,
-			atLookUp: atLookUp,
-		);
+      throw AtAuthenticationException(
+          'Unable to authenticate | Cause: $e \n $s');
+    }
+
     return pkamResponse;
   }
 
@@ -197,10 +192,11 @@ class AtAuthImpl implements AtAuth {
     } else {
       switch (atOnboardingRequest.atKeysIo) {
         case WrittenAtKeysIo writtenKeys:
-          _atAuthKeys = writtenKeys.generateKeyPairs(atSign: atOnboardingRequest.atSign);
+          _atAuthKeys =
+              writtenKeys.generateKeyPairs(atSign: atOnboardingRequest.atSign);
         default:
           throw AtAuthenticationException(
-          'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');
+              'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');
       }
     }
     atChops ??= _createAtChops(_atAuthKeys);
@@ -246,7 +242,7 @@ class AtAuthImpl implements AtAuth {
     }
 
     //6b. Store the keys
-    if( atOnboardingRequest.atKeysIo is WrittenAtKeysIo){
+    if (atOnboardingRequest.atKeysIo is WrittenAtKeysIo) {
       try {
         await (atOnboardingRequest.atKeysIo as WrittenAtKeysIo).write(
           atOnboardingRequest.atSign,
@@ -265,15 +261,15 @@ class AtAuthImpl implements AtAuth {
           'Unable to store keys for atSign: ${atOnboardingRequest.atSign} | Cause: ${e.message}',
         );
       } catch (e) {
-				_addProgress(
-					"onboarding",
-					e.toString(),
-					ProgressEventType.error,
-				);
-				throw AtAuthenticationException(
-					'Unable to write keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
-				);
-			}
+        _addProgress(
+          "onboarding",
+          e.toString(),
+          ProgressEventType.error,
+        );
+        throw AtAuthenticationException(
+          'Unable to write keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
+        );
+      }
     }
 
     //7. If so specified (default behaviour) then
@@ -284,18 +280,13 @@ class AtAuthImpl implements AtAuth {
       await completeActivation();
     }
 
-		AtClientPreference acp = AtClientPreference()
-			..rootDomain = atOnboardingRequest.rootDomain.rootDomain
-			..rootPort = atOnboardingRequest.rootDomain.rootPort;
+    atOnboardingResponse
+      ..isSuccessful = true
+      ..enrollmentId = enrollmentIdFromServer
+      ..atAuthKeys = _atAuthKeys
+      ..atLookUp = atLookUp
+      ..atChops = atChops;
 
-		atOnboardingResponse.atClient = await AtClientImpl.create(
-			atOnboardingRequest.atSign,
-			atOnboardingRequest.namespace,
-			acp
-		);
-    atOnboardingResponse.isSuccessful = true;
-    atOnboardingResponse.enrollmentId = enrollmentIdFromServer;
-    atOnboardingResponse.atAuthKeys = _atAuthKeys;
     _addProgress(
         "onboarding",
         "Onboarding successful for atSign: ${atOnboardingRequest.atSign}",

@@ -7,11 +7,60 @@ import 'package:uuid/uuid.dart';
 abstract class NotificationService {
   /// Gives back stream of notifications from the server to the subscribing client.
   ///
-  /// Optionally pass a regex to filter notification keys matching the regex.
-  ///
-  /// Optionally set shouldDecrypt to true to return the original value in the [AtNotification]
-  /// Defaulted to false to preserve the backward compatibility.
+  /// - Supply [regex] to stream only notifications whose keys match the regex.
+  /// - When [shouldDecrypt] is true, then [AtNotification.value] is decrypted
+  /// (if it was encrypted). [shouldDecrypt] defaults to false in order to
+  /// preserve backwards compatibility.
+  /// - when [AtClientPreference.autoStartListening] is true, then the notifications listener
+  /// will be started either the first time that [subscribe] is called by the
+  /// application code, or 30 seconds after creation if there have been no
+  /// subscriptions.
+  /// - when [autoStartListening] is false, then the notifications listener
+  /// will not be started until explicitly requested to do so by the
+  /// application, via [startListening]
   Stream<AtNotification> subscribe({String? regex, bool shouldDecrypt});
+
+  /// Stops all subscriptions on the current instance. By default
+  /// will also stop listening for notifications from the atServer. If you
+  /// wish to stop listening for notifications for some reason, but keep the
+  /// subscriptions, then you should call [startListening].
+  void stopAllSubscriptions({bool stopNotificationsListener = true});
+
+  /// Explicitly start the notification listener. If the notification listener
+  /// is already started, this should do nothing. Sets [targetListenerState] to
+  /// [NotificationListenerState.listening]
+  void startListening();
+
+  /// Stop the notification listener. If the notification listener is already
+  /// stopped, this should do nothing. Sets [targetListenerState] to
+  /// [NotificationListenerState.notConnected]
+  void stopListening();
+
+  /// Whether the service **should be** currently listening for notifications.
+  /// - [startListening] sets this to [NotificationListenerState.listening]
+  /// - [stopListening] sets this to [NotificationListenerState.notConnected]
+  NotificationListenerState get targetListenerState;
+
+  /// Whether the service **is** currently listening for notifications.
+  /// If network connectivity is lost or weird, the listener will detect that,
+  /// and will disconnect and periodically try to reconnect until successful,
+  /// or until [stopListening] has been called.
+  NotificationListenerState get currentListenerState;
+
+  /// Get an event every time the currentListenerState is set. **NB** The
+  /// listener state can be set to the same value it was previously. This
+  /// happens for example for every time the listener attempts to reconnect
+  /// to the atServer while the network is unavailable.
+  Stream<NotificationListenerState> get currentListenerStateStream;
+
+  /// Same as `currentListenerState == NotificationListenerState.listening`
+  /// as a convenience for application code
+  bool get listening =>
+      currentListenerState == NotificationListenerState.listening;
+
+  /// The time at which a notification was last received. [null] if nothing
+  /// has yet been received.
+  DateTime? get lastReceipt;
 
   /// Sends notification to [notificationParams.atKey.sharedWith] atSign.
   ///
@@ -98,9 +147,6 @@ abstract class NotificationService {
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary});
-
-  /// Stops all subscriptions on the current instance
-  void stopAllSubscriptions();
 
   /// Returns the status of the given notificationId
   ///
@@ -266,5 +312,7 @@ class NotificationConfig {
   /// Defaulted to false to preserve backward compatibility.
   bool shouldDecrypt = false;
 }
+
+enum NotificationListenerState { listening, notConnected }
 
 enum NotificationStatusEnum { delivered, undelivered }

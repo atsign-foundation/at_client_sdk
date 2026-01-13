@@ -30,8 +30,8 @@ void main() {
       mockAtClient = MockAtClient();
       mockDecryptionManager = MockAtKeyDecryptionManager();
       mockDecryptionService = MockAtKeyDecryption();
-      transformer = GetResponseTransformer(mockAtClient)
-        ..decryptionManager = mockDecryptionManager;
+      transformer = GetResponseTransformer(mockAtClient,
+          decrypterManager: mockDecryptionManager);
       when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
     });
     test('A test to validate new line character decoding', () async {
@@ -125,7 +125,7 @@ void main() {
         ..one = atKey
         ..two =
             '{"data": "shared_phone_number", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": true}}';
-      when(() => mockDecryptionManager.get(atKey, '@alice'))
+      when(() => mockDecryptionManager.get(atKey))
           .thenReturn(mockDecryptionService);
       when(() => mockDecryptionService.decrypt(atKey, "shared_phone_number"))
           .thenAnswer((_) async => 'decrypted_data');
@@ -148,7 +148,7 @@ void main() {
         ..one = atKey
         ..two =
             '{"data": "shared_phone_number", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": false}}';
-      when(() => mockDecryptionManager.get(atKey, '@alice'))
+      when(() => mockDecryptionManager.get(atKey))
           .thenReturn(mockDecryptionService);
       when(() => mockDecryptionService.decrypt(atKey, "shared_phone_number"))
           .thenAnswer((_) async => 'decrypted_data');
@@ -169,7 +169,7 @@ void main() {
         ..one = atKey
         ..two =
             '{"data": "shared_phone_number", "key": "@bob:phone@alice","metaData": {"isEncrypted": true}}';
-      when(() => mockDecryptionManager.get(atKey, '@alice'))
+      when(() => mockDecryptionManager.get(atKey))
           .thenReturn(mockDecryptionService);
       when(() => mockDecryptionService.decrypt(atKey, "shared_phone_number"))
           .thenThrow(AtException('Decryption failed'));

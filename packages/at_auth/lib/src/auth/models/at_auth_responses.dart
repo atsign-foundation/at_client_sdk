@@ -1,11 +1,13 @@
 import 'package:at_auth/src/keys/at_keys.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_chops/at_chops.dart';
+import 'package:at_lookup/at_lookup.dart';
 
 sealed class AuthResponse {
   String atSign;
   bool isSuccessful = false;
   AtKeys? atAuthKeys;
-  AtClient? atClient;
+  AtLookUp? atLookUp;
+  AtChops? atChops;
 
   AuthResponse(this.atSign);
 }

@@ -60,9 +60,7 @@ class PutRequestTransformer
         .get(updateVerbBuilder.atKey, _atClient.getCurrentAtSign()!);
     try {
       updateVerbBuilder.value = await encryptionService.encrypt(
-          updateVerbBuilder.atKey, updateVerbBuilder.value,
-          storeSharedKeyEncryptedWithData:
-              options.storeSharedKeyEncryptedMetadata);
+          updateVerbBuilder.atKey, updateVerbBuilder.value);
       updateVerbBuilder.atKey.metadata.isEncrypted = true;
     } on AtException catch (e) {
       e.stack(AtChainedException(Intent.shareData,
