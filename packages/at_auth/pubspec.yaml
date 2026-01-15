@@ -16,6 +16,8 @@ dependencies:
   at_chops: ^3.0.0
   at_utils: ^3.0.19
   crypton: ^2.2.1
+  http: ^1.2.1
+  meta: ^1.16.0
 
 dev_dependencies:
   args: ^2.6.0 # used in example
