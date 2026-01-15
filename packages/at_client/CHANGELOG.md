@@ -1,5 +1,6 @@
-## NEXT
+## 3.11.0
 
+- chore(deps): at_auth ^3.0.0
 - chore(deps): at_chops ^3.0.0
 
 ## 3.10.0

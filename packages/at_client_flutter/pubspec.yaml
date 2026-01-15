@@ -21,7 +21,6 @@ dependencies:
   at_utils: ^3.0.19
   at_chops: ^3.0.0
   at_lookup: ^3.4.2
-  at_client: ^3.10.0
   at_auth: ^3.0.0
   encrypt: ^5.0.3
   at_persistence_secondary_server: ^4.2.0

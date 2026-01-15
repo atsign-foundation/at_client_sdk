@@ -1,3 +1,7 @@
+## 5.8.0
+
+- feat: add `AtBytes` supporting hardware acceleration in `at_chops`
+
 ## 5.7.0
 
 - feat: extend syntax of `info` verb, adding `info:mtls` and `info:mtlsbrief`
