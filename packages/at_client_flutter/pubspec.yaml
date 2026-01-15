@@ -22,6 +22,7 @@ dependencies:
   at_chops: ^3.0.0
   at_lookup: ^3.4.2
   at_auth: ^3.0.0
+  at_client: ^3.11.0
   encrypt: ^5.0.3
   at_persistence_secondary_server: ^4.2.0
   flutter_riverpod: ^3.0.0
