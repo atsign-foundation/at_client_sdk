@@ -35,7 +35,7 @@ jobs:
         working-directory: packages/at_chops
 
       - name: Run osv-scanner
-        uses: google/osv-scanner-action/osv-scanner-action@375a0e8ebdc98e99b02ac4338a724f5750f21213 # v2.3.1
+        uses: google/osv-scanner-action/osv-scanner-action@2a387edfbe02a11d856b89172f6e978100177eb4 # v2.3.2
         with:
           scan-args: |-
             --lockfile=./pubspec.lock
