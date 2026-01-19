@@ -4,10 +4,10 @@ import 'package:at_onboarding_cli/src/util/at_onboarding_exceptions.dart';
 import 'package:at_onboarding_cli/src/util/home_directory_util.dart';
 import 'package:at_utils/at_logger.dart';
 
-import 'models.dart';
+import 'collision_models.dart';
 
-export 'collision_handler.dart';
-export 'models.dart';
+export 'collision_handlers.dart';
+export 'collision_models.dart';
 
 /// Atomic .atKeys file writer with secure permissions.
 ///

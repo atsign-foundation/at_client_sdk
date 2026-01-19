@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:chalkdart/chalk.dart';
 
-import 'models.dart';
+import 'collision_models.dart';
 
 /// Prebuilt collision handlers
 class AtKeysFileCollisionHandlers {
