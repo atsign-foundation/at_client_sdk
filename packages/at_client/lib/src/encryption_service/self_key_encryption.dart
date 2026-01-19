@@ -17,8 +17,7 @@ class SelfKeyEncryption implements AtKeyEncryption {
   }
 
   @override
-  Future<dynamic> encrypt(AtKey atKey, dynamic value,
-      {bool storeSharedKeyEncryptedWithData = true}) async {
+  Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
     String? selfEncryptionKey;
     if (value is! String) {
       _logger.severe(
@@ -54,7 +53,7 @@ class SelfKeyEncryption implements AtKeyEncryption {
         iV = AtChopsUtil.generateIVLegacy();
       }
       var encryptionAlgo = AESEncryptionAlgo(AESKey(selfEncryptionKey!));
-      encryptionResultFromAtChops = atClient.atChops!.encryptString(
+      encryptionResultFromAtChops = await atClient.atChops!.encryptString(
           value, EncryptionKeyType.aes256,
           encryptionAlgorithm: encryptionAlgo, iv: iV);
     } on AtEncryptionException catch (e) {

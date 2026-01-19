@@ -194,10 +194,10 @@ void main() {
   test('notify check value decryption on receiver', () async {
     // First off, let's initialize local storage and lastNotificationTime
     // for the receiving atSign
+    logger.info('Switching to $sharedWithAtSign');
     atClientManager = await atClientManager.setCurrentAtSign(
         sharedWithAtSign, 'wavi', TestUtils.getPreference(sharedWithAtSign));
     atClientManager.atClient.notificationService.subscribe(regex: 'nothing');
-    await Future.delayed(Duration(seconds: 1));
 
     int? lnt;
     int count = 0;
@@ -211,10 +211,14 @@ void main() {
       count++;
     }
 
+    expect(lnt, isNotNull, reason: 'lastNotificationTime should not be null');
+
+    logger.info('Switching to $currentAtSign');
     // Switch to the sending atSign
     atClientManager = await atClientManager.setCurrentAtSign(
         currentAtSign, 'wavi', TestUtils.getPreference(currentAtSign));
 
+    logger.info('Sending notification');
     // And send a notification
     var sentValue = '+1 100 200 300';
     await atClientManager.atClient.notificationService.notify(
@@ -226,10 +230,12 @@ void main() {
       checkForFinalDeliveryStatus: false,
     );
 
+    logger.info('Switching to $sharedWithAtSign');
     // Switch to the receiving atSign
     atClientManager = await atClientManager.setCurrentAtSign(
         sharedWithAtSign, 'wavi', TestUtils.getPreference(sharedWithAtSign));
 
+    logger.info('Subscribing to notifications');
     // and subscribe to notifications
     Completer<String> received = Completer<String>();
     atClientManager.atClient.notificationService

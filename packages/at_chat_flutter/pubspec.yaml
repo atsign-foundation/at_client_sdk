@@ -9,14 +9,13 @@ documentation: https://docs.atsign.com/
 environment:
   sdk: ^3.6.0
   flutter: ">=3.29.2"
-resolution: workspace
 
 dependencies:
   at_client: ^3.7.0
-  at_client_mobile: ^3.3.0
   at_common_flutter: ^2.1.0
   at_commons: ^5.5.0
   file_picker: ^10.0.0
+  at_client_mobile: ^3.3.0
   flutter:
     sdk: flutter
 

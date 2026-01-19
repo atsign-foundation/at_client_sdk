@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/src/enroll/at_enrollment_response.dart';
+import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'package:at_lookup/at_lookup.dart';
@@ -294,6 +294,10 @@ void main() {
   });
 
   group('tests to validate enrollment access control', () {
+		setUp(() async {
+			await Directory('$storageDir/keys/').create(recursive: true);
+		});
+
     test('validate enrollment only has access to approved namespaces',
         () async {
       // creates an enrollment with rw access to wavi namespace. Then validate

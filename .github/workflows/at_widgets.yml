@@ -31,7 +31,6 @@ jobs:
           - at_location_flutter
           - at_login_flutter
           - at_notify_flutter
-          - at_onboarding_flutter
           - at_sync_ui_flutter
           - at_theme_flutter
         flutter-channel:

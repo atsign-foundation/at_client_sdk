@@ -128,7 +128,7 @@ class VerbSyntax {
       r'(?<forAtSign>(([^:\s])+)?(,([^:\s]+))*)'
       r'(:(?<atKey>[^@:\s]+))(@(?<atSign>[^@:\s]+))?(:(?<value>.+))?$';
   static const batch = r'^batch:(?<json>.+)$';
-  static const info = r'^info(:brief)?$';
+  static const info = r'^info(:(brief|mtls|mtlsbrief))?$';
   static const noOp = r'^noop:(?<delayMillis>\d+)$';
   static const notifyRemove = r'notify:remove:(?<id>[\w\d\-\_]+)';
   static const enroll =

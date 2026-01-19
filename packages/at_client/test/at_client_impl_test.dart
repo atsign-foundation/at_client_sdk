@@ -98,8 +98,7 @@ void main() {
       var itr = atClientManager.getItemsInChangeListeners();
       while (itr.moveNext()) {
         if (itr.current is NotificationService) {
-          expect(
-              (itr.current as NotificationServiceImpl).currentAtSign, '@bob');
+          expect((itr.current as NotificationServiceImpl).atSign, '@bob');
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, '@bob');
         } else if (itr.current is AtClientImpl) {
@@ -133,8 +132,7 @@ void main() {
       var itr = atClientManager.getItemsInChangeListeners();
       while (itr.moveNext()) {
         if (itr.current is NotificationService) {
-          expect(
-              (itr.current as NotificationServiceImpl).currentAtSign, atSign);
+          expect((itr.current as NotificationServiceImpl).atSign, atSign);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign);
         } else if (itr.current is AtClientImpl) {
@@ -169,8 +167,7 @@ void main() {
       var itr = atClientManager.getItemsInChangeListeners();
       while (itr.moveNext()) {
         if (itr.current is NotificationService) {
-          expect(
-              (itr.current as NotificationServiceImpl).currentAtSign, atSign2);
+          expect((itr.current as NotificationServiceImpl).atSign, atSign2);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign2);
         } else if (itr.current is AtClientImpl) {
@@ -199,8 +196,7 @@ void main() {
       var itr = atClientManager.getItemsInChangeListeners();
       while (itr.moveNext()) {
         if (itr.current is NotificationService) {
-          expect(
-              (itr.current as NotificationServiceImpl).currentAtSign, atSign3);
+          expect((itr.current as NotificationServiceImpl).atSign, atSign3);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign3);
         } else if (itr.current is AtClientImpl) {
@@ -318,7 +314,7 @@ void main() {
       AtClient? client = await AtClientImpl.create(currentAtsign, 'buzz', pref,
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
-          EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
+          EnrollmentServiceImpl(client, AtEnrollment.create());
       AtClientImpl? clientImpl = client as AtClientImpl;
 
       List<Enrollment> requests =

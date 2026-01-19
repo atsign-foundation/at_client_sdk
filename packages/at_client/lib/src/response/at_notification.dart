@@ -36,7 +36,7 @@ class AtNotification {
       metadata.skeEncAlgo =
           json['metadata'][AtConstants.sharedKeyEncryptedEncryptingAlgo];
       metadata.sharedKeyEnc = json['metadata'][AtConstants.sharedKeyEncrypted];
-      // AtContants.sharedWithPublicKeyHash will be sent by the server starting v3.0.52
+      // AtConstants.sharedWithPublicKeyHash will be sent by the server starting v3.0.52
       // Notifications received from Secondary server before 3.0.52 does not contain
       // AtConstants.sharedWithPublicKeyHash. Therefore, check for null.
       if (json['metadata'][AtConstants.sharedWithPublicKeyHash] != null) {

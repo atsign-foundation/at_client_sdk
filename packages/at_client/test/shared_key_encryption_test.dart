@@ -1,5 +1,5 @@
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
+import 'package:at_client/src/decryption_service/shared_with_me_decryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:test/test.dart';
@@ -36,88 +36,6 @@ void main() {
   });
 
   test(
-      'test to verify encryption and decryption of a key shared by @alice with @bob - without IV',
-      () async {
-    // This test verifies encryption and decryption of a shared key value without using Initialization vector(IV)
-    // Value of a shared key is encrypted and then test asserts whether decrypted value is same as original value
-    // If @alice wants to share location value with bob, then key-value format is @bob:location@alice California
-    // @alice will generate a AES key and will encrypt the location value - California
-    // The  AES key will be encrypted with @bob's public key and stored in @bob:shared_key@alice
-    // When @bob wants to decrypt the @alice's location, @bob will read the encrypted  AES key from @bob:shared_key@alice
-    // @bob will decrypt the AES key using @bob's private key
-    // @bob will decrypt the location value - California with AES key
-
-    var sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
-    var bobMockAtClient = MockAtClientImpl();
-    var bobMockLocalSecondary = MockLocalSecondary();
-    // set up encryption key pair for @alice. This will be used during encryption process
-    var aliceEncryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
-    var aliceEncryptionPublicKey = aliceEncryptionKeyPair.atPublicKey.publicKey;
-    // Set up encryption key pair for @bob. This will be used during decryption process
-    var bobEncryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
-    var bobEncryptionPublicKey = bobEncryptionKeyPair.atPublicKey.publicKey;
-
-    // Generate the AES for encrypting the location value
-    var aesSharedKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
-    // local copy of the AES key that @alice maintains - shared_key.bob@alice
-    var sharedKeyEncryptedWithAlicePublicKey =
-        EncryptionUtil.encryptKey(aesSharedKey, aliceEncryptionPublicKey);
-
-    // set atChops for bob
-    AtChopsKeys bobAtChopsKeys = AtChopsKeys.create(bobEncryptionKeyPair, null);
-    var bobAtChopsImpl = AtChopsImpl(bobAtChopsKeys);
-    when(() => bobMockAtClient.atChops).thenAnswer((_) => bobAtChopsImpl);
-    when(() => bobMockAtClient.getLocalSecondary())
-        .thenAnswer((_) => bobMockLocalSecondary);
-    when(() => bobMockAtClient.getCurrentAtSign()).thenReturn('@bob');
-    when(() => bobMockLocalSecondary.getEncryptionPublicKey('@bob'))
-        .thenAnswer((_) => Future.value(bobEncryptionPublicKey));
-    var sharedKeyDecryption = SharedKeyDecryption(bobMockAtClient);
-
-    // encrypted AES key @bob:shared_key@alice
-    var sharedKeyEncryptedWithBobPublicKey =
-        EncryptionUtil.encryptKey(aesSharedKey, bobEncryptionPublicKey);
-
-    var bobPublicKeyCheckSum =
-        EncryptionUtil.md5CheckSum(bobEncryptionPublicKey);
-    var location = 'California';
-
-    // set atChops for alice
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(aliceEncryptionKeyPair, null);
-    var atChopsImpl = AtChopsImpl(atChopsKeys);
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
-    when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
-    when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
-        .thenAnswer((_) => Future.value(aliceEncryptionPublicKey));
-    when(() => mockLocalSecondary.executeVerb(any<LLookupVerbBuilder>()))
-        .thenAnswer((Invocation invocation) {
-      final builder = invocation.positionalArguments[0] as LLookupVerbBuilder;
-      final buildKeyValue = builder.buildKey();
-      if (buildKeyValue == 'shared_key.bob@alice') {
-        return Future.value('data:$sharedKeyEncryptedWithAlicePublicKey');
-      } else if (buildKeyValue == 'cached:public:publickey@bob') {
-        return Future.value('data:$bobEncryptionPublicKey');
-      } else if (buildKeyValue == '@bob:shared_key@alice') {
-        return Future.value('data:$sharedKeyEncryptedWithBobPublicKey');
-      } else {
-        return Future.value('data:null');
-      }
-    });
-    var sharedKey = AtKey()
-      ..sharedBy = '@alice'
-      ..sharedWith = '@bob'
-      ..key = 'location';
-    sharedKey.metadata = (Metadata()..pubKeyCS = bobPublicKeyCheckSum);
-    var encryptionResult =
-        await sharedKeyEncryption.encrypt(sharedKey, location);
-    expect(encryptionResult != location, true);
-    var decryptionResult =
-        await sharedKeyDecryption.decrypt(sharedKey, encryptionResult);
-    expect(decryptionResult, location);
-  });
-
-  test(
       'test to verify encryption and decryption of a key shared by @alice with @bob - with IV',
       () async {
     // This test verifies encryption and decryption of a shared key value by using Initialization vector(IV)
@@ -150,7 +68,7 @@ void main() {
     when(() => bobMockAtClient.getCurrentAtSign()).thenReturn('@bob');
     when(() => bobMockLocalSecondary.getEncryptionPublicKey('@bob'))
         .thenAnswer((_) => Future.value(bobEncryptionPublicKey));
-    var sharedKeyDecryption = SharedKeyDecryption(bobMockAtClient);
+    var sharedKeyDecryption = SharedWithMeDecryption(bobMockAtClient);
 
     // encrypted AES key @bob:shared_key@alice
     var sharedKeyEncryptedWithBobPublicKey =
@@ -190,7 +108,7 @@ void main() {
       ..sharedWith = '@bob'
       ..key = 'location';
     // random IV string
-    var ivBase64String = 'YmFzZTY0IGVuY29kaW5n';
+    var ivBase64String = EncryptionUtil.generateIV();
     sharedKey.metadata = Metadata()
       ..pubKeyCS = bobPublicKeyCheckSum
       ..ivNonce = ivBase64String;
@@ -201,18 +119,12 @@ void main() {
         await sharedKeyDecryption.decrypt(sharedKey, encryptionResult);
     expect(decryptionResult, location);
   });
-  test(
-      'test to verify encryption and decryption of a key shared by @alice with @bob - without IV - local copy of shared AES key is null',
+
+  test('Verify we will always set the correct encrypted shared key in metadata',
       () async {
-    // This test verifies encryption and decryption of a shared key value without using Initialization vector(IV)
-    // Local copy shared_key.bob@alice is null. Remote copy shared_key.bob@alice exists in @alice secondary
-    // Value of a shared key is encrypted and then test asserts whether decrypted value is same as original value
-    // If @alice wants to share location value with bob, then key-value format is @bob:location@alice California
-    // @alice will generate a AES key and will encrypt the location value - California
-    // The  AES key will be encrypted with @bob's public key and stored in @bob:shared_key@alice
-    // When @bob wants to decrypt the @alice's location, @bob will read the encrypted  AES key from @bob:shared_key@alice
-    // @bob will decrypt the AES key using @bob's private key
-    // @bob will decrypt the location value - California with AES key
+    // Variant on the previous test. This time we're going to deliberately
+    // return a bogus value when the sender looks up their copy of the
+    // shared key encrypted for the recipient.
 
     var sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
     var bobMockAtClient = MockAtClientImpl();
@@ -225,17 +137,10 @@ void main() {
     var bobEncryptionPublicKey = bobEncryptionKeyPair.atPublicKey.publicKey;
 
     // Generate the AES for encrypting the location value
-    var aesSharedKey =
+    var actualSymmetricKeyBeingUsed =
         AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
-
-    // remote copy of the AES key from @alice secondary - shared_key.bob@alice
-    var sharedKeyEncryptedWithAlicePublicKey =
-        EncryptionUtil.encryptKey(aesSharedKey, aliceEncryptionPublicKey);
-
-    // encrypted AES key @bob:shared_key@alice
-    var sharedKeyEncryptedWithBobPublicKey =
-        EncryptionUtil.encryptKey(aesSharedKey, bobEncryptionPublicKey);
-
+    var aDifferentSymmetricKey =
+        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
     // set atChops for bob
     AtChopsKeys bobAtChopsKeys = AtChopsKeys.create(bobEncryptionKeyPair, null);
     var bobAtChopsImpl = AtChopsImpl(bobAtChopsKeys);
@@ -245,7 +150,15 @@ void main() {
     when(() => bobMockAtClient.getCurrentAtSign()).thenReturn('@bob');
     when(() => bobMockLocalSecondary.getEncryptionPublicKey('@bob'))
         .thenAnswer((_) => Future.value(bobEncryptionPublicKey));
-    var sharedKeyDecryption = SharedKeyDecryption(bobMockAtClient);
+    var sharedKeyDecryption = SharedWithMeDecryption(bobMockAtClient);
+
+    // local copy of the AES key that @alice maintains - shared_key.bob@alice
+    var symmetricKeyEncryptedWithAlicePublicKey = EncryptionUtil.encryptKey(
+        actualSymmetricKeyBeingUsed, aliceEncryptionPublicKey);
+
+    // a DIFFERENT AES key encrypted with bob's public key @bob:shared_key@alice
+    var differentSharedKeyEncryptedWithBobPublicKey = EncryptionUtil.encryptKey(
+        aDifferentSymmetricKey, bobEncryptionPublicKey);
 
     var bobPublicKeyCheckSum =
         EncryptionUtil.md5CheckSum(bobEncryptionPublicKey);
@@ -258,33 +171,36 @@ void main() {
     when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
     when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
         .thenAnswer((_) => Future.value(aliceEncryptionPublicKey));
-    when(() =>
-        mockLocalSecondary.executeVerb(
-            any(that: LLookupLocalSharedKeyMatcher()))).thenAnswer((_) =>
-        throw KeyNotFoundException('local key shared_key.bob@alice not found'));
-    when(() => mockLocalSecondary.executeVerb(
-        any(that: DeleteLocalSharedKeyMatcher()),
-        sync: false)).thenAnswer((_) => Future.value('data:1'));
-    when(() => mockLocalSecondary.executeVerb(
-        any(that: UpdateLocalSharedKeyMatcher()),
-        sync: false)).thenAnswer((_) => Future.value('data:2'));
-    when(() => mockRemoteSecondary.executeVerb(
-            any(that: LLookupLocalSharedKeyMatcher()),
-            sync: false))
-        .thenAnswer(
-            (_) => Future.value('data:$sharedKeyEncryptedWithAlicePublicKey'));
-    when(() => mockLocalSecondary
-            .executeVerb(any(that: LLookupTheirSharedKeyMatcher())))
-        .thenAnswer(
-            (_) => Future.value('data:$sharedKeyEncryptedWithBobPublicKey'));
-    when(() => mockLocalSecondary
-            .executeVerb(any(that: LLookupCachedBobPublicKeyMatcher())))
-        .thenAnswer((_) => Future.value('data:$bobEncryptionPublicKey'));
+    when(() => mockLocalSecondary.executeVerb(any<LLookupVerbBuilder>()))
+        .thenAnswer((Invocation invocation) {
+      final builder = invocation.positionalArguments[0] as LLookupVerbBuilder;
+      final buildKeyValue = builder.buildKey();
+      if (buildKeyValue == 'shared_key.bob@alice') {
+        // This is alice's copy of the symmetric key
+        return Future.value('data:$symmetricKeyEncryptedWithAlicePublicKey');
+      } else if (buildKeyValue == 'cached:public:publickey@bob') {
+        return Future.value('data:$bobEncryptionPublicKey');
+      } else if (buildKeyValue == '@bob:shared_key@alice') {
+        // this is alice's datastore copy of the symmetric key encrypted
+        // with bob's public key. We're going to return a bogus value here
+        // because we want to verify that this value is now always ignored
+        // in order to eliminate the race condition identified in
+        // https://github.com/atsign-foundation/at_client_sdk/issues/1506
+        return Future.value(
+            'data:$differentSharedKeyEncryptedWithBobPublicKey');
+      } else {
+        return Future.value('data:null');
+      }
+    });
     var sharedKey = AtKey()
       ..sharedBy = '@alice'
       ..sharedWith = '@bob'
       ..key = 'location';
-    sharedKey.metadata = (Metadata()..pubKeyCS = bobPublicKeyCheckSum);
+    // random IV string
+    var ivBase64String = EncryptionUtil.generateIV();
+    sharedKey.metadata = Metadata()
+      ..pubKeyCS = bobPublicKeyCheckSum
+      ..ivNonce = ivBase64String;
     var encryptionResult =
         await sharedKeyEncryption.encrypt(sharedKey, location);
     expect(encryptionResult != location, true);

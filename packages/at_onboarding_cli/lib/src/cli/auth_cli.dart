@@ -851,7 +851,6 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
     stderr.writeln('No matching enrollment(s) found');
     return approved;
   }
-
   // Iterate through the requests, approve each one
   for (String eId in toApprove.keys) {
     Map er = toApprove[eId];
@@ -860,13 +859,14 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
         ' and deviceName "${er['deviceName']}"');
     // Then make a 'decision' object using data from the enrollment request
     EnrollmentRequestDecision decision = EnrollmentRequestDecision.approved(
-        ApprovedRequestDecisionBuilder(
-            enrollmentId: eId,
-            encryptedAPKAMSymmetricKey: er['encryptedAPKAMSymmetricKey']));
+      atSign: atClient.getCurrentAtSign()!,
+      enrollmentId: eId,
+      apkamSymmetricKey: AtBytes.fromString(er['encryptedAPKAMSymmetricKey']),
+    );
 
     // Finally call approve method via an AtEnrollment object
-    final response = await atAuthBase
-        .atEnrollment(atClient.getCurrentAtSign()!)
+    final response = await AtEnrollment
+        .create()
         .approve(decision, atLookup);
 
     stdout.writeln('Server response: $response');
@@ -947,13 +947,14 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
           ' (app: "$arx" and device: "$drx" respectively)');
 
       EnrollmentRequestDecision decision = EnrollmentRequestDecision.approved(
-          ApprovedRequestDecisionBuilder(
-              enrollmentId: eId,
-              encryptedAPKAMSymmetricKey: er['encryptedAPKAMSymmetricKey']));
+        atSign: atClient.getCurrentAtSign()!,
+        enrollmentId: eId,
+        apkamSymmetricKey: AtBytes.fromString(er['encryptedAPKAMSymmetricKey']),
+      );
 
       // Finally call approve method via an AtEnrollment object
-      final response = await atAuthBase
-          .atEnrollment(atClient.getCurrentAtSign()!)
+      final response = await AtEnrollment
+          .create()
           .approve(decision, atLookup);
       stdout.writeln('Approval successful.\n'
           '\tResponse: $response');
