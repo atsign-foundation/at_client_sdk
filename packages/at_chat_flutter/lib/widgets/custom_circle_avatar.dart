@@ -1,7 +1,5 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-// ignore: import_of_legacy_library_into_null_safe
-import 'package:at_common_flutter/services/size_config.dart';
 
 class CustomCircleAvatar extends StatelessWidget {
   final String? image;
@@ -24,13 +22,13 @@ class CustomCircleAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: size.toFont,
-      width: size.toFont,
+      height: size,
+      width: size,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(size.toWidth),
       ),
       child: CircleAvatar(
-        radius: (size - 5).toFont,
+        radius: (size - 5),
         backgroundColor: Colors.transparent,
         backgroundImage: nonAsset
             ? Image.memory(byteImage!).image

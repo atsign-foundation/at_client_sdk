@@ -1,26 +1,30 @@
 import 'dart:async';
 
-import 'package:at_app_flutter/at_app_flutter.dart' show AtEnv;
+import 'package:at_auth/at_auth.dart';
+import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_chat_flutter_example/second_screen.dart';
-import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:flutter/material.dart';
 import 'package:flutter_keychain/flutter_keychain.dart';
-import 'package:path_provider/path_provider.dart' show getApplicationSupportDirectory;
+import 'package:path_provider/path_provider.dart'
+    show getApplicationSupportDirectory;
 
+const environment = '';
+const rootDomain = AtRootDomain('root.atsign.org', 64);
+const namespace = 'at_chat_flutter_example';
 Future<void> main() async {
-  await AtEnv.load();
+  AtSignLogger.root_level = "FINER";
   runApp(const MyApp());
 }
 
 Future<AtClientPreference> loadAtClientPreference() async {
   var dir = await getApplicationSupportDirectory();
   return AtClientPreference()
-    ..rootDomain = AtEnv.rootDomain
-    ..namespace = AtEnv.appNamespace
+    ..rootDomain = rootDomain.rootDomain
+    ..rootPort = rootDomain.rootPort
+    ..namespace = namespace
     ..hiveStoragePath = dir.path
-    ..commitLogPath = dir.path
-    ..isLocalStoreRequired = true;
+    ..commitLogPath = dir.path;
 }
 
 class MyApp extends StatefulWidget {
@@ -34,9 +38,8 @@ class _MyAppState extends State<MyApp> {
   // * load the AtClientPreference in the background
   Future<AtClientPreference> futurePreference = loadAtClientPreference();
   AtClientPreference? atClientPreference;
-  AtAuthService? atAuthService;
 
-  final AtSignLogger _logger = AtSignLogger(AtEnv.appNamespace);
+  final AtSignLogger _logger = AtSignLogger(namespace);
 
   @override
   Widget build(BuildContext context) {
@@ -70,48 +73,69 @@ class _MyAppState extends State<MyApp> {
                         atClientPreference = preference;
                       });
                       if (context.mounted) {
-                        final result = await AtOnboarding.onboard(
-                          context: context,
-                          config: AtOnboardingConfig(
-                            atClientPreference: atClientPreference!,
-                            domain: AtEnv.rootDomain,
-                            appAPIKey: '477b-876u-bcez-c42z-6a3d',
-                            rootEnvironment: AtEnv.rootEnvironment,
-                          ),
+                        // a. Show AtSignSelectionDialog
+                        AuthRequest? authRequest =
+                            await AtSignSelectionDialog.show(
+                          context,
                         );
-
-                        switch (result.status) {
-                          case AtOnboardingResultStatus.success:
-                            if (mounted) {
-                              await Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const SecondScreen(),
-                                  ));
-                            }
-                            break;
-                          case AtOnboardingResultStatus.error:
-                            _logger.severe('Onboarding throws ${result.errorCode} error');
-                            if (mounted) {
-                              await showDialog(
-                                context: context,
-                                builder: (BuildContext context) {
-                                  return AlertDialog(
-                                    content: const Text('Something went wrong'),
-                                    actions: [
-                                      TextButton(
-                                          onPressed: () {
-                                            Navigator.of(context).pop();
-                                          },
-                                          child: const Text('ok'))
-                                    ],
-                                  );
-                                },
-                              );
-                            }
-                            break;
-                          case AtOnboardingResultStatus.cancel:
-                            break;
+                        if (authRequest == null) {
+                          print(
+                              'Authentication cancelled / authRequest is null');
+                          return;
+                        }
+                        authRequest.rootDomain = rootDomain;
+                        // b. Show AtKeysFileDialog to pick atKey file
+                        var atKeysIo = await AtKeysFileDialog.show(context);
+                        if (atKeysIo == null) {
+                          throw Exception(
+                            'Authentication cancelled / atKeysIo is null',
+                          );
+                        }
+                        var request = AtAuthRequest(
+                          authRequest.atSign,
+                          atKeysIo: atKeysIo,
+                          rootDomain: rootDomain,
+                        );
+                        // c. Show PkamDialog to complete authentication
+                        var response = await PkamDialog.show(
+                          context,
+                          request: request,
+                          backupKeys: [KeychainAtKeysIo()],
+                        );
+                        if (response != null) {
+                          if (response.isSuccessful) {
+                            _logger.shout(
+                                '${atClientPreference!.rootDomain}@${atClientPreference!.rootPort}');
+                            await AtClientManager.getInstance()
+                                .setCurrentAtSign(
+                              response.atSign,
+                              namespace,
+                              atClientPreference!,
+                              atChops: response.atChops!,
+                              atLookUp: response.atLookUp!,
+                            );
+                            await Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const SecondScreen(),
+                                ));
+                          } else {
+                            await showDialog(
+                              context: context,
+                              builder: (BuildContext context) {
+                                return AlertDialog(
+                                  content: const Text('Something went wrong'),
+                                  actions: [
+                                    TextButton(
+                                        onPressed: () {
+                                          Navigator.of(context).pop();
+                                        },
+                                        child: const Text('ok'))
+                                  ],
+                                );
+                              },
+                            );
+                          }
                         }
                       }
                     },
@@ -124,12 +148,14 @@ class _MyAppState extends State<MyApp> {
                 Center(
                     child: TextButton(
                         style: ButtonStyle(
-                          backgroundColor: WidgetStateProperty.all<Color>(Colors.black12),
+                          backgroundColor:
+                              WidgetStateProperty.all<Color>(Colors.black12),
                         ),
                         onPressed: () {
                           FlutterKeychain.remove(key: '@atsign');
                         },
-                        child: const Text('Clear paired atsigns', style: TextStyle(color: Colors.black)))),
+                        child: const Text('Clear paired atsigns',
+                            style: TextStyle(color: Colors.black)))),
               ],
             ),
           )),

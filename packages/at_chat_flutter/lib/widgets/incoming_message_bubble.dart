@@ -3,8 +3,6 @@ import 'dart:typed_data';
 import 'package:at_chat_flutter/models/message_model.dart';
 import 'package:at_chat_flutter/utils/colors.dart';
 
-// ignore: import_of_legacy_library_into_null_safe
-import 'package:at_common_flutter/at_common_flutter.dart';
 import 'package:at_chat_flutter/widgets/contacts_initials.dart';
 import 'package:flutter/material.dart';
 
@@ -27,20 +25,19 @@ class IncomingMessageBubble extends StatefulWidget {
 class _IncomingMessageBubbleState extends State<IncomingMessageBubble> {
   @override
   Widget build(BuildContext context) {
-    SizeConfig().init(context);
     return Flex(
       direction: Axis.horizontal,
       mainAxisAlignment: MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 20.toWidth,
+          width: 20,
         ),
         Container(
-          height: 45.toFont,
-          width: 45.toFont,
+          height: 45,
+          width: 45,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(45.toWidth),
+            borderRadius: BorderRadius.circular(45),
           ),
           child: ContactInitial(
             initials: widget.message?.sender ?? '@',
@@ -48,16 +45,16 @@ class _IncomingMessageBubbleState extends State<IncomingMessageBubble> {
           ),
         ),
         SizedBox(
-          width: 15.toWidth,
+          width: 15,
         ),
         Container(
-          padding: EdgeInsets.all(16.toHeight),
+          padding: EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: widget.color,
-            borderRadius: BorderRadius.circular(10.toWidth),
+            borderRadius: BorderRadius.circular(10),
           ),
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: 170.toWidth),
+            constraints: BoxConstraints(maxWidth: 170),
             child: _buildContentMessage(),
           ),
         ),
@@ -68,7 +65,7 @@ class _IncomingMessageBubbleState extends State<IncomingMessageBubble> {
   Widget _buildContentMessage() {
     if (widget.message?.contentType == MessageContentType.image) {
       return ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: 165.toWidth),
+        constraints: BoxConstraints(maxHeight: 165),
         child: Image.memory(widget.message?.imageData ?? Uint8List(0)),
       );
     } else {

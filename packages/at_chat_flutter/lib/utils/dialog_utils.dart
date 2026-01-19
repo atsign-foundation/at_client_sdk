@@ -1,13 +1,11 @@
 import 'package:at_chat_flutter/utils/colors.dart';
 import 'package:at_chat_flutter/widgets/bottom_sheet_dialog.dart';
 import 'package:at_chat_flutter/widgets/button_widget.dart';
-import 'package:at_common_flutter/services/size_config.dart';
 import 'package:flutter/material.dart';
 
 enum ConfirmTypes { approve, cancel }
 
 void showBottomSheetDialog(BuildContext context, Function() deleteCallback) {
-  SizeConfig().init(context);
   showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
