@@ -9,7 +9,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
-import 'package:at_onboarding_cli/src/util/create_at_client_cli.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:chalkdart/chalk.dart';
@@ -437,20 +436,27 @@ Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
       logger.shout('*************');
       OnboardingUtil.allowBadCertificates = true;
     }
-    // if  -y flag is not used and --cramkey is not provided, show back up key warning message
-    // --cramkey implies --yes for backwards compatibility with automation scripts
-    if (!argResults[AuthCliArgs.argNameYes] && !argResults.wasParsed(AuthCliArgs.argNameCramSecret)) {
+
+    // if  -y flag is not used and --cramkey is not provided, show back up key
+    // warning message --cramkey implies --yes for backwards compatibility with
+    // automation scripts
+    if (!argResults[AuthCliArgs.argNameYes] &&
+        !argResults.wasParsed(AuthCliArgs.argNameCramSecret)) {
       _showPreOnboardingKeyWarning();
     }
     await svc.onboard(
       maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
       retryInterval: AtOnboardingService.defaultActivationCheckInterval,
+      onKeysFileCollision:
+          AtKeysFileCollisionHandlers.interactiveConsoleHandler,
     );
     stderr.writeln();
     return true;
+  } on AtKeysFileExistsException {
+    rethrow;
   } catch (e) {
     await Future.delayed(Duration(milliseconds: 10));
-    throw ('Onboarding failed : $e');
+    throw AtOnboardingException('Onboarding failed : $e');
   }
 }
 
@@ -458,7 +464,7 @@ String parseServerResponse(String? response) {
   if (response != null && response.startsWith('data:')) {
     return response.replaceFirst(RegExp(r'^data:'), '');
   } else {
-    throw ('Unexpected server response: $response');
+    throw AtOnboardingException('Unexpected server response: $response');
   }
 }
 
@@ -474,10 +480,6 @@ Future<bool> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
   }
 
   File f = File(argResults[AuthCliArgs.argNameAtKeys]);
-
-  if (f.existsSync()) {
-    throw StateError('Error: atKeys file ${f.path} already exists');
-  }
 
   if (!canCreateFile(f)) {
     throw StateError('Error: Unable to open $f for writing');
@@ -513,7 +515,9 @@ Future<bool> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
       maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]));
 
   stderr.writeln('Creating atKeys file');
-  await svc.createAtKeysFile(er, allowOverwrite: false);
+  await svc.createAtKeysFile(er,
+      onKeysFileCollision:
+          AtKeysFileCollisionHandlers.interactiveConsoleHandler);
 
   return true;
 }

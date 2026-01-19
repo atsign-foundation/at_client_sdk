@@ -127,6 +127,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     bool autoCompleteActivation = true,
     Duration retryInterval = AtOnboardingService.defaultActivationCheckInterval,
     int maxRetries = AtOnboardingService.defaultMaxActivationCheckRetries,
+    AtKeysFileCollisionHandler? onKeysFileCollision,
   }) async {
     // Ensure we have an AtLookUp instance and send from: command if using proxy
     AtLookupImpl atLookUpImpl = AtLookupImpl(
@@ -201,6 +202,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       await _generateAtKeysFile(
         atOnboardingResponse.atAuthKeys!,
         enrollmentId: atOnboardingResponse.enrollmentId,
+        onKeysFileCollision: onKeysFileCollision,
       );
 
       if (autoCompleteActivation) {
@@ -225,7 +227,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     Duration retryInterval = AtOnboardingService.defaultApkamRetryInterval,
     int maxRetries = AtOnboardingService.defaultMaxApkamRetries,
     File? atKeysFile,
-    bool allowOverwrite = false,
+    AtKeysFileCollisionHandler? keysFileCollisionHandler,
   }) async {
     AtEnrollmentResponse enrollmentResponse = await sendEnrollRequest(
       appName,
@@ -253,7 +255,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     await createAtKeysFile(
       enrollmentResponse,
       atKeysFile: atKeysFile,
-      allowOverwrite: allowOverwrite,
+      onKeysFileCollision: keysFileCollisionHandler,
     );
 
     return enrollmentResponse;
@@ -264,12 +266,14 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     AtEnrollmentResponse er, {
     File? atKeysFile,
     bool allowOverwrite = false,
+    AtKeysFileCollisionHandler? onKeysFileCollision,
   }) async {
     return await _generateAtKeysFile(
       er.atAuthKeys!,
       enrollmentId: er.enrollmentId,
       atKeysFile: atKeysFile,
       allowOverwrite: allowOverwrite,
+      onKeysFileCollision: onKeysFileCollision,
     );
   }
 
@@ -554,12 +558,22 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
   }
 
-  /// Write newly created encryption key-pairs into atKeys file
+  /// Write newly created encryption key-pairs into atKeys file atomically.
+  ///
+  /// Strategy:
+  /// 1. Write to temp file (safe, no collision risk)
+  /// 2. Check if target path exists (collision detection)
+  /// 3. If collision, invoke handler to decide (overwrite, alternative path, abort)
+  /// 4. Atomically move temp to final path
+  ///
+  /// [onKeysFileCollision] - optional callback to handle collisions on target path.
+  /// If not provided, defaults to aborting on collision.
   Future<File> _generateAtKeysFile(
     AtAuthKeys atAuthKeys, {
     String? enrollmentId,
     File? atKeysFile,
-    bool allowOverwrite = true,
+    AtKeysFileCollisionHandler? onKeysFileCollision,
+    bool allowOverwrite = false,
   }) async {
     if (atKeysFile == null) {
       if (!atOnboardingPreference.atKeysFilePath!.endsWith('.atKeys')) {
@@ -568,14 +582,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       }
       atKeysFile = File(atOnboardingPreference.atKeysFilePath!);
     }
-
-    if (atKeysFile.existsSync() && !allowOverwrite) {
-      throw AtKeysFileExistsException(
-          'atKeys file ${atKeysFile.path} already exists');
-    }
-
-    logger.finer('Generating keys file at ${atKeysFile.path}'
-        ' with enrollmentId $enrollmentId');
 
     final atKeysMap = <String, String>{
       AuthKeyType.pkamPublicKey: EncryptionUtil.encryptValue(
@@ -604,8 +610,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           atAuthKeys.apkamPrivateKey!, atAuthKeys.defaultSelfEncryptionKey!);
     }
 
-    atKeysFile.createSync(recursive: true);
-    IOSink fileWriter = atKeysFile.openWrite();
     String encodedAtKeysString = jsonEncode(atKeysMap);
 
     if (atOnboardingPreference.passPhrase != null) {
@@ -613,17 +617,48 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
               atOnboardingPreference.hashingAlgoType)
           .encrypt(encodedAtKeysString, atOnboardingPreference.passPhrase!);
       encodedAtKeysString = atEncrypted.toString();
-      stdout.writeln(
-          '${chalk.blue('[Information]')} Encrypted atKeys file with the given pass phrase');
+      logger.info('Encrypted atKeys with the given pass phrase');
     }
-    //generating .atKeys file at path provided in onboardingConfig
-    fileWriter.write(encodedAtKeysString);
-    await fileWriter.flush();
-    await fileWriter.close();
-    stdout.writeln(
-        '${chalk.green('[Success]')} Your .atKeys file saved at ${atKeysFile.path}\n');
 
-    return atKeysFile;
+    logger.finer('Writing atKeys file to temp file: ${atKeysFile.path}');
+
+    // Write to temp file
+    final tempPath = await AtKeysFileWriter.writeToTempFile(
+      encodedAtKeysString,
+      _atSign,
+      targetPath: atKeysFile.path,
+    );
+
+    try {
+      // Handle collision on target path
+      String finalPath = atKeysFile.path;
+      if (!allowOverwrite) {
+        final collisionHandler =
+            onKeysFileCollision ?? AtKeysFileCollisionHandlers.abortOnCollision;
+
+        finalPath = await AtKeysFileWriter.handleTargetCollision(
+          tempPath,
+          atKeysFile.path,
+          encodedAtKeysString,
+          collisionHandler,
+        );
+      }
+
+      // Atomically move temp file to final path
+      final resultFile = await AtKeysFileWriter.moveToTargetPath(
+        tempPath,
+        finalPath,
+      );
+
+      stdout.writeln(
+          '${chalk.green('[Success]')} Your .atKeys file saved at ${resultFile.path}\n');
+
+      return resultFile;
+    } catch (e) {
+      // Clean up temp on any error
+      await AtKeysFileWriter.cleanupTempFile(tempPath);
+      rethrow;
+    }
   }
 
   /// Back-up encryption keys to local secondary

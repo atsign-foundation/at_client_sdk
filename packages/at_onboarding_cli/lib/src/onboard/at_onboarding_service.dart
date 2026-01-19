@@ -4,6 +4,7 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_onboarding_cli/src/at_keys/collision_models.dart';
 import 'package:at_utils/at_progress.dart';
 
 abstract class AtOnboardingService implements ProgressPublisher {
@@ -18,10 +19,14 @@ abstract class AtOnboardingService implements ProgressPublisher {
   ///
   /// When [autoCompleteActivation] is false, callers are responsible for
   /// calling [completeActivation]
+  ///
+  /// [onKeysFileCollision] - optional callback to handle file collisions on target path.
+  /// If not provided, defaults to aborting on collision. See [AtKeysFileCollisionHandler] for details.
   Future<bool> onboard({
     bool autoCompleteActivation = true,
     Duration retryInterval = defaultActivationCheckInterval,
     int maxRetries = defaultMaxActivationCheckRetries,
+    AtKeysFileCollisionHandler? onKeysFileCollision,
   });
 
   /// - Update encryption public key to server
@@ -61,6 +66,9 @@ abstract class AtOnboardingService implements ProgressPublisher {
   ///
   /// [atKeysFile] the file into which the atKeys generated for this enrollment
   /// will be written
+  ///
+  /// [keysFileCollisionHandler] - optional callback to handle file collisions on target path.
+  /// If not provided, defaults to aborting on collision. See [AtKeysFileCollisionHandler] for details.
   Future<AtEnrollmentResponse> enroll(
     String appName,
     String deviceName,
@@ -69,6 +77,7 @@ abstract class AtOnboardingService implements ProgressPublisher {
     File? atKeysFile,
     Duration retryInterval = defaultApkamRetryInterval,
     int maxRetries = defaultMaxApkamRetries,
+    AtKeysFileCollisionHandler? keysFileCollisionHandler,
   });
 
   /// Sends enrollment request. Application code may subsequently call
@@ -91,10 +100,14 @@ abstract class AtOnboardingService implements ProgressPublisher {
 
   /// Create a file in the standardized format which apps may use to
   /// authenticate to an atServer.
+  ///
+  /// [onKeysFileCollision] - optional callback to handle file collisions on target path.
+  /// If not provided, defaults to aborting on collision. See [AtKeysFileCollisionHandler] for details.
   Future<File> createAtKeysFile(
     AtEnrollmentResponse er, {
     File? atKeysFile,
     bool allowOverwrite = false,
+    AtKeysFileCollisionHandler? onKeysFileCollision,
   });
 
   /// Returns an authenticated instance of AtClient
