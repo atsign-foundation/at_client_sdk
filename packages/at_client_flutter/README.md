@@ -79,12 +79,54 @@ AtAuthRequest request = AtAuthRequest(
 AtAuthResponse response = await PkamDialog.show(context, request: request);
 ```
 
+#### Keychain Authentication
+Keychain Authentication is handled by providing a KeychainAtKeysIo instance in your AuthRequest
+
+```
+KeychainAtKeysIo keychainAtKeysIo = KeychainAtKeysIo();
+```
+This class handles necessary reading and writing of your AtKeys to your keychain during authentication.
+
+Any futher manipulation of the keychain is handled via `KeychainStorage`.
+
+#### Keychain Storage
+```
+final KeychainStorage keychainStorage = KeychainStorage();
+// Get a specific atsign's keys
+AtKeys? alice = await keychainStorage.getAtsign("@alice");
+
+// Get all atsigns in the keychain
+List<String> atsigns = await keychainStorage.getAllAtsigns();
+
+// Append atKeys to the keychain
+await keychainStorage.appendAtKeysToKeychain(atKeys);
+
+// Remove atSign from keychain
+await keychainStorage.removeAtsignFromKeychain("@alice");
+
+// Delete all atKeys data for this app
+await keychainStorage.deleteAllAtKeysData();
+```
+
 
 - If your app supports windows platform then add `biometric_storage` in app's dependencies
 
 ```
 dependencies:
  biometric_storage: ^4.1.3
+```
+
+#### Enrollments in the keychain
+
+Storing enrollment data for ongoing/approved/denied enrollments are managed by the KeychainStorage class
+```
+await keychainStorage.readEnrollmentData("@alice");
+
+await keychainStorage.writeEnrollmentData("@alice", enrollmentData);
+
+await keychainStorage.deleteEnrollmentData("@alice");
+
+bool isValidated = await keychainStorage.validateEnrollment("@alice");
 ```
 
 ## Example

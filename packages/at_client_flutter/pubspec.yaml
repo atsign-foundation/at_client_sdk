@@ -12,22 +12,18 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
-  package_info_plus: ^8.0.0
-  biometric_storage: ^5.0.0
-  hive: ^2.2.3
-  crypton: ^2.2.1
-  at_commons: ^5.5.0
-  at_utils: ^3.0.19
+  package_info_plus: ^8.3.1
+  biometric_storage: ^5.0.1
+  at_commons: ^5.8.0
+  at_utils: ^3.4.0
   at_chops: ^3.0.0
-  at_lookup: ^3.4.2
+  at_lookup: ^3.5.0
   at_auth: ^3.0.0
   at_client: ^3.11.0
   encrypt: ^5.0.3
-  at_persistence_secondary_server: ^4.2.0
-  flutter_riverpod: ^3.0.0
   phosphor_flutter: ^2.1.0
   intl: ^0.20.2
-  file_picker: ^10.3.7
+  file_picker: ^10.3.8
 
 dev_dependencies:
   path: ^1.9.0
