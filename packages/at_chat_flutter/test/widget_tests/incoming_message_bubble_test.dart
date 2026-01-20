@@ -3,7 +3,6 @@ import 'package:at_chat_flutter/models/message_model.dart';
 import 'package:at_chat_flutter/utils/colors.dart';
 import 'package:at_chat_flutter/widgets/contacts_initials.dart';
 import 'package:at_chat_flutter/widgets/incoming_message_bubble.dart';
-import 'package:at_common_flutter/at_common_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -12,7 +11,6 @@ import '../test_material_app.dart';
 void main() {
   Widget wrapWidgetWithMaterialApp({required Widget incomingMessageBubble}) {
     return TestMaterialApp(home: Builder(builder: (BuildContext context) {
-      SizeConfig().init(context);
       return incomingMessageBubble;
     }));
   }
