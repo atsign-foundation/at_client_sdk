@@ -67,7 +67,7 @@ abstract class AtOnboardingService implements ProgressPublisher {
   /// [atKeysFile] the file into which the atKeys generated for this enrollment
   /// will be written
   ///
-  /// [keysFileCollisionHandler] - optional callback to handle file collisions on target path.
+  /// [onKeysFileCollision] - optional callback to handle file collisions on target path.
   /// If not provided, defaults to aborting on collision. See [AtKeysFileCollisionHandler] for details.
   Future<AtEnrollmentResponse> enroll(
     String appName,
@@ -77,7 +77,7 @@ abstract class AtOnboardingService implements ProgressPublisher {
     File? atKeysFile,
     Duration retryInterval = defaultApkamRetryInterval,
     int maxRetries = defaultMaxApkamRetries,
-    AtKeysFileCollisionHandler? keysFileCollisionHandler,
+    AtKeysFileCollisionHandler? onKeysFileCollision,
   });
 
   /// Sends enrollment request. Application code may subsequently call

@@ -158,6 +158,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         authority: atOnboardingPreference.registrarUrl,
       );
     }
+
     if (atOnboardingPreference.cramSecret == null) {
       logger.info('Root Server address is ${atOnboardingPreference.rootDomain}:'
           '${atOnboardingPreference.rootPort}');
@@ -202,7 +203,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       await _generateAtKeysFile(
         atOnboardingResponse.atAuthKeys!,
         enrollmentId: atOnboardingResponse.enrollmentId,
-        onKeysFileCollision: onKeysFileCollision,
+        collisionHandler: onKeysFileCollision,
       );
 
       if (autoCompleteActivation) {
@@ -227,7 +228,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     Duration retryInterval = AtOnboardingService.defaultApkamRetryInterval,
     int maxRetries = AtOnboardingService.defaultMaxApkamRetries,
     File? atKeysFile,
-    AtKeysFileCollisionHandler? keysFileCollisionHandler,
+    bool allowOverwrite = false,
+    AtKeysFileCollisionHandler? onKeysFileCollision,
   }) async {
     AtEnrollmentResponse enrollmentResponse = await sendEnrollRequest(
       appName,
@@ -255,7 +257,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     await createAtKeysFile(
       enrollmentResponse,
       atKeysFile: atKeysFile,
-      onKeysFileCollision: keysFileCollisionHandler,
+      allowOverwrite: allowOverwrite,
+      onKeysFileCollision: onKeysFileCollision,
     );
 
     return enrollmentResponse;
@@ -273,7 +276,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       enrollmentId: er.enrollmentId,
       atKeysFile: atKeysFile,
       allowOverwrite: allowOverwrite,
-      onKeysFileCollision: onKeysFileCollision,
+      collisionHandler: onKeysFileCollision,
     );
   }
 
@@ -566,19 +569,20 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   /// Write newly created encryption key-pairs into atKeys file atomically.
   ///
   /// Strategy:
-  /// 1. Write to temp file (safe, no collision risk)
-  /// 2. Check if target path exists (collision detection)
-  /// 3. If collision, invoke handler to decide (overwrite, alternative path, abort)
+  /// 1. Write to temp file
+  /// 2. Check if target path exists
+  /// 3. If collision, invoke handler to decide
   /// 4. Atomically move temp to final path
   ///
-  /// [onKeysFileCollision] - optional callback to handle collisions on target path.
+  /// [collisionHandler] - optional callback to handle collisions on target path.
   /// If not provided, defaults to aborting on collision.
   Future<File> _generateAtKeysFile(
     AtKeys atAuthKeys, {
     String? enrollmentId,
     File? atKeysFile,
-    AtKeysFileCollisionHandler? onKeysFileCollision,
     bool allowOverwrite = false,
+    AtKeysFileCollisionHandler? collisionHandler =
+        AtKeysFileCollisionHandlers.abortOnCollision,
   }) async {
     if (atKeysFile == null) {
       if (!atOnboardingPreference.atKeysFilePath!.endsWith('.atKeys')) {
@@ -633,21 +637,17 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     final tempPath = await AtKeysFileWriter.writeToTempFile(
       encodedAtKeysString,
       _atSign,
-      targetPath: atKeysFile.path,
+      tempFilePath: atKeysFile.path,
     );
 
     try {
-      // Handle collision on target path
       String finalPath = atKeysFile.path;
       if (!allowOverwrite) {
-        final collisionHandler =
-            onKeysFileCollision ?? AtKeysFileCollisionHandlers.abortOnCollision;
-
         finalPath = await AtKeysFileWriter.handleTargetCollision(
           tempPath,
           atKeysFile.path,
           encodedAtKeysString,
-          collisionHandler,
+          collisionHandler ?? AtKeysFileCollisionHandlers.abortOnCollision,
         );
       }
 
@@ -657,12 +657,11 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         finalPath,
       );
 
-      stdout.writeln(
-          '${chalk.green('[Success]')} Your .atKeys file saved at ${resultFile.path}\n');
+      stdout.writeln('${chalk.green('[Success]')} Your .atKeys file saved'
+          ' at ${resultFile.path}\n');
 
       return resultFile;
     } catch (e) {
-      // Clean up temp on any error
       await AtKeysFileWriter.cleanupTempFile(tempPath);
       rethrow;
     }
@@ -702,8 +701,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   @override
   Future<bool> authenticate({String? enrollmentId}) async {
     atAuth ??= AtAuth.create();
-    var atAuthRequest = AtAuthRequest(
-        _atSign,
+    var atAuthRequest = AtAuthRequest(_atSign,
         atKeysIo: FileAtKeysIo(
             filePath: !atOnboardingPreference.atKeysFilePath.isNull
                 ? (_) => atOnboardingPreference.atKeysFilePath!

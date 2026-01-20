@@ -15,7 +15,6 @@ import 'package:chalkdart/chalk.dart';
 import 'package:duration/duration.dart';
 import 'package:meta/meta.dart';
 
-import '../util/onboarding_util.dart';
 import 'auth_cli_arg_validation.dart';
 
 final AtSignLogger logger = AtSignLogger(' CLI ');
@@ -23,6 +22,13 @@ final AtSignLogger logger = AtSignLogger(' CLI ');
 final aca = AuthCliArgs();
 
 Directory? storageDir;
+
+/// Configurable collision handler for the CLI.
+/// Defaults to [AtKeysFileCollisionHandlers.interactiveConsoleHandler].
+/// Tests can override this to avoid blocking on stdin.
+@visibleForTesting
+AtKeysFileCollisionHandler cliAtKeysFileCollisionHandler =
+    AtKeysFileCollisionHandlers.interactiveConsoleHandler;
 
 void _showPreOnboardingKeyWarning() {
   stdout.writeln();
@@ -447,8 +453,7 @@ Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
     await svc.onboard(
       maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
       retryInterval: AtOnboardingService.defaultActivationCheckInterval,
-      onKeysFileCollision:
-          AtKeysFileCollisionHandlers.interactiveConsoleHandler,
+      onKeysFileCollision: cliAtKeysFileCollisionHandler,
     );
     stderr.writeln();
     return true;
@@ -516,8 +521,7 @@ Future<bool> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
 
   stderr.writeln('Creating atKeys file');
   await svc.createAtKeysFile(er,
-      onKeysFileCollision:
-          AtKeysFileCollisionHandlers.interactiveConsoleHandler);
+      onKeysFileCollision: cliAtKeysFileCollisionHandler);
 
   return true;
 }

@@ -24,12 +24,12 @@ class AtKeysFileCollisionHandlers {
   static AtKeysFileCollisionResult interactiveConsoleHandler(
       AtKeysFileCollisionContext context) {
     stderr.writeln('');
-    stderr.writeln('${chalk.red('[Error]')} File already exists!');
-    stderr.writeln('File: ${context.targetFilePath}');
+    stderr.writeln('${chalk.red('[Error]')} File already exists at:'
+        ' ${context.targetFilePath}');
     stderr.writeln('');
-    stderr.writeln('Options:');
-    stderr.writeln('  1. Use a different path');
-    stderr.writeln('  2. Abort and exit');
+    stderr.writeln('${chalk.blue('[Action Required]')} Options:');
+    stderr.writeln('\t\t\t1. Use a different path');
+    stderr.writeln('\t\t\t2. Abort');
     stderr.write('Choose option (1-2): ');
 
     String? choice = stdin.readLineSync()?.trim();
