@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.1.1
+- chore: removed unused dependencies
+    - flutter_keychain
+    - hive
+    - crypton
+    - flutter_riverpod
+    - at_persistence_secondary_server
+- docs: Update README with more documentation
+- fix: broken links in README
+
 ## 0.1.0
 
 - Initial version, consolidating in functionality from legacy packages

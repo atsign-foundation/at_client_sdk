@@ -23,7 +23,7 @@ We call giving people control of access to their data "*flipping the internet*".
 ## Get Started
 
 > Before using this package for the first time, you should follow the
-> [getting started guide](https://docs.atsign.com/start/)
+> [getting started guide](https://docs.atsign.com/)
 
 You may find it useful to read the [atPlatform overview](https://docs.atsign.com/).
 
@@ -59,7 +59,7 @@ String cramKey = await RegistrarCramDialog.show(
 ```
 AtOnboardingResponse response = await CramDialog.show(
     context, 
-    request: authRequest, 
+    request: onboardingRequest, 
     cramKey: cramKey,
     progressBuilder: progressBuilder,
     onOnboardingComplete: onOnboardingComplete,
@@ -72,11 +72,40 @@ AtOnboardingResponse response = await CramDialog.show(
 ```
 AtAuthRequest request = AtAuthRequest(
     authRequest.atSign,
-    atKeysIo,
+    atKeysIo: atKeysIo,
     rootDomain: authRequest.rootDomain,
 );
 
 AtAuthResponse response = await PkamDialog.show(context, request: request);
+```
+
+#### Keychain Authentication
+Keychain Authentication is handled by providing a KeychainAtKeysIo instance in your AuthRequest
+
+```
+KeychainAtKeysIo keychainAtKeysIo = KeychainAtKeysIo();
+```
+This class handles necessary reading and writing of your AtKeys to your keychain during authentication.
+
+Any futher manipulation of the keychain is handled via `KeychainStorage`.
+
+#### Keychain Storage
+```
+final KeychainStorage keychainStorage = KeychainStorage();
+// Get a specific atsign's keys
+AtKeys? alice = await keychainStorage.getAtsign("@alice");
+
+// Get all atsigns in the keychain
+List<String> atsigns = await keychainStorage.getAllAtsigns();
+
+// Append atKeys to the keychain
+await keychainStorage.appendAtKeysToKeychain(atKeys);
+
+// Remove atSign from keychain
+await keychainStorage.removeAtsignFromKeychain("@alice");
+
+// Delete all atKeys data for this app
+await keychainStorage.deleteAllAtKeysData();
 ```
 
 
@@ -85,6 +114,19 @@ AtAuthResponse response = await PkamDialog.show(context, request: request);
 ```
 dependencies:
  biometric_storage: ^4.1.3
+```
+
+#### Enrollments in the keychain
+
+Storing enrollment data for ongoing/approved/denied enrollments are managed by the KeychainStorage class
+```
+await keychainStorage.readEnrollmentData("@alice");
+
+await keychainStorage.writeEnrollmentData("@alice", enrollmentData);
+
+await keychainStorage.deleteEnrollmentData("@alice");
+
+bool isValidated = await keychainStorage.validateEnrollment("@alice");
 ```
 
 ## Example
