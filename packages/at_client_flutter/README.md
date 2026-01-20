@@ -23,7 +23,7 @@ We call giving people control of access to their data "*flipping the internet*".
 ## Get Started
 
 > Before using this package for the first time, you should follow the
-> [getting started guide](https://docs.atsign.com/start/)
+> [getting started guide](https://docs.atsign.com/)
 
 You may find it useful to read the [atPlatform overview](https://docs.atsign.com/).
 
@@ -59,7 +59,7 @@ String cramKey = await RegistrarCramDialog.show(
 ```
 AtOnboardingResponse response = await CramDialog.show(
     context, 
-    request: authRequest, 
+    request: onboardingRequest, 
     cramKey: cramKey,
     progressBuilder: progressBuilder,
     onOnboardingComplete: onOnboardingComplete,
@@ -72,7 +72,7 @@ AtOnboardingResponse response = await CramDialog.show(
 ```
 AtAuthRequest request = AtAuthRequest(
     authRequest.atSign,
-    atKeysIo,
+    atKeysIo: atKeysIo,
     rootDomain: authRequest.rootDomain,
 );
 
