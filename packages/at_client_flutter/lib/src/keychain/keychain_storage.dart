@@ -48,6 +48,7 @@ class KeychainStorage {
     return null;
   }
 
+  /// Get atSign from keychain storage
   Future<AtKeys?> getAtsign(String atSign) async {
     final atKeysData = await readAtKeysData();
     if (atKeysData == null) {
@@ -66,6 +67,7 @@ class KeychainStorage {
     return null;
   }
 
+  /// Get all atSigns from the keychain
   Future<List<String>> getAllAtsigns() async {
     final atKeysData = await readAtKeysData();
     if (atKeysData == null) {
@@ -83,6 +85,8 @@ class KeychainStorage {
     return atSigns.toList();
   }
 
+  /// Append an atKeys instance to the Keychain
+  /// Note: atSign must be included in to AtKeys metadata field
   Future<void> appendAtKeysToKeychain({
     required AtKeys keys,
   }) async {
