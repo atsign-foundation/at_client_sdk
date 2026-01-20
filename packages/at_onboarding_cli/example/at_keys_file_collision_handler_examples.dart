@@ -1,211 +1,51 @@
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
-import 'package:at_onboarding_cli/src/at_keys/keys_file_writer.dart';
 
-/// Examples demonstrating the atomic temp-file write approach
-/// with injectable collision handlers.
-
-/// Example 1: Interactive CLI handler (matches the built-in CLI behavior)
-/// Prompts user when a collision is detected on the target path.
-AtKeysFileCollisionResult interactiveCliHandler(
+/// This example demonstrates how to implement a custom [AtKeysFileCollisionHandler]
+/// that suggests an alternative path to the user when a collision is detected.
+AtKeysFileCollisionResult suggestAlternativeHandler(
     AtKeysFileCollisionContext context) {
-  stderr.writeln('');
-  stderr.writeln('⚠️  File Collision Detected!');
-  stderr.writeln('Target file: ${context.targetFilePath}');
-  stderr.writeln('');
-  stderr.writeln('Options:');
-  stderr.writeln('  1. Use a different path');
-  stderr.writeln('  2. Abort');
-  stderr.write('Choose (1-2): ');
+  // Suggest an alternative path by appending a timestamp
+  final suggestedPath = 
+      '${context.targetFilePath}.${DateTime.now().millisecondsSinceEpoch}';
 
-  String? choice = stdin.readLineSync()?.trim();
+  stderr.writeln('\nFile Collision Detected!');
+  stderr.writeln('Target path: ${context.targetFilePath}');
+  stderr.write('Would you like to use $suggestedPath instead? (y/n): ');
 
-  switch (choice) {
-    case '1':
-      stderr.write('Enter new file path: ');
-      String? newPath = stdin.readLineSync()?.trim();
-      if (newPath?.isNotEmpty ?? false) {
-        return AtKeysFileCollisionUseAlternative(newPath!);
-      }
-      return AtKeysFileCollisionAbort(customMessage: 'No path provided');
-    default:
-      return AtKeysFileCollisionAbort(customMessage: 'User aborted');
-  }
-}
+  final choice = stdin.readLineSync()?.trim().toLowerCase();
 
-/// Example 2: Silent abort handler (safe default)
-/// Aborts immediately if collision detected, good for automated systems.
-AtKeysFileCollisionResult silentAbortHandler(
-    AtKeysFileCollisionContext context) {
-  stderr.writeln('File collision: ${context.targetFilePath} already exists');
-  return AtKeysFileCollisionAbort(
-    customMessage:
-        'File already exists. Provide a different path in preferences.',
-  );
-}
-
-/// Example 3: Automatic backup by using a different path
-/// Automatically uses a timestamped path if a collision occurs.
-AtKeysFileCollisionResult backupWithNewPathHandler(
-    AtKeysFileCollisionContext context) {
-  final backupPath =
-      '${context.targetFilePath}.backup.${DateTime.now().millisecondsSinceEpoch}';
-  stderr.writeln('Collision detected. Redirecting to: $backupPath');
-  return AtKeysFileCollisionUseAlternative(backupPath);
-}
-
-/// Example 4: Enterprise vault integration
-/// Backs up keys content to a secure vault and uses a unique local path.
-AtKeysFileCollisionResult enterpriseVaultHandler(
-    AtKeysFileCollisionContext context) {
-  try {
-    // Simulate backing up to enterprise vault
-    stderr.writeln('Backing up keys content to secure vault...');
-    
-    final uniquePath = '${context.targetFilePath}.${DateTime.now().microsecondsSinceEpoch}';
-    stderr.writeln('✓ Vault backup successful. Using local path: $uniquePath');
-
-    return AtKeysFileCollisionUseAlternative(uniquePath);
-  } catch (e) {
-    stderr.writeln('✗ Vault backup failed: $e');
+  if (choice == 'y') {
+    stdout.writeln('Using alternative path: $suggestedPath');
+    return AtKeysFileCollisionUseAlternative(suggestedPath);
+  } else {
     return AtKeysFileCollisionAbort(
-      customMessage: 'Enterprise backup failed - aborting to prevent data loss',
+      customMessage: 'User declined the suggested alternative path.',
     );
   }
 }
 
-/// Example 5: Mobile app handler with versioned storage
-/// When a collision occurs, it finds the next available versioned path.
-AtKeysFileCollisionResult mobileAppHandler(AtKeysFileCollisionContext context) {
-  int version = 1;
-  String newPath = '${context.targetFilePath}.$version';
-  while (File(newPath).existsSync()) {
-    version++;
-    newPath = '${context.targetFilePath}.$version';
-  }
-  stderr.writeln('Target path exists. Redirecting to versioned path: $newPath');
-  return AtKeysFileCollisionUseAlternative(newPath);
-}
-
-/// Example 6: Using prebuilt handlers
-/// Demonstrates the convenient prebuilt handlers.
-Future<void> exampleWithPrebuiltHandlers() async {
+Future<void> main() async {
   final atSign = '@alice';
+
+  // Set up onboarding preference
   final preference = AtOnboardingPreference()
     ..namespace = 'example'
-    ..atKeysFilePath = '/path/to/atkeys';
+    ..atKeysFilePath = 'alice_key.atKeys'
+    ..cramSecret = 'your-cram-secret-here';
 
   final service = AtOnboardingServiceImpl(atSign, preference);
 
-  // Example enrollment response for demonstration
-  final enrollmentResponse =
-      AtEnrollmentResponse('example-enrollment-id', EnrollmentStatus.approved)
-        ..atAuthKeys = AtAuthKeys();
-
-  // Option 1: Abort on collision (safest default)
-  await service.onboard(
-    onKeysFileCollision: AtKeysFileCollisionHandlers.abortOnCollision,
-  );
-
-  // Option 2: Interactive prompting (builtin CLI behavior)
-  await service.enroll(
-    'myapp',
-    'device-123',
-    'otp-code',
-    {'myapp': 'rw'},
-    keysFileCollisionHandler: AtKeysFileCollisionHandlers.interactiveConsoleHandler,
-  );
-
-  // Option 3: Manual key file creation
-  await service.createAtKeysFile(
-    enrollmentResponse,
-    onKeysFileCollision: AtKeysFileCollisionHandlers.abortOnCollision,
-  );
-}
-
-/// Example 7: Custom conditional handler
-/// Makes decision based on collision context.
-AtKeysFileCollisionResult conditionalHandler(
-    AtKeysFileCollisionContext context) {
-  // If we are in a temporary directory, we might allow redirecting to a new path
-  if (context.targetFilePath.contains('temp')) {
-    return AtKeysFileCollisionUseAlternative(
-        '${context.targetFilePath}.${DateTime.now().millisecondsSinceEpoch}');
-  }
-  return AtKeysFileCollisionAbort(
-    customMessage:
-        'Production keys file exists. Use a different path or resolve manually.',
-  );
-}
-
-/// Example 8: Full onboarding flow with custom handler
-Future<void> exampleOnboardingFlow() async {
-  const atSign = '@alice';
-  final prefs = AtOnboardingPreference()
-    ..namespace = 'myapp'
-    ..atKeysFilePath = '/home/user/.atSign/@alice/atkeys'
-    ..cramSecret = 'your-cram-secret-here'
-    ..rootDomain = 'root.atsign.org';
-
-  final service = AtOnboardingServiceImpl(atSign, prefs);
+  stdout.writeln('Starting onboarding for $atSign...');
 
   try {
-    // Onboard with custom interactive handler
+    // Pass the custom handler to the onboard method
     await service.onboard(
-      maxRetries: 50,
-      onKeysFileCollision: interactiveCliHandler,
+      onKeysFileCollision: suggestAlternativeHandler,
     );
-    stderr.writeln('✓ Onboarding complete!');
+    stdout.writeln('Success!');
   } catch (e) {
-    stderr.writeln('✗ Onboarding failed: $e');
+    stderr.writeln('Error: $e');
   }
-}
-
-/// Example 9: Enroll with custom handler
-Future<void> exampleEnrollmentFlow() async {
-  const atSign = '@alice';
-  final prefs = AtOnboardingPreference()
-    ..namespace = 'myapp'
-    ..atKeysFilePath = '/home/user/.atSign/@alice/atkeys'
-    ..rootDomain = 'root.atsign.org';
-
-  final service = AtOnboardingServiceImpl(atSign, prefs);
-
-  try {
-    // APKAM enrollment with backup-on-collision strategy
-    final response = await service.enroll(
-      'myapp', // appName
-      'iphone-12', // deviceName
-      'otp-from-cli', // otp
-      {'myapp': 'rw'}, // namespaces
-      keysFileCollisionHandler: backupWithNewPathHandler,
-    );
-    stderr.writeln('✓ Enrollment complete! ID: ${response.enrollmentId}');
-  } catch (e) {
-    stderr.writeln('✗ Enrollment failed: $e');
-  }
-}
-
-void main() {
-  stderr.writeln('=== AtKeys File Collision Handler Examples ===\n');
-  stderr.writeln('This file demonstrates 9 different ways to handle');
-  stderr.writeln('file collisions when creating .atKeys files:\n');
-  stderr.writeln('1. interactiveCliHandler - User prompts (like CLI)');
-  stderr.writeln('2. silentAbortHandler - Safe abort for automation');
-  stderr.writeln('3. backupAndOverwriteHandler - Local backup strategy');
-  stderr.writeln('4. enterpriseVaultHandler - Centralized vault backup');
-  stderr.writeln('5. mobileAppHandler - Mobile device-specific logic');
-  stderr.writeln('6. PrebuiltHandlers - Using AtKeysFileCollisionHandlers');
-  stderr.writeln('7. conditionalHandler - Decision based on context');
-  stderr.writeln('8. exampleOnboardingFlow - Full onboarding example');
-  stderr.writeln('9. exampleEnrollmentFlow - Full enrollment example');
-  stderr.writeln('\nKey Advantages:');
-  stderr.writeln('✓ Atomic writes to temp file (no collision during write)');
-  stderr.writeln('✓ Simple decision making (no retry loops)');
-  stderr.writeln('✓ Injectable handlers for different use cases');
-  stderr.writeln('✓ Safe by default (aborts if no handler provided)');
-  stderr.writeln('✓ Modular and composable');
 }

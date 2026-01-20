@@ -188,7 +188,7 @@ void main() {
     });
 
     test(
-        'A test to verify an onboarding exception is NOT thrown when enableEnrollmentDuringOnboard is set to true and deviceName and appName are not passed',
+        'enroll does not throw when enableEnrollmentDuringOnboard is true and deviceName and appName are not passed',
         () async {
       // when testing onboard() use distinct demo atsign per test,
       // since cram keys get deleted on server for already onboarded atsign
@@ -639,5 +639,11 @@ Future<void> tearDownFunc() async {
   bool isExists = await Directory('test/storage/').exists();
   if (isExists) {
     Directory('test/storage/').deleteSync(recursive: true);
+  }
+
+  Directory keysDir = Directory('${Platform.environment['HOME']}/.atsign/keys/');
+  isExists = keysDir.existsSync();
+  if (isExists){
+    keysDir.deleteSync();
   }
 }

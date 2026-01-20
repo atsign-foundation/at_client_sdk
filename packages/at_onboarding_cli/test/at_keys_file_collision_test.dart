@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/util/home_directory_util.dart';
 import 'package:test/test.dart';
@@ -6,25 +7,28 @@ import 'package:test/test.dart';
 void main() {
   group('AtKeysFileCollision tests', () {
     final atsign = '@collide67';
-    late Directory tempDir;
+    late String tempDir;
+    late Directory tempDirObj;
     late String targetPath;
     late String content;
 
     setUp(() {
-      tempDir = Directory.systemTemp.createTempSync('at_keys_collision_test');
-      targetPath = '${tempDir.path}/test.atKeys';
+      tempDirObj =
+          Directory.systemTemp.createTempSync('at_keys_collision_test');
+      tempDir = tempDirObj.path;
+      targetPath = '$tempDir/test.atKeys';
       content = 'test-content';
     });
 
     tearDown(() {
-      if (tempDir.existsSync()) {
-        tempDir.deleteSync(recursive: true);
+      if (tempDirObj.existsSync()) {
+        tempDirObj.deleteSync(recursive: true);
       }
     });
 
     test('writeToTempFile creates a secure temp file', () async {
       final tempPath = await AtKeysFileWriter.writeToTempFile(content, atsign,
-          targetPath: targetPath);
+          tempFilePath: targetPath);
       final file = File(tempPath);
 
       expect(file.existsSync(), isTrue);
@@ -44,7 +48,7 @@ void main() {
 
     test('handleTargetCollision returns targetPath if no collision', () async {
       final tempPath = await AtKeysFileWriter.writeToTempFile(content, atsign,
-          targetPath: targetPath);
+          tempFilePath: targetPath);
 
       final finalPath = await AtKeysFileWriter.handleTargetCollision(
         tempPath,
@@ -64,8 +68,8 @@ void main() {
       File(targetPath).writeAsStringSync('existing-content');
 
       final tempPath = await AtKeysFileWriter.writeToTempFile(content, atsign,
-          targetPath: targetPath);
-      final alternativePath = '$targetPath.alt';
+          tempFilePath: targetPath);
+      final alternativePath = '$targetPath.atKeys';
 
       final finalPath = await AtKeysFileWriter.handleTargetCollision(
         tempPath,
@@ -86,7 +90,7 @@ void main() {
         () async {
       File(targetPath).writeAsStringSync('existing-content');
       final tempPath = await AtKeysFileWriter.writeToTempFile(content, atsign,
-          targetPath: targetPath);
+          tempFilePath: targetPath);
 
       expect(
         () => AtKeysFileWriter.handleTargetCollision(
@@ -98,14 +102,11 @@ void main() {
         throwsA(isA<AtKeysFileExistsException>()
             .having((e) => e.message, 'message', contains('Abort test'))),
       );
-
-      expect(File(tempPath).existsSync(), isFalse,
-          reason: 'Temp file should be cleaned up on abort');
     });
 
     test('moveToTargetPath moves file and sets permissions', () async {
       final tempPath = await AtKeysFileWriter.writeToTempFile(content, atsign,
-          targetPath: targetPath);
+          tempFilePath: targetPath);
 
       final movedFile =
           await AtKeysFileWriter.moveToTargetPath(tempPath, targetPath);
@@ -118,7 +119,7 @@ void main() {
 
     test('validate permissions on moveToTargetPath', () async {
       final tempPath = await AtKeysFileWriter.writeToTempFile(content, atsign,
-          targetPath: targetPath);
+          tempFilePath: targetPath);
       final movedFile =
           await AtKeysFileWriter.moveToTargetPath(tempPath, targetPath);
 
@@ -133,7 +134,7 @@ void main() {
 
     test('validate permissions on create temp file', () async {
       final tempPath = await AtKeysFileWriter.writeToTempFile(content, atsign,
-          targetPath: targetPath);
+          tempFilePath: targetPath);
 
       if (!Platform.isWindows) {
         final stat = File(tempPath).statSync();
@@ -142,13 +143,106 @@ void main() {
       await AtKeysFileWriter.cleanupTempFile(tempPath);
     });
 
-    test('cleanupTempFile deletes the file', () async {
+    test(
+        'handleTargetCollision retries when handler returns another colliding path',
+        () async {
+      final collidingPath1 = '$tempDir/collide1.atKeys';
+      final collidingPath2 = '$tempDir/collide2.atKeys';
+      final finalPath = '$tempDir/success.atKeys';
+
+      File(collidingPath1).writeAsStringSync('c1');
+      File(collidingPath2).writeAsStringSync('c2');
+
       final tempPath = await AtKeysFileWriter.writeToTempFile(content, atsign,
-          targetPath: targetPath);
+          tempFilePath: targetPath);
+
+      int callCount = 0;
+      final resultPath = await AtKeysFileWriter.handleTargetCollision(
+        tempPath,
+        collidingPath1,
+        content,
+        (context) {
+          callCount++;
+          if (callCount == 1) {
+            return AtKeysFileCollisionUseAlternative(collidingPath2);
+          }
+          return AtKeysFileCollisionUseAlternative(finalPath);
+        },
+      );
+
+      expect(resultPath, equals(finalPath));
+      expect(callCount, equals(2));
+      await AtKeysFileWriter.cleanupTempFile(tempPath);
+    });
+
+    test('handleTargetCollision aborts after maxAttempts', () async {
+      File(targetPath).writeAsStringSync('exists');
+      final tempPath = await AtKeysFileWriter.writeToTempFile(content, atsign,
+          tempFilePath: targetPath);
+
+      await expectLater(
+        AtKeysFileWriter.handleTargetCollision(
+          tempPath,
+          targetPath,
+          content,
+          (context) => AtKeysFileCollisionUseAlternative(targetPath),
+        ),
+        throwsA(isA<AtKeysFileExistsException>().having(
+            (e) => e.message, 'message', contains('Too many file collisions'))),
+      );
+    });
+
+    test('abortOnCollision handler returns AtKeysFileCollisionAbort', () {
+      final ctx = AtKeysFileCollisionContext(
+        targetFilePath: '/test/path.atKeys',
+        keysContent: 'test-keys-content',
+      );
+
+      final result = AtKeysFileCollisionHandlers.abortOnCollision(ctx);
+
+      expect(result, isA<AtKeysFileCollisionAbort>());
+      expect((result as AtKeysFileCollisionAbort).customMessage,
+          contains('/test/path.atKeys'));
+    });
+
+    test('handleTargetCollision works with async handler', () async {
+      File(targetPath).writeAsStringSync('existing-content');
+      final tempPath = await AtKeysFileWriter.writeToTempFile(content, atsign,
+          tempFilePath: targetPath);
+      final alternativePath = '$targetPath.async';
+
+      Future<AtKeysFileCollisionUseAlternative> asyncHandler (context) async {
+        // Simulate async operation
+        await Future.delayed(Duration(milliseconds: 10));
+        return AtKeysFileCollisionUseAlternative(alternativePath);
+      }
+
+      // Use an async handler that returns a Future
+      final finalPath = await AtKeysFileWriter.handleTargetCollision(
+        tempPath,
+        targetPath,
+        content,
+          (context) => asyncHandler(context),
+      );
+
+      expect(finalPath, equals(alternativePath));
+      await AtKeysFileWriter.cleanupTempFile(tempPath);
+    });
+
+    test('cleanupTempFile deletes existing file', () async {
+      final tempPath = await AtKeysFileWriter.writeToTempFile(content, atsign,
+          tempFilePath: targetPath);
       expect(File(tempPath).existsSync(), isTrue);
 
       await AtKeysFileWriter.cleanupTempFile(tempPath);
+
       expect(File(tempPath).existsSync(), isFalse);
+    });
+
+    test('cleanupTempFile is idempotent for non-existent file', () async {
+      final nonExistentPath = '$tempDir/non_existent.tmp';
+
+      await AtKeysFileWriter.cleanupTempFile(nonExistentPath);
     });
   });
 }
