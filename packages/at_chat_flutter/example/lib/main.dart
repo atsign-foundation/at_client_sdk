@@ -5,7 +5,6 @@ import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_chat_flutter_example/second_screen.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:flutter/material.dart';
-import 'package:flutter_keychain/flutter_keychain.dart';
 import 'package:path_provider/path_provider.dart'
     show getApplicationSupportDirectory;
 
@@ -13,7 +12,6 @@ const environment = '';
 const rootDomain = AtRootDomain('root.atsign.org', 64);
 const namespace = 'at_chat_flutter_example';
 Future<void> main() async {
-  AtSignLogger.root_level = "FINER";
   runApp(const MyApp());
 }
 
@@ -40,7 +38,7 @@ class _MyAppState extends State<MyApp> {
   AtClientPreference? atClientPreference;
 
   final AtSignLogger _logger = AtSignLogger(namespace);
-
+	final KeychainStorage keychainStorage = KeychainStorage();
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -73,19 +71,25 @@ class _MyAppState extends State<MyApp> {
                         atClientPreference = preference;
                       });
                       if (context.mounted) {
+                        var keychain = await keychainStorage.getAllAtsigns();
                         // a. Show AtSignSelectionDialog
                         AuthRequest? authRequest =
                             await AtSignSelectionDialog.show(
                           context,
+                          existingAtSigns: keychain,
                         );
                         if (authRequest == null) {
-                          print(
+                          _logger.shout(
                               'Authentication cancelled / authRequest is null');
                           return;
                         }
-                        authRequest.rootDomain = rootDomain;
-                        // b. Show AtKeysFileDialog to pick atKey file
-                        var atKeysIo = await AtKeysFileDialog.show(context);
+                        // b. Check keychain for keys, otherwise show File Picker
+                        AtKeysIo? atKeysIo;
+                        if (keychain.contains(authRequest.atSign)) {
+                          atKeysIo = KeychainAtKeysIo();
+                        } else {
+                          atKeysIo = await AtKeysFileDialog.show(context);
+                        }
                         if (atKeysIo == null) {
                           throw Exception(
                             'Authentication cancelled / atKeysIo is null',
@@ -94,7 +98,6 @@ class _MyAppState extends State<MyApp> {
                         var request = AtAuthRequest(
                           authRequest.atSign,
                           atKeysIo: atKeysIo,
-                          rootDomain: rootDomain,
                         );
                         // c. Show PkamDialog to complete authentication
                         var response = await PkamDialog.show(
@@ -104,8 +107,6 @@ class _MyAppState extends State<MyApp> {
                         );
                         if (response != null) {
                           if (response.isSuccessful) {
-                            _logger.shout(
-                                '${atClientPreference!.rootDomain}@${atClientPreference!.rootPort}');
                             await AtClientManager.getInstance()
                                 .setCurrentAtSign(
                               response.atSign,
@@ -152,7 +153,7 @@ class _MyAppState extends State<MyApp> {
                               WidgetStateProperty.all<Color>(Colors.black12),
                         ),
                         onPressed: () {
-                          FlutterKeychain.remove(key: '@atsign');
+													keychainStorage.deleteAllAtKeysData();
                         },
                         child: const Text('Clear paired atsigns',
                             style: TextStyle(color: Colors.black)))),
