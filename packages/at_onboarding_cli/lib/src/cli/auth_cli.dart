@@ -29,38 +29,52 @@ void _showPreOnboardingKeyWarning() {
   stdout.writeln();
   stdout.writeln(chalk.yellow('⚠️  IMPORTANT - READ CAREFULLY ⚠️'));
   stdout.writeln();
-  stdout.writeln(chalk.bold('You are about to onboard your atSign and generate a set of unique cryptographic keys.'));
-  stdout.writeln(chalk.bold('It is CRITICAL that you back up these keys to more than one place after onboarding.'));
+  stdout.writeln(chalk.bold(
+      'You are about to onboard your atSign and generate a set of unique cryptographic keys.'));
+  stdout.writeln(chalk.bold(
+      'It is CRITICAL that you back up these keys to more than one place after onboarding.'));
   stdout.writeln();
   stdout.writeln(chalk.red('LOSING ACCESS TO THESE KEYS WILL RESULT IN:'));
-  stdout.writeln('• Loss of ability to authenticate into your atSign\'s atServer');
-  stdout.writeln('• Loss of ability to decrypt any data on your atSign\'s atServer');
-  stdout.writeln('• Loss of data access to any applications/devices that use these keys');
+  stdout.writeln(
+      '• Loss of ability to authenticate into your atSign\'s atServer');
+  stdout.writeln(
+      '• Loss of ability to decrypt any data on your atSign\'s atServer');
+  stdout.writeln(
+      '• Loss of data access to any applications/devices that use these keys');
   stdout.writeln();
-  stdout.writeln(chalk.bold('If you lose these keys, you will NOT be able to recover your atSign or its data.'));
-  stdout.writeln(chalk.bold('NOT EVEN ATSIGN INC. CAN RECOVER THESE KEYS FOR YOU!'));
-  stdout.writeln(chalk.bold('You may reset your atSign\'s atServer by contacting support@atsign.com, if a new set of keys is required, but no data can be recovered.'));
+  stdout.writeln(chalk.bold(
+      'If you lose these keys, you will NOT be able to recover your atSign or its data.'));
+  stdout.writeln(
+      chalk.bold('NOT EVEN ATSIGN INC. CAN RECOVER THESE KEYS FOR YOU!'));
+  stdout.writeln(chalk.bold(
+      'You may reset your atSign\'s atServer by contacting support@atsign.com, if a new set of keys is required, but no data can be recovered.'));
   stdout.writeln();
   stdout.writeln(chalk.blue('IMPORTANT:'));
-  stdout.writeln('• After onboarding, you MUST back up your .atKeys file to a secure location');
-  stdout.writeln('• Store it in multiple secure locations (cloud storage, external drives, etc.)');
+  stdout.writeln(
+      '• After onboarding, you MUST back up your .atKeys file to a secure location');
+  stdout.writeln(
+      '• Store it in multiple secure locations (cloud storage, external drives, etc.)');
   stdout.writeln('• Keep it safe from unauthorized access');
   stdout.writeln();
-  
+
   while (true) {
-    stdout.write(chalk.blue('[Action Required] ') + chalk.bold('Do you understand that losing these keys means losing access to your atSign and all its data? (Y/N): '));
+    stdout.write(chalk.blue('[Action Required] ') +
+        chalk.bold(
+            'Do you understand that losing these keys means losing access to your atSign and all its data? (Y/N): '));
     String? response = stdin.readLineSync();
-    
+
     if (response != null) {
       String normalized = response.trim().toLowerCase();
       if (normalized == 'y' || normalized == 'yes') {
         stdout.writeln();
-        stdout.writeln(chalk.green('✓ Acknowledged. Please remember to back up your keys securely!'));
+        stdout.writeln(chalk.green(
+            '✓ Acknowledged. Please remember to back up your keys securely!'));
         stdout.writeln();
         break;
       } else if (normalized == 'n' || normalized == 'no') {
         stdout.writeln();
-        stdout.writeln(chalk.red('Onboarding cancelled. Please ensure you understand the importance of key backup before proceeding.'));
+        stdout.writeln(chalk.red(
+            'Onboarding cancelled. Please ensure you understand the importance of key backup before proceeding.'));
         exit(0);
       } else {
         stdout.writeln(chalk.yellow('Please enter Y (yes) or N (no).'));
@@ -206,8 +220,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.otp:
@@ -223,8 +236,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.interactive:
@@ -236,8 +248,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.list:
@@ -246,8 +257,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.fetch:
@@ -256,8 +266,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.approve:
@@ -266,8 +275,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.auto:
@@ -276,8 +284,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.deny:
@@ -286,8 +293,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.revoke:
@@ -296,8 +302,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.enroll:
@@ -314,8 +319,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
 
       case AuthCliCommand.delete:
@@ -324,8 +328,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
     }
   } on ArgumentError catch (e) {
@@ -439,7 +442,8 @@ Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
     }
     // if  -y flag is not used and --cramkey is not provided, show back up key warning message
     // --cramkey implies --yes for backwards compatibility with automation scripts
-    if (!argResults[AuthCliArgs.argNameYes] && !argResults.wasParsed(AuthCliArgs.argNameCramSecret)) {
+    if (!argResults[AuthCliArgs.argNameYes] &&
+        !argResults.wasParsed(AuthCliArgs.argNameCramSecret)) {
       _showPreOnboardingKeyWarning();
     }
     await svc.onboard(
@@ -839,8 +843,8 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
     atLookup,
     EnrollmentStatus.pending.name, // must be status pending
     eId: ar[AuthCliArgs.argNameEnrollmentId],
-    arx: ar[AuthCliArgs.argNameAppNameRegex],
-    drx: ar[AuthCliArgs.argNameDeviceNameRegex],
+    arx: ar[AuthCliArgs.argNameAppNameRegex]?.toLowerCase(),
+    drx: ar[AuthCliArgs.argNameDeviceNameRegex]?.toLowerCase(),
   );
 
   if (toApprove.isEmpty) {
@@ -879,8 +883,8 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
 Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
   int approved = 0;
   int limit = int.parse(ar[AuthCliArgs.argNameLimit]);
-  String? arx = ar[AuthCliArgs.argNameAppNameRegex];
-  String? drx = ar[AuthCliArgs.argNameDeviceNameRegex];
+  String? arx = ar[AuthCliArgs.argNameAppNameRegex]?.toLowerCase();
+  String? drx = ar[AuthCliArgs.argNameDeviceNameRegex]?.toLowerCase();
   bool approveExisting = ar[AuthCliArgs.argNameAutoApproveExisting];
 
   if (arx == null && drx == null) {
@@ -987,8 +991,8 @@ Future<void> deny(ArgResults ar, AtClient atClient) async {
     atLookup,
     EnrollmentStatus.pending.name, // must be status pending
     eId: ar[AuthCliArgs.argNameEnrollmentId],
-    arx: ar[AuthCliArgs.argNameAppNameRegex],
-    drx: ar[AuthCliArgs.argNameDeviceNameRegex],
+    arx: ar[AuthCliArgs.argNameAppNameRegex]?.toLowerCase(),
+    drx: ar[AuthCliArgs.argNameDeviceNameRegex]?.toLowerCase(),
   );
 
   if (toDeny.isEmpty) {
@@ -1014,8 +1018,8 @@ Future<void> revoke(ArgResults ar, AtClient atClient) async {
     atLookup,
     EnrollmentStatus.approved.name, // must be status approved
     eId: ar[AuthCliArgs.argNameEnrollmentId],
-    arx: ar[AuthCliArgs.argNameAppNameRegex],
-    drx: ar[AuthCliArgs.argNameDeviceNameRegex],
+    arx: ar[AuthCliArgs.argNameAppNameRegex]?.toLowerCase(),
+    drx: ar[AuthCliArgs.argNameDeviceNameRegex]?.toLowerCase(),
   );
 
   if (toRevoke.isEmpty) {
@@ -1040,8 +1044,8 @@ Future<void> unrevoke(ArgResults ar, AtClient atClient) async {
     atLookup,
     EnrollmentStatus.revoked.name, // must be status revoked
     eId: ar[AuthCliArgs.argNameEnrollmentId],
-    arx: ar[AuthCliArgs.argNameAppNameRegex],
-    drx: ar[AuthCliArgs.argNameDeviceNameRegex],
+    arx: ar[AuthCliArgs.argNameAppNameRegex]?.toLowerCase(),
+    drx: ar[AuthCliArgs.argNameDeviceNameRegex]?.toLowerCase(),
   );
 
   if (toUnRevoke.isEmpty) {
