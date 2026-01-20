@@ -754,8 +754,8 @@ Future<void> list(ArgResults ar, AtClient atClient) async {
   AtLookUp atLookup = atClient.getRemoteSecondary()!.atLookUp;
 
   String? statusFilter = ar[AuthCliArgs.argNameEnrollmentStatus];
-  String? arx = ar[AuthCliArgs.argNameAppNameRegex];
-  String? drx = ar[AuthCliArgs.argNameDeviceNameRegex];
+  String? arx = ar[AuthCliArgs.argNameAppNameRegex]?.toLowerCase();
+  String? drx = ar[AuthCliArgs.argNameDeviceNameRegex]?.toLowerCase();
 
   Map json = await _list(statusFilter, atLookup, arx: arx, drx: drx);
   stdout.write('Enrollment ID'.padRight(38));
