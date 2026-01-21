@@ -10,6 +10,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/factory/service_factories.dart';
+import 'package:at_onboarding_cli/src/util/at_file_util.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
@@ -566,13 +567,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
   }
 
-  /// Write newly created encryption key-pairs into atKeys file atomically.
-  ///
-  /// Strategy:
-  /// 1. Write to temp file
-  /// 2. Check if target path exists
-  /// 3. If collision, invoke handler to decide
-  /// 4. Atomically move temp to final path
+  /// Write newly created encryption key-pairs into atKeys file.
   ///
   /// [collisionHandler] - optional callback to handle collisions on target path.
   /// If not provided, defaults to aborting on collision.
@@ -631,40 +626,32 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       logger.info('Encrypted atKeys with the given pass phrase');
     }
 
-    logger.finer('Writing atKeys file to temp file: ${atKeysFile.path}');
+    logger.finer('Writing atKeys file: ${atKeysFile.path}');
 
-    // Write to temp file
-    final tempPath = await AtKeysFileWriter.writeToTempFile(
-      encodedAtKeysString,
-      _atSign,
-      tempFilePath: atKeysFile.path,
-    );
-
-    try {
-      String finalPath = atKeysFile.path;
-      if (!allowOverwrite) {
-        finalPath = await AtKeysFileWriter.handleTargetCollision(
-          tempPath,
-          atKeysFile.path,
-          encodedAtKeysString,
-          collisionHandler ?? AtKeysFileCollisionHandlers.abortOnCollision,
-        );
+    // Write keys file directly, handling collisions if not allowing overwrite
+    String finalPath;
+    if (allowOverwrite) {
+      // If overwrite is allowed, skip collision checking - just write
+      final parentDir = atKeysFile.parent;
+      if (!parentDir.existsSync()) {
+        parentDir.createSync(recursive: true);
       }
-
-      // Atomically move temp file to final path
-      final resultFile = await AtKeysFileWriter.moveToTargetPath(
-        tempPath,
-        finalPath,
+      await atKeysFile.writeAsString(encodedAtKeysString);
+      await AtFileUtil.setSecureFilePermissions(atKeysFile.path);
+      finalPath = atKeysFile.path;
+    } else {
+      finalPath = await AtKeysFileWriter.writeKeys(
+        encodedAtKeysString,
+        atKeysFile.path,
+        collisionHandler ?? AtKeysFileCollisionHandlers.abortOnCollision,
       );
-
-      stdout.writeln('${chalk.green('[Success]')} Your .atKeys file saved'
-          ' at ${resultFile.path}\n');
-
-      return resultFile;
-    } catch (e) {
-      await AtKeysFileWriter.cleanupTempFile(tempPath);
-      rethrow;
     }
+
+    final resultFile = File(finalPath);
+    stdout.writeln('${chalk.green('[Success]')} Your .atKeys file saved'
+        ' at ${resultFile.path}\n');
+
+    return resultFile;
   }
 
   /// Back-up encryption keys to local secondary

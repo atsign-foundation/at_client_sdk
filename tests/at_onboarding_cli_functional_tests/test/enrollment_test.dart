@@ -644,6 +644,6 @@ Future<void> tearDownFunc() async {
   Directory keysDir = Directory('${Platform.environment['HOME']}/.atsign/keys/');
   isExists = keysDir.existsSync();
   if (isExists){
-    keysDir.deleteSync();
+    keysDir.deleteSync(recursive: true);
   }
 }

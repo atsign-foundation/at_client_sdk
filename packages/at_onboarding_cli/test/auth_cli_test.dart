@@ -11,8 +11,6 @@ void main() {
   });
 
   group('A group of tests to verify write permission of apkam file path', () {
-    final dirPath = '$baseDirPath/@alice-apkam-keys.atKeys';
-
     test(
         'A test to verify isWritable returns false if directory has read-only permissions',
         () async {
