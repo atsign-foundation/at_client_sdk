@@ -48,17 +48,44 @@ class LookUpBuilderManager {
   }
 }
 
-/// Returns the instance of [Secondary] server.
-///
-/// Basing the verb, the appropriate instance of secondary server is returned.
 class SecondaryManager {
-  static Secondary getSecondary(AtClient atClient, VerbBuilder verbBuilder) {
+  /// - If [useRemoteAtServer] is true, return RemoteLocalPref.remoteOnly
+  /// - Else return [remoteLocalPref], or [RemoteLocalPref.localOnly]
+  /// if [remoteLocalPref] is null
+  static RemoteLocalPref getRemoteLocalPrefForOp(
+    bool? useRemoteAtServer,
+    RemoteLocalPref? remoteLocalPref,
+  ) {
+    if (useRemoteAtServer == true) {
+      return RemoteLocalPref.remoteOnly;
+    } else if (useRemoteAtServer == false) {
+      return RemoteLocalPref.localOnly;
+    } else {
+      return remoteLocalPref ?? RemoteLocalPref.localOnly;
+    }
+  }
+
+  /// - Return the [atClient]'s localSecondary or remoteSecondary as appropriate.
+  /// - Always returns the remoteSecondary if the [verbBuilder] is Lookup,
+  /// PLookup, Notify or Stats.
+  /// - Otherwise returns local or remote based on the [prefForOp]
+  static Secondary getSecondary(
+    AtClient atClient,
+    VerbBuilder verbBuilder,
+    RemoteLocalPref prefForOp,
+  ) {
     if (verbBuilder is LookupVerbBuilder ||
         verbBuilder is PLookupVerbBuilder ||
         verbBuilder is NotifyVerbBuilder ||
         verbBuilder is StatsVerbBuilder) {
       return atClient.getRemoteSecondary()!;
     }
-    return atClient.getLocalSecondary()!;
+
+    switch (prefForOp) {
+      case RemoteLocalPref.localOnly:
+        return atClient.getLocalSecondary()!;
+      case RemoteLocalPref.remoteOnly:
+        return atClient.getRemoteSecondary()!;
+    }
   }
 }

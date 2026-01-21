@@ -1,3 +1,7 @@
+## 4.2.0 (unreleased tech-debt-removal branch changes)
+
+- chore(deps): at_chops ^3.0.0
+
 ## 4.1.0
 
 - chore(deps): at_client_mobile ^3.3.0

@@ -43,19 +43,28 @@ void main() {
 
     test('test current atsign', () async {
       final atClientManager = AtClientManager(atSign);
-      final preference = AtClientPreference()..syncRegex = '.wavi';
+      final preference = AtClientPreference()
+        ..syncRegex = '.wavi'
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       expect(atClient.getCurrentAtSign(), atSign);
     });
     test('test current atsign - backward compatibility', () async {
-      final preference = AtClientPreference()..syncRegex = '.wavi';
+      final preference = AtClientPreference()
+        ..syncRegex = '.wavi'
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference);
       expect(atClient.getCurrentAtSign(), atSign);
     });
     test('test preference', () async {
       final atClientManager = AtClientManager(atSign);
-      final preference = AtClientPreference()..syncRegex = '.wavi';
+      final preference = AtClientPreference()
+        ..syncRegex = '.wavi'
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
       expect(atClient.getPreferences()!.syncRegex, '.wavi');
@@ -65,7 +74,9 @@ void main() {
   group('A group of tests on switch atSign event', () {
     String atSign = '@alice';
     String namespace = 'wavi';
-    AtClientPreference atClientPreference = AtClientPreference();
+    AtClientPreference atClientPreference = AtClientPreference()
+      ..hiveStoragePath = 'test/hive'
+      ..commitLogPath = 'test/hive/path';
     setUp(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
       AtClientManager.getInstance().removeAllChangeListeners();
@@ -87,8 +98,7 @@ void main() {
       var itr = atClientManager.getItemsInChangeListeners();
       while (itr.moveNext()) {
         if (itr.current is NotificationService) {
-          expect(
-              (itr.current as NotificationServiceImpl).currentAtSign, '@bob');
+          expect((itr.current as NotificationServiceImpl).atSign, '@bob');
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, '@bob');
         } else if (itr.current is AtClientImpl) {
@@ -102,7 +112,9 @@ void main() {
         () async {
       String atSign = '@alice';
       String namespace = 'wavi';
-      AtClientPreference atClientPreference = AtClientPreference();
+      AtClientPreference atClientPreference = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace, atClientPreference);
       expect(atClientManager.getChangeListenersSize(), 3);
@@ -120,8 +132,7 @@ void main() {
       var itr = atClientManager.getItemsInChangeListeners();
       while (itr.moveNext()) {
         if (itr.current is NotificationService) {
-          expect(
-              (itr.current as NotificationServiceImpl).currentAtSign, atSign);
+          expect((itr.current as NotificationServiceImpl).atSign, atSign);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign);
         } else if (itr.current is AtClientImpl) {
@@ -135,7 +146,9 @@ void main() {
       String atSign2 = '@bob';
       String atSign3 = '@emoji';
       String namespace = 'wavi';
-      AtClientPreference atClientPreference = AtClientPreference();
+      AtClientPreference atClientPreference = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign1, namespace, atClientPreference);
       atClientManager = await AtClientManager.getInstance()
@@ -154,8 +167,7 @@ void main() {
       var itr = atClientManager.getItemsInChangeListeners();
       while (itr.moveNext()) {
         if (itr.current is NotificationService) {
-          expect(
-              (itr.current as NotificationServiceImpl).currentAtSign, atSign2);
+          expect((itr.current as NotificationServiceImpl).atSign, atSign2);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign2);
         } else if (itr.current is AtClientImpl) {
@@ -170,7 +182,9 @@ void main() {
       String atSign2 = '@bob';
       String atSign3 = '@emoji';
       String namespace = 'wavi';
-      AtClientPreference atClientPreference = AtClientPreference();
+      AtClientPreference atClientPreference = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign1, namespace, atClientPreference);
       atClientManager = await AtClientManager.getInstance()
@@ -182,8 +196,7 @@ void main() {
       var itr = atClientManager.getItemsInChangeListeners();
       while (itr.moveNext()) {
         if (itr.current is NotificationService) {
-          expect(
-              (itr.current as NotificationServiceImpl).currentAtSign, atSign3);
+          expect((itr.current as NotificationServiceImpl).atSign, atSign3);
         } else if (itr.current is SyncService) {
           expect((itr.current as SyncServiceImpl).currentAtSign, atSign3);
         } else if (itr.current is AtClientImpl) {
@@ -209,6 +222,9 @@ void main() {
   group('AtClientImpl.ensureLowerCase() functionality checks', () {
     late AtClientManager manager;
     late AtClientImpl client;
+    AtClientPreference pref = AtClientPreference()
+      ..hiveStoragePath = 'test/hive'
+      ..commitLogPath = 'test/hive/path';
     test('Test AtClientImpl.ensureLowerCase() on an AtKey with no namespace',
         () async {
       AtKey key = AtKey()
@@ -217,7 +233,7 @@ void main() {
         ..sharedWith = '@receiver';
 
       manager = await AtClientManager.getInstance()
-          .setCurrentAtSign('@sender', null, AtClientPreference());
+          .setCurrentAtSign('@sender', null, pref);
       client = manager.atClient as AtClientImpl;
 
       //AtClientImpl.ensureLowerCase() has a void return type
@@ -261,12 +277,15 @@ void main() {
   });
 
   group('A group of tests related to apkam/enrollments', () {
+    AtClientPreference pref = AtClientPreference()
+      ..hiveStoragePath = 'test/hive'
+      ..commitLogPath = 'test/hive/path';
     test(
         'A test to verify enrollmentId is set in atClient after calling setCurrentAtSign',
         () async {
       final testEnrollmentId = 'abc123';
       var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign('@alice', 'wavi', AtClientPreference(),
+          .setCurrentAtSign('@alice', 'wavi', pref,
               enrollmentId: testEnrollmentId);
       expect(atClientManager.atClient.enrollmentId, testEnrollmentId);
     });
@@ -292,11 +311,10 @@ void main() {
               auth: true)).thenAnswer((_) => Future.value('data:{"$enrollKey1":'
           '$enrollValue1,"$enrollKey2":$enrollValue2,"$enrollKey3":$enrollValue3}'));
 
-      AtClient? client = await AtClientImpl.create(
-          currentAtsign, 'buzz', AtClientPreference(),
+      AtClient? client = await AtClientImpl.create(currentAtsign, 'buzz', pref,
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
-          EnrollmentServiceImpl(client, atAuthBase.atEnrollment(currentAtsign));
+          EnrollmentServiceImpl(client, AtEnrollment.create());
       AtClientImpl? clientImpl = client as AtClientImpl;
 
       List<Enrollment> requests =
@@ -342,8 +360,11 @@ void main() {
         'A test to verify exception is thrown when SPP exceeds the character length',
         () async {
       String invalidSPP = 'abc1234';
+      AtClientPreference pref = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
       var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, 'wavi', AtClientPreference());
+          .setCurrentAtSign(atSign, 'wavi', pref);
       expect(
           () async => await atClientManager.atClient.setSPP(invalidSPP),
           throwsA(predicate((dynamic e) =>
@@ -352,8 +373,10 @@ void main() {
     });
 
     test('A test to verify SPP is created successfully', () async {
-      AtClient atClient = await AtClientImpl.create(
-          atSign, 'wavi', AtClientPreference(),
+      AtClientPreference pref = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
+      AtClient atClient = await AtClientImpl.create(atSign, 'wavi', pref,
           remoteSecondary: mockRemoteSecondary);
 
       when(() => mockRemoteSecondary.executeCommand('otp:put:ABC123\n',
@@ -369,8 +392,10 @@ void main() {
   group('A group of test to validate max length of a key', () {
     MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
     test('test max length for put method', () async {
-      AtClient? client = await AtClientImpl.create(
-          '@alice', 'buzz', AtClientPreference(),
+      AtClientPreference pref = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
+      AtClient? client = await AtClientImpl.create('@alice', 'buzz', pref,
           remoteSecondary: mockRemoteSecondary);
       var key = TestUtils.createRandomString(250);
       var atKey = AtKey.fromString('$key@alice');

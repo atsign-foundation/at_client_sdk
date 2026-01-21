@@ -1,0 +1,56 @@
+import 'package:at_chops/at_chops.dart';
+import 'package:at_client/at_client.dart';
+import 'package:at_client/src/decryption_service/decryption.dart';
+import 'package:at_client/src/encryption_service/abstract_atkey_encryption.dart';
+import 'package:at_utils/at_logger.dart';
+
+/// Class responsible for decrypting values shared by me TO others
+/// If I am @alice then an example would be @bob:foo.bar@alice
+class SharedByMeDecryption extends AbstractAtKeyEncryption
+    implements AtKeyDecryption {
+  late final AtSignLogger _logger;
+  final AtClient _atClient;
+
+  SharedByMeDecryption(this._atClient) : super(_atClient) {
+    _logger =
+        AtSignLogger('LocalKeyDecryption (${_atClient.getCurrentAtSign()})');
+  }
+
+  @override
+  Future<String> decrypt(AtKey atKey, dynamic encryptedValue) async {
+    if (encryptedValue == null || encryptedValue.isEmpty) {
+      throw AtDecryptionException('Decryption failed. Encrypted value is null',
+          intent: Intent.decryptData,
+          exceptionScenario: ExceptionScenario.decryptionFailed);
+    }
+    // Get the shared key.
+    var symmetricKey = await getMyCopyOfSharedSymmetricKey(atKey);
+
+    if (symmetricKey.isEmpty) {
+      _logger.severe('Decryption failed. SharedKey is null');
+      throw SharedKeyNotFoundException('Empty or null SharedKey is found',
+          intent: Intent.fetchEncryptionSharedKey,
+          exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
+    }
+    InitialisationVector iV;
+    if (atKey.metadata.ivNonce != null) {
+      iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
+    } else {
+      iV = AtChopsUtil.generateIVLegacy();
+    }
+    AtEncryptionResult decryptionResultFromAtChops;
+    try {
+      var encryptionAlgo = AESEncryptionAlgo(AESKey(symmetricKey));
+      decryptionResultFromAtChops = await _atClient.atChops!.decryptString(
+          encryptedValue, EncryptionKeyType.aes256,
+          encryptionAlgorithm: encryptionAlgo, iv: iV);
+      _logger.finer(
+          'decryptionResultFromAtChops: ${decryptionResultFromAtChops.result}');
+    } on AtDecryptionException catch (e) {
+      _logger.severe(
+          'decryption exception during of key: ${atKey.key}. Reason: ${e.toString()}');
+      rethrow;
+    }
+    return decryptionResultFromAtChops.result;
+  }
+}

@@ -24,7 +24,7 @@ jobs:
       matrix:
         dart-channel: [stable, beta]
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - uses: ./actions/setup-flutter-and-dart
         with:
@@ -61,49 +61,49 @@ jobs:
       #          file: packages/at_client/unit_test_coverage.lcov
       #          flags: at_client_unit_tests
 
-  unit_at_client_mobile:
+  unit_at_client_flutter:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         dart-channel: [stable, beta]
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - uses: ./actions/setup-flutter-and-dart
         with:
           dart-channel: ${{ matrix.dart-channel}}
 
-      # Install dependencies of at_client_mobile
+      # Install dependencies of at_client_flutter
       - name: Installing dependencies
-        working-directory: packages/at_client_mobile
+        working-directory: packages/at_client_flutter
         run: flutter pub get --no-example
 
-      # Analyze at_client_mobile package
+      # Analyze at_client_flutter package
       - name: flutter analyze
-        working-directory: packages/at_client_mobile
+        working-directory: packages/at_client_flutter
         run: flutter analyze --no-fatal-infos
 
       # Check formatting
       - name: Check that code in packages is correctly formatted
-        working-directory: packages/at_client_mobile
+        working-directory: packages/at_client_flutter
         run: dart format . -o none --set-exit-if-changed
 
       # Run unit tests
-      - name: Run at_client_mobile unit tests, with code coverage measurement
-        working-directory: packages/at_client_mobile
+      - name: Run at_client_flutter unit tests, with code coverage measurement
+        working-directory: packages/at_client_flutter
         run: flutter test --concurrency=1 --coverage
 
-      - name: Convert at_client_mobile coverage to LCOV format
-        working-directory: packages/at_client_mobile
+      - name: Convert at_client_flutter coverage to LCOV format
+        working-directory: packages/at_client_flutter
         run: dart run coverage:format_coverage --lcov --check-ignore --in=coverage --out=unit_test_coverage.lcov --report-on=lib
 
       #      Commenting out for now
-      #      - name: Upload at_client_mobile coverage to Codecov
+      #      - name: Upload at_client_flutter coverage to Codecov
       #        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
       #        with:
-      #          file: packages/at_client_mobile/unit_test_coverage.lcov
-      #          flags: at_client_mobile_unit_tests
+      #          file: packages/at_client_flutter/unit_test_coverage.lcov
+      #          flags: at_client_flutter_unit_tests
 
   functional_tests:
     runs-on: ubuntu-latest
@@ -112,7 +112,7 @@ jobs:
       matrix:
         dart-channel: [stable, beta]
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - uses: ./actions/setup-flutter-and-dart
         with:
@@ -172,7 +172,7 @@ jobs:
       - name: update image on cicd VMs
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
-        uses: appleboy/ssh-action@91f3272fc5907f4699dcf59761eb622a07342f5a # v1.2.3
+        uses: appleboy/ssh-action@823bd89e131d8d508129f9443cad5855e9ba96f0 # v1.2.4
         with:
           host: "cicd1.atsign.wtf,cicd2.atsign.wtf"
           username: ubuntu
@@ -188,7 +188,7 @@ jobs:
     needs: [end2end_tests_prep]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./actions/setup-flutter-and-dart
         with:
           dart-channel: ${{ matrix.dart-channel}}
@@ -240,7 +240,7 @@ jobs:
     if: ${{ github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./actions/setup-flutter-and-dart
         with:
           dart-channel: ${{ matrix.dart-channel}}

@@ -17,8 +17,12 @@ class AtClientPreference {
   @Deprecated("Use [SyncService]")
   SyncStrategy? syncStrategy;
 
-  /// Specify whether local store is required
-  bool isLocalStoreRequired = false;
+  bool _isLocalStoreRequired = true;
+
+  bool get isLocalStoreRequired => _isLocalStoreRequired;
+
+  @Deprecated("LocalStore is always required")
+  set isLocalStoreRequired(bool b) => _isLocalStoreRequired = b;
 
   /// Shared secret of the atSign
   String? cramSecret;
@@ -60,10 +64,31 @@ class AtClientPreference {
   /// The number of keys to pull from cloud secondary to local secondary in a single call.
   int syncPageLimit = 25;
 
-  // Default chunk size for file encryption and decryption
+  /// Default chunk size for file encryption and decryption
   int fileEncryptionChunkSize = 4096;
 
-  Duration monitorHeartbeatInterval = Duration(seconds: 10);
+  /// The NotificationService maintains a connection which monitors for new
+  /// notifications being delivered from the atServer. Because network weather
+  /// is real, and because it is generally essential for client programs to
+  /// receive notifications consistently, a heartbeat `no-op` command is sent
+  /// to the atServer periodically, at this interval
+  Duration monitorHeartbeatInterval = Duration(seconds: 59);
+
+  /// When a heartbeat is sent by the notifications monitor, we wait for this
+  /// length of time to receive a response. If no response is received, then
+  /// the connection is closed, and the notifications monitor will reconnect.
+  ///
+  /// See also [monitorHeartbeatInterval]
+  Duration monitorHeartbeatResponseTimeout = Duration(seconds: 10);
+
+  /// - when true, then the notifications monitor will be started either the
+  /// first time that [NotificationService.subscribe] is called by the
+  /// application code, or 30 seconds after creation of the
+  /// [NotificationService] if there have been no subscriptions.
+  /// - when false, then the notifications monitor
+  /// will not be started until explicitly requested to do so by the
+  /// application calling [NotificationService.startListening]
+  bool monitorAutoStart = true;
 
   /// Time interval for the scheduled task that removes expired keys from local keyStore
   ///
@@ -96,18 +121,41 @@ class AtClientPreference {
   @Deprecated('No longer needed. at_chops will be used by default')
   bool useAtChops = true;
 
-  /// Poorly named variable which controls some aspects of at_client's
-  /// default data encryption
-  @Deprecated('Will be removed in next major version')
+  /// Poorly named variable which used to control some aspects of at_client's
+  /// default data encryption. Is now fully ignored.
+  @Deprecated('Ignored. Will be removed in next major version')
   Version atProtocolEmitted = Version(2, 0, 0);
 
   AtClientParticulars atClientParticulars = AtClientParticulars();
 
-  //signing algorithm to use for pkam authentication
+  /// signing algorithm to use for pkam authentication
   SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
 
-  //hashing algorithm to use for pkam authentication
+  /// hashing algorithm to use for pkam authentication
   HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
+
+  /// Set this to [RemoteLocalPref.remoteFirst] or [RemoteLocalPref.remoteOnly]
+  /// if you require all data operations (get / put / delete) to be performed
+  /// on the remote atServer first.
+  RemoteLocalPref remoteLocalPref = RemoteLocalPref.localOnly;
+}
+
+/// Default preference on how to handle get, put and delete requests with
+/// regards to use of local storage vs the remote atServer.
+enum RemoteLocalPref {
+  /// The default - operate on local storage, and rely on the background
+  /// sync processing to push changes to the remote atServer.
+  localOnly,
+
+  // /// Operate on remote first. If there is an exception, rethrow it back to
+  // /// application code. If remote operation was successful, then perform the
+  // /// operation on local storage.
+  // remoteFirst,
+  //
+  /// Operate on remote only - i.e. do not interact with local storage at all.
+  /// Note that if the application is syncing, then the change will be pulled
+  /// to local from remote as part of the sync process.
+  remoteOnly,
 }
 
 @Deprecated("Use SyncService")

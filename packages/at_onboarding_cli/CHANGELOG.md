@@ -1,6 +1,21 @@
+## 1.15.0
+
+- feat: add `--root-server` option to specify root server domain
+- feat: add `--license-key` alias for `--cramkey`
+- chore(deps): at_commons: ^5.6.0
+- chore(deps): args gkc/show-aliases-in-usage dependency override
+- chore(deps): at_auth ^3.0.0
+- chore(deps): at_chops ^3.0.0
+
+## 1.14.2
+
+ - chore: export createAtClientCli() to be used downstream
+
 ## 1.14.1
 
-- build: remove the dependency override on the `args` package 
+- build: remove the dependency override on the `args` package
+- feat: export method requestEnrollmentOtp() to be used downstream
+- feat: expose atKeysFile in OnboardingService.enroll() method signature
 
 ## 1.14.0
 

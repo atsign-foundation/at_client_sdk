@@ -367,8 +367,6 @@ class AtRpc {
     bool mutexAcquired = enableRequestMutex &&
         await _tryAcquireSessionMutex(requestId, notification.to);
     if (enableRequestMutex && !mutexAcquired) {
-      logger.shout(
-          'Ignoring request: could not acquire mutex for requestId $requestId');
       return;
     }
 
@@ -509,11 +507,13 @@ class AtRpc {
           ..namespace = baseNameSpace
           ..metadata = _defaultMetaData;
 
+        var responseJson = jsonEncode(response.toJson());
+
         logger.info(
-            "Sending notification $responseAtKey with payload ${response.toJson()}");
+            "Sending notification $responseAtKey with payload $responseJson");
         await atClient.notificationService.notify(
             NotificationParams.forUpdate(responseAtKey,
-                value: jsonEncode(response.toJson()),
+                value: responseJson,
                 notificationExpiry: defaultNotificationExpiry),
             checkForFinalDeliveryStatus: false,
             waitForFinalDeliveryStatus: false);

@@ -1,8 +1,26 @@
-## 3.10.0
+## NEXT
 
 - feat: new AtBase mixin
-  - both ApkamSigning and AtClientBindings implement it.
+- both ApkamSigning and AtClientBindings implement it.
 - feat: new EnvelopeSigning mixin on ApkamSigning
+
+## 3.11.0
+
+- chore(deps): at_auth ^3.0.0
+- chore(deps): at_chops ^3.0.0
+
+## 3.10.0
+
+- build(deps): Updated archive dependency to ^4.0.7
+- feat: Add RemoteLocalPref enum and AtClientPreference.remoteLocalPref field
+  to enable apps to easily default to using the remote atServer
+- fix: ensure AtRpcResp and AtRpcReq `.toString()` methods are JSON serialized
+  strings
+- feat: use responseJson variable so that log is consistent
+- fix: fixed rare race condition caused by the handling of legacy shared 
+  symmetric keys
+- feat: improved resilience of the notifications monitor to weird network 
+  conditions
 
 ## 3.9.2
 
@@ -19,7 +37,7 @@
 - feat: introduce single-responder mode in AtRpc enabling redundancy support in
   request-response services relying on AtRpc. This feature is coupled with
   `enableRequestMutex` flag that controls it.
-  
+
 ## 3.8.0
 
 - feat: add optional `useRemoteAtServer` flag to AtClient `getKeys` and

@@ -21,9 +21,10 @@ import 'package:meta/meta.dart';
 import 'package:zxing2/qrcode.dart';
 
 import '../util/home_directory_util.dart';
-import '../util/onboarding_util.dart';
 
-///class containing service that can onboard/activate/authenticate @signs
+/// Service implementation responsible for onboarding and authenticating atSigns.
+///
+/// Also has implementation to create, approve, deny and revoke enrollments.
 class AtOnboardingServiceImpl implements AtOnboardingService {
   late final String _atSign;
   bool _isAtsignOnboarded = false;
@@ -33,17 +34,18 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   /// The object which controls what types of AtClients, NotificationServices
   /// and SyncServices get created when we call [AtClientManager.setCurrentAtSign].
+  ///
   /// If [atServiceFactory] is not set, AtClientManager.setCurrentAtSign will use
   /// a [DefaultAtServiceFactory]
   AtServiceFactory? atServiceFactory;
 
-  AtEnrollmentBase? _atEnrollment;
+  AtEnrollment? _atEnrollment;
 
   AtOnboardingServiceImpl(String atsign, this.atOnboardingPreference,
       {this.atServiceFactory, String? enrollmentId}) {
     // performs atSign format checks on the atSign
     _atSign = AtUtils.fixAtSign(atsign);
-    _atEnrollment ??= atAuthBase.atEnrollment(_atSign);
+    _atEnrollment ??= AtEnrollment.create();
     // set default LocalStorage paths for this instance
     atOnboardingPreference.commitLogPath ??=
         HomeDirectoryUtil.getCommitLogPath(_atSign, enrollmentId: enrollmentId);
@@ -58,29 +60,37 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   bool get _isUsingProxy => atOnboardingPreference.isUsingProxy;
 
   /// Sends from: command if using proxy
+  ///
   /// [context] - description of the operation for logging (defaults to 'sendFromCommand')
+  ///
   /// [atSign] - the atSign to send the from: command for (defaults to current atSign)
-  Future<bool> _sendFromCommandIfUsingProxy(AtLookUp atLookUp, {String context = 'sendFromCommand', String? atSign}) async {
+  Future<bool> _sendFromCommandIfUsingProxy(AtLookUp atLookUp,
+      {String context = 'sendFromCommand', String? atSign}) async {
     if (!_isUsingProxy) {
       return false;
     }
 
     String targetAtSign = atSign ?? _atSign;
     try {
-      String? fromResponse = await atLookUp.executeCommand('from:$targetAtSign\n', auth: false);
-      logger.info('$context: from: command successful for $targetAtSign, response: $fromResponse');
+      String? fromResponse =
+          await atLookUp.executeCommand('from:$targetAtSign\n', auth: false);
+      logger.info(
+          '$context: from: command successful for $targetAtSign, response: $fromResponse');
 
       if (fromResponse == null || fromResponse.isEmpty) {
-        logger.warning('$context: from: command returned empty response for $targetAtSign');
+        logger.warning(
+            '$context: from: command returned empty response for $targetAtSign');
         return false;
       }
       if (fromResponse.contains('error:')) {
-        logger.warning('$context: from: command returned error for $targetAtSign: $fromResponse');
+        logger.warning(
+            '$context: from: command returned error for $targetAtSign: $fromResponse');
         return false;
       }
       return true;
     } catch (e) {
-      logger.warning('$context: from: command failed for $targetAtSign: $e - continuing anyway');
+      logger.warning(
+          '$context: from: command failed for $targetAtSign: $e - continuing anyway');
       return false;
     }
   }
@@ -168,14 +178,15 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       throw AtActivateException('atsign $_atSign is already activated');
     }
 
-    atAuth ??= atAuthBase.atAuth();
+    atAuth ??= AtAuth.create();
     var atOnboardingRequest = AtOnboardingRequest(_atSign);
-    atOnboardingRequest.rootDomain = atOnboardingPreference.rootDomain;
-    atOnboardingRequest.rootPort = atOnboardingPreference.rootPort;
-    atOnboardingRequest.appName = atOnboardingPreference.appName;
-    atOnboardingRequest.deviceName = atOnboardingPreference.deviceName;
-    atOnboardingRequest.publicKeyId = atOnboardingPreference.publicKeyId;
-    atOnboardingRequest.authMode = atOnboardingPreference.authMode;
+    atOnboardingRequest.rootDomain = AtRootDomain(
+        atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+    atOnboardingRequest.atKeysIo = FileAtKeysIo(
+      filePath: atOnboardingPreference.atKeysFilePath != null
+          ? (_) => atOnboardingPreference.atKeysFilePath!
+          : null,
+    );
 
     AtOnboardingResponse atOnboardingResponse = await atAuth!.onboard(
       atOnboardingRequest,
@@ -282,7 +293,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       atOnboardingPreference.rootPort,
     );
 
-    EnrollmentRequest newClientEnrollmentRequest = EnrollmentRequest(
+    AtEnrollmentRequest newClientEnrollmentRequest = AtEnrollmentRequest(
+        atSign: _atSign,
         appName: appName,
         deviceName: deviceName,
         namespaces: namespaces,
@@ -331,11 +343,14 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     AtChopsKeys atChopsKeys = AtChopsKeys.create(
         AtEncryptionKeyPair.create(
-            enrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!, ''),
-        AtPkamKeyPair.create(enrollmentResponse.atAuthKeys!.apkamPublicKey!,
-            enrollmentResponse.atAuthKeys!.apkamPrivateKey!));
+            enrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!
+                .toString(),
+            ''),
+        AtPkamKeyPair.create(
+            enrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
+            enrollmentResponse.atAuthKeys!.apkamPrivateKey!.toString()));
     atChopsKeys.apkamSymmetricKey =
-        AESKey(enrollmentResponse.atAuthKeys!.apkamSymmetricKey!);
+        AESKey(enrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString());
 
     // Create AtChops instance and assign it to the lookup for PKAM authentication
     AtChopsImpl atChops = AtChopsImpl(atChopsKeys);
@@ -362,7 +377,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     var decryptedEncryptionPrivateKey = EncryptionUtil.decryptValue(
         encryptedPrivateKey.$1,
-        enrollmentResponse.atAuthKeys!.apkamSymmetricKey!,
+        enrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString(),
         ivBase64: encryptedPrivateKey.$2);
 
     // Fetches encrypted "selfEncryptionKey" from server. The first
@@ -372,13 +387,14 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     (String, String?) selfEncryptionKey = await _getSelfEncryptionKeyFromServer(
         enrollmentResponse.enrollmentId, _atLookUp!);
     var decryptedSelfEncryptionKey = EncryptionUtil.decryptValue(
-        selfEncryptionKey.$1, enrollmentResponse.atAuthKeys!.apkamSymmetricKey!,
+        selfEncryptionKey.$1,
+        enrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString(),
         ivBase64: selfEncryptionKey.$2);
 
     enrollmentResponse.atAuthKeys!.defaultEncryptionPrivateKey =
-        decryptedEncryptionPrivateKey;
+        AtBytes.fromString(decryptedEncryptionPrivateKey);
     enrollmentResponse.atAuthKeys!.defaultSelfEncryptionKey =
-        decryptedSelfEncryptionKey;
+        AtBytes.fromString(decryptedSelfEncryptionKey);
   }
 
   /// Retrieves the encryption private key and its associated initialization vector (IV)
@@ -474,7 +490,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     return (selfEncryptionKeyFromServer, selfEncryptionKeyIV);
   }
 
-  /// Pkam auth will be retried until server approves/denies/expires the enrollment
+  /// Retries PKAM auth until an enrollment is approved/denied/expired
   Future<void> _waitForPkamAuthSuccess(
     AtLookUp atLookUp,
     String enrollmentIdFromServer,
@@ -544,9 +560,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
   }
 
-  ///write newly created encryption keypairs into atKeys file
+  /// Write newly created encryption key-pairs into atKeys file
   Future<File> _generateAtKeysFile(
-    AtAuthKeys atAuthKeys, {
+    AtKeys atAuthKeys, {
     String? enrollmentId,
     File? atKeysFile,
     bool allowOverwrite = true,
@@ -567,21 +583,22 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         ' with enrollmentId $enrollmentId');
 
     final atKeysMap = <String, String>{
-      AuthKeyType.pkamPublicKey: EncryptionUtil.encryptValue(
-        atAuthKeys.apkamPublicKey!,
-        atAuthKeys.defaultSelfEncryptionKey!,
+      AuthKeyType.aesEncryptedPkamPublicKey: EncryptionUtil.encryptValue(
+        atAuthKeys.apkamPublicKey!.toString(),
+        atAuthKeys.defaultSelfEncryptionKey!.toString(),
       ),
-      AuthKeyType.encryptionPublicKey: EncryptionUtil.encryptValue(
-        atAuthKeys.defaultEncryptionPublicKey!,
-        atAuthKeys.defaultSelfEncryptionKey!,
+      AuthKeyType.aesEncryptedEncryptionPublicKey: EncryptionUtil.encryptValue(
+        atAuthKeys.defaultEncryptionPublicKey!.toString(),
+        atAuthKeys.defaultSelfEncryptionKey!.toString(),
       ),
-      AuthKeyType.encryptionPrivateKey: EncryptionUtil.encryptValue(
-        atAuthKeys.defaultEncryptionPrivateKey!,
-        atAuthKeys.defaultSelfEncryptionKey!,
+      AuthKeyType.aesEncryptedEncryptionPrivateKey: EncryptionUtil.encryptValue(
+        atAuthKeys.defaultEncryptionPrivateKey!.toString(),
+        atAuthKeys.defaultSelfEncryptionKey!.toString(),
       ),
-      AuthKeyType.selfEncryptionKey: atAuthKeys.defaultSelfEncryptionKey!,
-      _atSign: atAuthKeys.defaultSelfEncryptionKey!,
-      AuthKeyType.apkamSymmetricKey: atAuthKeys.apkamSymmetricKey!
+      AuthKeyType.selfEncryptionKey:
+          atAuthKeys.defaultSelfEncryptionKey!.toString(),
+      _atSign: atAuthKeys.defaultSelfEncryptionKey!.toString(),
+      AuthKeyType.apkamSymmetricKey: atAuthKeys.apkamSymmetricKey!.toString()
     };
 
     if (enrollmentId != null) {
@@ -589,8 +606,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
 
     if (atOnboardingPreference.authMode == PkamAuthMode.keysFile) {
-      atKeysMap[AuthKeyType.pkamPrivateKey] = EncryptionUtil.encryptValue(
-          atAuthKeys.apkamPrivateKey!, atAuthKeys.defaultSelfEncryptionKey!);
+      atKeysMap[AuthKeyType.aesEncryptedPkamPrivateKey] =
+          EncryptionUtil.encryptValue(atAuthKeys.apkamPrivateKey!.toString(),
+              atAuthKeys.defaultSelfEncryptionKey!.toString());
     }
 
     atKeysFile.createSync(recursive: true);
@@ -610,67 +628,71 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     await fileWriter.flush();
     await fileWriter.close();
     stdout.writeln(
-        '${chalk.green('[Success]')} Your .atKeys file saved at ${atOnboardingPreference.atKeysFilePath}\n');
+        '${chalk.green('[Success]')} Your .atKeys file saved at ${atKeysFile.path}\n');
 
     return atKeysFile;
   }
 
-  ///back-up encryption keys to local secondary
+  /// Back-up encryption keys to local secondary
   /// #TODO remove this method in future when all keys are read from AtChops
-  Future<void> _persistKeysLocalSecondary(AtAuthKeys atAuthKeys) async {
+  Future<void> _persistKeysLocalSecondary(AtKeys atAuthKeys) async {
     //backup keys into local secondary
-    bool? response = await atClient
-        ?.getLocalSecondary()
-        ?.putValue(AtConstants.atPkamPublicKey, atAuthKeys.apkamPublicKey!);
+    bool? response = await atClient?.getLocalSecondary()?.putValue(
+        AtConstants.atPkamPublicKey, atAuthKeys.apkamPublicKey!.toString());
     logger.finer('PkamPublicKey persist to localSecondary: status $response');
-    // save pkam private key only when auth mode is keyFile. if auth mode is sim/any other secure element private key cannot be read and hence will not be part of keys file
+    // Save the PKAM private key only when the auth mode is keyFile.
+    // In SIM or other secure element modes, the private key cannot be
+    // read and therefore won't be included in the keys file.
     if (atOnboardingPreference.authMode == PkamAuthMode.keysFile) {
-      response = await atClient
-          ?.getLocalSecondary()
-          ?.putValue(AtConstants.atPkamPrivateKey, atAuthKeys.apkamPrivateKey!);
+      response = await atClient?.getLocalSecondary()?.putValue(
+          AtConstants.atPkamPrivateKey, atAuthKeys.apkamPrivateKey!.toString());
       logger
           .finer('PkamPrivateKey persist to localSecondary: status $response');
     }
     response = await atClient?.getLocalSecondary()?.putValue(
         '${AtConstants.atEncryptionPublicKey}$_atSign',
-        atAuthKeys.defaultEncryptionPublicKey!);
+        atAuthKeys.defaultEncryptionPublicKey!.toString());
     logger.finer(
         'EncryptionPublicKey persist to localSecondary: status $response');
     response = await atClient?.getLocalSecondary()?.putValue(
         AtConstants.atEncryptionPrivateKey,
-        atAuthKeys.defaultEncryptionPrivateKey!);
+        atAuthKeys.defaultEncryptionPrivateKey!.toString());
     logger.finer(
         'EncryptionPrivateKey persist to localSecondary: status $response');
     response = await atClient?.getLocalSecondary()?.putValue(
-        AtConstants.atEncryptionSelfKey, atAuthKeys.defaultSelfEncryptionKey!);
+        AtConstants.atEncryptionSelfKey,
+        atAuthKeys.defaultSelfEncryptionKey!.toString());
   }
 
   @override
   Future<bool> authenticate({String? enrollmentId}) async {
-    atAuth ??= atAuthBase.atAuth();
-    var atAuthRequest = AtAuthRequest(_atSign)
+    atAuth ??= AtAuth.create();
+    var atAuthRequest = AtAuthRequest(
+        _atSign,
+        atKeysIo: FileAtKeysIo(
+            filePath: !atOnboardingPreference.atKeysFilePath.isNull
+                ? (_) => atOnboardingPreference.atKeysFilePath!
+                : null,
+            passPhrase: atOnboardingPreference.passPhrase))
       ..enrollmentId = enrollmentId
-      ..atKeysFilePath = atOnboardingPreference.atKeysFilePath
-      ..authMode = atOnboardingPreference.authMode
-      ..rootDomain = atOnboardingPreference.rootDomain
-      ..rootPort = atOnboardingPreference.rootPort
-      ..publicKeyId = atOnboardingPreference.publicKeyId
-      ..passPhrase = atOnboardingPreference.passPhrase;
+      ..rootDomain = AtRootDomain(
+          atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     var atAuthResponse = await atAuth!.authenticate(atAuthRequest);
     logger.finer('Auth response: $atAuthResponse');
     if (atAuthResponse.isSuccessful &&
         atOnboardingPreference.atKeysFilePath != null) {
       logger.finer('Calling persist keys to local secondary');
       await _initAtClient(atAuth!.atChops!,
-          enrollmentId: atAuthResponse.enrollmentId);
+          enrollmentId: atAuthResponse.atAuthKeys!.enrollmentId);
       await _persistKeysLocalSecondary(atAuthResponse.atAuthKeys!);
     }
 
     return atAuthResponse.isSuccessful;
   }
 
-  ///method to read and return data from .atKeysFile
-  ///returns map containing encryption keys
+  /// Method to read and return data from .atKeysFile
+  ///
+  /// Returns map containing encryption keys
   @visibleForTesting
   Future<Map<String, String>> readAtKeysFile(String? atKeysFilePath) async {
     if (atKeysFilePath == null || atKeysFilePath.isEmpty) {
@@ -685,17 +707,17 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     return jsonData;
   }
 
-  ///generates random RSA keypair
+  /// Generates a random RSA keypair
   RSAKeypair generateRsaKeypair() {
     return RSAKeypair.fromRandom();
   }
 
-  ///generate random AES key
+  /// Generate a random AES key
   String generateAESKey() {
     return AES(Key.fromSecureRandom(32)).key.base64;
   }
 
-  ///returns secondary server status
+  /// Returns secondary server status
   Future<AtStatus> getServerStatus() async {
     AtServerStatus atServerStatus = AtStatusImpl(
         rootUrl: atOnboardingPreference.rootDomain,
@@ -705,21 +727,26 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   @override
   Future<bool> isOnboarded() async {
-
     if (_isUsingProxy) {
       // When using a proxy, try a simple lookup command that doesn't require auth
-      AtLookUp atLookUp = AtLookupImpl(_atSign, atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+      AtLookUp atLookUp = AtLookupImpl(_atSign,
+          atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
       await _sendFromCommandIfUsingProxy(atLookUp, context: 'isOnboarded');
 
       try {
-        String? pkeyResponse = await _atLookUp!.executeCommand('lookup:publickey$_atSign\n', auth: false);
-        if (pkeyResponse != null && !pkeyResponse.contains('error:') && !pkeyResponse.contains('null') && pkeyResponse.trim().isNotEmpty) {
+        String? pkeyResponse = await _atLookUp!
+            .executeCommand('lookup:publickey$_atSign\n', auth: false);
+        if (pkeyResponse != null &&
+            !pkeyResponse.contains('error:') &&
+            !pkeyResponse.contains('null') &&
+            pkeyResponse.trim().isNotEmpty) {
           _isAtsignOnboarded = true;
           return true;
         }
         return false;
       } catch (e) {
-        logger.info('isOnboarded: lookup failed, trying alternative approach: $e');
+        logger.info(
+            'isOnboarded: lookup failed, trying alternative approach: $e');
         return false;
       }
     } else {
@@ -733,13 +760,14 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         return false;
       } catch (e) {
         stderr.writeln('${chalk.brightRed('[Error]')} $e');
-        throw AtActivateException('Could not determine atsign activation status: $e',
+        throw AtActivateException(
+            'Could not determine atsign activation status: $e',
             intent: Intent.fetchData);
       }
     }
   }
 
-  ///extracts cram secret from qrCode
+  // Extracts cram secret from qrCode
   @Deprecated('qr_code based cram authentication not supported anymore')
   static String? getSecretFromQr(String? path) {
     if (path == null) {
@@ -870,7 +898,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }
 
   @visibleForTesting
-  set enrollmentBase(AtEnrollmentBase enrollmentBase) {
+  set enrollmentBase(AtEnrollment enrollmentBase) {
     _atEnrollment = enrollmentBase;
   }
 

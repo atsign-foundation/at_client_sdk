@@ -11,7 +11,9 @@ void main() {
     test('Test that we can inject an AtLookUp instance', () async {
       final aliceAtSign = '@alice';
       final atClientManager = AtClientManager(aliceAtSign);
-      final alicePreference = AtClientPreference();
+      final alicePreference = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
       final mockAtLookUp = MockAtLookUp();
       await atClientManager.setCurrentAtSign(
           aliceAtSign, 'wavi', alicePreference,
@@ -27,11 +29,15 @@ void main() {
     test('test switch atsign - check atsign name', () async {
       final aliceAtSign = '@alice';
       final atClientManager = AtClientManager(aliceAtSign);
-      final alicePreference = AtClientPreference();
+      final alicePreference = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
       await atClientManager.setCurrentAtSign(
           aliceAtSign, 'wavi', alicePreference);
       expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
-      final bobPreference = AtClientPreference();
+      final bobPreference = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
       final bobAtSign = '@bob';
       await atClientManager.setCurrentAtSign(bobAtSign, 'buzz', bobPreference);
       expect(atClientManager.atClient.getCurrentAtSign(), bobAtSign);
@@ -46,7 +52,9 @@ void main() {
       expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
       atClientManager.atClient.syncService
           .addProgressListener(AliceSyncProgressListener());
-      final bobPreference = AtClientPreference();
+      final bobPreference = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
       final bobAtSign = '@bob';
       await atClientManager.setCurrentAtSign(bobAtSign, 'buzz', bobPreference);
       atClientManager.atClient.syncService

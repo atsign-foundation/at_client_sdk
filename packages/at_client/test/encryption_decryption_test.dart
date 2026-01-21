@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
+import 'package:at_client/src/decryption_service/shared_with_me_decryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
@@ -21,7 +21,6 @@ void main() {
 
   setUp(() async {
     AtClientPreference atClientPreference = AtClientPreference()
-      ..isLocalStoreRequired = true
       ..hiveStoragePath = 'test/unit_test_storage/hive'
       ..commitLogPath = 'test/unit_test_storage/commit';
 
@@ -87,7 +86,8 @@ void main() {
       expect(sharedKey.metadata.pubKeyCS, null);
 
       // Decryption
-      SharedKeyDecryption sharedKeyDecryption = SharedKeyDecryption(atClient);
+      SharedWithMeDecryption sharedKeyDecryption =
+          SharedWithMeDecryption(atClient);
       String decryptedValue =
           await sharedKeyDecryption.decrypt(sharedKey, encryptedValue);
       expect(decryptedValue, value);
@@ -126,13 +126,14 @@ void main() {
       // during decryption.
       sharedKey.metadata.pubKeyCS = null;
       expect(sharedKey.metadata.pubKeyCS, null);
-      // Explicity changing the publicKeyHash value to mimic change in publicKeyHash
+      // Explicitly changing the publicKeyHash value to mimic change in publicKeyHash
       // value.
       sharedKey.metadata.pubKeyHash =
           PublicKeyHash('dummy_hash_value', HashingAlgoType.sha512.name);
 
       // Decryption
-      SharedKeyDecryption sharedKeyDecryption = SharedKeyDecryption(atClient);
+      SharedWithMeDecryption sharedKeyDecryption =
+          SharedWithMeDecryption(atClient);
       expect(
           () async =>
               await sharedKeyDecryption.decrypt(sharedKey, encryptedValue),

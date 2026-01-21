@@ -1,8 +1,8 @@
 class AtResponse {
-  late String response;
+  String response = '';
   bool isError = false;
   String? errorCode;
-  late String errorDescription;
+  String errorDescription = 'Error description n/a';
 
   AtResponse fromJson(Map<String, dynamic> json) {
     response = json['response'];
@@ -18,4 +18,7 @@ class AtResponse {
         'errorCode': errorCode,
         'errorDescription': errorDescription,
       };
+
+  @override
+  String toString() => toJson().toString();
 }

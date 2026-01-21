@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
-import 'package:at_client/src/service/sync/sync_request.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/util/sync_util.dart';
@@ -102,9 +101,11 @@ void main() async {
     mockRemoteSecondary = MockRemoteSecondary();
     mockLocalSecondary = MockLocalSecondary();
 
+    when(() => mockAtClient.notificationService)
+        .thenReturn(mockNotificationService);
+
     syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
         atClientManager: mockAtClientManager,
-        notificationService: mockNotificationService,
         remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
     syncServiceImpl.syncUtil = SyncUtil(atCommitLog: mockAtCommitLog);
   });
