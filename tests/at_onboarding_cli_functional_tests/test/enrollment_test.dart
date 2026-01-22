@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
+import 'package:at_onboarding_cli/src/at_keys/collision_models.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
@@ -19,10 +21,10 @@ var encryptionPrivateKey;
 var selfEncryptionKey;
 
 final logger = AtSignLogger('OnboardingEnrollmentTest');
+String storageDir = '${Directory.current.path}/test/storage';
 
 void main() {
-  AtSignLogger.root_level = 'WARNING';
-  String storageDir = 'test/storage';
+  AtSignLogger.root_level = 'INFO';
 
   String atSign1 = '@naresh🛠';
   String atSign2 = '@eggovagency🛠';
@@ -38,6 +40,10 @@ void main() {
   // String atSign6 = '@cli_test_06';
 
   group('A group of tests to assert on authenticate functionality', () {
+    setUp(() async {
+      await Directory('$storageDir/keys/').create(recursive: true);
+    });
+
     test(
         'A test to verify send enroll request, approve enrollment and auth by enrollmentId',
         () async {
@@ -196,11 +202,12 @@ void main() {
       AtOnboardingPreference preference_1 = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
         ..isLocalStoreRequired = true
-        ..hiveStoragePath = 'storage/hive/client'
-        ..commitLogPath = 'storage/hive/client/commit'
+        ..hiveStoragePath = '$storageDir/hive/client'
+        ..commitLogPath = '$storageDir/hive/client/commit'
         ..cramSecret = at_demos.cramKeyMap[atSign4] ?? atSign4.substring(1)
         ..namespace =
             'wavi' // unique identifier that can be used to identify data from your app
+        ..atKeysFilePath = '$storageDir/keys/${atSign4}_key.atKeys'
         ..rootDomain = 'vip.ve.atsign.zone';
 
       AtOnboardingService? onboardingService_1 =
@@ -290,12 +297,21 @@ void main() {
       onboardingService_1 = onboardingService_2 = null;
     });
 
-    tearDown(() async => await tearDownFunc());
+    // tearDown(() async => await tearDownFunc());
   });
 
   group('tests to validate enrollment access control', () {
 		setUp(() async {
 			await Directory('$storageDir/keys/').create(recursive: true);
+			// Clean up any existing keys files for the atSigns used in these tests
+			var atSign6KeysFile = File('$storageDir/keys/${atSign6}_key.atKeys');
+			if (await atSign6KeysFile.exists()) {
+			  await atSign6KeysFile.delete();
+			}
+			var atSign2KeysFile = File('$storageDir/keys/${atSign2}_key.atKeys');
+			if (await atSign2KeysFile.exists()) {
+			  await atSign2KeysFile.delete();
+			}
 		});
 
     test('validate enrollment only has access to approved namespaces',
@@ -589,14 +605,13 @@ AtOnboardingPreference getPreferenceForAuth(String atSign) {
   atSign = AtUtils.fixAtSign(atSign);
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..rootDomain = 'vip.ve.atsign.zone'
+    ..atKeysFilePath = '$storageDir/keys/${atSign}_key.atKeys'
     ..isLocalStoreRequired = true
-    ..hiveStoragePath = 'storage/hive/client'
-    ..commitLogPath = 'storage/hive/client/commit'
+    ..hiveStoragePath = '$storageDir/hive/client'
+    ..commitLogPath = '$storageDir/hive/client/commit'
     ..cramSecret = at_demos.cramKeyMap[atSign] ?? atSign.substring(1)
     ..namespace =
         'wavi' // unique identifier that can be used to identify data from your app
-    ..atKeysFilePath =
-        '${Platform.environment['HOME']}/.atsign/keys/${atSign}_key.atKeys'
     ..appName = 'wavi'
     ..deviceName = 'pixel'
     ..rootDomain = 'vip.ve.atsign.zone';
@@ -609,8 +624,7 @@ AtOnboardingPreference getPreferenceForEnroll(String atSign) {
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..namespace =
         'buzz' // unique identifier that can be used to identify data from your app
-    ..atKeysFilePath =
-        '${Platform.environment['HOME']}/.atsign/keys/${atSign}_buzzkey.atKeys'
+    ..atKeysFilePath = '$storageDir/keys/${atSign}_buzzkey.atKeys'
     ..appName = 'buzz'
     ..deviceName = 'iphone'
     ..rootDomain = 'vip.ve.atsign.zone';
@@ -636,14 +650,8 @@ Future<void> getAtKeys(String atSign) async {
 
 Future<void> tearDownFunc() async {
   AtClientManager.getInstance().reset();
-  bool isExists = await Directory('test/storage/').exists();
+  bool isExists = await Directory(storageDir).exists();
   if (isExists) {
-    Directory('test/storage/').deleteSync(recursive: true);
-  }
-
-  Directory keysDir = Directory('${Platform.environment['HOME']}/.atsign/keys/');
-  isExists = keysDir.existsSync();
-  if (isExists){
-    keysDir.deleteSync(recursive: true);
+    Directory(storageDir).deleteSync(recursive: true);
   }
 }
