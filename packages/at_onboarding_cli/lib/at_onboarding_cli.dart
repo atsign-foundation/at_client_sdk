@@ -4,6 +4,7 @@ export 'src/cli/auth_cli_args.dart';
 export 'src/onboard/at_onboarding_service.dart';
 export 'src/onboard/at_onboarding_service_impl.dart';
 export 'src/register_cli/register.dart';
+export 'src/at_keys/collision_aware_file_at_keys_io.dart';
 export 'src/at_keys/keys_file_writer.dart';
 export 'src/util/at_onboarding_exceptions.dart';
 export 'src/util/at_onboarding_preference.dart';

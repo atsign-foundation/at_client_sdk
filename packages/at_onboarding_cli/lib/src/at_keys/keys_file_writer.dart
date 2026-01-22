@@ -67,7 +67,8 @@ class AtKeysFileWriter {
   }
 
   /// Writes [keysContent] to [filePath] and sets secure permissions.
-  static Future<String> _writeToFile(String keysContent, String filePath) async {
+  static Future<String> _writeToFile(
+      String keysContent, String filePath) async {
     // Create parent directory if needed
     final parentDir = File(filePath).parent;
     if (!parentDir.existsSync()) {

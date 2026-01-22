@@ -106,6 +106,8 @@ abstract class AtOnboardingService implements ProgressPublisher {
   Future<File> createAtKeysFile(
     AtEnrollmentResponse er, {
     File? atKeysFile,
+    @Deprecated(
+        'This parameter is no longer used. Overwriting is not allowed anymore')
     bool allowOverwrite = false,
     AtKeysFileCollisionHandler? onKeysFileCollision,
   });

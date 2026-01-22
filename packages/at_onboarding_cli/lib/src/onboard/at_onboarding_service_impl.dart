@@ -10,7 +10,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/factory/service_factories.dart';
-import 'package:at_onboarding_cli/src/util/at_file_util.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
@@ -184,10 +183,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     var atOnboardingRequest = AtOnboardingRequest(_atSign);
     atOnboardingRequest.rootDomain = AtRootDomain(
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
-    atOnboardingRequest.atKeysIo = FileAtKeysIo(
+
+    atOnboardingRequest.atKeysIo = CollisionAwareFileAtKeysIo(
       filePath: atOnboardingPreference.atKeysFilePath != null
           ? (_) => atOnboardingPreference.atKeysFilePath!
           : null,
+      passPhrase: atOnboardingPreference.passPhrase,
+      collisionHandler: onKeysFileCollision,
     );
 
     AtOnboardingResponse atOnboardingResponse = await atAuth!.onboard(
@@ -201,11 +203,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       logger.finer(
           'Onboarding successful.Generating keyfile in path: ${atOnboardingPreference.atKeysFilePath}');
       stderr.writeln();
-      await _generateAtKeysFile(
-        atOnboardingResponse.atAuthKeys!,
-        enrollmentId: atOnboardingResponse.enrollmentId,
-        collisionHandler: onKeysFileCollision,
-      );
 
       if (autoCompleteActivation) {
         await completeActivation();
@@ -229,6 +226,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     Duration retryInterval = AtOnboardingService.defaultApkamRetryInterval,
     int maxRetries = AtOnboardingService.defaultMaxApkamRetries,
     File? atKeysFile,
+    @Deprecated(
+        'This parameter is no longer used. Use onKeysFileCollision instead')
     bool allowOverwrite = false,
     AtKeysFileCollisionHandler? onKeysFileCollision,
   }) async {
@@ -258,7 +257,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     await createAtKeysFile(
       enrollmentResponse,
       atKeysFile: atKeysFile,
-      allowOverwrite: allowOverwrite,
       onKeysFileCollision: onKeysFileCollision,
     );
 
@@ -269,16 +267,31 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   Future<File> createAtKeysFile(
     AtEnrollmentResponse er, {
     File? atKeysFile,
+    @Deprecated(
+        'This parameter is no longer used. Use onKeysFileCollision instead')
     bool allowOverwrite = false,
     AtKeysFileCollisionHandler? onKeysFileCollision,
   }) async {
-    return await _generateAtKeysFile(
-      er.atAuthKeys!,
-      enrollmentId: er.enrollmentId,
-      atKeysFile: atKeysFile,
-      allowOverwrite: allowOverwrite,
+    String targetPath =
+        atKeysFile?.path ?? atOnboardingPreference.atKeysFilePath!;
+
+    // Ensure .atKeys extension
+    if (!targetPath.endsWith('.atKeys')) {
+      targetPath = '$targetPath.atKeys';
+    }
+
+    String finalPath = await CollisionAwareFileAtKeysIo.writeKeys(
+      atKeys: er.atAuthKeys!,
+      atSign: _atSign,
+      targetPath: targetPath,
       collisionHandler: onKeysFileCollision,
+      passPhrase: atOnboardingPreference.passPhrase,
+      enrollmentId: er.enrollmentId,
+      authMode: atOnboardingPreference.authMode,
+      hashingAlgoType: atOnboardingPreference.hashingAlgoType,
     );
+
+    return File(finalPath);
   }
 
   Future<void> waitBriefly({int millis = 500}) async {
@@ -567,93 +580,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
   }
 
-  /// Write newly created encryption key-pairs into atKeys file.
-  ///
-  /// [collisionHandler] - optional callback to handle collisions on target path.
-  /// If not provided, defaults to aborting on collision.
-  Future<File> _generateAtKeysFile(
-    AtKeys atAuthKeys, {
-    String? enrollmentId,
-    File? atKeysFile,
-    bool allowOverwrite = false,
-    AtKeysFileCollisionHandler? collisionHandler =
-        AtKeysFileCollisionHandlers.abortOnCollision,
-  }) async {
-    if (atKeysFile == null) {
-      if (!atOnboardingPreference.atKeysFilePath!.endsWith('.atKeys')) {
-        atOnboardingPreference.atKeysFilePath =
-            '${atOnboardingPreference.atKeysFilePath}.atKeys';
-      }
-      atKeysFile = File(atOnboardingPreference.atKeysFilePath!);
-    }
-
-    final atKeysMap = <String, String>{
-      AuthKeyType.aesEncryptedPkamPublicKey: EncryptionUtil.encryptValue(
-        atAuthKeys.apkamPublicKey!.toString(),
-        atAuthKeys.defaultSelfEncryptionKey!.toString(),
-      ),
-      AuthKeyType.aesEncryptedEncryptionPublicKey: EncryptionUtil.encryptValue(
-        atAuthKeys.defaultEncryptionPublicKey!.toString(),
-        atAuthKeys.defaultSelfEncryptionKey!.toString(),
-      ),
-      AuthKeyType.aesEncryptedEncryptionPrivateKey: EncryptionUtil.encryptValue(
-        atAuthKeys.defaultEncryptionPrivateKey!.toString(),
-        atAuthKeys.defaultSelfEncryptionKey!.toString(),
-      ),
-      AuthKeyType.selfEncryptionKey:
-          atAuthKeys.defaultSelfEncryptionKey!.toString(),
-      _atSign: atAuthKeys.defaultSelfEncryptionKey!.toString(),
-      AuthKeyType.apkamSymmetricKey: atAuthKeys.apkamSymmetricKey!.toString()
-    };
-
-    if (enrollmentId != null) {
-      atKeysMap['enrollmentId'] = enrollmentId;
-    }
-
-    if (atOnboardingPreference.authMode == PkamAuthMode.keysFile) {
-      atKeysMap[AuthKeyType.aesEncryptedPkamPrivateKey] =
-          EncryptionUtil.encryptValue(atAuthKeys.apkamPrivateKey!.toString(),
-              atAuthKeys.defaultSelfEncryptionKey!.toString());
-    }
-
-    String encodedAtKeysString = jsonEncode(atKeysMap);
-
-    if (atOnboardingPreference.passPhrase != null) {
-      AtEncrypted atEncrypted = await AtKeysCrypto.fromHashingAlgorithm(
-              atOnboardingPreference.hashingAlgoType)
-          .encrypt(encodedAtKeysString, atOnboardingPreference.passPhrase!);
-      encodedAtKeysString = atEncrypted.toString();
-      logger.info('Encrypted atKeys with the given pass phrase');
-    }
-
-    logger.finer('Writing atKeys file: ${atKeysFile.path}');
-
-    // Write keys file directly, handling collisions if not allowing overwrite
-    String finalPath;
-    if (allowOverwrite) {
-      // If overwrite is allowed, skip collision checking - just write
-      final parentDir = atKeysFile.parent;
-      if (!parentDir.existsSync()) {
-        parentDir.createSync(recursive: true);
-      }
-      await atKeysFile.writeAsString(encodedAtKeysString);
-      await AtFileUtil.setSecureFilePermissions(atKeysFile.path);
-      finalPath = atKeysFile.path;
-    } else {
-      finalPath = await AtKeysFileWriter.writeKeys(
-        encodedAtKeysString,
-        atKeysFile.path,
-        collisionHandler ?? AtKeysFileCollisionHandlers.abortOnCollision,
-      );
-    }
-
-    final resultFile = File(finalPath);
-    stdout.writeln('${chalk.green('[Success]')} Your .atKeys file saved'
-        ' at ${resultFile.path}\n');
-
-    return resultFile;
-  }
-
   /// Back-up encryption keys to local secondary
   /// #TODO remove this method in future when all keys are read from AtChops
   Future<void> _persistKeysLocalSecondary(AtKeys atAuthKeys) async {
@@ -714,6 +640,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   ///
   /// Returns map containing encryption keys
   @visibleForTesting
+  @Deprecated('Use CollisionAwareFileAtKeysIo.read instead')
   Future<Map<String, String>> readAtKeysFile(String? atKeysFilePath) async {
     if (atKeysFilePath == null || atKeysFilePath.isEmpty) {
       throw AtClientException.message(
