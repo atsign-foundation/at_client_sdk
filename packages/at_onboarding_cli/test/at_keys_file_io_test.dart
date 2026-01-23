@@ -136,7 +136,7 @@ void main() {
       setUp(() {
         keysIo = CollisionAwareFileAtKeysIo(
           filePath: (atSign) => '$tempDirPath/$atSign.atKeys',
-          collisionHandler: AtKeysFileCollisionHandlers.abortOnCollision,
+          collisionHandler: AtKeysFileCollisionHandlers.abortOnCollisionHandler,
         );
       });
 

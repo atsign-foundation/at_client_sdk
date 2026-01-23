@@ -30,8 +30,8 @@ class CollisionAwareFileAtKeysIo extends WrittenAtKeysIo {
     this.filePath,
     this.passPhrase,
     AtKeysFileCollisionHandler? collisionHandler,
-  }) : collisionHandler =
-            collisionHandler ?? AtKeysFileCollisionHandlers.abortOnCollision {
+  }) : collisionHandler = collisionHandler ??
+            AtKeysFileCollisionHandlers.abortOnCollisionHandler {
     // Set default filePath if not provided
     filePath ??=
         (atsign) => getDefaultAtKeysFilePath(getHomeDirectory()!, atsign);
@@ -66,10 +66,12 @@ class CollisionAwareFileAtKeysIo extends WrittenAtKeysIo {
     );
   }
 
-  /// Static method for direct usage (e.g., in enroll() flow)
+  /// Writes [AtKeys] to the target file
   ///
-  /// Returns the final path where the file was written (may be different from
-  /// targetPath if collision handler suggested an alternative).
+  /// Encrypts the keys with [passPhrase] if provided
+  ///
+  ///
+  /// Returns the final path where the file was written
   ///
   /// Parameters:
   /// - [atKeys]: The keys to write
@@ -94,8 +96,8 @@ class CollisionAwareFileAtKeysIo extends WrittenAtKeysIo {
       atKeys: atKeys,
       atSign: atSign,
       targetPath: targetPath,
-      collisionHandler:
-          collisionHandler ?? AtKeysFileCollisionHandlers.abortOnCollision,
+      collisionHandler: collisionHandler ??
+          AtKeysFileCollisionHandlers.abortOnCollisionHandler,
       passPhrase: passPhrase,
       enrollmentId: enrollmentId,
       authMode: authMode,

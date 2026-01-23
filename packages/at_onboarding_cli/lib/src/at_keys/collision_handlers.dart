@@ -7,7 +7,7 @@ import 'collision_models.dart';
 /// Prebuilt collision handlers
 class AtKeysFileCollisionHandlers {
   /// Abort on any collision (default)
-  static AtKeysFileCollisionResult abortOnCollision(
+  static AtKeysFileCollisionResult abortOnCollisionHandler(
       AtKeysFileCollisionContext context) {
     return AtKeysFileCollisionAbort(
       customMessage:
@@ -33,6 +33,12 @@ class AtKeysFileCollisionHandlers {
     stderr.write('Choose option (1-2): ');
 
     String? choice = stdin.readLineSync()?.trim();
+
+    if (choice == null) {
+      return AtKeysFileCollisionAbort(
+        customMessage: 'No input received. Aborting.',
+      );
+    }
 
     switch (choice) {
       case '1':

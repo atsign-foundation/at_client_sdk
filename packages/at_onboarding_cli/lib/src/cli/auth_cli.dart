@@ -9,6 +9,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
+import 'package:at_onboarding_cli/src/util/exception_formatter.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:chalkdart/chalk.dart';
@@ -345,9 +346,9 @@ Future<int> wrappedMain(List<String> arguments) async {
     await Future.delayed(Duration(milliseconds: 10));
     stderr.writeln();
     stderr.writeln();
-    final bolded = chalk.bold(chalk.brightRed('ERROR: ${cliCommand.name}'));
 
-    stderr.writeln('$bolded : $e');
+    stderr.writeln(
+        '${chalk.brightRed('[ERROR]')} ${ExceptionMessageFormatter.extractRootCause(e)}');
     stderr.writeln();
     stderr.writeln('Please try again or contact support@atsign.com');
     return 1;
@@ -869,9 +870,7 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
     );
 
     // Finally call approve method via an AtEnrollment object
-    final response = await AtEnrollment
-        .create()
-        .approve(decision, atLookup);
+    final response = await AtEnrollment.create().approve(decision, atLookup);
 
     stdout.writeln('Server response: $response');
 
@@ -957,9 +956,7 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
       );
 
       // Finally call approve method via an AtEnrollment object
-      final response = await AtEnrollment
-          .create()
-          .approve(decision, atLookup);
+      final response = await AtEnrollment.create().approve(decision, atLookup);
       stdout.writeln('Approval successful.\n'
           '\tResponse: $response');
 

@@ -375,8 +375,8 @@ void main() {
       expect(file1.existsSync(), isTrue);
 
       // Second write should fail with default abort handler
-      expect(
-        () => onboardingService.createAtKeysFile(enrollmentResponse),
+      await expectLater(
+        onboardingService.createAtKeysFile(enrollmentResponse),
         throwsA(isA<AtKeysFileExistsException>()),
       );
     });

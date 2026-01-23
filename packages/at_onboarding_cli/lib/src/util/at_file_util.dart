@@ -9,6 +9,7 @@ class AtFileUtil {
   /// Sets secure file permissions (owner read/write only).
   ///
   /// On POSIX systems, uses chmod 600.
+  ///
   /// On Windows, uses icacls to remove inherited permissions and grant full control only to the current user.
   static Future<void> setSecureFilePermissions(String filePath) async {
     try {

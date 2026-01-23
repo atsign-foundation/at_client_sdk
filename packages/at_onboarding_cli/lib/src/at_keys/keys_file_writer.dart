@@ -45,7 +45,12 @@ class AtKeysFileWriter {
         keysContent: keysContent,
       );
 
-      final result = await collisionHandler(context);
+      AtKeysFileCollisionResult result;
+      try {
+        result = await collisionHandler(context);
+      } catch (e) {
+        throw AtKeysFileExistsException('Collision handler failed: $e');
+      }
 
       if (result is AtKeysFileCollisionUseAlternative) {
         _logger.info('Using alternative path: ${result.alternativePath}');

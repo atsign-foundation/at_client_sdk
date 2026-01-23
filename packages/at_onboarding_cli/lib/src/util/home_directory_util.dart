@@ -111,15 +111,4 @@ class HomeDirectoryUtil {
       ));
     }
   }
-
-  static String getDefaultTempDir() {
-    final parentDir = getHomeDirectory() ?? Directory.systemTemp.path;
-    return path.join(parentDir, '.atsign', 'tmp');
-  }
-
-  static String getDefaultTempFilePath(String atSign,
-      {String? parentDir, String? uniqueId}) {
-    return path.join(
-        parentDir ?? getDefaultTempDir(), '${atSign}_$uniqueId.tmp');
-  }
 }

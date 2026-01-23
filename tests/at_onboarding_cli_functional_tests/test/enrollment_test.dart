@@ -3,12 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
-import 'package:at_onboarding_cli/src/at_keys/collision_models.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
@@ -24,7 +22,7 @@ final logger = AtSignLogger('OnboardingEnrollmentTest');
 String storageDir = '${Directory.current.path}/test/storage';
 
 void main() {
-  AtSignLogger.root_level = 'INFO';
+  AtSignLogger.root_level = 'WARNING';
 
   String atSign1 = '@naresh🛠';
   String atSign2 = '@eggovagency🛠';
@@ -297,22 +295,13 @@ void main() {
       onboardingService_1 = onboardingService_2 = null;
     });
 
-    // tearDown(() async => await tearDownFunc());
+    tearDown(() async => await tearDownFunc());
   });
 
   group('tests to validate enrollment access control', () {
-		setUp(() async {
-			await Directory('$storageDir/keys/').create(recursive: true);
-			// Clean up any existing keys files for the atSigns used in these tests
-			var atSign6KeysFile = File('$storageDir/keys/${atSign6}_key.atKeys');
-			if (await atSign6KeysFile.exists()) {
-			  await atSign6KeysFile.delete();
-			}
-			var atSign2KeysFile = File('$storageDir/keys/${atSign2}_key.atKeys');
-			if (await atSign2KeysFile.exists()) {
-			  await atSign2KeysFile.delete();
-			}
-		});
+    setUp(() async {
+      await Directory('$storageDir/keys/').create(recursive: true);
+    });
 
     test('validate enrollment only has access to approved namespaces',
         () async {
@@ -348,7 +337,8 @@ void main() {
       AtClientManager.getInstance().reset();
 
       // Fetch otp
-      EnrollmentOperations? enrollmentOperations = EnrollmentOperations(atSign6);
+      EnrollmentOperations? enrollmentOperations =
+          EnrollmentOperations(atSign6);
       String? otp = await enrollmentOperations.getOtp(masterKeysFilePath);
 
       // Create a new instance of OnboardingService that will be used to send an
