@@ -152,6 +152,21 @@ void main() {
         expect(decoded[AuthKeyType.selfEncryptionKey], isNotEmpty);
       });
 
+      test('write() includes enrollmentId in keys file', () async {
+        const atSign = '@bob_enroll';
+        const enrollmentId = 'test-enrollment-id-123';
+        testKeys.enrollmentId = enrollmentId;
+
+        await keysIo.write(atSign, testKeys);
+
+        final file = File('$tempDirPath/$atSign.atKeys');
+        expect(file.existsSync(), isTrue);
+
+        final content = await file.readAsString();
+        final decoded = jsonDecode(content);
+        expect(decoded['enrollmentId'], equals(enrollmentId));
+      });
+
       test('read() reads and decrypts keys file', () async {
         const atSign = '@eve';
         await keysIo.write(atSign, testKeys);

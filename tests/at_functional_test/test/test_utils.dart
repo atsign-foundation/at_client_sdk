@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:at_functional_test/src/at_keys_initializer.dart';
 import 'package:at_utils/at_logger.dart';
@@ -79,5 +80,13 @@ class TestUtils {
     );
     logger.info('RECEIVED: $response');
     return response?.replaceFirst('data:', '');
+  }
+
+  /// Cleans up test data directory containing generated .atKeys files
+  static void cleanUpTestData({Directory? testDir}) {
+    final testDataDir = testDir ?? Directory('test/testData');
+    if (testDataDir.existsSync()) {
+      testDataDir.deleteSync(recursive: true);
+    }
   }
 }

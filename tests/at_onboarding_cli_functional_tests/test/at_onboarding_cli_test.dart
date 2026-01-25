@@ -11,7 +11,7 @@ import 'package:test/test.dart';
 
 import 'utils/onboarding_service_impl_override.dart';
 
-final String atKeysFilePath = '${Platform.environment['HOME']}/.atsign/keys';
+final String testDir = 'test_temp';
 Map<String, bool> keysCreatedMap = {};
 
 void main() {
@@ -92,7 +92,7 @@ void main() {
       AtOnboardingPreference preference = getPreferences(atSign);
       preference.atKeysFilePath = null;
       AtOnboardingServiceImpl(atSign, preference);
-      expect(preference.atKeysFilePath, '$atKeysFilePath/${atSign}_key.atKeys');
+      expect(preference.atKeysFilePath, '$testDir/${atSign}_key.atKeys');
     });
 
     tearDown(() async {
@@ -141,15 +141,17 @@ void main() {
     test('Onboard and verify failure modes', () async {
       String atSign = '@egcovidlab🛠';
       AtOnboardingPreference atOnboardingPreference = getPreferences(atSign);
+      String alternativePath = '$testDir/keys/${atSign}_alternative_key.atKeys';
 
-      Future<void> onboard(bool autoCompleteActivation) async {
+      Future<void> onboard(bool autoCompleteActivation,
+          {AtKeysFileCollisionHandler? collisionHandler}) async {
         AtOnboardingService atOnboardingService = AtOnboardingServiceImpl(
           atSign,
           atOnboardingPreference,
         );
         bool status = await atOnboardingService.onboard(
-          autoCompleteActivation: autoCompleteActivation,
-        );
+            autoCompleteActivation: autoCompleteActivation,
+            onKeysFileCollision: collisionHandler);
         expect(status, true);
         expect(await atOnboardingService.isOnboarded(), autoCompleteActivation);
 
@@ -163,7 +165,9 @@ void main() {
       await onboard(false);
 
       // do it again, but remove the cram secret (should succeed)
-      await onboard(true);
+      await onboard(true, collisionHandler: (context) {
+        return AtKeysFileCollisionUseAlternative(alternativePath);
+      });
 
       // try to do it again (should fail)
       await expectLater(() async {
@@ -225,12 +229,12 @@ AtOnboardingPreference getPreferences(String atSign) {
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..rootDomain = 'vip.ve.atsign.zone'
     ..isLocalStoreRequired = true
-    ..hiveStoragePath = 'storage/hive/client'
-    ..commitLogPath = 'storage/hive/client/commit'
+    ..hiveStoragePath = '$testDir/storage/hive/client'
+    ..commitLogPath = '$testDir/storage/hive/client/commit'
     ..privateKey = null
     ..cramSecret = at_demos.cramKeyMap[atSign]
-    ..atKeysFilePath = '$atKeysFilePath/${atSign}_key.atKeys'
-    ..downloadPath = atKeysFilePath
+    ..atKeysFilePath = '$testDir/keys/${atSign}_key.atKeys'
+    ..downloadPath = testDir
     ..appName = 'wavi'
     ..deviceName = 'pixel';
 

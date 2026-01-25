@@ -62,6 +62,7 @@ class CollisionAwareFileAtKeysIo extends WrittenAtKeysIo {
       targetPath: filePath!(atSign),
       collisionHandler: collisionHandler,
       passPhrase: passPhrase,
+      enrollmentId: atKeys.enrollmentId,
       hashingAlgoType: HashingAlgoType.sha512,
     );
   }
