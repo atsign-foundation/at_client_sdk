@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:at_auth/at_auth.dart';
 import 'package:at_onboarding_cli/src/util/at_file_util.dart';
 import 'package:at_onboarding_cli/src/util/at_onboarding_exceptions.dart';
 import 'package:at_utils/at_logger.dart';
@@ -22,6 +23,8 @@ class AtKeysFileWriter {
   ///
   /// This method recursively checks alternative paths for collisions,
   /// up to a limit (10 attempts) to prevent infinite loops.
+  ///
+  /// Throws [AtKeysFileExistsException] when
   static Future<String> writeKeys(
     String keysContent,
     String targetPath,

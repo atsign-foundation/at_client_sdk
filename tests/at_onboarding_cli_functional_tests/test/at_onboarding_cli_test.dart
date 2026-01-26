@@ -11,11 +11,23 @@ import 'package:test/test.dart';
 
 import 'utils/onboarding_service_impl_override.dart';
 
-final String testDir = 'test_temp';
+final String testDir = '${Directory.current.path}/test/temp';
+final String keysDir = '$testDir/keys';
+final String storageDir = '$testDir/storage';
 Map<String, bool> keysCreatedMap = {};
 
 void main() {
   AtSignLogger.root_level = 'WARNING';
+  
+  setUpAll(() async {
+    await Directory(testDir).create(recursive: true);
+  });
+  
+  tearDownAll(() async {
+    if (await Directory(testDir).exists()) {
+      await Directory(testDir).delete(recursive: true);
+    }
+  });
 
   // These group of tests run on docker container with only cram key available on secondary
   // Perform cram auth and update keys manually.
@@ -92,7 +104,9 @@ void main() {
       AtOnboardingPreference preference = getPreferences(atSign);
       preference.atKeysFilePath = null;
       AtOnboardingServiceImpl(atSign, preference);
-      expect(preference.atKeysFilePath, '$testDir/${atSign}_key.atKeys');
+
+      final homeDir = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+      expect(preference.atKeysFilePath, '$homeDir/.atsign/keys/${atSign}_key.atKeys');
     });
 
     tearDown(() async {
@@ -141,7 +155,7 @@ void main() {
     test('Onboard and verify failure modes', () async {
       String atSign = '@egcovidlab🛠';
       AtOnboardingPreference atOnboardingPreference = getPreferences(atSign);
-      String alternativePath = '$testDir/keys/${atSign}_alternative_key.atKeys';
+      String alternativePath = '$keysDir/${atSign}_alternative_key.atKeys';
 
       Future<void> onboard(bool autoCompleteActivation,
           {AtKeysFileCollisionHandler? collisionHandler}) async {
@@ -204,7 +218,9 @@ void main() {
         '-c',
         at_demos.cramKeyMap[atSign]!,
         '-r',
-        'vip.ve.atsign.zone'
+        'vip.ve.atsign.zone',
+        '-k',
+        onboardingPreference.atKeysFilePath!
       ];
       // perform activation of atSign
       await auth_cli.wrappedMain(args);
@@ -214,6 +230,7 @@ void main() {
       /// able to run the following assertions.
 
       // Authenticate atSign with the .atKeys file generated via the activate_cli tool
+      print(onboardingPreference.atKeysFilePath);
       expect(await File(onboardingPreference.atKeysFilePath!).exists(), true);
       expect(await onboardingService.authenticate(), true);
     });
@@ -229,11 +246,11 @@ AtOnboardingPreference getPreferences(String atSign) {
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..rootDomain = 'vip.ve.atsign.zone'
     ..isLocalStoreRequired = true
-    ..hiveStoragePath = '$testDir/storage/hive/client'
-    ..commitLogPath = '$testDir/storage/hive/client/commit'
+    ..hiveStoragePath = '$storageDir/hive/client'
+    ..commitLogPath = '$storageDir/hive/client/commit'
     ..privateKey = null
     ..cramSecret = at_demos.cramKeyMap[atSign]
-    ..atKeysFilePath = '$testDir/keys/${atSign}_key.atKeys'
+    ..atKeysFilePath = '$keysDir/${atSign}_key.atKeys'
     ..downloadPath = testDir
     ..appName = 'wavi'
     ..deviceName = 'pixel';
@@ -266,8 +283,5 @@ Future<void> generateAtKeysFile(String atSign, String filePath) async {
 }
 
 Future<void> tearDownFunc() async {
-  bool isExists = await Directory('storage/').exists();
-  if (isExists) {
-    Directory('storage/').deleteSync(recursive: true);
-  }
+  // Cleanup is now handled by the centralized tearDownAll
 }
