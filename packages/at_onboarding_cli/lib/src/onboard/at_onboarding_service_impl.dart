@@ -200,8 +200,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     logger.finer('Onboarding Response: $atOnboardingResponse');
     if (atOnboardingResponse.isSuccessful) {
-      logger.finer(
-          'Onboarding successful.Generating keyfile in path: ${atOnboardingPreference.atKeysFilePath}');
+      logger.finer('Onboarding successful.Generating keyfile in'
+          ' path: ${atOnboardingPreference.atKeysFilePath}');
       stderr.writeln();
 
       if (autoCompleteActivation) {
