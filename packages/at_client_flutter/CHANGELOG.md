@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 0.1.2
+- constraint on file_picker 10.3.9 (BC)
+
 ## 0.1.1
 - chore: removed unused dependencies
     - flutter_keychain
