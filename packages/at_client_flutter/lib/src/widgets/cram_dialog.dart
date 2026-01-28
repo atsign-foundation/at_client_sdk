@@ -103,7 +103,7 @@ class CramDialog extends StatelessWidget {
     final trimmedInput = input.trim();
     final match = ActivateRegex.cram.firstMatch(trimmedInput);
     if (match != null) {
-      return match.namedGroup(ActivateRegexGroups.cram)!;
+      return match.namedGroup(ActivateRegexGroups.activationKey)!;
     }
     return trimmedInput; // fallback: assume input is the secret
   }
@@ -111,7 +111,8 @@ class CramDialog extends StatelessWidget {
 
 class ActivateRegex {
   // CRAM authentication: <atsign>:cram:<secret>
-  static final cram = RegExp(r'^(?<atsign>[^:]+):cram:(?<secret>.+)$');
+  static final cram =
+      RegExp(r'^(?<atsign>[^:]+):activation_key:(?<secret>.+)$');
 
   // Enrollment: <atsign>:enroll:otp:<otp>[:name:<device>]
   static final enroll = RegExp(
@@ -123,7 +124,7 @@ class ActivateRegex {
 /// Named capture groups used in [ActivateRegex]
 class ActivateRegexGroups {
   static const atsign = 'atsign';
-  static const cram = 'secret';
+  static const activationKey = 'secret';
   static const otp = 'otp';
   static const deviceName = 'device_name';
   static const keyfilePath = 'keyfile_path';
