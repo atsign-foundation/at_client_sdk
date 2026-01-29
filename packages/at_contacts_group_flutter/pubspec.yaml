@@ -19,7 +19,7 @@ dependencies:
   at_utils: ^3.0.19
   collection: ^1.17.0
   emoji_picker_flutter: ^4.3.0
-  file_picker: ^10.0.0
+  file_picker: 10.3.8 #10.3.9 contains non-addressed breaking change
   flutter:
     sdk: flutter
   flutter_image_compress: ^2.0.4
