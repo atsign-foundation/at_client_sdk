@@ -1,6 +1,6 @@
 // ignore: import_of_legacy_library_into_null_safe
 import 'package:at_chat_flutter/services/chat_service.dart';
-import 'package:at_client_mobile/at_client_mobile.dart';
+import 'package:at_client_flutter/at_client_flutter.dart';
 
 /// function exposed to calling app to set certain parameters
 void initializeChatService(

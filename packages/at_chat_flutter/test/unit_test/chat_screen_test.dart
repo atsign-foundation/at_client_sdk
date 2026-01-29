@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_chat_flutter/models/message_model.dart';
 import 'package:at_chat_flutter/services/chat_service.dart';
-import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 

@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 
-// ignore: import_of_legacy_library_into_null_safe
-import 'package:at_common_flutter/services/size_config.dart';
-
 class SendMessage extends StatefulWidget {
   final Function? onSend;
   final ValueChanged<String>? messageCallback;
@@ -43,12 +40,10 @@ class _SendMessageState extends State<SendMessage> {
 
   @override
   Widget build(BuildContext context) {
-    SizeConfig().init(context);
     return Container(
       margin: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10.toHeight),
-          color: Colors.grey[200]),
+          borderRadius: BorderRadius.circular(10), color: Colors.grey[200]),
       child: Row(
         children: [
           IconButton(
