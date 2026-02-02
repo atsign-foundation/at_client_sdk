@@ -14,6 +14,7 @@ import 'package:at_utils/at_utils.dart';
 import 'package:chalkdart/chalk.dart';
 import 'package:duration/duration.dart';
 import 'package:meta/meta.dart';
+import '../version.dart' show packageVersion;
 
 import 'auth_cli_arg_validation.dart';
 
@@ -102,6 +103,7 @@ Future<int> main(List<String> arguments) async {
 
 Future<int> wrappedMain(List<String> arguments) async {
   if (arguments.isEmpty) {
+    stderr.writeln('Version: $packageVersion\n');
     stderr.writeln('You must supply a command.');
     aca.parser.printAllCommandsUsage(showSubCommandParams: false);
     stderr.writeln('\n'
