@@ -103,7 +103,7 @@ Future<int> main(List<String> arguments) async {
 
 Future<int> wrappedMain(List<String> arguments) async {
   if (arguments.isEmpty) {
-    stderr.writeln('Version: $packageVersion\n');
+    stderr.writeln('Version: $packageVersion');
     stderr.writeln('You must supply a command.');
     aca.parser.printAllCommandsUsage(showSubCommandParams: false);
     stderr.writeln('\n'
@@ -129,6 +129,7 @@ Future<int> wrappedMain(List<String> arguments) async {
   }
 
   if (topLevelResults.wasParsed(AuthCliArgs.argNameHelp)) {
+    stderr.writeln('Version: $packageVersion');
     aca.sharedArgsParser
         .printAllCommandsUsage(header: 'Arguments common to all commands: ');
     aca.parser.printAllCommandsUsage(showSubCommandParams: true);
@@ -178,6 +179,7 @@ Future<int> wrappedMain(List<String> arguments) async {
   try {
     switch (cliCommand) {
       case AuthCliCommand.help:
+        stderr.writeln('Version: $packageVersion');
         aca.parser.printAllCommandsUsage(showSubCommandParams: true);
         break;
 
