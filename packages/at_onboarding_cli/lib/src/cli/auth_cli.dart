@@ -9,14 +9,13 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
-import 'package:at_onboarding_cli/src/util/create_at_client_cli.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:chalkdart/chalk.dart';
 import 'package:duration/duration.dart';
 import 'package:meta/meta.dart';
+import '../version.dart' show packageVersion;
 
-import '../util/onboarding_util.dart';
 import 'auth_cli_arg_validation.dart';
 
 final AtSignLogger logger = AtSignLogger(' CLI ');
@@ -104,6 +103,7 @@ Future<int> main(List<String> arguments) async {
 
 Future<int> wrappedMain(List<String> arguments) async {
   if (arguments.isEmpty) {
+    stderr.writeln('Version: $packageVersion');
     stderr.writeln('You must supply a command.');
     aca.parser.printAllCommandsUsage(showSubCommandParams: false);
     stderr.writeln('\n'
@@ -113,7 +113,7 @@ Future<int> wrappedMain(List<String> arguments) async {
   }
 
   final first = arguments.first;
-  if (first.startsWith('-') && first != '-h' && first != '--help') {
+  if (first.startsWith('-') && first != '-h' && first != '--help' && first != '--version') {
     // no command found ... legacy ... insert 'onboard' as the command
     arguments = ['onboard', ...arguments];
   }
@@ -129,10 +129,16 @@ Future<int> wrappedMain(List<String> arguments) async {
   }
 
   if (topLevelResults.wasParsed(AuthCliArgs.argNameHelp)) {
+    stderr.writeln('Version: $packageVersion');
     aca.sharedArgsParser
         .printAllCommandsUsage(header: 'Arguments common to all commands: ');
     aca.parser.printAllCommandsUsage(showSubCommandParams: true);
     stderr.writeln();
+    return 0;
+  }
+
+  if (topLevelResults.wasParsed(AuthCliArgs.argNameVersion)) {
+    stdout.writeln('Version: $packageVersion');
     return 0;
   }
 
@@ -178,6 +184,7 @@ Future<int> wrappedMain(List<String> arguments) async {
   try {
     switch (cliCommand) {
       case AuthCliCommand.help:
+        stderr.writeln('Version: $packageVersion');
         aca.parser.printAllCommandsUsage(showSubCommandParams: true);
         break;
 
@@ -327,6 +334,8 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+      case AuthCliCommand.version:
+        stdout.writeln('Version: $packageVersion');
     }
   } on ArgumentError catch (e) {
     stderr
@@ -422,6 +431,10 @@ Future<int> status(ArgResults ar) async {
 /// secret from the registrar.
 @visibleForTesting
 Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
+  if(argResults[AuthCliArgs.argNameVersion]) {
+    stdout.writeln('Version: $packageVersion');
+    return false;
+  }
   svc ??= createOnboardingService(argResults);
   logger.info('Root server is ${argResults[AuthCliArgs.argNameRootServer]}');
   logger.info(
@@ -687,6 +700,8 @@ Future<void> interactive(ArgResults argResults, AtClient atClient) async {
 
         case AuthCliCommand.delete:
           await deleteEnrollment(commandArgResults, atClient);
+        case AuthCliCommand.version:
+          stdout.writeln('Version: $packageVersion');
       }
     } on ArgumentError catch (e) {
       stderr.writeln(
