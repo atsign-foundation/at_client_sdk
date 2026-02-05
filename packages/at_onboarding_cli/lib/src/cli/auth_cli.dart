@@ -445,10 +445,15 @@ Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
     await svc.onboard(
       maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
       retryInterval: AtOnboardingService.defaultActivationCheckInterval,
+      autoCompleteActivation: false
     );
     stderr.writeln();
     return true;
-  } catch (e) {
+  } on AtKeysFileExistsException {
+    if (stdin.hasTerminal) {
+
+    }
+  }catch (e) {
     await Future.delayed(Duration(milliseconds: 10));
     throw ('Onboarding failed : $e');
   }

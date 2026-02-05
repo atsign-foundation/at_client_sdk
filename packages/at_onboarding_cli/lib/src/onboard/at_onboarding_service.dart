@@ -18,11 +18,94 @@ abstract class AtOnboardingService implements ProgressPublisher {
   ///
   /// When [autoCompleteActivation] is false, callers are responsible for
   /// calling [completeActivation]
+  @Deprecated('Use individual step methods instead: ensureCramSecret(), performCramAuth(), '
+      'sendOnboardingRequest(), performPkamAuth(), and completeActivation(). '
+      'Handle file writing separately. This method will be removed in a future version.')
   Future<bool> onboard({
     bool autoCompleteActivation = true,
     Duration retryInterval = defaultActivationCheckInterval,
     int maxRetries = defaultMaxActivationCheckRetries,
   });
+
+  /// Ensures a CRAM secret is available, fetching it via OTP flow if needed.
+  ///
+  /// This method first checks if a CRAM secret is already provided in preferences.
+  /// If not, it delegates to OnboardingUtil to:
+  /// 1. Request OTP from registrar
+  /// 2. Prompt user to enter OTP
+  /// 3. Exchange OTP for CRAM secret
+  ///
+  /// Returns the CRAM secret string.
+  /// Throws AtOnboardingException if unable to retrieve CRAM secret.
+  ///
+  /// Example:
+  /// ```dart
+  /// final service = AtOnboardingServiceImpl('@alice', preference);
+  /// final cramSecret = await service.ensureCramSecret();
+  /// ```
+  Future<String> ensureCramSecret();
+
+  /// Perform CRAM authentication using the CRAM secret from preferences.
+  ///
+  /// This method handles all prerequisites for CRAM authentication including:
+  /// - Checking if atSign is already onboarded
+  /// - Validating CRAM secret from preferences
+  /// - Sending FROM command if using proxy
+  /// - Waiting for secondary server to be ready
+  /// - Performing CRAM authentication
+  ///
+  /// Must call ensureCramSecret() first to populate the CRAM secret in preferences.
+  /// Progress events are published throughout the operation.
+  /// Throws AtOnboardingException if authentication fails or secondary not found.
+  ///
+  /// Example:
+  /// ```dart
+  /// await service.ensureCramSecret();
+  /// await service.performCramAuth(atLookUp);
+  /// ```
+  Future<void> performCramAuth(AtLookUp atLookUp);
+
+  /// Send onboarding request to server.
+  ///
+  /// This method:
+  /// 1. Generates RSA/AES key pairs internally
+  /// 2. Sends onboarding request via AtAuth
+  /// 3. Returns the AtKeys with enrollmentId populated
+  ///
+  /// Generated keys include:
+  /// - APKAM key pair (RSA 2048, for PKAM authentication)
+  /// - Encryption key pair (RSA 2048, for data encryption)
+  /// - Self-encryption key (AES-256)
+  /// - APKAM symmetric key (AES-256)
+  ///
+  /// Must be called after performCramAuth().
+  /// Returns AtKeys object with enrollmentId set.
+  ///
+  /// Example:
+  /// ```dart
+  /// final atKeys = await service.sendOnboardingRequest();
+  /// // atKeys.enrollmentId is already populated
+  /// ```
+  Future<String> sendOnboardingRequest(AtLookUp atLookUp);
+
+  /// Perform PKAM authentication with the generated keys.
+  ///
+  /// This primitive authenticates using the APKAM private key.
+  /// Must be called after sendOnboardingRequest().
+  /// Internally closes the CRAM connection and creates a new connection for PKAM auth.
+  ///
+  /// [atLookUp] - The AtLookUp instance (will be closed and recreated)
+  /// [enrollmentId] - The enrollment ID returned from sendOnboardingRequest()
+  ///
+  /// Returns true if PKAM authentication succeeds.
+  /// Throws AtOnboardingException if authentication fails.
+  ///
+  /// Example:
+  /// ```dart
+  /// final atKeys = await service.sendOnboardingRequest();
+  /// await service.performPkamAuth(atLookUp, atKeys.enrollmentId!);
+  /// ```
+  Future<bool> performPkamAuth(String enrollmentId, AtLookUp atLookUp);
 
   /// - Update encryption public key to server
   ///
@@ -122,8 +205,4 @@ abstract class AtOnboardingService implements ProgressPublisher {
   set atChops(AtChops? atChops);
 
   AtChops? get atChops;
-
-  set atAuth(AtAuth? atAuth);
-
-  AtAuth? get atAuth;
 }

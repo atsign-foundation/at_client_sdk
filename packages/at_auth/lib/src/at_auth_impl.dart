@@ -183,7 +183,7 @@ class AtAuthImpl implements AtAuth {
       );
       throw AtAuthenticationException(
         'Cram authentication failed. Please check the cram key'
-        ' and try again (or) contact support@atsign.com',
+        ' and try again (or) contact support@atsign.com',     //????????????????
       );
     }
     //2. generate key pairs
@@ -194,6 +194,7 @@ class AtAuthImpl implements AtAuth {
         case WrittenAtKeysIo writtenKeys:
           _atAuthKeys =
               writtenKeys.generateKeyPairs(atSign: atOnboardingRequest.atSign);
+          break;
         default:
           throw AtAuthenticationException(
               'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');

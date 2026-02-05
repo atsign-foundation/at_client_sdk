@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:at_auth/at_auth.dart';
 import 'package:meta/meta.dart';
 
 import 'package:at_commons/at_commons.dart';
-import 'package:at_auth/src/keys/at_keys.dart';
-import 'package:at_auth/src/keys/at_keys_io.dart';
 
 /// An implementation of [AtKeysIo] that reads and writes AtKeys to the file system.
 /// This implementation uses a mixin [KeyIOMixin] to provide common functionality for encoding and decoding AtKeys.
@@ -34,16 +33,23 @@ class FileAtKeysIo extends WrittenAtKeysIo {
       throw AtException(
           'provided keys file does not exist. Please check whether the file path $file is valid');
     }
+
     String atAuthData = await File(file).readAsString();
     decodedAtKeysData = jsonDecode(atAuthData);
     decodedAtKeysData =
         await decodeAtKeys(decodedAtKeysData, passPhrase: passPhrase);
+
     return decryptAtKeysWithSelfEncKey(
         decodedAtKeysData, PkamAuthMode.keysFile);
   }
 
   @override
   Future write(String atSign, AtKeys atKeys) async {
+    final keyFilePath = filePath!(atSign);
+    if (File(keyFilePath).existsSync()){
+      throw AtKeysFileExistsException('Keyfile already exists at: $keyFilePath');
+    }
+
     String atKeysData =
         await encryptAtKeysWithSelfEncKey(atKeys, PkamAuthMode.keysFile);
     await File(filePath!(atSign)).writeAsString(atKeysData);

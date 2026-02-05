@@ -52,7 +52,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     atOnboardingPreference.hiveStoragePath ??=
         HomeDirectoryUtil.getHiveStoragePath(_atSign,
             enrollmentId: enrollmentId);
-    atOnboardingPreference.isLocalStoreRequired = true;
     atOnboardingPreference.atKeysFilePath ??=
         HomeDirectoryUtil.getAtKeysPath(_atSign);
   }
@@ -210,6 +209,197 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
     _isAtsignOnboarded = atOnboardingResponse.isSuccessful;
     return _isAtsignOnboarded;
+  }
+
+  @override
+  Future<String> ensureCramSecret() async {
+    // Check if already provided in preferences
+    if (atOnboardingPreference.cramSecret != null) {
+      return atOnboardingPreference.cramSecret!;
+    }
+
+    // Interactive OTP flow via OnboardingUtil
+    logger.info('CRAM secret not provided, starting interactive OTP flow');
+    final util = OnboardingUtil();
+    // trigger OTP dispatch to user email
+    await util.requestAuthenticationOtp(
+      _atSign,
+      authority: atOnboardingPreference.registrarUrl,
+    );
+    // prompt user for the OTP
+    String otp = util.getVerificationCodeFromUser();
+    // fetch CRAM from the registrar using the OTP
+    String? cramSecret = await util.getCramKey(
+      _atSign,
+      otp,
+      authority: atOnboardingPreference.registrarUrl,
+    );
+
+    if (cramSecret == null || cramSecret.isEmpty) {
+      throw AtOnboardingException(
+          'Could not fetch CRAM secret for $_atSign from registrar',
+          exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
+    }
+
+    return cramSecret;
+  }
+
+  @override
+  Future<void> performCramAuth(AtLookUp atLookUp) async {
+    // Check if already onboarded
+    if (await isOnboarded()) {
+      throw AtOnboardingException('$_atSign is already activated');
+    }
+
+    final cramSecret = _getCramSecretFromPreferences();
+
+    // Validate cramSecret
+    if (cramSecret.isEmpty || cramSecret.trim().isEmpty) {
+      throw AtOnboardingException('CRAM secret not provided',
+          exceptionScenario: ExceptionScenario.invalidValueProvided);
+    }
+
+    try {
+      await _sendFromCommandIfUsingProxy(atLookUp, context: 'performCramAuth');
+
+      logger.info('Performing CRAM authentication');
+      _addProgress(
+          'CRAM Auth', 'authenticating $_atSign', ProgressEventType.info);
+
+      bool success = await atLookUp.cramAuthenticate(cramSecret);
+
+      if (!success) {
+        _addProgress('CRAM', 'Auth Failed', ProgressEventType.error);
+        throw AtOnboardingException('CRAM authentication failed');
+      }
+
+      logger.info('CRAM authentication successful');
+      _addProgress('CRAM Auth', 'auth success', ProgressEventType.success);
+    } on SecondaryNotFoundException catch (e) {
+      throw AtOnboardingException(
+          'Could not find secondary server for $_atSign: $e');
+    } on SecondaryConnectException catch (e) {
+      throw AtOnboardingException(
+          'Could not connect to secondary server for $_atSign: $e',
+          exceptionScenario: ExceptionScenario.secondaryServerNotReachable);
+    } catch (e) {
+      throw AtOnboardingException(
+          'CRAM authentication failed for $_atSign: $e');
+    }
+  }
+
+  @override
+  Future<String> sendOnboardingRequest(AtLookUp atLookUp) async {
+    final cramSecret = _getCramSecretFromPreferences();
+
+    try {
+      atAuth ??= AtAuth.create();
+
+      // Create onboarding request
+      var atOnboardingRequest = AtOnboardingRequest(_atSign)
+        ..rootDomain = AtRootDomain(
+            atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort)
+        ..atKeysIo = FileAtKeysIo(
+            filePath: (_) => atOnboardingPreference.atKeysFilePath!,
+            passPhrase: atOnboardingPreference.passPhrase);
+
+      _addProgress(
+          'Onboarding', 'Sending onboarding request', ProgressEventType.info);
+
+      AtOnboardingResponse atOnboardingResponse = await atAuth!.onboard(
+        atOnboardingRequest,
+        cramSecret,
+        autoCompleteActivation: false,
+      );
+      logger.finer('Onboarding Response: $atOnboardingResponse');
+
+      if (!atOnboardingResponse.isSuccessful) {
+        _addProgress(
+            'Onboarding', "Onboarding request failed", ProgressEventType.error);
+        throw AtOnboardingException('Onboarding request failed');
+      }
+
+      if (atOnboardingResponse.atAuthKeys == null) {
+        _addProgress('Onboarding', "No keys returned from onboarding request",
+            ProgressEventType.error);
+        throw AtOnboardingException('No keys returned from onboarding request');
+      }
+
+      if (atOnboardingResponse.enrollmentId == null ||
+          atOnboardingResponse.enrollmentId!.isEmpty) {
+        _addProgress('Onboarding', "Onboarding response missing enrollment ID",
+            ProgressEventType.error);
+        throw AtOnboardingException(
+            'Onboarding response missing enrollment ID');
+      }
+
+
+      final enrollmentId = atOnboardingResponse.enrollmentId;
+
+      logger.info(
+          'Onboarding request sent, received enrollment ID: $enrollmentId');
+      return enrollmentId;
+
+    } catch (e) {
+      throw AtOnboardingException(
+          'Failed to send onboarding request for $_atSign: $e');
+    }
+  }
+
+  @override
+  Future<bool> performPkamAuth(String enrollmentId, AtLookUp atLookUp) async {
+    if (atAuth == null) {
+      throw AtOnboardingException(
+          'AtAuth not initialized. Call sendOnboardingRequest first.');
+    }
+
+    // Get AtChops from AtAuth (created by atAuth.onboard())
+    final atChopsInstance = atAuth!.atChops;
+    if (atChopsInstance == null) {
+      throw AtOnboardingException(
+          'AtChops not available. Call sendOnboardingRequest first.');
+    }
+
+    try {
+      // Close existing connection and create new one for PKAM
+      logger.info('Closing CRAM connection');
+      await _atLookUp!.close();
+
+      logger.info('Creating new connection for PKAM authentication');
+      _atLookUp = AtLookupImpl(
+        _atSign,
+        atOnboardingPreference.rootDomain,
+        atOnboardingPreference.rootPort,
+      );
+
+      // Send FROM command if using proxy
+      await _sendFromCommandIfUsingProxy(_atLookUp!,
+          context: 'performPkamAuth');
+
+      // Assign AtChops and enrollment ID (using getter, not deprecated setter)
+      (_atLookUp as AtLookupImpl).atChops = atChopsInstance;
+      _atLookUp!.enrollmentId = enrollmentId;
+      _atLookUp!.signingAlgoType = atOnboardingPreference.signingAlgoType;
+      _atLookUp!.hashingAlgoType = atOnboardingPreference.hashingAlgoType;
+
+      logger.info('Performing PKAM authentication');
+
+      // Perform PKAM authentication
+      final success =
+          await _atLookUp!.pkamAuthenticate(enrollmentId: enrollmentId);
+
+      if (!success) {
+        throw AtOnboardingException('PKAM authentication failed');
+      }
+
+      logger.info('PKAM authentication successful');
+      return success;
+    } on AtOnboardingException {
+      rethrow;
+    } catch (e) {
+      throw AtOnboardingException(
+          'PKAM authentication failed for $_atSign: $e');
+    }
   }
 
   @override
@@ -667,8 +857,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   @override
   Future<bool> authenticate({String? enrollmentId}) async {
     atAuth ??= AtAuth.create();
-    var atAuthRequest = AtAuthRequest(
-        _atSign,
+    var atAuthRequest = AtAuthRequest(_atSign,
         atKeysIo: FileAtKeysIo(
             filePath: !atOnboardingPreference.atKeysFilePath.isNull
                 ? (_) => atOnboardingPreference.atKeysFilePath!
@@ -868,6 +1057,30 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           ' : Apparent cause: $lastException';
       throw SecondaryConnectException(msg);
     }
+  }
+
+  /// Validates and returns the CRAM secret from preferences.
+  ///
+  /// Throws [AtOnboardingException] if CRAM secret is null, empty, or whitespace-only.
+  ///
+  /// Returns the validated CRAM secret from preferences.
+  String _getCramSecretFromPreferences() {
+    if (atOnboardingPreference.cramSecret == null) {
+      throw AtOnboardingException(
+        'CRAM secret not available. Call ensureCramSecret first.',
+        exceptionScenario: ExceptionScenario.fetchEncryptionKeys,
+      );
+    }
+
+    final cramSecret = atOnboardingPreference.cramSecret!;
+    if (cramSecret.isEmpty || cramSecret.trim().isEmpty) {
+      throw AtOnboardingException(
+        'CRAM secret cannot be empty',
+        exceptionScenario: ExceptionScenario.invalidValueProvided,
+      );
+    }
+
+    return cramSecret;
   }
 
   @override
