@@ -104,23 +104,6 @@ class MyHomePage extends StatelessWidget {
               children: [
                 const Spacer(flex: 2),
 
-                // Icon - using theme colors
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: colorScheme.primaryContainer,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.face_retouching_natural,
-                    size: 40,
-                    color: colorScheme.primary,
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
                 // Title - using theme text style
                 Text('My App', style: textTheme.headlineMedium),
 
