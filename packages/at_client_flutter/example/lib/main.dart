@@ -119,10 +119,10 @@ class MyHomePage extends StatelessWidget {
 
                 const SizedBox(height: 48),
 
-                // Login Button - using theme button style
+                // Login Button - now calls loginWithKeychain
                 ElevatedButton(
                   onPressed: () async {
-                    await login(context);
+                    await loginWithKeychain(context);
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: colorScheme.primary,
@@ -152,10 +152,10 @@ class MyHomePage extends StatelessWidget {
 
                 const SizedBox(height: 16),
 
-                // Register Button - using theme button style
+                // Register Button - now says "Onboard a New atSign"
                 OutlinedButton(
                   onPressed: () async {
-                    onboard(context);
+                    await onboard(context);
                   },
                   style: OutlinedButton.styleFrom(
                     foregroundColor: colorScheme.primary,
@@ -163,7 +163,23 @@ class MyHomePage extends StatelessWidget {
                       color: colorScheme.primary.withOpacity(0.5),
                     ),
                   ),
-                  child: const Text('Register a New atSign'),
+                  child: const Text('Onboard a New atSign'),
+                ),
+
+                const SizedBox(height: 16),
+
+                // NEW: Add atSign by File Button
+                OutlinedButton(
+                  onPressed: () async {
+                    await loginWithFile(context);
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colorScheme.secondary,
+                    side: BorderSide(
+                      color: colorScheme.secondary.withOpacity(0.5),
+                    ),
+                  ),
+                  child: const Text('Add an atSign by File'),
                 ),
 
                 const SizedBox(height: 16),

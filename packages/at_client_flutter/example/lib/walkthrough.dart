@@ -1,7 +1,9 @@
 import 'package:example/main.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_auth/at_auth.dart';
+import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart'
     show getApplicationSupportDirectory;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -59,45 +61,88 @@ Future<void> onboard(BuildContext context) async {
   );
 }
 
-/// This method is an example of how an application creates their own customized authentication flow
-/// Using the provided widgets in this library, you can create your own flow for authentication like this
-/// This is one of many different ways of logging in.
-/// This combines two methods into one.
-Future<void> login(BuildContext context) async {
-  // a. get existing atSigns from keychain storage
+/// Login using an atSign stored in the keychain
+/// This method authenticates using existing keychain credentials
+Future<void> loginWithKeychain(BuildContext context) async {
+  // a. Load existing atSigns from keychain
   var atSigns = await keychainStorage.getAllAtsigns();
-  // b. Show AtSignSelectionDialog
+
+  if (atSigns.isEmpty) {
+    // No atSigns in keychain, fallback to file login
+    _logger.warning('No atSigns found in keychain');
+    return;
+  }
+
+  // b. Show AtSignSelectionDialog with existing atSigns
   AuthRequest? request = await AtSignSelectionDialog.show(
     context,
     existingAtSigns: atSigns,
   );
   if (request == null) return;
-  //  ensure providing KeychainAtKeysIo for the AuthRequest
+
+  // c. Create AuthRequest with KeychainAtKeysIo
   var authRequest = AtAuthRequest(
     request.atSign,
     atKeysIo: KeychainAtKeysIo(),
     rootDomain: request.rootDomain,
   );
-  // if there was nothing in the keychain, we need to authenticate via AtKeys File
-  // or, if the atsign wasn't in the keychain
-  if (atSigns.isEmpty || !atSigns.contains(request.atSign)) {
-    authRequest.atKeysIo = await AtKeysFileDialog.show(context);
-  }
-  // c. Show PkamDialog to complete authentication
+
+  // d. Show PkamDialog to complete authentication
   var response = await PkamDialog.show(
     context,
     request: authRequest,
     backupKeys: [KeychainAtKeysIo()],
   );
   if (response == null || !response.isSuccessful) return;
-  // d. very important! now that we have authenticated, we can create an atClient instance
+
+  // e. Create atClient instance
+  await _setupAtClient(context, authRequest, response);
+}
+
+/// Login using an atKeys file from the file system
+/// This method prompts the user to select an atKeys file for authentication
+Future<void> loginWithFile(BuildContext context) async {
+  // b. Show AtKeysFileDialog to select the atKeys file
+  FileAtKeysIo atKeysIo = (await AtKeysFileDialog.show(context))!;
+
+  var filepath = atKeysIo.filePath!('');
+  var name = path.basenameWithoutExtension(filepath);
+  var atSign = name.split('_').first;
+
+  // c. Create AuthRequest with file-based AtKeysIo
+  var authRequest = AtAuthRequest(
+    atSign,
+    atKeysIo: atKeysIo,
+    rootDomain: AtRootDomain.atsignDomain,
+  );
+
+  // d. Show PkamDialog to complete authentication
+  var response = await PkamDialog.show(
+    context,
+    request: authRequest,
+    backupKeys: [KeychainAtKeysIo()],
+  );
+  if (response == null || !response.isSuccessful) return;
+
+  // e. Create atClient instance
+  await _setupAtClient(context, authRequest, response);
+}
+
+/// Helper method to set up the atClient instance and navigate to home page
+Future<void> _setupAtClient(
+  BuildContext context,
+  AtAuthRequest authRequest,
+  dynamic response,
+) async {
   var dir = await getApplicationSupportDirectory();
   var acp = AtClientPreference()
     ..rootDomain = authRequest.rootDomain.rootDomain
     ..rootPort = authRequest.rootDomain.rootPort
+    ..namespace = namespace
     ..commitLogPath = dir.path
     ..hiveStoragePath = dir.path;
-  // make sure to use the atChops and atLookUp provided by the response as these are already authenticated.
+
+  // Make sure to use the atChops and atLookUp provided by the response
   await AtClientManager.getInstance().setCurrentAtSign(
     response.atSign,
     namespace,
@@ -105,10 +150,13 @@ Future<void> login(BuildContext context) async {
     atChops: response.atChops,
     atLookUp: response.atLookUp,
   );
-  Navigator.pushReplacement(
-    context,
-    MaterialPageRoute(builder: (context) => const HomePage()),
-  );
+
+  if (context.mounted) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const HomePage()),
+    );
+  }
 }
 
 /// remove all atsigns from the keychain
