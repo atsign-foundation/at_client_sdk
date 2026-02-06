@@ -4,6 +4,7 @@ import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -141,6 +142,15 @@ abstract class AtEnrollment {
   /// ```
   Future<AtEnrollmentResponse> revoke(
       EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp);
+
+  /// Lists all enrollments.
+  ///
+  /// Accepts [EnrollmentStatus] inside the [statusFilters] parameter to filter enrollments with their current status.
+  ///
+  /// Returns a [Future] containing a [List<EnrollmentServerRequest>] representing all the enrollments.
+  Future<List<EnrollmentServerRequest>> list(
+      List<EnrollmentStatus>? statusFilters, AtLookUp atLookUp,
+      {String? arx, String? drx});
 
   ///Awaits for approval/deny of an enrollment request at regular intervals.
   /// The polling continues until a final status is received or the maximum number of retries is reached.
