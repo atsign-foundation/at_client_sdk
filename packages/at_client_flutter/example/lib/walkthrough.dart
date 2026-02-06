@@ -1,5 +1,6 @@
 import 'package:example/main.dart';
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_auth/at_auth.dart';
@@ -126,6 +127,56 @@ Future<void> loginWithFile(BuildContext context) async {
 
   // e. Create atClient instance
   await _setupAtClient(context, authRequest, response);
+}
+
+Future<void> exportKeys(BuildContext context) async {
+  // Get the file path from the save dialog
+  if (AtClientManager.getInstance().atClient == null) return;
+  final atsign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
+  final filePath = await _openFileSaveDialog(
+    suggestedFileName: '${atsign}_key.atKeys',
+    fileExtension: '.atKeys',
+    allowedExtensions: ['atKeys'],
+  );
+
+  if (filePath == null) return;
+
+  FileAtKeysIo atKeysIo = FileAtKeysIo(filePath: (_) => filePath);
+  var atKeys = await keychainStorage.getAtsign(atsign);
+  atKeysIo.write(atsign!, atKeys!);
+}
+
+/// Opens a file save dialog and returns the selected file path.
+/// Returns null if the user cancels the dialog.
+Future<String?> _openFileSaveDialog({
+  String? suggestedFileName,
+  String? fileExtension,
+  List<String>? allowedExtensions,
+}) async {
+  try {
+    // Open save file dialog
+    String? outputPath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save File',
+      fileName: suggestedFileName ?? 'document.txt',
+      type: FileType.custom,
+      allowedExtensions: allowedExtensions ?? ['txt', 'pdf', 'json'],
+    );
+
+    // User cancelled the dialog
+    if (outputPath == null) {
+      return null;
+    }
+
+    // Ensure the file has the correct extension if specified
+    if (fileExtension != null && !outputPath.endsWith(fileExtension)) {
+      outputPath = '$outputPath$fileExtension';
+    }
+
+    return outputPath;
+  } catch (e) {
+    print('Error opening file save dialog: $e');
+    return null;
+  }
 }
 
 /// Helper method to set up the atClient instance and navigate to home page

@@ -295,22 +295,40 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    bool _isExporting = false;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Home'),
         automaticallyImplyLeading: false, // Removes back button
       ),
       body: Center(
-        child: ElevatedButton(
-          onPressed: () {
-            AtClientManager.getInstance().reset();
-            // Navigate back to login page
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const MyHomePage()),
-            );
-          },
-          child: const Text('Logout'),
+        child: Column(
+          children: [
+            ElevatedButton(
+              onPressed: () {
+                AtClientManager.getInstance().reset();
+                // Navigate back to login page
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const MyHomePage()),
+                );
+              },
+              child: const Text('Logout'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                await exportKeys(context);
+              },
+              icon: const Icon(Icons.download),
+              label: Text('Export AtSign Keys'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
