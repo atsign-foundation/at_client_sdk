@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:at_auth/at_auth.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
 
 import 'package:at_lookup/at_lookup.dart';
@@ -13,7 +16,6 @@ class FlutterEnrollmentService {
   final KeychainAtKeysIo _keychainAtKeysIo = KeychainAtKeysIo();
 
   Stream<ProgressEvent> get progressStream => _atEnrollment.progressStream;
-
   Future<AtEnrollmentResponse> enroll(EnrollmentRequest request,
       {bool waitForApproval = false}) async {
     AtEnrollmentResponse? atEnrollmentResponse;
@@ -85,6 +87,12 @@ class FlutterEnrollmentService {
     }
     await atLookUp.close();
     return atEnrollmentResponse;
+  }
+
+  Future<List<EnrollmentServerRequest>> list(
+      List<EnrollmentStatus> filters, AtLookUp atLookUp,
+      {String? drx, String? arx}) async {
+    return await _atEnrollment.list(filters, atLookUp, arx: arx, drx: drx);
   }
 
   Future<void> waitForApproval(AtEnrollmentResponse response) async {

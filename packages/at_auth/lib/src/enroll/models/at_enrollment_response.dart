@@ -1,5 +1,6 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_auth/src/enroll/models/namespace_permission.dart';
 
 /// The class holds details regarding an enrollment request, where the server notifies the approving app upon receiving a
 /// request from the requesting app, seeking approval or denial.
@@ -11,11 +12,45 @@ import 'package:at_commons/at_commons.dart';
 ///   - namespace: This field determines the namespaces for granting access to view or write data based on permissions.
 ///   - encryptedAPKAMSymmetricKey: In the event of approval, the encryptedAPKAMSymmetricKey is used to encrypt the default
 ///                                 encryption private key and self-encryption key, facilitating the generation of the APKAM key pair.
-class EnrollmentServerResponse {
-  late String appName;
-  late String deviceName;
-  late Map<String, String> namespace;
-  late String encryptedAPKAMSymmetricKey;
+class EnrollmentServerRequest {
+  String enrollmentId;
+  String appName;
+  String deviceName;
+  EnrollmentStatus status;
+  List<NamespacePermission> namespace;
+
+  EnrollmentServerRequest({
+    required this.enrollmentId,
+    required this.appName,
+    required this.deviceName,
+    required this.status,
+    required this.namespace,
+  });
+
+  factory EnrollmentServerRequest.fromServer(MapEntry<String, dynamic> entry) {
+    // Example id: a7d6a9.....40a15.new.enrollments.__manage@alice
+    // Only interested in the first part.
+    final enrollmentId = entry.key.split('.').first;
+    return EnrollmentServerRequest(
+      enrollmentId: enrollmentId,
+      appName: entry.value['appName'] as String,
+      deviceName: entry.value['deviceName'] as String,
+      // Status can be null when received from a notification
+      status: entry.value['status'] != null
+          ? getEnrollStatusFromString(entry.value['status'] as String)
+          : EnrollmentStatus.pending,
+      // Looks like: `namespace: {ns1: rw, ns2: r}`
+      namespace: (entry.value['namespace'] as Map<String, dynamic>)
+          .cast<String, String>()
+          .entries
+          .map((e) => NamespacePermission(
+                namespace: e.key,
+                read: e.value.contains('r'),
+                write: e.value.contains('w'),
+              ))
+          .toList(),
+    );
+  }
 }
 
 /// Represents the response of an enrollment operation received
@@ -29,8 +64,10 @@ class AtEnrollmentResponse {
 
   /// Optional atSign associated with the enrollment.
   String? atSign;
+
   /// Optional root domain associated with the enrollment.
   AtRootDomain? rootDomain;
+
   /// The authentication keys associated with the enrollment.
   AtKeys? atAuthKeys;
 

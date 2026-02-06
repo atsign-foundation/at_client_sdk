@@ -25,7 +25,6 @@ void main() {
 
       final result = await cramAuthenticator.authenticate(atSign, cramSecret, mockAtLookup);
 
-      expect(result, isA<AtAuthResponse>());
       expect(result, isTrue);
     });
 

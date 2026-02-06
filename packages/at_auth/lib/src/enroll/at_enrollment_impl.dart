@@ -39,15 +39,19 @@ class AtEnrollmentImpl implements AtEnrollment {
     AtEnrollmentResponse atEnrollmentResponse;
     switch (enrollmentRequest) {
       case FirstEnrollmentRequest _:
-        atEnrollmentResponse = await _handleFirstEnrollmentRequest(enrollmentRequest, atLookUp);
+        atEnrollmentResponse =
+            await _handleFirstEnrollmentRequest(enrollmentRequest, atLookUp);
         break;
       case AtEnrollmentRequest _:
-        atEnrollmentResponse = await _handleAtEnrollmentRequest(enrollmentRequest, atLookUp);
+        atEnrollmentResponse =
+            await _handleAtEnrollmentRequest(enrollmentRequest, atLookUp);
       default:
-        _addProgress('enrollment', 'Invalid Enrollment request received', ProgressEventType.error);
+        _addProgress('enrollment', 'Invalid Enrollment request received',
+            ProgressEventType.error);
         throw InvalidRequestException('Invalid Enrollment request received');
     }
-    _addProgress('enrollment', 'Enrollment request submitted', ProgressEventType.success);
+    _addProgress('enrollment', 'Enrollment request submitted',
+        ProgressEventType.success);
     return atEnrollmentResponse;
   }
 
@@ -176,7 +180,7 @@ class AtEnrollmentImpl implements AtEnrollment {
     var enrollmentJsonMap = jsonDecode(enrollResponse!);
     AtEnrollmentResponse enrollmentResponse = AtEnrollmentResponse(
         enrollmentJsonMap['enrollmentId'],
-        _convertEnrollmentStatusToEnum(enrollmentJsonMap['status']));
+        getEnrollStatusFromString(enrollmentJsonMap['status']));
     return enrollmentResponse;
   }
 
@@ -195,7 +199,7 @@ class AtEnrollmentImpl implements AtEnrollment {
     var enrollmentJsonMap = jsonDecode(enrollResponse!);
     AtEnrollmentResponse enrollmentResponse = AtEnrollmentResponse(
         enrollmentJsonMap['enrollmentId'],
-        _convertEnrollmentStatusToEnum(enrollmentJsonMap['status']));
+        getEnrollStatusFromString(enrollmentJsonMap['status']));
     return enrollmentResponse;
   }
 
@@ -216,7 +220,7 @@ class AtEnrollmentImpl implements AtEnrollment {
     var enrollmentJsonMap = jsonDecode(enrollmentResponseStr!);
     AtEnrollmentResponse enrollmentResponse = AtEnrollmentResponse(
         enrollmentJsonMap['enrollmentId'],
-        _convertEnrollmentStatusToEnum(enrollmentJsonMap['status']));
+        getEnrollStatusFromString(enrollmentJsonMap['status']));
     return enrollmentResponse;
   }
 
@@ -226,6 +230,7 @@ class AtEnrollmentImpl implements AtEnrollment {
     Duration retryInterval = const Duration(seconds: 2),
     bool logProgress = true,
     int maxRetries = 15,
+    AtLookupImpl? atLookup,
   }) async {
     if (enrollmentResponse.atSign == null ||
         enrollmentResponse.atSign!.isEmpty) {
@@ -237,7 +242,7 @@ class AtEnrollmentImpl implements AtEnrollment {
           'rootDomain is not available in the enrollment response');
     }
 
-    var atLookup = AtLookupImpl(
+    atLookup ??= AtLookupImpl(
       enrollmentResponse.atSign!,
       enrollmentResponse.rootDomain!.rootDomain,
       enrollmentResponse.rootDomain!.rootPort,
@@ -268,6 +273,66 @@ class AtEnrollmentImpl implements AtEnrollment {
     );
   }
 
+  @override
+  Future<List<EnrollmentServerRequest>> list(
+    List<EnrollmentStatus>? filters,
+    AtLookUp atLookup, {
+    String? arx,
+    String? drx,
+  }) async {
+    String command = 'enroll:list';
+    //Handle EnrollmentStatus enum to string
+    String statusFilter = '';
+    if (filters != null) {
+      for (EnrollmentStatus filter in filters) {
+        statusFilter += '${filter.name},';
+      }
+
+      //remove additional ','
+      statusFilter.substring(0, statusFilter.length - 1);
+      if (statusFilter.isNotEmpty) {
+        command += ':{"enrollmentStatusFilter":["$statusFilter"]}';
+      }
+    }
+    String rawResponse = (await atLookup.executeCommand(
+      '$command\n',
+      auth: true,
+    ))!;
+
+    RegExp? ar;
+    RegExp? dr;
+    if (arx != null) {
+      ar = RegExp(arx);
+    }
+    if (drx != null) {
+      dr = RegExp(drx);
+    }
+    if (rawResponse.startsWith('data:')) {
+      rawResponse = rawResponse.substring(rawResponse.indexOf('data:') + 5);
+      Map unfiltered = jsonDecode(rawResponse);
+      List<EnrollmentServerRequest> filtered = [];
+      for (final String ek in unfiltered.keys) {
+        final e = unfiltered[ek];
+        String appName = e['appName'] as String;
+        if (ar != null) {
+          if (!ar.hasMatch(appName)) {
+            continue;
+          }
+        }
+        String deviceName = e['deviceName'] as String;
+        if (dr != null) {
+          if (!dr.hasMatch(deviceName)) {
+            continue;
+          }
+        }
+        filtered.add(EnrollmentServerRequest.fromServer(e));
+      }
+      return filtered;
+    } else {
+      throw Exception('Unexpected server response: $rawResponse');
+    }
+  }
+
   Future<String> _getDefaultEncryptionPublicKey(
       AtLookUp atLookupImpl, String atSign) async {
     var lookupVerbBuilder = LookupVerbBuilder()
@@ -282,24 +347,6 @@ class AtEnrollmentImpl implements AtEnrollment {
     var defaultEncryptionPublicKey =
         lookupResult.replaceFirst(RegExp(r'^data:'), '');
     return defaultEncryptionPublicKey;
-  }
-
-  EnrollmentStatus _convertEnrollmentStatusToEnum(String enrollmentStatus) {
-    switch (enrollmentStatus) {
-      case 'approved':
-        return EnrollmentStatus.approved;
-      case 'denied':
-        return EnrollmentStatus.denied;
-      case 'expired':
-        return EnrollmentStatus.expired;
-      case 'revoked':
-        return EnrollmentStatus.revoked;
-      case 'pending':
-        return EnrollmentStatus.pending;
-      default:
-        throw AtEnrollmentException(
-            '$enrollmentStatus is not a valid enrollment status');
-    }
   }
 
   Future<String> _executeEnrollCommand(
