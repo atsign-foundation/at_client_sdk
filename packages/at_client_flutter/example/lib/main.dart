@@ -1,13 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:at_client_flutter/src/widgets/atsign_rootdomain_dialog.dart';
-import 'package:at_client_flutter/src/widgets/registrar_cram_dialog.dart';
-import 'package:at_client_flutter/src/keychain/keychain_storage.dart';
-import 'package:at_client_flutter/src/widgets/pkam_dialog.dart';
-import 'package:at_client_flutter/src/widgets/cram_dialog.dart';
-import 'package:at_client_flutter/src/widgets/file_picker.dart';
-import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
-import 'package:at_auth/at_auth.dart';
+import 'package:example/walkthrough.dart';
 
 void main() {
   runApp(const MyApp());
@@ -23,193 +16,302 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
+
+        // Scaffold theme
+        scaffoldBackgroundColor: Colors.white,
+
+        // AppBar theme
+        appBarTheme: const AppBarTheme(centerTitle: true, elevation: 0),
+
+        // Text theme
+        textTheme: const TextTheme(
+          headlineMedium: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+          bodyMedium: TextStyle(fontSize: 14),
+          bodyLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          bodySmall: TextStyle(fontSize: 13),
+          titleMedium: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+
+        // Elevated button theme
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            elevation: 0,
+            minimumSize: const Size(double.infinity, 54),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            textStyle: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+
+        // Outlined button theme
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            elevation: 0,
+            minimumSize: const Size(double.infinity, 54),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            textStyle: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+
+        // Text button theme
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            textStyle: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ),
+
+        // Divider theme
+        dividerTheme: const DividerThemeData(thickness: 1),
       ),
-      home: MyHomePage(),
+      home: const MyHomePage(),
     );
   }
 }
 
-/// The main home page of the example app
-///
-/// Demonstrates usage for common authentication and onboarding flows:
-/// - Onboarding via Registrar
-/// - Authentication via File
-/// - Authentication via Keychain
-///
-/// Each flow is composed using the reusable widgets provided by at_client_flutter:
-/// - AtSignSelectionDialog
-/// - RegistrarCramDialog
-/// - CramDialog
-/// - PkamDialog
-/// - AtKeysFileDialog
-///
-///  Generally, the flow is as follows:
-///  1. Show AtSignSelectionDialog to create an AuthRequest (generic class for at_auth)
-///    a. For onboarding, use AtOnboardingRequest
-///    b. For authentication, use AtAuthRequest
-///  2. Process authentication or onboarding
-///    a. For onboarding via Registrar
-///    b. For authentication via File or Keychain
-///  3. Show CramDialog or PkamDialog to complete the process
-///    a. returns AtOnboardingResponse or AtAuthResponse respectively
-///
-/// See the individual widgets for more details on their usage.
 class MyHomePage extends StatelessWidget {
-  final RegistrarService registrar = RegistrarService(
-    registrarUrl: "my.atsign.com",
-    apiKey: "c5df0db6-952f-4acc-9e6a-dadbeec021f7",
-  );
+  const MyHomePage({super.key});
 
-  final KeychainStorage keychainStorage = KeychainStorage();
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
+    return Scaffold(
+      // Uses theme.scaffoldBackgroundColor automatically
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Spacer(flex: 2),
+
+                // Icon - using theme colors
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.face_retouching_natural,
+                    size: 40,
+                    color: colorScheme.primary,
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Title - using theme text style
+                Text('My App', style: textTheme.headlineMedium),
+
+                const SizedBox(height: 8),
+
+                // Subtitle - using theme text style with color modification
+                Text(
+                  'Secure authentication with atSign',
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+
+                const SizedBox(height: 48),
+
+                // Login Button - using theme button style
+                ElevatedButton(
+                  onPressed: () async {
+                    await login(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
+                  ),
+                  child: const Text('Login with Existing atSign'),
+                ),
+
+                const SizedBox(height: 16),
+
+                // Divider with "OR" - using theme divider
+                Row(
+                  children: [
+                    const Expanded(child: Divider()),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'OR',
+                        style: textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurface.withOpacity(0.5),
+                        ),
+                      ),
+                    ),
+                    const Expanded(child: Divider()),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+
+                // Register Button - using theme button style
+                OutlinedButton(
+                  onPressed: () async {
+                    onboard(context);
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colorScheme.primary,
+                    side: BorderSide(
+                      color: colorScheme.primary.withOpacity(0.5),
+                    ),
+                  ),
+                  child: const Text('Register a New atSign'),
+                ),
+
+                const SizedBox(height: 16),
+
+                // Manage Paired atSigns text button - using theme
+                TextButton(
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(20),
+                        ),
+                      ),
+                      builder: (BuildContext context) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Header - using theme text style
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 10,
+                                ),
+                                child: Text(
+                                  'Manage Paired atSigns',
+                                  style: textTheme.titleMedium?.copyWith(
+                                    color: colorScheme.onSurface.withOpacity(
+                                      0.8,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const Divider(),
+
+                              // Clear atSign option - using theme colors
+                              ListTile(
+                                leading: Icon(
+                                  Icons.clear,
+                                  color: colorScheme.primary,
+                                ),
+                                title: const Text('Clear atSign'),
+                                onTap: () async {
+                                  await removeAtsign(context);
+                                  Navigator.pop(context);
+                                },
+                              ),
+
+                              // Reset all atSigns option - using theme colors
+                              ListTile(
+                                leading: Icon(
+                                  Icons.restore,
+                                  color: colorScheme.primary,
+                                ),
+                                title: const Text('Reset All atSigns'),
+                                onTap: () async {
+                                  Navigator.pop(context);
+                                  await clearAllAtsigns();
+                                },
+                              ),
+
+                              const SizedBox(height: 10),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                  child: Text(
+                    'Manage Paired atSigns',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  ),
+                ),
+
+                const Spacer(flex: 2),
+
+                // Footer text - using theme text style
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: Column(
+                    children: [
+                      Text(
+                        "Don't have an atSign yet?",
+                        style: textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Get a free atSign at atsign.com',
+                        style: textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class HomePage extends StatelessWidget {
+  const HomePage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Flutter Demo Home Page'),
+        title: const Text('Home'),
+        automaticallyImplyLeading: false, // Removes back button
       ),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ///1. Example of AtSignSelectionDialog usage
-            ///  a. Get existing atSigns from keychain storage
-            ///  b. Show AtSignSelectionDialog to select or input atSign and root domain
-            ElevatedButton(
-              onPressed: () async {
-                // a.
-                List<String>? existingAtSigns = await keychainStorage
-                    .getAllAtsigns();
-                // b.
-                AuthRequest? authRequest = await AtSignSelectionDialog.show(
-                  context,
-                  existingAtSigns: existingAtSigns,
-                  // existingDomains: {'root.atsign.org': AtRootDomain.atsignDomain},
-                );
-              },
-              child: const Text("Show AtSign Selection Dialog"),
-            ),
-
-            const SizedBox(height: 20),
-
-            ///2. Example of Registrar Cram Onboarding flow
-            ///  a. Show AtSignSelectionDialog to select or input atSign and root domain
-            ///  b. Show RegistrarCramDialog to get the cram key from registrar
-            ///  c. Show CramDialog to complete onboarding with the cram key
-            ElevatedButton(
-              onPressed: () async {
-                // a. Show AtSignSelectionDialog
-                AuthRequest? authRequest = await AtSignSelectionDialog.show(
-                  context,
-                );
-
-                if (authRequest == null) {
-                  print('Onboarding cancelled / authRequest is null');
-                  return;
-                }
-
-                // b. Show RegistrarCramDialog
-                var cramKey = await RegistrarCramDialog.show(
-                  context,
-                  (authRequest as AtOnboardingRequest),
-                  registrar: registrar,
-                );
-                if (cramKey == null) {
-                  print('Onboarding cancelled / cramKey is null');
-                  return;
-                }
-
-                // c. Show CramDialog to complete onboarding
-                var response = await CramDialog.show(
-                  context,
-                  request: authRequest,
-                  cramKey: cramKey,
-                );
-              },
-              child: const Text("Registrar Cram Onboarding"),
-            ),
-
-            const SizedBox(height: 20),
-
-            ///3. Example of Authentication flow via AtKeysFile
-            ///  a. Show AtSignSelectionDialog to select atSign for authentication
-            ///  b. Show AtKeysFileDialog to pick the atKeys file from device storage
-            ///  c. Show PkamDialog to complete authentication
-            ElevatedButton(
-              onPressed: () async {
-                // a. Show AtSignSelectionDialog
-                AuthRequest? authRequest = await AtSignSelectionDialog.show(
-                  context,
-                );
-                if (authRequest == null) {
-                  print('Authentication cancelled / authRequest is null');
-                  return;
-                }
-                // b. Show AtKeysFileDialog to pick atKey file
-                var atKeysIo = await AtKeysFileDialog.show(context);
-                if (atKeysIo == null) {
-                  throw Exception(
-                    'Authentication cancelled / atKeysIo is null',
-                  );
-                }
-                var request = AtAuthRequest(
-                  authRequest.atSign,
-                  atKeysIo: atKeysIo,
-                  rootDomain: authRequest.rootDomain,
-                );
-                // c. Show PkamDialog to complete authentication
-                var response = await PkamDialog.show(
-                  context,
-                  request: request,
-                  backupKeys: [KeychainAtKeysIo()],
-                );
-                print('Authentication response: $response');
-              },
-              child: const Text("Authenticate/PKAM via File Picker"),
-            ),
-
-            const SizedBox(height: 20),
-
-            ///4. Example of Authentication flow via Keychain
-            ///  a. Get existing atSigns from keychain storage
-            ///  b. Show AtSignSelectionDialog to select atSign for authentication
-            ///     i. Ensure providing KeychainAtKeysIo for the AuthRequest
-            ///  c. Show PkamDialog to complete authentication
-            ElevatedButton(
-              onPressed: () async {
-                // a. get existing atSigns from keychain storage
-                var atSigns = await keychainStorage.getAllAtsigns();
-                if (atSigns == null || atSigns.isEmpty) {
-                  print('No atSigns found in keychain for authentication');
-                  return;
-                }
-                // b. Show AtSignSelectionDialog
-                AuthRequest? request = await AtSignSelectionDialog.show(
-                  context,
-                  existingAtSigns: atSigns,
-                );
-                if (request == null) {
-                  print('Keychain authentication cancelled / request is null');
-                  return;
-                }
-                //  i) ensure providing KeychainAtKeysIo for the AuthRequest
-                var authRequest = AtAuthRequest(
-                  request.atSign,
-                  atKeysIo: KeychainAtKeysIo(),
-                  rootDomain: request.rootDomain,
-                );
-                // c. Show PkamDialog to complete authentication
-                var response = await PkamDialog.show(
-                  context,
-                  request: authRequest,
-                );
-                print('Keychain authentication response: $response');
-              },
-              child: const Text("Keychain Authentication"),
-            ),
-
-            const SizedBox(height: 20),
-          ],
+        child: ElevatedButton(
+          onPressed: () {
+            AtClientManager.getInstance().reset();
+            // Navigate back to login page
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const MyHomePage()),
+            );
+          },
+          child: const Text('Logout'),
         ),
       ),
     );

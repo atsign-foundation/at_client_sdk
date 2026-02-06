@@ -218,21 +218,21 @@ class KeychainStorage {
           final Map m = jsonDecode(storedData);
           segmentCount = m['segmentCount'];
           segmentPrefix = '${keychainStoreName}_segment';
-          log(
-              '  => READ: Got segmentCount $segmentCount'
-              ', and inferred RELATIVE segmentPrefix $segmentPrefix,'
-              ' from storedData $storedData',
-              false);
+          //log(
+          //  '  => READ: Got segmentCount $segmentCount'
+          //  ', and inferred RELATIVE segmentPrefix $segmentPrefix,'
+          //  ' from storedData $storedData',
+          //   false);
         } else {
           // legacy
           segmentCount = int.tryParse(storedData) ?? 0;
           String packageName = await getPackageName();
           segmentPrefix = '${packageName}_data';
-          log(
-              '  => READ: Got segmentCount $segmentCount'
-              ', and inferred LEGACY, BUGGY segmentPrefix $segmentPrefix,'
-              ' from storedData $storedData',
-              false);
+          //log(
+          //    '  => READ: Got segmentCount $segmentCount'
+          //     ', and inferred LEGACY, BUGGY segmentPrefix $segmentPrefix,'
+          //     ' from storedData $storedData',
+          //     false);
         }
         final results = <String>[];
         for (int i = 0; i < segmentCount; i++) {
@@ -269,20 +269,20 @@ class KeychainStorage {
     BiometricStorageFile store =
         await _getBiometricStorageFile(biometricStoreName);
     if (!isWindows) {
-      log("WRITE: _writeDataToStore called", true);
+      //log("WRITE: _writeDataToStore called", true);
       await store.write(data);
     } else {
-      log('WRITE: _writeDataToStore called', true);
+      //log('WRITE: _writeDataToStore called', true);
       final dataList = _splitString(data, _kWindowSegmentDataLength);
       String segmentCountInfo = jsonEncode({'segmentCount': dataList.length});
-      log('  => WRITE: Writing $segmentCountInfo to ${store.name}', false);
+      //log('  => WRITE: Writing $segmentCountInfo to ${store.name}', false);
       await store.write(segmentCountInfo);
 
       for (int i = 0; i < dataList.length; i++) {
         final segmentStore =
             await _getBiometricStorageFile('${biometricStoreName}_segment_$i');
-        log('  => WRITE: Writing segment $i length ${dataList[i].length} to ${segmentStore.name}',
-            false);
+        //log('  => WRITE: Writing segment $i length ${dataList[i].length} to ${segmentStore.name}',
+        //    false);
         // log('  => WRITE: segmentValue was ${dataList[i]}', false);
         await segmentStore.write(dataList[i]);
       }
