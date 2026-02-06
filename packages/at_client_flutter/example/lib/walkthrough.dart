@@ -116,7 +116,6 @@ Future<void> clearAllAtsigns() async {
   await keychainStorage.deleteAllAtKeysData();
 }
 
-
 /// This is an example of writing your own dialog to remove an atsign from the keychain
 Future<void> removeAtsign(BuildContext context) async {
   var items = await keychainStorage.getAllAtsigns();
