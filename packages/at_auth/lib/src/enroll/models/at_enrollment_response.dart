@@ -39,8 +39,6 @@ class EnrollmentServerRequest {
       status: entry.value['status'] != null
           ? getEnrollStatusFromString(entry.value['status'] as String)
           : EnrollmentStatus.pending,
-      encryptedAPKAMSymmetricKey:
-          entry.value['encryptedAPKAMSymmetricKey'] as String,
       // Looks like: `namespace: {ns1: rw, ns2: r}`
       namespace: (entry.value['namespace'] as Map<String, dynamic>)
           .cast<String, String>()
