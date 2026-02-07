@@ -17,3 +17,4 @@ export 'src/widgets/registrar_cram_dialog.dart';
 export 'src/widgets/file_picker.dart';
 export 'src/widgets/shared/loading.dart';
 export 'src/widgets/shared/typable_dropdown.dart';
+export 'src/widgets/apkam_dialog.dart';

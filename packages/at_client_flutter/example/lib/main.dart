@@ -130,7 +130,19 @@ class MyHomePage extends StatelessWidget {
                   ),
                   child: const Text('Login with Existing atSign'),
                 ),
+                const SizedBox(height: 16),
 
+                // Login Button via enrollment
+                ElevatedButton(
+                  onPressed: () async {
+                    await loginWithApkam(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
+                  ),
+                  child: const Text('Register an atSign with APKAM'),
+                ),
                 const SizedBox(height: 16),
 
                 // Divider with "OR" - using theme divider

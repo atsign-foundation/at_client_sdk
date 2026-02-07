@@ -129,6 +129,43 @@ Future<void> loginWithFile(BuildContext context) async {
   await _setupAtClient(context, authRequest, response);
 }
 
+Future<void> loginWithApkam(BuildContext context) async {
+  // a. Show AtSignSelectionDialog with existing atSigns
+  AuthRequest? request = await AtSignSelectionDialog.show(context);
+  if (request == null) return;
+
+  AtEnrollmentResponse? enrollmentResponse = await ApkamActivationDialog.show(
+    context,
+    atSign: request.atSign,
+    rootDomain: request.rootDomain,
+    appName: namespace,
+    deviceName: 'default',
+    namespaces: {namespace: 'rw'},
+  );
+
+  if (enrollmentResponse == null || enrollmentResponse.atAuthKeys == null) {
+    throw AtAuthenticationException("Enrollment Failed");
+  }
+
+  // b. Create AuthRequest with KeychainAtKeysIo
+  var authRequest = AtAuthRequest(
+    request.atSign,
+    atAuthKeys: enrollmentResponse.atAuthKeys!,
+    rootDomain: request.rootDomain,
+  );
+
+  // d. Show PkamDialog to complete authentication
+  var response = await PkamDialog.show(
+    context,
+    request: authRequest,
+    backupKeys: [KeychainAtKeysIo()],
+  );
+  if (response == null || !response.isSuccessful) return;
+
+  // e. Create atClient instance
+  await _setupAtClient(context, authRequest, response);
+}
+
 Future<void> exportKeys(BuildContext context) async {
   // Get the file path from the save dialog
   if (AtClientManager.getInstance().atClient == null) return;

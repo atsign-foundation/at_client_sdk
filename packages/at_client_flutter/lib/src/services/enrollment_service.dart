@@ -1,21 +1,28 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_commons/at_commons.dart';
-import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
+import 'package:at_client_flutter/at_client_flutter.dart';
 
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
-import '../keychain/keychain_data.dart';
-import '../keychain/keychain_storage.dart';
-
 class FlutterEnrollmentService {
+  final AtSignLogger _logger = AtSignLogger('FlutterEnrollmentService');
   final AtEnrollment _atEnrollment = AtEnrollment.create();
   final KeychainStorage _keychainStorage = KeychainStorage();
   final KeychainAtKeysIo _keychainAtKeysIo = KeychainAtKeysIo();
 
+  AtClient get atClient => AtClientManager.getInstance().atClient;
+
+  // Used for updating realtime ui
+  StreamController<EnrollmentServerRequest>? _enrollmentRequestsController =
+      StreamController<EnrollmentServerRequest>.broadcast();
+  StreamSubscription? _newRequestsSubcription;
+
   Stream<ProgressEvent> get progressStream => _atEnrollment.progressStream;
+
   Future<AtEnrollmentResponse> enroll(EnrollmentRequest request,
       {bool waitForApproval = false}) async {
     AtEnrollmentResponse? atEnrollmentResponse;
@@ -89,6 +96,21 @@ class FlutterEnrollmentService {
     return atEnrollmentResponse;
   }
 
+  Stream<EnrollmentServerRequest> getEnrollments(
+      {List<EnrollmentStatus>? statusFilters}) {
+    if (_enrollmentRequestsController!.onListen == null) {
+      _enrollmentRequestsController!.onListen = _listenForNewRequest;
+    }
+    return _enrollmentRequestsController!.stream
+        .map((event) => event)
+        .where((event) {
+      if (statusFilters == null) {
+        return true;
+      }
+      return statusFilters.contains(event.status);
+    });
+  }
+
   Future<List<EnrollmentServerRequest>> list(
       List<EnrollmentStatus> filters, AtLookUp atLookUp,
       {String? drx, String? arx}) async {
@@ -97,5 +119,35 @@ class FlutterEnrollmentService {
 
   Future<void> waitForApproval(AtEnrollmentResponse response) async {
     await _atEnrollment.waitForApproval(response);
+  }
+
+  void _listenForNewRequest() {
+    final stream = atClient.notificationService.subscribe(
+      regex: r'r.*\.new\.enrollments\.__manage',
+      shouldDecrypt: false,
+    );
+
+    _newRequestsSubcription = stream.listen((AtNotification noti) async {
+      try {
+        _logger.info('Enrollment Request with id ${noti.key} received');
+        final enrollmentRequest = EnrollmentServerRequest.fromServer(MapEntry(
+          noti.key,
+          jsonDecode(noti.value!),
+        ));
+        if (!_enrollmentRequestsController!.isClosed) {
+          _enrollmentRequestsController!.add(enrollmentRequest);
+        }
+      } catch (e, st) {
+        _logger.severe('Failed to process new enrollment request.', e, st);
+        _enrollmentRequestsController!.addError(Exception(e.toString()));
+      }
+    });
+  }
+
+  Future<void> dispose() async {
+    await _newRequestsSubcription?.cancel();
+    _newRequestsSubcription = null;
+    await _enrollmentRequestsController!.close();
+    _enrollmentRequestsController = null;
   }
 }
