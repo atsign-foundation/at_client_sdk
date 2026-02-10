@@ -30,8 +30,8 @@ class FlutterEnrollmentService {
         request.rootDomain.rootDomain, request.rootDomain.rootPort);
     try {
       atEnrollmentResponse = await _atEnrollment.submit(request, atLookup);
-    } catch (e) {
-      throw Exception('Enrollment failed: $e');
+    } catch (e, s) {
+      throw Exception('Enrollment failed: $e \n $s');
     }
     await atLookup.close();
 
@@ -47,7 +47,7 @@ class FlutterEnrollmentService {
           atSign: request.atSign, enrollmentData: enrollmentData);
     }
     if (waitForApproval) {
-      await _atEnrollment.waitForApproval(atEnrollmentResponse);
+      atEnrollmentResponse = await awaitApproval(atEnrollmentResponse);
     }
     return atEnrollmentResponse;
   }
@@ -117,8 +117,9 @@ class FlutterEnrollmentService {
     return await _atEnrollment.list(filters, atLookUp, arx: arx, drx: drx);
   }
 
-  Future<void> waitForApproval(AtEnrollmentResponse response) async {
-    await _atEnrollment.waitForApproval(response);
+  Future<AtEnrollmentResponse> awaitApproval(
+      AtEnrollmentResponse response) async {
+    return await _atEnrollment.waitForApproval(response);
   }
 
   void _listenForNewRequest() {

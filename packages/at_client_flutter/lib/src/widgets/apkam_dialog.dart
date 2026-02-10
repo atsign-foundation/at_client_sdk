@@ -83,26 +83,6 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   @override
   void initState() {
     super.initState();
-    _startResendTimer();
-  }
-
-  void _startResendTimer() {
-    setState(() {
-      _canResend = false;
-      _resendCountdown = 30; // Reset to 30 seconds
-    });
-
-    _resendTimer?.cancel();
-    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        if (_resendCountdown > 0) {
-          _resendCountdown--;
-        } else {
-          _canResend = true;
-          timer.cancel();
-        }
-      });
-    });
   }
 
   Future<AtEnrollmentResponse> _sendEnrollment(String otp) async {
@@ -117,15 +97,8 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
     return await enrollmentService.enroll(request, waitForApproval: true);
   }
 
-  void _handleResendCode() {
-    if (_canResend) {
-      _startResendTimer(); // Restart the timer after resending
-    }
-  }
-
   @override
   void dispose() {
-    _resendTimer?.cancel();
     for (var controller in _controllers) {
       controller.dispose();
     }
@@ -148,42 +121,6 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
         index > 0) {
       _focusNodes[index - 1].requestFocus();
     }
-  }
-
-  Widget _buildResendCodeText() {
-    return Center(
-      child: RichText(
-        text: TextSpan(
-          style: TextStyle(
-            fontSize: 14,
-            color: widget.themeData.primaryColor,
-          ),
-          children: [
-            const TextSpan(text: "Didn't receive a code? "),
-            WidgetSpan(
-              child: InkWell(
-                onTap: _canResend ? _handleResendCode : null,
-                child: Text(
-                  'Resend code',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: _canResend
-                        ? widget.themeData.colorScheme.secondary
-                        : widget.themeData.disabledColor,
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
-              ),
-            ),
-            if (!_canResend)
-              TextSpan(
-                text: ' (${_resendCountdown}s)',
-                style: TextStyle(color: widget.themeData.disabledColor),
-              ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -329,21 +266,14 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
                       onPressed: () async {
                         String otp = _controllers.map((c) => c.text).join();
                         if (otp.length == 6 && !_isLoading) {
-                          try {
-                            setState(() {
-                              _isLoading = true;
-                            });
-                            final response = await _sendEnrollment(otp);
-                            Navigator.of(context).pop(response);
-                          } catch (e) {
-                            setState(() {
-                              _isLoading = false;
-                            });
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content: Text('Error verifying OTP: $e')),
-                            );
-                          }
+                          setState(() {
+                            _isLoading = true;
+                          });
+                          final response = await _sendEnrollment(otp);
+                          Navigator.of(context).pop(response);
+                          setState(() {
+                            _isLoading = false;
+                          });
                         }
                       },
                       style: ElevatedButton.styleFrom(
@@ -364,9 +294,6 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
                     ),
                   ),
             const SizedBox(height: 16),
-
-            _buildResendCodeText(),
-            const SizedBox(height: 32),
           ],
         ),
       ),

@@ -91,7 +91,7 @@ class AtAuthImpl implements AtAuth {
       atAuthRequest.rootDomain.rootPort,
     );
     // ??= to support mocking
-    atChops ??= _createAtChops(atAuthKeys);
+    atChops ??= atAuthKeys.toAtChops();
     atLookUp!.atChops = atChops;
 
     _logger.finer('Authenticating using PKAM');
@@ -199,7 +199,7 @@ class AtAuthImpl implements AtAuth {
               'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');
       }
     }
-    atChops ??= _createAtChops(_atAuthKeys);
+    atChops ??= _atAuthKeys.toAtChops();
     atLookUp!.atChops = atChops;
 
     //3. send onboarding enrollment
@@ -282,7 +282,6 @@ class AtAuthImpl implements AtAuth {
 
     atOnboardingResponse
       ..isSuccessful = true
-      ..enrollmentId = enrollmentIdFromServer
       ..atAuthKeys = _atAuthKeys
       ..atLookUp = atLookUp
       ..atChops = atChops;
@@ -312,63 +311,6 @@ class AtAuthImpl implements AtAuth {
       ..atKey = (AtKey()..key = AtConstants.atCramSecret);
     String? deleteResponse = await atLookUp!.executeVerb(deleteBuilder);
     _logger.info('Cram secret delete response : $deleteResponse');
-  }
-
-  AtChops _createAtChops(AtKeys atKeys) {
-    //if the keys contain an apkamSymmetricKey, they're a apkam key
-    return switch (atKeys.apkamSymmetricKey) {
-      AtBytes() => _createApkamChops(atKeys),
-      null => _createPkamChops(atKeys),
-    };
-  }
-
-  AtChops _createApkamChops(AtKeys atKeys) {
-    if (atKeys.apkamPublicKey == null) {
-      AtKeyNotFoundException(
-          "apkamPublicKey not found in AtKeys, unable to make atChops instance");
-    }
-    if (atKeys.apkamSymmetricKey == null) {
-      throw AtKeyNotFoundException(
-          "apkamSymmetricKey not found in AtKeys, unable to make atChops instance");
-    }
-    final atEncryptionKeyPair = AtEncryptionKeyPair.create(
-      atKeys.defaultEncryptionPublicKey!.toString(),
-      '', // TODO: I really dislike this solution, Apkam keys don't have a encryptionPrivateKey but require it for their atChops instance...
-    );
-
-    final atPkamKeyPair = AtPkamKeyPair.create(
-      atKeys.apkamPublicKey!.toString(),
-      atKeys.apkamPrivateKey!.toString(),
-    );
-
-    final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
-      ..apkamSymmetricKey = AESKey(atKeys.apkamSymmetricKey!.toString());
-
-    return AtChopsImpl(atChopsKeys);
-  }
-
-  AtChops _createPkamChops(AtKeys atKeysFile) {
-    if (atKeysFile.apkamPrivateKey == null ||
-        atKeysFile.defaultEncryptionPrivateKey == null) {
-      throw AtPrivateKeyNotFoundException(
-          'PKAM mode requires apkamPrivateKey and defaultEncryptionPrivateKey');
-    }
-
-    final atEncryptionKeyPair = AtEncryptionKeyPair.create(
-      atKeysFile.defaultEncryptionPublicKey!.toString(),
-      atKeysFile.defaultEncryptionPrivateKey!.toString(),
-    );
-
-    final atPkamKeyPair = AtPkamKeyPair.create(
-      atKeysFile.apkamPublicKey!.toString(),
-      atKeysFile.apkamPrivateKey!.toString(),
-    );
-
-    final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
-      ..selfEncryptionKey =
-          AESKey(atKeysFile.defaultSelfEncryptionKey!.toString());
-
-    return AtChopsImpl(atChopsKeys);
   }
 
   Future<String> _sendOnboardingEnrollment(

@@ -1,9 +1,58 @@
 import 'package:flutter/material.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:example/walkthrough.dart';
+import 'package:at_utils/at_logger.dart';
+import 'dart:async';
+
+final AtSignLogger _logger = AtSignLogger('main');
 
 void main() {
-  runApp(const MyApp());
+  // Capture all errors in the Flutter framework
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    _logger.info(
+      '╔════════════════════════════════════════════════════════════════',
+    );
+    _logger.info('║ FLUTTER ERROR CAUGHT');
+    _logger.info(
+      '╠════════════════════════════════════════════════════════════════',
+    );
+    _logger.info('║ ${details.exception}');
+    _logger.info(
+      '╠════════════════════════════════════════════════════════════════',
+    );
+    _logger.info('║ Stack trace:');
+    _logger.info('║ ${details.stack}');
+    _logger.info(
+      '╚════════════════════════════════════════════════════════════════',
+    );
+  };
+
+  // Capture all errors outside of Flutter framework
+  runZonedGuarded(
+    () {
+      runApp(const MyApp());
+    },
+    (error, stack) {
+      _logger.info(
+        '╔════════════════════════════════════════════════════════════════',
+      );
+      _logger.info('║ ASYNC ERROR CAUGHT');
+      _logger.info(
+        '╠════════════════════════════════════════════════════════════════',
+      );
+      _logger.info('║ Error: $error');
+      _logger.info('║ Type: ${error.runtimeType}');
+      _logger.info(
+        '╠════════════════════════════════════════════════════════════════',
+      );
+      _logger.info('║ Stack trace:');
+      _logger.info('║ $stack');
+      _logger.info(
+        '╚════════════════════════════════════════════════════════════════',
+      );
+    },
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -79,6 +128,54 @@ class MyApp extends StatelessWidget {
         // Divider theme
         dividerTheme: const DividerThemeData(thickness: 1),
       ),
+      // Add a global builder to catch any remaining errors
+      builder: (context, widget) {
+        ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
+          return Scaffold(
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.red,
+                      size: 48,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'An error occurred',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      errorDetails.exception.toString(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () {
+                        // Try to recover by navigating to home
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (_) => const MyHomePage()),
+                          (route) => false,
+                        );
+                      },
+                      child: const Text('Return to Home'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        };
+        return widget!;
+      },
       home: const MyHomePage(),
     );
   }
@@ -122,7 +219,18 @@ class MyHomePage extends StatelessWidget {
                 // Login Button - now calls loginWithKeychain
                 ElevatedButton(
                   onPressed: () async {
-                    await loginWithKeychain(context);
+                    _logger.info('═══ Login with Keychain button pressed ═══');
+                    try {
+                      await loginWithKeychain(context);
+                    } catch (e, stack) {
+                      _logger.info('CAUGHT in button handler: $e');
+                      _logger.info('Stack: $stack');
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                      }
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: colorScheme.primary,
@@ -135,7 +243,18 @@ class MyHomePage extends StatelessWidget {
                 // Login Button via enrollment
                 ElevatedButton(
                   onPressed: () async {
-                    await loginWithApkam(context);
+                    _logger.info('═══ Login with APKAM button pressed ═══');
+                    try {
+                      await loginWithApkam(context);
+                    } catch (e, stack) {
+                      _logger.info('CAUGHT in button handler: $e');
+                      _logger.info('Stack: $stack');
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                      }
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: colorScheme.primary,
@@ -167,7 +286,18 @@ class MyHomePage extends StatelessWidget {
                 // Register Button - now says "Onboard a New atSign"
                 OutlinedButton(
                   onPressed: () async {
-                    await onboard(context);
+                    _logger.info('═══ Onboard button pressed ═══');
+                    try {
+                      await onboard(context);
+                    } catch (e, stack) {
+                      _logger.info('CAUGHT in button handler: $e');
+                      _logger.info('Stack: $stack');
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                      }
+                    }
                   },
                   style: OutlinedButton.styleFrom(
                     foregroundColor: colorScheme.primary,
@@ -183,7 +313,18 @@ class MyHomePage extends StatelessWidget {
                 // NEW: Add atSign by File Button
                 OutlinedButton(
                   onPressed: () async {
-                    await loginWithFile(context);
+                    _logger.info('═══ Login with File button pressed ═══');
+                    try {
+                      await loginWithFile(context);
+                    } catch (e, stack) {
+                      _logger.info('CAUGHT in button handler: $e');
+                      _logger.info('Stack: $stack');
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                      }
+                    }
                   },
                   style: OutlinedButton.styleFrom(
                     foregroundColor: colorScheme.secondary,
@@ -237,8 +378,15 @@ class MyHomePage extends StatelessWidget {
                                 ),
                                 title: const Text('Clear atSign'),
                                 onTap: () async {
-                                  await removeAtsign(context);
-                                  Navigator.pop(context);
+                                  try {
+                                    await removeAtsign(context);
+                                    if (context.mounted) {
+                                      Navigator.pop(context);
+                                    }
+                                  } catch (e, stack) {
+                                    _logger.info('Error removing atSign: $e');
+                                    _logger.info('Stack: $stack');
+                                  }
                                 },
                               ),
 
@@ -250,8 +398,15 @@ class MyHomePage extends StatelessWidget {
                                 ),
                                 title: const Text('Reset All atSigns'),
                                 onTap: () async {
-                                  Navigator.pop(context);
-                                  await clearAllAtsigns();
+                                  try {
+                                    Navigator.pop(context);
+                                    await clearAllAtsigns();
+                                  } catch (e, stack) {
+                                    _logger.info(
+                                      'Error clearing all atSigns: $e',
+                                    );
+                                    _logger.info('Stack: $stack');
+                                  }
                                 },
                               ),
 
@@ -318,18 +473,34 @@ class HomePage extends StatelessWidget {
           children: [
             ElevatedButton(
               onPressed: () {
-                AtClientManager.getInstance().reset();
-                // Navigate back to login page
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const MyHomePage()),
-                );
+                try {
+                  AtClientManager.getInstance().reset();
+                  // Navigate back to login page
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => const MyHomePage()),
+                  );
+                } catch (e, stack) {
+                  _logger.info('Error during logout: $e');
+                  _logger.info('Stack: $stack');
+                }
               },
               child: const Text('Logout'),
             ),
             ElevatedButton.icon(
               onPressed: () async {
-                await exportKeys(context);
+                _logger.info('═══ Export Keys button pressed ═══');
+                try {
+                  await exportKeys(context);
+                } catch (e, stack) {
+                  _logger.info('CAUGHT in export button handler: $e');
+                  _logger.info('Stack: $stack');
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Export error: $e')));
+                  }
+                }
               },
               icon: const Icon(Icons.download),
               label: Text('Export AtSign Keys'),

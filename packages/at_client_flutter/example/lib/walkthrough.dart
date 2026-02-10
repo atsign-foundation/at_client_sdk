@@ -18,179 +18,376 @@ final RegistrarService registrar = RegistrarService(
 
 final KeychainStorage keychainStorage = KeychainStorage();
 
-/// This method is an example of how an application creates their own customized onboarding flow
-/// Using the provided widgets in this library, you can create your own flow for onboarding like this
-/// This is the default and suggested method of implementing the onboarding flow and can be copy and pasted into your application
-Future<void> onboard(BuildContext context) async {
-  // a. Show AtSignSelectionDialog
-  AuthRequest? authRequest = await AtSignSelectionDialog.show(context);
-  if (!context.mounted || authRequest == null) return;
-  // b. Show RegistrarCramDialog
-  var cramKey = await RegistrarCramDialog.show(
-    context,
-    (authRequest as AtOnboardingRequest),
-    registrar: registrar,
-  );
-  if (!context.mounted || cramKey == null) return;
-  // c. Show CramDialog to complete onboarding
-  var response = await CramDialog.show(
-    context,
-    request: authRequest,
-    cramKey: cramKey,
-  );
-  if (response == null || !response.isSuccessful) return;
+/// Helper function to safely execute async operations with comprehensive error logging
+Future<T?> _safeExecute<T>(
+  String operationName,
+  Future<T> Function() operation, {
+  BuildContext? context,
+  bool showErrorDialog = true,
+}) async {
+  try {
+    _logger.info('Starting operation: $operationName');
+    final result = await operation();
+    _logger.info('Completed operation: $operationName');
+    return result;
+  } catch (e, stackTrace) {
+    _logger.severe('ERROR in $operationName: $e');
+    _logger.severe('Stack trace: $stackTrace');
 
-  // d. very important! now that we have authenticated, we can create an atClient instance
-  var dir = await getApplicationSupportDirectory();
-  var acp = AtClientPreference()
-    ..rootDomain = authRequest.rootDomain.rootDomain
-    ..rootPort = authRequest.rootDomain.rootPort
-    ..namespace = namespace
-    ..commitLogPath = dir.path
-    ..hiveStoragePath = dir.path;
-  // make sure to use the atChops and atLookUp provided by the response as these are already authenticated.
-  await AtClientManager.getInstance().setCurrentAtSign(
-    response.atSign,
-    namespace,
-    acp,
-    atChops: response.atChops,
-    atLookUp: response.atLookUp,
+    // Print to console as well for debugging
+    print('╔════════════════════════════════════════════════════════════════');
+    print('║ CAUGHT EXCEPTION in $operationName');
+    print('╠════════════════════════════════════════════════════════════════');
+    print('║ Error: $e');
+    print('║ Type: ${e.runtimeType}');
+    print('╠════════════════════════════════════════════════════════════════');
+    print('║ Stack Trace:');
+    print('║ $stackTrace');
+    print('╚════════════════════════════════════════════════════════════════');
+
+    if (context != null && context.mounted && showErrorDialog) {
+      _showErrorDialog(context, operationName, e, stackTrace);
+    }
+
+    return null;
+  }
+}
+
+/// Show a detailed error dialog
+void _showErrorDialog(
+  BuildContext context,
+  String operation,
+  Object error,
+  StackTrace stackTrace,
+) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Error Occurred'),
+      content: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Operation: $operation'),
+            const SizedBox(height: 8),
+            Text('Error Type: ${error.runtimeType}'),
+            const SizedBox(height: 8),
+            const Text(
+              'Details:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(error.toString()),
+            const SizedBox(height: 8),
+            const Text(
+              'Stack Trace:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              stackTrace.toString(),
+              style: const TextStyle(fontSize: 10, fontFamily: 'monospace'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('OK'),
+        ),
+      ],
+    ),
   );
-  Navigator.pushReplacement(
-    context,
-    MaterialPageRoute(builder: (context) => const HomePage()),
-  );
+}
+
+/// This method is an example of how an application creates their own customized onboarding flow
+Future<void> onboard(BuildContext context) async {
+  await _safeExecute('onboard', () async {
+    _logger.info('Step a: Showing AtSignSelectionDialog');
+    // a. Show AtSignSelectionDialog
+    AuthRequest? authRequest = await AtSignSelectionDialog.show(context);
+    if (!context.mounted || authRequest == null) {
+      _logger.warning(
+        'User cancelled or context not mounted after AtSignSelectionDialog',
+      );
+      return;
+    }
+
+    _logger.info(
+      'Step b: Showing RegistrarCramDialog for ${authRequest.atSign}',
+    );
+    // b. Show RegistrarCramDialog
+    var cramKey = await RegistrarCramDialog.show(
+      context,
+      (authRequest as AtOnboardingRequest),
+      registrar: registrar,
+    );
+    if (!context.mounted || cramKey == null) {
+      _logger.warning(
+        'User cancelled or context not mounted after RegistrarCramDialog',
+      );
+      return;
+    }
+
+    _logger.info('Step c: Showing CramDialog to complete onboarding');
+    // c. Show CramDialog to complete onboarding
+    var response = await CramDialog.show(
+      context,
+      request: authRequest,
+      cramKey: cramKey,
+    );
+    if (response == null || !response.isSuccessful) {
+      _logger.warning('CramDialog failed or user cancelled');
+      return;
+    }
+
+    _logger.info('Step d: Setting up atClient instance');
+    // d. very important! now that we have authenticated, we can create an atClient instance
+    var dir = await getApplicationSupportDirectory();
+    _logger.info('Application support directory: ${dir.path}');
+
+    var acp = AtClientPreference()
+      ..rootDomain = authRequest.rootDomain.rootDomain
+      ..rootPort = authRequest.rootDomain.rootPort
+      ..namespace = namespace
+      ..commitLogPath = dir.path
+      ..hiveStoragePath = dir.path;
+
+    _logger.info('Setting current atSign: ${response.atSign}');
+    // make sure to use the atChops and atLookUp provided by the response as these are already authenticated.
+    await AtClientManager.getInstance().setCurrentAtSign(
+      response.atSign,
+      namespace,
+      enrollmentId: response.enrollmentId,
+      acp,
+      atChops: response.atChops,
+      atLookUp: response.atLookUp,
+    );
+
+    _logger.info('Navigation to HomePage');
+    if (context.mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const HomePage()),
+      );
+    }
+  }, context: context);
 }
 
 /// Login using an atSign stored in the keychain
-/// This method authenticates using existing keychain credentials
 Future<void> loginWithKeychain(BuildContext context) async {
-  // a. Load existing atSigns from keychain
-  var atSigns = await keychainStorage.getAllAtsigns();
+  await _safeExecute('loginWithKeychain', () async {
+    _logger.info('Step a: Loading atSigns from keychain');
+    var atSigns = await keychainStorage.getAllAtsigns();
+    _logger.info('Found ${atSigns.length} atSigns in keychain: $atSigns');
 
-  if (atSigns.isEmpty) {
-    // No atSigns in keychain, fallback to file login
-    _logger.warning('No atSigns found in keychain');
-    return;
-  }
+    if (atSigns.isEmpty) {
+      _logger.warning('No atSigns found in keychain');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No atSigns found in keychain. Please onboard first.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
 
-  // b. Show AtSignSelectionDialog with existing atSigns
-  AuthRequest? request = await AtSignSelectionDialog.show(
-    context,
-    existingAtSigns: atSigns,
-  );
-  if (request == null) return;
+    _logger.info('Step b: Showing AtSignSelectionDialog with existing atSigns');
+    AuthRequest? request = await AtSignSelectionDialog.show(
+      context,
+      existingAtSigns: atSigns,
+    );
+    if (request == null) {
+      _logger.warning('User cancelled AtSignSelectionDialog');
+      return;
+    }
 
-  // c. Create AuthRequest with KeychainAtKeysIo
-  var authRequest = AtAuthRequest(
-    request.atSign,
-    atKeysIo: KeychainAtKeysIo(),
-    rootDomain: request.rootDomain,
-  );
+    _logger.info(
+      'Step c: Creating AuthRequest with KeychainAtKeysIo for ${request.atSign}',
+    );
+    var authRequest = AtAuthRequest(
+      request.atSign,
+      atKeysIo: KeychainAtKeysIo(),
+      rootDomain: request.rootDomain,
+    );
 
-  // d. Show PkamDialog to complete authentication
-  var response = await PkamDialog.show(
-    context,
-    request: authRequest,
-    backupKeys: [KeychainAtKeysIo()],
-  );
-  if (response == null || !response.isSuccessful) return;
+    _logger.info('Step d: Showing PkamDialog');
+    var response = await PkamDialog.show(
+      context,
+      request: authRequest,
+      backupKeys: [KeychainAtKeysIo()],
+    );
+    if (response == null || !response.isSuccessful) {
+      _logger.warning('PkamDialog failed or user cancelled');
+      return;
+    }
 
-  // e. Create atClient instance
-  await _setupAtClient(context, authRequest, response);
+    _logger.info('Step e: Setting up atClient');
+    await _setupAtClient(context, authRequest, response);
+  }, context: context);
 }
 
 /// Login using an atKeys file from the file system
-/// This method prompts the user to select an atKeys file for authentication
 Future<void> loginWithFile(BuildContext context) async {
-  // b. Show AtKeysFileDialog to select the atKeys file
-  FileAtKeysIo atKeysIo = (await AtKeysFileDialog.show(context))!;
+  await _safeExecute('loginWithFile', () async {
+    _logger.info('Step a: Showing AtKeysFileDialog');
+    // b. Show AtKeysFileDialog to select the atKeys file
+    FileAtKeysIo? atKeysIo = await AtKeysFileDialog.show(context);
 
-  var filepath = atKeysIo.filePath!('');
-  var name = path.basenameWithoutExtension(filepath);
-  var atSign = name.split('_').first;
+    if (atKeysIo == null) {
+      _logger.warning('User cancelled file selection');
+      return;
+    }
 
-  // c. Create AuthRequest with file-based AtKeysIo
-  var authRequest = AtAuthRequest(
-    atSign,
-    atKeysIo: atKeysIo,
-    rootDomain: AtRootDomain.atsignDomain,
-  );
+    _logger.info('Step b: Processing selected file');
+    var filepath = atKeysIo.filePath!('');
+    _logger.info('Selected file path: $filepath');
 
-  // d. Show PkamDialog to complete authentication
-  var response = await PkamDialog.show(
-    context,
-    request: authRequest,
-    backupKeys: [KeychainAtKeysIo()],
-  );
-  if (response == null || !response.isSuccessful) return;
+    var name = path.basenameWithoutExtension(filepath);
+    var atSign = name.split('_').first;
+    _logger.info('Extracted atSign from filename: $atSign');
 
-  // e. Create atClient instance
-  await _setupAtClient(context, authRequest, response);
+    _logger.info('Step c: Creating AuthRequest with file-based AtKeysIo');
+    // c. Create AuthRequest with file-based AtKeysIo
+    var authRequest = AtAuthRequest(
+      atSign,
+      atKeysIo: atKeysIo,
+      rootDomain: AtRootDomain.atsignDomain,
+    );
+
+    _logger.info('Step d: Showing PkamDialog');
+    // d. Show PkamDialog to complete authentication
+    var response = await PkamDialog.show(
+      context,
+      request: authRequest,
+      backupKeys: [KeychainAtKeysIo()],
+    );
+    if (response == null || !response.isSuccessful) {
+      _logger.warning('PkamDialog failed or user cancelled');
+      return;
+    }
+
+    _logger.info('Step e: Setting up atClient');
+    // e. Create atClient instance
+    await _setupAtClient(context, authRequest, response);
+  }, context: context);
 }
 
 Future<void> loginWithApkam(BuildContext context) async {
-  // a. Show AtSignSelectionDialog with existing atSigns
-  AuthRequest? request = await AtSignSelectionDialog.show(context);
-  if (request == null) return;
+  await _safeExecute('loginWithApkam', () async {
+    _logger.info('Step a: Showing AtSignSelectionDialog');
+    // a. Show AtSignSelectionDialog with existing atSigns
+    AuthRequest? request = await AtSignSelectionDialog.show(context);
+    if (request == null) {
+      _logger.warning('User cancelled AtSignSelectionDialog');
+      return;
+    }
 
-  AtEnrollmentResponse? enrollmentResponse = await ApkamActivationDialog.show(
-    context,
-    atSign: request.atSign,
-    rootDomain: request.rootDomain,
-    appName: namespace,
-    deviceName: 'default',
-    namespaces: {namespace: 'rw'},
-  );
+    _logger.info('Step b: Showing ApkamActivationDialog for ${request.atSign}');
+    AtEnrollmentResponse? enrollmentResponse = await ApkamActivationDialog.show(
+      context,
+      atSign: request.atSign,
+      rootDomain: request.rootDomain,
+      appName: namespace,
+      deviceName: 'default',
+      namespaces: {namespace: 'rw'},
+    );
 
-  if (enrollmentResponse == null || enrollmentResponse.atAuthKeys == null) {
-    throw AtAuthenticationException("Enrollment Failed");
-  }
+    if (enrollmentResponse == null) {
+      _logger.severe('Enrollment failed: enrollmentResponse is null');
+      throw AtAuthenticationException(
+        "Enrollment failed: enrollmentResponse is null",
+      );
+    }
 
-  // b. Create AuthRequest with KeychainAtKeysIo
-  var authRequest = AtAuthRequest(
-    request.atSign,
-    atAuthKeys: enrollmentResponse.atAuthKeys!,
-    rootDomain: request.rootDomain,
-  );
+    if (enrollmentResponse.atAuthKeys == null) {
+      _logger.severe('Enrollment failed: atAuthKeys missing');
+      throw AtAuthenticationException('Enrollment failed: atAuthKeys missing');
+    }
 
-  // d. Show PkamDialog to complete authentication
-  var response = await PkamDialog.show(
-    context,
-    request: authRequest,
-    backupKeys: [KeychainAtKeysIo()],
-  );
-  if (response == null || !response.isSuccessful) return;
+    _logger.info('Step c: Creating AuthRequest with atAuthKeys');
+    // b. Create AuthRequest with KeychainAtKeysIo
+    AtAuthRequest authRequest = AtAuthRequest(
+      request.atSign,
+      atAuthKeys: enrollmentResponse.atAuthKeys!,
+      rootDomain: request.rootDomain,
+    );
+    _logger.info('Step d: Showing PkamDialog');
+    // d. Show PkamDialog to complete authentication
+    var response = await PkamDialog.show(
+      context,
+      request: authRequest,
+      backupKeys: [KeychainAtKeysIo()],
+    );
+    if (response == null || !response.isSuccessful) {
+      _logger.warning('PkamDialog failed or user cancelled');
+      return;
+    }
 
-  // e. Create atClient instance
-  await _setupAtClient(context, authRequest, response);
+    _logger.info('Step e: Setting up atClient');
+    // e. Create atClient instance
+    await _setupAtClient(context, authRequest, response);
+  }, context: context);
 }
 
 Future<void> exportKeys(BuildContext context) async {
-  // Get the file path from the save dialog
-  if (AtClientManager.getInstance().atClient == null) return;
-  final atsign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
-  final filePath = await _openFileSaveDialog(
-    suggestedFileName: '${atsign}_key.atKeys',
-    fileExtension: '.atKeys',
-    allowedExtensions: ['atKeys'],
-  );
+  await _safeExecute('exportKeys', () async {
+    _logger.info('Checking if atClient is initialized');
+    if (AtClientManager.getInstance().atClient == null) {
+      _logger.warning('atClient is null, cannot export keys');
+      return;
+    }
 
-  if (filePath == null) return;
+    final atsign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
+    _logger.info('Exporting keys for: $atsign');
 
-  FileAtKeysIo atKeysIo = FileAtKeysIo(filePath: (_) => filePath);
-  var atKeys = await keychainStorage.getAtsign(atsign);
-  atKeysIo.write(atsign!, atKeys!);
+    final filePath = await _openFileSaveDialog(
+      suggestedFileName: '${atsign}_key.atKeys',
+      fileExtension: '.atKeys',
+      allowedExtensions: ['atKeys'],
+    );
+
+    if (filePath == null) {
+      _logger.warning('User cancelled file save dialog');
+      return;
+    }
+
+    _logger.info('Selected save path: $filePath');
+    FileAtKeysIo atKeysIo = FileAtKeysIo(filePath: (_) => filePath);
+
+    _logger.info('Retrieving keys from keychain');
+    var atKeys = await keychainStorage.getAtsign(atsign);
+
+    if (atKeys == null) {
+      _logger.severe('No keys found in keychain for $atsign');
+      throw Exception('No keys found in keychain for $atsign');
+    }
+
+    _logger.info('Writing keys to file');
+    atKeysIo.write(atsign, atKeys);
+    _logger.info('Keys exported successfully');
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Keys exported to $filePath')));
+    }
+  }, context: context);
 }
 
 /// Opens a file save dialog and returns the selected file path.
-/// Returns null if the user cancels the dialog.
 Future<String?> _openFileSaveDialog({
   String? suggestedFileName,
   String? fileExtension,
   List<String>? allowedExtensions,
 }) async {
   try {
+    _logger.info('Opening file save dialog');
     // Open save file dialog
     String? outputPath = await FilePicker.platform.saveFile(
       dialogTitle: 'Save File',
@@ -201,17 +398,22 @@ Future<String?> _openFileSaveDialog({
 
     // User cancelled the dialog
     if (outputPath == null) {
+      _logger.info('User cancelled file save dialog');
       return null;
     }
 
     // Ensure the file has the correct extension if specified
     if (fileExtension != null && !outputPath.endsWith(fileExtension)) {
       outputPath = '$outputPath$fileExtension';
+      _logger.info('Added extension to path: $outputPath');
     }
 
     return outputPath;
-  } catch (e) {
+  } catch (e, stackTrace) {
+    _logger.severe('Error opening file save dialog: $e');
+    _logger.severe('Stack trace: $stackTrace');
     print('Error opening file save dialog: $e');
+    print('Stack trace: $stackTrace');
     return null;
   }
 }
@@ -220,9 +422,13 @@ Future<String?> _openFileSaveDialog({
 Future<void> _setupAtClient(
   BuildContext context,
   AtAuthRequest authRequest,
-  dynamic response,
+  AuthResponse response,
 ) async {
+  _logger.info('Setting up atClient for ${response.atSign}');
+
   var dir = await getApplicationSupportDirectory();
+  _logger.info('Using directory: ${dir.path}');
+
   var acp = AtClientPreference()
     ..rootDomain = authRequest.rootDomain.rootDomain
     ..rootPort = authRequest.rootDomain.rootPort
@@ -230,59 +436,104 @@ Future<void> _setupAtClient(
     ..commitLogPath = dir.path
     ..hiveStoragePath = dir.path;
 
+  _logger.info('AtClientPreference configured:');
+  _logger.info('  - rootDomain: ${acp.rootDomain}');
+  _logger.info('  - rootPort: ${acp.rootPort}');
+  _logger.info('  - namespace: ${acp.namespace}');
+  if (response.enrollmentId == null) {
+    _logger.warning("EnrollmentId is null");
+  }
   // Make sure to use the atChops and atLookUp provided by the response
   await AtClientManager.getInstance().setCurrentAtSign(
     response.atSign,
     namespace,
     acp,
+    enrollmentId: response.enrollmentId,
     atChops: response.atChops,
     atLookUp: response.atLookUp,
   );
 
+  _logger.info('atClient setup complete');
+
   if (context.mounted) {
+    _logger.info('Navigating to HomePage');
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => const HomePage()),
     );
+  } else {
+    _logger.warning('Context not mounted, skipping navigation');
   }
 }
 
 /// remove all atsigns from the keychain
 Future<void> clearAllAtsigns() async {
-  await keychainStorage.deleteAllAtKeysData();
+  await _safeExecute('clearAllAtsigns', () async {
+    _logger.info('Clearing all atSigns from keychain');
+    await keychainStorage.deleteAllAtKeysData();
+    _logger.info('All atSigns cleared successfully');
+  });
 }
 
 /// This is an example of writing your own dialog to remove an atsign from the keychain
 Future<void> removeAtsign(BuildContext context) async {
-  var items = await keychainStorage.getAllAtsigns();
-  String? atsign = await showDialog<String>(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: const Text('Select an atSign to clear'),
-        content: SizedBox(
-          width: 300,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: items.length,
-            itemBuilder: (BuildContext context, int index) {
-              return ListTile(
-                title: Text(items[index]),
-                onTap: () {
-                  Navigator.pop(context, items[index]);
-                },
-              );
-            },
+  await _safeExecute('removeAtsign', () async {
+    _logger.info('Getting all atSigns for removal dialog');
+    var items = await keychainStorage.getAllAtsigns();
+    _logger.info('Found ${items.length} atSigns: $items');
+
+    if (items.isEmpty) {
+      _logger.warning('No atSigns to remove');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No atSigns found in keychain')),
+        );
+      }
+      return;
+    }
+
+    String? atsign = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Select an atSign to clear'),
+          content: SizedBox(
+            width: 300,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: items.length,
+              itemBuilder: (BuildContext context, int index) {
+                return ListTile(
+                  title: Text(items[index]),
+                  onTap: () {
+                    Navigator.pop(context, items[index]);
+                  },
+                );
+              },
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-        ],
-      );
-    },
-  );
-  keychainStorage.removeAtsignFromKeychain(atsign!);
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (atsign != null) {
+      _logger.info('Removing atSign: $atsign');
+      await keychainStorage.removeAtsignFromKeychain(atsign);
+      _logger.info('atSign removed successfully');
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Removed $atsign from keychain')),
+        );
+      }
+    } else {
+      _logger.info('User cancelled atSign removal');
+    }
+  }, context: context);
 }

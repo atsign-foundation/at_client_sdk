@@ -1,3 +1,4 @@
+import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 
@@ -83,6 +84,72 @@ class AtKeys {
     }
     return keys;
   }
+
+  AtChops toAtChops() {
+    //if the keys contain an apkamSymmetricKey, they're a apkam key
+    return switch (apkamSymmetricKey) {
+      AtBytes() => _createApkamChops(this),
+      null => _createPkamChops(this),
+    };
+  }
+}
+
+// Splitting these implementations to improve understanding
+
+///APKAMChops should contain:
+AtChops _createApkamChops(AtKeys atKeys) {
+  if (atKeys.apkamPublicKey == null) {
+    AtKeyNotFoundException(
+        "apkamPublicKey not found in AtKeys, unable to make atChops instance");
+  }
+  if (atKeys.apkamSymmetricKey == null) {
+    throw AtKeyNotFoundException(
+        "apkamSymmetricKey not found in AtKeys, unable to make atChops instance");
+  }
+  final atEncryptionKeyPair = AtEncryptionKeyPair.create(
+    atKeys.defaultEncryptionPublicKey!.toString(),
+    atKeys.defaultEncryptionPrivateKey == null
+        ? ''
+        : atKeys.defaultEncryptionPrivateKey!.toString(),
+  );
+
+  final atPkamKeyPair = AtPkamKeyPair.create(
+    atKeys.apkamPublicKey!.toString(),
+    atKeys.apkamPrivateKey!.toString(),
+  );
+
+  final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
+    ..apkamSymmetricKey = AESKey(atKeys.apkamSymmetricKey!.toString());
+
+  if (atKeys.defaultSelfEncryptionKey != null) {
+    atChopsKeys.selfEncryptionKey =
+        AESKey(atKeys.defaultSelfEncryptionKey!.toString());
+  }
+
+  return AtChopsImpl(atChopsKeys);
+}
+
+AtChops _createPkamChops(AtKeys atKeysFile) {
+  if (atKeysFile.defaultEncryptionPrivateKey == null) {
+    throw AtPrivateKeyNotFoundException(
+        'PKAM mode requires defaultEncryptionPrivateKey');
+  }
+
+  final atEncryptionKeyPair = AtEncryptionKeyPair.create(
+    atKeysFile.defaultEncryptionPublicKey!.toString(),
+    atKeysFile.defaultEncryptionPrivateKey!.toString(),
+  );
+
+  final atPkamKeyPair = AtPkamKeyPair.create(
+    atKeysFile.apkamPublicKey!.toString(),
+    atKeysFile.apkamPrivateKey!.toString(),
+  );
+
+  final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
+    ..selfEncryptionKey =
+        AESKey(atKeysFile.defaultSelfEncryptionKey!.toString());
+
+  return AtChopsImpl(atChopsKeys);
 }
 
 bool _existsAndNotNull(Map<String, dynamic> json, String key) {
