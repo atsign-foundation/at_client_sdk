@@ -172,7 +172,7 @@ abstract class AtEnrollment {
   ///   // Handle errors
   /// }
   /// ```
-  Future<AtEnrollmentResponse> waitForApproval(
+  Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
     bool logProgress = false,
     int maxRetries = 48,

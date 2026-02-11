@@ -96,7 +96,15 @@ class AtKeys {
 
 // Splitting these implementations to improve understanding
 
-///APKAMChops should contain:
+/// APKAMChops should contain:
+///   - apkamPublicKey
+///   - apkamPrivateKey
+///   - usual PKAM keys
+/// As well as APKAMChops can potentially have two states:
+///   - approval
+///   - post approval
+/// During approval: the enroll will wait to confirm via PKAM
+/// post approval: we fetch the defaultEncryptionPrivateKey & defaultSelfEncryptionKey
 AtChops _createApkamChops(AtKeys atKeys) {
   if (atKeys.apkamPublicKey == null) {
     AtKeyNotFoundException(

@@ -39,7 +39,6 @@ class AtEnrollmentImpl implements AtEnrollment {
   Future<AtEnrollmentResponse> submit(
       EnrollmentRequest enrollmentRequest, AtLookUp atLookUp) async {
     AtEnrollmentResponse atEnrollmentResponse;
-    _logger.level = 'INFO';
     switch (enrollmentRequest) {
       case FirstEnrollmentRequest _:
         atEnrollmentResponse =
@@ -235,8 +234,12 @@ class AtEnrollmentImpl implements AtEnrollment {
     return enrollmentResponse;
   }
 
+  /// waits for Approval of the enrollmentId related to [enrollmentResponse]
+  /// completes the end of the handshake for the APKAM flow
+  ///
+  /// returns [AtEnrollmentResponse] to intake additional keys provided after submission
   @override
-  Future<AtEnrollmentResponse> waitForApproval(
+  Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
     Duration retryInterval = const Duration(seconds: 2),
     bool logProgress = true,
@@ -263,9 +266,6 @@ class AtEnrollmentImpl implements AtEnrollment {
       enrollmentResponse.rootDomain!.rootPort,
     );
 
-    // Create AtChops instance and assign it to the lookup for PKAM authentication
-    AtKeys atKeys = enrollmentResponse.atAuthKeys!;
-
     AtChops atChops = enrollmentResponse.atAuthKeys!.toAtChops();
     atLookup.atChops = atChops;
 
@@ -277,6 +277,10 @@ class AtEnrollmentImpl implements AtEnrollment {
       maxRetries: maxRetries,
     );
 
+    // post approval:
+    // after pkam authentication is accepted
+
+    // fetch the following keys from the atServer
     Map<String, dynamic> encPrivKeyResponse =
         await _getDefaultEncryptionPrivateKey(
       atLookup,
@@ -291,11 +295,11 @@ class AtEnrollmentImpl implements AtEnrollment {
     );
 
     // decrypting the following after fetching
-    // selfEncryptionKey for atChops / client
-    // defaultEncryptionPrivateKey for atChops / client
+    // selfEncryptionKey (encrypted via apkamSymmetricKey from the enrollment)
+    // defaultEncryptionPrivateKey (encrypted via apkamSymmetricKey from the enrollment)
 
-    final aesEncryption =
-        StringAESEncryptor(AESKey(atKeys.apkamSymmetricKey!.toString()));
+    final aesEncryption = StringAESEncryptor(
+        AESKey(enrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString()));
 
     String decryptedSelfEncryptionKey = aesEncryption.decrypt(
       selfEncKeyResponse['value'],
@@ -306,11 +310,12 @@ class AtEnrollmentImpl implements AtEnrollment {
       encPrivKeyResponse['value'],
       iv: AtChopsUtil.generateIVFromBase64String(encPrivKeyResponse['iv']),
     );
+
+    // set the fetched & decrypted keys in the reference
     enrollmentResponse.atAuthKeys!.defaultSelfEncryptionKey =
         AtBytes.fromString(decryptedSelfEncryptionKey);
     enrollmentResponse.atAuthKeys!.defaultEncryptionPrivateKey =
         AtBytes.fromString(decryptedDefaultEncryptionPrivateKey);
-    return enrollmentResponse;
   }
 
   @override

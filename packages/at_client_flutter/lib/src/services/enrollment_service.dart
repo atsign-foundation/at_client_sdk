@@ -47,7 +47,7 @@ class FlutterEnrollmentService {
           atSign: request.atSign, enrollmentData: enrollmentData);
     }
     if (waitForApproval) {
-      atEnrollmentResponse = await awaitApproval(atEnrollmentResponse);
+      await awaitApproval(atEnrollmentResponse);
     }
     return atEnrollmentResponse;
   }
@@ -117,9 +117,9 @@ class FlutterEnrollmentService {
     return await _atEnrollment.list(filters, atLookUp, arx: arx, drx: drx);
   }
 
-  Future<AtEnrollmentResponse> awaitApproval(
+  Future<void> awaitApproval(
       AtEnrollmentResponse response) async {
-    return await _atEnrollment.waitForApproval(response);
+    await _atEnrollment.waitForApproval(response);
   }
 
   void _listenForNewRequest() {

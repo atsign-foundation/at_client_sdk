@@ -1,5 +1,4 @@
 import 'package:example/main.dart';
-import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
@@ -33,17 +32,6 @@ Future<T?> _safeExecute<T>(
   } catch (e, stackTrace) {
     _logger.severe('ERROR in $operationName: $e');
     _logger.severe('Stack trace: $stackTrace');
-
-    // Print to console as well for debugging
-    print('╔════════════════════════════════════════════════════════════════');
-    print('║ CAUGHT EXCEPTION in $operationName');
-    print('╠════════════════════════════════════════════════════════════════');
-    print('║ Error: $e');
-    print('║ Type: ${e.runtimeType}');
-    print('╠════════════════════════════════════════════════════════════════');
-    print('║ Stack Trace:');
-    print('║ $stackTrace');
-    print('╚════════════════════════════════════════════════════════════════');
 
     if (context != null && context.mounted && showErrorDialog) {
       _showErrorDialog(context, operationName, e, stackTrace);
@@ -105,8 +93,7 @@ void _showErrorDialog(
 /// This method is an example of how an application creates their own customized onboarding flow
 Future<void> onboard(BuildContext context) async {
   await _safeExecute('onboard', () async {
-    _logger.info('Step a: Showing AtSignSelectionDialog');
-    // a. Show AtSignSelectionDialog
+    _logger.info('Step 1: Showing AtSignSelectionDialog');
     AuthRequest? authRequest = await AtSignSelectionDialog.show(context);
     if (!context.mounted || authRequest == null) {
       _logger.warning(
@@ -116,9 +103,8 @@ Future<void> onboard(BuildContext context) async {
     }
 
     _logger.info(
-      'Step b: Showing RegistrarCramDialog for ${authRequest.atSign}',
+      'Step 2: Showing RegistrarCramDialog for ${authRequest.atSign}',
     );
-    // b. Show RegistrarCramDialog
     var cramKey = await RegistrarCramDialog.show(
       context,
       (authRequest as AtOnboardingRequest),
@@ -131,8 +117,7 @@ Future<void> onboard(BuildContext context) async {
       return;
     }
 
-    _logger.info('Step c: Showing CramDialog to complete onboarding');
-    // c. Show CramDialog to complete onboarding
+    _logger.info('Step 3: Showing CramDialog to complete onboarding');
     var response = await CramDialog.show(
       context,
       request: authRequest,
@@ -143,8 +128,8 @@ Future<void> onboard(BuildContext context) async {
       return;
     }
 
-    _logger.info('Step d: Setting up atClient instance');
-    // d. very important! now that we have authenticated, we can create an atClient instance
+    _logger.info('Step 5: Setting up atClient instance');
+    // 5. very important! now that we have authenticated, we can create an atClient instance
     var dir = await getApplicationSupportDirectory();
     _logger.info('Application support directory: ${dir.path}');
 
@@ -179,7 +164,7 @@ Future<void> onboard(BuildContext context) async {
 /// Login using an atSign stored in the keychain
 Future<void> loginWithKeychain(BuildContext context) async {
   await _safeExecute('loginWithKeychain', () async {
-    _logger.info('Step a: Loading atSigns from keychain');
+    _logger.info('Step 1: Loading atSigns from keychain');
     var atSigns = await keychainStorage.getAllAtsigns();
     _logger.info('Found ${atSigns.length} atSigns in keychain: $atSigns');
 
@@ -197,7 +182,7 @@ Future<void> loginWithKeychain(BuildContext context) async {
       return;
     }
 
-    _logger.info('Step b: Showing AtSignSelectionDialog with existing atSigns');
+    _logger.info('Step 2: Showing AtSignSelectionDialog with existing atSigns');
     AuthRequest? request = await AtSignSelectionDialog.show(
       context,
       existingAtSigns: atSigns,
@@ -208,7 +193,7 @@ Future<void> loginWithKeychain(BuildContext context) async {
     }
 
     _logger.info(
-      'Step c: Creating AuthRequest with KeychainAtKeysIo for ${request.atSign}',
+      'Step 3: Creating AuthRequest with KeychainAtKeysIo for ${request.atSign}',
     );
     var authRequest = AtAuthRequest(
       request.atSign,
@@ -216,7 +201,7 @@ Future<void> loginWithKeychain(BuildContext context) async {
       rootDomain: request.rootDomain,
     );
 
-    _logger.info('Step d: Showing PkamDialog');
+    _logger.info('Step 4: Showing PkamDialog');
     var response = await PkamDialog.show(
       context,
       request: authRequest,
@@ -227,7 +212,7 @@ Future<void> loginWithKeychain(BuildContext context) async {
       return;
     }
 
-    _logger.info('Step e: Setting up atClient');
+    _logger.info('Step 5: Setting up atClient');
     await _setupAtClient(context, authRequest, response);
   }, context: context);
 }
@@ -235,8 +220,7 @@ Future<void> loginWithKeychain(BuildContext context) async {
 /// Login using an atKeys file from the file system
 Future<void> loginWithFile(BuildContext context) async {
   await _safeExecute('loginWithFile', () async {
-    _logger.info('Step a: Showing AtKeysFileDialog');
-    // b. Show AtKeysFileDialog to select the atKeys file
+    _logger.info('Step 1: Showing AtKeysFileDialog');
     FileAtKeysIo? atKeysIo = await AtKeysFileDialog.show(context);
 
     if (atKeysIo == null) {
@@ -244,7 +228,7 @@ Future<void> loginWithFile(BuildContext context) async {
       return;
     }
 
-    _logger.info('Step b: Processing selected file');
+    _logger.info('Step 2: Processing selected file');
     var filepath = atKeysIo.filePath!('');
     _logger.info('Selected file path: $filepath');
 
@@ -252,16 +236,14 @@ Future<void> loginWithFile(BuildContext context) async {
     var atSign = name.split('_').first;
     _logger.info('Extracted atSign from filename: $atSign');
 
-    _logger.info('Step c: Creating AuthRequest with file-based AtKeysIo');
-    // c. Create AuthRequest with file-based AtKeysIo
+    _logger.info('Step 3: Creating AuthRequest with file-based AtKeysIo');
     var authRequest = AtAuthRequest(
       atSign,
       atKeysIo: atKeysIo,
       rootDomain: AtRootDomain.atsignDomain,
     );
 
-    _logger.info('Step d: Showing PkamDialog');
-    // d. Show PkamDialog to complete authentication
+    _logger.info('Step 4: Showing PkamDialog');
     var response = await PkamDialog.show(
       context,
       request: authRequest,
@@ -272,23 +254,21 @@ Future<void> loginWithFile(BuildContext context) async {
       return;
     }
 
-    _logger.info('Step e: Setting up atClient');
-    // e. Create atClient instance
+    _logger.info('Step 5: Setting up atClient');
     await _setupAtClient(context, authRequest, response);
   }, context: context);
 }
 
 Future<void> loginWithApkam(BuildContext context) async {
   await _safeExecute('loginWithApkam', () async {
-    _logger.info('Step a: Showing AtSignSelectionDialog');
-    // a. Show AtSignSelectionDialog with existing atSigns
+    _logger.info('Step 1: Showing AtSignSelectionDialog');
     AuthRequest? request = await AtSignSelectionDialog.show(context);
     if (request == null) {
       _logger.warning('User cancelled AtSignSelectionDialog');
       return;
     }
 
-    _logger.info('Step b: Showing ApkamActivationDialog for ${request.atSign}');
+    _logger.info('Step 2: Showing ApkamActivationDialog for ${request.atSign}');
     AtEnrollmentResponse? enrollmentResponse = await ApkamActivationDialog.show(
       context,
       atSign: request.atSign,
@@ -310,15 +290,13 @@ Future<void> loginWithApkam(BuildContext context) async {
       throw AtAuthenticationException('Enrollment failed: atAuthKeys missing');
     }
 
-    _logger.info('Step c: Creating AuthRequest with atAuthKeys');
-    // b. Create AuthRequest with KeychainAtKeysIo
+    _logger.info('Step 3: Creating AuthRequest with atAuthKeys');
     AtAuthRequest authRequest = AtAuthRequest(
       request.atSign,
       atAuthKeys: enrollmentResponse.atAuthKeys!,
       rootDomain: request.rootDomain,
     );
-    _logger.info('Step d: Showing PkamDialog');
-    // d. Show PkamDialog to complete authentication
+    _logger.info('Step 4: Showing PkamDialog');
     var response = await PkamDialog.show(
       context,
       request: authRequest,
@@ -329,8 +307,7 @@ Future<void> loginWithApkam(BuildContext context) async {
       return;
     }
 
-    _logger.info('Step e: Setting up atClient');
-    // e. Create atClient instance
+    _logger.info('Step 5: Setting up atClient');
     await _setupAtClient(context, authRequest, response);
   }, context: context);
 }
@@ -338,10 +315,6 @@ Future<void> loginWithApkam(BuildContext context) async {
 Future<void> exportKeys(BuildContext context) async {
   await _safeExecute('exportKeys', () async {
     _logger.info('Checking if atClient is initialized');
-    if (AtClientManager.getInstance().atClient == null) {
-      _logger.warning('atClient is null, cannot export keys');
-      return;
-    }
 
     final atsign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
     _logger.info('Exporting keys for: $atsign');
@@ -412,8 +385,6 @@ Future<String?> _openFileSaveDialog({
   } catch (e, stackTrace) {
     _logger.severe('Error opening file save dialog: $e');
     _logger.severe('Stack trace: $stackTrace');
-    print('Error opening file save dialog: $e');
-    print('Stack trace: $stackTrace');
     return null;
   }
 }
@@ -452,8 +423,6 @@ Future<void> _setupAtClient(
     atChops: response.atChops,
     atLookUp: response.atLookUp,
   );
-
-  _logger.info('atClient setup complete');
 
   if (context.mounted) {
     _logger.info('Navigating to HomePage');

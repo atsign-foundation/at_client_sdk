@@ -1,56 +1,25 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
-import 'package:example/walkthrough.dart';
 import 'package:at_utils/at_logger.dart';
-import 'dart:async';
+
+import 'package:example/walkthrough.dart';
 
 final AtSignLogger _logger = AtSignLogger('main');
 
-void main() {
-  // Capture all errors in the Flutter framework
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
-    _logger.info(
-      '╔════════════════════════════════════════════════════════════════',
-    );
-    _logger.info('║ FLUTTER ERROR CAUGHT');
-    _logger.info(
-      '╠════════════════════════════════════════════════════════════════',
-    );
-    _logger.info('║ ${details.exception}');
-    _logger.info(
-      '╠════════════════════════════════════════════════════════════════',
-    );
-    _logger.info('║ Stack trace:');
-    _logger.info('║ ${details.stack}');
-    _logger.info(
-      '╚════════════════════════════════════════════════════════════════',
-    );
-  };
+// All the of UI for the main screen
 
+void main() {
   // Capture all errors outside of Flutter framework
   runZonedGuarded(
     () {
       runApp(const MyApp());
     },
     (error, stack) {
-      _logger.info(
-        '╔════════════════════════════════════════════════════════════════',
-      );
-      _logger.info('║ ASYNC ERROR CAUGHT');
-      _logger.info(
-        '╠════════════════════════════════════════════════════════════════',
-      );
       _logger.info('║ Error: $error');
       _logger.info('║ Type: ${error.runtimeType}');
-      _logger.info(
-        '╠════════════════════════════════════════════════════════════════',
-      );
       _logger.info('║ Stack trace:');
       _logger.info('║ $stack');
-      _logger.info(
-        '╚════════════════════════════════════════════════════════════════',
-      );
     },
   );
 }
@@ -201,12 +170,12 @@ class MyHomePage extends StatelessWidget {
               children: [
                 const Spacer(flex: 2),
 
-                // Title - using theme text style
+                // Title
                 Text('My App', style: textTheme.headlineMedium),
 
                 const SizedBox(height: 8),
 
-                // Subtitle - using theme text style with color modification
+                // Subtitl
                 Text(
                   'Secure authentication with atSign',
                   style: textTheme.bodyMedium?.copyWith(
@@ -216,7 +185,7 @@ class MyHomePage extends StatelessWidget {
 
                 const SizedBox(height: 48),
 
-                // Login Button - now calls loginWithKeychain
+                // Login Button
                 ElevatedButton(
                   onPressed: () async {
                     _logger.info('═══ Login with Keychain button pressed ═══');
@@ -264,7 +233,7 @@ class MyHomePage extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // Divider with "OR" - using theme divider
+                // Divider with "OR"
                 Row(
                   children: [
                     const Expanded(child: Divider()),
@@ -283,7 +252,7 @@ class MyHomePage extends StatelessWidget {
 
                 const SizedBox(height: 16),
 
-                // Register Button - now says "Onboard a New atSign"
+                // Register Button
                 OutlinedButton(
                   onPressed: () async {
                     _logger.info('═══ Onboard button pressed ═══');
@@ -310,7 +279,7 @@ class MyHomePage extends StatelessWidget {
 
                 const SizedBox(height: 16),
 
-                // NEW: Add atSign by File Button
+                // Add atSign via File
                 OutlinedButton(
                   onPressed: () async {
                     _logger.info('═══ Login with File button pressed ═══');
@@ -337,7 +306,7 @@ class MyHomePage extends StatelessWidget {
 
                 const SizedBox(height: 16),
 
-                // Manage Paired atSigns text button - using theme
+                // Manage Paired atSigns text button
                 TextButton(
                   onPressed: () {
                     showModalBottomSheet(
@@ -353,7 +322,6 @@ class MyHomePage extends StatelessWidget {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              // Header - using theme text style
                               Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 20,
@@ -370,7 +338,7 @@ class MyHomePage extends StatelessWidget {
                               ),
                               const Divider(),
 
-                              // Clear atSign option - using theme colors
+                              // Clear atSign option
                               ListTile(
                                 leading: Icon(
                                   Icons.clear,
@@ -390,7 +358,7 @@ class MyHomePage extends StatelessWidget {
                                 },
                               ),
 
-                              // Reset all atSigns option - using theme colors
+                              // Reset all atSigns option
                               ListTile(
                                 leading: Icon(
                                   Icons.restore,
@@ -427,7 +395,7 @@ class MyHomePage extends StatelessWidget {
 
                 const Spacer(flex: 2),
 
-                // Footer text - using theme text style
+                // Footer text
                 Padding(
                   padding: const EdgeInsets.only(bottom: 24),
                   child: Column(
@@ -462,7 +430,6 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    bool _isExporting = false;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Home'),
