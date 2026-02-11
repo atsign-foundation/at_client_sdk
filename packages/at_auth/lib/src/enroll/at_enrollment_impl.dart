@@ -67,7 +67,6 @@ class AtEnrollmentImpl implements AtEnrollment {
 
     String? serverResponse =
         await _executeEnrollCommand(enrollVerbBuilder, atLookUp);
-    _logger.shout("server: $serverResponse");
     var enrollJson = jsonDecode(serverResponse);
     var enrollmentIdFromServer = enrollJson[AtConstants.enrollmentId];
     var enrollStatus = getEnrollStatusFromString(enrollJson['status']);

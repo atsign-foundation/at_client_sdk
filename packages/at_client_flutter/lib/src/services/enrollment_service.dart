@@ -117,8 +117,7 @@ class FlutterEnrollmentService {
     return await _atEnrollment.list(filters, atLookUp, arx: arx, drx: drx);
   }
 
-  Future<void> awaitApproval(
-      AtEnrollmentResponse response) async {
+  Future<void> awaitApproval(AtEnrollmentResponse response) async {
     await _atEnrollment.waitForApproval(response);
   }
 
