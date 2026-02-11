@@ -66,10 +66,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   final List<TextEditingController> _controllers =
       List.generate(6, (_) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
-  Timer? _resendTimer;
   bool _isLoading = false;
-  int _resendCountdown = 30;
-  bool _canResend = false;
   final enrollmentService = FlutterEnrollmentService();
   final String atSign;
   final AtRootDomain rootDomain;
