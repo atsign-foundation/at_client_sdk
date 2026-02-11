@@ -49,70 +49,14 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
   final TextEditingController _atSignTextController = TextEditingController();
   final TextEditingController _domainTextController = TextEditingController();
 
-  Widget _buildInfoIcon(String tooltipText) {
-    return Tooltip(
-      message: tooltipText,
-      child: Icon(
-        Icons.info_outline,
-        size: 16,
-        color: Colors.grey[600],
-      ),
-    );
-  }
-
-  Widget _buildDropdownField({
-    required TextEditingController controller,
-    required String hint,
-    required String infoText,
-    required String labelText,
-    required List<String>? items,
-    required Function(String?) onChanged,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Text(
-                labelText,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: widget.themeData.primaryColor,
-                ),
-              ),
-              const SizedBox(width: 6),
-              _buildInfoIcon(infoText),
-            ],
-          ),
-          const SizedBox(height: 16),
-          TypableDropdown(
-            items: items ?? [],
-            hintText: hint,
-            onChanged: onChanged,
-          ),
-          const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-
   void _handleSubmit() {
     if (_selectedAtSign != null) {
       AtOnboardingRequest request = AtOnboardingRequest(
         _selectedAtSign!,
       );
       if (_selectedDomain != null && _selectedDomain!.isNotEmpty) {
-        var split = _selectedDomain!.split(':');
-        String rootDomain = split[0];
-        int rootPort = split.length > 1 ? int.parse(split[1]) : 64;
-        request.rootDomain = AtRootDomain(
-          rootDomain,
-          rootPort,
-        );
+        AtRootDomain domain = AtRootDomain.parse(_selectedDomain!);
+        request.rootDomain = domain;
       }
       Navigator.of(context).pop(request);
     }
@@ -132,11 +76,11 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // atSign Dropdown
-            _buildDropdownField(
+            _DropdownField(
               labelText: 'Type or select an atSign',
               infoText: "Select an atSign to proceed with onboarding.",
               hint: 'Type atSign or select from existing',
-              controller: _atSignTextController,
+              themeData: widget.themeData,
               items: widget.existingAtSigns,
               onChanged: (value) {
                 setState(() {
@@ -188,12 +132,12 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
                   const SizedBox(height: 20),
 
                   // Domain Field
-                  _buildDropdownField(
+                  _DropdownField(
                     labelText: 'Type or select a root domain',
                     infoText:
                         "Only for custom implementations. Specify a root domain.",
                     hint: 'Type a root domain or select from existing',
-                    controller: _domainTextController,
+                    themeData: widget.themeData,
                     items: widget.existingDomains?.values
                         .map((domain) =>
                             "${domain.rootDomain}:${domain.rootPort}")
@@ -251,5 +195,64 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
     _atSignTextController.dispose();
     _domainTextController.dispose();
     super.dispose();
+  }
+}
+
+class _DropdownField extends StatelessWidget {
+  final ThemeData themeData;
+  final String labelText;
+  final String infoText;
+  final String hint;
+  final List<String>? items;
+  final Function(String?) onChanged;
+
+  const _DropdownField({
+    required this.themeData,
+    required this.labelText,
+    required this.infoText,
+    required this.hint,
+    required this.items,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Text(
+                labelText,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: themeData.primaryColor,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: infoText,
+                child: Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          TypableDropdown(
+            items: items ?? [],
+            hintText: hint,
+            onChanged: onChanged,
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
   }
 }
