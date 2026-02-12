@@ -23,7 +23,7 @@ dependencies:
   encrypt: ^5.0.3
   phosphor_flutter: ^2.1.0
   intl: ^0.20.2
-  file_picker: 10.3.8 #10.3.9 contains non-addressed breaking change
+  file_picker: 10.3.10
 
 dev_dependencies:
   path: ^1.9.0
