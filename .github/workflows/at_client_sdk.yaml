@@ -6,6 +6,7 @@
 name: at_client_sdk
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - trunk
