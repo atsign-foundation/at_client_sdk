@@ -199,10 +199,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       logger.finer(
           'Onboarding successful.Generating keyfile in path: ${atOnboardingPreference.atKeysFilePath}');
       stderr.writeln();
-      await _generateAtKeysFile(
-        atOnboardingResponse.atAuthKeys!,
-        enrollmentId: atOnboardingResponse.enrollmentId,
-      );
+      //     await _generateAtKeysFile(
+      //     atOnboardingResponse.atAuthKeys!,
+      //   enrollmentId: atOnboardingResponse.enrollmentId,
+      //);
 
       if (autoCompleteActivation) {
         await completeActivation();
@@ -667,8 +667,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   @override
   Future<bool> authenticate({String? enrollmentId}) async {
     atAuth ??= AtAuth.create();
-    var atAuthRequest = AtAuthRequest(
-        _atSign,
+    var atAuthRequest = AtAuthRequest(_atSign,
         atKeysIo: FileAtKeysIo(
             filePath: !atOnboardingPreference.atKeysFilePath.isNull
                 ? (_) => atOnboardingPreference.atKeysFilePath!

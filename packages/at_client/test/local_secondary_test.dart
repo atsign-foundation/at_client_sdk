@@ -78,8 +78,9 @@ void main() {
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
       final pkamPrivateKey = RSAKeypair.fromRandom().privateKey.toString();
-      await localSecondary.putValue(
+      final success = await localSecondary.putValue(
           AtConstants.atPkamPrivateKey, pkamPrivateKey);
+      expect(success, true);
       expect(await localSecondary.getPkamPrivateKey(), pkamPrivateKey);
     });
 
@@ -93,7 +94,9 @@ void main() {
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
       final pkamPublicKey = RSAKeypair.fromRandom().publicKey.toString();
-      await localSecondary.putValue(AtConstants.atPkamPublicKey, pkamPublicKey);
+      final success = await localSecondary.putValue(
+          AtConstants.atPkamPublicKey, pkamPublicKey);
+      expect(success, true);
       expect(await localSecondary.getPkamPublicKey(), pkamPublicKey);
     });
 
@@ -108,8 +111,9 @@ void main() {
       final localSecondary = LocalSecondary(atClient);
       final encryptionPrivateKey =
           RSAKeypair.fromRandom().privateKey.toString();
-      await localSecondary.putValue(
+      final success = await localSecondary.putValue(
           AtConstants.atEncryptionPrivateKey, encryptionPrivateKey);
+      expect(success, true);
       expect(
           await localSecondary.getEncryptionPrivateKey(), encryptionPrivateKey);
     });
@@ -124,8 +128,9 @@ void main() {
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
       final encryptionPublicKey = RSAKeypair.fromRandom().publicKey.toString();
-      await localSecondary.putValue(
+      final success = await localSecondary.putValue(
           '${AtConstants.atEncryptionPublicKey}$atSign', encryptionPublicKey);
+      expect(success, true);
       expect(await localSecondary.getEncryptionPublicKey(atSign),
           encryptionPublicKey);
     });
@@ -140,8 +145,9 @@ void main() {
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
       final selfEncryptionKey = EncryptionUtil.generateAESKey();
-      await localSecondary.putValue(
+      final success = await localSecondary.putValue(
           AtConstants.atEncryptionSelfKey, selfEncryptionKey);
+      expect(success, true);
       expect(await localSecondary.getEncryptionSelfKey(), selfEncryptionKey);
     });
   });
@@ -789,6 +795,10 @@ Future<void> setupLocalStorage(String storageDir, String atSign) async {
 
 Future<void> tearDownLocalStorage(String storageDir) async {
   try {
+    // Close factories BEFORE deleting storage (prevents open file handles)
+    await SecondaryPersistenceStoreFactory.getInstance().close();
+    await AtCommitLogManagerImpl.getInstance().close();
+
     var isExists = await Directory(storageDir).exists();
     if (isExists) {
       Directory(storageDir).deleteSync(recursive: true);

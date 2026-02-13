@@ -12,7 +12,7 @@ import 'package:at_auth/src/keys/at_keys_io.dart';
 /// The [FileAtKeysIo] class can be configured with an optional [filePath] and [passPhrase].
 ///
 /// Optional Parameters:
-/// If [filePath] is a format function derived from your atSign. Defaults to using %HOME%/.atsign/keys/$atsign_key.t atKeys 
+/// If [filePath] is a format function derived from your atSign. Defaults to using %HOME%/.atsign/keys/$atsign_key.t atKeys
 /// The [passPhrase] is used for atKeys files that are password protected.
 class FileAtKeysIo extends WrittenAtKeysIo {
   @visibleForTesting
@@ -46,7 +46,11 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   Future write(String atSign, AtKeys atKeys) async {
     String atKeysData =
         await encryptAtKeysWithSelfEncKey(atKeys, PkamAuthMode.keysFile);
-    await File(filePath!(atSign)).writeAsString(atKeysData);
+    String path = filePath!(atSign);
+    if (!Directory(path).parent.existsSync()) {
+      await Directory(path).parent.create(recursive: true);
+    }
+    await File(path).writeAsString(atKeysData);
   }
 }
 
@@ -56,7 +60,6 @@ String getDefaultAtKeysFilePath(String homeDirectory, String atSign) {
   return '$homeDirectory/.atsign/keys/${atSign}_key.atKeys'
       .replaceAll('/', Platform.pathSeparator);
 }
-
 
 String? getHomeDirectory({bool throwIfNull = false}) {
   String? homeDir;
