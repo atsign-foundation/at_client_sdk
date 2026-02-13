@@ -6,7 +6,6 @@
 name: at_client_sdk
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - trunk
@@ -19,7 +18,7 @@ permissions: # added using https://github.com/step-security/secure-workflows
 
 jobs:
   unit_at_client:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-slim
     strategy:
       fail-fast: false
       matrix:
@@ -107,7 +106,7 @@ jobs:
       #          flags: at_client_flutter_unit_tests
 
   functional_tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     strategy:
       fail-fast: false
       matrix:
