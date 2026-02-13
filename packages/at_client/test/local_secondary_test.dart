@@ -61,6 +61,11 @@ void main() {
   group('A group of local secondary get keys test', () {
     setUp(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
+      // Delete storage directory before setup to ensure clean state
+      var dir = Directory(storageDir);
+      if (dir.existsSync()) {
+        dir.deleteSync(recursive: true);
+      }
       await setupLocalStorage(storageDir, atSign);
     });
     tearDown(() async {
@@ -94,7 +99,8 @@ void main() {
           atClientManager: atClientManager);
       final localSecondary = LocalSecondary(atClient);
       final pkamPublicKey = RSAKeypair.fromRandom().publicKey.toString();
-      final success = await localSecondary.putValue(AtConstants.atPkamPublicKey, pkamPublicKey);
+      final success = await localSecondary.putValue(
+          AtConstants.atPkamPublicKey, pkamPublicKey);
       expect(success, true);
       expect(await localSecondary.getPkamPublicKey(), pkamPublicKey);
     });
@@ -794,6 +800,10 @@ Future<void> setupLocalStorage(String storageDir, String atSign) async {
 
 Future<void> tearDownLocalStorage(String storageDir) async {
   try {
+    // Close factories BEFORE deleting storage (prevents open file handles)
+    await SecondaryPersistenceStoreFactory.getInstance().close();
+    await AtCommitLogManagerImpl.getInstance().close();
+
     var isExists = await Directory(storageDir).exists();
     if (isExists) {
       Directory(storageDir).deleteSync(recursive: true);
