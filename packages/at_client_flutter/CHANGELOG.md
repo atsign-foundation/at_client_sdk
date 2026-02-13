@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 1.0.0
+ - feat: `ApkamActivationDialog` introduced for apkam onboarding
+ - fix: proxy parsing on root domains
+ - chore: file_picker pinned at 10.3.10
+ - feat: list to `AtEnrollment`
+
 ## 0.1.2
 - pin file_picker to 10.3.9 (BC)
 
