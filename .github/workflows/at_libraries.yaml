@@ -41,7 +41,7 @@ jobs:
         run: dart analyze
 
   build_and_test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -73,7 +73,7 @@ jobs:
         run: dart test --concurrency=1
 
   functional_tests_at_onboarding_cli:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
