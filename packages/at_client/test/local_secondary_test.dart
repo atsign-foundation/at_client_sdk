@@ -61,11 +61,6 @@ void main() {
   group('A group of local secondary get keys test', () {
     setUp(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
-      // Delete storage directory before setup to ensure clean state
-      var dir = Directory(storageDir);
-      if (dir.existsSync()) {
-        dir.deleteSync(recursive: true);
-      }
       await setupLocalStorage(storageDir, atSign);
     });
     tearDown(() async {

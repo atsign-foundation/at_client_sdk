@@ -42,7 +42,6 @@ Future<SecureSocket> secureSocketConnection(String host, int port) async {
     } catch (e, stackTrace) {
       print('retrying for connection.. $retryCount');
       print('Error: $e');
-      print('Error type: ${e.runtimeType}');
       if (retryCount == 1) {
         print('Stack trace: $stackTrace');
       }
