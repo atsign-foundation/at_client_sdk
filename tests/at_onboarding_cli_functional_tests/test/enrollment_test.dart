@@ -596,7 +596,7 @@ AtOnboardingPreference getPreferenceForAuth(String atSign) {
     ..namespace =
         'wavi' // unique identifier that can be used to identify data from your app
     ..atKeysFilePath =
-        '${Platform.environment['HOME']}/.atsign/keys/${atSign}_key.atKeys'
+        'test/storage/.atsign/keys/${atSign}_key.atKeys'
     ..appName = 'wavi'
     ..deviceName = 'pixel'
     ..rootDomain = 'vip.ve.atsign.zone';
