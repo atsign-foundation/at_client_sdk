@@ -18,7 +18,7 @@ permissions: # added using https://github.com/step-security/secure-workflows
 
 jobs:
   unit_at_client:
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -106,7 +106,7 @@ jobs:
       #          flags: at_client_flutter_unit_tests
 
   functional_tests:
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
