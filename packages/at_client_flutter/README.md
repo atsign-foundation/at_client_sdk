@@ -31,95 +31,231 @@ This package is available on [pub.dev](https://pub.dev) at https://pub.dev/packa
 
 ## Usage
 
-See at_client_flutter/example for more details regarding all workflows.
+See `at_client_flutter/example` for complete working implementations of all workflows.
 
 Package provides Flutter Dialogs for the following workflows:
- 1. Onboarding via Registrar / Cram
- 2. Authentication via File
+ 1. Onboarding a new atSign via Registrar / CRAM
+ 2. Authentication via atKeys file
  3. Authentication via Keychain
+ 4. Authentication via APKAM enrollment
 
-#### Atsign / RootDomain Selection Dialog
-```
-AuthRequest? authRequest = await AtSignSelectionDialog.show(
-    context,
+---
+
+### Workflow 1: Onboard a new atSign (Registrar / CRAM)
+
+Use this flow to register a brand-new atSign for the first time.
+
+```dart
+// Step 1: Let the user enter/select their atSign and root domain
+AuthRequest? authRequest = await AtSignSelectionDialog.show(context);
+if (authRequest == null) return; // user cancelled
+
+// Step 2: Fetch the CRAM key from the registrar
+RegistrarService registrar = RegistrarService(
+  registrarUrl: "my.atsign.com",
+  apiKey: "yourApiKey",
 );
-```
-
-#### Registrar Cram Dialog
-```
-RegistrarService registrar = RegistrarService("registarURL" "apiKey");
-String cramKey = await RegistrarCramDialog.show(
-    context,
-    atOnboardingRequest,
-    registrar: registrar,
+String? cramKey = await RegistrarCramDialog.show(
+  context,
+  authRequest as AtOnboardingRequest,
+  registrar: registrar,
 );
-```
+if (cramKey == null) return; // user cancelled
 
-#### Cram Onboarding Dialog
-```
-AtOnboardingResponse response = await CramDialog.show(
-    context, 
-    request: onboardingRequest, 
-    cramKey: cramKey,
-    progressBuilder: progressBuilder,
-    onOnboardingComplete: onOnboardingComplete,
-    title: title,
-    description: description,
+// Step 3: Perform CRAM onboarding
+AuthResponse? response = await CramDialog.show(
+  context,
+  request: authRequest,
+  cramKey: cramKey,
 );
+if (response == null || !response.isSuccessful) return;
+
+// Step 4: Initialize the atClient with the authenticated session
+await _setupAtClient(context, authRequest, response);
 ```
 
-#### Pkam Onboarding Dialog
-```
-AtAuthRequest request = AtAuthRequest(
-    authRequest.atSign,
-    atKeysIo: atKeysIo,
-    rootDomain: authRequest.rootDomain,
+---
+
+### Workflow 2: Login with an existing atKeys file
+
+Use this flow to authenticate using a `.atKeys` file from the device filesystem.
+
+```dart
+// Step 1: Let the user pick a .atKeys file
+FileAtKeysIo? atKeysIo = await AtKeysFileDialog.show(context);
+if (atKeysIo == null) return; // user cancelled
+
+// Step 2: Extract the atSign from the filename (e.g. "@alice_key.atKeys")
+var filepath = atKeysIo.filePath!('');
+var atSign = path.basenameWithoutExtension(filepath).split('_').first;
+
+// Step 3: Build an auth request
+AtAuthRequest authRequest = AtAuthRequest(
+  atSign,
+  atKeysIo: atKeysIo,
+  rootDomain: AtRootDomain.atsignDomain,
 );
 
-AtAuthResponse response = await PkamDialog.show(context, request: request);
+// Step 4: Authenticate and optionally back up keys to the keychain
+AuthResponse? response = await PkamDialog.show(
+  context,
+  request: authRequest,
+  backupKeys: [KeychainAtKeysIo()],
+);
+if (response == null || !response.isSuccessful) return;
+
+// Step 5: Initialize the atClient
+await _setupAtClient(context, authRequest, response);
 ```
 
-#### Keychain Authentication
-Keychain Authentication is handled by providing a KeychainAtKeysIo instance in your AuthRequest
+---
 
-```
-KeychainAtKeysIo keychainAtKeysIo = KeychainAtKeysIo();
-```
-This class handles necessary reading and writing of your AtKeys to your keychain during authentication.
+### Workflow 3: Login with Keychain
 
-Any futher manipulation of the keychain is handled via `KeychainStorage`.
+Use this flow when the user has previously authenticated and their keys are stored in the device keychain.
 
-#### Keychain Storage
-```
+```dart
+// Step 1: Load stored atSigns
 final KeychainStorage keychainStorage = KeychainStorage();
-// Get a specific atsign's keys
+List<String> atSigns = await keychainStorage.getAllAtsigns();
+if (atSigns.isEmpty) return; // nothing stored yet
+
+// Step 2: Let the user choose which atSign to use
+AuthRequest? request = await AtSignSelectionDialog.show(
+  context,
+  existingAtSigns: atSigns,
+);
+if (request == null) return; // user cancelled
+
+// Step 3: Build an auth request backed by the keychain
+AtAuthRequest authRequest = AtAuthRequest(
+  request.atSign,
+  atKeysIo: KeychainAtKeysIo(),
+  rootDomain: request.rootDomain,
+);
+
+// Step 4: Authenticate
+AuthResponse? response = await PkamDialog.show(
+  context,
+  request: authRequest,
+  backupKeys: [KeychainAtKeysIo()],
+);
+if (response == null || !response.isSuccessful) return;
+
+// Step 5: Initialize the atClient
+await _setupAtClient(context, authRequest, response);
+```
+
+---
+
+### Workflow 4: Login via APKAM enrollment
+
+Use this flow to enroll a new device/app using an APKAM approval from an existing authenticated device.
+
+```dart
+// Step 1: Let the user enter their atSign
+AuthRequest? request = await AtSignSelectionDialog.show(context);
+if (request == null) return;
+
+// Step 2: Start APKAM enrollment (waits for approval on another device)
+AtEnrollmentResponse? enrollmentResponse = await ApkamActivationDialog.show(
+  context,
+  atSign: request.atSign,
+  rootDomain: request.rootDomain,
+  appName: 'myApp',
+  deviceName: 'myDevice',
+  namespaces: {'myApp': 'rw'},
+);
+if (enrollmentResponse == null || enrollmentResponse.atAuthKeys == null) return;
+
+// Step 3: Build an auth request using the enrollment keys
+AtAuthRequest authRequest = AtAuthRequest(
+  request.atSign,
+  atAuthKeys: enrollmentResponse.atAuthKeys!,
+  rootDomain: request.rootDomain,
+);
+
+// Step 4: Authenticate and back up keys to the keychain
+AuthResponse? response = await PkamDialog.show(
+  context,
+  request: authRequest,
+  backupKeys: [KeychainAtKeysIo()],
+);
+if (response == null || !response.isSuccessful) return;
+
+// Step 5: Initialize the atClient
+await _setupAtClient(context, authRequest, response);
+```
+
+---
+
+### Post-authentication: Initializing the atClient
+
+After any successful authentication, call `AtClientManager.setCurrentAtSign` to create the atClient instance. Use the `atChops` and `atLookUp` from the `AuthResponse` — these are already authenticated.
+
+```dart
+Future<void> _setupAtClient(
+  BuildContext context,
+  AtAuthRequest authRequest,
+  AuthResponse response,
+) async {
+  var dir = await getApplicationSupportDirectory();
+  var acp = AtClientPreference()
+    ..rootDomain = authRequest.rootDomain.rootDomain
+    ..rootPort = authRequest.rootDomain.rootPort
+    ..namespace = 'myApp'
+    ..commitLogPath = dir.path
+    ..hiveStoragePath = dir.path;
+
+  await AtClientManager.getInstance().setCurrentAtSign(
+    response.atSign,
+    'myApp',
+    acp,
+    enrollmentId: response.enrollmentId,
+    atChops: response.atChops,
+    atLookUp: response.atLookUp,
+  );
+}
+```
+
+---
+
+### Keychain Storage
+
+`KeychainStorage` provides direct access to manage keys stored in the device keychain.
+
+```dart
+final KeychainStorage keychainStorage = KeychainStorage();
+
+// Get a specific atSign's keys
 AtKeys? alice = await keychainStorage.getAtsign("@alice");
 
-// Get all atsigns in the keychain
+// Get all atSigns stored for this app
 List<String> atsigns = await keychainStorage.getAllAtsigns();
 
 // Append atKeys to the keychain
 await keychainStorage.appendAtKeysToKeychain(atKeys);
 
-// Remove atSign from keychain
+// Remove a specific atSign from the keychain
 await keychainStorage.removeAtsignFromKeychain("@alice");
 
 // Delete all atKeys data for this app
 await keychainStorage.deleteAllAtKeysData();
 ```
 
+Keychain Authentication is handled automatically when you provide a `KeychainAtKeysIo` instance in your `AtAuthRequest`. This class reads and writes AtKeys to the keychain during authentication.
 
-- If your app supports windows platform then add `biometric_storage` in app's dependencies
-
-```
-dependencies:
- biometric_storage: ^4.1.3
-```
+> If your app supports the Windows platform, add `biometric_storage` to your app's dependencies:
+> ```
+> dependencies:
+>   biometric_storage: ^4.1.3
+> ```
 
 #### Enrollments in the keychain
 
-Storing enrollment data for ongoing/approved/denied enrollments are managed by the KeychainStorage class
-```
+Enrollment data for ongoing/approved/denied APKAM enrollments is managed by `KeychainStorage`:
+
+```dart
 await keychainStorage.readEnrollmentData("@alice");
 
 await keychainStorage.writeEnrollmentData("@alice", enrollmentData);
@@ -129,7 +265,21 @@ await keychainStorage.deleteEnrollmentData("@alice");
 bool isValidated = await keychainStorage.validateEnrollment("@alice");
 ```
 
+---
+
+### Exporting atKeys to a file
+
+```dart
+final atsign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
+AtKeys? atKeys = await keychainStorage.getAtsign(atsign);
+if (atKeys == null) throw Exception('No keys found for $atsign');
+
+FileAtKeysIo atKeysIo = FileAtKeysIo(filePath: (_) => '/path/to/${atsign}_key.atKeys');
+atKeysIo.write(atsign, atKeys);
+```
+
 ## Example
 
-More details in the example
-`at_client_flutter/example/main.dart`
+Full working examples are available in the example app:
+- `at_client_flutter/example/lib/main.dart` — UI and navigation
+- `at_client_flutter/example/lib/walkthrough.dart` — all authentication flows with error handling

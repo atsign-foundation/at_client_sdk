@@ -15,7 +15,6 @@ import 'package:at_auth/src/keys/at_keys_io.dart';
 /// If [filePath] is a format function derived from your atSign. Defaults to using %HOME%/.atsign/keys/$atsign_key.t atKeys
 /// The [passPhrase] is used for atKeys files that are password protected.
 class FileAtKeysIo extends WrittenAtKeysIo {
-  @visibleForTesting
   String Function(String)? filePath;
   String? passPhrase;
   FileAtKeysIo({this.filePath, this.passPhrase}) {

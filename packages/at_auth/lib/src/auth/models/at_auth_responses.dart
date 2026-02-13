@@ -8,14 +8,13 @@ sealed class AuthResponse {
   AtKeys? atAuthKeys;
   AtLookUp? atLookUp;
   AtChops? atChops;
+	String? get enrollmentId => atAuthKeys?.enrollmentId;
 
   AuthResponse(this.atSign);
 }
 
 /// Represents an onboarding response of an atSign.
 class AtOnboardingResponse extends AuthResponse {
-  String? enrollmentId;
-
   /// Constructor for [AtOnboardingResponse]
   /// [atSign] is the atSign for onboarding
   AtOnboardingResponse(super.atSign);

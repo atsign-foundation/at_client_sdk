@@ -19,6 +19,8 @@ import 'package:crypton/crypton.dart';
 ///
 /// This class provides functionality to submit and manage enrollment requests.
 class AtEnrollmentImpl implements AtEnrollment {
+  final AtSignLogger _logger = AtSignLogger('AtEnrollmentImpl');
+
   AtEnrollmentImpl();
 
   final StreamController<ProgressEvent> _progressStreamController =
@@ -39,15 +41,19 @@ class AtEnrollmentImpl implements AtEnrollment {
     AtEnrollmentResponse atEnrollmentResponse;
     switch (enrollmentRequest) {
       case FirstEnrollmentRequest _:
-        atEnrollmentResponse = await _handleFirstEnrollmentRequest(enrollmentRequest, atLookUp);
+        atEnrollmentResponse =
+            await _handleFirstEnrollmentRequest(enrollmentRequest, atLookUp);
         break;
       case AtEnrollmentRequest _:
-        atEnrollmentResponse = await _handleAtEnrollmentRequest(enrollmentRequest, atLookUp);
+        atEnrollmentResponse =
+            await _handleAtEnrollmentRequest(enrollmentRequest, atLookUp);
       default:
-        _addProgress('enrollment', 'Invalid Enrollment request received', ProgressEventType.error);
+        _addProgress('enrollment', 'Invalid Enrollment request received',
+            ProgressEventType.error);
         throw InvalidRequestException('Invalid Enrollment request received');
     }
-    _addProgress('enrollment', 'Enrollment request submitted', ProgressEventType.success);
+    _addProgress('enrollment', 'Enrollment request submitted',
+        ProgressEventType.success);
     return atEnrollmentResponse;
   }
 
@@ -76,31 +82,38 @@ class AtEnrollmentImpl implements AtEnrollment {
   /// Handles the subsequent enrollment requests.
   Future<AtEnrollmentResponse> _handleAtEnrollmentRequest(
       AtEnrollmentRequest atEnrollmentRequest, AtLookUp atLookUp) async {
-    EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
-      ..appName = atEnrollmentRequest.appName
-      ..deviceName = atEnrollmentRequest.deviceName;
-
-    // Generate APKAM Key pair
+    // Generate required keys
     AtPkamKeyPair apkamKeyPair = AtChopsUtil.generateAtPkamKeyPair();
-    enrollVerbBuilder.apkamPublicKey = apkamKeyPair.atPublicKey.publicKey;
     SymmetricKey apkamSymmetricKey =
         AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+
+    //Fetch required keys from atServer
     String defaultEncryptionPublicKey = await _getDefaultEncryptionPublicKey(
-        atLookUp, atEnrollmentRequest.atSign);
-    // Encrypting the Encryption Public key with APKAM Symmetric key.
-    enrollVerbBuilder.encryptedAPKAMSymmetricKey =
+      atLookUp,
+      atEnrollmentRequest.atSign,
+    );
+
+    // encrypting the following APKAM keys:
+    // apkamSymmetricKey for the enroll verb
+    String encryptedAPKAMSymmetricKey =
         RSAPublicKey.fromString(defaultEncryptionPublicKey)
             .encrypt(apkamSymmetricKey.key);
-    enrollVerbBuilder.otp = atEnrollmentRequest.otp;
-    enrollVerbBuilder.namespaces = atEnrollmentRequest.namespaces;
-    enrollVerbBuilder.apkamKeysExpiryDuration =
-        atEnrollmentRequest.apkamKeysExpiryDuration;
+
+    EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
+      ..appName = atEnrollmentRequest.appName
+      ..deviceName = atEnrollmentRequest.deviceName
+      ..encryptedAPKAMSymmetricKey = encryptedAPKAMSymmetricKey
+      ..apkamPublicKey = apkamKeyPair.atPublicKey.publicKey
+      ..otp = atEnrollmentRequest.otp
+      ..namespaces = atEnrollmentRequest.namespaces
+      ..apkamKeysExpiryDuration = atEnrollmentRequest.apkamKeysExpiryDuration;
 
     String? serverResponse =
         await _executeEnrollCommand(enrollVerbBuilder, atLookUp);
     var enrollJson = jsonDecode(serverResponse);
     var enrollmentIdFromServer = enrollJson[AtConstants.enrollmentId];
     var enrollStatus = getEnrollStatusFromString(enrollJson['status']);
+
     AtKeys atAuthKeys = AtKeys()
       ..apkamPrivateKey =
           AtBytes.fromString(apkamKeyPair.atPrivateKey.privateKey)
@@ -176,7 +189,7 @@ class AtEnrollmentImpl implements AtEnrollment {
     var enrollmentJsonMap = jsonDecode(enrollResponse!);
     AtEnrollmentResponse enrollmentResponse = AtEnrollmentResponse(
         enrollmentJsonMap['enrollmentId'],
-        _convertEnrollmentStatusToEnum(enrollmentJsonMap['status']));
+        getEnrollStatusFromString(enrollmentJsonMap['status']));
     return enrollmentResponse;
   }
 
@@ -195,7 +208,7 @@ class AtEnrollmentImpl implements AtEnrollment {
     var enrollmentJsonMap = jsonDecode(enrollResponse!);
     AtEnrollmentResponse enrollmentResponse = AtEnrollmentResponse(
         enrollmentJsonMap['enrollmentId'],
-        _convertEnrollmentStatusToEnum(enrollmentJsonMap['status']));
+        getEnrollStatusFromString(enrollmentJsonMap['status']));
     return enrollmentResponse;
   }
 
@@ -216,47 +229,43 @@ class AtEnrollmentImpl implements AtEnrollment {
     var enrollmentJsonMap = jsonDecode(enrollmentResponseStr!);
     AtEnrollmentResponse enrollmentResponse = AtEnrollmentResponse(
         enrollmentJsonMap['enrollmentId'],
-        _convertEnrollmentStatusToEnum(enrollmentJsonMap['status']));
+        getEnrollStatusFromString(enrollmentJsonMap['status']));
     return enrollmentResponse;
   }
 
+  /// waits for Approval of the enrollmentId related to [enrollmentResponse]
+  /// completes the end of the handshake for the APKAM flow
+  ///
+  /// returns [AtEnrollmentResponse] to intake additional keys provided after submission
   @override
   Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
     Duration retryInterval = const Duration(seconds: 2),
     bool logProgress = true,
     int maxRetries = 15,
+    AtLookupImpl? atLookup,
   }) async {
     if (enrollmentResponse.atSign == null ||
         enrollmentResponse.atSign!.isEmpty) {
-      throw InvalidRequestException(
+      throw InvalidResponseException(
           'atSign is not available in the enrollment response');
     }
     if (enrollmentResponse.rootDomain == null) {
-      throw InvalidRequestException(
+      throw InvalidResponseException(
           'rootDomain is not available in the enrollment response');
     }
+    if (enrollmentResponse.atAuthKeys == null) {
+      throw InvalidResponseException(
+          'AtAuthKeys are not avaialbe in the enrollemnt response');
+    }
 
-    var atLookup = AtLookupImpl(
+    atLookup ??= AtLookupImpl(
       enrollmentResponse.atSign!,
       enrollmentResponse.rootDomain!.rootDomain,
       enrollmentResponse.rootDomain!.rootPort,
     );
 
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(
-      AtEncryptionKeyPair.create(
-          enrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!.toString(),
-          ''),
-      AtPkamKeyPair.create(
-          enrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
-          enrollmentResponse.atAuthKeys!.apkamPrivateKey!.toString()),
-    );
-    atChopsKeys.apkamSymmetricKey = AESKey(
-      enrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString(),
-    );
-
-    // Create AtChops instance and assign it to the lookup for PKAM authentication
-    AtChopsImpl atChops = AtChopsImpl(atChopsKeys);
+    AtChops atChops = enrollmentResponse.atAuthKeys!.toAtChops();
     atLookup.atChops = atChops;
 
     await _waitForPkamAuthSuccess(
@@ -266,40 +275,154 @@ class AtEnrollmentImpl implements AtEnrollment {
       logProgress: logProgress,
       maxRetries: maxRetries,
     );
+
+    // post approval:
+    // after pkam authentication is accepted
+
+    // fetch the following keys from the atServer
+    Map<String, dynamic> encPrivKeyResponse =
+        await _getDefaultEncryptionPrivateKey(
+      atLookup,
+      enrollmentResponse.atSign!,
+      enrollmentResponse.enrollmentId,
+    );
+
+    Map<String, dynamic> selfEncKeyResponse = await _getSelfEncryptionKey(
+      atLookup,
+      enrollmentResponse.atSign!,
+      enrollmentResponse.enrollmentId,
+    );
+
+    // decrypting the following after fetching
+    // selfEncryptionKey (encrypted via apkamSymmetricKey from the enrollment)
+    // defaultEncryptionPrivateKey (encrypted via apkamSymmetricKey from the enrollment)
+
+    final aesEncryption = StringAESEncryptor(
+        AESKey(enrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString()));
+
+    String decryptedSelfEncryptionKey = aesEncryption.decrypt(
+      selfEncKeyResponse['value'],
+      iv: AtChopsUtil.generateIVFromBase64String(selfEncKeyResponse['iv']),
+    );
+
+    String decryptedDefaultEncryptionPrivateKey = aesEncryption.decrypt(
+      encPrivKeyResponse['value'],
+      iv: AtChopsUtil.generateIVFromBase64String(encPrivKeyResponse['iv']),
+    );
+
+    // set the fetched & decrypted keys in the reference
+    enrollmentResponse.atAuthKeys!.defaultSelfEncryptionKey =
+        AtBytes.fromString(decryptedSelfEncryptionKey);
+    enrollmentResponse.atAuthKeys!.defaultEncryptionPrivateKey =
+        AtBytes.fromString(decryptedDefaultEncryptionPrivateKey);
+  }
+
+  @override
+  Future<List<EnrollmentServerRequest>> list(
+    List<EnrollmentStatus>? filters,
+    AtLookUp atLookup, {
+    String? arx,
+    String? drx,
+  }) async {
+    String command = 'enroll:list';
+    //Handle EnrollmentStatus enum to string
+    String statusFilter = '';
+    if (filters != null) {
+      for (EnrollmentStatus filter in filters) {
+        statusFilter += '${filter.name},';
+      }
+
+      //remove additional ','
+      statusFilter.substring(0, statusFilter.length - 1);
+      if (statusFilter.isNotEmpty) {
+        command += ':{"enrollmentStatusFilter":["$statusFilter"]}';
+      }
+    }
+    String rawResponse = (await atLookup.executeCommand(
+      '$command\n',
+      auth: true,
+    ))!;
+
+    RegExp? ar;
+    RegExp? dr;
+    if (arx != null) {
+      ar = RegExp(arx);
+    }
+    if (drx != null) {
+      dr = RegExp(drx);
+    }
+    if (rawResponse.startsWith('data:')) {
+      rawResponse = rawResponse.substring(rawResponse.indexOf('data:') + 5);
+      Map unfiltered = jsonDecode(rawResponse);
+      List<EnrollmentServerRequest> filtered = [];
+      for (final String ek in unfiltered.keys) {
+        final e = unfiltered[ek];
+        String appName = e['appName'] as String;
+        if (ar != null) {
+          if (!ar.hasMatch(appName)) {
+            continue;
+          }
+        }
+        String deviceName = e['deviceName'] as String;
+        if (dr != null) {
+          if (!dr.hasMatch(deviceName)) {
+            continue;
+          }
+        }
+        filtered.add(EnrollmentServerRequest.fromServer(e));
+      }
+      return filtered;
+    } else {
+      throw Exception('Unexpected server response: $rawResponse');
+    }
   }
 
   Future<String> _getDefaultEncryptionPublicKey(
       AtLookUp atLookupImpl, String atSign) async {
-    var lookupVerbBuilder = LookupVerbBuilder()
+    LookupVerbBuilder builder = LookupVerbBuilder()
       ..atKey = (AtKey()
-        ..key = 'publickey'
+        ..key = 'publicKey'
         ..sharedBy = atSign);
-    String? lookupResult = await atLookupImpl.executeVerb(lookupVerbBuilder);
+    String? lookupResult = await atLookupImpl.executeVerb(builder);
     if (lookupResult == null || lookupResult.isEmpty) {
       throw AtEnrollmentException(
           'Unable to lookup encryption public key. Server response is null/empty');
     }
     var defaultEncryptionPublicKey =
         lookupResult.replaceFirst(RegExp(r'^data:'), '');
+
     return defaultEncryptionPublicKey;
   }
 
-  EnrollmentStatus _convertEnrollmentStatusToEnum(String enrollmentStatus) {
-    switch (enrollmentStatus) {
-      case 'approved':
-        return EnrollmentStatus.approved;
-      case 'denied':
-        return EnrollmentStatus.denied;
-      case 'expired':
-        return EnrollmentStatus.expired;
-      case 'revoked':
-        return EnrollmentStatus.revoked;
-      case 'pending':
-        return EnrollmentStatus.pending;
-      default:
-        throw AtEnrollmentException(
-            '$enrollmentStatus is not a valid enrollment status');
+  Future<Map<String, dynamic>> _getDefaultEncryptionPrivateKey(
+      AtLookUp atLookUp, String atSign, String enrollmentId) async {
+    String cmd =
+        "keys:get:keyName:$enrollmentId.default_enc_private_key.__manage$atSign\n";
+    _logger.shout('cmd: $cmd');
+    String? lookupResult = await atLookUp.executeCommand(cmd);
+    if (lookupResult == null || lookupResult.isEmpty) {
+      throw AtEnrollmentException(
+          'Unable to lookup encryption privateKey key. Server response is null/empty');
     }
+    var jsonString = lookupResult.replaceFirst(RegExp(r'^data:'), '');
+    Map<String, dynamic> map = jsonDecode(jsonString);
+    return map;
+  }
+
+  Future<Map<String, dynamic>> _getSelfEncryptionKey(
+      AtLookUp atLookUp, String atSign, String enrollmentId) async {
+    String cmd =
+        "keys:get:keyName:$enrollmentId.default_self_enc_key.__manage$atSign\n";
+    _logger.shout('cmd: $cmd');
+    String? lookupResult = await atLookUp.executeCommand(cmd);
+    if (lookupResult == null || lookupResult.isEmpty) {
+      throw AtEnrollmentException(
+          'Unable to lookup encryption privateKey key. Server response is null/empty');
+    }
+    var jsonString = lookupResult.replaceFirst(RegExp(r'^data:'), '');
+
+    var map = jsonDecode(jsonString);
+    return map;
   }
 
   Future<String> _executeEnrollCommand(

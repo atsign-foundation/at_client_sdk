@@ -31,24 +31,28 @@ class FakeDeleteVerbBuilder extends Fake implements DeleteVerbBuilder {}
 
 class FakeVerbBuilder extends Fake implements VerbBuilder {}
 
+class FakeAtLookUp extends Fake implements AtLookupImpl {}
+
 void main() {
   late AtAuthImpl atAuth;
   late MockAtLookUp mockAtLookUp;
   late MockPkamAuthenticator mockPkamAuthenticator;
   late AtEnrollment mockAtEnrollment;
-	late FileAtKeysIo fileAtKeysIo;
+  late FileAtKeysIo fileAtKeysIo;
   final String testEnrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
 
   setUp(() {
     mockAtLookUp = MockAtLookUp();
     mockPkamAuthenticator = MockPkamAuthenticator();
     mockAtEnrollment = MockAtEnrollment();
-		fileAtKeysIo = FileAtKeysIo(filePath: (atsign) => 'test/data/${atsign}_key.atKeys');
+    fileAtKeysIo =
+        FileAtKeysIo(filePath: (atsign) => 'test/data/${atsign}_key.atKeys');
     atAuth = AtAuthImpl(
         atLookUp: mockAtLookUp,
         pkamAuthenticator: mockPkamAuthenticator,
         atEnrollment: mockAtEnrollment);
     registerFallbackValue(FakeVerbBuilder());
+    registerFallbackValue(FakeAtLookUp());
   });
   group('AtAuthImpl authentication tests', () {
     test('Test authenticate() true with keys file', () async {
@@ -95,7 +99,8 @@ void main() {
           .thenAnswer((_) => Future.value(true));
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
-        atKeysIo: FileAtKeysIo(filePath: (_) => 'test/hello/data/@alice🛠_key.atKeys'),
+        atKeysIo: FileAtKeysIo(
+            filePath: (_) => 'test/hello/data/@alice🛠_key.atKeys'),
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 

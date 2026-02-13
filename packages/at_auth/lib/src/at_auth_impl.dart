@@ -91,7 +91,7 @@ class AtAuthImpl implements AtAuth {
       atAuthRequest.rootDomain.rootPort,
     );
     // ??= to support mocking
-    atChops ??= _createAtChops(atAuthKeys);
+    atChops ??= atAuthKeys.toAtChops();
     atLookUp!.atChops = atChops;
 
     _logger.finer('Authenticating using PKAM');
@@ -199,7 +199,7 @@ class AtAuthImpl implements AtAuth {
               'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');
       }
     }
-    atChops ??= _createAtChops(_atAuthKeys);
+    atChops ??= _atAuthKeys.toAtChops();
     atLookUp!.atChops = atChops;
 
     //3. send onboarding enrollment
@@ -282,7 +282,6 @@ class AtAuthImpl implements AtAuth {
 
     atOnboardingResponse
       ..isSuccessful = true
-      ..enrollmentId = enrollmentIdFromServer
       ..atAuthKeys = _atAuthKeys
       ..atLookUp = atLookUp
       ..atChops = atChops;
@@ -312,28 +311,6 @@ class AtAuthImpl implements AtAuth {
       ..atKey = (AtKey()..key = AtConstants.atCramSecret);
     String? deleteResponse = await atLookUp!.executeVerb(deleteBuilder);
     _logger.info('Cram secret delete response : $deleteResponse');
-  }
-
-  AtChops _createAtChops(AtKeys atKeysFile) {
-    if (atKeysFile.apkamPrivateKey == null ||
-        atKeysFile.defaultEncryptionPrivateKey == null) {
-      throw AtPrivateKeyNotFoundException(
-          'AtKeys is missing required keys to create AtChops instance');
-    }
-    final atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        atKeysFile.defaultEncryptionPublicKey!.toString(),
-        atKeysFile.defaultEncryptionPrivateKey!.toString());
-    final atPkamKeyPair = AtPkamKeyPair.create(
-        atKeysFile.apkamPublicKey!.toString(),
-        atKeysFile.apkamPrivateKey!.toString());
-    final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-    if (atKeysFile.apkamSymmetricKey != null) {
-      atChopsKeys.apkamSymmetricKey =
-          AESKey(atKeysFile.apkamSymmetricKey!.toString());
-    }
-    atChopsKeys.selfEncryptionKey =
-        AESKey(atKeysFile.defaultSelfEncryptionKey!.toString());
-    return AtChopsImpl(atChopsKeys);
   }
 
   Future<String> _sendOnboardingEnrollment(
