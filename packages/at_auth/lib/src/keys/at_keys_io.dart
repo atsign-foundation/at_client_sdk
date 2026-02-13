@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:at_auth/at_auth.dart';
+
 import 'at_keys.dart' show AtKeys;
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_chops/at_chops.dart';
@@ -183,7 +185,7 @@ mixin KeyIOMixin on AtKeysIo {
     // If it contains "iv(InitializationVector)", it means the data is encrypted with a
     // passphrase. Decrypt it.
     if (decodedAtKeysData.containsKey('iv') && passPhrase.isNullOrEmpty) {
-      throw AtDecryptionException(
+      throw AtPasswordRequiredException(
           'Pass Phrase is required for password protected atKeys file');
     }
     if (decodedAtKeysData.containsKey('iv')) {
