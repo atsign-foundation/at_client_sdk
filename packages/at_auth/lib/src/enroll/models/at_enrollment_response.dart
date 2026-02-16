@@ -12,14 +12,14 @@ import 'package:at_auth/src/enroll/models/namespace_permission.dart';
 ///   - namespace: This field determines the namespaces for granting access to view or write data based on permissions.
 ///   - encryptedAPKAMSymmetricKey: In the event of approval, the encryptedAPKAMSymmetricKey is used to encrypt the default
 ///                                 encryption private key and self-encryption key, facilitating the generation of the APKAM key pair.
-class EnrollmentServerRequest {
+class EnrollmentServerResponse {
   String enrollmentId;
   String appName;
   String deviceName;
   EnrollmentStatus status;
   List<NamespacePermission> namespace;
 
-  EnrollmentServerRequest({
+  EnrollmentServerResponse({
     required this.enrollmentId,
     required this.appName,
     required this.deviceName,
@@ -27,11 +27,11 @@ class EnrollmentServerRequest {
     required this.namespace,
   });
 
-  factory EnrollmentServerRequest.fromServer(MapEntry<String, dynamic> entry) {
+  factory EnrollmentServerResponse.fromServer(MapEntry<String, dynamic> entry) {
     // Example id: a7d6a9.....40a15.new.enrollments.__manage@alice
     // Only interested in the first part.
     final enrollmentId = entry.key.split('.').first;
-    return EnrollmentServerRequest(
+    return EnrollmentServerResponse(
       enrollmentId: enrollmentId,
       appName: entry.value['appName'] as String,
       deviceName: entry.value['deviceName'] as String,

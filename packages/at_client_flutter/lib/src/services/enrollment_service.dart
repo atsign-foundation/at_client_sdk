@@ -17,8 +17,8 @@ class FlutterEnrollmentService {
   AtClient get atClient => AtClientManager.getInstance().atClient;
 
   // Used for updating realtime ui
-  StreamController<EnrollmentServerRequest>? _enrollmentRequestsController =
-      StreamController<EnrollmentServerRequest>.broadcast();
+  StreamController<EnrollmentServerResponse>? _enrollmentRequestsController =
+      StreamController<EnrollmentServerResponse>.broadcast();
   StreamSubscription? _newRequestsSubcription;
 
   Stream<ProgressEvent> get progressStream => _atEnrollment.progressStream;
@@ -96,7 +96,7 @@ class FlutterEnrollmentService {
     return atEnrollmentResponse;
   }
 
-  Stream<EnrollmentServerRequest> getEnrollments(
+  Stream<EnrollmentServerResponse> getEnrollments(
       {List<EnrollmentStatus>? statusFilters}) {
     if (_enrollmentRequestsController!.onListen == null) {
       _enrollmentRequestsController!.onListen = _listenForNewRequest;
@@ -111,7 +111,7 @@ class FlutterEnrollmentService {
     });
   }
 
-  Future<List<EnrollmentServerRequest>> list(
+  Future<List<EnrollmentServerResponse>> list(
       List<EnrollmentStatus> filters, AtLookUp atLookUp,
       {String? drx, String? arx}) async {
     return await _atEnrollment.list(filters, atLookUp, arx: arx, drx: drx);
@@ -130,7 +130,7 @@ class FlutterEnrollmentService {
     _newRequestsSubcription = stream.listen((AtNotification noti) async {
       try {
         _logger.info('Enrollment Request with id ${noti.key} received');
-        final enrollmentRequest = EnrollmentServerRequest.fromServer(MapEntry(
+        final enrollmentRequest = EnrollmentServerResponse.fromServer(MapEntry(
           noti.key,
           jsonDecode(noti.value!),
         ));
