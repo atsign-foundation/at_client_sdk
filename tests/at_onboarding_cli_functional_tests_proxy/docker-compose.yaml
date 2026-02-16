@@ -13,7 +13,7 @@ services:
       - default
   at_proxyserver:
     container_name: at_proxyserver
-    image: atsigncompany/at_proxyserver
+    image: atsigncompany/at_proxyserver:gha41
     command: "vip.ve.atsign.zone:443 vip.ve.atsign.zone:64 1443"
     ports:
       - '443:1443'
