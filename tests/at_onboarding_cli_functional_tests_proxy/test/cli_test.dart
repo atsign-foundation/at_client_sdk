@@ -89,12 +89,7 @@ void main() {
 
       String cramKey = cramKeyMap[atSign] ?? '';
 
-      int count = 0;
-      bool success = false;
-      while(count < 3 && !success) {
-        success = await onboardAtSign(atSign, cramKey, masterKeyFile, rootServer);
-        count++;
-      }
+      bool success = await onboardAtSign(atSign, cramKey, masterKeyFile, rootServer);
       expect(success, isTrue, reason: 'Onboarding should succeed and generate master key file');
 
       filesToCleanup.add('../../packages/at_onboarding_cli/$masterKeyFile');
