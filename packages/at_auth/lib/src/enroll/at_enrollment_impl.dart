@@ -318,7 +318,7 @@ class AtEnrollmentImpl implements AtEnrollment {
   }
 
   @override
-  Future<List<EnrollmentServerRequest>> list(
+  Future<List<EnrollmentServerResponse>> list(
     List<EnrollmentStatus>? filters,
     AtLookUp atLookup, {
     String? arx,
@@ -354,7 +354,7 @@ class AtEnrollmentImpl implements AtEnrollment {
     if (rawResponse.startsWith('data:')) {
       rawResponse = rawResponse.substring(rawResponse.indexOf('data:') + 5);
       Map unfiltered = jsonDecode(rawResponse);
-      List<EnrollmentServerRequest> filtered = [];
+      List<EnrollmentServerResponse> filtered = [];
       for (final String ek in unfiltered.keys) {
         final e = unfiltered[ek];
         String appName = e['appName'] as String;
@@ -369,7 +369,7 @@ class AtEnrollmentImpl implements AtEnrollment {
             continue;
           }
         }
-        filtered.add(EnrollmentServerRequest.fromServer(e));
+        filtered.add(EnrollmentServerResponse.fromServer(e));
       }
       return filtered;
     } else {

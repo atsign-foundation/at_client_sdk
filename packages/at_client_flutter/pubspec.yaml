@@ -18,7 +18,7 @@ dependencies:
   at_utils: ^3.4.0
   at_chops: ^3.0.0
   at_lookup: ^3.5.0
-  at_auth: ^3.0.0
+  at_auth: ^3.0.1
   at_client: ^3.11.0
   encrypt: ^5.0.3
   phosphor_flutter: ^2.1.0

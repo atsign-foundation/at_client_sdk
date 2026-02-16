@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:meta/meta.dart';
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/keys/at_keys.dart';

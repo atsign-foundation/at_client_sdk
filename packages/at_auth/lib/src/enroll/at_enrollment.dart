@@ -148,7 +148,7 @@ abstract class AtEnrollment {
   /// Accepts [EnrollmentStatus] inside the [statusFilters] parameter to filter enrollments with their current status.
   ///
   /// Returns a [Future] containing a [List<EnrollmentServerRequest>] representing all the enrollments.
-  Future<List<EnrollmentServerRequest>> list(
+  Future<List<EnrollmentServerResponse>> list(
       List<EnrollmentStatus>? statusFilters, AtLookUp atLookUp,
       {String? arx, String? drx});
 

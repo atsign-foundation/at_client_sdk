@@ -1,4 +1,7 @@
-
+## 3.0.1
+- feat: improve `AtEnrollmentImpl`
+- feat: introduce `NamespacePermission`
+- fix: ensure directory when writing keys in FileAtKeysIo
 
 ## 3.0.0 
 
