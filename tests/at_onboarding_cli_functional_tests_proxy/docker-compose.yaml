@@ -6,6 +6,8 @@ services:
     ports:
       - '127.0.0.1:6379:6379'
       - '127.0.0.1:9001:9001'
+      - '64:64'
+      - "25000-25999:25000-25999"
     extra_hosts:
       - 'vip.ve.atsign.zone:127.0.0.1'
     hostname: vip.ve.atsign.zone
@@ -14,7 +16,7 @@ services:
   at_proxyserver:
     container_name: at_proxyserver
     # https://hub.docker.com/layers/atsigncompany/at_proxyserver/gha41/images/sha256-de7f513db35a3046ef25bd2195113f48b276800c9921c1eec81ced55a597cd0b
-    image: atsigncompany/at_proxyserver:gha41  
+    image: atsigncompany/at_proxyserver
     command: "vip.ve.atsign.zone:443 vip.ve.atsign.zone:64 1443"
     ports:
       - '443:1443'
