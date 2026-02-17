@@ -20,18 +20,33 @@ final Uuid _uuid = Uuid();
 final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
 
 void main() {
-  group('System Readiness', () {
-    test('fresh docker environment setup', () async {
+  group('Enrollment Workflow Tests', () {
+    late String atSign;
+    late String masterKeyFile;
+    late String deviceName;
+    late String enrollmentKeyFile;
+    late String generatedOtp;
+    late List<String> filesToCleanup;
+
+    setUpAll(() async {
+      const int atSignIndex = 31;
+      atSign = allAtsigns[atSignIndex];
+      masterKeyFile = '${atSign}_master_${_uuid.v4()}_key.atKeys';
+      deviceName = _uuid.v4();
+      enrollmentKeyFile = '${atSign}_enrolled_${deviceName}_key.atKeys';
+      filesToCleanup = [];
+
       try {
         logger.info('Stopping existing docker compose services (if any)');
-        await runDockerComposeDown();
+        await runDockerComposeDown().timeout(Duration(seconds: 10));
       } catch (e) {
         logger.warning('Exception while stopping existing, will ignore: $e');
       }
 
       try {
         logger.info('Removing at_proxyserver and at_virtualenv containers');
-        await removeDockerContainers(['at_proxyserver', 'at_virtualenv']);
+        await removeDockerContainers(['at_proxyserver', 'at_virtualenv'])
+            .timeout(Duration(seconds: 10));
       } catch (e) {
         logger.warning('Exception while removing containers, will ignore: $e');
       }
@@ -45,24 +60,6 @@ void main() {
       bool isReady = await checkDockerContainers();
       expect(isReady, isTrue,
           reason: 'System should be ready with fresh Docker Compose');
-    });
-  });
-
-  group('Enrollment Workflow Tests', () {
-    late String atSign;
-    late String masterKeyFile;
-    late String deviceName;
-    late String enrollmentKeyFile;
-    late String generatedOtp;
-    late List<String> filesToCleanup;
-
-    setUpAll(() {
-      const int atSignIndex = 31;
-      atSign = allAtsigns[atSignIndex];
-      masterKeyFile = '${atSign}_master_${_uuid.v4()}_key.atKeys';
-      deviceName = _uuid.v4();
-      enrollmentKeyFile = '${atSign}_enrolled_${deviceName}_key.atKeys';
-      filesToCleanup = [];
 
       logger.info('Setup: Using atSign: $atSign for enrollment workflow');
     });
