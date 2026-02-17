@@ -1,7 +1,6 @@
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 import 'package:at_utils/at_logger.dart';
-import '../check_docker_readiness.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import '../lib/features/onboard_command.dart';
 import '../lib/features/otp_command.dart';
@@ -10,7 +9,6 @@ import '../lib/features/list_enrollments_command.dart';
 import '../lib/features/approve_command.dart';
 import '../lib/features/validate_keys.dart';
 import '../lib/features/cleanup_utils.dart';
-import '../lib/docker_utils.dart';
 
 const String rootServer = 'proxy:vip.ve.atsign.zone:443';
 const String appName = 'noports';
@@ -36,38 +34,11 @@ void main() {
       enrollmentKeyFile = '${atSign}_enrolled_${deviceName}_key.atKeys';
       filesToCleanup = [];
 
-      try {
-        logger.info('Stopping existing docker compose services (if any)');
-        await runDockerComposeDown().timeout(Duration(seconds: 10));
-      } catch (e) {
-        logger.warning('Exception while stopping existing, will ignore: $e');
-      }
-
-      try {
-        logger.info('Removing at_proxyserver and at_virtualenv containers');
-        await removeDockerContainers(['at_proxyserver', 'at_virtualenv'])
-            .timeout(Duration(seconds: 10));
-      } catch (e) {
-        logger.warning('Exception while removing containers, will ignore: $e');
-      }
-
-      logger.info('Starting fresh Docker Compose services...');
-      bool restartSuccess = await restartDockerCompose();
-      expect(restartSuccess, isTrue,
-          reason: 'Docker Compose restart should succeed');
-
-      logger.info('Checking system readiness...');
-      bool isReady = await checkDockerContainers();
-      expect(isReady, isTrue,
-          reason: 'System should be ready with fresh Docker Compose');
-
       logger.info('Setup: Using atSign: $atSign for enrollment workflow');
     });
 
     tearDownAll(() async {
       await cleanupTestFiles(filesToCleanup);
-
-      await stopDockerServices();
     });
 
     test('step 1: fresh onboard to generate master keys', () async {
