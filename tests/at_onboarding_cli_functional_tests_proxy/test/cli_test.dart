@@ -20,42 +20,31 @@ final Uuid _uuid = Uuid();
 final logger = AtSignLogger('AtOnboardingFunctionalTestsProxy');
 
 void main() {
-	group('System Readiness', () {
+  group('System Readiness', () {
     test('fresh docker environment setup', () async {
-      logger.info('Checking current docker state...');
+      try {
+        logger.info('Stopping existing docker compose services (if any)');
+        await runDockerComposeDown();
+      } catch (e) {
+        logger.warning('Exception while stopping existing, will ignore: $e');
+      }
 
-      // Check if docker compose services are running
-      bool composeRunning = await isDockerComposeRunning();
-
-      // Check if specific containers are running
-      bool containersRunning = await areContainersRunning(['at_proxyserver', 'at_virtualenv']);
-
-      if (composeRunning || containersRunning) {
-        logger.info('Found running containers/services, cleaning up...');
-        try {
-          if (composeRunning) {
-            logger.info('Stopping Docker Compose services...');
-            await runDockerComposeDown();
-          }
-
-          if (containersRunning) {
-            logger.info('Removing specific containers...');
-            await removeDockerContainers(['at_proxyserver', 'at_virtualenv']);
-          }
-        } catch (e) {
-          logger.warning('Error during cleanup: $e');
-        }
-      } else {
-        logger.info('No running containers found, skipping cleanup');
+      try {
+        logger.info('Removing at_proxyserver and at_virtualenv containers');
+        await removeDockerContainers(['at_proxyserver', 'at_virtualenv']);
+      } catch (e) {
+        logger.warning('Exception while removing containers, will ignore: $e');
       }
 
       logger.info('Starting fresh Docker Compose services...');
       bool restartSuccess = await restartDockerCompose();
-      expect(restartSuccess, isTrue, reason: 'Docker Compose restart should succeed');
+      expect(restartSuccess, isTrue,
+          reason: 'Docker Compose restart should succeed');
 
       logger.info('Checking system readiness...');
       bool isReady = await checkDockerContainers();
-      expect(isReady, isTrue, reason: 'System should be ready with fresh Docker Compose');
+      expect(isReady, isTrue,
+          reason: 'System should be ready with fresh Docker Compose');
     });
   });
 
@@ -89,45 +78,64 @@ void main() {
 
       String cramKey = cramKeyMap[atSign] ?? '';
 
-      bool success = await onboardAtSign(atSign, cramKey, masterKeyFile, rootServer);
-      expect(success, isTrue, reason: 'Onboarding should succeed and generate master key file');
+      bool success =
+          await onboardAtSign(atSign, cramKey, masterKeyFile, rootServer);
+      expect(success, isTrue,
+          reason: 'Onboarding should succeed and generate master key file');
 
       filesToCleanup.add('../../packages/at_onboarding_cli/$masterKeyFile');
     }, timeout: Timeout(Duration(minutes: 3)));
 
     test('step 2: generate OTP using master keys', () async {
-      generatedOtp = await generateOtpWithExistingKeys(atSign, masterKeyFile, rootServer);
-      expect(generatedOtp.isNotEmpty, isTrue, reason: 'OTP should be generated successfully');
+      generatedOtp =
+          await generateOtpWithExistingKeys(atSign, masterKeyFile, rootServer);
+      expect(generatedOtp.isNotEmpty, isTrue,
+          reason: 'OTP should be generated successfully');
       logger.info('Generated OTP: $generatedOtp');
     });
 
-    test('step 3 & 4: submit enrollment request and approve concurrently', () async {
+    test('step 3 & 4: submit enrollment request and approve concurrently',
+        () async {
       filesToCleanup.add('../../packages/at_onboarding_cli/$enrollmentKeyFile');
 
       // Start enrollment request (this will wait for approval)
-      Future<bool> enrollmentFuture = submitEnrollmentRequest(generatedOtp, atSign, deviceName, enrollmentKeyFile, rootServer, appName, namespaces);
+      Future<bool> enrollmentFuture = submitEnrollmentRequest(
+          generatedOtp,
+          atSign,
+          deviceName,
+          enrollmentKeyFile,
+          rootServer,
+          appName,
+          namespaces);
 
       // Give enrollment request a moment to be submitted and start waiting
       await Future.delayed(Duration(seconds: 5));
 
       // Find and approve the enrollment while Step 3 is waiting
-      List<String> enrollmentIds = await listPendingEnrollments(atSign, rootServer, keyFile: masterKeyFile);
-      expect(enrollmentIds.isNotEmpty, isTrue, reason: 'Should find pending enrollment requests');
+      List<String> enrollmentIds = await listPendingEnrollments(
+          atSign, rootServer,
+          keyFile: masterKeyFile);
+      expect(enrollmentIds.isNotEmpty, isTrue,
+          reason: 'Should find pending enrollment requests');
 
       String enrollmentId = enrollmentIds.first;
-      bool approvalSuccess = await approveEnrollment(atSign, enrollmentId, masterKeyFile, rootServer);
-      expect(approvalSuccess, isTrue, reason: 'Enrollment should be approved successfully');
+      bool approvalSuccess = await approveEnrollment(
+          atSign, enrollmentId, masterKeyFile, rootServer);
+      expect(approvalSuccess, isTrue,
+          reason: 'Enrollment should be approved successfully');
 
       // Wait for enrollment to complete (should finish after approval)
       bool enrollmentSuccess = await enrollmentFuture;
-      expect(enrollmentSuccess, isTrue, reason: 'Enrollment request should complete successfully after approval');
+      expect(enrollmentSuccess, isTrue,
+          reason:
+              'Enrollment request should complete successfully after approval');
     }, timeout: Timeout(Duration(minutes: 5)));
 
     test('step 5: validate enrollment keys with list command', () async {
-      bool success = await validateEnrollmentKeys(atSign, enrollmentKeyFile, rootServer);
-      expect(success, isTrue, reason: 'Enrollment keys should be valid and functional for listing');
+      bool success =
+          await validateEnrollmentKeys(atSign, enrollmentKeyFile, rootServer);
+      expect(success, isTrue,
+          reason: 'Enrollment keys should be valid and functional for listing');
     });
-
   });
-
 }
