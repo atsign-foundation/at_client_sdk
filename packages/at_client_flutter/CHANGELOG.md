@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 1.0.1
+ - deps: at_auth 3.0.1
+
 ## 1.0.0
  - feat: `ApkamActivationDialog` introduced for apkam onboarding
  - fix: proxy parsing on root domains
