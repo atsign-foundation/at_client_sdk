@@ -40,7 +40,7 @@ class _TypableDropdownState extends State<TypableDropdown> {
         _showOverlay();
       } else {
         // Delay to allow tap to register
-        Future.delayed(Duration(milliseconds: 100), () {
+        Future.delayed(Duration(milliseconds: 200), () {
           _hideOverlay();
         });
       }

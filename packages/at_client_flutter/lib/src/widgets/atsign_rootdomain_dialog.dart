@@ -77,6 +77,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
           children: [
             // atSign Dropdown
             _DropdownField(
+              controller: _atSignTextController,
               labelText: 'Type or select an atSign',
               infoText: "Select an atSign to proceed with onboarding.",
               hint: 'Type atSign or select from existing',
@@ -85,6 +86,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
               onChanged: (value) {
                 setState(() {
                   _selectedAtSign = value;
+                  _atSignTextController.text = value ?? '';
                 });
               },
             ),
@@ -133,6 +135,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
 
                   // Domain Field
                   _DropdownField(
+                    controller: _domainTextController,
                     labelText: 'Type or select a root domain',
                     infoText:
                         "Only for custom implementations. Specify a root domain.",
@@ -145,6 +148,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
                     onChanged: (value) {
                       setState(() {
                         _selectedDomain = value;
+                        _domainTextController.text = value ?? '';
                       });
                     },
                   ),
@@ -199,6 +203,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
 }
 
 class _DropdownField extends StatelessWidget {
+  final TextEditingController controller;
   final ThemeData themeData;
   final String labelText;
   final String infoText;
@@ -207,6 +212,7 @@ class _DropdownField extends StatelessWidget {
   final Function(String?) onChanged;
 
   const _DropdownField({
+    required this.controller,
     required this.themeData,
     required this.labelText,
     required this.infoText,
