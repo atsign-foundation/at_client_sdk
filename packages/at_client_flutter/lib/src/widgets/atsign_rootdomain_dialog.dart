@@ -64,6 +64,9 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
 
   @override
   Widget build(BuildContext context) {
+    var firstDomain = widget.existingDomains!.values.first;
+    _domainTextController.text =
+        "${firstDomain.rootDomain}:${firstDomain.rootPort}";
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
@@ -254,6 +257,7 @@ class _DropdownField extends StatelessWidget {
           TypableDropdown(
             items: items ?? [],
             hintText: hint,
+            initialValue: controller.text,
             onChanged: onChanged,
           ),
           const SizedBox(height: 16),
