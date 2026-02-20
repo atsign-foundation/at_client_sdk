@@ -29,7 +29,6 @@ void main() {
         enrollmentId: testEnrollmentId,
       );
 
-      expect(result, isA<AtAuthResponse>());
       expect(result, isTrue);
     });
 

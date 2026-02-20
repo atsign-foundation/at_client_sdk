@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:at_auth/src/keys/at_keys_io_impl.dart';
+import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
 import 'package:at_auth/src/auth/models/at_auth_responses.dart';
@@ -68,9 +70,12 @@ class AtAuthImpl implements AtAuth {
   ///    contains keys in encrypted format (LEGACY)
   ///
   /// returns an `AtAuthResponse` indicating success or failure of authentication
-  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
+  Future<AtAuthResponse> authenticate(
+    AtAuthRequest atAuthRequest, {
+    @visibleForTesting AtServerStatus? status,
+  }) async {
     AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
-    await validateAtServer(atAuthRequest);
+    await validateAtServer(atAuthRequest, status: status);
     try {
       atAuthKeys ??= await atAuthRequest.atKeysIo!.read(atAuthRequest.atSign);
     } on AtKeyException catch (e) {
@@ -146,6 +151,7 @@ class AtAuthImpl implements AtAuth {
     String cramSecret, {
     bool autoCompleteActivation = true,
     String? publicKeyId,
+    @visibleForTesting AtServerStatus? status,
   }) async {
     var atOnboardingResponse = AtOnboardingResponse(atOnboardingRequest.atSign);
     atLookUp ??= AtLookupImpl(
@@ -167,7 +173,7 @@ class AtAuthImpl implements AtAuth {
         'Failed to read keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
       ); //swallow the error, we just want to know if keys exist or not
     }
-    await validateAtServer(atOnboardingRequest);
+    await validateAtServer(atOnboardingRequest, status: status);
     //1. cram auth
     cramAuthenticator ??= CramAuthenticator();
     var cramAuthResult = await cramAuthenticator!.authenticate(
@@ -190,6 +196,8 @@ class AtAuthImpl implements AtAuth {
     if (atOnboardingRequest.atKeys != null) {
       _atAuthKeys = atOnboardingRequest.atKeys!;
     } else {
+      //2a. if there is no specified implementation we're defaulting to FileAtKeysIo with a default file path
+      atOnboardingRequest.atKeysIo ??= FileAtKeysIo();
       switch (atOnboardingRequest.atKeysIo) {
         case WrittenAtKeysIo writtenKeys:
           _atAuthKeys =
@@ -354,8 +362,12 @@ class AtAuthImpl implements AtAuth {
   /// Uses retry logic based on the [RetryOptions] provided in the [AuthRequest].
   /// This method is used internally before onboarding or authentication operations.
   @override
-  Future<void> validateAtServer(AuthRequest atRequest) async {
-    AtServerStatus status = AtStatusImpl(
+  Future<void> validateAtServer(
+    AuthRequest atRequest, {
+    @visibleForTesting AtServerStatus? status,
+  }) async {
+    //support mocking
+    status ??= AtStatusImpl(
       rootUrl: atRequest.rootDomain.rootDomain,
       rootPort: atRequest.rootDomain.rootPort,
     );
@@ -413,7 +425,7 @@ class AtAuthImpl implements AtAuth {
         _logger.severe('Error during atServer validation: $e');
         retryCount++;
         if (retryCount >= atRequest.retryOptions.maxRetries) {
-          throw AtException(
+          throw AtAuthenticationException(
               'Max retries reached while validating atSign server. Last error: $e');
         }
         _logger.warning(

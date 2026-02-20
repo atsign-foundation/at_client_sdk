@@ -56,10 +56,15 @@ void main() {
             base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
         ..defaultSelfEncryptionKey = AtBytes.fromString(
             base64Encode(utf8.encode('defaultSelfEncryptionKey')))
+        ..apkamSymmetricKey =
+            AtBytes.fromString(base64Encode(utf8.encode('apkamSymmetricKey')))
         ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
       await fileAtKeysIo.write(atSign, atKeys);
 
-      expect(await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atSign)), true);
+      expect(
+        await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atSign)),
+        true,
+      );
     });
   });
 
@@ -68,13 +73,14 @@ void main() {
   });
 }
 
-Future<bool> matchesEncryptedAtKeys(AtKeys decryptedAtKeys, String filePath) async {
+Future<bool> matchesEncryptedAtKeys(
+    AtKeys decryptedAtKeys, String filePath) async {
   final fileAtKeysIo = FileAtKeysIo(filePath: (_) => filePath);
   final encryptedAtKeysMap = jsonDecode(File(filePath).readAsStringSync());
   var decryptedAtKeysMap = await fileAtKeysIo.decryptAtKeysWithSelfEncKey(
       encryptedAtKeysMap, PkamAuthMode.keysFile);
   return decryptedAtKeys.apkamPrivateKey.toString() ==
-          decryptedAtKeysMap.toString() &&
+          decryptedAtKeysMap.apkamPrivateKey.toString() &&
       decryptedAtKeys.apkamPublicKey.toString() ==
           decryptedAtKeysMap.apkamPublicKey.toString() &&
       decryptedAtKeys.apkamSymmetricKey.toString() ==
