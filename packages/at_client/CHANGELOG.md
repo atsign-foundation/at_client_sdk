@@ -1,3 +1,9 @@
+## NEXT
+
+- feat: new AtBase mixin
+- both ApkamSigning and AtClientBindings implement it.
+- feat: new EnvelopeSigning mixin on ApkamSigning
+
 ## 3.11.0
 
 - chore(deps): at_auth ^3.0.0

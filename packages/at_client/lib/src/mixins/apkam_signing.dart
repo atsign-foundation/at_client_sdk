@@ -1,18 +1,13 @@
 import 'package:at_client/at_client.dart'
     show
-        AtClient,
         EnrollmentConstants,
         AtKeyNotFoundException,
         AtKey,
         GetRequestOptions,
         PutRequestOptions;
-import 'package:at_utils/at_utils.dart' show AtSignLogger;
+import 'package:at_client/src/mixins/at_base.dart' show AtBase;
 
-mixin ApkamSigning {
-  AtClient get atClient;
-
-  AtSignLogger get logger;
-
+mixin ApkamSigning implements AtBase {
   String get enrollmentId {
     String id =
         atClient.getRemoteSecondary()?.atLookUp.enrollmentId ?? 'primary';

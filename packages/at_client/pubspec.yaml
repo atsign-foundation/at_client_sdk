@@ -7,6 +7,7 @@ description: The at_client library is the non-platform specific Client SDK which
 version: 3.11.0
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
 ##
+## TODO ^^^ switch to build_version package
 
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client
 homepage: https://atsign.com
