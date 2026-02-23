@@ -9,11 +9,11 @@ import 'package:http/io_client.dart';
 
 const apiBase = '/api/app/v4';
 
-class RegistrarService implements Registrar{
-	@override
-	final String registrarUrl;
-	@override
-	final String apiKey;
+class RegistrarService implements Registrar {
+  @override
+  final String registrarUrl;
+  @override
+  final String apiKey;
   late final IOClient _http;
   RegistrarService({
     required this.registrarUrl,
@@ -25,8 +25,8 @@ class RegistrarService implements Registrar{
         (X509Certificate cert, String host, int port) => true;
     _http = IOClient(innerClient);
   }
-	
-	@override
+
+  @override
   Future<Response> registrarApiRequest(
     ActivateApiEndpoint endpoint,
     Map<String, String?> data,
@@ -43,7 +43,7 @@ class RegistrarService implements Registrar{
     );
   }
 
-	@override
+  @override
   Future<bool> sendActivationOtp(String atsign) async {
     var res = await registrarApiRequest(ActivateApiEndpoint.login, {
       'atsign': atsign,
@@ -58,7 +58,7 @@ class RegistrarService implements Registrar{
     return true;
   }
 
-	@override
+  @override
   Future<String?> verifyActivation({
     required String atSign,
     required String otp,
@@ -68,7 +68,8 @@ class RegistrarService implements Registrar{
       'otp': otp,
     });
     if (res.statusCode != 200) {
-      throw Exception('Failed to verify activation: ${res.reasonPhrase} - ${res.body}');
+      throw Exception(
+          'Failed to verify activation: ${res.reasonPhrase} - ${res.body}');
     }
     var payload = jsonDecode(res.body);
     if (payload["message"] != "Verified") {

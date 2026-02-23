@@ -8,7 +8,7 @@ sealed class AuthResponse {
   AtKeys? atAuthKeys;
   AtLookUp? atLookUp;
   AtChops? atChops;
-	String? get enrollmentId => atAuthKeys?.enrollmentId;
+  String? get enrollmentId => atAuthKeys?.enrollmentId;
 
   AuthResponse(this.atSign);
 }
