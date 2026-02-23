@@ -74,9 +74,7 @@ class AtAuthImpl implements AtAuth {
   ///    contains keys in encrypted format (LEGACY)
   ///
   /// returns an `AtAuthResponse` indicating success or failure of authentication
-  Future<AtAuthResponse> authenticate(
-    AtAuthRequest atAuthRequest,
-  ) async {
+  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
     AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
     await validateAtServer(atAuthRequest);
     try {

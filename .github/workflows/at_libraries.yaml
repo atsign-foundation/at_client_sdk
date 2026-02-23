@@ -47,6 +47,7 @@ jobs:
       fail-fast: false
       matrix:
         package:
+          - at_auth
           - at_lookup
           - at_chops
           - at_onboarding_cli
