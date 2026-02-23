@@ -14,6 +14,27 @@ class AtKeys {
 
   AtKeys();
 
+  //TODO: AtBytes needs an equality operator so we can avoid this...
+  // I can't even use the strEquals in the AtBytes
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! AtKeys) return false;
+    return enrollmentId == other.enrollmentId &&
+        apkamPublicKey?.toString() == other.apkamPublicKey?.toString() &&
+        apkamPrivateKey?.toString() == other.apkamPrivateKey?.toString() &&
+        defaultEncryptionPublicKey?.toString() ==
+            other.defaultEncryptionPublicKey?.toString() &&
+        defaultEncryptionPrivateKey?.toString() ==
+            other.defaultEncryptionPrivateKey?.toString() &&
+        defaultSelfEncryptionKey?.toString() ==
+            other.defaultSelfEncryptionKey?.toString() &&
+        apkamSymmetricKey?.toString() == other.apkamSymmetricKey?.toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(enrollmentId, metadata);
+
   Map<String, dynamic> toJson() {
     return {
       auth_constants.apkamPublicKey: apkamPublicKey?.toString(),
@@ -113,6 +134,10 @@ AtChops _createApkamChops(AtKeys atKeys) {
   if (atKeys.apkamSymmetricKey == null) {
     throw AtKeyNotFoundException(
         "apkamSymmetricKey not found in AtKeys, unable to make atChops instance");
+  }
+  if (atKeys.defaultEncryptionPrivateKey == null) {
+    throw AtPrivateKeyNotFoundException(
+        'PKAM mode requires defaultEncryptionPrivateKey');
   }
   final atEncryptionKeyPair = AtEncryptionKeyPair.create(
     atKeys.defaultEncryptionPublicKey!.toString(),
