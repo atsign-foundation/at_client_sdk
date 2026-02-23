@@ -916,8 +916,8 @@ void main() {
 
     test('delayedStartListeningTimer is cancelled when stopListening called',
         () async {
-      when(() => mockAtClientImpl.getPreferences()).thenAnswer((_) =>
-          AtClientPreference()
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
             ..namespace = 'wavi'
             ..monitorAutoStart = true);
 
@@ -1309,7 +1309,6 @@ void main() {
       expect(lastReceivedNotification.isLocal, true);
     });
   });
-
 }
 
 class StatsAtKeyMatcher extends Matcher {
