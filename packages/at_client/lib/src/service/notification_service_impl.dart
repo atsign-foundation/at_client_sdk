@@ -169,7 +169,7 @@ class NotificationServiceImpl extends NotificationService
   @override
   void stopAllSubscriptions({bool stopNotificationsListener = true}) {
     if (stopNotificationsListener) {
-      monitor.stop();
+      stopListening();
     }
 
     _streamListeners.forEach((regex, streamController) {
@@ -377,6 +377,12 @@ class NotificationServiceImpl extends NotificationService
     return status;
   }
 
+  @visibleForTesting
+  Timer? delayedStartListeningTimer;
+
+  @visibleForTesting
+  Duration? delayedStartListeningTimerDuration;
+
   @override
   Stream<AtNotification> subscribe(
       {String? regex, bool shouldDecrypt = false}) {
@@ -419,7 +425,9 @@ class NotificationServiceImpl extends NotificationService
     // much better clear control over the notification listening lifecycle.
     if (atClient.getPreferences()?.monitorAutoStart == true) {
       if (regex == 'statsNotification') {
-        Future.delayed(Duration(seconds: 30), () async => startListening());
+        delayedStartListeningTimerDuration ??= Duration(seconds: 30);
+        delayedStartListeningTimer =
+            Timer(delayedStartListeningTimerDuration!, startListening);
       } else {
         startListening();
       }
@@ -543,13 +551,18 @@ class NotificationServiceImpl extends NotificationService
 
   @override
   void stopListening() {
-    if (monitor.targetState != NotificationListenerState.notConnected) {
-      logger.info('stopListening() called: stopping notification listener');
-      monitor.stop();
-    } else {
+    if (delayedStartListeningTimer != null) {
+      delayedStartListeningTimer!.cancel();
+      delayedStartListeningTimer = null;
+    }
+    if (monitor.targetState == NotificationListenerState.notConnected) {
       logger.info('stopListening() called, but'
           ' target state is already ${monitor.targetState}');
+      return;
     }
+
+    logger.info('stopListening() called: stopping notification listener');
+    monitor.stop();
   }
 
   @override

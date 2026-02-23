@@ -913,6 +913,66 @@ void main() {
       expect(received, isNotEmpty);
       expect(received[0].value, 'Got it');
     });
+
+    test('delayedStartListeningTimer is cancelled when stopListening called',
+        () async {
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..monitorAutoStart = true);
+
+      var notificationService = await NotificationServiceImpl.create(
+        mockAtClientImpl,
+        atClientManager: mockAtClientManager,
+        monitor: fakeMonitor,
+      ) as NotificationServiceImpl;
+
+      notificationService.subscribe(regex: 'statsNotification');
+      expect(notificationService.delayedStartListeningTimer, isNotNull);
+
+      notificationService.stopListening();
+      // Timer cancelled and monitor not started
+      expect(notificationService.delayedStartListeningTimer, isNull);
+      expect(fakeMonitor.currentState, NotificationListenerState.notConnected);
+    });
+
+    test('delayedStartListeningTimer is cancelled with custom Duration',
+        () async {
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi_1234'
+            ..monitorAutoStart = true);
+
+      var notificationService = await NotificationServiceImpl.create(
+        mockAtClientImpl,
+        atClientManager: mockAtClientManager,
+        monitor: fakeMonitor,
+      ) as NotificationServiceImpl;
+
+      // inject a custom duration of 10 milliseconds
+      notificationService.delayedStartListeningTimerDuration =
+          Duration(milliseconds: 10);
+
+      // subscribe to statsNotification and ensure that the timer has started
+      notificationService.subscribe(regex: 'statsNotification');
+      expect(notificationService.delayedStartListeningTimer, isNotNull);
+      expect(notificationService.monitor.targetState,
+          NotificationListenerState.notConnected);
+
+      // stop NotificationService and ensure the timer is removed
+      notificationService.stopAllSubscriptions();
+      expect(notificationService.delayedStartListeningTimer, isNull);
+      expect(notificationService.monitor.targetState,
+          NotificationListenerState.notConnected);
+
+      // await for more time than we set as the delayed start duration
+      // validate that the monitor in fact did not start
+      await Future.delayed(Duration(milliseconds: 20));
+      expect(notificationService.monitor.currentState,
+          NotificationListenerState.notConnected);
+      expect(notificationService.monitor.targetState,
+          NotificationListenerState.notConnected);
+    });
   });
 
   group('A group of tests to validate notification subscribe method', () {
