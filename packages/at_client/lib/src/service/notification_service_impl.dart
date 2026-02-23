@@ -377,7 +377,12 @@ class NotificationServiceImpl extends NotificationService
     return status;
   }
 
+  @visibleForTesting
   Timer? delayedStartListeningTimer;
+
+  @visibleForTesting
+  Duration? delayedStartListeningTimerDuration;
+
   @override
   Stream<AtNotification> subscribe(
       {String? regex, bool shouldDecrypt = false}) {
@@ -420,8 +425,9 @@ class NotificationServiceImpl extends NotificationService
     // much better clear control over the notification listening lifecycle.
     if (atClient.getPreferences()?.monitorAutoStart == true) {
       if (regex == 'statsNotification') {
+        delayedStartListeningTimerDuration ??= Duration(seconds: 30);
         delayedStartListeningTimer =
-            Timer(Duration(seconds: 30), startListening);
+            Timer(delayedStartListeningTimerDuration!, startListening);
       } else {
         startListening();
       }
