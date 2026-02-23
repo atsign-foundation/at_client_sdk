@@ -913,6 +913,28 @@ void main() {
       expect(received, isNotEmpty);
       expect(received[0].value, 'Got it');
     });
+
+    test('delayedStartListeningTimer is cancelled when stopListening called',
+        () async {
+      when(() => mockAtClientImpl.getPreferences()).thenAnswer((_) =>
+          AtClientPreference()
+            ..namespace = 'wavi'
+            ..monitorAutoStart = true);
+
+      var notificationService = await NotificationServiceImpl.create(
+        mockAtClientImpl,
+        atClientManager: mockAtClientManager,
+        monitor: fakeMonitor,
+      ) as NotificationServiceImpl;
+
+      notificationService.subscribe(regex: 'statsNotification');
+      expect(notificationService.delayedStartListeningTimer, isNotNull);
+
+      notificationService.stopListening();
+      // Timer cancelled and monitor not started
+      expect(notificationService.delayedStartListeningTimer, isNull);
+      expect(fakeMonitor.currentState, NotificationListenerState.notConnected);
+    });
   });
 
   group('A group of tests to validate notification subscribe method', () {
@@ -1287,6 +1309,7 @@ void main() {
       expect(lastReceivedNotification.isLocal, true);
     });
   });
+
 }
 
 class StatsAtKeyMatcher extends Matcher {
