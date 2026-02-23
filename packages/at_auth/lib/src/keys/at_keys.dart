@@ -171,7 +171,8 @@ AtChops _createPkamChops(AtKeys atKeysFile) {
     throw AtPrivateKeyNotFoundException(
         'PKAM mode requries defaultPkamPrivateKey');
   }
-
+  print(atKeysFile.defaultEncryptionPublicKey == null);
+  print(atKeysFile.apkamPrivateKey == null);
   final atEncryptionKeyPair = AtEncryptionKeyPair.create(
     atKeysFile.defaultEncryptionPublicKey!.toString(),
     atKeysFile.defaultEncryptionPrivateKey!.toString(),

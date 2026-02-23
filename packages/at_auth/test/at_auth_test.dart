@@ -9,7 +9,6 @@ import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io_impl.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -17,21 +16,13 @@ import 'package:at_server_status/at_server_status.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-// Create a mock for AtLookUp
 class MockAtLookUp extends Mock implements AtLookupImpl {}
-
-// Create a mock for AtChops
-class MockAtChops extends Mock implements AtChops {}
 
 class MockAtEnrollment extends Mock implements AtEnrollment {}
 
 class MockPkamAuthenticator extends Mock implements PkamAuthenticator {}
 
 class MockAtServerStatus extends Mock implements AtServerStatus {}
-
-class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
-
-class FakeDeleteVerbBuilder extends Fake implements DeleteVerbBuilder {}
 
 class FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -44,38 +35,35 @@ void main() {
   late MockAtLookUp mockAtLookUp;
   late MockPkamAuthenticator mockPkamAuthenticator;
   late MockAtServerStatus mockAtServerStatus;
-  late MockAtServerStatus mockCramAtServerStatus;
   late AtEnrollment mockAtEnrollment;
   late FileAtKeysIo fileAtKeysIo;
   final String testEnrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
 
   setUp(() {
-    mockAtLookUp = MockAtLookUp();
-    mockPkamAuthenticator = MockPkamAuthenticator();
-    mockAtEnrollment = MockAtEnrollment();
-    mockAtServerStatus = MockAtServerStatus();
-    mockCramAtServerStatus = MockAtServerStatus();
     fileAtKeysIo =
         FileAtKeysIo(filePath: (atsign) => 'test/data/${atsign}_key.atKeys');
-    atAuth = AtAuthImpl(
-        atLookUp: mockAtLookUp,
-        pkamAuthenticator: mockPkamAuthenticator,
-        atEnrollment: mockAtEnrollment);
     registerFallbackValue(FakeVerbBuilder());
     registerFallbackValue(FakeEnrollmentRequest());
     registerFallbackValue(FakeAtLookUp());
-    when(() => mockAtServerStatus.get(any())).thenAnswer((_) => Future.value(
-        AtStatus(
-            serverStatus: ServerStatus.ready,
-            rootStatus: RootStatus.found,
-            atSignStatus: AtSignStatus.activated)));
-    when(() => mockCramAtServerStatus.get(any())).thenAnswer((_) =>
-        Future.value(AtStatus(
-            serverStatus: ServerStatus.teapot,
-            rootStatus: RootStatus.found,
-            atSignStatus: AtSignStatus.teapot)));
   });
   group('AtAuthImpl authentication tests', () {
+    setUp(() {
+      mockAtLookUp = MockAtLookUp();
+      mockPkamAuthenticator = MockPkamAuthenticator();
+      mockAtServerStatus = MockAtServerStatus();
+      mockAtEnrollment = MockAtEnrollment();
+      when(() => mockAtServerStatus.get(any())).thenAnswer((_) => Future.value(
+          AtStatus(
+              serverStatus: ServerStatus.ready,
+              rootStatus: RootStatus.found,
+              atSignStatus: AtSignStatus.activated)));
+      atAuth = AtAuthImpl(
+          atLookUp: mockAtLookUp,
+          pkamAuthenticator: mockPkamAuthenticator,
+          atEnrollment: mockAtEnrollment,
+          atServerStatus: mockAtServerStatus);
+    });
+
     test('Test authenticate() true with keys file', () async {
       when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId))
           .thenAnswer((_) => Future.value(true));
@@ -87,8 +75,7 @@ void main() {
         atKeysIo: fileAtKeysIo,
       )..enrollmentId = testEnrollmentId;
 
-      final response =
-          await atAuth.authenticate(atAuthRequest, status: mockAtServerStatus);
+      final response = await atAuth.authenticate(atAuthRequest);
 
       expect(response.isSuccessful, true);
       expect(response.atAuthKeys!.enrollmentId, testEnrollmentId);
@@ -106,8 +93,7 @@ void main() {
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 
-      final response =
-          await atAuth.authenticate(atAuthRequest, status: mockAtServerStatus);
+      final response = await atAuth.authenticate(atAuthRequest);
 
       expect(response.isSuccessful, false);
       expect(response.atAuthKeys!.enrollmentId, testEnrollmentId);
@@ -126,11 +112,7 @@ void main() {
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 
-      expect(
-          () async => await atAuth.authenticate(
-                atAuthRequest,
-                status: mockAtServerStatus,
-              ),
+      expect(() async => await atAuth.authenticate(atAuthRequest),
           throwsA(isA<AtException>()));
     });
 
@@ -158,10 +140,7 @@ void main() {
             base64Encode(utf8.encode('defaultSelfEncryptionKey')))
         ..enrollmentId = testEnrollmentId;
 
-      final response = await atAuth.authenticate(
-        atAuthRequest,
-        status: mockAtServerStatus,
-      );
+      final response = await atAuth.authenticate(atAuthRequest);
 
       expect(response.isSuccessful, true);
       expect(response.atAuthKeys!.enrollmentId, testEnrollmentId);
@@ -181,8 +160,6 @@ void main() {
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
       atAuthRequest.atAuthKeys = AtKeys()
-        ..apkamPublicKey =
-            AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
         ..defaultEncryptionPublicKey = AtBytes.fromString(
             base64Encode(utf8.encode('defaultEncryptionPublicKey')))
         ..defaultEncryptionPrivateKey = AtBytes.fromString(
@@ -191,11 +168,7 @@ void main() {
             base64Encode(utf8.encode('defaultSelfEncryptionKey')))
         ..enrollmentId = testEnrollmentId;
 
-      expect(
-          () async => await atAuth.authenticate(
-                atAuthRequest,
-                status: mockAtServerStatus,
-              ),
+      expect(() async => await atAuth.authenticate(atAuthRequest),
           throwsA(isA<AtPrivateKeyNotFoundException>()));
     });
 
@@ -210,11 +183,7 @@ void main() {
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 
-      expect(
-          () async => await atAuth.authenticate(
-                atAuthRequest,
-                status: mockAtServerStatus,
-              ),
+      expect(() async => await atAuth.authenticate(atAuthRequest),
           throwsA(isA<AtAuthenticationException>()));
     });
 
@@ -232,15 +201,24 @@ void main() {
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
 
-      expect(
-          () async => await atAuth.authenticate(
-                atAuthRequest,
-                status: mockAtServerStatus,
-              ),
+      expect(() async => await atAuth.authenticate(atAuthRequest),
           throwsA(isA<AtAuthenticationException>()));
     });
   });
   group('AtAuthImpl onboarding tests', () {
+    setUp(() {
+      mockAtServerStatus = MockAtServerStatus();
+      when(() => mockAtServerStatus.get(any())).thenAnswer((_) => Future.value(
+          AtStatus(
+              serverStatus: ServerStatus.teapot,
+              rootStatus: RootStatus.found,
+              atSignStatus: AtSignStatus.teapot)));
+      atAuth = AtAuthImpl(
+          atLookUp: mockAtLookUp,
+          pkamAuthenticator: mockPkamAuthenticator,
+          atEnrollment: mockAtEnrollment,
+          atServerStatus: mockAtServerStatus);
+    });
     var testCramSecret = 'cram123';
     test('Test onboard - cramAuthenticate returns false', () async {
       when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
@@ -257,11 +235,7 @@ void main() {
       final atOnboardingRequest = AtOnboardingRequest('@alice🛠');
 
       expect(
-          () async => await atAuth.onboard(
-                atOnboardingRequest,
-                testCramSecret,
-                status: mockCramAtServerStatus,
-              ),
+          () async => await atAuth.onboard(atOnboardingRequest, testCramSecret),
           throwsA(isA<AtAuthenticationException>()));
     });
 
@@ -291,7 +265,6 @@ void main() {
       final response = await atAuth.onboard(
         atOnboardingRequest,
         testCramSecret,
-        status: mockCramAtServerStatus,
       );
 
       expect(response.isSuccessful, true);
@@ -319,7 +292,6 @@ void main() {
       final response = await atAuth.onboard(
         atOnboardingRequest,
         testCramSecret,
-        status: mockCramAtServerStatus,
       );
 
       expect(response.isSuccessful, true);

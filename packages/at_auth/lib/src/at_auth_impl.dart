@@ -41,6 +41,9 @@ class AtAuthImpl implements AtAuth {
 
   PkamAuthenticator? pkamAuthenticator;
 
+  @visibleForTesting
+  AtServerStatus? atServerStatus;
+
   AtEnrollment atEnrollment;
 
   @override
@@ -51,6 +54,7 @@ class AtAuthImpl implements AtAuth {
       this.atChops,
       this.cramAuthenticator,
       this.pkamAuthenticator,
+      this.atServerStatus,
       AtEnrollment? atEnrollment})
       : atEnrollment = atEnrollment ?? AtEnrollment.create();
 
@@ -71,11 +75,10 @@ class AtAuthImpl implements AtAuth {
   ///
   /// returns an `AtAuthResponse` indicating success or failure of authentication
   Future<AtAuthResponse> authenticate(
-    AtAuthRequest atAuthRequest, {
-    @visibleForTesting AtServerStatus? status,
-  }) async {
+    AtAuthRequest atAuthRequest,
+  ) async {
     AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
-    await validateAtServer(atAuthRequest, status: status);
+    await validateAtServer(atAuthRequest);
     try {
       atAuthKeys ??= await atAuthRequest.atKeysIo!.read(atAuthRequest.atSign);
     } on AtKeyException catch (e) {
@@ -151,7 +154,6 @@ class AtAuthImpl implements AtAuth {
     String cramSecret, {
     bool autoCompleteActivation = true,
     String? publicKeyId,
-    @visibleForTesting AtServerStatus? status,
   }) async {
     var atOnboardingResponse = AtOnboardingResponse(atOnboardingRequest.atSign);
     atLookUp ??= AtLookupImpl(
@@ -173,7 +175,7 @@ class AtAuthImpl implements AtAuth {
         'Failed to read keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
       ); //swallow the error, we just want to know if keys exist or not
     }
-    await validateAtServer(atOnboardingRequest, status: status);
+    await validateAtServer(atOnboardingRequest);
     //1. cram auth
     cramAuthenticator ??= CramAuthenticator();
     var cramAuthResult = await cramAuthenticator!.authenticate(
@@ -362,12 +364,9 @@ class AtAuthImpl implements AtAuth {
   /// Uses retry logic based on the [RetryOptions] provided in the [AuthRequest].
   /// This method is used internally before onboarding or authentication operations.
   @override
-  Future<void> validateAtServer(
-    AuthRequest atRequest, {
-    @visibleForTesting AtServerStatus? status,
-  }) async {
+  Future<void> validateAtServer(AuthRequest atRequest) async {
     //support mocking
-    status ??= AtStatusImpl(
+    atServerStatus ??= AtStatusImpl(
       rootUrl: atRequest.rootDomain.rootDomain,
       rootPort: atRequest.rootDomain.rootPort,
     );
@@ -375,7 +374,7 @@ class AtAuthImpl implements AtAuth {
 
     while (retryCount < atRequest.retryOptions.maxRetries) {
       try {
-        var atStatus = await status.get(atRequest.atSign);
+        var atStatus = await atServerStatus!.get(atRequest.atSign);
 
         // 3 Checks for onboarding:
         //   1. Root server should be found
