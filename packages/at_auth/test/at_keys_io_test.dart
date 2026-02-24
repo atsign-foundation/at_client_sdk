@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io_impl.dart';
 import 'package:at_commons/at_commons.dart';
@@ -9,6 +10,7 @@ import 'package:test/test.dart';
 void main() {
   String atSign = '@alice🛠';
   String keyFilePath = 'test/data/@alice🛠_key.atKeys';
+  String writeFilePath = 'test/data/@bober_key.atKeys';
 
   group('FileAtKeysIo tests', () {
     test('Test read() with valid atKeys file path', () async {
@@ -44,7 +46,7 @@ void main() {
     });
 
     test('Test write()', () async {
-      final fileAtKeysIo = FileAtKeysIo(filePath: (_) => keyFilePath);
+      final fileAtKeysIo = FileAtKeysIo(filePath: (_) => writeFilePath);
       final atKeys = AtKeys()
         ..apkamPublicKey =
             AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
@@ -65,6 +67,20 @@ void main() {
         await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atSign)),
         true,
       );
+    });
+
+    test('Test write() -> throwsA AtKeysOverwriteExpcetion)', () {
+      final fileAtKeysIo = FileAtKeysIo(filePath: (_) => keyFilePath);
+      AtKeys atKeys = AtKeys();
+      expect(() => fileAtKeysIo.write('test', atKeys),
+          throwsA(isA<AtKeysFileOverwriteException>()));
+    });
+
+    tearDownAll(() {
+      final keyFile = File(writeFilePath);
+      if (keyFile.existsSync()) {
+        keyFile.deleteSync();
+      }
     });
   });
 

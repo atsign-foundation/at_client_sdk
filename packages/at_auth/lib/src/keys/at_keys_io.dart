@@ -74,7 +74,7 @@ mixin KeyIOMixin on AtKeysIo {
   }
 
   FutureOr<String> encryptAtKeysWithSelfEncKey(
-      AtKeys atKeys, PkamAuthMode authMode) async {
+      AtKeys atKeys, PkamAuthMode authMode, String atsign) async {
     Map<String, dynamic> atKeysMap = {};
     if (atKeys.defaultSelfEncryptionKey == null) {
       throw AtException('selfEncryptionKey is required to encrypt the atKeys');
@@ -115,6 +115,7 @@ mixin KeyIOMixin on AtKeysIo {
     atKeysMap[auth_constants.defaultSelfEncryptionKey] =
         atKeys.defaultSelfEncryptionKey.toString();
     atKeysMap[AtConstants.enrollmentId] = atKeys.enrollmentId;
+    atKeysMap[atsign] = atKeys.defaultSelfEncryptionKey.toString();
     return jsonEncode(atKeysMap);
   }
 

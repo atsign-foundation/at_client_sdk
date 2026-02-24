@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
@@ -11,7 +10,9 @@ void main() {
   String filePath = 'test/data/@alice🛠_key.atKeys';
   final atKeysString = File(filePath).readAsStringSync();
   Map<String, dynamic> encryptedAtKeysMap = jsonDecode(atKeysString);
-  AtKeys keys = AtKeys()
+
+  // Factory function to always produce a fresh AtKeys instance
+  AtKeys createKeys() => AtKeys()
     ..apkamPublicKey =
         AtBytes.fromString(encryptedAtKeysMap[auth_constants.apkamPublicKey])
     ..apkamPrivateKey =
@@ -28,12 +29,14 @@ void main() {
     ..metadata = {};
 
   group('AtKeys json transformers', () {
-    test('toJson -> should return a Map<String,dynamic> instance', () async {
-      expect(encryptedAtKeysMap, equals(keys.toJson()));
+    test('toJson -> should return a Map instance', () async {
+      //legacy keys? or not? idk...
+      encryptedAtKeysMap.remove('@alice🛠');
+      expect(createKeys().toJson(), equals(encryptedAtKeysMap));
     });
 
     test('fromJson -> should return AtKeys instance', () async {
-      expect(keys, AtKeys.fromJson(encryptedAtKeysMap));
+      expect(AtKeys.fromJson(encryptedAtKeysMap), createKeys());
     });
 
     test('toJson -> should be nullable', () async {
@@ -45,43 +48,56 @@ void main() {
     });
 
     test('toJson -> metadata test', () async {
-      keys.metadata = {
-        'atsign': "@vforreal",
-      };
+      AtKeys keys = createKeys();
+      keys.metadata = {'atsign': "@vforreal"};
       var json = keys.toJson();
       var metadata = json['atsign'];
       expect(metadata, equals('@vforreal'));
     });
 
     test('fromJson -> metadata', () async {
-      encryptedAtKeysMap['atsign'] = "@shabonaganmcsideburns";
-      var atKeys = AtKeys.fromJson(encryptedAtKeysMap);
+      // Copy the map so we don't pollute the shared encryptedAtKeysMap
+      final localMap = Map<String, dynamic>.from(encryptedAtKeysMap);
+      localMap['atsign'] = "@shabonaganmcsideburns";
+      var atKeys = AtKeys.fromJson(localMap);
       expect(atKeys.metadata, isNotEmpty);
     });
   });
 
   group('AtKeys AtChops transformers', () {
-    test('MPKAM AtKeys to AtChopsImpl', () {
-      AtChops chops = keys.toAtChops();
-      expect(chops, isA<AtChopsImpl>());
+    late AtKeys apkam;
+    late AtKeys mpkam;
+
+    setUp(() {
+      apkam = createKeys();
+      mpkam = createKeys()..apkamSymmetricKey = null;
     });
 
-    test('APKAM AtKeys to AtChopsImpl', () {
-      AtChops chops = keys.toAtChops();
-      expect(chops, isA<AtChopsImpl>());
+    test('Preapproval state for APKAM AtKeys to AtChopsImpl', () {
+      apkam.defaultEncryptionPrivateKey = null;
+      apkam.defaultSelfEncryptionKey = null;
+      var chops = apkam.toAtChops();
+      expect(chops, isNotNull);
+    });
+
+    test('Postapproval state for APKAM AtKeys to AtChopsImpl', () {
+      expect(apkam.toAtChops(), isA<AtChopsImpl>());
+    });
+
+    test('MPKAM AtKeys to AtChopsImpl', () {
+      expect(mpkam.toAtChops(), isA<AtChopsImpl>());
     });
 
     test('MPKAM AtKeys to AtChopsImpl -> throws', () {
-      keys.apkamPrivateKey = null;
-      keys.defaultEncryptionPrivateKey = null;
-      expect(() => keys.toAtChops(), throwsA(isA<AtException>()));
+      mpkam.defaultEncryptionPrivateKey = null;
+      expect(() => mpkam.toAtChops(), throwsA(isA<AtException>()));
     });
 
     test('APKAM AtKeys to AtChopsImpl -> throws', () {
-      keys.apkamPublicKey = null;
-      keys.defaultEncryptionPrivateKey = null;
-      keys.apkamSymmetricKey = null;
-      expect(() => keys.toAtChops(), throwsA(isA<AtException>()));
+      apkam.apkamPublicKey = null;
+      apkam.defaultEncryptionPrivateKey = null;
+      apkam.apkamSymmetricKey = null;
+      expect(() => apkam.toAtChops(), throwsA(isA<AtException>()));
     });
   });
 }

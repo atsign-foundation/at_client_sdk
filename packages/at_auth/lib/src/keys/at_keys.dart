@@ -135,10 +135,6 @@ AtChops _createApkamChops(AtKeys atKeys) {
     throw AtKeyNotFoundException(
         "apkamSymmetricKey not found in AtKeys, unable to make atChops instance");
   }
-  if (atKeys.defaultEncryptionPrivateKey == null) {
-    throw AtPrivateKeyNotFoundException(
-        'PKAM mode requires defaultEncryptionPrivateKey');
-  }
   final atEncryptionKeyPair = AtEncryptionKeyPair.create(
     atKeys.defaultEncryptionPublicKey!.toString(),
     atKeys.defaultEncryptionPrivateKey == null
@@ -162,30 +158,28 @@ AtChops _createApkamChops(AtKeys atKeys) {
   return AtChopsImpl(atChopsKeys);
 }
 
-AtChops _createPkamChops(AtKeys atKeysFile) {
-  if (atKeysFile.defaultEncryptionPrivateKey == null) {
+AtChops _createPkamChops(AtKeys atKeys) {
+  if (atKeys.defaultEncryptionPrivateKey == null) {
     throw AtPrivateKeyNotFoundException(
         'PKAM mode requires defaultEncryptionPrivateKey');
   }
-  if (atKeysFile.apkamPrivateKey == null) {
+  if (atKeys.apkamPrivateKey == null) {
     throw AtPrivateKeyNotFoundException(
         'PKAM mode requries defaultPkamPrivateKey');
   }
-  print(atKeysFile.defaultEncryptionPublicKey == null);
-  print(atKeysFile.apkamPrivateKey == null);
+
   final atEncryptionKeyPair = AtEncryptionKeyPair.create(
-    atKeysFile.defaultEncryptionPublicKey!.toString(),
-    atKeysFile.defaultEncryptionPrivateKey!.toString(),
+    atKeys.defaultEncryptionPublicKey!.toString(),
+    atKeys.defaultEncryptionPrivateKey!.toString(),
   );
 
   final atPkamKeyPair = AtPkamKeyPair.create(
-    atKeysFile.apkamPublicKey!.toString(),
-    atKeysFile.apkamPrivateKey!.toString(),
+    atKeys.apkamPublicKey!.toString(),
+    atKeys.apkamPrivateKey!.toString(),
   );
 
   final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
-    ..selfEncryptionKey =
-        AESKey(atKeysFile.defaultSelfEncryptionKey!.toString());
+    ..selfEncryptionKey = AESKey(atKeys.defaultSelfEncryptionKey!.toString());
 
   return AtChopsImpl(atChopsKeys);
 }

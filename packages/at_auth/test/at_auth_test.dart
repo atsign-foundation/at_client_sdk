@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:ffi';
+import 'dart:io';
 
 import 'package:at_auth/src/at_auth_impl.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
@@ -232,7 +234,7 @@ void main() {
       when(() => mockPkamAuthenticator.authenticate(any(), any(),
           enrollmentId: "abc123")).thenAnswer((_) => Future.value(true));
 
-      final atOnboardingRequest = AtOnboardingRequest('@alice🛠');
+      final atOnboardingRequest = AtOnboardingRequest('@aaron🛠');
 
       expect(
           () async => await atAuth.onboard(atOnboardingRequest, testCramSecret),
@@ -257,7 +259,7 @@ void main() {
           AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp))
           .thenAnswer((_) => Future.value(mockEnrollmentResponse));
-      final atOnboardingRequest = AtOnboardingRequest('@alice🛠')
+      final atOnboardingRequest = AtOnboardingRequest('@bob🛠')
         ..atKeysIo = fileAtKeysIo
         ..appName = 'wavi'
         ..deviceName = 'iphone';
@@ -287,7 +289,7 @@ void main() {
           AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp))
           .thenAnswer((_) => Future.value(mockEnrollmentResponse));
-      final atOnboardingRequest = AtOnboardingRequest('@alice🛠')
+      final atOnboardingRequest = AtOnboardingRequest('@colin🛠')
         ..atKeysIo = fileAtKeysIo;
       final response = await atAuth.onboard(
         atOnboardingRequest,
@@ -296,6 +298,17 @@ void main() {
 
       expect(response.isSuccessful, true);
       expect(response.enrollmentId, 'abc123');
+    });
+
+    tearDownAll(() {
+      final bobKeys = File('test/data/@bob🛠_key.atKeys');
+      final colinKeys = File('test/data/@colin🛠_key.atKeys');
+      if (bobKeys.existsSync()) {
+        bobKeys.deleteSync();
+      }
+      if (colinKeys.existsSync()) {
+        colinKeys.deleteSync();
+      }
     });
   });
 }

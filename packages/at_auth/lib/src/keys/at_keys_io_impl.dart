@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
@@ -42,12 +43,18 @@ class FileAtKeysIo extends WrittenAtKeysIo {
 
   @override
   Future write(String atSign, AtKeys atKeys) async {
-    String atKeysData =
-        await encryptAtKeysWithSelfEncKey(atKeys, PkamAuthMode.keysFile);
     String path = filePath!(atSign);
     if (!Directory(path).parent.existsSync()) {
       await Directory(path).parent.create(recursive: true);
+    } else if (File(path).existsSync()) {
+      throw AtKeysFileOverwriteException(
+          'AtKeys File already exists at this location');
     }
+    String atKeysData = await encryptAtKeysWithSelfEncKey(
+      atKeys,
+      PkamAuthMode.keysFile,
+      atSign,
+    );
     await File(path).writeAsString(atKeysData);
   }
 }
