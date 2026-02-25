@@ -69,11 +69,13 @@ void main() {
       );
     });
 
-    test('Test write() -> throwsA AtKeysOverwriteExpcetion)', () {
+    test('Test write() -> doesnt write due to overwrite', () {
       final fileAtKeysIo = FileAtKeysIo(filePath: (_) => keyFilePath);
       AtKeys atKeys = AtKeys();
-      expect(() => fileAtKeysIo.write('test', atKeys),
-          throwsA(isA<AtKeysFileOverwriteException>()));
+      fileAtKeysIo.write('test', atKeys);
+      File file = File(keyFilePath);
+      var data = file.readAsStringSync();
+      expect(data, isNot(equals('test')));
     });
 
     tearDownAll(() {

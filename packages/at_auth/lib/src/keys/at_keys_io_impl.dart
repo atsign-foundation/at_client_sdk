@@ -46,16 +46,16 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     String path = filePath!(atSign);
     if (!Directory(path).parent.existsSync()) {
       await Directory(path).parent.create(recursive: true);
-    } else if (File(path).existsSync()) {
-      throw AtKeysFileOverwriteException(
-          'AtKeys File already exists at this location');
     }
-    String atKeysData = await encryptAtKeysWithSelfEncKey(
-      atKeys,
-      PkamAuthMode.keysFile,
-      atSign,
-    );
-    await File(path).writeAsString(atKeysData);
+    //don't overwrite the file
+    if (!File(path).existsSync()) {
+      String atKeysData = await encryptAtKeysWithSelfEncKey(
+        atKeys,
+        PkamAuthMode.keysFile,
+        atSign,
+      );
+      await File(path).writeAsString(atKeysData);
+    }
   }
 }
 
