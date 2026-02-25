@@ -77,7 +77,6 @@ class NotificationServiceImpl extends NotificationService
           getLastNotificationTime: getLastNotificationTime,
           secondaryAddressFinder: atClientManager.secondaryAddressFinder!,
         );
-    atClientManager.listenToAtSignChange(this);
     lastReceivedNotificationAtKey = AtKey.local(
             lastReceivedNotificationKey, atClient.getCurrentAtSign()!,
             namespace: atClient.getPreferences()!.namespace)
@@ -166,14 +165,30 @@ class NotificationServiceImpl extends NotificationService
     return null;
   }
 
+  @visibleForTesting
+  bool isClosed = false;
+
+  Future<void> stop() async {
+    stopAllSubscriptions();
+  }
+
   @override
   void stopAllSubscriptions({bool stopNotificationsListener = true}) {
+    if (isClosed) {
+      logger.info(
+          'stopAllSubscriptions() called, but service is already closed. Ignoring.');
+      return;
+    }
+    isClosed = true;
+
     if (stopNotificationsListener) {
       stopListening();
     }
 
     _streamListeners.forEach((regex, streamController) {
-      if (!streamController.isClosed) () => streamController.close();
+      if (!streamController.isClosed) {
+        streamController.close();
+      }
     });
     _streamListeners.clear();
   }
@@ -453,11 +468,8 @@ class NotificationServiceImpl extends NotificationService
 
   @override
   void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
-    atClientManager.removeChangeListeners(this);
-
-    logger.finer(
-        'stopping notification listeners for ${atClient.getCurrentAtSign()}');
-    stopAllSubscriptions();
+    // do nothing
+    // NotificationService does not subscribe to SwitchAtsign event anymore
   }
 
   @override
@@ -541,12 +553,12 @@ class NotificationServiceImpl extends NotificationService
 
   @override
   void startListening() {
-    if (monitor.targetState != NotificationListenerState.listening) {
-      logger.info('startListening() called: starting notification listener');
-      monitor.start();
-    } else {
-      logger.info('startListening() called, but already listening');
+    if (monitor.targetState == NotificationListenerState.listening) {
+      logger.info('startListening() called, but already targeting listening');
+      return;
     }
+    logger.info('startListening(): starting notification listener');
+    monitor.start();
   }
 
   @override
