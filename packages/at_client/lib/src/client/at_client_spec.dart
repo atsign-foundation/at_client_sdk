@@ -53,6 +53,22 @@ abstract class AtClient {
 
   AtClientPreference? getPreferences();
 
+  /// Whether this client has been stopped via [AtClientManager].
+  ///
+  /// Once true, the instance is unusable — all sub-services have been torn down
+  /// and the instance has been removed from the internal cache.
+  bool get isStopped;
+
+  /// Stops all background services (sync, notifications, monitor) and closes
+  /// local storage for this atSign.
+  ///
+  /// After calling [stop], the instance remains in the internal cache and can
+  /// be resumed by calling [AtClientManager.setCurrentAtSign] for the same
+  /// atSign, which will reopen storage and wire up fresh services.
+  ///
+  /// To permanently discard this instance, call [dispose] instead.
+  Future<void> stop();
+
   /// Updates value of [AtKey.key] is if it is already present. Otherwise creates a new key. Set [AtKey.sharedWith] if the key
   /// has to be shared with another atSign. Set [AtKey.metadata.isBinary] if you are updating binary value e.g image,file.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice will be saved as
