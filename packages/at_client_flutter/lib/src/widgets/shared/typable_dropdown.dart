@@ -5,6 +5,7 @@ class TypableDropdown extends StatelessWidget {
   final List<String> items;
   final String? initialValue;
   final ValueChanged<String?>? onChanged;
+  final String Function(String)? valueNormalizer;
   final String? hintText;
   final InputDecoration? decoration;
 
@@ -13,6 +14,7 @@ class TypableDropdown extends StatelessWidget {
     required this.items,
     this.initialValue,
     this.onChanged,
+    this.valueNormalizer,
     this.hintText,
     this.decoration,
   });
@@ -23,10 +25,15 @@ class TypableDropdown extends StatelessWidget {
       initialValue: TextEditingValue(text: initialValue ?? ''),
       optionsBuilder: (textEditingValue) {
         if (textEditingValue.text.isEmpty) return items;
-        return items.where((item) =>
-            item.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+        return items.where(
+          (item) =>
+              item.toLowerCase().contains(textEditingValue.text.toLowerCase()),
+        );
       },
-      onSelected: (value) => onChanged?.call(value),
+      onSelected: (value) {
+        final normalized = valueNormalizer?.call(value) ?? value;
+        onChanged?.call(normalized);
+      },
       optionsViewBuilder: (context, onSelected, options) {
         return Align(
           alignment: Alignment.topLeft,
@@ -47,12 +54,16 @@ class TypableDropdown extends StatelessWidget {
                       onTap: () => onSelected(item),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16.0, vertical: 12.0),
+                          horizontal: 16.0,
+                          vertical: 12.0,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.transparent,
                           border: Border(
                             bottom: BorderSide(
-                                color: Colors.grey.shade200, width: 1),
+                              color: Colors.grey.shade200,
+                              width: 1,
+                            ),
                           ),
                         ),
                         child: Text(item, style: TextStyle(fontSize: 16)),
@@ -69,7 +80,8 @@ class TypableDropdown extends StatelessWidget {
         return TextField(
           controller: controller,
           focusNode: focusNode,
-          decoration: decoration ??
+          decoration:
+              decoration ??
               InputDecoration(
                 hintText: hintText ?? 'Type to search...',
                 hintStyle: TextStyle(fontSize: 12),
@@ -82,7 +94,16 @@ class TypableDropdown extends StatelessWidget {
                   child: PhosphorIcon(PhosphorIcons.caretDown()),
                 ),
               ),
-          onChanged: (value) => onChanged?.call(value.isEmpty ? null : value),
+          onChanged: (value) {
+            var normalized = valueNormalizer?.call(value) ?? value;
+            if (normalized != value) {
+              controller.value = TextEditingValue(
+                text: normalized,
+                selection: TextSelection.collapsed(offset: normalized.length),
+              );
+            }
+            onChanged?.call(normalized.isEmpty ? null : normalized);
+          },
         );
       },
     );
