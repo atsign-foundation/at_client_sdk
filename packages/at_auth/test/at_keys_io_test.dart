@@ -10,8 +10,18 @@ void main() {
   String atSign = '@alice🛠';
   String keyFilePath = 'test/data/@alice🛠_key.atKeys';
   String writeFilePath = 'test/data/@bober_key.atKeys';
+  late String homeDirKeys;
 
   group('FileAtKeysIo tests', () {
+    setUp(() {
+      Directory home = getUserHomeDir();
+      if (!home.existsSync()) {
+        home.createSync(recursive: true);
+      }
+      homeDirKeys = '${home.path}/@alice🛠_key.atKeys';
+      File(keyFilePath).copySync(homeDirKeys);
+    });
+
     test('Test read() with valid atKeys file path', () async {
       final fileAtKeysIo = FileAtKeysIo(filePath: (_) => keyFilePath);
       final atKeys = await fileAtKeysIo.read(atSign);
@@ -82,6 +92,7 @@ void main() {
       if (keyFile.existsSync()) {
         keyFile.deleteSync();
       }
+      File(homeDirKeys).deleteSync();
     });
   });
 
@@ -109,4 +120,22 @@ Future<bool> matchesEncryptedAtKeys(
       decryptedAtKeys.defaultSelfEncryptionKey.toString() ==
           decryptedAtKeysMap.defaultSelfEncryptionKey.toString() &&
       decryptedAtKeys.enrollmentId == decryptedAtKeysMap.enrollmentId;
+}
+
+Directory getUserHomeDir() {
+  String? home;
+  if (Platform.isLinux || Platform.isMacOS) {
+    home = Platform.environment['HOME'];
+  } else if (Platform.isWindows) {
+    home = Platform.environment['USERPROFILE'];
+  } else {
+    throw UnsupportedError(
+        'Getting the home directory is not supported on ${Platform.operatingSystem}');
+  }
+
+  if (home == null) {
+    throw StateError('Home directory environment variable not defined');
+  }
+
+  return Directory(home);
 }
