@@ -1,6 +1,7 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/widgets/shared/typable_dropdown.dart';
+import 'package:at_utils/at_utils.dart';
 import 'package:flutter/material.dart';
 
 /// A dialog widget that allows users to select or input an atSign and optionally a root domain.
@@ -49,11 +50,34 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
   final TextEditingController _atSignTextController = TextEditingController();
   final TextEditingController _domainTextController = TextEditingController();
 
+  String _normalizeAtSignInput(String value) {
+    final trimmedValue = value.trim();
+    if (trimmedValue.isEmpty) {
+      return '';
+    }
+    try {
+      return AtUtils.fixAtSign(trimmedValue);
+    } catch (_) {
+      return value;
+    }
+  }
+
+  String? _normalizedAtSignForSubmit() {
+    final atSign = _selectedAtSign?.trim();
+    if (atSign == null || atSign.isEmpty) {
+      return null;
+    }
+    try {
+      return AtUtils.fixAtSign(atSign);
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _handleSubmit() {
-    if (_selectedAtSign != null) {
-      AtOnboardingRequest request = AtOnboardingRequest(
-        _selectedAtSign!,
-      );
+    final normalizedAtSign = _normalizedAtSignForSubmit();
+    if (normalizedAtSign != null) {
+      AtOnboardingRequest request = AtOnboardingRequest(normalizedAtSign);
       if (_selectedDomain != null && _selectedDomain!.isNotEmpty) {
         AtRootDomain domain = AtRootDomain.parse(_selectedDomain!);
         request.rootDomain = domain;
@@ -68,9 +92,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
     _domainTextController.text =
         "${firstDomain.rootDomain}:${firstDomain.rootPort}";
     return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
         width: 360,
         padding: const EdgeInsets.all(24),
@@ -86,6 +108,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
               hint: 'Type atSign or select from existing',
               themeData: widget.themeData,
               items: widget.existingAtSigns,
+              valueNormalizer: _normalizeAtSignInput,
               onChanged: (value) {
                 setState(() {
                   _selectedAtSign = value;
@@ -145,8 +168,9 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
                     hint: 'Type a root domain or select from existing',
                     themeData: widget.themeData,
                     items: widget.existingDomains?.values
-                        .map((domain) =>
-                            "${domain.rootDomain}:${domain.rootPort}")
+                        .map(
+                          (domain) => "${domain.rootDomain}:${domain.rootPort}",
+                        )
                         .toList(),
                     onChanged: (value) {
                       setState(() {
@@ -169,9 +193,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
               height: 44,
               child: ElevatedButton(
                 onPressed:
-                    (_selectedAtSign != null && _selectedAtSign!.isNotEmpty)
-                        ? _handleSubmit
-                        : null,
+                    _normalizedAtSignForSubmit() != null ? _handleSubmit : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: widget.themeData.colorScheme.secondary,
                   foregroundColor: Colors.white,
@@ -183,10 +205,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
                 ),
                 child: const Text(
                   'Continue',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
                 ),
               ),
             ),
@@ -213,6 +232,7 @@ class _DropdownField extends StatelessWidget {
   final String hint;
   final List<String>? items;
   final Function(String?) onChanged;
+  final String Function(String)? valueNormalizer;
 
   const _DropdownField({
     required this.controller,
@@ -222,14 +242,13 @@ class _DropdownField extends StatelessWidget {
     required this.hint,
     required this.items,
     required this.onChanged,
+    this.valueNormalizer,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
       child: Column(
         children: [
           Row(
@@ -258,6 +277,7 @@ class _DropdownField extends StatelessWidget {
             items: items ?? [],
             hintText: hint,
             initialValue: controller.text,
+            valueNormalizer: valueNormalizer,
             onChanged: onChanged,
           ),
           const SizedBox(height: 16),
