@@ -14,11 +14,11 @@ void main() {
 
   group('FileAtKeysIo tests', () {
     setUp(() {
-      Directory home = getUserHomeDir();
-      if (!home.existsSync()) {
-        home.createSync(recursive: true);
+      homeDirKeys = '${getUserHomeDir().path}/.atsign/keys/@alice🛠_key.atKeys';
+      Directory keysDir = Directory(homeDirKeys).parent;
+      if (!keysDir.existsSync()) {
+        keysDir.createSync(recursive: true);
       }
-      homeDirKeys = '${home.path}/.atsign/keys/@alice🛠_key.atKeys';
       File(keyFilePath).copySync(homeDirKeys);
     });
 
