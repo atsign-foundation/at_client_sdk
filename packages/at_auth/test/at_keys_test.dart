@@ -81,6 +81,7 @@ void main() {
     });
 
     test('Postapproval state for APKAM AtKeys to AtChopsImpl', () {
+      apkam = createKeys();
       expect(apkam.toAtChops(), isA<AtChopsImpl>());
     });
 
