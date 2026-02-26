@@ -18,7 +18,7 @@ void main() {
       if (!home.existsSync()) {
         home.createSync(recursive: true);
       }
-      homeDirKeys = '${home.path}/@alice🛠_key.atKeys';
+      homeDirKeys = '${home.path}/.atsign/keys/@alice🛠_key.atKeys';
       File(keyFilePath).copySync(homeDirKeys);
     });
 
