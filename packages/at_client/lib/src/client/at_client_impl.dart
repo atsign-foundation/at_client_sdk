@@ -9,7 +9,6 @@ import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
-import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
@@ -41,7 +40,7 @@ import 'package:uuid/uuid.dart';
 ///
 /// Implements to [AtSignChangeListener] to get notified on switch atSign event. On switch atSign event,
 /// pause's the compaction job on currentAtSign and start/resume the compaction job on the new atSign
-class AtClientImpl implements AtClient, AtSignChangeListener {
+class AtClientImpl implements AtClient {
   AtClientPreference? _preference;
 
   AtClientPreference? get preference => _preference;
@@ -1057,12 +1056,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   AtClientPreference? getPreferences() {
     return _preference;
-  }
-
-  @override
-  void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
-    // do nothing
-    // AtClientImpl does not register a change listener anymore
   }
 
   // TODO v4 - remove the follow methods in version 4 of at_client package

@@ -4,8 +4,6 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
-import 'package:at_client/src/listener/at_sign_change_listener.dart';
-import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/util/logger_util.dart';
@@ -19,7 +17,7 @@ import 'package:cron/cron.dart';
 import 'package:meta/meta.dart';
 
 ///A [SyncService] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
-class SyncServiceImpl implements SyncService, AtSignChangeListener {
+class SyncServiceImpl implements SyncService {
   static int syncRequestThreshold = 3,
       syncRequestTriggerInSeconds = 3,
       syncRunIntervalSeconds = 5,
@@ -41,7 +39,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   final List<SyncProgressListener> _syncProgressListeners = [];
   late final Cron _cron;
-  final _syncRequests = ListQueue<SyncRequest>(queueSize);
+
+  @visibleForTesting
+  final syncRequests = ListQueue<SyncRequest>(queueSize);
+
   bool _syncInProgress = false;
 
   @override
@@ -198,15 +199,15 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       return;
     }
     if (respectSyncRequestQueueSizeAndRequestTriggerDuration) {
-      if (_syncRequests.isEmpty ||
-          (_syncRequests.length < syncRequestThreshold &&
-              (_syncRequests.isNotEmpty &&
+      if (syncRequests.isEmpty ||
+          (syncRequests.length < syncRequestThreshold &&
+              (syncRequests.isNotEmpty &&
                   DateTime.now()
                           .toUtc()
-                          .difference(_syncRequests.elementAt(0).requestedOn)
+                          .difference(syncRequests.elementAt(0).requestedOn)
                           .inSeconds <
                       syncRequestTriggerInSeconds))) {
-        _logger.finest('skipping sync - queue length ${_syncRequests.length}');
+        _logger.finest('skipping sync - queue length ${syncRequests.length}');
         return;
       }
     }
@@ -290,11 +291,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// Fetches the first app request from the queue. If there are no app requests, the first element of the
   /// queue is returned.
   SyncRequest _getSyncRequest() {
-    return _syncRequests.firstWhere(
+    return syncRequests.firstWhere(
         (syncRequest) =>
             syncRequest.requestSource == SyncRequestSource.app &&
             syncRequest.onDone != null,
-        orElse: () => _syncRequests.removeFirst());
+        orElse: () => syncRequests.removeFirst());
   }
 
   void _syncError(SyncRequest syncRequest) {
@@ -337,17 +338,17 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   void _addSyncRequestToQueue(SyncRequest syncRequest) {
     hasHadNoSyncRequests = false;
-    if (_syncRequests.length == queueSize) {
-      _syncRequests.removeLast();
+    if (syncRequests.length == queueSize) {
+      syncRequests.removeLast();
     }
-    _syncRequests.addLast(syncRequest);
+    syncRequests.addLast(syncRequest);
   }
 
   void _clearQueue() {
     _logger.finer(_logger.getLogMessageWithClientParticulars(
         _atClient.getPreferences()!.atClientParticulars,
         'Clearing sync queue'));
-    _syncRequests.clear();
+    syncRequests.clear();
   }
 
   @visibleForTesting
@@ -1077,19 +1078,13 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   @visibleForTesting
   bool isStopped = false;
 
-  @override
-  void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
-    // do nothing
-    // SyncService does not subscribe to SwitchAtsign event anymore
-  }
-
   Future<void> stop() async {
     if (isStopped) {
-      _logger.info('close() called, but service is already closed. Ignoring.');
+      _logger.info('stop() called, but service is already stopped. Ignoring.');
       return;
     }
     isStopped = true;
-    _logger.info('Closing sync service for $currentAtSign');
+    _logger.info('Stopping sync service for $currentAtSign');
 
     _drainSyncQueue();
 
@@ -1105,7 +1100,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     try {
       await _cron.close();
     } catch (e) {
-      _logger.warning('Error while closing cron: $e');
+      _logger.warning('Error while stopping cron: $e');
     }
 
     removeAllProgressListeners();
@@ -1116,8 +1111,8 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     final exception = AtClientException(
         error_codes['AtClientException'], 'SyncService has been closed');
 
-    while (_syncRequests.isNotEmpty) {
-      var request = _syncRequests.removeFirst();
+    while (syncRequests.isNotEmpty) {
+      var request = syncRequests.removeFirst();
       try {
         if (request.onError != null) {
           request.onError!(SyncResult()
@@ -1165,7 +1160,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   ///Clears all in-memory entities belonging to the syncService
   @visibleForTesting
   void clearSyncEntities() {
-    _syncRequests.clear();
+    syncRequests.clear();
     _syncProgressListeners.clear();
   }
 
@@ -1178,6 +1173,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   @visibleForTesting
   int getSyncRequestQueueSize() {
-    return _syncRequests.length;
+    return syncRequests.length;
   }
 }

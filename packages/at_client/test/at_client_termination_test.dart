@@ -231,7 +231,8 @@ void main() {
 
         expect((atClient2.syncService as SyncServiceImpl).isStopped, false);
         expect(
-            (atClient2.notificationService as NotificationServiceImpl).isClosed,
+            (atClient2.notificationService as NotificationServiceImpl)
+                .isStopped,
             false);
       });
     });

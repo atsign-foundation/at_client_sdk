@@ -1347,6 +1347,25 @@ void main() {
       expect(lastReceivedNotification.isLocal, true);
     });
   });
+
+  group('validate stop() behaviour', () {
+    test('stop() sets isStopped to true', () async {
+      when(() => mockAtClientManager.secondaryAddressFinder)
+          .thenReturn(MockSecondaryAddressFinder());
+      final notificationService = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          atClientManager: mockAtClientManager) as NotificationServiceImpl;
+
+      await notificationService.stop();
+      expect(notificationService.isStopped, true);
+      expect(notificationService.currentListenerState,
+          NotificationListenerState.notConnected);
+      expect(notificationService.monitor.currentState,
+          NotificationListenerState.notConnected);
+      expect(notificationService.monitor.targetState,
+          NotificationListenerState.notConnected);
+    });
+  });
 }
 
 class StatsAtKeyMatcher extends Matcher {

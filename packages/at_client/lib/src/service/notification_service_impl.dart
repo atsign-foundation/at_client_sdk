@@ -4,8 +4,6 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_client/src/listener/at_sign_change_listener.dart';
-import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
@@ -20,8 +18,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 
-class NotificationServiceImpl extends NotificationService
-    implements AtSignChangeListener {
+class NotificationServiceImpl extends NotificationService {
   final Map<NotificationConfig, StreamController> _streamListeners =
       HashMap(equals: _compareNotificationConfig, hashCode: _generateHashCode);
   final emptyRegex = '';
@@ -166,7 +163,7 @@ class NotificationServiceImpl extends NotificationService
   }
 
   @visibleForTesting
-  bool isClosed = false;
+  bool isStopped = false;
 
   Future<void> stop() async {
     stopAllSubscriptions();
@@ -174,12 +171,12 @@ class NotificationServiceImpl extends NotificationService
 
   @override
   void stopAllSubscriptions({bool stopNotificationsListener = true}) {
-    if (isClosed) {
+    if (isStopped) {
       logger.info(
           'stopAllSubscriptions() called, but service is already closed. Ignoring.');
       return;
     }
-    isClosed = true;
+    isStopped = true;
 
     if (stopNotificationsListener) {
       stopListening();
@@ -464,12 +461,6 @@ class NotificationServiceImpl extends NotificationService
   /// Returns the hashcode for the [NotificationConfig.regex]
   static int _generateHashCode(NotificationConfig notificationConfig) {
     return notificationConfig.regex.hashCode;
-  }
-
-  @override
-  void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
-    // do nothing
-    // NotificationService does not subscribe to SwitchAtsign event anymore
   }
 
   @override
