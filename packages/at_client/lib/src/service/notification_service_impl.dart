@@ -173,7 +173,7 @@ class NotificationServiceImpl extends NotificationService {
   void stopAllSubscriptions({bool stopNotificationsListener = true}) {
     if (isStopped) {
       logger.info(
-          'stopAllSubscriptions() called, but service is already closed. Ignoring.');
+          'stopAllSubscriptions() called, but service is already stopped. Ignoring.');
       return;
     }
     isStopped = true;

@@ -1109,7 +1109,7 @@ class SyncServiceImpl implements SyncService {
   void _drainSyncQueue() {
     // 1. Drain the sync request queue with errors
     final exception = AtClientException(
-        error_codes['AtClientException'], 'SyncService has been closed');
+        error_codes['AtClientException'], 'SyncService has been stopped');
 
     while (syncRequests.isNotEmpty) {
       var request = syncRequests.removeFirst();
@@ -1129,7 +1129,7 @@ class SyncServiceImpl implements SyncService {
       ..atSign = currentAtSign
       ..syncStatus = SyncStatus.failure
       ..atClientException = exception
-      ..message = 'SyncService closed';
+      ..message = 'SyncService stopped';
 
     for (var listener in _syncProgressListeners) {
       try {

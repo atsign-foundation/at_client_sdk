@@ -251,12 +251,12 @@ class AtClientImpl implements AtClient {
   @override
   Future<void> stop() async {
     if (_isStopped) {
-      _logger.info('close() called, but client is already closed. Ignoring.');
+      _logger.info('stop() called: but client is already stopped. Ignoring.');
       return;
     }
 
     _isStopped = true;
-    _logger.info('close() called: stopping at_client for $_atSign');
+    _logger.info('stop() called: stopping at_client for $_atSign');
 
     await _stopBackgroundProcesses();
   }
