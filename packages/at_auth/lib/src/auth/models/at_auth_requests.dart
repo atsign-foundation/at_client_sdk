@@ -39,6 +39,7 @@ class AtOnboardingRequest extends AuthRequest {
   AtOnboardingRequest(
     super.atSign, {
     super.rootDomain,
+    super.retryOptions,
     this.atKeysIo,
     this.atKeys,
   });
@@ -53,28 +54,29 @@ class AtOnboardingRequest extends AuthRequest {
 class AtAuthRequest extends AuthRequest {
   /// Constructor for [AtAuthRequest]
   /// [atSign] is the atSign for authentication
-	///
-	/// Must provide one of the following!
-	/// atKeysIo - method of authentication
-	///    or 
-	/// atAuthKeys - the actual keys themselves
-	///
+  ///
+  /// Must provide one of the following!
+  /// atKeysIo - method of authentication
+  ///    or
+  /// atAuthKeys - the actual keys themselves
+  ///
   /// [atKeysIo] controls how AtKeys are loaded and saved (e.g. file system, keychain, secure element)
   /// [atAuthKeys] are the keys for authentication of an atSign
   ///
   /// optional:
   /// [rootDomain] is the default domain of the root server (e.g. root.atsign.org, 64)
   AtAuthRequest(
-    super.atSign,{
+    super.atSign, {
     super.rootDomain,
     super.retryOptions,
     this.atKeysIo,
     this.atAuthKeys,
-  }){
-		if(atKeysIo == null && atAuthKeys == null){
-			throw Exception("Either method of authentication(atKeysIo) or atAuthKeys need to be provided");
-		}
-	}
+  }) {
+    if (atKeysIo == null && atAuthKeys == null) {
+      throw Exception(
+          "Either method of authentication(atKeysIo) or atAuthKeys need to be provided");
+    }
+  }
 
   // Controls how the authentication is performed
   AtKeysIo? atKeysIo;

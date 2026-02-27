@@ -4,8 +4,6 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_client/src/listener/at_sign_change_listener.dart';
-import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
@@ -20,8 +18,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 
-class NotificationServiceImpl extends NotificationService
-    implements AtSignChangeListener {
+class NotificationServiceImpl extends NotificationService {
   final Map<NotificationConfig, StreamController> _streamListeners =
       HashMap(equals: _compareNotificationConfig, hashCode: _generateHashCode);
   final emptyRegex = '';
@@ -77,7 +74,6 @@ class NotificationServiceImpl extends NotificationService
           getLastNotificationTime: getLastNotificationTime,
           secondaryAddressFinder: atClientManager.secondaryAddressFinder!,
         );
-    atClientManager.listenToAtSignChange(this);
     lastReceivedNotificationAtKey = AtKey.local(
             lastReceivedNotificationKey, atClient.getCurrentAtSign()!,
             namespace: atClient.getPreferences()!.namespace)
@@ -166,14 +162,30 @@ class NotificationServiceImpl extends NotificationService
     return null;
   }
 
+  @visibleForTesting
+  bool isStopped = false;
+
+  Future<void> stop() async {
+    stopAllSubscriptions();
+  }
+
   @override
   void stopAllSubscriptions({bool stopNotificationsListener = true}) {
+    if (isStopped) {
+      logger.info(
+          'stopAllSubscriptions() called, but service is already stopped. Ignoring.');
+      return;
+    }
+    isStopped = true;
+
     if (stopNotificationsListener) {
       stopListening();
     }
 
     _streamListeners.forEach((regex, streamController) {
-      if (!streamController.isClosed) () => streamController.close();
+      if (!streamController.isClosed) {
+        streamController.close();
+      }
     });
     _streamListeners.clear();
   }
@@ -452,15 +464,6 @@ class NotificationServiceImpl extends NotificationService
   }
 
   @override
-  void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
-    atClientManager.removeChangeListeners(this);
-
-    logger.finer(
-        'stopping notification listeners for ${atClient.getCurrentAtSign()}');
-    stopAllSubscriptions();
-  }
-
-  @override
   Future<NotificationResult> getStatus(String notificationId) async {
     var status = await atClient.notifyStatus(notificationId);
     var atResponse = DefaultResponseParser().parse(status);
@@ -541,12 +544,12 @@ class NotificationServiceImpl extends NotificationService
 
   @override
   void startListening() {
-    if (monitor.targetState != NotificationListenerState.listening) {
-      logger.info('startListening() called: starting notification listener');
-      monitor.start();
-    } else {
-      logger.info('startListening() called, but already listening');
+    if (monitor.targetState == NotificationListenerState.listening) {
+      logger.info('startListening() called, but already targeting listening');
+      return;
     }
+    logger.info('startListening(): starting notification listener');
+    monitor.start();
   }
 
   @override

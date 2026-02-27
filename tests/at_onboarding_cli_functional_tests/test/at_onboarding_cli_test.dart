@@ -142,33 +142,40 @@ void main() {
       String atSign = '@egcovidlab🛠';
       AtOnboardingPreference atOnboardingPreference = getPreferences(atSign);
 
-      Future<void> onboard(bool autoCompleteActivation) async {
+      Future<void> onboard({
+        bool autoCompleteActivation = true,
+        bool cleanup = true,
+      }) async {
         AtOnboardingService atOnboardingService = AtOnboardingServiceImpl(
           atSign,
           atOnboardingPreference,
         );
-        bool status = await atOnboardingService.onboard(
+        File atKeysFile = File(atOnboardingPreference.atKeysFilePath!);
+        await atOnboardingService.onboard(
           autoCompleteActivation: autoCompleteActivation,
         );
-        expect(status, true);
         expect(await atOnboardingService.isOnboarded(), autoCompleteActivation);
 
-        File atKeysFile = File(atOnboardingPreference.atKeysFilePath!);
-
-        /// Assert .atKeys file is generated for the atSign
+        // Assert .atKeys file is generated for the atSign
         expect(await atKeysFile.exists(), true);
+        if (cleanup) {
+          await atKeysFile.delete();
+          expect(await atKeysFile.exists(), false);
+        }
       }
 
       // onboard without removing cram secret
-      await onboard(false);
+      await onboard(
+        autoCompleteActivation: false,
+      );
 
       // do it again, but remove the cram secret (should succeed)
-      await onboard(true);
+      await onboard();
 
       // try to do it again (should fail)
       await expectLater(() async {
         try {
-          await onboard(true);
+          await onboard();
         } catch (e) {
           print('Caught an ${e.runtimeType} as expected ($e)');
           rethrow;
@@ -177,6 +184,21 @@ void main() {
           throwsA(predicate((dynamic e) =>
               e is AtActivateException &&
               e.message == 'atsign $atSign is already activated')));
+
+      // try to onboard with keys in place
+      await expectLater(() async {
+        try {
+          File atKeysFile = File(atOnboardingPreference.atKeysFilePath!);
+          if (await atKeysFile.exists()) {
+            await atKeysFile.create(recursive: true);
+          }
+          await onboard();
+        } catch (e) {
+          print('Caught an ${e.runtimeType} as expected ($e)');
+          rethrow;
+        }
+      }, throwsA(predicate((dynamic e) => e is AtException)));
+      ;
     });
 
     tearDown(() async {

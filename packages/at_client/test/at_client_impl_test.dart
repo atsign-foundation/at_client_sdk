@@ -77,34 +77,28 @@ void main() {
     AtClientPreference atClientPreference = AtClientPreference()
       ..hiveStoragePath = 'test/hive'
       ..commitLogPath = 'test/hive/path';
+
     setUp(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
       AtClientManager.getInstance().removeAllChangeListeners();
     });
+
     tearDown(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
       AtClientManager.getInstance().removeAllChangeListeners();
     });
-    test('A test to verify switch atSign event clears the inactive listeners',
-        () async {
+
+    test('A test to verify change', () async {
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace, atClientPreference);
-      expect(atClientManager.getChangeListenersSize(), 3);
+
+      expect(atClientManager.getChangeListenersSize(), 0);
       atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign('@bob', namespace, atClientPreference);
-      expect(atClientManager.getChangeListenersSize(), 3);
-      // Verify the listeners in [AtClientManager._changeListeners] list belongs
-      // to the new atSign. Here @bob.
-      var itr = atClientManager.getItemsInChangeListeners();
-      while (itr.moveNext()) {
-        if (itr.current is NotificationService) {
-          expect((itr.current as NotificationServiceImpl).atSign, '@bob');
-        } else if (itr.current is SyncService) {
-          expect((itr.current as SyncServiceImpl).currentAtSign, '@bob');
-        } else if (itr.current is AtClientImpl) {
-          expect((itr.current as AtClientImpl).getCurrentAtSign(), '@bob');
-        }
-      }
+      expect(atClientManager.getChangeListenersSize(), 0);
+
+      // Notification Service, Sync Service and AtClientImpl do not register
+      // change listeners anymore
     });
 
     test(
@@ -117,7 +111,8 @@ void main() {
         ..commitLogPath = 'test/hive/path';
       var atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace, atClientPreference);
-      expect(atClientManager.getChangeListenersSize(), 3);
+
+      expect(atClientManager.getChangeListenersSize(), 0);
       atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace, atClientPreference);
       atClientManager = await AtClientManager.getInstance()
@@ -126,19 +121,10 @@ void main() {
           .setCurrentAtSign(atSign, namespace, atClientPreference);
       atClientManager = await AtClientManager.getInstance()
           .setCurrentAtSign(atSign, namespace, atClientPreference);
-      expect(atClientManager.getChangeListenersSize(), 3);
-      // Verify the listeners in [AtClientManager._changeListeners] list belongs
-      // to the new atSign. Here @alice.
-      var itr = atClientManager.getItemsInChangeListeners();
-      while (itr.moveNext()) {
-        if (itr.current is NotificationService) {
-          expect((itr.current as NotificationServiceImpl).atSign, atSign);
-        } else if (itr.current is SyncService) {
-          expect((itr.current as SyncServiceImpl).currentAtSign, atSign);
-        } else if (itr.current is AtClientImpl) {
-          expect((itr.current as AtClientImpl).getCurrentAtSign(), atSign);
-        }
-      }
+      expect(atClientManager.getChangeListenersSize(), 0);
+
+      // Notification Service, Sync Service and AtClientImpl do not register
+      // change listeners anymore
     });
 
     test('A test to verify atSigns switched multiple times', () async {
@@ -347,8 +333,13 @@ void main() {
         'A test to verify exception is thrown when SPP contains special characters',
         () async {
       String invalidSPP = 'abc#12';
-      var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign(atSign, 'wavi', AtClientPreference());
+      var atClientManager =
+          await AtClientManager.getInstance().setCurrentAtSign(
+              atSign,
+              'wavi',
+              AtClientPreference()
+                ..hiveStoragePath = 'test/hive'
+                ..commitLogPath = 'test/hive/path');
       expect(
           () async => await atClientManager.atClient.setSPP(invalidSPP),
           throwsA(predicate((dynamic e) =>

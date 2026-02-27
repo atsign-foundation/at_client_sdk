@@ -9,7 +9,6 @@ import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
-import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/manager/sync_manager_impl.dart';
@@ -17,6 +16,8 @@ import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
@@ -39,7 +40,7 @@ import 'package:uuid/uuid.dart';
 ///
 /// Implements to [AtSignChangeListener] to get notified on switch atSign event. On switch atSign event,
 /// pause's the compaction job on currentAtSign and start/resume the compaction job on the new atSign
-class AtClientImpl implements AtClient, AtSignChangeListener {
+class AtClientImpl implements AtClient {
   AtClientPreference? _preference;
 
   AtClientPreference? get preference => _preference;
@@ -80,6 +81,9 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   set atChops(AtChops? atChops) {
     _atChops = atChops;
+    if (_remoteSecondary != null) {
+      _remoteSecondary!.atChops = atChops;
+    }
   }
 
   @override
@@ -124,8 +128,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   EncryptionService? get encryptionService => _encryptionService;
 
-  late final AtClientManager _atClientManager;
-
   late final AtSignLogger _logger;
 
   @override
@@ -167,8 +169,7 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
       await atClientImpl._init(atLookUp: atLookUp);
     }
 
-    await atClientImpl!.startCompactionJob();
-    atClientManager.listenToAtSignChange(atClientImpl);
+    await atClientImpl!.start();
 
     atClientInstanceMap[currentAtSign] = atClientImpl;
     return atClientInstanceMap[currentAtSign];
@@ -192,7 +193,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
     _preference?.namespace ??= namespace;
-    _atClientManager = atClientManager;
     _localSecondaryKeyStore = localSecondaryKeyStore;
 
     if (_localSecondaryKeyStore != null && !_preference!.isLocalStoreRequired) {
@@ -232,6 +232,61 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
     putRequestTransformer.atClient = this;
 
     _cascadeSetTelemetryService();
+  }
+
+  bool _isStopped = false;
+
+  @override
+  bool get isStopped => _isStopped;
+
+  Future<void> start() async {
+    if (!_isStopped) {
+      _logger.finer('start() called, but atClient is not stopped. Ignoring');
+      return;
+    }
+    _isStopped = false;
+    await startCompactionJob();
+  }
+
+  @override
+  Future<void> stop() async {
+    if (_isStopped) {
+      _logger.info('stop() called: but client is already stopped. Ignoring.');
+      return;
+    }
+
+    _isStopped = true;
+    _logger.info('stop() called: stopping at_client for $_atSign');
+
+    await _stopBackgroundProcesses();
+  }
+
+  Future<void> _stopBackgroundProcesses() async {
+    try {
+      await stopCompactionJob();
+    } catch (e) {
+      _logger.warning('Error while stopping compaction job: $e');
+    }
+
+    try {
+      await (syncService as SyncServiceImpl).stop();
+    } catch (e) {
+      _logger.warning('Error while closing sync service: $e');
+    }
+
+    try {
+      await (notificationService as NotificationServiceImpl).stop();
+    } catch (e) {
+      _logger.warning('Error while closing notification service: $e');
+    }
+
+    if (_remoteSecondary != null) {
+      try {
+        await _remoteSecondary!.closeConnection();
+      } catch (e) {
+        _logger.warning('Error while closing remote secondary connection: $e');
+      }
+    }
   }
 
   @override
@@ -1001,17 +1056,6 @@ class AtClientImpl implements AtClient, AtSignChangeListener {
   @override
   AtClientPreference? getPreferences() {
     return _preference;
-  }
-
-  @override
-  void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
-    // Checks if the instance of AtClientImpl belongs to previous atSign. If Yes,
-    // the compaction job is stopped and removed from changeListener list.
-    if (switchAtSignEvent.previousAtClient?.getCurrentAtSign() ==
-        getCurrentAtSign()) {
-      _atClientCommitLogCompaction!.stopCompactionJob();
-      _atClientManager.removeChangeListeners(this);
-    }
   }
 
   // TODO v4 - remove the follow methods in version 4 of at_client package
