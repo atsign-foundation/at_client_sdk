@@ -4,21 +4,20 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
-import 'package:at_client/src/listener/at_sign_change_listener.dart';
-import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/util/logger_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
+    hide AtNotification;
 import 'package:at_utils/at_utils.dart';
 import 'package:cron/cron.dart';
 import 'package:meta/meta.dart';
 
 ///A [SyncService] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
-class SyncServiceImpl implements SyncService, AtSignChangeListener {
+class SyncServiceImpl implements SyncService {
   static int syncRequestThreshold = 3,
       syncRequestTriggerInSeconds = 3,
       syncRunIntervalSeconds = 5,
@@ -27,6 +26,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   final RemoteSecondary _remoteSecondary;
   @visibleForTesting
   late AtKeyDecryptionManager atKeyDecryptionManager;
+  StreamSubscription<AtNotification>? _statsNotificationSubscription;
 
   /// utility method to reduce code verbosity in this file
   /// Does nothing if a telemetryService has not been injected
@@ -39,7 +39,10 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   final List<SyncProgressListener> _syncProgressListeners = [];
   late final Cron _cron;
-  final _syncRequests = ListQueue<SyncRequest>(queueSize);
+
+  @visibleForTesting
+  final syncRequests = ListQueue<SyncRequest>(queueSize);
+
   bool _syncInProgress = false;
 
   @override
@@ -48,8 +51,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   Function? onDone;
 
   late final AtSignLogger _logger;
-
-  final AtClientManager _atClientManager;
 
   // "^shared_key\..+@.+" matches the key that starts-with shared_key.<someone>@<me>
   // "@.+:shared_key@.+" matches the key that starts-with @<someone>:shared_key@<me>
@@ -72,22 +73,19 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
     remoteSecondary ??= RemoteSecondary(
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
         atChops: atClient.atChops, enrollmentId: atClient.enrollmentId);
-    final syncService =
-        SyncServiceImpl._(atClientManager, atClient, remoteSecondary);
+    final syncService = SyncServiceImpl._(atClient, remoteSecondary);
     await syncService.statsServiceListener();
     syncService._scheduleSyncRun();
     return syncService;
   }
 
-  SyncServiceImpl._(
-      this._atClientManager, this._atClient, this._remoteSecondary) {
+  SyncServiceImpl._(this._atClient, this._remoteSecondary) {
     _logger = AtSignLogger('SyncService (${_atClient.getCurrentAtSign()})');
     _lastReceivedServerCommitIdAtKey =
         AtKey.local('lastreceivedservercommitid', currentAtSign).build();
     _skipDeletesUntilCommitId =
         AtKey.local('skipdeletesuntil', currentAtSign).build();
     atKeyDecryptionManager = AtKeyDecryptionManager(_atClient);
-    _atClientManager.listenToAtSignChange(this);
   }
 
   void _scheduleSyncRun() {
@@ -136,7 +134,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   Future<void> statsServiceListener() async {
     // Setting the regex to 'statsNotification' to receive only the notifications
     // from stats notification service.
-    _atClient.notificationService
+    _statsNotificationSubscription = _atClient.notificationService
         .subscribe(regex: 'statsNotification')
         .listen((notification) async {
       _logger.finer(_logger.getLogMessageWithClientParticulars(
@@ -201,15 +199,15 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
       return;
     }
     if (respectSyncRequestQueueSizeAndRequestTriggerDuration) {
-      if (_syncRequests.isEmpty ||
-          (_syncRequests.length < syncRequestThreshold &&
-              (_syncRequests.isNotEmpty &&
+      if (syncRequests.isEmpty ||
+          (syncRequests.length < syncRequestThreshold &&
+              (syncRequests.isNotEmpty &&
                   DateTime.now()
                           .toUtc()
-                          .difference(_syncRequests.elementAt(0).requestedOn)
+                          .difference(syncRequests.elementAt(0).requestedOn)
                           .inSeconds <
                       syncRequestTriggerInSeconds))) {
-        _logger.finest('skipping sync - queue length ${_syncRequests.length}');
+        _logger.finest('skipping sync - queue length ${syncRequests.length}');
         return;
       }
     }
@@ -293,11 +291,11 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   /// Fetches the first app request from the queue. If there are no app requests, the first element of the
   /// queue is returned.
   SyncRequest _getSyncRequest() {
-    return _syncRequests.firstWhere(
+    return syncRequests.firstWhere(
         (syncRequest) =>
             syncRequest.requestSource == SyncRequestSource.app &&
             syncRequest.onDone != null,
-        orElse: () => _syncRequests.removeFirst());
+        orElse: () => syncRequests.removeFirst());
   }
 
   void _syncError(SyncRequest syncRequest) {
@@ -340,17 +338,17 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   void _addSyncRequestToQueue(SyncRequest syncRequest) {
     hasHadNoSyncRequests = false;
-    if (_syncRequests.length == queueSize) {
-      _syncRequests.removeLast();
+    if (syncRequests.length == queueSize) {
+      syncRequests.removeLast();
     }
-    _syncRequests.addLast(syncRequest);
+    syncRequests.addLast(syncRequest);
   }
 
   void _clearQueue() {
     _logger.finer(_logger.getLogMessageWithClientParticulars(
         _atClient.getPreferences()!.atClientParticulars,
         'Clearing sync queue'));
-    _syncRequests.clear();
+    syncRequests.clear();
   }
 
   @visibleForTesting
@@ -1077,16 +1075,70 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
         _atClient.getCurrentAtSign()!);
   }
 
-  @override
-  void listenToAtSignChange(SwitchAtSignEvent switchAtSignEvent) {
-    _atClientManager.removeChangeListeners(this);
+  @visibleForTesting
+  bool isStopped = false;
 
-    _syncRequests.clear();
+  Future<void> stop() async {
+    if (isStopped) {
+      _logger.info('stop() called, but service is already stopped. Ignoring.');
+      return;
+    }
+    isStopped = true;
+    _logger.info('Stopping sync service for $currentAtSign');
+
+    _drainSyncQueue();
+
+    _logger.finer('stopping stats notification subscription');
+    try {
+      await _statsNotificationSubscription?.cancel();
+    } catch (e) {
+      _logger.warning(
+          'Error while cancelling stats notification subscription: $e');
+    }
 
     _logger.finer('stopping cron');
-    _cron.close();
+    try {
+      await _cron.close();
+    } catch (e) {
+      _logger.warning('Error while stopping cron: $e');
+    }
 
     removeAllProgressListeners();
+  }
+
+  void _drainSyncQueue() {
+    // 1. Drain the sync request queue with errors
+    final exception = AtClientException(
+        error_codes['AtClientException'], 'SyncService has been stopped');
+
+    while (syncRequests.isNotEmpty) {
+      var request = syncRequests.removeFirst();
+      try {
+        if (request.onError != null) {
+          request.onError!(SyncResult()
+            ..syncStatus = SyncStatus.failure
+            ..atClientException = exception);
+        }
+      } catch (e) {
+        _logger.warning('Error while draining sync request: $e');
+      }
+    }
+
+    // 2. Notify progress listeners of the failure
+    var progress = SyncProgress()
+      ..atSign = currentAtSign
+      ..syncStatus = SyncStatus.failure
+      ..atClientException = exception
+      ..message = 'SyncService stopped';
+
+    for (var listener in _syncProgressListeners) {
+      try {
+        listener.onSyncProgressEvent(progress);
+      } catch (e) {
+        _logger.warning('Error notifying progress listener during stop: $e');
+      }
+    }
+    _syncProgressListeners.clear();
   }
 
   @override
@@ -1108,7 +1160,7 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
   ///Clears all in-memory entities belonging to the syncService
   @visibleForTesting
   void clearSyncEntities() {
-    _syncRequests.clear();
+    syncRequests.clear();
     _syncProgressListeners.clear();
   }
 
@@ -1121,6 +1173,6 @@ class SyncServiceImpl implements SyncService, AtSignChangeListener {
 
   @visibleForTesting
   int getSyncRequestQueueSize() {
-    return _syncRequests.length;
+    return syncRequests.length;
   }
 }

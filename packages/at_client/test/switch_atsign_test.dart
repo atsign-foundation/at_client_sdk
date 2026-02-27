@@ -46,7 +46,9 @@ void main() {
     test('test switch atsign - check progress listener cleared', () async {
       final aliceAtSign = '@alice';
       final atClientManager = AtClientManager(aliceAtSign);
-      final alicePreference = AtClientPreference();
+      final alicePreference = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
       await atClientManager.setCurrentAtSign(
           aliceAtSign, 'wavi', alicePreference);
       expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);

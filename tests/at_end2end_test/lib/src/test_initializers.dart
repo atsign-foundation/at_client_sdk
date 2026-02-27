@@ -70,6 +70,7 @@ class TestSuiteInitializer {
       assert(result == AtCredentials.credentialsMap[atSign]![TestConstants.ENCRYPTION_PRIVATE_KEY].toString());
     } on Exception catch (e) {
       print('Exception in setting the encryption: $e');
+      rethrow;
     }
   }
 

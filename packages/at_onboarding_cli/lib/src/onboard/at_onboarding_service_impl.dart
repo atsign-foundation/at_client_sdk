@@ -52,7 +52,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     atOnboardingPreference.hiveStoragePath ??=
         HomeDirectoryUtil.getHiveStoragePath(_atSign,
             enrollmentId: enrollmentId);
-    atOnboardingPreference.isLocalStoreRequired = true;
     atOnboardingPreference.atKeysFilePath ??=
         HomeDirectoryUtil.getAtKeysPath(_atSign);
   }
@@ -876,7 +875,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         (_atLookUp as AtLookupImpl).isConnectionAvailable()) {
       await _atLookUp!.close();
     }
-    atClient?.notificationService.stopAllSubscriptions();
+    if (atClient != null) {
+      await atClient!.stop();
+    }
     _atLookUp = null;
     atClient = null;
     logger.info('Closed');
