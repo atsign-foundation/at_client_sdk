@@ -1,3 +1,9 @@
+## 3.12.0
+
+- feat: explicit AtClient lifecycle control — cleanly stop and resume atSigns without
+  re-initialising storage or keys
+- fix: monitor delayed-start timer could not be cancelled on stop
+
 ## 3.11.0
 
 - chore(deps): at_auth ^3.0.0

@@ -251,10 +251,16 @@ class AtChopsImpl extends AtChops {
       return signingInput.signingAlgorithm;
     } else if (signingInput.signingMode != null &&
         signingInput.signingMode == AtSigningMode.pkam) {
+      if (atChopsKeys.atPkamKeyPair == null) {
+        throw AtSigningException('PKAM Keypair required for signing');
+      }
       return PkamSigningAlgo(
           atChopsKeys.atPkamKeyPair!, signingInput.hashingAlgoType);
     } else if (signingInput.signingMode != null &&
         signingInput.signingMode == AtSigningMode.data) {
+      if (atChopsKeys.atEncryptionKeyPair == null){
+        throw AtSigningException('Encryption keypair required for signing');
+      }
       return DefaultSigningAlgo(
           atChopsKeys.atEncryptionKeyPair!, signingInput.hashingAlgoType);
     } else {
