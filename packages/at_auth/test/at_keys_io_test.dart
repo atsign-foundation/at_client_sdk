@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io_impl.dart';
 import 'package:at_commons/at_commons.dart';
@@ -14,7 +15,8 @@ void main() {
 
   group('FileAtKeysIo tests', () {
     setUp(() {
-      homeDirKeys = '${getUserHomeDir().path}/.atsign/keys/@alice🛠_key.atKeys';
+      var homeDir = getHomeDirectory();
+      homeDirKeys = '$homeDir/.atsign/keys/@alice🛠_key.atKeys';
       Directory keysDir = Directory(homeDirKeys).parent;
       if (!keysDir.existsSync()) {
         keysDir.createSync(recursive: true);
@@ -78,13 +80,11 @@ void main() {
       );
     });
 
-    test('Test write() -> doesnt write due to overwrite', () {
+    test('Test write() -> throws due to overwrite', () {
       final fileAtKeysIo = FileAtKeysIo(filePath: (_) => keyFilePath);
       AtKeys atKeys = AtKeys();
-      fileAtKeysIo.write('test', atKeys);
-      File file = File(keyFilePath);
-      var data = file.readAsStringSync();
-      expect(data, isNot(equals('test')));
+      expect(() => fileAtKeysIo.write('test', atKeys),
+          throwsA(isA<AtKeysFileOverwriteException>()));
     });
 
     tearDownAll(() {
@@ -120,22 +120,4 @@ Future<bool> matchesEncryptedAtKeys(
       decryptedAtKeys.defaultSelfEncryptionKey.toString() ==
           decryptedAtKeysMap.defaultSelfEncryptionKey.toString() &&
       decryptedAtKeys.enrollmentId == decryptedAtKeysMap.enrollmentId;
-}
-
-Directory getUserHomeDir() {
-  String? home;
-  if (Platform.isLinux || Platform.isMacOS) {
-    home = Platform.environment['HOME'];
-  } else if (Platform.isWindows) {
-    home = Platform.environment['USERPROFILE'];
-  } else {
-    throw UnsupportedError(
-        'Getting the home directory is not supported on ${Platform.operatingSystem}');
-  }
-
-  if (home == null) {
-    throw StateError('Home directory environment variable not defined');
-  }
-
-  return Directory(home);
 }
