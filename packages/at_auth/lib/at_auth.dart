@@ -27,4 +27,4 @@ export 'src/keys/at_keys_io.dart';
 export 'src/keys/at_keys_io_impl.dart';
 
 ///Classes for registrar services
-export 'src/registrar/registrar_service.dart'; 
+export 'src/registrar/registrar_service.dart';

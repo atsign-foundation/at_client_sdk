@@ -14,6 +14,27 @@ class AtKeys {
 
   AtKeys();
 
+  //TODO: AtBytes needs an equality operator so we can avoid this...
+  // I can't even use the strEquals in the AtBytes
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! AtKeys) return false;
+    return enrollmentId == other.enrollmentId &&
+        apkamPublicKey?.toString() == other.apkamPublicKey?.toString() &&
+        apkamPrivateKey?.toString() == other.apkamPrivateKey?.toString() &&
+        defaultEncryptionPublicKey?.toString() ==
+            other.defaultEncryptionPublicKey?.toString() &&
+        defaultEncryptionPrivateKey?.toString() ==
+            other.defaultEncryptionPrivateKey?.toString() &&
+        defaultSelfEncryptionKey?.toString() ==
+            other.defaultSelfEncryptionKey?.toString() &&
+        apkamSymmetricKey?.toString() == other.apkamSymmetricKey?.toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(enrollmentId, metadata);
+
   Map<String, dynamic> toJson() {
     return {
       auth_constants.apkamPublicKey: apkamPublicKey?.toString(),
@@ -137,25 +158,28 @@ AtChops _createApkamChops(AtKeys atKeys) {
   return AtChopsImpl(atChopsKeys);
 }
 
-AtChops _createPkamChops(AtKeys atKeysFile) {
-  if (atKeysFile.defaultEncryptionPrivateKey == null) {
+AtChops _createPkamChops(AtKeys atKeys) {
+  if (atKeys.defaultEncryptionPrivateKey == null) {
     throw AtPrivateKeyNotFoundException(
         'PKAM mode requires defaultEncryptionPrivateKey');
   }
+  if (atKeys.apkamPrivateKey == null) {
+    throw AtPrivateKeyNotFoundException(
+        'PKAM mode requries defaultPkamPrivateKey');
+  }
 
   final atEncryptionKeyPair = AtEncryptionKeyPair.create(
-    atKeysFile.defaultEncryptionPublicKey!.toString(),
-    atKeysFile.defaultEncryptionPrivateKey!.toString(),
+    atKeys.defaultEncryptionPublicKey!.toString(),
+    atKeys.defaultEncryptionPrivateKey!.toString(),
   );
 
   final atPkamKeyPair = AtPkamKeyPair.create(
-    atKeysFile.apkamPublicKey!.toString(),
-    atKeysFile.apkamPrivateKey!.toString(),
+    atKeys.apkamPublicKey!.toString(),
+    atKeys.apkamPrivateKey!.toString(),
   );
 
   final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
-    ..selfEncryptionKey =
-        AESKey(atKeysFile.defaultSelfEncryptionKey!.toString());
+    ..selfEncryptionKey = AESKey(atKeys.defaultSelfEncryptionKey!.toString());
 
   return AtChopsImpl(atChopsKeys);
 }

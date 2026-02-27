@@ -1,4 +1,3 @@
-
 /// {@template namespace_permission}
 /// Model class representing a namespace permission.
 /// The string representation of the permission is `namespace: {ns1: rw, ns2: r}`
