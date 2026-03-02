@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io_impl.dart';
 import 'package:at_commons/at_commons.dart';
@@ -9,8 +10,20 @@ import 'package:test/test.dart';
 void main() {
   String atSign = '@alice🛠';
   String keyFilePath = 'test/data/@alice🛠_key.atKeys';
+  String writeFilePath = 'test/data/@bober_key.atKeys';
+  late String homeDirKeys;
 
   group('FileAtKeysIo tests', () {
+    setUp(() {
+      var homeDir = getHomeDirectory();
+      homeDirKeys = '$homeDir/.atsign/keys/@alice🛠_key.atKeys';
+      Directory keysDir = Directory(homeDirKeys).parent;
+      if (!keysDir.existsSync()) {
+        keysDir.createSync(recursive: true);
+      }
+      File(keyFilePath).copySync(homeDirKeys);
+    });
+
     test('Test read() with valid atKeys file path', () async {
       final fileAtKeysIo = FileAtKeysIo(filePath: (_) => keyFilePath);
       final atKeys = await fileAtKeysIo.read(atSign);
@@ -44,7 +57,7 @@ void main() {
     });
 
     test('Test write()', () async {
-      final fileAtKeysIo = FileAtKeysIo(filePath: (_) => keyFilePath);
+      final fileAtKeysIo = FileAtKeysIo(filePath: (_) => writeFilePath);
       final atKeys = AtKeys()
         ..apkamPublicKey =
             AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
@@ -56,10 +69,30 @@ void main() {
             base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
         ..defaultSelfEncryptionKey = AtBytes.fromString(
             base64Encode(utf8.encode('defaultSelfEncryptionKey')))
+        ..apkamSymmetricKey =
+            AtBytes.fromString(base64Encode(utf8.encode('apkamSymmetricKey')))
         ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
       await fileAtKeysIo.write(atSign, atKeys);
 
-      expect(await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atSign)), true);
+      expect(
+        await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atSign)),
+        true,
+      );
+    });
+
+    test('Test write() -> throws due to overwrite', () {
+      final fileAtKeysIo = FileAtKeysIo(filePath: (_) => keyFilePath);
+      AtKeys atKeys = AtKeys();
+      expect(() => fileAtKeysIo.write('test', atKeys),
+          throwsA(isA<AtKeysFileOverwriteException>()));
+    });
+
+    tearDownAll(() {
+      final keyFile = File(writeFilePath);
+      if (keyFile.existsSync()) {
+        keyFile.deleteSync();
+      }
+      File(homeDirKeys).deleteSync();
     });
   });
 
@@ -68,13 +101,14 @@ void main() {
   });
 }
 
-Future<bool> matchesEncryptedAtKeys(AtKeys decryptedAtKeys, String filePath) async {
+Future<bool> matchesEncryptedAtKeys(
+    AtKeys decryptedAtKeys, String filePath) async {
   final fileAtKeysIo = FileAtKeysIo(filePath: (_) => filePath);
   final encryptedAtKeysMap = jsonDecode(File(filePath).readAsStringSync());
   var decryptedAtKeysMap = await fileAtKeysIo.decryptAtKeysWithSelfEncKey(
       encryptedAtKeysMap, PkamAuthMode.keysFile);
   return decryptedAtKeys.apkamPrivateKey.toString() ==
-          decryptedAtKeysMap.toString() &&
+          decryptedAtKeysMap.apkamPrivateKey.toString() &&
       decryptedAtKeys.apkamPublicKey.toString() ==
           decryptedAtKeysMap.apkamPublicKey.toString() &&
       decryptedAtKeys.apkamSymmetricKey.toString() ==

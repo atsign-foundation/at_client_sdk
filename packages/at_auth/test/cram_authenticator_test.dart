@@ -22,7 +22,8 @@ void main() {
       when(() => mockAtLookup.cramAuthenticate(cramSecret))
           .thenAnswer((_) async => true);
 
-      final result = await cramAuthenticator.authenticate(atSign, cramSecret, mockAtLookup);
+      final result = await cramAuthenticator.authenticate(
+          atSign, cramSecret, mockAtLookup);
 
       expect(result, isTrue);
     });
@@ -32,7 +33,9 @@ void main() {
       when(() => mockAtLookup.cramAuthenticate(cramSecret))
           .thenThrow(UnAuthenticatedException('Unauthenticated'));
 
-      expect(() async => await cramAuthenticator.authenticate(atSign, cramSecret, mockAtLookup),
+      expect(
+          () async => await cramAuthenticator.authenticate(
+              atSign, cramSecret, mockAtLookup),
           throwsA(isA<UnAuthenticatedException>()));
     });
   });

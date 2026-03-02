@@ -1,4 +1,3 @@
-import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -29,7 +28,6 @@ void main() {
         enrollmentId: testEnrollmentId,
       );
 
-      expect(result, isA<AtAuthResponse>());
       expect(result, isTrue);
     });
 

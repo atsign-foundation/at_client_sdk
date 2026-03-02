@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 1.0.2
+- fix(ai): automatically prepend @ symbol into text box 
+
 ## 1.0.1
  - deps: at_auth 3.0.1
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
 import 'package:at_auth/src/auth/models/at_auth_responses.dart';
@@ -11,6 +12,7 @@ import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
+import 'package:at_auth/src/keys/at_keys_io_impl.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
@@ -39,6 +41,9 @@ class AtAuthImpl implements AtAuth {
 
   PkamAuthenticator? pkamAuthenticator;
 
+  @visibleForTesting
+  AtServerStatus? atServerStatus;
+
   AtEnrollment atEnrollment;
 
   @override
@@ -49,6 +54,7 @@ class AtAuthImpl implements AtAuth {
       this.atChops,
       this.cramAuthenticator,
       this.pkamAuthenticator,
+      this.atServerStatus,
       AtEnrollment? atEnrollment})
       : atEnrollment = atEnrollment ?? AtEnrollment.create();
 
@@ -190,6 +196,8 @@ class AtAuthImpl implements AtAuth {
     if (atOnboardingRequest.atKeys != null) {
       _atAuthKeys = atOnboardingRequest.atKeys!;
     } else {
+      //2a. if there is no specified implementation we're defaulting to FileAtKeysIo with a default file path
+      atOnboardingRequest.atKeysIo ??= FileAtKeysIo();
       switch (atOnboardingRequest.atKeysIo) {
         case WrittenAtKeysIo writtenKeys:
           _atAuthKeys =
@@ -355,7 +363,8 @@ class AtAuthImpl implements AtAuth {
   /// This method is used internally before onboarding or authentication operations.
   @override
   Future<void> validateAtServer(AuthRequest atRequest) async {
-    AtServerStatus status = AtStatusImpl(
+    //support mocking
+    atServerStatus ??= AtStatusImpl(
       rootUrl: atRequest.rootDomain.rootDomain,
       rootPort: atRequest.rootDomain.rootPort,
     );
@@ -363,7 +372,7 @@ class AtAuthImpl implements AtAuth {
 
     while (retryCount < atRequest.retryOptions.maxRetries) {
       try {
-        var atStatus = await status.get(atRequest.atSign);
+        var atStatus = await atServerStatus!.get(atRequest.atSign);
 
         // 3 Checks for onboarding:
         //   1. Root server should be found
@@ -413,7 +422,7 @@ class AtAuthImpl implements AtAuth {
         _logger.severe('Error during atServer validation: $e');
         retryCount++;
         if (retryCount >= atRequest.retryOptions.maxRetries) {
-          throw AtException(
+          throw AtAuthenticationException(
               'Max retries reached while validating atSign server. Last error: $e');
         }
         _logger.warning(

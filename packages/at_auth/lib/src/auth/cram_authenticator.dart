@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 
-class CramAuthenticator{ 
+class CramAuthenticator {
   CramAuthenticator();
 
   Future<bool> authenticate(

@@ -24,11 +24,18 @@ class RemoteSecondary implements Secondary {
 
   late AtLookUp atLookUp;
 
-  final AtChops? atChops;
+  AtChops? _atChops;
+
+  AtChops? get atChops => _atChops;
+
+  set atChops(AtChops? value) {
+    _atChops = value;
+    atLookUp.atChops = value;
+  }
 
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey,
-      this.atChops,
+      AtChops? atChops,
       AtLookUp? atLookUp,
       String? enrollmentId}) {
     _atSign = AtUtils.fixAtSign(atSign);
@@ -39,6 +46,7 @@ class RemoteSecondary implements Secondary {
       ..decryptPackets = preference.decryptPackets
       ..pathToCerts = preference.pathToCerts
       ..tlsKeysSavePath = preference.tlsKeysSavePath;
+    _atChops = atChops;
     this.atLookUp = atLookUp ??
         AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
             privateKey: privateKey,
@@ -205,5 +213,9 @@ class RemoteSecondary implements Secondary {
       return Intent.syncData;
     }
     return Intent.fetchData;
+  }
+
+  Future<void> closeConnection() async {
+    await atLookUp.close();
   }
 }

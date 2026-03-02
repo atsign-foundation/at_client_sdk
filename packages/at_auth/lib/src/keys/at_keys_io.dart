@@ -7,7 +7,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
-
 /// An interface that defines methods for reading AtKeys.
 /// It can be implemented by classes that read AtKeys from different sources,
 sealed class AtKeysIo {
@@ -27,7 +26,6 @@ abstract class WrittenAtKeysIo extends AtKeysIo with KeyIOMixin {
 abstract class GeneratedAtKeysIo extends AtKeysIo with KeyIOMixin {
   AtKeys generateKeys(String publicKeyId);
 }
-
 
 /// A mixin that provides common functionality for encoding and decoding AtKeys.
 mixin KeyIOMixin on AtKeysIo {
@@ -76,7 +74,7 @@ mixin KeyIOMixin on AtKeysIo {
   }
 
   FutureOr<String> encryptAtKeysWithSelfEncKey(
-      AtKeys atKeys, PkamAuthMode authMode) async {
+      AtKeys atKeys, PkamAuthMode authMode, String atsign) async {
     Map<String, dynamic> atKeysMap = {};
     if (atKeys.defaultSelfEncryptionKey == null) {
       throw AtException('selfEncryptionKey is required to encrypt the atKeys');
@@ -117,6 +115,7 @@ mixin KeyIOMixin on AtKeysIo {
     atKeysMap[auth_constants.defaultSelfEncryptionKey] =
         atKeys.defaultSelfEncryptionKey.toString();
     atKeysMap[AtConstants.enrollmentId] = atKeys.enrollmentId;
+    atKeysMap[atsign] = atKeys.defaultSelfEncryptionKey.toString();
     return jsonEncode(atKeysMap);
   }
 

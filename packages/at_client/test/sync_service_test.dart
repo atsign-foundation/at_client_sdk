@@ -328,6 +328,83 @@ void main() async {
       mockCommitLogStore.clear();
     });
   });
+
+  group('Validate SyncService stop() behaviour', () {
+    test('stop() should stop the sync service', () async {
+      await syncServiceImpl.stop();
+      expect(syncServiceImpl.isStopped, true);
+    });
+
+    test('stop() should not stop the sync service if it is already stopped',
+        () async {
+      await syncServiceImpl.stop();
+      expect(syncServiceImpl.isStopped, true);
+    });
+
+    test('stop() should drain the pending requests', () async {
+      syncServiceImpl.sync();
+      syncServiceImpl.sync();
+      syncServiceImpl.sync();
+      expect(syncServiceImpl.syncRequests.length, 3);
+
+      await syncServiceImpl.stop();
+      expect(syncServiceImpl.isStopped, true);
+      expect(syncServiceImpl.syncRequests.length, 0);
+    });
+
+    test('stop() should gracefully close mid-sync and notify listeners',
+        () async {
+      registerFallbackValue(FakeUpdateVerbBuilder());
+      registerFallbackValue(FakeAtKey());
+
+      // local has uncommitted DELETE entries while server is at commit 5 —
+      // isSyncInProgress will be true while the batch push is in-flight
+      when(() => mockRemoteSecondary
+              .executeVerb(any(that: isA<StatsVerbBuilder>())))
+          .thenAnswer((_) => Future.value('data:${jsonEncode([
+                    {"id": "3", "name": "lastCommitID", "value": "5"}
+                  ])}'));
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((_) => Future.value(AtValue()..value = '5'));
+      when(() => mockAtCommitLog.lastSyncedEntry())
+          .thenAnswer((_) => Future.value(null));
+      // uncommitted local entries → _isInSync() returns false
+      when(() => mockAtCommitLog.getChanges(any(), any()))
+          .thenAnswer((_) => Future.value([
+                CommitEntry('phone.wavi', CommitOp.DELETE, DateTime.now()),
+                CommitEntry('mobile.wavi', CommitOp.DELETE, DateTime.now()),
+              ]));
+      when(() => mockRemoteSecondary.executeCommand(any(), auth: true))
+          .thenAnswer((_) async {
+        await Future.delayed(Duration(milliseconds: 300));
+        return 'data:[{"id":1,"response":{"data":"10"}},{"id":2,"response":{"data":"11"}}]';
+      });
+
+      MockSyncProgressListener syncProgressListener =
+          MockSyncProgressListener();
+      syncServiceImpl.addProgressListener(syncProgressListener);
+
+      int syncFailureCount = 0;
+      // queue requests and start processing, then stop mid-sync
+      syncServiceImpl.sync(onError: () => syncFailureCount++);
+      syncServiceImpl.sync(onError: () => syncFailureCount++);
+      syncServiceImpl.sync(onError: () => syncFailureCount++);
+      syncServiceImpl.sync(onError: () => syncFailureCount++);
+      syncServiceImpl.sync(onError: () => syncFailureCount++);
+
+      expect(syncServiceImpl.syncRequests.length, 5);
+      unawaited(syncServiceImpl.processSyncRequests(
+          respectSyncRequestQueueSizeAndRequestTriggerDuration: false));
+      await Future.delayed(Duration(milliseconds: 200));
+      expect(syncServiceImpl.isSyncInProgress, true);
+
+      await syncServiceImpl.stop();
+      expect(syncServiceImpl.isStopped, true);
+      expect(syncServiceImpl.syncRequests.length, 0);
+      expect(syncProgressListener.syncFailed, true);
+    });
+  });
 }
 
 class MySyncProgressListener extends SyncProgressListener {
@@ -340,6 +417,17 @@ class MySyncProgressListener extends SyncProgressListener {
       syncComplete = true;
     }
     return;
+  }
+}
+
+class MockSyncProgressListener extends SyncProgressListener {
+  bool syncFailed = false;
+
+  @override
+  void onSyncProgressEvent(SyncProgress syncProgress) {
+    if (syncProgress.syncStatus == SyncStatus.failure) {
+      syncFailed = true;
+    }
   }
 }
 
