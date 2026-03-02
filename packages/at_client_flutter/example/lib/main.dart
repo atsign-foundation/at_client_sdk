@@ -459,7 +459,9 @@ class HomePage extends StatelessWidget {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const ApkamExamplePage()),
+                  MaterialPageRoute(
+                    builder: (context) => const ApkamExamplePage(),
+                  ),
                 );
               },
               icon: const Icon(Icons.security),

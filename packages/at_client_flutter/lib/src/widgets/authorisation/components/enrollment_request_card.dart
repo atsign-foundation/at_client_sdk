@@ -155,7 +155,8 @@ class _EnrollmentRequestCardState extends State<EnrollmentRequestCard> {
                         ),
                         side: WidgetStateProperty.all<BorderSide>(
                           BorderSide(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
                         textStyle: WidgetStateProperty.all<TextStyle>(
@@ -232,7 +233,6 @@ class _EnrollmentRequestCardState extends State<EnrollmentRequestCard> {
                   ),
               ],
             ),
-
           ],
         ),
       ),

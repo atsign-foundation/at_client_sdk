@@ -55,7 +55,10 @@ class AuthorisationListTile extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(8.0),
                   color: isSelected
-                      ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
+                      ? Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.1)
                       : Colors.transparent,
                   child: Row(
                     children: [

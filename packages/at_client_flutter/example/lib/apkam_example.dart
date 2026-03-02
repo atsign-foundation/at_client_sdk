@@ -28,13 +28,11 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
 
   @override
   Widget build(BuildContext context) {
-    final currentAtSign =
-        AtClientManager.getInstance().atClient.getCurrentAtSign();
+    final currentAtSign = AtClientManager.getInstance().atClient
+        .getCurrentAtSign();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('APKAM Demo ($currentAtSign)'),
-      ),
+      appBar: AppBar(title: Text('APKAM Demo ($currentAtSign)')),
       body: Column(
         children: [
           Expanded(
@@ -91,7 +89,8 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
                                     width: 20,
                                     height: 20,
                                     child: CircularProgressIndicator(
-                                        strokeWidth: 2),
+                                      strokeWidth: 2,
+                                    ),
                                   )
                                 : null,
                           ),
@@ -141,15 +140,15 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
       );
 
       // STEP 1: Generate an OTP using the MANAGER client
-      final otpResponse = await atClient.getRemoteSecondary()!.atLookUp.executeCommand(
-            'otp:get\n',
-            auth: true,
-          );
-      final cleanOtp = otpResponse?.replaceFirst('data:', '').trim();
+      final otpResponse = await atClient
+          .getRemoteSecondary()!
+          .atLookUp
+          .executeCommand('otp:get\n', auth: true);
+      final otp = otpResponse?.replaceFirst('data:', '').trim();
 
       // STEP 2: Submit the enrollment request (The "Requester" side)
       final enrollment = AtEnrollment.create();
-      
+
       // We generate a key pair for the simulation
       final apkamKeyPair = AtChopsUtil.generateAtPkamKeyPair();
 
@@ -157,8 +156,8 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
         atSign: currentAtSign,
         appName: appName,
         deviceName: deviceName,
-        namespaces: {'public': 'rw'}, 
-        otp: cleanOtp!,
+        namespaces: {'public': 'rw'},
+        otp: otp!,
         apkamPublicKey: apkamKeyPair.atPublicKey.publicKey,
       );
 
@@ -167,11 +166,11 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
 
       // STEP 3: Wait for approval (polling the status)
       _logger.info('STEP 3: Polling for status updates...');
-      
+
       await enrollment.waitForApproval(
         response,
         retryInterval: const Duration(seconds: 5),
-        maxRetries: 12, 
+        maxRetries: 12,
       );
 
       _logger.info('STEP 4: Enrollment APPROVED!');
@@ -180,16 +179,15 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
           requesterStatus.status = EnrollmentStatus.approved;
         });
       }
-
     } catch (e) {
       _logger.severe('Simulation failed: $e');
       if (mounted) {
         setState(() {
           requesterStatus.status = EnrollmentStatus.denied;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Simulation error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Simulation error: $e')));
       }
     }
   }

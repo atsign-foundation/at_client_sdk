@@ -178,7 +178,6 @@ class KeychainStorage {
     try {
       data = await readEnrollmentData(atSign);
     } catch (e) {
-
       rethrow;
     }
 

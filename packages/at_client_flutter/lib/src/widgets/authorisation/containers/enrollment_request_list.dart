@@ -62,7 +62,6 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
         },
       );
 
-
       // 1. Initial fetch of pending requests
       final initialRequests = await _service.getEnrollmentRequests(
         statusFilters: [EnrollmentStatus.pending],
@@ -99,8 +98,10 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
     } catch (e) {
       if (mounted) {
         String errorMessage = 'Failed to approve: $e';
-        if (e.toString().contains('authorized') || e.toString().contains('manage')) {
-          errorMessage = 'This keysFile/enrollment cannot approve this enrollment as it is not authorized to.';
+        if (e.toString().contains('authorized') ||
+            e.toString().contains('manage')) {
+          errorMessage =
+              'This keysFile/enrollment cannot approve this enrollment as it is not authorized to.';
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(errorMessage)),
@@ -121,8 +122,10 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
     } catch (e) {
       if (mounted) {
         String errorMessage = 'Failed to deny: $e';
-        if (e.toString().contains('authorized') || e.toString().contains('manage')) {
-          errorMessage = 'This keysFile/enrollment cannot deny this enrollment as it is not authorized to.';
+        if (e.toString().contains('authorized') ||
+            e.toString().contains('manage')) {
+          errorMessage =
+              'This keysFile/enrollment cannot deny this enrollment as it is not authorized to.';
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(errorMessage)),
@@ -206,7 +209,8 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
 
     return ListView.builder(
       shrinkWrap: widget.useShrinkWrap,
-      physics: widget.useShrinkWrap ? const NeverScrollableScrollPhysics() : null,
+      physics:
+          widget.useShrinkWrap ? const NeverScrollableScrollPhysics() : null,
       itemCount: _requests.length,
       itemBuilder: (context, index) {
         final request = _requests[index];

@@ -114,7 +114,8 @@ class AuthorisationFeedbackOverlay extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 32),              IconButton(
+              const SizedBox(width: 32),
+              IconButton(
                 icon: const Icon(Icons.close),
                 onPressed: onTap,
               ),
