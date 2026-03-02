@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:at_auth/src/registrar/registrar.dart';
 import 'package:at_auth/src/at_auth.dart';
+import 'package:at_utils/at_logger.dart';
 
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
@@ -15,6 +16,7 @@ class RegistrarService implements Registrar {
   @override
   final String apiKey;
   late final http.Client _http;
+  final AtSignLogger _logger = AtSignLogger('RegistrarService');
 
   RegistrarService({
     required this.registrarUrl,
@@ -62,6 +64,7 @@ class RegistrarService implements Registrar {
 
   // AtSign Activation Methods
   @override
+  //TODO: this should return void, throw if fails
   Future<bool> sendActivationOtp(String atsign) async {
     var res = await registrarApiRequest(
       RegistrarApiEndpoint.requestOtp,
@@ -88,15 +91,15 @@ class RegistrarService implements Registrar {
       {'atsign': atSign, 'otp': otp},
     );
     if (res.statusCode != 200) {
-      throw Exception(
-          'Failed to verify activation: ${res.reasonPhrase} - ${res.body}');
+      _logger.warning('Failed to verify activation: ${res.body}');
+      throw Exception('Failed to verify activation: ${res.reasonPhrase}');
     }
     var payload = jsonDecode(res.body);
     if (payload["message"] != "Verified") {
       throw Exception('Verification failed: ${payload["message"].toString()}');
     }
 
-    String? cramKey = payload["cramkey"]!.split(':').last;
+    String? cramKey = payload["cramkey"]?.split(':').last;
     if (cramKey == null) {
       throw Exception('Verification failed: cramKey missing from payload');
     }
@@ -125,22 +128,6 @@ class RegistrarService implements Registrar {
         'Failed to get free Atsign: ${payload["message"] ?? "Unknown error"}');
   }
 
-  /// Returns a `Future<List<String>>` containing free available atSigns of count provided as input.
-  Future<List<String>> getFreeAtSigns({
-    required int amount,
-  }) async {
-    List<String> atSigns = <String>[];
-    for (int i = 0; i < amount; i++) {
-      try {
-        var atSign = await getFreeAtSign();
-        atSigns.add(atSign);
-      } catch (_) {
-        rethrow;
-      }
-    }
-    return atSigns;
-  }
-
   @override
   Future<String> getFreeAtSignByCategory(List<String> categories) async {
     Uri url = Uri.https(registrarUrl,
@@ -156,8 +143,9 @@ class RegistrarService implements Registrar {
     );
 
     if (res.statusCode != 200) {
+      _logger.shout('Failed to getFreeAtsignByCategory - ${res.body}');
       throw Exception(
-          'Failed to get free Atsign by category: ${res.reasonPhrase} - ${res.body}');
+          'Failed to get free Atsign by category: ${res.reasonPhrase}');
     }
     var payload = jsonDecode(res.body);
     if (payload["data"] == null) {
@@ -201,6 +189,18 @@ class RegistrarService implements Registrar {
     }
   }
 
+  /// validates A Person through atSign, an attached email and otp from the authentication request.
+  ///
+  /// For a new user, returns cramkey
+  /// returns: {
+  ///		'success':
+  ///   'cramkey':
+  /// }
+  /// For an existing user, returns existing atsigns, and the new one
+  /// returns: {
+  ///		'atsigns':
+  ///   'newAtsign':
+  /// }
   @override
   Future<Map<String, dynamic>> validatePerson({
     required String atSign,
@@ -218,13 +218,17 @@ class RegistrarService implements Registrar {
       },
     );
     if (res.statusCode != 200) {
+      if (!confirmation) {
+        _logger.shout(
+            'Failed to validate person, try setting confirmation in validatePerson to true');
+      }
       throw Exception(
           'Failed to validate person: ${res.reasonPhrase} - ${res.body}');
     }
     var payload = jsonDecode(res.body);
 
     // Check if validation was successful and return appropriate data
-    if (payload["success"] == true) {
+    if (payload["success"] != null && payload["success"] == true) {
       // New user - return cramkey
       return {
         'success': true,
@@ -232,10 +236,19 @@ class RegistrarService implements Registrar {
       };
     } else if (payload["data"] != null) {
       // Existing user - return list of atSigns
-      return {
-        'atsigns': payload["data"]["atsigns"],
-        'newAtsign': payload["data"]["newAtsign"],
-      };
+      //describes a successful free atsign path
+      if (payload["data"]["newAtsign"] != null) {
+        return {
+          'atsigns': payload["data"]["atsigns"],
+          'newAtsign': payload["data"]["newAtsign"],
+        };
+      } else {
+        // if user has reached maximum free atsigns
+        _logger.shout(payload["message"]);
+        return {
+          'atsigns': payload["data"]["atsigns"],
+        };
+      }
     }
 
     throw Exception(
