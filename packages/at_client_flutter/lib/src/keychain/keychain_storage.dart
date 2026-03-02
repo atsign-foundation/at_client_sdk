@@ -174,24 +174,28 @@ class KeychainStorage {
 
   /// Validates if the enrollment is still valid based on the submission time.
   Future<bool> validateEnrollment(String atSign) async {
+    EnrollmentData? data;
     try {
-      var data = await readEnrollmentData(atSign);
-      if (data == null) {
-        return false;
-      }
-      if (DateTime.now()
-              .toUtc()
-              .difference(DateTime.fromMillisecondsSinceEpoch(
-                  data.enrollmentSubmissionTimeEpoch))
-              .inHours >=
-          _maxEnrollmentAuthenticationRetryInHours) {
-        await deleteEnrollmentData(atSign);
-        return false;
-      }
-      return true;
+      data = await readEnrollmentData(atSign);
     } catch (e) {
+
+      rethrow;
+    }
+
+    if (data == null) {
       return false;
     }
+
+    if (DateTime.now()
+            .toUtc()
+            .difference(DateTime.fromMillisecondsSinceEpoch(
+                data.enrollmentSubmissionTimeEpoch))
+            .inHours >=
+        _maxEnrollmentAuthenticationRetryInHours) {
+      await deleteEnrollmentData(atSign);
+      return false;
+    }
+    return true;
   }
 
   Future<String?> _read({

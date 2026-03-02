@@ -18,6 +18,7 @@ class EnrollmentServerResponse {
   String deviceName;
   EnrollmentStatus status;
   List<NamespacePermission> namespace;
+  String? encryptedAPKAMSymmetricKey;
 
   EnrollmentServerResponse({
     required this.enrollmentId,
@@ -25,6 +26,7 @@ class EnrollmentServerResponse {
     required this.deviceName,
     required this.status,
     required this.namespace,
+    this.encryptedAPKAMSymmetricKey,
   });
 
   factory EnrollmentServerResponse.fromServer(MapEntry<String, dynamic> entry) {
@@ -39,6 +41,8 @@ class EnrollmentServerResponse {
       status: entry.value['status'] != null
           ? getEnrollStatusFromString(entry.value['status'] as String)
           : EnrollmentStatus.pending,
+      encryptedAPKAMSymmetricKey:
+          entry.value['encryptedAPKAMSymmetricKey'] as String?,
       // Looks like: `namespace: {ns1: rw, ns2: r}`
       namespace: (entry.value['namespace'] as Map<String, dynamic>)
           .cast<String, String>()

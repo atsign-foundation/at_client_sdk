@@ -333,7 +333,7 @@ class AtEnrollmentImpl implements AtEnrollment {
       }
 
       //remove additional ','
-      statusFilter.substring(0, statusFilter.length - 1);
+      statusFilter = statusFilter.substring(0, statusFilter.length - 1);
       if (statusFilter.isNotEmpty) {
         command += ':{"enrollmentStatusFilter":["$statusFilter"]}';
       }
@@ -369,7 +369,7 @@ class AtEnrollmentImpl implements AtEnrollment {
             continue;
           }
         }
-        filtered.add(EnrollmentServerResponse.fromServer(e));
+        filtered.add(EnrollmentServerResponse.fromServer(MapEntry(ek, e)));
       }
       return filtered;
     } else {
