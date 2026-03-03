@@ -43,7 +43,7 @@ class ServerEnrollmentRequest {
     // Example id: a7d6a9.....40a15.new.enrollments.__manage@alice
     // Only need the first part.
     final enrollmentId = entry.key.split('.').first;
-    
+
     return ServerEnrollmentRequest(
       enrollmentId: enrollmentId,
       appName: entry.value['appName'] as String,
@@ -93,10 +93,9 @@ class ServerEnrollmentRequest {
   @override
   String toString() {
     return 'ServerEnrollmentRequest(enrollmentId: $enrollmentId, '
-    'appName: $appName, '
-    'deviceName: $deviceName, '
-    'status: $status, '
-    'namespaces: $namespacePermissions)';
+        'appName: $appName, '
+        'deviceName: $deviceName, '
+        'status: $status, '
+        'namespaces: $namespacePermissions)';
   }
 }
-

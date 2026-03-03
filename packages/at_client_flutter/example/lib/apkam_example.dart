@@ -47,7 +47,8 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
                       icon: Icons.admin_panel_settings_outlined,
                     ),
                     const TipCard(
-                      tip: 'EnrollmentRequestList listens for real-time notifications.',
+                      tip:
+                          'EnrollmentRequestList listens for real-time notifications.',
                     ),
                     const SizedBox(height: 16),
                     const EnrollmentRequestList(useShrinkWrap: true),
@@ -161,7 +162,7 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
 
       final response = await enrollment.submit(request, atLookup);
       _logger.info('Submitted request ID: ${response.enrollmentId}');
-      
+
       await enrollment.waitForApproval(
         response,
         retryInterval: const Duration(seconds: 5),
@@ -212,4 +213,3 @@ class RequesterStatus {
     required this.status,
   });
 }
-

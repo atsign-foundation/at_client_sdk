@@ -65,7 +65,7 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
       final initialRequests = await _service.getEnrollmentRequests(
         statusFilters: [EnrollmentStatus.pending],
       );
-      
+
       if (mounted) {
         setState(() {
           for (final request in initialRequests) {
@@ -225,4 +225,3 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
     );
   }
 }
-

@@ -367,4 +367,3 @@ class FlutterEnrollmentService {
 
   Stream<ProgressEvent> get progressStream => _atEnrollment.progressStream;
 }
-
