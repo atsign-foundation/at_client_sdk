@@ -111,10 +111,6 @@ class FlutterEnrollmentService {
     );
 
     final enrollmentRequests = enrollmentResponses.map((response) {
-      // Map EnrollmentServerResponse to ServerEnrollmentRequest
-      // Note: EnrollmentServerResponse in at_auth is missing encryptedAPKAMSymmetricKey in current version
-      // but we need it for approval if it's pending.
-      // We'll trust that the notification handler will provide it if needed, or we fetch it.
       return ServerEnrollmentRequest(
         enrollmentId: response.enrollmentId,
         appName: response.appName,
@@ -149,8 +145,6 @@ class FlutterEnrollmentService {
     return hasManagePermission;
   }
 
-  /// Check if the given spp is valid.
-  /// Must be alphanumeric and exactly 6 characters long.
   bool _isSppValid(String otp) {
     final regex = RegExp('^$_kSppRegex\$');
     return regex.hasMatch(otp);
@@ -339,7 +333,6 @@ class FlutterEnrollmentService {
     return;
   }
 
-  /// Original [enroll] method from FlutterEnrollmentService
   Future<AtEnrollmentResponse> enroll(EnrollmentRequest request,
       {bool waitForApproval = false}) async {
     AtEnrollmentResponse? atEnrollmentResponse;
@@ -352,7 +345,6 @@ class FlutterEnrollmentService {
     }
     await atLookup.close();
 
-    //If the atEnrollmentResponse contains atAuthKeys, it means it isn't a first time enrollment.
     if (atEnrollmentResponse.atAuthKeys != null) {
       EnrollmentData enrollmentData = EnrollmentData(
           atEnrollmentResponse.enrollmentId,
@@ -375,3 +367,4 @@ class FlutterEnrollmentService {
 
   Stream<ProgressEvent> get progressStream => _atEnrollment.progressStream;
 }
+

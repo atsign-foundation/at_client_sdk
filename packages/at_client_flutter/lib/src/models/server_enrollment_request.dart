@@ -41,13 +41,14 @@ class ServerEnrollmentRequest {
   /// Creates an [ServerEnrollmentRequest] object from a server response.
   factory ServerEnrollmentRequest.fromServer(MapEntry<String, dynamic> entry) {
     // Example id: a7d6a9.....40a15.new.enrollments.__manage@alice
-    // Only interested in the first part.
+    // Only need the first part.
     final enrollmentId = entry.key.split('.').first;
+    
     return ServerEnrollmentRequest(
       enrollmentId: enrollmentId,
       appName: entry.value['appName'] as String,
       deviceName: entry.value['deviceName'] as String,
-      // Status can be null when received from a notification
+
       status: entry.value['status'] != null
           ? getEnrollStatusFromString(entry.value['status'] as String)
           : EnrollmentStatus.pending,
@@ -91,6 +92,11 @@ class ServerEnrollmentRequest {
 
   @override
   String toString() {
-    return 'ServerEnrollmentRequest(enrollmentId: $enrollmentId, appName: $appName, deviceName: $deviceName, status: $status, namespaces: $namespacePermissions, encryptedAPKAMSymmetricKey: ${encryptedAPKAMSymmetricKey?.substring(0, 10)})';
+    return 'ServerEnrollmentRequest(enrollmentId: $enrollmentId, '
+    'appName: $appName, '
+    'deviceName: $deviceName, '
+    'status: $status, '
+    'namespaces: $namespacePermissions)';
   }
 }
+

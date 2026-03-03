@@ -9,14 +9,14 @@ class Otp {
   const Otp({
     required this.value,
     required this.expiry,
-  }) : assert(value.length >= 6, 'OTP should be 6 or more characters');
+  }) : assert(value.length == 6, 'OTP must be exactly 6 characters');
 
   /// Creates an [Otp] object with a specified duration from now.
   Otp.fromDuration({
     required this.value,
     required Duration duration,
   })  : expiry = DateTime.now().add(duration),
-        assert(value.length >= 6, 'OTP should be 6 or more characters');
+        assert(value.length == 6, 'OTP must be exdactly 6 characters');
 
   /// The one-time passcode.
   final String value;

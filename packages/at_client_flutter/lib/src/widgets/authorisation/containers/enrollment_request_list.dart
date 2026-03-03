@@ -39,7 +39,6 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
     });
 
     try {
-      // 2. Subscribe to real-time updates FIRST to avoid race conditions
       _subscription = _service
           .enrollmentRequests(statusFilters: [EnrollmentStatus.pending]).listen(
         (request) {
@@ -62,10 +61,11 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
         },
       );
 
-      // 1. Initial fetch of pending requests
+      // Initial fetch of pending requests
       final initialRequests = await _service.getEnrollmentRequests(
         statusFilters: [EnrollmentStatus.pending],
       );
+      
       if (mounted) {
         setState(() {
           for (final request in initialRequests) {
@@ -158,7 +158,6 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
 
       Overlay.of(context).insert(overlayEntry);
       final timer = Timer(const Duration(seconds: 3), () {
-        // Use a try-catch as a safer alternative to 'mounted' for OverlayEntry
         try {
           overlayEntry.remove();
         } catch (_) {
@@ -226,3 +225,4 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
     );
   }
 }
+

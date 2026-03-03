@@ -47,11 +47,9 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
                       icon: Icons.admin_panel_settings_outlined,
                     ),
                     const TipCard(
-                      tip:
-                          'This section uses the EnrollmentRequestList widget to listen for real-time notifications.',
+                      tip: 'EnrollmentRequestList listens for real-time notifications.',
                     ),
                     const SizedBox(height: 16),
-                    // THE BIG WIDGET: Displays and manages incoming requests
                     const EnrollmentRequestList(useShrinkWrap: true),
 
                     const Divider(height: 48),
@@ -61,20 +59,20 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
                       icon: Icons.phonelink_setup_outlined,
                     ),
                     const Text(
-                      'Click the button below to simulate a new app/device requesting an enrollment.',
+                      'Click below to simulate a new device requesting enrollment.',
                       style: TextStyle(fontSize: 14, color: Colors.grey),
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton.icon(
                       onPressed: _simulateNewRequest,
                       icon: const Icon(Icons.add_to_home_screen),
-                      label: const Text('Simulate New Enrollment Request'),
+                      label: const Text('Simulate Request'),
                     ),
 
                     if (_simulatedRequests.isNotEmpty) ...[
                       const SizedBox(height: 24),
                       const Text(
-                        'My Active Requests (Simulated)',
+                        'Active Requests (Simulated)',
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
@@ -131,7 +129,7 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
     });
 
     try {
-      _logger.info('STEP 1: Initiating enrollment request for $appName');
+      _logger.info('Initiating simulated request for $appName');
 
       final atLookup = AtLookupImpl(
         currentAtSign,
@@ -162,18 +160,15 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
       );
 
       final response = await enrollment.submit(request, atLookup);
-      _logger.info('STEP 2: Request submitted. ID: ${response.enrollmentId}');
-
-      // STEP 3: Wait for approval (polling the status)
-      _logger.info('STEP 3: Polling for status updates...');
-
+      _logger.info('Submitted request ID: ${response.enrollmentId}');
+      
       await enrollment.waitForApproval(
         response,
         retryInterval: const Duration(seconds: 5),
         maxRetries: 12,
       );
 
-      _logger.info('STEP 4: Enrollment APPROVED!');
+      _logger.info('Simulated request approved.');
       if (mounted) {
         setState(() {
           requesterStatus.status = EnrollmentStatus.approved;
@@ -217,3 +212,4 @@ class RequesterStatus {
     required this.status,
   });
 }
+
