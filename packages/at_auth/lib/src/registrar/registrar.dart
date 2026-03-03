@@ -51,7 +51,7 @@ abstract interface class Registrar {
   });
 
   // ===========================================================================
-  // AtSign Activation Methods 
+  // AtSign Activation Methods
   // ===========================================================================
 
   /// Sends an activation OTP to the email/phone associated with the atSign
@@ -100,6 +100,7 @@ abstract interface class Registrar {
   /// [email] - Email address used for registration
   /// [otp] - 4-character OTP sent to email
   /// [confirmation] - Set to true if validating previously validated atSign
+  /// note: if you have existing atsigns, you need to resend the same request with confirmation set to true
   ///
   /// Returns a map with validation results:
   /// - If new user: { 'success': true, 'cramkey': '...' }
