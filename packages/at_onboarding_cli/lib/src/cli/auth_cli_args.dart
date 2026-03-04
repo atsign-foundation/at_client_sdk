@@ -67,6 +67,10 @@ enum AuthCliCommand {
           ' permission to approve or deny the requests. Typically that will be'
           ' the program which first onboarded; however it can also be an enrolled'
           ' program which has "rw" access to the "__manage" namespace.'),
+  decrypt(
+      usage:
+          'Decrypts a passphrase-protected atKeys file and writes it to the '
+              'targetKeys file'),
   version(
     usage: 'Print version. The version printed is the at_onboarding_cli '
           'package version. It prints a format similar to "Version: x.xx.x"',
@@ -92,8 +96,10 @@ class AuthCliArgs {
   static const argNameAtSign = 'atsign';
   static const argNameCramSecret = 'cramkey';
   static const argNameAtKeys = 'keys';
+  static const argNameTargetAtKeys = 'target-keys';
   static const argNameRootServer = 'root-server';
-  static const argNameAtDirectoryFqdn = 'rootServer'; // alias to argNameRootServer
+  static const argNameAtDirectoryFqdn =
+      'rootServer'; // alias to argNameRootServer
   static const argNameRegistrarFqdn = 'registrarUrl';
   static const argNameSpp = 'spp';
   static const argNameAppName = 'app';
@@ -205,8 +211,13 @@ class AuthCliArgs {
 
       case AuthCliCommand.unrevoke:
         return createUnRevokeCommandParser();
+
       case AuthCliCommand.delete:
         return createDeleteCommandParser();
+
+      case AuthCliCommand.decrypt:
+        return createDecryptCommandParser();
+
       case AuthCliCommand.version:
         return createVersionCommandParser();
     }
@@ -560,6 +571,16 @@ class AuthCliArgs {
   ArgParser createDeleteCommandParser() {
     ArgParser p = createSharedArgParser(hide: true);
     _addEnrollmentIdOption(p, mandatory: true);
+    return p;
+  }
+
+  @visibleForTesting
+  ArgParser createDecryptCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
+    p.addOption(argNameTargetAtKeys,
+        abbr: 't',
+        mandatory: true,
+        help: 'Target atKeys file to write the decrypted keys');
     return p;
   }
 

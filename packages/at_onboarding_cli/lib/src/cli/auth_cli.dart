@@ -9,6 +9,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
+import 'package:at_onboarding_cli/src/util/home_directory_util.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:chalkdart/chalk.dart';
@@ -334,6 +335,8 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+      case AuthCliCommand.decrypt:
+        await passPhraseDecryptAtKeys(commandArgResults);
       case AuthCliCommand.version:
         stdout.writeln('Version: $packageVersion');
     }
@@ -668,6 +671,7 @@ Future<void> interactive(ArgResults argResults, AtClient atClient) async {
         case AuthCliCommand.interactive:
         case AuthCliCommand.status:
         case AuthCliCommand.enroll:
+        case AuthCliCommand.decrypt:
           stderr.writeln('The "${cliCommand.name}" command'
               ' may not be used in interactive session');
 
@@ -700,6 +704,7 @@ Future<void> interactive(ArgResults argResults, AtClient atClient) async {
 
         case AuthCliCommand.delete:
           await deleteEnrollment(commandArgResults, atClient);
+
         case AuthCliCommand.version:
           stdout.writeln('Version: $packageVersion');
       }
@@ -876,9 +881,7 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
     );
 
     // Finally call approve method via an AtEnrollment object
-    final response = await AtEnrollment
-        .create()
-        .approve(decision, atLookup);
+    final response = await AtEnrollment.create().approve(decision, atLookup);
 
     stdout.writeln('Server response: $response');
 
@@ -964,9 +967,7 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
       );
 
       // Finally call approve method via an AtEnrollment object
-      final response = await AtEnrollment
-          .create()
-          .approve(decision, atLookup);
+      final response = await AtEnrollment.create().approve(decision, atLookup);
       stdout.writeln('Approval successful.\n'
           '\tResponse: $response');
 
@@ -1083,6 +1084,40 @@ Future<void> deleteEnrollment(ArgResults ar, AtClient atClient) async {
   String? response = await atLookup.executeVerb(enrollVerbBuilder);
   response = parseServerResponse(response);
   stdout.writeln('Server response: $response');
+}
+
+Future<void> passPhraseDecryptAtKeys(ArgResults ar) async {
+  final atSign = (ar[AuthCliArgs.argNameAtSign] as String).toAtsign();
+  final passPhrase = ar[AuthCliArgs.argNamePassPhrase];
+
+  if (passPhrase == null || passPhrase.isEmpty) {
+    throw ArgumentError(
+        'The --${AuthCliArgs.argNamePassPhrase} option is mandatory for the "decrypt" command');
+  }
+
+  final atKeysFilePath =
+      ar[AuthCliArgs.argNameAtKeys] ?? HomeDirectoryUtil.getAtKeysPath(atSign);
+  if (atKeysFilePath.isEmpty) {
+    throw ArgumentError(
+        'The --${AuthCliArgs.argNameAtKeys} option must not be empty');
+  }
+  if (!File(atKeysFilePath).existsSync()){
+    throw ArgumentError('Keys file does not exist at $atKeysFilePath');
+  }
+
+  String targetKeyFilePath = ar[AuthCliArgs.argNameTargetAtKeys];
+  if (!targetKeyFilePath.endsWith('.atKeys')) {
+    targetKeyFilePath = '$targetKeyFilePath.atKeys';
+  }
+
+  stderr.writeln('Decrypting atKeys file with passphrase...');
+  final reader =
+      FileAtKeysIo(filePath: (_) => atKeysFilePath, passPhrase: passPhrase);
+  final decryptedAtKeys = await reader.read(atSign);
+
+  final writer = FileAtKeysIo(filePath: (_) => targetKeyFilePath);
+  await writer.write(atSign, decryptedAtKeys);
+  stdout.writeln('${chalk.green('[Success]')} Decrypted atKeys file stored at $targetKeyFilePath');
 }
 
 @visibleForTesting
