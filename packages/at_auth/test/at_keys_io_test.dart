@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io_impl.dart';
@@ -87,7 +89,73 @@ void main() {
           throwsA(isA<AtKeysFileOverwriteException>()));
     });
 
-    tearDownAll(() {
+    test('Test write() -> should encrypt with passphrase when available',
+        () async {
+      final passPhrase = 'qwerty';
+      final fileAtKeysIo =
+          FileAtKeysIo(filePath: (_) => writeFilePath, passPhrase: passPhrase);
+
+      final atKeys = AtKeys()
+        ..apkamPublicKey =
+            AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
+        ..apkamPrivateKey =
+            AtBytes.fromString(base64Encode(utf8.encode('testApkamPrivateKey')))
+        ..defaultEncryptionPublicKey = AtBytes.fromString(
+            base64Encode(utf8.encode('defaultEncryptionPublicKey')))
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(
+            base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
+        ..defaultSelfEncryptionKey = AtBytes.fromString(
+            base64Encode(utf8.encode('defaultSelfEncryptionKey')))
+        ..apkamSymmetricKey =
+            AtBytes.fromString(base64Encode(utf8.encode('apkamSymmetricKey')))
+        ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
+      await fileAtKeysIo.write(atSign, atKeys); // writes encrypted keys
+
+      // read the generated file and validate fields
+      File encryptedAtKeysFile = File(writeFilePath);
+      Map encryptedFileContent =
+          jsonDecode(encryptedAtKeysFile.readAsStringSync());
+      expect(encryptedFileContent['content'], isNotNull);
+      expect(encryptedFileContent['iv'], isNotNull);
+      expect(encryptedFileContent['hashingAlgoType'], 'argon2id');
+
+      // assert that when fileAtKeysIo decrypts and reads the passphrase
+      // encrypted file the decrypted keys are the same as the original keys
+      // Note: the method call below tests the encrypted keys read path too
+      expect(
+        await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atSign),
+            passPhrase: passPhrase),
+        true,
+      );
+    });
+
+    test('Test read() -> throws with incorrect passphrase', () async {
+      final passPhrase = 'abcd';
+      final fileAtKeysIo =
+          FileAtKeysIo(filePath: (_) => writeFilePath, passPhrase: passPhrase);
+
+      final atKeys = AtKeys()
+        ..apkamPublicKey =
+            AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
+        ..apkamPrivateKey =
+            AtBytes.fromString(base64Encode(utf8.encode('testApkamPrivateKey')))
+        ..defaultEncryptionPublicKey = AtBytes.fromString(
+            base64Encode(utf8.encode('defaultEncryptionPublicKey')))
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(
+            base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
+        ..defaultSelfEncryptionKey = AtBytes.fromString(
+            base64Encode(utf8.encode('defaultSelfEncryptionKey')))
+        ..apkamSymmetricKey =
+            AtBytes.fromString(base64Encode(utf8.encode('apkamSymmetricKey')))
+        ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
+      await fileAtKeysIo.write(atSign, atKeys); // writes encrypted keys
+
+      fileAtKeysIo.passPhrase = 'incorrect_pass';
+      await expectLater(() async => await fileAtKeysIo.read(atSign),
+          throwsA(isA<AtDecryptionException>()));
+    });
+
+    tearDown(() {
       final keyFile = File(writeFilePath);
       if (keyFile.existsSync()) {
         keyFile.deleteSync();
@@ -101,23 +169,32 @@ void main() {
   });
 }
 
-Future<bool> matchesEncryptedAtKeys(
-    AtKeys decryptedAtKeys, String filePath) async {
-  final fileAtKeysIo = FileAtKeysIo(filePath: (_) => filePath);
-  final encryptedAtKeysMap = jsonDecode(File(filePath).readAsStringSync());
-  var decryptedAtKeysMap = await fileAtKeysIo.decryptAtKeysWithSelfEncKey(
+Future<bool> matchesEncryptedAtKeys(AtKeys decryptedAtKeys, String filePath,
+    {String? passPhrase}) async {
+  final fileAtKeysIo =
+      FileAtKeysIo(filePath: (_) => filePath, passPhrase: passPhrase);
+
+  Map<String, dynamic> encryptedAtKeysMap =
+      jsonDecode(File(filePath).readAsStringSync());
+
+  // decrypt if pass phrase available
+  if (passPhrase != null) {
+    encryptedAtKeysMap = await fileAtKeysIo.decodeAtKeys(encryptedAtKeysMap,
+        passPhrase: passPhrase);
+  }
+  AtKeys decryptedAtKeys = await fileAtKeysIo.decryptAtKeysWithSelfEncKey(
       encryptedAtKeysMap, PkamAuthMode.keysFile);
   return decryptedAtKeys.apkamPrivateKey.toString() ==
-          decryptedAtKeysMap.apkamPrivateKey.toString() &&
+          decryptedAtKeys.apkamPrivateKey.toString() &&
       decryptedAtKeys.apkamPublicKey.toString() ==
-          decryptedAtKeysMap.apkamPublicKey.toString() &&
+          decryptedAtKeys.apkamPublicKey.toString() &&
       decryptedAtKeys.apkamSymmetricKey.toString() ==
-          decryptedAtKeysMap.apkamSymmetricKey.toString() &&
+          decryptedAtKeys.apkamSymmetricKey.toString() &&
       decryptedAtKeys.defaultEncryptionPrivateKey.toString() ==
-          decryptedAtKeysMap.defaultEncryptionPrivateKey.toString() &&
+          decryptedAtKeys.defaultEncryptionPrivateKey.toString() &&
       decryptedAtKeys.defaultEncryptionPublicKey.toString() ==
-          decryptedAtKeysMap.defaultEncryptionPublicKey.toString() &&
+          decryptedAtKeys.defaultEncryptionPublicKey.toString() &&
       decryptedAtKeys.defaultSelfEncryptionKey.toString() ==
-          decryptedAtKeysMap.defaultSelfEncryptionKey.toString() &&
-      decryptedAtKeys.enrollmentId == decryptedAtKeysMap.enrollmentId;
+          decryptedAtKeys.defaultSelfEncryptionKey.toString() &&
+      decryptedAtKeys.enrollmentId == decryptedAtKeys.enrollmentId;
 }
