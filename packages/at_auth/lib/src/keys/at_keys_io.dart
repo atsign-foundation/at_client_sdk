@@ -195,9 +195,15 @@ mixin KeyIOMixin on AtKeysIo {
             'Hashing algo type is required for decryption of password protected atKeys file');
       }
 
-      String decryptedAtKeysData =
-          await AtKeysCrypto.fromHashingAlgorithm(atEncrypted.hashingAlgoType!)
-              .decrypt(atEncrypted, passPhrase!);
+      String decryptedAtKeysData;
+      try {
+        decryptedAtKeysData =
+            await AtKeysCrypto.fromHashingAlgorithm(atEncrypted.hashingAlgoType!)
+                .decrypt(atEncrypted, passPhrase!);
+      } catch (e) {
+        throw AtDecryptionException(
+            'Failed to decrypt atKeys file - passphrase may be incorrect: $e');
+      }
       decodedAtKeysData = jsonDecode(decryptedAtKeysData);
     }
 
