@@ -180,6 +180,27 @@ void main() {
       expect(() async => await passPhraseDecryptAtKeys(argResults),
           throwsA(isA<ArgumentError>()));
     });
+
+    test('Decrypt command fails when target file already exists', () async {
+      final decryptParser = AuthCliArgs().createDecryptCommandParser();
+
+      final args = [
+        '--${AuthCliArgs.argNameAtSign}',
+        testAtSign,
+        '--${AuthCliArgs.argNameAtKeys}',
+        encryptedAtKeysFile.path,
+        '--${AuthCliArgs.argNamePassPhrase}',
+        passPhrase,
+        '--${AuthCliArgs.argNameTargetAtKeys}',
+        // using the existing encrypted keys file path as the target path
+        encryptedAtKeysFile.path,
+      ];
+
+      // decrypt
+      final argResults = decryptParser.parse(args);
+      await expectLater(() async => await passPhraseDecryptAtKeys(argResults),
+          throwsA(isA<AtKeysFileOverwriteException>()));
+    });
   });
 
   tearDown(() async {

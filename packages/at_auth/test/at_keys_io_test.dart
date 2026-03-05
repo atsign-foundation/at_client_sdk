@@ -169,32 +169,35 @@ void main() {
   });
 }
 
-Future<bool> matchesEncryptedAtKeys(AtKeys decryptedAtKeys, String filePath,
+Future<bool> matchesEncryptedAtKeys(AtKeys atKeys, String filePath,
     {String? passPhrase}) async {
   final fileAtKeysIo =
       FileAtKeysIo(filePath: (_) => filePath, passPhrase: passPhrase);
 
-  Map<String, dynamic> encryptedAtKeysMap =
+  Map<String, dynamic> atKeysFromFile =
       jsonDecode(File(filePath).readAsStringSync());
 
-  // decrypt if pass phrase available
+  // decrypt if passPhrase available
   if (passPhrase != null) {
-    encryptedAtKeysMap = await fileAtKeysIo.decodeAtKeys(encryptedAtKeysMap,
-        passPhrase: passPhrase);
+    atKeysFromFile =
+        await fileAtKeysIo.decodeAtKeys(atKeysFromFile, passPhrase: passPhrase);
   }
+
+  // decrypt the atKeys read from file with self encryption key
   AtKeys decryptedAtKeys = await fileAtKeysIo.decryptAtKeysWithSelfEncKey(
-      encryptedAtKeysMap, PkamAuthMode.keysFile);
+      atKeysFromFile, PkamAuthMode.keysFile);
+
   return decryptedAtKeys.apkamPrivateKey.toString() ==
-          decryptedAtKeys.apkamPrivateKey.toString() &&
+          atKeys.apkamPrivateKey.toString() &&
       decryptedAtKeys.apkamPublicKey.toString() ==
-          decryptedAtKeys.apkamPublicKey.toString() &&
+          atKeys.apkamPublicKey.toString() &&
       decryptedAtKeys.apkamSymmetricKey.toString() ==
-          decryptedAtKeys.apkamSymmetricKey.toString() &&
+          atKeys.apkamSymmetricKey.toString() &&
       decryptedAtKeys.defaultEncryptionPrivateKey.toString() ==
-          decryptedAtKeys.defaultEncryptionPrivateKey.toString() &&
+          atKeys.defaultEncryptionPrivateKey.toString() &&
       decryptedAtKeys.defaultEncryptionPublicKey.toString() ==
-          decryptedAtKeys.defaultEncryptionPublicKey.toString() &&
+          atKeys.defaultEncryptionPublicKey.toString() &&
       decryptedAtKeys.defaultSelfEncryptionKey.toString() ==
-          decryptedAtKeys.defaultSelfEncryptionKey.toString() &&
-      decryptedAtKeys.enrollmentId == decryptedAtKeys.enrollmentId;
+          atKeys.defaultSelfEncryptionKey.toString() &&
+      decryptedAtKeys.enrollmentId == atKeys.enrollmentId;
 }
