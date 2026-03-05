@@ -76,10 +76,7 @@ void main() {
         ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
       await fileAtKeysIo.write(atSign, atKeys);
 
-      expect(
-        await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atSign)),
-        true,
-      );
+      await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atSign));
     });
 
     test('Test write() -> throws due to overwrite', () {
@@ -122,11 +119,8 @@ void main() {
       // assert that when fileAtKeysIo decrypts and reads the passphrase
       // encrypted file the decrypted keys are the same as the original keys
       // Note: the method call below tests the encrypted keys read path too
-      expect(
-        await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atSign),
-            passPhrase: passPhrase),
-        true,
-      );
+      await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atSign),
+          passPhrase: passPhrase);
     });
 
     test('Test read() -> throws with incorrect passphrase', () async {
@@ -169,7 +163,7 @@ void main() {
   });
 }
 
-Future<bool> matchesEncryptedAtKeys(AtKeys atKeys, String filePath,
+Future<void> matchesEncryptedAtKeys(AtKeys atKeys, String filePath,
     {String? passPhrase}) async {
   final fileAtKeysIo =
       FileAtKeysIo(filePath: (_) => filePath, passPhrase: passPhrase);
@@ -187,17 +181,17 @@ Future<bool> matchesEncryptedAtKeys(AtKeys atKeys, String filePath,
   AtKeys decryptedAtKeys = await fileAtKeysIo.decryptAtKeysWithSelfEncKey(
       atKeysFromFile, PkamAuthMode.keysFile);
 
-  return decryptedAtKeys.apkamPrivateKey.toString() ==
-          atKeys.apkamPrivateKey.toString() &&
-      decryptedAtKeys.apkamPublicKey.toString() ==
-          atKeys.apkamPublicKey.toString() &&
-      decryptedAtKeys.apkamSymmetricKey.toString() ==
-          atKeys.apkamSymmetricKey.toString() &&
-      decryptedAtKeys.defaultEncryptionPrivateKey.toString() ==
-          atKeys.defaultEncryptionPrivateKey.toString() &&
-      decryptedAtKeys.defaultEncryptionPublicKey.toString() ==
-          atKeys.defaultEncryptionPublicKey.toString() &&
-      decryptedAtKeys.defaultSelfEncryptionKey.toString() ==
-          atKeys.defaultSelfEncryptionKey.toString() &&
-      decryptedAtKeys.enrollmentId == atKeys.enrollmentId;
+  expect(decryptedAtKeys.apkamPrivateKey.toString(),
+      atKeys.apkamPrivateKey.toString());
+  expect(decryptedAtKeys.apkamPublicKey.toString(),
+      atKeys.apkamPublicKey.toString());
+  expect(decryptedAtKeys.apkamSymmetricKey.toString(),
+      atKeys.apkamSymmetricKey.toString());
+  expect(decryptedAtKeys.defaultEncryptionPrivateKey.toString(),
+      atKeys.defaultEncryptionPrivateKey.toString());
+  expect(decryptedAtKeys.defaultEncryptionPublicKey.toString(),
+      atKeys.defaultEncryptionPublicKey.toString());
+  expect(decryptedAtKeys.defaultSelfEncryptionKey.toString(),
+      atKeys.defaultSelfEncryptionKey.toString());
+  expect(decryptedAtKeys.enrollmentId, atKeys.enrollmentId);
 }
