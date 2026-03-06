@@ -28,6 +28,10 @@ jobs:
               https://api.github.com/repos/flutter/flutter/branches/${{ matrix.channel }} |
             jq -r '.commit.sha'
           )
+          if [ -z "$sha" ] || [ "$sha" == "null" ]; then
+            echo "Error: Could not retrieve SHA for ${{ matrix.channel }}"
+            exit 1
+          fi
           echo "$sha" >flutter_ref-${{ matrix.channel }}
         working-directory: ./actions/setup-flutter-and-dart/
 

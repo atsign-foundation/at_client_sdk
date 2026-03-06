@@ -22,6 +22,10 @@ runs:
         sha=$(
         cat flutter_ref-${{ inputs.flutter-channel }}
         )
+        if [ -z "$sha" ] || [ "$sha" == "null" ]; then
+          echo "Error: Empty or null SHA found in flutter_ref-${{ inputs.flutter-channel }}"
+          exit 1
+        fi
         echo "sha=$sha" >> "$GITHUB_OUTPUT"
       working-directory: ./actions/setup-flutter-and-dart/
 
