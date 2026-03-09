@@ -69,6 +69,7 @@ abstract class AtOnboardingService implements ProgressPublisher {
     File? atKeysFile,
     Duration retryInterval = defaultApkamRetryInterval,
     int maxRetries = defaultMaxApkamRetries,
+    Duration? apkamKeysExpiryDuration,
   });
 
   /// Sends enrollment request. Application code may subsequently call

@@ -337,6 +337,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
       case AuthCliCommand.decrypt:
         await passPhraseDecryptAtKeys(commandArgResults);
+
       case AuthCliCommand.version:
         stdout.writeln('Version: $packageVersion');
     }
@@ -488,17 +489,6 @@ Future<bool> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
     throw ArgumentError('The --${AuthCliArgs.argNameAtKeys} option is'
         ' mandatory for the "enroll" command');
   }
-
-  File f = File(argResults[AuthCliArgs.argNameAtKeys]);
-
-  if (f.existsSync()) {
-    throw StateError('Error: atKeys file ${f.path} already exists');
-  }
-
-  if (!canCreateFile(f)) {
-    throw StateError('Error: Unable to open $f for writing');
-  }
-
   svc ??= createOnboardingService(argResults);
 
   Map<String, String> namespaces = {};
@@ -511,25 +501,23 @@ Future<bool> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
     namespaces[namespace] = permission;
   }
 
-  // If apkam Keys expiry is not set, then APKAM keys should lives forever.
+  // If apkam Keys expiry is not set, then APKAM keys should live forever.
   // Therefore set to 0ms (0 milliseconds) and TTL will not be set.
   String apkamKeysExpiry = argResults[AuthCliArgs.argNameExpiry] ?? '0ms';
-  AtEnrollmentResponse er = await svc.sendEnrollRequest(
-      argResults[AuthCliArgs.argNameAppName],
-      argResults[AuthCliArgs.argNameDeviceName],
-      argResults[AuthCliArgs.argNamePasscode],
-      namespaces,
-      apkamKeysExpiryDuration: parseDuration(apkamKeysExpiry));
-  stdout.writeln('Enrollment ID: ${er.enrollmentId}');
 
-  stderr.writeln('Waiting for approval; will check every 10 seconds');
-  await svc.awaitApproval(er,
-      retryInterval: AtOnboardingService.defaultApkamRetryInterval,
-      logProgress: true,
-      maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]));
+  String? atKeysPath = argResults[AuthCliArgs.argNameAtKeys];
+  File? atKeysFile = atKeysPath != null ? File(atKeysPath) : null;
 
-  stderr.writeln('Creating atKeys file');
-  await svc.createAtKeysFile(er, allowOverwrite: false);
+  await svc.enroll(
+    argResults[AuthCliArgs.argNameAppName],
+    argResults[AuthCliArgs.argNameDeviceName],
+    argResults[AuthCliArgs.argNamePasscode],
+    namespaces,
+    atKeysFile: atKeysFile,
+    apkamKeysExpiryDuration: parseDuration(apkamKeysExpiry),
+    maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
+    retryInterval: AtOnboardingService.defaultApkamRetryInterval,
+  );
 
   return true;
 }
@@ -1168,7 +1156,7 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
     if (stdout.hasTerminal && viewableLength > (stdout.terminalColumns - 3)) {
       output = '${output.substring(0, stdout.terminalColumns - 3 + diff)}...';
     }
-    stderr.write('\r\x1b[K$output');
+    stderr.writeln('\r\x1b[K$output');
   });
 
   return impl;

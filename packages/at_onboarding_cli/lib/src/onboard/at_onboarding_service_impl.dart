@@ -20,7 +20,9 @@ import 'package:image/image.dart';
 import 'package:meta/meta.dart';
 import 'package:zxing2/qrcode.dart';
 
+import '../util/at_file_util.dart';
 import '../util/home_directory_util.dart';
+import 'helpers/enrollment_checkpoint.dart';
 
 /// Service implementation responsible for onboarding and authenticating atSigns.
 ///
@@ -41,8 +43,12 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   AtEnrollment? _atEnrollment;
 
-  AtOnboardingServiceImpl(String atsign, this.atOnboardingPreference,
-      {this.atServiceFactory, String? enrollmentId}) {
+  AtOnboardingServiceImpl(
+    String atsign,
+    this.atOnboardingPreference, {
+    this.atServiceFactory,
+    String? enrollmentId,
+  }) {
     // performs atSign format checks on the atSign
     _atSign = AtUtils.fixAtSign(atsign);
     _atEnrollment ??= AtEnrollment.create();
@@ -127,6 +133,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     Duration retryInterval = AtOnboardingService.defaultActivationCheckInterval,
     int maxRetries = AtOnboardingService.defaultMaxActivationCheckRetries,
   }) async {
+    // Fails early if the filePath already exists (or) isn't writable
+    AtFileUtil.validateFileIsCreatable(
+        File(atOnboardingPreference.atKeysFilePath!));
+
     // Ensure we have an AtLookUp instance and send from: command if using proxy
     AtLookupImpl atLookUpImpl = AtLookupImpl(
       _atSign,
@@ -195,13 +205,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     logger.finer('Onboarding Response: $atOnboardingResponse');
     if (atOnboardingResponse.isSuccessful) {
-      logger.finer(
-          'Onboarding successful.Generating keyfile in path: ${atOnboardingPreference.atKeysFilePath}');
-      stderr.writeln();
-      //     await _generateAtKeysFile(
-      //     atOnboardingResponse.atAuthKeys!,
-      //   enrollmentId: atOnboardingResponse.enrollmentId,
-      //);
+      logger.finer('Onboarding successful. Generating keyfile in'
+          ' path: ${atOnboardingPreference.atKeysFilePath}');
+      await AtFileUtil.setSecureFilePermissions(
+          atOnboardingPreference.atKeysFilePath!);
 
       if (autoCompleteActivation) {
         await completeActivation();
@@ -216,6 +223,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     await atAuth!.completeActivation();
   }
 
+  @visibleForTesting
+  late EnrollmentCheckpoint enrollCheckpoint = EnrollmentCheckpoint(_atSign);
+
   @override
   Future<AtEnrollmentResponse> enroll(
     String appName,
@@ -225,30 +235,64 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     Duration retryInterval = AtOnboardingService.defaultApkamRetryInterval,
     int maxRetries = AtOnboardingService.defaultMaxApkamRetries,
     File? atKeysFile,
+    Duration? apkamKeysExpiryDuration,
     bool allowOverwrite = false,
   }) async {
-    AtEnrollmentResponse enrollmentResponse = await sendEnrollRequest(
-      appName,
-      deviceName,
-      otp,
-      namespaces,
+    // Fails early if the filePath already exists (or) isn't writable
+    if (atKeysFile != null) {
+      AtFileUtil.validateFileIsCreatable(atKeysFile);
+    }
+
+    // Resume from checkpoint if a previous enrollment was interrupted,
+    // otherwise submit a new enrollment request and save a checkpoint.
+    AtEnrollmentResponse? enrollmentResponse =
+        enrollCheckpoint.load(appName, deviceName, namespaces);
+
+    if (enrollmentResponse != null) {
+      logger.info('Resuming from enrollment checkpoint...');
+    } else {
+      enrollmentResponse = await sendEnrollRequest(
+        appName,
+        deviceName,
+        otp,
+        namespaces,
+        apkamKeysExpiryDuration: apkamKeysExpiryDuration,
+      );
+      logger.finer('EnrollmentResponse from server: $enrollmentResponse');
+      await enrollCheckpoint.save(
+          enrollmentResponse, appName, deviceName, namespaces, expiry: apkamKeysExpiryDuration);
+    }
+
+    stdout.writeln('Enrollment ID: ${enrollmentResponse.enrollmentId}');
+    _addProgress('Enroll', 'Enrollment ID: ${enrollmentResponse.enrollmentId}',
+        ProgressEventType.info);
+
+    try {
+      await awaitApproval(
+        enrollmentResponse,
+        retryInterval: retryInterval,
+        maxRetries: maxRetries,
+      );
+    } finally {
+      // Checkpoint is always removed after approval attempt, whether it
+      // succeeds or throws
+      enrollCheckpoint.delete(appName, deviceName, namespaces);
+    }
+
+    await _initAtClient(
+      _atLookUp!.atChops!,
+      enrollmentId: enrollmentResponse.enrollmentId,
     );
-    logger.finer('EnrollmentResponse from server: $enrollmentResponse');
 
-    await awaitApproval(enrollmentResponse, retryInterval: retryInterval);
-
-    await _initAtClient(_atLookUp!.atChops!,
-        enrollmentId: enrollmentResponse.enrollmentId);
-    var enrollmentDetails = EnrollmentDetails();
-    enrollmentDetails.namespace = namespaces;
+    // Store enrollment details in local secondary.
     var localEnrollmentKey = AtKey()
       ..isLocal = true
       ..key = enrollmentResponse.enrollmentId
       ..sharedBy = atClient!.getCurrentAtSign();
+    EnrollmentDetails enrollmentDetails = EnrollmentDetails()
+      ..namespace = namespaces;
     await atClient!.getLocalSecondary()!.putValue(
-          localEnrollmentKey.toString(),
-          jsonEncode(enrollmentDetails.toJson()),
-        );
+        localEnrollmentKey.toString(), jsonEncode(enrollmentDetails.toJson()));
 
     await createAtKeysFile(
       enrollmentResponse,
@@ -490,6 +534,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }
 
   /// Retries PKAM auth until an enrollment is approved/denied/expired
+  ///
+  /// This method is no longer needed here. Use AtAuthImpl.validateAtServer()
+  /// ToDo: Marking this for removal
   Future<void> _waitForPkamAuthSuccess(
     AtLookUp atLookUp,
     String enrollmentIdFromServer,
@@ -626,6 +673,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     fileWriter.write(encodedAtKeysString);
     await fileWriter.flush();
     await fileWriter.close();
+    await AtFileUtil.setSecureFilePermissions(atKeysFile.path);
     stdout.writeln(
         '${chalk.green('[Success]')} Your .atKeys file saved at ${atKeysFile.path}\n');
 
