@@ -5,6 +5,7 @@ import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
+import 'package:at_auth/src/enroll/models/otp.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_chops/at_chops.dart';
@@ -508,6 +509,36 @@ class AtEnrollmentImpl implements AtEnrollment {
         await Future.delayed(retryInterval); // Delay and retry
       }
     }
+  }
+
+  static const _kSppRegex = r'[A-Za-z0-9]{6}';
+  static const _defaultOtpExpiry = Duration(minutes: 5);
+
+  @override
+  Future<Otp> generateOtp(AtLookUp atLookUp,
+      {Duration expiry = _defaultOtpExpiry}) async {
+    final command = 'otp:get:ttl:${expiry.inMilliseconds}\n';
+    final response = await atLookUp.executeCommand(command, auth: true);
+    if (response != null && response.startsWith('data:')) {
+      final otp = response.substring(response.indexOf('data:') + 5).trim();
+      return Otp.fromDuration(value: otp, duration: expiry);
+    }
+    throw AtEnrollmentException('Failed to generate OTP. Response: $response');
+  }
+
+  @override
+  Future<Otp> setSpp(String spp, AtLookUp atLookUp,
+      {Duration expiry = _defaultOtpExpiry}) async {
+    if (!RegExp('^$_kSppRegex\$').hasMatch(spp)) {
+      throw AtEnrollmentException(
+          'SPP must be alphanumeric and exactly 6 characters');
+    }
+    final command = 'otp:put:$spp:ttl:${expiry.inMilliseconds}\n';
+    final response = await atLookUp.executeCommand(command, auth: true);
+    if (response == null || !response.contains('ok')) {
+      throw AtEnrollmentException('Failed to set SPP. Response: $response');
+    }
+    return Otp.fromDuration(value: spp, duration: expiry);
   }
 
   Future<void> waitBriefly({int millis = 500}) async {

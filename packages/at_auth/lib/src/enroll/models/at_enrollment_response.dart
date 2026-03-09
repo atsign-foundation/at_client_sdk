@@ -1,6 +1,6 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_auth/src/enroll/models/namespace_permission.dart';
+import 'package:meta/meta.dart';
 
 /// The class holds details regarding an enrollment request, where the server notifies the approving app upon receiving a
 /// request from the requesting app, seeking approval or denial.
@@ -12,13 +12,14 @@ import 'package:at_auth/src/enroll/models/namespace_permission.dart';
 ///   - namespace: This field determines the namespaces for granting access to view or write data based on permissions.
 ///   - encryptedAPKAMSymmetricKey: In the event of approval, the encryptedAPKAMSymmetricKey is used to encrypt the default
 ///                                 encryption private key and self-encryption key, facilitating the generation of the APKAM key pair.
+@immutable
 class EnrollmentServerResponse {
-  String enrollmentId;
-  String appName;
-  String deviceName;
-  EnrollmentStatus status;
-  List<NamespacePermission> namespace;
-  String? encryptedAPKAMSymmetricKey;
+  final String enrollmentId;
+  final String appName;
+  final String deviceName;
+  final EnrollmentStatus status;
+  final List<NamespacePermission> namespace;
+  final String? encryptedAPKAMSymmetricKey;
 
   EnrollmentServerResponse({
     required this.enrollmentId,
@@ -55,6 +56,45 @@ class EnrollmentServerResponse {
           .toList(),
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    return other is EnrollmentServerResponse &&
+        other.enrollmentId == enrollmentId &&
+        other.appName == appName &&
+        other.deviceName == deviceName &&
+        other.status == status &&
+        other.encryptedAPKAMSymmetricKey == encryptedAPKAMSymmetricKey &&
+        _listEquals(other.namespace, namespace);
+  }
+
+  @override
+  int get hashCode =>
+      enrollmentId.hashCode ^
+      appName.hashCode ^
+      deviceName.hashCode ^
+      status.hashCode ^
+      encryptedAPKAMSymmetricKey.hashCode ^
+      namespace.hashCode;
+
+  @override
+  String toString() {
+    return 'EnrollmentServerResponse(enrollmentId: $enrollmentId, '
+        'appName: $appName, '
+        'deviceName: $deviceName, '
+        'status: $status, '
+        'namespace: $namespace)';
+  }
+}
+
+bool _listEquals<T>(List<T> a, List<T> b) {
+  if (a.length != b.length) return false;
+  for (int i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 /// Represents the response of an enrollment operation received

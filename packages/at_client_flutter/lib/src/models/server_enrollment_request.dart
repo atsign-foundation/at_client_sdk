@@ -2,7 +2,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 
-import 'namespace_permission.dart';
+import 'package:at_auth/at_auth.dart' show NamespacePermission;
 
 /// {@template enrollment_request}
 /// A model representing an enrollment request.
