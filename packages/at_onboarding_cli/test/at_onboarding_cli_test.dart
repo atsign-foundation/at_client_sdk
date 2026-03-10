@@ -219,11 +219,7 @@ void main() {
 
       File file = File(f.path);
       expect(file.existsSync(), true);
-      if (!Platform.isWindows) {
-        final stat = await FileStat.stat(file.path);
-        expect(stat.mode & 0x1FF, equals(0x180),
-            reason: 'atKeys file must have chmod 600 (owner read/write only)');
-      }
+      await expectSecureFilePermissions(file);
       // Delete the file at the end of the test.
       file.deleteSync(recursive: true);
     });
@@ -255,11 +251,7 @@ void main() {
 
       File file = File(f.path);
       expect(file.existsSync(), true);
-      if (!Platform.isWindows) {
-        final stat = await FileStat.stat(file.path);
-        expect(stat.mode & 0x1FF, equals(0x180),
-            reason: 'atKeys file must have chmod 600 (owner read/write only)');
-      }
+      await expectSecureFilePermissions(file);
       // Delete the file at the end of the test.
       file.deleteSync(recursive: true);
     });
@@ -291,11 +283,7 @@ void main() {
 
       File file = File(f.path);
       expect(file.existsSync(), true);
-      if (!Platform.isWindows) {
-        final stat = await FileStat.stat(file.path);
-        expect(stat.mode & 0x1FF, equals(0x180),
-            reason: 'atKeys file must have chmod 600 (owner read/write only)');
-      }
+      await expectSecureFilePermissions(file);
       // Delete the file at the end of the test.
       file.deleteSync(recursive: true);
     });
@@ -327,11 +315,7 @@ void main() {
 
       File file = File(f.path);
       expect(file.existsSync(), true);
-      if (!Platform.isWindows) {
-        final stat = await FileStat.stat(file.path);
-        expect(stat.mode & 0x1FF, equals(0x180),
-            reason: 'atKeys file must have chmod 600 (owner read/write only)');
-      }
+      await expectSecureFilePermissions(file);
       // Delete the file at the end of the test.
       file.deleteSync(recursive: true);
     });
@@ -799,4 +783,29 @@ Future<void> setupLocalStorage(String atSign) async {
   var persistenceManager = SecondaryPersistenceStoreFactory.getInstance()
       .getSecondaryPersistenceStore(atSign)!;
   await persistenceManager.getHivePersistenceManager()!.init(storageDir);
+}
+
+/// Asserts that [file] has secure (owner-only) permissions.
+///
+/// On POSIX: expects chmod 600 (mode bits 0x180).
+/// On Windows: expects only the current user has Full control via icacls.
+Future<void> expectSecureFilePermissions(File file) async {
+  if (Platform.isWindows) {
+    final username =
+        Platform.environment['USERNAME'] ?? Platform.environment['USER'];
+    final result = await Process.run('icacls', [file.path]);
+    final output = result.stdout as String;
+    final permEntries = output
+        .split('\n')
+        .where((l) => l.contains(':(') && !l.startsWith('Successfully'))
+        .toList();
+    expect(permEntries.length, equals(1),
+        reason: 'only the current user should have access');
+    expect(permEntries.first, contains('$username:(F)'),
+        reason: 'current user must have Full control');
+  } else {
+    final stat = await FileStat.stat(file.path);
+    expect(stat.mode & 0x1FF, equals(0x180),
+        reason: 'file must have chmod 600 (owner read/write only)');
+  }
 }
