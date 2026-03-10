@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
@@ -371,7 +372,13 @@ class AtAuthImpl implements AtAuth {
     int retryCount = 0;
 
     while (retryCount < atRequest.retryOptions.maxRetries) {
+      retryCount++;
       try {
+        _addProgress(
+            'Find',
+            '#[$retryCount/${atRequest.retryOptions.maxRetries}] : looking up ${atRequest.atSign} in atDirectory',
+            ProgressEventType.info);
+
         var atStatus = await atServerStatus!.get(atRequest.atSign);
 
         // 3 Checks for onboarding:
@@ -417,16 +424,46 @@ class AtAuthImpl implements AtAuth {
           }
         }
 
+        _addProgress(
+            'Connect',
+            '#[$retryCount/${atRequest.retryOptions.maxRetries}] : Connecting to ${atRequest.atSign} atServer',
+            ProgressEventType.info);
+
+        SecondaryAddressFinder secondaryAddressFinder =
+            CacheableSecondaryAddressFinder(
+          atRequest.rootDomain.rootDomain,
+          atRequest.rootDomain.rootPort,
+        );
+        SecondaryAddress secondaryAddress =
+            await secondaryAddressFinder.findSecondary(atRequest.atSign);
+
+        final secureSocket = await SecureSocket.connect(
+            secondaryAddress.host, secondaryAddress.port,
+            timeout: Duration(seconds: 5));
+        secureSocket.destroy();
+
+        _addProgress(
+            'Connect',
+            '#[$retryCount/${atRequest.retryOptions.maxRetries}] : Connected to ${atRequest.atSign} atServer',
+            ProgressEventType.success);
+
         break; // Exit loop if no exception occurs
       } catch (e) {
         _logger.severe('Error during atServer validation: $e');
-        retryCount++;
         if (retryCount >= atRequest.retryOptions.maxRetries) {
+          _addProgress(
+              'Connect',
+              '#[$retryCount/${atRequest.retryOptions.maxRetries}] : $e',
+              ProgressEventType.error);
           throw AtAuthenticationException(
               'Max retries reached while validating atSign server. Last error: $e');
         }
         _logger.warning(
             'Attempt $retryCount failed: $e. Retrying... $retryCount/${atRequest.retryOptions.maxRetries}');
+        _addProgress(
+            'Connect',
+            '#[$retryCount/${atRequest.retryOptions.maxRetries}] : $e',
+            ProgressEventType.error);
         await Future.delayed(
             atRequest.retryOptions.retryDelay); // Wait before retrying
       }

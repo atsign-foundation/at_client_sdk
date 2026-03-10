@@ -166,13 +166,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           'Could not fetch cram secret for \'$_atSign\' from registrar');
     }
 
-    // check and wait till secondary exists
-    await _waitUntilSecondaryCreated(
-      atLookUpImpl,
-      retryInterval: retryInterval,
-      maxRetries: maxRetries,
-    );
-
     if (await isOnboarded()) {
       throw AtActivateException('atsign $_atSign is already activated');
     }
@@ -785,89 +778,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
   }
 
-  /// Method to check if secondary belonging to [_atSign] has been created
-  /// If not, wait until secondary is created. Makes 50 retry attempts, 2 sec apart
-  Future<void> _waitUntilSecondaryCreated(
-    AtLookupImpl atLookupImpl, {
-    required int maxRetries,
-    required Duration retryInterval,
-  }) async {
-    int retryAttempt = 0;
-    SecondaryAddress? secondaryAddress;
-
-    String lastException = '';
-    while (retryAttempt < maxRetries && secondaryAddress == null) {
-      retryAttempt++;
-      if (retryAttempt > 1) {
-        await Future.delayed(retryInterval);
-      }
-      _addProgress(
-          'Find',
-          '#[$retryAttempt/$maxRetries] : looking up $_atSign in atDirectory',
-          ProgressEventType.info);
-      await waitBriefly();
-      logger.finer(
-          'retrying find AtServer for $_atSign... #[$retryAttempt/$maxRetries]');
-      try {
-        secondaryAddress =
-            await atLookupImpl.secondaryAddressFinder.findSecondary(_atSign);
-      } catch (e) {
-        lastException = e.toString();
-        _addProgress('Find', '#[$retryAttempt/$maxRetries] : $e',
-            ProgressEventType.error);
-      }
-    }
-    if (secondaryAddress == null) {
-      String msg = 'Find atServer for $_atSign failed'
-          ' : Apparent cause: $lastException';
-      throw SecondaryNotFoundException(msg);
-    }
-    _addProgress(
-      'Find',
-      '#[$retryAttempt/$maxRetries] : Found atServer address for $_atSign in atDirectory - $secondaryAddress',
-      ProgressEventType.success,
-    );
-
-    retryAttempt = 0;
-    bool connected = false;
-    lastException = '';
-    while (!connected && retryAttempt < maxRetries) {
-      retryAttempt++;
-      if (retryAttempt > 1) {
-        await Future.delayed(retryInterval);
-      }
-      _addProgress(
-          'Connect',
-          '#[$retryAttempt/$maxRetries] : Connecting to $_atSign atServer',
-          ProgressEventType.info);
-      await waitBriefly();
-      try {
-        final secureSocket = await SecureSocket.connect(
-            secondaryAddress.host, secondaryAddress.port,
-            timeout: Duration(seconds: 5));
-        connected = secureSocket.remoteAddress != null &&
-            secureSocket.remotePort != null;
-        secureSocket.destroy();
-      } catch (e, trace) {
-        lastException = e.toString();
-        _addProgress('Connect', '#[$retryAttempt/$maxRetries] : $e',
-            ProgressEventType.error);
-        logger.finer(e);
-        logger.finer(trace);
-      }
-    }
-    if (connected) {
-      _addProgress(
-          'Connect',
-          '#[$retryAttempt/$maxRetries] : Connected to $_atSign atServer',
-          ProgressEventType.success);
-    } else {
-      String msg = 'Connect to atServer for $_atSign failed'
-          ' : Apparent cause: $lastException';
-      throw SecondaryConnectException(msg);
-    }
-  }
-
   @override
   Future<void> close() async {
     logger.info('Closing');
@@ -909,8 +819,18 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   @Deprecated('AtChops will be created in AtAuth')
   AtChops? atChops;
 
+  AtAuth? _atAuth;
+
   @override
-  AtAuth? atAuth;
+  AtAuth? get atAuth => _atAuth;
+
+  @override
+  set atAuth(AtAuth? auth) {
+    _atAuth = auth;
+    _atAuth?.progressStream.listen((pe) {
+        _psc.add(pe);
+    });
+  }
 
   final StreamController<ProgressEvent> _psc = StreamController.broadcast();
 
