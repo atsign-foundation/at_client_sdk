@@ -43,8 +43,10 @@ abstract class AtOnboardingService implements ProgressPublisher {
   ///
   /// If the request is denied, or times out, an exception will be thrown.
   ///
-  /// Calling this method is exactly equivalent to calling
-  /// [sendEnrollRequest], [awaitApproval] and [createAtKeysFile] in turn.
+  /// This method internally calls [sendEnrollRequest], [awaitApproval], and
+  /// [createAtKeysFile]. It supports resuming interrupted enrollments via a
+  /// local checkpoint file; if a valid checkpoint is found, it skips the initial
+  /// request and proceeds directly to [awaitApproval].
   ///
   /// [appName] - application name of the client e.g wavi,buzz, atmosphere etc.,
   ///
@@ -92,6 +94,8 @@ abstract class AtOnboardingService implements ProgressPublisher {
 
   /// Create a file in the standardized format which apps may use to
   /// authenticate to an atServer.
+  ///
+  /// [allowOverwrite] if true, allows overwriting of the existing atKeys file
   Future<File> createAtKeysFile(
     AtEnrollmentResponse er, {
     File? atKeysFile,

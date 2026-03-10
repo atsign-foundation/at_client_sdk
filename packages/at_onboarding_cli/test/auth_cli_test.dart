@@ -17,7 +17,7 @@ void main() {
     final dirPath = '$baseDirPath/@alice-apkam-keys.atKeys';
 
     test(
-        'A test to verify ensureWritable returns false if directory has read-only permissions',
+        'ensureWritable throws PathAccessException if directory has read-only permissions',
         () async {
       final directory = Directory(dirPath);
       // Create the directory first to ensure it exists before calling isWritable.
@@ -28,7 +28,7 @@ void main() {
     });
 
     test(
-        'A test verify ensureWritable doesnt throw if directory does not have a file already',
+        'ensureWritable doesnt throw if directory does not have a file already',
         () {
           expect(() => AtFileUtil.ensureWritable(File(dirPath)), returnsNormally);
     });

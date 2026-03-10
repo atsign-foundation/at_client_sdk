@@ -28,7 +28,7 @@ class EnrollmentCheckpoint {
   /// that two different atSigns enrolling with identical parameters produce
   /// different filenames and cannot interfere with each other's checkpoints.
   ///
-  /// The atSign is intentionally kept out of the filename itself — it is only
+  /// The [atSign] is intentionally kept out of the filename itself — it is only
   /// used as hash input — so the resulting filename reveals nothing about which
   /// atSign the checkpoint belongs to.
   static String _paramsHash(String atSign, String appName, String deviceName,
@@ -49,7 +49,9 @@ class EnrollmentCheckpoint {
           '${_paramsHash(_atSign, appName, deviceName, namespaces)}.enrollment.checkpoint'));
 
   /// Writes the checkpoint to disk with secure file permissions (chmod 600).
-  /// Any existing checkpoint for different params is deleted first.
+  ///
+  /// Maintains expiry for each checkpoint, defaults to [defaultCheckpointExpiry].
+  /// Expired checkpoints are invalidated and deleted by [load]
   Future<void> save(
     AtEnrollmentResponse er,
     String appName,
