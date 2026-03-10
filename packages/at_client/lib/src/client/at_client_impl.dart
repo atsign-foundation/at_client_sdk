@@ -89,21 +89,30 @@ class AtClientImpl implements AtClient {
   @override
   AtChops? get atChops => _atChops;
 
-  late SyncService _syncService;
+  SyncService? _syncService;
 
   @override
   set syncService(SyncService syncService) {
     _syncService = syncService;
+    _finalizer.attach(_syncService!, 'SyncService for $_atSign');
   }
 
   @override
-  SyncService get syncService => _syncService;
+  SyncService get syncService {
+    if (_isStopped) throw StateError('AtClient for $_atSign has been stopped');
+    if (_syncService == null) {
+      throw StateError('SyncService has not yet been set');
+    }
+    return _syncService!;
+  }
 
   NotificationService? _notificationService;
 
   @override
   set notificationService(NotificationService notificationService) {
     _notificationService = notificationService;
+    _finalizer.attach(
+        _notificationService!, 'NotificationService for $_atSign');
   }
 
   EnrollmentService? _enrollmentService;
@@ -111,6 +120,9 @@ class AtClientImpl implements AtClient {
   @override
   set enrollmentService(EnrollmentService? enrollmentService) {
     _enrollmentService = enrollmentService;
+    if (enrollmentService != null) {
+      _finalizer.attach(enrollmentService, 'EnrollmentService for $_atSign');
+    }
   }
 
   @override
@@ -128,13 +140,17 @@ class AtClientImpl implements AtClient {
   @override
   EncryptionService? get encryptionService => _encryptionService;
 
-  late final AtSignLogger _logger;
+  static late AtSignLogger _logger;
 
   @override
   String? enrollmentId;
 
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
+
+  static final Finalizer<String> _finalizer = Finalizer((service) {
+    _logger.finer('Outgoing $service has been garbage collected');
+  });
 
   static Future<AtClient> create(
       String currentAtSign, String? namespace, AtClientPreference preferences,
@@ -269,16 +285,20 @@ class AtClientImpl implements AtClient {
     }
 
     try {
-      await (syncService as SyncServiceImpl).stop();
+      await (_syncService as SyncServiceImpl).stop();
+      _syncService = null;
     } catch (e) {
       _logger.warning('Error while closing sync service: $e');
     }
 
     try {
       await (notificationService as NotificationServiceImpl).stop();
+      _notificationService = null;
     } catch (e) {
       _logger.warning('Error while closing notification service: $e');
     }
+
+    _enrollmentService = null;
 
     if (_remoteSecondary != null) {
       try {
