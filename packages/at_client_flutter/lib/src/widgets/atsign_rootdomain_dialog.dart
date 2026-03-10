@@ -56,7 +56,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
       return '';
     }
     try {
-      return AtUtils.fixAtSign(trimmedValue);
+      return trimmedValue.toAtsign();
     } catch (_) {
       return value;
     }
@@ -68,7 +68,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
       return null;
     }
     try {
-      return AtUtils.fixAtSign(atSign);
+      return atSign.toAtsign();
     } catch (_) {
       return null;
     }
