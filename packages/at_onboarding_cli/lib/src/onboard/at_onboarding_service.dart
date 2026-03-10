@@ -94,8 +94,6 @@ abstract class AtOnboardingService implements ProgressPublisher {
 
   /// Create a file in the standardized format which apps may use to
   /// authenticate to an atServer.
-  ///
-  /// [allowOverwrite] if true, allows overwriting of the existing atKeys file
   Future<File> createAtKeysFile(
     AtEnrollmentResponse er, {
     File? atKeysFile,

@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_client/at_client.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:path/path.dart' as path;
 
 /// Utility class for file system operations.
 class AtFileUtil {
@@ -23,8 +25,9 @@ class AtFileUtil {
           throw StateError('Could not determine username');
         }
 
+        final normalizedFilePath = path.windows.normalize(filePath);
         final result = await Process.run('icacls', [
-          filePath,
+          normalizedFilePath,
           '/inheritance:r',
           '/grant:r',
           '$username:F',
@@ -36,8 +39,7 @@ class AtFileUtil {
       } else if (Platform.isLinux || Platform.isMacOS || Platform.isAndroid) {
         await Process.run('chmod', ['600', filePath]);
       } else {
-        _logger.warning(
-            'Unsupported platform: ${Platform.operatingSystem}');
+        _logger.warning('Unsupported platform: ${Platform.operatingSystem}');
       }
     } catch (e) {
       _logger.warning('Could not set file permissions on $filePath | $e');
@@ -50,9 +52,9 @@ class AtFileUtil {
   /// and then tries to open the file in write mode to verify write permissions.
   /// If the file can be opened for writing, it is immediately closed and deleted.
   ///
-  /// Throws a [PathExistsException] if [file] already exists, a
-  /// [PathAccessException] if the path lacks write permissions, or the
-  /// underlying platform exception for any other I/O failure.
+  /// Throws [AtKeysFileOverwriteException] if [file] already exists,
+  /// or [AtException] if the path lacks write permissions or any other
+  /// I/O failure occurs.
   static void ensureWritable(File file) {
     try {
       // If the directories do not exist, create them.
@@ -65,13 +67,14 @@ class AtFileUtil {
       // Deletes only if the new file is created to verify write permissions.
       file.deleteSync();
     } on PathExistsException {
-      throw AtKeysFileOverwriteException('Keys file already exists at ${file.path}');
-    } on PathAccessException {
-      stderr.writeln('Path: ${file.path} does not have write permissions');
-      rethrow;
+      throw AtKeysFileOverwriteException(
+          'Keys file already exists at ${file.path}');
+    } on PathAccessException catch (e) {
+      _logger.severe('Caught: $e');
+      throw AtException('Keys file path is not writable: ${file.path}');
     } catch (e) {
-      stderr.writeln('Error in writing keys file to path: ${file.path}');
-      rethrow;
+      _logger.severe('Caught: $e');
+      throw AtException('Failed to write file at ${file.path}');
     }
   }
 }
