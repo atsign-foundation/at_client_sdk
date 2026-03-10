@@ -39,6 +39,8 @@ Package provides Flutter Dialogs for the following workflows:
  3. Authentication via Keychain
  4. Authentication via APKAM enrollment
 
+Additionally, 1.1.0 introduced extensions.dart as a new import to add flutter specific helpers.
+
 ---
 
 ### Workflow 1: Onboard a new atSign (Registrar / CRAM)
