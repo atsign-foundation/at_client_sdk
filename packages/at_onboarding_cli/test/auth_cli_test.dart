@@ -24,7 +24,7 @@ void main() {
       await directory.create(recursive: true);
       // Set permission to read only.
       await Process.run('chmod', ['444', baseDirPath]);
-      expect(() => AtFileUtil.ensureWritable(File(dirPath)), throwsA(isA<PathAccessException>()));
+      expect(() => AtFileUtil.ensureWritable(File(dirPath)), throwsA(isA<AtException>()));
     });
 
     test(
