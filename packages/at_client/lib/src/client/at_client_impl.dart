@@ -115,6 +115,15 @@ class AtClientImpl implements AtClient {
         _notificationService!, 'NotificationService for $_atSign');
   }
 
+  @override
+  NotificationService get notificationService {
+    if (_isStopped) throw StateError('AtClient for $_atSign has been stopped');
+    if (_notificationService == null) {
+      throw StateError('notificationService has not yet been set');
+    }
+    return _notificationService!;
+  }
+
   EnrollmentService? _enrollmentService;
 
   @override
@@ -126,15 +135,12 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  EnrollmentService? get enrollmentService => _enrollmentService;
-
-  @override
-  NotificationService get notificationService {
-    if (_notificationService == null) {
-      throw StateError('notificationService has not yet been set');
-    } else {
-      return _notificationService!;
+  EnrollmentService? get enrollmentService {
+    if (_isStopped) throw StateError('AtClient for $_atSign has been stopped');
+    if (_enrollmentService == null) {
+      throw StateError('EnrollmentService has not yet been set');
     }
+    return _enrollmentService;
   }
 
   @override
