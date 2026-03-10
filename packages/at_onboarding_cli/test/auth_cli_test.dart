@@ -5,6 +5,8 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_onboarding_cli/src/cli/auth_cli.dart';
 import 'package:at_onboarding_cli/src/cli/auth_cli_args.dart';
+
+import 'package:at_onboarding_cli/src/util/at_file_util.dart';
 import 'package:test/test.dart';
 import 'at_onboarding_cli_test.dart';
 
@@ -15,20 +17,20 @@ void main() {
     final dirPath = '$baseDirPath/@alice-apkam-keys.atKeys';
 
     test(
-        'A test to verify isWritable returns false if directory has read-only permissions',
+        'A test to verify ensureWritable returns false if directory has read-only permissions',
         () async {
       final directory = Directory(dirPath);
       // Create the directory first to ensure it exists before calling isWritable.
       await directory.create(recursive: true);
       // Set permission to read only.
       await Process.run('chmod', ['444', baseDirPath]);
-      expect(canCreateFile(File(dirPath)), false);
+      expect(() => AtFileUtil.ensureWritable(File(dirPath)), throwsA(isA<PathAccessException>()));
     });
 
     test(
-        'A test verify isWritable returns true if directory does not have a file already',
+        'A test verify ensureWritable doesnt throw if directory does not have a file already',
         () {
-      expect(canCreateFile(File(dirPath)), true);
+          expect(() => AtFileUtil.ensureWritable(File(dirPath)), returnsNormally);
     });
   });
 

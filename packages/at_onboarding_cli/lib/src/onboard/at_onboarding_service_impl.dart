@@ -134,8 +134,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     int maxRetries = AtOnboardingService.defaultMaxActivationCheckRetries,
   }) async {
     // Fails early if the filePath already exists (or) isn't writable
-    AtFileUtil.validateFileIsCreatable(
-        File(atOnboardingPreference.atKeysFilePath!));
+    AtFileUtil.ensureWritable(File(atOnboardingPreference.atKeysFilePath!));
 
     // Ensure we have an AtLookUp instance and send from: command if using proxy
     AtLookupImpl atLookUpImpl = AtLookupImpl(
@@ -191,6 +190,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     var atOnboardingRequest = AtOnboardingRequest(_atSign);
     atOnboardingRequest.rootDomain = AtRootDomain(
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+    atOnboardingRequest.retryOptions =
+        RetryOptions(maxRetries: maxRetries, retryDelay: retryInterval);
     atOnboardingRequest.atKeysIo = FileAtKeysIo(
       filePath: atOnboardingPreference.atKeysFilePath != null
           ? (_) => atOnboardingPreference.atKeysFilePath!
@@ -205,7 +206,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     logger.finer('Onboarding Response: $atOnboardingResponse');
     if (atOnboardingResponse.isSuccessful) {
-      logger.finer('Onboarding successful. Generating keyfile in'
+      stdout.writeln('[Success] Your keyfile stored at'
           ' path: ${atOnboardingPreference.atKeysFilePath}');
       await AtFileUtil.setSecureFilePermissions(
           atOnboardingPreference.atKeysFilePath!);
@@ -240,7 +241,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }) async {
     // Fails early if the filePath already exists (or) isn't writable
     if (atKeysFile != null) {
-      AtFileUtil.validateFileIsCreatable(atKeysFile);
+      AtFileUtil.ensureWritable(atKeysFile);
     }
 
     // Resume from checkpoint if a previous enrollment was interrupted,
@@ -260,7 +261,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       );
       logger.finer('EnrollmentResponse from server: $enrollmentResponse');
       await enrollCheckpoint.save(
-          enrollmentResponse, appName, deviceName, namespaces, expiry: apkamKeysExpiryDuration);
+          enrollmentResponse, appName, deviceName, namespaces,
+          expiry: apkamKeysExpiryDuration);
     }
 
     stdout.writeln('Enrollment ID: ${enrollmentResponse.enrollmentId}');
@@ -534,9 +536,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }
 
   /// Retries PKAM auth until an enrollment is approved/denied/expired
-  ///
-  /// This method is no longer needed here. Use AtAuthImpl.validateAtServer()
-  /// ToDo: Marking this for removal
   Future<void> _waitForPkamAuthSuccess(
     AtLookUp atLookUp,
     String enrollmentIdFromServer,

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:at_auth/at_auth.dart';
 import 'package:at_utils/at_logger.dart';
 
 /// Utility class for file system operations.
@@ -43,15 +44,34 @@ class AtFileUtil {
     }
   }
 
-  /// Validates that [file] does not already exist and that the path is
-  /// writable. Throws [StateError] if the file exists, or re-throws any
-  /// [FileSystemException] if the path cannot be written to.
-  static void validateFileIsCreatable(File file) {
-    if (file.existsSync()) {
-      throw StateError('Error: file ${file.path} already exists');
+  /// Checks if the specified [file] is writable and does not already exist.
+  ///
+  /// This function attempts to create the directories for the given [file] if they do not exist,
+  /// and then tries to open the file in write mode to verify write permissions.
+  /// If the file can be opened for writing, it is immediately closed and deleted.
+  ///
+  /// Throws a [PathExistsException] if [file] already exists, a
+  /// [PathAccessException] if the path lacks write permissions, or the
+  /// underlying platform exception for any other I/O failure.
+  static void ensureWritable(File file) {
+    try {
+      // If the directories do not exist, create them.
+      // "recursive" is set to true to ensure that any missing parent directories are created.
+      // "exclusive" is set to true to prevent creation of file if it already exists.
+      file.createSync(recursive: true, exclusive: true);
+      // Try opening the file in write mode, which requires write permissions
+      RandomAccessFile raf = file.openSync(mode: FileMode.write);
+      raf.closeSync();
+      // Deletes only if the new file is created to verify write permissions.
+      file.deleteSync();
+    } on PathExistsException {
+      throw AtKeysFileOverwriteException('Keys file already exists at ${file.path}');
+    } on PathAccessException {
+      stderr.writeln('Path: ${file.path} does not have write permissions');
+      rethrow;
+    } catch (e) {
+      stderr.writeln('Error in writing keys file to path: ${file.path}');
+      rethrow;
     }
-    // Checks write access by creating and immediately deleting the file.
-    file.createSync(recursive: true, exclusive: true);
-    file.deleteSync();
   }
 }
