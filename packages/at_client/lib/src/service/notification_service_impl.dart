@@ -196,6 +196,7 @@ class NotificationServiceImpl extends NotificationService {
   Future<void> handleNotificationReceipt(String notificationJSON) async {
     try {
       logger.finest('DEBUG: $notificationJSON');
+      if (isStopped) return;
 
       final atNotifications = notificationParser
           .getAtNotifications(notificationParser.parse(notificationJSON));
@@ -230,6 +231,8 @@ class NotificationServiceImpl extends NotificationService {
     } on Exception catch (e) {
       logger.severe('unexpected error:${e.toString()}'
           ' while processing notificationJson: $notificationJSON');
+    } catch (e){
+      logger.severe('Caught: $e');
     }
   }
 
