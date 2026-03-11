@@ -28,7 +28,7 @@ import 'helpers/enrollment_checkpoint.dart';
 ///
 /// Also has implementation to create, approve, deny and revoke enrollments.
 class AtOnboardingServiceImpl implements AtOnboardingService {
-  late final String _atSign;
+  final Atsign _atSign;
   bool _isAtsignOnboarded = false;
   AtSignLogger logger = AtSignLogger('OnboardingCli');
   AtOnboardingPreference atOnboardingPreference;
@@ -51,9 +51,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     this.atOnboardingPreference, {
     this.atServiceFactory,
     String? enrollmentId,
-  }) {
-    // performs atSign format checks on the atSign
-    _atSign = AtUtils.fixAtSign(atsign);
+  }): _atSign = atsign.toAtsign() {
     _atEnrollment ??= AtEnrollment.create();
     enrollCheckpoint = EnrollmentCheckpoint(_atSign);
 
