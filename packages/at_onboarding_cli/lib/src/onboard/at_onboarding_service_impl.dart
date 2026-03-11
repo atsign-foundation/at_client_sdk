@@ -43,6 +43,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   AtEnrollment? _atEnrollment;
 
+  @visibleForTesting
+  late EnrollmentCheckpoint enrollCheckpoint;
+
   AtOnboardingServiceImpl(
     String atsign,
     this.atOnboardingPreference, {
@@ -52,6 +55,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     // performs atSign format checks on the atSign
     _atSign = AtUtils.fixAtSign(atsign);
     _atEnrollment ??= AtEnrollment.create();
+    enrollCheckpoint = EnrollmentCheckpoint(_atSign);
+
     // set default LocalStorage paths for this instance
     atOnboardingPreference.commitLogPath ??=
         HomeDirectoryUtil.getCommitLogPath(_atSign, enrollmentId: enrollmentId);
@@ -223,9 +228,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   Future<void> completeActivation() async {
     await atAuth!.completeActivation();
   }
-
-  @visibleForTesting
-  late EnrollmentCheckpoint enrollCheckpoint = EnrollmentCheckpoint(_atSign);
 
   @override
   Future<AtEnrollmentResponse> enroll(
