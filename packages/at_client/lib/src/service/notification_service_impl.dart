@@ -204,8 +204,12 @@ class NotificationServiceImpl extends NotificationService {
       for (var atNotification in atNotifications) {
         // Saves latest notification id to the keys if its not a stats notification.
         if (atNotification.id != '-1') {
-          await atClient.put(lastReceivedNotificationAtKey,
-              jsonEncode(atNotification.toJson()));
+          try {
+            await atClient.put(lastReceivedNotificationAtKey,
+                jsonEncode(atNotification.toJson()));
+          } catch (e) {
+            logger.warning('Failed to save last received notification ID: $e');
+          }
         }
         _streamListeners.forEach((notificationConfig, streamController) async {
           try {
@@ -225,14 +229,16 @@ class NotificationServiceImpl extends NotificationService {
           } on AtException catch (e) {
             logger.severe('${e.getTraceMessage()}'
                 ' while processing notificationJson: $notificationJSON');
+          } catch (e) {
+            logger.severe('Caught: while processing notificationJson $e');
           }
         });
       }
     } on Exception catch (e) {
       logger.severe('unexpected error:${e.toString()}'
           ' while processing notificationJson: $notificationJSON');
-    } catch (e){
-      logger.severe('Caught: $e');
+    } catch (e) {
+      logger.severe('handleNotificationReceipt() - Caught: $e');
     }
   }
 
