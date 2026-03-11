@@ -1,10 +1,7 @@
 import 'dart:convert';
 
-import 'package:at_auth/src/enroll/at_enrollment.dart';
+import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
-import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
-import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
-import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -190,6 +187,82 @@ void main() {
       expect(atEnrollmentResponse.enrollmentId,
           '4be2d358-074d-4e3b-99f3-64c4da01532f');
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.denied);
+    });
+  });
+
+  group('AtEnrollmentResponse toJson / fromJson', () {
+    test('toJson includes enrollmentId and enrollStatus', () {
+      final response = AtEnrollmentResponse(
+        'enroll-123',
+        EnrollmentStatus.approved,
+      );
+
+      final json = response.toJson();
+
+      expect(json['enrollmentId'], 'enroll-123');
+      expect(json['enrollStatus'], 'approved');
+    });
+
+    test('toJson includes atSign when set', () {
+      final response = AtEnrollmentResponse(
+        'enroll-123',
+        EnrollmentStatus.pending,
+        atSign: '@alice',
+      );
+
+      expect(response.toJson()['atSign'], '@alice');
+    });
+
+    test('toJson does not include atAuthKeys', () {
+      final response = AtEnrollmentResponse(
+        'enroll-123',
+        EnrollmentStatus.approved,
+        atAuthKeys: AtKeys(),
+      );
+
+      expect(response.toJson().containsKey('atAuthKeys'), false);
+    });
+
+    test('fromJson restores enrollmentId and enrollStatus', () {
+      final json = {
+        'enrollmentId': 'enroll-456',
+        'enrollStatus': 'denied',
+      };
+
+      final response = AtEnrollmentResponse.fromJson(json);
+
+      expect(response.enrollmentId, 'enroll-456');
+      expect(response.enrollStatus, EnrollmentStatus.denied);
+    });
+
+    test('fromJson sets atAuthKeys to null when present', () {
+      final json = {
+        'enrollmentId': 'enroll-456',
+        'enrollStatus': 'pending',
+        'atAuthKeys': AtKeys()
+      };
+      expect(AtEnrollmentResponse.fromJson(json).atAuthKeys, isNull);
+    });
+
+    test('fromJson throws when enrollStatus is unknown', () {
+      final json = {
+        'enrollmentId': 'enroll-456',
+        'enrollStatus': 'invalidStatus',
+      };
+
+      expect(
+        () => AtEnrollmentResponse.fromJson(json),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('fromJson throws when enrollmentId is missing', () {
+      final json = {'enrollStatus': 'approved'};
+
+      expect(
+        () => AtEnrollmentResponse.fromJson(json),
+        throwsA(anything),
+      );
     });
   });
 }

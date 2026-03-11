@@ -337,6 +337,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
       case AuthCliCommand.decrypt:
         await passPhraseDecryptAtKeys(commandArgResults);
+
       case AuthCliCommand.version:
         stdout.writeln('Version: $packageVersion');
     }
@@ -462,7 +463,6 @@ Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
       maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
       retryInterval: AtOnboardingService.defaultActivationCheckInterval,
     );
-    stderr.writeln();
     return true;
   } catch (e) {
     await Future.delayed(Duration(milliseconds: 10));
@@ -488,17 +488,6 @@ Future<bool> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
     throw ArgumentError('The --${AuthCliArgs.argNameAtKeys} option is'
         ' mandatory for the "enroll" command');
   }
-
-  File f = File(argResults[AuthCliArgs.argNameAtKeys]);
-
-  if (f.existsSync()) {
-    throw StateError('Error: atKeys file ${f.path} already exists');
-  }
-
-  if (!canCreateFile(f)) {
-    throw StateError('Error: Unable to open $f for writing');
-  }
-
   svc ??= createOnboardingService(argResults);
 
   Map<String, String> namespaces = {};
@@ -511,73 +500,27 @@ Future<bool> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
     namespaces[namespace] = permission;
   }
 
-  // If apkam Keys expiry is not set, then APKAM keys should lives forever.
+  // If apkam Keys expiry is not set, then APKAM keys should live forever.
   // Therefore set to 0ms (0 milliseconds) and TTL will not be set.
   String apkamKeysExpiry = argResults[AuthCliArgs.argNameExpiry] ?? '0ms';
-  AtEnrollmentResponse er = await svc.sendEnrollRequest(
-      argResults[AuthCliArgs.argNameAppName],
-      argResults[AuthCliArgs.argNameDeviceName],
-      argResults[AuthCliArgs.argNamePasscode],
-      namespaces,
-      apkamKeysExpiryDuration: parseDuration(apkamKeysExpiry));
-  stdout.writeln('Enrollment ID: ${er.enrollmentId}');
 
-  stderr.writeln('Waiting for approval; will check every 10 seconds');
-  await svc.awaitApproval(er,
-      retryInterval: AtOnboardingService.defaultApkamRetryInterval,
-      logProgress: true,
-      maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]));
+  String? atKeysPath = argResults[AuthCliArgs.argNameAtKeys];
+  File? atKeysFile = atKeysPath != null ? File(atKeysPath) : null;
 
-  stderr.writeln('Creating atKeys file');
-  await svc.createAtKeysFile(er, allowOverwrite: false);
+  await svc.enroll(
+    argResults[AuthCliArgs.argNameAppName],
+    argResults[AuthCliArgs.argNameDeviceName],
+    argResults[AuthCliArgs.argNamePasscode],
+    namespaces,
+    atKeysFile: atKeysFile,
+    apkamKeysExpiryDuration: parseDuration(apkamKeysExpiry),
+    maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
+    retryInterval: AtOnboardingService.defaultApkamRetryInterval,
+  );
 
   return true;
 }
 
-/// Checks if the specified [file] is writable.
-///
-/// This function attempts to create the directories for the given [file] if they do not exist,
-/// and then tries to open the file in write mode to verify write permissions.
-/// If the file can be opened for writing, it is immediately closed and deleted.
-///
-/// Returns:
-/// - `true` if the file is writable, or
-/// - `false` if the file is not writable due to existing files, lack of permissions,
-///   or any other exceptions encountered during the process.
-///
-/// [file]: The [File] instance to check for write access.
-///
-/// Exceptions:
-/// - If the file does not have write permissions, a [PathAccessException] is caught, and an error message is printed to stderr.
-/// - Any other exceptions are caught and logged, indicating a failure to determine write access.
-@visibleForTesting
-bool canCreateFile(File file) {
-  try {
-    // If the directories do not exist, create them.
-    // "recursive" is set to true to ensure that any missing parent directories are created.
-    // "exclusive" is set to true to prevent creation of file if it already exists.
-    file.createSync(recursive: true, exclusive: true);
-    // Try opening the file in write mode, which requires write permissions
-    RandomAccessFile raf = file.openSync(mode: FileMode.write);
-    raf.closeSync();
-    // In [AtOnboardingServiceImpl._generateAtKeysFile] method, there is a check which returns error
-    // if the file already exists. Therefore, delete the file here after checking for write permissions.
-    // This does not delete the existing file. Deletes only if the new file is created to verify write permissions.
-    file.deleteSync();
-    return true;
-  } on PathExistsException {
-    stderr.writeln('Error : atKeys file ${file.path} already exists');
-    rethrow;
-  } on PathAccessException {
-    stderr.writeln(
-        'Error : atKeys file ${file.path} does not have write permissions');
-    return false;
-  } catch (e) {
-    // If any exception occurs, we assume the file is not writable
-    stderr.writeln('Error in writing to atKeys file: ${e.toString()}');
-    return false;
-  }
-}
 
 @visibleForTesting
 Future<void> setSpp(ArgResults argResults, AtClient atClient) async {
@@ -1168,7 +1111,7 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
     if (stdout.hasTerminal && viewableLength > (stdout.terminalColumns - 3)) {
       output = '${output.substring(0, stdout.terminalColumns - 3 + diff)}...';
     }
-    stderr.write('\r\x1b[K$output');
+    stderr.writeln('\r\x1b[K$output');
   });
 
   return impl;
