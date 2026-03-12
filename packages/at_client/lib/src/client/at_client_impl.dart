@@ -226,6 +226,7 @@ class AtClientImpl implements AtClient {
     _encryptionService = encryptionService;
     _atChops = atChops;
     _atClientCommitLogCompaction = atClientCommitLogCompaction;
+    putRequestTransformer.atClient = this;
   }
 
   Future<void> _init({AtLookUp? atLookUp}) async {
@@ -251,8 +252,6 @@ class AtClientImpl implements AtClient {
     _encryptionService!.remoteSecondary = _remoteSecondary;
     _encryptionService!.localSecondary = localSecondary;
 
-    putRequestTransformer.atClient = this;
-
     _cascadeSetTelemetryService();
   }
 
@@ -267,6 +266,9 @@ class AtClientImpl implements AtClient {
       return;
     }
     _isStopped = false;
+
+    await _init();
+
     await startCompactionJob();
   }
 
@@ -313,6 +315,23 @@ class AtClientImpl implements AtClient {
         _logger.warning('Error while closing remote secondary connection: $e');
       }
     }
+
+    // Gracefully close the local Hive boxes to clear locks and prevent deadlocks
+    try {
+      var commitLog =
+          await AtCommitLogManagerImpl.getInstance().getCommitLog(_atSign);
+      await commitLog?.close();
+      AtCommitLogManagerImpl.getInstance().clear();
+
+      await SecondaryPersistenceStoreFactory.getInstance()
+          .getSecondaryPersistenceStore(_atSign)
+          ?.getHivePersistenceManager()
+          ?.close();
+    } catch (e) {
+      _logger.warning('Error while closing local keystore: $e');
+    }
+    _localSecondaryKeyStore = null;
+    localSecondary = null;
   }
 
   @override
