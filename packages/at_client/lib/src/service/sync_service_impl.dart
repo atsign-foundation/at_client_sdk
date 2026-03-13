@@ -1086,14 +1086,6 @@ class SyncServiceImpl implements SyncService {
     isStopped = true;
     _logger.info('Stopping sync service for $currentAtSign');
 
-    // Gracefully wait for any ongoing sync to complete to prevent deadlocking local keystore
-    int waitCount = 0;
-    while (_syncInProgress && waitCount < 50) {
-      // Max 5 seconds
-      await Future.delayed(Duration(milliseconds: 100));
-      waitCount++;
-    }
-
     _drainSyncQueue();
 
     _logger.finer('stopping stats notification subscription');

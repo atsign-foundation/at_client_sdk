@@ -100,6 +100,7 @@ class AtClientImpl implements AtClient {
   @override
   SyncService get syncService {
     if (_syncService == null) {
+      _logger.info('AtClient ($_atSign) isStopped: $isStopped');
       throw StateError('SyncService has not yet been set');
     }
     return _syncService!;
@@ -117,6 +118,7 @@ class AtClientImpl implements AtClient {
   @override
   NotificationService get notificationService {
     if (_notificationService == null) {
+      _logger.info('AtClient ($_atSign) isStopped: $isStopped');
       throw StateError('notificationService has not yet been set');
     }
     return _notificationService!;
@@ -128,6 +130,7 @@ class AtClientImpl implements AtClient {
   set enrollmentService(EnrollmentService? enrollmentService) {
     _enrollmentService = enrollmentService;
     if (enrollmentService != null) {
+      _logger.info('AtClient ($_atSign) isStopped: $isStopped');
       _finalizer.attach(enrollmentService, 'EnrollmentService for $_atSign');
     }
   }
@@ -222,7 +225,6 @@ class AtClientImpl implements AtClient {
     _encryptionService = encryptionService;
     _atChops = atChops;
     _atClientCommitLogCompaction = atClientCommitLogCompaction;
-    putRequestTransformer.atClient = this;
   }
 
   Future<void> _init({AtLookUp? atLookUp}) async {
@@ -248,6 +250,8 @@ class AtClientImpl implements AtClient {
     _encryptionService!.remoteSecondary = _remoteSecondary;
     _encryptionService!.localSecondary = localSecondary;
 
+    putRequestTransformer.atClient = this;
+
     _cascadeSetTelemetryService();
   }
 
@@ -262,18 +266,6 @@ class AtClientImpl implements AtClient {
       return;
     }
     _isStopped = false;
-    // AtCommitLog? commitLog = await AtCommitLogManagerImpl.getInstance()
-    //     .getCommitLog(_atSign,
-    //         commitLogPath: _preference?.commitLogPath, enableCommitId: false);
-    // if (commitLog == null) {
-    //   _logger.info(
-    //       'Failed to get CommitLog from path: ${_preference?.commitLogPath}');
-    // }
-    // HiveKeystore? hiveKeyStore = SecondaryPersistenceStoreFactory.getInstance()
-    //     .getSecondaryPersistenceStore(_atSign)
-    //     ?.getSecondaryKeyStore();
-    // hiveKeyStore?.commitLog = commitLog;
-
     await startCompactionJob();
   }
 
@@ -304,7 +296,7 @@ class AtClientImpl implements AtClient {
     }
 
     try {
-      await (notificationService as NotificationServiceImpl).stop();
+      await (_notificationService as NotificationServiceImpl).stop();
     } catch (e) {
       _logger.warning('Error while closing notification service: $e');
     }
