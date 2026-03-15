@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.1.0
+ - feat: extensions for additional functionality
+ - fix: bug where example app consumes atsigns with '_' inside them
+
 ## 1.0.2
 - fix(ai): automatically prepend @ symbol into text box 
 
