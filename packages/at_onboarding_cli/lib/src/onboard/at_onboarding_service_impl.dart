@@ -51,7 +51,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     this.atOnboardingPreference, {
     this.atServiceFactory,
     String? enrollmentId,
-  }): _atSign = atsign.toAtsign() {
+  }) : _atSign = atsign.toAtsign() {
     _atEnrollment ??= AtEnrollment.create();
     enrollCheckpoint = EnrollmentCheckpoint(_atSign);
 
@@ -152,8 +152,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     logger.info('Root Server address is ${atOnboardingPreference.rootDomain}:'
         '${atOnboardingPreference.rootPort}');
 
-    // get cram_secret from either from AtOnboardingPreference
-    // or fetch from the registrar using verification code sent to email
+    // Fetch from the registrar using verification code sent to email
+    // if not provided through onboardingPreference
     if (atOnboardingPreference.cramSecret == null) {
       final util = OnboardingUtil();
       await util.requestAuthenticationOtp(
@@ -169,6 +169,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         authority: atOnboardingPreference.registrarUrl,
       );
     }
+
     if (atOnboardingPreference.cramSecret == null) {
       logger.info('Root Server address is ${atOnboardingPreference.rootDomain}:'
           '${atOnboardingPreference.rootPort}');
@@ -872,10 +873,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   AtAuth? get atAuth => _atAuth;
 
   @override
-  set atAuth(AtAuth? auth) {
-    _atAuth = auth;
+  set atAuth(AtAuth? atAuth) {
+    _atAuth = atAuth;
     _atAuth?.progressStream.listen((pe) {
-        _psc.add(pe);
+      _psc.add(pe);
     });
   }
 
