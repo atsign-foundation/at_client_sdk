@@ -166,14 +166,18 @@ class AtAuthImpl implements AtAuth {
       atOnboardingRequest.atKeys = await atOnboardingRequest.atKeysIo?.read(
         atOnboardingRequest.atSign,
       );
-      throw AtAuthenticationException(
-        'atSign: ${atOnboardingRequest.atSign} is already onboarded. Cannot perform onboarding again.',
-      );
     } catch (e, _) {
       _logger.info(
         'Failed to read keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
       ); //swallow the error, we just want to know if keys exist or not
     }
+
+    if (atOnboardingRequest.atKeys != null) {
+      throw AtAuthenticationException(
+        'atSign: ${atOnboardingRequest.atSign} is already onboarded. Cannot perform onboarding again.',
+      );
+    }
+
     await validateAtServer(atOnboardingRequest);
     //1. cram auth
     cramAuthenticator ??= CramAuthenticator();
