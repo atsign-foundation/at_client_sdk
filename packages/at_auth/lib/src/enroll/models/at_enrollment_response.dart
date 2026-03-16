@@ -2,18 +2,33 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:meta/meta.dart';
 
+/// Base class for enrollment-related data objects.
+///
+/// Provides a unified interface for accessing [enrollmentId] and
+/// [enrollmentStatus] across both server-side enrollment details
+/// ([ServerEnrollmentRequest]) and enrollment operation results
+/// ([AtEnrollmentResponse]).
+abstract class EnrollmentBase {
+  String get enrollmentId;
+  EnrollmentStatus get enrollmentStatus;
+}
+
 /// Holds details of an enrollment request received from the server.
 ///
 /// The server notifies the approving app when a requesting app submits
 /// an enrollment, seeking approval or denial.
 @immutable
-class ServerEnrollmentRequest {
+class ServerEnrollmentRequest extends EnrollmentBase {
+  @override
   final String enrollmentId;
   final String appName;
   final String deviceName;
   final EnrollmentStatus status;
   final List<NamespacePermission> namespacePermissions;
   final String? encryptedAPKAMSymmetricKey;
+
+  @override
+  EnrollmentStatus get enrollmentStatus => status;
 
   /// Backwards-compatible alias for [namespacePermissions].
   List<NamespacePermission> get namespace => namespacePermissions;
@@ -99,12 +114,16 @@ bool _listEquals<T>(List<T> a, List<T> b) {
 
 /// Represents the response of an enrollment operation received
 /// from the secondary server.
-class AtEnrollmentResponse {
+class AtEnrollmentResponse extends EnrollmentBase {
   /// The unique identifier associated with the enrollment.
+  @override
   String enrollmentId;
 
   /// The status of the enrollment operation.
   EnrollmentStatus enrollStatus;
+
+  @override
+  EnrollmentStatus get enrollmentStatus => enrollStatus;
 
   /// Optional atSign associated with the enrollment.
   String? atSign;
