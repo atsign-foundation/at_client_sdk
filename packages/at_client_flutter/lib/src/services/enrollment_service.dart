@@ -23,7 +23,6 @@ class FlutterEnrollmentService {
   final AtEnrollment _atEnrollment = AtEnrollment.create();
   final KeychainStorage _keychainStorage = KeychainStorage();
   final KeychainAtKeysIo _keychainAtKeysIo = KeychainAtKeysIo();
-  final SppKeychainData _sppKeychainData = SppKeychainData();
 
   AtClient get atClient => AtClientManager.getInstance().atClient;
 
@@ -154,15 +153,15 @@ class FlutterEnrollmentService {
     final atLookup = atClient.getRemoteSecondary()!.atLookUp;
     final otp = await _atEnrollment.setSpp(spp, atLookup, expiry: sppExpiry);
     _logger.info('SPP set on the server');
-    await _sppKeychainData.save(atClient.getCurrentAtSign()!, otp);
+    await _keychainStorage.saveSpp(atClient.getCurrentAtSign()!, otp);
     return otp;
   }
 
   /// Get the active SPP from the keychain.
   ///
   /// Returns `null` if no SPP is set or the last SPP has expired.
-  Future<Otp?> getActiveSpp() =>
-      _sppKeychainData.getActive(atClient.getCurrentAtSign()!);
+  Future<SppData?> getActiveSpp() =>
+      _keychainStorage.getActiveSpp(atClient.getCurrentAtSign()!);
 
   /// Get the OTP from the server.
   ///

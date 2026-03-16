@@ -68,3 +68,26 @@ class EnrollmentData extends KeychainData {
     };
   }
 }
+
+class SppData extends KeychainData {
+  final String value;
+  final DateTime expiry;
+
+  SppData({
+    required this.value,
+    required this.expiry,
+  }) : assert(value.length == 6, 'SPP must be exactly 6 characters');
+
+  bool get isExpired => DateTime.now().isAfter(expiry);
+
+  factory SppData.fromJson(Map<String, dynamic> json) => SppData(
+        value: json['spp'] as String,
+        expiry: DateTime.parse(json['expiry'] as String),
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'spp': value,
+        'expiry': expiry.toIso8601String(),
+      };
+}

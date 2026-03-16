@@ -194,6 +194,37 @@ class KeychainStorage {
     }
   }
 
+  /// Saves [otp] to the keychain for [atSign].
+  Future<void> saveSpp(String atSign, Otp otp) async {
+    final spp = SppData(value: otp.value, expiry: otp.expiry);
+
+    await _write(
+        biometricStoreName: SppStore(atSign).getName(), keychainData: spp);
+    _logger.info('SPP saved to keychain');
+  }
+
+  /// Returns the active (non-expired) SPP for [atSign], or null if none or expired.
+  Future<SppData?> getActiveSpp(String atSign) async {
+    try {
+      final data = await _read(keychainStoreName: SppStore(atSign).getName());
+      if (data == null) {
+        _logger.info('No SPP found in keychain');
+        return null;
+      }
+      final spp = SppData.fromJson(jsonDecode(data));
+      if (spp.isExpired) {
+        _logger.info('SPP found in keychain but has expired. Deleting.');
+        final store = await _getBiometricStorageFile(SppStore(atSign).getName());
+        await store.delete();
+        return null;
+      }
+      return spp;
+    } catch (e, st) {
+      _logger.severe('Failed to get SPP from keychain', e, st);
+      return null;
+    }
+  }
+
   Future<String?> _read({
     required String keychainStoreName,
   }) async {
