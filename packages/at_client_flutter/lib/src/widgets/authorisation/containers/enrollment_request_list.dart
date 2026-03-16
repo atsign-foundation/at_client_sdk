@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:at_auth/at_auth.dart' show EnrollmentRequestDecision;
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/material.dart';
 
@@ -27,7 +28,6 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   @override
   void initState() {
     super.initState();
-    _service.init();
     _fetchAndSubscribe();
   }
 
@@ -40,7 +40,7 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
 
     try {
       _subscription = _service
-          .enrollmentRequests(statusFilters: [EnrollmentStatus.pending]).listen(
+          .getEnrollments(statusFilters: [EnrollmentStatus.pending]).listen(
         (request) {
           if (mounted) {
             setState(() {
@@ -62,8 +62,10 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
       );
 
       // Initial fetch of pending requests
-      final initialRequests = await _service.getEnrollmentRequests(
-        statusFilters: [EnrollmentStatus.pending],
+      final atLookUp = AtClientManager.getInstance().atClient.getRemoteSecondary()!.atLookUp;
+      final initialRequests = await _service.list(
+        [EnrollmentStatus.pending],
+        atLookUp,
       );
 
       if (mounted) {
@@ -88,7 +90,16 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
 
   Future<void> _handleApprove(ServerEnrollmentRequest request) async {
     try {
-      await _service.approve(request);
+      final atSign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
+      final atLookUp = AtClientManager.getInstance().atClient.getRemoteSecondary()!.atLookUp;
+      await _service.approve(
+        EnrollmentRequestDecision.approved(
+          enrollmentId: request.enrollmentId,
+          apkamSymmetricKey: AtBytes.fromString(request.encryptedAPKAMSymmetricKey!),
+          atSign: atSign,
+        ),
+        atLookUp,
+      );
       if (mounted) {
         setState(() {
           _requests.removeWhere((r) => r.enrollmentId == request.enrollmentId);
@@ -112,7 +123,12 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
 
   Future<void> _handleDeny(ServerEnrollmentRequest request) async {
     try {
-      await _service.deny(request);
+      final atSign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
+      final atLookUp = AtClientManager.getInstance().atClient.getRemoteSecondary()!.atLookUp;
+      await _service.deny(
+        EnrollmentRequestDecision.denied(request.enrollmentId, atSign),
+        atLookUp,
+      );
       if (mounted) {
         setState(() {
           _requests.removeWhere((r) => r.enrollmentId == request.enrollmentId);

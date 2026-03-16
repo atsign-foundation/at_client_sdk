@@ -2,39 +2,36 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:meta/meta.dart';
 
-/// The class holds details regarding an enrollment request, where the server notifies the approving app upon receiving a
-/// request from the requesting app, seeking approval or denial.
+/// Holds details of an enrollment request received from the server.
 ///
-/// The EnrollmentServerResponse includes the following fields:
-///
-///   - appName: The name of the app initiating the enrollment request.
-///   - deviceName: The name of the device.
-///   - namespace: This field determines the namespaces for granting access to view or write data based on permissions.
-///   - encryptedAPKAMSymmetricKey: In the event of approval, the encryptedAPKAMSymmetricKey is used to encrypt the default
-///                                 encryption private key and self-encryption key, facilitating the generation of the APKAM key pair.
+/// The server notifies the approving app when a requesting app submits
+/// an enrollment, seeking approval or denial.
 @immutable
-class EnrollmentServerResponse {
+class ServerEnrollmentRequest {
   final String enrollmentId;
   final String appName;
   final String deviceName;
   final EnrollmentStatus status;
-  final List<NamespacePermission> namespace;
+  final List<NamespacePermission> namespacePermissions;
   final String? encryptedAPKAMSymmetricKey;
 
-  EnrollmentServerResponse({
+  /// Backwards-compatible alias for [namespacePermissions].
+  List<NamespacePermission> get namespace => namespacePermissions;
+
+  ServerEnrollmentRequest({
     required this.enrollmentId,
     required this.appName,
     required this.deviceName,
     required this.status,
-    required this.namespace,
+    required this.namespacePermissions,
     this.encryptedAPKAMSymmetricKey,
   });
 
-  factory EnrollmentServerResponse.fromServer(MapEntry<String, dynamic> entry) {
+  factory ServerEnrollmentRequest.fromServer(MapEntry<String, dynamic> entry) {
     // Example id: a7d6a9.....40a15.new.enrollments.__manage@alice
     // Only interested in the first part.
     final enrollmentId = entry.key.split('.').first;
-    return EnrollmentServerResponse(
+    return ServerEnrollmentRequest(
       enrollmentId: enrollmentId,
       appName: entry.value['appName'] as String,
       deviceName: entry.value['deviceName'] as String,
@@ -45,7 +42,7 @@ class EnrollmentServerResponse {
       encryptedAPKAMSymmetricKey:
           entry.value['encryptedAPKAMSymmetricKey'] as String?,
       // Looks like: `namespace: {ns1: rw, ns2: r}`
-      namespace: (entry.value['namespace'] as Map<String, dynamic>)
+      namespacePermissions: (entry.value['namespace'] as Map<String, dynamic>)
           .cast<String, String>()
           .entries
           .map((e) => NamespacePermission(
@@ -61,13 +58,13 @@ class EnrollmentServerResponse {
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
 
-    return other is EnrollmentServerResponse &&
+    return other is ServerEnrollmentRequest &&
         other.enrollmentId == enrollmentId &&
         other.appName == appName &&
         other.deviceName == deviceName &&
         other.status == status &&
         other.encryptedAPKAMSymmetricKey == encryptedAPKAMSymmetricKey &&
-        _listEquals(other.namespace, namespace);
+        _listEquals(other.namespacePermissions, namespacePermissions);
   }
 
   @override
@@ -77,17 +74,20 @@ class EnrollmentServerResponse {
       deviceName.hashCode ^
       status.hashCode ^
       encryptedAPKAMSymmetricKey.hashCode ^
-      namespace.hashCode;
+      namespacePermissions.hashCode;
 
   @override
   String toString() {
-    return 'EnrollmentServerResponse(enrollmentId: $enrollmentId, '
+    return 'ServerEnrollmentRequest(enrollmentId: $enrollmentId, '
         'appName: $appName, '
         'deviceName: $deviceName, '
         'status: $status, '
-        'namespace: $namespace)';
+        'namespacePermissions: $namespacePermissions)';
   }
 }
+
+/// Backwards-compatible alias for [ServerEnrollmentRequest].
+typedef EnrollmentServerResponse = ServerEnrollmentRequest;
 
 bool _listEquals<T>(List<T> a, List<T> b) {
   if (a.length != b.length) return false;
