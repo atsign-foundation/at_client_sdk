@@ -42,10 +42,16 @@ class AtAuthImpl implements AtAuth {
 
   PkamAuthenticator? pkamAuthenticator;
 
+  AtEnrollment atEnrollment;
+
   @visibleForTesting
   AtServerStatus? atServerStatus;
 
-  AtEnrollment atEnrollment;
+  @visibleForTesting
+  SecondaryAddressFinder? secondaryAddressFinder;
+
+  @visibleForTesting
+  Future<void> Function(String host, int port)? probeSocket;
 
   @override
   AtLookUp? atLookUp;
@@ -355,6 +361,12 @@ class AtAuthImpl implements AtAuth {
     return enrollmentIdFromServer;
   }
 
+  Future<void> _defaultProbeSocket(String host, int port) async {
+    final socket =
+        await SecureSocket.connect(host, port, timeout: Duration(seconds: 5));
+    socket.destroy();
+  }
+
   /// Validates the atSign server status depending on whether it's onboarding or authentication.
   ///
   /// For onboarding, it checks that the root server is found, the secondary server is running,
@@ -368,19 +380,22 @@ class AtAuthImpl implements AtAuth {
   /// This method is used internally before onboarding or authentication operations.
   @override
   Future<void> validateAtServer(AuthRequest atRequest) async {
+    final maxRetries = atRequest.retryOptions.maxRetries;
+    final retryDelay = atRequest.retryOptions.retryDelay;
+    int retryCount = 0;
+
     //support mocking
     atServerStatus ??= AtStatusImpl(
       rootUrl: atRequest.rootDomain.rootDomain,
       rootPort: atRequest.rootDomain.rootPort,
     );
-    int retryCount = 0;
 
-    while (retryCount < atRequest.retryOptions.maxRetries) {
+    while (retryCount < maxRetries) {
       retryCount++;
       try {
         _addProgress(
             'Find',
-            '#[$retryCount/${atRequest.retryOptions.maxRetries}] : looking up ${atRequest.atSign} in atDirectory',
+            '#[$retryCount/$maxRetries] : looking up ${atRequest.atSign} in atDirectory',
             ProgressEventType.info);
 
         var atStatus = await atServerStatus!.get(atRequest.atSign);
@@ -397,7 +412,8 @@ class AtAuthImpl implements AtAuth {
           if (atStatus.serverStatus == ServerStatus.error ||
               atStatus.atSignStatus == AtSignStatus.notFound) {
             throw AtException(
-                'atSign: ${atRequest.atSign} secondary server is not running. Cannot perform onboarding. ${atStatus.serverStatus} ${atStatus.atSignStatus}');
+                'atSign: ${atRequest.atSign} secondary server is not running. '
+                'Cannot perform onboarding. ${atStatus.serverStatus} ${atStatus.atSignStatus}');
           }
           if (atStatus.atSignStatus == AtSignStatus.activated) {
             throw AtException(
@@ -428,48 +444,41 @@ class AtAuthImpl implements AtAuth {
           }
         }
 
+        // AtServer availability probing
         _addProgress(
             'Connect',
-            '#[$retryCount/${atRequest.retryOptions.maxRetries}] : Connecting to ${atRequest.atSign} atServer',
+            '#[$retryCount/$maxRetries] : Connecting to ${atRequest.atSign} atServer',
             ProgressEventType.info);
 
-        SecondaryAddressFinder secondaryAddressFinder =
-            CacheableSecondaryAddressFinder(
+        secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
           atRequest.rootDomain.rootDomain,
           atRequest.rootDomain.rootPort,
         );
         SecondaryAddress secondaryAddress =
-            await secondaryAddressFinder.findSecondary(atRequest.atSign);
+            await secondaryAddressFinder!.findSecondary(atRequest.atSign);
 
-        final secureSocket = await SecureSocket.connect(
-            secondaryAddress.host, secondaryAddress.port,
-            timeout: Duration(seconds: 5));
-        secureSocket.destroy();
+        await (probeSocket ?? _defaultProbeSocket)(
+            secondaryAddress.host, secondaryAddress.port);
 
         _addProgress(
             'Connect',
-            '#[$retryCount/${atRequest.retryOptions.maxRetries}] : Connected to ${atRequest.atSign} atServer',
+            '#[$retryCount/$maxRetries] : Connected to ${atRequest.atSign} atServer',
             ProgressEventType.success);
 
         break; // Exit loop if no exception occurs
       } catch (e) {
         _logger.severe('Error during atServer validation: $e');
-        if (retryCount >= atRequest.retryOptions.maxRetries) {
-          _addProgress(
-              'Connect',
-              '#[$retryCount/${atRequest.retryOptions.maxRetries}] : $e',
+        if (retryCount >= maxRetries) {
+          _addProgress('Connect', '#[$retryCount/$maxRetries] : $e',
               ProgressEventType.error);
           throw AtAuthenticationException(
               'Max retries reached while validating atSign server. Last error: $e');
         }
         _logger.warning(
-            'Attempt $retryCount failed: $e. Retrying... $retryCount/${atRequest.retryOptions.maxRetries}');
-        _addProgress(
-            'Connect',
-            '#[$retryCount/${atRequest.retryOptions.maxRetries}] : $e',
+            'Attempt $retryCount failed: $e. Retrying... $retryCount/$maxRetries');
+        _addProgress('Connect', '#[$retryCount/$maxRetries] : $e',
             ProgressEventType.error);
-        await Future.delayed(
-            atRequest.retryOptions.retryDelay); // Wait before retrying
+        await Future.delayed(retryDelay); // Wait before retrying
       }
     }
   }

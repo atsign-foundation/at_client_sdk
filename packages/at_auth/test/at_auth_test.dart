@@ -31,6 +31,14 @@ class FakeAtLookUp extends Fake implements AtLookupImpl {}
 
 class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
 
+class FakeSecondaryAddressFinder extends Fake
+    implements CacheableSecondaryAddressFinder {
+  @override
+  Future<SecondaryAddress> findSecondary(String atSign) async {
+    return SecondaryAddress('abcd', 123);
+  }
+}
+
 void main() {
   late AtAuthImpl atAuth;
   late MockAtLookUp mockAtLookUp;
@@ -39,6 +47,7 @@ void main() {
   late AtEnrollment mockAtEnrollment;
   late FileAtKeysIo fileAtKeysIo;
   final String testEnrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
+  late FakeSecondaryAddressFinder fakeSecondaryAddressFinder;
 
   setUp(() {
     fileAtKeysIo =
@@ -52,6 +61,7 @@ void main() {
       mockAtLookUp = MockAtLookUp();
       mockPkamAuthenticator = MockPkamAuthenticator();
       mockAtServerStatus = MockAtServerStatus();
+      fakeSecondaryAddressFinder = FakeSecondaryAddressFinder();
       mockAtEnrollment = MockAtEnrollment();
       when(() => mockAtServerStatus.get(any())).thenAnswer((_) => Future.value(
           AtStatus(
@@ -71,10 +81,14 @@ void main() {
       when(() => mockPkamAuthenticator.authenticate(any(), any(),
               enrollmentId: testEnrollmentId))
           .thenAnswer((_) => Future.value(true));
+
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
         atKeysIo: fileAtKeysIo,
       )..enrollmentId = testEnrollmentId;
+
+      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
+      atAuth.probeSocket = (host, port) async {};
 
       final response = await atAuth.authenticate(atAuthRequest);
 
@@ -88,11 +102,14 @@ void main() {
       when(() => mockPkamAuthenticator.authenticate(any(), any(),
               enrollmentId: testEnrollmentId))
           .thenAnswer((_) => Future.value(false));
+
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
         atKeysIo: fileAtKeysIo,
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
+      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
+      atAuth.probeSocket = (host, port) async {};
 
       final response = await atAuth.authenticate(atAuthRequest);
 
@@ -106,12 +123,15 @@ void main() {
       when(() => mockPkamAuthenticator.authenticate(any(), any(),
               enrollmentId: testEnrollmentId))
           .thenAnswer((_) => Future.value(true));
+
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
         atKeysIo: FileAtKeysIo(
             filePath: (_) => 'test/hello/data/@alice🛠_key.atKeys'),
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
+      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
+      atAuth.probeSocket = (host, port) async {};
 
       expect(() async => await atAuth.authenticate(atAuthRequest),
           throwsA(isA<AtException>()));
@@ -141,6 +161,9 @@ void main() {
             base64Encode(utf8.encode('defaultSelfEncryptionKey')))
         ..enrollmentId = testEnrollmentId;
 
+      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
+      atAuth.probeSocket = (host, port) async {};
+
       final response = await atAuth.authenticate(atAuthRequest);
 
       expect(response.isSuccessful, true);
@@ -169,6 +192,9 @@ void main() {
             base64Encode(utf8.encode('defaultSelfEncryptionKey')))
         ..enrollmentId = testEnrollmentId;
 
+      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
+      atAuth.probeSocket = (host, port) async {};
+
       expect(() async => await atAuth.authenticate(atAuthRequest),
           throwsA(isA<AtPrivateKeyNotFoundException>()));
     });
@@ -183,6 +209,9 @@ void main() {
         atKeysIo: fileAtKeysIo,
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
+
+      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
+      atAuth.probeSocket = (host, port) async {};
 
       expect(() async => await atAuth.authenticate(atAuthRequest),
           throwsA(isA<AtAuthenticationException>()));
@@ -201,6 +230,9 @@ void main() {
         atKeysIo: fileAtKeysIo,
       );
       atAuthRequest.enrollmentId = testEnrollmentId;
+
+      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
+      atAuth.probeSocket = (host, port) async {};
 
       expect(() async => await atAuth.authenticate(atAuthRequest),
           throwsA(isA<AtAuthenticationException>()));
@@ -235,6 +267,9 @@ void main() {
 
       final atOnboardingRequest = AtOnboardingRequest('@aaron🛠');
 
+      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
+      atAuth.probeSocket = (host, port) async {};
+
       expect(
           () async => await atAuth.onboard(atOnboardingRequest, testCramSecret),
           throwsA(isA<AtAuthenticationException>()));
@@ -263,6 +298,9 @@ void main() {
         ..appName = 'wavi'
         ..deviceName = 'iphone';
 
+      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
+      atAuth.probeSocket = (host, port) async {};
+
       final response = await atAuth.onboard(
         atOnboardingRequest,
         testCramSecret,
@@ -290,6 +328,10 @@ void main() {
           .thenAnswer((_) => Future.value(mockEnrollmentResponse));
       final atOnboardingRequest = AtOnboardingRequest('@colin🛠')
         ..atKeysIo = fileAtKeysIo;
+
+      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
+      atAuth.probeSocket = (host, port) async {};
+
       final response = await atAuth.onboard(
         atOnboardingRequest,
         testCramSecret,
