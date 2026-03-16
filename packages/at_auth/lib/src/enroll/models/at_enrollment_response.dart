@@ -127,4 +127,21 @@ class AtEnrollmentResponse {
   String toString() {
     return 'AtEnrollmentResponse{enrollmentId: $enrollmentId, enrollStatus: $enrollStatus}';
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'enrollmentId': enrollmentId,
+      'enrollStatus': enrollStatus.name,
+      if (atSign != null) 'atSign': atSign,
+    };
+  }
+
+  factory AtEnrollmentResponse.fromJson(Map<String, dynamic> json) {
+    String enrollmentId = json['enrollmentId'];
+    EnrollmentStatus enrollmentStatus = EnrollmentStatus.values
+        .firstWhere((es) => es.name == json['enrollStatus']);
+    String? atSign = json['atSign'];
+
+    return AtEnrollmentResponse(enrollmentId, enrollmentStatus, atSign: atSign);
+  }
 }

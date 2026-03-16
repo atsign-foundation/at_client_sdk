@@ -2,10 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/src/exception/at_auth_exceptions.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 
 /// An implementation of [AtKeysIo] that reads and writes AtKeys to the file system.
 /// This implementation uses a mixin [KeyIOMixin] to provide common functionality for encoding and decoding AtKeys.
@@ -52,11 +53,20 @@ class FileAtKeysIo extends WrittenAtKeysIo {
       throw AtKeysFileOverwriteException(
           'Tried writing $path, but failed since it already exists');
     }
+
     String atKeysData = await encryptAtKeysWithSelfEncKey(
       atKeys,
       PkamAuthMode.keysFile,
       atSign,
     );
+
+    if (passPhrase != null && passPhrase!.isNotEmpty) {
+      AtEncrypted atEncrypted =
+      await AtKeysCrypto.fromHashingAlgorithm(HashingAlgoType.argon2id)
+          .encrypt(atKeysData, passPhrase!);
+      atKeysData = atEncrypted.toString();
+    }
+
     await File(path).writeAsString(atKeysData);
   }
 }
