@@ -2,8 +2,8 @@ import 'package:example/main.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
+import 'package:at_client_flutter/extensions.dart';
 import 'package:at_auth/at_auth.dart';
-import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart'
     show getApplicationSupportDirectory;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -229,11 +229,7 @@ Future<void> loginWithFile(BuildContext context) async {
     }
 
     _logger.info('Step 2: Processing selected file');
-    var filepath = atKeysIo.filePath!('');
-    _logger.info('Selected file path: $filepath');
-
-    var name = path.basenameWithoutExtension(filepath);
-    var atSign = name.split('_').first;
+    var atSign = atKeysIo.getAtsign();
     _logger.info('Extracted atSign from filename: $atSign');
 
     _logger.info('Step 3: Creating AuthRequest with file-based AtKeysIo');
