@@ -1,6 +1,5 @@
+import 'package:at_auth/at_auth.dart';
 import 'package:flutter/material.dart';
-
-import '../../../models/models.dart';
 
 class NamespaceChip extends StatelessWidget {
   const NamespaceChip({

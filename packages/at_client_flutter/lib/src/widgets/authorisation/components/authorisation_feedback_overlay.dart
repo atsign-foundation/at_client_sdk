@@ -1,7 +1,6 @@
+import 'package:at_auth/at_auth.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:flutter/material.dart';
-
-import '../../../models/models.dart';
 
 class AuthorisationFeedbackOverlay extends StatelessWidget {
   const AuthorisationFeedbackOverlay({

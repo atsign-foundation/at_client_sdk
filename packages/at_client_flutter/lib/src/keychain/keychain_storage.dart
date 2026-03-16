@@ -214,7 +214,8 @@ class KeychainStorage {
       final spp = SppData.fromJson(jsonDecode(data));
       if (spp.isExpired) {
         _logger.info('SPP found in keychain but has expired. Deleting.');
-        final store = await _getBiometricStorageFile(SppStore(atSign).getName());
+        final store =
+            await _getBiometricStorageFile(SppStore(atSign).getName());
         await store.delete();
         return null;
       }

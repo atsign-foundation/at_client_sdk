@@ -1,6 +1,6 @@
+import 'package:at_auth/at_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../models/models.dart';
 import 'namespace_chip.dart';
 
 class EnrollmentRequestCard extends StatefulWidget {

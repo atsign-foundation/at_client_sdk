@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:at_auth/at_auth.dart' show EnrollmentRequestDecision;
+import 'package:at_auth/at_auth.dart'
+    show EnrollmentRequestDecision, ServerEnrollmentRequest;
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/material.dart';
 
@@ -62,7 +63,8 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
       );
 
       // Initial fetch of pending requests
-      final atLookUp = AtClientManager.getInstance().atClient.getRemoteSecondary()!.atLookUp;
+      final atLookUp =
+          AtClientManager.getInstance().atClient.getRemoteSecondary()!.atLookUp;
       final initialRequests = await _service.list(
         [EnrollmentStatus.pending],
         atLookUp,
@@ -91,11 +93,13 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   Future<void> _handleApprove(ServerEnrollmentRequest request) async {
     try {
       final atSign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
-      final atLookUp = AtClientManager.getInstance().atClient.getRemoteSecondary()!.atLookUp;
+      final atLookUp =
+          AtClientManager.getInstance().atClient.getRemoteSecondary()!.atLookUp;
       await _service.approve(
         EnrollmentRequestDecision.approved(
           enrollmentId: request.enrollmentId,
-          apkamSymmetricKey: AtBytes.fromString(request.encryptedAPKAMSymmetricKey!),
+          apkamSymmetricKey:
+              AtBytes.fromString(request.encryptedAPKAMSymmetricKey!),
           atSign: atSign,
         ),
         atLookUp,
@@ -124,7 +128,8 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   Future<void> _handleDeny(ServerEnrollmentRequest request) async {
     try {
       final atSign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
-      final atLookUp = AtClientManager.getInstance().atClient.getRemoteSecondary()!.atLookUp;
+      final atLookUp =
+          AtClientManager.getInstance().atClient.getRemoteSecondary()!.atLookUp;
       await _service.deny(
         EnrollmentRequestDecision.denied(request.enrollmentId, atSign),
         atLookUp,
