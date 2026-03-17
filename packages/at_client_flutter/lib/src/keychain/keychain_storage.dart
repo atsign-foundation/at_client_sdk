@@ -195,34 +195,96 @@ class KeychainStorage {
   }
 
   /// Saves [otp] to the keychain for [atSign].
+  /// Appends to the list of existing SPPs.
   Future<void> saveSpp(String atSign, Otp otp) async {
     final spp = SppData(value: otp.value, expiry: otp.expiry);
 
+    SppListData sppListData;
+    try {
+      final existingData =
+          await _read(keychainStoreName: SppStore(atSign).getName());
+      if (existingData != null) {
+        // Try parsing as list first (new format)
+        try {
+          sppListData = SppListData.fromJson(jsonDecode(existingData));
+        } catch (e) {
+          // Fallback for legacy single SPP format
+          final singleSpp = SppData.fromJson(jsonDecode(existingData));
+          sppListData = SppListData(spps: [singleSpp]);
+        }
+      } else {
+        sppListData = SppListData(spps: []);
+      }
+    } catch (e) {
+      sppListData = SppListData(spps: []);
+    }
+
+    // Remove expired and the same value if it exists
+    sppListData.spps
+        .removeWhere((element) => element.isExpired || element.value == spp.value);
+    sppListData.spps.add(spp);
+
     await _write(
-        biometricStoreName: SppStore(atSign).getName(), keychainData: spp);
+        biometricStoreName: SppStore(atSign).getName(),
+        keychainData: sppListData);
     _logger.info('SPP saved to keychain');
   }
 
-  /// Returns the active (non-expired) SPP for [atSign], or null if none or expired.
-  Future<SppData?> getActiveSpp(String atSign) async {
+  /// Gets all active (non-expired) SPPs from the keychain.
+  Future<List<SppData>> getAllSpps(String atSign) async {
     try {
       final data = await _read(keychainStoreName: SppStore(atSign).getName());
       if (data == null) {
-        _logger.info('No SPP found in keychain');
-        return null;
+        return [];
       }
-      final spp = SppData.fromJson(jsonDecode(data));
-      if (spp.isExpired) {
-        _logger.info('SPP found in keychain but has expired. Deleting.');
-        final store =
-            await _getBiometricStorageFile(SppStore(atSign).getName());
-        await store.delete();
-        return null;
+      SppListData sppListData;
+      try {
+        sppListData = SppListData.fromJson(jsonDecode(data));
+      } catch (e) {
+        // Handle legacy single SPP
+        final singleSpp = SppData.fromJson(jsonDecode(data));
+        sppListData = SppListData(spps: [singleSpp]);
       }
-      return spp;
+
+      // Filter out expired ones
+      final activeSpps =
+          sppListData.spps.where((spp) => !spp.isExpired).toList();
+
+      // If some were expired, update the store
+      if (activeSpps.length != sppListData.spps.length) {
+        if (activeSpps.isEmpty) {
+          await deleteSppData(atSign);
+        } else {
+          await _write(
+              biometricStoreName: SppStore(atSign).getName(),
+              keychainData: SppListData(spps: activeSpps));
+        }
+      }
+
+      return activeSpps;
     } catch (e, st) {
-      _logger.severe('Failed to get SPP from keychain', e, st);
+      _logger.severe('Failed to get SPPs from keychain', e, st);
+      return [];
+    }
+  }
+
+  /// Returns the active (non-expired) SPP for [atSign], or null if none or expired.
+  /// If multiple exist, returns the most recently added one.
+  Future<SppData?> getActiveSpp(String atSign) async {
+    final activeSpps = await getAllSpps(atSign);
+    if (activeSpps.isEmpty) {
       return null;
+    }
+    return activeSpps.last;
+  }
+
+  Future<void> deleteSppData(String atSign) async {
+    try {
+      final BiometricStorageFile biometricStore =
+          await _getBiometricStorageFile(SppStore(atSign).getName());
+      await biometricStore.delete();
+    } catch (e) {
+      _logger.warning('Failed to delete SPP data: $e');
     }
   }
 

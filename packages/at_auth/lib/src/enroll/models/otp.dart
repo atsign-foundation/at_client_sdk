@@ -40,14 +40,5 @@ class Otp {
   }
 
   @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is Otp && other.value == value && other.expiry == expiry;
-  }
-
-  @override
-  int get hashCode => value.hashCode ^ expiry.hashCode;
-
-  @override
   String toString() => value;
 }

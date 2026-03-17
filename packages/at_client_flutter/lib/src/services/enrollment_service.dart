@@ -14,8 +14,6 @@ class FlutterEnrollmentService {
   /// {@macro flutter_enrollment_service}
   FlutterEnrollmentService() {
     _logger.info('Initialising FlutterEnrollmentService');
-    _enrollmentRequestsController =
-        StreamController<ServerEnrollmentRequest>.broadcast();
     _enrollmentRequestsController!.onListen = _listenForNewRequests;
   }
 
@@ -28,7 +26,8 @@ class FlutterEnrollmentService {
 
   static const _kDefaultExpiry = Duration(minutes: 5);
 
-  StreamController<ServerEnrollmentRequest>? _enrollmentRequestsController;
+  StreamController<ServerEnrollmentRequest>? _enrollmentRequestsController =
+      StreamController<ServerEnrollmentRequest>.broadcast();
   StreamSubscription? _newRequestsSubscription;
 
   Stream<ProgressEvent> get progressStream => _atEnrollment.progressStream;
@@ -162,6 +161,10 @@ class FlutterEnrollmentService {
   /// Returns `null` if no SPP is set or the last SPP has expired.
   Future<SppData?> getActiveSpp() =>
       _keychainStorage.getActiveSpp(atClient.getCurrentAtSign()!);
+
+  /// Get all active (non-expired) SPPs from the keychain.
+  Future<List<SppData>> getAllSpps() =>
+      _keychainStorage.getAllSpps(atClient.getCurrentAtSign()!);
 
   /// Get the OTP from the server.
   ///

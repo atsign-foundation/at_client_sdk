@@ -91,3 +91,22 @@ class SppData extends KeychainData {
         'expiry': expiry.toIso8601String(),
       };
 }
+
+class SppListData extends KeychainData {
+  List<SppData> spps;
+  SppListData({
+    this.spps = const [],
+  });
+
+  factory SppListData.fromJson(Map<String, dynamic> json) => SppListData(
+        spps: (json['spps'] as List<dynamic>?)
+                ?.map((e) => SppData.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            [],
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'spps': (spps).map((e) => e.toJson()).toList(),
+      };
+}
