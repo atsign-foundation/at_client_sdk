@@ -204,14 +204,7 @@ class KeychainStorage {
       final existingData =
           await _read(keychainStoreName: SppStore(atSign).getName());
       if (existingData != null) {
-        // Try parsing as list first (new format)
-        try {
-          sppListData = SppListData.fromJson(jsonDecode(existingData));
-        } catch (e) {
-          // Fallback for legacy single SPP format
-          final singleSpp = SppData.fromJson(jsonDecode(existingData));
-          sppListData = SppListData(spps: [singleSpp]);
-        }
+        sppListData = SppListData.fromJson(jsonDecode(existingData));
       } else {
         sppListData = SppListData(spps: []);
       }
@@ -220,8 +213,8 @@ class KeychainStorage {
     }
 
     // Remove expired and the same value if it exists
-    sppListData.spps
-        .removeWhere((element) => element.isExpired || element.value == spp.value);
+    sppListData.spps.removeWhere(
+        (element) => element.isExpired || element.value == spp.value);
     sppListData.spps.add(spp);
 
     await _write(
@@ -237,14 +230,7 @@ class KeychainStorage {
       if (data == null) {
         return [];
       }
-      SppListData sppListData;
-      try {
-        sppListData = SppListData.fromJson(jsonDecode(data));
-      } catch (e) {
-        // Handle legacy single SPP
-        final singleSpp = SppData.fromJson(jsonDecode(data));
-        sppListData = SppListData(spps: [singleSpp]);
-      }
+      SppListData sppListData = SppListData.fromJson(jsonDecode(data));
 
       // Filter out expired ones
       final activeSpps =

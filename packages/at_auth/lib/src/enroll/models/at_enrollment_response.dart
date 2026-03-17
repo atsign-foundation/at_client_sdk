@@ -8,17 +8,20 @@ import 'package:meta/meta.dart';
 /// [enrollmentStatus] across both server-side enrollment details
 /// ([ServerEnrollmentRequest]) and enrollment operation results
 /// ([AtEnrollmentResponse]).
-abstract class EnrollmentBase {
+abstract class AtEnrollmentRecord {
   String get enrollmentId;
   EnrollmentStatus get enrollmentStatus;
 }
+
+/// Backward compatibility for [AtEnrollmentRecord]
+typedef EnrollmentBase = AtEnrollmentRecord;
 
 /// Holds details of an enrollment request received from the server.
 ///
 /// The server notifies the approving app when a requesting app submits
 /// an enrollment, seeking approval or denial.
 @immutable
-class ServerEnrollmentRequest extends EnrollmentBase {
+class ServerEnrollmentRequest extends AtEnrollmentRecord {
   @override
   final String enrollmentId;
   final String appName;
@@ -114,7 +117,7 @@ bool _listEquals<T>(List<T> a, List<T> b) {
 
 /// Represents the response of an enrollment operation received
 /// from the secondary server.
-class AtEnrollmentResponse extends EnrollmentBase {
+class AtEnrollmentResponse extends AtEnrollmentRecord {
   /// The unique identifier associated with the enrollment.
   @override
   String enrollmentId;
