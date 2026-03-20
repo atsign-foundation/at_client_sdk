@@ -1,8 +1,11 @@
+import 'package:meta/meta.dart';
+
 /// {@template namespace_permission}
 /// Model class representing a namespace permission.
 /// The string representation of the permission is `namespace: {ns1: rw, ns2: r}`
 /// where read is `r` and write is `w` and `ns1`/`ns2` are the namespaces.
 /// {@endtemplate}
+@immutable
 class NamespacePermission {
   /// {@macro namespace_permission}
   const NamespacePermission({

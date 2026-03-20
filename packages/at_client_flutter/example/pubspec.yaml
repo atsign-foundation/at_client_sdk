@@ -33,6 +33,9 @@ dependencies:
   at_auth: ^3.0.0
   at_client_flutter:
     path: ../
+  at_commons: ^5.8.0
+  at_lookup: ^3.5.0
+  at_chops: ^3.0.0
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8

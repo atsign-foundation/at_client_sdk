@@ -197,9 +197,9 @@ mixin KeyIOMixin on AtKeysIo {
 
       String decryptedAtKeysData;
       try {
-        decryptedAtKeysData =
-            await AtKeysCrypto.fromHashingAlgorithm(atEncrypted.hashingAlgoType!)
-                .decrypt(atEncrypted, passPhrase!);
+        decryptedAtKeysData = await AtKeysCrypto.fromHashingAlgorithm(
+                atEncrypted.hashingAlgoType!)
+            .decrypt(atEncrypted, passPhrase!);
       } catch (e) {
         throw AtDecryptionException(
             'Failed to decrypt atKeys file - passphrase may be incorrect: $e');
