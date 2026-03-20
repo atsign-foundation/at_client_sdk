@@ -6,8 +6,7 @@ void main() {
     group('AtSpacing Token Logic Tests', () {
       test('copyWith successfully overrides specific values', () {
         const originalSpacing = AtSpacing();
-
-        var updatedSpacing = originalSpacing.copyWith(
+        final updatedSpacing = originalSpacing.copyWith(
           scale2: 102.0,
           scale4: 104.0,
           scale6: 106.0,
