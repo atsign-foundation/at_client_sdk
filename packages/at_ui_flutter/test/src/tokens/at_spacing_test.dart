@@ -43,6 +43,40 @@ void main() {
         // Verify that non-updated values remain unchanged
         expect(updatedSpacing, originalSpacing);
       });
+
+      test('lerp correctly interpolates between two AtSpacing instances', () {
+        const spacingA = AtSpacing();
+        const spacingB = AtSpacing(
+          scale2: 200.0,
+          scale4: 400.0,
+          scale6: 600.0,
+          scale8: 800.0,
+          scale12: 1200.0,
+          scale16: 1600.0,
+          scale20: 2000.0,
+          scale24: 2400.0,
+          scale32: 3200.0,
+          scale36: 3600.0,
+          scale40: 4000.0,
+          scale48: 4800.0,
+        );
+        // Interpolate halfway between spacingA and spacingB
+        final midSpacing = spacingA.lerp(spacingB, 0.5);
+
+        // Verify that the midSpacing values are the average of spacingA and spacingB
+        expect(midSpacing.scale2, (spacingA.scale2 + spacingB.scale2) / 2);
+        expect(midSpacing.scale4, (spacingA.scale4 + spacingB.scale4) / 2);
+        expect(midSpacing.scale6, (spacingA.scale6 + spacingB.scale6) / 2);
+        expect(midSpacing.scale8, (spacingA.scale8 + spacingB.scale8) / 2);
+        expect(midSpacing.scale12, (spacingA.scale12 + spacingB.scale12) / 2);
+        expect(midSpacing.scale16, (spacingA.scale16 + spacingB.scale16) / 2);
+        expect(midSpacing.scale20, (spacingA.scale20 + spacingB.scale20) / 2);
+        expect(midSpacing.scale24, (spacingA.scale24 + spacingB.scale24) / 2);
+        expect(midSpacing.scale32, (spacingA.scale32 + spacingB.scale32) / 2);
+        expect(midSpacing.scale36, (spacingA.scale36 + spacingB.scale36) / 2);
+        expect(midSpacing.scale40, (spacingA.scale40 + spacingB.scale40) / 2);
+        expect(midSpacing.scale48, (spacingA.scale48 + spacingB.scale48) / 2);
+      });
     });
   });
 }
