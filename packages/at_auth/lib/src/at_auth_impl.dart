@@ -466,8 +466,13 @@ class AtAuthImpl implements AtAuth {
             ProgressEventType.success);
 
         break; // Exit loop if no exception occurs
+      } on SocketException catch (e) {
+        _logger.warning('Attempt #[$retryCount/$maxRetries] : '
+            'Probe socket failed: $e');
+        _addProgress('Connect', '#[$retryCount/$maxRetries] : '
+            'Probe socket failed : $e', ProgressEventType.error);
       } catch (e) {
-        _logger.severe('Error during atServer validation: $e');
+        _logger.severe('validateAtServer(): Caught $e');
         if (retryCount >= maxRetries) {
           _addProgress('Connect', '#[$retryCount/$maxRetries] : $e',
               ProgressEventType.error);
