@@ -62,8 +62,8 @@ class FileAtKeysIo extends WrittenAtKeysIo {
 
     if (passPhrase != null && passPhrase!.isNotEmpty) {
       AtEncrypted atEncrypted =
-      await AtKeysCrypto.fromHashingAlgorithm(HashingAlgoType.argon2id)
-          .encrypt(atKeysData, passPhrase!);
+          await AtKeysCrypto.fromHashingAlgorithm(HashingAlgoType.argon2id)
+              .encrypt(atKeysData, passPhrase!);
       atKeysData = atEncrypted.toString();
     }
 

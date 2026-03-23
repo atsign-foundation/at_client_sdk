@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:example/apkam_example.dart';
 import 'package:flutter/material.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_utils/at_logger.dart';
@@ -454,6 +455,25 @@ class HomePage extends StatelessWidget {
               },
               child: const Text('Logout'),
             ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ApkamExamplePage(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.security),
+              label: const Text('Enrollment Manager (APKAM)'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: () async {
                 _logger.info('═══ Export Keys button pressed ═══');

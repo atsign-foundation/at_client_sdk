@@ -20,7 +20,8 @@ MockClient _mockResponse(Object body, {int status = 200}) =>
 void main() {
   group('sendActivationOtp', () {
     test('returns true on success', () async {
-      final service = _makeService(_mockResponse({'message': 'Sent Successfully'}));
+      final service =
+          _makeService(_mockResponse({'message': 'Sent Successfully'}));
       expect(await service.sendActivationOtp('@alice'), isTrue);
     });
 
@@ -38,8 +39,8 @@ void main() {
 
   group('verifyActivation', () {
     test('returns cram key portion on success', () async {
-      final service = _makeService(
-          _mockResponse({'message': 'Verified', 'cramkey': 'prefix:THECRAMKEY'}));
+      final service = _makeService(_mockResponse(
+          {'message': 'Verified', 'cramkey': 'prefix:THECRAMKEY'}));
       final result =
           await service.verifyActivation(atSign: '@alice', otp: '1234');
       expect(result, equals('THECRAMKEY'));
@@ -149,8 +150,8 @@ void main() {
 
   group('validatePerson', () {
     test('returns cramkey map for new user', () async {
-      final service = _makeService(_mockResponse(
-          {'success': true, 'cramkey': 'prefix:NEWUSERCRAMKEY'}));
+      final service = _makeService(
+          _mockResponse({'success': true, 'cramkey': 'prefix:NEWUSERCRAMKEY'}));
       final result = await service.validatePerson(
         atSign: '@alice',
         email: 'alice@example.com',
@@ -190,8 +191,7 @@ void main() {
     });
 
     test('throws when neither success nor data is present', () async {
-      final service =
-          _makeService(_mockResponse({'message': 'Invalid OTP'}));
+      final service = _makeService(_mockResponse({'message': 'Invalid OTP'}));
       expect(
         () => service.validatePerson(
           atSign: '@alice',

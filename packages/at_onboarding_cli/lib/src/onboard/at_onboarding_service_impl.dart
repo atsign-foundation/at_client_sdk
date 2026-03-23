@@ -394,6 +394,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     // Create AtChops instance and assign it to the lookup for PKAM authentication
     AtChopsImpl atChops = AtChopsImpl(atChopsKeys);
     _atLookUp!.atChops = atChops;
+    _atLookUp!.enrollmentId = enrollmentResponse.enrollmentId;
 
     // Pkam auth will be attempted asynchronously until enrollment is approved
     // or denied or times out. If denied or timed out, an exception will be
