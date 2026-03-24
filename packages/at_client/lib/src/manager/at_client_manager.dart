@@ -94,8 +94,9 @@ class AtClientManager {
         _atSign, namespace, preference, this,
         atChops: atChops, atLookUp: atLookUp, enrollmentId: enrollmentId);
 
-    var notificationService =
-        await serviceFactory.notificationService(_currentAtClient!, this);
+    var notificationService = await serviceFactory.notificationService(
+        _currentAtClient!, this,
+        secondaryAddressFinder: secondaryAddressFinder);
     _currentAtClient!.notificationService = notificationService;
 
     var syncService = await serviceFactory.syncService(
@@ -177,7 +178,10 @@ abstract class AtServiceFactory {
       {AtChops? atChops, AtLookUp? atLookUp, String? enrollmentId});
 
   Future<NotificationService> notificationService(
-      AtClient atClient, AtClientManager atClientManager);
+      AtClient atClient,
+      @Deprecated('no longer needed. will be removed in a future release')
+      AtClientManager atClientManager,
+      {SecondaryAddressFinder? secondaryAddressFinder});
 
   /// The [notificationService] parameter is ignored — the sync service retrieves
   /// its notification dependency directly from [atClient] after construction.
@@ -201,15 +205,16 @@ class DefaultAtServiceFactory implements AtServiceFactory {
 
   @override
   Future<NotificationService> notificationService(
-      AtClient atClient, AtClientManager atClientManager) async {
-    return await NotificationServiceImpl.create(
-      atClient,
-    );
+      AtClient atClient, AtClientManager atClientManager,
+      {SecondaryAddressFinder? secondaryAddressFinder}) async {
+    return await NotificationServiceImpl.create(atClient,
+        secondaryAddressFinder: secondaryAddressFinder);
   }
 
   @override
   Future<SyncService> syncService(
       AtClient atClient,
+      @Deprecated('no longer needed. will be removed in a future release')
       AtClientManager atClientManager,
       NotificationService notificationService) async {
     return await SyncServiceImpl.create(atClient);

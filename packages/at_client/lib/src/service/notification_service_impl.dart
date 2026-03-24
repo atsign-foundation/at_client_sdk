@@ -56,8 +56,8 @@ class NotificationServiceImpl extends NotificationService {
       SecondaryAddressFinder? secondaryAddressFinder}) async {
     return NotificationServiceImpl._(
         atClient: atClient,
-        secondaryAddressFinder: secondaryAddressFinder,
-        monitor: monitor);
+        monitor: monitor,
+        secondaryAddressFinder: secondaryAddressFinder);
   }
 
   NotificationServiceImpl._(
