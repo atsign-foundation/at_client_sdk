@@ -202,8 +202,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
   @override
   Future<NotificationService> notificationService(
       AtClient atClient, AtClientManager atClientManager) async {
-    return await NotificationServiceImpl.create(atClient,
-        atClientManager: atClientManager);
+    return await NotificationServiceImpl.create(atClient,);
   }
 
   @override
@@ -211,8 +210,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
       AtClient atClient,
       AtClientManager atClientManager,
       NotificationService notificationService) async {
-    return await SyncServiceImpl.create(atClient,
-        atClientManager: atClientManager);
+    return await SyncServiceImpl.create(atClient);
   }
 
   @override

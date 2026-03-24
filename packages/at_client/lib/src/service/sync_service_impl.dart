@@ -68,7 +68,9 @@ class SyncServiceImpl implements SyncService {
   late final AtKey _skipDeletesUntilCommitId;
 
   static Future<SyncService> create(AtClient atClient,
-      {required AtClientManager atClientManager,
+      {
+      @Deprecated('will be removed in a future version')
+      AtClientManager? atClientManager,
       RemoteSecondary? remoteSecondary}) async {
     remoteSecondary ??= RemoteSecondary(
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
