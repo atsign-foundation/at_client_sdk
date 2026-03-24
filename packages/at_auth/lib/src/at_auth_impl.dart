@@ -466,21 +466,19 @@ class AtAuthImpl implements AtAuth {
             ProgressEventType.success);
 
         break; // Exit loop if no exception occurs
-      } on SocketException catch (e) {
-        _logger.warning('Attempt #[$retryCount/$maxRetries] : '
-            'Probe socket failed: $e');
-        _addProgress('Connect', '#[$retryCount/$maxRetries] : '
-            'Probe socket failed : $e', ProgressEventType.error);
       } catch (e) {
-        _logger.severe('validateAtServer(): Caught $e');
+        if (e is SocketException) {
+          _logger.warning(
+              'Attempt #[$retryCount/$maxRetries] Probe socket failed: $e');
+        } else {
+          _logger.severe('Attempt #[$retryCount/$maxRetries] failed: $e');
+        }
         if (retryCount >= maxRetries) {
           _addProgress('Connect', '#[$retryCount/$maxRetries] : $e',
               ProgressEventType.error);
           throw AtAuthenticationException(
               'Max retries reached while validating atSign server. Last error: $e');
         }
-        _logger.warning(
-            'Attempt $retryCount failed: $e. Retrying... $retryCount/$maxRetries');
         _addProgress('Connect', '#[$retryCount/$maxRetries] : $e',
             ProgressEventType.error);
         await Future.delayed(retryDelay); // Wait before retrying
