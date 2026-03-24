@@ -7,6 +7,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
+import 'package:at_onboarding_cli/src/onboard/helpers/enrollment_checkpoint.dart';
 
 // ignore: depend_on_referenced_packages
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -24,7 +25,11 @@ class FakeAtAuthRequest extends Fake implements AtAuthRequest {}
 
 class MockAtClient extends Mock implements AtClient {}
 
-class MockEnrollmentBase extends Mock implements AtEnrollment{}
+class MockEnrollmentBase extends Mock implements AtEnrollment {}
+
+class MockEnrollmentRequest extends Mock implements EnrollmentRequest {}
+
+class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
 
 void main() {
   AtSignLogger.root_level = 'INFO';
@@ -44,7 +49,8 @@ void main() {
       registerFallbackValue(FakeAtAuthRequest());
     });
 
-    test('A test to check atOnboardingService.authenticate() returns true', () async {
+    test('A test to check atOnboardingService.authenticate() returns true',
+        () async {
       final atSign = '@alice🛠';
       AtOnboardingPreference onboardingPreference = AtOnboardingPreference()
         ..atKeysFilePath = 'test/data/@alice🛠_key.atKeys'
@@ -213,6 +219,7 @@ void main() {
 
       File file = File(f.path);
       expect(file.existsSync(), true);
+      await expectSecureFilePermissions(file);
       // Delete the file at the end of the test.
       file.deleteSync(recursive: true);
     });
@@ -244,6 +251,7 @@ void main() {
 
       File file = File(f.path);
       expect(file.existsSync(), true);
+      await expectSecureFilePermissions(file);
       // Delete the file at the end of the test.
       file.deleteSync(recursive: true);
     });
@@ -275,6 +283,7 @@ void main() {
 
       File file = File(f.path);
       expect(file.existsSync(), true);
+      await expectSecureFilePermissions(file);
       // Delete the file at the end of the test.
       file.deleteSync(recursive: true);
     });
@@ -306,8 +315,406 @@ void main() {
 
       File file = File(f.path);
       expect(file.existsSync(), true);
+      await expectSecureFilePermissions(file);
       // Delete the file at the end of the test.
       file.deleteSync(recursive: true);
+    });
+  });
+
+  group('Tests to assert enroll resume behaviour', () {
+    MockEnrollmentBase mockEnrollmentBase = MockEnrollmentBase();
+
+    setUp(() {
+      reset(mockAtLookup);
+      reset(mockAtAuth);
+      reset(mockEnrollmentBase);
+      registerFallbackValue(FakeAtAuthRequest());
+      registerFallbackValue(FakeEnrollmentRequest());
+      registerFallbackValue(
+          AtEnrollmentResponse('123', EnrollmentStatus.pending));
+      registerFallbackValue(MockAtLookupImpl());
+      registerFallbackValue(AtKey.fromString('public:test_key.test@alice'));
+    });
+
+    test('when available enroll should use the checkpoint', () async {
+      // also validates the checkpoint file is deleted after approval
+      final atsign = '@syrax';
+      final dummyEnrollmentId = '1234';
+
+      await setupLocalStorage(atsign);
+
+      MockAtClient mockAtClient = MockAtClient();
+      var keyStore = SecondaryPersistenceStoreFactory.getInstance()
+          .getSecondaryPersistenceStore(atsign)
+          ?.getSecondaryKeyStore();
+      LocalSecondary localSecondary =
+          LocalSecondary(mockAtClient, keyStore: keyStore);
+
+      AtOnboardingPreference pref = getOnboardingPreference()
+        ..atKeysFilePath = 'test/storage/keys/${atsign}_key.atKeys';
+      AtOnboardingServiceImpl svc = AtOnboardingServiceImpl(atsign, pref);
+      svc.atClient = mockAtClient;
+      svc.enrollmentBase = mockEnrollmentBase;
+      svc.atLookUp = mockAtLookup;
+      svc.atAuth = mockAtAuth;
+
+      // setup AtChopsKeys and AtKeys
+      final atChopsKeys = getRandomAtChopsKeys();
+      AtKeys atAuthKeys = getAtAuthKeysFromAtChopsKeys(atChopsKeys);
+      AtEnrollmentResponse enrollmentResponse = AtEnrollmentResponse(
+          dummyEnrollmentId, EnrollmentStatus.pending,
+          atAuthKeys: atAuthKeys);
+
+      // encrypt the keys with APKAMSymmetricKey
+      String encryptedEncryptionPrivateKey = EncryptionUtil.encryptValue(
+          atAuthKeys.defaultEncryptionPrivateKey!.toString(),
+          atAuthKeys.apkamSymmetricKey!.toString());
+      String encryptedSelfEncryptionKey = EncryptionUtil.encryptValue(
+          atAuthKeys.defaultSelfEncryptionKey!.toString(),
+          atAuthKeys.apkamSymmetricKey!.toString());
+      String fetchEncryptionPrivateKeyCommand =
+          'keys:get:keyName:$dummyEnrollmentId.${AtConstants.defaultEncryptionPrivateKey}.__manage$atsign\n';
+      String fetchSelfEncryptionKeyCommand =
+          'keys:get:keyName:$dummyEnrollmentId.${AtConstants.defaultSelfEncryptionKey}.__manage$atsign\n';
+
+      // setup mock behaviour
+      when(() => mockEnrollmentBase.submit(any(), any()))
+          .thenAnswer((_) => Future.value(enrollmentResponse));
+      when(() => mockAtLookup.pkamAuthenticate(enrollmentId: dummyEnrollmentId))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtLookup.atChops).thenReturn(AtChopsImpl(atChopsKeys));
+      when(() => mockAtClient.getCurrentAtSign()).thenReturn(atsign);
+      when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => mockAtClient.put(any(), any())).thenAnswer((i) async {
+        AtKey atKey = i.positionalArguments[0];
+        dynamic value = i.positionalArguments[1];
+        return await localSecondary.putValue(atKey.toString(), value);
+      });
+      when(() => mockAtLookup.executeCommand(fetchEncryptionPrivateKeyCommand,
+              auth: true))
+          .thenAnswer((_) => Future.value(
+              'data:${jsonEncode({'value': encryptedEncryptionPrivateKey})}'));
+      when(() => mockAtLookup.executeCommand(fetchSelfEncryptionKeyCommand,
+              auth: true))
+          .thenAnswer((_) => Future.value(
+              'data:${jsonEncode({'value': encryptedSelfEncryptionKey})}'));
+
+      final appName = 'enroll_test_1';
+      final device = 'unit_test_1';
+      final namespaces = {'test': 'rw'};
+
+      // manually create a checkpoint
+      await svc.enrollCheckpoint
+          .save(enrollmentResponse, appName, device, namespaces);
+
+      final checkpointFile =
+          svc.enrollCheckpoint.getFile(appName, device, namespaces);
+      expect(checkpointFile.existsSync(), isTrue);
+
+      // the mocks will mimic enrollment approval and fetching keys from server
+      // using the keys:get commands
+      await svc.enroll(appName, device, 'ABCDE', namespaces);
+
+      // ensure that after enroll() returns, the checkpoint is removed
+      expect(checkpointFile.existsSync(), isFalse);
+      expect(File(pref.atKeysFilePath!).existsSync(), isTrue);
+      // assert that a new enrollment was not submitted
+      verifyNever(() => mockEnrollmentBase.submit(any(), any()));
+    });
+
+    test('assert checkpoint deletion when enrollment is denied', () async {
+      final atsign = '@caraxes';
+      final dummyEnrollmentId = '1234abcdxyz';
+
+      await setupLocalStorage(atsign);
+
+      AtOnboardingPreference atOnboardingPreference = getOnboardingPreference()
+        ..atKeysFilePath = 'test/storage/keys/${atsign}_key.atKeys';
+      AtOnboardingServiceImpl svc =
+          AtOnboardingServiceImpl(atsign, atOnboardingPreference);
+      svc.atLookUp = mockAtLookup;
+
+      // setup AtChopsKeys and AtKeys
+      final atChopsKeys = getRandomAtChopsKeys();
+      AtKeys atAuthKeys = getAtAuthKeysFromAtChopsKeys(atChopsKeys);
+      AtEnrollmentResponse enrollmentResponse = AtEnrollmentResponse(
+          dummyEnrollmentId, EnrollmentStatus.pending,
+          atAuthKeys: atAuthKeys);
+
+      // setup mock behaviour
+      when(() => mockAtLookup.pkamAuthenticate(enrollmentId: dummyEnrollmentId))
+          .thenThrow(UnAuthenticatedException(
+              'error:AT0025')); // mimic enrollment denial
+
+      // pre-seed checkpoint — params must match the enroll() call below
+      await svc.enrollCheckpoint.save(
+          enrollmentResponse, 'enroll_test_1', 'unit_test_1', {'test': 'rw'});
+
+      final checkpointFile = svc.enrollCheckpoint
+          .getFile('enroll_test_1', 'unit_test_1', {'test': 'rw'});
+      expect(checkpointFile.existsSync(), isTrue);
+
+      await expectLater(
+          () => svc
+              .enroll('enroll_test_1', 'unit_test_1', 'ABCDE', {'test': 'rw'}),
+          throwsA(isA<AtEnrollmentException>()));
+      expect(checkpointFile.existsSync(), isFalse);
+    });
+
+    test('enroll() creates a checkpoint', () async {
+      final atsign = '@perrytheplatypus';
+      final dummyEnrollmentId = 'xyz123abc';
+
+      final atChopsKeys = getRandomAtChopsKeys();
+      AtKeys atAuthKeys = getAtAuthKeysFromAtChopsKeys(atChopsKeys);
+      AtEnrollmentResponse enrollmentResponse = AtEnrollmentResponse(
+          dummyEnrollmentId, EnrollmentStatus.pending,
+          atAuthKeys: atAuthKeys);
+
+      AtOnboardingPreference pref = getOnboardingPreference();
+      AtOnboardingServiceImpl svc = AtOnboardingServiceImpl(atsign, pref);
+      svc.enrollmentBase = mockEnrollmentBase;
+      svc.atLookUp = mockAtLookup;
+
+      expect(
+          svc.enrollCheckpoint
+              .getFile('myApp', 'myDevice', {'test': 'rw'}).existsSync(),
+          isFalse);
+
+      bool checkpointExistedDuringApproval = false;
+
+      when(() => mockEnrollmentBase.submit(any(), any()))
+          .thenAnswer((_) => Future.value(enrollmentResponse));
+      // check whether the checkpoint file exists during awaitApproval() execution
+      when(() => mockAtLookup.pkamAuthenticate(enrollmentId: dummyEnrollmentId))
+          .thenAnswer((_) {
+        checkpointExistedDuringApproval = svc.enrollCheckpoint
+            .getFile('myApp', 'myDevice', {'test': 'rw'}).existsSync();
+        throw UnAuthenticatedException('error:AT0025');
+      });
+
+      await expectLater(
+        () => svc.enroll('myApp', 'myDevice', 'OTP123', {'test': 'rw'}),
+        throwsA(isA<AtEnrollmentException>()),
+      );
+
+      expect(checkpointExistedDuringApproval, isTrue);
+      // finally ensure its removed after enroll() returns
+      expect(
+          svc.enrollCheckpoint
+              .getFile('myApp', 'myDevice', {'test': 'rw'}).existsSync(),
+          isFalse);
+    });
+
+    tearDown(() async => await tearDownFunc());
+  });
+  group('Validate enroll checkpoint methods', () {
+    const appName = 'testApp';
+    const deviceName = 'testDevice';
+    final namespaces = {'ns': 'rw'};
+
+    test('checkpoint.getFile() - filename does not contain atSign', () {
+      final cp = EnrollmentCheckpoint('@lima');
+      final file = cp.getFile(appName, deviceName, namespaces);
+      expect(file.path, endsWith('.enrollment.checkpoint'));
+      expect(file.path, isNot(contains('@lima')));
+    });
+
+    test(
+        'checkpoint.getFile() - same params different atSigns produce different files',
+        () {
+      final checkpoint1 = EnrollmentCheckpoint('@dreamfyre')
+          .getFile(appName, deviceName, namespaces);
+      final checkpoint2 = EnrollmentCheckpoint('@sunfyre')
+          .getFile(appName, deviceName, namespaces);
+      expect(checkpoint1.path, isNot(equals(checkpoint2.path)));
+    });
+
+    test('checkpoint.save() - creates a checkpoint', () async {
+      final cp = EnrollmentCheckpoint('@syrax');
+      final atAuthKeys = getAtAuthKeysFromAtChopsKeys(getRandomAtChopsKeys());
+      await cp.save(
+          AtEnrollmentResponse('1234', EnrollmentStatus.pending,
+              atAuthKeys: atAuthKeys),
+          appName,
+          deviceName,
+          namespaces);
+
+      final file = cp.getFile(appName, deviceName, namespaces);
+      expect(file.existsSync(), isTrue);
+      if (!Platform.isWindows) {
+        final stat = await FileStat.stat(file.path);
+        expect(stat.mode & 0x1FF, equals(0x180),
+            reason: 'checkpoint file must have chmod 600');
+      }
+      final data = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+      expect(data['enrollmentId'], '1234');
+      expect(data['enrollStatus'], EnrollmentStatus.pending.name);
+      expect(data['atAuthKeys'], atAuthKeys.toJson());
+      expect(data['validTill'],
+          greaterThan(DateTime.now().millisecondsSinceEpoch));
+    });
+
+    test('checkpoint.save() - overwrites an existing checkpoint', () async {
+      final ckp = EnrollmentCheckpoint('@silverwing');
+      final firstKeys = getAtAuthKeysFromAtChopsKeys(getRandomAtChopsKeys());
+      final secondKeys = getAtAuthKeysFromAtChopsKeys(getRandomAtChopsKeys());
+
+      await ckp.save(
+          AtEnrollmentResponse('first-id', EnrollmentStatus.pending,
+              atAuthKeys: firstKeys),
+          appName,
+          deviceName,
+          namespaces);
+      await ckp.save(
+          AtEnrollmentResponse('second-id', EnrollmentStatus.pending,
+              atAuthKeys: secondKeys),
+          appName,
+          deviceName,
+          namespaces);
+
+      expect(
+          ckp.load(appName, deviceName, namespaces)!.enrollmentId, 'second-id');
+
+      ckp.delete(appName, deviceName, namespaces);
+    });
+
+    test('checkpoint.load() - loads the checkpoint file', () async {
+      final cp = EnrollmentCheckpoint('@caraxes');
+      final atAuthKeys = getAtAuthKeysFromAtChopsKeys(getRandomAtChopsKeys());
+      final er = AtEnrollmentResponse('abc321', EnrollmentStatus.pending,
+          atAuthKeys: atAuthKeys);
+
+      await cp.save(er, appName, deviceName, namespaces);
+
+      final loaded = cp.load(appName, deviceName, namespaces);
+      expect(loaded, isNotNull);
+      expect(loaded!.enrollmentId, er.enrollmentId);
+      expect(loaded.enrollStatus, er.enrollStatus);
+      expect(loaded.atAuthKeys!.apkamPublicKey.toString(),
+          atAuthKeys.apkamPublicKey.toString());
+      expect(loaded.atAuthKeys!.apkamPrivateKey.toString(),
+          atAuthKeys.apkamPrivateKey.toString());
+      expect(loaded.atAuthKeys!.defaultEncryptionPublicKey.toString(),
+          atAuthKeys.defaultEncryptionPublicKey.toString());
+      expect(loaded.atAuthKeys!.defaultSelfEncryptionKey.toString(),
+          atAuthKeys.defaultSelfEncryptionKey.toString());
+      expect(loaded.atAuthKeys!.apkamSymmetricKey.toString(),
+          atAuthKeys.apkamSymmetricKey.toString());
+    });
+
+    test('checkpoint.load() - returns null when file is missing', () {
+      expect(
+          EnrollmentCheckpoint('@rhaegar')
+              .load(appName, deviceName, namespaces),
+          isNull);
+    });
+
+    test('checkpoint.load() - returns null for corrupt JSON', () async {
+      final cp = EnrollmentCheckpoint('@vermithor');
+      File checkpoint = cp.getFile(appName, deviceName, namespaces);
+      checkpoint.writeAsStringSync('not valid json {{{');
+      expect(cp.load(appName, deviceName, namespaces), isNull);
+      expect(checkpoint.existsSync(), false);
+    });
+
+    test('checkpoint.load() - returns null for different params', () async {
+      final cp = EnrollmentCheckpoint('@sheepstealer');
+      final atAuthKeys = getAtAuthKeysFromAtChopsKeys(getRandomAtChopsKeys());
+
+      await cp.save(
+          AtEnrollmentResponse('mismatch-test', EnrollmentStatus.pending,
+              atAuthKeys: atAuthKeys),
+          'app1',
+          'device1',
+          {'ns': 'rw'});
+
+      expect(cp.load('app2', 'device2', {'ns': 'rw'}), isNull);
+
+      // in-case of mismatch, the checkpoint is not automatically removed
+      cp.delete('app1', 'device1', {'ns': 'rw'});
+    });
+
+    test('checkpoint.load() - returns null and deletes file when expired',
+        () async {
+      final cp = EnrollmentCheckpoint('@moondancer');
+      final atAuthKeys = getAtAuthKeysFromAtChopsKeys(getRandomAtChopsKeys());
+
+      await cp.save(
+          AtEnrollmentResponse('expired-test', EnrollmentStatus.pending,
+              atAuthKeys: atAuthKeys),
+          appName,
+          deviceName,
+          namespaces,
+          expiry: Duration.zero);
+
+      final file = cp.getFile(appName, deviceName, namespaces);
+      expect(file.existsSync(), isTrue);
+      expect(cp.load(appName, deviceName, namespaces), isNull);
+      // checkpoint is deleted as it's expired
+      expect(file.existsSync(), isFalse);
+    });
+
+    test('checkpoint.delete() - deletes existing checkpoint file', () async {
+      final cp = EnrollmentCheckpoint('@meraxes');
+      final atAuthKeys = getAtAuthKeysFromAtChopsKeys(getRandomAtChopsKeys());
+
+      await cp.save(
+          AtEnrollmentResponse('del-test', EnrollmentStatus.pending,
+              atAuthKeys: atAuthKeys),
+          appName,
+          deviceName,
+          namespaces);
+      expect(cp.getFile(appName, deviceName, namespaces).existsSync(), isTrue);
+
+      cp.delete(appName, deviceName, namespaces);
+      expect(cp.getFile(appName, deviceName, namespaces).existsSync(), isFalse);
+    });
+
+    test('checkpoint.delete() - is a no-op when file does not exist', () {
+      expect(
+          () => EnrollmentCheckpoint('@quicksilver')
+              .delete(appName, deviceName, namespaces),
+          returnsNormally);
+    });
+
+    test(
+        'checkpoint files are created per atSign — same params generate different files',
+        () async {
+      final cp1 = EnrollmentCheckpoint('@dreamfyre');
+      final cp2 = EnrollmentCheckpoint('@sunfyre');
+      final keys1 = getAtAuthKeysFromAtChopsKeys(getRandomAtChopsKeys());
+      final keys2 = getAtAuthKeysFromAtChopsKeys(getRandomAtChopsKeys());
+
+      await cp1.save(
+          AtEnrollmentResponse('id-for-dreamfyre', EnrollmentStatus.pending,
+              atAuthKeys: keys1),
+          appName,
+          deviceName,
+          namespaces);
+      await cp2.save(
+          AtEnrollmentResponse('id-for-sunfyre', EnrollmentStatus.pending,
+              atAuthKeys: keys2),
+          appName,
+          deviceName,
+          namespaces);
+
+      expect(cp1.load(appName, deviceName, namespaces)!.enrollmentId,
+          'id-for-dreamfyre');
+      expect(cp2.load(appName, deviceName, namespaces)!.enrollmentId,
+          'id-for-sunfyre');
+
+      cp1.delete(appName, deviceName, namespaces);
+      cp2.delete(appName, deviceName, namespaces);
+    });
+
+    tearDown(() {
+      // clean up any leftover checkpoint files from this group
+      Directory(Directory.current.path)
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.enrollment.checkpoint'))
+          .forEach((f) => f.deleteSync());
     });
   });
 }
@@ -323,7 +730,6 @@ AtClientPreference getAtClientPreferenceAlice() {
   var preference = AtClientPreference();
   preference.hiveStoragePath = 'test/storage/hive/client';
   preference.commitLogPath = 'test/storage/hive/client/commit';
-  preference.isLocalStoreRequired = true;
   preference.rootDomain = 'vip.ve.atsign.zone';
   return preference;
 }
@@ -332,8 +738,7 @@ AtOnboardingPreference getOnboardingPreference() {
   return AtOnboardingPreference()
     ..hiveStoragePath = 'test/storage/hive/client'
     ..commitLogPath = 'test/storage/hive/client/commit'
-    ..atKeysFilePath = 'test/storage'
-    ..isLocalStoreRequired = true;
+    ..atKeysFilePath = 'test/storage';
 }
 
 // creates an instance of AtAuthKeys by using the keys in AtChopsKeys
@@ -378,4 +783,29 @@ Future<void> setupLocalStorage(String atSign) async {
   var persistenceManager = SecondaryPersistenceStoreFactory.getInstance()
       .getSecondaryPersistenceStore(atSign)!;
   await persistenceManager.getHivePersistenceManager()!.init(storageDir);
+}
+
+/// Asserts that [file] has secure (owner-only) permissions.
+///
+/// On POSIX: expects chmod 600 (mode bits 0x180).
+/// On Windows: expects only the current user has Full control via icacls.
+Future<void> expectSecureFilePermissions(File file) async {
+  if (Platform.isWindows) {
+    final username =
+        Platform.environment['USERNAME'] ?? Platform.environment['USER'];
+    final result = await Process.run('icacls', [file.path]);
+    final output = result.stdout as String;
+    final permEntries = output
+        .split('\n')
+        .where((l) => l.contains(':(') && !l.startsWith('Successfully'))
+        .toList();
+    expect(permEntries.length, equals(1),
+        reason: 'only the current user should have access');
+    expect(permEntries.first, contains('$username:(F)'),
+        reason: 'current user must have Full control');
+  } else {
+    final stat = await FileStat.stat(file.path);
+    expect(stat.mode & 0x1FF, equals(0x180),
+        reason: 'file must have chmod 600 (owner read/write only)');
+  }
 }

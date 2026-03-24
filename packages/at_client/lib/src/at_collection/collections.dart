@@ -33,7 +33,7 @@ abstract interface class AtCollectionModelOperations<T> {
   /// By default when the object is deleted then the cached values on the recipients are deleted. if this needs to be changed set [objectLifeCycleOptions.cascadeDelete] to false.
   ///
   /// Returns a true if save is successful else returns a false.
-  /// If fine grained information on individual operations that happens within [save] is desired then use [streams.save]
+  /// If fine grained information on individual operations that happens within [save] is desired then use [streams.saveSpp]
   Future<bool> save({bool autoReshare = true, ObjectLifeCycleOptions? options});
 
   /// [share] shares the AtCollectionModel object with the atSigns in [atSigns] list.

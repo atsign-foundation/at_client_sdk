@@ -1,7 +1,6 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/widgets/shared/typable_dropdown.dart';
-import 'package:at_utils/at_utils.dart';
 import 'package:flutter/material.dart';
 
 /// A dialog widget that allows users to select or input an atSign and optionally a root domain.
@@ -56,7 +55,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
       return '';
     }
     try {
-      return AtUtils.fixAtSign(trimmedValue);
+      return trimmedValue.toAtsign();
     } catch (_) {
       return value;
     }
@@ -68,7 +67,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
       return null;
     }
     try {
-      return AtUtils.fixAtSign(atSign);
+      return atSign.toAtsign();
     } catch (_) {
       return null;
     }

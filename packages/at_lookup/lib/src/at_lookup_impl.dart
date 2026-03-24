@@ -658,7 +658,7 @@ class AtLookupImpl implements AtLookUp {
 
   @override
   Future<void> close() async {
-    await _connection!.close();
+    await _connection?.close();
   }
 
   Future<void> _sendCommand(String command) async {
