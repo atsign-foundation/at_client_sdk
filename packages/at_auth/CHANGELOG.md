@@ -1,3 +1,7 @@
+## 3.0.2
+- feat: validateAtServer(): Added progress events and atSign connectivity probing
+- fix: throw AtAuthenticationException when atSign is already onboarded
+
 ## 3.0.1
 - feat: improve `AtEnrollmentImpl`
 - feat: introduce `NamespacePermission`
