@@ -40,6 +40,7 @@ void main() {
     reset(mockAtLookup);
     reset(mockAtAuth);
     registerFallbackValue(FakeAtAuthRequest());
+    when(() => mockAtAuth.progressStream).thenAnswer((_) => Stream.empty());
   });
 
   group('A group of tests to verify at_chops creation in onboarding_cli', () {
@@ -47,6 +48,7 @@ void main() {
       reset(mockAtLookup);
       reset(mockAtAuth);
       registerFallbackValue(FakeAtAuthRequest());
+      when(() => mockAtAuth.progressStream).thenAnswer((_) => Stream.empty());
     });
 
     test('A test to check atOnboardingService.authenticate() returns true',
@@ -91,6 +93,7 @@ void main() {
       await setupLocalStorage(atsign);
       reset(mockAtLookup);
       reset(mockAtAuth);
+      when(() => mockAtAuth.progressStream).thenAnswer((_) => Stream.empty());
       registerFallbackValue(FakeAtAuthRequest());
       registerFallbackValue(EnrollVerbBuilder());
       registerFallbackValue(mockAtLookup);
@@ -327,6 +330,7 @@ void main() {
     setUp(() {
       reset(mockAtLookup);
       reset(mockAtAuth);
+      when(() => mockAtAuth.progressStream).thenAnswer((_) => Stream.empty());
       reset(mockEnrollmentBase);
       registerFallbackValue(FakeAtAuthRequest());
       registerFallbackValue(FakeEnrollmentRequest());
