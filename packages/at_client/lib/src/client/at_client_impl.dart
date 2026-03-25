@@ -160,7 +160,8 @@ class AtClientImpl implements AtClient {
 
   static Future<AtClient> create(
       String currentAtSign, String? namespace, AtClientPreference preferences,
-      {AtClientManager? atClientManager,
+      {@Deprecated('no longer needed. will be removed in a future release')
+      AtClientManager? atClientManager,
       RemoteSecondary? remoteSecondary,
       EncryptionService? encryptionService,
       SecondaryKeyStore? localSecondaryKeyStore,
@@ -169,7 +170,6 @@ class AtClientImpl implements AtClient {
       AtClientCommitLogCompaction? atClientCommitLogCompaction,
       AtClientConfig? atClientConfig,
       String? enrollmentId}) async {
-    atClientManager ??= AtClientManager.getInstance();
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
     // Fetch cached AtClientImpl for re-use, or create a new one and init it
@@ -178,8 +178,7 @@ class AtClientImpl implements AtClient {
       atClientImpl = atClientInstanceMap[currentAtSign];
       await atClientImpl!.start();
     } else {
-      atClientImpl = AtClientImpl._(
-          currentAtSign, namespace, preferences, atClientManager,
+      atClientImpl = AtClientImpl._(currentAtSign, namespace, preferences,
           remoteSecondary: remoteSecondary,
           encryptionService: encryptionService,
           localSecondaryKeyStore: localSecondaryKeyStore,
@@ -199,8 +198,7 @@ class AtClientImpl implements AtClient {
   AtClientImpl._(
     String theAtSign,
     String? namespace,
-    AtClientPreference preference,
-    AtClientManager atClientManager, {
+    AtClientPreference preference, {
     RemoteSecondary? remoteSecondary,
     EncryptionService? encryptionService,
     SecondaryKeyStore? localSecondaryKeyStore,

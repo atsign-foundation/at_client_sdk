@@ -703,9 +703,10 @@ void main() {
           .thenAnswer((_) => mockAtClientImpl);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          atClientManager: mockAtClientManager,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: mockSecondaryAddressFinder)
+          as NotificationServiceImpl;
 
       notificationServiceImpl.atKeyEncryptionManager = mockEncryptionManager;
 
@@ -745,7 +746,7 @@ void main() {
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
-          atClientManager: mockAtClientManager,
+          secondaryAddressFinder: mockSecondaryAddressFinder,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       notificationServiceImpl.atKeyEncryptionManager = mockEncryptionManager;

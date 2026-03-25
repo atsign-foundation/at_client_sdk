@@ -13,6 +13,7 @@ import 'package:at_client/src/transformer/response_transformer/notification_resp
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     as at_persistence_secondary_server;
 import 'package:at_utils/at_utils.dart';
@@ -28,7 +29,6 @@ class NotificationServiceImpl extends NotificationService {
   /// from at_client v3.0.59
   static const lastReceivedNotificationKey = 'lastreceivednotification';
 
-  final AtClientManager atClientManager;
   final AtClient atClient;
   late final Monitor monitor;
   late final AtSignLogger logger;
@@ -46,23 +46,30 @@ class NotificationServiceImpl extends NotificationService {
   /// Returns the currentAtSign associated with the NotificationService
   String get atSign => atClient.getCurrentAtSign()!;
 
+  late SecondaryAddressFinder secondaryAddressFinder;
+
   /// - [monitor] is providable for unit test purposes
-  static Future<NotificationService> create(
-    AtClient atClient, {
-    required AtClientManager atClientManager,
-    Monitor? monitor,
-  }) async {
-    final notificationService = NotificationServiceImpl._(
-        atClientManager: atClientManager, atClient: atClient, monitor: monitor);
-    return notificationService;
+  static Future<NotificationService> create(AtClient atClient,
+      {@Deprecated('will be removed in a future version')
+      AtClientManager? atClientManager,
+      Monitor? monitor,
+      SecondaryAddressFinder? secondaryAddressFinder}) async {
+    return NotificationServiceImpl._(
+        atClient: atClient,
+        monitor: monitor,
+        secondaryAddressFinder: secondaryAddressFinder);
   }
 
   NotificationServiceImpl._(
-      {required this.atClientManager,
-      required this.atClient,
-      Monitor? monitor}) {
+      {required this.atClient,
+      Monitor? monitor,
+      SecondaryAddressFinder? secondaryAddressFinder}) {
     logger = AtSignLogger(
         'NotificationServiceImpl (${atClient.getCurrentAtSign()})');
+
+    this.secondaryAddressFinder = secondaryAddressFinder ??
+        CacheableSecondaryAddressFinder(atClient.getPreferences()!.rootDomain,
+            atClient.getPreferences()!.rootPort);
 
     this.monitor = monitor ??
         Monitor(
@@ -72,8 +79,9 @@ class NotificationServiceImpl extends NotificationService {
           enrollmentId: atClient.enrollmentId,
           handleNotification: handleNotificationReceipt,
           getLastNotificationTime: getLastNotificationTime,
-          secondaryAddressFinder: atClientManager.secondaryAddressFinder!,
+          secondaryAddressFinder: this.secondaryAddressFinder,
         );
+
     lastReceivedNotificationAtKey = AtKey.local(
             lastReceivedNotificationKey, atClient.getCurrentAtSign()!,
             namespace: atClient.getPreferences()!.namespace)
@@ -265,7 +273,7 @@ class NotificationServiceImpl extends NotificationService {
           AtUtils.fixAtSign(notificationParams.atKey.sharedBy!);
       // validate notification request
       await atClientValidation.validateNotificationRequest(
-          atClientManager.secondaryAddressFinder!,
+          secondaryAddressFinder,
           notificationParams,
           atClient.getPreferences()!,
           atClient.getCurrentAtSign()!);
