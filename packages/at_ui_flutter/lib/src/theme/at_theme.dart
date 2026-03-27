@@ -70,14 +70,16 @@ class AtTheme {
           ), // Medium size
           shape: WidgetStateProperty.all(
             RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(atRadius.radiusSm),
+              borderRadius: BorderRadius.circular(atRadius.sm),
             ),
           ),
           backgroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.disabled))
+            if (states.contains(WidgetState.disabled)) {
               return atColors.secondary.shade200;
-            if (states.contains(WidgetState.pressed))
+            }
+            if (states.contains(WidgetState.pressed)) {
               return atColors.primary.shade700;
+            }
             if (states.contains(WidgetState.hovered) ||
                 states.contains(WidgetState.focused)) {
               return atColors.primary.shade600;
@@ -85,8 +87,9 @@ class AtTheme {
             return atColors.primary; // Default 500
           }),
           foregroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.disabled))
+            if (states.contains(WidgetState.disabled)) {
               return atColors.secondary.shade400;
+            }
             return Colors.white; // Default text color
           }),
         ),
@@ -102,12 +105,13 @@ class AtTheme {
           minimumSize: WidgetStateProperty.all(const Size(0, 40)),
           shape: WidgetStateProperty.all(
             RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(atRadius.radiusSm),
+              borderRadius: BorderRadius.circular(atRadius.sm),
             ),
           ),
           backgroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.pressed))
+            if (states.contains(WidgetState.pressed)) {
               return atColors.primary.shade100;
+            }
             if (states.contains(WidgetState.hovered) ||
                 states.contains(WidgetState.focused)) {
               return atColors.primary.shade50;
@@ -115,12 +119,15 @@ class AtTheme {
             return Colors.transparent; // Default
           }),
           foregroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.disabled))
+            if (states.contains(WidgetState.disabled)) {
               return atColors.secondary.shade400;
-            if (states.contains(WidgetState.pressed))
+            }
+            if (states.contains(WidgetState.pressed)) {
               return atColors.primary.shade700;
-            if (states.contains(WidgetState.hovered))
+            }
+            if (states.contains(WidgetState.hovered)) {
               return atColors.primary.shade600;
+            }
             return atColors.primary; // Default 500
           }),
         ),
@@ -151,8 +158,9 @@ class AtTheme {
             ); // Default border
           }),
           backgroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.pressed))
+            if (states.contains(WidgetState.pressed)) {
               return atColors.secondary.shade100;
+            }
             if (states.contains(WidgetState.hovered) ||
                 states.contains(WidgetState.focused)) {
               return atColors.secondary.shade50;
@@ -160,8 +168,9 @@ class AtTheme {
             return Colors.transparent;
           }),
           foregroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.disabled))
+            if (states.contains(WidgetState.disabled)) {
               return atColors.secondary.shade400;
+            }
             return atColors.secondary.shade900; // Default dark text
           }),
         ),
