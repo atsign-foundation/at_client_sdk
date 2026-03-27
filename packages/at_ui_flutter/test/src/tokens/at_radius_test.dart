@@ -6,26 +6,26 @@ void main() {
     test('copyWith successfully overrides specific values', () {
       const originalRadius = AtRadius();
       final updatedRadius = originalRadius.copyWith(
-        radiusNone: 1.0,
-        radiusXs: originalRadius.radiusXs * 2,
-        radiusSm: originalRadius.radiusSm * 2,
-        radiusMd: originalRadius.radiusMd * 2,
-        radiusLg: originalRadius.radiusLg * 2,
-        radiusXl: originalRadius.radiusXl * 2,
-        radius2xl: originalRadius.radius2xl * 2,
-        radius3xl: originalRadius.radius3xl * 2,
-        radiusFull: originalRadius.radiusFull * 2,
+        none: 1.0,
+        xs: originalRadius.xs * 2,
+        sm: originalRadius.sm * 2,
+        md: originalRadius.md * 2,
+        lg: originalRadius.lg * 2,
+        xl: originalRadius.xl * 2,
+        x2l: originalRadius.x2l * 2,
+        x3l: originalRadius.x3l * 2,
+        full: originalRadius.full * 2,
       );
       // Verify that the updated values are correctly applied
-      expect(updatedRadius.radiusNone, 1.0);
-      expect(updatedRadius.radiusXs, originalRadius.radiusXs * 2);
-      expect(updatedRadius.radiusSm, originalRadius.radiusSm * 2);
-      expect(updatedRadius.radiusMd, originalRadius.radiusMd * 2);
-      expect(updatedRadius.radiusLg, originalRadius.radiusLg * 2);
-      expect(updatedRadius.radiusXl, originalRadius.radiusXl * 2);
-      expect(updatedRadius.radius2xl, originalRadius.radius2xl * 2);
-      expect(updatedRadius.radius3xl, originalRadius.radius3xl * 2);
-      expect(updatedRadius.radiusFull, originalRadius.radiusFull * 2);
+      expect(updatedRadius.none, 1.0);
+      expect(updatedRadius.xs, originalRadius.xs * 2);
+      expect(updatedRadius.sm, originalRadius.sm * 2);
+      expect(updatedRadius.md, originalRadius.md * 2);
+      expect(updatedRadius.lg, originalRadius.lg * 2);
+      expect(updatedRadius.xl, originalRadius.xl * 2);
+      expect(updatedRadius.x2l, originalRadius.x2l * 2);
+      expect(updatedRadius.x3l, originalRadius.x3l * 2);
+      expect(updatedRadius.full, originalRadius.full * 2);
       expect(updatedRadius, isNot(originalRadius));
     });
 
@@ -40,53 +40,29 @@ void main() {
     test('lerp correctly interpolates between two AtRadius instances', () {
       const radiusA = AtRadius();
       final radiusB = AtRadius(
-        radiusNone: 1.0,
-        radiusXs: radiusA.radiusXs * 2,
-        radiusSm: radiusA.radiusSm * 2,
-        radiusMd: radiusA.radiusMd * 2,
-        radiusLg: radiusA.radiusLg * 2,
-        radiusXl: radiusA.radiusXl * 2,
-        radius2xl: radiusA.radius2xl * 2,
-        radius3xl: radiusA.radius3xl * 2,
-        radiusFull: radiusA.radiusFull * 2,
+        none: 1.0,
+        xs: radiusA.xs * 2,
+        sm: radiusA.sm * 2,
+        md: radiusA.md * 2,
+        lg: radiusA.lg * 2,
+        xl: radiusA.xl * 2,
+        x2l: radiusA.x2l * 2,
+        x3l: radiusA.x3l * 2,
+        full: radiusA.full * 2,
       );
       // Interpolate halfway between radiusA and radiusB
       final midRadius = radiusA.lerp(radiusB, 0.5);
 
       // Verify that the midRadius values are the average of radiusA and radiusB
-      expect(midRadius.radiusNone, 0.5);
-      expect(
-        midRadius.radiusXs,
-        (radiusA.radiusXs + (radiusA.radiusXs * 2)) / 2,
-      );
-      expect(
-        midRadius.radiusSm,
-        (radiusA.radiusSm + (radiusA.radiusSm * 2)) / 2,
-      );
-      expect(
-        midRadius.radiusMd,
-        (radiusA.radiusMd + (radiusA.radiusMd * 2)) / 2,
-      );
-      expect(
-        midRadius.radiusLg,
-        (radiusA.radiusLg + (radiusA.radiusLg * 2)) / 2,
-      );
-      expect(
-        midRadius.radiusXl,
-        (radiusA.radiusXl + (radiusA.radiusXl * 2)) / 2,
-      );
-      expect(
-        midRadius.radius2xl,
-        (radiusA.radius2xl + (radiusA.radius2xl * 2)) / 2,
-      );
-      expect(
-        midRadius.radius3xl,
-        (radiusA.radius3xl + (radiusA.radius3xl * 2)) / 2,
-      );
-      expect(
-        midRadius.radiusFull,
-        (radiusA.radiusFull + (radiusA.radiusFull * 2)) / 2,
-      );
+      expect(midRadius.none, 0.5);
+      expect(midRadius.xs, (radiusA.xs + (radiusA.xs * 2)) / 2);
+      expect(midRadius.sm, (radiusA.sm + (radiusA.sm * 2)) / 2);
+      expect(midRadius.md, (radiusA.md + (radiusA.md * 2)) / 2);
+      expect(midRadius.lg, (radiusA.lg + (radiusA.lg * 2)) / 2);
+      expect(midRadius.xl, (radiusA.xl + (radiusA.xl * 2)) / 2);
+      expect(midRadius.x2l, (radiusA.x2l + (radiusA.x2l * 2)) / 2);
+      expect(midRadius.x3l, (radiusA.x3l + (radiusA.x3l * 2)) / 2);
+      expect(midRadius.full, (radiusA.full + (radiusA.full * 2)) / 2);
     });
   });
 }
