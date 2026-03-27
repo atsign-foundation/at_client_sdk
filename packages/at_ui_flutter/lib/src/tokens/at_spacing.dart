@@ -4,62 +4,62 @@ import 'package:flutter/material.dart';
 
 /// Defines the foundational 2-point spacing scale for the Atsign Design System.
 class AtSpacing extends ThemeExtension<AtSpacing> {
-  final double scale2;
-  final double scale4;
-  final double scale6;
-  final double scale8;
-  final double scale12;
-  final double scale16;
-  final double scale20;
-  final double scale24;
-  final double scale32;
-  final double scale36;
-  final double scale40;
-  final double scale48;
+  final double s2;
+  final double s4;
+  final double s6;
+  final double s8;
+  final double s12;
+  final double s16;
+  final double s20;
+  final double s24;
+  final double s32;
+  final double s36;
+  final double s40;
+  final double s48;
 
   const AtSpacing({
-    this.scale2 = 2.0,
-    this.scale4 = 4.0,
-    this.scale6 = 6.0,
-    this.scale8 = 8.0,
-    this.scale12 = 12.0,
-    this.scale16 = 16.0,
-    this.scale20 = 20.0,
-    this.scale24 = 24.0,
-    this.scale32 = 32.0,
-    this.scale36 = 36.0,
-    this.scale40 = 40.0,
-    this.scale48 = 48.0,
+    this.s2 = 2.0,
+    this.s4 = 4.0,
+    this.s6 = 6.0,
+    this.s8 = 8.0,
+    this.s12 = 12.0,
+    this.s16 = 16.0,
+    this.s20 = 20.0,
+    this.s24 = 24.0,
+    this.s32 = 32.0,
+    this.s36 = 36.0,
+    this.s40 = 40.0,
+    this.s48 = 48.0,
   });
 
   @override
   AtSpacing copyWith({
-    double? scale2,
-    double? scale4,
-    double? scale6,
-    double? scale8,
-    double? scale12,
-    double? scale16,
-    double? scale20,
-    double? scale24,
-    double? scale32,
-    double? scale36,
-    double? scale40,
-    double? scale48,
+    double? s2,
+    double? s4,
+    double? s6,
+    double? s8,
+    double? s12,
+    double? s16,
+    double? s20,
+    double? s24,
+    double? s32,
+    double? s36,
+    double? s40,
+    double? s48,
   }) {
     return AtSpacing(
-      scale2: scale2 ?? this.scale2,
-      scale4: scale4 ?? this.scale4,
-      scale6: scale6 ?? this.scale6,
-      scale8: scale8 ?? this.scale8,
-      scale12: scale12 ?? this.scale12,
-      scale16: scale16 ?? this.scale16,
-      scale20: scale20 ?? this.scale20,
-      scale24: scale24 ?? this.scale24,
-      scale32: scale32 ?? this.scale32,
-      scale36: scale36 ?? this.scale36,
-      scale40: scale40 ?? this.scale40,
-      scale48: scale48 ?? this.scale48,
+      s2: s2 ?? this.s2,
+      s4: s4 ?? this.s4,
+      s6: s6 ?? this.s6,
+      s8: s8 ?? this.s8,
+      s12: s12 ?? this.s12,
+      s16: s16 ?? this.s16,
+      s20: s20 ?? this.s20,
+      s24: s24 ?? this.s24,
+      s32: s32 ?? this.s32,
+      s36: s36 ?? this.s36,
+      s40: s40 ?? this.s40,
+      s48: s48 ?? this.s48,
     );
   }
 
@@ -67,37 +67,24 @@ class AtSpacing extends ThemeExtension<AtSpacing> {
   AtSpacing lerp(ThemeExtension<AtSpacing>? other, double t) {
     if (other is! AtSpacing) return this;
     return AtSpacing(
-      scale2: lerpDouble(scale2, other.scale2, t) ?? scale2,
-      scale4: lerpDouble(scale4, other.scale4, t) ?? scale4,
-      scale6: lerpDouble(scale6, other.scale6, t) ?? scale6,
-      scale8: lerpDouble(scale8, other.scale8, t) ?? scale8,
-      scale12: lerpDouble(scale12, other.scale12, t) ?? scale12,
-      scale16: lerpDouble(scale16, other.scale16, t) ?? scale16,
-      scale20: lerpDouble(scale20, other.scale20, t) ?? scale20,
-      scale24: lerpDouble(scale24, other.scale24, t) ?? scale24,
-      scale32: lerpDouble(scale32, other.scale32, t) ?? scale32,
-      scale36: lerpDouble(scale36, other.scale36, t) ?? scale36,
-      scale40: lerpDouble(scale40, other.scale40, t) ?? scale40,
-      scale48: lerpDouble(scale48, other.scale48, t) ?? scale48,
+      s2: lerpDouble(s2, other.s2, t) ?? s2,
+      s4: lerpDouble(s4, other.s4, t) ?? s4,
+      s6: lerpDouble(s6, other.s6, t) ?? s6,
+      s8: lerpDouble(s8, other.s8, t) ?? s8,
+      s12: lerpDouble(s12, other.s12, t) ?? s12,
+      s16: lerpDouble(s16, other.s16, t) ?? s16,
+      s20: lerpDouble(s20, other.s20, t) ?? s20,
+      s24: lerpDouble(s24, other.s24, t) ?? s24,
+      s32: lerpDouble(s32, other.s32, t) ?? s32,
+      s36: lerpDouble(s36, other.s36, t) ?? s36,
+      s40: lerpDouble(s40, other.s40, t) ?? s40,
+      s48: lerpDouble(s48, other.s48, t) ?? s48,
     );
   }
 
   @override
   int get hashCode {
-    return Object.hash(
-      scale2,
-      scale4,
-      scale6,
-      scale8,
-      scale12,
-      scale16,
-      scale20,
-      scale24,
-      scale32,
-      scale36,
-      scale40,
-      scale48,
-    );
+    return Object.hash(s2, s4, s6, s8, s12, s16, s20, s24, s32, s36, s40, s48);
   }
 
   @override
@@ -105,17 +92,17 @@ class AtSpacing extends ThemeExtension<AtSpacing> {
     if (identical(this, other)) return true;
 
     return other is AtSpacing &&
-        other.scale2 == scale2 &&
-        other.scale4 == scale4 &&
-        other.scale6 == scale6 &&
-        other.scale8 == scale8 &&
-        other.scale12 == scale12 &&
-        other.scale16 == scale16 &&
-        other.scale20 == scale20 &&
-        other.scale24 == scale24 &&
-        other.scale32 == scale32 &&
-        other.scale36 == scale36 &&
-        other.scale40 == scale40 &&
-        other.scale48 == scale48;
+        other.s2 == s2 &&
+        other.s4 == s4 &&
+        other.s6 == s6 &&
+        other.s8 == s8 &&
+        other.s12 == s12 &&
+        other.s16 == s16 &&
+        other.s20 == s20 &&
+        other.s24 == s24 &&
+        other.s32 == s32 &&
+        other.s36 == s36 &&
+        other.s40 == s40 &&
+        other.s48 == s48;
   }
 }

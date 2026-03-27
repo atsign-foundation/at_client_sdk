@@ -63,7 +63,7 @@ class AtTheme {
           elevation: WidgetStateProperty.all(0), // Spec shows flat buttons
           textStyle: WidgetStateProperty.all(atTypography.buttonMd),
           padding: WidgetStateProperty.all(
-            EdgeInsets.symmetric(horizontal: atSpacing.scale16, vertical: 0),
+            EdgeInsets.symmetric(horizontal: atSpacing.s16, vertical: 0),
           ),
           minimumSize: WidgetStateProperty.all(
             const Size(0, 40),
@@ -100,7 +100,7 @@ class AtTheme {
         style: ButtonStyle(
           textStyle: WidgetStateProperty.all(atTypography.buttonMd),
           padding: WidgetStateProperty.all(
-            EdgeInsets.symmetric(horizontal: atSpacing.scale12, vertical: 0),
+            EdgeInsets.symmetric(horizontal: atSpacing.s12, vertical: 0),
           ),
           minimumSize: WidgetStateProperty.all(const Size(0, 40)),
           shape: WidgetStateProperty.all(
@@ -138,7 +138,7 @@ class AtTheme {
         style: ButtonStyle(
           textStyle: WidgetStateProperty.all(atTypography.buttonMd),
           padding: WidgetStateProperty.all(
-            EdgeInsets.symmetric(horizontal: atSpacing.scale16, vertical: 0),
+            EdgeInsets.symmetric(horizontal: atSpacing.s16, vertical: 0),
           ),
           minimumSize: WidgetStateProperty.all(const Size(0, 40)),
           shape: WidgetStateProperty.all(
