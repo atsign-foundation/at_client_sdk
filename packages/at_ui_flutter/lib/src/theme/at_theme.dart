@@ -136,7 +136,7 @@ class AtTheme {
           minimumSize: WidgetStateProperty.all(const Size(0, 40)),
           shape: WidgetStateProperty.all(
             RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(atRadius.radiusSm),
+              borderRadius: BorderRadius.circular(atRadius.sm),
             ),
           ),
           side: WidgetStateProperty.resolveWith((states) {
