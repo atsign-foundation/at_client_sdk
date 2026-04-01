@@ -7,7 +7,7 @@ void main() {
     test('strEquals should compare AtBytes with String by value', () {
       // Create test data
       final testData =
-      Uint8List.fromList([72, 101, 108, 108, 111]); // "Hello" in ASCII
+          Uint8List.fromList([72, 101, 108, 108, 111]); // "Hello" in ASCII
       final atBytes = AtBytes(testData);
 
       // The base64 encoded string of "Hello" is "SGVsbG8="
@@ -33,11 +33,21 @@ void main() {
       AtBytes? e;
       // Verify toString() matches
       expect(a.strEquals(b.toString()), isTrue);
-      expect(AtBytes.equals(a, b), isTrue);
-      expect(AtBytes.equals(a, c), isFalse);
+      expect(a == b, isTrue);
+      expect(a == c, isFalse);
       // Verify null cases
-      expect(AtBytes.equals(a, d), isFalse);
-      expect(AtBytes.equals(d, e), isTrue);
+      expect(a == d, isFalse);
+      expect(d == e, isTrue);
+    });
+
+    test('equal AtBytes instances should have the same hashCode', () {
+      final a = AtBytes(Uint8List.fromList([72, 101, 108, 108, 111]));
+      final b = AtBytes(Uint8List.fromList([72, 101, 108, 108, 111]));
+      final c = AtBytes(Uint8List.fromList([72, 101, 108, 108, 112]));
+
+      expect(a == b, isTrue);
+      expect(a.hashCode, b.hashCode);
+      expect(a.hashCode == c.hashCode, isFalse);
     });
   });
 }

@@ -19,12 +19,12 @@ class AtKeys {
     if (identical(this, other)) return true;
     if (other is! AtKeys) return false;
     return enrollmentId == other.enrollmentId &&
-        AtBytes.equals(apkamPublicKey, other.apkamPublicKey) &&
-        AtBytes.equals(apkamPrivateKey, other.apkamPrivateKey) &&
-        AtBytes.equals(defaultEncryptionPublicKey, other.defaultEncryptionPublicKey) &&
-        AtBytes.equals(defaultEncryptionPrivateKey, other.defaultEncryptionPrivateKey) &&
-        AtBytes.equals(defaultSelfEncryptionKey, other.defaultSelfEncryptionKey) &&
-        AtBytes.equals(apkamSymmetricKey, other.apkamSymmetricKey);
+        apkamPublicKey == other.apkamPublicKey &&
+        apkamPrivateKey == other.apkamPrivateKey &&
+        defaultEncryptionPublicKey == other.defaultEncryptionPublicKey &&
+        defaultEncryptionPrivateKey == other.defaultEncryptionPrivateKey &&
+        defaultSelfEncryptionKey == other.defaultSelfEncryptionKey &&
+        apkamSymmetricKey == other.apkamSymmetricKey;
   }
 
   @override

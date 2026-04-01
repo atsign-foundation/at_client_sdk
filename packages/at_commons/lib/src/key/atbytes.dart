@@ -15,10 +15,13 @@ class AtBytes {
 
   bool strEquals(String str) => toString() == str;
 
-  /// Equality check on two AtBytes?, if both are null it will return true.
-  static bool equals(AtBytes? a, AtBytes? b){
-    if (identical(a, b)) return true;
-    if (a == null || b == null) return false;
-    return a.strEquals(b.toString());
+  @override
+  bool operator ==(Object other) {
+    if (other is! AtBytes) return false;
+    if (identical(this, other)) return true;
+    return strEquals(other.toString());
   }
+
+  @override
+  int get hashCode => Object.hashAll(bytes);
 }

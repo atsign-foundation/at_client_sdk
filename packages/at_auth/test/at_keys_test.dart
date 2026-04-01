@@ -36,7 +36,7 @@ void main() {
     });
 
     test('fromJson -> should return AtKeys instance', () async {
-      expect(AtKeys.fromJson(encryptedAtKeysMap), createKeys());
+      expect(AtKeys.fromJson(encryptedAtKeysMap), equals(createKeys()));
     });
 
     test('toJson -> should be nullable', () async {
