@@ -14,4 +14,11 @@ class AtBytes {
   String toString() => base64Encode(bytes);
 
   bool strEquals(String str) => toString() == str;
+
+  /// Equality check on two AtBytes?, if both are null it will return true.
+  static bool equals(AtBytes? a, AtBytes? b){
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return false;
+    return a.strEquals(b.toString());
+  }
 }

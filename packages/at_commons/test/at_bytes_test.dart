@@ -7,7 +7,7 @@ void main() {
     test('strEquals should compare AtBytes with String by value', () {
       // Create test data
       final testData =
-          Uint8List.fromList([72, 101, 108, 108, 111]); // "Hello" in ASCII
+      Uint8List.fromList([72, 101, 108, 108, 111]); // "Hello" in ASCII
       final atBytes = AtBytes(testData);
 
       // The base64 encoded string of "Hello" is "SGVsbG8="
@@ -23,6 +23,21 @@ void main() {
 
       // Verify toString() matches the expected base64 string
       expect(atBytes.toString(), expectedBase64String);
+    });
+
+    test('AtBytes.equals should work regardless of nullity', () {
+      AtBytes a = AtBytes.fromString('str');
+      AtBytes b = AtBytes.fromString('str');
+      AtBytes c = AtBytes.fromString('string');
+      AtBytes? d;
+      AtBytes? e;
+      // Verify toString() matches
+      expect(a.strEquals(b.toString()), isTrue);
+      expect(AtBytes.equals(a, b), isTrue);
+      expect(AtBytes.equals(a, c), isFalse);
+      // Verify null cases
+      expect(AtBytes.equals(a, d), isFalse);
+      expect(AtBytes.equals(d, e), isTrue);
     });
   });
 }
