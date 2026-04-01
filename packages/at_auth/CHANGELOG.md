@@ -1,5 +1,5 @@
 ## Next
-- feat: use AtBytes.equals in `AtKeys` (requires at_commons: ^5.8.1)
+- feat: use AtBytes.equals in `AtKeys` (requires at_commons: ^5.9.0)
 
 ## 3.0.2
 - feat: validateAtServer(): Added progress events and atSign connectivity probing
