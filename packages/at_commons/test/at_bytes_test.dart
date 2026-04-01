@@ -26,8 +26,8 @@ void main() {
     });
 
     test('AtBytes.equals should work regardless of nullity', () {
-      AtBytes a = AtBytes.fromString('str');
-      AtBytes b = AtBytes.fromString('str');
+      AtBytes a = AtBytes.fromString('bone');
+      AtBytes b = AtBytes.fromString('bone');
       AtBytes c = AtBytes.fromString('string');
       AtBytes? d;
       AtBytes? e;
