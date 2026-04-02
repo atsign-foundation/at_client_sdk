@@ -1,10 +1,12 @@
 ## 3.12.0
 
-- feat: explicit AtClient lifecycle control — cleanly stop and resume atSigns without
+- feat: explicit AtClient lifecycle control — cleanly stop and resume atClients without
   re-initialising storage or keys
-- fix: monitor delayed-start timer could not be cancelled on stop
+- feat: outgoing AtClient's sync and notification services will now be garbage collected
+- chore: deprecated `atClientManager` param in the factories of AtClient, NotificationService, and SyncService
+- fix: added null guards to AtClient service getters
 
-## 3.11.0
+## 3.11.0     
 
 - chore(deps): at_auth ^3.0.0
 - chore(deps): at_chops ^3.0.0
