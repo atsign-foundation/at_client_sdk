@@ -3,6 +3,7 @@
 - fix: `decodeAtKeys()` now throws when an invalid passphrase is provided
 - fix: `FileAtKeysIO` now encrypts the key file with a passphrase when one is available
 - fix: throws `AtAuthenticationException` when the atSign is already onboarded
+- feat: use AtBytes.equals in `AtKeys` (requires at_commons: ^5.9.0)
 
 ## 3.0.1
 - feat: improve `AtEnrollmentImpl`

@@ -24,5 +24,30 @@ void main() {
       // Verify toString() matches the expected base64 string
       expect(atBytes.toString(), expectedBase64String);
     });
+
+    test('AtBytes.equals should work regardless of nullity', () {
+      AtBytes a = AtBytes.fromString('bone');
+      AtBytes b = AtBytes.fromString('bone');
+      AtBytes c = AtBytes.fromString('stringss');
+      AtBytes? d;
+      AtBytes? e;
+      // Verify toString() matches
+      expect(a.strEquals(b.toString()), isTrue);
+      expect(a == b, isTrue);
+      expect(a == c, isFalse);
+      // Verify null cases
+      expect(a == d, isFalse);
+      expect(d == e, isTrue);
+    });
+
+    test('equal AtBytes instances should have the same hashCode', () {
+      final a = AtBytes(Uint8List.fromList([72, 101, 108, 108, 111]));
+      final b = AtBytes(Uint8List.fromList([72, 101, 108, 108, 111]));
+      final c = AtBytes(Uint8List.fromList([72, 101, 108, 108, 112]));
+
+      expect(a == b, isTrue);
+      expect(a.hashCode, b.hashCode);
+      expect(a.hashCode == c.hashCode, isFalse);
+    });
   });
 }
