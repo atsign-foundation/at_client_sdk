@@ -1,3 +1,6 @@
+## 5.9.0
+- feat: add equals method for `AtBytes`
+
 ## 5.8.0
 
 - feat: add `AtBytes` supporting hardware acceleration in `at_chops`

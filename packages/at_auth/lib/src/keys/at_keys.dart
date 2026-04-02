@@ -14,22 +14,17 @@ class AtKeys {
 
   AtKeys();
 
-  //TODO: AtBytes needs an equality operator so we can avoid this...
-  // I can't even use the strEquals in the AtBytes
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
     if (other is! AtKeys) return false;
     return enrollmentId == other.enrollmentId &&
-        apkamPublicKey?.toString() == other.apkamPublicKey?.toString() &&
-        apkamPrivateKey?.toString() == other.apkamPrivateKey?.toString() &&
-        defaultEncryptionPublicKey?.toString() ==
-            other.defaultEncryptionPublicKey?.toString() &&
-        defaultEncryptionPrivateKey?.toString() ==
-            other.defaultEncryptionPrivateKey?.toString() &&
-        defaultSelfEncryptionKey?.toString() ==
-            other.defaultSelfEncryptionKey?.toString() &&
-        apkamSymmetricKey?.toString() == other.apkamSymmetricKey?.toString();
+        apkamPublicKey == other.apkamPublicKey &&
+        apkamPrivateKey == other.apkamPrivateKey &&
+        defaultEncryptionPublicKey == other.defaultEncryptionPublicKey &&
+        defaultEncryptionPrivateKey == other.defaultEncryptionPrivateKey &&
+        defaultSelfEncryptionKey == other.defaultSelfEncryptionKey &&
+        apkamSymmetricKey == other.apkamSymmetricKey;
   }
 
   @override
