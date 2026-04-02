@@ -19,7 +19,11 @@ class AtBytes {
   bool operator ==(Object other) {
     if (other is! AtBytes) return false;
     if (identical(this, other)) return true;
-    return strEquals(other.toString());
+    if (bytes.length != other.bytes.length) return false;
+    for (int i = 0; i < bytes.length; i++) {
+      if (bytes[i] != other.bytes[i]) return false;
+    }
+    return true;
   }
 
   @override
