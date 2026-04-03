@@ -1,3 +1,11 @@
+## 1.16.0
+- feat: enrollment authorization wait can now be resumed across sessions
+- feat: atKeys files are now restricted to read/write permissions for the current user only
+- feat: atKeys file writability is verified before enrollment or onboarding begins
+- feat: activate_cli: new `decrypt` command outputs a passphrase-decrypted version of the atKeys file
+- feat: activate_cli: version is now shown via `--version`, `--help`, and `help`
+- fix: at_onboarding_cli now subscribes to at_auth progress stream events
+
 ## 1.15.0
 
 - feat: add `--root-server` option to specify root server domain

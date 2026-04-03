@@ -1,9 +1,9 @@
-## Next
+## 3.1.0
+- feat: `validateAtServer()` now emits progress events and probes atSign connectivity before returning
+- fix: `decodeAtKeys()` now throws when an invalid passphrase is provided
+- fix: `FileAtKeysIO` now encrypts the key file with a passphrase when one is available
+- fix: throws `AtAuthenticationException` when the atSign is already onboarded
 - feat: use AtBytes.equals in `AtKeys` (requires at_commons: ^5.9.0)
-
-## 3.0.2
-- feat: validateAtServer(): Added progress events and atSign connectivity probing
-- fix: throw AtAuthenticationException when atSign is already onboarded
 
 ## 3.0.1
 - feat: improve `AtEnrollmentImpl`
