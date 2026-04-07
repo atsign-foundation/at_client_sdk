@@ -285,3 +285,7 @@ atKeysIo.write(atsign, atKeys);
 Full working examples are available in the example app:
 - `at_client_flutter/example/lib/main.dart` — UI and navigation
 - `at_client_flutter/example/lib/walkthrough.dart` — all authentication flows with error handling
+
+Reusable snippets are also available under `at_client_flutter/example/lib/snippets`
+for smaller integration examples:
+- `at_backup_key` — export backed-up keys using `at_backup_key.dart`

@@ -1,5 +1,5 @@
-## 4.2.0 (unreleased tech-debt-removal branch changes)
-
+## Final Version DEPRECATED
+- **CHORE**: this package has turned into a snippet under `at_client_flutter/example/snippets`
 - chore(deps): at_chops ^3.0.0
 
 ## 4.1.0
