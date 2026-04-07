@@ -13,6 +13,14 @@ dependency_overrides:
     path: ../../at_cli_commons
   at_client:
     path: ../../at_client
+  at_commons:
+    path: ../../at_commons
+  at_chops:
+    path: ../../at_chops
+  at_auth:
+    path: ../../at_auth
+  at_lookup:
+    path: ../../at_lookup
 
 dependencies:
   at_policy:

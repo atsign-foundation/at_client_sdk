@@ -1,4 +1,3 @@
-import 'package:at_common_flutter/at_common_flutter.dart';
 import 'package:flutter/material.dart';
 
 class BottomSheetDialog extends StatefulWidget {
@@ -18,13 +17,12 @@ class _BottomSheetDialogState extends State<BottomSheetDialog> {
 
   @override
   Widget build(BuildContext context) {
-    SizeConfig().init(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         SizedBox(
-          height: 16.toHeight,
+          height: 16,
         ),
         GestureDetector(
           onTap: () {
@@ -34,9 +32,9 @@ class _BottomSheetDialogState extends State<BottomSheetDialog> {
             widget.deleteCallback();
           },
           child: Container(
-            width: 240.toWidth,
+            width: 240,
             padding: EdgeInsets.symmetric(
-                vertical: 16.toHeight, horizontal: 0.toWidth),
+                vertical: 16, horizontal: 0),
             decoration: BoxDecoration(
               borderRadius: const BorderRadius.all(
                 Radius.circular(5.0),
@@ -49,18 +47,18 @@ class _BottomSheetDialogState extends State<BottomSheetDialog> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 SizedBox(
-                  width: 36.toWidth,
+                  width: 36,
                 ),
                 const Text(
                   'Delete Message',
                   style: TextStyle(color: Colors.red, fontSize: 14),
                 ),
                 SizedBox(
-                  width: 16.toWidth,
+                  width: 16,
                 ),
                 SizedBox(
-                  width: 20.toWidth,
-                  height: 20.toHeight,
+                  width: 20,
+                  height: 20,
                   child: Visibility(
                     visible: isLoading,
                     child: const CircularProgressIndicator(),
@@ -71,16 +69,16 @@ class _BottomSheetDialogState extends State<BottomSheetDialog> {
           ),
         ),
         SizedBox(
-          height: 8.toHeight,
+          height: 8,
         ),
         GestureDetector(
           onTap: () {
             Navigator.of(context).pop();
           },
           child: Container(
-            width: 240.toWidth,
+            width: 240,
             padding: EdgeInsets.symmetric(
-                vertical: 16.toHeight, horizontal: 0.toWidth),
+                vertical: 16, horizontal: 0),
             decoration: BoxDecoration(
               borderRadius: const BorderRadius.all(
                 Radius.circular(5.0),
@@ -97,7 +95,7 @@ class _BottomSheetDialogState extends State<BottomSheetDialog> {
           ),
         ),
         SizedBox(
-          height: 16.toHeight,
+          height: 16,
         ),
       ],
     );

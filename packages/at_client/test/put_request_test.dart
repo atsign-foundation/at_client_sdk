@@ -157,6 +157,7 @@ void main() {
           '@bob',
           'wavi',
           AtClientPreference()
+            // ignore: deprecated_member_use_from_same_package
             ..isLocalStoreRequired = false
             ..maxDataSize = 1,
           remoteSecondary: mockRemoteSecondary) as AtClientImpl;

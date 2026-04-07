@@ -27,7 +27,6 @@ void main() {
           '@alice',
           'all',
           AtClientPreference()
-            ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
@@ -131,7 +130,6 @@ void main() {
           '@alice',
           'all',
           AtClientPreference()
-            ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
@@ -214,7 +212,6 @@ void main() {
           '@alice',
           'all',
           AtClientPreference()
-            ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
@@ -290,7 +287,6 @@ void main() {
           '@alice',
           'wavi',
           AtClientPreference()
-            ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       enrolledAtClient.enrollmentId = newEnrollmentId;
@@ -351,7 +347,6 @@ void main() {
           '@alice',
           'all',
           AtClientPreference()
-            ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
@@ -450,7 +445,6 @@ void main() {
           '@alice',
           'all',
           AtClientPreference()
-            ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = privilegedEnrollment;
@@ -520,7 +514,6 @@ void main() {
           '@alice',
           'wavi',
           AtClientPreference()
-            ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       enrolledAtClient.enrollmentId = newEnrollmentId;
@@ -578,7 +571,6 @@ void main() {
           '@alice',
           'all',
           AtClientPreference()
-            ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
@@ -662,7 +654,6 @@ void main() {
           '@alice',
           'wavi',
           AtClientPreference()
-            ..isLocalStoreRequired = true
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       enrolledAtClient.enrollmentId = newEnrollmentId;

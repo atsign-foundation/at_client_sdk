@@ -20,13 +20,15 @@ import 'package:image/image.dart';
 import 'package:meta/meta.dart';
 import 'package:zxing2/qrcode.dart';
 
+import '../util/at_file_util.dart';
 import '../util/home_directory_util.dart';
+import 'helpers/enrollment_checkpoint.dart';
 
 /// Service implementation responsible for onboarding and authenticating atSigns.
 ///
 /// Also has implementation to create, approve, deny and revoke enrollments.
 class AtOnboardingServiceImpl implements AtOnboardingService {
-  late final String _atSign;
+  final Atsign _atSign;
   bool _isAtsignOnboarded = false;
   AtSignLogger logger = AtSignLogger('OnboardingCli');
   AtOnboardingPreference atOnboardingPreference;
@@ -41,18 +43,24 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   AtEnrollment? _atEnrollment;
 
-  AtOnboardingServiceImpl(String atsign, this.atOnboardingPreference,
-      {this.atServiceFactory, String? enrollmentId}) {
-    // performs atSign format checks on the atSign
-    _atSign = AtUtils.fixAtSign(atsign);
+  @visibleForTesting
+  late EnrollmentCheckpoint enrollCheckpoint;
+
+  AtOnboardingServiceImpl(
+    String atsign,
+    this.atOnboardingPreference, {
+    this.atServiceFactory,
+    String? enrollmentId,
+  }) : _atSign = atsign.toAtsign() {
     _atEnrollment ??= AtEnrollment.create();
+    enrollCheckpoint = EnrollmentCheckpoint(_atSign);
+
     // set default LocalStorage paths for this instance
     atOnboardingPreference.commitLogPath ??=
         HomeDirectoryUtil.getCommitLogPath(_atSign, enrollmentId: enrollmentId);
     atOnboardingPreference.hiveStoragePath ??=
         HomeDirectoryUtil.getHiveStoragePath(_atSign,
             enrollmentId: enrollmentId);
-    atOnboardingPreference.isLocalStoreRequired = true;
     atOnboardingPreference.atKeysFilePath ??=
         HomeDirectoryUtil.getAtKeysPath(_atSign);
   }
@@ -128,6 +136,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     Duration retryInterval = AtOnboardingService.defaultActivationCheckInterval,
     int maxRetries = AtOnboardingService.defaultMaxActivationCheckRetries,
   }) async {
+    // Fails early if the filePath already exists (or) isn't writable
+    AtFileUtil.ensureWritable(File(atOnboardingPreference.atKeysFilePath!));
+
     // Ensure we have an AtLookUp instance and send from: command if using proxy
     AtLookupImpl atLookUpImpl = AtLookupImpl(
       _atSign,
@@ -141,8 +152,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     logger.info('Root Server address is ${atOnboardingPreference.rootDomain}:'
         '${atOnboardingPreference.rootPort}');
 
-    // get cram_secret from either from AtOnboardingPreference
-    // or fetch from the registrar using verification code sent to email
+    // Fetch from the registrar using verification code sent to email
+    // if not provided through onboardingPreference
     if (atOnboardingPreference.cramSecret == null) {
       final util = OnboardingUtil();
       await util.requestAuthenticationOtp(
@@ -158,6 +169,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         authority: atOnboardingPreference.registrarUrl,
       );
     }
+
     if (atOnboardingPreference.cramSecret == null) {
       logger.info('Root Server address is ${atOnboardingPreference.rootDomain}:'
           '${atOnboardingPreference.rootPort}');
@@ -167,13 +179,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           'Could not fetch cram secret for \'$_atSign\' from registrar');
     }
 
-    // check and wait till secondary exists
-    await _waitUntilSecondaryCreated(
-      atLookUpImpl,
-      retryInterval: retryInterval,
-      maxRetries: maxRetries,
-    );
-
     if (await isOnboarded()) {
       throw AtActivateException('atsign $_atSign is already activated');
     }
@@ -182,7 +187,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     var atOnboardingRequest = AtOnboardingRequest(_atSign);
     atOnboardingRequest.rootDomain = AtRootDomain(
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
-    atOnboardingRequest.atKeysIo = FileAtKeysIo();
+    atOnboardingRequest.retryOptions =
+        RetryOptions(maxRetries: maxRetries, retryDelay: retryInterval);
+    atOnboardingRequest.atKeysIo = FileAtKeysIo(
+      filePath: atOnboardingPreference.atKeysFilePath != null
+          ? (_) => atOnboardingPreference.atKeysFilePath!
+          : null,
+    );
 
     AtOnboardingResponse atOnboardingResponse = await atAuth!.onboard(
       atOnboardingRequest,
@@ -192,13 +203,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     logger.finer('Onboarding Response: $atOnboardingResponse');
     if (atOnboardingResponse.isSuccessful) {
-      logger.finer(
-          'Onboarding successful.Generating keyfile in path: ${atOnboardingPreference.atKeysFilePath}');
-      stderr.writeln();
-      await _generateAtKeysFile(
-        atOnboardingResponse.atAuthKeys!,
-        enrollmentId: atOnboardingResponse.enrollmentId,
-      );
+      stdout.writeln('[Success] Your keyfile stored at'
+          ' path: ${atOnboardingPreference.atKeysFilePath}');
+      await AtFileUtil.setSecureFilePermissions(
+          atOnboardingPreference.atKeysFilePath!);
 
       if (autoCompleteActivation) {
         await completeActivation();
@@ -222,30 +230,65 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     Duration retryInterval = AtOnboardingService.defaultApkamRetryInterval,
     int maxRetries = AtOnboardingService.defaultMaxApkamRetries,
     File? atKeysFile,
+    Duration? apkamKeysExpiryDuration,
     bool allowOverwrite = false,
   }) async {
-    AtEnrollmentResponse enrollmentResponse = await sendEnrollRequest(
-      appName,
-      deviceName,
-      otp,
-      namespaces,
+    // Fails early if the filePath already exists (or) isn't writable
+    if (atKeysFile != null) {
+      AtFileUtil.ensureWritable(atKeysFile);
+    }
+
+    // Resume from checkpoint if a previous enrollment was interrupted,
+    // otherwise submit a new enrollment request and save a checkpoint.
+    AtEnrollmentResponse? enrollmentResponse =
+        enrollCheckpoint.load(appName, deviceName, namespaces);
+
+    if (enrollmentResponse != null) {
+      logger.info('Resuming from enrollment checkpoint...');
+    } else {
+      enrollmentResponse = await sendEnrollRequest(
+        appName,
+        deviceName,
+        otp,
+        namespaces,
+        apkamKeysExpiryDuration: apkamKeysExpiryDuration,
+      );
+      logger.finer('EnrollmentResponse from server: $enrollmentResponse');
+      await enrollCheckpoint.save(
+          enrollmentResponse, appName, deviceName, namespaces,
+          expiry: apkamKeysExpiryDuration);
+    }
+
+    stdout.writeln('Enrollment ID: ${enrollmentResponse.enrollmentId}');
+    _addProgress('Enroll', 'Enrollment ID: ${enrollmentResponse.enrollmentId}',
+        ProgressEventType.info);
+
+    try {
+      await awaitApproval(
+        enrollmentResponse,
+        retryInterval: retryInterval,
+        maxRetries: maxRetries,
+      );
+    } finally {
+      // Checkpoint is always removed after approval attempt, whether it
+      // succeeds or throws
+      enrollCheckpoint.delete(appName, deviceName, namespaces);
+    }
+
+    await _initAtClient(
+      _atLookUp!.atChops!,
+      enrollmentId: enrollmentResponse.enrollmentId,
     );
-    logger.finer('EnrollmentResponse from server: $enrollmentResponse');
 
-    await awaitApproval(enrollmentResponse, retryInterval: retryInterval);
-
-    await _initAtClient(_atLookUp!.atChops!,
-        enrollmentId: enrollmentResponse.enrollmentId);
-    var enrollmentDetails = EnrollmentDetails();
-    enrollmentDetails.namespace = namespaces;
+    // Store enrollment details in local secondary.
     var localEnrollmentKey = AtKey()
       ..isLocal = true
       ..key = enrollmentResponse.enrollmentId
       ..sharedBy = atClient!.getCurrentAtSign();
+    EnrollmentDetails enrollmentDetails = EnrollmentDetails()
+      ..namespace = namespaces;
     await atClient!.getLocalSecondary()!.putValue(
-          localEnrollmentKey.toString(),
-          jsonEncode(enrollmentDetails.toJson()),
-        );
+        localEnrollmentKey.toString(), jsonEncode(enrollmentDetails.toJson()));
 
     await createAtKeysFile(
       enrollmentResponse,
@@ -351,6 +394,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     // Create AtChops instance and assign it to the lookup for PKAM authentication
     AtChopsImpl atChops = AtChopsImpl(atChopsKeys);
     _atLookUp!.atChops = atChops;
+    _atLookUp!.enrollmentId = enrollmentResponse.enrollmentId;
 
     // Pkam auth will be attempted asynchronously until enrollment is approved
     // or denied or times out. If denied or timed out, an exception will be
@@ -623,6 +667,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     fileWriter.write(encodedAtKeysString);
     await fileWriter.flush();
     await fileWriter.close();
+    await AtFileUtil.setSecureFilePermissions(atKeysFile.path);
     stdout.writeln(
         '${chalk.green('[Success]')} Your .atKeys file saved at ${atKeysFile.path}\n');
 
@@ -663,10 +708,11 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   @override
   Future<bool> authenticate({String? enrollmentId}) async {
     atAuth ??= AtAuth.create();
-    var atAuthRequest = AtAuthRequest(
-        _atSign,
-        FileAtKeysIo(
-            filePath: atOnboardingPreference.atKeysFilePath.isNull ? (_) => atOnboardingPreference.atKeysFilePath! : null,
+    var atAuthRequest = AtAuthRequest(_atSign,
+        atKeysIo: FileAtKeysIo(
+            filePath: !atOnboardingPreference.atKeysFilePath.isNull
+                ? (_) => atOnboardingPreference.atKeysFilePath!
+                : null,
             passPhrase: atOnboardingPreference.passPhrase))
       ..enrollmentId = enrollmentId
       ..rootDomain = AtRootDomain(
@@ -781,89 +827,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
   }
 
-  /// Method to check if secondary belonging to [_atSign] has been created
-  /// If not, wait until secondary is created. Makes 50 retry attempts, 2 sec apart
-  Future<void> _waitUntilSecondaryCreated(
-    AtLookupImpl atLookupImpl, {
-    required int maxRetries,
-    required Duration retryInterval,
-  }) async {
-    int retryAttempt = 0;
-    SecondaryAddress? secondaryAddress;
-
-    String lastException = '';
-    while (retryAttempt < maxRetries && secondaryAddress == null) {
-      retryAttempt++;
-      if (retryAttempt > 1) {
-        await Future.delayed(retryInterval);
-      }
-      _addProgress(
-          'Find',
-          '#[$retryAttempt/$maxRetries] : looking up $_atSign in atDirectory',
-          ProgressEventType.info);
-      await waitBriefly();
-      logger.finer(
-          'retrying find AtServer for $_atSign... #[$retryAttempt/$maxRetries]');
-      try {
-        secondaryAddress =
-            await atLookupImpl.secondaryAddressFinder.findSecondary(_atSign);
-      } catch (e) {
-        lastException = e.toString();
-        _addProgress('Find', '#[$retryAttempt/$maxRetries] : $e',
-            ProgressEventType.error);
-      }
-    }
-    if (secondaryAddress == null) {
-      String msg = 'Find atServer for $_atSign failed'
-          ' : Apparent cause: $lastException';
-      throw SecondaryNotFoundException(msg);
-    }
-    _addProgress(
-      'Find',
-      '#[$retryAttempt/$maxRetries] : Found atServer address for $_atSign in atDirectory - $secondaryAddress',
-      ProgressEventType.success,
-    );
-
-    retryAttempt = 0;
-    bool connected = false;
-    lastException = '';
-    while (!connected && retryAttempt < maxRetries) {
-      retryAttempt++;
-      if (retryAttempt > 1) {
-        await Future.delayed(retryInterval);
-      }
-      _addProgress(
-          'Connect',
-          '#[$retryAttempt/$maxRetries] : Connecting to $_atSign atServer',
-          ProgressEventType.info);
-      await waitBriefly();
-      try {
-        final secureSocket = await SecureSocket.connect(
-            secondaryAddress.host, secondaryAddress.port,
-            timeout: Duration(seconds: 5));
-        connected = secureSocket.remoteAddress != null &&
-            secureSocket.remotePort != null;
-        secureSocket.destroy();
-      } catch (e, trace) {
-        lastException = e.toString();
-        _addProgress('Connect', '#[$retryAttempt/$maxRetries] : $e',
-            ProgressEventType.error);
-        logger.finer(e);
-        logger.finer(trace);
-      }
-    }
-    if (connected) {
-      _addProgress(
-          'Connect',
-          '#[$retryAttempt/$maxRetries] : Connected to $_atSign atServer',
-          ProgressEventType.success);
-    } else {
-      String msg = 'Connect to atServer for $_atSign failed'
-          ' : Apparent cause: $lastException';
-      throw SecondaryConnectException(msg);
-    }
-  }
-
   @override
   Future<void> close() async {
     logger.info('Closing');
@@ -871,7 +834,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         (_atLookUp as AtLookupImpl).isConnectionAvailable()) {
       await _atLookUp!.close();
     }
-    atClient?.notificationService.stopAllSubscriptions();
+    if (atClient != null) {
+      await atClient!.stop();
+    }
     _atLookUp = null;
     atClient = null;
     logger.info('Closed');
@@ -903,8 +868,18 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   @Deprecated('AtChops will be created in AtAuth')
   AtChops? atChops;
 
+  AtAuth? _atAuth;
+
   @override
-  AtAuth? atAuth;
+  AtAuth? get atAuth => _atAuth;
+
+  @override
+  set atAuth(AtAuth? atAuth) {
+    _atAuth = atAuth;
+    _atAuth?.progressStream.listen((pe) {
+      _psc.add(pe);
+    });
+  }
 
   final StreamController<ProgressEvent> _psc = StreamController.broadcast();
 

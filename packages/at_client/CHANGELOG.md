@@ -1,10 +1,28 @@
-## 3.10.0
+## 3.12.0
 
+- feat: explicit AtClient lifecycle control — cleanly stop and resume atClients without
+  re-initialising storage or keys
+- feat: outgoing AtClient's sync and notification services will now be garbage collected
+- chore: deprecated `atClientManager` param in the factories of AtClient, NotificationService, and SyncService
+- fix: added null guards to AtClient service getters
+
+## 3.11.0     
+
+- chore(deps): at_auth ^3.0.0
 - chore(deps): at_chops ^3.0.0
 
-## 3.9.3
+## 3.10.0
 
 - build(deps): Updated archive dependency to ^4.0.7
+- feat: Add RemoteLocalPref enum and AtClientPreference.remoteLocalPref field
+  to enable apps to easily default to using the remote atServer
+- fix: ensure AtRpcResp and AtRpcReq `.toString()` methods are JSON serialized
+  strings
+- feat: use responseJson variable so that log is consistent
+- fix: fixed rare race condition caused by the handling of legacy shared 
+  symmetric keys
+- feat: improved resilience of the notifications monitor to weird network 
+  conditions
 
 ## 3.9.2
 

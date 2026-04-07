@@ -1,6 +1,7 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/src/services/auth_service.dart';
 import 'package:at_client_flutter/src/widgets/shared/loading.dart';
+import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:flutter/material.dart';
 
@@ -40,6 +41,7 @@ class CramDialog extends StatelessWidget {
   final void Function(AtOnboardingRequest)? onOnboardingComplete;
   final String? title;
   final String? description;
+  final AtSignLogger _logger = AtSignLogger('CramDialog');
 
   static Future<AtOnboardingResponse?> show(
     BuildContext context, {
@@ -65,11 +67,12 @@ class CramDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    _authService.onboard(request, cramKey).then((response) {
+    String secret = _parseCramKey(cramKey);
+    _authService.onboard(request, secret).then((response) {
       if (onOnboardingComplete != null) {
         onOnboardingComplete!(request);
       } else {
-        print(response.toString());
+        _logger.info('Onboarding response: $response');
       }
       Navigator.of(context).pop(response);
     });
@@ -80,7 +83,10 @@ class CramDialog extends StatelessWidget {
             stream: _authService.progressStream,
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
-                return LoadingDialog(title: title ?? "Onboarding atSign via cram", description: description ?? "Authenticating, please wait...");
+                return LoadingDialog(
+                    title: title ?? "Onboarding atSign via cram",
+                    description:
+                        description ?? "Authenticating, please wait...");
               }
               final progress = snapshot.data as ProgressEvent;
               if (progressBuilder == null) {
@@ -92,4 +98,34 @@ class CramDialog extends StatelessWidget {
       ]),
     );
   }
+
+  String _parseCramKey(String input) {
+    final trimmedInput = input.trim();
+    final match = ActivateRegex.cram.firstMatch(trimmedInput);
+    if (match != null) {
+      return match.namedGroup(ActivateRegexGroups.activationKey)!;
+    }
+    return trimmedInput; // fallback: assume input is the secret
+  }
+}
+
+class ActivateRegex {
+  // CRAM authentication: <atsign>:cram:<secret>
+  static final cram =
+      RegExp(r'^(?<atsign>[^:]+):activation_key:(?<secret>.+)$');
+
+  // Enrollment: <atsign>:enroll:otp:<otp>[:name:<device>]
+  static final enroll = RegExp(
+    r'^(?<atsign>[^:]+):enroll:otp:(?<otp>[A-Za-z0-9]{6})'
+    r'(?::name:(?<device_name>[^]+))?$', // ?: indicates a non-capturing group
+  );
+}
+
+/// Named capture groups used in [ActivateRegex]
+class ActivateRegexGroups {
+  static const atsign = 'atsign';
+  static const activationKey = 'secret';
+  static const otp = 'otp';
+  static const deviceName = 'device_name';
+  static const keyfilePath = 'keyfile_path';
 }

@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_chat_flutter/models/message_model.dart';
-import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:flutter/material.dart';
 
 /// Service to manage the chat messages for different atsigns
@@ -80,11 +80,6 @@ class ChatService {
     return true;
   }
 
-  ///Fetches privatekey for [atsign] from device keychain.
-  Future<String> getPrivateKey(String atsign) async {
-    var str = await KeyChainManager.getInstance().getPkamPrivateKey(atsign);
-    return str!;
-  }
 
   /// Captures and processes notifications
   void _notificationCallback(AtNotification response) async {

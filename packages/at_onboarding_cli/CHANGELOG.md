@@ -1,6 +1,10 @@
 ## 1.16.0
-
-- chore(deps): at_chops ^3.0.0
+- feat: enrollment authorization wait can now be resumed across sessions
+- feat: atKeys files are now restricted to read/write permissions for the current user only
+- feat: atKeys file writability is verified before enrollment or onboarding begins
+- feat: activate_cli: new `decrypt` command outputs a passphrase-decrypted version of the atKeys file
+- feat: activate_cli: version is now shown via `--version`, `--help`, and `help`
+- fix: at_onboarding_cli now subscribes to at_auth progress stream events
 
 ## 1.15.0
 
@@ -8,6 +12,9 @@
 - feat: add `--license-key` alias for `--cramkey`
 - chore(deps): at_commons: ^5.6.0
 - chore(deps): args gkc/show-aliases-in-usage dependency override
+- chore(deps): at_auth ^3.0.0
+- chore(deps): at_chops ^3.0.0
+
 ## 1.14.2
 
  - chore: export createAtClientCli() to be used downstream

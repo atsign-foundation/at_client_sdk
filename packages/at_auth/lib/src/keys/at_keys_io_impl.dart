@@ -1,21 +1,21 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:meta/meta.dart';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 
 /// An implementation of [AtKeysIo] that reads and writes AtKeys to the file system.
 /// This implementation uses a mixin [KeyIOMixin] to provide common functionality for encoding and decoding AtKeys.
 /// The [FileAtKeysIo] class can be configured with an optional [filePath] and [passPhrase].
 ///
 /// Optional Parameters:
-/// If [filePath] is a format function derived from your atSign. Defaults to using %HOME%/.atsign/keys/$atsign_key.t atKeys 
+/// If [filePath] is a format function derived from your atSign. Defaults to using %HOME%/.atsign/keys/$atsign_key.t atKeys
 /// The [passPhrase] is used for atKeys files that are password protected.
 class FileAtKeysIo extends WrittenAtKeysIo {
-  @visibleForTesting
   String Function(String)? filePath;
   String? passPhrase;
   FileAtKeysIo({this.filePath, this.passPhrase}) {
@@ -43,9 +43,30 @@ class FileAtKeysIo extends WrittenAtKeysIo {
 
   @override
   Future write(String atSign, AtKeys atKeys) async {
-    String atKeysData =
-        await encryptAtKeysWithSelfEncKey(atKeys);
-    return File(filePath!(atSign)).writeAsString(atKeysData);
+    String path = filePath!(atSign);
+    if (!Directory(path).parent.existsSync()) {
+      await Directory(path).parent.create(recursive: true);
+    }
+    //don't overwrite the file
+    if (File(path).existsSync()) {
+      throw AtKeysFileOverwriteException(
+          'Tried writing $path, but failed since it already exists');
+    }
+
+    String atKeysData = await encryptAtKeysWithSelfEncKey(
+      atKeys,
+      PkamAuthMode.keysFile,
+      atSign,
+    );
+
+    if (passPhrase != null && passPhrase!.isNotEmpty) {
+      AtEncrypted atEncrypted =
+          await AtKeysCrypto.fromHashingAlgorithm(HashingAlgoType.argon2id)
+              .encrypt(atKeysData, passPhrase!);
+      atKeysData = atEncrypted.toString();
+    }
+
+    await File(path).writeAsString(atKeysData);
   }
 }
 
@@ -55,7 +76,6 @@ String getDefaultAtKeysFilePath(String homeDirectory, String atSign) {
   return '$homeDirectory/.atsign/keys/${atSign}_key.atKeys'
       .replaceAll('/', Platform.pathSeparator);
 }
-
 
 String? getHomeDirectory({bool throwIfNull = false}) {
   String? homeDir;

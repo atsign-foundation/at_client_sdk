@@ -4,6 +4,7 @@
 name: at_libraries
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*.*.*"
@@ -26,7 +27,7 @@ jobs:
           - at_contact
           - at_server_status
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - uses: ./actions/setup-flutter-and-dart
         with:
@@ -46,6 +47,7 @@ jobs:
       fail-fast: false
       matrix:
         package:
+          - at_auth
           - at_lookup
           - at_chops
           - at_onboarding_cli
@@ -54,7 +56,7 @@ jobs:
           - at_cli_commons
           - at_policy
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - uses: ./actions/setup-flutter-and-dart
         with:
@@ -82,7 +84,7 @@ jobs:
           - at_onboarding_cli_functional_tests_proxy
 
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - uses: ./actions/setup-flutter-and-dart
         with:

@@ -6,7 +6,6 @@ import 'package:at_chat_flutter/utils/colors.dart';
 
 import 'package:flutter/material.dart';
 // ignore: import_of_legacy_library_into_null_safe
-import 'package:at_common_flutter/services/size_config.dart';
 
 // ignore: must_be_immutable
 class ContactInitial extends StatelessWidget {
@@ -31,18 +30,18 @@ class ContactInitial extends StatelessWidget {
     }
 
     return Container(
-      height: size.toHeight,
-      width: size.toHeight,
+      height: size,
+      width: size,
       decoration: BoxDecoration(
         color: backgroundColor ?? ContactInitialsColors.getColor(initials),
-        borderRadius: BorderRadius.circular(size.toWidth),
+        borderRadius: BorderRadius.circular(size),
       ),
       child: Center(
         child: Text(
           initials.substring((index == 1) ? 0 : 1, index).toUpperCase(),
           style: TextStyle(
             color: Colors.white,
-            fontSize: 16.toFont,
+            fontSize: 16,
             fontWeight: FontWeight.w700,
           ),
         ),

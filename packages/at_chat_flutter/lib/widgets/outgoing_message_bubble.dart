@@ -4,8 +4,6 @@ import 'package:at_chat_flutter/models/message_model.dart';
 import 'package:at_chat_flutter/utils/colors.dart';
 import 'package:at_chat_flutter/utils/dialog_utils.dart';
 
-// ignore: import_of_legacy_library_into_null_safe
-import 'package:at_common_flutter/at_common_flutter.dart';
 import 'package:at_chat_flutter/widgets/contacts_initials.dart';
 import 'package:flutter/material.dart';
 
@@ -29,7 +27,6 @@ class OutgoingMessageBubble extends StatefulWidget {
 class _OutgoingMessageBubbleState extends State<OutgoingMessageBubble> {
   @override
   Widget build(BuildContext context) {
-    SizeConfig().init(context);
     return GestureDetector(
       onLongPress: () {
         showBottomSheetDialog(context, () {
@@ -42,31 +39,31 @@ class _OutgoingMessageBubbleState extends State<OutgoingMessageBubble> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: EdgeInsets.all(30.toHeight),
+            padding: EdgeInsets.all(30),
             decoration: BoxDecoration(
               color: widget.color,
-              borderRadius: BorderRadius.circular(10.toWidth),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: 165.toWidth),
+              constraints: BoxConstraints(maxWidth: 165),
               child: _buildContentMessage(),
             ),
           ),
           SizedBox(
-            width: 15.toWidth,
+            width: 15,
           ),
           Container(
-            height: 45.toFont,
-            width: 45.toFont,
+            height: 45,
+            width: 45,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(45.toWidth),
+              borderRadius: BorderRadius.circular(45),
             ),
             child: ContactInitial(
               initials: widget.message?.sender ?? '@',
             ),
           ),
           SizedBox(
-            width: 20.toWidth,
+            width: 20,
           )
         ],
       ),
@@ -76,7 +73,7 @@ class _OutgoingMessageBubbleState extends State<OutgoingMessageBubble> {
   Widget _buildContentMessage() {
     if (widget.message?.contentType == MessageContentType.image) {
       return ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: 165.toWidth),
+        constraints: BoxConstraints(maxHeight: 165),
         child: Image.memory(widget.message?.imageData ?? Uint8List(0)),
       );
     } else {

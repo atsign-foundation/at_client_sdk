@@ -14,4 +14,18 @@ class AtBytes {
   String toString() => base64Encode(bytes);
 
   bool strEquals(String str) => toString() == str;
+
+  @override
+  bool operator ==(Object other) {
+    if (other is! AtBytes) return false;
+    if (identical(this, other)) return true;
+    if (bytes.length != other.bytes.length) return false;
+    for (int i = 0; i < bytes.length; i++) {
+      if (bytes[i] != other.bytes[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hashAll(bytes);
 }

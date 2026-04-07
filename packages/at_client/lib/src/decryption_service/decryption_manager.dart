@@ -1,8 +1,8 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/decryption_service/decryption.dart';
-import 'package:at_client/src/decryption_service/local_key_decryption.dart';
+import 'package:at_client/src/decryption_service/shared_by_me_decryption.dart';
 import 'package:at_client/src/decryption_service/self_key_decryption.dart';
-import 'package:at_client/src/decryption_service/shared_key_decryption.dart';
+import 'package:at_client/src/decryption_service/shared_with_me_decryption.dart';
 
 ///The manager class for [AtKeyDecryption]
 class AtKeyDecryptionManager {
@@ -11,22 +11,27 @@ class AtKeyDecryptionManager {
   AtKeyDecryptionManager(this._atClient);
 
   /// Return the relevant instance of [AtKeyDecryption] for the given [AtKey]
-  AtKeyDecryption get(AtKey atKey, String currentAtSign) {
-    // If sharedBy not equals currentAtSign, return SharedKeyDecryption
-    // Eg: currentAtSign is @bob and key is phone@alice
-    if (atKey.sharedBy != currentAtSign) {
-      return SharedKeyDecryption(_atClient);
+  AtKeyDecryption get(AtKey atKey) {
+    Atsign myAtsign = _atClient.getCurrentAtSign()!.toAtsign();
+
+    // Shared by others with me
+    if (atKey.sharedBy != myAtsign) {
+      return SharedWithMeDecryption(_atClient);
     }
-    // Return SelfKeyDecryption for self keys.
+
+    // Shared by me with others
+    if (atKey.sharedWith != null && atKey.sharedWith != myAtsign) {
+      return SharedByMeDecryption(_atClient);
+    }
+
+    // Shared by me with myself
     // Eg: currentAtSign is @bob and _phone.wavi@bob (or) phone@bob (or) @bob:phone@bob
-    if (((atKey.sharedWith == null || atKey.sharedWith == currentAtSign) &&
-            atKey.sharedBy == currentAtSign) ||
+    if (((atKey.sharedWith == null || atKey.sharedWith == myAtsign) &&
+            atKey.sharedBy == myAtsign) ||
         atKey.key.startsWith('_')) {
       return SelfKeyDecryption(_atClient);
     }
-    // Returns LocalKeyDecryption to for the keys present in local storage
-    // that are sharedWith other atSign's.
-    // @alice:phone@bob
-    return LocalKeyDecryption(_atClient);
+
+    throw Exception('$atKey is neither sharedByMe, sharedWithMe nor self');
   }
 }

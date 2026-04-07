@@ -48,6 +48,7 @@ class KeychainStorage {
     return null;
   }
 
+  /// Get atSign from keychain storage
   Future<AtKeys?> getAtsign(String atSign) async {
     final atKeysData = await readAtKeysData();
     if (atKeysData == null) {
@@ -66,6 +67,7 @@ class KeychainStorage {
     return null;
   }
 
+  /// Get all atSigns from the keychain
   Future<List<String>> getAllAtsigns() async {
     final atKeysData = await readAtKeysData();
     if (atKeysData == null) {
@@ -83,15 +85,18 @@ class KeychainStorage {
     return atSigns.toList();
   }
 
+  /// Append an atKeys instance to the Keychain
+  /// Note: atSign must be included in to AtKeys metadata field
   Future<void> appendAtKeysToKeychain({
     required AtKeys keys,
   }) async {
     String? existingData;
-    try{
+    try {
       existingData =
-        await _read(keychainStoreName: (await AtKeysStore.getName()));
+          await _read(keychainStoreName: (await AtKeysStore.getName()));
     } catch (e) {
-      _logger.info('No existing atKeysData found in keychain. A new one will be created.');
+      _logger.info(
+          'No existing atKeysData found in keychain. A new one will be created.');
     }
     if (existingData == null) {
       final atKeysData = AtKeysData(keys: [keys]);
@@ -148,7 +153,7 @@ class KeychainStorage {
       final Map<String, dynamic> jsonData = jsonDecode(data);
       return EnrollmentData.fromJson(jsonData);
     }
-    return null; 
+    return null;
   }
 
   Future<void> writeEnrollmentData({
@@ -189,6 +194,86 @@ class KeychainStorage {
     }
   }
 
+  /// Saves [otp] to the keychain for [atSign].
+  /// Appends to the list of existing SPPs.
+  Future<void> saveSpp(String atSign, Otp otp) async {
+    final spp = SppData(value: otp.value, expiry: otp.expiry);
+
+    SppListData sppListData;
+    try {
+      final existingData =
+          await _read(keychainStoreName: SppStore(atSign).getName());
+      if (existingData != null) {
+        sppListData = SppListData.fromJson(jsonDecode(existingData));
+      } else {
+        sppListData = SppListData(spps: []);
+      }
+    } catch (e) {
+      sppListData = SppListData(spps: []);
+    }
+
+    // Remove expired and the same value if it exists
+    sppListData.spps.removeWhere(
+        (element) => element.isExpired || element.value == spp.value);
+    sppListData.spps.add(spp);
+
+    await _write(
+        biometricStoreName: SppStore(atSign).getName(),
+        keychainData: sppListData);
+    _logger.info('SPP saved to keychain');
+  }
+
+  /// Gets all active (non-expired) SPPs from the keychain.
+  Future<List<SppData>> getAllSpps(String atSign) async {
+    try {
+      final data = await _read(keychainStoreName: SppStore(atSign).getName());
+      if (data == null) {
+        return [];
+      }
+      SppListData sppListData = SppListData.fromJson(jsonDecode(data));
+
+      // Filter out expired ones
+      final activeSpps =
+          sppListData.spps.where((spp) => !spp.isExpired).toList();
+
+      // If some were expired, update the store
+      if (activeSpps.length != sppListData.spps.length) {
+        if (activeSpps.isEmpty) {
+          await deleteSppData(atSign);
+        } else {
+          await _write(
+              biometricStoreName: SppStore(atSign).getName(),
+              keychainData: SppListData(spps: activeSpps));
+        }
+      }
+
+      return activeSpps;
+    } catch (e, st) {
+      _logger.severe('Failed to get SPPs from keychain', e, st);
+      return [];
+    }
+  }
+
+  /// Returns the active (non-expired) SPP for [atSign], or null if none or expired.
+  /// If multiple exist, returns the most recently added one.
+  Future<SppData?> getActiveSpp(String atSign) async {
+    final activeSpps = await getAllSpps(atSign);
+    if (activeSpps.isEmpty) {
+      return null;
+    }
+    return activeSpps.last;
+  }
+
+  Future<void> deleteSppData(String atSign) async {
+    try {
+      final BiometricStorageFile biometricStore =
+          await _getBiometricStorageFile(SppStore(atSign).getName());
+      await biometricStore.delete();
+    } catch (e) {
+      _logger.warning('Failed to delete SPP data: $e');
+    }
+  }
+
   Future<String?> _read({
     required String keychainStoreName,
   }) async {
@@ -213,21 +298,21 @@ class KeychainStorage {
           final Map m = jsonDecode(storedData);
           segmentCount = m['segmentCount'];
           segmentPrefix = '${keychainStoreName}_segment';
-          log(
-              '  => READ: Got segmentCount $segmentCount'
-              ', and inferred RELATIVE segmentPrefix $segmentPrefix,'
-              ' from storedData $storedData',
-              false);
+          //log(
+          //  '  => READ: Got segmentCount $segmentCount'
+          //  ', and inferred RELATIVE segmentPrefix $segmentPrefix,'
+          //  ' from storedData $storedData',
+          //   false);
         } else {
           // legacy
           segmentCount = int.tryParse(storedData) ?? 0;
           String packageName = await getPackageName();
           segmentPrefix = '${packageName}_data';
-          log(
-              '  => READ: Got segmentCount $segmentCount'
-              ', and inferred LEGACY, BUGGY segmentPrefix $segmentPrefix,'
-              ' from storedData $storedData',
-              false);
+          //log(
+          //    '  => READ: Got segmentCount $segmentCount'
+          //     ', and inferred LEGACY, BUGGY segmentPrefix $segmentPrefix,'
+          //     ' from storedData $storedData',
+          //     false);
         }
         final results = <String>[];
         for (int i = 0; i < segmentCount; i++) {
@@ -254,7 +339,6 @@ class KeychainStorage {
           keychainData: EmptyKeychainData());
       rethrow;
     }
-    return null;
   }
 
   Future<void> _write({
@@ -265,20 +349,20 @@ class KeychainStorage {
     BiometricStorageFile store =
         await _getBiometricStorageFile(biometricStoreName);
     if (!isWindows) {
-      log("WRITE: _writeDataToStore called", true);
+      //log("WRITE: _writeDataToStore called", true);
       await store.write(data);
     } else {
-      log('WRITE: _writeDataToStore called', true);
+      //log('WRITE: _writeDataToStore called', true);
       final dataList = _splitString(data, _kWindowSegmentDataLength);
       String segmentCountInfo = jsonEncode({'segmentCount': dataList.length});
-      log('  => WRITE: Writing $segmentCountInfo to ${store.name}', false);
+      //log('  => WRITE: Writing $segmentCountInfo to ${store.name}', false);
       await store.write(segmentCountInfo);
 
       for (int i = 0; i < dataList.length; i++) {
         final segmentStore =
             await _getBiometricStorageFile('${biometricStoreName}_segment_$i');
-        log('  => WRITE: Writing segment $i length ${dataList[i].length} to ${segmentStore.name}',
-            false);
+        //log('  => WRITE: Writing segment $i length ${dataList[i].length} to ${segmentStore.name}',
+        //    false);
         // log('  => WRITE: segmentValue was ${dataList[i]}', false);
         await segmentStore.write(dataList[i]);
       }

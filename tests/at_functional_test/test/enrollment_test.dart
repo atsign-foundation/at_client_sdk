@@ -6,7 +6,6 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
-import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_functional_test/src/config_util.dart';
@@ -61,27 +60,20 @@ void main() {
       expect(atOnboardingResponse.atAuthKeys, isNotNull);
       expect(atOnboardingResponse.atAuthKeys!.apkamSymmetricKey, isNotNull);
       expect(atOnboardingResponse.enrollmentId, isNotEmpty);
-      // generate keys file
-      await _generateAtKeysFile(
-          apkamAtSign,
-          atOnboardingResponse.enrollmentId,
-          atOnboardingResponse.atAuthKeys!,
-          'test/testData/$apkamAtSign.atKeys');
 
       // auth using generated keysFile
       var atAuthResponse = await atAuth.authenticate(AtAuthRequest(
         apkamAtSign,
-        FileAtKeysIo(filePath: (atsign) => 'test/testData/$atSign.atKeys'),
+        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
       )..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64));
       expect(atAuthResponse.isSuccessful, true);
       expect(atAuthResponse.atAuthKeys, isNotNull);
 
       // create atclient instance
       var atClientPreference = AtClientPreference()
-        ..rootDomain = 'vip.ve.atsign.zone'
         ..commitLogPath = 'test/hive/commit/'
         ..hiveStoragePath = 'test/hive/client'
-        ..isLocalStoreRequired = true;
+        ..rootDomain = 'vip.ve.atsign.zone';
 
       final atClientManager = await AtClientManager(apkamAtSign)
           .setCurrentAtSign(apkamAtSign, namespace, atClientPreference,
@@ -368,7 +360,7 @@ void main() {
       AtAuth atAuth = AtAuth.create(atChops: atChops);
       AtAuthRequest atAuthRequest = AtAuthRequest(
         atSign,
-        FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
+        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
       );
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
@@ -464,7 +456,7 @@ void main() {
       AtAuth atAuth = AtAuth.create(atChops: atChops);
       AtAuthRequest atAuthRequest = AtAuthRequest(
         atSign,
-        FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
+        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
       );
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
@@ -561,7 +553,7 @@ void main() {
 
       // Authenticate the atSign
       AtAuth atAuth = AtAuth.create(atChops: atChops);
-      AtAuthRequest atAuthRequest = AtAuthRequest(atSign, FileAtKeysIo());
+      AtAuthRequest atAuthRequest = AtAuthRequest(atSign, atKeysIo: FileAtKeysIo());
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
       atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
@@ -634,8 +626,8 @@ void main() {
           .listen((_) {});
       while ((atClientManager.atClient.notificationService
                   as NotificationServiceImpl)
-              .getMonitorStatus() !=
-          MonitorStatus.started) {
+              .monitor.currentState !=
+          NotificationListenerState.listening) {
         await Future.delayed(Duration(milliseconds: 100));
       }
 
@@ -682,7 +674,6 @@ AtClientPreference getClient2Preferences() {
   return AtClientPreference()
     ..commitLogPath = 'test/hive/client_2/commit'
     ..hiveStoragePath = 'test/hive/client_2'
-    ..isLocalStoreRequired = true
     ..rootDomain = 'vip.ve.atsign.zone';
 }
 

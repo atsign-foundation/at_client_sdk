@@ -9,18 +9,17 @@ documentation: https://docs.atsign.com
 environment:
   sdk: ^3.6.0
   flutter: ">=3.29.2"
-resolution: workspace
 
 dependencies:
-  at_client_mobile: ^3.3.0
   at_common_flutter: ^2.1.0
   at_commons: ^5.5.0
+  at_client_mobile: ^3.3.0
   at_contact: ^3.0.9
   at_contacts_flutter: ^4.0.16
   at_utils: ^3.0.19
   collection: ^1.17.0
   emoji_picker_flutter: ^4.3.0
-  file_picker: ^10.0.0
+  file_picker: 10.3.10
   flutter:
     sdk: flutter
   flutter_image_compress: ^2.0.4

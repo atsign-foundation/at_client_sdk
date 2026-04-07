@@ -18,7 +18,6 @@ class TestUtils {
     var preference = AtClientPreference();
     preference.hiveStoragePath = 'test/hive/client/$atsign';
     preference.commitLogPath = 'test/hive/client/$atsign';
-    preference.isLocalStoreRequired = true;
     preference.rootDomain = 'vip.ve.atsign.zone';
     preference.decryptPackets = false;
     preference.tlsKeysSavePath = 'test/tlsKeysFile';

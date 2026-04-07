@@ -66,7 +66,15 @@ enum AuthCliCommand {
           ' be delivered to some other program(s) which have'
           ' permission to approve or deny the requests. Typically that will be'
           ' the program which first onboarded; however it can also be an enrolled'
-          ' program which has "rw" access to the "__manage" namespace.');
+          ' program which has "rw" access to the "__manage" namespace.'),
+  decrypt(
+      usage:
+          'Decrypts a passphrase-protected atKeys file and writes it to the '
+              'targetKeys file'),
+  version(
+    usage: 'Print version. The version printed is the at_onboarding_cli '
+          'package version. It prints a format similar to "Version: x.xx.x"',
+  );
 
   const AuthCliCommand({this.usage = ''});
 
@@ -88,8 +96,10 @@ class AuthCliArgs {
   static const argNameAtSign = 'atsign';
   static const argNameCramSecret = 'cramkey';
   static const argNameAtKeys = 'keys';
+  static const argNameTargetAtKeys = 'target-keys';
   static const argNameRootServer = 'root-server';
-  static const argNameAtDirectoryFqdn = 'rootServer'; // alias to argNameRootServer
+  static const argNameAtDirectoryFqdn =
+      'rootServer'; // alias to argNameRootServer
   static const argNameRegistrarFqdn = 'registrarUrl';
   static const argNameSpp = 'spp';
   static const argNameAppName = 'app';
@@ -114,6 +124,7 @@ class AuthCliArgs {
   static const argNameMaxRetries = 'max-retries';
   static const argNameAllowBadRegistrarCerts = 'allow-bad-registrar-certs';
   static const argNameYes = 'yes';
+  static const argNameVersion = 'version';
 
   ArgParser get parser {
     return _aap;
@@ -139,6 +150,12 @@ class AuthCliArgs {
     p.addFlag(
       argNameHelp,
       abbr: 'h',
+      negatable: false,
+      hide: true,
+    );
+
+    p.addFlag(
+      argNameVersion,
       negatable: false,
       hide: true,
     );
@@ -197,6 +214,12 @@ class AuthCliArgs {
 
       case AuthCliCommand.delete:
         return createDeleteCommandParser();
+
+      case AuthCliCommand.decrypt:
+        return createDecryptCommandParser();
+
+      case AuthCliCommand.version:
+        return createVersionCommandParser();
     }
   }
 
@@ -319,6 +342,13 @@ class AuthCliArgs {
       defaultsTo: false,
       negatable: false,
       hide: false,
+    );
+    p.addFlag(
+      argNameVersion,
+      help: 'Print version',
+      defaultsTo: false,
+      negatable: false,
+      hide: true,
     );
 
     return p;
@@ -541,6 +571,22 @@ class AuthCliArgs {
   ArgParser createDeleteCommandParser() {
     ArgParser p = createSharedArgParser(hide: true);
     _addEnrollmentIdOption(p, mandatory: true);
+    return p;
+  }
+
+  @visibleForTesting
+  ArgParser createDecryptCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
+    p.addOption(argNameTargetAtKeys,
+        abbr: 't',
+        mandatory: true,
+        help: 'Target atKeys file to write the decrypted keys');
+    return p;
+  }
+
+  @visibleForTesting
+  ArgParser createVersionCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true, forOnboard: false);
     return p;
   }
 }

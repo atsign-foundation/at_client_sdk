@@ -17,13 +17,13 @@ void main(List<String> args) async {
           abbr: 'k', help: 'Path of .atKeys file', mandatory: true);
     final argResults = parser.parse(args);
     final atAuth = AtAuth.create();
-    atAuth.progressStream.listen( (ProgressEvent event) {
+    atAuth.progressStream.listen((ProgressEvent event) {
       print('Progress: ${event.group} : ${event.msg}');
     });
     final atSign = argResults['atsign'];
-    final atAuthRequest = AtAuthRequest(
-        atSign, FileAtKeysIo(filePath: (_) => argResults['keysFilePath']))
-      ..rootDomain = AtRootDomain('root.atsign.org', 64);
+    final atAuthRequest = AtAuthRequest(atSign,
+        atKeysIo: FileAtKeysIo(filePath: (_) => argResults['keysFilePath']),
+        rootDomain: AtRootDomain('root.atsign.org', 64));
     final atAuthResponse = await atAuth.authenticate(atAuthRequest);
     print('atAuthResponse: $atAuthResponse');
   } on Exception catch (e, trace) {

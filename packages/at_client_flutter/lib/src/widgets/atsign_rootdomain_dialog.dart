@@ -36,7 +36,7 @@ class AtSignSelectionDialog extends StatefulWidget {
       builder: (context) => AtSignSelectionDialog(
         existingAtSigns: existingAtSigns,
         existingDomains: existingDomains,
-        themeData: Theme.of(context),  
+        themeData: Theme.of(context),
       ),
     );
   }
@@ -49,70 +49,37 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
   final TextEditingController _atSignTextController = TextEditingController();
   final TextEditingController _domainTextController = TextEditingController();
 
-  Widget _buildInfoIcon(String tooltipText) {
-    return Tooltip(
-      message: tooltipText,
-      child: Icon(
-        Icons.info_outline,
-        size: 16,
-        color: Colors.grey[600],
-      ),
-    );
+  String _normalizeAtSignInput(String value) {
+    final trimmedValue = value.trim();
+    if (trimmedValue.isEmpty) {
+      return '';
+    }
+    try {
+      return trimmedValue.toAtsign();
+    } catch (_) {
+      return value;
+    }
   }
 
-  Widget _buildDropdownField({
-    required TextEditingController controller,
-    required String hint,
-    required String infoText,
-    required String labelText,
-    required List<String>? items,
-    required Function(String?) onChanged,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Text(
-                labelText,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: widget.themeData.primaryColor,
-                ),
-              ),
-              const SizedBox(width: 6),
-              _buildInfoIcon(infoText),
-            ],
-          ),
-          const SizedBox(height: 16),
-          TypableDropdown(
-            items: items ?? [],
-            hintText: hint,
-            onChanged: onChanged,
-          ),
-          const SizedBox(height: 16),
-        ],
-      ),
-    );
+  String? _normalizedAtSignForSubmit() {
+    final atSign = _selectedAtSign?.trim();
+    if (atSign == null || atSign.isEmpty) {
+      return null;
+    }
+    try {
+      return atSign.toAtsign();
+    } catch (_) {
+      return null;
+    }
   }
 
   void _handleSubmit() {
-    if (_selectedAtSign != null) {
-      AtOnboardingRequest request = AtOnboardingRequest(
-        _selectedAtSign!,
-      );
+    final normalizedAtSign = _normalizedAtSignForSubmit();
+    if (normalizedAtSign != null) {
+      AtOnboardingRequest request = AtOnboardingRequest(normalizedAtSign);
       if (_selectedDomain != null && _selectedDomain!.isNotEmpty) {
-        var split = _selectedDomain!.split(':');
-        String rootDomain = split[0];
-        int rootPort = split.length > 1 ? int.parse(split[1]) : 64;
-        request.rootDomain = AtRootDomain(
-          rootDomain,
-          rootPort,
-        );
+        AtRootDomain domain = AtRootDomain.parse(_selectedDomain!);
+        request.rootDomain = domain;
       }
       Navigator.of(context).pop(request);
     }
@@ -120,10 +87,11 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
 
   @override
   Widget build(BuildContext context) {
+    var firstDomain = widget.existingDomains!.values.first;
+    _domainTextController.text =
+        "${firstDomain.rootDomain}:${firstDomain.rootPort}";
     return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
         width: 360,
         padding: const EdgeInsets.all(24),
@@ -132,15 +100,18 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // atSign Dropdown
-            _buildDropdownField(
+            _DropdownField(
+              controller: _atSignTextController,
               labelText: 'Type or select an atSign',
               infoText: "Select an atSign to proceed with onboarding.",
               hint: 'Type atSign or select from existing',
-              controller: _atSignTextController,
+              themeData: widget.themeData,
               items: widget.existingAtSigns,
+              valueNormalizer: _normalizeAtSignInput,
               onChanged: (value) {
                 setState(() {
                   _selectedAtSign = value;
+                  _atSignTextController.text = value ?? '';
                 });
               },
             ),
@@ -188,19 +159,22 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
                   const SizedBox(height: 20),
 
                   // Domain Field
-                  _buildDropdownField(
+                  _DropdownField(
+                    controller: _domainTextController,
                     labelText: 'Type or select a root domain',
                     infoText:
                         "Only for custom implementations. Specify a root domain.",
                     hint: 'Type a root domain or select from existing',
-                    controller: _domainTextController,
+                    themeData: widget.themeData,
                     items: widget.existingDomains?.values
-                        .map((domain) =>
-                            "${domain.rootDomain}:${domain.rootPort}")
+                        .map(
+                          (domain) => "${domain.rootDomain}:${domain.rootPort}",
+                        )
                         .toList(),
                     onChanged: (value) {
                       setState(() {
                         _selectedDomain = value;
+                        _domainTextController.text = value ?? '';
                       });
                     },
                   ),
@@ -218,9 +192,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
               height: 44,
               child: ElevatedButton(
                 onPressed:
-                    (_selectedAtSign != null && _selectedAtSign!.isNotEmpty)
-                        ? _handleSubmit
-                        : null,
+                    _normalizedAtSignForSubmit() != null ? _handleSubmit : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: widget.themeData.colorScheme.secondary,
                   foregroundColor: Colors.white,
@@ -232,10 +204,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
                 ),
                 child: const Text(
                   'Continue',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
                 ),
               ),
             ),
@@ -251,5 +220,68 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
     _atSignTextController.dispose();
     _domainTextController.dispose();
     super.dispose();
+  }
+}
+
+class _DropdownField extends StatelessWidget {
+  final TextEditingController controller;
+  final ThemeData themeData;
+  final String labelText;
+  final String infoText;
+  final String hint;
+  final List<String>? items;
+  final Function(String?) onChanged;
+  final String Function(String)? valueNormalizer;
+
+  const _DropdownField({
+    required this.controller,
+    required this.themeData,
+    required this.labelText,
+    required this.infoText,
+    required this.hint,
+    required this.items,
+    required this.onChanged,
+    this.valueNormalizer,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Text(
+                labelText,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: themeData.primaryColor,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: infoText,
+                child: Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          TypableDropdown(
+            items: items ?? [],
+            hintText: hint,
+            initialValue: controller.text,
+            valueNormalizer: valueNormalizer,
+            onChanged: onChanged,
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
   }
 }

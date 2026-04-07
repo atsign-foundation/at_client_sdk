@@ -30,7 +30,6 @@ void main() {
         currentAtSign,
         'wavi',
         AtClientPreference()
-          ..isLocalStoreRequired = true
           ..hiveStoragePath = 'test/hive'
           ..commitLogPath = 'test/hive/commit',
         enrollmentId: enrollmentId,
@@ -55,8 +54,9 @@ void main() {
         ?.keyStore
         ?.put(localEnrollmentKey.toString(), atData);
 
-    AtEncryptionResult? atEncryptionResult = await atClient.atChops?.encryptString(
-        atChops.atChopsKeys.selfEncryptionKey!.key, EncryptionKeyType.rsa2048);
+    AtEncryptionResult? atEncryptionResult = await atClient.atChops
+        ?.encryptString(atChops.atChopsKeys.selfEncryptionKey!.key,
+            EncryptionKeyType.rsa2048);
 
     // Store "currentAtSign" encrypted symmetric key : shared_key.bob@alice
     await atClient.getLocalSecondary()?.keyStore?.put(
@@ -74,12 +74,12 @@ void main() {
           ..data =
               atChops.atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey);
 
-    // Store cached sharedkey
+    // Store cached shared_key
     await atClient.getLocalSecondary()?.keyStore?.put(
         'cached:@alice:shared_key@bob',
         AtData()..data = atEncryptionResult?.result);
 
-    // Store cached sharedkey
+    // Store cached shared_key
     await atClient.getLocalSecondary()?.keyStore?.put(
         'public:publickey@alice',
         AtData()
@@ -91,9 +91,11 @@ void main() {
     test(
         'A test to verify enrollmentId is set in atClient after calling setCurrentAtSign',
         () async {
+      var pref = AtClientPreference()
+        ..hiveStoragePath = "test/hive"
+        ..commitLogPath = "test/hive/commit";
       var atClientManager = await AtClientManager.getInstance()
-          .setCurrentAtSign('@alice', 'wavi', AtClientPreference(),
-              enrollmentId: enrollmentId);
+          .setCurrentAtSign('@alice', 'wavi', pref, enrollmentId: enrollmentId);
       expect(atClientManager.atClient.enrollmentId, enrollmentId);
     });
 
@@ -120,9 +122,10 @@ void main() {
           mockRemoteSecondary.executeCommand(enrollListCommand,
               auth: true)).thenAnswer((_) => Future.value('data:{"$enrollKey1":'
           '$enrollValue1,"$enrollKey2":$enrollValue2,"$enrollKey3":$enrollValue3}'));
-
-      AtClient? client = await AtClientImpl.create(
-          currentAtsign, 'buzz', AtClientPreference(),
+      AtClientPreference pref = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/commit';
+      AtClient? client = await AtClientImpl.create(currentAtsign, 'buzz', pref,
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
@@ -173,8 +176,11 @@ void main() {
           EnrollmentStatus.pending,
           EnrollmentStatus.approved
         ];
+      AtClientPreference pref = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/commit';
       AtClient? client = await AtClientImpl.create(
-          currentAtsign, 'random_namespace', AtClientPreference(),
+          currentAtsign, 'random_namespace', pref,
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
@@ -216,8 +222,11 @@ void main() {
 
       EnrollmentListRequestParam listRequestParam = EnrollmentListRequestParam()
         ..enrollmentListFilter = [EnrollmentStatus.approved];
+      AtClientPreference pref = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/commit';
       AtClient? client = await AtClientImpl.create(
-          currentAtsign, 'random_namespace_1', AtClientPreference(),
+          currentAtsign, 'random_namespace_1', pref,
           remoteSecondary: mockRemoteSecondary);
       client.enrollmentService =
           EnrollmentServiceImpl(client, AtEnrollment.create());
@@ -255,9 +264,9 @@ void main() {
     test(
         'A test to verify get operation is successful for the authorized namespace',
         () async {
-      AtEncryptionResult? encryptedValue = await atClient.atChops?.encryptString(
-          '1234', EncryptionKeyType.aes256,
-          iv: AtChopsUtil.generateIVLegacy());
+      AtEncryptionResult? encryptedValue = await atClient.atChops
+          ?.encryptString('1234', EncryptionKeyType.aes256,
+              iv: AtChopsUtil.generateIVLegacy());
       FakeLookupVerbBuilder fakeLookupVerbBuilder = FakeLookupVerbBuilder();
       registerFallbackValue(fakeLookupVerbBuilder);
       when(() => mockRemoteSecondary.executeVerb(any(that: LookupKeyMatcher())))

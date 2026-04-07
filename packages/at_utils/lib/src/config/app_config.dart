@@ -1,5 +1,6 @@
-import 'package:yaml/yaml.dart';
 import 'dart:io';
+
+import 'package:yaml/yaml.dart';
 
 /// Application Configuration class
 class ApplicationConfiguration {

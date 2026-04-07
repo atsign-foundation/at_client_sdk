@@ -58,8 +58,11 @@ void main() {
 
 class MyLoggingHandler implements LoggingHandler {
   final LoggingHandler delegate;
+
   MyLoggingHandler(this.delegate);
+
   LogRecord? lastLogRecord;
+
   @override
   void call(LogRecord record) {
     lastLogRecord = record;
@@ -69,6 +72,7 @@ class MyLoggingHandler implements LoggingHandler {
 
 class NullLoggingHandler implements LoggingHandler {
   LogRecord? lastLogRecord;
+
   @override
   void call(LogRecord record) {
     lastLogRecord = record;

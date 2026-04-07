@@ -42,7 +42,7 @@ class AtEncryptionKeysLoader {
     result = await atClient.getLocalSecondary()!.putValue(
         encryptionPublicKeyAtKey,
         AtCredentials
-            .credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY]);
+            .credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY].toString());
     if (result) {
       _logger.info('encryption public key was set successfully.');
     } else {

@@ -6,10 +6,14 @@ import 'package:at_commons/at_commons.dart';
 sealed class AuthRequest {
   String atSign;
   AtRootDomain rootDomain;
+  String? namespace;
 
-  AuthRequest(this.atSign,
-      {this.retryOptions = RetryOptions.defaultRetryOptions,
-      this.rootDomain = AtRootDomain.atsignDomain});
+  AuthRequest(
+    this.atSign, {
+    this.retryOptions = RetryOptions.defaultRetryOptions,
+    this.rootDomain = AtRootDomain.atsignDomain,
+    this.namespace,
+  });
 
   /// Options for retrying operations that validate atServer status' for Onboarding.
   RetryOptions retryOptions;
@@ -35,6 +39,7 @@ class AtOnboardingRequest extends AuthRequest {
   AtOnboardingRequest(
     super.atSign, {
     super.rootDomain,
+    super.retryOptions,
     this.atKeysIo,
     this.atKeys,
   });
@@ -49,21 +54,32 @@ class AtOnboardingRequest extends AuthRequest {
 class AtAuthRequest extends AuthRequest {
   /// Constructor for [AtAuthRequest]
   /// [atSign] is the atSign for authentication
+  ///
+  /// Must provide one of the following!
+  /// atKeysIo - method of authentication
+  ///    or
+  /// atAuthKeys - the actual keys themselves
+  ///
   /// [atKeysIo] controls how AtKeys are loaded and saved (e.g. file system, keychain, secure element)
+  /// [atAuthKeys] are the keys for authentication of an atSign
   ///
   /// optional:
-  /// [atAuthKeys] are the keys for authentication of an atSign
   /// [rootDomain] is the default domain of the root server (e.g. root.atsign.org, 64)
   AtAuthRequest(
-    super.atSign,
-    this.atKeysIo, {
+    super.atSign, {
     super.rootDomain,
     super.retryOptions,
+    this.atKeysIo,
     this.atAuthKeys,
-  });
+  }) {
+    if (atKeysIo == null && atAuthKeys == null) {
+      throw Exception(
+          "Either method of authentication(atKeysIo) or atAuthKeys need to be provided");
+    }
+  }
 
   // Controls how the authentication is performed
-  AtKeysIo atKeysIo;
+  AtKeysIo? atKeysIo;
 
   /// The enrollmentId for APKAM authentication
   String? enrollmentId;

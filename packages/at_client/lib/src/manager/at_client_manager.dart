@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
@@ -55,10 +57,17 @@ class AtClientManager {
     }
   }
 
-  /// * Can provide an [AtServiceFactory] to control what types of AtClients, NotificationServices and SyncServices get created
-  /// by this method.
-  /// * Can provide an [AtChops] instance if available; setCurrentAtSign will ensure that it is injected into objects that
-  /// can use it
+  /// Switches the active atSign and (re)creates its associated services.
+  ///
+  /// The outgoing client is stopped via [AtClient.stop] and its instance
+  /// remains in cache for resumption. Calling this method again for the same
+  /// atSign resumes it with fresh services.
+  ///
+  /// Use [AtClient.stop] only when permanently finished with an atSign (e.g.,
+  /// logout or app shutdown).
+  ///
+  /// * [serviceFactory] - Overrides service creation (primarily for testing).
+  /// * [atChops] - Shared crypto context for the new services.
   Future<AtClientManager> setCurrentAtSign(
       String atSign, String? namespace, AtClientPreference preference,
       {AtServiceFactory? serviceFactory,
@@ -71,26 +80,23 @@ class AtClientManager {
     AtUtils.fixAtSign(atSign);
     secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
         preference.rootDomain, preference.rootPort);
-    if (_currentAtClient != null &&
-        _currentAtClient?.getCurrentAtSign() == atSign) {
-      _logger.info(
-          'previous currentAtSign ${_currentAtClient?.getCurrentAtSign()} is same as new atSign $atSign - doing nothing, returning');
-      return this;
-    }
 
     _logger.info(
-        'Switching atSigns from ${_currentAtClient?.getCurrentAtSign()} to $atSign');
+        'Switching atSigns ${_currentAtClient?.getCurrentAtSign()} -> $atSign');
+
+    // Stop the outgoing atsign
     _atSign = atSign;
-    var previousAtClient = _currentAtClient;
+    final previousAtClient = _currentAtClient;
+    await previousAtClient?.stop();
+
+    // Spin up the new atClient
     _currentAtClient = await serviceFactory.atClient(
         _atSign, namespace, preference, this,
         atChops: atChops, atLookUp: atLookUp, enrollmentId: enrollmentId);
-    final switchAtSignEvent =
-        SwitchAtSignEvent(previousAtClient, _currentAtClient!);
-    _notifyListeners(switchAtSignEvent);
 
-    var notificationService =
-        await serviceFactory.notificationService(_currentAtClient!, this);
+    var notificationService = await serviceFactory.notificationService(
+        _currentAtClient!, this,
+        secondaryAddressFinder: secondaryAddressFinder);
     _currentAtClient!.notificationService = notificationService;
 
     var syncService = await serviceFactory.syncService(
@@ -100,6 +106,14 @@ class AtClientManager {
     EnrollmentService enrollmentService =
         serviceFactory.enrollmentService(_currentAtClient!);
     _currentAtClient!.enrollmentService = enrollmentService;
+
+    // notify the subscribed listeners about atsign switch
+    if (!identical(previousAtClient?.getCurrentAtSign(),
+        _currentAtClient?.getCurrentAtSign())) {
+      final switchAtSignEvent =
+          SwitchAtSignEvent(previousAtClient, _currentAtClient!);
+      _notifyListeners(switchAtSignEvent);
+    }
 
     _logger.info("setCurrentAtSign complete");
 
@@ -154,14 +168,23 @@ class AtClientManager {
   }
 }
 
+/// Abstraction over the construction of the core services managed by [AtClientManager].
+///
+/// The default production implementation is [DefaultAtServiceFactory].
+/// Override this in tests to inject fakes or mocks without subclassing [AtClientManager].
 abstract class AtServiceFactory {
   Future<AtClient> atClient(String atSign, String? namespace,
       AtClientPreference preference, AtClientManager atClientManager,
       {AtChops? atChops, AtLookUp? atLookUp, String? enrollmentId});
 
   Future<NotificationService> notificationService(
-      AtClient atClient, AtClientManager atClientManager);
+      AtClient atClient,
+      @Deprecated('no longer needed. will be removed in a future release')
+      AtClientManager atClientManager,
+      {SecondaryAddressFinder? secondaryAddressFinder});
 
+  /// The [notificationService] parameter is ignored — the sync service retrieves
+  /// its notification dependency directly from [atClient] after construction.
   Future<SyncService> syncService(AtClient atClient,
       AtClientManager atClientManager, NotificationService notificationService);
 
@@ -182,19 +205,19 @@ class DefaultAtServiceFactory implements AtServiceFactory {
 
   @override
   Future<NotificationService> notificationService(
-      AtClient atClient, AtClientManager atClientManager) async {
+      AtClient atClient, AtClientManager atClientManager,
+      {SecondaryAddressFinder? secondaryAddressFinder}) async {
     return await NotificationServiceImpl.create(atClient,
-        atClientManager: atClientManager);
+        secondaryAddressFinder: secondaryAddressFinder);
   }
 
   @override
   Future<SyncService> syncService(
       AtClient atClient,
+      @Deprecated('no longer needed. will be removed in a future release')
       AtClientManager atClientManager,
       NotificationService notificationService) async {
-    return await SyncServiceImpl.create(atClient,
-        atClientManager: atClientManager,
-        notificationService: notificationService);
+    return await SyncServiceImpl.create(atClient);
   }
 
   @override

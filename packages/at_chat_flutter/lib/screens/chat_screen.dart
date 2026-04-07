@@ -7,7 +7,6 @@ import 'package:at_chat_flutter/widgets/outgoing_message_bubble.dart';
 import 'package:at_chat_flutter/widgets/send_message.dart';
 
 // ignore: import_of_legacy_library_into_null_safe
-import 'package:at_common_flutter/services/size_config.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 
@@ -79,21 +78,20 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    SizeConfig().init(context);
     return ClipRRect(
       borderRadius: BorderRadius.only(
-        topLeft: Radius.circular(10.toHeight),
-        topRight: Radius.circular(10.toHeight),
+        topLeft: Radius.circular(10),
+        topRight: Radius.circular(10),
       ),
       child: Container(
-        height: widget.height ?? SizeConfig().screenHeight * 0.8,
+        height: widget.height,
         margin: widget.isScreen
             ? const EdgeInsets.all(0.0)
             : const EdgeInsets.only(top: 10.0),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(10.toHeight),
-            topRight: Radius.circular(10.toHeight),
+            topLeft: Radius.circular(10),
+            topRight: Radius.circular(10),
           ),
           color: Theme.of(context).brightness == Brightness.dark
               ? Colors.black87

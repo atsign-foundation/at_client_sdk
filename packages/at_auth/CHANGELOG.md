@@ -1,6 +1,23 @@
-## 2.5.0 (unreleased tech-debt-removal branch changes)
+## 3.1.0
+- feat: `validateAtServer()` now emits progress events and probes atSign connectivity before returning
+- fix: `decodeAtKeys()` now throws when an invalid passphrase is provided
+- fix: `FileAtKeysIO` now encrypts the key file with a passphrase when one is available
+- fix: throws `AtAuthenticationException` when the atSign is already onboarded
+- feat: use AtBytes.equals in `AtKeys` (requires at_commons: ^5.9.0)
+
+## 3.0.1
+- feat: improve `AtEnrollmentImpl`
+- feat: introduce `NamespacePermission`
+- fix: ensure directory when writing keys in FileAtKeysIo
+
+## 3.0.0 
 
 - chore(deps): at_chops ^3.0.0
+- refactor: remove all singletons, injecting dependecies via `AuthRequest`
+- feat: `AtKeysIo` interface which defines interaction between stored/generated keys and at_auth
+- feat: `FileAtKeysIo` class which defines implementation
+- feat: authentication returns `AtLookup` and `AtChops` via `AuthResponse`
+- feat: `AtAuth` exposes a `ProgressStream` to consume status of at_auth
 
 ## 2.4.0
 

@@ -4,17 +4,15 @@ import 'package:at_auth/at_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-
-
 /// A dialog widget that facilitates obtaining a CRAM key via Registrar OTP verification.
-/// 
+///
 /// Use `RegistrarCramDialog.show` to display the dialog and handle the OTP verification process.
-/// 
+///
 /// Required Parameters:
 /// - [request]: An `AtOnboardingRequest` containing details for the onboarding process.
 /// - [registrar]: An instance of `RegistrarService` to interact with the registrar.
 /// - [themeData]: ThemeData for styling the dialog. NOTE: Handled internally via show method.
-/// 
+///
 /// Returns:
 /// - A `String` representing the CRAM key upon successful OTP verification, or null if the process fails or is cancelled.
 class RegistrarCramDialog extends StatefulWidget {
