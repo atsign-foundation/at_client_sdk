@@ -95,7 +95,6 @@ class BackupKeyWidget extends StatelessWidget {
     );
   }
 
-
   onBackup(BuildContext context) async {
     try {
       var keychain = KeychainAtKeysIo();
@@ -212,7 +211,7 @@ class BackupKeyWidget extends StatelessWidget {
         final file = XFile(tempFilePath);
         await file.saveTo(path);
         if (context.mounted) {
-					Navigator.of(context).pop(true);
+          Navigator.of(context).pop(true);
         }
       }
     } on Exception catch (ex, s) {
