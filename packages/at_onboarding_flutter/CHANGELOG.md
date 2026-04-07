@@ -1,4 +1,8 @@
+## DEPRECATED
+ - This package has been deprecated and has been replaced by [at_client_flutter](https://pub.dev/packages/at_client_flutter).
+ - See README.md here and in `at_client_flutter` for more details
 ## 6.1.12
+
 
 - **FIX** Replace depreciated `withOpacity` method with `withValues`.
 - build[deps]: Upgraded dependencies for the following packages:

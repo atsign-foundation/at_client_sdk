@@ -1,3 +1,7 @@
+## DEPRECATED
+- This package has been deprecated and has been replaced by [at_client_flutter](https://pub.dev/packages/at_client_flutter).
+- See README.md here and in `at_client_flutter` for more details
+
 ## 3.3.0
 
 - chore(deps): remove unused dependencies

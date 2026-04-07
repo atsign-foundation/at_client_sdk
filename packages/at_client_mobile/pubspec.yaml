@@ -1,9 +1,6 @@
 name: at_client_mobile
 description: A Flutter extension to the at_client library which adds support for mobile, desktop and IoT devices.
-version: 3.3.0
-repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client_mobile
-homepage: https://atsign.com
-documentation: https://docs.atsign.com/
+version: 3.3.1
 
 environment:
   sdk: ^3.6.0
