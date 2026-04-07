@@ -12,7 +12,7 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
-  package_info_plus: ^8.3.1
+  package_info_plus: 9.0.1
   biometric_storage: ^5.0.1
   collection: ^1.18.0
   at_commons: ^5.8.0
@@ -24,7 +24,7 @@ dependencies:
   encrypt: ^5.0.3
   phosphor_flutter: ^2.1.0
   intl: ^0.20.2
-  file_picker: 10.3.10
+  file_picker: 11.0.02
 
 dev_dependencies:
   path: ^1.9.0
