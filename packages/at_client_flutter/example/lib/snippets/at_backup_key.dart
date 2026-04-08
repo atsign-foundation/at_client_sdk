@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_client_flutter/at_client_flutter.dart';
+import 'package:at_commons/atsign.dart';
 import 'package:at_file_saver/at_file_saver.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:file_picker/file_picker.dart';
@@ -27,7 +28,7 @@ class BackupKeyWidget extends StatelessWidget {
   final AtSignLogger _logger = AtSignLogger('AtBackupKey');
 
   ///required to provide backup keys for `atsign` to save.
-  final String atsign;
+  final Atsign atsign;
 
   ///takes a `String` and displays on button. set [isButton] to `true` to use this.
   final String buttonText;
