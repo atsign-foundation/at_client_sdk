@@ -19,7 +19,7 @@ final _maxEnrollmentAuthenticationRetryInHours = 48;
 const int _kWindowSegmentDataLength =
     2560; //CREDENTIALA structure (wincred.h) - CRED_MAX_CREDENTIAL_BLOB_SIZE (5*512) bytes.
 
-/// Service to manage keychain CRUD operations for atSigns, enrollments and SPPs
+/// Service to manage keychain CRUD operations for Atsigns, enrollments and SPPs
 class KeychainStorage {
   static final _logger = AtSignLogger('KeychainStorage');
   static bool isWindows = Platform.isWindows;
@@ -37,7 +37,7 @@ class KeychainStorage {
     this.biometricStorage = biometricStorage ?? BiometricStorage();
   }
 
-  /// Read all stored atSign keys data from the keychain
+  /// Read all stored Atsign keys data from the keychain
   ///
   /// Returns [AtKeysData] containing all persisted [AtKeys] entries, or `null`
   /// if no key data has been stored yet
@@ -50,13 +50,13 @@ class KeychainStorage {
     return null;
   }
 
-  /// Get the stored keys for a specific atSign
+  /// Get the stored keys for a specific Atsign
   ///
-  ///   [atSign] - atSign whose key material should be retrieved
+  ///   [atSign] - a whose key material should be retrieved
   ///
-  /// Returns [AtKeys] for the requested atSign, or `null` if it is not present
+  /// Returns [AtKeys] for the requested Atsign, or `null` if it is not present
   ///
-  /// Throws [AtKeyException] if no atSign data exists in the keychain
+  /// Throws [AtKeyException] if no Atsign data exists in the keychain
   Future<AtKeys?> getAtsign(String atSign) async {
     final atKeysData = await readAtKeysData();
     if (atKeysData == null) {
@@ -75,9 +75,9 @@ class KeychainStorage {
     return null;
   }
 
-  /// Get all atSigns currently stored in the keychain
+  /// Get all Atsigns currently stored in the keychain
   ///
-  /// Returns a [List] of unique atSign values
+  /// Returns a [List] of unique Atsign values
   Future<List<String>> getAllAtsigns() async {
     final atKeysData = await readAtKeysData();
     if (atKeysData == null) {
@@ -99,7 +99,7 @@ class KeychainStorage {
   ///
   ///   [keys] - [AtKeys] instance to persist
   ///
-  /// Note: the atSign must be included in the [AtKeys.metadata] field
+  /// Note: the Atsign must be included in the [AtKeys.metadata] field
   Future<void> appendAtKeysToKeychain({
     required AtKeys keys,
   }) async {
@@ -127,9 +127,9 @@ class KeychainStorage {
     );
   }
 
-  /// Remove a stored atSign entry from the keychain
+  /// Remove a stored Atsign entry from the keychain
   ///
-  ///   [atSign] - atSign whose persisted keys should be removed
+  ///   [atSign] - Atsign whose persisted keys should be removed
   Future<void> removeAtsignFromKeychain(String atSign) async {
     try {
       final data =
@@ -150,7 +150,7 @@ class KeychainStorage {
     }
   }
 
-  /// Delete all persisted atSign key data from the keychain
+  /// Delete all persisted Atsign key data from the keychain
   Future<void> deleteAllAtKeysData() async {
     try {
       final BiometricStorageFile biometricStore =
@@ -163,9 +163,9 @@ class KeychainStorage {
   }
 
   // Functions for EnrollmentStore CRUD operations
-  /// Read stored enrollment data for an atSign
+  /// Read stored enrollment data for an Atsign
   ///
-  ///   [atSign] - atSign whose enrollment data should be retrieved
+  ///   [atSign] - Atsign whose enrollment data should be retrieved
   ///
   /// Returns [EnrollmentData] if present, otherwise `null`
   Future<EnrollmentData?> readEnrollmentData(String atSign) async {
@@ -178,9 +178,9 @@ class KeychainStorage {
     return null;
   }
 
-  /// Write enrollment data for an atSign to the keychain
+  /// Write enrollment data for an Atsign to the keychain
   ///
-  ///   [atSign] - atSign associated with the enrollment
+  ///   [atSign] - Atsign associated with the enrollment
   ///
   ///   [enrollmentData] - [EnrollmentData] to persist
   Future<void> writeEnrollmentData({
@@ -193,9 +193,9 @@ class KeychainStorage {
     );
   }
 
-  /// Delete stored enrollment data for an atSign
+  /// Delete stored enrollment data for an Atsign
   ///
-  ///   [atSign] - atSign whose enrollment data should be removed
+  ///   [atSign] - Atsign whose enrollment data should be removed
   Future<void> deleteEnrollmentData(String atSign) async {
     final BiometricStorageFile biometricStore =
         await _getBiometricStorageFile(EnrollmentStore(atSign).getName());
@@ -204,7 +204,7 @@ class KeychainStorage {
 
   /// Validate whether stored enrollment data is still within the retry window
   ///
-  ///   [atSign] - atSign whose enrollment should be validated
+  ///   [atSign] - Atsign whose enrollment should be validated
   ///
   /// Returns `true` if the stored enrollment exists and is still valid.
   /// Returns `false` if no enrollment exists, validation fails, or the stored
@@ -230,9 +230,9 @@ class KeychainStorage {
     }
   }
 
-  /// Save an SPP/OTP for an atSign in the keychain
+  /// Save an SPP/OTP for an Atsign in the keychain
   ///
-  ///   [atSign] - atSign associated with the SPP
+  ///   [atSign] - Atsign associated with the SPP
   ///
   ///   [otp] - [Otp] value to persist
   ///
@@ -265,9 +265,9 @@ class KeychainStorage {
     _logger.info('SPP saved to keychain');
   }
 
-  /// Get all active SPPs stored for an atSign
+  /// Get all active SPPs stored for an Atsign
   ///
-  ///   [atSign] - atSign whose SPPs should be retrieved
+  ///   [atSign] - Atsign whose SPPs should be retrieved
   ///
   /// Returns a [List] of non-expired [SppData] values. Expired entries are
   /// removed from storage when encountered.
@@ -301,9 +301,9 @@ class KeychainStorage {
     }
   }
 
-  /// Get the active SPP for an atSign
+  /// Get the active SPP for an Atsign
   ///
-  ///   [atSign] - atSign whose SPP should be retrieved
+  ///   [atSign] - Atsign whose SPP should be retrieved
   ///
   /// Returns the most recently added non-expired [SppData], or `null` if none
   /// exist
@@ -315,9 +315,9 @@ class KeychainStorage {
     return activeSpps.last;
   }
 
-  /// Delete all stored SPP data for an atSign
+  /// Delete all stored SPP data for an Atsign
   ///
-  ///   [atSign] - atSign whose SPP data should be removed
+  ///   [atSign] - Atsign whose SPP data should be removed
   Future<void> deleteSppData(String atSign) async {
     try {
       final BiometricStorageFile biometricStore =
