@@ -83,7 +83,7 @@ dependencies:
   path_provider: ^2.1.2
   permission_handler: ^12.0.0
   pin_code_fields: ^8.0.1
-  pointycastle: ^3.9.1
+  pointycastle: ^4.0.0
   positioned_tap_detector_2: ^1.0.4
   proj4dart: ^2.1.0
   provider: ^6.0.5
@@ -111,7 +111,6 @@ dev_dependencies:
   at_demo_data: ^1.2.0
   build_runner: ^2.4.13
   build_version: ^2.1.1
-  collection: ^1.19.1
   coverage: ^1.14.0
   flutter_lints: ^6.0.0
   json_serializable: ^6.9.0
