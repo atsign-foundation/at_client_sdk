@@ -52,7 +52,7 @@ class KeychainStorage {
 
   /// Get the stored keys for a specific Atsign
   ///
-  ///   [atSign] - a whose key material should be retrieved
+  ///   [atSign] - Atsign whose key material should be retrieved
   ///
   /// Returns [AtKeys] for the requested Atsign, or `null` if it is not present
   ///
