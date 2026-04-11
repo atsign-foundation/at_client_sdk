@@ -278,9 +278,6 @@ class NotificationServiceImpl extends NotificationService {
     sb.write(atKey.metadata.toAtProtocolFragment());
     sb.write(':$key');
 
-    final String cmdWithoutPayload = sb.toString();
-    logger.info('SEND: $cmdWithoutPayload');
-
     sb.write(':$notifPayload');
     sb.write('\n');
 
@@ -295,16 +292,7 @@ class NotificationServiceImpl extends NotificationService {
     Set<Atsign>? acceptedSenders,
     required String namespace,
   }) {
-    // A regex for
-    // - sent to me
-    // - has a unique identifier without a dot
-    // - followed by dot-namespace
-    // - followed by '@' (because we don't know the sending atSign but we know
-    //   that it starts with '@')
-    String r = '^$atSign:'
-        '[^.]+'
-        '\\.$namespace'
-        '@';
+    String r = '^$atSign:([^.]+\\.)?$namespace@';
     StreamController<AtNotification> sc = StreamController<AtNotification>();
     StreamSubscription<AtNotification>? notifStreamSubscription;
     sc.onListen = () {

@@ -86,8 +86,11 @@ abstract class NotificationService {
     Duration expiration = defaultExpiration,
   });
 
-  /// calls [subscribe] with regex constructed from [atSign] and [namespace]
-  /// `^$atSign:$namespace@`
+  /// calls [subscribe] with regex constructed from the [namespace]
+  ///
+  /// If namespace is `foo.my_app` then the constructed regex will match
+  /// `@alice:foo.my_app@bob` AND `@alice:12345.foo.my_app@bob`
+  /// but not `@alice:ffoo.my_appp@bob` or `@alice:bar.foo.my_app@bob`
   ///
   /// [namespace] could be, for example 'foo.bar.my_application'
   /// We are setting shouldDecrypt to [true] when subscribing, so that the

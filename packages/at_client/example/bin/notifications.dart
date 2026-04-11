@@ -32,14 +32,27 @@ void main(List<String> args) async {
 
 Future<void> sender(ExampleContext c) async {
   final String msgId = DateTime.now().microsecondsSinceEpoch.toString();
+  String namespace = '$msgId.$subNamespace.$applicationNamespace';
   await Future.wait(c.otherAtSigns!.map((otherAtsign) {
     String msg;
     // Basic messaging - send notification, fire and forget
-    msg = 'Simple fire and forget message';
-    stdout.writeln('-> Sending $msg to $otherAtsign');
+    msg = 'Simple fire and forget message with ID part';
+    stdout.writeln('-> Sending $msg to $otherAtsign on $namespace');
     return c.atClient.notificationService.send(
       to: otherAtsign,
-      namespace: '$msgId.$subNamespace.$applicationNamespace',
+      namespace: namespace,
+      body: msg,
+    );
+  }));
+  await Future.wait(c.otherAtSigns!.map((otherAtsign) {
+    String msg;
+    // Basic messaging - send notification, fire and forget
+    msg = 'Simple fire and forget message without ID part';
+    String namespace = '$subNamespace.$applicationNamespace';
+    stdout.writeln('-> Sending $msg to $otherAtsign on $namespace');
+    return c.atClient.notificationService.send(
+      to: otherAtsign,
+      namespace: namespace,
       body: msg,
     );
   }));
@@ -47,6 +60,7 @@ Future<void> sender(ExampleContext c) async {
 
 Future<void> receiver(ExampleContext c) async {
   Completer done = Completer();
+  // ignore: unused_local_variable
   StreamSubscription<AtNotification>? sub;
   sub = c.atClient.notificationService
       .subscribeFiltered(
@@ -54,9 +68,7 @@ Future<void> receiver(ExampleContext c) async {
     namespace: '$subNamespace.$applicationNamespace',
   )
       .listen((n) {
-    stdout.writeln('-> Received ${n.value} from ${n.from}');
-    sub?.cancel();
-    done.complete();
+    stdout.writeln('-> Received ${n.value} from ${n.from} : ${n.key}');
   });
   await done.future;
 }
