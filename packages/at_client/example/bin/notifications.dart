@@ -48,10 +48,12 @@ Future<void> sender(ExampleContext c) async {
 Future<void> receiver(ExampleContext c) async {
   Completer done = Completer();
   StreamSubscription<AtNotification>? sub;
-  sub = c.atClient.notificationService.subscribeFiltered(
+  sub = c.atClient.notificationService
+      .subscribeFiltered(
     acceptedSenders: c.otherAtSigns,
     namespace: '$subNamespace.$applicationNamespace',
-  ).listen((n) {
+  )
+      .listen((n) {
     stdout.writeln('-> Received ${n.value} from ${n.from}');
     sub?.cancel();
     done.complete();
