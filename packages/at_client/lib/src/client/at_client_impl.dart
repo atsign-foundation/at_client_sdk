@@ -44,7 +44,9 @@ class AtClientImpl implements AtClient {
   AtClientPreference? _preference;
 
   AtClientPreference? get preference => _preference;
-  late final String _atSign;
+  late final Atsign _atSign;
+  @override
+  Atsign get atSign => _atSign;
   SecondaryKeyStore? _localSecondaryKeyStore;
   @visibleForTesting
   LocalSecondary? localSecondary;
@@ -208,7 +210,7 @@ class AtClientImpl implements AtClient {
     AtClientConfig? atClientConfig,
     this.enrollmentId,
   }) {
-    _atSign = AtUtils.fixAtSign(theAtSign);
+    _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
     _preference?.namespace ??= namespace;

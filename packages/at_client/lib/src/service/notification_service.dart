@@ -5,6 +5,9 @@ import 'package:at_commons/at_commons.dart';
 import 'package:uuid/uuid.dart';
 
 abstract class NotificationService {
+  /// Our atSign
+  Atsign get atSign;
+
   /// Gives back stream of notifications from the server to the subscribing client.
   ///
   /// - Supply [regex] to stream only notifications whose keys match the regex.
@@ -61,6 +64,42 @@ abstract class NotificationService {
   /// The time at which a notification was last received. [null] if nothing
   /// has yet been received.
   DateTime? get lastReceipt;
+
+  static const Duration defaultExpiration = Duration(minutes: 15);
+
+  /// Send a notification to [to] on [namespace] with body (payload) [body].
+  /// Will encrypt [body] before sending if [shouldEncrypt] is true (default).
+  ///
+  /// Returns the id of the notification, which can then be used when calling
+  /// the [getStatus] and [fetch] functions.
+  ///
+  /// Notifications will disappear after [expiration] has passed; notifications
+  /// are intended for inter-process communication and generally have a useful
+  /// lifetime of seconds or minutes.
+  ///
+  /// [body] is most usually some json encoded as a String.
+  Future<String> send({
+    required Atsign to,
+    required String namespace,
+    required String body,
+    bool shouldEncrypt = true,
+    Duration expiration = defaultExpiration,
+  });
+
+  /// calls [subscribe] with regex constructed from [atSign] and [namespace]
+  /// `^$atSign:$namespace@`
+  ///
+  /// [namespace] could be, for example 'foo.bar.my_application'
+  /// We are setting shouldDecrypt to [true] when subscribing, so that the
+  /// value in each notification is decrypted.
+  ///
+  /// If [acceptedSenders] is supplied, we filter out any notifications except
+  /// those which were sent by one of the atSigns in [acceptedSenders]. If
+  /// [acceptedSenders] is not supplied, we do not filter.
+  Stream<AtNotification> subscribeFiltered({
+    Set<Atsign>? acceptedSenders,
+    required String namespace,
+  });
 
   /// Sends notification to [notificationParams.atKey.sharedWith] atSign.
   ///
@@ -273,7 +312,7 @@ class NotificationParams {
   /// Returns [NotificationParams] to send a text message to another atSign.
   /// forText notifications are case-sensitive
   /// platform level lower case enforcement will not apply to forText notifications
-  @Deprecated('use NotificationService.notify() instead')
+  @Deprecated('No longer supported')
   static NotificationParams forText(String text, String whomToNotify,
       {bool shouldEncrypt = false}) {
     var atKey = AtKey()

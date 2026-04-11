@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client.dart' hide StringBuffer;
+import 'package:at_client/src/encryption_service/encryption.dart';
 import 'package:at_client/src/encryption_service/encryption_manager.dart';
+import 'package:at_client/src/encryption_service/self_key_encryption.dart';
+import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
@@ -18,6 +21,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
     as at_persistence_secondary_server;
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
+import 'package:uuid/uuid.dart' show Uuid;
 
 class NotificationServiceImpl extends NotificationService {
   final Map<NotificationConfig, StreamController> _streamListeners =
@@ -43,8 +47,8 @@ class NotificationServiceImpl extends NotificationService {
   @visibleForTesting
   late AtKey lastReceivedNotificationAtKey;
 
-  /// Returns the currentAtSign associated with the NotificationService
-  String get atSign => atClient.getCurrentAtSign()!;
+  @override
+  Atsign get atSign => atClient.atSign;
 
   late SecondaryAddressFinder secondaryAddressFinder;
 
@@ -243,6 +247,89 @@ class NotificationServiceImpl extends NotificationService {
       logger.severe('unexpected error:${e.toString()}'
           ' while processing notificationJson: $notificationJSON');
     }
+  }
+
+  @override
+  Future<String> send({
+    required Atsign to,
+    required String namespace,
+    required String body,
+    bool shouldEncrypt = true,
+    Duration expiration = NotificationService.defaultExpiration,
+  }) async {
+    final String key = '$to:$namespace$atSign';
+    final AtKey atKey = AtKey.fromString(key);
+    final String notifPayload;
+    if (shouldEncrypt) {
+      AtKeyEncryption encrypter = atSign == to
+          ? SelfKeyEncryption(atClient)
+          : SharedKeyEncryption(atClient);
+      notifPayload = await encrypter.encrypt(atKey, body);
+      atKey.metadata.isEncrypted = true;
+    } else {
+      notifPayload = body;
+      atKey.metadata.isEncrypted = false;
+    }
+
+    final String id = Uuid().v4();
+    StringBuffer sb = StringBuffer();
+    sb.write('notify:id:$id');
+    sb.write(':ttln:${expiration.inMilliseconds}');
+    sb.write(atKey.metadata.toAtProtocolFragment());
+    sb.write(':$key');
+
+    final String cmdWithoutPayload = sb.toString();
+    logger.info('SEND: $cmdWithoutPayload');
+
+    sb.write(':$notifPayload');
+    sb.write('\n');
+
+    final String cmd = sb.toString();
+    await atClient.getRemoteSecondary()?.executeCommand(cmd, auth: true);
+
+    return id;
+  }
+
+  @override
+  Stream<AtNotification> subscribeFiltered({
+    Set<Atsign>? acceptedSenders,
+    required String namespace,
+  }) {
+    // A regex for
+    // - sent to me
+    // - has a unique identifier without a dot
+    // - followed by dot-namespace
+    // - followed by '@' (because we don't know the sending atSign but we know
+    //   that it starts with '@')
+    String r = '^$atSign:'
+        '[^.]+'
+        '\\.$namespace'
+        '@';
+    StreamController<AtNotification> sc = StreamController<AtNotification>();
+    StreamSubscription<AtNotification>? notifStreamSubscription;
+    sc.onListen = () {
+      Stream<AtNotification> notifStream = subscribe(
+        regex: r,
+        shouldDecrypt: true,
+      );
+      notifStreamSubscription = notifStream.listen((AtNotification n) async {
+        if (acceptedSenders == null || acceptedSenders.contains(n.from)) {
+          sc.add(n);
+        } else {
+          logger.warning('Ignored notification ${n.key}');
+        }
+      });
+    };
+    sc.onCancel = () {
+      notifStreamSubscription?.cancel();
+    };
+    sc.onPause = () {
+      notifStreamSubscription?.pause();
+    };
+    sc.onResume = () {
+      notifStreamSubscription?.resume();
+    };
+    return sc.stream;
   }
 
   @override

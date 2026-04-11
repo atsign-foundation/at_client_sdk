@@ -635,5 +635,7 @@ abstract class AtClient {
   /// could change - but an AtClient should only ever have one atSign.
   String? getCurrentAtSign();
 
+  Atsign get atSign;
+
   EncryptionService? get encryptionService;
 }
