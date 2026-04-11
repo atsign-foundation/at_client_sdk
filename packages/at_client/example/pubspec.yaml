@@ -1,24 +1,20 @@
-name: at_client_example
-description: An example application to demonstrate the at_client package usage.
+name: at_client_examples
+description: Examples of some of the most common usages of the at_client package.
 version: 1.0.0
+publish_to: none
 
 environment:
-  sdk: ">=2.15.0 <4.0.0"
+  sdk: ">=3.0.0"
+
+dependencies:
+  at_client: ^3.11.0
+  at_cli_commons: ^3.0.1
 
 dependency_overrides:
   at_client:
     path: ../../at_client
-  at_commons:
-    path: ../../at_commons
-  at_chops:
-    path: ../../at_chops
-  at_auth:
-    path: ../../at_auth
-  at_lookup:
-    path: ../../at_lookup
-
-dependencies:
-  at_client: ^3.7.0
+  at_cli_commons:
+    path: ../../at_cli_commons
 
 dev_dependencies:
-  lints: ^1.0.0
+  lints: ^6.1.0

@@ -1,0 +1,60 @@
+// - simple messaging: `@alice` sends message to `@bob`
+// - messaging: send
+// - rpc: atRpc
+import 'dart:async';
+import 'dart:io';
+
+import 'package:at_client/at_client.dart';
+
+import 'package:at_client_examples/snippets/init_example_context.dart';
+
+const String subNamespace = 'fire.and.forget';
+
+/// Example of simple messaging between atSigns using notifications.
+///
+/// Sender will send a notification on some namespace (like a 'topic' in
+/// pub-sub systems)
+///
+/// Receiver will listen for notifications on that topic
+void main(List<String> args) async {
+  stdout.writeln('Messaging');
+  ExampleContext c = await getExampleContext(args);
+  switch (c.role) {
+    case ExampleRole.sender:
+      await sender(c);
+      break;
+    case ExampleRole.receiver:
+      await receiver(c);
+      break;
+  }
+  exit(0);
+}
+
+Future<void> sender(ExampleContext c) async {
+  final String msgId = DateTime.now().microsecondsSinceEpoch.toString();
+  await Future.wait(c.otherAtSigns!.map((otherAtsign) {
+    String msg;
+    // Basic messaging - send notification, fire and forget
+    msg = 'Simple fire and forget message';
+    stdout.writeln('-> Sending $msg to $otherAtsign');
+    return c.atClient.notificationService.send(
+      to: otherAtsign,
+      namespace: '$msgId.$subNamespace.$applicationNamespace',
+      body: msg,
+    );
+  }));
+}
+
+Future<void> receiver(ExampleContext c) async {
+  Completer done = Completer();
+  StreamSubscription<AtNotification>? sub;
+  sub = c.atClient.notificationService.subscribeFiltered(
+    acceptedSenders: c.otherAtSigns,
+    namespace: '$subNamespace.$applicationNamespace',
+  ).listen((n) {
+    stdout.writeln('-> Received ${n.value} from ${n.from}');
+    sub?.cancel();
+    done.complete();
+  });
+  await done.future;
+}
