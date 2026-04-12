@@ -8,8 +8,11 @@ import 'collection_methods_impl.dart';
 
 class AtCollectionModelOperationsImpl implements AtCollectionModelOperations {
   final _logger = AtSignLogger('AtCollectionModelOperationsImpl');
-  late AtCollectionModel atCollectionModel;
-  late AtCollectionMethodImpl collectionMethodImpl;
+
+  final AtCollectionModel atCollectionModel;
+  late final AtCollectionMethodImpl collectionMethodImpl;
+
+  AtClient get atClient => AtClientManager.getInstance().atClient;
 
   AtCollectionModelOperationsImpl(this.atCollectionModel) {
     collectionMethodImpl = AtCollectionMethodImpl(atCollectionModel);
@@ -62,7 +65,7 @@ class AtCollectionModelOperationsImpl implements AtCollectionModelOperations {
     String formattedCollectionName =
         CollectionUtil.format(atCollectionModel.collectionName);
 
-    var allKeys = await _getAtClient().getAtKeys(
+    var allKeys = await atClient.getAtKeys(
         regex: CollectionUtil.makeRegex(
             formattedId: formattedId,
             collectionName: formattedCollectionName,
@@ -150,10 +153,6 @@ class AtCollectionModelOperationsImpl implements AtCollectionModelOperations {
     });
 
     return isAllShareKeysUnshared;
-  }
-
-  AtClient _getAtClient() {
-    return AtClientManager.getInstance().atClient;
   }
 
   @override
