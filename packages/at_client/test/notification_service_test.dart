@@ -36,6 +36,9 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
     return '@alice';
   }
 
+  @override
+  Atsign get atSign => getCurrentAtSign()!.toAtsign();
+
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
 
   @override
