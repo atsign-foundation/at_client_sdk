@@ -59,7 +59,7 @@ dependencies:
   elliptic: ^0.3.10
   emoji_picker_flutter: ^4.3.0
   encrypt: ^5.0.3
-  file_picker: ^10.0.0
+  file_picker: ^11.0.0
   flutter_image: ^4.1.8 # FIXME: discontinued
   flutter_image_compress: ^2.0.4
   flutter_keychain: ^2.2.1
@@ -78,7 +78,7 @@ dependencies:
   latlong2: 0.9.1
   logging: ^1.2.0
   mutex: ^3.0.0
-  package_info_plus: ^8.0.0
+  package_info_plus: ^9.0.0
   path: ^1.9.0
   path_provider: ^2.1.2
   permission_handler: ^12.0.0
@@ -111,7 +111,6 @@ dev_dependencies:
   at_demo_data: ^1.2.0
   build_runner: ^2.4.13
   build_version: ^2.1.1
-  collection: ^1.19.1
   coverage: ^1.14.0
   flutter_lints: ^6.0.0
   json_serializable: ^6.9.0
