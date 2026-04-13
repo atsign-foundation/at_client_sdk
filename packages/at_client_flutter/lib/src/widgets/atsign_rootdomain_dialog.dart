@@ -3,7 +3,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/widgets/shared/typable_dropdown.dart';
 import 'package:flutter/material.dart';
 
-/// A dialog widget that allows users to select or input an atSign and optionally a root domain.
+/// A dialog widget that allows users to select or input an Atsign and optionally a root domain.
 ///
 /// Use `AtSignSelectionDialog.show` to display the dialog and retrieve the user's selection.
 class AtSignSelectionDialog extends StatefulWidget {
@@ -20,10 +20,10 @@ class AtSignSelectionDialog extends StatefulWidget {
   @override
   State<AtSignSelectionDialog> createState() => _AtSignSelectionDialogState();
 
-  /// Displays the AtSignSelectionDialog and returns an AuthRequest based on user input.
+  /// Displays the AtsignSelectionDialog and returns an AuthRequest based on user input.
   /// - [context]: BuildContext to display the dialog.
   /// - [themeData]: ThemeData for styling the dialog.
-  /// - [existingAtSigns]: Inject atsigns via file or keychain storage so that user can select them from a dropdown.
+  /// - [existingAtSigns]: Inject Atsigns via file or keychain storage so that user can select them from a dropdown.
   /// - [existingDomains]: Inject root domains for selection (default: root.atsign.org:64).
   static Future<AuthRequest?> show(
     BuildContext context, {
@@ -99,12 +99,12 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // atSign Dropdown
+            // Atsign Dropdown
             _DropdownField(
               controller: _atSignTextController,
-              labelText: 'Type or select an atSign',
-              infoText: "Select an atSign to proceed with onboarding.",
-              hint: 'Type atSign or select from existing',
+              labelText: 'Type or select an Atsign',
+              infoText: "Select an Atsign to proceed with onboarding.",
+              hint: 'Type Atsign or select from existing',
               themeData: widget.themeData,
               items: widget.existingAtSigns,
               valueNormalizer: _normalizeAtSignInput,

@@ -22,6 +22,7 @@ class FlutterEnrollmentService {
   final KeychainStorage _keychainStorage = KeychainStorage();
   final KeychainAtKeysIo _keychainAtKeysIo = KeychainAtKeysIo();
 
+  /// Instance of [AtClient] for the current atSign
   AtClient get atClient => AtClientManager.getInstance().atClient;
 
   static const _kDefaultExpiry = Duration(minutes: 5);
@@ -30,8 +31,19 @@ class FlutterEnrollmentService {
       StreamController<ServerEnrollmentRequest>.broadcast();
   StreamSubscription? _newRequestsSubscription;
 
+  /// Stream of progress events during enrollment operations
   Stream<ProgressEvent> get progressStream => _atEnrollment.progressStream;
 
+  /// Submit an enrollment request to the secondary server
+  ///
+  ///   [request] - [EnrollmentRequest] containing enrollment details such as
+  ///   atSign, namespaces and enrollment metadata
+  ///
+  ///   [waitForApproval] - Optional parameter to wait until the enrollment
+  ///   request is approved on the server
+  ///
+  /// Returns [AtEnrollmentResponse] which contains the enrollment id, status
+  /// and generated auth keys when available
   Future<AtEnrollmentResponse> enroll(EnrollmentRequest request,
       {bool waitForApproval = false}) async {
     AtEnrollmentResponse? atEnrollmentResponse;
@@ -60,6 +72,16 @@ class FlutterEnrollmentService {
     return atEnrollmentResponse;
   }
 
+  /// Approve a pending enrollment request
+  ///
+  ///   [request] - [EnrollmentRequestDecision] containing the enrollment id,
+  ///   atSign and approval decision details
+  ///
+  ///   [atLookUp] - [AtLookUp] instance used to communicate with the secondary
+  ///   server, using an atLookUp as we should be authenticated.
+  ///
+  /// Returns [AtEnrollmentResponse] containing the status of the approval and
+  /// auth keys for the approved enrollment
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision request, AtLookUp atLookUp) async {
     AtEnrollmentResponse? atEnrollmentResponse;
@@ -77,6 +99,16 @@ class FlutterEnrollmentService {
     return atEnrollmentResponse;
   }
 
+  /// Deny a pending enrollment request
+  ///
+  ///   [request] - [EnrollmentRequestDecision] containing the enrollment id,
+  ///   atSign and denial decision details
+  ///
+  ///   [atLookUp] - [AtLookUp] instance used to communicate with the secondary
+  ///   server
+  ///
+  /// Returns [AtEnrollmentResponse] containing the status of the denied
+  /// enrollment request
   Future<AtEnrollmentResponse> deny(
       EnrollmentRequestDecision request, AtLookUp atLookUp) async {
     AtEnrollmentResponse? atEnrollmentResponse;
@@ -89,6 +121,16 @@ class FlutterEnrollmentService {
     return atEnrollmentResponse;
   }
 
+  /// Revoke an existing enrollment
+  ///
+  ///   [request] - [EnrollmentRequestDecision] containing the enrollment id,
+  ///   atSign and revocation details
+  ///
+  ///   [atLookUp] - [AtLookUp] instance used to communicate with the secondary
+  ///   server
+  ///
+  /// Returns [AtEnrollmentResponse] containing the status of the revoked
+  /// enrollment
   Future<AtEnrollmentResponse> revoke(
       EnrollmentRequestDecision request, AtLookUp atLookUp) async {
     AtEnrollmentResponse? atEnrollmentResponse;
@@ -101,6 +143,13 @@ class FlutterEnrollmentService {
     return atEnrollmentResponse;
   }
 
+  /// Listen for enrollment requests received from the server
+  ///
+  ///   [statusFilters] - Optional list of [EnrollmentStatus] values used to
+  ///   filter the returned enrollment requests
+  ///
+  /// Returns a [Stream] of [EnrollmentServerResponse] values matching the
+  /// provided filters
   Stream<EnrollmentServerResponse> getEnrollments(
       {List<EnrollmentStatus>? statusFilters}) {
     return _enrollmentRequestsController!.stream
@@ -111,12 +160,30 @@ class FlutterEnrollmentService {
     });
   }
 
+  /// List enrollments from the secondary server
+  ///
+  ///   [filters] - List of [EnrollmentStatus] values used to filter server
+  ///   results
+  ///
+  ///   [atLookUp] - [AtLookUp] instance used to communicate with the secondary
+  ///   server
+  ///
+  ///   [drx] - Optional device regex filter
+  ///
+  ///   [arx] - Optional app regex filter
+  ///
+  /// Returns a [List] of [EnrollmentServerResponse] objects matching the
+  /// filters
   Future<List<EnrollmentServerResponse>> list(
       List<EnrollmentStatus> filters, AtLookUp atLookUp,
       {String? drx, String? arx}) async {
     return await _atEnrollment.list(filters, atLookUp, arx: arx, drx: drx);
   }
 
+  /// Wait for a submitted enrollment request to be approved
+  ///
+  ///   [response] - [AtEnrollmentResponse] returned from an earlier enrollment
+  ///   submission
   Future<void> awaitApproval(AtEnrollmentResponse response) async {
     await _atEnrollment.waitForApproval(response);
   }
