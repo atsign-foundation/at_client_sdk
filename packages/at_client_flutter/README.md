@@ -286,6 +286,9 @@ Full working examples are available in the example app:
 - `at_client_flutter/example/lib/main.dart` — UI and navigation
 - `at_client_flutter/example/lib/walkthrough.dart` — all authentication flows with error handling
 
-Reusable snippets are also available under `at_client_flutter/example/lib/snippets`
-for smaller integration examples:
-- `at_backup_key` — export backed-up keys using `at_backup_key.dart`
+
+## Migration from at_client_flutter & at_onboarding_flutter
+
+There has been significant changes to functionality between these packages.
+- The majority of functionality in at_onboarding_flutter lives here in at_client_flutter, including new widgets.
+- The majority of at_client_mobile has been brought into at_auth and anything else related to mobile functions live here.

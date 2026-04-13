@@ -2,6 +2,13 @@
 
 [![pub package](https://img.shields.io/pub/v/at_common_flutter)](https://pub.dev/packages/at_common_flutter) [![](https://img.shields.io/static/v1?label=Backend&message=atPlatform&color=<COLOR>)](https://atsign.dev) [![](https://img.shields.io/static/v1?label=Publisher&message=Atsign&color=F05E3E)](https://atsign.com) [![gitHub license](https://img.shields.io/badge/license-BSD3-blue.svg)](./LICENSE)
 
+## Deprecation Notice
+`at_common_flutter` is deprecated and will no longer receive updates.
+
+Use [`at_client_flutter`](https://pub.dev/packages/at_client_flutter) instead for Flutter support in the atPlatform SDK:
+- Package: https://pub.dev/packages/at_client_flutter
+- Source: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client_flutter
+
 ## Overview
 The at_common_flutter package provides custom widgets for development of other packages and apps built on atPlatform.
 

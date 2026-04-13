@@ -5,7 +5,7 @@ import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:flutter/material.dart';
 
-/// A dialog widget that facilitates onboarding an atSign using a CRAM key.
+/// A dialog widget that facilitates onboarding an Atsign using a CRAM key.
 ///
 /// Use `CramDialog.show` to display the dialog and handle the onboarding process.
 ///
@@ -14,7 +14,7 @@ import 'package:flutter/material.dart';
 /// - [cramKey]: The CRAM key used for authentication during onboarding.
 ///
 /// Optional Parameters:
-/// - [title]: A title string for the dialog (default: "Onboarding atSign via cram").
+/// - [title]: A title string for the dialog (default: "Onboarding Atsign via cram").
 /// - [description]: A description string displayed while onboarding is in progress (default: "Authenticating, please wait...").
 /// - [progressBuilder]: An optional builder function to customize the display of progress events.
 ///   It takes a `ProgressEvent` and returns a `Widget`, allowing for tailored UI updates during the onboarding process.
@@ -84,7 +84,7 @@ class CramDialog extends StatelessWidget {
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
                 return LoadingDialog(
-                    title: title ?? "Onboarding atSign via cram",
+                    title: title ?? "Onboarding Atsign via cram",
                     description:
                         description ?? "Authenticating, please wait...");
               }

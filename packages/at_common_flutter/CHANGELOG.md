@@ -1,3 +1,8 @@
+## 2.1.1
+
+- **DEPRECATION**: Marked `at_common_flutter` as deprecated.
+- **DEPRECATION**: Updated package metadata and documentation to direct users to `at_client_flutter`.
+
 ## 2.1.0
 
 - chore(deps): flutter_lints ^6.0.0
