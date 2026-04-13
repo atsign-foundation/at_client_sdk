@@ -1,6 +1,10 @@
 # CHANGELOG
 
 ## 1.1.0
+ - feat: models NamespacePermission, Otp, ServerEnrollmentRequest, AuthorisationException
+ - feat: additional functionality on FlutterEnrollmentService
+ - rework: lifecycle on FlutterEnrollmentService
+ - feat: new widgets for Enrollment related activities
  - feat: extensions for additional functionality
  - fix: bug where example app consumes atsigns with '_' inside them
 
