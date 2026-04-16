@@ -90,7 +90,7 @@ class AtKeysFileDialog extends StatelessWidget {
                     width: double.infinity,
                     child: OutlinedButton(
                       onPressed: () async {
-                        var result = await FilePicker.platform.pickFiles(
+                        var result = await FilePicker.pickFiles(
                             type: FileType.custom,
                             initialDirectory: Directory.current.path,
                             allowedExtensions: ['atKeys']);

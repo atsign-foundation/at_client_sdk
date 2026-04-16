@@ -19,13 +19,16 @@ final _maxEnrollmentAuthenticationRetryInHours = 48;
 const int _kWindowSegmentDataLength =
     2560; //CREDENTIALA structure (wincred.h) - CRED_MAX_CREDENTIAL_BLOB_SIZE (5*512) bytes.
 
-/// Service to manage keychain CRUD operations for atsigns & enrollments
+/// Service to manage keychain CRUD operations for Atsigns, enrollments and SPPs
 class KeychainStorage {
   static final _logger = AtSignLogger('KeychainStorage');
   static bool isWindows = Platform.isWindows;
   @visibleForTesting
   late BiometricStorage biometricStorage;
 
+  /// Create a [KeychainStorage] instance
+  ///
+  ///   [biometricStorage] - Optional [BiometricStorage] for mocking
   KeychainStorage({BiometricStorage? biometricStorage}) {
     if (isWindows) {
       // ignore: undefined_method
@@ -34,11 +37,10 @@ class KeychainStorage {
     this.biometricStorage = biometricStorage ?? BiometricStorage();
   }
 
-  // All exposed methods for keychain storage operations
-
-  // Functions for AtKeysData CRUD operations
-
-  /// Function to read AtKeysData from keychain
+  /// Read all stored Atsign keys data from the keychain
+  ///
+  /// Returns [AtKeysData] containing all persisted [AtKeys] entries, or `null`
+  /// if no key data has been stored yet
   Future<AtKeysData?> readAtKeysData() async {
     final data = await _read(keychainStoreName: (await AtKeysStore.getName()));
     if (data != null) {
@@ -48,7 +50,13 @@ class KeychainStorage {
     return null;
   }
 
-  /// Get atSign from keychain storage
+  /// Get the stored keys for a specific Atsign
+  ///
+  ///   [atSign] - Atsign whose key material should be retrieved
+  ///
+  /// Returns [AtKeys] for the requested Atsign, or `null` if it is not present
+  ///
+  /// Throws [AtKeyException] if no Atsign data exists in the keychain
   Future<AtKeys?> getAtsign(String atSign) async {
     final atKeysData = await readAtKeysData();
     if (atKeysData == null) {
@@ -67,7 +75,9 @@ class KeychainStorage {
     return null;
   }
 
-  /// Get all atSigns from the keychain
+  /// Get all Atsigns currently stored in the keychain
+  ///
+  /// Returns a [List] of unique Atsign values
   Future<List<String>> getAllAtsigns() async {
     final atKeysData = await readAtKeysData();
     if (atKeysData == null) {
@@ -85,8 +95,11 @@ class KeychainStorage {
     return atSigns.toList();
   }
 
-  /// Append an atKeys instance to the Keychain
-  /// Note: atSign must be included in to AtKeys metadata field
+  /// Append a new [AtKeys] entry to the keychain
+  ///
+  ///   [keys] - [AtKeys] instance to persist
+  ///
+  /// Note: the Atsign must be included in the [AtKeys.metadata] field
   Future<void> appendAtKeysToKeychain({
     required AtKeys keys,
   }) async {
@@ -114,6 +127,9 @@ class KeychainStorage {
     );
   }
 
+  /// Remove a stored Atsign entry from the keychain
+  ///
+  ///   [atSign] - Atsign whose persisted keys should be removed
   Future<void> removeAtsignFromKeychain(String atSign) async {
     try {
       final data =
@@ -134,6 +150,7 @@ class KeychainStorage {
     }
   }
 
+  /// Delete all persisted Atsign key data from the keychain
   Future<void> deleteAllAtKeysData() async {
     try {
       final BiometricStorageFile biometricStore =
@@ -146,6 +163,11 @@ class KeychainStorage {
   }
 
   // Functions for EnrollmentStore CRUD operations
+  /// Read stored enrollment data for an Atsign
+  ///
+  ///   [atSign] - Atsign whose enrollment data should be retrieved
+  ///
+  /// Returns [EnrollmentData] if present, otherwise `null`
   Future<EnrollmentData?> readEnrollmentData(String atSign) async {
     final String? data =
         await _read(keychainStoreName: EnrollmentStore(atSign).getName());
@@ -156,6 +178,11 @@ class KeychainStorage {
     return null;
   }
 
+  /// Write enrollment data for an Atsign to the keychain
+  ///
+  ///   [atSign] - Atsign associated with the enrollment
+  ///
+  ///   [enrollmentData] - [EnrollmentData] to persist
   Future<void> writeEnrollmentData({
     required String atSign,
     required EnrollmentData enrollmentData,
@@ -166,13 +193,22 @@ class KeychainStorage {
     );
   }
 
+  /// Delete stored enrollment data for an Atsign
+  ///
+  ///   [atSign] - Atsign whose enrollment data should be removed
   Future<void> deleteEnrollmentData(String atSign) async {
     final BiometricStorageFile biometricStore =
         await _getBiometricStorageFile(EnrollmentStore(atSign).getName());
     await biometricStore.delete();
   }
 
-  /// Validates if the enrollment is still valid based on the submission time.
+  /// Validate whether stored enrollment data is still within the retry window
+  ///
+  ///   [atSign] - Atsign whose enrollment should be validated
+  ///
+  /// Returns `true` if the stored enrollment exists and is still valid.
+  /// Returns `false` if no enrollment exists, validation fails, or the stored
+  /// enrollment has expired. Expired enrollment data is removed automatically.
   Future<bool> validateEnrollment(String atSign) async {
     try {
       var data = await readEnrollmentData(atSign);
@@ -194,8 +230,14 @@ class KeychainStorage {
     }
   }
 
-  /// Saves [otp] to the keychain for [atSign].
-  /// Appends to the list of existing SPPs.
+  /// Save an SPP/OTP for an Atsign in the keychain
+  ///
+  ///   [atSign] - Atsign associated with the SPP
+  ///
+  ///   [otp] - [Otp] value to persist
+  ///
+  /// Appends the value to the existing SPP list after removing expired entries
+  /// and any matching duplicate value
   Future<void> saveSpp(String atSign, Otp otp) async {
     final spp = SppData(value: otp.value, expiry: otp.expiry);
 
@@ -223,7 +265,12 @@ class KeychainStorage {
     _logger.info('SPP saved to keychain');
   }
 
-  /// Gets all active (non-expired) SPPs from the keychain.
+  /// Get all active SPPs stored for an Atsign
+  ///
+  ///   [atSign] - Atsign whose SPPs should be retrieved
+  ///
+  /// Returns a [List] of non-expired [SppData] values. Expired entries are
+  /// removed from storage when encountered.
   Future<List<SppData>> getAllSpps(String atSign) async {
     try {
       final data = await _read(keychainStoreName: SppStore(atSign).getName());
@@ -254,8 +301,12 @@ class KeychainStorage {
     }
   }
 
-  /// Returns the active (non-expired) SPP for [atSign], or null if none or expired.
-  /// If multiple exist, returns the most recently added one.
+  /// Get the active SPP for an Atsign
+  ///
+  ///   [atSign] - Atsign whose SPP should be retrieved
+  ///
+  /// Returns the most recently added non-expired [SppData], or `null` if none
+  /// exist
   Future<SppData?> getActiveSpp(String atSign) async {
     final activeSpps = await getAllSpps(atSign);
     if (activeSpps.isEmpty) {
@@ -264,6 +315,9 @@ class KeychainStorage {
     return activeSpps.last;
   }
 
+  /// Delete all stored SPP data for an Atsign
+  ///
+  ///   [atSign] - Atsign whose SPP data should be removed
   Future<void> deleteSppData(String atSign) async {
     try {
       final BiometricStorageFile biometricStore =
@@ -377,8 +431,13 @@ class KeychainStorage {
         ));
   }
 
-  /// The function separated a String to a list of segment String
-  /// Max length of segment is [segmentLength]
+  /// Split a string into fixed-size segments
+  ///
+  ///   [text] - Source string to split
+  ///
+  ///   [segmentLength] - Maximum length of each segment
+  ///
+  /// Returns a [List] of string segments
   List<String> _splitString(String text, int segmentLength) {
     int segmentCount = (text.length / segmentLength).ceil();
     final result = <String>[];
@@ -392,7 +451,11 @@ class KeychainStorage {
     return result;
   }
 
-  /// The function combine list of String to String
+  /// Combine a list of string segments into a single string
+  ///
+  ///   [texts] - String segments to combine
+  ///
+  /// Returns the combined string, or `null` if the list is empty
   String? _combineString(List<String> texts) {
     if (texts.isEmpty) {
       return null;
@@ -400,6 +463,11 @@ class KeychainStorage {
     return texts.join();
   }
 
+  /// Write a message to the internal logger
+  ///
+  ///   [s] - Log message
+  ///
+  ///   [logStackTrace] - Whether to include the current stack trace
   void log(String s, bool logStackTrace) {
     _logger.info(s);
     if (!logStackTrace) {
