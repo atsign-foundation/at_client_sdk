@@ -9,6 +9,7 @@ import 'impl/at_collection_operations_impl.dart';
 import 'impl/at_collection_query_operations_impl.dart';
 import 'impl/at_collection_stream_operations_impl.dart';
 
+@Deprecated("Use AtClient.collection for collection-style operations")
 abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
   static final _logger = AtSignLogger('AtCollectionModel');
 

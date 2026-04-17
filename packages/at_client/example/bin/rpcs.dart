@@ -6,21 +6,15 @@ import 'package:at_client_examples/snippets/init_example_context.dart';
 
 const String rpcName = 'some_method.some_interface';
 
-/// Example of simple messaging between atSigns using notifications.
-///
-/// Sender will send a notification on some namespace (like a 'topic' in
-/// pub-sub systems)
-///
-/// Receiver will listen for notifications on that topic
 void main(List<String> args) async {
   stdout.writeln('Messaging');
   ExampleContext c = await getExampleContext(args);
   switch (c.role) {
     case ExampleRole.sender:
-      await sender(c);
+      await sender(c.atClient, c.otherAtSigns);
       return;
     case ExampleRole.receiver:
-      await receiver(c);
+      await receiver(c.atClient, c.otherAtSigns);
       break;
   }
 }
@@ -29,10 +23,10 @@ void main(List<String> args) async {
 /// 2. Send an rpc with an unfeasibly short timeout - should throw exception
 /// 3. Send rpc with our magic `'throw':true` value; the server will
 //     throw an exception which we will catch here.
-Future<void> sender(ExampleContext c) async {
+Future<void> sender(AtClient atClient, Set<Atsign>? otherAtSigns) async {
   final rpcClient = AtRpcClient(
-    serverAtsign: c.otherAtSigns!.first,
-    atClient: c.atClient,
+    serverAtsign: otherAtSigns!.first,
+    atClient: atClient,
     baseNameSpace: applicationNamespace,
     domainNameSpace: rpcName,
   );
@@ -73,14 +67,16 @@ Future<void> sender(ExampleContext c) async {
   }
 }
 
-Future<void> receiver(ExampleContext c) async {
+/// Creates an [AtRpcServer] and starts it with [requestHandler] as the
+/// request-handling function.
+Future<void> receiver(AtClient atClient, Set<Atsign>? otherAtSigns) async {
   AtRpc.server(
-    atClient: c.atClient,
+    atClient: atClient,
     baseNameSpace: applicationNamespace,
     domainNameSpace: rpcName,
     requestHandler: requestHandler,
-    allowList: c.otherAtSigns,
-    allowAll: c.otherAtSigns == null,
+    allowList: otherAtSigns,
+    allowAll: otherAtSigns == null,
     enableRequestMutex: true,
   ).start();
 }

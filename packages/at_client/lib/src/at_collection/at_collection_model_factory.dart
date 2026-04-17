@@ -1,5 +1,6 @@
 import 'package:at_client/src/at_collection/at_collection_model.dart';
 
+@Deprecated("Use AtClient.collection for collection-style operations")
 abstract class AtCollectionModelFactory<T extends AtCollectionModel> {
   /// Expected to return an instance of T
   T create();
@@ -15,6 +16,7 @@ abstract class AtCollectionModelFactory<T extends AtCollectionModel> {
   }
 }
 
+@Deprecated("Use AtClient.collection for collection-style operations")
 class AtCollectionModelFactoryManager {
   static final AtCollectionModelFactoryManager _singleton =
       AtCollectionModelFactoryManager._internal();

@@ -134,9 +134,11 @@ class AtClientPreference {
   /// hashing algorithm to use for pkam authentication
   HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
 
-  /// Set this to [RemoteLocalPref.remoteFirst] or [RemoteLocalPref.remoteOnly]
+  /// Set this to [RemoteLocalPref.remoteOnly]
   /// if you require all data operations (get / put / delete) to be performed
-  /// on the remote atServer first.
+  /// on the remote atServer rather than on local storage. (When operations are
+  /// performed locally, we depend on sync to get eventual consistency between
+  /// local and remote.
   RemoteLocalPref remoteLocalPref = RemoteLocalPref.localOnly;
 }
 

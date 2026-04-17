@@ -45,6 +45,7 @@ class AtClientImpl implements AtClient {
 
   AtClientPreference? get preference => _preference;
   late final Atsign _atSign;
+
   @override
   Atsign get atSign => _atSign;
   SecondaryKeyStore? _localSecondaryKeyStore;
@@ -159,6 +160,14 @@ class AtClientImpl implements AtClient {
   static final Finalizer<String> _finalizer = Finalizer((service) {
     _logger.finer('Outgoing $service has been garbage collected');
   });
+
+  final Map<String, Collection> _collections = {};
+
+  @override
+  Collection<T> collection<T>(String namespace) {
+    return _collections.putIfAbsent(
+        namespace, () => CollectionImpl<T>(this, namespace)) as Collection<T>;
+  }
 
   static Future<AtClient> create(
       String currentAtSign, String? namespace, AtClientPreference preferences,
