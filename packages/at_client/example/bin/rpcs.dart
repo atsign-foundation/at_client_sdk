@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client_examples/snippets/init_example_context.dart';
+import 'package:at_client_examples/init_example_context.dart';
 
 const String rpcName = 'some_method.some_interface';
 

@@ -9,12 +9,16 @@ environment:
 dependencies:
   at_client: ^3.11.0
   at_cli_commons: ^3.0.1
+  at_commons: ^5.8.0
+  at_utils: ^3.4.0
 
 dependency_overrides:
   at_client:
     path: ../../at_client
   at_cli_commons:
     path: ../../at_cli_commons
+  at_commons:
+    path: ../../at_commons
 
 dev_dependencies:
   lints: ^6.1.0

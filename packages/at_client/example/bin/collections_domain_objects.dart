@@ -1,0 +1,87 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:at_client/at_client.dart';
+import 'package:at_client_examples/domain_objects.dart';
+
+import 'package:at_client_examples/init_example_context.dart';
+
+void main(List<String> args) async {
+  stdout.writeln('Collections');
+  Model.registerFactory(type: 'Dog', factory: Dog.fromJson);
+  Model.registerFactory(type: 'Cat', factory: Cat.fromJson);
+  ExampleContext c = await getExampleContext(args);
+
+  c.progressController.stream.listen((s) => stdout.writeln(s));
+
+  c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
+  switch (c.role) {
+    case ExampleRole.sender:
+      await sender(c.atClient, c.otherAtSigns, c.progressController.sink);
+      break;
+    case ExampleRole.receiver:
+      await receiver(c.atClient, c.otherAtSigns, c.progressController.sink);
+      break;
+  }
+  exit(0);
+}
+
+Future<void> sender(
+  AtClient atClient,
+  Set<Atsign>? otherAtSigns,
+  StreamSink<String> progressSink,
+) async {
+  final pets = atClient.collection<Pet>('pets.$applicationNamespace');
+
+  progressSink.add('Creating a Dog, sharing with $otherAtSigns');
+  await for (final r in pets.put(
+    Model.domain(
+      owner: atClient.atSign,
+      id: 'rex',
+      type: 'Dog',
+      obj: Dog(name: '${atClient.atSign}\'s dog Rex'),
+      sharedWith: otherAtSigns,
+    ),
+    expiresAt: DateTime.now().add(Duration(seconds: 10)),
+  )) {
+    progressSink.add(r.toString());
+  }
+
+  progressSink.add('Creating a Cat, sharing with $otherAtSigns');
+  await for (final r in pets.put(
+    Model.domain(
+        owner: atClient.atSign,
+        id: 'felix',
+        type: 'Cat',
+        obj: Cat(name: '${atClient.atSign}\'s cat Felix'),
+        sharedWith: otherAtSigns),
+    expiresAt: DateTime.now().add(Duration(seconds: 10)),
+  )) {
+    progressSink.add(r.toString());
+  }
+
+  await poll(pets, progressSink);
+}
+
+Future<void> receiver(
+  AtClient atClient,
+  Set<Atsign>? otherAtSigns,
+  StreamSink<String> progressSink,
+) async {
+  await poll(
+      atClient.collection<Pet>('pets.$applicationNamespace'), progressSink);
+}
+
+Future<void> poll(
+  Collection<Pet> pets,
+  StreamSink<String> progressSink,
+) async {
+  while (true) {
+    progressSink.add('${DateTime.now().toString()} : Fetching');
+
+    for (final pet in (await pets.get()).models) {
+      progressSink.add('Fetched $pet');
+    }
+    await Future.delayed(Duration(seconds: 3));
+  }
+}

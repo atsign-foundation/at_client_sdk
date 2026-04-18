@@ -166,7 +166,8 @@ class AtClientImpl implements AtClient {
   @override
   Collection<T> collection<T>(String namespace) {
     return _collections.putIfAbsent(
-        namespace, () => CollectionImpl<T>(this, namespace)) as Collection<T>;
+            namespace, () => Collection.create<T>(this, namespace))
+        as Collection<T>;
   }
 
   static Future<AtClient> create(

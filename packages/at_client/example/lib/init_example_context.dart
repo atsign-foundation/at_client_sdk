@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:at_cli_commons/at_cli_commons.dart';
@@ -14,6 +15,7 @@ typedef ExampleContext = ({
   ExampleRole role,
   AtClient atClient,
   Set<Atsign>? otherAtSigns,
+  StreamController<String> progressController,
 });
 
 /// To help with running examples, parse the command line args and determine
@@ -56,8 +58,12 @@ Future<ExampleContext> getExampleContext(List<String> args) async {
     final AtClient atClient;
     atClient = (await CLIBase.fromCommandLineArgs(args, parser: ap)).atClient;
 
-    ExampleContext c =
-        (role: role, atClient: atClient, otherAtSigns: otherAtSigns);
+    ExampleContext c = (
+      role: role,
+      atClient: atClient,
+      otherAtSigns: otherAtSigns,
+      progressController: StreamController<String>(),
+    );
     return c;
   } catch (e, st) {
     stderr.writeln(st);

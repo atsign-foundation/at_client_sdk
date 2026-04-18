@@ -23,8 +23,7 @@ export 'package:at_client/src/util/encryption_util.dart';
 export 'package:at_client/src/util/enroll_list_request_param.dart';
 export 'package:at_commons/at_commons.dart';
 
-export 'package:at_client/src/collections/interface.dart';
-export 'package:at_client/src/collections/impl.dart';
+export 'package:at_client/src/collections/collections.dart';
 
 // The following have been deprecated and will be removed in next major version
 @Deprecated("Use AtClient.collection for collection-style operations")
