@@ -161,13 +161,20 @@ class AtClientImpl implements AtClient {
     _logger.finer('Outgoing $service has been garbage collected');
   });
 
-  final Map<String, Collection> _collections = {};
+  final Map<String, AtCollection> _collections = {};
 
   @override
-  Collection<T> collection<T>(String namespace) {
+  AtCollection<T> collection<T>(
+    String namespace,
+    Duration defaultExpiration,
+  ) {
     return _collections.putIfAbsent(
-            namespace, () => Collection.create<T>(this, namespace))
-        as Collection<T>;
+        namespace,
+        () => AtCollection<T>(
+              this,
+              namespace,
+              defaultExpiration,
+            )) as AtCollection<T>;
   }
 
   static Future<AtClient> create(

@@ -13,10 +13,14 @@ void main(List<String> args) async {
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
-  final Collection<Map> maps =
-      c.atClient.collection<Map>('maps.$applicationNamespace');
-  final Collection<String> strings =
-      c.atClient.collection<String>('strings.$applicationNamespace');
+  final AtCollection<Map> maps = c.atClient.collection<Map>(
+    'maps.$applicationNamespace',
+    exampleDefaultExpiration,
+  );
+  final AtCollection<String> strings = c.atClient.collection<String>(
+    'strings.$applicationNamespace',
+    exampleDefaultExpiration,
+  );
 
   switch (c.role) {
     case ExampleRole.sender:
@@ -45,12 +49,12 @@ Future<void> sender(
   AtClient atClient,
   Set<Atsign>? otherAtSigns,
   StreamSink<String> progressSink,
-  Collection<Map> maps,
-  Collection<String> strings,
+  AtCollection<Map> maps,
+  AtCollection<String> strings,
 ) async {
   progressSink.add('Creating a Map, sharing with $otherAtSigns');
   await for (final r in maps.put(
-    Model.primitive(
+    AtModel.primitive(
       owner: atClient.atSign,
       id: '12345',
       obj: {'isMap': true, 'name': 'my map', 'intValue': 123},
@@ -63,7 +67,7 @@ Future<void> sender(
 
   progressSink.add('Creating a String, sharing with $otherAtSigns');
   await for (final r in strings.put(
-    Model.primitive(
+    AtModel.primitive(
       owner: atClient.atSign,
       id: '12345',
       obj: 'this is just a String',
@@ -78,8 +82,8 @@ Future<void> sender(
 }
 
 Future<void> poll({
-  required Collection maps,
-  required Collection strings,
+  required AtCollection<Map> maps,
+  required AtCollection<String> strings,
   required StreamSink<String> progressSink,
 }) async {
   while (true) {
@@ -118,8 +122,8 @@ Future<void> receiver(
   AtClient atClient,
   Set<Atsign>? otherAtSigns,
   StreamSink<String> progressSink,
-  Collection maps,
-  Collection<String> strings,
+  AtCollection<Map> maps,
+  AtCollection<String> strings,
 ) async {
   await poll(maps: maps, strings: strings, progressSink: progressSink);
 }

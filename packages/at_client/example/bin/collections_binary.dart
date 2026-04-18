@@ -14,12 +14,23 @@ void main(List<String> args) async {
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
+  final AtCollection<Uint8List> binaries = c.atClient.collection<Uint8List>(
+    'binary.$applicationNamespace',
+    exampleDefaultExpiration,
+  );
+
   switch (c.role) {
     case ExampleRole.sender:
-      await sender(c.atClient, c.otherAtSigns, c.progressController.sink);
+      await sender(
+          c.atClient, c.otherAtSigns, c.progressController.sink, binaries);
       break;
     case ExampleRole.receiver:
-      await receiver(c.atClient, c.otherAtSigns, c.progressController.sink);
+      await receiver(
+        c.atClient,
+        c.otherAtSigns,
+        c.progressController.sink,
+        binaries,
+      );
       break;
   }
   exit(0);
@@ -29,16 +40,14 @@ Future<void> sender(
   AtClient atClient,
   Set<Atsign>? otherAtSigns,
   StreamSink<String> progressSink,
+  AtCollection binaries,
 ) async {
-  final Collection<Uint8List> binaries =
-      atClient.collection<Uint8List>('binary.$applicationNamespace');
-
   progressSink.add('Creating some binary data, sharing with $otherAtSigns');
   final data = Uint8List.fromList(
       'This is binary data from ${atClient.atSign}'.codeUnits);
 
   await for (final r in binaries.put(
-    Model.primitive(
+    AtModel.primitive(
       owner: atClient.atSign,
       id: '12345',
       obj: data,
@@ -53,7 +62,7 @@ Future<void> sender(
 }
 
 Future<void> poll(
-  Collection c,
+  AtCollection c,
   StreamSink<String> progressSink,
 ) async {
   while (true) {
@@ -79,9 +88,7 @@ Future<void> receiver(
   AtClient atClient,
   Set<Atsign>? otherAtSigns,
   StreamSink<String> progressSink,
+  AtCollection binaries,
 ) async {
-  final Collection binaries =
-      atClient.collection<Uint8List>('binary.$applicationNamespace');
-
   await poll(binaries, progressSink);
 }

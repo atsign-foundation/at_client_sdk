@@ -5,6 +5,7 @@ import 'package:at_cli_commons/at_cli_commons.dart';
 import 'package:at_client/at_client.dart';
 
 const String applicationNamespace = 'examples.demos';
+const Duration exampleDefaultExpiration = Duration(minutes: 1);
 
 enum ExampleRole {
   sender,

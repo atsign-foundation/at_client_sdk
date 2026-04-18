@@ -8,8 +8,8 @@ import 'package:at_client_examples/domain_objects.dart';
 import 'package:at_client_examples/init_example_context.dart';
 
 void main(List<String> args) async {
-  Model.registerFactory(type: 'Dog', factory: Dog.fromJson);
-  Model.registerFactory(type: 'Cat', factory: Cat.fromJson);
+  AtModel.registerFactory(type: 'Dog', factory: Dog.fromJson);
+  AtModel.registerFactory(type: 'Cat', factory: Cat.fromJson);
 
   stdout.writeln('Collections - generic');
   ExampleContext c = await getExampleContext(args);
@@ -18,8 +18,11 @@ void main(List<String> args) async {
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
-  final Collection<Object> generic =
-      c.atClient.collection<Object>('generic.$applicationNamespace');
+  final AtCollection generic = c.atClient.collection(
+    'generic.$applicationNamespace',
+    exampleDefaultExpiration,
+  );
+
   switch (c.role) {
     case ExampleRole.sender:
       await sender(
@@ -45,11 +48,11 @@ Future<void> sender(
   AtClient atClient,
   Set<Atsign>? otherAtSigns,
   StreamSink<String> progressSink,
-  Collection<Object> generic,
+  AtCollection generic,
 ) async {
   progressSink.add('Creating some binary data, sharing with $otherAtSigns');
   await for (final r in generic.put(
-    Model.primitive(
+    AtModel.primitive(
       owner: atClient.atSign,
       id: 'binary_12345',
       obj: Uint8List.fromList(
@@ -63,7 +66,7 @@ Future<void> sender(
 
   progressSink.add('Creating a Dog, sharing with $otherAtSigns');
   await for (final r in generic.put(
-    Model.domain(
+    AtModel.domain(
       owner: atClient.atSign,
       id: 'pets_rex',
       type: 'Dog',
@@ -77,7 +80,7 @@ Future<void> sender(
 
   progressSink.add('Creating a Cat, sharing with $otherAtSigns');
   await for (final r in generic.put(
-    Model.domain(
+    AtModel.domain(
         owner: atClient.atSign,
         id: 'pets_felix',
         type: 'Cat',
@@ -90,7 +93,7 @@ Future<void> sender(
 
   progressSink.add('Creating a Map, sharing with $otherAtSigns');
   await for (final r in generic.put(
-    Model.primitive(
+    AtModel.primitive(
       owner: atClient.atSign,
       id: 'map_12345',
       obj: {'isMap': true, 'name': 'my map', 'intValue': 123},
@@ -103,7 +106,7 @@ Future<void> sender(
 
   progressSink.add('Creating a String, sharing with $otherAtSigns');
   await for (final r in generic.put(
-    Model.primitive(
+    AtModel.primitive(
       owner: atClient.atSign,
       id: 'string_12345',
       obj: 'this is just a String',
@@ -121,39 +124,28 @@ Future<void> receiver(
   AtClient atClient,
   Set<Atsign>? otherAtSigns,
   StreamSink<String> progressSink,
-  Collection<Object> generic,
+  AtCollection generic,
 ) async {
   await poll(generic, progressSink);
 }
 
 Future<void> poll(
-  Collection c,
+  AtCollection generic,
   StreamSink<String> progressSink,
 ) async {
   while (true) {
     progressSink.add('${DateTime.now().toString()} : Fetching');
 
-    final getResponse = await c.get();
+    final getResponse = await generic.get();
     for (final e in getResponse.exceptions) {
       progressSink.add('Exception: $e');
     }
-    for (final i in getResponse.models) {
-      if (i.type == 'binary') {
-        progressSink.add('Fetched ${i.id}.${c.namespace}${i.owner}'
-            ' sharedWith: ${i.sharedWith}'
-            ' type: ${i.type}'
-            ' runtimeType: ${i.obj.runtimeType}'
-            ' length: ${i.obj.length} bytes'
-            ' : ${String.fromCharCodes(i.obj)}'
-            '');
-      } else {
-        progressSink.add('Fetched ${i.id}.${c.namespace}${i.owner}'
-            ' sharedWith: ${i.sharedWith}'
-            ' type: ${i.type}'
-            ' runtimeType: ${i.obj.runtimeType}'
-            ' obj: ${i.obj}'
-            '');
+    for (final model in getResponse.models) {
+      String msg = 'Fetched ${generic.prettyString(model)}';
+      if (model.type == 'binary') {
+        msg = '$msg : ${String.fromCharCodes(model.obj)}';
       }
+      progressSink.add(msg);
     }
     await Future.delayed(Duration(seconds: 3));
   }

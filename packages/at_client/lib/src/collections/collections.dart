@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:at_client/at_client.dart';
 import 'package:at_base2e15/at_base2e15.dart';
 
-final class Model<T> {
+final class AtModel<T> {
   static final Map<String, Function> _factories = {};
 
   static void registerFactory({
@@ -19,7 +19,7 @@ final class Model<T> {
   /// `@alice`. But the owner of Models shared with us by `@bob` will
   /// be `@bob`.
   ///
-  /// [owner] is set by [Collection] when rehydrating stored data
+  /// [owner] is set by [AtCollection] when rehydrating stored data
   final Atsign owner;
 
   /// the unique identifier which will be prepended to the namespace of the
@@ -27,7 +27,7 @@ final class Model<T> {
   /// namespace of `tasks.app_1.my_apps` then the full namespace of the
   /// persisted record will be `<id>.tasks.app_1.my_apps`
   ///
-  /// [id] is set by [Collection] when rehydrating stored data
+  /// [id] is set by [AtCollection] when rehydrating stored data
   final String id;
 
   /// The type name; this MUST be included in toJson() and fromJson()
@@ -37,9 +37,15 @@ final class Model<T> {
   final T obj;
 
   /// The [Atsign]s with which this data is shared
-  final Set<Atsign> sharedWith = {};
+  final Set<Atsign> sharedWith;
 
-  factory Model.domain({
+  final Set<Atsign> readBy;
+
+  DateTime? expiresAt;
+
+  DateTime? availableAt;
+
+  factory AtModel.domain({
     required Atsign owner,
     required String id,
     required String type,
@@ -49,31 +55,47 @@ final class Model<T> {
     if (!_factories.containsKey(type)) {
       throw StateError('No factory registered for domain type $type');
     }
-    return Model._(
-        owner: owner, id: id, type: type, obj: obj, sharedWith: sharedWith);
+    return AtModel._(
+      owner: owner,
+      id: id,
+      type: type,
+      obj: obj,
+      sharedWith: sharedWith ?? {},
+      readBy: {},
+      expiresAt: null,
+      availableAt: null,
+    );
   }
 
-  factory Model.primitive({
+  factory AtModel.primitive({
     required Atsign owner,
     required String id,
     required T obj,
     Set<Atsign>? sharedWith,
   }) {
     String type = (obj is Uint8List ? 'binary' : 'n/a');
-    return Model._(
-        owner: owner, id: id, type: type, obj: obj, sharedWith: sharedWith);
+    return AtModel._(
+      owner: owner,
+      id: id,
+      type: type,
+      obj: obj,
+      sharedWith: sharedWith ?? {},
+      readBy: {},
+      expiresAt: null,
+      availableAt: null,
+    );
   }
 
-  Model._({
+  AtModel._({
     required this.owner,
     required this.id,
     required this.type,
     required this.obj,
-    Set<Atsign>? sharedWith,
+    required this.sharedWith,
+    required this.readBy,
+    required this.expiresAt,
+    required this.availableAt,
   }) {
-    if (sharedWith != null) {
-      this.sharedWith.addAll(sharedWith);
-    }
     if (obj is Uint8List && type != 'binary') {
       throw ArgumentError('factoryType for Uint8List must be "binary"');
     }
@@ -81,9 +103,13 @@ final class Model<T> {
 
   Map<String, dynamic> toJson() {
     if (type == 'binary') {
-      return {'type': type, 'obj': Base2e15.encode(obj as Uint8List)};
+      return {
+        'type': type,
+        'readBy': readBy.toList(),
+        'obj': Base2e15.encode(obj as Uint8List)
+      };
     } else {
-      return {'type': type, 'obj': obj};
+      return {'type': type, 'readBy': readBy.toList(), 'obj': obj};
     }
   }
 
@@ -102,7 +128,7 @@ final class Model<T> {
 
   @override
   String toString() {
-    return 'Model{owner: $owner, sharedWith: $sharedWith, id: $id, type: $type, obj: $obj}';
+    return 'Model{owner: $owner, sharedWith: $sharedWith, readBy: $readBy, id: $id, type: $type, obj: $obj}';
   }
 }
 
@@ -136,67 +162,10 @@ class Failure extends OpResult {
   }
 }
 
-typedef CollectionGetResponse<T> = ({List<Model<T>> models, List exceptions});
+typedef CollectionGetResponse<T> = ({List<AtModel<T>> models, List exceptions});
 
-/// Operations to manage objects stored in "collections".
-abstract interface class Collection<T> {
-  static Collection<T> create<T>(AtClient atClient, String namespace) {
-    return CollectionImpl<T>(atClient, namespace);
-  }
-
+final class AtCollection<T> {
   /// The [AtClient] we will use
-  AtClient get atClient;
-
-  /// The fully qualified namespace. By fully qualified we mean
-  /// that the namespace includes the "application namespace".
-  ///
-  /// i.e. if your application has a namespace of "app_1.my_apps"
-  /// and your collection has a namespace of "tasks"
-  /// then the full qualified namespace would be "tasks.app_1.my_apps"
-  String get namespace;
-
-  /// - saves a copy of [model] for us (aka a 'self' copy)
-  /// - saves a copy for each of [Model.sharedWith]
-  /// - if [unshareWithOthers] is true, deletes any copies for atSigns who
-  ///   are not in [Model.sharedWith]
-  /// Returns a stream of [OpResult] for each action taken
-  Stream<OpResult> put(
-    Model<T> model, {
-    bool unshareWithOthers = true,
-    required DateTime expiresAt,
-    DateTime? availableAt,
-  });
-
-  /// Deletes the object.
-  /// - If owner was us, also deletes any copies shared with others.
-  /// - If owner was other, deletes our cached copy of what was shared with us.
-  Stream<OpResult> delete(Model<T> model);
-
-  /// Returns a [CollectionGetResponse] with a model for every unique
-  /// `id.collection.namespace@owner`. So for example if `@alice` has shared
-  /// the same thing with both `@bob` and `@chuck`, that would be just one
-  /// [Model] in the response, with [Model.owner] == `@alice` and
-  /// [Model.sharedWith] == `{'@bob','@chuck'}`
-  ///
-  /// Note that [Model.id] identifiers are treated as unique within collections
-  /// for a given [Model.owner] but are not required to be unique across owners.
-  ///
-  /// Consider example of a `tasks` Collection with a [Model] whose id is
-  /// `1` - there may be MANY items in the overall collection with id 1, for
-  /// example if `@alice` creates a task with ID 1 and shares it with bob, and
-  /// `@bob` creates a task with ID of 1 and shares it with alice, then alice
-  /// will have
-  /// - `@bob:1.tasks.app_1.my_apps@alice`
-  /// - `@alice:1.tasks.app_1.my_apps@bob`
-  Future<CollectionGetResponse<T>> get({
-    String id,
-    Atsign? owner,
-  });
-}
-
-class CollectionImpl<T> implements Collection<T> {
-  /// The [AtClient] we will use
-  @override
   final AtClient atClient;
 
   /// The fully qualified namespace. By fully qualified we mean
@@ -205,15 +174,23 @@ class CollectionImpl<T> implements Collection<T> {
   /// i.e. if your application has a namespace of "app_1.my_apps"
   /// and your collection has a namespace of "tasks"
   /// then the full qualified namespace would be "tasks.app_1.my_apps"
-  @override
   final String namespace;
 
-  CollectionImpl(this.atClient, this.namespace) {
+  final Duration defaultExpiration;
+
+  AtCollection(
+    this.atClient,
+    this.namespace,
+    this.defaultExpiration,
+  ) {
     if (!namespace.contains('.')) {
       throw ArgumentError('namespaces must be fully qualified');
     }
   }
 
+  /// Get the list of all AtKeys in this collection
+  /// - for [owner] if supplied
+  /// - for [id] if supplied
   Future<List<AtKey>> getKeys({String? id, Atsign? owner}) async {
     // scan for matching AtKeys
     id ??= '[^.]+';
@@ -224,25 +201,46 @@ class CollectionImpl<T> implements Collection<T> {
       ..sort((a, b) => a.fullKeyAndOwner.compareTo(b.fullKeyAndOwner));
   }
 
-  @override
+  /// Returns a [CollectionGetResponse] with a model for every unique
+  /// `id.collection.namespace@owner`. So for example if `@alice` has shared
+  /// the same thing with both `@bob` and `@chuck`, that would be just one
+  /// [AtModel] in the response, with [AtModel.owner] == `@alice` and
+  /// [AtModel.sharedWith] == `{'@bob','@chuck'}`
+  ///
+  /// Note that [AtModel.id] identifiers are treated as unique within collections
+  /// for a given [AtModel.owner] but are not required to be unique across owners.
+  ///
+  /// Consider example of a `tasks` Collection with a [AtModel] whose id is
+  /// `1` - there may be MANY items in the overall collection with id 1, for
+  /// example if `@alice` creates a task with ID 1 and shares it with bob, and
+  /// `@bob` creates a task with ID of 1 and shares it with alice, then alice
+  /// will have
+  /// - `@bob:1.tasks.app_1.my_apps@alice`
+  /// - `@alice:1.tasks.app_1.my_apps@bob`
   Future<CollectionGetResponse<T>> get({String? id, Atsign? owner}) async {
-    Map<String, Model<T>> map = {};
+    Map<String, AtModel<T>> map = {};
     List exceptions = [];
 
     for (final AtKey k in await getKeys(id: id, owner: owner)) {
       try {
-        Model<T> m;
+        AtModel<T> m;
         if (map.containsKey(k.fullKeyAndOwner)) {
           m = map[k.fullKeyAndOwner]!;
         } else {
           final AtValue v = await atClient.get(k);
           print('Retrieved raw value ${v.value}');
           final decoded = jsonDecode(v.value!);
-          m = Model._(
+          m = AtModel._(
             owner: k.sharedBy!.toAtsign(),
             id: k.key.split('.').first,
             type: decoded['type'],
-            obj: Model.rehydrate<T>(decoded['obj'], decoded['type']),
+            obj: AtModel.rehydrate<T>(decoded['obj'], decoded['type']),
+            sharedWith: {},
+            readBy: (decoded['readBy'] as List)
+                .map((e) => e.toString().toAtsign())
+                .toSet(),
+            expiresAt: v.metadata?.expiresAt,
+            availableAt: v.metadata?.availableAt,
           );
           map[k.fullKeyAndOwner] = m;
         }
@@ -256,17 +254,34 @@ class CollectionImpl<T> implements Collection<T> {
     return (models: map.values.toList(), exceptions: exceptions);
   }
 
-  @override
+  Future<void> markRead(AtModel<T> model, Atsign readBy) async {
+    model.readBy.add(readBy);
+  }
+
+  /// - saves a copy of [model] for us (aka a 'self' copy)
+  /// - saves a copy for each of [AtModel.sharedWith]
+  /// - if [unshareWithOthers] is true, deletes any copies for atSigns who
+  ///   are not in [AtModel.sharedWith]
+  /// Returns a stream of [OpResult] for each action taken
   Stream<OpResult> put(
-    Model<T> model, {
+    AtModel<T> model, {
     bool unshareWithOthers = true,
-    bool unshare = true,
-    required DateTime expiresAt,
+    DateTime? expiresAt,
     DateTime? availableAt,
   }) async* {
     if (model.owner != atClient.atSign) {
       throw ArgumentError('You may not update models owned by other atSigns');
     }
+
+    AtKey selfKey =
+        AtKey.fromString('${model.id}.$namespace${atClient.atSign}');
+    try {
+      AtValue v = await atClient.get(selfKey);
+      expiresAt = v.metadata?.expiresAt;
+      availableAt = v.metadata?.availableAt;
+    } catch (_) {}
+
+    expiresAt ??= DateTime.now().add(defaultExpiration);
 
     final now = DateTime.now();
     if (expiresAt.millisecondsSinceEpoch < now.millisecondsSinceEpoch) {
@@ -285,10 +300,9 @@ class CollectionImpl<T> implements Collection<T> {
 
     /// save a copy of [model] for us (aka a 'self' copy) and yield a result
     try {
-      AtKey k = AtKey.fromString('${model.id}.$namespace${atClient.atSign}');
-      k.metadata = md;
+      selfKey.metadata = md;
       await atClient.put(
-        k,
+        selfKey,
         jsonEncode(model.toJson()),
       );
       yield Success(atClient.atSign, Op.put);
@@ -323,11 +337,31 @@ class CollectionImpl<T> implements Collection<T> {
     }
   }
 
-  @override
-  Stream<OpResult> delete(Model<T> model) async* {
+  /// Deletes the object.
+  /// - If owner was us, also deletes any copies shared with others.
+  /// - If owner was other, deletes our cached copy of what was shared with us.
+  Stream<OpResult> delete(AtModel<T> model) async* {
     for (final AtKey k in await getKeys(id: model.id, owner: atClient.atSign)) {
       await atClient.delete(k);
       yield Success((k.sharedWith ?? atClient.atSign).toAtsign(), Op.delete);
+    }
+  }
+
+  String prettyString(AtModel<dynamic> m) {
+    if (m.type == 'binary') {
+      return '${m.id}.$namespace${m.owner}'
+          ' sharedWith: ${m.sharedWith}'
+          ' type: ${m.type}'
+          ' runtimeType: ${m.obj.runtimeType}'
+          ' length: ${m.obj.length} bytes'
+          '';
+    } else {
+      return '${m.id}.$namespace${m.owner}'
+          ' sharedWith: ${m.sharedWith}'
+          ' type: ${m.type}'
+          ' runtimeType: ${m.obj.runtimeType}'
+          ' obj: ${m.obj}'
+          '';
     }
   }
 }

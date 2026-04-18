@@ -639,11 +639,14 @@ abstract class AtClient {
 
   EncryptionService? get encryptionService;
 
-  /// Returns a [Collection] of [Model]s for the given namespace
+  /// Returns a [AtCollection] of [AtModel]s for the given namespace
   /// NB: [namespace] must be fully qualified. By fully qualified we mean
   /// that the namespace includes the "application namespace" - i.e. :
   /// - if your application has a namespace of "app_1.my_apps"
   /// - and your collection has a namespace of "tasks"
   /// - then the full qualified namespace would be "tasks.app_1.my_apps"
-  Collection<T> collection<T>(String namespace);
+  AtCollection<T> collection<T>(
+    String namespace,
+    Duration defaultExpiration,
+  );
 }
