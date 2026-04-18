@@ -14,7 +14,7 @@ void main(List<String> args) async {
   stdout.writeln('Collections - generic');
   ExampleContext c = await getExampleContext(args);
 
-  c.progressController.stream.listen((s) => stdout.writeln(s));
+  // c.progressController.stream.listen((s) => stdout.writeln('${DateTime.now()} | $s'));
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
@@ -50,6 +50,8 @@ Future<void> sender(
   StreamSink<String> progressSink,
   AtCollection generic,
 ) async {
+  generic.readReceipts
+      .listen((rr) => print('Read receipt ${rr.id} ${rr.readBy} ${rr.readAt}'));
   progressSink.add('Creating some binary data, sharing with $otherAtSigns');
   await for (final r in generic.put(
     AtModel.primitive(
@@ -146,6 +148,9 @@ Future<void> poll(
         msg = '$msg : ${String.fromCharCodes(model.obj)}';
       }
       progressSink.add(msg);
+      if (model.owner != generic.atClient.atSign) {
+        await generic.sendReadReceipt(model);
+      }
     }
     await Future.delayed(Duration(seconds: 3));
   }

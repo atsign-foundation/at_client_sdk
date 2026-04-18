@@ -12,7 +12,8 @@ void main(List<String> args) async {
   AtModel.registerFactory(type: 'Cat', factory: Cat.fromJson);
   ExampleContext c = await getExampleContext(args);
 
-  c.progressController.stream.listen((s) => stdout.writeln(s));
+  c.progressController.stream
+      .listen((s) => stdout.writeln('${DateTime.now()} | $s'));
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
@@ -95,7 +96,7 @@ Future<void> poll(
     progressSink.add('${DateTime.now().toString()} : Fetching');
 
     for (final pet in (await pets.get()).models) {
-      progressSink.add('Fetched $pet');
+      progressSink.add('Fetched ${pets.prettyString(pet)}');
     }
     await Future.delayed(Duration(seconds: 3));
   }

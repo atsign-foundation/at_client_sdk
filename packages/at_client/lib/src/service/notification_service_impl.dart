@@ -210,15 +210,16 @@ class NotificationServiceImpl extends NotificationService {
       logger.finest('DEBUG: $notificationJSON');
       if (isStopped) return;
 
-      final atNotifications = notificationParser
+      final notifs = notificationParser
           .getAtNotifications(notificationParser.parse(notificationJSON));
       _lastReceipt = DateTime.now().toUtc();
-      for (var atNotification in atNotifications) {
+      for (var notif in notifs) {
+        logger.info('Received ${notif.key}');
         // Saves latest notification id to the keys if its not a stats notification.
-        if (atNotification.id != '-1') {
+        if (notif.id != '-1') {
           try {
-            await atClient.put(lastReceivedNotificationAtKey,
-                jsonEncode(atNotification.toJson()));
+            await atClient.put(
+                lastReceivedNotificationAtKey, jsonEncode(notif.toJson()));
           } catch (e) {
             logger.warning('Failed to save last received notification ID: $e');
           }
@@ -228,11 +229,11 @@ class NotificationServiceImpl extends NotificationService {
             var transformedNotification =
                 await NotificationResponseTransformer(atClient)
                     .transform(Tuple()
-                      ..one = atNotification
+                      ..one = notif
                       ..two = notificationConfig);
 
             if (notificationConfig.regex != emptyRegex) {
-              if (hasRegexMatch(atNotification.key, notificationConfig.regex)) {
+              if (hasRegexMatch(notif.key, notificationConfig.regex)) {
                 streamController.add(transformedNotification);
               }
             } else {
@@ -253,14 +254,22 @@ class NotificationServiceImpl extends NotificationService {
   Future<String> send({
     required Atsign to,
     required String namespace,
-    required String body,
+    String body = '',
     bool shouldEncrypt = true,
     Duration expiration = NotificationService.defaultExpiration,
+    bool cacheAtRecipient = false,
+    DateTime? recipientCacheExpiration,
   }) async {
+    if (cacheAtRecipient && recipientCacheExpiration == null) {
+      throw ArgumentError(
+          'You must supply recipientCacheExpiration when cacheAtRecipient is true');
+    }
     final String key = '$to:$namespace$atSign';
     final AtKey atKey = AtKey.fromString(key);
+    atKey.metadata.namespaceAware = false;
     final String notifPayload;
-    if (shouldEncrypt) {
+    body = body.trim();
+    if (body.isNotEmpty && shouldEncrypt) {
       AtKeyEncryption encrypter = atSign == to
           ? SelfKeyEncryption(atClient)
           : SharedKeyEncryption(atClient);
@@ -271,6 +280,16 @@ class NotificationServiceImpl extends NotificationService {
       atKey.metadata.isEncrypted = false;
     }
 
+    if (cacheAtRecipient) {
+      atKey.metadata.ttr = -1;
+      int ttl = recipientCacheExpiration!.millisecondsSinceEpoch -
+          DateTime.now().millisecondsSinceEpoch;
+      if (ttl < 0) {
+        ttl = 1;
+      }
+      atKey.metadata.ttl = ttl;
+    }
+
     final String id = Uuid().v4();
     StringBuffer sb = StringBuffer();
     sb.write('notify:id:$id');
@@ -278,11 +297,17 @@ class NotificationServiceImpl extends NotificationService {
     sb.write(atKey.metadata.toAtProtocolFragment());
     sb.write(':$key');
 
-    sb.write(':$notifPayload');
+    if (notifPayload.isNotEmpty) {
+      sb.write(':$notifPayload');
+    }
+
     sb.write('\n');
 
-    final String cmd = sb.toString();
-    await atClient.getRemoteSecondary()?.executeCommand(cmd, auth: true);
+    logger.info('SENDING: $key');
+
+    await atClient
+        .getRemoteSecondary()
+        ?.executeCommand(sb.toString(), auth: true);
 
     return id;
   }

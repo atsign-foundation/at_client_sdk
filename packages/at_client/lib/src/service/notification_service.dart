@@ -81,9 +81,11 @@ abstract class NotificationService {
   Future<String> send({
     required Atsign to,
     required String namespace,
-    required String body,
+    String body = '',
     bool shouldEncrypt = true,
-    Duration expiration = defaultExpiration,
+    Duration expiration = NotificationService.defaultExpiration,
+    bool cacheAtRecipient = false,
+    DateTime? recipientCacheExpiration,
   });
 
   /// calls [subscribe] with regex constructed from the [namespace]

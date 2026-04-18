@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_base2e15/at_base2e15.dart';
+import 'package:at_utils/at_logger.dart' show AtSignLogger;
 
 final class AtModel<T> {
   static final Map<String, Function> _factories = {};
@@ -128,7 +130,9 @@ final class AtModel<T> {
 
   @override
   String toString() {
-    return 'Model{owner: $owner, sharedWith: $sharedWith, readBy: $readBy, id: $id, type: $type, obj: $obj}';
+    return 'Model{owner: $owner, sharedWith: $sharedWith, readBy: $readBy,'
+        ' id: $id, type: $type, obj: $obj,'
+        ' expiresAt: $expiresAt, availableAt: $availableAt}';
   }
 }
 
@@ -163,8 +167,11 @@ class Failure extends OpResult {
 }
 
 typedef CollectionGetResponse<T> = ({List<AtModel<T>> models, List exceptions});
+typedef ReadReceipt = ({String id, Atsign readBy, DateTime readAt});
 
-final class AtCollection<T> {
+class AtCollection<T> {
+  late final AtSignLogger logger;
+
   /// The [AtClient] we will use
   final AtClient atClient;
 
@@ -178,6 +185,12 @@ final class AtCollection<T> {
 
   final Duration defaultExpiration;
 
+  final StreamController<ReadReceipt> _receipts = StreamController.broadcast();
+  Stream<({String id, Atsign readBy, DateTime readAt})> get readReceipts =>
+      _receipts.stream;
+
+  late final StreamSubscription<AtNotification> _rrSub;
+
   AtCollection(
     this.atClient,
     this.namespace,
@@ -186,6 +199,35 @@ final class AtCollection<T> {
     if (!namespace.contains('.')) {
       throw ArgumentError('namespaces must be fully qualified');
     }
+
+    logger = AtSignLogger(' AtCollection<$T> $namespace ');
+
+    _rrSub = atClient.notificationService
+        .subscribe(
+          regex: ':[^.]+\\.__rr\\.[^.]+\\.$namespace@',
+          shouldDecrypt: true,
+        )
+        .listen(handleReadReceipt);
+  }
+
+  Future<void> handleReadReceipt(AtNotification n) async {
+    _rrSub.pause();
+    try {
+      logger.shout('Read Receipt: ${n.key} ${n.value}');
+    } finally {
+      _rrSub.resume();
+    }
+  }
+
+  Future<void> sendReadReceipt(AtModel<T> model) async {
+    await atClient.notificationService.send(
+        to: model.owner,
+        namespace: '${DateTime.now().microsecondsSinceEpoch}'
+            '.__rr'
+            '.${model.id}'
+            '.$namespace',
+        cacheAtRecipient: true,
+        recipientCacheExpiration: model.expiresAt);
   }
 
   /// Get the list of all AtKeys in this collection
@@ -228,7 +270,7 @@ final class AtCollection<T> {
           m = map[k.fullKeyAndOwner]!;
         } else {
           final AtValue v = await atClient.get(k);
-          print('Retrieved raw value ${v.value}');
+          logger.info('Retrieved raw value ${v.value}');
           final decoded = jsonDecode(v.value!);
           m = AtModel._(
             owner: k.sharedBy!.toAtsign(),
@@ -279,6 +321,14 @@ final class AtCollection<T> {
       AtValue v = await atClient.get(selfKey);
       expiresAt = v.metadata?.expiresAt;
       availableAt = v.metadata?.availableAt;
+      if (v.value != null) {
+        final decoded = jsonDecode(v.value);
+        final existingReadBy = (decoded['readBy'] as List)
+            .map((e) => e.toString().toAtsign())
+            .toSet();
+        model.readBy.clear();
+        model.readBy.addAll(existingReadBy);
+      }
     } catch (_) {}
 
     expiresAt ??= DateTime.now().add(defaultExpiration);
@@ -297,6 +347,7 @@ final class AtCollection<T> {
       md.availableAt = availableAt;
       md.ttb = availableAt.millisecondsSinceEpoch - now.millisecondsSinceEpoch;
     }
+    md.namespaceAware = false;
 
     /// save a copy of [model] for us (aka a 'self' copy) and yield a result
     try {
@@ -350,17 +401,23 @@ final class AtCollection<T> {
   String prettyString(AtModel<dynamic> m) {
     if (m.type == 'binary') {
       return '${m.id}.$namespace${m.owner}'
-          ' sharedWith: ${m.sharedWith}'
-          ' type: ${m.type}'
-          ' runtimeType: ${m.obj.runtimeType}'
-          ' length: ${m.obj.length} bytes'
+          '\n\tsharedWith: ${m.sharedWith}'
+          '\n\treadBy: ${m.readBy}'
+          '\n\texpiresAt: ${m.expiresAt}'
+          '\n\tavailableAt: ${m.availableAt}'
+          '\n\ttype: ${m.type}'
+          '\n\truntimeType: ${m.obj.runtimeType}'
+          '\n\tlength: ${m.obj.length} bytes'
           '';
     } else {
       return '${m.id}.$namespace${m.owner}'
-          ' sharedWith: ${m.sharedWith}'
-          ' type: ${m.type}'
-          ' runtimeType: ${m.obj.runtimeType}'
-          ' obj: ${m.obj}'
+          '\n\tsharedWith: ${m.sharedWith}'
+          '\n\treadBy: ${m.readBy}'
+          '\n\texpiresAt: ${m.expiresAt}'
+          '\n\tavailableAt: ${m.availableAt}'
+          '\n\ttype: ${m.type}'
+          '\n\truntimeType: ${m.obj.runtimeType}'
+          '\n\tobj: ${m.obj}'
           '';
     }
   }

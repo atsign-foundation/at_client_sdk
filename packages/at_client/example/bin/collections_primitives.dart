@@ -9,7 +9,8 @@ void main(List<String> args) async {
   stdout.writeln('Collections - Maps and Strings');
   ExampleContext c = await getExampleContext(args);
 
-  c.progressController.stream.listen((s) => stdout.writeln(s));
+  c.progressController.stream
+      .listen((s) => stdout.writeln('${DateTime.now()} | $s'));
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
@@ -107,12 +108,7 @@ Future<void> poll({
       progressSink.add('Exception: $e');
     }
     for (final i in stringsResponse.models) {
-      progressSink.add('Fetched ${i.id}.${strings.namespace}${i.owner}'
-          ' sharedWith ${i.sharedWith}'
-          ' factory type ${i.type}'
-          ' runtime type ${i.obj.runtimeType}'
-          ' obj ${i.obj}'
-          '');
+      progressSink.add('Fetched ${strings.prettyString(i)}');
     }
     await Future.delayed(Duration(seconds: 3));
   }

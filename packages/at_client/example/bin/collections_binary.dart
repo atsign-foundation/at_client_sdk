@@ -10,7 +10,8 @@ void main(List<String> args) async {
   stdout.writeln('Collections - binary data');
   ExampleContext c = await getExampleContext(args);
 
-  c.progressController.stream.listen((s) => stdout.writeln(s));
+  c.progressController.stream
+      .listen((s) => stdout.writeln('${DateTime.now()} | $s'));
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
@@ -40,7 +41,7 @@ Future<void> sender(
   AtClient atClient,
   Set<Atsign>? otherAtSigns,
   StreamSink<String> progressSink,
-  AtCollection binaries,
+  AtCollection<Uint8List> binaries,
 ) async {
   progressSink.add('Creating some binary data, sharing with $otherAtSigns');
   final data = Uint8List.fromList(
@@ -62,24 +63,24 @@ Future<void> sender(
 }
 
 Future<void> poll(
-  AtCollection c,
+  AtCollection<Uint8List> binaries,
   StreamSink<String> progressSink,
 ) async {
   while (true) {
     progressSink.add('${DateTime.now().toString()} : Fetching');
 
-    final getResponse = await c.get();
+    final getResponse = await binaries.get();
     for (final e in getResponse.exceptions) {
       progressSink.add('Exception: $e');
     }
-    for (final i in getResponse.models) {
-      progressSink.add('Fetched ${i.id}.${c.namespace}${i.owner}'
-          ' sharedWith ${i.sharedWith}'
-          ' type ${i.type}'
-          ' with length ${i.obj.length} bytes'
-          ' : ${String.fromCharCodes(i.obj)}'
-          '');
+    for (final model in getResponse.models) {
+      String msg = '==> Fetched ${binaries.prettyString(model)}';
+      if (model.type == 'binary') {
+        msg = '$msg : ${String.fromCharCodes(model.obj)}';
+      }
+      progressSink.add(msg);
     }
+    progressSink.add('');
     await Future.delayed(Duration(seconds: 3));
   }
 }
@@ -88,7 +89,7 @@ Future<void> receiver(
   AtClient atClient,
   Set<Atsign>? otherAtSigns,
   StreamSink<String> progressSink,
-  AtCollection binaries,
+  AtCollection<Uint8List> binaries,
 ) async {
   await poll(binaries, progressSink);
 }

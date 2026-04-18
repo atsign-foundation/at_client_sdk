@@ -465,16 +465,20 @@ class AtClientImpl implements AtClient {
       var verbBuilder = GetRequestTransformer(this)
           .transform(atKey, requestOptions: getRequestOptions);
       // Execute the verb.
-      if (getRequestOptions?.useRemoteAtServer == true) {
-        secondary = getRemoteSecondary()!;
+      if (atKey.isLocal) {
+        secondary = getLocalSecondary()!;
       } else {
-        secondary = SecondaryManager.getSecondary(
-            this,
-            verbBuilder,
-            SecondaryManager.getRemoteLocalPrefForOp(
-              getRequestOptions?.useRemoteAtServer,
-              preference?.remoteLocalPref,
-            ));
+        if (getRequestOptions?.useRemoteAtServer == true) {
+          secondary = getRemoteSecondary()!;
+        } else {
+          secondary = SecondaryManager.getSecondary(
+              this,
+              verbBuilder,
+              SecondaryManager.getRemoteLocalPrefForOp(
+                getRequestOptions?.useRemoteAtServer,
+                preference?.remoteLocalPref,
+              ));
+        }
       }
       var getResponse = await secondary.executeVerb(verbBuilder);
       // Return empty value if getResponse is null.
@@ -701,12 +705,16 @@ class AtClientImpl implements AtClient {
           'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference!.maxDataSize} bytes. Found ${value.toString().length} bytes');
     }
 
-    var putResponse = await executeVerb(
-        putBuilder,
-        SecondaryManager.getRemoteLocalPrefForOp(
-          putRequestOptions?.useRemoteAtServer,
-          preference?.remoteLocalPref,
-        ));
+    RemoteLocalPref remoteLocalPref;
+    if (atKey.isLocal) {
+      remoteLocalPref = RemoteLocalPref.localOnly;
+    } else {
+      remoteLocalPref = SecondaryManager.getRemoteLocalPrefForOp(
+        putRequestOptions?.useRemoteAtServer,
+        preference?.remoteLocalPref,
+      );
+    }
+    var putResponse = await executeVerb(putBuilder, remoteLocalPref);
 
     // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
