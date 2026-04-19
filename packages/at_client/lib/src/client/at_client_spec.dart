@@ -331,6 +331,9 @@ abstract class AtClient {
   Future<bool> delete(AtKey key,
       {bool isDedicated = false, DeleteRequestOptions? deleteRequestOptions});
 
+  /// Does a key exist
+  Future<bool> keyExists(AtKey key, bool? useRemoteAtServer);
+
   /// Get all the keys stored in user's secondary in [AtKey] format. If [regex] is specified only matching keys are returned.
   /// If [sharedBy] is specified, then gets the keys from [sharedBy] user shared with current atClient user.
   /// If [sharedWith] is specified, then gets the keys shared to [sharedWith] user from the current atClient user.
@@ -639,7 +642,7 @@ abstract class AtClient {
 
   EncryptionService? get encryptionService;
 
-  /// Returns a [AtCollection] of [AtModel]s for the given namespace
+  /// Returns a [AtCollection] of [CItem]s for the given namespace
   /// NB: [namespace] must be fully qualified. By fully qualified we mean
   /// that the namespace includes the "application namespace" - i.e. :
   /// - if your application has a namespace of "app_1.my_apps"

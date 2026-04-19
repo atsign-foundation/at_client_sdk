@@ -48,9 +48,8 @@ Future<void> sender(
       'This is binary data from ${atClient.atSign}'.codeUnits);
 
   await for (final r in binaries.put(
-    AtModel.primitive(
+    CItem.primitive(
       owner: atClient.atSign,
-      id: '12345',
       obj: data,
       sharedWith: otherAtSigns,
     ),
@@ -73,10 +72,10 @@ Future<void> poll(
     for (final e in getResponse.exceptions) {
       progressSink.add('Exception: $e');
     }
-    for (final model in getResponse.models) {
-      String msg = '==> Fetched ${binaries.prettyString(model)}';
-      if (model.type == 'binary') {
-        msg = '$msg : ${String.fromCharCodes(model.obj)}';
+    for (final item in getResponse.items) {
+      String msg = '==> Fetched ${binaries.prettyString(item)}';
+      if (item.type == 'binary') {
+        msg = '$msg : ${String.fromCharCodes(item.obj)}';
       }
       progressSink.add(msg);
     }

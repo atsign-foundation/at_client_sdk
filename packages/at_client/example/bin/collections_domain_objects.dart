@@ -8,8 +8,8 @@ import 'package:at_client_examples/init_example_context.dart';
 
 void main(List<String> args) async {
   stdout.writeln('Collections');
-  AtModel.registerFactory(type: 'Dog', factory: Dog.fromJson);
-  AtModel.registerFactory(type: 'Cat', factory: Cat.fromJson);
+  CItem.registerFactory(type: 'Dog', factory: Dog.fromJson);
+  CItem.registerFactory(type: 'Cat', factory: Cat.fromJson);
   ExampleContext c = await getExampleContext(args);
 
   c.progressController.stream
@@ -51,9 +51,8 @@ Future<void> sender(
 ) async {
   progressSink.add('Creating a Dog, sharing with $otherAtSigns');
   await for (final r in pets.put(
-    AtModel.domain(
+    CItem.domain(
       owner: atClient.atSign,
-      id: 'rex',
       type: 'Dog',
       obj: Dog(name: '${atClient.atSign}\'s dog Rex'),
       sharedWith: otherAtSigns,
@@ -65,9 +64,8 @@ Future<void> sender(
 
   progressSink.add('Creating a Cat, sharing with $otherAtSigns');
   await for (final r in pets.put(
-    AtModel.domain(
+    CItem.domain(
         owner: atClient.atSign,
-        id: 'felix',
         type: 'Cat',
         obj: Cat(name: '${atClient.atSign}\'s cat Felix'),
         sharedWith: otherAtSigns),
@@ -95,7 +93,7 @@ Future<void> poll(
   while (true) {
     progressSink.add('${DateTime.now().toString()} : Fetching');
 
-    for (final pet in (await pets.get()).models) {
+    for (final pet in (await pets.get()).items) {
       progressSink.add('Fetched ${pets.prettyString(pet)}');
     }
     await Future.delayed(Duration(seconds: 3));

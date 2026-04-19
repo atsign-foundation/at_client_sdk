@@ -512,6 +512,16 @@ class AtClientImpl implements AtClient {
   }
 
   @override
+  Future<bool> keyExists(AtKey key, bool? useRemoteAtServer) async {
+    String s = key.toString();
+    final matches = await getKeys(
+      regex: s,
+      useRemoteAtServer: useRemoteAtServer,
+    );
+    return matches.contains(s);
+  }
+
+  @override
   Future<List<String>> getKeys({
     String? regex,
     String? sharedBy,

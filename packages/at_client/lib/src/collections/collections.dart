@@ -5,8 +5,9 @@ import 'dart:convert';
 import 'package:at_client/at_client.dart';
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
+import 'package:meta/meta.dart';
 
-final class AtModel<T> {
+final class CItem<T> {
   static final Map<String, Function> _factories = {};
 
   static void registerFactory({
@@ -16,9 +17,9 @@ final class AtModel<T> {
     _factories[type] = factory;
   }
 
-  /// The atSign which created this Model. For example let's say we are
-  /// currently `@alice`; then owners of Models which we create would be
-  /// `@alice`. But the owner of Models shared with us by `@bob` will
+  /// The atSign which created this [CItem]. For example let's say we are
+  /// currently `@alice`; then owner of a [CItem] which we create would be
+  /// `@alice`. But the owner of a [CItem] shared with us by `@bob` will
   /// be `@bob`.
   ///
   /// [owner] is set by [AtCollection] when rehydrating stored data
@@ -47,17 +48,18 @@ final class AtModel<T> {
 
   DateTime? availableAt;
 
-  factory AtModel.domain({
+  factory CItem.domain({
     required Atsign owner,
-    required String id,
     required String type,
     required T obj,
+    String? id,
     Set<Atsign>? sharedWith,
   }) {
     if (!_factories.containsKey(type)) {
       throw StateError('No factory registered for domain type $type');
     }
-    return AtModel._(
+    id ??= DateTime.now().microsecondsSinceEpoch.toString();
+    return CItem._(
       owner: owner,
       id: id,
       type: type,
@@ -69,14 +71,15 @@ final class AtModel<T> {
     );
   }
 
-  factory AtModel.primitive({
+  factory CItem.primitive({
     required Atsign owner,
-    required String id,
     required T obj,
+    String? id,
     Set<Atsign>? sharedWith,
   }) {
+    id ??= DateTime.now().microsecondsSinceEpoch.toString();
     String type = (obj is Uint8List ? 'binary' : 'n/a');
-    return AtModel._(
+    return CItem._(
       owner: owner,
       id: id,
       type: type,
@@ -88,7 +91,7 @@ final class AtModel<T> {
     );
   }
 
-  AtModel._({
+  CItem._({
     required this.owner,
     required this.id,
     required this.type,
@@ -130,8 +133,8 @@ final class AtModel<T> {
 
   @override
   String toString() {
-    return 'Model{owner: $owner, sharedWith: $sharedWith, readBy: $readBy,'
-        ' id: $id, type: $type, obj: $obj,'
+    return 'CItem{owner: $owner, sharedWith: $sharedWith, readBy: $readBy,'
+        ' id: $id, type: $type, obj: ${obj.runtimeType},'
         ' expiresAt: $expiresAt, availableAt: $availableAt}';
   }
 }
@@ -166,14 +169,80 @@ class Failure extends OpResult {
   }
 }
 
-typedef CollectionGetResponse<T> = ({List<AtModel<T>> models, List exceptions});
-typedef ReadReceipt = ({String id, Atsign readBy, DateTime readAt});
+typedef CollectionGetResponse<T> = ({List<CItem<T>> items, List exceptions});
+
+sealed class CEvent {
+  final Atsign owner;
+  final String id;
+
+  CEvent({
+    required this.owner,
+    required this.id,
+  });
+}
+
+class CReadReceipt extends CEvent {
+  final Atsign from;
+  final DateTime readAt;
+
+  CReadReceipt({
+    required super.owner,
+    required super.id,
+    required this.from,
+    required this.readAt,
+  });
+}
+
+class CItemUpdated extends CEvent {
+  CItemUpdated({
+    required super.owner,
+    required super.id,
+  });
+}
+
+class CItemDeleted extends CEvent {
+  CItemDeleted({
+    required super.owner,
+    required super.id,
+  });
+}
+
+class CSubItemUpdated extends CEvent {
+  final String subNamespace;
+
+  CSubItemUpdated({
+    required super.owner,
+    required super.id,
+    required this.subNamespace,
+  });
+}
+
+class CSubItemDeleted extends CEvent {
+  final String subNamespace;
+
+  CSubItemDeleted({
+    required super.owner,
+    required super.id,
+    required this.subNamespace,
+  });
+}
+
+typedef CParts = ({
+  Atsign from,
+  String id,
+  String? subNamespace,
+  String? subId
+});
 
 class AtCollection<T> {
+  static const String readReceiptNamespacePart = '__rr';
+  static const String _rr = readReceiptNamespacePart;
   late final AtSignLogger logger;
 
   /// The [AtClient] we will use
   final AtClient atClient;
+
+  Atsign get atSign => atClient.atSign;
 
   /// The fully qualified namespace. By fully qualified we mean
   /// that the namespace includes the "application namespace".
@@ -185,11 +254,16 @@ class AtCollection<T> {
 
   final Duration defaultExpiration;
 
-  final StreamController<ReadReceipt> _receipts = StreamController.broadcast();
-  Stream<({String id, Atsign readBy, DateTime readAt})> get readReceipts =>
-      _receipts.stream;
+  final StreamController<CEvent> _events = StreamController.broadcast();
+
+  Stream<CEvent> get eventStream => _events.stream;
 
   late final StreamSubscription<AtNotification> _rrSub;
+
+  late final RegExp regexRR;
+  late final RegExp regexObj;
+  late final RegExp regexSubObj;
+  late final String regexAllStr;
 
   AtCollection(
     this.atClient,
@@ -202,32 +276,123 @@ class AtCollection<T> {
 
     logger = AtSignLogger(' AtCollection<$T> $namespace ');
 
+    regexRR = RegExp(':[^.]+\\.$_rr\\.[^.]+\\.$namespace@');
+    regexAllStr = '.*\\.$namespace@';
+    regexObj = RegExp('(^|:)[^.]+\\.$namespace@');
+    regexSubObj = RegExp('(^|:)[^.]+\\.[^.]+\\.[^.]+\\.$namespace@');
+
     _rrSub = atClient.notificationService
         .subscribe(
-          regex: ':[^.]+\\.__rr\\.[^.]+\\.$namespace@',
+          regex: regexAllStr,
           shouldDecrypt: true,
         )
-        .listen(handleReadReceipt);
+        .listen(handleNotification);
   }
 
-  Future<void> handleReadReceipt(AtNotification n) async {
+  @visibleForTesting
+  Future<void> handleNotification(AtNotification n) async {
     _rrSub.pause();
     try {
-      logger.shout('Read Receipt: ${n.key} ${n.value}');
+      if (regexRR.hasMatch(n.key)) {
+        await handleReadReceipt(n);
+      } else if (regexObj.hasMatch(n.key)) {
+        await handleObjNotification(n);
+      } else {
+        logger.shout('handleNotification: No handler for ${n.key}');
+        // TODO add "subObj" notification handler
+      }
+    } catch (e, st) {
+      logger.shout('handleNotification: $e\nStackTrace:\n$st');
     } finally {
       _rrSub.resume();
     }
   }
 
-  Future<void> sendReadReceipt(AtModel<T> model) async {
-    await atClient.notificationService.send(
-        to: model.owner,
-        namespace: '${DateTime.now().microsecondsSinceEpoch}'
-            '.__rr'
-            '.${model.id}'
-            '.$namespace',
-        cacheAtRecipient: true,
-        recipientCacheExpiration: model.expiresAt);
+  CParts getPartsFromNotifKey(AtNotification n) {
+    String keyName = n.key.replaceAll('${n.to}:', '').replaceAll(n.from, '');
+    final ix = keyName.lastIndexOf('.$namespace');
+    if (ix >= 0) {
+      keyName = keyName.substring(0, ix);
+    }
+    final parts = keyName.split('.').reversed.toList();
+    String id = parts[0];
+    String? subSpace = parts.length > 1 ? parts[1] : null;
+    String? subId = parts.length > 2 ? parts[2] : null;
+    return (
+      from: n.from.toAtsign(),
+      id: id,
+      subNamespace: subSpace,
+      subId: subId,
+    );
+  }
+
+  @visibleForTesting
+  Future<void> handleReadReceipt(AtNotification n) async {
+    // @to:rr_id.__rr.obj_id.some.name.space@from
+    // -> obj_id.__rr.rr_id
+    final parts = getPartsFromNotifKey(n);
+    _events.add(
+      CReadReceipt(
+        owner: atSign,
+        id: parts.id,
+        from: parts.from,
+        readAt: DateTime.fromMicrosecondsSinceEpoch(int.parse(parts.subId!)),
+      ),
+    );
+  }
+
+  @visibleForTesting
+  Future<void> handleObjNotification(AtNotification n) async {
+    final parts = getPartsFromNotifKey(n);
+
+    switch (n.operation) {
+      case 'update':
+        _events.add(CItemUpdated(owner: parts.from, id: parts.id));
+        break;
+      case 'delete':
+        _events.add(CItemDeleted(owner: parts.from, id: parts.id));
+        break;
+      default:
+        logger.shout('handleObjNotification:'
+            ' No handler for operation ${n.operation}');
+    }
+  }
+
+  Future<bool> sentReadReceipt(CItem<T> item) async {
+    String regex = '${item.owner}:.*\\.$_rr\\.${item.id}\\.$namespace$atSign';
+    final matches = await atClient.getKeys(regex: regex);
+    return matches.isNotEmpty;
+  }
+
+  String get newId => DateTime.now().microsecondsSinceEpoch.toString();
+
+  /// It is safe to call this multiple times; it will only be sent one time
+  Future<bool> sendReadReceipt(CItem<T> item) async {
+    if (await sentReadReceipt(item)) {
+      return false;
+    }
+    String id = newId;
+    AtKey k =
+        AtKey.fromString('${item.owner}:$id.$_rr.${item.id}.$namespace$atSign');
+    Metadata md = Metadata();
+    md.ttr = -1; // recipient can cache
+    md.ccd = true;
+    DateTime now = DateTime.now();
+    if (item.expiresAt == null) {
+      throw StateError('expiresAt is null for $k');
+    }
+    md.expiresAt = item.expiresAt ?? now.add(Duration(days: 7));
+    md.ttl = md.expiresAt!.millisecondsSinceEpoch - now.millisecondsSinceEpoch;
+    if (item.availableAt != null) {
+      md.availableAt = item.availableAt;
+      md.ttb =
+          md.availableAt!.millisecondsSinceEpoch - now.millisecondsSinceEpoch;
+    }
+    md.namespaceAware = false;
+
+    await atClient.put(k, id);
+
+    return true;
   }
 
   /// Get the list of all AtKeys in this collection
@@ -243,16 +408,16 @@ class AtCollection<T> {
       ..sort((a, b) => a.fullKeyAndOwner.compareTo(b.fullKeyAndOwner));
   }
 
-  /// Returns a [CollectionGetResponse] with a model for every unique
+  /// Returns a [CollectionGetResponse] with a [CItem] for every unique
   /// `id.collection.namespace@owner`. So for example if `@alice` has shared
   /// the same thing with both `@bob` and `@chuck`, that would be just one
-  /// [AtModel] in the response, with [AtModel.owner] == `@alice` and
-  /// [AtModel.sharedWith] == `{'@bob','@chuck'}`
+  /// [CItem] in the response, with [CItem.owner] == `@alice` and
+  /// [CItem.sharedWith] == `{'@bob','@chuck'}`
   ///
-  /// Note that [AtModel.id] identifiers are treated as unique within collections
-  /// for a given [AtModel.owner] but are not required to be unique across owners.
+  /// Note that [CItem.id] identifiers are treated as unique within collections
+  /// for a given [CItem.owner] but are not required to be unique across owners.
   ///
-  /// Consider example of a `tasks` Collection with a [AtModel] whose id is
+  /// Consider example of a `tasks` Collection with a [CItem] whose id is
   /// `1` - there may be MANY items in the overall collection with id 1, for
   /// example if `@alice` creates a task with ID 1 and shares it with bob, and
   /// `@bob` creates a task with ID of 1 and shares it with alice, then alice
@@ -260,23 +425,23 @@ class AtCollection<T> {
   /// - `@bob:1.tasks.app_1.my_apps@alice`
   /// - `@alice:1.tasks.app_1.my_apps@bob`
   Future<CollectionGetResponse<T>> get({String? id, Atsign? owner}) async {
-    Map<String, AtModel<T>> map = {};
+    Map<String, CItem<T>> map = {};
     List exceptions = [];
 
     for (final AtKey k in await getKeys(id: id, owner: owner)) {
       try {
-        AtModel<T> m;
+        CItem<T> m;
         if (map.containsKey(k.fullKeyAndOwner)) {
           m = map[k.fullKeyAndOwner]!;
         } else {
           final AtValue v = await atClient.get(k);
           logger.info('Retrieved raw value ${v.value}');
           final decoded = jsonDecode(v.value!);
-          m = AtModel._(
+          m = CItem._(
             owner: k.sharedBy!.toAtsign(),
             id: k.key.split('.').first,
             type: decoded['type'],
-            obj: AtModel.rehydrate<T>(decoded['obj'], decoded['type']),
+            obj: CItem.rehydrate<T>(decoded['obj'], decoded['type']),
             sharedWith: {},
             readBy: (decoded['readBy'] as List)
                 .map((e) => e.toString().toAtsign())
@@ -293,30 +458,37 @@ class AtCollection<T> {
         exceptions.add(e);
       }
     }
-    return (models: map.values.toList(), exceptions: exceptions);
+    return (items: map.values.toList(), exceptions: exceptions);
   }
 
-  Future<void> markRead(AtModel<T> model, Atsign readBy) async {
-    model.readBy.add(readBy);
+  Future<List<CItem<T>>> getList({String? id, Atsign? owner}) async {
+    final r = await get(id: id, owner: owner);
+    if (r.exceptions.isNotEmpty) {
+      throw Exception(r.exceptions.toString());
+    }
+    return r.items;
   }
 
-  /// - saves a copy of [model] for us (aka a 'self' copy)
-  /// - saves a copy for each of [AtModel.sharedWith]
+  Future<void> markRead(CItem<T> item, Atsign readBy) async {
+    item.readBy.add(readBy);
+  }
+
+  /// - saves a copy of [item] for us (aka a 'self' copy)
+  /// - saves a copy for each of [CItem.sharedWith]
   /// - if [unshareWithOthers] is true, deletes any copies for atSigns who
-  ///   are not in [AtModel.sharedWith]
+  ///   are not in [CItem.sharedWith]
   /// Returns a stream of [OpResult] for each action taken
   Stream<OpResult> put(
-    AtModel<T> model, {
+    CItem<T> item, {
     bool unshareWithOthers = true,
     DateTime? expiresAt,
     DateTime? availableAt,
   }) async* {
-    if (model.owner != atClient.atSign) {
-      throw ArgumentError('You may not update models owned by other atSigns');
+    if (item.owner != atSign) {
+      throw ArgumentError('You may not update items owned by other atSigns');
     }
 
-    AtKey selfKey =
-        AtKey.fromString('${model.id}.$namespace${atClient.atSign}');
+    AtKey selfKey = AtKey.fromString('${item.id}.$namespace$atSign');
     try {
       AtValue v = await atClient.get(selfKey);
       expiresAt = v.metadata?.expiresAt;
@@ -326,8 +498,8 @@ class AtCollection<T> {
         final existingReadBy = (decoded['readBy'] as List)
             .map((e) => e.toString().toAtsign())
             .toSet();
-        model.readBy.clear();
-        model.readBy.addAll(existingReadBy);
+        item.readBy.clear();
+        item.readBy.addAll(existingReadBy);
       }
     } catch (_) {}
 
@@ -349,22 +521,22 @@ class AtCollection<T> {
     }
     md.namespaceAware = false;
 
-    /// save a copy of [model] for us (aka a 'self' copy) and yield a result
+    /// save a copy for us (aka a 'self' copy) and yield a result
     try {
       selfKey.metadata = md;
       await atClient.put(
         selfKey,
-        jsonEncode(model.toJson()),
+        jsonEncode(item.toJson()),
       );
-      yield Success(atClient.atSign, Op.put);
+      yield Success(atSign, Op.put);
     } catch (e) {
-      yield Failure(atClient.atSign, Op.put, e);
+      yield Failure(atSign, Op.put, e);
     }
 
     /// if [unshareWithOthers] is true, deletes any copies for atSigns who
-    /// are not in model.sharedWith
-    for (final AtKey k in await getKeys(id: model.id, owner: atClient.atSign)) {
-      if ((k.sharedWith ?? atClient.atSign) == atClient.atSign) {
+    /// are not in item.sharedWith
+    for (final AtKey k in await getKeys(id: item.id, owner: atSign)) {
+      if ((k.sharedWith ?? atSign) == atSign) {
         continue;
       }
       await atClient.delete(k);
@@ -372,14 +544,13 @@ class AtCollection<T> {
     }
 
     /// for each item in [shareWith], save a copy for them and yield a result
-    for (final otherAtSign in model.sharedWith) {
+    for (final otherAtSign in item.sharedWith) {
       try {
-        AtKey k = AtKey.fromString(
-            '$otherAtSign:${model.id}.$namespace${atClient.atSign}');
+        AtKey k = AtKey.fromString('$otherAtSign:${item.id}.$namespace$atSign');
         k.metadata = md;
         await atClient.put(
           k,
-          jsonEncode(model.toJson()),
+          jsonEncode(item.toJson()),
         );
         yield Success(otherAtSign, Op.put);
       } catch (e) {
@@ -391,14 +562,14 @@ class AtCollection<T> {
   /// Deletes the object.
   /// - If owner was us, also deletes any copies shared with others.
   /// - If owner was other, deletes our cached copy of what was shared with us.
-  Stream<OpResult> delete(AtModel<T> model) async* {
-    for (final AtKey k in await getKeys(id: model.id, owner: atClient.atSign)) {
+  Stream<OpResult> delete(CItem<T> item) async* {
+    for (final AtKey k in await getKeys(id: item.id, owner: atSign)) {
       await atClient.delete(k);
-      yield Success((k.sharedWith ?? atClient.atSign).toAtsign(), Op.delete);
+      yield Success((k.sharedWith ?? atSign).toAtsign(), Op.delete);
     }
   }
 
-  String prettyString(AtModel<dynamic> m) {
+  String prettyString(CItem<dynamic> m) {
     if (m.type == 'binary') {
       return '${m.id}.$namespace${m.owner}'
           '\n\tsharedWith: ${m.sharedWith}'

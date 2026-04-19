@@ -8,13 +8,14 @@ import 'package:at_client_examples/domain_objects.dart';
 import 'package:at_client_examples/init_example_context.dart';
 
 void main(List<String> args) async {
-  AtModel.registerFactory(type: 'Dog', factory: Dog.fromJson);
-  AtModel.registerFactory(type: 'Cat', factory: Cat.fromJson);
+  CItem.registerFactory(type: 'Dog', factory: Dog.fromJson);
+  CItem.registerFactory(type: 'Cat', factory: Cat.fromJson);
 
   stdout.writeln('Collections - generic');
   ExampleContext c = await getExampleContext(args);
 
-  // c.progressController.stream.listen((s) => stdout.writeln('${DateTime.now()} | $s'));
+  c.progressController.stream
+      .listen((s) => stdout.writeln('${DateTime.now()} | $s'));
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
@@ -41,6 +42,8 @@ void main(List<String> args) async {
       );
       break;
   }
+  await Future.delayed(Duration(milliseconds: 100));
+
   exit(0);
 }
 
@@ -50,76 +53,100 @@ Future<void> sender(
   StreamSink<String> progressSink,
   AtCollection generic,
 ) async {
-  generic.readReceipts
-      .listen((rr) => print('Read receipt ${rr.id} ${rr.readBy} ${rr.readAt}'));
+  Map<String, Set<Atsign>> expectedReceipts = {};
+  Completer allReceiptsReceived = Completer();
+  generic.eventStream.listen((CEvent e) {
+    if (e is CReadReceipt) {
+      progressSink.add('${e.runtimeType} :'
+          ' Read Receipt from ${e.from} for ${e.id}');
+      expectedReceipts[e.id]?.remove(e.from);
+      if (expectedReceipts[e.id]?.isEmpty ?? true) {
+        expectedReceipts.remove(e.id);
+      }
+      if (expectedReceipts.isEmpty) {
+        allReceiptsReceived.complete();
+      }
+    } else {
+      progressSink.add(e.toString());
+    }
+  });
+
+  CItem itemToShare;
+
   progressSink.add('Creating some binary data, sharing with $otherAtSigns');
+  itemToShare = CItem.primitive(
+    owner: atClient.atSign,
+    obj: Uint8List.fromList(
+        'This is binary data from ${atClient.atSign}'.codeUnits),
+    sharedWith: otherAtSigns,
+  );
   await for (final r in generic.put(
-    AtModel.primitive(
-      owner: atClient.atSign,
-      id: 'binary_12345',
-      obj: Uint8List.fromList(
-          'This is binary data from ${atClient.atSign}'.codeUnits),
-      sharedWith: otherAtSigns,
-    ),
+    itemToShare,
     expiresAt: DateTime.now().add(Duration(seconds: 10)),
   )) {
     progressSink.add(r.toString());
   }
+  expectedReceipts[itemToShare.id] = Set.from(otherAtSigns!);
 
   progressSink.add('Creating a Dog, sharing with $otherAtSigns');
+  itemToShare = CItem.domain(
+    owner: atClient.atSign,
+    type: 'Dog',
+    obj: Dog(name: '${atClient.atSign}\'s dog Rex'),
+    sharedWith: otherAtSigns,
+  );
   await for (final r in generic.put(
-    AtModel.domain(
-      owner: atClient.atSign,
-      id: 'pets_rex',
-      type: 'Dog',
-      obj: Dog(name: '${atClient.atSign}\'s dog Rex'),
-      sharedWith: otherAtSigns,
-    ),
+    itemToShare,
     expiresAt: DateTime.now().add(Duration(seconds: 10)),
   )) {
     progressSink.add(r.toString());
   }
+  expectedReceipts[itemToShare.id] = Set.from(otherAtSigns);
 
   progressSink.add('Creating a Cat, sharing with $otherAtSigns');
+  itemToShare = CItem.domain(
+      owner: atClient.atSign,
+      type: 'Cat',
+      obj: Cat(name: '${atClient.atSign}\'s cat Felix'),
+      sharedWith: otherAtSigns);
   await for (final r in generic.put(
-    AtModel.domain(
-        owner: atClient.atSign,
-        id: 'pets_felix',
-        type: 'Cat',
-        obj: Cat(name: '${atClient.atSign}\'s cat Felix'),
-        sharedWith: otherAtSigns),
+    itemToShare,
     expiresAt: DateTime.now().add(Duration(seconds: 10)),
   )) {
     progressSink.add(r.toString());
   }
+  expectedReceipts[itemToShare.id] = Set.from(otherAtSigns);
 
   progressSink.add('Creating a Map, sharing with $otherAtSigns');
+  itemToShare = CItem.primitive(
+    owner: atClient.atSign,
+    obj: {'isMap': true, 'name': 'my map', 'intValue': 123},
+    sharedWith: otherAtSigns,
+  );
   await for (final r in generic.put(
-    AtModel.primitive(
-      owner: atClient.atSign,
-      id: 'map_12345',
-      obj: {'isMap': true, 'name': 'my map', 'intValue': 123},
-      sharedWith: otherAtSigns,
-    ),
+    itemToShare,
     expiresAt: DateTime.now().add(Duration(seconds: 10)),
   )) {
     progressSink.add(r.toString());
   }
+  expectedReceipts[itemToShare.id] = Set.from(otherAtSigns);
 
   progressSink.add('Creating a String, sharing with $otherAtSigns');
+  itemToShare = CItem.primitive(
+    owner: atClient.atSign,
+    obj: 'this is just a String',
+    sharedWith: otherAtSigns,
+  );
   await for (final r in generic.put(
-    AtModel.primitive(
-      owner: atClient.atSign,
-      id: 'string_12345',
-      obj: 'this is just a String',
-      sharedWith: otherAtSigns,
-    ),
+    itemToShare,
     expiresAt: DateTime.now().add(Duration(seconds: 10)),
   )) {
     progressSink.add(r.toString());
   }
+  expectedReceipts[itemToShare.id] = Set.from(otherAtSigns);
 
-  await poll(generic, progressSink);
+  await allReceiptsReceived.future;
+  progressSink.add('All read receipts received');
 }
 
 Future<void> receiver(
@@ -128,30 +155,51 @@ Future<void> receiver(
   StreamSink<String> progressSink,
   AtCollection generic,
 ) async {
-  await poll(generic, progressSink);
-}
+  // We're expecting to receive 5 things; we will send read receipts for each;
+  // once we've sent 5 read receipts, we're done
 
-Future<void> poll(
-  AtCollection generic,
-  StreamSink<String> progressSink,
-) async {
-  while (true) {
-    progressSink.add('${DateTime.now().toString()} : Fetching');
+  int expected = 5;
+  int actual = 0;
+  Completer allReceiptsSent = Completer();
 
-    final getResponse = await generic.get();
-    for (final e in getResponse.exceptions) {
-      progressSink.add('Exception: $e');
+  Future<void> sendReadReceipt(CItem item) async {
+    if (await generic.sentReadReceipt(item)) {
+      return;
     }
-    for (final model in getResponse.models) {
-      String msg = 'Fetched ${generic.prettyString(model)}';
-      if (model.type == 'binary') {
-        msg = '$msg : ${String.fromCharCodes(model.obj)}';
-      }
-      progressSink.add(msg);
-      if (model.owner != generic.atClient.atSign) {
-        await generic.sendReadReceipt(model);
-      }
+    progressSink.add('Sending read receipt for $item');
+    bool sent = await generic.sendReadReceipt(item);
+    if (sent) {
+      actual++;
     }
-    await Future.delayed(Duration(seconds: 3));
+    if (actual == expected) {
+      allReceiptsSent.complete();
+    }
   }
+
+  // watch for new collection events
+  generic.eventStream.listen((CEvent e) async {
+    switch (e) {
+      case CItemUpdated():
+        await sendReadReceipt(
+            (await generic.getList(id: e.id, owner: e.owner)).first);
+      default:
+        break;
+    }
+  });
+
+  progressSink.add('${DateTime.now().toString()} : Fetching');
+
+  for (final item in await generic.getList()) {
+    String msg = 'Fetched ${generic.prettyString(item)}';
+    if (item.type == 'binary') {
+      msg = '$msg : ${String.fromCharCodes(item.obj)}';
+    }
+    progressSink.add(msg);
+    if (item.owner != generic.atSign) {
+      await sendReadReceipt(item);
+    }
+  }
+
+  await allReceiptsSent.future;
+  progressSink.add('All read receipts sent');
 }
