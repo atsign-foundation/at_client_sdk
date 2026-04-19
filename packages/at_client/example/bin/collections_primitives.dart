@@ -54,7 +54,7 @@ Future<void> sender(
   AtCollection<String> strings,
 ) async {
   progressSink.add('Creating a Map, sharing with $otherAtSigns');
-  await for (final r in maps.put(
+  for (final r in await maps.put(
     CItem.primitive(
       owner: atClient.atSign,
       obj: {'isMap': true, 'name': 'my map', 'intValue': 123},
@@ -66,7 +66,7 @@ Future<void> sender(
   }
 
   progressSink.add('Creating a String, sharing with $otherAtSigns');
-  await for (final r in strings.put(
+  for (final r in await strings.put(
     CItem.primitive(
       owner: atClient.atSign,
       obj: 'this is just a String',

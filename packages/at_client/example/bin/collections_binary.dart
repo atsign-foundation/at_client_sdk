@@ -47,7 +47,7 @@ Future<void> sender(
   final data = Uint8List.fromList(
       'This is binary data from ${atClient.atSign}'.codeUnits);
 
-  await for (final r in binaries.put(
+  for (final r in await binaries.put(
     CItem.primitive(
       owner: atClient.atSign,
       obj: data,

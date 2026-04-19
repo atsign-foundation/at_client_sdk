@@ -50,7 +50,7 @@ Future<void> sender(
   AtCollection<Pet> pets,
 ) async {
   progressSink.add('Creating a Dog, sharing with $otherAtSigns');
-  await for (final r in pets.put(
+  for (final r in await pets.put(
     CItem.domain(
       owner: atClient.atSign,
       type: 'Dog',
@@ -63,7 +63,7 @@ Future<void> sender(
   }
 
   progressSink.add('Creating a Cat, sharing with $otherAtSigns');
-  await for (final r in pets.put(
+  for (final r in await pets.put(
     CItem.domain(
         owner: atClient.atSign,
         type: 'Cat',

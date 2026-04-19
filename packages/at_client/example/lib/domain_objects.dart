@@ -1,3 +1,28 @@
+class Todo {
+  String title;
+  String description;
+
+  Todo({required this.title, required this.description});
+
+  factory Todo.fromJson(Map<String, dynamic> json) {
+    return Todo(title: json['title'], description: json['description']);
+  }
+
+  Map<String, dynamic> toJson() => {'title': title, 'description': description};
+}
+
+class TodoNote {
+  String note;
+
+  TodoNote({required this.note});
+
+  factory TodoNote.fromJson(Map<String, dynamic> json) {
+    return TodoNote(note: json['note']);
+  }
+
+  Map<String, dynamic> toJson() => {'note': note};
+}
+
 abstract class Pet {
   final String name;
 

@@ -44,7 +44,9 @@ final class CItem<T> {
 
   final Set<Atsign> readBy;
 
-  DateTime? expiresAt;
+  DateTime createdAt;
+
+  DateTime expiresAt;
 
   DateTime? availableAt;
 
@@ -58,7 +60,8 @@ final class CItem<T> {
     if (!_factories.containsKey(type)) {
       throw StateError('No factory registered for domain type $type');
     }
-    id ??= DateTime.now().microsecondsSinceEpoch.toString();
+    final now = DateTime.now().toUtc();
+    id ??= now.microsecondsSinceEpoch.toString();
     return CItem._(
       owner: owner,
       id: id,
@@ -66,7 +69,8 @@ final class CItem<T> {
       obj: obj,
       sharedWith: sharedWith ?? {},
       readBy: {},
-      expiresAt: null,
+      createdAt: now,
+      expiresAt: now.add(Duration(days: 1)),
       availableAt: null,
     );
   }
@@ -77,7 +81,8 @@ final class CItem<T> {
     String? id,
     Set<Atsign>? sharedWith,
   }) {
-    id ??= DateTime.now().microsecondsSinceEpoch.toString();
+    final now = DateTime.now().toUtc();
+    id ??= now.microsecondsSinceEpoch.toString();
     String type = (obj is Uint8List ? 'binary' : 'n/a');
     return CItem._(
       owner: owner,
@@ -86,7 +91,8 @@ final class CItem<T> {
       obj: obj,
       sharedWith: sharedWith ?? {},
       readBy: {},
-      expiresAt: null,
+      createdAt: now,
+      expiresAt: now.add(Duration(days: 1)),
       availableAt: null,
     );
   }
@@ -98,6 +104,7 @@ final class CItem<T> {
     required this.obj,
     required this.sharedWith,
     required this.readBy,
+    required this.createdAt,
     required this.expiresAt,
     required this.availableAt,
   }) {
@@ -139,33 +146,33 @@ final class CItem<T> {
   }
 }
 
-enum Op { put, delete }
+enum CollectionOp { put, delete }
 
 sealed class OpResult {
-  /// the atSign for which the operation failed
-  final Atsign atSign;
-  final Op op;
+  /// the [AtKey] for the operation
+  final AtKey atKey;
+  final CollectionOp op;
 
-  OpResult(this.atSign, this.op);
+  OpResult(this.atKey, this.op);
 }
 
-class Success extends OpResult {
-  Success(super.atSign, super.op);
+class OpSuccess extends OpResult {
+  OpSuccess(super.atKey, super.op);
 
   @override
   String toString() {
-    return '$atSign:${op.name}:Success';
+    return '$atKey:${op.name}:Success';
   }
 }
 
-class Failure extends OpResult {
+class OpFailure extends OpResult {
   final Object reason;
 
-  Failure(super.atSign, super.op, this.reason);
+  OpFailure(super.atKey, super.op, this.reason);
 
   @override
   String toString() {
-    return '$atSign:${op.name}:Failure:$reason';
+    return '$atKey:${op.name}:Failure:$reason';
   }
 }
 
@@ -256,7 +263,7 @@ class AtCollection<T> {
 
   final StreamController<CEvent> _events = StreamController.broadcast();
 
-  Stream<CEvent> get eventStream => _events.stream;
+  Stream<CEvent> get events => _events.stream;
 
   late final StreamSubscription<AtNotification> _rrSub;
 
@@ -331,6 +338,8 @@ class AtCollection<T> {
     // @to:rr_id.__rr.obj_id.some.name.space@from
     // -> obj_id.__rr.rr_id
     final parts = getPartsFromNotifKey(n);
+    await markRead(
+        (await get(id: parts.id, owner: atSign)).items.first, parts.from);
     _events.add(
       CReadReceipt(
         owner: atSign,
@@ -359,6 +368,9 @@ class AtCollection<T> {
   }
 
   Future<bool> sentReadReceipt(CItem<T> item) async {
+    if (item.owner == atSign) {
+      return true;
+    }
     String regex = '${item.owner}:.*\\.$_rr\\.${item.id}\\.$namespace$atSign';
     final matches = await atClient.getKeys(regex: regex);
     return matches.isNotEmpty;
@@ -378,10 +390,7 @@ class AtCollection<T> {
     md.ttr = -1; // recipient can cache
     md.ccd = true;
     DateTime now = DateTime.now();
-    if (item.expiresAt == null) {
-      throw StateError('expiresAt is null for $k');
-    }
-    md.expiresAt = item.expiresAt ?? now.add(Duration(days: 7));
+    md.expiresAt = item.createdAt.add(Duration(days: 7));
     md.ttl = md.expiresAt!.millisecondsSinceEpoch - now.millisecondsSinceEpoch;
     if (item.availableAt != null) {
       md.availableAt = item.availableAt;
@@ -446,8 +455,9 @@ class AtCollection<T> {
             readBy: (decoded['readBy'] as List)
                 .map((e) => e.toString().toAtsign())
                 .toSet(),
-            expiresAt: v.metadata?.expiresAt,
-            availableAt: v.metadata?.availableAt,
+            createdAt: v.metadata!.createdAt!,
+            expiresAt: v.metadata!.expiresAt!,
+            availableAt: v.metadata!.availableAt,
           );
           map[k.fullKeyAndOwner] = m;
         }
@@ -471,6 +481,7 @@ class AtCollection<T> {
 
   Future<void> markRead(CItem<T> item, Atsign readBy) async {
     item.readBy.add(readBy);
+    await put(item);
   }
 
   /// - saves a copy of [item] for us (aka a 'self' copy)
@@ -478,12 +489,13 @@ class AtCollection<T> {
   /// - if [unshareWithOthers] is true, deletes any copies for atSigns who
   ///   are not in [CItem.sharedWith]
   /// Returns a stream of [OpResult] for each action taken
-  Stream<OpResult> put(
+  Future<List<OpResult>> put(
     CItem<T> item, {
     bool unshareWithOthers = true,
     DateTime? expiresAt,
     DateTime? availableAt,
-  }) async* {
+  }) async {
+    List<OpResult> l = [];
     if (item.owner != atSign) {
       throw ArgumentError('You may not update items owned by other atSigns');
     }
@@ -498,7 +510,6 @@ class AtCollection<T> {
         final existingReadBy = (decoded['readBy'] as List)
             .map((e) => e.toString().toAtsign())
             .toSet();
-        item.readBy.clear();
         item.readBy.addAll(existingReadBy);
       }
     } catch (_) {}
@@ -528,45 +539,64 @@ class AtCollection<T> {
         selfKey,
         jsonEncode(item.toJson()),
       );
-      yield Success(atSign, Op.put);
+      l.add(OpSuccess(selfKey, CollectionOp.put));
     } catch (e) {
-      yield Failure(atSign, Op.put, e);
+      l.add(OpFailure(selfKey, CollectionOp.put, e));
     }
 
     /// if [unshareWithOthers] is true, deletes any copies for atSigns who
     /// are not in item.sharedWith
-    for (final AtKey k in await getKeys(id: item.id, owner: atSign)) {
-      if ((k.sharedWith ?? atSign) == atSign) {
-        continue;
+    if (unshareWithOthers) {
+      for (final AtKey k in await getKeys(id: item.id, owner: atSign)) {
+        if ((k.sharedWith ?? atSign) == atSign) {
+          continue;
+        }
+        try {
+          await atClient.delete(k);
+          l.add(OpSuccess(k, CollectionOp.delete));
+        } catch (e) {
+          l.add(OpFailure(k, CollectionOp.delete, e));
+        }
       }
-      await atClient.delete(k);
-      yield Success(k.sharedWith!.toAtsign(), Op.delete);
     }
 
     /// for each item in [shareWith], save a copy for them and yield a result
     for (final otherAtSign in item.sharedWith) {
+      AtKey k = AtKey.fromString('$otherAtSign:${item.id}.$namespace$atSign');
       try {
-        AtKey k = AtKey.fromString('$otherAtSign:${item.id}.$namespace$atSign');
         k.metadata = md;
         await atClient.put(
           k,
           jsonEncode(item.toJson()),
         );
-        yield Success(otherAtSign, Op.put);
+        l.add(OpSuccess(k, CollectionOp.put));
       } catch (e) {
-        yield Failure(otherAtSign, Op.put, e);
+        l.add(OpFailure(k, CollectionOp.put, e));
       }
     }
+
+    return l;
   }
 
   /// Deletes the object.
   /// - If owner was us, also deletes any copies shared with others.
   /// - If owner was other, deletes our cached copy of what was shared with us.
-  Stream<OpResult> delete(CItem<T> item) async* {
-    for (final AtKey k in await getKeys(id: item.id, owner: atSign)) {
-      await atClient.delete(k);
-      yield Success((k.sharedWith ?? atSign).toAtsign(), Op.delete);
+  Future<List<OpResult>> delete(CItem<T> item) async {
+    if (item.owner != atSign) {
+      throw ArgumentError('You may not delete items owned by other atSigns');
     }
+
+    final List<OpResult> l = [];
+    // delete all
+    for (final AtKey k in await getKeys(id: item.id, owner: atSign)) {
+      try {
+        await atClient.delete(k);
+        l.add(OpSuccess(k, CollectionOp.delete));
+      } catch (e) {
+        l.add(OpFailure(k, CollectionOp.delete, e));
+      }
+    }
+    return l;
   }
 
   String prettyString(CItem<dynamic> m) {

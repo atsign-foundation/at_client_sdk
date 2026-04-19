@@ -55,7 +55,7 @@ Future<void> sender(
 ) async {
   Map<String, Set<Atsign>> expectedReceipts = {};
   Completer allReceiptsReceived = Completer();
-  generic.eventStream.listen((CEvent e) {
+  generic.events.listen((CEvent e) {
     if (e is CReadReceipt) {
       progressSink.add('${e.runtimeType} :'
           ' Read Receipt from ${e.from} for ${e.id}');
@@ -80,7 +80,7 @@ Future<void> sender(
         'This is binary data from ${atClient.atSign}'.codeUnits),
     sharedWith: otherAtSigns,
   );
-  await for (final r in generic.put(
+  for (final r in await generic.put(
     itemToShare,
     expiresAt: DateTime.now().add(Duration(seconds: 10)),
   )) {
@@ -95,7 +95,7 @@ Future<void> sender(
     obj: Dog(name: '${atClient.atSign}\'s dog Rex'),
     sharedWith: otherAtSigns,
   );
-  await for (final r in generic.put(
+  for (final r in await generic.put(
     itemToShare,
     expiresAt: DateTime.now().add(Duration(seconds: 10)),
   )) {
@@ -109,7 +109,7 @@ Future<void> sender(
       type: 'Cat',
       obj: Cat(name: '${atClient.atSign}\'s cat Felix'),
       sharedWith: otherAtSigns);
-  await for (final r in generic.put(
+  for (final r in await generic.put(
     itemToShare,
     expiresAt: DateTime.now().add(Duration(seconds: 10)),
   )) {
@@ -123,7 +123,7 @@ Future<void> sender(
     obj: {'isMap': true, 'name': 'my map', 'intValue': 123},
     sharedWith: otherAtSigns,
   );
-  await for (final r in generic.put(
+  for (final r in await generic.put(
     itemToShare,
     expiresAt: DateTime.now().add(Duration(seconds: 10)),
   )) {
@@ -137,7 +137,7 @@ Future<void> sender(
     obj: 'this is just a String',
     sharedWith: otherAtSigns,
   );
-  await for (final r in generic.put(
+  for (final r in await generic.put(
     itemToShare,
     expiresAt: DateTime.now().add(Duration(seconds: 10)),
   )) {
@@ -177,7 +177,7 @@ Future<void> receiver(
   }
 
   // watch for new collection events
-  generic.eventStream.listen((CEvent e) async {
+  generic.events.listen((CEvent e) async {
     switch (e) {
       case CItemUpdated():
         await sendReadReceipt(
