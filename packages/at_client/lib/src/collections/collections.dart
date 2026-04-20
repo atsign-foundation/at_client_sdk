@@ -8,15 +8,6 @@ import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart';
 
 final class CItem<T> {
-  static final Map<String, Function> _factories = {};
-
-  static void registerFactory({
-    required String type,
-    required Function factory,
-  }) {
-    _factories[type] = factory;
-  }
-
   /// The atSign which created this [CItem]. For example let's say we are
   /// currently `@alice`; then owner of a [CItem] which we create would be
   /// `@alice`. But the owner of a [CItem] shared with us by `@bob` will
@@ -50,53 +41,6 @@ final class CItem<T> {
 
   DateTime? availableAt;
 
-  factory CItem.domain({
-    required Atsign owner,
-    required String type,
-    required T obj,
-    String? id,
-    Set<Atsign>? sharedWith,
-  }) {
-    if (!_factories.containsKey(type)) {
-      throw StateError('No factory registered for domain type $type');
-    }
-    final now = DateTime.now().toUtc();
-    id ??= now.microsecondsSinceEpoch.toString();
-    return CItem._(
-      owner: owner,
-      id: id,
-      type: type,
-      obj: obj,
-      sharedWith: sharedWith ?? {},
-      readBy: {},
-      createdAt: now,
-      expiresAt: now.add(Duration(days: 1)),
-      availableAt: null,
-    );
-  }
-
-  factory CItem.primitive({
-    required Atsign owner,
-    required T obj,
-    String? id,
-    Set<Atsign>? sharedWith,
-  }) {
-    final now = DateTime.now().toUtc();
-    id ??= now.microsecondsSinceEpoch.toString();
-    String type = (obj is Uint8List ? 'binary' : 'n/a');
-    return CItem._(
-      owner: owner,
-      id: id,
-      type: type,
-      obj: obj,
-      sharedWith: sharedWith ?? {},
-      readBy: {},
-      createdAt: now,
-      expiresAt: now.add(Duration(days: 1)),
-      availableAt: null,
-    );
-  }
-
   CItem._({
     required this.owner,
     required this.id,
@@ -122,19 +66,6 @@ final class CItem<T> {
       };
     } else {
       return {'type': type, 'readBy': readBy.toList(), 'obj': obj};
-    }
-  }
-
-  static T rehydrate<T>(Object obj, String type) {
-    if (type == 'binary') {
-      return Base2e15.decode(obj.toString()) as T;
-    } else {
-      final f = _factories[type];
-      if (f == null) {
-        return obj as T;
-      } else {
-        return f.call(obj) as T;
-      }
     }
   }
 
@@ -246,6 +177,56 @@ class AtCollection<T> {
   static const String _rr = readReceiptNamespacePart;
   late final AtSignLogger logger;
 
+  static final Map<String, Function> _factories = {};
+
+  static void registerFactory(
+      {required String type, required Function factory}) {
+    _factories[type] = factory;
+  }
+
+  /// Creates a new [CItem] owned by this atSign.
+  ///
+  /// For domain objects, supply [type] matching a factory registered via
+  /// [registerFactory]. For primitives (String, Map, Uint8List), omit [type].
+  CItem<T> create({
+    String? type,
+    required T obj,
+    String? id,
+    Set<Atsign>? sharedWith,
+  }) {
+    final now = DateTime.now().toUtc();
+    id ??= now.microsecondsSinceEpoch.toString();
+    final String resolvedType;
+    if (type != null) {
+      if (!_factories.containsKey(type)) {
+        throw StateError('No factory registered for type $type');
+      }
+      resolvedType = type;
+    } else {
+      resolvedType = obj is Uint8List ? 'binary' : 'n/a';
+    }
+    return CItem._(
+      owner: atSign,
+      id: id,
+      type: resolvedType,
+      obj: obj,
+      sharedWith: sharedWith ?? {},
+      readBy: {},
+      createdAt: now,
+      expiresAt: now.add(defaultExpiration),
+      availableAt: null,
+    );
+  }
+
+  V _rehydrate<V>(Object obj, String type) {
+    if (type == 'binary') {
+      return Base2e15.decode(obj.toString()) as V;
+    }
+    final f = _factories[type];
+    if (f == null) return obj as V;
+    return f.call(obj) as V;
+  }
+
   /// The [AtClient] we will use
   final AtClient atClient;
 
@@ -338,8 +319,7 @@ class AtCollection<T> {
     // @to:rr_id.__rr.obj_id.some.name.space@from
     // -> obj_id.__rr.rr_id
     final parts = getPartsFromNotifKey(n);
-    await markRead(
-        (await get(id: parts.id, owner: atSign)).items.first, parts.from);
+    await markRead(await get(parts.id, atSign), parts.from);
     _events.add(
       CReadReceipt(
         owner: atSign,
@@ -433,7 +413,18 @@ class AtCollection<T> {
   /// will have
   /// - `@bob:1.tasks.app_1.my_apps@alice`
   /// - `@alice:1.tasks.app_1.my_apps@bob`
-  Future<CollectionGetResponse<T>> get({String? id, Atsign? owner}) async {
+  Future<CItem<T>> get(String id, Atsign owner) async {
+    final r = await getItems(id: id, owner: owner);
+    if (r.exceptions.isNotEmpty) {
+      throw Exception(r.exceptions.toString());
+    }
+    if (r.items.isEmpty) {
+      throw AtKeyNotFoundException('No item found with id $id owned by $owner');
+    }
+    return r.items.first;
+  }
+
+  Future<CollectionGetResponse<T>> getItems({String? id, Atsign? owner}) async {
     Map<String, CItem<T>> map = {};
     List exceptions = [];
 
@@ -450,7 +441,7 @@ class AtCollection<T> {
             owner: k.sharedBy!.toAtsign(),
             id: k.key.split('.').first,
             type: decoded['type'],
-            obj: CItem.rehydrate<T>(decoded['obj'], decoded['type']),
+            obj: _rehydrate<T>(decoded['obj'], decoded['type']),
             sharedWith: {},
             readBy: (decoded['readBy'] as List)
                 .map((e) => e.toString().toAtsign())
@@ -471,8 +462,8 @@ class AtCollection<T> {
     return (items: map.values.toList(), exceptions: exceptions);
   }
 
-  Future<List<CItem<T>>> getList({String? id, Atsign? owner}) async {
-    final r = await get(id: id, owner: owner);
+  Future<List<CItem<T>>> getItemsList({String? id, Atsign? owner}) async {
+    final r = await getItems(id: id, owner: owner);
     if (r.exceptions.isNotEmpty) {
       throw Exception(r.exceptions.toString());
     }

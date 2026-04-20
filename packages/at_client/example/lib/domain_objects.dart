@@ -1,26 +1,44 @@
 class Todo {
   String title;
   String description;
+  bool done;
+  DateTime? dueDate;
 
-  Todo({required this.title, required this.description});
+  Todo({
+    required this.title,
+    required this.description,
+    this.done = false,
+    this.dueDate,
+  });
 
   factory Todo.fromJson(Map<String, dynamic> json) {
-    return Todo(title: json['title'], description: json['description']);
+    return Todo(
+      title: json['title'],
+      description: json['description'],
+      done: json['done'] ?? false,
+      dueDate: json['dueDate'] != null ? DateTime.parse(json['dueDate']) : null,
+    );
   }
 
-  Map<String, dynamic> toJson() => {'title': title, 'description': description};
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'description': description,
+        'done': done,
+        if (dueDate != null) 'dueDate': dueDate!.toIso8601String(),
+      };
 }
 
 class TodoNote {
   String note;
+  String todoId;
 
-  TodoNote({required this.note});
+  TodoNote({required this.note, required this.todoId});
 
   factory TodoNote.fromJson(Map<String, dynamic> json) {
-    return TodoNote(note: json['note']);
+    return TodoNote(note: json['note'], todoId: json['todoId']);
   }
 
-  Map<String, dynamic> toJson() => {'note': note};
+  Map<String, dynamic> toJson() => {'note': note, 'todoId': todoId};
 }
 
 abstract class Pet {

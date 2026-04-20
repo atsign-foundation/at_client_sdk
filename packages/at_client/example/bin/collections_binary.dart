@@ -48,8 +48,7 @@ Future<void> sender(
       'This is binary data from ${atClient.atSign}'.codeUnits);
 
   for (final r in await binaries.put(
-    CItem.primitive(
-      owner: atClient.atSign,
+    binaries.create(
       obj: data,
       sharedWith: otherAtSigns,
     ),
@@ -68,7 +67,7 @@ Future<void> poll(
   while (true) {
     progressSink.add('${DateTime.now().toString()} : Fetching');
 
-    final getResponse = await binaries.get();
+    final getResponse = await binaries.getItems();
     for (final e in getResponse.exceptions) {
       progressSink.add('Exception: $e');
     }

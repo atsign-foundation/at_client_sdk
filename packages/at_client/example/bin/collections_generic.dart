@@ -8,9 +8,6 @@ import 'package:at_client_examples/domain_objects.dart';
 import 'package:at_client_examples/init_example_context.dart';
 
 void main(List<String> args) async {
-  CItem.registerFactory(type: 'Dog', factory: Dog.fromJson);
-  CItem.registerFactory(type: 'Cat', factory: Cat.fromJson);
-
   stdout.writeln('Collections - generic');
   ExampleContext c = await getExampleContext(args);
 
@@ -19,6 +16,8 @@ void main(List<String> args) async {
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
+  AtCollection.registerFactory(type: 'Dog', factory: Dog.fromJson);
+  AtCollection.registerFactory(type: 'Cat', factory: Cat.fromJson);
   final AtCollection generic = c.atClient.collection(
     'generic.$applicationNamespace',
     exampleDefaultExpiration,
@@ -74,8 +73,7 @@ Future<void> sender(
   CItem itemToShare;
 
   progressSink.add('Creating some binary data, sharing with $otherAtSigns');
-  itemToShare = CItem.primitive(
-    owner: atClient.atSign,
+  itemToShare = generic.create(
     obj: Uint8List.fromList(
         'This is binary data from ${atClient.atSign}'.codeUnits),
     sharedWith: otherAtSigns,
@@ -89,8 +87,7 @@ Future<void> sender(
   expectedReceipts[itemToShare.id] = Set.from(otherAtSigns!);
 
   progressSink.add('Creating a Dog, sharing with $otherAtSigns');
-  itemToShare = CItem.domain(
-    owner: atClient.atSign,
+  itemToShare = generic.create(
     type: 'Dog',
     obj: Dog(name: '${atClient.atSign}\'s dog Rex'),
     sharedWith: otherAtSigns,
@@ -104,8 +101,7 @@ Future<void> sender(
   expectedReceipts[itemToShare.id] = Set.from(otherAtSigns);
 
   progressSink.add('Creating a Cat, sharing with $otherAtSigns');
-  itemToShare = CItem.domain(
-      owner: atClient.atSign,
+  itemToShare = generic.create(
       type: 'Cat',
       obj: Cat(name: '${atClient.atSign}\'s cat Felix'),
       sharedWith: otherAtSigns);
@@ -118,8 +114,7 @@ Future<void> sender(
   expectedReceipts[itemToShare.id] = Set.from(otherAtSigns);
 
   progressSink.add('Creating a Map, sharing with $otherAtSigns');
-  itemToShare = CItem.primitive(
-    owner: atClient.atSign,
+  itemToShare = generic.create(
     obj: {'isMap': true, 'name': 'my map', 'intValue': 123},
     sharedWith: otherAtSigns,
   );
@@ -132,8 +127,7 @@ Future<void> sender(
   expectedReceipts[itemToShare.id] = Set.from(otherAtSigns);
 
   progressSink.add('Creating a String, sharing with $otherAtSigns');
-  itemToShare = CItem.primitive(
-    owner: atClient.atSign,
+  itemToShare = generic.create(
     obj: 'this is just a String',
     sharedWith: otherAtSigns,
   );
@@ -180,8 +174,12 @@ Future<void> receiver(
   generic.events.listen((CEvent e) async {
     switch (e) {
       case CItemUpdated():
-        await sendReadReceipt(
-            (await generic.getList(id: e.id, owner: e.owner)).first);
+        try {
+          final item = await generic.get(e.id, e.owner);
+          await sendReadReceipt(item);
+        } catch (_) {
+          return;
+        }
       default:
         break;
     }
@@ -189,7 +187,7 @@ Future<void> receiver(
 
   progressSink.add('${DateTime.now().toString()} : Fetching');
 
-  for (final item in await generic.getList()) {
+  for (final item in await generic.getItemsList()) {
     String msg = 'Fetched ${generic.prettyString(item)}';
     if (item.type == 'binary') {
       msg = '$msg : ${String.fromCharCodes(item.obj)}';

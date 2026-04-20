@@ -8,8 +8,6 @@ import 'package:at_client_examples/init_example_context.dart';
 
 void main(List<String> args) async {
   stdout.writeln('Collections');
-  CItem.registerFactory(type: 'Dog', factory: Dog.fromJson);
-  CItem.registerFactory(type: 'Cat', factory: Cat.fromJson);
   ExampleContext c = await getExampleContext(args);
 
   c.progressController.stream
@@ -17,6 +15,8 @@ void main(List<String> args) async {
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
+  AtCollection.registerFactory(type: 'Dog', factory: Dog.fromJson);
+  AtCollection.registerFactory(type: 'Cat', factory: Cat.fromJson);
   final pets = c.atClient.collection<Pet>(
     'pets.$applicationNamespace',
     exampleDefaultExpiration,
@@ -51,8 +51,7 @@ Future<void> sender(
 ) async {
   progressSink.add('Creating a Dog, sharing with $otherAtSigns');
   for (final r in await pets.put(
-    CItem.domain(
-      owner: atClient.atSign,
+    pets.create(
       type: 'Dog',
       obj: Dog(name: '${atClient.atSign}\'s dog Rex'),
       sharedWith: otherAtSigns,
@@ -64,8 +63,7 @@ Future<void> sender(
 
   progressSink.add('Creating a Cat, sharing with $otherAtSigns');
   for (final r in await pets.put(
-    CItem.domain(
-        owner: atClient.atSign,
+    pets.create(
         type: 'Cat',
         obj: Cat(name: '${atClient.atSign}\'s cat Felix'),
         sharedWith: otherAtSigns),
@@ -93,7 +91,7 @@ Future<void> poll(
   while (true) {
     progressSink.add('${DateTime.now().toString()} : Fetching');
 
-    for (final pet in (await pets.get()).items) {
+    for (final pet in (await pets.getItems()).items) {
       progressSink.add('Fetched ${pets.prettyString(pet)}');
     }
     await Future.delayed(Duration(seconds: 3));

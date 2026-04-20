@@ -1,6 +1,6 @@
 name: at_cli_commons
 description: Library of useful stuff when building cli programs which use the AtClient SDK
-version: 3.0.1
+version: 3.1.0
 
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_cli_commons
 homepage: https://atsign.com

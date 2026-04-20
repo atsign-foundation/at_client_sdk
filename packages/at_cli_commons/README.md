@@ -21,6 +21,27 @@ For further usage examples, see
   authentication keys, etc.
 - There are a few other small utilities in utils.dart which CLIBase uses
 
+### Injecting an AtOnboardingPreference
+
+You can supply an existing `AtOnboardingPreference` instance to `CLIBase` (or
+`fromCommandLineArgs`). When `init()` runs it will update that instance with
+the computed values (paths, root domain, keys file, etc.) rather than creating
+a new one. This lets you pre-set fields on the preference that `CLIBase` does
+not manage, and have them preserved:
+
+```dart
+final pref = AtOnboardingPreference()
+  ..someCustomField = 'my value';
+
+final AtClient atClient = (await CLIBase.fromCommandLineArgs(
+  args,
+  preference: pref,
+)).atClient;
+
+// pref.hiveStoragePath, pref.namespace, etc. are now populated by CLIBase
+// pref.someCustomField is still 'my value'
+```
+
 ## Open source usage and contributions
 
 This is freely licensed open source code, so feel free to use it as is, suggest

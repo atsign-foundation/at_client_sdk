@@ -55,8 +55,7 @@ Future<void> sender(
 ) async {
   progressSink.add('Creating a Map, sharing with $otherAtSigns');
   for (final r in await maps.put(
-    CItem.primitive(
-      owner: atClient.atSign,
+    maps.create(
       obj: {'isMap': true, 'name': 'my map', 'intValue': 123},
       sharedWith: otherAtSigns,
     ),
@@ -67,8 +66,7 @@ Future<void> sender(
 
   progressSink.add('Creating a String, sharing with $otherAtSigns');
   for (final r in await strings.put(
-    CItem.primitive(
-      owner: atClient.atSign,
+    strings.create(
       obj: 'this is just a String',
       sharedWith: otherAtSigns,
     ),
@@ -88,7 +86,7 @@ Future<void> poll({
   while (true) {
     progressSink.add('${DateTime.now().toString()} : Fetching');
 
-    final mapsResponse = await maps.get();
+    final mapsResponse = await maps.getItems();
     for (final e in mapsResponse.exceptions) {
       progressSink.add('Exception: $e');
     }
@@ -101,7 +99,7 @@ Future<void> poll({
           '');
     }
 
-    final stringsResponse = await strings.get();
+    final stringsResponse = await strings.getItems();
     for (final e in stringsResponse.exceptions) {
       progressSink.add('Exception: $e');
     }
