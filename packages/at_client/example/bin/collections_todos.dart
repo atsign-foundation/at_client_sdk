@@ -62,6 +62,7 @@ class _AtsignColors {
 
 class _Cols {
   final int due;
+  final int created;
   final int idx;
   final int st;
   final int title;
@@ -72,6 +73,7 @@ class _Cols {
 
   const _Cols(
     this.due,
+    this.created,
     this.idx,
     this.st,
     this.title,
@@ -81,33 +83,52 @@ class _Cols {
     this.readBy,
   );
 
-  // Overhead for an 8-column row: 9 '│' chars + 16 padding spaces = 25.
-  static const int _overhead = 25;
+  // Overhead for a 9-column row: 10 '│' chars + 18 padding spaces = 28.
+  static const int _overhead = 28;
 
   static _Cols compute(int totalWidth) {
-    const due = 10;
+    const due = 20;
+    const created = 20;
     const idx = 3;
     const st = 3;
     const author = 20;
-    final flex = (totalWidth - _overhead - due - idx - st - author).clamp(
-      30,
-      500,
-    );
+    final flex = (totalWidth - _overhead - due - created - idx - st - author)
+        .clamp(30, 500);
     final title = (flex * 0.15).round().clamp(5, 200);
-    final desc = (flex * 0.30).round().clamp(5, 200);
-    final shared = (flex * 0.275).round().clamp(5, 200);
-    final readBy = (flex - title - desc - shared).clamp(5, 200);
-    return _Cols(due, idx, st, title, desc, author, shared, readBy);
+    // shared and readBy reduced by 60% from their previous 0.275 share.
+    final shared = (flex * 0.11).round().clamp(5, 200);
+    final readBy = (flex * 0.11).round().clamp(5, 200);
+    final desc = (flex - title - shared - readBy).clamp(5, 200);
+    return _Cols(due, created, idx, st, title, desc, author, shared, readBy);
   }
 
   int get totalWidth =>
-      _overhead + due + idx + st + title + desc + author + shared + readBy;
+      _overhead +
+      due +
+      created +
+      idx +
+      st +
+      title +
+      desc +
+      author +
+      shared +
+      readBy;
 
-  List<int> get widths => [due, idx, st, title, desc, author, shared, readBy];
+  List<int> get widths => [
+    due,
+    created,
+    idx,
+    st,
+    title,
+    desc,
+    author,
+    shared,
+    readBy,
+  ];
 
   // Column at which the Title cell's content begins (0-based).
-  // Layout per cell: '│ <content> '. Three fixed cells precede Title.
-  int get titleStartCol => due + idx + st + 11;
+  // Layout per cell: '│ <content> '. Four fixed cells precede Title.
+  int get titleStartCol => due + created + idx + st + 14;
 }
 
 class TodosApp {
@@ -199,7 +220,9 @@ class TodosApp {
       for (final item in todos) {
         if (!(await collection.sentReadReceipt(item))) {
           await collection.sendReadReceipt(item);
-          log('Read receipt sent for: ${item.obj.title}');
+          log(
+            'Read receipt sent to ${_color.fmt(item.owner)} for: ${item.obj.title}',
+          );
         }
       }
       _draw();
@@ -269,11 +292,11 @@ class TodosApp {
     notesCollection.events.listen((CEvent e) {
       switch (e) {
         case CItemUpdated():
-          log('updated a note ', by: e.owner);
           unawaited(_refreshNotes());
+          break;
         case CItemDeleted():
-          log('deleted a note', by: e.owner);
           unawaited(_refreshNotes());
+          break;
         default:
           break;
       }
@@ -373,7 +396,7 @@ class TodosApp {
     'quit': 'Exit the app.',
   };
 
-  static const int _logHeight = 8;
+  static const int _logHeight = 5;
 
   // Fixed row count for the wrapped command list. Enough for 2 lines at 80-col
   // terminals; wider terminals will wrap to 1 line and leave the second row
@@ -408,6 +431,7 @@ class TodosApp {
       if (row < mainHeight) {
         row = _drawTableRowSingle(row, tableWidth, cols, [
           'Due',
+          'Created',
           '#',
           '✓',
           'Title',
@@ -425,8 +449,15 @@ class TodosApp {
         final todo = todos[i];
         final dueStr =
             todo.obj.dueDate != null
-                ? todo.obj.dueDate!.toIso8601String().substring(0, 10)
+                ? todo.obj.dueDate!
+                    .toIso8601String()
+                    .substring(0, 19)
+                    .replaceFirst('T', ' ')
                 : '-';
+        final createdStr = todo.createdAt
+            .toIso8601String()
+            .substring(0, 19)
+            .replaceFirst('T', ' ');
         final idxStr = '${i + 1}';
         final stStr = todo.obj.done ? '[x]' : '[ ]';
         final authorStr = _color.fmt(todo.owner);
@@ -438,6 +469,7 @@ class TodosApp {
                 : _color.fmtAll(todo.readBy);
         row = _drawTableRowSingle(row, tableWidth, cols, [
           dueStr,
+          createdStr,
           idxStr,
           stStr,
           todo.obj.title,
@@ -451,7 +483,12 @@ class TodosApp {
         final notes = notesByTodoId[todo.id] ?? [];
         for (int ni = 0; ni < notes.length && row < mainHeight; ni++) {
           final n = notes[ni];
-          final text = '[n${ni + 1}] (${_color.fmt(n.owner)}) "${n.obj.note}"';
+          final createdStr = n.createdAt
+              .toIso8601String()
+              .substring(0, 19)
+              .replaceFirst('T', ' ');
+          final text =
+              '[n${ni + 1}] (${_color.fmt(n.owner)}, $createdStr) "${n.obj.note}"';
           row = _drawNote(row, width, cols.titleStartCol, text, mainHeight);
         }
 
@@ -501,7 +538,6 @@ class TodosApp {
     }
 
     terminal.moveCursor(0, hintRow);
-    terminal.write('Arrows/PgUp/PgDn: scroll logs');
 
     final promptPrefix =
         _promptLabel != null
