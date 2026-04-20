@@ -9,8 +9,9 @@ void main(List<String> args) async {
   stdout.writeln('Collections - Maps and Strings');
   ExampleContext c = await getExampleContext(args);
 
-  c.progressController.stream
-      .listen((s) => stdout.writeln('${DateTime.now()} | $s'));
+  c.progressController.stream.listen(
+    (s) => stdout.writeln('${DateTime.now()} | $s'),
+  );
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
@@ -66,10 +67,7 @@ Future<void> sender(
 
   progressSink.add('Creating a String, sharing with $otherAtSigns');
   for (final r in await strings.put(
-    strings.create(
-      obj: 'this is just a String',
-      sharedWith: otherAtSigns,
-    ),
+    strings.create(obj: 'this is just a String', sharedWith: otherAtSigns),
     expiresAt: DateTime.now().add(Duration(seconds: 10)),
   )) {
     progressSink.add(r.toString());
@@ -91,12 +89,14 @@ Future<void> poll({
       progressSink.add('Exception: $e');
     }
     for (final i in mapsResponse.items) {
-      progressSink.add('Fetched ${i.id}.${maps.namespace}${i.owner}'
-          ' sharedWith ${i.sharedWith}'
-          ' factory type ${i.type}'
-          ' runtime type ${i.obj.runtimeType}'
-          ' obj ${i.obj}'
-          '');
+      progressSink.add(
+        'Fetched ${i.id}.${maps.namespace}${i.owner}'
+        ' sharedWith ${i.sharedWith}'
+        ' factory type ${i.type}'
+        ' runtime type ${i.obj.runtimeType}'
+        ' obj ${i.obj}'
+        '',
+      );
     }
 
     final stringsResponse = await strings.getItems();

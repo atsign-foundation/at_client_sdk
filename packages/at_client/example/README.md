@@ -59,22 +59,24 @@ specify per item.
 dart run bin/collections_todos.dart --atsign @alice
 ```
 
-Available commands inside the app (each command prompts for its inputs):
+Available commands inside the app. Todo / note indexes are 1-based. Commands
+that take an index require it inline (e.g. `delete 1`, `done 2`, `note 3`);
+other arguments are optional and prompted if omitted.
 
-| Command      | Description                                                                  |
-|--------------|------------------------------------------------------------------------------|
-| `create`     | Create a new todo, optionally shared with other atSigns                      |
-| `update`     | Update title, description, and share list                                    |
-| `done`       | Toggle the done `[x]`/`[ ]` status                                           |
-| `due`        | Set a due date                                                               |
-| `note`       | Attach a note to a todo (stored in a separate collection)                    |
-| `updatenote` | Update a note's text; re-syncs sharing to match the parent todo's recipients |
-| `deletenote` | Delete a note                                                                |
-| `share`      | Add recipients without removing existing shares                              |
-| `schedule`   | Delay recipient visibility by N seconds (`availableAt`)                      |
-| `delete`     | Delete a todo                                                                |
-| `keys`       | Log all raw AtKeys in both collections (debug)                               |
-| `quit`       | Exit the app                                                                 |
+| Command                    | Description                                                                 |
+|----------------------------|-----------------------------------------------------------------------------|
+| `create`                   | Create a new todo. Prompts for title, description, atSigns, due (default 7d)|
+| `update N`                 | Update a todo. Prompts for new title, description, and share list           |
+| `delete N` or `delete N.M` | Delete todo N, or note M in todo N                                          |
+| `done N`                   | Toggle the done `[x]`/`[ ]` status                                          |
+| `due N [YYYY-MM-DD]`       | Set a due date                                                              |
+| `note N [text…]`           | Attach a note to a todo (stored in a separate collection)                   |
+| `updatenote N.M [text…]`   | Update note M in todo N; re-syncs sharing to match the parent todo          |
+| `share N [@signs,…]`       | Add recipients without removing existing shares                             |
+| `schedule N [seconds]`     | Delay recipient visibility (`availableAt`)                                  |
+| `keys`                     | Log all raw AtKeys in both collections (debug)                              |
+| `help [cmd]`               | Show help. Also `<cmd> help` or `<cmd> --help`                              |
+| `quit`                     | Exit the app                                                                |
 
 ### Notifications
 Fire-and-forget messaging via `NotificationService`.

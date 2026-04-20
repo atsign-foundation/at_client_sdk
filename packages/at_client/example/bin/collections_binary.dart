@@ -10,8 +10,9 @@ void main(List<String> args) async {
   stdout.writeln('Collections - binary data');
   ExampleContext c = await getExampleContext(args);
 
-  c.progressController.stream
-      .listen((s) => stdout.writeln('${DateTime.now()} | $s'));
+  c.progressController.stream.listen(
+    (s) => stdout.writeln('${DateTime.now()} | $s'),
+  );
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
@@ -23,7 +24,11 @@ void main(List<String> args) async {
   switch (c.role) {
     case ExampleRole.sender:
       await sender(
-          c.atClient, c.otherAtSigns, c.progressController.sink, binaries);
+        c.atClient,
+        c.otherAtSigns,
+        c.progressController.sink,
+        binaries,
+      );
       break;
     case ExampleRole.receiver:
       await receiver(
@@ -45,13 +50,11 @@ Future<void> sender(
 ) async {
   progressSink.add('Creating some binary data, sharing with $otherAtSigns');
   final data = Uint8List.fromList(
-      'This is binary data from ${atClient.atSign}'.codeUnits);
+    'This is binary data from ${atClient.atSign}'.codeUnits,
+  );
 
   for (final r in await binaries.put(
-    binaries.create(
-      obj: data,
-      sharedWith: otherAtSigns,
-    ),
+    binaries.create(obj: data, sharedWith: otherAtSigns),
     expiresAt: DateTime.now().add(Duration(seconds: 10)),
   )) {
     progressSink.add(r.toString());

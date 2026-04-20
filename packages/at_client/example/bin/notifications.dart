@@ -30,29 +30,33 @@ void main(List<String> args) async {
 Future<void> sender(AtClient atClient, Set<Atsign>? otherAtSigns) async {
   final String msgId = DateTime.now().microsecondsSinceEpoch.toString();
   String namespace = '$msgId.$subNamespace.$applicationNamespace';
-  await Future.wait(otherAtSigns!.map((otherAtsign) {
-    String msg;
-    // Basic messaging - send notification, fire and forget
-    msg = 'Simple fire and forget message with ID part';
-    stdout.writeln('-> Sending $msg to $otherAtsign on $namespace');
-    return atClient.notificationService.send(
-      to: otherAtsign,
-      namespace: namespace,
-      body: msg,
-    );
-  }));
-  await Future.wait(otherAtSigns.map((otherAtsign) {
-    String msg;
-    // Basic messaging - send notification, fire and forget
-    msg = 'Simple fire and forget message without ID part';
-    String namespace = '$subNamespace.$applicationNamespace';
-    stdout.writeln('-> Sending $msg to $otherAtsign on $namespace');
-    return atClient.notificationService.send(
-      to: otherAtsign,
-      namespace: namespace,
-      body: msg,
-    );
-  }));
+  await Future.wait(
+    otherAtSigns!.map((otherAtsign) {
+      String msg;
+      // Basic messaging - send notification, fire and forget
+      msg = 'Simple fire and forget message with ID part';
+      stdout.writeln('-> Sending $msg to $otherAtsign on $namespace');
+      return atClient.notificationService.send(
+        to: otherAtsign,
+        namespace: namespace,
+        body: msg,
+      );
+    }),
+  );
+  await Future.wait(
+    otherAtSigns.map((otherAtsign) {
+      String msg;
+      // Basic messaging - send notification, fire and forget
+      msg = 'Simple fire and forget message without ID part';
+      String namespace = '$subNamespace.$applicationNamespace';
+      stdout.writeln('-> Sending $msg to $otherAtsign on $namespace');
+      return atClient.notificationService.send(
+        to: otherAtsign,
+        namespace: namespace,
+        body: msg,
+      );
+    }),
+  );
 }
 
 Future<void> receiver(AtClient atClient, Set<Atsign>? otherAtSigns) async {
@@ -61,11 +65,11 @@ Future<void> receiver(AtClient atClient, Set<Atsign>? otherAtSigns) async {
   StreamSubscription<AtNotification>? sub;
   sub = atClient.notificationService
       .subscribeFiltered(
-    acceptedSenders: otherAtSigns,
-    namespace: '$subNamespace.$applicationNamespace',
-  )
+        acceptedSenders: otherAtSigns,
+        namespace: '$subNamespace.$applicationNamespace',
+      )
       .listen((n) {
-    stdout.writeln('-> Received ${n.value} from ${n.from} : ${n.key}');
-  });
+        stdout.writeln('-> Received ${n.value} from ${n.from} : ${n.key}');
+      });
   await done.future;
 }

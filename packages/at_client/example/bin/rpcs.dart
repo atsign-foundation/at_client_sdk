@@ -34,19 +34,17 @@ Future<void> sender(AtClient atClient, Set<Atsign>? otherAtSigns) async {
   Map<String, dynamic> responseBody;
 
   // 1. Send an rpc with a reasonable timeout of 30 seconds
-  responseBody =
-      await rpcClient.call({'param1': 'foo', 'param2': true}).timeout(
-    Duration(seconds: 30),
-  );
+  responseBody = await rpcClient
+      .call({'param1': 'foo', 'param2': true})
+      .timeout(Duration(seconds: 30));
   stdout.writeln('    -> Received RPC response body: $responseBody');
 
   // 2. Send rpc with an unfeasibly short timeout - should throw exception
   stdout.writeln('-> Sending rpc with 1-microsecond timeout');
   try {
-    responseBody =
-        await rpcClient.call({'param1': 'foo', 'param2': true}).timeout(
-      Duration(microseconds: 1),
-    );
+    responseBody = await rpcClient
+        .call({'param1': 'foo', 'param2': true})
+        .timeout(Duration(microseconds: 1));
   } on TimeoutException catch (_) {
     stdout.writeln(
       '    -> Sent RPC with timeout of 1 microsecond;'
@@ -59,9 +57,8 @@ Future<void> sender(AtClient atClient, Set<Atsign>? otherAtSigns) async {
   stdout.writeln('-> Sending rpc request where we expect an error response');
   try {
     await rpcClient
-        .call({'param1': 'foo', 'param2': true, 'throw': true}).timeout(
-      Duration(seconds: 30),
-    );
+        .call({'param1': 'foo', 'param2': true, 'throw': true})
+        .timeout(Duration(seconds: 30));
   } catch (e) {
     stdout.writeln('    -> Got error response as expected: $e');
   }

@@ -10,8 +10,9 @@ void main(List<String> args) async {
   stdout.writeln('Collections');
   ExampleContext c = await getExampleContext(args);
 
-  c.progressController.stream
-      .listen((s) => stdout.writeln('${DateTime.now()} | $s'));
+  c.progressController.stream.listen(
+    (s) => stdout.writeln('${DateTime.now()} | $s'),
+  );
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
@@ -24,12 +25,7 @@ void main(List<String> args) async {
 
   switch (c.role) {
     case ExampleRole.sender:
-      await sender(
-        c.atClient,
-        c.otherAtSigns,
-        c.progressController.sink,
-        pets,
-      );
+      await sender(c.atClient, c.otherAtSigns, c.progressController.sink, pets);
       break;
     case ExampleRole.receiver:
       await receiver(
@@ -64,9 +60,10 @@ Future<void> sender(
   progressSink.add('Creating a Cat, sharing with $otherAtSigns');
   for (final r in await pets.put(
     pets.create(
-        type: 'Cat',
-        obj: Cat(name: '${atClient.atSign}\'s cat Felix'),
-        sharedWith: otherAtSigns),
+      type: 'Cat',
+      obj: Cat(name: '${atClient.atSign}\'s cat Felix'),
+      sharedWith: otherAtSigns,
+    ),
     expiresAt: DateTime.now().add(Duration(seconds: 10)),
   )) {
     progressSink.add(r.toString());

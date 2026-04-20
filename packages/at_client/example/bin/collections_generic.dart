@@ -11,8 +11,9 @@ void main(List<String> args) async {
   stdout.writeln('Collections - generic');
   ExampleContext c = await getExampleContext(args);
 
-  c.progressController.stream
-      .listen((s) => stdout.writeln('${DateTime.now()} | $s'));
+  c.progressController.stream.listen(
+    (s) => stdout.writeln('${DateTime.now()} | $s'),
+  );
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
@@ -56,8 +57,10 @@ Future<void> sender(
   Completer allReceiptsReceived = Completer();
   generic.events.listen((CEvent e) {
     if (e is CReadReceipt) {
-      progressSink.add('${e.runtimeType} :'
-          ' Read Receipt from ${e.from} for ${e.id}');
+      progressSink.add(
+        '${e.runtimeType} :'
+        ' Read Receipt from ${e.from} for ${e.id}',
+      );
       expectedReceipts[e.id]?.remove(e.from);
       if (expectedReceipts[e.id]?.isEmpty ?? true) {
         expectedReceipts.remove(e.id);
@@ -75,7 +78,8 @@ Future<void> sender(
   progressSink.add('Creating some binary data, sharing with $otherAtSigns');
   itemToShare = generic.create(
     obj: Uint8List.fromList(
-        'This is binary data from ${atClient.atSign}'.codeUnits),
+      'This is binary data from ${atClient.atSign}'.codeUnits,
+    ),
     sharedWith: otherAtSigns,
   );
   for (final r in await generic.put(
@@ -102,9 +106,10 @@ Future<void> sender(
 
   progressSink.add('Creating a Cat, sharing with $otherAtSigns');
   itemToShare = generic.create(
-      type: 'Cat',
-      obj: Cat(name: '${atClient.atSign}\'s cat Felix'),
-      sharedWith: otherAtSigns);
+    type: 'Cat',
+    obj: Cat(name: '${atClient.atSign}\'s cat Felix'),
+    sharedWith: otherAtSigns,
+  );
   for (final r in await generic.put(
     itemToShare,
     expiresAt: DateTime.now().add(Duration(seconds: 10)),

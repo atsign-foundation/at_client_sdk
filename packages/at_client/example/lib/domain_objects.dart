@@ -21,11 +21,11 @@ class Todo {
   }
 
   Map<String, dynamic> toJson() => {
-        'title': title,
-        'description': description,
-        'done': done,
-        if (dueDate != null) 'dueDate': dueDate!.toIso8601String(),
-      };
+    'title': title,
+    'description': description,
+    'done': done,
+    if (dueDate != null) 'dueDate': dueDate!.toIso8601String(),
+  };
 }
 
 class TodoNote {
