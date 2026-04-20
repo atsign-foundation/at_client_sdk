@@ -45,6 +45,15 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations {
     collectionName = runtimeType.toString().toLowerCase();
   }
 
+  /// Registers list of AtCollectionModelFactory instances.
+  /// These factories will be used while creating specific sub classes of [AtCollectionModel] for a given collection
+  static void registerFactories(List<AtCollectionModelFactory> factories) {
+    for (var atCollectionModelFactory in factories) {
+      AtCollectionModelFactoryManager.getInstance()
+          .register(atCollectionModelFactory);
+    }
+  }
+
   /// Returns an instance of a class extending  [AtCollectionModel] for the given [id], [namespace] and [collectionName]
   /// An instance of [AtJsonCollectionModel] is returned If a specific factory class for a given collection name is not registered
   /// Factory class for a [collectionName] can be registered using method [AtCollectionModel.registerFactories(factories)]

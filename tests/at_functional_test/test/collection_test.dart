@@ -1,3 +1,6 @@
+// ignore_for_file: deprecated_member_use
+// ignore_for_file: deprecated_export_use
+
 import 'package:at_client/at_client.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
@@ -20,6 +23,14 @@ class Phone extends AtCollectionModel {
 }
 
 class PhoneFactory extends AtCollectionModelFactory<Phone> {
+  static final PhoneFactory _singleton = PhoneFactory._internal();
+
+  PhoneFactory._internal();
+
+  factory PhoneFactory.getInstance() {
+    return _singleton;
+  }
+
   @override
   Phone create() {
     return Phone();
@@ -32,16 +43,14 @@ class PhoneFactory extends AtCollectionModelFactory<Phone> {
 }
 
 void main() {
-  AtClientManager acm = AtClientManager.getInstance();
-  AtCollectionModelFactoryManager atCollectionModelFactoryManager =
-      AtCollectionModelFactoryManager.getInstance();
+  late AtClientManager atClientManager;
   late String currentAtSign;
   final namespace = 'wavi';
 
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    await TestUtils.initAtClient(currentAtSign, namespace);
-    acm.atClient.syncService.sync();
+    atClientManager = await TestUtils.initAtClient(currentAtSign, namespace);
+    atClientManager.atClient.syncService.sync();
   });
 
   test('Model operations - save() test', () async {
@@ -71,8 +80,8 @@ void main() {
       ..phoneNumber = '9999';
     await personalPhone.save(options: TestUtils.optionsTtlOneMinute);
     await officePhone.save(options: TestUtils.optionsTtlOneMinute);
-    final phoneFactory = PhoneFactory();
-    atCollectionModelFactoryManager.register(phoneFactory);
+
+    AtCollectionModel.registerFactories([PhoneFactory.getInstance()]);
     var personalPhoneLoaded = await AtCollectionModel.getModel(
         id: 'new personal Phone',
         namespace: 'buzz',
@@ -91,7 +100,8 @@ void main() {
     expect(officePhoneLoaded.collectionName, 'phone');
     expect(officePhoneLoaded.namespace, 'buzz.bz');
     expect(officePhoneLoaded.id, 'Office Phone');
-    atCollectionModelFactoryManager.unregister(phoneFactory);
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(PhoneFactory.getInstance());
   });
 
   test('Query method - AtCollectionModel.getModelsByCollectionName() test',
@@ -109,8 +119,7 @@ void main() {
     await personalPhone.save(options: TestUtils.optionsTtlOneMinute);
     await officePhone.save(options: TestUtils.optionsTtlOneMinute);
 
-    final phoneFactory = PhoneFactory();
-    atCollectionModelFactoryManager.register(phoneFactory);
+    AtCollectionModel.registerFactories([PhoneFactory.getInstance()]);
     // Get models with existing collectionName
     var phones = await AtCollectionModel.getModelsByCollectionName('phone');
     expect(phones.length >= 2, true,
@@ -120,6 +129,7 @@ void main() {
         await AtCollectionModel.getModelsByCollectionName('phone-dont-exist');
     expect(phones.isEmpty, true,
         reason: 'Expect phones to be empty for an invalid collection name');
-    atCollectionModelFactoryManager.unregister(phoneFactory);
+    AtCollectionModelFactoryManager.getInstance()
+        .unregister(PhoneFactory.getInstance());
   });
 }

@@ -35,21 +35,9 @@ class AtCollectionModelFactoryManager {
     }
   }
 
-  void registerFactories(List<AtCollectionModelFactory> factories) {
-    for (AtCollectionModelFactory factory in factories) {
-      register(factory);
-    }
-  }
-
   void unregister(AtCollectionModelFactory factory) {
     if (collectionFactories.contains(factory)) {
       collectionFactories.remove(factory);
-    }
-  }
-
-  void unregisterFactories(List<AtCollectionModelFactory> factories) {
-    for (AtCollectionModelFactory factory in factories) {
-      unregister(factory);
     }
   }
 

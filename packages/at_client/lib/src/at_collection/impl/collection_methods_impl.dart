@@ -1,21 +1,24 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/at_collection/at_collection_model.dart';
 import 'package:at_client/src/at_collection/collection_util.dart';
 import 'package:at_client/src/at_collection/impl/default_key_maker.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
+
+import '../collections.dart';
 
 /// [AtCollectionMethodImpl] have the implementation of all the methods available in collections package.
 /// These methods are wrapped with a stream or future return types for the end consumption.
 
+@Deprecated("Use AtClient.collection for collection-style operations")
 class AtCollectionMethodImpl {
   final _logger = AtSignLogger('AtCollectionModelMethodsImpl');
 
-  AtClient get atClient => AtClientManager.getInstance().atClient;
+  late KeyMaker keyMaker = DefaultKeyMaker();
+  AtCollectionModel atCollectionModel;
 
-  late final KeyMaker keyMaker;
-  final AtCollectionModel atCollectionModel;
-
-  AtCollectionMethodImpl(this.atCollectionModel, {KeyMaker? keyMaker})
-      : keyMaker = keyMaker ?? DefaultKeyMaker();
+  AtCollectionMethodImpl(this.atCollectionModel);
 
   Stream<AtOperationItemStatus> save(
       {required String jsonEncodedData,
@@ -63,7 +66,7 @@ class AtCollectionMethodImpl {
       String formattedCollectionName, String jsonEncodedData) async* {
     _logger.finest(
         'Update shared keys for id:$formattedId collectionName:$formattedCollectionName');
-    var sharedAtKeys = await atClient.getAtKeys(
+    var sharedAtKeys = await _getAtClient().getAtKeys(
         regex: CollectionUtil.makeRegex(
             formattedId: formattedId,
             collectionName: formattedCollectionName,
@@ -72,7 +75,7 @@ class AtCollectionMethodImpl {
     sharedAtKeys.retainWhere((element) => element.sharedWith != null);
 
     for (var sharedKey in sharedAtKeys) {
-      AtValue v = await atClient.get(sharedKey);
+      AtValue v = await _getAtClient().get(sharedKey);
       if (v.metadata != null) {
         sharedKey.metadata = v.metadata!;
       }
@@ -162,7 +165,7 @@ class AtCollectionMethodImpl {
       namespace: atCollectionModel.namespace,
     );
 
-    var isSelfKeyDeleted = await atClient.delete(selfAtKey);
+    var isSelfKeyDeleted = await _getAtClient().delete(selfAtKey);
 
     yield AtOperationItemStatus(
         atSign: selfAtKey.sharedWith ?? '',
@@ -177,7 +180,7 @@ class AtCollectionMethodImpl {
       atCollectionModel.collectionName,
     );
 
-    var sharedAtKeys = await atClient.getAtKeys(
+    var sharedAtKeys = await _getAtClient().getAtKeys(
       regex: CollectionUtil.makeRegex(
           formattedId: formattedId,
           collectionName: formattedCollectionName,
@@ -199,7 +202,7 @@ class AtCollectionMethodImpl {
           operation: Operation.unshare);
 
       try {
-        var res = await atClient.delete(sharedKey);
+        var res = await _getAtClient().delete(sharedKey);
         atOperationItemStatus.complete = res;
         yield atOperationItemStatus;
       } catch (e) {
@@ -210,8 +213,12 @@ class AtCollectionMethodImpl {
     }
   }
 
+  AtClient _getAtClient() {
+    return AtClientManager.getInstance().atClient;
+  }
+
   Future<bool> _put(AtKey atKey, String jsonEncodedData) async {
-    return await atClient.put(
+    return await _getAtClient().put(
       atKey,
       jsonEncodedData,
     );

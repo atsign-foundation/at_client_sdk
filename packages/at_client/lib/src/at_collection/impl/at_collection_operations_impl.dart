@@ -6,13 +6,11 @@ import 'package:at_client/src/at_collection/collection_util.dart';
 import 'package:at_utils/at_logger.dart';
 import 'collection_methods_impl.dart';
 
+@Deprecated("Use AtClient.collection for collection-style operations")
 class AtCollectionModelOperationsImpl implements AtCollectionModelOperations {
   final _logger = AtSignLogger('AtCollectionModelOperationsImpl');
-
-  final AtCollectionModel atCollectionModel;
-  late final AtCollectionMethodImpl collectionMethodImpl;
-
-  AtClient get atClient => AtClientManager.getInstance().atClient;
+  late AtCollectionModel atCollectionModel;
+  late AtCollectionMethodImpl collectionMethodImpl;
 
   AtCollectionModelOperationsImpl(this.atCollectionModel) {
     collectionMethodImpl = AtCollectionMethodImpl(atCollectionModel);
@@ -65,7 +63,7 @@ class AtCollectionModelOperationsImpl implements AtCollectionModelOperations {
     String formattedCollectionName =
         CollectionUtil.format(atCollectionModel.collectionName);
 
-    var allKeys = await atClient.getAtKeys(
+    var allKeys = await _getAtClient().getAtKeys(
         regex: CollectionUtil.makeRegex(
             formattedId: formattedId,
             collectionName: formattedCollectionName,
@@ -153,6 +151,10 @@ class AtCollectionModelOperationsImpl implements AtCollectionModelOperations {
     });
 
     return isAllShareKeysUnshared;
+  }
+
+  AtClient _getAtClient() {
+    return AtClientManager.getInstance().atClient;
   }
 
   @override

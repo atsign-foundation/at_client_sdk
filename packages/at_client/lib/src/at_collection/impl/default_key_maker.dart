@@ -1,7 +1,10 @@
 import 'package:at_client/at_client.dart';
 
+@Deprecated("Use AtClient.collection for collection-style operations")
 class DefaultKeyMaker implements KeyMaker {
-  Atsign get atSign => AtClientManager.getInstance().atClient.atSign;
+  AtClient _getAtClient() {
+    return AtClientManager.getInstance().atClient;
+  }
 
   @override
   AtKey createSelfKey(
@@ -16,7 +19,7 @@ class DefaultKeyMaker implements KeyMaker {
       ..metadata.ccd = objectLifeCycleOptions?.cascadeDelete ?? true
       ..metadata.ttl = objectLifeCycleOptions?.timeToLive?.inMilliseconds
       ..metadata.ttb = objectLifeCycleOptions?.timeToBirth?.inMilliseconds
-      ..sharedBy = atSign;
+      ..sharedBy = _getAtClient().getCurrentAtSign();
   }
 
   @override
@@ -38,6 +41,6 @@ class DefaultKeyMaker implements KeyMaker {
       ..metadata.ccd = objectLifeCycleOptions?.cascadeDelete ?? true
       ..metadata.ttl = objectLifeCycleOptions?.timeToLive?.inMilliseconds
       ..metadata.ttb = objectLifeCycleOptions?.timeToBirth?.inMilliseconds
-      ..sharedBy = atSign;
+      ..sharedBy = _getAtClient().getCurrentAtSign();
   }
 }

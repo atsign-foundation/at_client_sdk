@@ -5,14 +5,17 @@ import 'package:at_client/src/at_collection/collection_util.dart';
 import 'package:at_client/src/at_collection/impl/default_key_maker.dart';
 import 'package:at_utils/at_logger.dart';
 
+@Deprecated("Use AtClient.collection for collection-style operations")
 class AtCollectionQueryOperationsImpl implements AtCollectionQueryOperations {
   final _logger = AtSignLogger('AtCollectionQueryOperationsImpl');
+  AtClientManager? atClientManager;
+  final KeyMaker _keyMaker = DefaultKeyMaker();
 
-  AtClient get atClient => AtClientManager.getInstance().atClient;
-  late final KeyMaker keyMaker;
+  AtCollectionQueryOperationsImpl();
 
-  AtCollectionQueryOperationsImpl({KeyMaker? keyMaker}) {
-    this.keyMaker = keyMaker ?? DefaultKeyMaker();
+  AtClient getAtClient() {
+    atClientManager ??= AtClientManager.getInstance();
+    return atClientManager!.atClient;
   }
 
   @override
@@ -32,14 +35,14 @@ class AtCollectionQueryOperationsImpl implements AtCollectionQueryOperations {
 
     List<T> modelList = [];
 
-    var collectionAtKeys = await atClient.getAtKeys(regex: regex);
+    var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
     collectionAtKeys.retainWhere((atKey) => atKey.sharedWith == null);
 
     for (var atKey in collectionAtKeys) {
       try {
         AtValue atValue;
         try {
-          atValue = await atClient.get(atKey);
+          atValue = await getAtClient().get(atKey);
         } on AtKeyNotFoundException {
           continue;
         }
@@ -80,13 +83,13 @@ class AtCollectionQueryOperationsImpl implements AtCollectionQueryOperations {
     String formattedId = CollectionUtil.format(id);
     String formattedCollectionName = CollectionUtil.format(collectionName);
 
-    AtKey atKey = keyMaker.createSelfKey(
+    AtKey atKey = _keyMaker.createSelfKey(
         keyId: formattedId,
         collectionName: formattedCollectionName,
         namespace: namespace);
 
     try {
-      AtValue atValue = await atClient.get(atKey);
+      AtValue atValue = await getAtClient().get(atKey);
       if (atValue.value == null) {
         throw AtKeyNotFoundException('Key has expired');
       }
@@ -105,7 +108,7 @@ class AtCollectionQueryOperationsImpl implements AtCollectionQueryOperations {
       String atSign) async {
     var regex = CollectionUtil.makeRegex();
 
-    var collectionAtKeys = await atClient.getAtKeys(regex: regex);
+    var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
     collectionAtKeys.retainWhere((atKey) => atKey.sharedWith == atSign);
 
     return _getAtCollectionModelsFromAtKey(collectionAtKeys);
@@ -116,7 +119,7 @@ class AtCollectionQueryOperationsImpl implements AtCollectionQueryOperations {
       String atSign) async {
     var regex = CollectionUtil.makeRegex();
     // Get all collection model keys
-    var collectionAtKeys = await atClient.getAtKeys(regex: regex);
+    var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
     // Just keep the ones where shared by is the atSign passed
     collectionAtKeys.retainWhere(
         (atKey) => (atKey.sharedBy != null && atKey.sharedBy == atSign));
@@ -130,10 +133,10 @@ class AtCollectionQueryOperationsImpl implements AtCollectionQueryOperations {
     var regex = CollectionUtil.makeRegex();
     _logger.finest('Getting sharedBy Models using regex: $regex');
     // Get all collection model keys
-    var collectionAtKeys = await atClient.getAtKeys(regex: regex);
+    var collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
     // From all of the shared collection keys retain the ones where sharedBy is not null and it not the current atSign
-    collectionAtKeys.retainWhere((atKey) =>
-        (atKey.sharedBy != null && atKey.sharedBy != atClient.atSign));
+    collectionAtKeys.retainWhere((atKey) => (atKey.sharedBy != null &&
+        atKey.sharedBy != getAtClient().getCurrentAtSign()));
     return _getAtCollectionModelsFromAtKey(collectionAtKeys);
   }
 
@@ -142,10 +145,10 @@ class AtCollectionQueryOperationsImpl implements AtCollectionQueryOperations {
       getModelsSharedWithAnyAtSign<T extends AtCollectionModel>() async {
     var regex = CollectionUtil.makeRegex();
     // Get all collection model keys
-    List<AtKey> collectionAtKeys = await atClient.getAtKeys(regex: regex);
+    List<AtKey> collectionAtKeys = await getAtClient().getAtKeys(regex: regex);
     // Just keep the keys that current atSign has shared
     collectionAtKeys.retainWhere((atKey) => (atKey.sharedBy != null &&
-        atKey.sharedBy == atClient.atSign &&
+        atKey.sharedBy == getAtClient().getCurrentAtSign() &&
         atKey.sharedWith != null));
     Set<AtKey> uniqueSelfKeys = {};
     // Add distinct keys that are shared to the other atSigns.
@@ -167,7 +170,7 @@ class AtCollectionQueryOperationsImpl implements AtCollectionQueryOperations {
         _logger.finest('Converting atKey: $atKey to the collection model');
         AtValue atValue;
         try {
-          atValue = await atClient.get(atKey);
+          atValue = await getAtClient().get(atKey);
         } on AtKeyNotFoundException {
           continue;
         }
