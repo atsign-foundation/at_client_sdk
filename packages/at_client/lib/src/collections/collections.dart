@@ -535,12 +535,18 @@ class AtCollection<T> {
       l.add(OpFailure(selfKey, CollectionOp.put, e));
     }
 
-    /// if [unshareWithOthers] is true, deletes any copies for atSigns who
-    /// are not in item.sharedWith
+    /// if [unshareWithOthers] is true, delete any existing recipient copies
+    /// whose atSign is NOT in item.sharedWith. Recipients who are in both
+    /// the existing set AND item.sharedWith are left alone here — the
+    /// put loop below will overwrite their copy with the new content.
     if (unshareWithOthers) {
       for (final AtKey k in await getKeys(id: item.id, owner: atSign)) {
-        if ((k.sharedWith ?? atSign) == atSign) {
-          continue;
+        final sharedWith = k.sharedWith;
+        if (sharedWith == null || sharedWith == atSign) {
+          continue; // self copy
+        }
+        if (item.sharedWith.any((a) => a == sharedWith)) {
+          continue; // still a recipient — leave it for the put loop to update
         }
         try {
           await atClient.delete(k);
