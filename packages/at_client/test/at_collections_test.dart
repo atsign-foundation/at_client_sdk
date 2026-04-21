@@ -926,7 +926,11 @@ void main() {
       expect(receipts.single.id, 'id9');
       expect(receipts.single.from, bob);
       expect(subs, hasLength(1));
-      expect(subs.single.subNamespace, '__rr');
+      expect(subs.single.subName, '__rr');
+      // The CSubItemUpdated's id is the receipt sub-item's own id
+      // (the microsecond timestamp), and ancestry.last.id is the
+      // parent item id (id9).
+      expect(subs.single.ancestry.single.id, 'id9');
       await rrSub.cancel();
       await subSub.cancel();
     });

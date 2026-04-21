@@ -187,8 +187,12 @@ void main() {
         await Future<void>.delayed(Duration.zero);
       }
       expect(received, hasLength(1));
-      expect(received.single.id, 'p1');
-      expect(received.single.subNamespace, 'comments');
+      // `id` is the sub-item's own id; ancestry.last.id is the direct
+      // parent (p1).
+      expect(received.single.id, 'c1');
+      expect(received.single.ancestry, hasLength(1));
+      expect(received.single.ancestry.single.id, 'p1');
+      expect(received.single.subName, 'comments');
       expect(received.single.owner, selfAtSign);
       await sub.cancel();
     });
@@ -209,8 +213,61 @@ void main() {
         await Future<void>.delayed(Duration.zero);
       }
       expect(received, hasLength(1));
-      expect(received.single.id, 'p1');
-      expect(received.single.subNamespace, 'comments');
+      expect(received.single.id, 'c1');
+      expect(received.single.ancestry.single.id, 'p1');
+      expect(received.single.subName, 'comments');
+      await sub.cancel();
+    });
+
+    test(
+        'depth-2 (sub-sub) update emits CSubItemUpdated with full ancestry',
+        () async {
+      final c = buildParent();
+      final received = <CSubItemUpdated>[];
+      final sub = c.parent.subUpdates.listen(received.add);
+
+      // Sub-sub key shape: <subSubId>.<subSubName>.<subId>.<subName>
+      //   .<parentId>.<namespace>@<owner>
+      c.notifStream.add(subNotif(
+        key: 'r1.replies.c1.comments.p1.$parentNs$bobStr',
+        from: bobStr,
+        to: selfAtSignStr,
+        operation: 'update',
+      ));
+      for (int i = 0; i < 3; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(received, hasLength(1));
+      expect(received.single.id, 'r1');
+      expect(received.single.ancestry, hasLength(2));
+      // root → direct parent
+      expect(received.single.ancestry[0].id, 'p1');
+      expect(received.single.ancestry[0].subName, 'comments');
+      expect(received.single.ancestry[1].id, 'c1');
+      expect(received.single.ancestry[1].subName, 'replies');
+      expect(received.single.subName, 'replies');
+      await sub.cancel();
+    });
+
+    test('depth-2 delete emits CSubItemDeleted with full ancestry',
+        () async {
+      final c = buildParent();
+      final received = <CSubItemDeleted>[];
+      final sub = c.parent.subDeletes.listen(received.add);
+
+      c.notifStream.add(subNotif(
+        key: 'r1.replies.c1.comments.p1.$parentNs$bobStr',
+        from: bobStr,
+        to: selfAtSignStr,
+        operation: 'delete',
+      ));
+      for (int i = 0; i < 3; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(received, hasLength(1));
+      expect(received.single.id, 'r1');
+      expect(received.single.ancestry.last.id, 'c1');
+      expect(received.single.subName, 'replies');
       await sub.cancel();
     });
 
@@ -283,6 +340,60 @@ void main() {
         () => c.atClient.delete(captureAny()),
       ).captured.cast<AtKey>().map((k) => k.toString()).toList();
       expect(deleted, contains('c1.comments.p1.$parentNs$selfAtSignStr'));
+    });
+
+    test(
+        'parent-delete cascade deep-scans nested descendants '
+        '(sub-sub items)', () async {
+      // Regression: before the deep-scan fix, `_cascadeFromParentDelete`
+      // only picked up direct sub-items (`<id>.<composedNs>@self`).
+      // Nested sub-sub items matching the composed sub-collection's
+      // namespace at depth 2+ were left behind.
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      final comments = subOn<String>(c, post, 'comments');
+      final commentSelfKey =
+          AtKey.fromString('c1.comments.p1.$parentNs$selfAtSignStr');
+      final replySelfKey = AtKey.fromString(
+          'r1.replies.c1.comments.p1.$parentNs$selfAtSignStr');
+      when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((invocation) async {
+        final regex =
+            invocation.namedArguments[const Symbol('regex')] as String;
+        // Deep regex `(^|:).+\\.comments.p1.posts.blog.app@alice`
+        // matches both the direct comment AND the nested reply.
+        if (regex.contains('comments.p1.$parentNs')) {
+          return [commentSelfKey, replySelfKey];
+        }
+        return <AtKey>[];
+      });
+      when(() => c.atClient.delete(any())).thenAnswer((_) async => true);
+
+      c.notifStream.add(AtNotification(
+        'nid-del',
+        'p1.$parentNs$selfAtSignStr',
+        selfAtSignStr,
+        selfAtSignStr,
+        DateTime.now().millisecondsSinceEpoch,
+        'key',
+        false,
+        operation: 'delete',
+      ));
+      for (int i = 0; i < 8; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(comments.namespace, 'comments.p1.$parentNs');
+      final deleted = verify(
+        () => c.atClient.delete(captureAny()),
+      ).captured.cast<AtKey>().map((k) => k.toString()).toList();
+      expect(
+        deleted,
+        containsAll(<String>[
+          'c1.comments.p1.$parentNs$selfAtSignStr',
+          'r1.replies.c1.comments.p1.$parentNs$selfAtSignStr',
+        ]),
+      );
     });
   });
 

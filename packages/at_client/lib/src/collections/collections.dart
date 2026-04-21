@@ -332,30 +332,57 @@ class CItemDeleted extends CEvent {
   CItemDeleted({required super.owner, required super.id});
 }
 
+/// A single link in a sub-item's parent chain. [id] is the ancestor's
+/// own id; [subName] is the name of the sub-collection that contains
+/// this ancestor's next-level-down children.
+///
+/// Example — for the key `T.replies.S.comments.R.posts.app@owner`
+/// (a "reply" on a "comment" on a "post"), the ancestry from root is:
+///   - `(id: R, subName: 'comments')` — R's children live in `comments`
+///   - `(id: S, subName: 'replies')`  — S's children live in `replies`
+///
+/// For a depth-1 sub-item, the ancestry has exactly one entry.
+typedef CAncestor = ({String id, String subName});
+
 class CSubItemUpdated extends CEvent {
-  final String subNamespace;
+  /// Root-to-direct-parent chain. Length equals the sub-item's
+  /// nesting depth (1 for a direct sub-item, 2 for a sub-sub, …).
+  final List<CAncestor> ancestry;
+
   CSubItemUpdated({
     required super.owner,
     required super.id,
-    required this.subNamespace,
+    required this.ancestry,
   });
+
+  /// The subName of the innermost sub-collection containing this
+  /// item — equivalent to `ancestry.last.subName`.
+  String get subName => ancestry.last.subName;
 }
 
 class CSubItemDeleted extends CEvent {
-  final String subNamespace;
+  /// Root-to-direct-parent chain. Length equals the sub-item's
+  /// nesting depth.
+  final List<CAncestor> ancestry;
+
   CSubItemDeleted({
     required super.owner,
     required super.id,
-    required this.subNamespace,
+    required this.ancestry,
   });
+
+  /// The subName of the innermost sub-collection containing this
+  /// item — equivalent to `ancestry.last.subName`.
+  String get subName => ancestry.last.subName;
 }
 
 /// Parsed components of a notification key. Private to [AtCollection].
 typedef _CParts = ({
   Atsign from,
+  /// The item's own id (at any depth).
   String id,
-  String? subNamespace,
-  String? subId,
+  /// Root-to-direct-parent chain. Empty for a root-level item.
+  List<CAncestor> ancestry,
 });
 
 /// Internal registry entry for a typed factory. Holds both the wire-format
@@ -402,8 +429,11 @@ class AtCollection<T> {
   final StreamController<CEvent> _events = StreamController.broadcast();
 
   // Notification regex patterns, built in the constructor from [namespace].
-  late final RegExp _regexObj;
-  late final RegExp _regexSubObj;
+  // Matches any key at any depth (L0 or any sub-collection) whose tail
+  // is `.<namespace>@<anyone>`. Dispatch by depth is done in
+  // `handleNotification` based on `_getPartsFromNotifKey`'s ancestry
+  // length — not by separate per-depth regexes.
+  late final RegExp _regexObjAny;
   late final String _regexAllStr;
 
   late final StreamSubscription<AtNotification> _rrSub;
@@ -478,8 +508,12 @@ class AtCollection<T> {
     // TODO: namespace may contain periods - the regular expression should
     // escape those periods
     _regexAllStr = '.*\\.$namespace@';
-    _regexObj = RegExp('(^|:)[^.]+\\.$namespace@');
-    _regexSubObj = RegExp('(^|:)[^.]+\\.[^.]+\\.[^.]+\\.$namespace@');
+    // Matches the direct-item shape `<id>.<ns>@` AND any deeper
+    // sub-item shape `<id>.<subName>.<parentId>.…<ns>@`. We use this
+    // as a cheap filter to reject notifications that don't belong to
+    // this collection at all; depth-dispatch happens via the parsed
+    // ancestry length, not by regex.
+    _regexObjAny = RegExp('(^|:)[^.]+(\\.[^.]+)*\\.$namespace@');
 
     _injectedNotifications = notifications;
     final notifStream = notifications ??
@@ -876,7 +910,14 @@ class AtCollection<T> {
 
   Future<void> _cascadeFromParentDelete() async {
     try {
-      final keys = await getKeys(owner: atSign);
+      // Deep scan — we must pick up not just direct sub-items
+      // (`<id>.<ns>@<self>`) but also nested descendants
+      // (`<subId>.<subName>.<id>.<ns>@<self>`, and deeper). Using
+      // `getKeys(owner: self)` alone would miss every level deeper
+      // than 1.
+      final keys = await atClient.getAtKeys(
+        regex: '(^|:).+\\.$namespace$self',
+      );
       await Future.wait(keys.map((k) async {
         try {
           await atClient.delete(k);
@@ -996,17 +1037,22 @@ class AtCollection<T> {
 
   /// Top-level notification dispatcher. Pauses its own subscription for
   /// the duration of handling so re-entrant notifications don't cause
-  /// overlapping work.
+  /// overlapping work. Dispatch is depth-agnostic: L0 items go to
+  /// [handleObjNotification]; any sub-item at any nesting depth goes
+  /// to [handleSubObjNotification].
   @visibleForTesting
   Future<void> handleNotification(AtNotification n) async {
     _rrSub.pause();
     try {
-      if (_regexObj.hasMatch(n.key)) {
-        await handleObjNotification(n);
-      } else if (_regexSubObj.hasMatch(n.key)) {
-        await handleSubObjNotification(n);
-      } else {
+      if (!_regexObjAny.hasMatch(n.key)) {
         logger.shout('handleNotification: No handler for ${n.key}');
+        return;
+      }
+      final parts = _getPartsFromNotifKey(n);
+      if (parts.ancestry.isEmpty) {
+        await handleObjNotification(n);
+      } else {
+        await handleSubObjNotification(n);
       }
     } catch (e, st) {
       logger.shout('handleNotification: $e\nStackTrace:\n$st');
@@ -1032,36 +1078,38 @@ class AtCollection<T> {
     }
   }
 
-  /// Handles notifications for items in a sub-collection whose namespace
-  /// suffixes this collection's namespace. The key has the shape
-  /// `<subId>.<subName>.<parentId>.<namespace>@<owner>`; we emit
-  /// [CSubItemUpdated] / [CSubItemDeleted] with the **parent's** id (so
-  /// listeners can filter by which parent the sub-item belongs to) and
-  /// the sub-collection's name.
+  /// Handles notifications for items in a sub-collection at any depth.
+  /// The key has the shape
+  /// `<id>.<subName_k>.<ancestorId_k>…<subName_1>.<ancestorId_1>.<namespace>@<owner>`
+  /// and we emit [CSubItemUpdated] / [CSubItemDeleted] carrying the
+  /// full root-to-direct-parent ancestry, so listeners can filter by
+  /// any ancestor id or by the innermost sub-collection's `subName`.
   ///
-  /// When [subNamespace] is the reserved `__rr` name, we also emit a
-  /// [CReadReceipt] on top of the [CSubItemUpdated] so application code
-  /// can subscribe to read receipts directly via [readReceipts].
+  /// When the innermost sub-collection's subName is the reserved
+  /// `__rr` name, we also emit a [CReadReceipt] on top of the
+  /// [CSubItemUpdated] so application code can subscribe to read
+  /// receipts directly via [readReceipts]. The receipt's `id` is the
+  /// direct parent's id (i.e. `ancestry.last.id` — the item being
+  /// read).
   @visibleForTesting
   Future<void> handleSubObjNotification(AtNotification n) async {
     final parts = _getPartsFromNotifKey(n);
-    final parentId = parts.id;
-    final subNamespace = parts.subNamespace;
-    if (subNamespace == null) {
-      logger.shout('handleSubObjNotification: malformed sub key ${n.key}');
+    if (parts.ancestry.isEmpty) {
+      logger.shout('handleSubObjNotification: empty ancestry ${n.key}');
       return;
     }
+    final directParent = parts.ancestry.last;
     switch (n.operation) {
       case 'update':
         _events.add(CSubItemUpdated(
           owner: parts.from,
-          id: parentId,
-          subNamespace: subNamespace,
+          id: parts.id,
+          ancestry: parts.ancestry,
         ));
-        if (subNamespace == _rr) {
+        if (directParent.subName == _rr) {
           _events.add(CReadReceipt(
-            owner: atSign,
-            id: parentId,
+            owner: self,
+            id: directParent.id,
             from: parts.from,
             readAt: DateTime.now(),
           ));
@@ -1069,8 +1117,8 @@ class AtCollection<T> {
       case 'delete':
         _events.add(CSubItemDeleted(
           owner: parts.from,
-          id: parentId,
-          subNamespace: subNamespace,
+          id: parts.id,
+          ancestry: parts.ancestry,
         ));
       default:
         logger.shout(
@@ -1085,12 +1133,24 @@ class AtCollection<T> {
     if (ix >= 0) {
       keyName = keyName.substring(0, ix);
     }
-    final parts = keyName.split('.').reversed.toList();
+    final parts = keyName.split('.');
+    // parts layout by depth (natural order):
+    //   L0 root  : [id]                               (length 1)
+    //   L1 sub   : [id, subName, parentId]            (length 3)
+    //   L2 sub2  : [id, subName, pId, gSubName, gId]  (length 5)
+    // General: length = 2*depth + 1. Ancestors are built from the
+    // outermost id inward (so the first entry is the root ancestor).
+    final ancestry = <CAncestor>[];
+    for (int i = parts.length - 1; i >= 2; i -= 2) {
+      // parts[i] is an ancestor's id; parts[i-1] is the subName of
+      // the sub-collection that contains this ancestor's children
+      // (i.e. the child-step toward the current item).
+      ancestry.add((id: parts[i], subName: parts[i - 1]));
+    }
     return (
       from: n.from.toAtsign(),
-      id: parts[0],
-      subNamespace: parts.length > 1 ? parts[1] : null,
-      subId: parts.length > 2 ? parts[2] : null,
+      id: parts.first,
+      ancestry: ancestry,
     );
   }
 
@@ -1112,8 +1172,9 @@ class AtCollection<T> {
       watch().where((e) => e is CReadReceipt).cast<CReadReceipt>();
 
   /// Fires for any descendant (sub-collection) item that was updated —
-  /// at any nesting depth. Use [CSubItemUpdated.subNamespace] to tell
-  /// which sub-collection the update came from.
+  /// at any nesting depth. Use [CSubItemUpdated.ancestry] to inspect
+  /// the full root-to-direct-parent chain, or [CSubItemUpdated.subName]
+  /// for just the innermost sub-collection name.
   Stream<CSubItemUpdated> get subUpdates =>
       watch().where((e) => e is CSubItemUpdated).cast<CSubItemUpdated>();
 

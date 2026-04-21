@@ -98,12 +98,12 @@ Future<void> sender(ExampleContext c, AtCollection<BlogPost> posts) async {
   //    comments coming in from the other side.
   posts.subUpdates.listen((e) {
     progress.add(
-      'Sub-update from ${e.owner}: id=${e.id} sub=${e.subNamespace}',
+      'Sub-update from ${e.owner}: id=${e.id} sub=${e.subName}',
     );
   });
   posts.subDeletes.listen((e) {
     progress.add(
-      'Sub-delete from ${e.owner}: id=${e.id} sub=${e.subNamespace}',
+      'Sub-delete from ${e.owner}: id=${e.id} sub=${e.subName}',
     );
   });
 
@@ -155,12 +155,12 @@ Future<void> receiver(ExampleContext c, AtCollection<BlogPost> posts) async {
 
   posts.subUpdates.listen((e) {
     progress.add(
-      'Sub-update from ${e.owner}: id=${e.id} sub=${e.subNamespace}',
+      'Sub-update from ${e.owner}: id=${e.id} sub=${e.subName}',
     );
   });
   posts.subDeletes.listen((e) {
     progress.add(
-      'Sub-delete from ${e.owner}: id=${e.id} sub=${e.subNamespace}',
+      'Sub-delete from ${e.owner}: id=${e.id} sub=${e.subName}',
     );
   });
 
