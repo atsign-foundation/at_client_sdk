@@ -129,6 +129,16 @@ final class CItem<T> {
   /// the item's `__rr` sub-collection for read-receipt queries.
   final AtCollection<T> _collection;
 
+  /// Root-to-direct-parent owner chain persisted in the envelope.
+  /// Empty for items in a root collection. Length equals the item's
+  /// nesting depth for items in a sub-collection. Owner at index `i`
+  /// is the ancestor at nesting level `i` (root-most first).
+  ///
+  /// Ids of ancestors are not duplicated here — they're recoverable
+  /// from the item's key via the sub-collection's composed
+  /// namespace. See [ancestors] for the combined (owner, id) view.
+  final List<Atsign> parentOwners;
+
   CItem._({
     required this.owner,
     required this.id,
@@ -139,21 +149,27 @@ final class CItem<T> {
     required this.expiresAt,
     required this.availableAt,
     required AtCollection<T> collection,
-  }) : _collection = collection {
+    List<Atsign>? parentOwners,
+  })  : _collection = collection,
+        parentOwners = parentOwners ?? const <Atsign>[] {
     if (obj is Uint8List && type != 'binary') {
       throw ArgumentError('type for Uint8List must be "binary"');
     }
   }
 
   Map<String, dynamic> toJson() {
-    if (type == 'binary') {
-      return {
-        'type': type,
-        'obj': Base2e15.encode(obj as Uint8List),
-      };
-    } else {
-      return {'type': type, 'obj': obj};
+    final base = type == 'binary'
+        ? <String, dynamic>{
+            'type': type,
+            'obj': Base2e15.encode(obj as Uint8List),
+          }
+        : <String, dynamic>{'type': type, 'obj': obj};
+    if (parentOwners.isNotEmpty) {
+      base['parents'] = [
+        for (final o in parentOwners) {'owner': o.toString()}
+      ];
     }
+    return base;
   }
 
   @override
@@ -166,6 +182,31 @@ final class CItem<T> {
   /// [AtCollection.self]. Useful for ownership checks:
   /// `item.owner == item.self` means "I own this item".
   Atsign get self => _collection.self;
+
+  /// Root-to-direct-parent chain for a sub-collection item. Empty for
+  /// items in a root collection. Each entry combines the
+  /// envelope-persisted [parentOwners] at the same index with the id
+  /// of that ancestor, which is recovered from the sub-collection's
+  /// composed namespace.
+  ///
+  /// If [parentOwners] is empty but the collection's namespace shows
+  /// this item lives at depth ≥ 1 (legacy data written before the
+  /// `parents` envelope field was added), owners fall back to this
+  /// item's own [owner] — same lenient assumption applied throughout
+  /// the codebase for backward compatibility.
+  List<({Atsign owner, String id})> get ancestors {
+    final ids = _collection._ancestorIdsFromNamespace();
+    if (ids.isEmpty) return const <({Atsign owner, String id})>[];
+    // Pair owners to ids, falling back to [owner] for any missing
+    // entries in the envelope (legacy items).
+    return [
+      for (int i = 0; i < ids.length; i++)
+        (
+          owner: i < parentOwners.length ? parentOwners[i] : owner,
+          id: ids[i],
+        ),
+    ];
+  }
 
   // Lazy, event-maintained reader cache. `null` until the first load;
   // mutex-protected to serialise concurrent callers; subscribed to the
@@ -591,6 +632,7 @@ class AtCollection<T> {
       expiresAt: now.add(defaultExpiration),
       availableAt: null,
       collection: this,
+      parentOwners: _expectedAncestorOwners(),
     );
   }
 
@@ -761,6 +803,17 @@ class AtCollection<T> {
           if (pending != null) yield pending;
           final v = await atClient.get(k);
           final decoded = _decodeEnvelope(v.value!, k);
+          // Parent-owner ancestry filter (see §3 of the post-
+          // implementation tidy-up plan). Legacy items whose envelope
+          // lacks `parents` are accepted lenient-ly as matching this
+          // sub-collection's expected chain.
+          final parsedParents = _decodeParentOwners(decoded);
+          if (parsedParents != null &&
+              !_ancestryMatches(parsedParents)) {
+            // Item belongs to a different parent-owner chain at the
+            // same key shape — skip.
+            continue;
+          }
           pending = CItem._(
             owner: k.sharedBy!.toAtsign(),
             id: k.key.split('.').first,
@@ -771,6 +824,7 @@ class AtCollection<T> {
             expiresAt: v.metadata!.expiresAt!,
             availableAt: _liveAvailableAt(v.metadata!.availableAt),
             collection: this,
+            parentOwners: parsedParents ?? _expectedAncestorOwners(),
           );
           pendingKey = k.fullKeyAndOwner;
         }
@@ -918,8 +972,20 @@ class AtCollection<T> {
       final keys = await atClient.getAtKeys(
         regex: '(^|:).+\\.$namespace$self',
       );
+      // Ancestry filter: we only delete descendants whose persisted
+      // `parents` chain starts with this sub-collection's expected
+      // chain. A descendant of a DIFFERENT-owner chain that happens
+      // to live under the same composed namespace (id collision
+      // case) must be spared.
+      final expectedPrefix = _expectedAncestorOwners();
       await Future.wait(keys.map((k) async {
         try {
+          final v = await atClient.get(k);
+          final decoded = _decodeEnvelope(v.value!, k);
+          final persisted = _decodeParentOwners(decoded);
+          if (persisted != null && !_startsWith(persisted, expectedPrefix)) {
+            return; // not our chain — leave it alone
+          }
           await atClient.delete(k);
         } catch (e) {
           logger.shout('_cascadeFromParentDelete: $e');
@@ -956,25 +1022,24 @@ class AtCollection<T> {
     final parentColl = _parentCollection!;
     final stillAlive = await parentColl.getMaybe(parent.id, parent.owner);
     if (stillAlive != null) return const <OpResult>[];
-    // Parent is gone — delete every self-owned item in this sub-collection
-    // (and recursively their descendants).
+    // Parent is gone — delete every self-owned item in this sub-
+    // collection AND its nested descendants, but only those whose
+    // persisted `parents` chain starts with this sub-collection's
+    // expected ancestor chain (ancestry filter — see §3 of the post-
+    // implementation tidy-up plan).
+    final expectedPrefix = _expectedAncestorOwners();
     final results = <OpResult>[];
-    final keys = await getKeys(owner: atSign);
-    for (final k in keys) {
-      try {
-        await atClient.delete(k);
-        results.add(OpSuccess(k, CollectionOp.delete));
-      } catch (e) {
-        results.add(OpFailure(k, CollectionOp.delete, e));
-      }
-    }
-    // Also sweep any nested descendant keys (replies on deleted comments,
-    // etc.) that still linger under this sub-collection.
     final deep = await atClient.getAtKeys(
       regex: '(^|:).+\\.$namespace$atSign',
     );
     for (final k in deep) {
       try {
+        final v = await atClient.get(k);
+        final decoded = _decodeEnvelope(v.value!, k);
+        final persisted = _decodeParentOwners(decoded);
+        if (persisted != null && !_startsWith(persisted, expectedPrefix)) {
+          continue; // different-owner chain; leave alone
+        }
         await atClient.delete(k);
         results.add(OpSuccess(k, CollectionOp.delete));
       } catch (e) {
@@ -985,31 +1050,29 @@ class AtCollection<T> {
   }
 
   Future<List<OpResult>> _cleanupOrphansFromRoot() async {
-    // Note on key parsing: `AtKey.fromString` splits a persisted key like
-    // `<id>.<namespace>@<owner>` into `k.key` (everything before the last
-    // namespace segment) plus `k.namespace` (just the last segment). So
-    // for namespace `posts.blog.app`, a direct item's `k.key` has exactly
-    // `nsSegments` parts (`<id>` + nsSegments-1 namespace segments); a
-    // descendant's `k.key` has MORE, with 2 extra parts per sub-level
-    // (subId + subName).
+    // Chain-walking orphan sweep. For each self-owned descendant in
+    // this collection's subtree:
+    //   1. Parse its ancestor ids and subNames from the key.
+    //   2. Read its envelope's `parents` for ancestor owners.
+    //   3. For each ancestor level (root-first), construct
+    //      `<id_i>.<composedNs_i>@<owner_i>` and check local presence.
+    //   4. If any ancestor is absent → orphaned → delete.
+    //
+    // Legacy items (no `parents`) cannot have their ancestor-owner
+    // chain verified, so we preserve the old behaviour: check only
+    // the ROOT ancestor's id against direct items locally (any owner).
     final nsSegments = namespace.split('.').length;
 
-    // Alive direct items in this collection — of ANY owner. Bob's
-    // sub-collection items (e.g. comments he owns on Alice's still-alive
-    // post) must not be treated as orphans just because Bob doesn't own
-    // the parent. We only delete descendants whose root ancestor is
-    // absent locally (i.e. no self-owned copy AND no cached copy from
-    // another atSign), which is exactly what happens after a parent is
-    // deleted and the delete notification propagates.
-    final aliveIds = <String>{};
+    // Legacy-fallback: set of root-ancestor ids that exist locally as
+    // direct items (any owner).
+    final aliveRootIds = <String>{};
     for (final k in await getKeys()) {
       final parts = k.key.split('.');
       if (parts.length == nsSegments) {
-        aliveIds.add(parts.first);
+        aliveRootIds.add(parts.first);
       }
     }
 
-    // All self-owned descendants in this collection's subtree.
     final descendantKeys = await atClient.getAtKeys(
       regex: '(^|:).+\\.$namespace$atSign',
     );
@@ -1017,11 +1080,69 @@ class AtCollection<T> {
     for (final k in descendantKeys) {
       final parts = k.key.split('.');
       if (parts.length <= nsSegments) continue; // direct items are alive
-      // The root-ancestor id — the direct item's id under which this
-      // descendant is nested — is at index `parts.length - nsSegments`.
-      // (For `c1.comments.p1.posts.blog`: length 5, ns 3, index 2 → `p1`.)
-      final rootAncestorId = parts[parts.length - nsSegments];
-      if (aliveIds.contains(rootAncestorId)) continue;
+      // Parse ancestor ids and subNames from the key.
+      //
+      // k.key layout for a depth-D descendant (D >= 1):
+      //   [itemId, subName_D, id_D, subName_{D-1}, id_{D-1}, ...,
+      //    subName_1, id_1, ns_seg_0, ns_seg_1, ..., ns_seg_{nsSegments-2}]
+      //
+      // The last `nsSegments - 1` parts are the root namespace tail
+      // (AtKey.namespace captures the final namespace segment, not
+      // the whole thing). The root ancestor's id lives at index
+      // `parts.length - nsSegments` (= `rootIndex`). Iterating down
+      // by 2 from there walks root → direct parent.
+      final rootIndex = parts.length - nsSegments;
+      final ancestorIds = <String>[];
+      final ancestorSubNames = <String>[];
+      for (int i = rootIndex; i >= 2; i -= 2) {
+        ancestorIds.add(parts[i]);         // root first, then deeper
+        ancestorSubNames.add(parts[i - 1]);
+      }
+
+      // Determine ancestor owners — from envelope if present, legacy
+      // fallback otherwise.
+      List<Atsign>? ancestorOwners;
+      try {
+        final v = await atClient.get(k);
+        final decoded = _decodeEnvelope(v.value!, k);
+        ancestorOwners = _decodeParentOwners(decoded);
+      } catch (_) {
+        // Unreadable envelope — fall through to legacy path.
+      }
+
+      if (ancestorOwners == null) {
+        // Legacy fallback: only the root ancestor is checked.
+        if (aliveRootIds.contains(ancestorIds.first)) continue;
+        try {
+          await atClient.delete(k);
+          results.add(OpSuccess(k, CollectionOp.delete));
+        } catch (e) {
+          results.add(OpFailure(k, CollectionOp.delete, e));
+        }
+        continue;
+      }
+
+      // Chain-walk: for each ancestor level, build the composed
+      // namespace at that level and look up `<id_i>.<ns_i>@<owner_i>`.
+      bool orphaned = false;
+      String composed = namespace;
+      for (int i = 0; i < ancestorIds.length; i++) {
+        final ancId = ancestorIds[i];
+        final ancOwner = i < ancestorOwners.length
+            ? ancestorOwners[i]
+            : self; // lenient: short chain ⇒ treat missing as self
+        final ancKey = AtKey.fromString('$ancId.$composed$ancOwner');
+        try {
+          await atClient.get(ancKey);
+        } catch (_) {
+          orphaned = true;
+          break;
+        }
+        // Descend composed namespace for the next level.
+        composed = '${ancestorSubNames[i]}.$ancId.$composed';
+      }
+
+      if (!orphaned) continue;
       try {
         await atClient.delete(k);
         results.add(OpSuccess(k, CollectionOp.delete));
@@ -1204,6 +1325,74 @@ class AtCollection<T> {
   // Internals
   // ===========================================================================
 
+  /// Parses the `parents` field from a decoded envelope, returning
+  /// `null` if the field is absent (legacy data). The result is the
+  /// root-first chain of ancestor owners persisted at write time.
+  List<Atsign>? _decodeParentOwners(Map<String, dynamic> decoded) {
+    final raw = decoded['parents'];
+    if (raw == null) return null;
+    if (raw is! List) return null;
+    return [
+      for (final e in raw) (e['owner'] as String).toAtsign(),
+    ];
+  }
+
+  /// True iff [persisted] (from an envelope's `parents` field) is a
+  /// valid match for this collection's expected ancestor-owner chain.
+  /// A shorter-than-expected persisted list is a legacy-straggler
+  /// mismatch → false.
+  bool _ancestryMatches(List<Atsign> persisted) {
+    final expected = _expectedAncestorOwners();
+    if (persisted.length != expected.length) return false;
+    for (int i = 0; i < expected.length; i++) {
+      if (persisted[i] != expected[i]) return false;
+    }
+    return true;
+  }
+
+  /// Walks up this collection's parent chain (if it's a sub-collection)
+  /// and returns the root-to-direct-parent owner chain. Empty for root
+  /// collections. Used by [_put] to emit the `parents` envelope field
+  /// and by `_loadItems` to filter sub-collection reads by ancestor
+  /// ownership.
+  List<Atsign> _expectedAncestorOwners() {
+    final owners = <Atsign>[];
+    AtCollection<dynamic>? cursor = this;
+    while (cursor != null && cursor._parentItem != null) {
+      owners.insert(0, cursor._parentItem!.owner);
+      cursor = cursor._parentCollection;
+    }
+    return owners;
+  }
+
+  /// Parses ancestor ids out of this collection's composed namespace.
+  /// For a root collection, returns `[]`. For a sub-collection whose
+  /// composed namespace is `<subName>.<pId>.<rootNs>`, returns
+  /// `[pId]`. For a sub-sub-collection `<sub2>.<pId2>.<sub1>.<pId1>.<rootNs>`,
+  /// returns `[pId1, pId2]` (root-first, matching [_expectedAncestorOwners]).
+  List<String> _ancestorIdsFromNamespace() {
+    if (_parentItem == null) return const <String>[];
+    // Find the root namespace by walking to the root collection.
+    AtCollection<dynamic> cursor = this;
+    while (cursor._parentCollection != null) {
+      cursor = cursor._parentCollection!;
+    }
+    final rootNs = cursor.namespace;
+    // `namespace` of this (sub-)collection is something like
+    // `<subN>.<idN>.<subN-1>.<idN-1>...<sub1>.<id1>.<rootNs>`. Strip
+    // the rootNs suffix; the remainder alternates subName / id, with
+    // subName first (closest to this level).
+    final tail = namespace.substring(0, namespace.length - rootNs.length - 1);
+    final parts = tail.split('.');
+    // parts layout: [subN, idN, subN-1, idN-1, ..., sub1, id1].
+    // Ancestor ids in root-first order: id1, id2, ..., idN.
+    final ids = <String>[];
+    for (int i = parts.length - 1; i >= 0; i -= 2) {
+      ids.add(parts[i]);
+    }
+    return ids;
+  }
+
   String _newItemId() {
     final buf = StringBuffer();
     for (int i = 0; i < 8; i++) {
@@ -1295,6 +1484,14 @@ class AtCollection<T> {
           final v = await atClient.get(k);
           logger.info('Retrieved raw value ${v.value}');
           final decoded = _decodeEnvelope(v.value!, k);
+          // Parent-owner ancestry filter (see ancestor-owner
+          // disambiguation in the post-implementation tidy-up plan).
+          // Legacy items (no `parents` in envelope) pass through.
+          final parsedParents = _decodeParentOwners(decoded);
+          if (parsedParents != null &&
+              !_ancestryMatches(parsedParents)) {
+            continue;
+          }
           item = CItem._(
             owner: k.sharedBy!.toAtsign(),
             id: k.key.split('.').first,
@@ -1305,6 +1502,7 @@ class AtCollection<T> {
             expiresAt: v.metadata!.expiresAt!,
             availableAt: _liveAvailableAt(v.metadata!.availableAt),
             collection: this,
+            parentOwners: parsedParents ?? _expectedAncestorOwners(),
           );
           map[k.fullKeyAndOwner] = item;
         }
@@ -1408,7 +1606,16 @@ class AtCollection<T> {
       throw ArgumentError('You may not delete items owned by other atSigns');
     }
 
-    final descendants = await _selfOwnedDescendantKeys(item.id);
+    // Expected chain for valid descendants of [item] at this collection
+    // level: (this collection's ancestors) + [self]. Id-collision safety:
+    // descendants whose key happens to match the regex but whose
+    // envelope declares a different ancestor chain (e.g. self's
+    // sub-items on a DIFFERENT-owner's same-id parent) are rejected.
+    final expectedChainPrefix = <Atsign>[..._expectedAncestorOwners(), self];
+    final descendants = await _selfOwnedDescendantKeysFiltered(
+      item.id,
+      expectedChainPrefix,
+    );
     if (descendants.isNotEmpty && !cascade) {
       throw StateError(
         'Cannot delete item ${item.id}: ${descendants.length} self-owned '
@@ -1442,5 +1649,53 @@ class AtCollection<T> {
   Future<List<AtKey>> _selfOwnedDescendantKeys(String parentId) async {
     final regex = '(^|:).+\\.$parentId\\.$namespace$atSign';
     return atClient.getAtKeys(regex: regex);
+  }
+
+  /// Variant of [_selfOwnedDescendantKeys] that also filters each
+  /// candidate by its envelope's `parents` chain. Only descendants
+  /// whose `parents` **begins with** [expectedChainPrefix] are kept.
+  /// Legacy items lacking the `parents` field pass the filter (lenient
+  /// tolerance per the post-implementation tidy-up plan).
+  Future<List<AtKey>> _selfOwnedDescendantKeysFiltered(
+    String parentId,
+    List<Atsign> expectedChainPrefix,
+  ) async {
+    final raw = await _selfOwnedDescendantKeys(parentId);
+    // Fast path: at root-level cascade with no id collision, filter is
+    // unnecessary. But we don't know up-front whether a collision
+    // exists, so always do the per-key envelope decode. One extra
+    // round-trip per candidate; fine at typical scales.
+    final keep = <AtKey>[];
+    for (final k in raw) {
+      try {
+        final v = await atClient.get(k);
+        final decoded = _decodeEnvelope(v.value!, k);
+        final persisted = _decodeParentOwners(decoded);
+        if (persisted == null) {
+          // Legacy: accept.
+          keep.add(k);
+          continue;
+        }
+        if (_startsWith(persisted, expectedChainPrefix)) {
+          keep.add(k);
+        }
+      } catch (e) {
+        // Bad envelope / unreadable — err on the side of keeping the
+        // candidate (so `prevent` fires rather than silently stranding
+        // a malformed descendant). Cascade will try to delete it.
+        logger.warning('descendant envelope decode failed on ${k.key}: $e');
+        keep.add(k);
+      }
+    }
+    return keep;
+  }
+
+  /// True iff [list] begins with [prefix] (element-wise equality).
+  static bool _startsWith<X>(List<X> list, List<X> prefix) {
+    if (list.length < prefix.length) return false;
+    for (int i = 0; i < prefix.length; i++) {
+      if (list[i] != prefix[i]) return false;
+    }
+    return true;
   }
 }

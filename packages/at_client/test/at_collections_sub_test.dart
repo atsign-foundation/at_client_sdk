@@ -315,6 +315,17 @@ void main() {
         }
         return <AtKey>[];
       });
+      // Ancestry filter in _cascadeFromParentDelete fetches each
+      // candidate's envelope; stub the get. Legacy (no parents)
+      // passes the lenient filter.
+      when(() => c.atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'x'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
       when(() => c.atClient.delete(any())).thenAnswer((_) async => true);
 
       // Fire the parent delete notification.
@@ -366,6 +377,14 @@ void main() {
           return [commentSelfKey, replySelfKey];
         }
         return <AtKey>[];
+      });
+      when(() => c.atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'x'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
       });
       when(() => c.atClient.delete(any())).thenAnswer((_) async => true);
 
@@ -463,6 +482,72 @@ void main() {
       expect(results.whereType<OpSuccess>().length, 2);
     });
 
+    test(
+        'ancestry filter: sub-collection cleanup preserves self-owned '
+        'items in a DIFFERENT-owner chain with a colliding parent id',
+        () async {
+      // Setup: self and bob each have a post with the same id (`p1`).
+      // Self has a comment on self's p1 AND a comment on bob's p1,
+      // both persisted with the same key shape (id collision on the
+      // wire). When self's sub-collection-for-self's-p1 runs
+      // cleanupOrphans after self's p1 is gone, ONLY self's comment on
+      // self's p1 should be deleted. The comment on bob's p1
+      // (envelope parents: [bob]) must be preserved.
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      final comments = subOn<String>(c, post, 'comments');
+
+      final myCommentOnMyP1 =
+          AtKey.fromString('c1.comments.p1.$parentNs$selfAtSignStr');
+      final myCommentOnBobsP1 =
+          AtKey.fromString('c2.comments.p1.$parentNs$selfAtSignStr');
+      when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((invocation) async {
+        final regex =
+            invocation.namedArguments[const Symbol('regex')] as String;
+        if (regex.contains('comments.p1.$parentNs')) {
+          return [myCommentOnMyP1, myCommentOnBobsP1];
+        }
+        return <AtKey>[];
+      });
+      when(() => c.atClient.get(myCommentOnMyP1)).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({
+          'type': 'n/a',
+          'obj': 'on my own p1',
+          'parents': [
+            {'owner': selfAtSignStr},
+          ],
+        });
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+      when(() => c.atClient.get(myCommentOnBobsP1)).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({
+          'type': 'n/a',
+          'obj': 'on bob\'s p1',
+          'parents': [
+            {'owner': bobStr},
+          ],
+        });
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+      when(() => c.atClient.delete(any())).thenAnswer((_) async => true);
+
+      await comments.cleanupOrphans();
+      final deleted = verify(
+        () => c.atClient.delete(captureAny()),
+      ).captured.cast<AtKey>().map((k) => k.toString()).toList();
+      expect(deleted, contains(myCommentOnMyP1.toString()));
+      expect(deleted, isNot(contains(myCommentOnBobsP1.toString())));
+    });
+
     test('deletes self-owned sub-items when the parent is gone', () async {
       final c = buildParent();
       final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
@@ -477,10 +562,8 @@ void main() {
           .thenAnswer((invocation) async {
         final regex =
             invocation.namedArguments[const Symbol('regex')] as String;
-        // Descendants scan — starts with `(^|:).+\.` (arbitrary prefix
-        // before the id). Nothing nested under c1.
-        if (regex.startsWith(r'(^|:).+\.')) return <AtKey>[];
-        // Item scan inside the sub-collection — the comment itself.
+        // Both the sub-collection's deep-scan and its narrow scans
+        // should find the stale comment.
         if (regex.contains('comments.p1.$parentNs')) return [commentKey];
         // Parent lookup in the parent collection.
         return <AtKey>[];
@@ -489,7 +572,6 @@ void main() {
         final v = AtValue();
         v.value = jsonEncode({
           'type': 'n/a',
-          'readBy': <String>[],
           'obj': 'a stale comment',
         });
         v.metadata = Metadata()
