@@ -3,7 +3,7 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/decryption_service/decryption_manager.dart';
+import 'package:at_client/src/decryption_service/decryption_builder.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
@@ -24,8 +24,6 @@ class SyncServiceImpl implements SyncService {
   static int queueSize = 10;
   final AtClient _atClient;
   final RemoteSecondary _remoteSecondary;
-  @visibleForTesting
-  late AtKeyDecryptionManager atKeyDecryptionManager;
   StreamSubscription<AtNotification>? _statsNotificationSubscription;
 
   /// utility method to reduce code verbosity in this file
@@ -175,7 +173,6 @@ class SyncServiceImpl implements SyncService {
         AtKey.local('lastreceivedservercommitid', currentAtSign).build();
     _skipDeletesUntilCommitId =
         AtKey.local('skipdeletesuntil', currentAtSign).build();
-    atKeyDecryptionManager = AtKeyDecryptionManager(_atClient);
   }
 
   @override
@@ -1033,7 +1030,7 @@ class SyncServiceImpl implements SyncService {
       final serverMetaData = serverCommitEntry['metadata'];
       if (serverMetaData != null &&
           serverMetaData[AtConstants.isEncrypted] == "true") {
-        final decrypter = atKeyDecryptionManager.get(serverAtKey);
+        final decrypter = AtKeyDecryptionBuilder.build(serverAtKey, _atClient);
         // ignore: prefer_typing_uninitialized_variables
         var serverDecryptedValue;
         if (serverEncryptedValue != null && serverEncryptedValue.isNotEmpty) {

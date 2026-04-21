@@ -4,7 +4,7 @@ import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/src/converters/decoder/at_decoder.dart';
 import 'package:at_client/src/decryption_service/decryption.dart';
-import 'package:at_client/src/decryption_service/decryption_manager.dart';
+import 'package:at_client/src/decryption_service/decryption_builder.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/util/at_client_util.dart';
@@ -18,12 +18,8 @@ import 'package:at_commons/at_commons.dart';
 class GetResponseTransformer
     implements Transformer<Tuple<AtKey, String>, AtValue> {
   late final AtClient _atClient;
-  late final AtKeyDecryptionManager _decryptionManager;
 
-  GetResponseTransformer(this._atClient,
-      {AtKeyDecryptionManager? decrypterManager}) {
-    _decryptionManager = decrypterManager ?? AtKeyDecryptionManager(_atClient);
-  }
+  GetResponseTransformer(this._atClient);
 
   @override
   FutureOr<AtValue> transform(Tuple<AtKey, String> tuple) async {
@@ -44,7 +40,7 @@ class GetResponseTransformer
     if (_isKeyPublic(decodedResponse['key'])) {
       return _handlePublicData(atValue, tuple);
     }
-    final decrypter = _decryptionManager.get(tuple.one);
+    final decrypter = AtKeyDecryptionBuilder.build(tuple.one, _atClient);
     // Decrypt the data, for other keys
     // For new encrypted data after AtClient v3.2.1, isEncrypted will be true(default value for PutRequestOptions.shouldEncrypt) for self and shared keys
     // isEncrypted will be false if client sets PutRequestOptions.shouldEncrypt to false
