@@ -142,6 +142,9 @@ class TodosApp {
   final List<String> logMessages = [];
   List<CItem<Todo>> todos = [];
   Map<String, List<CItem<TodoNote>>> notesByTodoId = {};
+  // Per-todo cache of read-receipt owners, refreshed during refreshTodos.
+  // Avoids triggering an async __rr sub-collection query from _draw().
+  Map<String, Set<Atsign>> readersByTodoId = {};
   String currentInput = '';
   bool _running = false;
   bool _handlerRunning = false;
@@ -169,6 +172,10 @@ class TodosApp {
   static const String _errorAnsi = '\x1b[38;5;208m';
 
   void log(String message, {Atsign? by, bool error = false}) {
+    if (message.contains('\n')) {
+      message.split('\n').forEach((s) => log(s, by: by, error: error));
+      return;
+    }
     final who = by ?? atClient.atSign;
     final ts = DateTime.now().toIso8601String().substring(11, 23);
     final body = error ? '$_errorAnsi$message\x1b[0m' : message;
@@ -221,14 +228,17 @@ class TodosApp {
       final fetched = await collection.getItems();
       fetched.sort(_compareByDue);
       todos = fetched;
+      final nextReaders = <String, Set<Atsign>>{};
       for (final item in todos) {
-        if (!(await collection.hasSentReadReceipt(item))) {
-          await collection.sendReadReceipt(item);
+        if (!(await item.wasMarkedReadByMe())) {
+          await item.markReadByMe();
           log(
             'Read receipt sent to ${_color.fmt(item.owner)} for: ${item.obj.title}',
           );
         }
+        nextReaders[item.id] = await item.readers();
       }
+      readersByTodoId = nextReaders;
       _draw();
     } catch (e) {
       log('Error refreshing todos: $e');
@@ -253,13 +263,13 @@ class TodosApp {
       notesByTodoId = {};
       for (final n in items) {
         notesByTodoId.putIfAbsent(n.obj.todoId, () => []).add(n);
-        if (!(await notesCollection.hasSentReadReceipt(n))) {
-          await notesCollection.sendReadReceipt(n);
+        if (!(await n.wasMarkedReadByMe())) {
+          await n.markReadByMe();
         }
       }
       _draw();
-    } catch (e) {
-      log('Error refreshing notes: $e');
+    } catch (e, st) {
+      log('Error refreshing notes: $e\n$st');
     }
   }
 
@@ -377,7 +387,7 @@ class TodosApp {
     'quit': 'Exit the app.',
   };
 
-  static const int _logHeight = 5;
+  static const int _logHeight = 20;
 
   // Fixed row count for the wrapped command list. Enough for 2 lines at 80-col
   // terminals; wider terminals will wrap to 1 line and leave the second row
@@ -444,10 +454,11 @@ class TodosApp {
         final authorStr = _color.fmt(todo.owner);
         final sharedStr =
             todo.sharedWith.isEmpty ? '-' : _color.fmtAll(todo.sharedWith);
+        final readers = readersByTodoId[todo.id] ?? const <Atsign>{};
         final readByStr =
-            todo.readBy.isEmpty
+            readers.isEmpty
                 ? (todo.sharedWith.isEmpty ? '-' : '(nobody)')
-                : _color.fmtAll(todo.readBy);
+                : _color.fmtAll(readers);
         row = _drawTableRowSingle(row, tableWidth, cols, [
           dueStr,
           createdStr,

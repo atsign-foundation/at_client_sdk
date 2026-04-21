@@ -1,5 +1,5 @@
 // =============================================================================
-// AtCollection<T> — a typed collection of items on the atPlatform.
+// AtCollection<T> — a typed collection of items on the Atsign Protocol.
 //
 // MENTAL MODEL (read this first):
 //
@@ -12,10 +12,11 @@
 // item. It is a distribution list, not a permission grant — you cannot
 // "un-share" retroactively except by deleting their copy.
 //
-// [CItem.readBy] grows monotonically: every time a recipient calls
-// [sendReadReceipt], their atSign is added to `readBy` on the owner's side
-// (via a [CReadReceipt] event that drives the internal read-receipt
-// handling).
+// Read receipts: every [CItem] has an implicit reserved sub-collection
+// `__rr` whose items are the receipts written by readers. Query via
+// [CItem.readers] / [CItem.wasMarkedReadByMe] on the item itself, or
+// via [AtCollection.wasMarkedReadByMe] from the reader's side. Incoming
+// receipts fire as [CReadReceipt] events on the parent collection.
 //
 // PERSISTENCE VERBS:
 // - [draft] builds a local [CItem] with no I/O. Use when you need to stage
@@ -109,11 +110,6 @@ final class CItem<T> {
   /// [AtCollection.update] to persist.
   final Set<Atsign> sharedWith;
 
-  /// atSigns known to have read this item. Populated from incoming
-  /// read-receipt notifications and merged from the stored record on
-  /// each [AtCollection.update] so stale CItems don't clobber it.
-  final Set<Atsign> readBy;
-
   /// When this item was first written. Set by [AtCollection.draft] for
   /// new items; read from server metadata on rehydrate.
   DateTime createdAt;
@@ -127,17 +123,21 @@ final class CItem<T> {
   /// [AtCollection.update] to schedule.
   DateTime? availableAt;
 
+  /// The collection that minted this item. Used internally to resolve
+  /// the item's `__rr` sub-collection for read-receipt queries.
+  final AtCollection<T> _collection;
+
   CItem._({
     required this.owner,
     required this.id,
     required this.type,
     required this.obj,
     required this.sharedWith,
-    required this.readBy,
     required this.createdAt,
     required this.expiresAt,
     required this.availableAt,
-  }) {
+    required AtCollection<T> collection,
+  }) : _collection = collection {
     if (obj is Uint8List && type != 'binary') {
       throw ArgumentError('type for Uint8List must be "binary"');
     }
@@ -147,19 +147,56 @@ final class CItem<T> {
     if (type == 'binary') {
       return {
         'type': type,
-        'readBy': readBy.toList(),
         'obj': Base2e15.encode(obj as Uint8List),
       };
     } else {
-      return {'type': type, 'readBy': readBy.toList(), 'obj': obj};
+      return {'type': type, 'obj': obj};
     }
   }
 
   @override
   String toString() =>
-      'CItem{owner: $owner, sharedWith: $sharedWith, readBy: $readBy,'
+      'CItem{owner: $owner, sharedWith: $sharedWith,'
       ' id: $id, type: $type, obj: ${obj.runtimeType},'
       ' expiresAt: $expiresAt, availableAt: $availableAt}';
+
+  /// The atSign this item's collection is acting as — delegates to
+  /// [AtCollection.self]. Useful for ownership checks:
+  /// `item.owner == item.self` means "I own this item".
+  Atsign get self => _collection.self;
+
+  /// The set of atSigns known to have read this item. Live query against
+  /// the item's reserved `__rr` sub-collection; returns the owners of
+  /// every receipt that currently exists.
+  Future<Set<Atsign>> readers() async {
+    final rr = _collection._readReceiptsFor(this);
+    final items = await rr.getItems();
+    return items.map((e) => e.owner).toSet();
+  }
+
+  /// True iff the current atSign ([self]) has already posted a read
+  /// receipt for this item. Returns true for self-owned items (the
+  /// owner is trivially "caught up" on their own record).
+  Future<bool> wasMarkedReadByMe() async {
+    if (owner == self) return true;
+    final rr = _collection._readReceiptsFor(this);
+    // `getItems(owner: self)` filters at the regex layer.
+    final items = await rr.getItems(owner: self);
+    return items.isNotEmpty;
+  }
+
+  /// Idempotent: if the current atSign has already posted a read
+  /// receipt for this item, does nothing. Otherwise creates a receipt
+  /// sub-item shared with [owner]. No-op on self-owned items.
+  Future<void> markReadByMe() async {
+    if (owner == self) return;
+    if (await wasMarkedReadByMe()) return;
+    final rr = _collection._readReceiptsFor(this);
+    await rr.create(
+      obj: {'readAt': DateTime.now().toUtc().toIso8601String()},
+      sharedWith: {owner},
+    );
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -298,6 +335,10 @@ class AtCollection<T> {
   final Map<Type, _FactoryEntry> _factoriesByType = {};
   final Map<String, Function> _factoriesByTag = {};
 
+  // Per-item cache of read-receipt sub-collections. Keyed by
+  // (owner.toString(), id) so it survives CItem rehydrate cycles.
+  final Map<String, AtCollection<Map<String, dynamic>>> _rrCache = {};
+
   // Immutable wiring (set by the private constructor).
   final AtClient atClient;
 
@@ -313,12 +354,16 @@ class AtCollection<T> {
   final StreamController<CEvent> _events = StreamController.broadcast();
 
   // Notification regex patterns, built in the constructor from [namespace].
-  late final RegExp _regexRR;
   late final RegExp _regexObj;
   late final RegExp _regexSubObj;
   late final String _regexAllStr;
 
   late final StreamSubscription<AtNotification> _rrSub;
+
+  // The notification stream used for this collection's dispatch. Stored
+  // so sub-collections built via [_readReceiptsFor] can reuse an
+  // injected (test) stream rather than hit the NotificationService.
+  Stream<AtNotification>? _injectedNotifications;
 
   // Sub-collection bookkeeping. On instances returned by [subCollection],
   // these point at the parent item and the parent collection; they're null
@@ -384,11 +429,11 @@ class AtCollection<T> {
 
     // TODO: namespace may contain periods - the regular expression should
     // escape those periods
-    _regexRR = RegExp(':[^.]+\\.$_rr\\.[^.]+\\.$namespace@');
     _regexAllStr = '.*\\.$namespace@';
     _regexObj = RegExp('(^|:)[^.]+\\.$namespace@');
     _regexSubObj = RegExp('(^|:)[^.]+\\.[^.]+\\.[^.]+\\.$namespace@');
 
+    _injectedNotifications = notifications;
     final notifStream = notifications ??
         atClient.notificationService.subscribe(
           regex: _regexAllStr,
@@ -401,6 +446,10 @@ class AtCollection<T> {
   // Basic getters
 
   Atsign get atSign => atClient.atSign;
+
+  /// Convenience alias for [atSign] — reads naturally when contrasting
+  /// "self" with "other" atSigns in ownership / sharing logic.
+  Atsign get self => atClient.atSign;
 
   /// True iff this collection was constructed via [subCollection] on a
   /// parent collection.
@@ -456,10 +505,10 @@ class AtCollection<T> {
       type: _resolveType(obj),
       obj: obj,
       sharedWith: sharedWith ?? {},
-      readBy: {},
       createdAt: now,
       expiresAt: now.add(defaultExpiration),
       availableAt: null,
+      collection: this,
     );
   }
 
@@ -490,8 +539,7 @@ class AtCollection<T> {
       useId = await _uniqueItemId();
     }
     final item = draft(obj: obj, id: useId, sharedWith: sharedWith);
-    // We just confirmed the self-key doesn't exist — skip the merge read.
-    final results = await _put(item, mergeExistingReadBy: false);
+    final results = await _put(item);
     if (results.any((r) => r is OpFailure)) {
       throw CollectionOpException(results);
     }
@@ -637,12 +685,10 @@ class AtCollection<T> {
             type: decoded['type'] as String,
             obj: _rehydrate<T>(decoded['obj']!, decoded['type'] as String),
             sharedWith: {},
-            readBy: (decoded['readBy'] as List)
-                .map((e) => e.toString().toAtsign())
-                .toSet(),
             createdAt: v.metadata!.createdAt!,
             expiresAt: v.metadata!.expiresAt!,
             availableAt: _liveAvailableAt(v.metadata!.availableAt),
+            collection: this,
           );
           pendingKey = k.fullKeyAndOwner;
         }
@@ -659,43 +705,33 @@ class AtCollection<T> {
   // ---------------------------------------------------------------------------
   // Read receipts
 
-  /// True if this atSign has already sent a read receipt for [item]. Self-
-  /// owned items are considered already-read by the owner (trivially true).
-  Future<bool> hasSentReadReceipt(CItem<T> item) async {
-    if (item.owner == atSign) return true;
-    final regex = '${item.owner}:.*\\.$_rr\\.${item.id}\\.$namespace$atSign';
-    final matches = await atClient.getKeys(regex: regex);
-    return matches.isNotEmpty;
-  }
+  /// True if the current atSign has already sent a read receipt for
+  /// [item]. Delegates to [CItem.wasMarkedReadByMe], which returns
+  /// true for self-owned items without any I/O.
+  Future<bool> wasMarkedReadByMe(CItem<T> item) => item.wasMarkedReadByMe();
 
   /// Sends a read receipt to the owner of [item]. Idempotent — if a
-  /// receipt has already been sent for this item, the call is a no-op.
-  /// Read-receipt keys use the current microsecond timestamp as their id
-  /// so the owner can decode `readAt` from the incoming notification.
-  Future<void> sendReadReceipt(CItem<T> item) async {
-    if (await hasSentReadReceipt(item)) return;
-    final receiptId = DateTime.now().microsecondsSinceEpoch.toString();
-    final k = AtKey.fromString(
-      '${item.owner}:$receiptId.$_rr.${item.id}.$namespace$atSign',
+  /// receipt already exists for this atSign, the call is a no-op.
+  /// No-op on self-owned items.
+  Future<void> markReadByMe(CItem<T> item) => item.markReadByMe();
+
+  /// Returns (creating and caching if necessary) the reserved `__rr`
+  /// sub-collection for [item]. Apps should not call this directly —
+  /// use [CItem.readers] / [CItem.wasMarkedReadByMe] /
+  /// [CItem.markReadByMe] or the [markReadByMe] /
+  /// [wasMarkedReadByMe] shims above.
+  AtCollection<Map<String, dynamic>> _readReceiptsFor(CItem<T> item) {
+    final cacheKey = '${item.owner}:${item.id}';
+    final cached = _rrCache[cacheKey];
+    if (cached != null) return cached;
+    final sub = _buildSubCollection<Map<String, dynamic>>(
+      parent: item,
+      subName: _rr,
+      defaultExpiration: const Duration(days: 365),
+      notifications: _injectedNotifications,
     );
-    final md = Metadata()
-      ..ttr = -1
-      ..ccd = true
-      ..namespaceAware = false;
-    final now = DateTime.now();
-    md.expiresAt = item.createdAt.add(const Duration(days: 7));
-    md.ttl = md.expiresAt!.millisecondsSinceEpoch - now.millisecondsSinceEpoch;
-    // Skip availableAt/ttb when the scheduled time has already passed —
-    // atServer rejects negative ttb values, and an item whose availableAt
-    // is in the past is already available by definition.
-    if (item.availableAt != null &&
-        item.availableAt!.isAfter(now)) {
-      md.availableAt = item.availableAt;
-      md.ttb =
-          md.availableAt!.millisecondsSinceEpoch - now.millisecondsSinceEpoch;
-    }
-    k.metadata = md;
-    await atClient.put(k, receiptId);
+    _rrCache[cacheKey] = sub;
+    return sub;
   }
 
   // ---------------------------------------------------------------------------
@@ -715,6 +751,32 @@ class AtCollection<T> {
   /// returned sub-collection auto-deletes this atSign's own items scoped
   /// to it. See [cleanupOrphans] for the offline-recovery counterpart.
   AtCollection<U> subCollection<U>({
+    required CItem<T> parent,
+    required String subName,
+    required Duration defaultExpiration,
+    U Function(Map<String, dynamic>)? fromJson,
+    Stream<AtNotification>? notifications,
+  }) {
+    if (subName == _rr) {
+      throw ArgumentError(
+        'subName "$_rr" is reserved for the built-in read-receipt '
+        'sub-collection. Use item.readers() / item.wasMarkedReadByMe() '
+        '/ item.markReadByMe() — or AtCollection.markReadByMe / '
+        'wasMarkedReadByMe — instead of constructing it directly.',
+      );
+    }
+    return _buildSubCollection<U>(
+      parent: parent,
+      subName: subName,
+      defaultExpiration: defaultExpiration,
+      fromJson: fromJson,
+      notifications: notifications,
+    );
+  }
+
+  /// Internal sub-collection constructor without the reserved-name
+  /// guard. Used by [_readReceiptsFor] to build the `__rr` sub-collection.
+  AtCollection<U> _buildSubCollection<U>({
     required CItem<T> parent,
     required String subName,
     required Duration defaultExpiration,
@@ -891,9 +953,7 @@ class AtCollection<T> {
   Future<void> handleNotification(AtNotification n) async {
     _rrSub.pause();
     try {
-      if (_regexRR.hasMatch(n.key)) {
-        await handleReadReceipt(n);
-      } else if (_regexObj.hasMatch(n.key)) {
+      if (_regexObj.hasMatch(n.key)) {
         await handleObjNotification(n);
       } else if (_regexSubObj.hasMatch(n.key)) {
         await handleSubObjNotification(n);
@@ -905,23 +965,6 @@ class AtCollection<T> {
     } finally {
       _rrSub.resume();
     }
-  }
-
-  /// Handles `@to:<rrId>.__rr.<objId>.<namespace>@<from>` read-receipt
-  /// notifications: marks `from` as having read the item and emits a
-  /// [CReadReceipt] event.
-  @visibleForTesting
-  Future<void> handleReadReceipt(AtNotification n) async {
-    final parts = _getPartsFromNotifKey(n);
-    await _markReadBy(await get(parts.id, atSign), parts.from);
-    _events.add(
-      CReadReceipt(
-        owner: atSign,
-        id: parts.id,
-        from: parts.from,
-        readAt: DateTime.fromMicrosecondsSinceEpoch(int.parse(parts.subId!)),
-      ),
-    );
   }
 
   /// Handles direct-item notifications (a key with exactly the collection
@@ -947,6 +990,10 @@ class AtCollection<T> {
   /// [CSubItemUpdated] / [CSubItemDeleted] with the **parent's** id (so
   /// listeners can filter by which parent the sub-item belongs to) and
   /// the sub-collection's name.
+  ///
+  /// When [subNamespace] is the reserved `__rr` name, we also emit a
+  /// [CReadReceipt] on top of the [CSubItemUpdated] so application code
+  /// can subscribe to read receipts directly via [readReceipts].
   @visibleForTesting
   Future<void> handleSubObjNotification(AtNotification n) async {
     final parts = _getPartsFromNotifKey(n);
@@ -963,6 +1010,14 @@ class AtCollection<T> {
           id: parentId,
           subNamespace: subNamespace,
         ));
+        if (subNamespace == _rr) {
+          _events.add(CReadReceipt(
+            owner: atSign,
+            id: parentId,
+            from: parts.from,
+            readAt: DateTime.now(),
+          ));
+        }
       case 'delete':
         _events.add(CSubItemDeleted(
           owner: parts.from,
@@ -1026,7 +1081,6 @@ class AtCollection<T> {
   String prettyString(CItem<dynamic> item) {
     final base = '${item.id}.$namespace${item.owner}'
         '\n\tsharedWith: ${item.sharedWith}'
-        '\n\treadBy: ${item.readBy}'
         '\n\texpiresAt: ${item.expiresAt}'
         '\n\tavailableAt: ${item.availableAt}'
         '\n\ttype: ${item.type}'
@@ -1096,14 +1150,6 @@ class AtCollection<T> {
     return f.call(obj) as V;
   }
 
-  Future<void> _markReadBy(CItem<T> item, Atsign readBy) async {
-    item.readBy.add(readBy);
-    final results = await _put(item);
-    if (results.any((r) => r is OpFailure)) {
-      throw CollectionOpException(results);
-    }
-  }
-
   /// Loads items, collecting per-key decode errors rather than throwing.
   /// The public [getItems] / [get] / [getMaybe] wrap this to surface the
   /// errors as [CollectionGetException] when needed.
@@ -1128,12 +1174,10 @@ class AtCollection<T> {
             type: decoded['type'] as String,
             obj: _rehydrate<T>(decoded['obj']!, decoded['type'] as String),
             sharedWith: {},
-            readBy: (decoded['readBy'] as List)
-                .map((e) => e.toString().toAtsign())
-                .toSet(),
             createdAt: v.metadata!.createdAt!,
             expiresAt: v.metadata!.expiresAt!,
             availableAt: _liveAvailableAt(v.metadata!.availableAt),
+            collection: this,
           );
           map[k.fullKeyAndOwner] = item;
         }
@@ -1155,7 +1199,6 @@ class AtCollection<T> {
   Future<List<OpResult>> _put(
     CItem<T> item, {
     bool unshareWithOthers = true,
-    bool mergeExistingReadBy = true,
   }) async {
     if (item.owner != atSign) {
       throw ArgumentError('You may not update items owned by other atSigns');
@@ -1167,24 +1210,6 @@ class AtCollection<T> {
 
     final results = <OpResult>[];
     final selfKey = AtKey.fromString('${item.id}.$namespace$atSign');
-
-    // Merge readBy from any existing stored record so we don't clobber
-    // receipts that arrived via [CReadReceipt] events on a stale CItem.
-    // [create] skips this (it just verified the self-key is absent).
-    if (mergeExistingReadBy) {
-      try {
-        final v = await atClient.get(selfKey);
-        if (v.value != null) {
-          final decoded = jsonDecode(v.value);
-          final existingReadBy = (decoded['readBy'] as List)
-              .map((e) => e.toString().toAtsign())
-              .toSet();
-          item.readBy.addAll(existingReadBy);
-        }
-      } catch (_) {
-        // No prior record — fine, continue.
-      }
-    }
 
     final md = Metadata()
       ..ttr = -1

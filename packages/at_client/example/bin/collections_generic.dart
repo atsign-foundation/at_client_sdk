@@ -118,9 +118,9 @@ Future<void> receiver(
   Completer allReceiptsSent = Completer();
 
   Future<void> sendReadReceiptAndTrack(CItem item) async {
-    if (await generic.hasSentReadReceipt(item)) return;
+    if (await generic.wasMarkedReadByMe(item)) return;
     progressSink.add('Sending read receipt for $item');
-    await generic.sendReadReceipt(item);
+    await generic.markReadByMe(item);
     actual++;
     if (actual == expected) {
       allReceiptsSent.complete();

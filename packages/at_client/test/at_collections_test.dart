@@ -114,8 +114,8 @@ void main() {
   // ---------------------------------------------------------------------------
   group('draft', () {
     test(
-        'assigns owner=self, auto 8-char id, timestamps, empty '
-        'sharedWith/readBy', () {
+        'assigns owner=self, auto 8-char id, timestamps, empty sharedWith',
+        () {
       final c = buildCollection<String>(ttl: const Duration(hours: 1));
       final before = DateTime.now().toUtc();
       final item = c.draft(obj: 'hello');
@@ -126,7 +126,6 @@ void main() {
       expect(RegExp(r'^[a-z0-9]+$').hasMatch(item.id), isTrue);
       expect(item.obj, 'hello');
       expect(item.sharedWith, isEmpty);
-      expect(item.readBy, isEmpty);
       expect(
         item.createdAt.millisecondsSinceEpoch,
         inInclusiveRange(
@@ -239,7 +238,8 @@ void main() {
       final decoded = jsonDecode(value) as Map<String, dynamic>;
       expect(decoded['type'], 'n/a');
       expect(decoded['obj'], 'hello');
-      expect(decoded['readBy'], isEmpty);
+      // readBy is no longer persisted — live-queried via item.readers().
+      expect(decoded.containsKey('readBy'), isFalse);
     });
 
     test('writes one recipient copy per entry in sharedWith plus self copy',
@@ -467,9 +467,8 @@ void main() {
   // ---------------------------------------------------------------------------
   group('update — existence check, otherwise put', () {
     test('succeeds when the self-key exists', () async {
-      // The first get() is the existence probe — return a stored record.
-      // The second get() (called internally by tryPut to merge readBy) is
-      // served by the same stub. Both return "exists".
+      // get() is the existence probe — return a stored record so update
+      // proceeds through _put without throwing.
       when(() => atClient.get(any())).thenAnswer((_) async {
         final v = AtValue();
         v.value = jsonEncode({'type': 'n/a', 'readBy': <String>[], 'obj': 'x'});
@@ -892,29 +891,18 @@ void main() {
       await sub.cancel();
     });
 
-    test('readReceipts stream fires CReadReceipt on __rr notifications',
-        () async {
-      // markReadBy path needs get + put to succeed.
-      final selfKey = AtKey.fromString('id9.$namespace$selfAtSignStr');
-      when(
-        () => atClient.getAtKeys(regex: any(named: 'regex')),
-      ).thenAnswer((_) async => [selfKey]);
-      when(() => atClient.get(any())).thenAnswer((_) async {
-        final v = AtValue();
-        v.value = jsonEncode({'type': 'n/a', 'readBy': <String>[], 'obj': 'v'});
-        v.metadata = Metadata()
-          ..createdAt = DateTime.now().toUtc()
-          ..expiresAt = DateTime.now().add(const Duration(days: 1));
-        return v;
-      });
-      when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
-      when(
-        () => atClient.getKeys(regex: any(named: 'regex')),
-      ).thenAnswer((_) async => <String>[]);
-
+    test(
+        'readReceipts stream fires CReadReceipt on __rr sub-item '
+        'notifications', () async {
+      // A read receipt is now a sub-item of the reserved `__rr`
+      // sub-collection, so the notification goes through
+      // handleSubObjNotification, which emits both a CSubItemUpdated
+      // and a CReadReceipt on the parent collection.
       final c = buildCollection<String>();
-      final received = <CReadReceipt>[];
-      final sub = c.readReceipts.listen(received.add);
+      final receipts = <CReadReceipt>[];
+      final subs = <CSubItemUpdated>[];
+      final rrSub = c.readReceipts.listen(receipts.add);
+      final subSub = c.subUpdates.listen(subs.add);
 
       final readAtMicros =
           DateTime.now().toUtc().microsecondsSinceEpoch.toString();
@@ -930,15 +918,17 @@ void main() {
           operation: 'update',
         ),
       );
-      // Handler awaits get + put; allow enough microtasks.
-      for (int i = 0; i < 5; i++) {
+      for (int i = 0; i < 3; i++) {
         await Future<void>.delayed(Duration.zero);
       }
 
-      expect(received, hasLength(1));
-      expect(received.single.id, 'id9');
-      expect(received.single.from, bob);
-      await sub.cancel();
+      expect(receipts, hasLength(1));
+      expect(receipts.single.id, 'id9');
+      expect(receipts.single.from, bob);
+      expect(subs, hasLength(1));
+      expect(subs.single.subNamespace, '__rr');
+      await rrSub.cancel();
+      await subSub.cancel();
     });
 
     test('non-matching notification produces no event', () async {
@@ -960,25 +950,30 @@ void main() {
 
   // ---------------------------------------------------------------------------
   group('read receipts', () {
-    test('hasSentReadReceipt returns true for items owned by self', () async {
+    test('wasMarkedReadByMe returns true for items owned by self', () async {
       final c = buildCollection<String>();
       final item = c.draft(obj: 'x');
-      expect(await c.hasSentReadReceipt(item), isTrue);
+      expect(await c.wasMarkedReadByMe(item), isTrue);
       verifyNever(() => atClient.getKeys(regex: any(named: 'regex')));
     });
 
-    test('hasSentReadReceipt scans for existing receipt on others\' items',
+    test('wasMarkedReadByMe scans __rr sub-collection on others\' items',
         () async {
-      when(
-        () => atClient.getKeys(regex: any(named: 'regex')),
-      ).thenAnswer((_) async => <String>[]);
-      final bobKey = AtKey.fromString('idR.$namespace$bobStr');
+      // AtKey.fromString lowercases ids, so the stored id is 'idr'.
+      final bobKey = AtKey.fromString('idr.$namespace$bobStr');
+      final rrRegex = '(^|:)[^.]+\\.__rr.idr.$namespace$selfAtSignStr';
+      // Parent scan returns bob's item; the __rr sub-collection scan for
+      // items owned by self returns nothing (no receipt sent yet).
       when(
         () => atClient.getAtKeys(regex: any(named: 'regex')),
-      ).thenAnswer((_) async => [bobKey]);
+      ).thenAnswer((invocation) async {
+        final regex = invocation.namedArguments[#regex] as String;
+        if (regex.contains('__rr')) return <AtKey>[];
+        return [bobKey];
+      });
       when(() => atClient.get(any())).thenAnswer((_) async {
         final v = AtValue();
-        v.value = jsonEncode({'type': 'n/a', 'readBy': <String>[], 'obj': 'v'});
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'v'});
         v.metadata = Metadata()
           ..createdAt = DateTime.now().toUtc()
           ..expiresAt = DateTime.now().add(const Duration(days: 1));
@@ -989,8 +984,64 @@ void main() {
       final items = await c.getItems();
       final fromBob = items.single;
       expect(fromBob.owner, bob);
-      expect(await c.hasSentReadReceipt(fromBob), isFalse);
-      verify(() => atClient.getKeys(regex: any(named: 'regex'))).called(1);
+      expect(await c.wasMarkedReadByMe(fromBob), isFalse);
+      verify(
+        () => atClient.getAtKeys(regex: rrRegex),
+      ).called(1);
+    });
+
+    test('markReadByMe writes a __rr sub-item with the owner in sharedWith',
+        () async {
+      // AtKey lowercases ids → 'idm'.
+      final bobKey = AtKey.fromString('idm.$namespace$bobStr');
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((invocation) async {
+        final regex = invocation.namedArguments[#regex] as String;
+        if (regex.contains('__rr')) return <AtKey>[];
+        return [bobKey];
+      });
+      // get() returns bob's item for the parent read; throws for any
+      // __rr sub-key (existence probe inside create()).
+      when(() => atClient.get(any())).thenAnswer((invocation) async {
+        final k = invocation.positionalArguments.first as AtKey;
+        if (k.toString().contains('__rr')) {
+          throw Exception('no such key');
+        }
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'v'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+      when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
+
+      final c = buildCollection<String>();
+      final fromBob = (await c.getItems()).single;
+      await fromBob.markReadByMe();
+
+      final writes = verify(
+        () => atClient.put(captureAny(), any()),
+      ).captured.cast<AtKey>();
+      final strings = writes.map((k) => k.toString()).toList();
+      expect(
+        strings.any((s) => RegExp(r'^[^.:]+\.__rr\.idm\.').hasMatch(s)),
+        isTrue,
+        reason: 'self-copy of __rr receipt written',
+      );
+      expect(
+        strings.any((s) => s.startsWith('$bobStr:')),
+        isTrue,
+        reason: 'receipt copy shared with bob',
+      );
+    });
+
+    test('markReadByMe is a no-op for self-owned items', () async {
+      final c = buildCollection<String>();
+      final own = c.draft(obj: 'mine');
+      await own.markReadByMe();
+      verifyNever(() => atClient.put(any(), any()));
     });
   });
 }
