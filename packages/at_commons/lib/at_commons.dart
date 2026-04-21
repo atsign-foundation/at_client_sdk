@@ -8,6 +8,7 @@ export 'package:at_commons/src/at_message.dart';
 export 'package:at_commons/src/at_root_domain.dart';
 export 'package:at_commons/src/buffer/at_buffer.dart';
 export 'package:at_commons/src/buffer/at_buffer_impl.dart';
+export 'package:at_commons/src/crypto/crypto_scheme.dart';
 export 'package:at_commons/src/exception/at_client_exceptions.dart';
 export 'package:at_commons/src/exception/at_exception_manager.dart';
 export 'package:at_commons/src/exception/at_exception_stack.dart';

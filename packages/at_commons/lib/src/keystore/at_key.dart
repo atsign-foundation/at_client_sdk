@@ -5,6 +5,7 @@ import 'package:at_commons/src/keystore/public_key_hash.dart';
 import 'package:at_commons/src/utils/at_key_regex_utils.dart';
 import 'package:at_commons/src/utils/string_utils.dart';
 
+import '../../at_commons.dart' show CryptoScheme;
 import '../at_constants.dart';
 import '../exception/at_exceptions.dart';
 import 'key_type.dart';
@@ -521,6 +522,10 @@ class Metadata {
   /// when executing the `delete` verb.
   bool immutable = false;
 
+  /// Additional metadata
+  /// contains crypto and keyNames for app-specific encryption schemes
+  AppMetadata? appMetadata;
+
   @override
   String toString() {
     return 'Metadata{${jsonEncode(toJson())}}';
@@ -775,4 +780,57 @@ class AtValue {
 
   @override
   int get hashCode => value.hashCode ^ metadata.hashCode;
+}
+
+class AppMetadata {
+  // all crypto related details
+  // ie: iv, ephemeralKeys, encapsulation coins, and any signing related business
+  List<CryptoScheme> crypto;
+
+  // any fields that aren't crypto or keyNames get placed here.
+  Map<String, dynamic>? additional;
+  AppMetadata(this.crypto, {this.additional});
+
+  Map<String, dynamic> toJson() {
+    final map = <String, dynamic>{
+      'crypto': crypto.map((scheme) => scheme.toJson()).toList(),
+    };
+    if (additional != null) {
+      map.addAll(additional!);
+    }
+    return map;
+  }
+
+  static AppMetadata fromJson(Map json) {
+    final crypto = <CryptoScheme>[];
+    final cryptoJson = json['crypto'];
+    if (cryptoJson is List) {
+      for (final value in cryptoJson) {
+        if (value is CryptoScheme) {
+          crypto.add(value);
+        } else if (value is Map) {
+          crypto.add(CryptoScheme.fromJson(Map<String, dynamic>.from(value)));
+        }
+      }
+    } else if (cryptoJson is Map) {
+      for (final value in cryptoJson.values) {
+        if (value is CryptoScheme) {
+          crypto.add(value);
+        } else if (value is Map) {
+          crypto.add(CryptoScheme.fromJson(Map<String, dynamic>.from(value)));
+        }
+      }
+    }
+    final additional = <String, dynamic>{};
+    json.forEach((key, value) {
+      if (key != 'crypto') {
+        additional[key.toString()] = value;
+      }
+    });
+
+    return AppMetadata(
+      crypto,
+      additional: additional.isEmpty ? null : additional,
+    );
+  }
 }

@@ -1,20 +1,16 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/decryption_service/decryption_builder.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
-import 'package:at_client/src/decryption_service/decryption_manager.dart';
 
 /// Class is responsible for decrypting the notification value/text-message data
 class NotificationResponseTransformer
     implements
         Transformer<Tuple<AtNotification, NotificationConfig>, AtNotification> {
   late final AtClient _atClient;
-  late final AtKeyDecryptionManager _decryptionManager;
 
-  NotificationResponseTransformer(this._atClient,
-      {AtKeyDecryptionManager? decrypterManager}) {
-    _decryptionManager = decrypterManager ?? AtKeyDecryptionManager(_atClient);
-  }
+  NotificationResponseTransformer(this._atClient);
 
   @override
   Future<AtNotification> transform(
@@ -80,7 +76,7 @@ class NotificationResponseTransformer
   }
 
   Future<String> _getDecryptedValue(AtKey atKey, String? encryptedValue) async {
-    final decrypter = _decryptionManager.get(atKey);
+    final decrypter = AtKeyDecryptionBuilder.build(atKey, _atClient);
     final decrypted = await decrypter.decrypt(atKey, encryptedValue?.trim());
     // Return decrypted value
     return decrypted.toString().trim();
