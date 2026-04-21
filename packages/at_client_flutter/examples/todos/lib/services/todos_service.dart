@@ -16,7 +16,6 @@ class TodosService {
 
   final AtClient atClient;
   late final AtCollection<Todo> collection;
-  late final AtCollection<TodoNote> notesCollection;
   late final AtsignColors colors;
 
   final ValueNotifier<List<CItem<Todo>>> todos = ValueNotifier([]);
@@ -25,13 +24,17 @@ class TodosService {
   final ValueNotifier<List<String>> logMessages = ValueNotifier([]);
 
   final List<StreamSubscription> _subs = [];
+  // Memoised per-todo notes sub-collection, keyed by (owner, id) of
+  // the parent todo.
+  final Map<String, AtCollection<TodoNote>> _notesSubs = {};
 
   TodosService(this.atClient) {
     colors = AtsignColors(atClient.atSign);
   }
 
-  /// Must be called before [init]. Creates the two collections and
-  /// runs a one-shot orphan sweep on each.
+  /// Must be called before [init]. Creates the todos collection with
+  /// orphan sweep. Notes live as per-todo sub-collections, built
+  /// lazily by [_notesSubFor].
   Future<void> setUpCollections() async {
     final ns = atClient.getPreferences()!.namespace!;
     collection = await atClient.collection<Todo>(
@@ -40,11 +43,33 @@ class TodosService {
       fromJson: Todo.fromJson,
       cleanupOrphansOnCreation: true,
     );
-    notesCollection = await atClient.collection<TodoNote>(
-      'notes.$ns',
-      defaultExpiration,
-      fromJson: TodoNote.fromJson,
-      cleanupOrphansOnCreation: true,
+    // Legacy notes probe — pre-subcollection versions of this app
+    // stored notes under a sibling `notes.$ns` namespace. Report any
+    // remaining legacy keys without migrating them.
+    try {
+      final legacyRegex = '(^|:)[^.]+\\.notes\\.${ns.replaceAll('.', '\\.')}@';
+      final legacyKeys = await atClient.getAtKeys(regex: legacyRegex);
+      if (legacyKeys.isNotEmpty) {
+        _log('${legacyKeys.length} legacy notes in "notes.$ns" '
+            'present; not displayed by this version.');
+      }
+    } catch (_) {
+      /* best-effort */
+    }
+  }
+
+  /// Returns the memoised notes sub-collection for [todo], constructing
+  /// it on first access.
+  AtCollection<TodoNote> _notesSubFor(CItem<Todo> todo) {
+    final key = '${todo.owner}:${todo.id}';
+    return _notesSubs.putIfAbsent(
+      key,
+      () => collection.subCollection<TodoNote>(
+        parent: todo,
+        subName: 'notes',
+        defaultExpiration: defaultExpiration,
+        fromJson: TodoNote.fromJson,
+      ),
     );
   }
 
@@ -68,8 +93,15 @@ class TodosService {
     }));
     _subs.add(collection.updates.listen((_) => unawaited(refreshTodos())));
     _subs.add(collection.deletes.listen((_) => unawaited(refreshTodos())));
-    _subs.add(notesCollection.updates.listen((_) => unawaited(refreshNotes())));
-    _subs.add(notesCollection.deletes.listen((_) => unawaited(refreshNotes())));
+    // Notes are sub-items under the todos collection; filter the
+    // subUpdates/subDeletes streams to only note changes (i.e. skip
+    // the internal `__rr` read-receipt sub-updates).
+    _subs.add(collection.subUpdates
+        .where((e) => e.subName == 'notes')
+        .listen((_) => unawaited(refreshNotes())));
+    _subs.add(collection.subDeletes
+        .where((e) => e.subName == 'notes')
+        .listen((_) => unawaited(refreshNotes())));
 
     await Future.wait([refreshTodos(), refreshNotes()]);
   }
@@ -103,17 +135,19 @@ class TodosService {
 
   Future<void> refreshNotes() async {
     try {
-      final items = await notesCollection.getItems();
       final map = <String, List<CItem<TodoNote>>>{};
-      for (final n in items) {
-        map.putIfAbsent(n.obj.todoId, () => []).add(n);
-        if (!(await n.wasMarkedReadByMe())) {
-          await n.markReadByMe();
+      for (final todo in todos.value) {
+        final sub = _notesSubFor(todo);
+        final items = await sub.getItems();
+        if (items.isEmpty) continue;
+        items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        map[todo.id] = items;
+        for (final n in items) {
+          if (!(await n.wasMarkedReadByMe())) {
+            await n.markReadByMe();
+          }
+          await n.readBy;
         }
-        await n.readBy;
-      }
-      for (final list in map.values) {
-        list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       }
       notesByTodoId.value = map;
     } catch (e) {
@@ -204,9 +238,12 @@ class TodosService {
   }
 
   Future<void> deleteTodo(CItem<Todo> todo) async {
-    await collection.delete(todo);
+    // cascade: true so notes (and any deeper descendants) go with the
+    // todo rather than stranding on the atServer.
+    await collection.delete(todo, cascade: true);
     _log('deleted "${todo.obj.title}"');
     await refreshTodos();
+    await refreshNotes();
   }
 
   Future<void> shareTodo(CItem<Todo> todo, Set<Atsign> addAtSigns) async {
@@ -230,8 +267,8 @@ class TodosService {
   }
 
   Future<void> addNote(CItem<Todo> todo, String text) async {
-    await notesCollection.create(
-      obj: TodoNote(note: text, todoId: todo.id),
+    await _notesSubFor(todo).create(
+      obj: TodoNote(note: text),
       sharedWith: noteAudience(todo),
     );
     _log('note added to "${todo.obj.title}"');
@@ -246,8 +283,9 @@ class TodosService {
     if (existing.owner != self) {
       throw StateError('Cannot update a note owned by another atSign');
     }
-    await notesCollection.update(notesCollection.draft(
-      obj: TodoNote(note: text, todoId: todo.id),
+    final sub = _notesSubFor(todo);
+    await sub.update(sub.draft(
+      obj: TodoNote(note: text),
       id: existing.id,
       sharedWith: noteAudience(todo),
     ));
@@ -255,11 +293,11 @@ class TodosService {
     await refreshNotes();
   }
 
-  Future<void> deleteNote(CItem<TodoNote> note) async {
+  Future<void> deleteNote(CItem<TodoNote> note, CItem<Todo> todo) async {
     if (note.owner != self) {
       throw StateError('Cannot delete a note owned by another atSign');
     }
-    await notesCollection.delete(note);
+    await _notesSubFor(todo).delete(note);
     _log('note deleted');
     await refreshNotes();
   }

@@ -313,7 +313,7 @@ class _TodoDetailScreenState extends State<TodoDetailScreen> {
                                 ),
                                 confirmDismiss: (_) async => noteIsMine,
                                 onDismissed: (_) => _withBusy(
-                                  () => service.deleteNote(n),
+                                  () => service.deleteNote(n, todo),
                                 ),
                                 child: ListTile(
                                   title: Text(n.obj.note),

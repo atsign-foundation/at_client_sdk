@@ -134,7 +134,6 @@ class _Cols {
 class TodosApp {
   final AtClient atClient;
   late final AtCollection<Todo> collection;
-  late final AtCollection<TodoNote> notesCollection;
   late final Terminal terminal;
   late final StdioBackend backend;
   late final _AtsignColors _color;
@@ -142,6 +141,10 @@ class TodosApp {
   final List<String> logMessages = [];
   List<CItem<Todo>> todos = [];
   Map<String, List<CItem<TodoNote>>> notesByTodoId = {};
+  // Memoised per-todo notes sub-collection. Keyed by (owner, id) of
+  // the parent todo to avoid clashing when two atSigns happen to pick
+  // the same todo id.
+  final Map<String, AtCollection<TodoNote>> _notesSubs = {};
   String currentInput = '';
   bool _running = false;
   bool _handlerRunning = false;
@@ -153,8 +156,9 @@ class TodosApp {
     _color = _AtsignColors(atClient.atSign);
   }
 
-  /// Builds the two collections used by the TUI, sweeping orphans at
-  /// startup. Called from [run] before entering the event loop.
+  /// Builds the todos collection and sweeps orphans at startup.
+  /// Called from [run] before entering the event loop. Notes are now
+  /// per-todo sub-collections, constructed lazily by [_notesSubFor].
   Future<void> _initCollections() async {
     final ns = atClient.getPreferences()!.namespace!;
     collection = await atClient.collection<Todo>(
@@ -163,11 +167,37 @@ class TodosApp {
       fromJson: Todo.fromJson,
       cleanupOrphansOnCreation: true,
     );
-    notesCollection = await atClient.collection<TodoNote>(
-      'notes.$ns',
-      const Duration(days: 365),
-      fromJson: TodoNote.fromJson,
-      cleanupOrphansOnCreation: true,
+    // Legacy-notes probe: prior versions of this TUI stored notes in
+    // a sibling top-level collection `notes.$ns`. Notes now live as
+    // sub-collections of each todo. Report any legacy keys without
+    // migrating them (per the post-implementation tidy-up plan).
+    try {
+      final legacyRegex = '(^|:)[^.]+\\.notes\\.${ns.replaceAll('.', '\\.')}@';
+      final legacyKeys = await atClient.getAtKeys(regex: legacyRegex);
+      if (legacyKeys.isNotEmpty) {
+        log('${legacyKeys.length} legacy notes in "notes.$ns" '
+            '(pre-subcollection shape) present; not displayed by this '
+            'version. Data is preserved on the atServer.');
+      }
+    } catch (_) {
+      /* swallow — legacy probe is best-effort */
+    }
+  }
+
+  /// Returns the memoised notes sub-collection for [todo], constructing
+  /// it on first access. The cache key includes the todo's owner so
+  /// same-id todos belonging to different atSigns get independent
+  /// sub-collections.
+  AtCollection<TodoNote> _notesSubFor(CItem<Todo> todo) {
+    final key = '${todo.owner}:${todo.id}';
+    return _notesSubs.putIfAbsent(
+      key,
+      () => collection.subCollection<TodoNote>(
+        parent: todo,
+        subName: 'notes',
+        defaultExpiration: const Duration(days: 365),
+        fromJson: TodoNote.fromJson,
+      ),
     );
   }
 
@@ -259,17 +289,23 @@ class TodosApp {
 
   Future<void> _refreshNotes({CEvent? event}) async {
     if (event != null) {
-      log('refreshTodos due to event: $event');
+      log('_refreshNotes due to event: $event');
     }
     try {
-      final items = await notesCollection.getItems();
-      notesByTodoId = {};
-      for (final n in items) {
-        notesByTodoId.putIfAbsent(n.obj.todoId, () => []).add(n);
-        if (!(await n.wasMarkedReadByMe())) {
-          await n.markReadByMe();
+      final next = <String, List<CItem<TodoNote>>>{};
+      for (final todo in todos) {
+        final sub = _notesSubFor(todo);
+        final items = await sub.getItems();
+        if (items.isNotEmpty) {
+          next[todo.id] = items;
+          for (final n in items) {
+            if (!(await n.wasMarkedReadByMe())) {
+              await n.markReadByMe();
+            }
+          }
         }
       }
+      notesByTodoId = next;
       _draw();
     } catch (e, st) {
       log('Error refreshing notes: $e\n$st');
@@ -295,8 +331,15 @@ class TodosApp {
     });
     collection.updates.listen((e) => unawaited(refreshTodos(event: e)));
     collection.deletes.listen((e) => unawaited(refreshTodos(event: e)));
-    notesCollection.updates.listen((e) => unawaited(_refreshNotes(event: e)));
-    notesCollection.deletes.listen((e) => unawaited(_refreshNotes(event: e)));
+    // Notes are sub-items of the todos collection. Filter by
+    // ancestry.last.subName == 'notes' so we don't also react to
+    // __rr read-receipt sub-updates.
+    collection.subUpdates
+        .where((e) => e.subName == 'notes')
+        .listen((e) => unawaited(_refreshNotes(event: e)));
+    collection.subDeletes
+        .where((e) => e.subName == 'notes')
+        .listen((e) => unawaited(_refreshNotes(event: e)));
 
     unawaited(refreshTodos());
     unawaited(_refreshNotes());
@@ -916,7 +959,7 @@ class TodosApp {
         return;
       }
       try {
-        await notesCollection.delete(note);
+        await _notesSubFor(todo).delete(note);
         log('Note deleted.');
         await _refreshNotes();
       } catch (e) {
@@ -925,9 +968,10 @@ class TodosApp {
     } else {
       log('Deleting todo: ${todo.obj.title}');
       try {
-        await collection.delete(todo);
+        await collection.delete(todo, cascade: true);
         log('Deleted.');
         await refreshTodos();
+        await _refreshNotes();
       } catch (e) {
         log('Error deleting todo: $e', error: true);
       }
@@ -1048,8 +1092,8 @@ class TodosApp {
     }
     final todo = todos[ref.todoIdx];
     try {
-      await notesCollection.create(
-        obj: TodoNote(note: text, todoId: todo.id),
+      await _notesSubFor(todo).create(
+        obj: TodoNote(note: text),
         sharedWith: _noteAudience(todo),
       );
       log('Note added.');
@@ -1093,9 +1137,10 @@ class TodosApp {
       return;
     }
     try {
-      await notesCollection.update(
-        notesCollection.draft(
-          obj: TodoNote(note: text, todoId: todo.id),
+      final sub = _notesSubFor(todo);
+      await sub.update(
+        sub.draft(
+          obj: TodoNote(note: text),
           id: existing.id,
           sharedWith: _noteAudience(todo),
         ),
@@ -1189,14 +1234,22 @@ class TodosApp {
   Future<void> _handleKeys() async {
     try {
       final todoKeys = await collection.getKeys();
-      final noteKeys = await notesCollection.getKeys();
       log('--- Todo keys (${todoKeys.length}) ---');
       for (final k in todoKeys) {
         log('  ${k.fullKeyAndOwner}');
       }
-      log('--- Note keys (${noteKeys.length}) ---');
-      for (final k in noteKeys) {
-        log('  ${k.fullKeyAndOwner}');
+      // Notes now live as per-todo sub-collection items — scan each.
+      var totalNoteKeys = 0;
+      for (final todo in todos) {
+        final noteKeys = await _notesSubFor(todo).getKeys();
+        totalNoteKeys += noteKeys.length;
+      }
+      log('--- Note keys (across todos: $totalNoteKeys) ---');
+      for (final todo in todos) {
+        final noteKeys = await _notesSubFor(todo).getKeys();
+        for (final k in noteKeys) {
+          log('  ${k.fullKeyAndOwner}');
+        }
       }
     } catch (e) {
       log('Error fetching keys: $e', error: true);
