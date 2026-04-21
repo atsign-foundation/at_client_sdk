@@ -15,11 +15,11 @@ void main(List<String> args) async {
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
-  final AtCollection<Map> maps = c.atClient.collection<Map>(
+  final AtCollection<Map> maps = await c.atClient.collection<Map>(
     'maps.$applicationNamespace',
     exampleDefaultExpiration,
   );
-  final AtCollection<String> strings = c.atClient.collection<String>(
+  final AtCollection<String> strings = await c.atClient.collection<String>(
     'strings.$applicationNamespace',
     exampleDefaultExpiration,
   );

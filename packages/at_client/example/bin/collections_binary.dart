@@ -16,7 +16,8 @@ void main(List<String> args) async {
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
-  final AtCollection<Uint8List> binaries = c.atClient.collection<Uint8List>(
+  final AtCollection<Uint8List> binaries =
+      await c.atClient.collection<Uint8List>(
     'binary.$applicationNamespace',
     exampleDefaultExpiration,
   );

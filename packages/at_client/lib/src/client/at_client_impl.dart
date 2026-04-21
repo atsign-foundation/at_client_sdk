@@ -162,13 +162,15 @@ class AtClientImpl implements AtClient {
   });
 
   final Map<String, AtCollection> _collections = {};
+  final Set<String> _collectionsSwept = <String>{};
 
   @override
-  AtCollection<T> collection<T>(
+  Future<AtCollection<T>> collection<T>(
     String namespace,
     Duration defaultExpiration, {
     T Function(Map<String, dynamic>)? fromJson,
-  }) {
+    bool cleanupOrphansOnCreation = false,
+  }) async {
     if (!namespace.contains('.')) {
       throw ArgumentError(
         'namespace must be fully qualified — provide the complete namespace '
@@ -177,7 +179,7 @@ class AtClientImpl implements AtClient {
         'automatically.',
       );
     }
-    return _collections.putIfAbsent(
+    final c = _collections.putIfAbsent(
       namespace,
       () => AtCollection<T>(
         this,
@@ -186,6 +188,17 @@ class AtClientImpl implements AtClient {
         fromJson: fromJson,
       ),
     ) as AtCollection<T>;
+    if (cleanupOrphansOnCreation && !_collectionsSwept.contains(namespace)) {
+      _collectionsSwept.add(namespace);
+      try {
+        await c.cleanupOrphans();
+      } catch (e, st) {
+        _logger.warning(
+          'cleanupOrphans on $namespace failed: $e\n$st',
+        );
+      }
+    }
+    return c;
   }
 
   static Future<AtClient> create(

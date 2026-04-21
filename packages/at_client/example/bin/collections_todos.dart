@@ -150,18 +150,25 @@ class TodosApp {
   Completer<String>? _promptCompleter;
 
   TodosApp(this.atClient) {
+    _color = _AtsignColors(atClient.atSign);
+  }
+
+  /// Builds the two collections used by the TUI, sweeping orphans at
+  /// startup. Called from [run] before entering the event loop.
+  Future<void> _initCollections() async {
     final ns = atClient.getPreferences()!.namespace!;
-    collection = atClient.collection<Todo>(
+    collection = await atClient.collection<Todo>(
       'todos.$ns',
       const Duration(days: 365),
       fromJson: Todo.fromJson,
+      cleanupOrphansOnCreation: true,
     );
-    notesCollection = atClient.collection<TodoNote>(
+    notesCollection = await atClient.collection<TodoNote>(
       'notes.$ns',
       const Duration(days: 365),
       fromJson: TodoNote.fromJson,
+      cleanupOrphansOnCreation: true,
     );
-    _color = _AtsignColors(atClient.atSign);
   }
 
   // Orange ANSI-256 colour for exception messages resulting directly from a
@@ -270,6 +277,8 @@ class TodosApp {
   }
 
   Future<void> run() async {
+    await _initCollections();
+
     backend = StdioBackend();
     terminal = Terminal(backend);
 

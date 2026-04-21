@@ -657,9 +657,17 @@ abstract class AtClient {
   /// of type [T] (keyed by `T.toString()`), so they rehydrate correctly on
   /// retrieval. For polymorphic collections, omit [fromJson] here and call
   /// `collection.registerFactory<ConcreteType>(...)` per concrete type.
-  AtCollection<T> collection<T>(
+  ///
+  /// When [cleanupOrphansOnCreation] is true, the returned collection runs
+  /// a one-shot `cleanupOrphans()` sweep before the `Future` completes.
+  /// Idempotent: the sweep runs at most once per collection instance
+  /// regardless of how many times [collection] is invoked with the flag.
+  /// Useful at app-startup to reclaim descendants whose parent was
+  /// deleted on another atSign while this app was offline.
+  Future<AtCollection<T>> collection<T>(
     String namespace,
     Duration defaultExpiration, {
     T Function(Map<String, dynamic>)? fromJson,
+    bool cleanupOrphansOnCreation = false,
   });
 }

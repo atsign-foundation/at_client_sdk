@@ -50,7 +50,7 @@ void main(List<String> args) async {
   );
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
-  final posts = c.atClient.collection<BlogPost>(
+  final posts = await c.atClient.collection<BlogPost>(
     'posts.$applicationNamespace',
     exampleDefaultExpiration,
     fromJson: BlogPost.fromJson,

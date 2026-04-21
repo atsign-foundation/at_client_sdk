@@ -27,18 +27,25 @@ class TodosService {
   final List<StreamSubscription> _subs = [];
 
   TodosService(this.atClient) {
+    colors = AtsignColors(atClient.atSign);
+  }
+
+  /// Must be called before [init]. Creates the two collections and
+  /// runs a one-shot orphan sweep on each.
+  Future<void> setUpCollections() async {
     final ns = atClient.getPreferences()!.namespace!;
-    collection = atClient.collection<Todo>(
+    collection = await atClient.collection<Todo>(
       'todos.$ns',
       defaultExpiration,
       fromJson: Todo.fromJson,
+      cleanupOrphansOnCreation: true,
     );
-    notesCollection = atClient.collection<TodoNote>(
+    notesCollection = await atClient.collection<TodoNote>(
       'notes.$ns',
       defaultExpiration,
       fromJson: TodoNote.fromJson,
+      cleanupOrphansOnCreation: true,
     );
-    colors = AtsignColors(atClient.atSign);
   }
 
   Atsign get self => atClient.atSign;
@@ -54,6 +61,7 @@ class TodosService {
   }
 
   Future<void> init() async {
+    await setUpCollections();
     _subs.add(collection.readReceipts.listen((r) {
       _log('read receipt from ${r.from}');
       unawaited(refreshTodos());
