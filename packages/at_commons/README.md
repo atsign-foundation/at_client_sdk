@@ -4,17 +4,27 @@
 
 # at_commons
 
-**at_commons** provides the shared types, models, and utilities used across the atPlatform SDK. It has no dependency on any specific client implementation and can be used independently.
+Foundational types used across every package in the Atsign Protocol SDK:
+key representations, metadata, atSign validation, root-domain parsing,
+verb builders (Atsign Protocol wire format), and the exception hierarchy.
+
+`at_commons` is a pure-Dart library with no dependency on any specific
+client implementation. Most application developers consume these types
+transitively via [`at_client`](../at_client); you'll reach for
+`at_commons` directly when you need to construct an `AtKey` by hand,
+interpret exceptions, or build Atsign Protocol verbs at a lower level.
 
 ## AtKey
 
-`AtKey` represents a key in the Atsign Protocol key-value store. Use the static factory methods to construct keys:
+`AtKey` represents a key in the atServer keystore. Prefer the static
+factory methods over the field-builder form — they encode the key
+*shape* (self / shared / public / local / cached) at the type level:
 
 ```dart
 // Shared with another atSign
-AtKey shared = AtKey.shared('phone', namespace: 'myapp', sharedBy: '@alice')
-  ..sharedWith('@bob')
-  ..build();
+AtKey shared = (AtKey.shared('phone', namespace: 'myapp', sharedBy: '@alice')
+      ..sharedWith('@bob'))
+    .build();
 
 // Public (readable by anyone)
 AtKey pub = AtKey.public('avatar', namespace: 'myapp', sharedBy: '@alice').build();
@@ -25,11 +35,11 @@ AtKey self = AtKey.self('prefs', namespace: 'myapp', sharedBy: '@alice').build()
 // Local (never synced to the cloud)
 AtKey local = AtKey.local('cache', '@alice', namespace: 'myapp').build();
 
-// Parse from a string
+// Parse from a wire-format string
 AtKey parsed = AtKey.fromString('@bob:phone.myapp@alice');
 ```
 
-Key getters:
+Useful getters:
 
 | Getter            | Example output           |
 |-------------------|--------------------------|
@@ -39,55 +49,56 @@ Key getters:
 
 ## Metadata
 
-`Metadata` carries per-key settings. Common fields:
+`Metadata` carries per-key settings. The fields most app code actually
+touches:
 
 | Field            | Type        | Description                                                                |
 |------------------|-------------|----------------------------------------------------------------------------|
-| `ttl`            | `int?`      | Time-to-live in milliseconds                                               |
-| `ttb`            | `int?`      | Time-to-birth (available-after delay) in milliseconds                      |
+| `ttl`            | `int?`      | Time-to-live in ms (key self-expires)                                      |
+| `ttb`            | `int?`      | Time-to-birth in ms (key becomes visible after this delay)                 |
 | `ttr`            | `int?`      | Recipient cache refresh interval in seconds; `-1` means cache indefinitely |
 | `ccd`            | `bool?`     | Cascade-delete cached copies when the original is deleted                  |
 | `isPublic`       | `bool?`     | Key is publicly readable                                                   |
 | `isEncrypted`    | `bool?`     | Value is encrypted                                                         |
 | `isBinary`       | `bool?`     | Value is binary data                                                       |
-| `namespaceAware` | `bool`      | Whether the namespace is appended to the key                               |
+| `namespaceAware` | `bool`      | Whether the namespace is appended to the key on the wire                   |
 | `immutable`      | `bool?`     | Key may not be updated once set                                            |
-| `expiresAt`      | `DateTime?` | Computed expiry timestamp                                                  |
-| `availableAt`    | `DateTime?` | Computed availability timestamp                                            |
+| `expiresAt`      | `DateTime?` | Derived expiry timestamp (from `ttl`)                                      |
+| `availableAt`    | `DateTime?` | Derived availability timestamp (from `ttb`)                                |
 
-## Atsign
-
-`Atsign` is an extension type for validated, fully-qualified atSign strings (e.g. `@alice`). `AtsignWithoutAt` is the variant without the leading `@`.
+## Atsign / AtRootDomain
 
 ```dart
-Atsign alice = '@alice'.toAtsign();
-```
+Atsign alice = '@alice'.toAtsign();          // validated, fully qualified
+AtsignWithoutAt a = alice.withoutAt;         // no leading '@'
 
-## AtRootDomain
-
-Represents a root server address including an optional port.
-
-```dart
 AtRootDomain root = AtRootDomain.parse('root.atsign.org:64');
-// AtRootDomain.atsignDomain is the production default
+AtRootDomain prod = AtRootDomain.atsignDomain; // production default
 ```
 
 ## Exceptions
 
 All exceptions extend `AtException`. The main sub-hierarchies are:
 
-- **`AtConnectException`** — connection and authentication failures
-  (`SecondaryServerConnectivityException`, `UnAuthorizedException`, `HandShakeException`, …)
+- **`AtConnectException`** — connection / auth failures
+  (`SecondaryServerConnectivityException`, `UnAuthorizedException`,
+  `HandShakeException`, …)
 - **`AtServerException`** — server-side errors
-  (`InboundConnectionLimitException`, `LookupException`, `InternalServerException`, …)
-- **`AtEnrollmentException`** — APKAM enrollment errors
-  (`AtInvalidEnrollmentException`, `AtEnrollmentRevokeException`, `AtThrottleLimitExceeded`)
-- Standalone: `InvalidAtKeyException`, `KeyNotFoundException`, `AtTimeoutException`,
-  `InvalidAtSignException`, `AtSigningException`, `AtIOException`, and others
+  (`InboundConnectionLimitException`, `LookupException`,
+  `InternalServerException`, …)
+- **`AtEnrollmentException`** — APKAM enrollment failures
+  (`AtInvalidEnrollmentException`, `AtEnrollmentRevokeException`,
+  `AtThrottleLimitExceeded`)
+- Standalone: `InvalidAtKeyException`, `KeyNotFoundException`,
+  `AtTimeoutException`, `InvalidAtSignException`, `AtSigningException`,
+  `AtIOException`, and others.
 
 ## Verb builders
 
-Each builder constructs an Atsign Protocol command string via `buildCommand()`.
+Each builder constructs an Atsign Protocol wire command via `buildCommand()`.
+Application code normally doesn't touch these directly — the client
+packages use them internally — but they're exposed for lower-level
+tooling (see the test suite in [`test/`](test) for concrete usage).
 
 | Builder              | Protocol verb |
 |----------------------|---------------|
@@ -105,8 +116,16 @@ Each builder constructs an Atsign Protocol command string via `buildCommand()`.
 
 ## Other types
 
-- **`AtBytes`** — wrapper for base64-encoded binary data
-- **`KeyType`** — enum identifying a key as `selfKey`, `sharedKey`, `publicKey`, `localKey`, `cachedSharedKey`, etc.
-- **`EnrollmentStatus`** — `pending`, `approved`, `denied`, `revoked`, `expired`
-- **`PublicKeyHash`** — stores the hash and algorithm of a public encryption key
+- **`AtBytes`** — wrapper for base64-encoded binary payloads
+- **`KeyType`** — `selfKey`, `sharedKey`, `publicKey`, `localKey`,
+  `cachedSharedKey`, …
+- **`EnrollmentStatus`** — `pending`, `approved`, `denied`, `revoked`,
+  `expired`
+- **`PublicKeyHash`** — hash + algorithm of a public encryption key
 - **`SecureSocketConfig`** — TLS configuration for atServer connections
+
+## Where to go next
+
+- [`at_client`](../at_client) — the client that uses these types
+- [`at_auth`](../at_auth) — onboarding / authentication that produces
+  the keys embedded in `AtKey`

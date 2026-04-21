@@ -5,7 +5,7 @@
 
 ## Overview
 
-The at_notify_flutter package is for Flutter developers who want to handle notifications in atProtocol apps.
+The at_notify_flutter package is for Flutter developers who want to handle notifications in Atsign Protocol apps.
 
 This open source package is written in Dart, supports Flutter and follows the atPlatform's decentralized, edge computing model with the following features: 
 - Cryptographic control of data access through personal data stores

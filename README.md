@@ -43,10 +43,10 @@ These libraries were previously located at
 [at_libraries](https://github.com/atsign-foundation/at_libraries)
 
 - [at_commons](https://pub.dev/packages/at_commons) Commonly used components
-in implementation of the atProtocol.
+in implementation of the Atsign Protocol.
 
 - [at_utils](https://pub.dev/packages/at_utils) This is the Utility library
-for atProtocol projects. It contains utility classes for atSign, atMetadata,
+for Atsign Protocol projects. It contains utility classes for atSign, atMetadata,
 configuration and logger.
 
 - [at_contact](https://pub.dev/packages/at_contact): A contacts library that
@@ -55,7 +55,7 @@ in action by cloning the at_chat_flutter project from the
 [at_widgets repository](https://github.com/atsign-foundation/at_widgets).
 
 - [at_lookup](https://pub.dev/packages/at_lookup): A low-level library that
-directly implements the atProtocol verbs. You can find this dependency in
+directly implements the Atsign Protocol verbs. You can find this dependency in
 several other packages such as at_client and at_client_mobile.
 
 - [at_onboarding_cli](https://pub.dev/packages/at_onboarding_cli): A command
@@ -84,18 +84,18 @@ These libraries were previously located at
 
 - [at_backupkey_flutter](https://pub.dev/packages/at_backupkey_flutter)- A
 flutter plugin project for saving the backup key of any atSign that is being
-onboarded with atProtocol apps. Backup key can be used to authenticate in any
-atProtocol apps.
+onboarded with Atsign Protocol apps. Backup key can be used to authenticate in any
+Atsign Protocol apps.
 
 - [at_chat_flutter](https://pub.dev/packages/at_chat_flutter)- A flutter plugin
-project to provide a chat feature using atSigns and atProtocol.
+project to provide a chat feature using atSigns and Atsign Protocol.
 
 - [at_common_flutter](https://pub.dev/packages/at_common_flutter)- A flutter
 package to provide common widgets used by other Atsign flutter packages.
 
 - [at_contacts_flutter](https://pub.dev/packages/at_contacts_flutter)- A
 flutter plugin project to provide ease of managing contacts for an atSign
-using atProtocol.
+using Atsign Protocol.
 
 - [at_contacts_group_flutter](https://pub.dev/packages/at_contacts_group_flutter)-
 A flutter plugin to provide group functionality for atSign contacts.
@@ -108,7 +108,7 @@ plugin project to share location between two atSigns and track them on Open
 Street Map ([OSM](https://www.openstreetmap.org/)).
 
 - [at_onboarding_flutter](https://pub.dev/packages/at_onboarding_flutter)- A
-flutter plugin project for onboarding any atSign in atProtocol apps with ease.
+flutter plugin project for onboarding any atSign in Atsign Protocol apps with ease.
 Provides QRscanner and upload key file options to authenticate.
 
 - [atsign_authentication_helper](https://pub.dev/packages/atsign_authentication_helper)-

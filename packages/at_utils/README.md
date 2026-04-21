@@ -4,5 +4,5 @@
 
 ## at_utils
 
-**at_utils** is the Utility library for atProtocol projects. It contains
+**at_utils** is the Utility library for Atsign Protocol projects. It contains
 utility classes for atsign, atmetadata, configuration and logger.

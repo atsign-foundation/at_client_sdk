@@ -62,7 +62,7 @@
 
 ## 3.6.0
 - feat: deprecate the (misleadingly named)
-  `AtClientPreference.atProtocolEmitted` and change its default value
+  `AtClientPreference.Atsign ProtocolEmitted` and change its default value
   from 1.5.0 to 2.0.0
 
 ## 3.5.3
@@ -206,7 +206,7 @@
 ## 3.0.61
 - fix: ensure key exchange functions properly when the sync service is not
   being used
-- feat: Add AtRpc - A simple rpc request-response API which uses atProtocol
+- feat: Add AtRpc - A simple rpc request-response API which uses Atsign Protocol
   notifications under the hood.
 ## 3.0.60
 - feat: Add `useRemoteAtServer` to PutRequestOptions. When set, the update

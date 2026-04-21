@@ -9,7 +9,7 @@
 ## Introduction
 The at_policy library provides generic scaffolding for building policy 
 management services which policy enforcement endpoints communicate with via 
-atProtocol and therefore get all the benefits of using atProtocol - outbound 
+Atsign Protocol and therefore get all the benefits of using Atsign Protocol - outbound 
 communication only, end-to-end encryption, using atSigns rather than IP 
 addresses
 
