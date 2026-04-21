@@ -116,10 +116,8 @@ class _TodosHomeState extends State<TodosHome> {
             return const Center(child: Text('No todos yet. Tap + to add one.'));
           }
           return RefreshIndicator(
-            onRefresh: () => Future.wait([
-              service.refreshTodos(),
-              service.refreshNotes(),
-            ]),
+            onRefresh: () =>
+                Future.wait([service.refreshTodos(), service.refreshNotes()]),
             child: ValueListenableBuilder(
               valueListenable: service.notesByTodoId,
               builder: (_, notesByTodoId, _) {
@@ -128,8 +126,7 @@ class _TodosHomeState extends State<TodosHome> {
                   separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (_, i) {
                     final todo = todos[i];
-                    final noteCount =
-                        (notesByTodoId[todo.id]?.length ?? 0);
+                    final noteCount = (notesByTodoId[todo.id]?.length ?? 0);
                     return _TodoRow(
                       todo: todo,
                       noteCount: noteCount,
@@ -183,12 +180,7 @@ class _TodoRow extends StatelessWidget {
     final canToggle = todo.owner == service.self;
     final subtitleParts = <Widget>[
       if (todo.obj.description.isNotEmpty) Text(todo.obj.description),
-      Row(
-        children: [
-          const Text('Due: '),
-          Text(_fmtDate(todo.obj.dueDate)),
-        ],
-      ),
+      Row(children: [const Text('Due: '), Text(_fmtDate(todo.obj.dueDate))]),
       Row(
         children: [
           const Text('By: '),

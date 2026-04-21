@@ -16,11 +16,11 @@ void main(List<String> args) async {
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
-  final AtCollection<Uint8List> binaries =
-      await c.atClient.collection<Uint8List>(
-    'binary.$applicationNamespace',
-    exampleDefaultExpiration,
-  );
+  final AtCollection<Uint8List> binaries = await c.atClient
+      .collection<Uint8List>(
+        'binary.$applicationNamespace',
+        exampleDefaultExpiration,
+      );
 
   switch (c.role) {
     case ExampleRole.sender:

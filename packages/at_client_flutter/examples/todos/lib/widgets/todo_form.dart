@@ -53,8 +53,7 @@ class _TodoFormDialogState extends State<TodoFormDialog> {
     _shared = TextEditingController(
       text: (e?.sharedWith ?? <Atsign>{}).join(', '),
     );
-    _dueDate =
-        e?.obj.dueDate ?? DateTime.now().add(const Duration(days: 7));
+    _dueDate = e?.obj.dueDate ?? DateTime.now().add(const Duration(days: 7));
   }
 
   @override
@@ -183,9 +182,7 @@ Future<Set<Atsign>?> showShareDialog(BuildContext context) async {
       content: TextField(
         controller: controller,
         autofocus: true,
-        decoration: const InputDecoration(
-          labelText: 'Comma-separated @signs',
-        ),
+        decoration: const InputDecoration(labelText: 'Comma-separated @signs'),
       ),
       actions: [
         TextButton(

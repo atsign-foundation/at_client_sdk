@@ -173,8 +173,7 @@ final class CItem<T> {
   }
 
   @override
-  String toString() =>
-      'CItem{owner: $owner, sharedWith: $sharedWith,'
+  String toString() => 'CItem{owner: $owner, sharedWith: $sharedWith,'
       ' id: $id, type: $type, obj: ${obj.runtimeType},'
       ' expiresAt: $expiresAt, availableAt: $availableAt}';
 
@@ -262,9 +261,8 @@ final class CItem<T> {
   /// draw loops that can't await. Returns an empty set until the first
   /// `await item.readBy` has primed the cache. Event-driven updates
   /// keep this in sync thereafter.
-  Set<Atsign> get readBySnapshot => _readers == null
-      ? const <Atsign>{}
-      : UnmodifiableSetView(_readers!);
+  Set<Atsign> get readBySnapshot =>
+      _readers == null ? const <Atsign>{} : UnmodifiableSetView(_readers!);
 
   /// True iff the current atSign ([self]) has already posted a read
   /// receipt for this item. Returns true for self-owned items (the
@@ -420,8 +418,10 @@ class CSubItemDeleted extends CEvent {
 /// Parsed components of a notification key. Private to [AtCollection].
 typedef _CParts = ({
   Atsign from,
+
   /// The item's own id (at any depth).
   String id,
+
   /// Root-to-direct-parent chain. Empty for a root-level item.
   List<CAncestor> ancestry,
 });
@@ -808,8 +808,7 @@ class AtCollection<T> {
           // lacks `parents` are accepted lenient-ly as matching this
           // sub-collection's expected chain.
           final parsedParents = _decodeParentOwners(decoded);
-          if (parsedParents != null &&
-              !_ancestryMatches(parsedParents)) {
+          if (parsedParents != null && !_ancestryMatches(parsedParents)) {
             // Item belongs to a different parent-owner chain at the
             // same key shape — skip.
             continue;
@@ -1095,7 +1094,7 @@ class AtCollection<T> {
       final ancestorIds = <String>[];
       final ancestorSubNames = <String>[];
       for (int i = rootIndex; i >= 2; i -= 2) {
-        ancestorIds.add(parts[i]);         // root first, then deeper
+        ancestorIds.add(parts[i]); // root first, then deeper
         ancestorSubNames.add(parts[i - 1]);
       }
 
@@ -1488,8 +1487,7 @@ class AtCollection<T> {
           // disambiguation in the post-implementation tidy-up plan).
           // Legacy items (no `parents` in envelope) pass through.
           final parsedParents = _decodeParentOwners(decoded);
-          if (parsedParents != null &&
-              !_ancestryMatches(parsedParents)) {
+          if (parsedParents != null && !_ancestryMatches(parsedParents)) {
             continue;
           }
           item = CItem._(

@@ -175,9 +175,11 @@ class TodosApp {
       final legacyRegex = '(^|:)[^.]+\\.notes\\.${ns.replaceAll('.', '\\.')}@';
       final legacyKeys = await atClient.getAtKeys(regex: legacyRegex);
       if (legacyKeys.isNotEmpty) {
-        log('${legacyKeys.length} legacy notes in "notes.$ns" '
-            '(pre-subcollection shape) present; not displayed by this '
-            'version. Data is preserved on the atServer.');
+        log(
+          '${legacyKeys.length} legacy notes in "notes.$ns" '
+          '(pre-subcollection shape) present; not displayed by this '
+          'version. Data is preserved on the atServer.',
+        );
       }
     } catch (_) {
       /* swallow — legacy probe is best-effort */
@@ -1092,10 +1094,9 @@ class TodosApp {
     }
     final todo = todos[ref.todoIdx];
     try {
-      await _notesSubFor(todo).create(
-        obj: TodoNote(note: text),
-        sharedWith: _noteAudience(todo),
-      );
+      await _notesSubFor(
+        todo,
+      ).create(obj: TodoNote(note: text), sharedWith: _noteAudience(todo));
       log('Note added.');
       await _refreshNotes();
     } catch (e) {

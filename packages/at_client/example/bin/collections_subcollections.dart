@@ -97,14 +97,10 @@ Future<void> sender(ExampleContext c, AtCollection<BlogPost> posts) async {
   // 3. Wire up sub-item event listeners on the PARENT collection to see
   //    comments coming in from the other side.
   posts.subUpdates.listen((e) {
-    progress.add(
-      'Sub-update from ${e.owner}: id=${e.id} sub=${e.subName}',
-    );
+    progress.add('Sub-update from ${e.owner}: id=${e.id} sub=${e.subName}');
   });
   posts.subDeletes.listen((e) {
-    progress.add(
-      'Sub-delete from ${e.owner}: id=${e.id} sub=${e.subName}',
-    );
+    progress.add('Sub-delete from ${e.owner}: id=${e.id} sub=${e.subName}');
   });
 
   // Linger briefly so the receiver can land its own comment.
@@ -154,14 +150,10 @@ Future<void> receiver(ExampleContext c, AtCollection<BlogPost> posts) async {
   });
 
   posts.subUpdates.listen((e) {
-    progress.add(
-      'Sub-update from ${e.owner}: id=${e.id} sub=${e.subName}',
-    );
+    progress.add('Sub-update from ${e.owner}: id=${e.id} sub=${e.subName}');
   });
   posts.subDeletes.listen((e) {
-    progress.add(
-      'Sub-delete from ${e.owner}: id=${e.id} sub=${e.subName}',
-    );
+    progress.add('Sub-delete from ${e.owner}: id=${e.id} sub=${e.subName}');
   });
 
   // When the sender cascades a parent delete, our sub-collection's

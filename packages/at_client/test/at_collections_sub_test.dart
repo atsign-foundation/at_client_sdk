@@ -219,8 +219,7 @@ void main() {
       await sub.cancel();
     });
 
-    test(
-        'depth-2 (sub-sub) update emits CSubItemUpdated with full ancestry',
+    test('depth-2 (sub-sub) update emits CSubItemUpdated with full ancestry',
         () async {
       final c = buildParent();
       final received = <CSubItemUpdated>[];
@@ -249,8 +248,7 @@ void main() {
       await sub.cancel();
     });
 
-    test('depth-2 delete emits CSubItemDeleted with full ancestry',
-        () async {
+    test('depth-2 delete emits CSubItemDeleted with full ancestry', () async {
       final c = buildParent();
       final received = <CSubItemDeleted>[];
       final sub = c.parent.subDeletes.listen(received.add);
@@ -365,8 +363,8 @@ void main() {
       final comments = subOn<String>(c, post, 'comments');
       final commentSelfKey =
           AtKey.fromString('c1.comments.p1.$parentNs$selfAtSignStr');
-      final replySelfKey = AtKey.fromString(
-          'r1.replies.c1.comments.p1.$parentNs$selfAtSignStr');
+      final replySelfKey =
+          AtKey.fromString('r1.replies.c1.comments.p1.$parentNs$selfAtSignStr');
       when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
           .thenAnswer((invocation) async {
         final regex =

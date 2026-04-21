@@ -159,8 +159,7 @@ class _TodoDetailScreenState extends State<TodoDetailScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () =>
-                Navigator.of(ctx).pop(controller.text.trim()),
+            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
             child: const Text('Save'),
           ),
         ],
@@ -172,8 +171,9 @@ class _TodoDetailScreenState extends State<TodoDetailScreen> {
     );
   }
 
-  String _fmtDate(DateTime? d) =>
-      d == null ? '—' : d.toIso8601String().substring(0, 19).replaceFirst('T', ' ');
+  String _fmtDate(DateTime? d) => d == null
+      ? '—'
+      : d.toIso8601String().substring(0, 19).replaceFirst('T', ' ');
 
   @override
   Widget build(BuildContext context) {
@@ -184,7 +184,10 @@ class _TodoDetailScreenState extends State<TodoDetailScreen> {
         title: Text(_currentTodo.obj.title),
         actions: [
           if (isOwner)
-            IconButton(onPressed: _busy ? null : _edit, icon: const Icon(Icons.edit)),
+            IconButton(
+              onPressed: _busy ? null : _edit,
+              icon: const Icon(Icons.edit),
+            ),
           if (isOwner)
             IconButton(
               onPressed: _busy ? null : _share,
@@ -229,7 +232,8 @@ class _TodoDetailScreenState extends State<TodoDetailScreen> {
                               value: todo.obj.done,
                               onChanged: isOwner
                                   ? (_) => _withBusy(
-                                      () => service.toggleDone(todo))
+                                      () => service.toggleDone(todo),
+                                    )
                                   : null,
                             ),
                             Expanded(
@@ -327,9 +331,7 @@ class _TodoDetailScreenState extends State<TodoDetailScreen> {
                                       Text(_fmtDate(n.createdAt)),
                                     ],
                                   ),
-                                  onTap: noteIsMine
-                                      ? () => _editNote(n)
-                                      : null,
+                                  onTap: noteIsMine ? () => _editNote(n) : null,
                                 ),
                               );
                             },

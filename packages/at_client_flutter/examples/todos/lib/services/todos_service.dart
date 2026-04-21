@@ -50,8 +50,10 @@ class TodosService {
       final legacyRegex = '(^|:)[^.]+\\.notes\\.${ns.replaceAll('.', '\\.')}@';
       final legacyKeys = await atClient.getAtKeys(regex: legacyRegex);
       if (legacyKeys.isNotEmpty) {
-        _log('${legacyKeys.length} legacy notes in "notes.$ns" '
-            'present; not displayed by this version.');
+        _log(
+          '${legacyKeys.length} legacy notes in "notes.$ns" '
+          'present; not displayed by this version.',
+        );
       }
     } catch (_) {
       /* best-effort */
@@ -87,21 +89,27 @@ class TodosService {
 
   Future<void> init() async {
     await setUpCollections();
-    _subs.add(collection.readReceipts.listen((r) {
-      _log('read receipt from ${r.from}');
-      unawaited(refreshTodos());
-    }));
+    _subs.add(
+      collection.readReceipts.listen((r) {
+        _log('read receipt from ${r.from}');
+        unawaited(refreshTodos());
+      }),
+    );
     _subs.add(collection.updates.listen((_) => unawaited(refreshTodos())));
     _subs.add(collection.deletes.listen((_) => unawaited(refreshTodos())));
     // Notes are sub-items under the todos collection; filter the
     // subUpdates/subDeletes streams to only note changes (i.e. skip
     // the internal `__rr` read-receipt sub-updates).
-    _subs.add(collection.subUpdates
-        .where((e) => e.subName == 'notes')
-        .listen((_) => unawaited(refreshNotes())));
-    _subs.add(collection.subDeletes
-        .where((e) => e.subName == 'notes')
-        .listen((_) => unawaited(refreshNotes())));
+    _subs.add(
+      collection.subUpdates
+          .where((e) => e.subName == 'notes')
+          .listen((_) => unawaited(refreshNotes())),
+    );
+    _subs.add(
+      collection.subDeletes
+          .where((e) => e.subName == 'notes')
+          .listen((_) => unawaited(refreshNotes())),
+    );
 
     await Future.wait([refreshTodos(), refreshNotes()]);
   }
@@ -221,18 +229,22 @@ class TodosService {
 
   Future<void> setDueDate(CItem<Todo> existing, DateTime dueDate) async {
     if (existing.owner != self) {
-      throw StateError('Cannot change due date on a todo owned by another atSign');
+      throw StateError(
+        'Cannot change due date on a todo owned by another atSign',
+      );
     }
-    await collection.update(collection.draft(
-      obj: Todo(
-        title: existing.obj.title,
-        description: existing.obj.description,
-        done: existing.obj.done,
-        dueDate: dueDate,
+    await collection.update(
+      collection.draft(
+        obj: Todo(
+          title: existing.obj.title,
+          description: existing.obj.description,
+          done: existing.obj.done,
+          dueDate: dueDate,
+        ),
+        id: existing.id,
+        sharedWith: Set.from(existing.sharedWith),
       ),
-      id: existing.id,
-      sharedWith: Set.from(existing.sharedWith),
-    ));
+    );
     _log('due date set for "${existing.obj.title}"');
     await refreshTodos();
   }
@@ -284,11 +296,13 @@ class TodosService {
       throw StateError('Cannot update a note owned by another atSign');
     }
     final sub = _notesSubFor(todo);
-    await sub.update(sub.draft(
-      obj: TodoNote(note: text),
-      id: existing.id,
-      sharedWith: noteAudience(todo),
-    ));
+    await sub.update(
+      sub.draft(
+        obj: TodoNote(note: text),
+        id: existing.id,
+        sharedWith: noteAudience(todo),
+      ),
+    );
     _log('note updated on "${todo.obj.title}"');
     await refreshNotes();
   }

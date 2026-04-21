@@ -33,9 +33,9 @@ class _LaunchScreen extends StatelessWidget {
     try {
       final ok = await fn(context);
       if (!ok || !context.mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const TodosHome()),
-      );
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const TodosHome()));
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(

@@ -121,7 +121,5 @@ Future<void> _setupAtClient(
 
 void _snack(BuildContext context, String message) {
   if (!context.mounted) return;
-  ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text(message)));
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 }

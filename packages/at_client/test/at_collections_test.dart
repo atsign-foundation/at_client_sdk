@@ -113,8 +113,7 @@ void main() {
 
   // ---------------------------------------------------------------------------
   group('draft', () {
-    test(
-        'assigns owner=self, auto 8-char id, timestamps, empty sharedWith',
+    test('assigns owner=self, auto 8-char id, timestamps, empty sharedWith',
         () {
       final c = buildCollection<String>(ttl: const Duration(hours: 1));
       final before = DateTime.now().toUtc();
@@ -345,7 +344,8 @@ void main() {
       expect(key.metadata.ttb, greaterThan(0));
     });
 
-    test('past availableAt is silently dropped from metadata (would be a '
+    test(
+        'past availableAt is silently dropped from metadata (would be a '
         'negative ttb)', () async {
       // Regression: a previously-scheduled item's `availableAt` persists
       // across rehydrate+update cycles. Once the scheduled time has
