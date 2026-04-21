@@ -79,13 +79,15 @@ class TodosService {
     try {
       final fetched = await collection.getItems();
       fetched.sort(_compareByDue);
-      todos.value = fetched;
       for (final item in fetched) {
-        if (!(await collection.wasMarkedReadByMe(item))) {
-          await collection.markReadByMe(item);
+        if (!(await item.wasMarkedReadByMe())) {
+          await item.markReadByMe();
           _log('sent read receipt to ${item.owner} for "${item.obj.title}"');
         }
+        // Prime the readBy cache so the UI's sync snapshot is populated.
+        await item.readBy;
       }
+      todos.value = fetched;
     } catch (e) {
       _log('Error refreshing todos: $e');
     }
@@ -97,9 +99,10 @@ class TodosService {
       final map = <String, List<CItem<TodoNote>>>{};
       for (final n in items) {
         map.putIfAbsent(n.obj.todoId, () => []).add(n);
-        if (!(await notesCollection.wasMarkedReadByMe(n))) {
-          await notesCollection.markReadByMe(n);
+        if (!(await n.wasMarkedReadByMe())) {
+          await n.markReadByMe();
         }
+        await n.readBy;
       }
       for (final list in map.values) {
         list.sort((a, b) => a.createdAt.compareTo(b.createdAt));

@@ -72,6 +72,7 @@
 // =============================================================================
 
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -83,6 +84,7 @@ import 'package:at_client/at_client.dart' hide StringBuffer;
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart';
+import 'package:mutex/mutex.dart';
 
 // -----------------------------------------------------------------------------
 // CItem
@@ -165,24 +167,70 @@ final class CItem<T> {
   /// `item.owner == item.self` means "I own this item".
   Atsign get self => _collection.self;
 
-  /// The set of atSigns known to have read this item. Live query against
-  /// the item's reserved `__rr` sub-collection; returns the owners of
-  /// every receipt that currently exists.
-  Future<Set<Atsign>> readers() async {
-    final rr = _collection._readReceiptsFor(this);
-    final items = await rr.getItems();
-    return items.map((e) => e.owner).toSet();
+  // Lazy, event-maintained reader cache. `null` until the first load;
+  // mutex-protected to serialise concurrent callers; subscribed to the
+  // parent collection's `readReceipts` stream so arrivals append in-place.
+  Set<Atsign>? _readers;
+  final Mutex _readersLoadMutex = Mutex();
+  StreamSubscription<CReadReceipt>? _readReceiptSub;
+
+  // Cancel per-CItem read-receipt subscriptions when the CItem is GC'd
+  // (CItems churn on every refreshTodos-style loop; we'd leak otherwise).
+  static final Finalizer<StreamSubscription> _subFinalizer =
+      Finalizer<StreamSubscription>((sub) => sub.cancel());
+
+  /// The set of atSigns known to have read this item.
+  ///
+  /// First access triggers a one-shot load from the reserved `__rr`
+  /// sub-collection. After that, incoming `CReadReceipt` events on the
+  /// parent collection (targeting this item) append into the cached
+  /// set, so subsequent `readBy` calls are O(1) and always current.
+  ///
+  /// Self-owned items return the empty set: sending a receipt to
+  /// yourself is a no-op, so no receipt sub-items exist.
+  ///
+  /// For synchronous UI rendering after an `await readBy` prime, see
+  /// [readBySnapshot].
+  Future<Set<Atsign>> get readBy async {
+    await _readersLoadMutex.protect(() async {
+      if (_readers != null) return;
+      // Subscribe BEFORE the fetch so events arriving during the I/O
+      // are not lost. Initialise the set synchronously so the listener
+      // has somewhere to append.
+      final readers = <Atsign>{};
+      _readers = readers;
+      if (owner != self) {
+        _readReceiptSub = _collection.readReceipts
+            .where((e) => e.id == id && e.owner == self)
+            .listen((e) => readers.add(e.from));
+        _subFinalizer.attach(this, _readReceiptSub!, detach: this);
+        // Use `getItemsAsStream` (tolerant of per-key decode errors —
+        // it logs and skips). Legacy pre-refactor `__rr` records with
+        // bare-numeric values are silently ignored here rather than
+        // blowing up the whole load.
+        final rr = _collection._readReceiptsFor(this);
+        await for (final receipt in rr.getItemsAsStream()) {
+          readers.add(receipt.owner);
+        }
+      }
+    });
+    return UnmodifiableSetView(_readers!);
   }
+
+  /// Synchronous accessor for the cached reader set; useful for UI
+  /// draw loops that can't await. Returns an empty set until the first
+  /// `await item.readBy` has primed the cache. Event-driven updates
+  /// keep this in sync thereafter.
+  Set<Atsign> get readBySnapshot => _readers == null
+      ? const <Atsign>{}
+      : UnmodifiableSetView(_readers!);
 
   /// True iff the current atSign ([self]) has already posted a read
   /// receipt for this item. Returns true for self-owned items (the
   /// owner is trivially "caught up" on their own record).
   Future<bool> wasMarkedReadByMe() async {
     if (owner == self) return true;
-    final rr = _collection._readReceiptsFor(this);
-    // `getItems(owner: self)` filters at the regex layer.
-    final items = await rr.getItems(owner: self);
-    return items.isNotEmpty;
+    return (await readBy).contains(self);
   }
 
   /// Idempotent: if the current atSign has already posted a read
@@ -678,7 +726,7 @@ class AtCollection<T> {
         if (k.fullKeyAndOwner != pendingKey) {
           if (pending != null) yield pending;
           final v = await atClient.get(k);
-          final decoded = jsonDecode(v.value!) as Map<String, dynamic>;
+          final decoded = _decodeEnvelope(v.value!, k);
           pending = CItem._(
             owner: k.sharedBy!.toAtsign(),
             id: k.key.split('.').first,
@@ -1141,6 +1189,24 @@ class AtCollection<T> {
     return v.isAfter(DateTime.now()) ? v : null;
   }
 
+  /// Decodes a stored value into the CItem JSON envelope, with a
+  /// diagnostic [FormatException] if the payload isn't a JSON object
+  /// (e.g. legacy pre-refactor `__rr` keys stored a bare numeric
+  /// receiptId; `jsonDecode` returns an `int`, and the subsequent
+  /// `as Map` cast blows up with a bare `_TypeError`). A typed
+  /// [FormatException] is collected cleanly by `_loadItems` as a
+  /// per-key error instead of crashing the whole read.
+  Map<String, dynamic> _decodeEnvelope(String value, AtKey k) {
+    final raw = jsonDecode(value);
+    if (raw is! Map<String, dynamic>) {
+      throw FormatException(
+        'Expected JSON object envelope at ${k.fullKeyAndOwner}, got '
+        '${raw.runtimeType}',
+      );
+    }
+    return raw;
+  }
+
   V _rehydrate<V>(Object obj, String type) {
     if (type == 'binary') {
       return Base2e15.decode(obj.toString()) as V;
@@ -1167,7 +1233,7 @@ class AtCollection<T> {
         } else {
           final v = await atClient.get(k);
           logger.info('Retrieved raw value ${v.value}');
-          final decoded = jsonDecode(v.value!) as Map<String, dynamic>;
+          final decoded = _decodeEnvelope(v.value!, k);
           item = CItem._(
             owner: k.sharedBy!.toAtsign(),
             id: k.key.split('.').first,

@@ -95,6 +95,25 @@ void main() {
       );
     });
 
+    test('rejects the reserved subName "__rr"', () {
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      expect(
+        () => c.parent.subCollection<String>(
+          parent: post,
+          subName: '__rr',
+          defaultExpiration: const Duration(days: 1),
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message.toString(),
+            'message',
+            contains('reserved'),
+          ),
+        ),
+      );
+    });
+
     test('rejects a composed namespace that would exceed the key-length max',
         () {
       final c = buildParent();

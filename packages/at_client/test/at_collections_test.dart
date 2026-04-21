@@ -961,9 +961,11 @@ void main() {
         () async {
       // AtKey.fromString lowercases ids, so the stored id is 'idr'.
       final bobKey = AtKey.fromString('idr.$namespace$bobStr');
-      final rrRegex = '(^|:)[^.]+\\.__rr.idr.$namespace$selfAtSignStr';
-      // Parent scan returns bob's item; the __rr sub-collection scan for
-      // items owned by self returns nothing (no receipt sent yet).
+      // The cache-priming `readBy` scans the entire __rr sub-collection
+      // (no owner filter); wasMarkedReadByMe then checks self membership.
+      final rrRegex = '(^|:)[^.]+\\.__rr.idr.$namespace@';
+      // Parent scan returns bob's item; the __rr sub-collection scan
+      // returns nothing (no receipts sent yet).
       when(
         () => atClient.getAtKeys(regex: any(named: 'regex')),
       ).thenAnswer((invocation) async {

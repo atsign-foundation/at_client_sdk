@@ -142,9 +142,6 @@ class TodosApp {
   final List<String> logMessages = [];
   List<CItem<Todo>> todos = [];
   Map<String, List<CItem<TodoNote>>> notesByTodoId = {};
-  // Per-todo cache of read-receipt owners, refreshed during refreshTodos.
-  // Avoids triggering an async __rr sub-collection query from _draw().
-  Map<String, Set<Atsign>> readersByTodoId = {};
   String currentInput = '';
   bool _running = false;
   bool _handlerRunning = false;
@@ -228,7 +225,6 @@ class TodosApp {
       final fetched = await collection.getItems();
       fetched.sort(_compareByDue);
       todos = fetched;
-      final nextReaders = <String, Set<Atsign>>{};
       for (final item in todos) {
         if (!(await item.wasMarkedReadByMe())) {
           await item.markReadByMe();
@@ -236,9 +232,9 @@ class TodosApp {
             'Read receipt sent to ${_color.fmt(item.owner)} for: ${item.obj.title}',
           );
         }
-        nextReaders[item.id] = await item.readers();
+        // Prime the readBy cache so _draw()'s sync snapshot is populated.
+        await item.readBy;
       }
-      readersByTodoId = nextReaders;
       _draw();
     } catch (e) {
       log('Error refreshing todos: $e');
@@ -454,7 +450,7 @@ class TodosApp {
         final authorStr = _color.fmt(todo.owner);
         final sharedStr =
             todo.sharedWith.isEmpty ? '-' : _color.fmtAll(todo.sharedWith);
-        final readers = readersByTodoId[todo.id] ?? const <Atsign>{};
+        final readers = todo.readBySnapshot;
         final readByStr =
             readers.isEmpty
                 ? (todo.sharedWith.isEmpty ? '-' : '(nobody)')
