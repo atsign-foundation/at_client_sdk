@@ -17,12 +17,13 @@ void main(List<String> args) async {
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
-  AtCollection.registerFactory(type: 'Dog', factory: Dog.fromJson);
-  AtCollection.registerFactory(type: 'Cat', factory: Cat.fromJson);
-  final AtCollection generic = c.atClient.collection(
-    'generic.$applicationNamespace',
-    exampleDefaultExpiration,
-  );
+  final AtCollection generic =
+      c.atClient.collection(
+          'generic.$applicationNamespace',
+          exampleDefaultExpiration,
+        )
+        ..registerFactory<Dog>(Dog.fromJson)
+        ..registerFactory<Cat>(Cat.fromJson);
 
   switch (c.role) {
     case ExampleRole.sender:
@@ -55,7 +56,7 @@ Future<void> sender(
 ) async {
   Map<String, Set<Atsign>> expectedReceipts = {};
   Completer allReceiptsReceived = Completer();
-  generic.events.listen((CEvent e) {
+  generic.watch().listen((CEvent e) {
     if (e is CReadReceipt) {
       progressSink.add(
         '${e.runtimeType} :'
@@ -73,76 +74,31 @@ Future<void> sender(
     }
   });
 
-  CItem itemToShare;
-
-  progressSink.add('Creating some binary data, sharing with $otherAtSigns');
-  itemToShare = generic.create(
-    obj: Uint8List.fromList(
-      'This is binary data from ${atClient.atSign}'.codeUnits,
-    ),
-    sharedWith: otherAtSigns,
-  );
-  for (final r in await generic.put(
-    itemToShare,
-    expiresAt: DateTime.now().add(Duration(seconds: 10)),
-  )) {
-    progressSink.add(r.toString());
+  Future<void> saveAndTrack(String label, Object obj) async {
+    progressSink.add('Creating $label, sharing with $otherAtSigns');
+    try {
+      final item = await generic.create(obj: obj, sharedWith: otherAtSigns);
+      progressSink.add('  ...saved.');
+      expectedReceipts[item.id] = Set.from(otherAtSigns!);
+    } on CollectionOpException catch (e) {
+      for (final r in e.results) {
+        progressSink.add(r.toString());
+      }
+    }
   }
-  expectedReceipts[itemToShare.id] = Set.from(otherAtSigns!);
 
-  progressSink.add('Creating a Dog, sharing with $otherAtSigns');
-  itemToShare = generic.create(
-    type: 'Dog',
-    obj: Dog(name: '${atClient.atSign}\'s dog Rex'),
-    sharedWith: otherAtSigns,
+  await saveAndTrack(
+    'some binary data',
+    Uint8List.fromList('This is binary data from ${atClient.atSign}'.codeUnits),
   );
-  for (final r in await generic.put(
-    itemToShare,
-    expiresAt: DateTime.now().add(Duration(seconds: 10)),
-  )) {
-    progressSink.add(r.toString());
-  }
-  expectedReceipts[itemToShare.id] = Set.from(otherAtSigns);
-
-  progressSink.add('Creating a Cat, sharing with $otherAtSigns');
-  itemToShare = generic.create(
-    type: 'Cat',
-    obj: Cat(name: '${atClient.atSign}\'s cat Felix'),
-    sharedWith: otherAtSigns,
-  );
-  for (final r in await generic.put(
-    itemToShare,
-    expiresAt: DateTime.now().add(Duration(seconds: 10)),
-  )) {
-    progressSink.add(r.toString());
-  }
-  expectedReceipts[itemToShare.id] = Set.from(otherAtSigns);
-
-  progressSink.add('Creating a Map, sharing with $otherAtSigns');
-  itemToShare = generic.create(
-    obj: {'isMap': true, 'name': 'my map', 'intValue': 123},
-    sharedWith: otherAtSigns,
-  );
-  for (final r in await generic.put(
-    itemToShare,
-    expiresAt: DateTime.now().add(Duration(seconds: 10)),
-  )) {
-    progressSink.add(r.toString());
-  }
-  expectedReceipts[itemToShare.id] = Set.from(otherAtSigns);
-
-  progressSink.add('Creating a String, sharing with $otherAtSigns');
-  itemToShare = generic.create(
-    obj: 'this is just a String',
-    sharedWith: otherAtSigns,
-  );
-  for (final r in await generic.put(
-    itemToShare,
-    expiresAt: DateTime.now().add(Duration(seconds: 10)),
-  )) {
-    progressSink.add(r.toString());
-  }
-  expectedReceipts[itemToShare.id] = Set.from(otherAtSigns);
+  await saveAndTrack('a Dog', Dog(name: '${atClient.atSign}\'s dog Rex'));
+  await saveAndTrack('a Cat', Cat(name: '${atClient.atSign}\'s cat Felix'));
+  await saveAndTrack('a Map', {
+    'isMap': true,
+    'name': 'my map',
+    'intValue': 123,
+  });
+  await saveAndTrack('a String', 'this is just a String');
 
   await allReceiptsReceived.future;
   progressSink.add('All read receipts received');
@@ -161,45 +117,36 @@ Future<void> receiver(
   int actual = 0;
   Completer allReceiptsSent = Completer();
 
-  Future<void> sendReadReceipt(CItem item) async {
-    if (await generic.sentReadReceipt(item)) {
-      return;
-    }
+  Future<void> sendReadReceiptAndTrack(CItem item) async {
+    if (await generic.hasSentReadReceipt(item)) return;
     progressSink.add('Sending read receipt for $item');
-    bool sent = await generic.sendReadReceipt(item);
-    if (sent) {
-      actual++;
-    }
+    await generic.sendReadReceipt(item);
+    actual++;
     if (actual == expected) {
       allReceiptsSent.complete();
     }
   }
 
-  // watch for new collection events
-  generic.events.listen((CEvent e) async {
-    switch (e) {
-      case CItemUpdated():
-        try {
-          final item = await generic.get(e.id, e.owner);
-          await sendReadReceipt(item);
-        } catch (_) {
-          return;
-        }
-      default:
-        break;
+  // watch for incoming item updates and send a read receipt for each
+  generic.updates.listen((e) async {
+    try {
+      final item = await generic.get(e.id, e.owner);
+      await sendReadReceiptAndTrack(item);
+    } catch (_) {
+      return;
     }
   });
 
   progressSink.add('${DateTime.now().toString()} : Fetching');
 
-  for (final item in await generic.getItemsList()) {
+  for (final item in await generic.getItems()) {
     String msg = 'Fetched ${generic.prettyString(item)}';
     if (item.type == 'binary') {
       msg = '$msg : ${String.fromCharCodes(item.obj)}';
     }
     progressSink.add(msg);
     if (item.owner != generic.atSign) {
-      await sendReadReceipt(item);
+      await sendReadReceiptAndTrack(item);
     }
   }
 

@@ -166,15 +166,26 @@ class AtClientImpl implements AtClient {
   @override
   AtCollection<T> collection<T>(
     String namespace,
-    Duration defaultExpiration,
-  ) {
+    Duration defaultExpiration, {
+    T Function(Map<String, dynamic>)? fromJson,
+  }) {
+    if (!namespace.contains('.')) {
+      throw ArgumentError(
+        'namespace must be fully qualified — provide the complete namespace '
+        '(e.g. "tasks.my_app"), NOT just the collection name. The '
+        'application namespace from AtClientPreference will NOT be appended '
+        'automatically.',
+      );
+    }
     return _collections.putIfAbsent(
+      namespace,
+      () => AtCollection<T>(
+        this,
         namespace,
-        () => AtCollection<T>(
-              this,
-              namespace,
-              defaultExpiration,
-            )) as AtCollection<T>;
+        defaultExpiration,
+        fromJson: fromJson,
+      ),
+    ) as AtCollection<T>;
   }
 
   static Future<AtClient> create(

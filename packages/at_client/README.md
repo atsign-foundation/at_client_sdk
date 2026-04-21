@@ -129,3 +129,64 @@ AtClient has many more methods that are exposed. Please refer to the [atsign doc
 ## Example
 
 We have a good example with explanation in the [at_client_mobile](https://pub.dev/packages/at_client_mobile/example) package.
+
+## Collections — a higher-level API
+
+For the common "CRUD on typed, shareable records" use case, the
+`AtCollection<T>` API in `src/collections/collections.dart` hides almost
+all of the atKey / metadata / notification-regex ceremony behind a small
+set of CRUD verbs. See the file-level doc comment in
+`collections.dart` for the mental model, and the worked examples under
+`example/bin/collections_*.dart`.
+
+Minimal sketch:
+
+```dart
+final todos = atClient.collection<Todo>(
+  'todos',                   // short name — composes with app namespace
+  const Duration(days: 7),
+  fromJson: Todo.fromJson,   // per-collection factory, no magic strings
+);
+
+// Create a brand-new item (throws if the id collides with an existing one;
+// an auto-generated id is used when you don't supply one).
+final item = await todos.create(
+  obj: Todo('write readme'),
+  sharedWith: {'@bob'.toAtsign()},
+);
+
+// Update an existing item (throws if the self-key doesn't exist).
+item.obj.done = true;
+await todos.update(item);
+
+await for (final e in todos.updates) {
+  print('updated: ${e.id} by ${e.owner}');
+}
+```
+
+### Sub-collections
+
+A `CItem` can have sub-collections whose lifetime is tied to it — for
+example, comments on a blog post:
+
+```dart
+final comments = posts.subCollection<Comment>(
+  parent: post,
+  subName: 'comments',
+  defaultExpiration: const Duration(days: 30),
+  fromJson: Comment.fromJson,
+);
+await comments.create(obj: Comment('nice one'), sharedWith: {/* … */});
+
+// Parent delete is prevent-by-default. Opt into cascading:
+await posts.delete(post, cascade: true);   // removes comments too
+```
+
+Sub-collections are just `AtCollection<U>` instances with a composed
+namespace; they support the same API (including further nesting). See
+`example/bin/collections_subcollections.dart` for an end-to-end walkthrough.
+
+**Key-length note:** atServer and local-store keys are capped at 255
+chars and atSigns at 55. `subCollection(...)` enforces a hard
+`ArgumentError` at construction if the composed namespace would overflow,
+so mistakes never reach the wire.

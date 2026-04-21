@@ -150,15 +150,16 @@ class TodosApp {
   Completer<String>? _promptCompleter;
 
   TodosApp(this.atClient) {
-    AtCollection.registerFactory(type: 'Todo', factory: Todo.fromJson);
-    AtCollection.registerFactory(type: 'TodoNote', factory: TodoNote.fromJson);
+    final ns = atClient.getPreferences()!.namespace!;
     collection = atClient.collection<Todo>(
-      'todos.${atClient.getPreferences()!.namespace}',
+      'todos.$ns',
       const Duration(days: 365),
+      fromJson: Todo.fromJson,
     );
     notesCollection = atClient.collection<TodoNote>(
-      'notes.${atClient.getPreferences()!.namespace}',
+      'notes.$ns',
       const Duration(days: 365),
+      fromJson: TodoNote.fromJson,
     );
     _color = _AtsignColors(atClient.atSign);
   }
@@ -212,13 +213,16 @@ class TodosApp {
     }
   }
 
-  Future<void> refreshTodos() async {
+  Future<void> refreshTodos({CEvent? event}) async {
+    if (event != null) {
+      log('refreshTodos due to event: $event');
+    }
     try {
-      final fetched = await collection.getItemsList();
+      final fetched = await collection.getItems();
       fetched.sort(_compareByDue);
       todos = fetched;
       for (final item in todos) {
-        if (!(await collection.sentReadReceipt(item))) {
+        if (!(await collection.hasSentReadReceipt(item))) {
           await collection.sendReadReceipt(item);
           log(
             'Read receipt sent to ${_color.fmt(item.owner)} for: ${item.obj.title}',
@@ -240,13 +244,16 @@ class TodosApp {
     return ad.compareTo(bd);
   }
 
-  Future<void> _refreshNotes() async {
+  Future<void> _refreshNotes({CEvent? event}) async {
+    if (event != null) {
+      log('refreshTodos due to event: $event');
+    }
     try {
-      final items = await notesCollection.getItemsList();
+      final items = await notesCollection.getItems();
       notesByTodoId = {};
       for (final n in items) {
         notesByTodoId.putIfAbsent(n.obj.todoId, () => []).add(n);
-        if (!(await notesCollection.sentReadReceipt(n))) {
+        if (!(await notesCollection.hasSentReadReceipt(n))) {
           await notesCollection.sendReadReceipt(n);
         }
       }
@@ -267,40 +274,14 @@ class TodosApp {
 
     _running = true;
 
-    collection.events
-        .where((e) => e is CReadReceipt)
-        .cast<CReadReceipt>()
-        .listen((e) {
-          log('sent us a read receipt', by: e.from);
-          unawaited(refreshTodos());
-        });
-
-    collection.events
-        .where((e) => e is CItemUpdated)
-        .cast<CItemUpdated>()
-        .listen((e) {
-          unawaited(refreshTodos());
-        });
-
-    collection.events
-        .where((e) => e is CItemDeleted)
-        .cast<CItemDeleted>()
-        .listen((e) {
-          unawaited(refreshTodos());
-        });
-
-    notesCollection.events.listen((CEvent e) {
-      switch (e) {
-        case CItemUpdated():
-          unawaited(_refreshNotes());
-          break;
-        case CItemDeleted():
-          unawaited(_refreshNotes());
-          break;
-        default:
-          break;
-      }
+    collection.readReceipts.listen((e) {
+      log('sent us a read receipt', by: e.from);
+      unawaited(refreshTodos());
     });
+    collection.updates.listen((e) => unawaited(refreshTodos(event: e)));
+    collection.deletes.listen((e) => unawaited(refreshTodos(event: e)));
+    notesCollection.updates.listen((e) => unawaited(_refreshNotes(event: e)));
+    notesCollection.deletes.listen((e) => unawaited(_refreshNotes(event: e)));
 
     unawaited(refreshTodos());
     unawaited(_refreshNotes());
@@ -829,16 +810,12 @@ class TodosApp {
     }
 
     log('Creating todo: $title');
-    final item = collection.create(
-      type: 'Todo',
-      obj: Todo(title: title, description: desc, dueDate: dueDate),
-      sharedWith: atSigns,
-    );
     try {
-      final results = await collection.put(item);
-      log(
-        'Created item ${item.id}. Success: ${results.every((r) => r is OpSuccess)}',
+      final item = await collection.create(
+        obj: Todo(title: title, description: desc, dueDate: dueDate),
+        sharedWith: atSigns,
       );
+      log('Created item ${item.id}.');
       await refreshTodos();
     } catch (e) {
       log('Error creating todo: $e', error: true);
@@ -875,20 +852,20 @@ class TodosApp {
 
     final old = todos[ref.todoIdx];
     log('Updating todo: ${old.obj.title} -> $title');
-    final updated = collection.create(
-      type: 'Todo',
-      obj: Todo(
-        title: title,
-        description: desc,
-        done: old.obj.done,
-        dueDate: old.obj.dueDate,
-      ),
-      id: old.id,
-      sharedWith: atSigns,
-    );
     try {
-      final results = await collection.put(updated);
-      log('Updated. Success: ${results.every((r) => r is OpSuccess)}');
+      await collection.update(
+        collection.draft(
+          obj: Todo(
+            title: title,
+            description: desc,
+            done: old.obj.done,
+            dueDate: old.obj.dueDate,
+          ),
+          id: old.id,
+          sharedWith: atSigns,
+        ),
+      );
+      log('Updated.');
     } catch (e) {
       log('Error updating todo: $e', error: true);
     } finally {
@@ -923,8 +900,8 @@ class TodosApp {
         return;
       }
       try {
-        final results = await notesCollection.delete(note);
-        log('Note deleted. Success: ${results.every((r) => r is OpSuccess)}');
+        await notesCollection.delete(note);
+        log('Note deleted.');
         await _refreshNotes();
       } catch (e) {
         log('Error deleting note: $e', error: true);
@@ -932,8 +909,8 @@ class TodosApp {
     } else {
       log('Deleting todo: ${todo.obj.title}');
       try {
-        final results = await collection.delete(todo);
-        log('Deleted. Success: ${results.every((r) => r is OpSuccess)}');
+        await collection.delete(todo);
+        log('Deleted.');
         await refreshTodos();
       } catch (e) {
         log('Error deleting todo: $e', error: true);
@@ -960,19 +937,18 @@ class TodosApp {
       log('Cannot update todos owned by other atSigns');
       return;
     }
-    final updated = collection.create(
-      type: 'Todo',
-      obj: Todo(
-        title: old.obj.title,
-        description: old.obj.description,
-        done: !old.obj.done,
-        dueDate: old.obj.dueDate,
-      ),
-      id: old.id,
-      sharedWith: Set.from(old.sharedWith),
-    );
     try {
-      await collection.put(updated);
+      final updated = collection.draft(
+        obj: Todo(
+          title: old.obj.title,
+          description: old.obj.description,
+          done: !old.obj.done,
+          dueDate: old.obj.dueDate,
+        ),
+        id: old.id,
+        sharedWith: Set.from(old.sharedWith),
+      );
+      await collection.update(updated);
       log(
         '"${old.obj.title}" marked ${updated.obj.done ? "done [x]" : "not done [ ]"}',
       );
@@ -1012,19 +988,19 @@ class TodosApp {
       log('Invalid date format. Use YYYY-MM-DD');
       return;
     }
-    final updated = collection.create(
-      type: 'Todo',
-      obj: Todo(
-        title: old.obj.title,
-        description: old.obj.description,
-        done: old.obj.done,
-        dueDate: dueDate,
-      ),
-      id: old.id,
-      sharedWith: Set.from(old.sharedWith),
-    );
     try {
-      await collection.put(updated);
+      await collection.update(
+        collection.draft(
+          obj: Todo(
+            title: old.obj.title,
+            description: old.obj.description,
+            done: old.obj.done,
+            dueDate: dueDate,
+          ),
+          id: old.id,
+          sharedWith: Set.from(old.sharedWith),
+        ),
+      );
       log('Due date set to $dateStr for "${old.obj.title}"');
       await refreshTodos();
     } catch (e) {
@@ -1055,14 +1031,12 @@ class TodosApp {
       return;
     }
     final todo = todos[ref.todoIdx];
-    final note = notesCollection.create(
-      type: 'TodoNote',
-      obj: TodoNote(note: text, todoId: todo.id),
-      sharedWith: _noteAudience(todo),
-    );
     try {
-      final results = await notesCollection.put(note);
-      log('Note added. Success: ${results.every((r) => r is OpSuccess)}');
+      await notesCollection.create(
+        obj: TodoNote(note: text, todoId: todo.id),
+        sharedWith: _noteAudience(todo),
+      );
+      log('Note added.');
       await _refreshNotes();
     } catch (e) {
       log('Error adding note: $e', error: true);
@@ -1102,15 +1076,15 @@ class TodosApp {
       log('Cancelled');
       return;
     }
-    final updated = notesCollection.create(
-      type: 'TodoNote',
-      obj: TodoNote(note: text, todoId: todo.id),
-      id: existing.id,
-      sharedWith: _noteAudience(todo),
-    );
     try {
-      final results = await notesCollection.put(updated);
-      log('Note updated. Success: ${results.every((r) => r is OpSuccess)}');
+      await notesCollection.update(
+        notesCollection.draft(
+          obj: TodoNote(note: text, todoId: todo.id),
+          id: existing.id,
+          sharedWith: _noteAudience(todo),
+        ),
+      );
+      log('Note updated.');
       await _refreshNotes();
     } catch (e) {
       log('Error updating note: $e', error: true);
@@ -1148,10 +1122,8 @@ class TodosApp {
         atSignsStr.split(',').map((s) => s.trim().toAtsign()).toSet();
     item.sharedWith.addAll(newAtSigns);
     try {
-      final results = await collection.put(item, unshareWithOthers: false);
-      log(
-        'Shared with ${_color.fmtAll(newAtSigns)}. Success: ${results.every((r) => r is OpSuccess)}',
-      );
+      await collection.update(item, unshareWithOthers: false);
+      log('Shared with ${_color.fmtAll(newAtSigns)}.');
       await refreshTodos();
     } catch (e) {
       log('Error sharing: $e', error: true);
@@ -1185,12 +1157,12 @@ class TodosApp {
       return;
     }
     final availableAt = DateTime.now().add(Duration(seconds: seconds));
+    item.availableAt = availableAt;
     try {
-      final results = await collection.put(item, availableAt: availableAt);
+      await collection.update(item);
       log(
         'Scheduled "${item.obj.title}" available at '
-        '${availableAt.toIso8601String().substring(0, 19)}. '
-        'Success: ${results.every((r) => r is OpSuccess)}',
+        '${availableAt.toIso8601String().substring(0, 19)}.',
       );
       await refreshTodos();
     } catch (e) {

@@ -642,14 +642,24 @@ abstract class AtClient {
 
   EncryptionService? get encryptionService;
 
-  /// Returns a [AtCollection] of [CItem]s for the given namespace
-  /// NB: [namespace] must be fully qualified. By fully qualified we mean
-  /// that the namespace includes the "application namespace" - i.e. :
-  /// - if your application has a namespace of "app_1.my_apps"
-  /// - and your collection has a namespace of "tasks"
-  /// - then the full qualified namespace would be "tasks.app_1.my_apps"
+  /// Returns an [AtCollection] of [CItem]s for the given [namespace].
+  ///
+  /// [namespace] **MUST be fully qualified**. For example:
+  /// - if your application namespace is "app_1.my_apps"
+  /// - and the collection name is "tasks"
+  /// - then the fully qualified namespace is `"tasks.app_1.my_apps"`.
+  ///
+  /// The application namespace configured on [AtClientPreference] is
+  /// **NOT** appended automatically — the caller must pass the complete
+  /// namespace. Throws [ArgumentError] if [namespace] contains no dot.
+  ///
+  /// If [fromJson] is supplied, it is registered as the factory for items
+  /// of type [T] (keyed by `T.toString()`), so they rehydrate correctly on
+  /// retrieval. For polymorphic collections, omit [fromJson] here and call
+  /// `collection.registerFactory<ConcreteType>(...)` per concrete type.
   AtCollection<T> collection<T>(
     String namespace,
-    Duration defaultExpiration,
-  );
+    Duration defaultExpiration, {
+    T Function(Map<String, dynamic>)? fromJson,
+  });
 }

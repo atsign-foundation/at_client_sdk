@@ -55,22 +55,29 @@ Future<void> sender(
   AtCollection<String> strings,
 ) async {
   progressSink.add('Creating a Map, sharing with $otherAtSigns');
-  for (final r in await maps.put(
-    maps.create(
+  try {
+    await maps.create(
       obj: {'isMap': true, 'name': 'my map', 'intValue': 123},
       sharedWith: otherAtSigns,
-    ),
-    expiresAt: DateTime.now().add(Duration(seconds: 10)),
-  )) {
-    progressSink.add(r.toString());
+    );
+    progressSink.add('  ...saved.');
+  } on CollectionOpException catch (e) {
+    for (final r in e.results) {
+      progressSink.add(r.toString());
+    }
   }
 
   progressSink.add('Creating a String, sharing with $otherAtSigns');
-  for (final r in await strings.put(
-    strings.create(obj: 'this is just a String', sharedWith: otherAtSigns),
-    expiresAt: DateTime.now().add(Duration(seconds: 10)),
-  )) {
-    progressSink.add(r.toString());
+  try {
+    await strings.create(
+      obj: 'this is just a String',
+      sharedWith: otherAtSigns,
+    );
+    progressSink.add('  ...saved.');
+  } on CollectionOpException catch (e) {
+    for (final r in e.results) {
+      progressSink.add(r.toString());
+    }
   }
 
   await poll(maps: maps, strings: strings, progressSink: progressSink);
@@ -84,11 +91,16 @@ Future<void> poll({
   while (true) {
     progressSink.add('${DateTime.now().toString()} : Fetching');
 
-    final mapsResponse = await maps.getItems();
-    for (final e in mapsResponse.exceptions) {
-      progressSink.add('Exception: $e');
+    List<CItem<Map>> mapItems;
+    try {
+      mapItems = await maps.getItems();
+    } on CollectionGetException catch (e) {
+      for (final err in e.errors) {
+        progressSink.add('Error: $err');
+      }
+      mapItems = e.partialItems.cast<CItem<Map>>();
     }
-    for (final i in mapsResponse.items) {
+    for (final i in mapItems) {
       progressSink.add(
         'Fetched ${i.id}.${maps.namespace}${i.owner}'
         ' sharedWith ${i.sharedWith}'
@@ -99,11 +111,16 @@ Future<void> poll({
       );
     }
 
-    final stringsResponse = await strings.getItems();
-    for (final e in stringsResponse.exceptions) {
-      progressSink.add('Exception: $e');
+    List<CItem<String>> stringItems;
+    try {
+      stringItems = await strings.getItems();
+    } on CollectionGetException catch (e) {
+      for (final err in e.errors) {
+        progressSink.add('Error: $err');
+      }
+      stringItems = e.partialItems.cast<CItem<String>>();
     }
-    for (final i in stringsResponse.items) {
+    for (final i in stringItems) {
       progressSink.add('Fetched ${strings.prettyString(i)}');
     }
     await Future.delayed(Duration(seconds: 3));

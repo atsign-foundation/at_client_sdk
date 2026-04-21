@@ -1,44 +1,130 @@
-import 'dart:async';
-import 'dart:typed_data';
-import 'dart:convert';
+// =============================================================================
+// AtCollection<T> — a typed collection of items on the atPlatform.
+//
+// MENTAL MODEL (read this first):
+//
+// A [CItem] is a single typed record owned by exactly one atSign. The owner
+// can mutate and delete it; everyone else can only read their own cached
+// copy. `item.owner == self` ⇔ you may call [create], [update] or [delete]
+// on it.
+//
+// [CItem.sharedWith] is a set of atSigns who each receive a *copy* of the
+// item. It is a distribution list, not a permission grant — you cannot
+// "un-share" retroactively except by deleting their copy.
+//
+// [CItem.readBy] grows monotonically: every time a recipient calls
+// [sendReadReceipt], their atSign is added to `readBy` on the owner's side
+// (via a [CReadReceipt] event that drives the internal read-receipt
+// handling).
+//
+// PERSISTENCE VERBS:
+// - [draft] builds a local [CItem] with no I/O. Use when you need to stage
+//   changes (adjusting `expiresAt`, `availableAt`, etc.) before committing.
+// - [create] persists a brand-new item. Throws [StateError] if the self-key
+//   already exists. If no id is supplied, a random 8-character id is
+//   generated and checked for collision before use (retries up to 10 times).
+// - [update] persists changes to an existing item. Throws [StateError] if
+//   the self-key does not exist. With the default `unshareWithOthers: true`
+//   any existing recipient copy whose atSign is NO LONGER in
+//   `item.sharedWith` is deleted; retained recipients are overwritten in
+//   place — never delete-then-write.
+// - [delete] removes the item and its recipient copies. Throws
+//   [CollectionOpException] on any key-level failure and [StateError] if
+//   `cascade: false` (the default) and self-owned descendants exist.
+//
+// FACTORY REGISTRY (per-collection, not global). Registering a `fromJson`
+// lets a collection rehydrate typed objects. The simple shape is:
+//
+//     atClient.collection<Todo>('todos.myapp', ttl, fromJson: Todo.fromJson);
+//
+// which registers `Todo.fromJson` under the type-tag `'Todo'` (from
+// `Todo.toString()`) and keys it on `Todo` (the [Type]) for lookup when
+// drafting. For polymorphic collections (e.g. `AtCollection<Pet>` holding
+// both `Dog` and `Cat`), register each concrete type explicitly via
+// `collection.registerFactory<Dog>(Dog.fromJson)`.
+//
+// Under obfuscated builds where class names may be renamed, pass an
+// explicit `typeTag:` to pin the wire-format type-tag and keep
+// interoperability across build variants:
+//
+//     collection.registerFactory<Dog>(Dog.fromJson, typeTag: 'Dog');
+//
+// READING:
+// - [get] throws [AtKeyNotFoundException] if the item is missing.
+// - [getMaybe] returns `null` when the item is missing.
+// - [getItems] fetches every item in the collection (optionally filtered by
+//   id/owner) as a `List<CItem<T>>`. Throws [CollectionGetException] if any
+//   per-key decode failed — the exception carries the partial list plus the
+//   errors list.
+// - [getItemsAsStream] yields a `Stream<CItem<T>>`, ideal for filter-style
+//   queries: `collection.getItemsAsStream().where(...).toList()`.
+//
+// EVENT STREAMS:
+//
+//     collection.watch()          // Stream<CEvent> — all of the below
+//     collection.updates          // Stream<CItemUpdated>
+//     collection.deletes          // Stream<CItemDeleted>
+//     collection.readReceipts     // Stream<CReadReceipt>
+//     collection.subUpdates       // Stream<CSubItemUpdated>  — descendants
+//     collection.subDeletes       // Stream<CSubItemDeleted>  — descendants
+//
+// =============================================================================
 
-import 'package:at_client/at_client.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
+
+// at_commons re-exports a `StringBuffer` class that would otherwise shadow
+// `dart:core`'s. Hide it so this file (and any consumer of the collections
+// API) can use `StringBuffer` with its standard Dart semantics.
+import 'package:at_client/at_client.dart' hide StringBuffer;
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart';
 
+// -----------------------------------------------------------------------------
+// CItem
+
 final class CItem<T> {
-  /// The atSign which created this [CItem]. For example let's say we are
-  /// currently `@alice`; then owner of a [CItem] which we create would be
-  /// `@alice`. But the owner of a [CItem] shared with us by `@bob` will
-  /// be `@bob`.
-  ///
-  /// [owner] is set by [AtCollection] when rehydrating stored data
+  /// The atSign which created this [CItem]. For example if we are
+  /// currently `@alice`, then the owner of a [CItem] which we create is
+  /// `@alice`; the owner of a [CItem] shared with us by `@bob` is `@bob`.
   final Atsign owner;
 
-  /// the unique identifier which will be prepended to the namespace of the
-  /// collection for persistence. For example, if the collection has a
-  /// namespace of `tasks.app_1.my_apps` then the full namespace of the
-  /// persisted record will be `<id>.tasks.app_1.my_apps`
-  ///
-  /// [id] is set by [AtCollection] when rehydrating stored data
+  /// The unique identifier, prepended to the collection's namespace when
+  /// persisted. E.g. if the collection namespace is `todos.my_apps` then
+  /// the full persisted key prefix is `<id>.todos.my_apps`.
   final String id;
 
-  /// The type name; this MUST be included in toJson() and fromJson()
+  /// The type-tag that drives rehydration. Set automatically by [draft]
+  /// from `obj.runtimeType.toString()` when a factory is registered,
+  /// otherwise `'binary'` for [Uint8List] or `'n/a'` for primitives.
   late final String type;
 
-  /// the application's domain object
+  /// The application's domain object.
   final T obj;
 
-  /// The [Atsign]s with which this data is shared
+  /// atSigns who receive a copy of this item. Mutable; edit then call
+  /// [AtCollection.update] to persist.
   final Set<Atsign> sharedWith;
 
+  /// atSigns known to have read this item. Populated from incoming
+  /// read-receipt notifications and merged from the stored record on
+  /// each [AtCollection.update] so stale CItems don't clobber it.
   final Set<Atsign> readBy;
 
+  /// When this item was first written. Set by [AtCollection.draft] for
+  /// new items; read from server metadata on rehydrate.
   DateTime createdAt;
 
+  /// Wall-clock expiry. Mutate before calling [AtCollection.update] to
+  /// change the item's lifecycle.
   DateTime expiresAt;
 
+  /// Earliest moment at which recipient copies become visible. `null`
+  /// means "visible immediately". Mutate before calling
+  /// [AtCollection.update] to schedule.
   DateTime? availableAt;
 
   CItem._({
@@ -53,7 +139,7 @@ final class CItem<T> {
     required this.availableAt,
   }) {
     if (obj is Uint8List && type != 'binary') {
-      throw ArgumentError('factoryType for Uint8List must be "binary"');
+      throw ArgumentError('type for Uint8List must be "binary"');
     }
   }
 
@@ -62,7 +148,7 @@ final class CItem<T> {
       return {
         'type': type,
         'readBy': readBy.toList(),
-        'obj': Base2e15.encode(obj as Uint8List)
+        'obj': Base2e15.encode(obj as Uint8List),
       };
     } else {
       return {'type': type, 'readBy': readBy.toList(), 'obj': obj};
@@ -70,59 +156,81 @@ final class CItem<T> {
   }
 
   @override
-  String toString() {
-    return 'CItem{owner: $owner, sharedWith: $sharedWith, readBy: $readBy,'
-        ' id: $id, type: $type, obj: ${obj.runtimeType},'
-        ' expiresAt: $expiresAt, availableAt: $availableAt}';
-  }
+  String toString() =>
+      'CItem{owner: $owner, sharedWith: $sharedWith, readBy: $readBy,'
+      ' id: $id, type: $type, obj: ${obj.runtimeType},'
+      ' expiresAt: $expiresAt, availableAt: $availableAt}';
 }
+
+// -----------------------------------------------------------------------------
+// Operation results & exceptions
 
 enum CollectionOp { put, delete }
 
 sealed class OpResult {
-  /// the [AtKey] for the operation
   final AtKey atKey;
   final CollectionOp op;
-
   OpResult(this.atKey, this.op);
 }
 
 class OpSuccess extends OpResult {
   OpSuccess(super.atKey, super.op);
-
   @override
-  String toString() {
-    return '$atKey:${op.name}:Success';
-  }
+  String toString() => '$atKey:${op.name}:Success';
 }
 
 class OpFailure extends OpResult {
   final Object reason;
-
   OpFailure(super.atKey, super.op, this.reason);
-
   @override
-  String toString() {
-    return '$atKey:${op.name}:Failure:$reason';
-  }
+  String toString() => '$atKey:${op.name}:Failure:$reason';
 }
 
-typedef CollectionGetResponse<T> = ({List<CItem<T>> items, List exceptions});
+/// Thrown by [AtCollection.create] / [AtCollection.update] /
+/// [AtCollection.delete] when any key-level op failed. Inspect [results]
+/// for the per-key breakdown, or [failures] / [firstFailure] for the
+/// subset that went wrong.
+class CollectionOpException implements Exception {
+  final List<OpResult> results;
+  CollectionOpException(this.results);
+
+  List<OpFailure> get failures => results.whereType<OpFailure>().toList();
+
+  OpFailure? get firstFailure => failures.isEmpty ? null : failures.first;
+
+  @override
+  String toString() =>
+      'CollectionOpException with ${failures.length} failure(s):\n'
+      '  ${failures.join('\n  ')}';
+}
+
+/// Thrown by [AtCollection.getItems] when any per-key decode failed.
+/// Carries the [partialItems] that did decode plus the [errors] that
+/// didn't.
+class CollectionGetException implements Exception {
+  final List<CItem<dynamic>> partialItems;
+  final List<Object> errors;
+  CollectionGetException(this.partialItems, this.errors);
+
+  @override
+  String toString() =>
+      'CollectionGetException: ${errors.length} per-key error(s); '
+      '${partialItems.length} item(s) decoded.\n'
+      '  ${errors.join('\n  ')}';
+}
+
+// -----------------------------------------------------------------------------
+// Events
 
 sealed class CEvent {
   final Atsign owner;
   final String id;
-
-  CEvent({
-    required this.owner,
-    required this.id,
-  });
+  CEvent({required this.owner, required this.id});
 }
 
 class CReadReceipt extends CEvent {
   final Atsign from;
   final DateTime readAt;
-
   CReadReceipt({
     required super.owner,
     required super.id,
@@ -132,22 +240,15 @@ class CReadReceipt extends CEvent {
 }
 
 class CItemUpdated extends CEvent {
-  CItemUpdated({
-    required super.owner,
-    required super.id,
-  });
+  CItemUpdated({required super.owner, required super.id});
 }
 
 class CItemDeleted extends CEvent {
-  CItemDeleted({
-    required super.owner,
-    required super.id,
-  });
+  CItemDeleted({required super.owner, required super.id});
 }
 
 class CSubItemUpdated extends CEvent {
   final String subNamespace;
-
   CSubItemUpdated({
     required super.owner,
     required super.id,
@@ -157,7 +258,6 @@ class CSubItemUpdated extends CEvent {
 
 class CSubItemDeleted extends CEvent {
   final String subNamespace;
-
   CSubItemDeleted({
     required super.owner,
     required super.id,
@@ -165,50 +265,195 @@ class CSubItemDeleted extends CEvent {
   });
 }
 
-typedef CParts = ({
+/// Parsed components of a notification key. Private to [AtCollection].
+typedef _CParts = ({
   Atsign from,
   String id,
   String? subNamespace,
-  String? subId
+  String? subId,
 });
+
+/// Internal registry entry for a typed factory. Holds both the wire-format
+/// tag and the rehydrator function.
+class _FactoryEntry {
+  final String tag;
+  final Function fromJson;
+  _FactoryEntry(this.tag, this.fromJson);
+}
+
+// -----------------------------------------------------------------------------
+// AtCollection<T>
 
 class AtCollection<T> {
   static const String readReceiptNamespacePart = '__rr';
   static const String _rr = readReceiptNamespacePart;
+
+  // Random-id alphabet and RNG (for auto-generated item ids).
+  static const String _idAlphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  static final Random _rng = Random.secure();
+
+  // Factory registry (per-collection):
+  //   - _factoriesByType: lookup by [Type] when drafting (obfuscation-safe)
+  //   - _factoriesByTag:  lookup by wire-format type-tag when rehydrating
+  final Map<Type, _FactoryEntry> _factoriesByType = {};
+  final Map<String, Function> _factoriesByTag = {};
+
+  // Immutable wiring (set by the private constructor).
+  final AtClient atClient;
+
+  /// Fully-qualified namespace — must include the application namespace.
+  /// E.g. `'todos.my_apps'`.
+  final String namespace;
+
+  final Duration defaultExpiration;
+
   late final AtSignLogger logger;
 
-  static final Map<String, Function> _factories = {};
+  // Internal event controller and derived streams.
+  final StreamController<CEvent> _events = StreamController.broadcast();
 
-  static void registerFactory(
-      {required String type, required Function factory}) {
-    _factories[type] = factory;
+  // Notification regex patterns, built in the constructor from [namespace].
+  late final RegExp _regexRR;
+  late final RegExp _regexObj;
+  late final RegExp _regexSubObj;
+  late final String _regexAllStr;
+
+  late final StreamSubscription<AtNotification> _rrSub;
+
+  // Sub-collection bookkeeping. On instances returned by [subCollection],
+  // these point at the parent item and the parent collection; they're null
+  // on standalone / root collections.
+  CItem<dynamic>? _parentItem;
+  AtCollection<dynamic>? _parentCollection;
+  StreamSubscription<CItemDeleted>? _parentDeleteSub;
+
+  // ---------------------------------------------------------------------------
+  // Construction
+
+  /// Creates a new [AtCollection] against [namespace] (which must be fully
+  /// qualified — see [AtClient.collection]). When supplied, [fromJson]
+  /// auto-registers the factory for type `T` — equivalent to calling
+  /// `registerFactory<T>(fromJson)` after construction.
+  factory AtCollection(
+    AtClient atClient,
+    String namespace,
+    Duration defaultExpiration, {
+    T Function(Map<String, dynamic>)? fromJson,
+  }) =>
+      AtCollection._(
+        atClient,
+        namespace,
+        defaultExpiration,
+        fromJson: fromJson,
+      );
+
+  /// Test-only factory that bypasses `atClient.notificationService.subscribe`
+  /// and drives notification dispatch from [notifications] instead. Keeps
+  /// the production constructor's surface clean.
+  @visibleForTesting
+  factory AtCollection.withInjectedNotifications(
+    AtClient atClient,
+    String namespace,
+    Duration defaultExpiration, {
+    required Stream<AtNotification> notifications,
+    T Function(Map<String, dynamic>)? fromJson,
+  }) =>
+      AtCollection._(
+        atClient,
+        namespace,
+        defaultExpiration,
+        fromJson: fromJson,
+        notifications: notifications,
+      );
+
+  AtCollection._(
+    this.atClient,
+    this.namespace,
+    this.defaultExpiration, {
+    T Function(Map<String, dynamic>)? fromJson,
+    Stream<AtNotification>? notifications,
+  }) {
+    if (!namespace.contains('.')) {
+      throw ArgumentError('namespace must be fully qualified');
+    }
+    if (fromJson != null) {
+      registerFactory<T>(fromJson);
+    }
+
+    logger = AtSignLogger(' AtCollection<$T> $namespace ');
+
+    // TODO: namespace may contain periods - the regular expression should
+    // escape those periods
+    _regexRR = RegExp(':[^.]+\\.$_rr\\.[^.]+\\.$namespace@');
+    _regexAllStr = '.*\\.$namespace@';
+    _regexObj = RegExp('(^|:)[^.]+\\.$namespace@');
+    _regexSubObj = RegExp('(^|:)[^.]+\\.[^.]+\\.[^.]+\\.$namespace@');
+
+    final notifStream = notifications ??
+        atClient.notificationService.subscribe(
+          regex: _regexAllStr,
+          shouldDecrypt: true,
+        );
+    _rrSub = notifStream.listen(handleNotification);
   }
 
-  /// Creates a new [CItem] owned by this atSign.
+  // ---------------------------------------------------------------------------
+  // Basic getters
+
+  Atsign get atSign => atClient.atSign;
+
+  /// True iff this collection was constructed via [subCollection] on a
+  /// parent collection.
+  bool get isSubCollection => _parentItem != null;
+
+  // ---------------------------------------------------------------------------
+  // Factory registry
+
+  /// Registers a factory for type [U] so objects of that type can be
+  /// drafted and rehydrated by this collection. The wire-format tag is
+  /// [typeTag] if supplied, otherwise `U.toString()`.
   ///
-  /// For domain objects, supply [type] matching a factory registered via
-  /// [registerFactory]. For primitives (String, Map, Uint8List), omit [type].
-  CItem<T> create({
-    String? type,
+  /// Use for polymorphic collections where `T` is an abstract supertype:
+  ///
+  ///     final pets = atClient.collection<Pet>(ns, ttl)
+  ///       ..registerFactory<Dog>(Dog.fromJson)
+  ///       ..registerFactory<Cat>(Cat.fromJson);
+  ///
+  /// If you build with Dart's minifier / tree-shaker (e.g. release-mode
+  /// Flutter web) and class names may be renamed, pin the tag explicitly:
+  ///
+  ///     collection.registerFactory<Dog>(Dog.fromJson, typeTag: 'Dog');
+  void registerFactory<U>(
+    U Function(Map<String, dynamic>) fromJson, {
+    String? typeTag,
+  }) {
+    final tag = typeTag ?? U.toString();
+    _factoriesByType[U] = _FactoryEntry(tag, fromJson);
+    _factoriesByTag[tag] = fromJson;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Drafting / persisting
+
+  /// Builds a new (not-yet-persisted) [CItem] owned by this atSign. No
+  /// I/O — use [create] to persist a new item, or [update] to save
+  /// changes to an existing one.
+  ///
+  /// If [id] is omitted a random 8-character `[a-z0-9]` id is assigned;
+  /// **note** that [draft] performs no uniqueness check — if you want to
+  /// guarantee a collision-free id, use [create] (which retries on
+  /// collision) rather than calling [draft] followed by a manual write.
+  CItem<T> draft({
     required T obj,
     String? id,
     Set<Atsign>? sharedWith,
   }) {
     final now = DateTime.now().toUtc();
-    id ??= now.microsecondsSinceEpoch.toString();
-    final String resolvedType;
-    if (type != null) {
-      if (!_factories.containsKey(type)) {
-        throw StateError('No factory registered for type $type');
-      }
-      resolvedType = type;
-    } else {
-      resolvedType = obj is Uint8List ? 'binary' : 'n/a';
-    }
+    id ??= _newItemId();
     return CItem._(
       owner: atSign,
       id: id,
-      type: resolvedType,
+      type: _resolveType(obj),
       obj: obj,
       sharedWith: sharedWith ?? {},
       readBy: {},
@@ -218,76 +463,442 @@ class AtCollection<T> {
     );
   }
 
-  V _rehydrate<V>(Object obj, String type) {
-    if (type == 'binary') {
-      return Base2e15.decode(obj.toString()) as V;
-    }
-    final f = _factories[type];
-    if (f == null) return obj as V;
-    return f.call(obj) as V;
-  }
-
-  /// The [AtClient] we will use
-  final AtClient atClient;
-
-  Atsign get atSign => atClient.atSign;
-
-  /// The fully qualified namespace. By fully qualified we mean
-  /// that the namespace includes the "application namespace".
+  /// Creates a brand-new [CItem] and persists it. Throws [StateError] if
+  /// [id] is supplied and the self-key `<id>.<namespace>@<self>` already
+  /// exists — use [update] to modify an existing item. When [id] is
+  /// omitted, a random 8-character id is generated with an existence
+  /// check; we retry on collision (odds are astronomically low) and give
+  /// up after 10 attempts with a [StateError].
   ///
-  /// i.e. if your application has a namespace of "app_1.my_apps"
-  /// and your collection has a namespace of "tasks"
-  /// then the full qualified namespace would be "tasks.app_1.my_apps"
-  final String namespace;
-
-  final Duration defaultExpiration;
-
-  final StreamController<CEvent> _events = StreamController.broadcast();
-
-  Stream<CEvent> get events => _events.stream;
-
-  late final StreamSubscription<AtNotification> _rrSub;
-
-  late final RegExp regexRR;
-  late final RegExp regexObj;
-  late final RegExp regexSubObj;
-  late final String regexAllStr;
-
-  AtCollection(
-    this.atClient,
-    this.namespace,
-    this.defaultExpiration,
-  ) {
-    if (!namespace.contains('.')) {
-      throw ArgumentError('namespaces must be fully qualified');
+  /// Returns the persisted item. Throws [CollectionOpException] on any
+  /// key-level failure.
+  Future<CItem<T>> create({
+    required T obj,
+    String? id,
+    Set<Atsign>? sharedWith,
+  }) async {
+    final String useId;
+    if (id != null) {
+      if (await _selfKeyExists(id)) {
+        throw StateError(
+          'Cannot create item with id "$id": already exists in $namespace. '
+          'Use update() to modify an existing item.',
+        );
+      }
+      useId = id;
+    } else {
+      useId = await _uniqueItemId();
     }
-
-    logger = AtSignLogger(' AtCollection<$T> $namespace ');
-
-    regexRR = RegExp(':[^.]+\\.$_rr\\.[^.]+\\.$namespace@');
-    regexAllStr = '.*\\.$namespace@';
-    regexObj = RegExp('(^|:)[^.]+\\.$namespace@');
-    regexSubObj = RegExp('(^|:)[^.]+\\.[^.]+\\.[^.]+\\.$namespace@');
-
-    _rrSub = atClient.notificationService
-        .subscribe(
-          regex: regexAllStr,
-          shouldDecrypt: true,
-        )
-        .listen(handleNotification);
+    final item = draft(obj: obj, id: useId, sharedWith: sharedWith);
+    // We just confirmed the self-key doesn't exist — skip the merge read.
+    final results = await _put(item, mergeExistingReadBy: false);
+    if (results.any((r) => r is OpFailure)) {
+      throw CollectionOpException(results);
+    }
+    return item;
   }
 
+  /// Updates an existing [item]. Throws [StateError] if the self-key does
+  /// not exist (use [create] for new items). Throws [ArgumentError] if
+  /// [item.owner] is not this atSign.
+  ///
+  /// With the default `unshareWithOthers: true`, any recipient copy
+  /// whose atSign is NO LONGER in `item.sharedWith` is deleted;
+  /// recipients present in both the existing set and `item.sharedWith`
+  /// are overwritten in place. Pass `false` to leave any current
+  /// recipient copies alone (useful when adding recipients without
+  /// risking removal of existing ones during a concurrent read).
+  ///
+  /// Typical usage: fetch an item via [get] / [getItems], mutate its
+  /// fields, then call [update].
+  Future<void> update(
+    CItem<T> item, {
+    bool unshareWithOthers = true,
+  }) async {
+    if (item.owner != atSign) {
+      throw ArgumentError('You may not update items owned by other atSigns');
+    }
+    if (!await _selfKeyExists(item.id)) {
+      throw StateError(
+        'Cannot update item "${item.id}": no such item exists in $namespace. '
+        'Use create() to add a new item.',
+      );
+    }
+    final results = await _put(item, unshareWithOthers: unshareWithOthers);
+    if (results.any((r) => r is OpFailure)) {
+      throw CollectionOpException(results);
+    }
+  }
+
+  /// Deletes [item] and every one of its recipient copies. Only the owner
+  /// may call this. Throws [CollectionOpException] on any key-level
+  /// failure.
+  ///
+  /// If [cascade] is false (the default) and [item] has self-owned
+  /// descendants in any sub-collection, throws [StateError] and does not
+  /// write anything — the caller must either delete descendants
+  /// explicitly or pass `cascade: true`.
+  ///
+  /// If [cascade] is true, every self-owned descendant (at any depth) is
+  /// deleted before [item] itself.
+  Future<void> delete(CItem<T> item, {bool cascade = false}) async {
+    final results = await _delete(item, cascade: cascade);
+    if (results.any((r) => r is OpFailure)) {
+      throw CollectionOpException(results);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reads
+
+  /// Raw [AtKey]s in this collection, optionally filtered by [id] / [owner].
+  /// Prefer [getItems] / [getItemsAsStream] for application code; this
+  /// hatch is kept for debugging and advanced cases.
+  Future<List<AtKey>> getKeys({String? id, Atsign? owner}) async {
+    // want a regex like (^|:)[^.]+\.collection\.name\.space@
+    // e.g. (^|:)[^.]+\.notes\.todos\.demos@
+    id ??= '[^.]+';
+    final ownerFragment = owner ?? '@';
+    final regex = '(^|:)$id\\.$namespace$ownerFragment';
+    return (await atClient.getAtKeys(regex: regex))
+      ..sort((a, b) => a.fullKeyAndOwner.compareTo(b.fullKeyAndOwner));
+  }
+
+  /// Fetches a single item. Throws [AtKeyNotFoundException] if no item
+  /// with this [id] owned by this [owner] exists. For a null-returning
+  /// variant, see [getMaybe].
+  Future<CItem<T>> get(String id, Atsign owner) async {
+    final (items, errors) = await _loadItems(id: id, owner: owner);
+    if (errors.isNotEmpty) {
+      throw CollectionGetException(items, errors);
+    }
+    if (items.isEmpty) {
+      throw AtKeyNotFoundException(
+        'No item found with id $id owned by $owner',
+      );
+    }
+    return items.first;
+  }
+
+  /// Same as [get] but returns `null` when no item exists, instead of
+  /// throwing [AtKeyNotFoundException]. Still throws
+  /// [CollectionGetException] on decode errors.
+  Future<CItem<T>?> getMaybe(String id, Atsign owner) async {
+    final (items, errors) = await _loadItems(id: id, owner: owner);
+    if (errors.isNotEmpty) {
+      throw CollectionGetException(items, errors);
+    }
+    return items.isEmpty ? null : items.first;
+  }
+
+  /// Fetches every item in the collection as a `List<CItem<T>>`,
+  /// optionally filtered by [id] / [owner]. Items with the same
+  /// `owner+id` across self and shared copies are deduplicated and their
+  /// `sharedWith` sets are unioned.
+  ///
+  /// Throws [CollectionGetException] if any per-key decode failed — the
+  /// exception carries both the partial-list and the errors so callers
+  /// that want "best effort" reads can inspect it rather than propagate.
+  Future<List<CItem<T>>> getItems({String? id, Atsign? owner}) async {
+    final (items, errors) = await _loadItems(id: id, owner: owner);
+    if (errors.isNotEmpty) {
+      throw CollectionGetException(items, errors);
+    }
+    return items;
+  }
+
+  /// Yields each item as it is fetched, deduping on `owner+id`. Ideal for
+  /// filter-style queries:
+  ///
+  ///     final done = await collection.getItemsAsStream()
+  ///         .where((item) => item.obj.done)
+  ///         .toList();
+  ///
+  /// Decode failures are logged and skipped rather than surfaced —
+  /// callers who need failure detail should use [getItems] and catch
+  /// [CollectionGetException].
+  Stream<CItem<T>> getItemsAsStream({String? id, Atsign? owner}) async* {
+    // [getKeys] returns keys sorted by `fullKeyAndOwner`, so all copies of
+    // the same item (self + per-recipient) are contiguous. We buffer each
+    // item, absorb its recipient siblings' `sharedWith` additions, and
+    // yield once per unique (owner, id).
+    final keys = await getKeys(id: id, owner: owner);
+    CItem<T>? pending;
+    String? pendingKey;
+    for (final k in keys) {
+      try {
+        if (k.fullKeyAndOwner != pendingKey) {
+          if (pending != null) yield pending;
+          final v = await atClient.get(k);
+          final decoded = jsonDecode(v.value!) as Map<String, dynamic>;
+          pending = CItem._(
+            owner: k.sharedBy!.toAtsign(),
+            id: k.key.split('.').first,
+            type: decoded['type'] as String,
+            obj: _rehydrate<T>(decoded['obj']!, decoded['type'] as String),
+            sharedWith: {},
+            readBy: (decoded['readBy'] as List)
+                .map((e) => e.toString().toAtsign())
+                .toSet(),
+            createdAt: v.metadata!.createdAt!,
+            expiresAt: v.metadata!.expiresAt!,
+            availableAt: _liveAvailableAt(v.metadata!.availableAt),
+          );
+          pendingKey = k.fullKeyAndOwner;
+        }
+        if (k.sharedWith != null) {
+          pending!.sharedWith.add(k.sharedWith!.toAtsign());
+        }
+      } catch (e) {
+        logger.warning('getItemsAsStream decode failure on ${k.key}: $e');
+      }
+    }
+    if (pending != null) yield pending;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Read receipts
+
+  /// True if this atSign has already sent a read receipt for [item]. Self-
+  /// owned items are considered already-read by the owner (trivially true).
+  Future<bool> hasSentReadReceipt(CItem<T> item) async {
+    if (item.owner == atSign) return true;
+    final regex = '${item.owner}:.*\\.$_rr\\.${item.id}\\.$namespace$atSign';
+    final matches = await atClient.getKeys(regex: regex);
+    return matches.isNotEmpty;
+  }
+
+  /// Sends a read receipt to the owner of [item]. Idempotent — if a
+  /// receipt has already been sent for this item, the call is a no-op.
+  /// Read-receipt keys use the current microsecond timestamp as their id
+  /// so the owner can decode `readAt` from the incoming notification.
+  Future<void> sendReadReceipt(CItem<T> item) async {
+    if (await hasSentReadReceipt(item)) return;
+    final receiptId = DateTime.now().microsecondsSinceEpoch.toString();
+    final k = AtKey.fromString(
+      '${item.owner}:$receiptId.$_rr.${item.id}.$namespace$atSign',
+    );
+    final md = Metadata()
+      ..ttr = -1
+      ..ccd = true
+      ..namespaceAware = false;
+    final now = DateTime.now();
+    md.expiresAt = item.createdAt.add(const Duration(days: 7));
+    md.ttl = md.expiresAt!.millisecondsSinceEpoch - now.millisecondsSinceEpoch;
+    // Skip availableAt/ttb when the scheduled time has already passed —
+    // atServer rejects negative ttb values, and an item whose availableAt
+    // is in the past is already available by definition.
+    if (item.availableAt != null &&
+        item.availableAt!.isAfter(now)) {
+      md.availableAt = item.availableAt;
+      md.ttb =
+          md.availableAt!.millisecondsSinceEpoch - now.millisecondsSinceEpoch;
+    }
+    k.metadata = md;
+    await atClient.put(k, receiptId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sub-collections
+
+  /// Returns an [AtCollection] of [CItem]s scoped to [parent] — e.g. the
+  /// comments on a specific blog post. The returned collection is a
+  /// plain `AtCollection<U>`; it supports every method of the parent
+  /// class, including further nesting via [subCollection].
+  ///
+  /// The composed namespace is `<subName>.<parent.id>.<this.namespace>`,
+  /// which must fit within atProtocol's 255-char key limit given the
+  /// current atSign length. A violation throws [ArgumentError] at
+  /// construction, before any I/O.
+  ///
+  /// When [parent] is deleted (locally or via a remote notification), the
+  /// returned sub-collection auto-deletes this atSign's own items scoped
+  /// to it. See [cleanupOrphans] for the offline-recovery counterpart.
+  AtCollection<U> subCollection<U>({
+    required CItem<T> parent,
+    required String subName,
+    required Duration defaultExpiration,
+    U Function(Map<String, dynamic>)? fromJson,
+    Stream<AtNotification>? notifications,
+  }) {
+    if (subName.isEmpty || subName.contains('.')) {
+      throw ArgumentError('subName must be non-empty and dot-free: "$subName"');
+    }
+    if (parent.id.contains('.')) {
+      throw ArgumentError('parent.id must not contain dots: "${parent.id}"');
+    }
+    final composedNs = '$subName.${parent.id}.$namespace';
+    final maxLen = 174 - atSign.toString().length;
+    if (composedNs.length > maxLen) {
+      throw ArgumentError(
+        'Composed sub-collection namespace "$composedNs" is '
+        '${composedNs.length} chars, exceeds the max of $maxLen for atSign '
+        '$atSign. Use a shorter subName or a shallower nesting depth.',
+      );
+    }
+    // Constructing the sub-collection directly (not via `atClient.collection`)
+    // so that `notifications` can be threaded straight through to its
+    // constructor for test wiring.
+    final sub = notifications != null
+        ? AtCollection<U>.withInjectedNotifications(
+            atClient,
+            composedNs,
+            defaultExpiration,
+            notifications: notifications,
+            fromJson: fromJson,
+          )
+        : AtCollection<U>(
+            atClient,
+            composedNs,
+            defaultExpiration,
+            fromJson: fromJson,
+          );
+    sub._parentItem = parent;
+    sub._parentCollection = this;
+    sub._parentDeleteSub?.cancel();
+    sub._parentDeleteSub = deletes.listen((e) {
+      if (e.id == parent.id && e.owner == parent.owner) {
+        unawaited(sub._cascadeFromParentDelete());
+      }
+    });
+    return sub;
+  }
+
+  Future<void> _cascadeFromParentDelete() async {
+    try {
+      final keys = await getKeys(owner: atSign);
+      await Future.wait(keys.map((k) async {
+        try {
+          await atClient.delete(k);
+        } catch (e) {
+          logger.shout('_cascadeFromParentDelete: $e');
+        }
+      }));
+    } catch (e) {
+      logger.shout('_cascadeFromParentDelete scan: $e');
+    }
+  }
+
+  /// Removes self-owned items whose parent chain has been broken.
+  ///
+  /// **On a sub-collection** (one returned by [subCollection] on a parent
+  /// item): if the bound parent no longer exists, deletes every self-owned
+  /// item in the sub-collection.
+  ///
+  /// **On a root or standalone collection**: scans every self-owned
+  /// descendant (any sub-collection, any depth) under this collection's
+  /// namespace and deletes those whose *root ancestor* — the direct item
+  /// in this collection — no longer exists. This is the path an app
+  /// should call on startup after the user may have been offline while a
+  /// parent item was deleted elsewhere, to reclaim storage from orphaned
+  /// sub-items of parents that are gone.
+  ///
+  /// Returns per-key [OpResult]s for every deletion attempted.
+  Future<List<OpResult>> cleanupOrphans() async {
+    return isSubCollection
+        ? _cleanupOrphansFromSub()
+        : _cleanupOrphansFromRoot();
+  }
+
+  Future<List<OpResult>> _cleanupOrphansFromSub() async {
+    final parent = _parentItem!;
+    final parentColl = _parentCollection!;
+    final stillAlive = await parentColl.getMaybe(parent.id, parent.owner);
+    if (stillAlive != null) return const <OpResult>[];
+    // Parent is gone — delete every self-owned item in this sub-collection
+    // (and recursively their descendants).
+    final results = <OpResult>[];
+    final keys = await getKeys(owner: atSign);
+    for (final k in keys) {
+      try {
+        await atClient.delete(k);
+        results.add(OpSuccess(k, CollectionOp.delete));
+      } catch (e) {
+        results.add(OpFailure(k, CollectionOp.delete, e));
+      }
+    }
+    // Also sweep any nested descendant keys (replies on deleted comments,
+    // etc.) that still linger under this sub-collection.
+    final deep = await atClient.getAtKeys(
+      regex: '(^|:).+\\.$namespace$atSign',
+    );
+    for (final k in deep) {
+      try {
+        await atClient.delete(k);
+        results.add(OpSuccess(k, CollectionOp.delete));
+      } catch (e) {
+        results.add(OpFailure(k, CollectionOp.delete, e));
+      }
+    }
+    return results;
+  }
+
+  Future<List<OpResult>> _cleanupOrphansFromRoot() async {
+    // Note on key parsing: `AtKey.fromString` splits a persisted key like
+    // `<id>.<namespace>@<owner>` into `k.key` (everything before the last
+    // namespace segment) plus `k.namespace` (just the last segment). So
+    // for namespace `posts.blog.app`, a direct item's `k.key` has exactly
+    // `nsSegments` parts (`<id>` + nsSegments-1 namespace segments); a
+    // descendant's `k.key` has MORE, with 2 extra parts per sub-level
+    // (subId + subName).
+    final nsSegments = namespace.split('.').length;
+
+    // Alive direct items in this collection — of ANY owner. Bob's
+    // sub-collection items (e.g. comments he owns on Alice's still-alive
+    // post) must not be treated as orphans just because Bob doesn't own
+    // the parent. We only delete descendants whose root ancestor is
+    // absent locally (i.e. no self-owned copy AND no cached copy from
+    // another atSign), which is exactly what happens after a parent is
+    // deleted and the delete notification propagates.
+    final aliveIds = <String>{};
+    for (final k in await getKeys()) {
+      final parts = k.key.split('.');
+      if (parts.length == nsSegments) {
+        aliveIds.add(parts.first);
+      }
+    }
+
+    // All self-owned descendants in this collection's subtree.
+    final descendantKeys = await atClient.getAtKeys(
+      regex: '(^|:).+\\.$namespace$atSign',
+    );
+    final results = <OpResult>[];
+    for (final k in descendantKeys) {
+      final parts = k.key.split('.');
+      if (parts.length <= nsSegments) continue; // direct items are alive
+      // The root-ancestor id — the direct item's id under which this
+      // descendant is nested — is at index `parts.length - nsSegments`.
+      // (For `c1.comments.p1.posts.blog`: length 5, ns 3, index 2 → `p1`.)
+      final rootAncestorId = parts[parts.length - nsSegments];
+      if (aliveIds.contains(rootAncestorId)) continue;
+      try {
+        await atClient.delete(k);
+        results.add(OpSuccess(k, CollectionOp.delete));
+      } catch (e) {
+        results.add(OpFailure(k, CollectionOp.delete, e));
+      }
+    }
+    return results;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Notification dispatch
+
+  /// Top-level notification dispatcher. Pauses its own subscription for
+  /// the duration of handling so re-entrant notifications don't cause
+  /// overlapping work.
   @visibleForTesting
   Future<void> handleNotification(AtNotification n) async {
     _rrSub.pause();
     try {
-      if (regexRR.hasMatch(n.key)) {
+      if (_regexRR.hasMatch(n.key)) {
         await handleReadReceipt(n);
-      } else if (regexObj.hasMatch(n.key)) {
+      } else if (_regexObj.hasMatch(n.key)) {
         await handleObjNotification(n);
+      } else if (_regexSubObj.hasMatch(n.key)) {
+        await handleSubObjNotification(n);
       } else {
         logger.shout('handleNotification: No handler for ${n.key}');
-        // TODO add "subObj" notification handler
       }
     } catch (e, st) {
       logger.shout('handleNotification: $e\nStackTrace:\n$st');
@@ -296,30 +907,13 @@ class AtCollection<T> {
     }
   }
 
-  CParts getPartsFromNotifKey(AtNotification n) {
-    String keyName = n.key.replaceAll('${n.to}:', '').replaceAll(n.from, '');
-    final ix = keyName.lastIndexOf('.$namespace');
-    if (ix >= 0) {
-      keyName = keyName.substring(0, ix);
-    }
-    final parts = keyName.split('.').reversed.toList();
-    String id = parts[0];
-    String? subSpace = parts.length > 1 ? parts[1] : null;
-    String? subId = parts.length > 2 ? parts[2] : null;
-    return (
-      from: n.from.toAtsign(),
-      id: id,
-      subNamespace: subSpace,
-      subId: subId,
-    );
-  }
-
+  /// Handles `@to:<rrId>.__rr.<objId>.<namespace>@<from>` read-receipt
+  /// notifications: marks `from` as having read the item and emits a
+  /// [CReadReceipt] event.
   @visibleForTesting
   Future<void> handleReadReceipt(AtNotification n) async {
-    // @to:rr_id.__rr.obj_id.some.name.space@from
-    // -> obj_id.__rr.rr_id
-    final parts = getPartsFromNotifKey(n);
-    await markRead(await get(parts.id, atSign), parts.from);
+    final parts = _getPartsFromNotifKey(n);
+    await _markReadBy(await get(parts.id, atSign), parts.from);
     _events.add(
       CReadReceipt(
         owner: atSign,
@@ -330,293 +924,371 @@ class AtCollection<T> {
     );
   }
 
+  /// Handles direct-item notifications (a key with exactly the collection
+  /// namespace as its suffix) and emits [CItemUpdated] / [CItemDeleted].
   @visibleForTesting
   Future<void> handleObjNotification(AtNotification n) async {
-    final parts = getPartsFromNotifKey(n);
-
+    final parts = _getPartsFromNotifKey(n);
     switch (n.operation) {
       case 'update':
         _events.add(CItemUpdated(owner: parts.from, id: parts.id));
-        break;
       case 'delete':
         _events.add(CItemDeleted(owner: parts.from, id: parts.id));
-        break;
       default:
-        logger.shout('handleObjNotification:'
-            ' No handler for operation ${n.operation}');
+        logger.shout(
+          'handleObjNotification: No handler for operation ${n.operation}',
+        );
     }
   }
 
-  Future<bool> sentReadReceipt(CItem<T> item) async {
-    if (item.owner == atSign) {
+  /// Handles notifications for items in a sub-collection whose namespace
+  /// suffixes this collection's namespace. The key has the shape
+  /// `<subId>.<subName>.<parentId>.<namespace>@<owner>`; we emit
+  /// [CSubItemUpdated] / [CSubItemDeleted] with the **parent's** id (so
+  /// listeners can filter by which parent the sub-item belongs to) and
+  /// the sub-collection's name.
+  @visibleForTesting
+  Future<void> handleSubObjNotification(AtNotification n) async {
+    final parts = _getPartsFromNotifKey(n);
+    final parentId = parts.id;
+    final subNamespace = parts.subNamespace;
+    if (subNamespace == null) {
+      logger.shout('handleSubObjNotification: malformed sub key ${n.key}');
+      return;
+    }
+    switch (n.operation) {
+      case 'update':
+        _events.add(CSubItemUpdated(
+          owner: parts.from,
+          id: parentId,
+          subNamespace: subNamespace,
+        ));
+      case 'delete':
+        _events.add(CSubItemDeleted(
+          owner: parts.from,
+          id: parentId,
+          subNamespace: subNamespace,
+        ));
+      default:
+        logger.shout(
+          'handleSubObjNotification: No handler for operation ${n.operation}',
+        );
+    }
+  }
+
+  _CParts _getPartsFromNotifKey(AtNotification n) {
+    String keyName = n.key.replaceAll('${n.to}:', '').replaceAll(n.from, '');
+    final ix = keyName.lastIndexOf('.$namespace');
+    if (ix >= 0) {
+      keyName = keyName.substring(0, ix);
+    }
+    final parts = keyName.split('.').reversed.toList();
+    return (
+      from: n.from.toAtsign(),
+      id: parts[0],
+      subNamespace: parts.length > 1 ? parts[1] : null,
+      subId: parts.length > 2 ? parts[2] : null,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Event streams
+
+  /// All events from this collection as they fire. For type-filtered
+  /// access, prefer [updates] / [deletes] / [readReceipts] /
+  /// [subUpdates] / [subDeletes].
+  Stream<CEvent> watch() => _events.stream;
+
+  Stream<CItemUpdated> get updates =>
+      watch().where((e) => e is CItemUpdated).cast<CItemUpdated>();
+
+  Stream<CItemDeleted> get deletes =>
+      watch().where((e) => e is CItemDeleted).cast<CItemDeleted>();
+
+  Stream<CReadReceipt> get readReceipts =>
+      watch().where((e) => e is CReadReceipt).cast<CReadReceipt>();
+
+  /// Fires for any descendant (sub-collection) item that was updated —
+  /// at any nesting depth. Use [CSubItemUpdated.subNamespace] to tell
+  /// which sub-collection the update came from.
+  Stream<CSubItemUpdated> get subUpdates =>
+      watch().where((e) => e is CSubItemUpdated).cast<CSubItemUpdated>();
+
+  /// Fires for any descendant item that was deleted.
+  Stream<CSubItemDeleted> get subDeletes =>
+      watch().where((e) => e is CSubItemDeleted).cast<CSubItemDeleted>();
+
+  // ---------------------------------------------------------------------------
+  // Debug helper
+
+  /// Returns a multi-line human-readable dump of [item] — useful for
+  /// example-app logging and debugging.
+  String prettyString(CItem<dynamic> item) {
+    final base = '${item.id}.$namespace${item.owner}'
+        '\n\tsharedWith: ${item.sharedWith}'
+        '\n\treadBy: ${item.readBy}'
+        '\n\texpiresAt: ${item.expiresAt}'
+        '\n\tavailableAt: ${item.availableAt}'
+        '\n\ttype: ${item.type}'
+        '\n\truntimeType: ${item.obj.runtimeType}';
+    if (item.type == 'binary') {
+      return '$base\n\tlength: ${item.obj.length} bytes';
+    }
+    return '$base\n\tobj: ${item.obj}';
+  }
+
+  // ===========================================================================
+  // Internals
+  // ===========================================================================
+
+  String _newItemId() {
+    final buf = StringBuffer();
+    for (int i = 0; i < 8; i++) {
+      buf.write(_idAlphabet[_rng.nextInt(_idAlphabet.length)]);
+    }
+    return buf.toString();
+  }
+
+  Future<String> _uniqueItemId({int maxAttempts = 10}) async {
+    for (int i = 0; i < maxAttempts; i++) {
+      final candidate = _newItemId();
+      if (!await _selfKeyExists(candidate)) return candidate;
+    }
+    throw StateError(
+      'Could not generate a unique item id in $maxAttempts attempts — '
+      'is this collection catastrophically full?',
+    );
+  }
+
+  Future<bool> _selfKeyExists(String id) async {
+    try {
+      await atClient.get(AtKey.fromString('$id.$namespace$atSign'));
       return true;
-    }
-    String regex = '${item.owner}:.*\\.$_rr\\.${item.id}\\.$namespace$atSign';
-    final matches = await atClient.getKeys(regex: regex);
-    return matches.isNotEmpty;
-  }
-
-  String get newId => DateTime.now().microsecondsSinceEpoch.toString();
-
-  /// It is safe to call this multiple times; it will only be sent one time
-  Future<bool> sendReadReceipt(CItem<T> item) async {
-    if (await sentReadReceipt(item)) {
+    } catch (_) {
       return false;
     }
-    String id = newId;
-    AtKey k =
-        AtKey.fromString('${item.owner}:$id.$_rr.${item.id}.$namespace$atSign');
-    Metadata md = Metadata();
-    md.ttr = -1; // recipient can cache
-    md.ccd = true;
-    DateTime now = DateTime.now();
-    md.expiresAt = item.createdAt.add(Duration(days: 7));
-    md.ttl = md.expiresAt!.millisecondsSinceEpoch - now.millisecondsSinceEpoch;
-    if (item.availableAt != null) {
-      md.availableAt = item.availableAt;
-      md.ttb =
-          md.availableAt!.millisecondsSinceEpoch - now.millisecondsSinceEpoch;
-    }
-    md.namespaceAware = false;
-
-    await atClient.put(k, id);
-
-    return true;
   }
 
-  /// Get the list of all AtKeys in this collection
-  /// - for [owner] if supplied
-  /// - for [id] if supplied
-  Future<List<AtKey>> getKeys({String? id, Atsign? owner}) async {
-    // scan for matching AtKeys
-    id ??= '[^.]+';
-    String ownerFragment = owner ?? '@';
-    final regex = '(^|:)$id\\.$namespace$ownerFragment';
-
-    return (await atClient.getAtKeys(regex: regex))
-      ..sort((a, b) => a.fullKeyAndOwner.compareTo(b.fullKeyAndOwner));
+  String _resolveType(Object? obj) {
+    if (obj is Uint8List) return 'binary';
+    final entry = _factoriesByType[obj.runtimeType];
+    if (entry != null) return entry.tag;
+    return 'n/a';
   }
 
-  /// Returns a [CollectionGetResponse] with a [CItem] for every unique
-  /// `id.collection.namespace@owner`. So for example if `@alice` has shared
-  /// the same thing with both `@bob` and `@chuck`, that would be just one
-  /// [CItem] in the response, with [CItem.owner] == `@alice` and
-  /// [CItem.sharedWith] == `{'@bob','@chuck'}`
-  ///
-  /// Note that [CItem.id] identifiers are treated as unique within collections
-  /// for a given [CItem.owner] but are not required to be unique across owners.
-  ///
-  /// Consider example of a `tasks` Collection with a [CItem] whose id is
-  /// `1` - there may be MANY items in the overall collection with id 1, for
-  /// example if `@alice` creates a task with ID 1 and shares it with bob, and
-  /// `@bob` creates a task with ID of 1 and shares it with alice, then alice
-  /// will have
-  /// - `@bob:1.tasks.app_1.my_apps@alice`
-  /// - `@alice:1.tasks.app_1.my_apps@bob`
-  Future<CItem<T>> get(String id, Atsign owner) async {
-    final r = await getItems(id: id, owner: owner);
-    if (r.exceptions.isNotEmpty) {
-      throw Exception(r.exceptions.toString());
-    }
-    if (r.items.isEmpty) {
-      throw AtKeyNotFoundException('No item found with id $id owned by $owner');
-    }
-    return r.items.first;
+  // Drops a past [availableAt] so rehydrated CItems don't carry a stale
+  // schedule. The atProtocol metadata wire format is additive — a past
+  // `availableAt` on the server has no mechanism to be cleared by an
+  // update, so it may linger indefinitely. Presenting it as null here
+  // keeps the app's view consistent with the item's actual state
+  // (already available) and prevents the write path from reapplying it.
+  static DateTime? _liveAvailableAt(DateTime? v) {
+    if (v == null) return null;
+    return v.isAfter(DateTime.now()) ? v : null;
   }
 
-  Future<CollectionGetResponse<T>> getItems({String? id, Atsign? owner}) async {
-    Map<String, CItem<T>> map = {};
-    List exceptions = [];
+  V _rehydrate<V>(Object obj, String type) {
+    if (type == 'binary') {
+      return Base2e15.decode(obj.toString()) as V;
+    }
+    final f = _factoriesByTag[type];
+    if (f == null) return obj as V;
+    return f.call(obj) as V;
+  }
 
-    for (final AtKey k in await getKeys(id: id, owner: owner)) {
+  Future<void> _markReadBy(CItem<T> item, Atsign readBy) async {
+    item.readBy.add(readBy);
+    final results = await _put(item);
+    if (results.any((r) => r is OpFailure)) {
+      throw CollectionOpException(results);
+    }
+  }
+
+  /// Loads items, collecting per-key decode errors rather than throwing.
+  /// The public [getItems] / [get] / [getMaybe] wrap this to surface the
+  /// errors as [CollectionGetException] when needed.
+  Future<(List<CItem<T>>, List<Object>)> _loadItems({
+    String? id,
+    Atsign? owner,
+  }) async {
+    final map = <String, CItem<T>>{};
+    final errors = <Object>[];
+    for (final k in await getKeys(id: id, owner: owner)) {
       try {
-        CItem<T> m;
+        CItem<T> item;
         if (map.containsKey(k.fullKeyAndOwner)) {
-          m = map[k.fullKeyAndOwner]!;
+          item = map[k.fullKeyAndOwner]!;
         } else {
-          final AtValue v = await atClient.get(k);
+          final v = await atClient.get(k);
           logger.info('Retrieved raw value ${v.value}');
-          final decoded = jsonDecode(v.value!);
-          m = CItem._(
+          final decoded = jsonDecode(v.value!) as Map<String, dynamic>;
+          item = CItem._(
             owner: k.sharedBy!.toAtsign(),
             id: k.key.split('.').first,
-            type: decoded['type'],
-            obj: _rehydrate<T>(decoded['obj'], decoded['type']),
+            type: decoded['type'] as String,
+            obj: _rehydrate<T>(decoded['obj']!, decoded['type'] as String),
             sharedWith: {},
             readBy: (decoded['readBy'] as List)
                 .map((e) => e.toString().toAtsign())
                 .toSet(),
             createdAt: v.metadata!.createdAt!,
             expiresAt: v.metadata!.expiresAt!,
-            availableAt: v.metadata!.availableAt,
+            availableAt: _liveAvailableAt(v.metadata!.availableAt),
           );
-          map[k.fullKeyAndOwner] = m;
+          map[k.fullKeyAndOwner] = item;
         }
         if (k.sharedWith != null) {
-          m.sharedWith.add(k.sharedWith!.toAtsign());
+          item.sharedWith.add(k.sharedWith!.toAtsign());
         }
       } catch (e) {
-        exceptions.add(e);
+        errors.add(e);
       }
     }
-    return (items: map.values.toList(), exceptions: exceptions);
+    return (map.values.toList(), errors);
   }
 
-  Future<List<CItem<T>>> getItemsList({String? id, Atsign? owner}) async {
-    final r = await getItems(id: id, owner: owner);
-    if (r.exceptions.isNotEmpty) {
-      throw Exception(r.exceptions.toString());
-    }
-    return r.items;
-  }
-
-  Future<void> markRead(CItem<T> item, Atsign readBy) async {
-    item.readBy.add(readBy);
-    await put(item);
-  }
-
-  /// - saves a copy of [item] for us (aka a 'self' copy)
-  /// - saves a copy for each of [CItem.sharedWith]
-  /// - if [unshareWithOthers] is true, deletes any copies for atSigns who
-  ///   are not in [CItem.sharedWith]
-  /// Returns a stream of [OpResult] for each action taken
-  Future<List<OpResult>> put(
+  /// Writes [item] (self + recipient copies) and optionally diff-deletes
+  /// recipients that are no longer in `item.sharedWith`. Never throws on
+  /// key-level failure — callers that want throwing semantics (like
+  /// [create] and [update]) inspect the returned results and raise
+  /// [CollectionOpException].
+  Future<List<OpResult>> _put(
     CItem<T> item, {
     bool unshareWithOthers = true,
-    DateTime? expiresAt,
-    DateTime? availableAt,
+    bool mergeExistingReadBy = true,
   }) async {
-    List<OpResult> l = [];
     if (item.owner != atSign) {
       throw ArgumentError('You may not update items owned by other atSigns');
     }
-
-    AtKey selfKey = AtKey.fromString('${item.id}.$namespace$atSign');
-    try {
-      AtValue v = await atClient.get(selfKey);
-      expiresAt = v.metadata?.expiresAt;
-      availableAt = v.metadata?.availableAt;
-      if (v.value != null) {
-        final decoded = jsonDecode(v.value);
-        final existingReadBy = (decoded['readBy'] as List)
-            .map((e) => e.toString().toAtsign())
-            .toSet();
-        item.readBy.addAll(existingReadBy);
-      }
-    } catch (_) {}
-
-    expiresAt ??= DateTime.now().add(defaultExpiration);
-
     final now = DateTime.now();
-    if (expiresAt.millisecondsSinceEpoch < now.millisecondsSinceEpoch) {
-      throw ArgumentError('expiresAt must be in the future');
+    if (item.expiresAt.millisecondsSinceEpoch < now.millisecondsSinceEpoch) {
+      throw ArgumentError('item.expiresAt must be in the future');
     }
 
-    Metadata md = Metadata();
-    md.ttr = -1; // recipient can cache
-    md.ccd = true;
-    md.expiresAt = expiresAt;
-    md.ttl = expiresAt.millisecondsSinceEpoch - now.millisecondsSinceEpoch;
-    if (availableAt != null) {
-      md.availableAt = availableAt;
-      md.ttb = availableAt.millisecondsSinceEpoch - now.millisecondsSinceEpoch;
-    }
-    md.namespaceAware = false;
+    final results = <OpResult>[];
+    final selfKey = AtKey.fromString('${item.id}.$namespace$atSign');
 
-    /// save a copy for us (aka a 'self' copy) and yield a result
+    // Merge readBy from any existing stored record so we don't clobber
+    // receipts that arrived via [CReadReceipt] events on a stale CItem.
+    // [create] skips this (it just verified the self-key is absent).
+    if (mergeExistingReadBy) {
+      try {
+        final v = await atClient.get(selfKey);
+        if (v.value != null) {
+          final decoded = jsonDecode(v.value);
+          final existingReadBy = (decoded['readBy'] as List)
+              .map((e) => e.toString().toAtsign())
+              .toSet();
+          item.readBy.addAll(existingReadBy);
+        }
+      } catch (_) {
+        // No prior record — fine, continue.
+      }
+    }
+
+    final md = Metadata()
+      ..ttr = -1
+      ..ccd = true
+      ..expiresAt = item.expiresAt
+      ..ttl = item.expiresAt.millisecondsSinceEpoch - now.millisecondsSinceEpoch
+      ..namespaceAware = false;
+    // Skip availableAt/ttb when the scheduled time has already passed —
+    // atServer rejects negative ttb values, and an item whose availableAt
+    // is in the past is already available by definition. This also means
+    // a schedule set by an earlier `update` persists harmlessly once it
+    // has fired: subsequent updates don't try to re-schedule it.
+    if (item.availableAt != null && item.availableAt!.isAfter(now)) {
+      md.availableAt = item.availableAt;
+      md.ttb =
+          item.availableAt!.millisecondsSinceEpoch - now.millisecondsSinceEpoch;
+    }
+
+    // 1. Self copy.
     try {
       selfKey.metadata = md;
-      await atClient.put(
-        selfKey,
-        jsonEncode(item.toJson()),
-      );
-      l.add(OpSuccess(selfKey, CollectionOp.put));
+      await atClient.put(selfKey, jsonEncode(item.toJson()));
+      results.add(OpSuccess(selfKey, CollectionOp.put));
     } catch (e) {
-      l.add(OpFailure(selfKey, CollectionOp.put, e));
+      results.add(OpFailure(selfKey, CollectionOp.put, e));
     }
 
-    /// if [unshareWithOthers] is true, delete any existing recipient copies
-    /// whose atSign is NOT in item.sharedWith. Recipients who are in both
-    /// the existing set AND item.sharedWith are left alone here — the
-    /// put loop below will overwrite their copy with the new content.
+    // 2. Diff: delete recipient copies whose atSign is no longer in
+    //    item.sharedWith. Retained recipients are overwritten in step 3.
     if (unshareWithOthers) {
-      for (final AtKey k in await getKeys(id: item.id, owner: atSign)) {
-        final sharedWith = k.sharedWith;
-        if (sharedWith == null || sharedWith == atSign) {
-          continue; // self copy
-        }
-        if (item.sharedWith.any((a) => a == sharedWith)) {
-          continue; // still a recipient — leave it for the put loop to update
-        }
+      for (final k in await getKeys(id: item.id, owner: atSign)) {
+        final sw = k.sharedWith;
+        if (sw == null || sw == atSign) continue;
+        if (item.sharedWith.any((a) => a == sw)) continue;
         try {
           await atClient.delete(k);
-          l.add(OpSuccess(k, CollectionOp.delete));
+          results.add(OpSuccess(k, CollectionOp.delete));
         } catch (e) {
-          l.add(OpFailure(k, CollectionOp.delete, e));
+          results.add(OpFailure(k, CollectionOp.delete, e));
         }
       }
     }
 
-    /// for each item in [shareWith], save a copy for them and yield a result
+    // 3. Recipient copies (create or overwrite).
     for (final otherAtSign in item.sharedWith) {
-      AtKey k = AtKey.fromString('$otherAtSign:${item.id}.$namespace$atSign');
+      final k = AtKey.fromString(
+        '$otherAtSign:${item.id}.$namespace$atSign',
+      );
       try {
         k.metadata = md;
-        await atClient.put(
-          k,
-          jsonEncode(item.toJson()),
-        );
-        l.add(OpSuccess(k, CollectionOp.put));
+        await atClient.put(k, jsonEncode(item.toJson()));
+        results.add(OpSuccess(k, CollectionOp.put));
       } catch (e) {
-        l.add(OpFailure(k, CollectionOp.put, e));
+        results.add(OpFailure(k, CollectionOp.put, e));
       }
     }
-
-    return l;
+    return results;
   }
 
-  /// Deletes the object.
-  /// - If owner was us, also deletes any copies shared with others.
-  /// - If owner was other, deletes our cached copy of what was shared with us.
-  Future<List<OpResult>> delete(CItem<T> item) async {
+  /// Deletes [item] and its recipient copies; if [cascade] is true also
+  /// deletes self-owned descendants. Never throws on key-level failure —
+  /// [delete] wraps this and raises [CollectionOpException] if any op
+  /// failed.
+  Future<List<OpResult>> _delete(
+    CItem<T> item, {
+    bool cascade = false,
+  }) async {
     if (item.owner != atSign) {
       throw ArgumentError('You may not delete items owned by other atSigns');
     }
 
-    final List<OpResult> l = [];
-    // delete all
-    for (final AtKey k in await getKeys(id: item.id, owner: atSign)) {
-      try {
-        await atClient.delete(k);
-        l.add(OpSuccess(k, CollectionOp.delete));
-      } catch (e) {
-        l.add(OpFailure(k, CollectionOp.delete, e));
+    final descendants = await _selfOwnedDescendantKeys(item.id);
+    if (descendants.isNotEmpty && !cascade) {
+      throw StateError(
+        'Cannot delete item ${item.id}: ${descendants.length} self-owned '
+        'descendant(s) still exist. Call delete(item, cascade: true) to '
+        'also remove them, or delete them explicitly first.',
+      );
+    }
+
+    final results = <OpResult>[];
+    if (cascade) {
+      for (final k in descendants) {
+        try {
+          await atClient.delete(k);
+          results.add(OpSuccess(k, CollectionOp.delete));
+        } catch (e) {
+          results.add(OpFailure(k, CollectionOp.delete, e));
+        }
       }
     }
-    return l;
+    for (final k in await getKeys(id: item.id, owner: atSign)) {
+      try {
+        await atClient.delete(k);
+        results.add(OpSuccess(k, CollectionOp.delete));
+      } catch (e) {
+        results.add(OpFailure(k, CollectionOp.delete, e));
+      }
+    }
+    return results;
   }
 
-  String prettyString(CItem<dynamic> m) {
-    if (m.type == 'binary') {
-      return '${m.id}.$namespace${m.owner}'
-          '\n\tsharedWith: ${m.sharedWith}'
-          '\n\treadBy: ${m.readBy}'
-          '\n\texpiresAt: ${m.expiresAt}'
-          '\n\tavailableAt: ${m.availableAt}'
-          '\n\ttype: ${m.type}'
-          '\n\truntimeType: ${m.obj.runtimeType}'
-          '\n\tlength: ${m.obj.length} bytes'
-          '';
-    } else {
-      return '${m.id}.$namespace${m.owner}'
-          '\n\tsharedWith: ${m.sharedWith}'
-          '\n\treadBy: ${m.readBy}'
-          '\n\texpiresAt: ${m.expiresAt}'
-          '\n\tavailableAt: ${m.availableAt}'
-          '\n\ttype: ${m.type}'
-          '\n\truntimeType: ${m.obj.runtimeType}'
-          '\n\tobj: ${m.obj}'
-          '';
-    }
+  Future<List<AtKey>> _selfOwnedDescendantKeys(String parentId) async {
+    final regex = '(^|:).+\\.$parentId\\.$namespace$atSign';
+    return atClient.getAtKeys(regex: regex);
   }
 }

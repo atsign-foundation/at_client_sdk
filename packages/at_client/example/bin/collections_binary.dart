@@ -52,12 +52,13 @@ Future<void> sender(
   final data = Uint8List.fromList(
     'This is binary data from ${atClient.atSign}'.codeUnits,
   );
-
-  for (final r in await binaries.put(
-    binaries.create(obj: data, sharedWith: otherAtSigns),
-    expiresAt: DateTime.now().add(Duration(seconds: 10)),
-  )) {
-    progressSink.add(r.toString());
+  try {
+    await binaries.create(obj: data, sharedWith: otherAtSigns);
+    progressSink.add('  ...saved.');
+  } on CollectionOpException catch (e) {
+    for (final r in e.results) {
+      progressSink.add(r.toString());
+    }
   }
 
   await poll(binaries, progressSink);
@@ -70,11 +71,16 @@ Future<void> poll(
   while (true) {
     progressSink.add('${DateTime.now().toString()} : Fetching');
 
-    final getResponse = await binaries.getItems();
-    for (final e in getResponse.exceptions) {
-      progressSink.add('Exception: $e');
+    List<CItem<Uint8List>> items;
+    try {
+      items = await binaries.getItems();
+    } on CollectionGetException catch (e) {
+      for (final err in e.errors) {
+        progressSink.add('Error: $err');
+      }
+      items = e.partialItems.cast<CItem<Uint8List>>();
     }
-    for (final item in getResponse.items) {
+    for (final item in items) {
       String msg = '==> Fetched ${binaries.prettyString(item)}';
       if (item.type == 'binary') {
         msg = '$msg : ${String.fromCharCodes(item.obj)}';

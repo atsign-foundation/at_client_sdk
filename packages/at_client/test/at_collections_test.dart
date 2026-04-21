@@ -1,11 +1,11 @@
-// Baseline tests for AtCollection<T> as it stands today. These are the
-// regression guard for any AtCollection refactor (e.g. sub-collection
-// support). Every test here must stay green after subsequent changes.
+// Baseline tests for AtCollection<T>. Regression guard for any AtCollection
+// refactor (e.g. sub-collection support). Every test here must stay green
+// after subsequent changes.
 //
-// Focus: behaviour observable through AtCollection's public (and
-// @visibleForTesting) API, with atClient stubbed via mocktail. No live
-// atServer, no Hive — we only assert that AtCollection drives AtClient
-// correctly given the contract of AtClient's interface.
+// Focus: behaviour observable through AtCollection's public API, with
+// atClient stubbed via mocktail. The notification stream is injected
+// directly via the constructor's [notifications] parameter, so tests drive
+// events without having to mock NotificationService.
 
 import 'dart:async';
 import 'dart:convert';
@@ -17,8 +17,6 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 class MockAtClient extends Mock implements AtClient {}
-
-class MockNotificationService extends Mock implements NotificationService {}
 
 class FakeAtKey extends Fake implements AtKey {}
 
@@ -39,12 +37,9 @@ void main() {
     registerFallbackValue(FakeAtKey());
   });
 
-  // Shared setUp builds a fresh MockAtClient + NotificationService for each
-  // test, and stubs the minimum surface the AtCollection constructor needs
-  // so we can instantiate without surprises.
   late MockAtClient atClient;
-  late MockNotificationService notifications;
   late StreamController<AtNotification> notifStream;
+
   const selfAtSignStr = '@alice';
   final selfAtSign = selfAtSignStr.toAtsign();
   const bobStr = '@bob';
@@ -53,17 +48,8 @@ void main() {
 
   setUp(() {
     atClient = MockAtClient();
-    notifications = MockNotificationService();
     notifStream = StreamController<AtNotification>.broadcast();
-
     when(() => atClient.atSign).thenReturn(selfAtSign);
-    when(() => atClient.notificationService).thenReturn(notifications);
-    when(
-      () => notifications.subscribe(
-        regex: any(named: 'regex'),
-        shouldDecrypt: any(named: 'shouldDecrypt'),
-      ),
-    ).thenAnswer((_) => notifStream.stream);
   });
 
   tearDown(() async {
@@ -73,43 +59,71 @@ void main() {
   AtCollection<T> buildCollection<T>({
     String ns = namespace,
     Duration ttl = const Duration(days: 7),
+    T Function(Map<String, dynamic>)? fromJson,
   }) {
-    return AtCollection<T>(atClient, ns, ttl);
+    return AtCollection<T>.withInjectedNotifications(
+      atClient,
+      ns,
+      ttl,
+      notifications: notifStream.stream,
+      fromJson: fromJson,
+    );
   }
 
   // ---------------------------------------------------------------------------
   group('construction', () {
     test('rejects a namespace without a dot', () {
       expect(
-        () => AtCollection<String>(
-            atClient, 'notqualified', const Duration(days: 1)),
+        () => AtCollection<String>.withInjectedNotifications(
+          atClient,
+          'notqualified',
+          const Duration(days: 1),
+          notifications: notifStream.stream,
+        ),
         throwsArgumentError,
       );
     });
 
-    test('subscribes to notifications with namespace-scoped regex', () {
-      buildCollection<String>();
-      verify(
-        () => notifications.subscribe(
-          regex: '.*\\.$namespace@',
-          shouldDecrypt: true,
-        ),
-      ).called(1);
+    test('fromJson is auto-registered under T.toString()', () async {
+      // Build a collection with a fromJson parameter and round-trip via
+      // rehydrate (indirectly, through tryGetItems).
+      final c = buildCollection<Widget>(fromJson: Widget.fromJson);
+      final selfKey = AtKey.fromString('id1.$namespace$selfAtSignStr');
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => [selfKey]);
+      when(() => atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({
+          'type': 'Widget',
+          'readBy': <String>[],
+          'obj': {'name': 'w1'},
+        });
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+
+      final items = await c.getItems();
+      expect(items.single.obj, Widget('w1'));
+      expect(items.single.type, 'Widget');
     });
   });
 
   // ---------------------------------------------------------------------------
-  group('create', () {
-    test('assigns owner=self, auto id, timestamps, empty sharedWith/readBy',
-        () {
+  group('draft', () {
+    test(
+        'assigns owner=self, auto 8-char id, timestamps, empty '
+        'sharedWith/readBy', () {
       final c = buildCollection<String>(ttl: const Duration(hours: 1));
       final before = DateTime.now().toUtc();
-      final item = c.create(obj: 'hello');
+      final item = c.draft(obj: 'hello');
       final after = DateTime.now().toUtc();
 
       expect(item.owner, selfAtSign);
-      expect(int.tryParse(item.id), isNotNull,
-          reason: 'id is a microsecond timestamp');
+      expect(item.id, hasLength(8));
+      expect(RegExp(r'^[a-z0-9]+$').hasMatch(item.id), isTrue);
       expect(item.obj, 'hello');
       expect(item.sharedWith, isEmpty);
       expect(item.readBy, isEmpty);
@@ -120,62 +134,73 @@ void main() {
           after.millisecondsSinceEpoch,
         ),
       );
-      final expectedExpiry = item.createdAt.add(const Duration(hours: 1));
-      expect(item.expiresAt, expectedExpiry);
+      expect(item.expiresAt, item.createdAt.add(const Duration(hours: 1)));
       expect(item.availableAt, isNull);
     });
 
     test('honours supplied id and sharedWith', () {
       final c = buildCollection<String>();
-      final item = c.create(obj: 'x', id: 'fixed-123', sharedWith: {bob});
+      final item = c.draft(obj: 'x', id: 'fixed-123', sharedWith: {bob});
       expect(item.id, 'fixed-123');
       expect(item.sharedWith, {bob});
     });
 
-    test('throws when type is supplied but no factory is registered', () {
-      final c = buildCollection<String>();
-      expect(
-        () => c.create(type: 'NotRegistered', obj: 'x'),
-        throwsA(isA<StateError>()),
-      );
-    });
-
-    test('auto-tags Uint8List as binary when type is not supplied', () {
+    test('auto-tags Uint8List as binary', () {
       final c = buildCollection<Uint8List>();
-      final item = c.create(obj: Uint8List.fromList([1, 2, 3]));
+      final item = c.draft(obj: Uint8List.fromList([1, 2, 3]));
       expect(item.type, 'binary');
     });
 
-    test('non-Uint8List with no type gets literal n/a', () {
+    test('non-Uint8List without registered factory gets n/a', () {
       final c = buildCollection<String>();
-      final item = c.create(obj: 'x');
+      final item = c.draft(obj: 'x');
       expect(item.type, 'n/a');
+    });
+
+    test('registered polymorphic type resolves to runtimeType key', () {
+      final c = buildCollection<Widget>()
+        ..registerFactory<Widget>(Widget.fromJson);
+      final item = c.draft(obj: Widget('w1'));
+      expect(item.type, 'Widget');
     });
   });
 
   // ---------------------------------------------------------------------------
-  group('factory registry + rehydration (static, shared across collections)',
-      () {
-    test('registerFactory is used to rehydrate on create+toJson round-trip',
-        () {
-      AtCollection.registerFactory(type: 'Widget', factory: Widget.fromJson);
+  group('factory registry (per-collection)', () {
+    test('registerFactory binds type-tag to instance, not statically',
+        () async {
+      // Two collections, each with its own Widget factory — no cross-talk.
+      final a = buildCollection<Widget>(ns: 'a.app.ns');
+      final b = buildCollection<Widget>(ns: 'b.app.ns');
+      a.registerFactory<Widget>((j) => Widget('from-a:${j['name']}'));
+      b.registerFactory<Widget>((j) => Widget('from-b:${j['name']}'));
 
-      final c = buildCollection<Widget>();
-      final item = c.create(type: 'Widget', obj: Widget('w1'));
-      expect(item.type, 'Widget');
+      // Stub the `a` collection's fetch.
+      final selfKey = AtKey.fromString('id.a.app.ns$selfAtSignStr');
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => [selfKey]);
+      when(() => atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({
+          'type': 'Widget',
+          'readBy': <String>[],
+          'obj': {'name': 'w1'},
+        });
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
 
-      // Serialised form mirrors what AtCollection.put writes to atClient.
-      final encoded = jsonEncode(item.toJson());
-      final decoded = jsonDecode(encoded);
-      expect(decoded['type'], 'Widget');
-      // The inner 'obj' field survives as JSON; fromJson should reconstruct.
-      expect(Widget.fromJson(decoded['obj']), Widget('w1'));
+      final aItems = await a.getItems();
+      expect(aItems.single.obj, Widget('from-a:w1'));
     });
 
     test('binary type round-trips through Base2e15', () {
       final raw = Uint8List.fromList([0, 127, 255, 10, 42]);
       final c = buildCollection<Uint8List>();
-      final item = c.create(obj: raw);
+      final item = c.draft(obj: raw);
       final encoded = jsonEncode(item.toJson());
       final decoded = jsonDecode(encoded);
       expect(decoded['type'], 'binary');
@@ -184,9 +209,11 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
-  group('put — self copy only (no sharedWith)', () {
+  // Low-level write mechanics are exercised indirectly through create/update.
+  // These groups focus on the metadata / key shapes produced by a write.
+  group('create — write mechanics', () {
     setUp(() {
-      // No prior self copy: atClient.get() throws; put succeeds.
+      // No prior self-key — create's existence probe returns "not found".
       when(() => atClient.get(any())).thenThrow(Exception('no such key'));
       when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
       when(
@@ -194,15 +221,10 @@ void main() {
       ).thenAnswer((_) async => <AtKey>[]);
     });
 
-    test('writes a single self key <id>.<ns>@<self>', () async {
+    test('writes a single self key <id>.<ns>@<self> with correct metadata',
+        () async {
       final c = buildCollection<String>();
-      final item = c.create(obj: 'hello', id: 'abc');
-      final results = await c.put(item);
-
-      expect(results, hasLength(1));
-      expect(results.single, isA<OpSuccess>());
-      expect(results.single.op, CollectionOp.put);
-      expect(results.single.atKey.toString(), 'abc.$namespace$selfAtSignStr');
+      await c.create(obj: 'hello', id: 'abc');
 
       final captured = verify(
         () => atClient.put(captureAny(), captureAny()),
@@ -210,35 +232,51 @@ void main() {
       final key = captured[0] as AtKey;
       final value = captured[1] as String;
       expect(key.toString(), 'abc.$namespace$selfAtSignStr');
-      // metadata propagation
       expect(key.metadata.ttr, -1);
       expect(key.metadata.ccd, true);
       expect(key.metadata.ttl, isNotNull);
       expect(key.metadata.expiresAt, isNotNull);
-      // value is JSON with type and obj
       final decoded = jsonDecode(value) as Map<String, dynamic>;
       expect(decoded['type'], 'n/a');
       expect(decoded['obj'], 'hello');
       expect(decoded['readBy'], isEmpty);
     });
 
-    test('rejects put for items owned by another atSign', () async {
-      // Create the item as alice, then hand it to a second collection whose
-      // atSign we rewire to bob, to simulate "someone else's item".
-      final aliceColl = buildCollection<String>();
-      final item = aliceColl.create(obj: 'hi');
-
-      when(() => atClient.atSign).thenReturn(bob);
-      final bobColl = buildCollection<String>();
-
-      await expectLater(bobColl.put(item), throwsArgumentError);
+    test('writes one recipient copy per entry in sharedWith plus self copy',
+        () async {
+      final c = buildCollection<String>();
+      await c.create(
+        obj: 'hi',
+        id: 'msg1',
+        sharedWith: {bob, '@carol'.toAtsign()},
+      );
+      final written = verify(
+        () => atClient.put(captureAny(), any()),
+      ).captured.cast<AtKey>().map((k) => k.toString()).toList();
+      expect(
+          written,
+          containsAll([
+            'msg1.$namespace$selfAtSignStr',
+            '$bobStr:msg1.$namespace$selfAtSignStr',
+            '@carol:msg1.$namespace$selfAtSignStr',
+          ]));
     });
   });
 
   // ---------------------------------------------------------------------------
-  group('put — shared copies', () {
+  group('update — write mechanics', () {
+    // Stubs so the self-key existence probe succeeds (existing record).
+    AtValue storedValue() {
+      final v = AtValue();
+      v.value = jsonEncode({'type': 'n/a', 'readBy': <String>[], 'obj': 'old'});
+      v.metadata = Metadata()
+        ..createdAt = DateTime.now().toUtc()
+        ..expiresAt = DateTime.now().add(const Duration(days: 1));
+      return v;
+    }
+
     setUp(() {
-      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+      when(() => atClient.get(any())).thenAnswer((_) async => storedValue());
       when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
       when(() => atClient.delete(any())).thenAnswer((_) async => true);
       when(
@@ -246,37 +284,17 @@ void main() {
       ).thenAnswer((_) async => <AtKey>[]);
     });
 
-    test('writes one recipient copy per entry in sharedWith plus the self copy',
-        () async {
-      final c = buildCollection<String>();
-      final item = c.create(
-        obj: 'hi',
-        id: 'msg1',
-        sharedWith: {bob, '@carol'.toAtsign()},
-      );
-      final results = await c.put(item);
-
-      // 3 successful puts: self + 2 recipients.
-      expect(results.whereType<OpSuccess>().length, 3);
-      final writtenKeys = verify(
-        () => atClient.put(captureAny(), any()),
-      ).captured.cast<AtKey>().map((k) => k.toString()).toList();
-      expect(
-          writtenKeys,
-          containsAll([
-            'msg1.$namespace$selfAtSignStr',
-            '$bobStr:msg1.$namespace$selfAtSignStr',
-            '@carol:msg1.$namespace$selfAtSignStr',
-          ]));
+    test('rejects items owned by another atSign', () async {
+      final aliceColl = buildCollection<String>();
+      final item = aliceColl.draft(obj: 'hi');
+      when(() => atClient.atSign).thenReturn(bob);
+      final bobColl = buildCollection<String>();
+      await expectLater(bobColl.update(item), throwsArgumentError);
     });
 
     test(
         'unshareWithOthers=true only deletes recipients no longer in '
         'sharedWith; retained recipients are updated in place', () async {
-      // Diff semantics: put() should delete ONLY the recipient copies for
-      // atSigns that are no longer in item.sharedWith. Recipients who are in
-      // both the existing set and item.sharedWith are updated (overwritten)
-      // by the regular put loop — never delete-then-write.
       final existingBob =
           AtKey.fromString('$bobStr:msg2.$namespace$selfAtSignStr');
       final existingDave =
@@ -286,27 +304,21 @@ void main() {
       ).thenAnswer((_) async => [existingBob, existingDave]);
 
       final c = buildCollection<String>();
-      final item = c.create(obj: 'x', id: 'msg2', sharedWith: {bob});
-      await c.put(item);
+      final item = c.draft(obj: 'x', id: 'msg2', sharedWith: {bob});
+      await c.update(item);
 
       final deleted = verify(
         () => atClient.delete(captureAny()),
       ).captured.cast<AtKey>().map((k) => k.toString()).toList();
-      // @dave lost access → deleted.
       expect(deleted, contains('@dave:msg2.$namespace$selfAtSignStr'));
-      // @bob is still a recipient → must NOT be deleted.
       expect(deleted, isNot(contains('$bobStr:msg2.$namespace$selfAtSignStr')));
 
-      // Writes: self + @bob update. @dave never re-written.
       final written = verify(
         () => atClient.put(captureAny(), any()),
       ).captured.cast<AtKey>().map((k) => k.toString()).toList();
       expect(written, contains('msg2.$namespace$selfAtSignStr'));
       expect(written, contains('$bobStr:msg2.$namespace$selfAtSignStr'));
-      expect(
-        written,
-        isNot(contains('@dave:msg2.$namespace$selfAtSignStr')),
-      );
+      expect(written, isNot(contains('@dave:msg2.$namespace$selfAtSignStr')));
     });
 
     test('unshareWithOthers=false preserves unmentioned recipients', () async {
@@ -315,32 +327,192 @@ void main() {
       when(
         () => atClient.getAtKeys(regex: any(named: 'regex')),
       ).thenAnswer((_) async => [existingDave]);
-
       final c = buildCollection<String>();
-      final item = c.create(obj: 'x', id: 'msg3', sharedWith: {bob});
-      await c.put(item, unshareWithOthers: false);
-
+      final item = c.draft(obj: 'x', id: 'msg3', sharedWith: {bob});
+      await c.update(item, unshareWithOthers: false);
       verifyNever(() => atClient.delete(any()));
     });
 
-    test('availableAt override propagates to metadata (ttb)', () async {
+    test('item.availableAt mutation propagates to metadata ttb', () async {
       final c = buildCollection<String>();
-      final item = c.create(obj: 'x', id: 'msg4');
-      final future = DateTime.now().add(const Duration(hours: 1));
-      await c.put(item, availableAt: future);
-
+      final item = c.draft(obj: 'x', id: 'msg4');
+      item.availableAt = DateTime.now().add(const Duration(hours: 1));
+      await c.update(item);
       final key = verify(
         () => atClient.put(captureAny(), any()),
       ).captured.first as AtKey;
-      expect(key.metadata.availableAt, future);
-      expect(key.metadata.ttb, isNotNull);
+      expect(key.metadata.availableAt, item.availableAt);
       expect(key.metadata.ttb, greaterThan(0));
+    });
+
+    test('past availableAt is silently dropped from metadata (would be a '
+        'negative ttb)', () async {
+      // Regression: a previously-scheduled item's `availableAt` persists
+      // across rehydrate+update cycles. Once the scheduled time has
+      // passed, we must NOT set metadata.ttb — atServer rejects negative
+      // ttb values.
+      final c = buildCollection<String>();
+      final item = c.draft(obj: 'x', id: 'msg5');
+      item.availableAt = DateTime.now().subtract(const Duration(minutes: 5));
+      await c.update(item);
+      final key = verify(
+        () => atClient.put(captureAny(), any()),
+      ).captured.first as AtKey;
+      expect(key.metadata.availableAt, isNull);
+      expect(key.metadata.ttb, isNull);
+    });
+
+    test('create throws CollectionOpException when any key-level write fails',
+        () async {
+      // Reset get-mock to pretend self-key is absent (create path).
+      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+      when(() => atClient.put(any(), any())).thenThrow(Exception('boom'));
+      final c = buildCollection<String>();
+      await expectLater(
+        c.create(obj: 'x', id: 'fail-me'),
+        throwsA(isA<CollectionOpException>()),
+      );
     });
   });
 
   // ---------------------------------------------------------------------------
-  group('getItems / getItemsList / get', () {
-    AtValue atValueFor(String id, Object obj, {String type = 'n/a'}) {
+  group('create — draft + put with existence check', () {
+    test(
+        'with explicit id: persists and returns the CItem when the self-key '
+        'is free', () async {
+      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+      when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => <AtKey>[]);
+      final c = buildCollection<String>();
+      final item = await c.create(obj: 'hello', id: 'abc');
+      expect(item.id, 'abc');
+      expect(item.obj, 'hello');
+      expect(item.owner, selfAtSign);
+      verify(() => atClient.put(any(), any())).called(1);
+    });
+
+    test('with explicit id: throws StateError if the self-key already exists',
+        () async {
+      when(() => atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'readBy': <String>[], 'obj': 'x'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+      when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => <AtKey>[]);
+      final c = buildCollection<String>();
+      await expectLater(
+        c.create(obj: 'hi', id: 'collides'),
+        throwsA(isA<StateError>()),
+      );
+      verifyNever(() => atClient.put(any(), any()));
+    });
+
+    test('with auto-generated id: persists with a fresh random 8-char id',
+        () async {
+      // First existence check: any auto-generated id is unused.
+      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+      when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => <AtKey>[]);
+
+      final c = buildCollection<String>();
+      final item = await c.create(obj: 'hello');
+      expect(item.id, hasLength(8));
+      expect(RegExp(r'^[a-z0-9]+$').hasMatch(item.id), isTrue);
+    });
+
+    test(
+        'with auto-generated id: retries on collision and gives up after 10 '
+        'attempts', () async {
+      // Every get() returns an existing AtValue → every random id we try
+      // is reported as "already in use". Create should eventually throw.
+      when(() => atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'readBy': <String>[], 'obj': 'x'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+      final c = buildCollection<String>();
+      await expectLater(
+        c.create(obj: 'hi'),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('propagates put failures as CollectionOpException', () async {
+      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+      when(() => atClient.put(any(), any())).thenThrow(Exception('boom'));
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => <AtKey>[]);
+      final c = buildCollection<String>();
+      await expectLater(
+        c.create(obj: 'x', id: 'abc'),
+        throwsA(isA<CollectionOpException>()),
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  group('update — existence check, otherwise put', () {
+    test('succeeds when the self-key exists', () async {
+      // The first get() is the existence probe — return a stored record.
+      // The second get() (called internally by tryPut to merge readBy) is
+      // served by the same stub. Both return "exists".
+      when(() => atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'readBy': <String>[], 'obj': 'x'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+      when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => <AtKey>[]);
+
+      final c = buildCollection<String>();
+      final item = c.draft(obj: 'new text', id: 'abc');
+      await c.update(item);
+      verify(() => atClient.put(any(), any())).called(1);
+    });
+
+    test('throws StateError when the self-key is missing', () async {
+      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+      when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
+      final c = buildCollection<String>();
+      final item = c.draft(obj: 'x', id: 'doesnt-exist');
+      await expectLater(
+        c.update(item),
+        throwsA(isA<StateError>()),
+      );
+      verifyNever(() => atClient.put(any(), any()));
+    });
+
+    test('rejects items owned by another atSign', () async {
+      final aliceColl = buildCollection<String>();
+      final item = aliceColl.draft(obj: 'x');
+      when(() => atClient.atSign).thenReturn(bob);
+      final bobColl = buildCollection<String>();
+      await expectLater(bobColl.update(item), throwsArgumentError);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  group('reads — get, getMaybe, getItems, getItemsAsStream', () {
+    AtValue atValueFor(Object obj, {String type = 'n/a'}) {
       final v = AtValue();
       v.value = jsonEncode({
         'type': type,
@@ -353,8 +525,7 @@ void main() {
       return v;
     }
 
-    test('deduplicates keys by fullKeyAndOwner and unions sharedWith',
-        () async {
+    test('getItems dedupes keys and unions sharedWith', () async {
       final selfKey = AtKey.fromString('id1.$namespace$selfAtSignStr');
       final shareBob = AtKey.fromString('$bobStr:id1.$namespace$selfAtSignStr');
       final shareCarol =
@@ -363,20 +534,19 @@ void main() {
         () => atClient.getAtKeys(regex: any(named: 'regex')),
       ).thenAnswer((_) async => [selfKey, shareBob, shareCarol]);
       when(() => atClient.get(any()))
-          .thenAnswer((_) async => atValueFor('id1', 'hello'));
+          .thenAnswer((_) async => atValueFor('hello'));
 
       final c = buildCollection<String>();
-      final response = await c.getItems();
-      expect(response.exceptions, isEmpty);
-      expect(response.items, hasLength(1));
-      final only = response.items.first;
-      expect(only.id, 'id1');
-      expect(only.owner, selfAtSign);
-      expect(only.sharedWith, containsAll([bob, '@carol'.toAtsign()]));
-      expect(only.obj, 'hello');
+      final items = await c.getItems();
+      expect(items, hasLength(1));
+      expect(items.single.id, 'id1');
+      expect(items.single.owner, selfAtSign);
+      expect(items.single.sharedWith, containsAll([bob, '@carol'.toAtsign()]));
+      expect(items.single.obj, 'hello');
     });
 
-    test('getItemsList throws when any exception accumulates', () async {
+    test('getItems throws CollectionGetException carrying partial + errors',
+        () async {
       final selfKey = AtKey.fromString('id2.$namespace$selfAtSignStr');
       when(
         () => atClient.getAtKeys(regex: any(named: 'regex')),
@@ -384,12 +554,14 @@ void main() {
       when(() => atClient.get(any())).thenThrow(Exception('boom'));
 
       final c = buildCollection<String>();
-      await expectLater(c.getItemsList(), throwsA(isA<Exception>()));
-
-      // But getItems() returns the exception inside the response, not raised.
-      final resp = await c.getItems();
-      expect(resp.exceptions, hasLength(1));
-      expect(resp.items, isEmpty);
+      await expectLater(
+        c.getItems(),
+        throwsA(isA<CollectionGetException>().having(
+          (e) => e.errors.length,
+          'errors',
+          1,
+        )),
+      );
     });
 
     test('get(id, owner) returns a single item or throws when missing',
@@ -398,8 +570,7 @@ void main() {
       when(
         () => atClient.getAtKeys(regex: any(named: 'regex')),
       ).thenAnswer((_) async => [selfKey]);
-      when(() => atClient.get(any()))
-          .thenAnswer((_) async => atValueFor('id3', 'v3'));
+      when(() => atClient.get(any())).thenAnswer((_) async => atValueFor('v3'));
 
       final c = buildCollection<String>();
       final item = await c.get('id3', selfAtSign);
@@ -414,6 +585,113 @@ void main() {
         throwsA(isA<AtKeyNotFoundException>()),
       );
     });
+
+    test('getMaybe returns null when missing, item when present', () async {
+      final selfKey = AtKey.fromString('id4.$namespace$selfAtSignStr');
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => [selfKey]);
+      when(() => atClient.get(any())).thenAnswer((_) async => atValueFor('v4'));
+
+      final c = buildCollection<String>();
+      final found = await c.getMaybe('id4', selfAtSign);
+      expect(found, isNotNull);
+      expect(found!.obj, 'v4');
+
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => <AtKey>[]);
+      final missing = await c.getMaybe('nope', selfAtSign);
+      expect(missing, isNull);
+    });
+
+    test('getItemsAsStream yields each unique item with full sharedWith',
+        () async {
+      // id1 has two copies (self + one recipient); id2 has just a self copy.
+      final id1Self = AtKey.fromString('id1.$namespace$selfAtSignStr');
+      final id1Bob = AtKey.fromString('$bobStr:id1.$namespace$selfAtSignStr');
+      final id2Self = AtKey.fromString('id2.$namespace$selfAtSignStr');
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => [id1Self, id1Bob, id2Self]);
+      when(() => atClient.get(any())).thenAnswer((_) async => atValueFor('v'));
+
+      final c = buildCollection<String>();
+      final items = await c.getItemsAsStream().toList();
+      expect(items, hasLength(2));
+      final byId = {for (final i in items) i.id: i};
+      expect(byId['id1']!.sharedWith, contains(bob));
+      expect(byId['id2']!.sharedWith, isEmpty);
+    });
+
+    test('getItemsAsStream plays nicely with Stream.where for queries',
+        () async {
+      final self1 = AtKey.fromString('id1.$namespace$selfAtSignStr');
+      final self2 = AtKey.fromString('id2.$namespace$selfAtSignStr');
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => [self1, self2]);
+      when(() => atClient.get(self1))
+          .thenAnswer((_) async => atValueFor('keep'));
+      when(() => atClient.get(self2))
+          .thenAnswer((_) async => atValueFor('drop'));
+
+      final c = buildCollection<String>();
+      final kept =
+          await c.getItemsAsStream().where((i) => i.obj == 'keep').toList();
+      expect(kept, hasLength(1));
+      expect(kept.single.obj, 'keep');
+    });
+
+    test(
+        'rehydrate drops past availableAt so stale server metadata does '
+        "not leak into CItem", () async {
+      // Regression: server-side metadata may carry a historic availableAt
+      // that is already in the past. The atProtocol metadata wire format
+      // is additive — we can't clear it on the server — but the app view
+      // must show it as null. Past availableAt on rehydrate → null here.
+      final selfKey = AtKey.fromString('oldsched.$namespace$selfAtSignStr');
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => [selfKey]);
+      when(() => atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'readBy': <String>[], 'obj': 'x'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1))
+          ..availableAt = DateTime.now().subtract(const Duration(hours: 1));
+        return v;
+      });
+
+      final c = buildCollection<String>();
+      final itemsList = await c.getItems();
+      expect(itemsList.single.availableAt, isNull);
+      final itemsStream = await c.getItemsAsStream().toList();
+      expect(itemsStream.single.availableAt, isNull);
+    });
+
+    test('rehydrate preserves future availableAt', () async {
+      final future = DateTime.now().add(const Duration(hours: 2));
+      final selfKey = AtKey.fromString('futsched.$namespace$selfAtSignStr');
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => [selfKey]);
+      when(() => atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'readBy': <String>[], 'obj': 'x'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1))
+          ..availableAt = future;
+        return v;
+      });
+
+      final c = buildCollection<String>();
+      final itemsList = await c.getItems();
+      expect(itemsList.single.availableAt, isNotNull);
+      expect(itemsList.single.availableAt!.isAfter(DateTime.now()), isTrue);
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -422,7 +700,6 @@ void main() {
       when(
         () => atClient.getAtKeys(regex: any(named: 'regex')),
       ).thenAnswer((_) async => <AtKey>[]);
-
       final c = buildCollection<String>();
       await c.getKeys(id: 'abc', owner: selfAtSign);
       verify(
@@ -434,7 +711,6 @@ void main() {
       when(
         () => atClient.getAtKeys(regex: any(named: 'regex')),
       ).thenAnswer((_) async => <AtKey>[]);
-
       final c = buildCollection<String>();
       await c.getKeys();
       verify(
@@ -445,29 +721,44 @@ void main() {
 
   // ---------------------------------------------------------------------------
   group('delete', () {
+    // Partition `atClient.getAtKeys` responses by regex shape:
+    // - descendant scan uses regex starting `(^|:).+\.`
+    // - item scan uses `(^|:)<id>\.`
+    late List<AtKey> itemScanKeys;
+
+    void stubDescendants({List<AtKey> descendants = const []}) {
+      when(() => atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((invocation) async {
+        final regex =
+            invocation.namedArguments[const Symbol('regex')] as String;
+        if (regex.startsWith(r'(^|:).+\.')) return descendants;
+        return itemScanKeys;
+      });
+    }
+
     setUp(() {
       when(() => atClient.delete(any())).thenAnswer((_) async => true);
+      itemScanKeys = <AtKey>[];
     });
 
     test('rejects items owned by another atSign', () async {
       final aliceColl = buildCollection<String>();
-      final item = aliceColl.create(obj: 'x');
+      final item = aliceColl.draft(obj: 'x');
       when(() => atClient.atSign).thenReturn(bob);
       final bobColl = buildCollection<String>();
       await expectLater(bobColl.delete(item), throwsArgumentError);
     });
 
-    test('deletes self + shared keys for the item', () async {
+    test('deletes self + shared keys when there are no descendants', () async {
       final selfKey = AtKey.fromString('delme.$namespace$selfAtSignStr');
       final shareKey =
           AtKey.fromString('$bobStr:delme.$namespace$selfAtSignStr');
-      when(
-        () => atClient.getAtKeys(regex: any(named: 'regex')),
-      ).thenAnswer((_) async => [selfKey, shareKey]);
+      itemScanKeys = [selfKey, shareKey];
+      stubDescendants();
 
       final c = buildCollection<String>();
-      final item = c.create(obj: 'x', id: 'delme', sharedWith: {bob});
-      final results = await c.delete(item);
+      final item = c.draft(obj: 'x', id: 'delme', sharedWith: {bob});
+      await c.delete(item);
 
       final deleted = verify(
         () => atClient.delete(captureAny()),
@@ -478,46 +769,66 @@ void main() {
             'delme.$namespace$selfAtSignStr',
             '$bobStr:delme.$namespace$selfAtSignStr',
           ]));
-      expect(results.whereType<OpSuccess>().length, 2);
     });
 
-    test('current behaviour: no descendants scan — descendants are left intact',
-        () async {
-      // Today delete() only scans for keys sharing the same id at this
-      // namespace level. A sub-collection item keyed
-      // `<subId>.comments.<parentId>.<parentNs>@<owner>` lives at a DIFFERENT
-      // namespace ('<parentId>.comments.<parentNs>') and is not matched by
-      // getKeys(id: parentId, owner: self) on the parent collection — so
-      // the parent's delete leaves descendants untouched. This test pins
-      // that fact in place until the sub-collection refactor changes it.
-      final selfKey = AtKey.fromString('p1.$namespace$selfAtSignStr');
-      when(
-        () => atClient.getAtKeys(regex: any(named: 'regex')),
-      ).thenAnswer((_) async => [selfKey]);
+    test('throws CollectionOpException on any key-level failure', () async {
+      final selfKey = AtKey.fromString('delme.$namespace$selfAtSignStr');
+      itemScanKeys = [selfKey];
+      stubDescendants();
+      when(() => atClient.delete(any())).thenThrow(Exception('boom'));
 
       final c = buildCollection<String>();
-      final item = c.create(obj: 'x', id: 'p1');
-      await c.delete(item);
+      final item = c.draft(obj: 'x', id: 'delme');
+      await expectLater(c.delete(item), throwsA(isA<CollectionOpException>()));
+    });
+
+    test(
+        'default (cascade: false) prevents delete when self-owned '
+        'descendants exist', () async {
+      final selfKey = AtKey.fromString('p1.$namespace$selfAtSignStr');
+      final descKey = AtKey.fromString(
+        'c1.comments.p1.$namespace$selfAtSignStr',
+      );
+      itemScanKeys = [selfKey];
+      stubDescendants(descendants: [descKey]);
+
+      final c = buildCollection<String>();
+      final item = c.draft(obj: 'x', id: 'p1');
+
+      await expectLater(c.delete(item), throwsA(isA<StateError>()));
+      verifyNever(() => atClient.delete(any()));
+    });
+
+    test('cascade: true deletes descendants first, then the item', () async {
+      final selfKey = AtKey.fromString('p1.$namespace$selfAtSignStr');
+      final desc1 = AtKey.fromString(
+        'c1.comments.p1.$namespace$selfAtSignStr',
+      );
+      final desc2 = AtKey.fromString(
+        'r1.replies.c1.comments.p1.$namespace$selfAtSignStr',
+      );
+      itemScanKeys = [selfKey];
+      stubDescendants(descendants: [desc1, desc2]);
+
+      final c = buildCollection<String>();
+      final item = c.draft(obj: 'x', id: 'p1');
+      await c.delete(item, cascade: true);
 
       final deleted = verify(
         () => atClient.delete(captureAny()),
       ).captured.cast<AtKey>().map((k) => k.toString()).toList();
-      expect(deleted, ['p1.$namespace$selfAtSignStr']);
-      // No descendant scan was performed — the regex called was the plain
-      // parent regex, nothing like '.*\\.p1\\.$namespace@'.
-      final regexes = verify(
-        () => atClient.getAtKeys(regex: captureAny(named: 'regex')),
-      ).captured.cast<String>();
       expect(
-        regexes.every((r) => !r.contains('.+\\.p1\\.$namespace')),
-        isTrue,
-        reason: 'Today delete() does not scan for descendants.',
-      );
+          deleted,
+          containsAll([
+            desc1.toString(),
+            desc2.toString(),
+            selfKey.toString(),
+          ]));
     });
   });
 
   // ---------------------------------------------------------------------------
-  group('events — via handleNotification directly', () {
+  group('events — typed sub-streams via injected notification stream', () {
     AtNotification objNotif({
       required String key,
       required String from,
@@ -536,52 +847,54 @@ void main() {
       );
     }
 
-    test('CItemUpdated fires on update notification matching regexObj',
-        () async {
+    test('updates stream fires only CItemUpdated', () async {
       final c = buildCollection<String>();
-      final received = <CEvent>[];
-      final sub = c.events.listen(received.add);
+      final received = <CItemUpdated>[];
+      final sub = c.updates.listen(received.add);
 
-      await c.handleNotification(
-        objNotif(
-          key: 'id9.$namespace$selfAtSignStr',
-          from: selfAtSignStr,
-          to: selfAtSignStr,
-          operation: 'update',
-        ),
-      );
+      notifStream.add(objNotif(
+        key: 'id9.$namespace$selfAtSignStr',
+        from: selfAtSignStr,
+        to: selfAtSignStr,
+        operation: 'update',
+      ));
+      notifStream.add(objNotif(
+        key: 'id9.$namespace$selfAtSignStr',
+        from: bobStr,
+        to: selfAtSignStr,
+        operation: 'delete',
+      ));
+      await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
 
       expect(received, hasLength(1));
-      expect(received.single, isA<CItemUpdated>());
-      expect((received.single as CItemUpdated).id, 'id9');
+      expect(received.single.id, 'id9');
       expect(received.single.owner, selfAtSign);
       await sub.cancel();
     });
 
-    test('CItemDeleted fires on delete notification', () async {
+    test('deletes stream fires only CItemDeleted', () async {
       final c = buildCollection<String>();
-      final received = <CEvent>[];
-      final sub = c.events.listen(received.add);
+      final received = <CItemDeleted>[];
+      final sub = c.deletes.listen(received.add);
 
-      await c.handleNotification(
-        objNotif(
-          key: 'id9.$namespace$selfAtSignStr',
-          from: bobStr,
-          to: selfAtSignStr,
-          operation: 'delete',
-        ),
-      );
+      notifStream.add(objNotif(
+        key: 'id9.$namespace$selfAtSignStr',
+        from: bobStr,
+        to: selfAtSignStr,
+        operation: 'delete',
+      ));
+      await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
 
-      expect(received.single, isA<CItemDeleted>());
+      expect(received, hasLength(1));
       expect(received.single.owner, bob);
       await sub.cancel();
     });
 
-    test('CReadReceipt fires on read-receipt notification', () async {
-      // Set up markRead path — receipt handler calls get() then put(); stub
-      // them to return a minimal CItem round-trip.
+    test('readReceipts stream fires CReadReceipt on __rr notifications',
+        () async {
+      // markReadBy path needs get + put to succeed.
       final selfKey = AtKey.fromString('id9.$namespace$selfAtSignStr');
       when(
         () => atClient.getAtKeys(regex: any(named: 'regex')),
@@ -595,15 +908,17 @@ void main() {
         return v;
       });
       when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
+      when(
+        () => atClient.getKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => <String>[]);
 
       final c = buildCollection<String>();
-      final received = <CEvent>[];
-      final sub = c.events.listen(received.add);
+      final received = <CReadReceipt>[];
+      final sub = c.readReceipts.listen(received.add);
 
-      // Read-receipt key form: @to:<rrId>.__rr.<objId>.<ns>@from
       final readAtMicros =
           DateTime.now().toUtc().microsecondsSinceEpoch.toString();
-      await c.handleNotification(
+      notifStream.add(
         AtNotification(
           'nid-rr',
           '$selfAtSignStr:$readAtMicros.__rr.id9.$namespace$bobStr',
@@ -615,32 +930,29 @@ void main() {
           operation: 'update',
         ),
       );
-      await Future<void>.delayed(Duration.zero);
+      // Handler awaits get + put; allow enough microtasks.
+      for (int i = 0; i < 5; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
 
       expect(received, hasLength(1));
-      expect(received.single, isA<CReadReceipt>());
-      final rr = received.single as CReadReceipt;
-      expect(rr.id, 'id9');
-      expect(rr.from, bob);
+      expect(received.single.id, 'id9');
+      expect(received.single.from, bob);
       await sub.cancel();
     });
 
-    test('non-matching notification produces no event and does not throw',
-        () async {
+    test('non-matching notification produces no event', () async {
       final c = buildCollection<String>();
       final received = <CEvent>[];
-      final sub = c.events.listen(received.add);
-
-      await c.handleNotification(
-        objNotif(
-          key: 'some.other.namespace@alice',
-          from: selfAtSignStr,
-          to: selfAtSignStr,
-          operation: 'update',
-        ),
-      );
+      final sub = c.watch().listen(received.add);
+      notifStream.add(objNotif(
+        key: 'some.other.namespace@alice',
+        from: selfAtSignStr,
+        to: selfAtSignStr,
+        operation: 'update',
+      ));
       await Future<void>.delayed(Duration.zero);
-
+      await Future<void>.delayed(Duration.zero);
       expect(received, isEmpty);
       await sub.cancel();
     });
@@ -648,24 +960,18 @@ void main() {
 
   // ---------------------------------------------------------------------------
   group('read receipts', () {
-    test('sentReadReceipt returns true for items owned by self (no-op case)',
-        () async {
+    test('hasSentReadReceipt returns true for items owned by self', () async {
       final c = buildCollection<String>();
-      final item = c.create(obj: 'x');
-      expect(await c.sentReadReceipt(item), isTrue);
-      // No regex scan should have been issued for self-owned items.
+      final item = c.draft(obj: 'x');
+      expect(await c.hasSentReadReceipt(item), isTrue);
       verifyNever(() => atClient.getKeys(regex: any(named: 'regex')));
     });
 
-    test('sentReadReceipt scans for existing receipt on items owned by others',
+    test('hasSentReadReceipt scans for existing receipt on others\' items',
         () async {
       when(
         () => atClient.getKeys(regex: any(named: 'regex')),
       ).thenAnswer((_) async => <String>[]);
-      final c = buildCollection<String>();
-      // Fabricate an item whose owner is bob. Can't use c.create because that
-      // sets owner=self; instead issue a getItems round-trip like the real
-      // flow would.
       final bobKey = AtKey.fromString('idR.$namespace$bobStr');
       when(
         () => atClient.getAtKeys(regex: any(named: 'regex')),
@@ -679,12 +985,11 @@ void main() {
         return v;
       });
 
-      final items = await c.getItemsList();
-      expect(items, hasLength(1));
+      final c = buildCollection<String>();
+      final items = await c.getItems();
       final fromBob = items.single;
       expect(fromBob.owner, bob);
-
-      expect(await c.sentReadReceipt(fromBob), isFalse);
+      expect(await c.hasSentReadReceipt(fromBob), isFalse);
       verify(() => atClient.getKeys(regex: any(named: 'regex'))).called(1);
     });
   });

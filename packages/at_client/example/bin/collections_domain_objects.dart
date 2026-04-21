@@ -16,12 +16,13 @@ void main(List<String> args) async {
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
-  AtCollection.registerFactory(type: 'Dog', factory: Dog.fromJson);
-  AtCollection.registerFactory(type: 'Cat', factory: Cat.fromJson);
-  final pets = c.atClient.collection<Pet>(
-    'pets.$applicationNamespace',
-    exampleDefaultExpiration,
-  );
+  final pets =
+      c.atClient.collection<Pet>(
+          'pets.$applicationNamespace',
+          exampleDefaultExpiration,
+        )
+        ..registerFactory<Dog>(Dog.fromJson)
+        ..registerFactory<Cat>(Cat.fromJson);
 
   switch (c.role) {
     case ExampleRole.sender:
@@ -45,29 +46,20 @@ Future<void> sender(
   StreamSink<String> progressSink,
   AtCollection<Pet> pets,
 ) async {
-  progressSink.add('Creating a Dog, sharing with $otherAtSigns');
-  for (final r in await pets.put(
-    pets.create(
-      type: 'Dog',
-      obj: Dog(name: '${atClient.atSign}\'s dog Rex'),
-      sharedWith: otherAtSigns,
-    ),
-    expiresAt: DateTime.now().add(Duration(seconds: 10)),
-  )) {
-    progressSink.add(r.toString());
+  Future<void> addAndLog(String label, Pet pet) async {
+    progressSink.add('Creating $label, sharing with $otherAtSigns');
+    try {
+      await pets.create(obj: pet, sharedWith: otherAtSigns);
+      progressSink.add('  ...saved.');
+    } on CollectionOpException catch (e) {
+      for (final r in e.results) {
+        progressSink.add(r.toString());
+      }
+    }
   }
 
-  progressSink.add('Creating a Cat, sharing with $otherAtSigns');
-  for (final r in await pets.put(
-    pets.create(
-      type: 'Cat',
-      obj: Cat(name: '${atClient.atSign}\'s cat Felix'),
-      sharedWith: otherAtSigns,
-    ),
-    expiresAt: DateTime.now().add(Duration(seconds: 10)),
-  )) {
-    progressSink.add(r.toString());
-  }
+  await addAndLog('a Dog', Dog(name: '${atClient.atSign}\'s dog Rex'));
+  await addAndLog('a Cat', Cat(name: '${atClient.atSign}\'s cat Felix'));
 
   await poll(pets, progressSink);
 }
@@ -88,7 +80,7 @@ Future<void> poll(
   while (true) {
     progressSink.add('${DateTime.now().toString()} : Fetching');
 
-    for (final pet in (await pets.getItems()).items) {
+    for (final pet in await pets.getItems()) {
       progressSink.add('Fetched ${pets.prettyString(pet)}');
     }
     await Future.delayed(Duration(seconds: 3));
