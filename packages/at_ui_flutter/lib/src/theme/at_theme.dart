@@ -37,17 +37,21 @@ class AtTheme {
         onError: Colors.white,
       ),
 
-      textTheme: TextTheme(
-        displayLarge: atTypography.h1,
-        displayMedium: atTypography.h2,
-        displaySmall: atTypography.h3,
-        headlineMedium: atTypography.h4,
+      textTheme:
+          TextTheme(
+            displayLarge: atTypography.h1,
+            displayMedium: atTypography.h2,
+            displaySmall: atTypography.h3,
+            headlineMedium: atTypography.h4,
 
-        bodyLarge: atTypography.bodyLgRegular,
-        bodyMedium: atTypography.bodyMdRegular,
-        bodySmall: atTypography.bodySmRegular,
-        labelLarge: atTypography.buttonMd,
-      ),
+            bodyLarge: atTypography.bodyLgRegular,
+            bodyMedium: atTypography.bodyMdRegular,
+            bodySmall: atTypography.bodySmRegular,
+            labelLarge: atTypography.buttonMd,
+          ).apply(
+            bodyColor: atColors.secondary.shade900,
+            // displayColor: atColors.secondary.shade900,
+          ),
       appBarTheme: AppBarTheme(
         backgroundColor: atColors.secondary.shade50,
         foregroundColor: atColors.secondary.shade900,
