@@ -373,21 +373,39 @@ class CItemDeleted extends CEvent {
   CItemDeleted({required super.owner, required super.id});
 }
 
-/// A single link in a sub-item's parent chain. [id] is the ancestor's
-/// own id; [subName] is the name of the sub-collection that contains
-/// this ancestor's next-level-down children.
+/// A single link in a sub-item's parent chain.
 ///
-/// Example — for the key `T.replies.S.comments.R.posts.app@owner`
+/// - [id]: the ancestor's own id.
+/// - [subName]: the name of the sub-collection that contains this
+///   ancestor's next-level-down children.
+/// - [owner]: the ancestor's owner atSign, or `null` when unknown
+///   (see below).
+///
+/// Example — for the key `T.replies.S.comments.R.posts.app@<reply-owner>`
 /// (a "reply" on a "comment" on a "post"), the ancestry from root is:
-///   - `(id: R, subName: 'comments')` — R's children live in `comments`
-///   - `(id: S, subName: 'replies')`  — S's children live in `replies`
+///   - `(id: R, subName: 'comments', owner: <post owner>)`
+///   - `(id: S, subName: 'replies', owner: <comment owner>)`
 ///
-/// For a depth-1 sub-item, the ancestry has exactly one entry.
-typedef CAncestor = ({String id, String subName});
+/// **Owner availability.** Owners of ancestors are not carried in
+/// an Atsign Protocol key; they live only in the sub-item's
+/// envelope `parents` field. The event pipeline fetches that
+/// envelope to populate [owner] for `CSubItemUpdated` events. On
+/// `CSubItemDeleted` events the sub-item itself is gone — there's
+/// no envelope to read — so every [owner] is `null`. Legacy
+/// sub-items written before the `parents` envelope field was added
+/// also yield `null` owners.
+///
+/// App code that filters event streams by an ancestor must match on
+/// **both** `id` AND `owner` to avoid cross-owner collisions when
+/// two atSigns independently pick the same id.
+typedef CAncestor = ({String id, String subName, Atsign? owner});
 
 class CSubItemUpdated extends CEvent {
   /// Root-to-direct-parent chain. Length equals the sub-item's
   /// nesting depth (1 for a direct sub-item, 2 for a sub-sub, …).
+  /// Owners are populated from the sub-item's envelope on arrival;
+  /// legacy items or envelopes missing the `parents` field yield
+  /// `null` owners.
   final List<CAncestor> ancestry;
 
   CSubItemUpdated({
@@ -403,7 +421,12 @@ class CSubItemUpdated extends CEvent {
 
 class CSubItemDeleted extends CEvent {
   /// Root-to-direct-parent chain. Length equals the sub-item's
-  /// nesting depth.
+  /// nesting depth. **Owners are always `null` on delete events** —
+  /// the sub-item is gone by the time the notification arrives, so
+  /// there's no envelope to recover `parents` from. Apps that need
+  /// to correlate a delete with the deleted item's ancestry should
+  /// cache the last seen `CSubItemUpdated` for that (id, subName)
+  /// and look it up here.
   final List<CAncestor> ancestry;
 
   CSubItemDeleted({
@@ -1234,7 +1257,15 @@ class AtCollection<T> {
   /// `<id>.<subName_k>.<ancestorId_k>…<subName_1>.<ancestorId_1>.<namespace>@<owner>`
   /// and we emit [CSubItemUpdated] / [CSubItemDeleted] carrying the
   /// full root-to-direct-parent ancestry, so listeners can filter by
-  /// any ancestor id or by the innermost sub-collection's `subName`.
+  /// any ancestor (id + owner, to disambiguate across atSigns that
+  /// may have picked the same id) or by the innermost sub-collection's
+  /// `subName`.
+  ///
+  /// Ancestor ids come from the key; ancestor owners come from the
+  /// sub-item's envelope `parents` field. For update events we fetch
+  /// the sub-item to read that envelope. For delete events the
+  /// sub-item is gone and owners stay null — see
+  /// [CSubItemDeleted.ancestry] for the documented behaviour.
   ///
   /// When the innermost sub-collection's subName is the reserved
   /// `__rr` name, we also emit a [CReadReceipt] on top of the
@@ -1252,10 +1283,27 @@ class AtCollection<T> {
     final directParent = parts.ancestry.last;
     switch (n.operation) {
       case 'update':
+        // Fetch the sub-item envelope to recover ancestor owners. The
+        // get is typically local-cache hot (we were just notified
+        // about this key). A malformed / legacy envelope yields a null
+        // owner chain which is tolerated lenient-ly.
+        List<Atsign>? parentOwners;
+        try {
+          final k = AtKey.fromString(
+            n.key.replaceAll('${n.to}:', ''),
+          );
+          final v = await atClient.get(k);
+          parentOwners = _decodeParentOwners(_decodeEnvelope(v.value!, k));
+        } catch (e) {
+          logger.warning(
+            'handleSubObjNotification: envelope fetch for ${n.key} '
+            'failed: $e — emitting with null ancestor owners',
+          );
+        }
         _events.add(CSubItemUpdated(
           owner: parts.from,
           id: parts.id,
-          ancestry: parts.ancestry,
+          ancestry: _zipAncestryOwners(parts.ancestry, parentOwners),
         ));
         if (directParent.subName == _rr) {
           // A __rr sub-item is always shared WITH the parent's owner
@@ -1284,6 +1332,26 @@ class AtCollection<T> {
     }
   }
 
+  /// Pairs [ancestry] (ids + subNames from the key) with [ownersFromEnvelope]
+  /// (owners from the sub-item's `parents` envelope field) to produce an
+  /// owner-enriched ancestry for [CSubItemUpdated]. If [ownersFromEnvelope]
+  /// is null (legacy item / failed fetch) or shorter than the ancestry,
+  /// missing entries keep `owner: null`.
+  List<CAncestor> _zipAncestryOwners(
+    List<CAncestor> ancestry,
+    List<Atsign>? ownersFromEnvelope,
+  ) {
+    if (ownersFromEnvelope == null) return ancestry;
+    return [
+      for (int i = 0; i < ancestry.length; i++)
+        (
+          id: ancestry[i].id,
+          subName: ancestry[i].subName,
+          owner: i < ownersFromEnvelope.length ? ownersFromEnvelope[i] : null,
+        ),
+    ];
+  }
+
   _CParts _getPartsFromNotifKey(AtNotification n) {
     String keyName = n.key.replaceAll('${n.to}:', '').replaceAll(n.from, '');
     final ix = keyName.lastIndexOf('.$namespace');
@@ -1301,8 +1369,10 @@ class AtCollection<T> {
     for (int i = parts.length - 1; i >= 2; i -= 2) {
       // parts[i] is an ancestor's id; parts[i-1] is the subName of
       // the sub-collection that contains this ancestor's children
-      // (i.e. the child-step toward the current item).
-      ancestry.add((id: parts[i], subName: parts[i - 1]));
+      // (i.e. the child-step toward the current item). Owners are
+      // not recoverable from a key — the dispatcher fetches the
+      // sub-item's envelope to fill them in for update events.
+      ancestry.add((id: parts[i], subName: parts[i - 1], owner: null));
     }
     return (
       from: n.from.toAtsign(),

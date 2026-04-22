@@ -219,9 +219,28 @@ void main() {
       await sub.cancel();
     });
 
-    test('depth-2 (sub-sub) update emits CSubItemUpdated with full ancestry',
-        () async {
+    test(
+        'depth-2 update emits CSubItemUpdated with envelope-derived '
+        'ancestor owners', () async {
       final c = buildParent();
+      // Stub the dispatcher's envelope fetch. The sub-item's envelope
+      // carries `parents` as owners-only; ids are recovered from the key.
+      when(() => c.atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({
+          'type': 'n/a',
+          'obj': 'r1 body',
+          'parents': [
+            {'owner': bobStr},       // root (p1) owner
+            {'owner': selfAtSignStr}, // direct parent (c1) owner
+          ],
+        });
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+
       final received = <CSubItemUpdated>[];
       final sub = c.parent.subUpdates.listen(received.add);
 
@@ -233,22 +252,61 @@ void main() {
         to: selfAtSignStr,
         operation: 'update',
       ));
-      for (int i = 0; i < 3; i++) {
+      for (int i = 0; i < 5; i++) {
         await Future<void>.delayed(Duration.zero);
       }
       expect(received, hasLength(1));
       expect(received.single.id, 'r1');
       expect(received.single.ancestry, hasLength(2));
-      // root → direct parent
+      // root → direct parent, ids from key, owners from envelope
       expect(received.single.ancestry[0].id, 'p1');
       expect(received.single.ancestry[0].subName, 'comments');
+      expect(received.single.ancestry[0].owner, bobStr.toAtsign());
       expect(received.single.ancestry[1].id, 'c1');
       expect(received.single.ancestry[1].subName, 'replies');
+      expect(received.single.ancestry[1].owner, selfAtSign);
       expect(received.single.subName, 'replies');
       await sub.cancel();
     });
 
-    test('depth-2 delete emits CSubItemDeleted with full ancestry', () async {
+    test(
+        'depth-2 update with no `parents` field in envelope falls back '
+        'to null ancestor owners (legacy tolerance)', () async {
+      final c = buildParent();
+      when(() => c.atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        // No `parents` key — legacy envelope.
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'r1'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+
+      final received = <CSubItemUpdated>[];
+      final sub = c.parent.subUpdates.listen(received.add);
+
+      c.notifStream.add(subNotif(
+        key: 'r1.replies.c1.comments.p1.$parentNs$bobStr',
+        from: bobStr,
+        to: selfAtSignStr,
+        operation: 'update',
+      ));
+      for (int i = 0; i < 5; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(received, hasLength(1));
+      expect(received.single.ancestry, hasLength(2));
+      expect(received.single.ancestry[0].owner, isNull);
+      expect(received.single.ancestry[1].owner, isNull);
+      expect(received.single.ancestry[0].id, 'p1');
+      expect(received.single.ancestry[1].id, 'c1');
+      await sub.cancel();
+    });
+
+    test(
+        'depth-2 delete emits CSubItemDeleted with ancestry ids and '
+        'null owners (item is gone, no envelope to read)', () async {
       final c = buildParent();
       final received = <CSubItemDeleted>[];
       final sub = c.parent.subDeletes.listen(received.add);
@@ -265,6 +323,8 @@ void main() {
       expect(received, hasLength(1));
       expect(received.single.id, 'r1');
       expect(received.single.ancestry.last.id, 'c1');
+      expect(received.single.ancestry.last.owner, isNull);
+      expect(received.single.ancestry.first.owner, isNull);
       expect(received.single.subName, 'replies');
       await sub.cancel();
     });
