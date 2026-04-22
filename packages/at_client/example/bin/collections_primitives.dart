@@ -91,15 +91,7 @@ Future<void> poll({
   while (true) {
     progressSink.add('${DateTime.now().toString()} : Fetching');
 
-    List<CItem<Map>> mapItems;
-    try {
-      mapItems = await maps.getItems();
-    } on CollectionGetException catch (e) {
-      for (final err in e.errors) {
-        progressSink.add('Error: $err');
-      }
-      mapItems = e.partialItems.cast<CItem<Map>>();
-    }
+    final mapItems = await maps.getItems();
     for (final i in mapItems) {
       progressSink.add(
         'Fetched ${i.id}.${maps.namespace}${i.owner}'
@@ -111,15 +103,7 @@ Future<void> poll({
       );
     }
 
-    List<CItem<String>> stringItems;
-    try {
-      stringItems = await strings.getItems();
-    } on CollectionGetException catch (e) {
-      for (final err in e.errors) {
-        progressSink.add('Error: $err');
-      }
-      stringItems = e.partialItems.cast<CItem<String>>();
-    }
+    final stringItems = await strings.getItems();
     for (final i in stringItems) {
       progressSink.add('Fetched ${strings.prettyString(i)}');
     }

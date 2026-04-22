@@ -550,23 +550,34 @@ void main() {
       expect(items.single.obj, 'hello');
     });
 
-    test('getItems throws CollectionGetException carrying partial + errors',
-        () async {
-      final selfKey = AtKey.fromString('id2.$namespace$selfAtSignStr');
+    test('getItems silently skips per-key decode failures', () async {
+      // Regression: previously this threw CollectionGetException with a
+      // partial list + errors. The new read path is stream-first and
+      // logs+skips bad keys — a single malformed record never poisons
+      // the read. Callers get whatever decoded successfully.
+      final goodKey = AtKey.fromString('ok.$namespace$selfAtSignStr');
+      final badKey = AtKey.fromString('bad.$namespace$selfAtSignStr');
       when(
         () => atClient.getAtKeys(regex: any(named: 'regex')),
-      ).thenAnswer((_) async => [selfKey]);
-      when(() => atClient.get(any())).thenThrow(Exception('boom'));
+      ).thenAnswer((_) async => [goodKey, badKey]);
+      when(() => atClient.get(any())).thenAnswer((invocation) async {
+        final k = invocation.positionalArguments.first as AtKey;
+        if (k.toString().startsWith('bad.')) {
+          throw Exception('boom');
+        }
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'hello'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
 
       final c = buildCollection<String>();
-      await expectLater(
-        c.getItems(),
-        throwsA(isA<CollectionGetException>().having(
-          (e) => e.errors.length,
-          'errors',
-          1,
-        )),
-      );
+      final items = await c.getItems();
+      expect(items, hasLength(1));
+      expect(items.single.id, 'ok');
+      expect(items.single.obj, 'hello');
     });
 
     test('get(id, owner) returns a single item or throws when missing',

@@ -37,7 +37,8 @@
 // Registering a `fromJson` lets AtCollection rehydrate typed objects. The
 // simple shape is:
 //
-//     atClient.collection<Todo>('todos.myapp', ttl, fromJson: Todo.fromJson);
+//     atClient.collection<Todo>('todos.myapp', defaultExpiration,
+//         fromJson: Todo.fromJson);
 //
 // which calls [AtCollection.registerFactory<Todo>] internally, binding
 // `Todo.fromJson` to the type-tag `'Todo'` (from `Todo.toString()`) and
@@ -55,14 +56,14 @@
 //     AtCollection.registerFactory<Dog>(Dog.fromJson, typeTag: 'Dog');
 //
 // READING:
-// - [get] throws [AtKeyNotFoundException] if the item is missing.
-// - [getMaybe] returns `null` when the item is missing.
-// - [getItems] fetches every item in the collection (optionally filtered by
-//   id/owner) as a `List<CItem<T>>`. Throws [CollectionGetException] if any
-//   per-key decode failed — the exception carries the partial list plus the
-//   errors list.
+// All read methods are thin wrappers around [getItemsAsStream], the
+// fundamental building block. Per-key decode failures are logged and
+// skipped — a single malformed item never poisons a read.
 // - [getItemsAsStream] yields a `Stream<CItem<T>>`, ideal for filter-style
 //   queries: `collection.getItemsAsStream().where(...).toList()`.
+// - [getItems] materialises the stream to a `List<CItem<T>>`.
+// - [get] returns the first match or throws [AtKeyNotFoundException].
+// - [getMaybe] returns the first match or `null`.
 //
 // EVENT STREAMS:
 //
@@ -332,21 +333,6 @@ class CollectionOpException implements Exception {
       '  ${failures.join('\n  ')}';
 }
 
-/// Thrown by [AtCollection.getItems] when any per-key decode failed.
-/// Carries the [partialItems] that did decode plus the [errors] that
-/// didn't.
-class CollectionGetException implements Exception {
-  final List<CItem<dynamic>> partialItems;
-  final List<Object> errors;
-  CollectionGetException(this.partialItems, this.errors);
-
-  @override
-  String toString() =>
-      'CollectionGetException: ${errors.length} per-key error(s); '
-      '${partialItems.length} item(s) decoded.\n'
-      '  ${errors.join('\n  ')}';
-}
-
 // -----------------------------------------------------------------------------
 // Events
 
@@ -605,7 +591,7 @@ class AtCollection<T> {
   ///
   ///     AtCollection.registerFactory<Dog>(Dog.fromJson);
   ///     AtCollection.registerFactory<Cat>(Cat.fromJson);
-  ///     final pets = await atClient.collection<Pet>(ns, ttl);
+  ///     final pets = await atClient.collection<Pet>(ns, defaultExpiration);
   ///
   /// If you build with Dart's minifier / tree-shaker (e.g. release-mode
   /// Flutter web) and class names may be renamed, pin the tag explicitly:
@@ -631,10 +617,20 @@ class AtCollection<T> {
   /// **note** that [draft] performs no uniqueness check — if you want to
   /// guarantee a collision-free id, use [create] (which retries on
   /// collision) rather than calling [draft] followed by a manual write.
+  ///
+  /// [expiresAt] defaults to `now + defaultExpiration`. Supply an
+  /// explicit value to override for this item alone.
+  ///
+  /// [availableAt] defaults to `null` (visible immediately). Supply a
+  /// future `DateTime` to delay visibility of recipient copies
+  /// (time-to-birth). A past timestamp is treated the same as `null` by
+  /// the write path, so setting one is harmless but has no effect.
   CItem<T> draft({
     required T obj,
     String? id,
     Set<Atsign>? sharedWith,
+    DateTime? expiresAt,
+    DateTime? availableAt,
   }) {
     final now = DateTime.now().toUtc();
     id ??= _newItemId();
@@ -645,8 +641,8 @@ class AtCollection<T> {
       obj: obj,
       sharedWith: sharedWith ?? {},
       createdAt: now,
-      expiresAt: now.add(defaultExpiration),
-      availableAt: null,
+      expiresAt: expiresAt ?? now.add(defaultExpiration),
+      availableAt: availableAt,
       collection: this,
       parentOwners: _expectedAncestorOwners(),
     );
@@ -659,12 +655,17 @@ class AtCollection<T> {
   /// check; we retry on collision (odds are astronomically low) and give
   /// up after 10 attempts with a [StateError].
   ///
+  /// [expiresAt] and [availableAt] are forwarded to [draft]. See that
+  /// method's doc comment for the defaults and the null semantics.
+  ///
   /// Returns the persisted item. Throws [CollectionOpException] on any
   /// key-level failure.
   Future<CItem<T>> create({
     required T obj,
     String? id,
     Set<Atsign>? sharedWith,
+    DateTime? expiresAt,
+    DateTime? availableAt,
   }) async {
     final String useId;
     if (id != null) {
@@ -678,7 +679,13 @@ class AtCollection<T> {
     } else {
       useId = await _uniqueItemId();
     }
-    final item = draft(obj: obj, id: useId, sharedWith: sharedWith);
+    final item = draft(
+      obj: obj,
+      id: useId,
+      sharedWith: sharedWith,
+      expiresAt: expiresAt,
+      availableAt: availableAt,
+    );
     final results = await _put(item);
     if (results.any((r) => r is OpFailure)) {
       throw CollectionOpException(results);
@@ -755,28 +762,28 @@ class AtCollection<T> {
   /// Fetches a single item. Throws [AtKeyNotFoundException] if no item
   /// with this [id] owned by this [owner] exists. For a null-returning
   /// variant, see [getMaybe].
+  ///
+  /// Per-key decode failures are logged and skipped by the underlying
+  /// stream; if every copy of the requested item fails to decode, the
+  /// result is indistinguishable from "no item found" and this throws
+  /// [AtKeyNotFoundException].
   Future<CItem<T>> get(String id, Atsign owner) async {
-    final (items, errors) = await _loadItems(id: id, owner: owner);
-    if (errors.isNotEmpty) {
-      throw CollectionGetException(items, errors);
-    }
-    if (items.isEmpty) {
+    final item = await getMaybe(id, owner);
+    if (item == null) {
       throw AtKeyNotFoundException(
         'No item found with id $id owned by $owner',
       );
     }
-    return items.first;
+    return item;
   }
 
   /// Same as [get] but returns `null` when no item exists, instead of
-  /// throwing [AtKeyNotFoundException]. Still throws
-  /// [CollectionGetException] on decode errors.
+  /// throwing [AtKeyNotFoundException].
   Future<CItem<T>?> getMaybe(String id, Atsign owner) async {
-    final (items, errors) = await _loadItems(id: id, owner: owner);
-    if (errors.isNotEmpty) {
-      throw CollectionGetException(items, errors);
+    await for (final item in getItemsAsStream(id: id, owner: owner)) {
+      return item; // first match; stream unsubscribed here.
     }
-    return items.isEmpty ? null : items.first;
+    return null;
   }
 
   /// Fetches every item in the collection as a `List<CItem<T>>`,
@@ -784,27 +791,23 @@ class AtCollection<T> {
   /// `owner+id` across self and shared copies are deduplicated and their
   /// `sharedWith` sets are unioned.
   ///
-  /// Throws [CollectionGetException] if any per-key decode failed — the
-  /// exception carries both the partial-list and the errors so callers
-  /// that want "best effort" reads can inspect it rather than propagate.
-  Future<List<CItem<T>>> getItems({String? id, Atsign? owner}) async {
-    final (items, errors) = await _loadItems(id: id, owner: owner);
-    if (errors.isNotEmpty) {
-      throw CollectionGetException(items, errors);
-    }
-    return items;
-  }
+  /// Thin wrapper around [getItemsAsStream]: per-key decode failures are
+  /// logged and skipped.
+  Future<List<CItem<T>>> getItems({String? id, Atsign? owner}) =>
+      getItemsAsStream(id: id, owner: owner).toList();
 
-  /// Yields each item as it is fetched, deduping on `owner+id`. Ideal for
-  /// filter-style queries:
+  /// Fundamental read path. Yields each item as it is fetched, deduping
+  /// on `owner+id`. Ideal for filter-style queries:
   ///
   ///     final done = await collection.getItemsAsStream()
   ///         .where((item) => item.obj.done)
   ///         .toList();
   ///
-  /// Decode failures are logged and skipped rather than surfaced —
-  /// callers who need failure detail should use [getItems] and catch
-  /// [CollectionGetException].
+  /// Per-key decode failures are logged (via `AtSignLogger.warning`) and
+  /// the offending item is skipped — callers see a clean stream. Good
+  /// and bad items can coexist without one poisoning the read. All
+  /// higher-level read methods ([get], [getMaybe], [getItems]) are
+  /// thin wrappers over this stream.
   Stream<CItem<T>> getItemsAsStream({String? id, Atsign? owner}) async* {
     // [getKeys] returns keys sorted by `fullKeyAndOwner`, so all copies of
     // the same item (self + per-recipient) are contiguous. We buffer each
@@ -1479,55 +1482,6 @@ class AtCollection<T> {
     final f = _factoriesByTag[type];
     if (f == null) return obj as V;
     return f.call(obj) as V;
-  }
-
-  /// Loads items, collecting per-key decode errors rather than throwing.
-  /// The public [getItems] / [get] / [getMaybe] wrap this to surface the
-  /// errors as [CollectionGetException] when needed.
-  Future<(List<CItem<T>>, List<Object>)> _loadItems({
-    String? id,
-    Atsign? owner,
-  }) async {
-    final map = <String, CItem<T>>{};
-    final errors = <Object>[];
-    for (final k in await getKeys(id: id, owner: owner)) {
-      try {
-        CItem<T> item;
-        if (map.containsKey(k.fullKeyAndOwner)) {
-          item = map[k.fullKeyAndOwner]!;
-        } else {
-          final v = await atClient.get(k);
-          logger.info('Retrieved raw value ${v.value}');
-          final decoded = _decodeEnvelope(v.value!, k);
-          // Parent-owner ancestry filter (see ancestor-owner
-          // disambiguation in the post-implementation tidy-up plan).
-          // Legacy items (no `parents` in envelope) pass through.
-          final parsedParents = _decodeParentOwners(decoded);
-          if (parsedParents != null && !_ancestryMatches(parsedParents)) {
-            continue;
-          }
-          item = CItem._(
-            owner: k.sharedBy!.toAtsign(),
-            id: k.key.split('.').first,
-            type: decoded['type'] as String,
-            obj: _rehydrate<T>(decoded['obj']!, decoded['type'] as String),
-            sharedWith: {},
-            createdAt: v.metadata!.createdAt!,
-            expiresAt: v.metadata!.expiresAt!,
-            availableAt: _liveAvailableAt(v.metadata!.availableAt),
-            collection: this,
-            parentOwners: parsedParents ?? _expectedAncestorOwners(),
-          );
-          map[k.fullKeyAndOwner] = item;
-        }
-        if (k.sharedWith != null) {
-          item.sharedWith.add(k.sharedWith!.toAtsign());
-        }
-      } catch (e) {
-        errors.add(e);
-      }
-    }
-    return (map.values.toList(), errors);
   }
 
   /// Writes [item] (self + recipient copies) and optionally diff-deletes

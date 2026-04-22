@@ -72,15 +72,10 @@ Future<void> poll(
   while (true) {
     progressSink.add('${DateTime.now().toString()} : Fetching');
 
-    List<CItem<Uint8List>> items;
-    try {
-      items = await binaries.getItems();
-    } on CollectionGetException catch (e) {
-      for (final err in e.errors) {
-        progressSink.add('Error: $err');
-      }
-      items = e.partialItems.cast<CItem<Uint8List>>();
-    }
+    // Per-key decode failures are now logged-and-skipped inside
+    // `getItemsAsStream` (the underlying building block), so a
+    // single malformed record no longer poisons the read.
+    final items = await binaries.getItems();
     for (final item in items) {
       String msg = '==> Fetched ${binaries.prettyString(item)}';
       if (item.type == 'binary') {
