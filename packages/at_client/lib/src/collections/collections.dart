@@ -33,22 +33,26 @@
 //   [CollectionOpException] on any key-level failure and [StateError] if
 //   `cascade: false` (the default) and self-owned descendants exist.
 //
-// FACTORY REGISTRY (per-collection, not global). Registering a `fromJson`
-// lets a collection rehydrate typed objects. The simple shape is:
+// FACTORY REGISTRY (process-global, via static [AtCollection.registerFactory]).
+// Registering a `fromJson` lets AtCollection rehydrate typed objects. The
+// simple shape is:
 //
 //     atClient.collection<Todo>('todos.myapp', ttl, fromJson: Todo.fromJson);
 //
-// which registers `Todo.fromJson` under the type-tag `'Todo'` (from
-// `Todo.toString()`) and keys it on `Todo` (the [Type]) for lookup when
-// drafting. For polymorphic collections (e.g. `AtCollection<Pet>` holding
-// both `Dog` and `Cat`), register each concrete type explicitly via
-// `collection.registerFactory<Dog>(Dog.fromJson)`.
+// which calls [AtCollection.registerFactory<Todo>] internally, binding
+// `Todo.fromJson` to the type-tag `'Todo'` (from `Todo.toString()`) and
+// keying it on `Todo` (the [Type]) for lookup when drafting. For
+// polymorphic collections (e.g. `AtCollection<Pet>` holding both `Dog`
+// and `Cat`), register each concrete type explicitly:
+//
+//     AtCollection.registerFactory<Dog>(Dog.fromJson);
+//     AtCollection.registerFactory<Cat>(Cat.fromJson);
 //
 // Under obfuscated builds where class names may be renamed, pass an
 // explicit `typeTag:` to pin the wire-format type-tag and keep
 // interoperability across build variants:
 //
-//     collection.registerFactory<Dog>(Dog.fromJson, typeTag: 'Dog');
+//     AtCollection.registerFactory<Dog>(Dog.fromJson, typeTag: 'Dog');
 //
 // READING:
 // - [get] throws [AtKeyNotFoundException] if the item is missing.
@@ -226,8 +230,10 @@ final class CItem<T> {
   /// parent collection (targeting this item) append into the cached
   /// set, so subsequent `readBy` calls are O(1) and always current.
   ///
-  /// Self-owned items return the empty set: sending a receipt to
-  /// yourself is a no-op, so no receipt sub-items exist.
+  /// Works regardless of who owns the item — if I own it, receipts
+  /// from readers (who shared with me) populate the set; if I'm a
+  /// reader of someone else's item, my own receipt populates the set
+  /// (since my own `__rr` self-copy is on my atServer).
   ///
   /// For synchronous UI rendering after an `await readBy` prime, see
   /// [readBySnapshot].
@@ -239,19 +245,17 @@ final class CItem<T> {
       // has somewhere to append.
       final readers = <Atsign>{};
       _readers = readers;
-      if (owner != self) {
-        _readReceiptSub = _collection.readReceipts
-            .where((e) => e.id == id && e.owner == self)
-            .listen((e) => readers.add(e.from));
-        _subFinalizer.attach(this, _readReceiptSub!, detach: this);
-        // Use `getItemsAsStream` (tolerant of per-key decode errors —
-        // it logs and skips). Legacy pre-refactor `__rr` records with
-        // bare-numeric values are silently ignored here rather than
-        // blowing up the whole load.
-        final rr = _collection._readReceiptsFor(this);
-        await for (final receipt in rr.getItemsAsStream()) {
-          readers.add(receipt.owner);
-        }
+      _readReceiptSub = _collection.readReceipts
+          .where((e) => e.id == id)
+          .listen((e) => readers.add(e.from));
+      _subFinalizer.attach(this, _readReceiptSub!, detach: this);
+      // Use `getItemsAsStream` (tolerant of per-key decode errors —
+      // it logs and skips). Legacy pre-refactor `__rr` records with
+      // bare-numeric values are silently ignored here rather than
+      // blowing up the whole load.
+      final rr = _collection._readReceiptsFor(this);
+      await for (final receipt in rr.getItemsAsStream()) {
+        readers.add(receipt.owner);
       }
     });
     return UnmodifiableSetView(_readers!);
@@ -445,11 +449,17 @@ class AtCollection<T> {
   static const String _idAlphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
   static final Random _rng = Random.secure();
 
-  // Factory registry (per-collection):
+  // Factory registry (process-global, NOT per-collection):
   //   - _factoriesByType: lookup by [Type] when drafting (obfuscation-safe)
   //   - _factoriesByTag:  lookup by wire-format type-tag when rehydrating
-  final Map<Type, _FactoryEntry> _factoriesByType = {};
-  final Map<String, Function> _factoriesByTag = {};
+  //
+  // A single global registry simplifies apps that use the same domain
+  // type across multiple collection instances (tests, polymorphic
+  // parent/child, cross-namespace). Registrations are idempotent —
+  // last write wins — so if two parts of your app register different
+  // factories for the same type / tag, the later one takes effect.
+  static final Map<Type, _FactoryEntry> _factoriesByType = {};
+  static final Map<String, Function> _factoriesByTag = {};
 
   // Per-item cache of read-receipt sub-collections. Keyed by
   // (owner.toString(), id) so it survives CItem rehydrate cycles.
@@ -582,20 +592,26 @@ class AtCollection<T> {
   // Factory registry
 
   /// Registers a factory for type [U] so objects of that type can be
-  /// drafted and rehydrated by this collection. The wire-format tag is
-  /// [typeTag] if supplied, otherwise `U.toString()`.
+  /// drafted and rehydrated by any [AtCollection] in this process.
+  /// The wire-format tag is [typeTag] if supplied, otherwise
+  /// `U.toString()`.
+  ///
+  /// Static by design: factories are process-global, shared across
+  /// every [AtCollection] instance. Callers that need to register a
+  /// factory implicitly by passing `fromJson:` to [AtClient.collection]
+  /// are just calling into this same registry.
   ///
   /// Use for polymorphic collections where `T` is an abstract supertype:
   ///
-  ///     final pets = atClient.collection<Pet>(ns, ttl)
-  ///       ..registerFactory<Dog>(Dog.fromJson)
-  ///       ..registerFactory<Cat>(Cat.fromJson);
+  ///     AtCollection.registerFactory<Dog>(Dog.fromJson);
+  ///     AtCollection.registerFactory<Cat>(Cat.fromJson);
+  ///     final pets = await atClient.collection<Pet>(ns, ttl);
   ///
   /// If you build with Dart's minifier / tree-shaker (e.g. release-mode
   /// Flutter web) and class names may be renamed, pin the tag explicitly:
   ///
-  ///     collection.registerFactory<Dog>(Dog.fromJson, typeTag: 'Dog');
-  void registerFactory<U>(
+  ///     AtCollection.registerFactory<Dog>(Dog.fromJson, typeTag: 'Dog');
+  static void registerFactory<U>(
     U Function(Map<String, dynamic>) fromJson, {
     String? typeTag,
   }) {

@@ -16,13 +16,12 @@ void main(List<String> args) async {
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
-  final pets =
-      (await c.atClient.collection<Pet>(
-          'pets.$applicationNamespace',
-          exampleDefaultExpiration,
-        ))
-        ..registerFactory<Dog>(Dog.fromJson)
-        ..registerFactory<Cat>(Cat.fromJson);
+  AtCollection.registerFactory<Dog>(Dog.fromJson);
+  AtCollection.registerFactory<Cat>(Cat.fromJson);
+  final pets = await c.atClient.collection<Pet>(
+    'pets.$applicationNamespace',
+    exampleDefaultExpiration,
+  );
 
   switch (c.role) {
     case ExampleRole.sender:

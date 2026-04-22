@@ -156,33 +156,36 @@ void main() {
     });
 
     test('registered polymorphic type resolves to runtimeType key', () {
-      final c = buildCollection<Widget>()
-        ..registerFactory<Widget>(Widget.fromJson);
+      buildCollection<Widget>();
+      AtCollection.registerFactory<Widget>(Widget.fromJson);
+      final c = buildCollection<Widget>();
       final item = c.draft(obj: Widget('w1'));
       expect(item.type, 'Widget');
     });
   });
 
   // ---------------------------------------------------------------------------
-  group('factory registry (per-collection)', () {
-    test('registerFactory binds type-tag to instance, not statically',
-        () async {
-      // Two collections, each with its own Widget factory — no cross-talk.
+  group('factory registry (process-global)', () {
+    test(
+        'registerFactory is static: last registration for a type wins, '
+        'and is visible from every collection instance', () async {
+      // Two collections with different namespaces — but factories are
+      // process-global. Registering twice for the same `Widget` type
+      // means the second registration overwrites the first, and both
+      // collections will decode via the surviving factory.
       final a = buildCollection<Widget>(ns: 'a.app.ns');
       final b = buildCollection<Widget>(ns: 'b.app.ns');
-      a.registerFactory<Widget>((j) => Widget('from-a:${j['name']}'));
-      b.registerFactory<Widget>((j) => Widget('from-b:${j['name']}'));
+      AtCollection.registerFactory<Widget>((j) => Widget('a:${j['name']}'));
+      AtCollection.registerFactory<Widget>((j) => Widget('b:${j['name']}'));
 
-      // Stub the `a` collection's fetch.
-      final selfKey = AtKey.fromString('id.a.app.ns$selfAtSignStr');
+      final aKey = AtKey.fromString('id.a.app.ns$selfAtSignStr');
       when(
         () => atClient.getAtKeys(regex: any(named: 'regex')),
-      ).thenAnswer((_) async => [selfKey]);
+      ).thenAnswer((_) async => [aKey]);
       when(() => atClient.get(any())).thenAnswer((_) async {
         final v = AtValue();
         v.value = jsonEncode({
           'type': 'Widget',
-          'readBy': <String>[],
           'obj': {'name': 'w1'},
         });
         v.metadata = Metadata()
@@ -191,8 +194,11 @@ void main() {
         return v;
       });
 
+      // The later registration wins on both instances.
       final aItems = await a.getItems();
-      expect(aItems.single.obj, Widget('from-a:w1'));
+      expect(aItems.single.obj, Widget('b:w1'));
+      // `b` sees the same factory, of course.
+      expect(b.namespace, 'b.app.ns');
     });
 
     test('binary type round-trips through Base2e15', () {
