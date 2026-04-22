@@ -246,8 +246,14 @@ final class CItem<T> {
       // has somewhere to append.
       final readers = <Atsign>{};
       _readers = readers;
+      // Filter on BOTH id and owner — item ids are unique per-atSign
+      // only. If two atSigns each happen to own an item with id 't1',
+      // an event for one must not cross-pollinate the other CItem's
+      // readers set. See `CReadReceipt.owner` — it carries the parent
+      // item's owner, set from the notification's `to` field in
+      // `handleSubObjNotification`.
       _readReceiptSub = _collection.readReceipts
-          .where((e) => e.id == id)
+          .where((e) => e.id == id && e.owner == owner)
           .listen((e) => readers.add(e.from));
       _subFinalizer.attach(this, _readReceiptSub!, detach: this);
       // Use `getItemsAsStream` (tolerant of per-key decode errors —
@@ -342,6 +348,12 @@ sealed class CEvent {
   CEvent({required this.owner, required this.id});
 }
 
+/// Fires when a remote atSign posts a receipt for an item we can
+/// observe. [owner] + [id] identify the PARENT item being read (the
+/// thing the receipt is about — not the receipt sub-item itself), so
+/// they match the `owner` + `id` of the corresponding [CItem].
+/// [from] is the reader; [readAt] is the moment the notification was
+/// received (not the moment the reader wrote it).
 class CReadReceipt extends CEvent {
   final Atsign from;
   final DateTime readAt;
@@ -1246,8 +1258,14 @@ class AtCollection<T> {
           ancestry: parts.ancestry,
         ));
         if (directParent.subName == _rr) {
+          // A __rr sub-item is always shared WITH the parent's owner
+          // (that's how receipts reach them). The notification's `to`
+          // field therefore identifies the parent's owner — which is
+          // what `CReadReceipt.owner` carries, so events can be
+          // filtered unambiguously against a specific CItem even when
+          // item ids collide across atSigns.
           _events.add(CReadReceipt(
-            owner: self,
+            owner: n.to.toAtsign(),
             id: directParent.id,
             from: parts.from,
             readAt: DateTime.now(),
