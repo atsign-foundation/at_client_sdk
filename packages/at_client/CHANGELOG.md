@@ -1,3 +1,16 @@
+## 3.13.0
+
+Several significant enhancements to the API to make it much easier to use.
+- feat: New feature - Collections - a clean API for storing, sharing, 
+  unsharing and deleting objects in named collections, with sub-collections, 
+  event streams, built-in support for read receipts, and more
+- feat: added a new method, `send`, to NotificationService which is much 
+  easier to use than the old (still fine to use) `notify` method.
+- feat: added `factory AtRpc.server` to make it much simpler to create AtRpc 
+  servers. 
+- docs: Rewrote the main README
+- docs: Added many examples in the [example](example/README.md) directory
+
 ## 3.12.0
 
 - feat: explicit AtClient lifecycle control — cleanly stop and resume atClients without

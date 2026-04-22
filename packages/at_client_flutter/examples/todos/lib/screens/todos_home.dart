@@ -111,7 +111,7 @@ class _TodosHomeState extends State<TodosHome> {
       ),
       body: ValueListenableBuilder<List<CItem<Todo>>>(
         valueListenable: service.todos,
-        builder: (_, todos, _) {
+        builder: (_, todos, __) {
           if (todos.isEmpty) {
             return const Center(child: Text('No todos yet. Tap + to add one.'));
           }
@@ -120,10 +120,10 @@ class _TodosHomeState extends State<TodosHome> {
                 Future.wait([service.refreshTodos(), service.refreshNotes()]),
             child: ValueListenableBuilder(
               valueListenable: service.notesByTodoId,
-              builder: (_, notesByTodoId, _) {
+              builder: (_, notesByTodoId, __) {
                 return ListView.separated(
                   itemCount: todos.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (_, i) {
                     final todo = todos[i];
                     final noteCount = (notesByTodoId[todo.id]?.length ?? 0);

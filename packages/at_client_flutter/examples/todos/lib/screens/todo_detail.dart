@@ -212,10 +212,10 @@ class _TodoDetailScreenState extends State<TodoDetailScreen> {
       ),
       body: ValueListenableBuilder(
         valueListenable: service.todos,
-        builder: (_, _, _) {
+        builder: (_, __, ___) {
           return ValueListenableBuilder(
             valueListenable: service.notesByTodoId,
-            builder: (_, notesMap, _) {
+            builder: (_, notesMap, __) {
               final todo = _currentTodo;
               final notes = notesMap[todo.id] ?? const [];
               return Column(
@@ -294,7 +294,7 @@ class _TodoDetailScreenState extends State<TodoDetailScreen> {
                         ? const Center(child: Text('No notes'))
                         : ListView.separated(
                             itemCount: notes.length,
-                            separatorBuilder: (_, _) =>
+                            separatorBuilder: (_, __) =>
                                 const Divider(height: 1),
                             itemBuilder: (_, i) {
                               final n = notes[i];

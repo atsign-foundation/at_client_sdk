@@ -231,7 +231,7 @@ void main() {
           'type': 'n/a',
           'obj': 'r1 body',
           'parents': [
-            {'owner': bobStr},       // root (p1) owner
+            {'owner': bobStr}, // root (p1) owner
             {'owner': selfAtSignStr}, // direct parent (c1) owner
           ],
         });
