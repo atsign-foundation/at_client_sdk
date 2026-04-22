@@ -1,5 +1,7 @@
 library;
 
+//Components
+export 'src/components/at_button.dart';
 //Theme
 export 'src/theme/at_theme.dart';
 //Tokens
