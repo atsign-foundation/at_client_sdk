@@ -585,10 +585,10 @@ void main() {
       final errors = <Object>[];
       final done = Completer<void>();
       c.getItemsAsStream().listen(
-        good.add,
-        onError: errors.add,
-        onDone: done.complete,
-      );
+            good.add,
+            onError: errors.add,
+            onDone: done.complete,
+          );
       await done.future;
       expect(good, hasLength(1));
       expect(good.single.id, 'ok');
@@ -599,8 +599,8 @@ void main() {
       await expectLater(c.getItems(), throwsA(anything));
     });
 
-    test(
-        'stream consumers can restore silent-skip with .handleError', () async {
+    test('stream consumers can restore silent-skip with .handleError',
+        () async {
       final goodKey = AtKey.fromString('ok.$namespace$selfAtSignStr');
       final badKey = AtKey.fromString('bad.$namespace$selfAtSignStr');
       when(
@@ -622,10 +622,7 @@ void main() {
       final c = buildCollection<String>();
       // `.handleError` swallows the error event; `.toList()` then
       // collects only the good item.
-      final items = await c
-          .getItemsAsStream()
-          .handleError((_) {})
-          .toList();
+      final items = await c.getItemsAsStream().handleError((_) {}).toList();
       expect(items, hasLength(1));
       expect(items.single.id, 'ok');
     });
