@@ -1,80 +1,6 @@
-// =============================================================================
-// AtCollection<T> — a typed collection of items on the Atsign Protocol.
-//
-// MENTAL MODEL (read this first):
-//
-// A [CItem] is a single typed record owned by exactly one atSign. The owner
-// can mutate and delete it; everyone else can only read their own cached
-// copy. `item.owner == self` ⇔ you may call [create], [update] or [delete]
-// on it.
-//
-// [CItem.sharedWith] is a set of atSigns who each receive a *copy* of the
-// item. It is a distribution list, not a permission grant — you cannot
-// "un-share" retroactively except by deleting their copy.
-//
-// Read receipts: every [CItem] has an implicit reserved sub-collection
-// `__rr` whose items are the receipts written by readers. Query via
-// [CItem.readers] / [CItem.wasMarkedReadByMe] on the item itself, or
-// via [AtCollection.wasMarkedReadByMe] from the reader's side. Incoming
-// receipts fire as [CReadReceipt] events on the parent collection.
-//
-// PERSISTENCE VERBS:
-// - [draft] builds a local [CItem] with no I/O. Use when you need to stage
-//   changes (adjusting `expiresAt`, `availableAt`, etc.) before committing.
-// - [create] persists a brand-new item. Throws [StateError] if the self-key
-//   already exists. If no id is supplied, a random 8-character id is
-//   generated and checked for collision before use (retries up to 10 times).
-// - [update] persists changes to an existing item. Throws [StateError] if
-//   the self-key does not exist. With the default `unshareWithOthers: true`
-//   any existing recipient copy whose atSign is NO LONGER in
-//   `item.sharedWith` is deleted; retained recipients are overwritten in
-//   place — never delete-then-write.
-// - [delete] removes the item and its recipient copies. Throws
-//   [CollectionOpException] on any key-level failure and [StateError] if
-//   `cascade: false` (the default) and self-owned descendants exist.
-//
-// FACTORY REGISTRY (process-global, via static [AtCollection.registerFactory]).
-// Registering a `fromJson` lets AtCollection rehydrate typed objects. The
-// simple shape is:
-//
-//     atClient.collection<Todo>('todos.myapp', defaultExpiration,
-//         fromJson: Todo.fromJson);
-//
-// which calls [AtCollection.registerFactory<Todo>] internally, binding
-// `Todo.fromJson` to the type-tag `'Todo'` (from `Todo.toString()`) and
-// keying it on `Todo` (the [Type]) for lookup when drafting. For
-// polymorphic collections (e.g. `AtCollection<Pet>` holding both `Dog`
-// and `Cat`), register each concrete type explicitly:
-//
-//     AtCollection.registerFactory<Dog>(Dog.fromJson);
-//     AtCollection.registerFactory<Cat>(Cat.fromJson);
-//
-// Under obfuscated builds where class names may be renamed, pass an
-// explicit `typeTag:` to pin the wire-format type-tag and keep
-// interoperability across build variants:
-//
-//     AtCollection.registerFactory<Dog>(Dog.fromJson, typeTag: 'Dog');
-//
-// READING:
-// All read methods are thin wrappers around [getItemsAsStream], the
-// fundamental building block. Per-key decode failures are logged and
-// skipped — a single malformed item never poisons a read.
-// - [getItemsAsStream] yields a `Stream<CItem<T>>`, ideal for filter-style
-//   queries: `collection.getItemsAsStream().where(...).toList()`.
-// - [getItems] materialises the stream to a `List<CItem<T>>`.
-// - [get] returns the first match or throws [AtKeyNotFoundException].
-// - [getMaybe] returns the first match or `null`.
-//
-// EVENT STREAMS:
-//
-//     collection.watch()          // Stream<CEvent> — all of the below
-//     collection.updates          // Stream<CItemUpdated>
-//     collection.deletes          // Stream<CItemDeleted>
-//     collection.readReceipts     // Stream<CReadReceipt>
-//     collection.subUpdates       // Stream<CSubItemUpdated>  — descendants
-//     collection.subDeletes       // Stream<CSubItemDeleted>  — descendants
-//
-// =============================================================================
+// Typed, shareable, reactive collections layered on AtClient.
+// Entry point: [AtCollection]. See its class-level doc comment for
+// the feature tour (CRUD, sub-collections, read receipts, events).
 
 import 'dart:async';
 import 'dart:collection';
@@ -92,376 +18,147 @@ import 'package:meta/meta.dart';
 import 'package:mutex/mutex.dart';
 
 // -----------------------------------------------------------------------------
-// CItem
-
-final class CItem<T> {
-  /// The atSign which created this [CItem]. For example if we are
-  /// currently `@alice`, then the owner of a [CItem] which we create is
-  /// `@alice`; the owner of a [CItem] shared with us by `@bob` is `@bob`.
-  final Atsign owner;
-
-  /// The unique identifier, prepended to the collection's namespace when
-  /// persisted. E.g. if the collection namespace is `todos.my_apps` then
-  /// the full persisted key prefix is `<id>.todos.my_apps`.
-  final String id;
-
-  /// The type-tag that drives rehydration. Set automatically by [draft]
-  /// from `obj.runtimeType.toString()` when a factory is registered,
-  /// otherwise `'binary'` for [Uint8List] or `'n/a'` for primitives.
-  late final String type;
-
-  /// The application's domain object.
-  final T obj;
-
-  /// atSigns who receive a copy of this item. Mutable; edit then call
-  /// [AtCollection.update] to persist.
-  final Set<Atsign> sharedWith;
-
-  /// When this item was first written. Set by [AtCollection.draft] for
-  /// new items; read from server metadata on rehydrate.
-  DateTime createdAt;
-
-  /// Wall-clock expiry. Mutate before calling [AtCollection.update] to
-  /// change the item's lifecycle.
-  DateTime expiresAt;
-
-  /// Earliest moment at which recipient copies become visible. `null`
-  /// means "visible immediately". Mutate before calling
-  /// [AtCollection.update] to schedule.
-  DateTime? availableAt;
-
-  /// The collection that minted this item. Used internally to resolve
-  /// the item's `__rr` sub-collection for read-receipt queries.
-  final AtCollection<T> _collection;
-
-  /// Root-to-direct-parent owner chain persisted in the envelope.
-  /// Empty for items in a root collection. Length equals the item's
-  /// nesting depth for items in a sub-collection. Owner at index `i`
-  /// is the ancestor at nesting level `i` (root-most first).
-  ///
-  /// Ids of ancestors are not duplicated here — they're recoverable
-  /// from the item's key via the sub-collection's composed
-  /// namespace. See [ancestors] for the combined (owner, id) view.
-  final List<Atsign> parentOwners;
-
-  CItem._({
-    required this.owner,
-    required this.id,
-    required this.type,
-    required this.obj,
-    required this.sharedWith,
-    required this.createdAt,
-    required this.expiresAt,
-    required this.availableAt,
-    required AtCollection<T> collection,
-    List<Atsign>? parentOwners,
-  })  : _collection = collection,
-        parentOwners = parentOwners ?? const <Atsign>[] {
-    if (obj is Uint8List && type != 'binary') {
-      throw ArgumentError('type for Uint8List must be "binary"');
-    }
-  }
-
-  Map<String, dynamic> toJson() {
-    final base = type == 'binary'
-        ? <String, dynamic>{
-            'type': type,
-            'obj': Base2e15.encode(obj as Uint8List),
-          }
-        : <String, dynamic>{'type': type, 'obj': obj};
-    if (parentOwners.isNotEmpty) {
-      base['parents'] = [
-        for (final o in parentOwners) {'owner': o.toString()}
-      ];
-    }
-    return base;
-  }
-
-  @override
-  String toString() => 'CItem{owner: $owner, sharedWith: $sharedWith,'
-      ' id: $id, type: $type, obj: ${obj.runtimeType},'
-      ' expiresAt: $expiresAt, availableAt: $availableAt}';
-
-  /// The atSign this item's collection is acting as — delegates to
-  /// [AtCollection.self]. Useful for ownership checks:
-  /// `item.owner == item.self` means "I own this item".
-  Atsign get self => _collection.self;
-
-  /// Root-to-direct-parent chain for a sub-collection item. Empty for
-  /// items in a root collection. Each entry combines the
-  /// envelope-persisted [parentOwners] at the same index with the id
-  /// of that ancestor, which is recovered from the sub-collection's
-  /// composed namespace.
-  ///
-  /// If [parentOwners] is empty but the collection's namespace shows
-  /// this item lives at depth ≥ 1 (legacy data written before the
-  /// `parents` envelope field was added), owners fall back to this
-  /// item's own [owner] — same lenient assumption applied throughout
-  /// the codebase for backward compatibility.
-  List<({Atsign owner, String id})> get ancestors {
-    final ids = _collection._ancestorIdsFromNamespace();
-    if (ids.isEmpty) return const <({Atsign owner, String id})>[];
-    // Pair owners to ids, falling back to [owner] for any missing
-    // entries in the envelope (legacy items).
-    return [
-      for (int i = 0; i < ids.length; i++)
-        (
-          owner: i < parentOwners.length ? parentOwners[i] : owner,
-          id: ids[i],
-        ),
-    ];
-  }
-
-  // Lazy, event-maintained reader cache. `null` until the first load;
-  // mutex-protected to serialise concurrent callers; subscribed to the
-  // parent collection's `readReceipts` stream so arrivals append in-place.
-  Set<Atsign>? _readers;
-  final Mutex _readersLoadMutex = Mutex();
-  StreamSubscription<CReadReceipt>? _readReceiptSub;
-
-  // Cancel per-CItem read-receipt subscriptions when the CItem is GC'd
-  // (CItems churn on every refreshTodos-style loop; we'd leak otherwise).
-  static final Finalizer<StreamSubscription> _subFinalizer =
-      Finalizer<StreamSubscription>((sub) => sub.cancel());
-
-  /// The set of atSigns known to have read this item.
-  ///
-  /// First access triggers a one-shot load from the reserved `__rr`
-  /// sub-collection. After that, incoming `CReadReceipt` events on the
-  /// parent collection (targeting this item) append into the cached
-  /// set, so subsequent `readBy` calls are O(1) and always current.
-  ///
-  /// Works regardless of who owns the item — if I own it, receipts
-  /// from readers (who shared with me) populate the set; if I'm a
-  /// reader of someone else's item, my own receipt populates the set
-  /// (since my own `__rr` self-copy is on my atServer).
-  ///
-  /// For synchronous UI rendering after an `await readBy` prime, see
-  /// [readBySnapshot].
-  Future<Set<Atsign>> get readBy async {
-    await _readersLoadMutex.protect(() async {
-      if (_readers != null) return;
-      // Subscribe BEFORE the fetch so events arriving during the I/O
-      // are not lost. Initialise the set synchronously so the listener
-      // has somewhere to append.
-      final readers = <Atsign>{};
-      _readers = readers;
-      // Filter on BOTH id and owner — item ids are unique per-atSign
-      // only. If two atSigns each happen to own an item with id 't1',
-      // an event for one must not cross-pollinate the other CItem's
-      // readers set. See `CReadReceipt.owner` — it carries the parent
-      // item's owner, set from the notification's `to` field in
-      // `handleSubObjNotification`.
-      _readReceiptSub = _collection.readReceipts
-          .where((e) => e.id == id && e.owner == owner)
-          .listen((e) => readers.add(e.from));
-      _subFinalizer.attach(this, _readReceiptSub!, detach: this);
-      // Use `getItemsAsStream` (tolerant of per-key decode errors —
-      // it logs and skips). Legacy pre-refactor `__rr` records with
-      // bare-numeric values are silently ignored here rather than
-      // blowing up the whole load.
-      final rr = _collection._readReceiptsFor(this);
-      await for (final receipt in rr.getItemsAsStream()) {
-        readers.add(receipt.owner);
-      }
-    });
-    return UnmodifiableSetView(_readers!);
-  }
-
-  /// Synchronous accessor for the cached reader set; useful for UI
-  /// draw loops that can't await. Returns an empty set until the first
-  /// `await item.readBy` has primed the cache. Event-driven updates
-  /// keep this in sync thereafter.
-  Set<Atsign> get readBySnapshot =>
-      _readers == null ? const <Atsign>{} : UnmodifiableSetView(_readers!);
-
-  /// True iff the current atSign ([self]) has already posted a read
-  /// receipt for this item. Returns true for self-owned items (the
-  /// owner is trivially "caught up" on their own record).
-  Future<bool> wasMarkedReadByMe() async {
-    if (owner == self) return true;
-    return (await readBy).contains(self);
-  }
-
-  /// Idempotent: if the current atSign has already posted a read
-  /// receipt for this item, does nothing. Otherwise creates a receipt
-  /// sub-item shared with [owner]. No-op on self-owned items.
-  Future<void> markReadByMe() async {
-    if (owner == self) return;
-    if (await wasMarkedReadByMe()) return;
-    final rr = _collection._readReceiptsFor(this);
-    await rr.create(
-      obj: {'readAt': DateTime.now().toUtc().toIso8601String()},
-      sharedWith: {owner},
-    );
-  }
-}
-
-// -----------------------------------------------------------------------------
-// Operation results & exceptions
-
-enum CollectionOp { put, delete }
-
-sealed class OpResult {
-  final AtKey atKey;
-  final CollectionOp op;
-  OpResult(this.atKey, this.op);
-}
-
-class OpSuccess extends OpResult {
-  OpSuccess(super.atKey, super.op);
-  @override
-  String toString() => '$atKey:${op.name}:Success';
-}
-
-class OpFailure extends OpResult {
-  final Object reason;
-  OpFailure(super.atKey, super.op, this.reason);
-  @override
-  String toString() => '$atKey:${op.name}:Failure:$reason';
-}
-
-/// Thrown by [AtCollection.create] / [AtCollection.update] /
-/// [AtCollection.delete] when any key-level op failed. Inspect [results]
-/// for the per-key breakdown, or [failures] / [firstFailure] for the
-/// subset that went wrong.
-class CollectionOpException implements Exception {
-  final List<OpResult> results;
-  CollectionOpException(this.results);
-
-  List<OpFailure> get failures => results.whereType<OpFailure>().toList();
-
-  OpFailure? get firstFailure => failures.isEmpty ? null : failures.first;
-
-  @override
-  String toString() =>
-      'CollectionOpException with ${failures.length} failure(s):\n'
-      '  ${failures.join('\n  ')}';
-}
-
-// -----------------------------------------------------------------------------
-// Events
-
-sealed class CEvent {
-  final Atsign owner;
-  final String id;
-  CEvent({required this.owner, required this.id});
-}
-
-/// Fires when a remote atSign posts a receipt for an item we can
-/// observe. [owner] + [id] identify the PARENT item being read (the
-/// thing the receipt is about — not the receipt sub-item itself), so
-/// they match the `owner` + `id` of the corresponding [CItem].
-/// [from] is the reader; [readAt] is the moment the notification was
-/// received (not the moment the reader wrote it).
-class CReadReceipt extends CEvent {
-  final Atsign from;
-  final DateTime readAt;
-  CReadReceipt({
-    required super.owner,
-    required super.id,
-    required this.from,
-    required this.readAt,
-  });
-}
-
-class CItemUpdated extends CEvent {
-  CItemUpdated({required super.owner, required super.id});
-}
-
-class CItemDeleted extends CEvent {
-  CItemDeleted({required super.owner, required super.id});
-}
-
-/// A single link in a sub-item's parent chain.
-///
-/// - [id]: the ancestor's own id.
-/// - [subName]: the name of the sub-collection that contains this
-///   ancestor's next-level-down children.
-/// - [owner]: the ancestor's owner atSign, or `null` when unknown
-///   (see below).
-///
-/// Example — for the key `T.replies.S.comments.R.posts.app@<reply-owner>`
-/// (a "reply" on a "comment" on a "post"), the ancestry from root is:
-///   - `(id: R, subName: 'comments', owner: <post owner>)`
-///   - `(id: S, subName: 'replies', owner: <comment owner>)`
-///
-/// **Owner availability.** Owners of ancestors are not carried in
-/// an Atsign Protocol key; they live only in the sub-item's
-/// envelope `parents` field. The event pipeline fetches that
-/// envelope to populate [owner] for `CSubItemUpdated` events. On
-/// `CSubItemDeleted` events the sub-item itself is gone — there's
-/// no envelope to read — so every [owner] is `null`. Legacy
-/// sub-items written before the `parents` envelope field was added
-/// also yield `null` owners.
-///
-/// App code that filters event streams by an ancestor must match on
-/// **both** `id` AND `owner` to avoid cross-owner collisions when
-/// two atSigns independently pick the same id.
-typedef CAncestor = ({String id, String subName, Atsign? owner});
-
-class CSubItemUpdated extends CEvent {
-  /// Root-to-direct-parent chain. Length equals the sub-item's
-  /// nesting depth (1 for a direct sub-item, 2 for a sub-sub, …).
-  /// Owners are populated from the sub-item's envelope on arrival;
-  /// legacy items or envelopes missing the `parents` field yield
-  /// `null` owners.
-  final List<CAncestor> ancestry;
-
-  CSubItemUpdated({
-    required super.owner,
-    required super.id,
-    required this.ancestry,
-  });
-
-  /// The subName of the innermost sub-collection containing this
-  /// item — equivalent to `ancestry.last.subName`.
-  String get subName => ancestry.last.subName;
-}
-
-class CSubItemDeleted extends CEvent {
-  /// Root-to-direct-parent chain. Length equals the sub-item's
-  /// nesting depth. **Owners are always `null` on delete events** —
-  /// the sub-item is gone by the time the notification arrives, so
-  /// there's no envelope to recover `parents` from. Apps that need
-  /// to correlate a delete with the deleted item's ancestry should
-  /// cache the last seen `CSubItemUpdated` for that (id, subName)
-  /// and look it up here.
-  final List<CAncestor> ancestry;
-
-  CSubItemDeleted({
-    required super.owner,
-    required super.id,
-    required this.ancestry,
-  });
-
-  /// The subName of the innermost sub-collection containing this
-  /// item — equivalent to `ancestry.last.subName`.
-  String get subName => ancestry.last.subName;
-}
-
-/// Parsed components of a notification key. Private to [AtCollection].
-typedef _CParts = ({
-  Atsign from,
-
-  /// The item's own id (at any depth).
-  String id,
-
-  /// Root-to-direct-parent chain. Empty for a root-level item.
-  List<CAncestor> ancestry,
-});
-
-/// Internal registry entry for a typed factory. Holds both the wire-format
-/// tag and the rehydrator function.
-class _FactoryEntry {
-  final String tag;
-  final Function fromJson;
-  _FactoryEntry(this.tag, this.fromJson);
-}
-
-// -----------------------------------------------------------------------------
 // AtCollection<T>
 
+/// A typed collection of [CItem<T>] records scoped to a
+/// fully-qualified namespace (e.g. `'todos.my_app'`). Entry point
+/// for all CRUD, sub-collection, event-stream, and read-receipt
+/// operations on that namespace.
+///
+/// **NOTE:**
+/// Intended as the new standard way to manage CRUD operations. Marked
+/// as `@experimental` for this release since it is the first release - i.e.
+/// there _may_ be some breaking changes in the next minor version(s) if we get
+/// feedback which leads to change of any major design decisions.
+///
+/// **Obtain one via [AtClient.collection]**, never directly:
+///
+/// ```dart
+/// final todos = await atClient.collection<Todo>(
+///   'todos.my_app',
+///   const Duration(days: 7),
+///   fromJson: Todo.fromJson,
+///   cleanupOrphansOnCreation: true,  // optional startup sweep
+/// );
+/// ```
+///
+/// `AtClient.collection` caches one instance per namespace, so
+/// subsequent calls with the same namespace return the same object.
+///
+/// ---
+///
+/// ## Three primary features
+///
+/// ### 1. CRUD on typed records
+///
+/// A [CItem<T>] is a single typed record owned by one atSign and
+/// optionally shared (distributed) to others. [create] / [update] /
+/// [delete] / [get] / [getItems] are the verbs.
+///
+/// ```dart
+/// final item = await todos.create(
+///   obj: Todo('write readme'),
+///   sharedWith: {'@bob'.toAtsign()},
+/// );
+///
+/// item.obj.done = true;
+/// await todos.update(item);
+///
+/// for (final t in await todos.getItems()) {
+///   print('${t.owner}: ${t.obj.title}');
+/// }
+///
+/// await todos.delete(item);
+/// ```
+///
+/// ### 2. Sub-collections to arbitrary depth
+///
+/// A [CItem] can be a parent of its own [AtCollection<U>]; that
+/// sub-collection's items can themselves be parents; and so on.
+/// Nesting is bounded only by the Atsign Protocol's 255-char key
+/// limit — roughly **200 characters** are available for the combined
+/// collection + sub-collection namespaces assuming two 24-character
+/// atSigns, given the shape of the underlying identifiers:
+/// `[cached:]@bob:<200 chars incl '.' separators>@alice`.
+/// Each [subCollection] call checks the budget and throws
+/// [ArgumentError] early if the composed namespace would overflow.
+///
+/// ```dart
+/// // Level 1: comments on a post.
+/// final comments = posts.subCollection<Comment>(
+///   parent: post,
+///   subName: 'comments',
+///   defaultExpiration: const Duration(days: 30),
+///   fromJson: Comment.fromJson,
+/// );
+/// final comment = await comments.create(
+///   obj: Comment('nice one'),
+///   sharedWith: post.sharedWith,
+/// );
+///
+/// // Level 2: replies on that comment.
+/// final replies = comments.subCollection<Reply>(
+///   parent: comment,
+///   subName: 'replies',
+///   defaultExpiration: const Duration(days: 30),
+///   fromJson: Reply.fromJson,
+/// );
+/// await replies.create(obj: Reply('thanks'), sharedWith: {post.owner});
+///
+/// // Cascade a parent delete down the tree.
+/// await posts.delete(post, cascade: true);
+/// ```
+///
+/// ### 3. Built-in read-receipt framework
+///
+/// Every item has an implicit reserved `__rr` sub-collection
+/// holding receipts written by readers. Receipts populate
+/// [CItem.readBy] lazily and stay current via an event subscription
+/// — no bookkeeping at the app layer.
+///
+/// ```dart
+/// // Reader side: mark an incoming item as read. Idempotent.
+/// await incomingItem.markReadByMe();
+///
+/// // Owner side: who has read my item?
+/// final readers = await myItem.readBy;   // Future<Set<Atsign>>
+/// print('Read by: $readers');
+///
+/// // Sync UI render after an async prime:
+/// await myItem.readBy;                   // prime cache
+/// render(myItem.readBySnapshot);         // sync read of same cache
+///
+/// // React to receipts in real time:
+/// todos.readReceipts.listen((e) {
+///   print('${e.from} read item ${e.id} at ${e.readAt}');
+/// });
+/// ```
+///
+/// ---
+///
+/// ## Event streams
+///
+/// See [CEvent] and its subclasses for wire shapes.
+///
+/// ```dart
+/// collection.watch()          // Stream<CEvent> — everything below
+/// collection.updates          // Stream<CItemUpdated>
+/// collection.deletes          // Stream<CItemDeleted>
+/// collection.readReceipts     // Stream<CReadReceipt>
+/// collection.subUpdates       // Stream<CSubItemUpdated>  — descendants
+/// collection.subDeletes       // Stream<CSubItemDeleted>  — descendants
+/// ```
+///
+/// ---
+///
+/// Per-key decode failures on the read path are yielded into the
+/// stream as errors — not logged and swallowed. Every higher-level
+/// read method is a thin wrapper over [getItemsAsStream], so
+/// `await collection.getItems()` will throw on the first bad key;
+/// `await for` without an `onError` handler will throw on the first
+/// bad key. Apps that want the old silent-skip posture should chain
+/// `.handleError(...)` before consuming the stream.
+@experimental
 class AtCollection<T> {
   static const String readReceiptNamespacePart = '__rr';
   static const String _rr = readReceiptNamespacePart;
@@ -599,10 +296,14 @@ class AtCollection<T> {
   // ---------------------------------------------------------------------------
   // Basic getters
 
+  /// The atSign this collection's underlying [atClient] is acting as.
+  /// See [self] for a more readable alias in ownership-centric code.
   Atsign get atSign => atClient.atSign;
 
   /// Convenience alias for [atSign] — reads naturally when contrasting
   /// "self" with "other" atSigns in ownership / sharing logic.
+  /// `item.owner == collection.self` is the ownership test the
+  /// library uses internally.
   Atsign get self => atClient.atSign;
 
   /// True iff this collection was constructed via [subCollection] on a
@@ -796,14 +497,14 @@ class AtCollection<T> {
 
   /// Fetches a single item. Throws [AtKeyNotFoundException] if no item
   /// with this [id] owned by this [owner] exists. For a null-returning
-  /// variant, see [getMaybe].
+  /// variant, see [getOrNull].
   ///
-  /// Per-key decode failures are logged and skipped by the underlying
-  /// stream; if every copy of the requested item fails to decode, the
-  /// result is indistinguishable from "no item found" and this throws
-  /// [AtKeyNotFoundException].
+  /// A per-key decode failure encountered before any item is yielded
+  /// propagates as that failure (via [getItemsAsStream]'s stream-error
+  /// mechanism). Once a matching item is yielded the stream is
+  /// cancelled, so later-in-the-scan errors never surface here.
   Future<CItem<T>> get(String id, Atsign owner) async {
-    final item = await getMaybe(id, owner);
+    final item = await getOrNull(id, owner);
     if (item == null) {
       throw AtKeyNotFoundException(
         'No item found with id $id owned by $owner',
@@ -813,8 +514,10 @@ class AtCollection<T> {
   }
 
   /// Same as [get] but returns `null` when no item exists, instead of
-  /// throwing [AtKeyNotFoundException].
-  Future<CItem<T>?> getMaybe(String id, Atsign owner) async {
+  /// throwing [AtKeyNotFoundException]. Same error-propagation
+  /// semantics as [get] for per-key decode failures that precede the
+  /// first matching item.
+  Future<CItem<T>?> getOrNull(String id, Atsign owner) async {
     await for (final item in getItemsAsStream(id: id, owner: owner)) {
       return item; // first match; stream unsubscribed here.
     }
@@ -826,8 +529,11 @@ class AtCollection<T> {
   /// `owner+id` across self and shared copies are deduplicated and their
   /// `sharedWith` sets are unioned.
   ///
-  /// Thin wrapper around [getItemsAsStream]: per-key decode failures are
-  /// logged and skipped.
+  /// Thin wrapper around [getItemsAsStream]: a per-key decode failure
+  /// aborts the list with that error (via `.toList()` propagating the
+  /// stream error). If you need to continue past decode failures, use
+  /// [getItemsAsStream] directly and chain `.handleError(...)` or
+  /// collect errors yourself.
   Future<List<CItem<T>>> getItems({String? id, Atsign? owner}) =>
       getItemsAsStream(id: id, owner: owner).toList();
 
@@ -838,10 +544,19 @@ class AtCollection<T> {
   ///         .where((item) => item.obj.done)
   ///         .toList();
   ///
-  /// Per-key decode failures are logged (via `AtSignLogger.warning`) and
-  /// the offending item is skipped — callers see a clean stream. Good
-  /// and bad items can coexist without one poisoning the read. All
-  /// higher-level read methods ([get], [getMaybe], [getItems]) are
+  /// Per-key decode failures are yielded into the stream as **errors**
+  /// (via `yield* Stream<CItem<T>>.error(...)`), not swallowed. Good
+  /// data items keep flowing before and after each error. Callers
+  /// choose the policy:
+  ///
+  ///   - `.toList()` / `await for` without `onError` → first error
+  ///     aborts with the error thrown.
+  ///   - `.listen(onData, onError: ...)` → handle per-key errors
+  ///     without stopping.
+  ///   - `.handleError(...)` chained before consumption → restore a
+  ///     silent-skip posture.
+  ///
+  /// All higher-level read methods ([get], [getOrNull], [getItems]) are
   /// thin wrappers over this stream.
   Stream<CItem<T>> getItemsAsStream({String? id, Atsign? owner}) async* {
     // [getKeys] returns keys sorted by `fullKeyAndOwner`, so all copies of
@@ -885,7 +600,24 @@ class AtCollection<T> {
           pending!.sharedWith.add(k.sharedWith!.toAtsign());
         }
       } catch (e) {
-        logger.warning('getItemsAsStream decode failure on ${k.key}: $e');
+        // Per-key decode failures are yielded as stream errors rather
+        // than logged-and-skipped. The stream continues after an error
+        // — subsequent iterations of this for-loop produce further
+        // data or error events. Callers choose the policy:
+        //
+        //   - `.toList()` / `await for` (no onError): first error
+        //     aborts with the error thrown. This is what [getItems]
+        //     does.
+        //   - `.listen(onData, onError: ...)`: handle per-key errors
+        //     without stopping the stream.
+        //   - `.handleError(...)` before consuming: restore the
+        //     silent-skip posture with explicit in-library tolerance
+        //     (see [CItem.readBy] for an example — it does this to
+        //     tolerate legacy `__rr` items written in the pre-
+        //     refactor wire format).
+        yield* Stream<CItem<T>>.error(
+          'getItemsAsStream decode failure on ${k.key}: $e',
+        );
       }
     }
     if (pending != null) yield pending;
@@ -927,18 +659,51 @@ class AtCollection<T> {
   // Sub-collections
 
   /// Returns an [AtCollection] of [CItem]s scoped to [parent] — e.g. the
-  /// comments on a specific blog post. The returned collection is a
-  /// plain `AtCollection<U>`; it supports every method of the parent
-  /// class, including further nesting via [subCollection].
+  /// comments on a specific blog post, or the replies on a specific
+  /// comment.
   ///
-  /// The composed namespace is `<subName>.<parent.id>.<this.namespace>`,
-  /// which must fit within atProtocol's 255-char key limit given the
-  /// current atSign length. A violation throws [ArgumentError] at
-  /// construction, before any I/O.
+  /// ```dart
+  /// final comments = posts.subCollection<Comment>(
+  ///   parent: post,
+  ///   subName: 'comments',
+  ///   defaultExpiration: const Duration(days: 30),
+  ///   fromJson: Comment.fromJson,
+  /// );
+  /// await comments.create(obj: Comment('great post'));
+  /// ```
   ///
-  /// When [parent] is deleted (locally or via a remote notification), the
-  /// returned sub-collection auto-deletes this atSign's own items scoped
-  /// to it. See [cleanupOrphans] for the offline-recovery counterpart.
+  /// The returned collection is a plain `AtCollection<U>`; it supports
+  /// every method of the parent class, including further nesting:
+  ///
+  /// ```dart
+  /// final replies = comments.subCollection<Reply>(
+  ///   parent: aComment,
+  ///   subName: 'replies',
+  ///   defaultExpiration: const Duration(days: 30),
+  ///   fromJson: Reply.fromJson,
+  /// );
+  /// ```
+  ///
+  /// **Nesting depth is bounded by the Atsign Protocol's 255-char key
+  /// limit.** The composed namespace is
+  /// `<subName>.<parent.id>.<this.namespace>`. The worst-case on-wire
+  /// key for any descendant is the cached-copy shape
+  /// `[cached:]@bob:<id>.<composedNs>@alice`; for two 24-character
+  /// atSigns that leaves **~200 characters** (inclusive of `.`
+  /// separators) for the combined item id + root namespace + all
+  /// sub-collection composition. Shorter atSigns give you more
+  /// budget, longer atSigns give you less. [subCollection] enforces
+  /// this budget at construction time and throws [ArgumentError]
+  /// before any I/O if it would overflow — errors never reach the
+  /// wire.
+  ///
+  /// The reserved sub-collection name `__rr` is rejected (it's used
+  /// internally for read receipts); pick any other string.
+  ///
+  /// **Parent-delete behaviour.** When [parent] is deleted — locally,
+  /// or via a remote-delete notification — the sub-collection
+  /// automatically deletes this atSign's own items scoped to it. See
+  /// [cleanupOrphans] for the cold-start / offline recovery equivalent.
   AtCollection<U> subCollection<U>({
     required CItem<T> parent,
     required String subName,
@@ -979,6 +744,23 @@ class AtCollection<T> {
       throw ArgumentError('parent.id must not contain dots: "${parent.id}"');
     }
     final composedNs = '$subName.${parent.id}.$namespace';
+    // Worst-case key shape (cached-shared-with form):
+    //   cached:<other>:<id>.<composedNs>@<self>
+    // Budget:
+    //   255 total
+    //   - 55 allowance for <other> atSign (worst-case max length)
+    //   - ~26 fixed overhead: cached: (7) + : (1) + <id> (~8) +
+    //     . separator (1) + @ (implicit in atSign) + slack
+    //   - len(<self>)
+    //   = 174 - len(<self>) available for composedNs.
+    //
+    // This is a CONSERVATIVE check — it assumes the recipient's
+    // atSign is at the 55-char max. In practice atSigns tend to run
+    // ~24 chars, so real apps get more headroom than this bound
+    // reserves. Keeping the conservative check means a valid
+    // construction here will never produce an over-long key on any
+    // subsequent `put`, regardless of which atSign we eventually
+    // share with.
     final maxLen = 174 - atSign.toString().length;
     if (composedNs.length > maxLen) {
       throw ArgumentError(
@@ -1050,20 +832,33 @@ class AtCollection<T> {
   }
 
   /// Removes self-owned items whose parent chain has been broken.
+  /// Call this at startup to reclaim storage from orphaned sub-items
+  /// after an offline period during which a parent may have been
+  /// deleted on another atSign.
   ///
-  /// **On a sub-collection** (one returned by [subCollection] on a parent
-  /// item): if the bound parent no longer exists, deletes every self-owned
-  /// item in the sub-collection.
+  /// Behaviour depends on the collection instance:
   ///
-  /// **On a root or standalone collection**: scans every self-owned
-  /// descendant (any sub-collection, any depth) under this collection's
-  /// namespace and deletes those whose *root ancestor* — the direct item
-  /// in this collection — no longer exists. This is the path an app
-  /// should call on startup after the user may have been offline while a
-  /// parent item was deleted elsewhere, to reclaim storage from orphaned
-  /// sub-items of parents that are gone.
+  /// - **Sub-collection** (instance returned by [subCollection]): if
+  ///   its bound parent no longer exists locally, delete every
+  ///   self-owned item that matches this sub-collection's ancestor-
+  ///   owner chain. Cross-owner same-id chains are spared.
   ///
-  /// Returns per-key [OpResult]s for every deletion attempted.
+  /// - **Root / standalone collection**: scan every self-owned
+  ///   descendant (any sub-collection, any depth) under this
+  ///   collection's namespace; for each, walk the full ancestor chain
+  ///   (ids from the key + owners from the envelope `parents` field)
+  ///   and delete if any level is missing locally. Legacy items with
+  ///   no `parents` envelope fall back to a root-ancestor-only check.
+  ///
+  /// The cleanest place to invoke this is implicitly via
+  /// [AtClient.collection]'s `cleanupOrphansOnCreation: true` flag —
+  /// the library then runs one sweep before the returned Future
+  /// completes. Direct invocation is also supported for apps that
+  /// want to sweep at other moments.
+  ///
+  /// Returns per-key [OpResult]s for every deletion attempted; on a
+  /// sub-collection whose parent still exists, returns an empty list
+  /// (no-op).
   Future<List<OpResult>> cleanupOrphans() async {
     return isSubCollection
         ? _cleanupOrphansFromSub()
@@ -1073,7 +868,7 @@ class AtCollection<T> {
   Future<List<OpResult>> _cleanupOrphansFromSub() async {
     final parent = _parentItem!;
     final parentColl = _parentCollection!;
-    final stillAlive = await parentColl.getMaybe(parent.id, parent.owner);
+    final stillAlive = await parentColl.getOrNull(parent.id, parent.owner);
     if (stillAlive != null) return const <OpResult>[];
     // Parent is gone — delete every self-owned item in this sub-
     // collection AND its nested descendants, but only those whose
@@ -1384,28 +1179,58 @@ class AtCollection<T> {
   // ---------------------------------------------------------------------------
   // Event streams
 
-  /// All events from this collection as they fire. For type-filtered
-  /// access, prefer [updates] / [deletes] / [readReceipts] /
-  /// [subUpdates] / [subDeletes].
+  /// All events from this collection as a single broadcast stream.
+  /// For type-filtered access, prefer the typed getters below
+  /// ([updates] / [deletes] / [readReceipts] / [subUpdates] /
+  /// [subDeletes]) — they avoid an `is`-check in every listener.
+  ///
+  /// The stream is live and broadcast; multiple listeners are
+  /// supported. Unless app code includes an exhaustive `switch` (not
+  /// recommended — see [CEvent] doc comment), it should include a
+  /// `default: break` branch to stay forward-compatible with future
+  /// event types.
   Stream<CEvent> watch() => _events.stream;
 
+  /// Fires when a direct item (at this collection's namespace, depth
+  /// 0) is created or updated by any atSign the caller observes —
+  /// including this atSign's own writes after they round-trip.
+  /// Payload: see [CItemUpdated].
   Stream<CItemUpdated> get updates =>
       watch().where((e) => e is CItemUpdated).cast<CItemUpdated>();
 
+  /// Fires when a direct item is deleted (by its owner or via
+  /// cascade-from-parent). Payload: see [CItemDeleted].
   Stream<CItemDeleted> get deletes =>
       watch().where((e) => e is CItemDeleted).cast<CItemDeleted>();
 
+  /// Fires when another atSign posts a read receipt for an item the
+  /// caller owns. Reader identity is in [CReadReceipt.from]; the
+  /// item being read is identified by `(owner, id)` on the event
+  /// itself (same pair as the corresponding [CItem]). Read-receipt
+  /// events on your OWN writes aren't fired — you can't receipt your
+  /// own items ([CItem.markReadByMe] is a no-op on self-owned items).
   Stream<CReadReceipt> get readReceipts =>
       watch().where((e) => e is CReadReceipt).cast<CReadReceipt>();
 
-  /// Fires for any descendant (sub-collection) item that was updated —
-  /// at any nesting depth. Use [CSubItemUpdated.ancestry] to inspect
-  /// the full root-to-direct-parent chain, or [CSubItemUpdated.subName]
+  /// Fires for any descendant (sub-collection) item that was created
+  /// or updated — at any nesting depth. Use [CSubItemUpdated.ancestry]
+  /// to inspect the full root-to-direct-parent chain (each level
+  /// carries `id + subName + owner`), or [CSubItemUpdated.subName]
   /// for just the innermost sub-collection name.
+  ///
+  /// This is the best place to filter with a combined
+  /// `(id, owner, subName)` predicate — e.g.
+  /// `e.ancestry.last.id == myTodo.id && e.ancestry.last.owner ==
+  /// myTodo.owner && e.subName == 'notes'` — because ids alone are
+  /// not globally unique across atSigns.
   Stream<CSubItemUpdated> get subUpdates =>
       watch().where((e) => e is CSubItemUpdated).cast<CSubItemUpdated>();
 
-  /// Fires for any descendant item that was deleted.
+  /// Fires for any descendant (sub-collection) item that was deleted.
+  /// On deletes, [CSubItemDeleted.ancestry] has every `owner` set to
+  /// `null` — the sub-item is gone so there's no envelope to recover
+  /// owner info from. Match on ids alone, or cache the last seen
+  /// [CSubItemUpdated] for correlation.
   Stream<CSubItemDeleted> get subDeletes =>
       watch().where((e) => e is CSubItemDeleted).cast<CSubItemDeleted>();
 
@@ -1535,7 +1360,7 @@ class AtCollection<T> {
   }
 
   // Drops a past [availableAt] so rehydrated CItems don't carry a stale
-  // schedule. The atProtocol metadata wire format is additive — a past
+  // schedule. The Atsign Protocol metadata wire format is additive — a past
   // `availableAt` on the server has no mechanism to be cleared by an
   // update, so it may linger indefinitely. Presenting it as null here
   // keeps the app's view consistent with the item's actual state
@@ -1754,4 +1579,437 @@ class AtCollection<T> {
     }
     return true;
   }
+}
+
+// -----------------------------------------------------------------------------
+// CItem
+
+/// A single typed record in an [AtCollection]. Wraps an application's
+/// domain object of type [T] together with Atsign Protocol object metadata:
+///
+/// - **[owner]** — the atSign that wrote this item. Only the owner can
+///   mutate or delete it; other atSigns see read-only cached copies.
+///   `item.owner == item.self` is the ownership test the library uses
+///   internally.
+///
+/// - **[id]** — a per-owner unique identifier (not globally unique).
+///   Alice and Bob can each have an item with id `abc` — they're
+///   distinct records. Combine `(owner, id)` to identify an item
+///   globally.
+///
+/// - **[obj]** — the app-defined payload. For collections whose `T` is
+///   registered via [AtCollection.registerFactory], incoming envelopes
+///   are rehydrated into typed instances.
+///
+/// - **[sharedWith]** — the distribution list: atSigns who each receive
+///   their own cached copy of this item. Mutable — edit it then call
+///   [AtCollection.update] to persist the diff.
+///
+/// - **[createdAt] / [expiresAt] / [availableAt]** — lifecycle
+///   timestamps. [expiresAt] is mutable (the owner can extend or
+///   shorten an item's TTL); [availableAt] schedules recipient-copy
+///   visibility (time-to-birth).
+///
+/// - **[readBy]** / **[readBySnapshot]** / **[wasMarkedReadByMe]** /
+///   **[markReadByMe]** — the read-receipt surface. See the
+///   [AtCollection] class-level doc for the receipt model overview.
+///
+/// Construction is always via [AtCollection.draft] or
+/// [AtCollection.create]; the constructor is private so every CItem
+/// is bound to a collection it can delegate to for reads, sub-
+/// collection resolution, and event streaming.
+final class CItem<T> {
+  /// The atSign which created this [CItem]. For example if we are
+  /// currently `@alice`, then the owner of a [CItem] which we create is
+  /// `@alice`; the owner of a [CItem] shared with us by `@bob` is `@bob`.
+  final Atsign owner;
+
+  /// The unique identifier, prepended to the collection's namespace when
+  /// persisted. E.g. if the collection namespace is `todos.my_apps` then
+  /// the full persisted key prefix is `<id>.todos.my_apps`.
+  final String id;
+
+  /// The type-tag that drives rehydration. Set automatically by [draft]
+  /// from `obj.runtimeType.toString()` when a factory is registered,
+  /// otherwise `'binary'` for [Uint8List] or `'n/a'` for primitives.
+  late final String type;
+
+  /// The application's domain object.
+  final T obj;
+
+  /// atSigns who receive a copy of this item. Mutable; edit then call
+  /// [AtCollection.update] to persist.
+  final Set<Atsign> sharedWith;
+
+  /// When this item was first written. Set by [AtCollection.draft] for
+  /// new items; read from server metadata on rehydrate.
+  DateTime createdAt;
+
+  /// Wall-clock expiry. Mutate before calling [AtCollection.update] to
+  /// change the item's lifecycle.
+  DateTime expiresAt;
+
+  /// Earliest moment at which recipient copies become visible. `null`
+  /// means "visible immediately". Mutate before calling
+  /// [AtCollection.update] to schedule.
+  DateTime? availableAt;
+
+  /// The collection that minted this item. Used internally to resolve
+  /// the item's `__rr` sub-collection for read-receipt queries.
+  final AtCollection<T> _collection;
+
+  /// Root-to-direct-parent owner chain persisted in the envelope.
+  /// Empty for items in a root collection. Length equals the item's
+  /// nesting depth for items in a sub-collection. Owner at index `i`
+  /// is the ancestor at nesting level `i` (root-most first).
+  ///
+  /// Ids of ancestors are not duplicated here — they're recoverable
+  /// from the item's key via the sub-collection's composed
+  /// namespace. See [ancestors] for the combined (owner, id) view.
+  final List<Atsign> parentOwners;
+
+  CItem._({
+    required this.owner,
+    required this.id,
+    required this.type,
+    required this.obj,
+    required this.sharedWith,
+    required this.createdAt,
+    required this.expiresAt,
+    required this.availableAt,
+    required AtCollection<T> collection,
+    List<Atsign>? parentOwners,
+  })  : _collection = collection,
+        parentOwners = parentOwners ?? const <Atsign>[] {
+    if (obj is Uint8List && type != 'binary') {
+      throw ArgumentError('type for Uint8List must be "binary"');
+    }
+  }
+
+  Map<String, dynamic> toJson() {
+    final base = type == 'binary'
+        ? <String, dynamic>{
+            'type': type,
+            'obj': Base2e15.encode(obj as Uint8List),
+          }
+        : <String, dynamic>{'type': type, 'obj': obj};
+    if (parentOwners.isNotEmpty) {
+      base['parents'] = [
+        for (final o in parentOwners) {'owner': o.toString()}
+      ];
+    }
+    return base;
+  }
+
+  @override
+  String toString() => 'CItem{owner: $owner, sharedWith: $sharedWith,'
+      ' id: $id, type: $type, obj: ${obj.runtimeType},'
+      ' expiresAt: $expiresAt, availableAt: $availableAt}';
+
+  /// The atSign this item's collection is acting as — delegates to
+  /// [AtCollection.self]. Useful for ownership checks:
+  /// `item.owner == item.self` means "I own this item".
+  Atsign get self => _collection.self;
+
+  /// Root-to-direct-parent chain for a sub-collection item. Empty for
+  /// items in a root collection. Each entry combines the
+  /// envelope-persisted [parentOwners] at the same index with the id
+  /// of that ancestor, which is recovered from the sub-collection's
+  /// composed namespace.
+  ///
+  /// If [parentOwners] is empty but the collection's namespace shows
+  /// this item lives at depth ≥ 1 (legacy data written before the
+  /// `parents` envelope field was added), owners fall back to this
+  /// item's own [owner] — same lenient assumption applied throughout
+  /// the codebase for backward compatibility.
+  List<({Atsign owner, String id})> get ancestors {
+    final ids = _collection._ancestorIdsFromNamespace();
+    if (ids.isEmpty) return const <({Atsign owner, String id})>[];
+    // Pair owners to ids, falling back to [owner] for any missing
+    // entries in the envelope (legacy items).
+    return [
+      for (int i = 0; i < ids.length; i++)
+        (
+          owner: i < parentOwners.length ? parentOwners[i] : owner,
+          id: ids[i],
+        ),
+    ];
+  }
+
+  // Lazy, event-maintained reader cache. `null` until the first load;
+  // mutex-protected to serialise concurrent callers; subscribed to the
+  // parent collection's `readReceipts` stream so arrivals append in-place.
+  Set<Atsign>? _readers;
+  final Mutex _readersLoadMutex = Mutex();
+  StreamSubscription<CReadReceipt>? _readReceiptSub;
+
+  // Cancel per-CItem read-receipt subscriptions when the CItem is GC'd
+  // (CItems churn on every refreshTodos-style loop; we'd leak otherwise).
+  static final Finalizer<StreamSubscription> _subFinalizer =
+      Finalizer<StreamSubscription>((sub) => sub.cancel());
+
+  /// The set of atSigns known to have read this item.
+  ///
+  /// First access triggers a one-shot load from the reserved `__rr`
+  /// sub-collection. After that, incoming `CReadReceipt` events on the
+  /// parent collection (targeting this item) append into the cached
+  /// set, so subsequent `readBy` calls are O(1) and always current.
+  ///
+  /// Works regardless of who owns the item — if I own it, receipts
+  /// from readers (who shared with me) populate the set; if I'm a
+  /// reader of someone else's item, my own receipt populates the set
+  /// (since my own `__rr` self-copy is on my atServer).
+  ///
+  /// For synchronous UI rendering after an `await readBy` prime, see
+  /// [readBySnapshot].
+  Future<Set<Atsign>> get readBy async {
+    await _readersLoadMutex.protect(() async {
+      if (_readers != null) return;
+      // Subscribe BEFORE the fetch so events arriving during the I/O
+      // are not lost. Initialise the set synchronously so the listener
+      // has somewhere to append.
+      final readers = <Atsign>{};
+      _readers = readers;
+      // Filter on BOTH id and owner — item ids are unique per-atSign
+      // only. If two atSigns each happen to own an item with id 't1',
+      // an event for one must not cross-pollinate the other CItem's
+      // readers set. See `CReadReceipt.owner` — it carries the parent
+      // item's owner, set from the notification's `to` field in
+      // `handleSubObjNotification`.
+      _readReceiptSub = _collection.readReceipts
+          .where((e) => e.id == id && e.owner == owner)
+          .listen((e) => readers.add(e.from));
+      _subFinalizer.attach(this, _readReceiptSub!, detach: this);
+      // Chain `.handleError` on the __rr sub-collection stream so a
+      // single malformed receipt (e.g. legacy pre-refactor record
+      // with a bare-numeric value) doesn't poison this whole load.
+      // `getItemsAsStream` yields decode errors into the stream; we
+      // swallow them HERE because `readBy` is a best-effort cache —
+      // missing one reader is far preferable to crashing every read
+      // path that touches the cache (including ownership checks via
+      // `wasMarkedReadByMe`).
+      final rr = _collection._readReceiptsFor(this);
+      final tolerant = rr.getItemsAsStream().handleError((Object e) {
+        _collection.logger.warning('readBy: skipping __rr decode error: $e');
+      });
+      await for (final receipt in tolerant) {
+        readers.add(receipt.owner);
+      }
+    });
+    return UnmodifiableSetView(_readers!);
+  }
+
+  /// Synchronous accessor for the cached reader set; useful for UI
+  /// draw loops that can't await. Returns an empty set until the first
+  /// `await item.readBy` has primed the cache. Event-driven updates
+  /// keep this in sync thereafter.
+  Set<Atsign> get readBySnapshot =>
+      _readers == null ? const <Atsign>{} : UnmodifiableSetView(_readers!);
+
+  /// True iff the current atSign ([self]) has already posted a read
+  /// receipt for this item. Returns true for self-owned items (the
+  /// owner is trivially "caught up" on their own record).
+  Future<bool> wasMarkedReadByMe() async {
+    if (owner == self) return true;
+    return (await readBy).contains(self);
+  }
+
+  /// Idempotent: if the current atSign has already posted a read
+  /// receipt for this item, does nothing. Otherwise creates a receipt
+  /// sub-item shared with [owner]. No-op on self-owned items.
+  Future<void> markReadByMe() async {
+    if (owner == self) return;
+    if (await wasMarkedReadByMe()) return;
+    final rr = _collection._readReceiptsFor(this);
+    await rr.create(
+      obj: {'readAt': DateTime.now().toUtc().toIso8601String()},
+      sharedWith: {owner},
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Operation results & exceptions
+
+enum CollectionOp { put, delete }
+
+sealed class OpResult {
+  final AtKey atKey;
+  final CollectionOp op;
+  OpResult(this.atKey, this.op);
+}
+
+class OpSuccess extends OpResult {
+  OpSuccess(super.atKey, super.op);
+  @override
+  String toString() => '$atKey:${op.name}:Success';
+}
+
+class OpFailure extends OpResult {
+  final Object reason;
+  OpFailure(super.atKey, super.op, this.reason);
+  @override
+  String toString() => '$atKey:${op.name}:Failure:$reason';
+}
+
+/// Thrown by [AtCollection.create] / [AtCollection.update] /
+/// [AtCollection.delete] when any key-level op failed. Inspect [results]
+/// for the per-key breakdown, or [failures] / [firstFailure] for the
+/// subset that went wrong.
+class CollectionOpException implements Exception {
+  final List<OpResult> results;
+  CollectionOpException(this.results);
+
+  List<OpFailure> get failures => results.whereType<OpFailure>().toList();
+
+  OpFailure? get firstFailure => failures.isEmpty ? null : failures.first;
+
+  @override
+  String toString() =>
+      'CollectionOpException with ${failures.length} failure(s):\n'
+      '  ${failures.join('\n  ')}';
+}
+
+// -----------------------------------------------------------------------------
+// Events
+
+/// Base class for everything emitted on an [AtCollection]'s event streams.
+///
+/// **Not `sealed`** — new event subtypes are expected to be added in
+/// future minor-version releases (e.g. `CItemAvailable`,
+/// `CItemExpiringSoon`). Apps that `switch` on event type should always
+/// include a `default:` branch so a new event is a non-event rather
+/// than a broken build:
+///
+/// ```dart
+/// collection.watch().listen((event) {
+///   switch (event) {
+///     case CItemUpdated():    onUpdate(event); break;
+///     case CItemDeleted():    onDelete(event); break;
+///     case CReadReceipt():    onReceipt(event); break;
+///     default:                break; // unknown / future event
+///   }
+/// });
+/// ```
+///
+/// [owner] + [id] identify the subject of the event — typically a
+/// [CItem], matching that item's `owner` + `id`. Individual subclasses
+/// may refine what `id` refers to (e.g. for [CSubItemUpdated], `id` is
+/// the sub-item's own id and [CSubItemUpdated.ancestry] carries its
+/// chain).
+abstract class CEvent {
+  final Atsign owner;
+  final String id;
+  CEvent({required this.owner, required this.id});
+}
+
+/// Fires when a remote atSign posts a receipt for an item we can
+/// observe. [owner] + [id] identify the PARENT item being read (the
+/// thing the receipt is about — not the receipt sub-item itself), so
+/// they match the `owner` + `id` of the corresponding [CItem].
+/// [from] is the reader; [readAt] is the moment the notification was
+/// received (not the moment the reader wrote it).
+class CReadReceipt extends CEvent {
+  final Atsign from;
+  final DateTime readAt;
+  CReadReceipt({
+    required super.owner,
+    required super.id,
+    required this.from,
+    required this.readAt,
+  });
+}
+
+class CItemUpdated extends CEvent {
+  CItemUpdated({required super.owner, required super.id});
+}
+
+class CItemDeleted extends CEvent {
+  CItemDeleted({required super.owner, required super.id});
+}
+
+/// A single link in a sub-item's parent chain.
+///
+/// - [id]: the ancestor's own id.
+/// - [subName]: the name of the sub-collection that contains this
+///   ancestor's next-level-down children.
+/// - [owner]: the ancestor's owner atSign, or `null` when unknown
+///   (see below).
+///
+/// Example — for the key `T.replies.S.comments.R.posts.app@<reply-owner>`
+/// (a "reply" on a "comment" on a "post"), the ancestry from root is:
+///   - `(id: R, subName: 'comments', owner: <post owner>)`
+///   - `(id: S, subName: 'replies', owner: <comment owner>)`
+///
+/// **Owner availability.** Owners of ancestors are not carried in
+/// an Atsign Protocol key; they live only in the sub-item's
+/// envelope `parents` field. The event pipeline fetches that
+/// envelope to populate [owner] for `CSubItemUpdated` events. On
+/// `CSubItemDeleted` events the sub-item itself is gone — there's
+/// no envelope to read — so every [owner] is `null`. Legacy
+/// sub-items written before the `parents` envelope field was added
+/// also yield `null` owners.
+///
+/// App code that filters event streams by an ancestor must match on
+/// **both** `id` AND `owner` to avoid cross-owner collisions when
+/// two atSigns independently pick the same id.
+typedef CAncestor = ({String id, String subName, Atsign? owner});
+
+class CSubItemUpdated extends CEvent {
+  /// Root-to-direct-parent chain. Length equals the sub-item's
+  /// nesting depth (1 for a direct sub-item, 2 for a sub-sub, …).
+  /// Owners are populated from the sub-item's envelope on arrival;
+  /// legacy items or envelopes missing the `parents` field yield
+  /// `null` owners.
+  final List<CAncestor> ancestry;
+
+  CSubItemUpdated({
+    required super.owner,
+    required super.id,
+    required this.ancestry,
+  });
+
+  /// The subName of the innermost sub-collection containing this
+  /// item — equivalent to `ancestry.last.subName`.
+  String get subName => ancestry.last.subName;
+}
+
+class CSubItemDeleted extends CEvent {
+  /// Root-to-direct-parent chain. Length equals the sub-item's
+  /// nesting depth. **Owners are always `null` on delete events** —
+  /// the sub-item is gone by the time the notification arrives, so
+  /// there's no envelope to recover `parents` from. Apps that need
+  /// to correlate a delete with the deleted item's ancestry should
+  /// cache the last seen `CSubItemUpdated` for that (id, subName)
+  /// and look it up here.
+  final List<CAncestor> ancestry;
+
+  CSubItemDeleted({
+    required super.owner,
+    required super.id,
+    required this.ancestry,
+  });
+
+  /// The subName of the innermost sub-collection containing this
+  /// item — equivalent to `ancestry.last.subName`.
+  String get subName => ancestry.last.subName;
+}
+
+/// Parsed components of a notification key. Private to [AtCollection].
+typedef _CParts = ({
+  Atsign from,
+
+  /// The item's own id (at any depth).
+  String id,
+
+  /// Root-to-direct-parent chain. Empty for a root-level item.
+  List<CAncestor> ancestry,
+});
+
+/// Internal registry entry for a typed factory. Holds both the wire-format
+/// tag and the rehydrator function.
+class _FactoryEntry {
+  final String tag;
+  final Function fromJson;
+  _FactoryEntry(this.tag, this.fromJson);
 }

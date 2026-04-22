@@ -162,6 +162,6 @@ Future<void> receiver(ExampleContext c, AtCollection<BlogPost> posts) async {
   // deleted), the app would call `subCollection.cleanupOrphans()` at
   // startup for each known parent.
 
-  progress.add('Listening for ${exampleDefaultExpiration.inSeconds}s...');
+  progress.add('Lingering for 30s');
   await Future.delayed(const Duration(seconds: 30));
 }

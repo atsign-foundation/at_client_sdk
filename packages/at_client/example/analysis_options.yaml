@@ -13,7 +13,12 @@ linter:
     unawaited_futures: true
     depend_on_referenced_packages : false
 
-#analyzer:
+analyzer:
+  errors:
+    # The example programs exist to demonstrate AtCollection, which is
+    # currently @experimental. Silence the noise here only — consumers
+    # of the SDK use their own analysis_options and will still see it.
+    experimental_member_use: ignore
 #   exclude:
 #     - path/to/excluded/files/**
 

@@ -516,7 +516,7 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
-  group('reads — get, getMaybe, getItems, getItemsAsStream', () {
+  group('reads — get, getOrNull, getItems, getItemsAsStream', () {
     AtValue atValueFor(Object obj, {String type = 'n/a'}) {
       final v = AtValue();
       v.value = jsonEncode({
@@ -550,11 +550,13 @@ void main() {
       expect(items.single.obj, 'hello');
     });
 
-    test('getItems silently skips per-key decode failures', () async {
-      // Regression: previously this threw CollectionGetException with a
-      // partial list + errors. The new read path is stream-first and
-      // logs+skips bad keys — a single malformed record never poisons
-      // the read. Callers get whatever decoded successfully.
+    test(
+        'getItemsAsStream yields per-key decode failures as stream errors; '
+        'getItems surfaces them via .toList()', () async {
+      // The stream emits a sequence of data events for good items and
+      // error events for bad ones. Good data keeps flowing on either
+      // side of an error. `.toList()` adopts the first-error-wins
+      // policy of Dart streams, so `await getItems()` will throw.
       final goodKey = AtKey.fromString('ok.$namespace$selfAtSignStr');
       final badKey = AtKey.fromString('bad.$namespace$selfAtSignStr');
       when(
@@ -574,10 +576,58 @@ void main() {
       });
 
       final c = buildCollection<String>();
-      final items = await c.getItems();
+
+      // Direct stream consumption: collect data and errors separately.
+      // Use onData + onError + a Completer on onDone — `asFuture()`
+      // would short-circuit the future on the first error event,
+      // swallowing the post-error data the stream still emits.
+      final good = <CItem<String>>[];
+      final errors = <Object>[];
+      final done = Completer<void>();
+      c.getItemsAsStream().listen(
+        good.add,
+        onError: errors.add,
+        onDone: done.complete,
+      );
+      await done.future;
+      expect(good, hasLength(1));
+      expect(good.single.id, 'ok');
+      expect(errors, hasLength(1));
+      expect(errors.single.toString(), contains('bad.'));
+
+      // `getItems()` is `.toList()` which adopts first-error-wins.
+      await expectLater(c.getItems(), throwsA(anything));
+    });
+
+    test(
+        'stream consumers can restore silent-skip with .handleError', () async {
+      final goodKey = AtKey.fromString('ok.$namespace$selfAtSignStr');
+      final badKey = AtKey.fromString('bad.$namespace$selfAtSignStr');
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => [goodKey, badKey]);
+      when(() => atClient.get(any())).thenAnswer((invocation) async {
+        final k = invocation.positionalArguments.first as AtKey;
+        if (k.toString().startsWith('bad.')) {
+          throw Exception('boom');
+        }
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'hi'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+
+      final c = buildCollection<String>();
+      // `.handleError` swallows the error event; `.toList()` then
+      // collects only the good item.
+      final items = await c
+          .getItemsAsStream()
+          .handleError((_) {})
+          .toList();
       expect(items, hasLength(1));
       expect(items.single.id, 'ok');
-      expect(items.single.obj, 'hello');
     });
 
     test('get(id, owner) returns a single item or throws when missing',
@@ -602,7 +652,7 @@ void main() {
       );
     });
 
-    test('getMaybe returns null when missing, item when present', () async {
+    test('getOrNull returns null when missing, item when present', () async {
       final selfKey = AtKey.fromString('id4.$namespace$selfAtSignStr');
       when(
         () => atClient.getAtKeys(regex: any(named: 'regex')),
@@ -610,14 +660,14 @@ void main() {
       when(() => atClient.get(any())).thenAnswer((_) async => atValueFor('v4'));
 
       final c = buildCollection<String>();
-      final found = await c.getMaybe('id4', selfAtSign);
+      final found = await c.getOrNull('id4', selfAtSign);
       expect(found, isNotNull);
       expect(found!.obj, 'v4');
 
       when(
         () => atClient.getAtKeys(regex: any(named: 'regex')),
       ).thenAnswer((_) async => <AtKey>[]);
-      final missing = await c.getMaybe('nope', selfAtSign);
+      final missing = await c.getOrNull('nope', selfAtSign);
       expect(missing, isNull);
     });
 
