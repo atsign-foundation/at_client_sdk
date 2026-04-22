@@ -44,11 +44,16 @@ class FlutterEnrollmentService {
   ///
   /// Returns [AtEnrollmentResponse] which contains the enrollment id, status
   /// and generated auth keys when available
-  Future<AtEnrollmentResponse> enroll(EnrollmentRequest request,
-      {bool waitForApproval = false}) async {
+  Future<AtEnrollmentResponse> enroll(
+    EnrollmentRequest request, {
+    bool waitForApproval = false,
+  }) async {
     AtEnrollmentResponse? atEnrollmentResponse;
-    AtLookUp atLookup = AtLookupImpl(request.atSign,
-        request.rootDomain.rootDomain, request.rootDomain.rootPort);
+    AtLookUp atLookup = AtLookupImpl(
+      request.atSign,
+      request.rootDomain.rootDomain,
+      request.rootDomain.rootPort,
+    );
     try {
       atEnrollmentResponse = await _atEnrollment.submit(request, atLookup);
     } catch (e, s) {
@@ -58,13 +63,15 @@ class FlutterEnrollmentService {
 
     if (atEnrollmentResponse.atAuthKeys != null) {
       EnrollmentData enrollmentData = EnrollmentData(
-          atEnrollmentResponse.enrollmentId,
-          atEnrollmentResponse.atAuthKeys!,
-          DateTime.now().toUtc().microsecondsSinceEpoch,
-          namespace:
-              (request is AtEnrollmentRequest) ? request.namespaces : null);
+        atEnrollmentResponse.enrollmentId,
+        atEnrollmentResponse.atAuthKeys!,
+        DateTime.now().toUtc().microsecondsSinceEpoch,
+        namespace: (request is AtEnrollmentRequest) ? request.namespaces : null,
+      );
       await _keychainStorage.writeEnrollmentData(
-          atSign: request.atSign, enrollmentData: enrollmentData);
+        atSign: request.atSign,
+        enrollmentData: enrollmentData,
+      );
     }
     if (waitForApproval) {
       await awaitApproval(atEnrollmentResponse);
@@ -83,7 +90,9 @@ class FlutterEnrollmentService {
   /// Returns [AtEnrollmentResponse] containing the status of the approval and
   /// auth keys for the approved enrollment
   Future<AtEnrollmentResponse> approve(
-      EnrollmentRequestDecision request, AtLookUp atLookUp) async {
+    EnrollmentRequestDecision request,
+    AtLookUp atLookUp,
+  ) async {
     AtEnrollmentResponse? atEnrollmentResponse;
     try {
       if (!await _keychainStorage.validateEnrollment(request.atSign)) {
@@ -110,7 +119,9 @@ class FlutterEnrollmentService {
   /// Returns [AtEnrollmentResponse] containing the status of the denied
   /// enrollment request
   Future<AtEnrollmentResponse> deny(
-      EnrollmentRequestDecision request, AtLookUp atLookUp) async {
+    EnrollmentRequestDecision request,
+    AtLookUp atLookUp,
+  ) async {
     AtEnrollmentResponse? atEnrollmentResponse;
     try {
       atEnrollmentResponse = await _atEnrollment.deny(request, atLookUp);
@@ -132,7 +143,9 @@ class FlutterEnrollmentService {
   /// Returns [AtEnrollmentResponse] containing the status of the revoked
   /// enrollment
   Future<AtEnrollmentResponse> revoke(
-      EnrollmentRequestDecision request, AtLookUp atLookUp) async {
+    EnrollmentRequestDecision request,
+    AtLookUp atLookUp,
+  ) async {
     AtEnrollmentResponse? atEnrollmentResponse;
     try {
       atEnrollmentResponse = await _atEnrollment.revoke(request, atLookUp);
@@ -150,11 +163,12 @@ class FlutterEnrollmentService {
   ///
   /// Returns a [Stream] of [EnrollmentServerResponse] values matching the
   /// provided filters
-  Stream<EnrollmentServerResponse> getEnrollments(
-      {List<EnrollmentStatus>? statusFilters}) {
-    return _enrollmentRequestsController!.stream
-        .map((event) => event)
-        .where((event) {
+  Stream<EnrollmentServerResponse> getEnrollments({
+    List<EnrollmentStatus>? statusFilters,
+  }) {
+    return _enrollmentRequestsController!.stream.map((event) => event).where((
+      event,
+    ) {
       if (statusFilters == null) return true;
       return statusFilters.contains(event.status);
     });
@@ -175,8 +189,11 @@ class FlutterEnrollmentService {
   /// Returns a [List] of [EnrollmentServerResponse] objects matching the
   /// filters
   Future<List<EnrollmentServerResponse>> list(
-      List<EnrollmentStatus> filters, AtLookUp atLookUp,
-      {String? drx, String? arx}) async {
+    List<EnrollmentStatus> filters,
+    AtLookUp atLookUp, {
+    String? drx,
+    String? arx,
+  }) async {
     return await _atEnrollment.list(filters, atLookUp, arx: arx, drx: drx);
   }
 
@@ -194,8 +211,9 @@ class FlutterEnrollmentService {
     final enrollments = await list([], atLookUp);
     final hasManagePermission = enrollments.any(
       (e) =>
-          e.namespacePermissions
-              .any((p) => p.namespace == '__manage' && p.write && p.read) &&
+          e.namespacePermissions.any(
+            (p) => p.namespace == '__manage' && p.write && p.read,
+          ) &&
           e.status == EnrollmentStatus.approved,
     );
     _logger.info('Has manage permissions: $hasManagePermission');
@@ -252,8 +270,9 @@ class FlutterEnrollmentService {
       shouldDecrypt: false,
     );
 
-    _newRequestsSubscription =
-        stream.listen((AtNotification notification) async {
+    _newRequestsSubscription = stream.listen((
+      AtNotification notification,
+    ) async {
       try {
         _logger.info('Enrollment request with id ${notification.key} received');
         final enrollmentRequest = ServerEnrollmentRequest.fromServer(
@@ -265,8 +284,9 @@ class FlutterEnrollmentService {
       } catch (e, st) {
         _logger.severe('Failed to process new enrollment request.', e, st);
         if (!_enrollmentRequestsController!.isClosed) {
-          _enrollmentRequestsController!
-              .addError(UnexpectedResponseException(e.toString()));
+          _enrollmentRequestsController!.addError(
+            UnexpectedResponseException(e.toString()),
+          );
         }
       }
     });
