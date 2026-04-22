@@ -437,7 +437,7 @@ class TodosApp {
     'quit': 'Exit the app.',
   };
 
-  static const int _logHeight = 20;
+  static const int _logHeight = 10;
 
   // Fixed row count for the wrapped command list. Enough for 2 lines at 80-col
   // terminals; wider terminals will wrap to 1 line and leave the second row
