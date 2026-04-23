@@ -102,6 +102,7 @@ enum _Modal {
   none,
   commandMenu,
   help,
+  find,
   createTodo,
   editTodo,
   addNote,
@@ -234,6 +235,12 @@ class _TodosAppState extends State<TodosApp> {
   List<String> _formValues = const [];
   int _formFieldIdx = 0;
   CItem<Todo>? _formTarget;
+  // Live-narrow search overlay. When [_modal] is [_Modal.find], the
+  // user types into [_findQuery] and the list pane renders a
+  // `.where(title contains)` composition of the active preset's
+  // query. Empty string → full unfiltered list. Esc closes and
+  // clears.
+  String _findQuery = '';
 
   // Init state — the app renders a "Loading…" placeholder until
   // `_setup()` completes, or an error screen if init failed.
@@ -376,10 +383,19 @@ class _TodosAppState extends State<TodosApp> {
     );
   }
 
-  /// Builds the current `Query<Todo>` from active preset + reverse flag.
+  /// Builds the current `Query<Todo>` from active preset + reverse
+  /// flag, with the find-bar substring composed in as a further
+  /// `.where(title contains)` predicate when non-empty. Stream-
+  /// composing this into `watchWithSub` means typing in the find
+  /// bar narrows the visible list live.
   Query<Todo> _buildQuery() {
     final preset = _todoPresetsByName[_activePresetName]!;
-    return preset.build(collection, atClient.atSign, _reverseSort);
+    var q = preset.build(collection, atClient.atSign, _reverseSort);
+    final needle = _findQuery.trim().toLowerCase();
+    if (needle.isNotEmpty) {
+      q = q.where((t) => t.obj.title.toLowerCase().contains(needle));
+    }
+    return q;
   }
 
   /// (Re-)subscribes [_todosSub] to a single `watchWithSub` stream
@@ -605,6 +621,7 @@ class _TodosAppState extends State<TodosApp> {
     if (_modal == _Modal.commandMenu) return _onCommandMenuKey(event);
     if (_modal == _Modal.help) return _onHelpKey(event);
     if (_modal == _Modal.confirmDeleteTodo) return _onConfirmKey(event);
+    if (_modal == _Modal.find) return _onFindKey(event);
     if (_modal == _Modal.createTodo ||
         _modal == _Modal.editTodo ||
         _modal == _Modal.addNote ||
@@ -618,18 +635,75 @@ class _TodosAppState extends State<TodosApp> {
       setState(() => _modal = _Modal.help);
       return true;
     }
+    if (event.character == '/') {
+      _openFindBar();
+      return true;
+    }
     if (event.logicalKey == LogicalKey.keyM && event.isAltPressed) {
       _openCommandMenu();
       return true;
     }
-    // Letter `m` from the list pane also opens the menu, since many
-    // terminals swallow Alt and we want the menu discoverable.
-    if (_activePane == _Pane.list &&
-        event.logicalKey == LogicalKey.keyM &&
-        !event.isShiftPressed &&
-        !event.isControlPressed) {
-      _openCommandMenu();
-      return true;
+    // List-pane single-key shortcuts. These fire in the list context
+    // only, so they don't interfere with the detail pane's reserved
+    // keys. Each dispatches into the same action path as the
+    // corresponding command-menu entry.
+    if (_activePane == _Pane.list) {
+      if (event.logicalKey == LogicalKey.keyM &&
+          !event.isShiftPressed &&
+          !event.isControlPressed) {
+        _openCommandMenu();
+        return true;
+      }
+      if (event.logicalKey == LogicalKey.keyC &&
+          !event.isShiftPressed &&
+          !event.isControlPressed) {
+        _openCreateForm();
+        return true;
+      }
+      if (event.logicalKey == LogicalKey.keyE &&
+          !event.isShiftPressed &&
+          !event.isControlPressed) {
+        _openEditForm();
+        return true;
+      }
+      if (event.logicalKey == LogicalKey.keyD &&
+          !event.isShiftPressed &&
+          !event.isControlPressed) {
+        _openConfirmDeleteForm();
+        return true;
+      }
+      if (event.logicalKey == LogicalKey.keyN &&
+          !event.isShiftPressed &&
+          !event.isControlPressed) {
+        _openAddNoteForm();
+        return true;
+      }
+      if (event.logicalKey == LogicalKey.keyS && event.isShiftPressed) {
+        _openScheduleForm();
+        return true;
+      }
+      if (event.logicalKey == LogicalKey.keyS &&
+          !event.isShiftPressed &&
+          !event.isControlPressed) {
+        _openShareForm();
+        return true;
+      }
+      if (event.logicalKey == LogicalKey.keyU &&
+          !event.isShiftPressed &&
+          !event.isControlPressed) {
+        _openSetDueForm();
+        return true;
+      }
+      if (event.logicalKey == LogicalKey.keyR &&
+          !event.isShiftPressed &&
+          !event.isControlPressed) {
+        _cmdToggleReverse();
+        return true;
+      }
+      if (event.logicalKey == LogicalKey.space) {
+        unawaited(_cmdToggleDone());
+        return true;
+      }
     }
     return _onGlobalKey(event);
   }
@@ -789,6 +863,11 @@ class _TodosAppState extends State<TodosApp> {
       invoke: _cmdStats,
     ),
     (
+      label: 'Find (live-narrow list by title)',
+      hint: '/',
+      invoke: _openFindBar,
+    ),
+    (
       label: 'Help',
       hint: '?',
       invoke: () => setState(() => _modal = _Modal.help),
@@ -814,6 +893,51 @@ class _TodosAppState extends State<TodosApp> {
       _cmdMenuQuery = '';
       _cmdMenuIdx = 0;
     });
+  }
+
+  /// Opens the live-narrow find bar. The bar is a thin overlay
+  /// anchored at the bottom of the main area; every keystroke
+  /// rebuilds the active query with a `.where(title contains)`
+  /// predicate so the list filters in real time.
+  void _openFindBar() {
+    setState(() {
+      _modal = _Modal.find;
+      _findQuery = '';
+    });
+    unawaited(_applyActiveQuery());
+  }
+
+  bool _onFindKey(KeyboardEvent event) {
+    if (event.logicalKey == LogicalKey.escape) {
+      setState(() {
+        _modal = _Modal.none;
+        _findQuery = '';
+      });
+      unawaited(_applyActiveQuery());
+      return true;
+    }
+    if (event.logicalKey == LogicalKey.enter) {
+      // Leave the narrow in place; just close the bar so the list
+      // behaves normally until the user hits `/` again.
+      setState(() => _modal = _Modal.none);
+      return true;
+    }
+    if (event.logicalKey == LogicalKey.backspace) {
+      if (_findQuery.isNotEmpty) {
+        setState(
+          () => _findQuery = _findQuery.substring(0, _findQuery.length - 1),
+        );
+        unawaited(_applyActiveQuery());
+      }
+      return true;
+    }
+    final ch = event.character;
+    if (ch != null && ch.length == 1 && ch.codeUnitAt(0) >= 32) {
+      setState(() => _findQuery = _findQuery + ch);
+      unawaited(_applyActiveQuery());
+      return true;
+    }
+    return false;
   }
 
   bool _onCommandMenuKey(KeyboardEvent event) {
@@ -997,9 +1121,51 @@ class _TodosAppState extends State<TodosApp> {
         );
       case _Modal.confirmDeleteTodo:
         return _buildConfirmDeleteModal();
+      case _Modal.find:
+        return _buildFindBar();
       case _Modal.none:
         return const SizedBox.shrink();
     }
+  }
+
+  Component _buildFindBar() {
+    // Thin bottom-anchored bar overlaid on top of the log pane.
+    // Doesn't use a ModalBarrier because the user wants to see the
+    // live-narrowed list underneath while typing.
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 1),
+        decoration: BoxDecoration(
+          border: BoxBorder.all(color: Colors.yellow),
+          color: Colors.black,
+        ),
+        child: RichText(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: 'find ',
+                style: TextStyle(
+                  color: Colors.yellow,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              TextSpan(text: '> '),
+              TextSpan(
+                text: '$_findQuery█',
+                style: TextStyle(color: Colors.white),
+              ),
+              TextSpan(
+                text: '   (Esc clear · ⏎ keep filter)',
+                style: TextStyle(color: Colors.gray),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Component _buildCommandMenu() {
@@ -1630,8 +1796,17 @@ class _TodosAppState extends State<TodosApp> {
       (chord: 'g / G', desc: 'First / last todo'),
       (chord: '⏎ or →', desc: 'Focus detail pane'),
       (chord: 'Esc or ←', desc: 'Back to list pane'),
-      (chord: 'm', desc: 'Open command menu'),
-      (chord: 'Alt+m', desc: 'Open command menu (from any pane)'),
+      (chord: 'c', desc: 'Create todo'),
+      (chord: 'e', desc: 'Edit selected'),
+      (chord: 'd', desc: 'Delete selected (confirm)'),
+      (chord: 'space', desc: 'Toggle done on selected'),
+      (chord: 'n', desc: 'Add note to selected'),
+      (chord: 's', desc: 'Share selected (add atSigns)'),
+      (chord: 'u', desc: 'Set due date'),
+      (chord: 'S', desc: 'Schedule availableAt'),
+      (chord: 'r', desc: 'Reverse sort'),
+      (chord: '/', desc: 'Find (live-narrow list)'),
+      (chord: 'm / Alt+m', desc: 'Open command menu'),
       (chord: '?', desc: 'Toggle this help'),
       (chord: 'q', desc: 'Quit'),
     ];
@@ -1677,7 +1852,7 @@ class _TodosAppState extends State<TodosApp> {
                   ),
                 const SizedBox(height: 1),
                 Text(
-                  'More shortcuts (create / edit / delete / note / find) arrive in M5–M6.',
+                  'Every command is also reachable via the command menu (m).',
                   style: TextStyle(color: Colors.gray),
                 ),
               ],
@@ -1960,10 +2135,14 @@ class _TodosAppState extends State<TodosApp> {
       hint = 'type to filter  ·  ↑↓ nav  ·  ⏎ run  ·  Esc close';
     } else if (_modal == _Modal.help) {
       hint = 'Esc or ? to close help';
+    } else if (_modal == _Modal.find) {
+      hint = 'type to narrow  ·  ⏎ keep filter  ·  Esc clear & close';
+    } else if (_modal != _Modal.none) {
+      hint = 'Tab next  ·  ⏎ submit  ·  Esc cancel';
     } else if (_activePane == _Pane.list) {
       hint =
-          '↑↓/jk nav  ·  g/G top/bottom  ·  ⏎/→ detail  ·  '
-          'm menu  ·  ? help  ·  q quit';
+          '⏎/→ detail  ·  c new  ·  e edit  ·  d del  ·  '
+          'space done  ·  n note  ·  / find  ·  m menu  ·  ? help  ·  q quit';
     } else {
       hint = 'Esc/← back to list  ·  m menu  ·  ? help  ·  q quit';
     }
