@@ -95,6 +95,63 @@ typedef _TodoWithNotes =
 /// or (later) scroll through the detail pane; Esc / Left-arrow return.
 enum _Pane { list, detail }
 
+/// Per-TUI colour helpers. One instance lives on the State class,
+/// seeded with the current atSign at init time.
+///
+/// - [colorForAtSign] assigns a stable colour to each seen atSign by
+///   walking a pastel palette in order; the current atSign always
+///   gets the accent orange.
+/// - [colorForDue] encodes due-date urgency (overdue=red, ≤24h=amber,
+///   otherwise green; done items are greyed regardless).
+class _TodoTheme {
+  static const List<int> _palette = [
+    27, 33, 39, 63, 69, 75, 76, 82, 99, 105, 129, 135, 141, 148,
+    160, 161, 162, 166, 172, 178, 196, 200, 201, 202, 208, 214,
+  ];
+  final Atsign self;
+  final Map<String, int> _assigned = {};
+  int _nextIdx = 0;
+
+  _TodoTheme(this.self);
+
+  /// Converts an ANSI-256 colour-cube index (16..231) to an RGB Color
+  /// using the canonical 6x6x6 cube steps.
+  static Color _ansi256ToColor(int idx) {
+    if (idx < 16 || idx > 231) return Colors.white;
+    final n = idx - 16;
+    final r = (n ~/ 36) % 6;
+    final g = (n ~/ 6) % 6;
+    final b = n % 6;
+    const steps = [0, 95, 135, 175, 215, 255];
+    return Color.fromRGB(steps[r], steps[g], steps[b]);
+  }
+
+  Color colorForAtSign(Atsign a) {
+    if (a == self) return const Color.fromRGB(255, 135, 0); // self = orange
+    final key = a.toString();
+    final idx = _assigned.putIfAbsent(key, () {
+      final i = _nextIdx;
+      _nextIdx = (_nextIdx + 1) % _palette.length;
+      return i;
+    });
+    return _ansi256ToColor(_palette[idx]);
+  }
+
+  TextStyle styleForAtSign(Atsign a, {bool bold = false}) => TextStyle(
+    color: colorForAtSign(a),
+    fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+  );
+
+  Color colorForDue(DateTime? due, {required bool done}) {
+    if (done) return Colors.gray;
+    if (due == null) return Colors.white;
+    final diff = due.difference(DateTime.now());
+    if (diff.isNegative) return Colors.red;
+    if (diff.inHours < 24) return const Color.fromRGB(255, 175, 0);
+    return Colors.green;
+  }
+}
+
 // -----------------------------------------------------------------------------
 // TodosApp — root `StatefulComponent`. Milestone 1 scaffold: basic
 // header / list / detail / log / footer layout, arrow-key list
@@ -113,6 +170,7 @@ class TodosApp extends StatefulComponent {
 class _TodosAppState extends State<TodosApp> {
   AtClient get atClient => component.atClient;
   late final AtCollection<Todo> collection;
+  late final _TodoTheme _theme = _TodoTheme(atClient.atSign);
 
   // ---- State ----
   final List<String> logMessages = [];
@@ -617,20 +675,47 @@ class _TodosAppState extends State<TodosApp> {
     final check = todo.obj.done ? '[x]' : '[ ]';
     final due = todo.obj.dueDate?.toIso8601String().substring(0, 10) ?? '——';
     final noteCount = notesByTodoId[todo.id]?.length ?? 0;
-    final noteTag = noteCount > 0 ? '  notes:$noteCount' : '';
     // Highlight the selected row brighter when the list pane owns
     // focus; dimmer when focus has moved to the detail pane but the
     // user should still see which item they're reading.
     final rowBg = selected
         ? (listFocused ? Color.fromRGB(0, 0, 110) : Color.fromRGB(0, 0, 40))
         : null;
+    final weight = selected ? FontWeight.bold : FontWeight.normal;
+    final done = todo.obj.done;
+    final titleStyle = TextStyle(
+      fontWeight: weight,
+      color: done ? Colors.gray : null,
+    );
     return Container(
       color: rowBg,
       padding: const EdgeInsets.symmetric(horizontal: 1),
-      child: Text(
-        '$marker $check  $due  ${todo.obj.title}$noteTag',
-        style: TextStyle(
-          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+      child: RichText(
+        text: TextSpan(
+          style: TextStyle(fontWeight: weight),
+          children: [
+            TextSpan(text: '$marker $check  '),
+            TextSpan(
+              text: due,
+              style: TextStyle(
+                color: _theme.colorForDue(todo.obj.dueDate, done: done),
+                fontWeight: weight,
+              ),
+            ),
+            TextSpan(text: '  '),
+            TextSpan(text: todo.obj.title, style: titleStyle),
+            TextSpan(text: '  ('),
+            TextSpan(
+              text: '${todo.owner}',
+              style: _theme.styleForAtSign(todo.owner, bold: selected),
+            ),
+            TextSpan(text: ')'),
+            if (noteCount > 0)
+              TextSpan(
+                text: '  notes:$noteCount',
+                style: TextStyle(color: Colors.gray, fontWeight: weight),
+              ),
+          ],
         ),
       ),
     );
@@ -662,16 +747,35 @@ class _TodosAppState extends State<TodosApp> {
             Text(todo.obj.description),
           ],
           const SizedBox(height: 1),
-          Text('Owner    : ${todo.owner}'),
-          Text(
-            'Due      : ${_fmtDateTime(todo.obj.dueDate)}',
+          RichText(
+            text: TextSpan(
+              children: [
+                const TextSpan(text: 'Owner    : '),
+                TextSpan(
+                  text: '${todo.owner}',
+                  style: _theme.styleForAtSign(todo.owner, bold: true),
+                ),
+              ],
+            ),
           ),
-          Text(
-            'Created  : ${_fmtDateTime(todo.createdAt)}',
+          RichText(
+            text: TextSpan(
+              children: [
+                const TextSpan(text: 'Due      : '),
+                TextSpan(
+                  text: _fmtDateTime(todo.obj.dueDate),
+                  style: TextStyle(
+                    color: _theme.colorForDue(
+                      todo.obj.dueDate,
+                      done: todo.obj.done,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          Text(
-            'Shared   : ${todo.sharedWith.isEmpty ? "—" : todo.sharedWith.join(", ")}',
-          ),
+          Text('Created  : ${_fmtDateTime(todo.createdAt)}'),
+          _buildAtSignListRow('Shared   : ', todo.sharedWith),
           Text('Done     : ${todo.obj.done ? "yes" : "no"}'),
           const SizedBox(height: 1),
           // Live read-by timeline. Each row is one receipt CItem from
@@ -689,9 +793,20 @@ class _TodosAppState extends State<TodosApp> {
               style: TextStyle(color: Colors.gray),
             ),
           for (final r in _detailReceipts)
-            Text(
-              '  • ${r.owner}  ${_fmtDateTime(r.createdAt)}',
-              style: TextStyle(color: Colors.gray),
+            RichText(
+              text: TextSpan(
+                children: [
+                  const TextSpan(text: '  • '),
+                  TextSpan(
+                    text: '${r.owner}',
+                    style: _theme.styleForAtSign(r.owner),
+                  ),
+                  TextSpan(
+                    text: '  ${_fmtDateTime(r.createdAt)}',
+                    style: TextStyle(color: Colors.gray),
+                  ),
+                ],
+              ),
             ),
           const SizedBox(height: 1),
           Text(
@@ -701,13 +816,40 @@ class _TodosAppState extends State<TodosApp> {
           if (notes.isEmpty)
             Text('  (none)', style: TextStyle(color: Colors.gray)),
           for (final n in notes)
-            Text(
-              '  • [${n.owner}] ${n.obj.note}',
-              style: TextStyle(color: Colors.gray),
+            RichText(
+              text: TextSpan(
+                children: [
+                  const TextSpan(text: '  • ['),
+                  TextSpan(
+                    text: '${n.owner}',
+                    style: _theme.styleForAtSign(n.owner),
+                  ),
+                  TextSpan(
+                    text: '] ${n.obj.note}',
+                    style: TextStyle(color: Colors.gray),
+                  ),
+                ],
+              ),
             ),
         ],
       ),
     );
+  }
+
+  /// Helper that renders a label followed by a comma-separated
+  /// coloured list of atSigns. Used for "Shared :" and similar.
+  Component _buildAtSignListRow(String label, Iterable<Atsign> atSigns) {
+    if (atSigns.isEmpty) {
+      return Text('$label—');
+    }
+    final children = <InlineSpan>[TextSpan(text: label)];
+    var first = true;
+    for (final a in atSigns) {
+      if (!first) children.add(const TextSpan(text: ', '));
+      children.add(TextSpan(text: '$a', style: _theme.styleForAtSign(a)));
+      first = false;
+    }
+    return RichText(text: TextSpan(children: children));
   }
 
   static String _fmtDateTime(DateTime? d) => d == null
