@@ -97,9 +97,19 @@ enum _Pane { list, detail }
 
 /// Which modal overlay (if any) is currently active. Only one modal
 /// can be open at a time; it steals keyboard focus from the main
-/// view and is dismissed with Esc. Later milestones add form-style
-/// modal entries for create / edit / add-note / share / etc.
-enum _Modal { none, commandMenu, help }
+/// view and is dismissed with Esc.
+enum _Modal {
+  none,
+  commandMenu,
+  help,
+  createTodo,
+  editTodo,
+  addNote,
+  share,
+  schedule,
+  setDue,
+  confirmDeleteTodo,
+}
 
 /// One row in the command menu. Each command is a (label, hint,
 /// invoke) triple — the hint column renders the equivalent single-
@@ -212,6 +222,18 @@ class _TodosAppState extends State<TodosApp> {
   // the filtered list.
   String _cmdMenuQuery = '';
   int _cmdMenuIdx = 0;
+  // Modal-form state. Each form is described by a list of field
+  // labels and a parallel list of current text values; the user
+  // types into `_formFieldIdx`-th field and presses Tab / Enter to
+  // advance. The target todo (when editing / adding a note to an
+  // existing one) is held in [_formTarget]. Simpler than wiring
+  // nocterm's TextField focus system for every field, and identical
+  // to the "type into a slot" mental model of the previous inline-
+  // prompt TUI.
+  List<String> _formLabels = const [];
+  List<String> _formValues = const [];
+  int _formFieldIdx = 0;
+  CItem<Todo>? _formTarget;
 
   // Init state — the app renders a "Loading…" placeholder until
   // `_setup()` completes, or an error screen if init failed.
@@ -582,6 +604,15 @@ class _TodosAppState extends State<TodosApp> {
   bool _onTopKey(KeyboardEvent event) {
     if (_modal == _Modal.commandMenu) return _onCommandMenuKey(event);
     if (_modal == _Modal.help) return _onHelpKey(event);
+    if (_modal == _Modal.confirmDeleteTodo) return _onConfirmKey(event);
+    if (_modal == _Modal.createTodo ||
+        _modal == _Modal.editTodo ||
+        _modal == _Modal.addNote ||
+        _modal == _Modal.share ||
+        _modal == _Modal.schedule ||
+        _modal == _Modal.setDue) {
+      return _onFormKey(event);
+    }
     // Global shortcuts available from any pane:
     if (event.character == '?') {
       setState(() => _modal = _Modal.help);
@@ -673,9 +704,44 @@ class _TodosAppState extends State<TodosApp> {
   /// that open a modal form instead of running directly.
   List<_Command> _commands() => [
     (
+      label: 'Create todo',
+      hint: 'c',
+      invoke: _openCreateForm,
+    ),
+    (
+      label: 'Edit selected todo',
+      hint: 'e',
+      invoke: _openEditForm,
+    ),
+    (
+      label: 'Delete selected todo',
+      hint: 'd',
+      invoke: _openConfirmDeleteForm,
+    ),
+    (
       label: 'Toggle done on selected',
       hint: 'space',
       invoke: _cmdToggleDone,
+    ),
+    (
+      label: 'Add note to selected',
+      hint: 'n',
+      invoke: _openAddNoteForm,
+    ),
+    (
+      label: 'Share selected (add atSigns)',
+      hint: 's',
+      invoke: _openShareForm,
+    ),
+    (
+      label: 'Set due date on selected',
+      hint: 'u',
+      invoke: _openSetDueForm,
+    ),
+    (
+      label: 'Schedule selected (availableAt)',
+      hint: 'S',
+      invoke: _openScheduleForm,
     ),
     (
       label: 'Filter: All',
@@ -906,6 +972,31 @@ class _TodosAppState extends State<TodosApp> {
         return _buildCommandMenu();
       case _Modal.help:
         return _buildHelpOverlay();
+      case _Modal.createTodo:
+        return _buildFormModal('New todo');
+      case _Modal.editTodo:
+        return _buildFormModal('Edit todo');
+      case _Modal.addNote:
+        return _buildFormModal(
+          'Add note to "${_formTarget?.obj.title ?? "…"}"',
+        );
+      case _Modal.share:
+        return _buildFormModal(
+          'Share "${_formTarget?.obj.title ?? "…"}"',
+          hint: 'Enter comma-separated atSigns  ·  ⏎ submit  ·  Esc cancel',
+        );
+      case _Modal.schedule:
+        return _buildFormModal(
+          'Schedule "${_formTarget?.obj.title ?? "…"}"',
+          hint: 'Delay in seconds  ·  ⏎ submit  ·  Esc cancel',
+        );
+      case _Modal.setDue:
+        return _buildFormModal(
+          'Set due for "${_formTarget?.obj.title ?? "…"}"',
+          hint: 'YYYY-MM-DD  ·  ⏎ submit  ·  Esc cancel',
+        );
+      case _Modal.confirmDeleteTodo:
+        return _buildConfirmDeleteModal();
       case _Modal.none:
         return const SizedBox.shrink();
     }
@@ -988,6 +1079,548 @@ class _TodosAppState extends State<TodosApp> {
           ],
         ),
       ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Form modals (M5) — every input command pops a modal form here.
+  //
+  // Fields are stored as plain strings in [_formValues], indexed by
+  // [_formFieldIdx]. Tab / Enter move between fields (Enter on the
+  // last field submits); Esc cancels. Rendering shows an underscore
+  // at the end of the focused field's value to hint at cursor
+  // position. This is deliberately thinner than wiring nocterm's
+  // TextField focus system — the UX is consistent across every form
+  // and stays close to the inline-prompt shape of the previous TUI.
+
+  void _closeModal() {
+    if (!mounted) return;
+    setState(() {
+      _modal = _Modal.none;
+      _formTarget = null;
+      _formLabels = const [];
+      _formValues = const [];
+      _formFieldIdx = 0;
+    });
+  }
+
+  void _openForm(
+    _Modal modal,
+    List<String> labels,
+    List<String> initialValues, {
+    CItem<Todo>? target,
+  }) {
+    assert(labels.length == initialValues.length);
+    setState(() {
+      _modal = modal;
+      _formLabels = labels;
+      _formValues = [...initialValues];
+      _formFieldIdx = 0;
+      _formTarget = target;
+    });
+  }
+
+  // ---- Form openers ----
+
+  void _openCreateForm() {
+    final defaultDue = DateTime.now().add(const Duration(days: 7));
+    _openForm(
+      _Modal.createTodo,
+      ['Title', 'Description', 'Share with (comma @signs)', 'Due (YYYY-MM-DD)'],
+      ['', '', '', defaultDue.toIso8601String().substring(0, 10)],
+    );
+  }
+
+  void _openEditForm() {
+    final t = _requireSelectedOwnTodo('Edit');
+    if (t == null) return;
+    _openForm(
+      _Modal.editTodo,
+      ['Title', 'Description', 'Share with (comma @signs)'],
+      [
+        t.obj.title,
+        t.obj.description,
+        t.sharedWith.map((a) => '$a').join(', '),
+      ],
+      target: t,
+    );
+  }
+
+  void _openAddNoteForm() {
+    if (todos.isEmpty ||
+        _selectedIdx < 0 ||
+        _selectedIdx >= todos.length) {
+      log('No todo selected.', error: true);
+      return;
+    }
+    final t = todos[_selectedIdx];
+    _openForm(_Modal.addNote, ['Note'], [''], target: t);
+  }
+
+  void _openShareForm() {
+    final t = _requireSelectedOwnTodo('Share');
+    if (t == null) return;
+    _openForm(
+      _Modal.share,
+      ['Add atSigns (comma-separated)'],
+      [''],
+      target: t,
+    );
+  }
+
+  void _openScheduleForm() {
+    final t = _requireSelectedOwnTodo('Schedule');
+    if (t == null) return;
+    _openForm(
+      _Modal.schedule,
+      ['Delay visibility by (seconds)'],
+      ['30'],
+      target: t,
+    );
+  }
+
+  void _openSetDueForm() {
+    final t = _requireSelectedOwnTodo('Set due date');
+    if (t == null) return;
+    final current =
+        t.obj.dueDate?.toIso8601String().substring(0, 10) ??
+        DateTime.now().add(const Duration(days: 7)).toIso8601String().substring(
+          0,
+          10,
+        );
+    _openForm(_Modal.setDue, ['Due (YYYY-MM-DD)'], [current], target: t);
+  }
+
+  void _openConfirmDeleteForm() {
+    if (todos.isEmpty ||
+        _selectedIdx < 0 ||
+        _selectedIdx >= todos.length) {
+      log('No todo selected.', error: true);
+      return;
+    }
+    final t = todos[_selectedIdx];
+    if (t.owner != atClient.atSign) {
+      log("Can't delete ${t.owner}'s todo.", error: true);
+      return;
+    }
+    setState(() {
+      _modal = _Modal.confirmDeleteTodo;
+      _formTarget = t;
+    });
+  }
+
+  CItem<Todo>? _requireSelectedOwnTodo(String action) {
+    if (todos.isEmpty ||
+        _selectedIdx < 0 ||
+        _selectedIdx >= todos.length) {
+      log('$action: no todo selected.', error: true);
+      return null;
+    }
+    final t = todos[_selectedIdx];
+    if (t.owner != atClient.atSign) {
+      log("$action: can't modify ${t.owner}'s todo.", error: true);
+      return null;
+    }
+    return t;
+  }
+
+  // ---- Form key handler ----
+
+  bool _onFormKey(KeyboardEvent event) {
+    if (event.logicalKey == LogicalKey.escape) {
+      _closeModal();
+      return true;
+    }
+    if (event.logicalKey == LogicalKey.tab) {
+      if (_formValues.isEmpty) return true;
+      final n = _formValues.length;
+      setState(
+        () => _formFieldIdx = event.isShiftPressed
+            ? (_formFieldIdx - 1 + n) % n
+            : (_formFieldIdx + 1) % n,
+      );
+      return true;
+    }
+    if (event.logicalKey == LogicalKey.enter) {
+      if (_formFieldIdx < _formValues.length - 1) {
+        setState(() => _formFieldIdx++);
+      } else {
+        unawaited(_submitForm());
+      }
+      return true;
+    }
+    if (event.logicalKey == LogicalKey.backspace) {
+      if (_formValues.isEmpty) return true;
+      final v = _formValues[_formFieldIdx];
+      if (v.isNotEmpty) {
+        setState(() {
+          _formValues = [..._formValues];
+          _formValues[_formFieldIdx] = v.substring(0, v.length - 1);
+        });
+      }
+      return true;
+    }
+    final ch = event.character;
+    if (ch != null && ch.length == 1 && ch.codeUnitAt(0) >= 32) {
+      setState(() {
+        _formValues = [..._formValues];
+        _formValues[_formFieldIdx] = _formValues[_formFieldIdx] + ch;
+      });
+      return true;
+    }
+    return false;
+  }
+
+  bool _onConfirmKey(KeyboardEvent event) {
+    if (event.logicalKey == LogicalKey.escape ||
+        event.character == 'n' ||
+        event.character == 'N') {
+      _closeModal();
+      return true;
+    }
+    if (event.character == 'y' ||
+        event.character == 'Y' ||
+        event.logicalKey == LogicalKey.enter) {
+      unawaited(_submitForm());
+      return true;
+    }
+    return false;
+  }
+
+  // ---- Submit (per-modal) ----
+
+  Future<void> _submitForm() async {
+    switch (_modal) {
+      case _Modal.createTodo:
+        await _submitCreate();
+      case _Modal.editTodo:
+        await _submitEdit();
+      case _Modal.addNote:
+        await _submitAddNote();
+      case _Modal.share:
+        await _submitShare();
+      case _Modal.schedule:
+        await _submitSchedule();
+      case _Modal.setDue:
+        await _submitSetDue();
+      case _Modal.confirmDeleteTodo:
+        await _submitDeleteTodo();
+      // ignore: no_default_cases
+      default:
+        _closeModal();
+    }
+  }
+
+  Set<Atsign> _parseAtSigns(String s) => s
+      .split(',')
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .map((e) => e.toAtsign())
+      .toSet();
+
+  DateTime _parseDueOrDefault(String s) {
+    try {
+      return DateTime.parse(s.trim());
+    } catch (_) {
+      return DateTime.now().add(const Duration(days: 7));
+    }
+  }
+
+  Future<void> _submitCreate() async {
+    final title = _formValues[0].trim();
+    if (title.isEmpty) {
+      log('Title is required.', error: true);
+      return;
+    }
+    final desc = _formValues[1].trim();
+    final shared = _parseAtSigns(_formValues[2]);
+    final due = _parseDueOrDefault(_formValues[3]);
+    try {
+      final item = await collection.create(
+        obj: Todo(title: title, description: desc, dueDate: due),
+        sharedWith: shared,
+      );
+      log('Created: ${item.obj.title}');
+      _closeModal();
+      await refreshTodos();
+    } catch (e) {
+      log('Create failed: $e', error: true);
+    }
+  }
+
+  Future<void> _submitEdit() async {
+    final t = _formTarget;
+    if (t == null) {
+      _closeModal();
+      return;
+    }
+    final title = _formValues[0].trim();
+    if (title.isEmpty) {
+      log('Title is required.', error: true);
+      return;
+    }
+    final desc = _formValues[1].trim();
+    final shared = _parseAtSigns(_formValues[2]);
+    try {
+      final updated = collection.draft(
+        obj: Todo(
+          title: title,
+          description: desc,
+          done: t.obj.done,
+          dueDate: t.obj.dueDate,
+        ),
+        id: t.id,
+        sharedWith: shared,
+      );
+      await collection.update(updated);
+      log('Updated: $title');
+      _closeModal();
+      await refreshTodos();
+    } catch (e) {
+      log('Edit failed: $e', error: true);
+    }
+  }
+
+  Future<void> _submitAddNote() async {
+    final t = _formTarget;
+    if (t == null) {
+      _closeModal();
+      return;
+    }
+    final text = _formValues[0].trim();
+    if (text.isEmpty) {
+      log('Note is empty.', error: true);
+      return;
+    }
+    // Audience: parent's owner + sharedWith, minus self.
+    final audience = <Atsign>{t.owner, ...t.sharedWith}
+      ..remove(atClient.atSign);
+    try {
+      await _notesSubFor(t).create(
+        obj: TodoNote(note: text),
+        sharedWith: audience,
+      );
+      log('Note added to "${t.obj.title}"');
+      _closeModal();
+      await refreshTodos();
+    } catch (e) {
+      log('Add note failed: $e', error: true);
+    }
+  }
+
+  Future<void> _submitShare() async {
+    final t = _formTarget;
+    if (t == null) {
+      _closeModal();
+      return;
+    }
+    final toAdd = _parseAtSigns(_formValues[0]);
+    if (toAdd.isEmpty) {
+      log('No atSigns given.', error: true);
+      return;
+    }
+    try {
+      t.sharedWith.addAll(toAdd);
+      await collection.update(t, unshareWithOthers: false);
+      log('Shared "${t.obj.title}" with ${toAdd.join(", ")}');
+      _closeModal();
+      await refreshTodos();
+    } catch (e) {
+      log('Share failed: $e', error: true);
+    }
+  }
+
+  Future<void> _submitSchedule() async {
+    final t = _formTarget;
+    if (t == null) {
+      _closeModal();
+      return;
+    }
+    final seconds = int.tryParse(_formValues[0].trim());
+    if (seconds == null || seconds < 0) {
+      log('Enter a non-negative integer (seconds).', error: true);
+      return;
+    }
+    try {
+      final updated = collection.draft(
+        obj: Todo(
+          title: t.obj.title,
+          description: t.obj.description,
+          done: t.obj.done,
+          dueDate: t.obj.dueDate,
+        ),
+        id: t.id,
+        sharedWith: Set.from(t.sharedWith),
+        availableAt: DateTime.now().add(Duration(seconds: seconds)),
+      );
+      await collection.update(updated);
+      log(
+        'Scheduled "${t.obj.title}" to be visible '
+        'in ${seconds}s.',
+      );
+      _closeModal();
+      await refreshTodos();
+    } catch (e) {
+      log('Schedule failed: $e', error: true);
+    }
+  }
+
+  Future<void> _submitSetDue() async {
+    final t = _formTarget;
+    if (t == null) {
+      _closeModal();
+      return;
+    }
+    final due = _parseDueOrDefault(_formValues[0]);
+    try {
+      final updated = collection.draft(
+        obj: Todo(
+          title: t.obj.title,
+          description: t.obj.description,
+          done: t.obj.done,
+          dueDate: due,
+        ),
+        id: t.id,
+        sharedWith: Set.from(t.sharedWith),
+      );
+      await collection.update(updated);
+      log(
+        'Due date for "${t.obj.title}" set to '
+        '${due.toIso8601String().substring(0, 10)}',
+      );
+      _closeModal();
+      await refreshTodos();
+    } catch (e) {
+      log('Set due failed: $e', error: true);
+    }
+  }
+
+  Future<void> _submitDeleteTodo() async {
+    final t = _formTarget;
+    if (t == null) {
+      _closeModal();
+      return;
+    }
+    try {
+      await collection.delete(t, cascade: true);
+      log('Deleted: ${t.obj.title}');
+      _closeModal();
+      await refreshTodos();
+    } catch (e) {
+      log('Delete failed: $e', error: true);
+    }
+  }
+
+  // ---- Form widget builder (shared) ----
+
+  Component _buildFormModal(String title, {String? hint}) {
+    return Stack(
+      children: [
+        const ModalBarrier(color: Color.fromRGB(0, 0, 0), obscure: true),
+        Positioned(
+          left: 4,
+          top: 3,
+          child: Container(
+            width: 64,
+            padding: const EdgeInsets.all(1),
+            decoration: BoxDecoration(
+              border: BoxBorder.all(color: Colors.cyan),
+              color: Colors.black,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: Colors.cyan,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  hint ??
+                      'Tab next field  ·  ⏎ next/submit  ·  Esc cancel',
+                  style: TextStyle(color: Colors.gray),
+                ),
+                const SizedBox(height: 1),
+                for (int i = 0; i < _formLabels.length; i++) _buildFormField(i),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Component _buildFormField(int idx) {
+    final focused = idx == _formFieldIdx;
+    final label = _formLabels[idx];
+    final value = _formValues[idx];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: focused ? Colors.yellow : Colors.gray,
+            fontWeight: focused ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 1),
+          decoration: BoxDecoration(
+            border: BoxBorder.all(
+              color: focused ? Colors.yellow : Colors.gray,
+            ),
+          ),
+          child: Text(focused ? '$value█' : value),
+        ),
+      ],
+    );
+  }
+
+  Component _buildConfirmDeleteModal() {
+    final t = _formTarget;
+    final title = t?.obj.title ?? '(unknown)';
+    return Stack(
+      children: [
+        const ModalBarrier(color: Color.fromRGB(0, 0, 0), obscure: true),
+        Positioned(
+          left: 8,
+          top: 5,
+          child: Container(
+            width: 52,
+            padding: const EdgeInsets.all(1),
+            decoration: BoxDecoration(
+              border: BoxBorder.all(color: Colors.red),
+              color: Colors.black,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Delete todo?',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text('"$title"'),
+                Text(
+                  '(all notes will be cascade-deleted)',
+                  style: TextStyle(color: Colors.gray),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  'y / ⏎ confirm  ·  n / Esc cancel',
+                  style: TextStyle(color: Colors.yellow),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
