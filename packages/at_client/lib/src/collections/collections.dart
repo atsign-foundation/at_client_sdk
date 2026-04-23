@@ -71,6 +71,29 @@ import 'package:mutex/mutex.dart';
 /// await todos.delete(item);
 /// ```
 ///
+/// ### 1a. Composable queries
+///
+/// [query] returns a [Query<T>] you can chain and terminate with
+/// either [Query.fetch] (one-shot `Future<List<CItem<T>>>`) or
+/// [Query.watch] (live reactive `Stream<List<CItem<T>>>`). Queries
+/// are immutable values — build once, pass around, reuse. Execution
+/// is always on-device against the local synced store.
+///
+/// ```dart
+/// final overdue = todos.query()
+///     .where((t) => !t.obj.done)
+///     .where((t) => t.obj.due.isBefore(DateTime.now()))
+///     .orderBy((t) => t.obj.due)
+///     .limit(20);
+///
+/// final list = await overdue.fetch();
+/// final live = overdue.watch();  // re-emits on update/delete
+/// ```
+///
+/// For ad-hoc stream pipelines outside the builder's vocabulary, the
+/// raw `getItemsAsStream().where(...).toList()` path still works —
+/// [Query] is the ergonomic complement, not a replacement.
+///
 /// ### 2. Sub-collections to arbitrary depth
 ///
 /// A [CItem] can be a parent of its own [AtCollection<U>]; that
@@ -208,7 +231,7 @@ class AtCollection<T> {
   late final StreamSubscription<AtNotification> _rrSub;
 
   // The notification stream used for this collection's dispatch. Stored
-  // so sub-collections built via [_readReceiptsFor] can reuse an
+  // so sub-collections built via [readReceiptsFor] can reuse an
   // injected (test) stream rather than hit the NotificationService.
   Stream<AtNotification>? _injectedNotifications;
 
@@ -623,6 +646,25 @@ class AtCollection<T> {
     if (pending != null) yield pending;
   }
 
+  /// Builds a new [Query] scoped to this collection's direct items.
+  /// Chain [Query.where] / [Query.orderBy] / [Query.limit] / [Query.skip]
+  /// and terminate with [Query.fetch] (one-shot) or [Query.watch] (live
+  /// reactive).
+  ///
+  /// ```dart
+  /// final overdue = await todos.query()
+  ///     .where((t) => !t.obj.done)
+  ///     .where((t) => t.obj.due.isBefore(DateTime.now()))
+  ///     .orderBy((t) => t.obj.due)
+  ///     .limit(20)
+  ///     .fetch();
+  /// ```
+  ///
+  /// For genuinely ad-hoc pipelines you can still use
+  /// [getItemsAsStream] directly with any `Stream` transformer —
+  /// [Query] is the value-typed ergonomic path, not a replacement.
+  Query<T> query() => Query<T>._(this, _QuerySpec<T>());
+
   // ---------------------------------------------------------------------------
   // Read receipts
 
@@ -637,11 +679,25 @@ class AtCollection<T> {
   Future<void> markReadByMe(CItem<T> item) => item.markReadByMe();
 
   /// Returns (creating and caching if necessary) the reserved `__rr`
-  /// sub-collection for [item]. Apps should not call this directly —
-  /// use [CItem.readers] / [CItem.wasMarkedReadByMe] /
-  /// [CItem.markReadByMe] or the [markReadByMe] /
-  /// [wasMarkedReadByMe] shims above.
-  AtCollection<Map<String, dynamic>> _readReceiptsFor(CItem<T> item) {
+  /// sub-collection that holds read receipts for [item].
+  ///
+  /// This is the public entry point for querying receipts directly —
+  /// e.g. a live "how many readers?" badge is just
+  /// `todos.readReceiptsFor(item).query().watch().map((l) => l.length)`,
+  /// and a one-shot check is `.query().count()`. Callers generally
+  /// shouldn't *write* through this handle — use
+  /// [CItem.markReadByMe] / [AtCollection.markReadByMe] — but
+  /// reading is fully supported and idiomatic.
+  ///
+  /// Each receipt sub-item's `owner` is the atSign that marked the
+  /// parent item as read; the sub-item's body is a small JSON map
+  /// carrying the `readAt` timestamp.
+  ///
+  /// The returned [AtCollection] is memoised per `(item.owner, item.id)`
+  /// so repeated calls for the same item return the same instance,
+  /// keeping its notification subscription and live-event machinery
+  /// alive across UI rebuilds.
+  AtCollection<Map<String, dynamic>> readReceiptsFor(CItem<T> item) {
     final cacheKey = '${item.owner}:${item.id}';
     final cached = _rrCache[cacheKey];
     if (cached != null) return cached;
@@ -729,7 +785,7 @@ class AtCollection<T> {
   }
 
   /// Internal sub-collection constructor without the reserved-name
-  /// guard. Used by [_readReceiptsFor] to build the `__rr` sub-collection.
+  /// guard. Used by [readReceiptsFor] to build the `__rr` sub-collection.
   AtCollection<U> _buildSubCollection<U>({
     required CItem<T> parent,
     required String subName,
@@ -1582,6 +1638,420 @@ class AtCollection<T> {
 }
 
 // -----------------------------------------------------------------------------
+// Query<T> — fluent, composable, value-typed query over AtCollection<T>.
+//
+// Complements [AtCollection.getItemsAsStream] with a builder-style API
+// you can store, pass around, and terminate with either [Query.fetch]
+// (one-shot List) or [Query.watch] (live reactive Stream). Executes
+// on-device over the local synced store — end-to-end encryption means
+// the atServer can't filter plaintext on your behalf, so on-device is
+// the only correct execution model (see the [AtCollection] class doc).
+//
+// The spec is captured as a small immutable data object so a future
+// indexed executor (SQLite + JSON-field indexes, once that migration
+// lands) can introspect individual modifiers and push eligible ones
+// down to secondary indexes without changing the caller's code.
+
+/// A composable, value-typed query over an [AtCollection<T>]. Build up
+/// a query with [where] / [orderBy] / [limit] / [skip], then terminate
+/// with [fetch] (one-shot) or [watch] (live reactive).
+///
+/// ```dart
+/// final overdue = todos.query()
+///     .where((t) => !t.obj.done)
+///     .where((t) => t.obj.due.isBefore(DateTime.now()))
+///     .orderBy((t) => t.obj.due)
+///     .limit(20);
+///
+/// final list = await overdue.fetch();
+/// final live = overdue.watch();
+/// ```
+///
+/// Queries are **immutable**: each modifier returns a new [Query].
+/// Reuse a built query anywhere; there's no shared mutable state.
+///
+/// Execution is **on-device**, over the local synced store. Under
+/// end-to-end encryption the atServer cannot decrypt the records it
+/// holds on your behalf, so on-device is the only correct model —
+/// not a performance compromise. See the [AtCollection] class doc for
+/// the platform-context details.
+///
+/// For ad-hoc stream pipelines outside this builder's vocabulary, use
+/// [AtCollection.getItemsAsStream] directly with Dart's stream
+/// transformers. [Query] complements that path; it does not replace it.
+@experimental
+final class Query<T> {
+  final AtCollection<T> _collection;
+  final _QuerySpec<T> _spec;
+
+  Query._(this._collection, this._spec);
+
+  /// Adds a predicate. Multiple [where] calls AND together —
+  /// `q.where(a).where(b)` yields items where both [a] and [b] hold.
+  Query<T> where(bool Function(CItem<T> item) predicate) =>
+      Query<T>._(_collection, _spec._withPredicate(predicate));
+
+  /// Sorts by [keyFn]. A subsequent [orderBy] replaces the previous
+  /// one; use a composite key (e.g. a record or derived value) for
+  /// multi-level sorts.
+  ///
+  /// The key type must implement `compareTo`; [Comparable] is passed
+  /// as a raw type so `int`, `double`, `DateTime`, `String`, and any
+  /// `Comparable<X>` are all accepted at the call site.
+  Query<T> orderBy(
+    Comparable<dynamic> Function(CItem<T> item) keyFn, {
+    bool descending = false,
+  }) =>
+      Query<T>._(
+        _collection,
+        _spec._withOrderBy(_OrderBy<T>(keyFn, descending: descending)),
+      );
+
+  /// Keeps at most [n] items after filter + sort + skip.
+  Query<T> limit(int n) {
+    if (n < 0) throw ArgumentError.value(n, 'n', 'limit must be non-negative');
+    return Query<T>._(_collection, _spec._withLimit(n));
+  }
+
+  /// Skips the first [n] items after filter + sort, before [limit].
+  Query<T> skip(int n) {
+    if (n < 0) throw ArgumentError.value(n, 'n', 'skip must be non-negative');
+    return Query<T>._(_collection, _spec._withSkip(n));
+  }
+
+  /// One-shot fetch. Reads the local store once, applies the spec,
+  /// returns a list. For a live reactive variant, see [watch].
+  ///
+  /// Propagates any error from the underlying [AtCollection.getItems]
+  /// (e.g. a per-key decode failure). Use [watch] if you need errors
+  /// on a live channel instead of a single throw.
+  Future<List<CItem<T>>> fetch() async {
+    final all = await _collection.getItems();
+    return _spec._apply(all);
+  }
+
+  /// Number of items matching the full spec (predicates + sort + skip
+  /// + limit). Equivalent to `(await fetch()).length` but makes the
+  /// intent explicit at the call site.
+  Future<int> count() async => (await fetch()).length;
+
+  /// True iff at least one item matches the predicates. Short-circuits
+  /// on the first match — does **not** apply [orderBy], [skip], or
+  /// [limit], because "does anything match?" is independent of
+  /// pagination and sort order.
+  ///
+  /// An optional [predicate] is ANDed with any accumulated [where]
+  /// clauses for the check — `q.any((t) => t.obj.done)` reads more
+  /// naturally than `q.where((t) => t.obj.done).any()`.
+  Future<bool> any([bool Function(CItem<T> item)? predicate]) async {
+    await for (final item in _collection.getItemsAsStream()) {
+      if (!_spec.predicates.every((p) => p(item))) continue;
+      if (predicate != null && !predicate(item)) continue;
+      return true;
+    }
+    return false;
+  }
+
+  /// First item matching the full spec. Throws [StateError] when
+  /// nothing matches; see [firstOrNull] for a null-returning variant.
+  Future<CItem<T>> first() async {
+    final item = await firstOrNull();
+    if (item == null) {
+      throw StateError('Query.first(): no items match this query');
+    }
+    return item;
+  }
+
+  /// First item matching the full spec, or `null` when nothing
+  /// matches.
+  ///
+  /// If [orderBy] is set on the spec, a full sort is required before
+  /// "first" is meaningful — the whole matching set is fetched, sorted
+  /// and skipped through before the first item is returned.
+  ///
+  /// If [orderBy] is unset, "first" means "first-encountered" and the
+  /// implementation short-circuits on the stream as soon as a
+  /// match is yielded. In that case [limit] is effectively clamped to
+  /// 1 for the purposes of this call; [skip] is respected.
+  Future<CItem<T>?> firstOrNull() async {
+    if (_spec.limitN != null && _spec.limitN! == 0) return null;
+    if (_spec.orderBy != null) {
+      final list = await fetch();
+      return list.isEmpty ? null : list.first;
+    }
+    var toSkip = _spec.skipN ?? 0;
+    await for (final item in _collection.getItemsAsStream()) {
+      if (!_spec.predicates.every((p) => p(item))) continue;
+      if (toSkip > 0) {
+        toSkip--;
+        continue;
+      }
+      return item;
+    }
+    return null;
+  }
+
+  /// Groups the matching items by a key derived from each. Runs the
+  /// full spec (predicates + sort + skip + limit) before grouping, so
+  /// within each bucket items are in the same order [fetch] would
+  /// return.
+  ///
+  /// ```dart
+  /// final byOwner = await todos.query()
+  ///     .where((t) => !t.obj.done)
+  ///     .groupBy((t) => t.owner);
+  /// // byOwner: Map<Atsign, List<CItem<Todo>>>
+  /// ```
+  Future<Map<K, List<CItem<T>>>> groupBy<K>(
+    K Function(CItem<T> item) keyFn,
+  ) async {
+    final items = await fetch();
+    final out = <K, List<CItem<T>>>{};
+    for (final item in items) {
+      out.putIfAbsent(keyFn(item), () => <CItem<T>>[]).add(item);
+    }
+    return out;
+  }
+
+  /// Live reactive terminal that joins each parent item matching this
+  /// query with its children from a named sub-collection.
+  ///
+  /// ```dart
+  /// final stream = todos.query().where((t) => !t.obj.done)
+  ///     .watchWithSub<TodoNote>(
+  ///       subName: 'notes',
+  ///       subDefaultExpiration: const Duration(days: 365),
+  ///       subFromJson: TodoNote.fromJson,
+  ///     );
+  /// // stream: Stream<List<({CItem<Todo> parent, List<CItem<TodoNote>> children})>>
+  /// ```
+  ///
+  /// Re-emits on any parent update/delete that could affect the
+  /// result set, and on any child update/delete within any of the
+  /// current parents' `subName` sub-collections. The previous
+  /// hand-rolled `Map<parentId, List<child>>` dance in consumer apps
+  /// collapses to a single stream subscription with this.
+  ///
+  /// The returned stream is single-subscription. Each parent held by
+  /// the stream owns an internal `.watch()` on its sub-collection;
+  /// those child subscriptions are cancelled automatically when the
+  /// parent leaves the result set (via filter change or delete) and
+  /// when the outer stream is cancelled.
+  ///
+  /// This is a first-class terminal — implemented in ~80 LOC here
+  /// rather than re-invented by every consumer. Phase 2 may add a
+  /// child-query parameter so callers can filter / sort the children
+  /// too; today the children are the sub-collection's full default
+  /// view.
+  Stream<List<({CItem<T> parent, List<CItem<U>> children})>>
+  watchWithSub<U>({
+    required String subName,
+    required Duration subDefaultExpiration,
+    U Function(Map<String, dynamic>)? subFromJson,
+  }) {
+    // Per-parent state. Key is `<owner>:<id>` — the (owner, id) pair
+    // under which a CItem is globally unique.
+    final childLatest = <String, List<CItem<U>>>{};
+    final childSubs = <String, StreamSubscription<List<CItem<U>>>>{};
+    List<CItem<T>> latestParents = const [];
+    late final StreamController<List<({CItem<T> parent, List<CItem<U>> children})>>
+        ctrl;
+    StreamSubscription<List<CItem<T>>>? parentSub;
+
+    String keyOf(CItem<T> p) => '${p.owner}:${p.id}';
+
+    void emit() {
+      if (ctrl.isClosed) return;
+      ctrl.add([
+        for (final p in latestParents)
+          (
+            parent: p,
+            children: List<CItem<U>>.from(childLatest[keyOf(p)] ?? const []),
+          ),
+      ]);
+    }
+
+    Future<void> onParents(List<CItem<T>> parents) async {
+      latestParents = parents;
+      final currentKeys = parents.map(keyOf).toSet();
+      // Cancel subs for parents that left the result set.
+      final leavers = childSubs.keys
+          .where((k) => !currentKeys.contains(k))
+          .toList();
+      for (final k in leavers) {
+        await childSubs.remove(k)?.cancel();
+        childLatest.remove(k);
+      }
+      // Open subs for newly-arrived parents.
+      for (final p in parents) {
+        final k = keyOf(p);
+        if (childSubs.containsKey(k)) continue;
+        final sub = _collection.subCollection<U>(
+          parent: p,
+          subName: subName,
+          defaultExpiration: subDefaultExpiration,
+          fromJson: subFromJson,
+          // Thread the parent collection's injected notification stream
+          // (if any) through so tests driving events via a shared
+          // controller see them at the child sub-collection too.
+          notifications: _collection._injectedNotifications,
+        );
+        childSubs[k] = sub.query().watch().listen(
+          (children) {
+            childLatest[k] = children;
+            emit();
+          },
+          onError: (Object e, StackTrace st) {
+            if (!ctrl.isClosed) ctrl.addError(e, st);
+          },
+        );
+      }
+      emit();
+    }
+
+    ctrl = StreamController<
+        List<({CItem<T> parent, List<CItem<U>> children})>>(
+      onListen: () {
+        parentSub = watch().listen(
+          (parents) => unawaited(onParents(parents)),
+          onError: (Object e, StackTrace st) {
+            if (!ctrl.isClosed) ctrl.addError(e, st);
+          },
+        );
+      },
+      onCancel: () async {
+        await parentSub?.cancel();
+        for (final s in childSubs.values) {
+          await s.cancel();
+        }
+        childSubs.clear();
+        childLatest.clear();
+      },
+    );
+    return ctrl.stream;
+  }
+
+  /// Live reactive variant. Emits an initial snapshot on first listen,
+  /// then re-emits a fresh snapshot whenever an update or delete on
+  /// the source collection could affect the result set.
+  ///
+  /// Implementation today: on any relevant event, re-run [fetch]. For
+  /// a local-store scan in the tens-of-milliseconds range this is
+  /// cheap. Future versions may switch to incremental delta
+  /// maintenance when profiling warrants.
+  ///
+  /// Listens to the collection's direct-item events ([AtCollection.updates]
+  /// and [AtCollection.deletes]) only. Sub-collection events do not
+  /// trigger a refresh — query a sub-collection directly for that.
+  ///
+  /// The returned stream is single-subscription. Wrap with
+  /// [Stream.asBroadcastStream] if multiple listeners are required.
+  Stream<List<CItem<T>>> watch() {
+    StreamSubscription<CItemUpdated>? updSub;
+    StreamSubscription<CItemDeleted>? delSub;
+    late final StreamController<List<CItem<T>>> controller;
+
+    Future<void> refresh() async {
+      if (controller.isClosed) return;
+      try {
+        final snapshot = await fetch();
+        if (!controller.isClosed) controller.add(snapshot);
+      } catch (e, st) {
+        if (!controller.isClosed) controller.addError(e, st);
+      }
+    }
+
+    controller = StreamController<List<CItem<T>>>(
+      onListen: () {
+        // Subscribe to events BEFORE the initial fetch so an event
+        // arriving during fetch() is still handled by a subsequent
+        // refresh — avoids a lost-update window.
+        updSub = _collection.updates.listen((_) => refresh());
+        delSub = _collection.deletes.listen((_) => refresh());
+        refresh();
+      },
+      onCancel: () async {
+        await updSub?.cancel();
+        await delSub?.cancel();
+      },
+    );
+    return controller.stream;
+  }
+}
+
+/// Immutable spec for a [Query<T>]. Kept as data (not just closures)
+/// so a future indexed executor can introspect the modifiers — e.g.
+/// push eligible predicates to SQLite JSON indexes while evaluating
+/// the rest in memory.
+final class _QuerySpec<T> {
+  final List<bool Function(CItem<T>)> predicates;
+  final _OrderBy<T>? orderBy;
+  final int? skipN;
+  final int? limitN;
+
+  const _QuerySpec({
+    this.predicates = const [],
+    this.orderBy,
+    this.skipN,
+    this.limitN,
+  });
+
+  _QuerySpec<T> _withPredicate(bool Function(CItem<T>) p) => _QuerySpec<T>(
+        predicates: [...predicates, p],
+        orderBy: orderBy,
+        skipN: skipN,
+        limitN: limitN,
+      );
+
+  _QuerySpec<T> _withOrderBy(_OrderBy<T> o) => _QuerySpec<T>(
+        predicates: predicates,
+        orderBy: o,
+        skipN: skipN,
+        limitN: limitN,
+      );
+
+  _QuerySpec<T> _withSkip(int n) => _QuerySpec<T>(
+        predicates: predicates,
+        orderBy: orderBy,
+        skipN: n,
+        limitN: limitN,
+      );
+
+  _QuerySpec<T> _withLimit(int n) => _QuerySpec<T>(
+        predicates: predicates,
+        orderBy: orderBy,
+        skipN: skipN,
+        limitN: n,
+      );
+
+  List<CItem<T>> _apply(List<CItem<T>> items) {
+    var out = items;
+    for (final p in predicates) {
+      out = out.where(p).toList();
+    }
+    if (orderBy != null) {
+      out = [...out]..sort((a, b) {
+          final cmp = orderBy!.keyFn(a).compareTo(orderBy!.keyFn(b));
+          return orderBy!.descending ? -cmp : cmp;
+        });
+    }
+    if (skipN != null && skipN! > 0) {
+      out = out.skip(skipN!).toList();
+    }
+    if (limitN != null) {
+      out = out.take(limitN!).toList();
+    }
+    return out;
+  }
+}
+
+final class _OrderBy<T> {
+  final Comparable<dynamic> Function(CItem<T>) keyFn;
+  final bool descending;
+  const _OrderBy(this.keyFn, {required this.descending});
+}
+
+// -----------------------------------------------------------------------------
 // CItem
 
 /// A single typed record in an [AtCollection]. Wraps an application's
@@ -1788,7 +2258,7 @@ final class CItem<T> {
       // missing one reader is far preferable to crashing every read
       // path that touches the cache (including ownership checks via
       // `wasMarkedReadByMe`).
-      final rr = _collection._readReceiptsFor(this);
+      final rr = _collection.readReceiptsFor(this);
       final tolerant = rr.getItemsAsStream().handleError((Object e) {
         _collection.logger.warning('readBy: skipping __rr decode error: $e');
       });
@@ -1820,12 +2290,24 @@ final class CItem<T> {
   Future<void> markReadByMe() async {
     if (owner == self) return;
     if (await wasMarkedReadByMe()) return;
-    final rr = _collection._readReceiptsFor(this);
+    final rr = _collection.readReceiptsFor(this);
     await rr.create(
       obj: {'readAt': DateTime.now().toUtc().toIso8601String()},
       sharedWith: {owner},
     );
   }
+
+  /// Shortcut for [AtCollection.readReceiptsFor] on this item — the
+  /// reserved `__rr` sub-collection holding receipts. Use this when
+  /// you want to query receipts directly (e.g. live counts, custom UI
+  /// over the receipt timeline):
+  ///
+  /// ```dart
+  /// final unreadCount = item.receipts.query().watch().map((l) => l.length);
+  /// final readers = await item.receipts.query().fetch();
+  /// ```
+  AtCollection<Map<String, dynamic>> get receipts =>
+      _collection.readReceiptsFor(this);
 }
 
 // -----------------------------------------------------------------------------

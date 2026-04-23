@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_client/at_client.dart';
 import 'package:flutter/material.dart';
 
@@ -24,17 +26,33 @@ class TodoDetailScreen extends StatefulWidget {
 class _TodoDetailScreenState extends State<TodoDetailScreen> {
   final _noteCtrl = TextEditingController();
   bool _busy = false;
+  // Live view of the currently-displayed todo. Seeded from the initial
+  // widget.todo, then updated by [_liveSub] on each emission of
+  // `service.watchSingle(id, owner)`. If the underlying item is
+  // deleted remotely, we pop back to the home screen.
+  late CItem<Todo> _currentTodo;
+  StreamSubscription<CItem<Todo>?>? _liveSub;
 
-  CItem<Todo> get _currentTodo {
-    // Re-read from the service so updates from events are reflected.
-    return widget.service.todos.value.firstWhere(
-      (t) => t.id == widget.todo.id && t.owner == widget.todo.owner,
-      orElse: () => widget.todo,
-    );
+  @override
+  void initState() {
+    super.initState();
+    _currentTodo = widget.todo;
+    _liveSub = widget.service
+        .watchSingle(widget.todo.id, widget.todo.owner)
+        .listen((t) {
+          if (!mounted) return;
+          if (t == null) {
+            // Underlying todo was deleted — back out.
+            Navigator.of(context).pop();
+            return;
+          }
+          setState(() => _currentTodo = t);
+        });
   }
 
   @override
   void dispose() {
+    _liveSub?.cancel();
     _noteCtrl.dispose();
     super.dispose();
   }
@@ -210,14 +228,11 @@ class _TodoDetailScreenState extends State<TodoDetailScreen> {
             ),
         ],
       ),
-      body: ValueListenableBuilder(
-        valueListenable: service.todos,
-        builder: (_, __, ___) {
-          return ValueListenableBuilder(
-            valueListenable: service.notesByTodoId,
-            builder: (_, notesMap, __) {
-              final todo = _currentTodo;
-              final notes = notesMap[todo.id] ?? const [];
+      body: StreamBuilder<List<CItem<TodoNote>>>(
+        stream: service.watchNotes(_currentTodo),
+        builder: (_, snap) {
+          final todo = _currentTodo;
+              final notes = snap.data ?? const <CItem<TodoNote>>[];
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -267,12 +282,55 @@ class _TodoDetailScreenState extends State<TodoDetailScreen> {
                         ),
                         _meta(
                           'Read by',
-                          AtsignList(
-                            atSigns: todo.readBySnapshot,
-                            colors: service.colors,
-                            emptyLabel: todo.sharedWith.isEmpty
-                                ? '—'
-                                : '(nobody yet)',
+                          // Live timeline of receipts, sorted by when
+                          // each reader marked the item. Direct use
+                          // of the public `item.receipts` handle:
+                          // `.query().orderBy(...).watch()`. Each
+                          // receipt's `owner` is the reader and its
+                          // `createdAt` is "when they marked it".
+                          StreamBuilder<List<CItem<Map<String, dynamic>>>>(
+                            stream: todo.receipts
+                                .query()
+                                .orderBy((r) => r.createdAt)
+                                .watch(),
+                            builder: (_, snap) {
+                              final receipts = snap.data ?? const [];
+                              if (receipts.isEmpty) {
+                                return Text(
+                                  todo.sharedWith.isEmpty
+                                      ? '—'
+                                      : '(nobody yet)',
+                                );
+                              }
+                              return Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  for (final r in receipts)
+                                    Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 2),
+                                      child: Row(
+                                        children: [
+                                          AtsignText(
+                                            atSign: r.owner,
+                                            colors: service.colors,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            _fmtDate(r.createdAt),
+                                            style: TextStyle(
+                                              color: Theme.of(context)
+                                                  .hintColor,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
                           ),
                         ),
                       ],
@@ -364,8 +422,6 @@ class _TodoDetailScreenState extends State<TodoDetailScreen> {
                   ),
                 ],
               );
-            },
-          );
         },
       ),
     );

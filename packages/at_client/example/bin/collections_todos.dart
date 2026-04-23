@@ -13,6 +13,15 @@ void main(List<String> args) async {
         namespace: 'todos.demos',
       )).atClient;
 
+  // Default read preference is local — the at_client SDK keeps a
+  // real-time-synced local cache per atSign, so `query().watch()`
+  // emissions resolve against on-device storage rather than the
+  // remote atServer. No override needed. (An app that wants to
+  // always-read-remote can set
+  // `atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly`
+  // here, but with "fsync" shipping that path is heading toward
+  // obsolete.)
+
   atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
   final app = TodosApp(atClient);
@@ -131,6 +140,71 @@ class _Cols {
   int get titleStartCol => due + created + idx + st + 14;
 }
 
+/// A named filter+sort view over the todos collection. Each preset is
+/// just a function from `(collection, self, reverse)` to a `Query<Todo>`
+/// value — queries are immutable, so presets stay cheap to build and
+/// safe to pass around. The full registry is in [_todoPresets].
+class _TodoPreset {
+  final String name;
+  final String label;
+  final Query<Todo> Function(
+    AtCollection<Todo> collection,
+    Atsign self,
+    bool reverse,
+  )
+  build;
+
+  const _TodoPreset(this.name, this.label, this.build);
+}
+
+/// Uniform sort modifier: by due date ascending, with `null` due-dates
+/// always sorted last (sentinel of year 9999). `reverse` flips to
+/// descending; sentinel then sorts first, matching the pre-builder
+/// `_compareByDue` behaviour.
+Query<Todo> _sortedByDue(Query<Todo> q, bool reverse) => q.orderBy(
+  (t) => t.obj.dueDate ?? DateTime.utc(9999),
+  descending: reverse,
+);
+
+final List<_TodoPreset> _todoPresets = [
+  _TodoPreset('all', 'All', (c, _, rev) => _sortedByDue(c.query(), rev)),
+  _TodoPreset(
+    'mine',
+    'Mine',
+    (c, self, rev) =>
+        _sortedByDue(c.query().where((t) => t.owner == self), rev),
+  ),
+  _TodoPreset(
+    'shared',
+    'Shared with me',
+    (c, self, rev) =>
+        _sortedByDue(c.query().where((t) => t.owner != self), rev),
+  ),
+  _TodoPreset(
+    'open',
+    'Open',
+    (c, _, rev) => _sortedByDue(c.query().where((t) => !t.obj.done), rev),
+  ),
+  _TodoPreset(
+    'done',
+    'Done',
+    (c, _, rev) => _sortedByDue(c.query().where((t) => t.obj.done), rev),
+  ),
+  _TodoPreset('overdue', 'Overdue', (c, _, rev) {
+    final now = DateTime.now();
+    return _sortedByDue(
+      c.query().where(
+        (t) => !t.obj.done && (t.obj.dueDate?.isBefore(now) ?? false),
+      ),
+      rev,
+    );
+  }),
+];
+
+final Map<String, _TodoPreset> _todoPresetsByName = {
+  for (final p in _todoPresets) p.name: p,
+};
+
 class TodosApp {
   final AtClient atClient;
   late final AtCollection<Todo> collection;
@@ -148,6 +222,33 @@ class TodosApp {
   String currentInput = '';
   bool _running = false;
   bool _handlerRunning = false;
+  // Name of the currently active preset (see [_todoPresets]). Default
+  // is 'all' — every todo the current atSign can see, sorted by due
+  // date. `filter <preset>` swaps it.
+  String _activePresetName = 'all';
+  // When true, sort is reversed (descending). `reverse` toggles it.
+  bool _reverseSort = false;
+  // Live subscriptions driving the main list + dashboard counts.
+  // [_todosSub] is the single stream carrying BOTH parents and their
+  // notes children, via `Query.watchWithSub`. Cancelled and re-created
+  // whenever the active query changes (filter / reverse). The count
+  // subs are long-lived.
+  StreamSubscription<List<({CItem<Todo> parent, List<CItem<TodoNote>> children})>>?
+  _todosSub;
+  StreamSubscription<int>? _openCountSub;
+  StreamSubscription<int>? _overdueCountSub;
+  StreamSubscription<int>? _sharedCountSub;
+  StreamSubscription<CReadReceipt>? _receiptsTickerSub;
+  StreamSubscription<List<CItem<Todo>>>? _nextDueSub;
+  // Cached counts rendered in the dashboard line above the table.
+  int _countOpen = 0;
+  int _countOverdue = 0;
+  int _countSharedWithMe = 0;
+  // Cached label for the soonest-due open todo. Updated live from a
+  // `.watch()` on the "open" preset — `Query.watch()` re-emits on
+  // every change, and we take the `.first` after sort on each
+  // emission. Empty string when nothing is open.
+  String _nextDueLabel = '';
   int logScrollOffset = 0;
   String? _promptLabel;
   Completer<String>? _promptCompleter;
@@ -256,61 +357,99 @@ class TodosApp {
     }
   }
 
-  Future<void> refreshTodos({CEvent? event}) async {
-    if (event != null) {
-      log('refreshTodos due to event: $event');
+  /// Builds the `Query<Todo>` for the currently active preset +
+  /// reverse flag. Queries are values; building one is cheap, and the
+  /// same shape drives `fetch()` (list) and `watch()` (stream)
+  /// terminals without reshaping the call site.
+  Query<Todo> _buildQuery() {
+    final preset = _todoPresetsByName[_activePresetName]!;
+    return preset.build(collection, atClient.atSign, _reverseSort);
+  }
+
+  /// (Re-)subscribes [_todosSub] to a single `watchWithSub` stream
+  /// that carries BOTH the parent todos and each todo's notes. One
+  /// subscription replaces the pre-Bundle-C quintet of
+  /// collection.updates/deletes/readReceipts/subUpdates/subDeletes
+  /// listeners plus the manual `_refreshNotes` loop. Called once on
+  /// startup, and again whenever filter / reverse settings change.
+  Future<void> _applyActiveQuery() async {
+    await _todosSub?.cancel();
+    _todosSub = _buildQuery()
+        .watchWithSub<TodoNote>(
+          subName: 'notes',
+          subDefaultExpiration: const Duration(days: 365),
+          subFromJson: TodoNote.fromJson,
+        )
+        .listen(
+          _onCombinedSnapshot,
+          onError: (Object e) =>
+              log('Error on todos stream: $e', error: true),
+        );
+  }
+
+  /// Consumes a combined (parent + children) snapshot from the live
+  /// [Query.watchWithSub] stream. Updates both `todos` and
+  /// `notesByTodoId`, marks anything new as read, primes the readBy
+  /// caches for synchronous render in `_draw`.
+  Future<void> _onCombinedSnapshot(
+    List<({CItem<Todo> parent, List<CItem<TodoNote>> children})> snapshot,
+  ) async {
+    todos = [for (final r in snapshot) r.parent];
+    final next = <String, List<CItem<TodoNote>>>{};
+    for (final r in snapshot) {
+      if (r.children.isNotEmpty) next[r.parent.id] = r.children;
     }
-    try {
-      final fetched = await collection.getItems();
-      fetched.sort(_compareByDue);
-      todos = fetched;
-      for (final item in todos) {
-        if (!(await item.wasMarkedReadByMe())) {
-          await item.markReadByMe();
-          log(
-            'Read receipt sent to ${_color.fmt(item.owner)} for: ${item.obj.title}',
-          );
-        }
-        // Prime the readBy cache so _draw()'s sync snapshot is populated.
-        await item.readBy;
+    notesByTodoId = next;
+    // Side effects: send pending read receipts for parents + children
+    // the current atSign hasn't acknowledged yet; prime their readBy
+    // caches so `_draw` can render them synchronously.
+    for (final r in snapshot) {
+      if (!(await r.parent.wasMarkedReadByMe())) {
+        await r.parent.markReadByMe();
+        log(
+          'Read receipt sent to ${_color.fmt(r.parent.owner)} for: '
+          '${r.parent.obj.title}',
+        );
       }
-      _draw();
+      await r.parent.readBy;
+      for (final note in r.children) {
+        if (!(await note.wasMarkedReadByMe())) {
+          await note.markReadByMe();
+        }
+      }
+    }
+    _draw();
+  }
+
+  /// One-shot fetch of the current active query (parents + notes),
+  /// pumped through the same snapshot handler the live stream uses.
+  /// Called from command handlers after a local write so the UI
+  /// reflects the change immediately without waiting for the atServer
+  /// to echo the self-notification back through `watchWithSub`.
+  Future<void> refreshTodos() async {
+    try {
+      final parents = await _buildQuery().fetch();
+      // Compose children from each parent's notes sub-collection —
+      // one fetch per parent, same shape as what watchWithSub would
+      // emit. For a demo-size list this is a few milliseconds of
+      // local I/O.
+      final combined =
+          <({CItem<Todo> parent, List<CItem<TodoNote>> children})>[];
+      for (final p in parents) {
+        final notes = await collection
+            .subCollection<TodoNote>(
+              parent: p,
+              subName: 'notes',
+              defaultExpiration: const Duration(days: 365),
+              fromJson: TodoNote.fromJson,
+            )
+            .query()
+            .fetch();
+        combined.add((parent: p, children: notes));
+      }
+      await _onCombinedSnapshot(combined);
     } catch (e) {
       log('Error refreshing todos: $e');
-    }
-  }
-
-  int _compareByDue(CItem<Todo> a, CItem<Todo> b) {
-    final ad = a.obj.dueDate;
-    final bd = b.obj.dueDate;
-    if (ad == null && bd == null) return 0;
-    if (ad == null) return 1;
-    if (bd == null) return -1;
-    return ad.compareTo(bd);
-  }
-
-  Future<void> _refreshNotes({CEvent? event}) async {
-    if (event != null) {
-      log('_refreshNotes due to event: $event');
-    }
-    try {
-      final next = <String, List<CItem<TodoNote>>>{};
-      for (final todo in todos) {
-        final sub = _notesSubFor(todo);
-        final items = await sub.getItems();
-        if (items.isNotEmpty) {
-          next[todo.id] = items;
-          for (final n in items) {
-            if (!(await n.wasMarkedReadByMe())) {
-              await n.markReadByMe();
-            }
-          }
-        }
-      }
-      notesByTodoId = next;
-      _draw();
-    } catch (e, st) {
-      log('Error refreshing notes: $e\n$st');
     }
   }
 
@@ -327,24 +466,81 @@ class TodosApp {
 
     _running = true;
 
-    collection.readReceipts.listen((e) {
-      log('sent us a read receipt', by: e.from);
-      unawaited(refreshTodos());
-    });
-    collection.updates.listen((e) => unawaited(refreshTodos(event: e)));
-    collection.deletes.listen((e) => unawaited(refreshTodos(event: e)));
-    // Notes are sub-items of the todos collection. Filter by
-    // ancestry.last.subName == 'notes' so we don't also react to
-    // __rr read-receipt sub-updates.
-    collection.subUpdates
-        .where((e) => e.subName == 'notes')
-        .listen((e) => unawaited(_refreshNotes(event: e)));
-    collection.subDeletes
-        .where((e) => e.subName == 'notes')
-        .listen((e) => unawaited(_refreshNotes(event: e)));
+    // Main list — one live stream subscription off the active
+    // preset's query. Re-created when the preset or reverse flag
+    // changes. Replaces the pre-builder pattern of 3 event listeners
+    // (readReceipts / updates / deletes) all calling a full refetch.
+    await _applyActiveQuery();
+    // Dashboard counts — three long-lived count streams, each a
+    // `.watch().map((l) => l.length)` over a dedicated preset.
+    _openCountSub = _todoPresetsByName['open']!
+        .build(collection, atClient.atSign, false)
+        .watch()
+        .map((l) => l.length)
+        .listen((n) {
+          _countOpen = n;
+          _draw();
+        });
+    _overdueCountSub = _todoPresetsByName['overdue']!
+        .build(collection, atClient.atSign, false)
+        .watch()
+        .map((l) => l.length)
+        .listen((n) {
+          _countOverdue = n;
+          _draw();
+        });
+    _sharedCountSub = _todoPresetsByName['shared']!
+        .build(collection, atClient.atSign, false)
+        .watch()
+        .map((l) => l.length)
+        .listen((n) {
+          _countSharedWithMe = n;
+          _draw();
+        });
+    // Live "next due" pointer — earliest-due open todo, updated on
+    // every collection change. Showcases `.orderBy().watch()` +
+    // `first()` on each snapshot.
+    _nextDueSub = _todoPresetsByName['open']!
+        .build(collection, atClient.atSign, false)
+        .watch()
+        .listen((open) {
+          if (open.isEmpty) {
+            _nextDueLabel = '';
+          } else {
+            final next = open.first;
+            final due = next.obj.dueDate;
+            final dueStr = due == null
+                ? 'no date'
+                : due.toIso8601String().substring(0, 10);
+            _nextDueLabel = '"${next.obj.title}" ($dueStr)';
+          }
+          _draw();
+        });
+    // Notes were previously refreshed via a pair of subUpdates /
+    // subDeletes listeners + a per-todo fetch loop. Bundle C folded
+    // all of that into the single `Query.watchWithSub<TodoNote>`
+    // stream driven by `_applyActiveQuery` above — parents and
+    // children arrive together on one subscription.
 
-    unawaited(refreshTodos());
-    unawaited(_refreshNotes());
+    // Live "just read by …" ticker. Subscribes directly to
+    // `collection.readReceipts` so that when another atSign marks
+    // one of our shared todos as read, we get a transient log line
+    // naming the reader and the todo title. The underlying events
+    // also drive `CItem.readBy` invalidation internally — this
+    // subscription is purely for the user-visible breadcrumb.
+    _receiptsTickerSub = collection.readReceipts.listen((e) {
+      // Ignore self-echo (CReadReceipt aren't emitted for self-owned
+      // items anyway, but guard defensively).
+      if (e.from == atClient.atSign) return;
+      String title = '(id ${e.id})';
+      for (final t in todos) {
+        if (t.id == e.id && t.owner == e.owner) {
+          title = t.obj.title;
+          break;
+        }
+      }
+      log('${_color.fmt(e.from)} just read "$title"');
+    });
 
     final sigintSub = ProcessSignal.sigint.watch().listen((_) async {
       await stop();
@@ -409,6 +605,12 @@ class TodosApp {
 
   Future<void> stop() async {
     _running = false;
+    await _todosSub?.cancel();
+    await _openCountSub?.cancel();
+    await _overdueCountSub?.cancel();
+    await _sharedCountSub?.cancel();
+    await _nextDueSub?.cancel();
+    await _receiptsTickerSub?.cancel();
     terminal.reset();
     backend.disableRawMode();
     backend.dispose();
@@ -432,6 +634,16 @@ class TodosApp {
         'Add recipients to a todo (keeps existing shares). Usage: share N [@signs,...].',
     'schedule':
         'Delay recipient visibility (availableAt). Usage: schedule N [seconds].',
+    'filter':
+        'Switch the active preset. Usage: filter <all|mine|shared|open|done|overdue>.',
+    'reverse':
+        'Flip the sort direction (due date asc ⇄ desc). No args.',
+    'find':
+        'Find the first open todo whose title contains <text>. Usage: find <text>.',
+    'cleanup':
+        'Run collection.cleanupOrphans() — deletes local sub-items whose parent is gone.',
+    'stats':
+        'One-shot diagnostic: counts per preset, per-owner breakdown, oldest todo, any overdue.',
     'keys': 'Log all AtKeys in both collections (debug).',
     'help': 'Show help. Usage: "help <cmd>", "<cmd> help", or "<cmd> --help".',
     'quit': 'Exit the app.',
@@ -455,11 +667,26 @@ class TodosApp {
     final bottomRows = 1 + _cmdRows + _logHeight + 2;
     final mainHeight = (height - bottomRows).clamp(3, height);
     terminal.moveCursor(0, 0);
+    final preset = _todoPresetsByName[_activePresetName]!;
+    final arrow = _reverseSort ? '↓' : '↑';
     terminal.write(
-      '\x1b[1m--- Shared Todos (${_color.fmt(atClient.atSign)}) ---\x1b[0m',
+      '\x1b[1m--- Shared Todos (${_color.fmt(atClient.atSign)}) '
+      '— ${preset.label} · due $arrow ---\x1b[0m',
+    );
+    // Dashboard line — live counts from independent count streams,
+    // plus the next-due pointer from a live `.firstOrNull` query.
+    terminal.moveCursor(0, 1);
+    final nextDueFragment = _nextDueLabel.isEmpty
+        ? ''
+        : ' · next due $_nextDueLabel';
+    terminal.write(
+      '  ${todos.length} in view · '
+      '$_countOpen open · '
+      '$_countOverdue overdue · '
+      '$_countSharedWithMe shared with me$nextDueFragment',
     );
 
-    int row = 1;
+    int row = 2;
     if (todos.isEmpty) {
       if (row < mainHeight) _trow(row++, width, '  (no todos)');
     } else {
@@ -815,6 +1042,28 @@ class TodosApp {
         unawaited(_runHandler(() => _handleShare(args)));
       case 'schedule':
         unawaited(_runHandler(() => _handleSchedule(args)));
+      case 'filter':
+        unawaited(_runHandler(() => _handleFilter(args)));
+      case 'reverse':
+        if (args.isNotEmpty) {
+          log('Unknown command: $cmd');
+          return;
+        }
+        unawaited(_runHandler(_handleReverse));
+      case 'find':
+        unawaited(_runHandler(() => _handleFind(args)));
+      case 'cleanup':
+        if (args.isNotEmpty) {
+          log('Unknown command: $cmd');
+          return;
+        }
+        unawaited(_runHandler(_handleCleanup));
+      case 'stats':
+        if (args.isNotEmpty) {
+          log('Unknown command: $cmd');
+          return;
+        }
+        unawaited(_runHandler(_handleStats));
       case 'keys':
         if (args.isNotEmpty) {
           log('Unknown command: $cmd');
@@ -823,6 +1072,107 @@ class TodosApp {
         unawaited(_handleKeys());
       default:
         log('Unknown command: $cmd');
+    }
+  }
+
+  Future<void> _handleFilter(List<String> args) async {
+    if (args.isEmpty) {
+      log(
+        'Active preset: ${_todoPresetsByName[_activePresetName]!.label}. '
+        'Available: ${_todoPresets.map((p) => p.name).join(", ")}.',
+      );
+      return;
+    }
+    final name = args.first.toLowerCase();
+    final preset = _todoPresetsByName[name];
+    if (preset == null) {
+      log(
+        'Unknown preset "$name". '
+        'Available: ${_todoPresets.map((p) => p.name).join(", ")}.',
+      );
+      return;
+    }
+    _activePresetName = name;
+    log('Active preset: ${preset.label}');
+    await _applyActiveQuery();
+  }
+
+  Future<void> _handleReverse() async {
+    _reverseSort = !_reverseSort;
+    log('Sort direction: ${_reverseSort ? "descending" : "ascending"}');
+    await _applyActiveQuery();
+  }
+
+  /// `find <text>` — composes the active preset with a title-substring
+  /// `.where(...)` and terminates with `.firstOrNull()`. Shows the
+  /// query-as-value + short-circuiting-terminal pattern together.
+  Future<void> _handleFind(List<String> args) async {
+    if (args.isEmpty) {
+      log('Usage: find <text>');
+      return;
+    }
+    final needle = args.join(' ').toLowerCase();
+    final match = await collection
+        .query()
+        .where((t) => !t.obj.done)
+        .where((t) => t.obj.title.toLowerCase().contains(needle))
+        .orderBy((t) => t.obj.dueDate ?? DateTime.utc(9999))
+        .firstOrNull();
+    if (match == null) {
+      log('No open todo matches "$needle".');
+      return;
+    }
+    log(
+      'First match: "${match.obj.title}" '
+      '(owner ${_color.fmt(match.owner)}, due ${match.obj.dueDate ?? "—"})',
+    );
+  }
+
+  /// `cleanup` — invokes `collection.cleanupOrphans()` on the root
+  /// collection. Normally the startup sweep (via
+  /// `cleanupOrphansOnCreation: true`) is all that's needed, but the
+  /// command lets users demonstrate it explicitly.
+  Future<void> _handleCleanup() async {
+    final results = await collection.cleanupOrphans();
+    if (results.isEmpty) {
+      log('cleanupOrphans: nothing to sweep.');
+      return;
+    }
+    final ok = results.whereType<OpSuccess>().length;
+    final fail = results.whereType<OpFailure>().length;
+    log('cleanupOrphans: $ok reclaimed, $fail failed.');
+  }
+
+  /// `stats` — one-shot diagnostic that composes several query
+  /// terminals against the same base collection. Exercises
+  /// `.count`, `.any`, `.firstOrNull`, and `.groupBy` in one go.
+  Future<void> _handleStats() async {
+    final base = collection.query();
+    final allCount = await base.count();
+    final openCount =
+        await base.where((t) => !t.obj.done).count();
+    final doneCount =
+        await base.where((t) => t.obj.done).count();
+    final hasOverdue = await base.any(
+      (t) => !t.obj.done && (t.obj.dueDate?.isBefore(DateTime.now()) ?? false),
+    );
+    final oldest = await base
+        .orderBy((t) => t.createdAt)
+        .firstOrNull();
+    final byOwner = await base.groupBy<Atsign>((t) => t.owner);
+
+    log('─── stats ───');
+    log('Total: $allCount · Open: $openCount · Done: $doneCount');
+    log('Any overdue open? ${hasOverdue ? "yes" : "no"}');
+    if (oldest != null) {
+      log(
+        'Oldest: "${oldest.obj.title}" '
+        '(${oldest.createdAt.toIso8601String().substring(0, 10)}, '
+        '${_color.fmt(oldest.owner)})',
+      );
+    }
+    for (final entry in byOwner.entries) {
+      log('  ${_color.fmt(entry.key)}: ${entry.value.length}');
     }
   }
 
@@ -963,7 +1313,7 @@ class TodosApp {
       try {
         await _notesSubFor(todo).delete(note);
         log('Note deleted.');
-        await _refreshNotes();
+        await refreshTodos();
       } catch (e) {
         log('Error deleting note: $e', error: true);
       }
@@ -973,7 +1323,7 @@ class TodosApp {
         await collection.delete(todo, cascade: true);
         log('Deleted.');
         await refreshTodos();
-        await _refreshNotes();
+        await refreshTodos();
       } catch (e) {
         log('Error deleting todo: $e', error: true);
       }
@@ -1098,7 +1448,7 @@ class TodosApp {
         todo,
       ).create(obj: TodoNote(note: text), sharedWith: _noteAudience(todo));
       log('Note added.');
-      await _refreshNotes();
+      await refreshTodos();
     } catch (e) {
       log('Error adding note: $e', error: true);
     }
@@ -1147,7 +1497,7 @@ class TodosApp {
         ),
       );
       log('Note updated.');
-      await _refreshNotes();
+      await refreshTodos();
     } catch (e) {
       log('Error updating note: $e', error: true);
     }

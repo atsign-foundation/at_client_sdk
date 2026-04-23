@@ -6,10 +6,22 @@ import 'package:flutter/foundation.dart';
 import '../models/todo.dart';
 import 'atsign_colors.dart';
 
+/// Record type for the combined parent-plus-notes stream emitted by
+/// [TodosService.watchTodosWithNotes]. Each row carries one todo and
+/// its current list of notes.
+typedef TodoWithNotes = ({CItem<Todo> parent, List<CItem<TodoNote>> children});
+
 /// Wraps the two `AtCollection`s (todos and notes) and exposes reactive
 /// state for Flutter widgets. Mirrors the TUI's in-file logic verbatim for
 /// anything that affects interoperability (key names, note audience rule,
 /// read-receipt behaviour, etc.).
+///
+/// Bundle A shape: todos are consumed as a `Stream<List<CItem<Todo>>>`
+/// via [watchTodos]; count badges via [watchCount]; the detail screen
+/// via [watchSingle]. The old `ValueNotifier<List<CItem<Todo>>>` and
+/// manual `refreshTodos()` pattern are gone — `Query.watch()` picks
+/// up remote changes, and write methods call [_pumpRefresh] for
+/// immediate local-feedback.
 class TodosService {
   static const String namespaceSuffix = 'todos.demos';
   static const Duration defaultExpiration = Duration(days: 365);
@@ -18,15 +30,21 @@ class TodosService {
   late final AtCollection<Todo> collection;
   late final AtsignColors colors;
 
-  final ValueNotifier<List<CItem<Todo>>> todos = ValueNotifier([]);
-  final ValueNotifier<Map<String, List<CItem<TodoNote>>>> notesByTodoId =
-      ValueNotifier({});
   final ValueNotifier<List<String>> logMessages = ValueNotifier([]);
 
-  final List<StreamSubscription> _subs = [];
   // Memoised per-todo notes sub-collection, keyed by (owner, id) of
-  // the parent todo.
+  // the parent todo. Used by write-path methods (addNote /
+  // updateNote / deleteNote) — reads flow through `watchWithSub` and
+  // `watchNotes` instead.
   final Map<String, AtCollection<TodoNote>> _notesSubs = {};
+
+  // Active-query stream machinery for the combined parents-plus-notes
+  // stream consumed by the home screen. Cached by [Query] object
+  // identity — the home screen should memoise its `Query<Todo>` so
+  // re-renders don't tear down the pipeline.
+  StreamController<List<TodoWithNotes>>? _todosCtrl;
+  StreamSubscription<List<TodoWithNotes>>? _todosWatchSub;
+  Query<Todo>? _currentQuery;
 
   TodosService(this.atClient) {
     colors = AtsignColors(atClient.atSign);
@@ -89,77 +107,112 @@ class TodosService {
 
   Future<void> init() async {
     await setUpCollections();
-    _subs.add(
-      collection.readReceipts.listen((r) {
-        _log('read receipt from ${r.from}');
-        unawaited(refreshTodos());
-      }),
-    );
-    _subs.add(collection.updates.listen((_) => unawaited(refreshTodos())));
-    _subs.add(collection.deletes.listen((_) => unawaited(refreshTodos())));
-    // Notes are sub-items under the todos collection; filter the
-    // subUpdates/subDeletes streams to only note changes (i.e. skip
-    // the internal `__rr` read-receipt sub-updates).
-    _subs.add(
-      collection.subUpdates
-          .where((e) => e.subName == 'notes')
-          .listen((_) => unawaited(refreshNotes())),
-    );
-    _subs.add(
-      collection.subDeletes
-          .where((e) => e.subName == 'notes')
-          .listen((_) => unawaited(refreshNotes())),
-    );
-
-    await Future.wait([refreshTodos(), refreshNotes()]);
+    // Both parent todos and their notes flow through a single
+    // `Query.watchWithSub` stream (see [watchTodosWithNotes]).
+    // Query.watch() already subscribes to the underlying collection
+    // events internally — no manual event listeners here.
   }
 
-  int _compareByDue(CItem<Todo> a, CItem<Todo> b) {
-    final ad = a.obj.dueDate;
-    final bd = b.obj.dueDate;
-    if (ad == null && bd == null) return 0;
-    if (ad == null) return 1;
-    if (bd == null) return -1;
-    return ad.compareTo(bd);
-  }
-
-  Future<void> refreshTodos() async {
-    try {
-      final fetched = await collection.getItems();
-      fetched.sort(_compareByDue);
-      for (final item in fetched) {
-        if (!(await item.wasMarkedReadByMe())) {
-          await item.markReadByMe();
-          _log('sent read receipt to ${item.owner} for "${item.obj.title}"');
-        }
-        // Prime the readBy cache so the UI's sync snapshot is populated.
-        await item.readBy;
-      }
-      todos.value = fetched;
-    } catch (e) {
-      _log('Error refreshing todos: $e');
+  /// Live stream of `(todo, notes)` pairs matching [q]. Re-emits on
+  /// any parent-level update/delete AND on any change to any listed
+  /// parent's `notes` sub-collection. Replaces both the Bundle-A
+  /// parents-only stream AND the manual refreshNotes loop with one
+  /// subscription.
+  ///
+  /// Caches the pipeline on [Query] object identity — callers should
+  /// memoise their `Query<Todo>` value across widget rebuilds
+  /// (see `screens/todos_home.dart`).
+  Stream<List<TodoWithNotes>> watchTodosWithNotes(Query<Todo> q) {
+    if (!identical(q, _currentQuery)) {
+      _todosWatchSub?.cancel();
+      _todosCtrl?.close();
+      _currentQuery = q;
+      _todosCtrl = StreamController<List<TodoWithNotes>>.broadcast();
+      _todosWatchSub = q
+          .watchWithSub<TodoNote>(
+            subName: 'notes',
+            subDefaultExpiration: defaultExpiration,
+            subFromJson: TodoNote.fromJson,
+          )
+          .listen(
+            _todosCtrl!.add,
+            onError: _todosCtrl!.addError,
+          );
     }
+    return _todosCtrl!.stream.asyncMap(_primeReadReceipts);
   }
 
-  Future<void> refreshNotes() async {
-    try {
-      final map = <String, List<CItem<TodoNote>>>{};
-      for (final todo in todos.value) {
-        final sub = _notesSubFor(todo);
-        final items = await sub.getItems();
-        if (items.isEmpty) continue;
-        items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-        map[todo.id] = items;
-        for (final n in items) {
+  /// Live count of items matching [q] — thin convenience over
+  /// `q.watch().map((l) => l.length)`. Useful for AppBar badges.
+  Stream<int> watchCount(Query<Todo> q) => q.watch().map((l) => l.length);
+
+  /// Live single-item stream for the detail screen. Re-emits whenever
+  /// the underlying todo changes (e.g. an owner on another atSign
+  /// renames it); yields `null` if the item is deleted while we're
+  /// looking at it.
+  Stream<CItem<Todo>?> watchSingle(String id, Atsign owner) => collection
+      .query()
+      .where((t) => t.id == id && t.owner == owner)
+      .watch()
+      .map((l) => l.isEmpty ? null : l.first);
+
+  /// Live stream of notes for a single parent [todo] — used by the
+  /// detail screen. Kept separate from [watchTodosWithNotes] so the
+  /// detail screen doesn't pay for the full-list watch just to render
+  /// one todo.
+  Stream<List<CItem<TodoNote>>> watchNotes(CItem<Todo> todo) =>
+      _notesSubFor(todo).query().watch().asyncMap((notes) async {
+        for (final n in notes) {
           if (!(await n.wasMarkedReadByMe())) {
             await n.markReadByMe();
           }
-          await n.readBy;
+        }
+        return notes;
+      });
+
+  /// Mark-as-read / prime-readBy side effect applied to every snapshot
+  /// flowing through [watchTodosWithNotes]. Kept on the pipeline so
+  /// both remote and local-refresh emissions go through the same
+  /// treatment — parents and children both get their receipts.
+  Future<List<TodoWithNotes>> _primeReadReceipts(
+    List<TodoWithNotes> rows,
+  ) async {
+    for (final r in rows) {
+      if (!(await r.parent.wasMarkedReadByMe())) {
+        await r.parent.markReadByMe();
+        _log(
+          'sent read receipt to ${r.parent.owner} for "${r.parent.obj.title}"',
+        );
+      }
+      await r.parent.readBy;
+      for (final note in r.children) {
+        if (!(await note.wasMarkedReadByMe())) {
+          await note.markReadByMe();
         }
       }
-      notesByTodoId.value = map;
-    } catch (e) {
-      _log('Error refreshing notes: $e');
+    }
+    return rows;
+  }
+
+  /// One-shot fetch of the currently-watched query, pumped into the
+  /// same controller the `watchWithSub` stream feeds. Called from
+  /// write methods so the UI reflects a local change immediately
+  /// rather than waiting for the atServer to echo the self-
+  /// notification back through the live stream.
+  Future<void> _pumpRefresh() async {
+    final q = _currentQuery;
+    final ctrl = _todosCtrl;
+    if (q == null || ctrl == null || ctrl.isClosed) return;
+    try {
+      final parents = await q.fetch();
+      final combined = <TodoWithNotes>[];
+      for (final p in parents) {
+        final notes = await _notesSubFor(p).query().fetch();
+        combined.add((parent: p, children: notes));
+      }
+      ctrl.add(combined);
+    } catch (e, st) {
+      ctrl.addError(e, st);
     }
   }
 
@@ -181,7 +234,7 @@ class TodosService {
       sharedWith: sharedWith,
     );
     _log('created "${item.obj.title}"');
-    await refreshTodos();
+    await _pumpRefresh();
   }
 
   Future<void> updateTodo(
@@ -202,7 +255,7 @@ class TodosService {
     );
     await collection.update(updated);
     _log('updated "${updated.obj.title}"');
-    await refreshTodos();
+    await _pumpRefresh();
   }
 
   Future<void> toggleDone(CItem<Todo> existing) async {
@@ -224,7 +277,7 @@ class TodosService {
       '"${existing.obj.title}" marked '
       '${updated.obj.done ? "done" : "not done"}',
     );
-    await refreshTodos();
+    await _pumpRefresh();
   }
 
   Future<void> setDueDate(CItem<Todo> existing, DateTime dueDate) async {
@@ -246,7 +299,7 @@ class TodosService {
       ),
     );
     _log('due date set for "${existing.obj.title}"');
-    await refreshTodos();
+    await _pumpRefresh();
   }
 
   Future<void> deleteTodo(CItem<Todo> todo) async {
@@ -254,8 +307,8 @@ class TodosService {
     // todo rather than stranding on the atServer.
     await collection.delete(todo, cascade: true);
     _log('deleted "${todo.obj.title}"');
-    await refreshTodos();
-    await refreshNotes();
+    await _pumpRefresh();
+    await _pumpRefresh();
   }
 
   Future<void> shareTodo(CItem<Todo> todo, Set<Atsign> addAtSigns) async {
@@ -265,7 +318,7 @@ class TodosService {
     todo.sharedWith.addAll(addAtSigns);
     await collection.update(todo, unshareWithOthers: false);
     _log('shared "${todo.obj.title}" with ${addAtSigns.join(", ")}');
-    await refreshTodos();
+    await _pumpRefresh();
   }
 
   Future<void> scheduleTodo(CItem<Todo> todo, DateTime availableAt) async {
@@ -275,7 +328,7 @@ class TodosService {
     todo.availableAt = availableAt;
     await collection.update(todo);
     _log('scheduled "${todo.obj.title}" for ${availableAt.toIso8601String()}');
-    await refreshTodos();
+    await _pumpRefresh();
   }
 
   Future<void> addNote(CItem<Todo> todo, String text) async {
@@ -284,7 +337,7 @@ class TodosService {
       sharedWith: noteAudience(todo),
     );
     _log('note added to "${todo.obj.title}"');
-    await refreshNotes();
+    await _pumpRefresh();
   }
 
   Future<void> updateNote(
@@ -304,7 +357,7 @@ class TodosService {
       ),
     );
     _log('note updated on "${todo.obj.title}"');
-    await refreshNotes();
+    await _pumpRefresh();
   }
 
   Future<void> deleteNote(CItem<TodoNote> note, CItem<Todo> todo) async {
@@ -313,15 +366,12 @@ class TodosService {
     }
     await _notesSubFor(todo).delete(note);
     _log('note deleted');
-    await refreshNotes();
+    await _pumpRefresh();
   }
 
   void dispose() {
-    for (final s in _subs) {
-      s.cancel();
-    }
-    todos.dispose();
-    notesByTodoId.dispose();
+    _todosWatchSub?.cancel();
+    _todosCtrl?.close();
     logMessages.dispose();
   }
 }

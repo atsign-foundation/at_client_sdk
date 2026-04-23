@@ -35,8 +35,8 @@ is the main entry point once authentication is complete.
   ([`lib/src/service/notification_service.dart`](lib/src/service/notification_service.dart))
 - `syncService` — background sync between the local store and the
   atServer
-- `collection<T>(namespace, defaultExpiration, {fromJson})` — returns an
-  `AtCollection<T>` (see [Collections](#collections) below)
+- `collection<T>(namespace, defaultExpiration, {fromJson})` — returns a
+  `Future<AtCollection<T>>` (see [Collections](#collections) below)
 
 ## Examples
 
@@ -53,8 +53,6 @@ tutorials or blog posts:
   - [`example/bin/collections_primitives.dart`](example/bin/collections_primitives.dart)
     and the other `collections_*.dart` files — typed shareable records
     via the `AtCollection<T>` API
-  - [`example/bin/minimal.dart`](example/bin/minimal.dart)
-    — the smallest useful program
 
 - **Flutter examples:**
   [`../at_client_flutter/example/`](../at_client_flutter/example)
@@ -96,7 +94,7 @@ behind a small set of verbs.
 Sketch:
 
 ```dart
-final todos = atClient.collection<Todo>(
+final todos = await atClient.collection<Todo>(
   'todos.my_app',            // fully-qualified namespace
   const Duration(days: 7),
   fromJson: Todo.fromJson,
@@ -115,6 +113,45 @@ await for (final e in todos.updates) {
 }
 ```
 
+`AtCollection<T>` executes reads on-device by default, against a
+local copy that the `at_client` SDK keeps current via real-time
+sync with the atServer. Value-level filtering is always on-device
+— records are end-to-end encrypted between atSigns, so the server
+never sees plaintext to filter on.
+
+A composable `Query<T>` builder covers the common filter / sort /
+paginate / aggregate patterns:
+
+```dart
+final overdue = todos.query()
+    .where((t) => !t.obj.done)
+    .where((t) => t.obj.due.isBefore(DateTime.now()))
+    .orderBy((t) => t.obj.due)
+    .limit(20);
+
+final list = await overdue.fetch();   // one-shot List
+final live = overdue.watch();         // Stream<List<CItem<Todo>>>
+
+final openCount = await todos.query().where((t) => !t.obj.done).count();
+final byOwner   = await todos.query().groupBy<Atsign>((t) => t.owner);
+```
+
+Queries are immutable values — build once, store, pass, fetch or
+watch. For ad-hoc pipelines outside the builder's vocabulary,
+`getItemsAsStream().where(...)` remains supported as an escape hatch.
+
+Read receipts ship built-in — one call on each side, no
+app-level bookkeeping:
+
+```dart
+// Reader side: idempotent, no-op on self-owned items.
+await incomingItem.markReadByMe();
+
+// Owner side: who has read this? Maintained live via events.
+final readers = await myItem.readBy;   // Future<Set<Atsign>>
+todos.readReceipts.listen((e) => print('${e.from} read ${e.id}'));
+```
+
 Sub-collections are `AtCollection<U>` instances scoped to a parent
 `CItem` — comments on a blog post, line-items on an invoice — with
 opt-in cascade-delete:
@@ -131,7 +168,7 @@ await comments.create(obj: Comment('nice one'), sharedWith: {/* … */});
 await posts.delete(post, cascade: true);   // removes comments too
 ```
 
-Worked examples:
+Worked examples (Dart / CLI):
 
 - [`example/bin/collections_primitives.dart`](example/bin/collections_primitives.dart)
 - [`example/bin/collections_domain_objects.dart`](example/bin/collections_domain_objects.dart)
@@ -144,8 +181,14 @@ Worked examples:
 - [`example/bin/collections_todos.dart`](example/bin/collections_todos.dart)
   (full interactive TUI)
 
-**Key-length note:** atServer keys are capped at 255 chars; atSigns at 55. 
-`subCollection(...)` enforces this at construction time with a hard 
+For Flutter, the canonical reference app is
+[`../at_client_flutter/examples/todos`](../at_client_flutter/examples/todos)
+— same feature set as `collections_todos.dart` above, rendered
+through the mobile / desktop widget stack the way a shipping app
+would use it.
+
+**Key-length note:** atServer keys are capped at 255 chars; atSigns at 55.
+`subCollection(...)` enforces this at construction time with a hard
 `ArgumentError` so oversized keys never reach the wire.
 
 ## Further reading
