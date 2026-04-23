@@ -50,36 +50,56 @@ dart run bin/collections_binary.dart -R receiver -O @sender
 ```
 
 ### Collections — todos app
-Interactive terminal-based shared todo list. (Note: there is an 
-equivalent Flutter app in the at_client_flutter/examples/todos 
-directory.)
-Demonstrates a wide range of the `AtCollection` API: two collections  
-(`Todo` and `TodoNote`), read receipts, live event streams,  
-`unshareWithOthers: false`, `availableAt` scheduling,  and raw key 
-inspection. Run as any atSign — todos are shared with whoever you
-specify per item.
+Interactive terminal-based shared todo list, built on the `nocterm`
+widget framework. (There is an equivalent Flutter app in
+`packages/at_client_flutter/examples/todos/` — the two apps have
+been deliberately given a similar UX so you can A/B the same
+scenarios across keyboard-driven and mouse-driven front-ends.)
+
+The app is a split-pane TUI: filter chips / dashboard counts header,
+list of todos on the left (keyboard-navigable), live detail pane on
+the right (per-reader read-receipt timeline via
+`item.receipts.query().watch()`, stitched notes via
+`Query.watchWithSub`), log pane, context-sensitive footer hints.
+Every command that takes input opens a modal form overlay.
+
 ```bash
 dart run bin/collections_todos.dart --atsign @alice
 ```
 
-Available commands inside the app. Todo / note indexes are 1-based. Commands
-that take an index require it inline (e.g. `delete 1`, `done 2`, `note 3`);
-other arguments are optional and prompted if omitted.
+Keyboard shortcuts (from the list pane):
 
-| Command                    | Description                                                                  |
-|----------------------------|------------------------------------------------------------------------------|
-| `create`                   | Create a new todo. Prompts for title, description, atSigns, due (default 7d) |
-| `update N`                 | Update a todo. Prompts for new title, description, and share list            |
-| `delete N` or `delete N.M` | Delete todo N, or note M in todo N                                           |
-| `done N`                   | Toggle the done `[x]`/`[ ]` status                                           |
-| `due N [YYYY-MM-DD]`       | Set a due date                                                               |
-| `note N [text…]`           | Attach a note to a todo (stored in a separate collection)                    |
-| `updatenote N.M [text…]`   | Update note M in todo N; re-syncs sharing to match the parent todo           |
-| `share N [@signs,…]`       | Add recipients without removing existing shares                              |
-| `schedule N [seconds]`     | Delay recipient visibility (`availableAt`)                                   |
-| `keys`                     | Log all raw AtKeys in both collections (debug)                               |
-| `help [cmd]`               | Show help. Also `<cmd> help` or `<cmd> --help`                               |
-| `quit`                     | Exit the app                                                                 |
+| Key           | Action                                                      |
+|---------------|-------------------------------------------------------------|
+| ↑ ↓ / j k     | Move selection                                              |
+| g / G         | First / last todo                                           |
+| ⏎ or →        | Focus detail pane                                           |
+| Esc or ←      | Back to list pane                                           |
+| c             | Create todo (modal form)                                    |
+| e             | Edit selected todo (modal form)                             |
+| d             | Delete selected todo (modal confirm)                        |
+| space         | Toggle done on selected                                     |
+| n             | Add note to selected (modal form)                           |
+| s             | Share selected — add atSigns (modal form)                   |
+| u             | Set due date (modal form, YYYY-MM-DD)                       |
+| S             | Schedule visibility via `availableAt` (modal form, seconds) |
+| r             | Reverse sort direction                                      |
+| /             | Live-narrow find bar                                        |
+| m or Alt-M    | Open command menu (searchable)                              |
+| ?             | Open help overlay                                           |
+| q             | Quit                                                        |
+
+The command menu (`m`) lists every shortcut and also includes
+`Cleanup orphans` (wraps `collection.cleanupOrphans()`) and `Stats`
+(composes `.count` / `.any` / `.firstOrNull` / `.groupBy` terminals
+on the active query). Presets (`All` / `Mine` / `Shared with me` /
+`Open` / `Done` / `Overdue`) are live `Query<Todo>` values — tapping
+one swaps the stream source; the list re-narrows live as shared
+todos come in.
+
+Shared TUI plumbing (palette, presets, typedefs) lives under
+`lib/todos_tui/`; the entry point and widget tree are in
+`bin/collections_todos.dart`.
 
 ### Notifications
 Fire-and-forget messaging via `NotificationService`.
