@@ -29,7 +29,8 @@ class Comment {
   final String body;
   Comment(this.body);
   Map<String, dynamic> toJson() => {'body': body};
-  factory Comment.fromJson(Map<String, dynamic> j) => Comment(j['body'] as String);
+  factory Comment.fromJson(Map<String, dynamic> j) =>
+      Comment(j['body'] as String);
 }
 
 void main() {
@@ -131,11 +132,14 @@ void main() {
 
       final snapshots =
           <List<({CItem<Post> parent, List<CItem<Comment>> children})>>[];
-      final sub = posts.query().watchWithSub<Comment>(
-        subName: 'comments',
-        subDefaultExpiration: const Duration(days: 7),
-        subFromJson: Comment.fromJson,
-      ).listen(snapshots.add);
+      final sub = posts
+          .query()
+          .watchWithSub<Comment>(
+            subName: 'comments',
+            subDefaultExpiration: const Duration(days: 7),
+            subFromJson: Comment.fromJson,
+          )
+          .listen(snapshots.add);
       await pump();
       // Last snapshot contains both posts; p1 has 2 comments, p2 has 0.
       final last = snapshots.last;
@@ -152,11 +156,14 @@ void main() {
       seedPost('p1', 'first');
       final snapshots =
           <List<({CItem<Post> parent, List<CItem<Comment>> children})>>[];
-      final sub = posts.query().watchWithSub<Comment>(
-        subName: 'comments',
-        subDefaultExpiration: const Duration(days: 7),
-        subFromJson: Comment.fromJson,
-      ).listen(snapshots.add);
+      final sub = posts
+          .query()
+          .watchWithSub<Comment>(
+            subName: 'comments',
+            subDefaultExpiration: const Duration(days: 7),
+            subFromJson: Comment.fromJson,
+          )
+          .listen(snapshots.add);
       await pump();
       expect(snapshots.last.single.children, isEmpty);
 
@@ -185,11 +192,14 @@ void main() {
       seedComment('p1', 'c1', 'hello');
       final snapshots =
           <List<({CItem<Post> parent, List<CItem<Comment>> children})>>[];
-      final sub = posts.query().watchWithSub<Comment>(
-        subName: 'comments',
-        subDefaultExpiration: const Duration(days: 7),
-        subFromJson: Comment.fromJson,
-      ).listen(snapshots.add);
+      final sub = posts
+          .query()
+          .watchWithSub<Comment>(
+            subName: 'comments',
+            subDefaultExpiration: const Duration(days: 7),
+            subFromJson: Comment.fromJson,
+          )
+          .listen(snapshots.add);
       await pump();
       expect(snapshots.last.map((r) => r.parent.id).toSet(), {'p1', 'p2'});
 
@@ -222,11 +232,14 @@ void main() {
       seedComment('p2', 'c9', 'other');
       final snapshots =
           <List<({CItem<Post> parent, List<CItem<Comment>> children})>>[];
-      final sub = posts.query().watchWithSub<Comment>(
-        subName: 'comments',
-        subDefaultExpiration: const Duration(days: 7),
-        subFromJson: Comment.fromJson,
-      ).listen(snapshots.add);
+      final sub = posts
+          .query()
+          .watchWithSub<Comment>(
+            subName: 'comments',
+            subDefaultExpiration: const Duration(days: 7),
+            subFromJson: Comment.fromJson,
+          )
+          .listen(snapshots.add);
       await pump();
       final before = snapshots.last;
       final p2Before = before
@@ -270,11 +283,14 @@ void main() {
       seedPost('p2', 'second');
       final snapshots =
           <List<({CItem<Post> parent, List<CItem<Comment>> children})>>[];
-      final sub = posts.query().watchWithSub<Comment>(
-        subName: 'comments',
-        subDefaultExpiration: const Duration(days: 7),
-        subFromJson: Comment.fromJson,
-      ).listen(snapshots.add);
+      final sub = posts
+          .query()
+          .watchWithSub<Comment>(
+            subName: 'comments',
+            subDefaultExpiration: const Duration(days: 7),
+            subFromJson: Comment.fromJson,
+          )
+          .listen(snapshots.add);
       await pump();
       final countAfterInitial = snapshots.length;
 

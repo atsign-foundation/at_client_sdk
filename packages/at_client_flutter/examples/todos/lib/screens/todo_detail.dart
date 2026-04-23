@@ -232,196 +232,184 @@ class _TodoDetailScreenState extends State<TodoDetailScreen> {
         stream: service.watchNotes(_currentTodo),
         builder: (_, snap) {
           final todo = _currentTodo;
-              final notes = snap.data ?? const <CItem<TodoNote>>[];
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+          final notes = snap.data ?? const <CItem<TodoNote>>[];
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            Checkbox(
-                              value: todo.obj.done,
-                              onChanged: isOwner
-                                  ? (_) => _withBusy(
-                                      () => service.toggleDone(todo),
-                                    )
-                                  : null,
-                            ),
-                            Expanded(
-                              child: Text(
-                                todo.obj.title,
-                                style: Theme.of(context).textTheme.titleLarge,
-                              ),
-                            ),
-                          ],
+                        Checkbox(
+                          value: todo.obj.done,
+                          onChanged: isOwner
+                              ? (_) => _withBusy(() => service.toggleDone(todo))
+                              : null,
                         ),
-                        if (todo.obj.description.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(todo.obj.description),
-                        ],
-                        const SizedBox(height: 12),
-                        _meta('Due', Text(_fmtDate(todo.obj.dueDate))),
-                        _meta('Created', Text(_fmtDate(todo.createdAt))),
-                        _meta(
-                          'Author',
-                          AtsignText(
-                            atSign: todo.owner,
-                            colors: service.colors,
-                          ),
-                        ),
-                        _meta(
-                          'Shared with',
-                          AtsignList(
-                            atSigns: todo.sharedWith,
-                            colors: service.colors,
-                          ),
-                        ),
-                        _meta(
-                          'Read by',
-                          // Live timeline of receipts, sorted by when
-                          // each reader marked the item. Direct use
-                          // of the public `item.receipts` handle:
-                          // `.query().orderBy(...).watch()`. Each
-                          // receipt's `owner` is the reader and its
-                          // `createdAt` is "when they marked it".
-                          StreamBuilder<List<CItem<Map<String, dynamic>>>>(
-                            stream: todo.receipts
-                                .query()
-                                .orderBy((r) => r.createdAt)
-                                .watch(),
-                            builder: (_, snap) {
-                              final receipts = snap.data ?? const [];
-                              if (receipts.isEmpty) {
-                                return Text(
-                                  todo.sharedWith.isEmpty
-                                      ? '—'
-                                      : '(nobody yet)',
-                                );
-                              }
-                              return Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                children: [
-                                  for (final r in receipts)
-                                    Padding(
-                                      padding:
-                                          const EdgeInsets.only(bottom: 2),
-                                      child: Row(
-                                        children: [
-                                          AtsignText(
-                                            atSign: r.owner,
-                                            colors: service.colors,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            _fmtDate(r.createdAt),
-                                            style: TextStyle(
-                                              color: Theme.of(context)
-                                                  .hintColor,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                ],
-                              );
-                            },
+                        Expanded(
+                          child: Text(
+                            todo.obj.title,
+                            style: Theme.of(context).textTheme.titleLarge,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                  const Divider(height: 1),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
+                    if (todo.obj.description.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(todo.obj.description),
+                    ],
+                    const SizedBox(height: 12),
+                    _meta('Due', Text(_fmtDate(todo.obj.dueDate))),
+                    _meta('Created', Text(_fmtDate(todo.createdAt))),
+                    _meta(
+                      'Author',
+                      AtsignText(atSign: todo.owner, colors: service.colors),
                     ),
-                    child: Text(
-                      'Notes (${notes.length})',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  Expanded(
-                    child: notes.isEmpty
-                        ? const Center(child: Text('No notes'))
-                        : ListView.separated(
-                            itemCount: notes.length,
-                            separatorBuilder: (_, __) =>
-                                const Divider(height: 1),
-                            itemBuilder: (_, i) {
-                              final n = notes[i];
-                              final noteIsMine = n.owner == service.self;
-                              return Dismissible(
-                                key: ValueKey('${n.owner}:${n.id}'),
-                                direction: noteIsMine
-                                    ? DismissDirection.endToStart
-                                    : DismissDirection.none,
-                                background: Container(
-                                  color: Colors.red,
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                  ),
-                                  child: const Icon(
-                                    Icons.delete,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                confirmDismiss: (_) async => noteIsMine,
-                                onDismissed: (_) => _withBusy(
-                                  () => service.deleteNote(n, todo),
-                                ),
-                                child: ListTile(
-                                  title: Text(n.obj.note),
-                                  subtitle: Row(
-                                    children: [
-                                      AtsignText(
-                                        atSign: n.owner,
-                                        colors: service.colors,
-                                      ),
-                                      const Text(' · '),
-                                      Text(_fmtDate(n.createdAt)),
-                                    ],
-                                  ),
-                                  onTap: noteIsMine ? () => _editNote(n) : null,
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                  SafeArea(
-                    top: false,
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _noteCtrl,
-                              decoration: const InputDecoration(
-                                hintText: 'Add a note…',
-                                border: OutlineInputBorder(),
-                              ),
-                              onSubmitted: (_) => _addNote(),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          FilledButton(
-                            onPressed: _busy ? null : _addNote,
-                            child: const Text('Add'),
-                          ),
-                        ],
+                    _meta(
+                      'Shared with',
+                      AtsignList(
+                        atSigns: todo.sharedWith,
+                        colors: service.colors,
                       ),
                     ),
+                    _meta(
+                      'Read by',
+                      // Live timeline of receipts, sorted by when
+                      // each reader marked the item. Direct use
+                      // of the public `item.receipts` handle:
+                      // `.query().orderBy(...).watch()`. Each
+                      // receipt's `owner` is the reader and its
+                      // `createdAt` is "when they marked it".
+                      StreamBuilder<List<CItem<Map<String, dynamic>>>>(
+                        stream: todo.receipts
+                            .query()
+                            .orderBy((r) => r.createdAt)
+                            .watch(),
+                        builder: (_, snap) {
+                          final receipts = snap.data ?? const [];
+                          if (receipts.isEmpty) {
+                            return Text(
+                              todo.sharedWith.isEmpty ? '—' : '(nobody yet)',
+                            );
+                          }
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (final r in receipts)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 2),
+                                  child: Row(
+                                    children: [
+                                      AtsignText(
+                                        atSign: r.owner,
+                                        colors: service.colors,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        _fmtDate(r.createdAt),
+                                        style: TextStyle(
+                                          color: Theme.of(context).hintColor,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: Text(
+                  'Notes (${notes.length})',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              Expanded(
+                child: notes.isEmpty
+                    ? const Center(child: Text('No notes'))
+                    : ListView.separated(
+                        itemCount: notes.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (_, i) {
+                          final n = notes[i];
+                          final noteIsMine = n.owner == service.self;
+                          return Dismissible(
+                            key: ValueKey('${n.owner}:${n.id}'),
+                            direction: noteIsMine
+                                ? DismissDirection.endToStart
+                                : DismissDirection.none,
+                            background: Container(
+                              color: Colors.red,
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              child: const Icon(
+                                Icons.delete,
+                                color: Colors.white,
+                              ),
+                            ),
+                            confirmDismiss: (_) async => noteIsMine,
+                            onDismissed: (_) =>
+                                _withBusy(() => service.deleteNote(n, todo)),
+                            child: ListTile(
+                              title: Text(n.obj.note),
+                              subtitle: Row(
+                                children: [
+                                  AtsignText(
+                                    atSign: n.owner,
+                                    colors: service.colors,
+                                  ),
+                                  const Text(' · '),
+                                  Text(_fmtDate(n.createdAt)),
+                                ],
+                              ),
+                              onTap: noteIsMine ? () => _editNote(n) : null,
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _noteCtrl,
+                          decoration: const InputDecoration(
+                            hintText: 'Add a note…',
+                            border: OutlineInputBorder(),
+                          ),
+                          onSubmitted: (_) => _addNote(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: _busy ? null : _addNote,
+                        child: const Text('Add'),
+                      ),
+                    ],
                   ),
-                ],
-              );
+                ),
+              ),
+            ],
+          );
         },
       ),
     );

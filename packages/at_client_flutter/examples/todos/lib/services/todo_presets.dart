@@ -23,10 +23,8 @@ class TodoPreset {
 /// use a far-future sentinel of year 9999). `reverse` flips to
 /// descending; the sentinel then sorts first, matching the app's
 /// pre-builder `_compareByDue` behaviour for interop.
-Query<Todo> _sortedByDue(Query<Todo> q, bool reverse) => q.orderBy(
-  (t) => t.obj.dueDate ?? DateTime.utc(9999),
-  descending: reverse,
-);
+Query<Todo> _sortedByDue(Query<Todo> q, bool reverse) =>
+    q.orderBy((t) => t.obj.dueDate ?? DateTime.utc(9999), descending: reverse);
 
 /// The full preset registry. Order here drives the filter-chip order on
 /// the home screen.

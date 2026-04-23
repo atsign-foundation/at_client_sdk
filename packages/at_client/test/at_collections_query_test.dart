@@ -143,7 +143,8 @@ void main() {
         'b': Task('bravo', done: true, due: d2),
         'c': Task('charlie', done: false, due: d3),
       });
-      final overdueOpen = await c.query()
+      final overdueOpen = await c
+          .query()
           .where((t) => !t.obj.done)
           .where((t) => t.obj.due.isBefore(d2))
           .fetch();
@@ -179,9 +180,8 @@ void main() {
         'b': Task('bravo', done: false, due: d1),
         'c': Task('charlie', done: false, due: d2),
       });
-      final sorted = await c.query()
-          .orderBy((t) => t.obj.due, descending: true)
-          .fetch();
+      final sorted =
+          await c.query().orderBy((t) => t.obj.due, descending: true).fetch();
       expect(sorted.map((i) => i.obj.title), ['alpha', 'charlie', 'bravo']);
     });
 
@@ -203,9 +203,11 @@ void main() {
         'b': Task('alpha', done: false, due: d1),
         'c': Task('bravo', done: false, due: d2),
       });
-      final sorted = await c.query()
+      final sorted = await c
+          .query()
           .orderBy((t) => t.obj.title) // would give alpha/bravo/charlie
-          .orderBy((t) => t.obj.due)   // wins — bravo (d1)/charlie(d2)/alpha(d3)? no
+          .orderBy(
+              (t) => t.obj.due) // wins — bravo (d1)/charlie(d2)/alpha(d3)? no
           .fetch();
       // Orders by due: b(d1), c(d2), a(d3). Titles: alpha(a), bravo(b), charlie(c) → b, c, a.
       expect(sorted.map((i) => i.id), ['b', 'c', 'a']);
@@ -222,10 +224,7 @@ void main() {
         'c': Task('charlie', done: false, due: d2),
         'd': Task('delta', done: false, due: d4),
       });
-      final top2 = await c.query()
-          .orderBy((t) => t.obj.due)
-          .limit(2)
-          .fetch();
+      final top2 = await c.query().orderBy((t) => t.obj.due).limit(2).fetch();
       expect(top2.map((i) => i.id), ['b', 'c']);
     });
 
@@ -237,10 +236,8 @@ void main() {
         'c': Task('charlie', done: false, due: d2),
         'd': Task('delta', done: false, due: d4),
       });
-      final afterFirst = await c.query()
-          .orderBy((t) => t.obj.due)
-          .skip(2)
-          .fetch();
+      final afterFirst =
+          await c.query().orderBy((t) => t.obj.due).skip(2).fetch();
       expect(afterFirst.map((i) => i.id), ['a', 'd']);
     });
 
@@ -252,11 +249,8 @@ void main() {
         'c': Task('charlie', done: false, due: d2),
         'd': Task('delta', done: false, due: d4),
       });
-      final page2 = await c.query()
-          .orderBy((t) => t.obj.due)
-          .skip(2)
-          .limit(1)
-          .fetch();
+      final page2 =
+          await c.query().orderBy((t) => t.obj.due).skip(2).limit(1).fetch();
       expect(page2.map((i) => i.id), ['a']);
     });
 
@@ -411,7 +405,8 @@ void main() {
       });
       // Filter out done=true (loses 'b'), order by due asc ('e' d1,
       // 'c' d2, 'a' d3, 'd' d4), skip 1 ('c' first), limit 2.
-      final page = await c.query()
+      final page = await c
+          .query()
           .where((t) => !t.obj.done)
           .orderBy((t) => t.obj.due)
           .skip(1)
@@ -519,8 +514,7 @@ void main() {
         'a': Task('alpha', done: false, due: d1),
         'b': Task('bravo', done: false, due: d2),
       });
-      final r =
-          await c.query().where((t) => !t.obj.done).firstOrNull();
+      final r = await c.query().where((t) => !t.obj.done).firstOrNull();
       expect(r, isNotNull);
       expect({'a', 'b'}, contains(r!.id));
     });
@@ -532,11 +526,7 @@ void main() {
         'b': Task('bravo', done: false, due: d1),
         'c': Task('charlie', done: false, due: d2),
       });
-      final r = await c
-          .query()
-          .orderBy((t) => t.obj.due)
-          .skip(1)
-          .firstOrNull();
+      final r = await c.query().orderBy((t) => t.obj.due).skip(1).firstOrNull();
       // Order: b (d1), c (d2), a (d3). Skip 1 → c is first.
       expect(r?.id, 'c');
     });
@@ -562,12 +552,12 @@ void main() {
       expect(q, isNotNull);
       // Sub-collection's namespace is the `__rr` form scoped to the
       // parent item id + owner.
-      expect(receipts.namespace, contains(AtCollection.readReceiptNamespacePart));
+      expect(
+          receipts.namespace, contains(AtCollection.readReceiptNamespacePart));
       expect(receipts.namespace, contains(item.id));
     });
 
-    test('CItem.receipts delegates to AtCollection.readReceiptsFor',
-        () async {
+    test('CItem.receipts delegates to AtCollection.readReceiptsFor', () async {
       final c = buildCollection();
       seed({'a': Task('alpha', done: false, due: d1)});
       final item = (await c.query().fetch()).single;
@@ -610,7 +600,7 @@ void main() {
           .query()
           .where((t) => !t.obj.done) // filters out b
           .orderBy((t) => t.obj.due) // a(d1), c(d3), d(d4)
-          .limit(2)                  // a, c
+          .limit(2) // a, c
           .groupBy<bool>((t) => t.obj.done);
       expect(byDone.keys, [false]);
       expect(byDone[false]!.map((i) => i.id), ['a', 'c']);

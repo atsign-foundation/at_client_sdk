@@ -161,10 +161,8 @@ class _TodoPreset {
 /// always sorted last (sentinel of year 9999). `reverse` flips to
 /// descending; sentinel then sorts first, matching the pre-builder
 /// `_compareByDue` behaviour.
-Query<Todo> _sortedByDue(Query<Todo> q, bool reverse) => q.orderBy(
-  (t) => t.obj.dueDate ?? DateTime.utc(9999),
-  descending: reverse,
-);
+Query<Todo> _sortedByDue(Query<Todo> q, bool reverse) =>
+    q.orderBy((t) => t.obj.dueDate ?? DateTime.utc(9999), descending: reverse);
 
 final List<_TodoPreset> _todoPresets = [
   _TodoPreset('all', 'All', (c, _, rev) => _sortedByDue(c.query(), rev)),
@@ -233,7 +231,9 @@ class TodosApp {
   // notes children, via `Query.watchWithSub`. Cancelled and re-created
   // whenever the active query changes (filter / reverse). The count
   // subs are long-lived.
-  StreamSubscription<List<({CItem<Todo> parent, List<CItem<TodoNote>> children})>>?
+  StreamSubscription<
+    List<({CItem<Todo> parent, List<CItem<TodoNote>> children})>
+  >?
   _todosSub;
   StreamSubscription<int>? _openCountSub;
   StreamSubscription<int>? _overdueCountSub;
@@ -382,8 +382,7 @@ class TodosApp {
         )
         .listen(
           _onCombinedSnapshot,
-          onError: (Object e) =>
-              log('Error on todos stream: $e', error: true),
+          onError: (Object e) => log('Error on todos stream: $e', error: true),
         );
   }
 
@@ -436,15 +435,16 @@ class TodosApp {
       final combined =
           <({CItem<Todo> parent, List<CItem<TodoNote>> children})>[];
       for (final p in parents) {
-        final notes = await collection
-            .subCollection<TodoNote>(
-              parent: p,
-              subName: 'notes',
-              defaultExpiration: const Duration(days: 365),
-              fromJson: TodoNote.fromJson,
-            )
-            .query()
-            .fetch();
+        final notes =
+            await collection
+                .subCollection<TodoNote>(
+                  parent: p,
+                  subName: 'notes',
+                  defaultExpiration: const Duration(days: 365),
+                  fromJson: TodoNote.fromJson,
+                )
+                .query()
+                .fetch();
         combined.add((parent: p, children: notes));
       }
       await _onCombinedSnapshot(combined);
@@ -509,9 +509,10 @@ class TodosApp {
           } else {
             final next = open.first;
             final due = next.obj.dueDate;
-            final dueStr = due == null
-                ? 'no date'
-                : due.toIso8601String().substring(0, 10);
+            final dueStr =
+                due == null
+                    ? 'no date'
+                    : due.toIso8601String().substring(0, 10);
             _nextDueLabel = '"${next.obj.title}" ($dueStr)';
           }
           _draw();
@@ -636,8 +637,7 @@ class TodosApp {
         'Delay recipient visibility (availableAt). Usage: schedule N [seconds].',
     'filter':
         'Switch the active preset. Usage: filter <all|mine|shared|open|done|overdue>.',
-    'reverse':
-        'Flip the sort direction (due date asc ⇄ desc). No args.',
+    'reverse': 'Flip the sort direction (due date asc ⇄ desc). No args.',
     'find':
         'Find the first open todo whose title contains <text>. Usage: find <text>.',
     'cleanup':
@@ -676,9 +676,8 @@ class TodosApp {
     // Dashboard line — live counts from independent count streams,
     // plus the next-due pointer from a live `.firstOrNull` query.
     terminal.moveCursor(0, 1);
-    final nextDueFragment = _nextDueLabel.isEmpty
-        ? ''
-        : ' · next due $_nextDueLabel';
+    final nextDueFragment =
+        _nextDueLabel.isEmpty ? '' : ' · next due $_nextDueLabel';
     terminal.write(
       '  ${todos.length} in view · '
       '$_countOpen open · '
@@ -1112,12 +1111,13 @@ class TodosApp {
       return;
     }
     final needle = args.join(' ').toLowerCase();
-    final match = await collection
-        .query()
-        .where((t) => !t.obj.done)
-        .where((t) => t.obj.title.toLowerCase().contains(needle))
-        .orderBy((t) => t.obj.dueDate ?? DateTime.utc(9999))
-        .firstOrNull();
+    final match =
+        await collection
+            .query()
+            .where((t) => !t.obj.done)
+            .where((t) => t.obj.title.toLowerCase().contains(needle))
+            .orderBy((t) => t.obj.dueDate ?? DateTime.utc(9999))
+            .firstOrNull();
     if (match == null) {
       log('No open todo matches "$needle".');
       return;
@@ -1149,16 +1149,12 @@ class TodosApp {
   Future<void> _handleStats() async {
     final base = collection.query();
     final allCount = await base.count();
-    final openCount =
-        await base.where((t) => !t.obj.done).count();
-    final doneCount =
-        await base.where((t) => t.obj.done).count();
+    final openCount = await base.where((t) => !t.obj.done).count();
+    final doneCount = await base.where((t) => t.obj.done).count();
     final hasOverdue = await base.any(
       (t) => !t.obj.done && (t.obj.dueDate?.isBefore(DateTime.now()) ?? false),
     );
-    final oldest = await base
-        .orderBy((t) => t.createdAt)
-        .firstOrNull();
+    final oldest = await base.orderBy((t) => t.createdAt).firstOrNull();
     final byOwner = await base.groupBy<Atsign>((t) => t.owner);
 
     log('─── stats ───');

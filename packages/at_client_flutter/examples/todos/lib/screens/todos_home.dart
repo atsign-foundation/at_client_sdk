@@ -209,7 +209,10 @@ class _TodosHomeState extends State<TodosHome> {
           style: TextStyle(color: service.colors.colorFor(service.self)),
         ),
         actions: [
-          _CountBadge(label: 'Open', stream: service.watchCount(_openCountQuery!)),
+          _CountBadge(
+            label: 'Open',
+            stream: service.watchCount(_openCountQuery!),
+          ),
           _CountBadge(
             label: 'Overdue',
             stream: service.watchCount(_overdueCountQuery!),
@@ -224,13 +227,9 @@ class _TodosHomeState extends State<TodosHome> {
             ),
           ),
           IconButton(
-            tooltip: _groupByOwner
-                ? 'Show flat list'
-                : 'Group by owner',
+            tooltip: _groupByOwner ? 'Show flat list' : 'Group by owner',
             onPressed: () => setState(() => _groupByOwner = !_groupByOwner),
-            icon: Icon(
-              _groupByOwner ? Icons.view_list : Icons.group_work,
-            ),
+            icon: Icon(_groupByOwner ? Icons.view_list : Icons.group_work),
           ),
           IconButton(onPressed: _logout, icon: const Icon(Icons.logout)),
         ],
@@ -271,10 +270,7 @@ class _TodosHomeState extends State<TodosHome> {
               ),
             ),
           ),
-          _FilterChipRow(
-            activeName: _presetName,
-            onSelected: _applyPreset,
-          ),
+          _FilterChipRow(activeName: _presetName, onSelected: _applyPreset),
           Expanded(
             child: currentQuery == null
                 ? const Center(child: CircularProgressIndicator())
@@ -285,9 +281,7 @@ class _TodosHomeState extends State<TodosHome> {
                         return Center(child: Text('Error: ${snap.error}'));
                       }
                       if (!snap.hasData) {
-                        return const Center(
-                          child: CircularProgressIndicator(),
-                        );
+                        return const Center(child: CircularProgressIndicator());
                       }
                       final rows = snap.data!;
                       if (rows.isEmpty) {
@@ -299,9 +293,8 @@ class _TodosHomeState extends State<TodosHome> {
                         todo: row.parent,
                         noteCount: row.children.length,
                         service: service,
-                        onToggleDone: () => _withBusy(
-                          () => service.toggleDone(row.parent),
-                        ),
+                        onToggleDone: () =>
+                            _withBusy(() => service.toggleDone(row.parent)),
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => TodoDetailScreen(
@@ -314,8 +307,7 @@ class _TodosHomeState extends State<TodosHome> {
                       if (!_groupByOwner) {
                         return ListView.separated(
                           itemCount: rows.length,
-                          separatorBuilder: (_, __) =>
-                              const Divider(height: 1),
+                          separatorBuilder: (_, __) => const Divider(height: 1),
                           itemBuilder: (_, i) => buildRow(rows[i]),
                         );
                       }
@@ -339,9 +331,9 @@ class _TodosHomeState extends State<TodosHome> {
                           for (final owner in owners) {
                             if (idx == 0) {
                               return Container(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .surfaceContainerHighest,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerHighest,
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 16,
                                   vertical: 8,
@@ -354,7 +346,9 @@ class _TodosHomeState extends State<TodosHome> {
                             }
                             idx--;
                             final bucket = groups[owner]!;
-                            if (idx < bucket.length) return buildRow(bucket[idx]);
+                            if (idx < bucket.length) {
+                              return buildRow(bucket[idx]);
+                            }
                             idx -= bucket.length;
                           }
                           return const SizedBox.shrink();

@@ -1843,8 +1843,7 @@ final class Query<T> {
   /// child-query parameter so callers can filter / sort the children
   /// too; today the children are the sub-collection's full default
   /// view.
-  Stream<List<({CItem<T> parent, List<CItem<U>> children})>>
-  watchWithSub<U>({
+  Stream<List<({CItem<T> parent, List<CItem<U>> children})>> watchWithSub<U>({
     required String subName,
     required Duration subDefaultExpiration,
     U Function(Map<String, dynamic>)? subFromJson,
@@ -1854,8 +1853,8 @@ final class Query<T> {
     final childLatest = <String, List<CItem<U>>>{};
     final childSubs = <String, StreamSubscription<List<CItem<U>>>>{};
     List<CItem<T>> latestParents = const [];
-    late final StreamController<List<({CItem<T> parent, List<CItem<U>> children})>>
-        ctrl;
+    late final StreamController<
+        List<({CItem<T> parent, List<CItem<U>> children})>> ctrl;
     StreamSubscription<List<CItem<T>>>? parentSub;
 
     String keyOf(CItem<T> p) => '${p.owner}:${p.id}';
@@ -1875,9 +1874,8 @@ final class Query<T> {
       latestParents = parents;
       final currentKeys = parents.map(keyOf).toSet();
       // Cancel subs for parents that left the result set.
-      final leavers = childSubs.keys
-          .where((k) => !currentKeys.contains(k))
-          .toList();
+      final leavers =
+          childSubs.keys.where((k) => !currentKeys.contains(k)).toList();
       for (final k in leavers) {
         await childSubs.remove(k)?.cancel();
         childLatest.remove(k);
@@ -1909,8 +1907,7 @@ final class Query<T> {
       emit();
     }
 
-    ctrl = StreamController<
-        List<({CItem<T> parent, List<CItem<U>> children})>>(
+    ctrl = StreamController<List<({CItem<T> parent, List<CItem<U>> children})>>(
       onListen: () {
         parentSub = watch().listen(
           (parents) => unawaited(onParents(parents)),

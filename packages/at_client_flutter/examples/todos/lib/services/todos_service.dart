@@ -134,10 +134,7 @@ class TodosService {
             subDefaultExpiration: defaultExpiration,
             subFromJson: TodoNote.fromJson,
           )
-          .listen(
-            _todosCtrl!.add,
-            onError: _todosCtrl!.addError,
-          );
+          .listen(_todosCtrl!.add, onError: _todosCtrl!.addError);
     }
     return _todosCtrl!.stream.asyncMap(_primeReadReceipts);
   }
