@@ -95,6 +95,17 @@ typedef _TodoWithNotes =
 /// or (later) scroll through the detail pane; Esc / Left-arrow return.
 enum _Pane { list, detail }
 
+/// Which modal overlay (if any) is currently active. Only one modal
+/// can be open at a time; it steals keyboard focus from the main
+/// view and is dismissed with Esc. Later milestones add form-style
+/// modal entries for create / edit / add-note / share / etc.
+enum _Modal { none, commandMenu, help }
+
+/// One row in the command menu. Each command is a (label, hint,
+/// invoke) triple — the hint column renders the equivalent single-
+/// key shortcut when one exists.
+typedef _Command = ({String label, String hint, FutureOr<void> Function() invoke});
+
 /// Per-TUI colour helpers. One instance lives on the State class,
 /// seeded with the current atSign at init time.
 ///
@@ -193,6 +204,14 @@ class _TodosAppState extends State<TodosApp> {
   // `Enter` or Right-arrow moves focus to the detail pane so the user
   // can scroll through its contents; `Esc` or Left-arrow comes back.
   _Pane _activePane = _Pane.list;
+  // Which modal (if any) is overlaying the main view. While non-
+  // [_Modal.none], keyboard events are routed to the modal instead
+  // of the list/detail handlers.
+  _Modal _modal = _Modal.none;
+  // Command-menu state — live filter text and selected row index in
+  // the filtered list.
+  String _cmdMenuQuery = '';
+  int _cmdMenuIdx = 0;
 
   // Init state — the app renders a "Loading…" placeholder until
   // `_setup()` completes, or an error screen if init failed.
@@ -531,23 +550,58 @@ class _TodosAppState extends State<TodosApp> {
 
   Component _mainView() => Focusable(
     focused: true,
-    onKeyEvent: _onGlobalKey,
-    child: Column(
+    onKeyEvent: _onTopKey,
+    child: Stack(
       children: [
-        _buildHeader(),
-        Expanded(
-          child: Row(
-            children: [
-              Expanded(flex: 2, child: _buildListPane()),
-              Expanded(flex: 3, child: _buildDetailPane()),
-            ],
-          ),
+        // Main layout — always rendered underneath any modal.
+        Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(flex: 2, child: _buildListPane()),
+                  Expanded(flex: 3, child: _buildDetailPane()),
+                ],
+              ),
+            ),
+            _buildLogPane(),
+            _buildFooterBar(),
+          ],
         ),
-        _buildLogPane(),
-        _buildFooterBar(),
+        // Modal overlay (if any). Rendered above the main content
+        // with a dimmed barrier that obscures text beneath.
+        if (_modal != _Modal.none) _buildModal(),
       ],
     ),
   );
+
+  /// Top-level key dispatcher. Routes to the active modal handler if
+  /// one is open; otherwise to the pane-level handler [_onGlobalKey].
+  /// `q` and `?` are handled globally so they work in any mode.
+  bool _onTopKey(KeyboardEvent event) {
+    if (_modal == _Modal.commandMenu) return _onCommandMenuKey(event);
+    if (_modal == _Modal.help) return _onHelpKey(event);
+    // Global shortcuts available from any pane:
+    if (event.character == '?') {
+      setState(() => _modal = _Modal.help);
+      return true;
+    }
+    if (event.logicalKey == LogicalKey.keyM && event.isAltPressed) {
+      _openCommandMenu();
+      return true;
+    }
+    // Letter `m` from the list pane also opens the menu, since many
+    // terminals swallow Alt and we want the menu discoverable.
+    if (_activePane == _Pane.list &&
+        event.logicalKey == LogicalKey.keyM &&
+        !event.isShiftPressed &&
+        !event.isControlPressed) {
+      _openCommandMenu();
+      return true;
+    }
+    return _onGlobalKey(event);
+  }
 
   bool _onGlobalKey(KeyboardEvent event) {
     // Global keys — active regardless of pane focus.
@@ -608,6 +662,397 @@ class _TodosAppState extends State<TodosApp> {
     // Scrolling / note navigation inside the detail pane comes in a
     // later milestone. For now the pane is read-only once focused.
     return false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Command menu / help overlay
+
+  /// The full command list. Order here drives the menu's display
+  /// order; typing in the menu filters by substring over [label].
+  /// Later milestones add form-backed entries like "Create todo"
+  /// that open a modal form instead of running directly.
+  List<_Command> _commands() => [
+    (
+      label: 'Toggle done on selected',
+      hint: 'space',
+      invoke: _cmdToggleDone,
+    ),
+    (
+      label: 'Filter: All',
+      hint: '',
+      invoke: () => _cmdSetPreset('all'),
+    ),
+    (
+      label: 'Filter: Mine',
+      hint: '',
+      invoke: () => _cmdSetPreset('mine'),
+    ),
+    (
+      label: 'Filter: Shared with me',
+      hint: '',
+      invoke: () => _cmdSetPreset('shared'),
+    ),
+    (
+      label: 'Filter: Open',
+      hint: '',
+      invoke: () => _cmdSetPreset('open'),
+    ),
+    (
+      label: 'Filter: Done',
+      hint: '',
+      invoke: () => _cmdSetPreset('done'),
+    ),
+    (
+      label: 'Filter: Overdue',
+      hint: '',
+      invoke: () => _cmdSetPreset('overdue'),
+    ),
+    (
+      label: 'Reverse sort direction',
+      hint: 'r',
+      invoke: _cmdToggleReverse,
+    ),
+    (
+      label: 'Cleanup orphans',
+      hint: '',
+      invoke: _cmdCleanup,
+    ),
+    (
+      label: 'Stats',
+      hint: '',
+      invoke: _cmdStats,
+    ),
+    (
+      label: 'Help',
+      hint: '?',
+      invoke: () => setState(() => _modal = _Modal.help),
+    ),
+    (
+      label: 'Quit',
+      hint: 'q',
+      invoke: shutdownApp,
+    ),
+  ];
+
+  List<_Command> _filteredCommands() {
+    final q = _cmdMenuQuery.trim().toLowerCase();
+    if (q.isEmpty) return _commands();
+    return _commands()
+        .where((c) => c.label.toLowerCase().contains(q))
+        .toList();
+  }
+
+  void _openCommandMenu() {
+    setState(() {
+      _modal = _Modal.commandMenu;
+      _cmdMenuQuery = '';
+      _cmdMenuIdx = 0;
+    });
+  }
+
+  bool _onCommandMenuKey(KeyboardEvent event) {
+    if (event.logicalKey == LogicalKey.escape) {
+      setState(() => _modal = _Modal.none);
+      return true;
+    }
+    final items = _filteredCommands();
+    if (event.logicalKey == LogicalKey.arrowUp) {
+      if (_cmdMenuIdx > 0) setState(() => _cmdMenuIdx--);
+      return true;
+    }
+    if (event.logicalKey == LogicalKey.arrowDown) {
+      if (_cmdMenuIdx < items.length - 1) {
+        setState(() => _cmdMenuIdx++);
+      }
+      return true;
+    }
+    if (event.logicalKey == LogicalKey.enter) {
+      if (items.isNotEmpty &&
+          _cmdMenuIdx >= 0 &&
+          _cmdMenuIdx < items.length) {
+        final chosen = items[_cmdMenuIdx];
+        setState(() => _modal = _Modal.none);
+        unawaited(Future.sync(chosen.invoke));
+      }
+      return true;
+    }
+    if (event.logicalKey == LogicalKey.backspace) {
+      if (_cmdMenuQuery.isNotEmpty) {
+        setState(() {
+          _cmdMenuQuery = _cmdMenuQuery.substring(
+            0,
+            _cmdMenuQuery.length - 1,
+          );
+          _cmdMenuIdx = 0;
+        });
+      }
+      return true;
+    }
+    // Any printable character extends the filter.
+    final ch = event.character;
+    if (ch != null && ch.length == 1 && ch.codeUnitAt(0) >= 32) {
+      setState(() {
+        _cmdMenuQuery = _cmdMenuQuery + ch;
+        _cmdMenuIdx = 0;
+      });
+      return true;
+    }
+    return false;
+  }
+
+  bool _onHelpKey(KeyboardEvent event) {
+    if (event.logicalKey == LogicalKey.escape ||
+        event.character == '?' ||
+        event.logicalKey == LogicalKey.enter) {
+      setState(() => _modal = _Modal.none);
+      return true;
+    }
+    return false;
+  }
+
+  // ---- Command action methods ----
+
+  void _cmdSetPreset(String name) {
+    if (_activePresetName == name) return;
+    setState(() => _activePresetName = name);
+    unawaited(_applyActiveQuery());
+    log('Active preset: ${_todoPresetsByName[name]!.label}');
+  }
+
+  void _cmdToggleReverse() {
+    setState(() => _reverseSort = !_reverseSort);
+    unawaited(_applyActiveQuery());
+    log('Sort direction: ${_reverseSort ? "descending" : "ascending"}');
+  }
+
+  Future<void> _cmdToggleDone() async {
+    if (todos.isEmpty || _selectedIdx < 0 || _selectedIdx >= todos.length) {
+      log('No todo selected.', error: true);
+      return;
+    }
+    final t = todos[_selectedIdx];
+    if (t.owner != atClient.atSign) {
+      log("Can't toggle done on ${t.owner}'s todo.", error: true);
+      return;
+    }
+    try {
+      final updated = collection.draft(
+        obj: Todo(
+          title: t.obj.title,
+          description: t.obj.description,
+          done: !t.obj.done,
+          dueDate: t.obj.dueDate,
+        ),
+        id: t.id,
+        sharedWith: Set.from(t.sharedWith),
+      );
+      await collection.update(updated);
+      log('"${t.obj.title}" marked ${updated.obj.done ? "done" : "not done"}');
+      await refreshTodos();
+    } catch (e) {
+      log('toggle done: $e', error: true);
+    }
+  }
+
+  Future<void> _cmdCleanup() async {
+    try {
+      final results = await collection.cleanupOrphans();
+      if (results.isEmpty) {
+        log('cleanupOrphans: nothing to sweep.');
+        return;
+      }
+      final ok = results.whereType<OpSuccess>().length;
+      final fail = results.whereType<OpFailure>().length;
+      log('cleanupOrphans: $ok reclaimed, $fail failed.');
+    } catch (e) {
+      log('cleanup: $e', error: true);
+    }
+  }
+
+  Future<void> _cmdStats() async {
+    try {
+      final base = collection.query();
+      final all = await base.count();
+      final open = await base.where((t) => !t.obj.done).count();
+      final done = await base.where((t) => t.obj.done).count();
+      final hasOverdue = await base.any(
+        (t) =>
+            !t.obj.done &&
+            (t.obj.dueDate?.isBefore(DateTime.now()) ?? false),
+      );
+      final oldest = await base.orderBy((t) => t.createdAt).firstOrNull();
+      final byOwner = await base.groupBy<Atsign>((t) => t.owner);
+      log('── stats ──');
+      log('Total: $all  ·  Open: $open  ·  Done: $done');
+      log('Any overdue open? ${hasOverdue ? "yes" : "no"}');
+      if (oldest != null) {
+        log(
+          'Oldest: "${oldest.obj.title}" (${_fmtDateTime(oldest.createdAt)})',
+        );
+      }
+      for (final entry in byOwner.entries) {
+        log('  ${entry.key}: ${entry.value.length}');
+      }
+    } catch (e) {
+      log('stats: $e', error: true);
+    }
+  }
+
+  // ---- Modal widget builders ----
+
+  Component _buildModal() {
+    switch (_modal) {
+      case _Modal.commandMenu:
+        return _buildCommandMenu();
+      case _Modal.help:
+        return _buildHelpOverlay();
+      case _Modal.none:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Component _buildCommandMenu() {
+    final items = _filteredCommands();
+    const double menuWidth = 48;
+    const double menuHeight = 20;
+    return Stack(
+      children: [
+        const ModalBarrier(color: Color.fromRGB(0, 0, 0), obscure: true),
+        Positioned(
+          left: 4,
+          top: 3,
+          child: Container(
+            width: menuWidth,
+            height: menuHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            decoration: BoxDecoration(
+              border: BoxBorder.all(color: Colors.cyan),
+              color: Colors.black,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Commands',
+                  style: TextStyle(
+                    color: Colors.cyan,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'type to filter  ·  ↑↓ nav  ·  ⏎ run  ·  Esc close',
+                  style: TextStyle(color: Colors.gray),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  '> ${_cmdMenuQuery.isEmpty ? "(no filter)" : _cmdMenuQuery}',
+                  style: TextStyle(color: Colors.yellow),
+                ),
+                const SizedBox(height: 1),
+                if (items.isEmpty)
+                  Text(
+                    '(no match)',
+                    style: TextStyle(color: Colors.gray),
+                  )
+                else
+                  for (int i = 0; i < items.length; i++)
+                    _buildCommandRow(items[i], i == _cmdMenuIdx),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Component _buildCommandRow(_Command c, bool selected) {
+    final label = c.label;
+    final hint = c.hint;
+    final styleLabel = TextStyle(
+      fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+      color: selected ? Colors.white : Colors.gray,
+    );
+    return Container(
+      color: selected ? Color.fromRGB(0, 0, 110) : null,
+      padding: const EdgeInsets.symmetric(horizontal: 1),
+      child: RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(text: selected ? '▶ ' : '  ', style: styleLabel),
+            TextSpan(text: label, style: styleLabel),
+            if (hint.isNotEmpty)
+              TextSpan(
+                text: '  ($hint)',
+                style: TextStyle(color: Colors.gray),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Component _buildHelpOverlay() {
+    const rows = <({String chord, String desc})>[
+      (chord: '↑ ↓ / k j', desc: 'Move selection'),
+      (chord: 'g / G', desc: 'First / last todo'),
+      (chord: '⏎ or →', desc: 'Focus detail pane'),
+      (chord: 'Esc or ←', desc: 'Back to list pane'),
+      (chord: 'm', desc: 'Open command menu'),
+      (chord: 'Alt+m', desc: 'Open command menu (from any pane)'),
+      (chord: '?', desc: 'Toggle this help'),
+      (chord: 'q', desc: 'Quit'),
+    ];
+    return Stack(
+      children: [
+        const ModalBarrier(color: Color.fromRGB(0, 0, 0), obscure: true),
+        Positioned(
+          left: 6,
+          top: 2,
+          child: Container(
+            width: 60,
+            padding: const EdgeInsets.all(1),
+            decoration: BoxDecoration(
+              border: BoxBorder.all(color: Colors.cyan),
+              color: Colors.black,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Shared Todos — keyboard reference',
+                  style: TextStyle(
+                    color: Colors.cyan,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'Esc or ? to close',
+                  style: TextStyle(color: Colors.gray),
+                ),
+                const SizedBox(height: 1),
+                for (final r in rows)
+                  RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: '  ${r.chord.padRight(14)}',
+                          style: TextStyle(color: Colors.yellow),
+                        ),
+                        TextSpan(text: r.desc),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 1),
+                Text(
+                  'More shortcuts (create / edit / delete / note / find) arrive in M5–M6.',
+                  style: TextStyle(color: Colors.gray),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   // ---- Widget builders ----
@@ -877,9 +1322,18 @@ class _TodosAppState extends State<TodosApp> {
   }
 
   Component _buildFooterBar() {
-    final hint = _activePane == _Pane.list
-        ? '↑↓/jk nav  ·  g/G top/bottom  ·  ⏎/→ open detail  ·  q quit'
-        : 'Esc/← back to list  ·  q quit';
+    final String hint;
+    if (_modal == _Modal.commandMenu) {
+      hint = 'type to filter  ·  ↑↓ nav  ·  ⏎ run  ·  Esc close';
+    } else if (_modal == _Modal.help) {
+      hint = 'Esc or ? to close help';
+    } else if (_activePane == _Pane.list) {
+      hint =
+          '↑↓/jk nav  ·  g/G top/bottom  ·  ⏎/→ detail  ·  '
+          'm menu  ·  ? help  ·  q quit';
+    } else {
+      hint = 'Esc/← back to list  ·  m menu  ·  ? help  ·  q quit';
+    }
     return Container(
       height: 1,
       child: Text(hint, style: TextStyle(color: Colors.gray)),
