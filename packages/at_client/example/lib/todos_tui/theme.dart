@@ -11,8 +11,32 @@ import 'package:nocterm/nocterm.dart';
 ///   otherwise green; done items are greyed regardless).
 class TodoTheme {
   static const List<int> _palette = [
-    27, 33, 39, 63, 69, 75, 76, 82, 99, 105, 129, 135, 141, 148,
-    160, 161, 162, 166, 172, 178, 196, 200, 201, 202, 208, 214,
+    27,
+    33,
+    39,
+    63,
+    69,
+    75,
+    76,
+    82,
+    99,
+    105,
+    129,
+    135,
+    141,
+    148,
+    160,
+    161,
+    162,
+    166,
+    172,
+    178,
+    196,
+    200,
+    201,
+    202,
+    208,
+    214,
   ];
   final Atsign self;
   final Map<String, int> _assigned = {};

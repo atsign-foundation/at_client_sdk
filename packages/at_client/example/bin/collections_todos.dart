@@ -10,10 +10,11 @@ import 'package:at_client_examples/todos_tui/types.dart';
 import 'package:nocterm/nocterm.dart';
 
 void main(List<String> args) async {
-  final AtClient atClient = (await CLIBase.fromCommandLineArgs(
-    args,
-    namespace: 'todos.demos',
-  )).atClient;
+  final AtClient atClient =
+      (await CLIBase.fromCommandLineArgs(
+        args,
+        namespace: 'todos.demos',
+      )).atClient;
 
   // Default read preference is local — the at_client SDK keeps a
   // real-time-synced local cache per atSign, so `query().watch()`
@@ -143,9 +144,7 @@ class _TodosAppState extends State<TodosApp> {
   /// selected todo's receipts sub-collection. Idempotent — a second
   /// call with the same selection is a no-op.
   void _subscribeSelectedReceipts() {
-    if (todos.isEmpty ||
-        _selectedIdx < 0 ||
-        _selectedIdx >= todos.length) {
+    if (todos.isEmpty || _selectedIdx < 0 || _selectedIdx >= todos.length) {
       _detailReceiptsSub?.cancel();
       _detailReceiptsSub = null;
       _detailItemKey = '';
@@ -166,14 +165,10 @@ class _TodosAppState extends State<TodosApp> {
         .query()
         .orderBy((r) => r.createdAt)
         .watch()
-        .listen(
-          (list) {
-            if (!mounted) return;
-            setState(() => _detailReceipts = list);
-          },
-          onError: (Object e) =>
-              log('receipts stream: $e', error: true),
-        );
+        .listen((list) {
+          if (!mounted) return;
+          setState(() => _detailReceipts = list);
+        }, onError: (Object e) => log('receipts stream: $e', error: true));
   }
 
   /// Full startup chain: open the collection, install the live stream
@@ -358,9 +353,10 @@ class _TodosAppState extends State<TodosApp> {
             } else {
               final next = open.first;
               final due = next.obj.dueDate;
-              final dueStr = due == null
-                  ? 'no date'
-                  : due.toIso8601String().substring(0, 10);
+              final dueStr =
+                  due == null
+                      ? 'no date'
+                      : due.toIso8601String().substring(0, 10);
               _nextDueLabel = '"${next.obj.title}" ($dueStr)';
             }
           });
@@ -631,91 +627,35 @@ class _TodosAppState extends State<TodosApp> {
   /// Later milestones add form-backed entries like "Create todo"
   /// that open a modal form instead of running directly.
   List<Command> _commands() => [
-    (
-      label: 'Create todo',
-      hint: 'c',
-      invoke: _openCreateForm,
-    ),
-    (
-      label: 'Edit selected todo',
-      hint: 'e',
-      invoke: _openEditForm,
-    ),
-    (
-      label: 'Delete selected todo',
-      hint: 'd',
-      invoke: _openConfirmDeleteForm,
-    ),
-    (
-      label: 'Toggle done on selected',
-      hint: 'space',
-      invoke: _cmdToggleDone,
-    ),
-    (
-      label: 'Add note to selected',
-      hint: 'n',
-      invoke: _openAddNoteForm,
-    ),
-    (
-      label: 'Share selected (add atSigns)',
-      hint: 's',
-      invoke: _openShareForm,
-    ),
-    (
-      label: 'Set due date on selected',
-      hint: 'u',
-      invoke: _openSetDueForm,
-    ),
+    (label: 'Create todo', hint: 'c', invoke: _openCreateForm),
+    (label: 'Edit selected todo', hint: 'e', invoke: _openEditForm),
+    (label: 'Delete selected todo', hint: 'd', invoke: _openConfirmDeleteForm),
+    (label: 'Toggle done on selected', hint: 'space', invoke: _cmdToggleDone),
+    (label: 'Add note to selected', hint: 'n', invoke: _openAddNoteForm),
+    (label: 'Share selected (add atSigns)', hint: 's', invoke: _openShareForm),
+    (label: 'Set due date on selected', hint: 'u', invoke: _openSetDueForm),
     (
       label: 'Schedule selected (availableAt)',
       hint: 'S',
       invoke: _openScheduleForm,
     ),
-    (
-      label: 'Filter: All',
-      hint: '',
-      invoke: () => _cmdSetPreset('all'),
-    ),
-    (
-      label: 'Filter: Mine',
-      hint: '',
-      invoke: () => _cmdSetPreset('mine'),
-    ),
+    (label: 'Filter: All', hint: '', invoke: () => _cmdSetPreset('all')),
+    (label: 'Filter: Mine', hint: '', invoke: () => _cmdSetPreset('mine')),
     (
       label: 'Filter: Shared with me',
       hint: '',
       invoke: () => _cmdSetPreset('shared'),
     ),
-    (
-      label: 'Filter: Open',
-      hint: '',
-      invoke: () => _cmdSetPreset('open'),
-    ),
-    (
-      label: 'Filter: Done',
-      hint: '',
-      invoke: () => _cmdSetPreset('done'),
-    ),
+    (label: 'Filter: Open', hint: '', invoke: () => _cmdSetPreset('open')),
+    (label: 'Filter: Done', hint: '', invoke: () => _cmdSetPreset('done')),
     (
       label: 'Filter: Overdue',
       hint: '',
       invoke: () => _cmdSetPreset('overdue'),
     ),
-    (
-      label: 'Reverse sort direction',
-      hint: 'r',
-      invoke: _cmdToggleReverse,
-    ),
-    (
-      label: 'Cleanup orphans',
-      hint: '',
-      invoke: _cmdCleanup,
-    ),
-    (
-      label: 'Stats',
-      hint: '',
-      invoke: _cmdStats,
-    ),
+    (label: 'Reverse sort direction', hint: 'r', invoke: _cmdToggleReverse),
+    (label: 'Cleanup orphans', hint: '', invoke: _cmdCleanup),
+    (label: 'Stats', hint: '', invoke: _cmdStats),
     (
       label: 'Find (live-narrow list by title)',
       hint: '/',
@@ -726,19 +666,13 @@ class _TodosAppState extends State<TodosApp> {
       hint: '?',
       invoke: () => setState(() => _modal = Modal.help),
     ),
-    (
-      label: 'Quit',
-      hint: 'q',
-      invoke: shutdownApp,
-    ),
+    (label: 'Quit', hint: 'q', invoke: shutdownApp),
   ];
 
   List<Command> _filteredCommands() {
     final q = _cmdMenuQuery.trim().toLowerCase();
     if (q.isEmpty) return _commands();
-    return _commands()
-        .where((c) => c.label.toLowerCase().contains(q))
-        .toList();
+    return _commands().where((c) => c.label.toLowerCase().contains(q)).toList();
   }
 
   void _openCommandMenu() {
@@ -811,9 +745,7 @@ class _TodosAppState extends State<TodosApp> {
       return true;
     }
     if (event.logicalKey == LogicalKey.enter) {
-      if (items.isNotEmpty &&
-          _cmdMenuIdx >= 0 &&
-          _cmdMenuIdx < items.length) {
+      if (items.isNotEmpty && _cmdMenuIdx >= 0 && _cmdMenuIdx < items.length) {
         final chosen = items[_cmdMenuIdx];
         setState(() => _modal = Modal.none);
         unawaited(Future.sync(chosen.invoke));
@@ -823,10 +755,7 @@ class _TodosAppState extends State<TodosApp> {
     if (event.logicalKey == LogicalKey.backspace) {
       if (_cmdMenuQuery.isNotEmpty) {
         setState(() {
-          _cmdMenuQuery = _cmdMenuQuery.substring(
-            0,
-            _cmdMenuQuery.length - 1,
-          );
+          _cmdMenuQuery = _cmdMenuQuery.substring(0, _cmdMenuQuery.length - 1);
           _cmdMenuIdx = 0;
         });
       }
@@ -921,8 +850,7 @@ class _TodosAppState extends State<TodosApp> {
       final done = await base.where((t) => t.obj.done).count();
       final hasOverdue = await base.any(
         (t) =>
-            !t.obj.done &&
-            (t.obj.dueDate?.isBefore(DateTime.now()) ?? false),
+            !t.obj.done && (t.obj.dueDate?.isBefore(DateTime.now()) ?? false),
       );
       final oldest = await base.orderBy((t) => t.createdAt).firstOrNull();
       final byOwner = await base.groupBy<Atsign>((t) => t.owner);
@@ -1061,10 +989,7 @@ class _TodosAppState extends State<TodosApp> {
                 ),
                 const SizedBox(height: 1),
                 if (items.isEmpty)
-                  Text(
-                    '(no match)',
-                    style: TextStyle(color: Colors.gray),
-                  )
+                  Text('(no match)', style: TextStyle(color: Colors.gray))
                 else
                   for (int i = 0; i < items.length; i++)
                     _buildCommandRow(items[i], i == _cmdMenuIdx),
@@ -1092,10 +1017,7 @@ class _TodosAppState extends State<TodosApp> {
             TextSpan(text: selected ? '▶ ' : '  ', style: styleLabel),
             TextSpan(text: label, style: styleLabel),
             if (hint.isNotEmpty)
-              TextSpan(
-                text: '  ($hint)',
-                style: TextStyle(color: Colors.gray),
-              ),
+              TextSpan(text: '  ($hint)', style: TextStyle(color: Colors.gray)),
           ],
         ),
       ),
@@ -1167,9 +1089,7 @@ class _TodosAppState extends State<TodosApp> {
   }
 
   void _openAddNoteForm() {
-    if (todos.isEmpty ||
-        _selectedIdx < 0 ||
-        _selectedIdx >= todos.length) {
+    if (todos.isEmpty || _selectedIdx < 0 || _selectedIdx >= todos.length) {
       log('No todo selected.', error: true);
       return;
     }
@@ -1180,12 +1100,7 @@ class _TodosAppState extends State<TodosApp> {
   void _openShareForm() {
     final t = _requireSelectedOwnTodo('Share');
     if (t == null) return;
-    _openForm(
-      Modal.share,
-      ['Add atSigns (comma-separated)'],
-      [''],
-      target: t,
-    );
+    _openForm(Modal.share, ['Add atSigns (comma-separated)'], [''], target: t);
   }
 
   void _openScheduleForm() {
@@ -1204,17 +1119,15 @@ class _TodosAppState extends State<TodosApp> {
     if (t == null) return;
     final current =
         t.obj.dueDate?.toIso8601String().substring(0, 10) ??
-        DateTime.now().add(const Duration(days: 7)).toIso8601String().substring(
-          0,
-          10,
-        );
+        DateTime.now()
+            .add(const Duration(days: 7))
+            .toIso8601String()
+            .substring(0, 10);
     _openForm(Modal.setDue, ['Due (YYYY-MM-DD)'], [current], target: t);
   }
 
   void _openConfirmDeleteForm() {
-    if (todos.isEmpty ||
-        _selectedIdx < 0 ||
-        _selectedIdx >= todos.length) {
+    if (todos.isEmpty || _selectedIdx < 0 || _selectedIdx >= todos.length) {
       log('No todo selected.', error: true);
       return;
     }
@@ -1230,9 +1143,7 @@ class _TodosAppState extends State<TodosApp> {
   }
 
   CItem<Todo>? _requireSelectedOwnTodo(String action) {
-    if (todos.isEmpty ||
-        _selectedIdx < 0 ||
-        _selectedIdx >= todos.length) {
+    if (todos.isEmpty || _selectedIdx < 0 || _selectedIdx >= todos.length) {
       log('$action: no todo selected.', error: true);
       return null;
     }
@@ -1255,9 +1166,11 @@ class _TodosAppState extends State<TodosApp> {
       if (_formValues.isEmpty) return true;
       final n = _formValues.length;
       setState(
-        () => _formFieldIdx = event.isShiftPressed
-            ? (_formFieldIdx - 1 + n) % n
-            : (_formFieldIdx + 1) % n,
+        () =>
+            _formFieldIdx =
+                event.isShiftPressed
+                    ? (_formFieldIdx - 1 + n) % n
+                    : (_formFieldIdx + 1) % n,
       );
       return true;
     }
@@ -1331,12 +1244,13 @@ class _TodosAppState extends State<TodosApp> {
     }
   }
 
-  Set<Atsign> _parseAtSigns(String s) => s
-      .split(',')
-      .map((e) => e.trim())
-      .where((e) => e.isNotEmpty)
-      .map((e) => e.toAtsign())
-      .toSet();
+  Set<Atsign> _parseAtSigns(String s) =>
+      s
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .map((e) => e.toAtsign())
+          .toSet();
 
   DateTime _parseDueOrDefault(String s) {
     try {
@@ -1416,10 +1330,9 @@ class _TodosAppState extends State<TodosApp> {
     final audience = <Atsign>{t.owner, ...t.sharedWith}
       ..remove(atClient.atSign);
     try {
-      await _notesSubFor(t).create(
-        obj: TodoNote(note: text),
-        sharedWith: audience,
-      );
+      await _notesSubFor(
+        t,
+      ).create(obj: TodoNote(note: text), sharedWith: audience);
       log('Note added to "${t.obj.title}"');
       _closeModal();
       await refreshTodos();
@@ -1558,8 +1471,7 @@ class _TodosAppState extends State<TodosApp> {
                   ),
                 ),
                 Text(
-                  hint ??
-                      'Tab next field  ·  ⏎ next/submit  ·  Esc cancel',
+                  hint ?? 'Tab next field  ·  ⏎ next/submit  ·  Esc cancel',
                   style: TextStyle(color: Colors.gray),
                 ),
                 const SizedBox(height: 1),
@@ -1589,9 +1501,7 @@ class _TodosAppState extends State<TodosApp> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 1),
           decoration: BoxDecoration(
-            border: BoxBorder.all(
-              color: focused ? Colors.yellow : Colors.gray,
-            ),
+            border: BoxBorder.all(color: focused ? Colors.yellow : Colors.gray),
           ),
           child: Text(focused ? '$value█' : value),
         ),
@@ -1687,10 +1597,7 @@ class _TodosAppState extends State<TodosApp> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                Text(
-                  'Esc or ? to close',
-                  style: TextStyle(color: Colors.gray),
-                ),
+                Text('Esc or ? to close', style: TextStyle(color: Colors.gray)),
                 const SizedBox(height: 1),
                 for (final r in rows)
                   RichText(
@@ -1722,9 +1629,8 @@ class _TodosAppState extends State<TodosApp> {
   Component _buildHeader() {
     final preset = todoPresetsByName[_activePresetName]!;
     final arrow = _reverseSort ? '↓' : '↑';
-    final nextDueFragment = _nextDueLabel.isEmpty
-        ? ''
-        : ' · next due $_nextDueLabel';
+    final nextDueFragment =
+        _nextDueLabel.isEmpty ? '' : ' · next due $_nextDueLabel';
     return Container(
       height: 3,
       padding: const EdgeInsets.symmetric(horizontal: 1),
@@ -1734,10 +1640,7 @@ class _TodosAppState extends State<TodosApp> {
         children: [
           Text(
             'Shared Todos  —  ${atClient.atSign}',
-            style: TextStyle(
-              color: Colors.cyan,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: Colors.cyan, fontWeight: FontWeight.bold),
           ),
           Text(
             '${preset.label} · due $arrow · '
@@ -1755,20 +1658,19 @@ class _TodosAppState extends State<TodosApp> {
     final focused = _activePane == Pane.list;
     return Container(
       decoration: BoxDecoration(
-        border: BoxBorder.all(
-          color: focused ? Colors.cyan : Colors.gray,
-        ),
+        border: BoxBorder.all(color: focused ? Colors.cyan : Colors.gray),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 1),
-      child: todos.isEmpty
-          ? const Center(child: Text('(no todos)'))
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (int i = 0; i < todos.length; i++)
-                  _buildTodoRow(i, todos[i], listFocused: focused),
-              ],
-            ),
+      child:
+          todos.isEmpty
+              ? const Center(child: Text('(no todos)'))
+              : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (int i = 0; i < todos.length; i++)
+                    _buildTodoRow(i, todos[i], listFocused: focused),
+                ],
+              ),
     );
   }
 
@@ -1785,9 +1687,10 @@ class _TodosAppState extends State<TodosApp> {
     // Highlight the selected row brighter when the list pane owns
     // focus; dimmer when focus has moved to the detail pane but the
     // user should still see which item they're reading.
-    final rowBg = selected
-        ? (listFocused ? Color.fromRGB(0, 0, 110) : Color.fromRGB(0, 0, 40))
-        : null;
+    final rowBg =
+        selected
+            ? (listFocused ? Color.fromRGB(0, 0, 110) : Color.fromRGB(0, 0, 40))
+            : null;
     final weight = selected ? FontWeight.bold : FontWeight.normal;
     final done = todo.obj.done;
     final titleStyle = TextStyle(
@@ -1845,10 +1748,7 @@ class _TodosAppState extends State<TodosApp> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            todo.obj.title,
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
+          Text(todo.obj.title, style: TextStyle(fontWeight: FontWeight.bold)),
           if (todo.obj.description.isNotEmpty) ...[
             const SizedBox(height: 1),
             Text(todo.obj.description),
@@ -1959,15 +1859,17 @@ class _TodosAppState extends State<TodosApp> {
     return RichText(text: TextSpan(children: children));
   }
 
-  static String _fmtDateTime(DateTime? d) => d == null
-      ? '—'
-      : d.toIso8601String().substring(0, 19).replaceFirst('T', ' ');
+  static String _fmtDateTime(DateTime? d) =>
+      d == null
+          ? '—'
+          : d.toIso8601String().substring(0, 19).replaceFirst('T', ' ');
 
   Component _buildLogPane() {
     const logHeight = 8;
-    final tail = logMessages.length > logHeight
-        ? logMessages.sublist(logMessages.length - logHeight)
-        : logMessages;
+    final tail =
+        logMessages.length > logHeight
+            ? logMessages.sublist(logMessages.length - logHeight)
+            : logMessages;
     return Container(
       height: logHeight + 2,
       decoration: BoxDecoration(border: BoxBorder.all(color: Colors.gray)),

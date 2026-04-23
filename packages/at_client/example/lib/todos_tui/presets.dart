@@ -30,14 +30,12 @@ final List<TodoPreset> todoPresets = [
   TodoPreset(
     'mine',
     'Mine',
-    (c, self, rev) =>
-        sortedByDue(c.query().where((t) => t.owner == self), rev),
+    (c, self, rev) => sortedByDue(c.query().where((t) => t.owner == self), rev),
   ),
   TodoPreset(
     'shared',
     'Shared with me',
-    (c, self, rev) =>
-        sortedByDue(c.query().where((t) => t.owner != self), rev),
+    (c, self, rev) => sortedByDue(c.query().where((t) => t.owner != self), rev),
   ),
   TodoPreset(
     'open',
