@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'package:example/apkam_example.dart';
-import 'package:flutter/material.dart';
+
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_utils/at_logger.dart';
-
+import 'package:example/apkam_example.dart';
 import 'package:example/walkthrough.dart';
+import 'package:flutter/material.dart';
 
 final AtSignLogger _logger = AtSignLogger('main');
 
@@ -180,7 +180,7 @@ class MyHomePage extends StatelessWidget {
                 Text(
                   'Secure authentication with atSign',
                   style: textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface.withOpacity(0.6),
+                    color: colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
 
@@ -243,7 +243,7 @@ class MyHomePage extends StatelessWidget {
                       child: Text(
                         'OR',
                         style: textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurface.withOpacity(0.5),
+                          color: colorScheme.onSurface.withValues(alpha: 0.5),
                         ),
                       ),
                     ),
@@ -272,7 +272,7 @@ class MyHomePage extends StatelessWidget {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: colorScheme.primary,
                     side: BorderSide(
-                      color: colorScheme.primary.withOpacity(0.5),
+                      color: colorScheme.primary.withValues(alpha: 0.5),
                     ),
                   ),
                   child: const Text('Onboard a New atSign'),
@@ -299,7 +299,7 @@ class MyHomePage extends StatelessWidget {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: colorScheme.secondary,
                     side: BorderSide(
-                      color: colorScheme.secondary.withOpacity(0.5),
+                      color: colorScheme.secondary.withValues(alpha: 0.5),
                     ),
                   ),
                   child: const Text('Add an atSign by File'),
@@ -331,8 +331,8 @@ class MyHomePage extends StatelessWidget {
                                 child: Text(
                                   'Manage Paired atSigns',
                                   style: textTheme.titleMedium?.copyWith(
-                                    color: colorScheme.onSurface.withOpacity(
-                                      0.8,
+                                    color: colorScheme.onSurface.withValues(
+                                      alpha: 0.8,
                                     ),
                                   ),
                                 ),
@@ -389,7 +389,7 @@ class MyHomePage extends StatelessWidget {
                   child: Text(
                     'Manage Paired atSigns',
                     style: textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurface.withOpacity(0.6),
+                      color: colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
                 ),
@@ -404,14 +404,14 @@ class MyHomePage extends StatelessWidget {
                       Text(
                         "Don't have an atSign yet?",
                         style: textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurface.withOpacity(0.6),
+                          color: colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Get a free atSign at atsign.com',
                         style: textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurface.withOpacity(0.6),
+                          color: colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                       ),
                     ],

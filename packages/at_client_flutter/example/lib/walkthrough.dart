@@ -1,12 +1,12 @@
+import 'package:at_auth/at_auth.dart';
+import 'package:at_client_flutter/at_client_flutter.dart';
+import 'package:at_client_flutter/extensions.dart';
+import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:example/main.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:at_client_flutter/at_client_flutter.dart';
-import 'package:at_client_flutter/extensions.dart';
-import 'package:at_auth/at_auth.dart';
 import 'package:path_provider/path_provider.dart'
     show getApplicationSupportDirectory;
-import 'package:at_utils/at_logger.dart' show AtSignLogger;
 
 final namespace = 'at_client_flutter_example';
 final AtSignLogger _logger = AtSignLogger(namespace);
@@ -358,7 +358,7 @@ Future<String?> _openFileSaveDialog({
   try {
     _logger.info('Opening file save dialog');
     // Open save file dialog
-    String? outputPath = await FilePicker.platform.saveFile(
+    String? outputPath = await FilePicker.saveFile(
       dialogTitle: 'Save File',
       fileName: suggestedFileName ?? 'document.txt',
       type: FileType.custom,
