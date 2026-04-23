@@ -4,6 +4,9 @@ import 'dart:io';
 import 'package:at_cli_commons/at_cli_commons.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client_examples/domain_objects.dart';
+import 'package:at_client_examples/todos_tui/presets.dart';
+import 'package:at_client_examples/todos_tui/theme.dart';
+import 'package:at_client_examples/todos_tui/types.dart';
 import 'package:nocterm/nocterm.dart';
 
 void main(List<String> args) async {
@@ -21,158 +24,9 @@ void main(List<String> args) async {
   exit(0);
 }
 
-// -----------------------------------------------------------------------------
-// Preset definitions — filter+sort views over the todos collection. Each
-// preset is a named function from `(collection, self, reverse)` to an
-// immutable `Query<Todo>` value, so the rest of the app can treat them
-// as first-class references and compose further .where(...)'s on top.
-
-class _TodoPreset {
-  final String name;
-  final String label;
-  final Query<Todo> Function(
-    AtCollection<Todo> collection,
-    Atsign self,
-    bool reverse,
-  )
-  build;
-
-  const _TodoPreset(this.name, this.label, this.build);
-}
-
-/// Sort by due date ascending, with `null` due-dates sorted last (far-
-/// future sentinel). `reverse` flips direction; nulls then sort first,
-/// matching the pre-builder `_compareByDue` behaviour.
-Query<Todo> _sortedByDue(Query<Todo> q, bool reverse) =>
-    q.orderBy((t) => t.obj.dueDate ?? DateTime.utc(9999), descending: reverse);
-
-final List<_TodoPreset> _todoPresets = [
-  _TodoPreset('all', 'All', (c, _, rev) => _sortedByDue(c.query(), rev)),
-  _TodoPreset(
-    'mine',
-    'Mine',
-    (c, self, rev) =>
-        _sortedByDue(c.query().where((t) => t.owner == self), rev),
-  ),
-  _TodoPreset(
-    'shared',
-    'Shared with me',
-    (c, self, rev) =>
-        _sortedByDue(c.query().where((t) => t.owner != self), rev),
-  ),
-  _TodoPreset(
-    'open',
-    'Open',
-    (c, _, rev) => _sortedByDue(c.query().where((t) => !t.obj.done), rev),
-  ),
-  _TodoPreset(
-    'done',
-    'Done',
-    (c, _, rev) => _sortedByDue(c.query().where((t) => t.obj.done), rev),
-  ),
-  _TodoPreset('overdue', 'Overdue', (c, _, rev) {
-    final now = DateTime.now();
-    return _sortedByDue(
-      c.query().where(
-        (t) => !t.obj.done && (t.obj.dueDate?.isBefore(now) ?? false),
-      ),
-      rev,
-    );
-  }),
-];
-
-final Map<String, _TodoPreset> _todoPresetsByName = {
-  for (final p in _todoPresets) p.name: p,
-};
-
-/// Parent+children snapshot emitted by [Query.watchWithSub] — one todo
-/// paired with its current notes.
-typedef _TodoWithNotes =
-    ({CItem<Todo> parent, List<CItem<TodoNote>> children});
-
-/// Which pane currently owns keyboard focus. `list` is the default;
-/// `detail` is entered via Enter or Right-arrow so the user can read
-/// or (later) scroll through the detail pane; Esc / Left-arrow return.
-enum _Pane { list, detail }
-
-/// Which modal overlay (if any) is currently active. Only one modal
-/// can be open at a time; it steals keyboard focus from the main
-/// view and is dismissed with Esc.
-enum _Modal {
-  none,
-  commandMenu,
-  help,
-  find,
-  createTodo,
-  editTodo,
-  addNote,
-  share,
-  schedule,
-  setDue,
-  confirmDeleteTodo,
-}
-
-/// One row in the command menu. Each command is a (label, hint,
-/// invoke) triple — the hint column renders the equivalent single-
-/// key shortcut when one exists.
-typedef _Command = ({String label, String hint, FutureOr<void> Function() invoke});
-
-/// Per-TUI colour helpers. One instance lives on the State class,
-/// seeded with the current atSign at init time.
-///
-/// - [colorForAtSign] assigns a stable colour to each seen atSign by
-///   walking a pastel palette in order; the current atSign always
-///   gets the accent orange.
-/// - [colorForDue] encodes due-date urgency (overdue=red, ≤24h=amber,
-///   otherwise green; done items are greyed regardless).
-class _TodoTheme {
-  static const List<int> _palette = [
-    27, 33, 39, 63, 69, 75, 76, 82, 99, 105, 129, 135, 141, 148,
-    160, 161, 162, 166, 172, 178, 196, 200, 201, 202, 208, 214,
-  ];
-  final Atsign self;
-  final Map<String, int> _assigned = {};
-  int _nextIdx = 0;
-
-  _TodoTheme(this.self);
-
-  /// Converts an ANSI-256 colour-cube index (16..231) to an RGB Color
-  /// using the canonical 6x6x6 cube steps.
-  static Color _ansi256ToColor(int idx) {
-    if (idx < 16 || idx > 231) return Colors.white;
-    final n = idx - 16;
-    final r = (n ~/ 36) % 6;
-    final g = (n ~/ 6) % 6;
-    final b = n % 6;
-    const steps = [0, 95, 135, 175, 215, 255];
-    return Color.fromRGB(steps[r], steps[g], steps[b]);
-  }
-
-  Color colorForAtSign(Atsign a) {
-    if (a == self) return const Color.fromRGB(255, 135, 0); // self = orange
-    final key = a.toString();
-    final idx = _assigned.putIfAbsent(key, () {
-      final i = _nextIdx;
-      _nextIdx = (_nextIdx + 1) % _palette.length;
-      return i;
-    });
-    return _ansi256ToColor(_palette[idx]);
-  }
-
-  TextStyle styleForAtSign(Atsign a, {bool bold = false}) => TextStyle(
-    color: colorForAtSign(a),
-    fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-  );
-
-  Color colorForDue(DateTime? due, {required bool done}) {
-    if (done) return Colors.gray;
-    if (due == null) return Colors.white;
-    final diff = due.difference(DateTime.now());
-    if (diff.isNegative) return Colors.red;
-    if (diff.inHours < 24) return const Color.fromRGB(255, 175, 0);
-    return Colors.green;
-  }
-}
+// Shared TUI types / presets / theme live under
+// `example/lib/todos_tui/` and are re-exported above via the package
+// imports. See `presets.dart`, `theme.dart`, and `types.dart`.
 
 // -----------------------------------------------------------------------------
 // TodosApp — root `StatefulComponent`. Milestone 1 scaffold: basic
@@ -192,7 +46,7 @@ class TodosApp extends StatefulComponent {
 class _TodosAppState extends State<TodosApp> {
   AtClient get atClient => component.atClient;
   late final AtCollection<Todo> collection;
-  late final _TodoTheme _theme = _TodoTheme(atClient.atSign);
+  late final TodoTheme _theme = TodoTheme(atClient.atSign);
 
   // ---- State ----
   final List<String> logMessages = [];
@@ -214,11 +68,11 @@ class _TodosAppState extends State<TodosApp> {
   // Which pane is currently keyboard-focused. `list` is the default;
   // `Enter` or Right-arrow moves focus to the detail pane so the user
   // can scroll through its contents; `Esc` or Left-arrow comes back.
-  _Pane _activePane = _Pane.list;
+  Pane _activePane = Pane.list;
   // Which modal (if any) is overlaying the main view. While non-
-  // [_Modal.none], keyboard events are routed to the modal instead
+  // [Modal.none], keyboard events are routed to the modal instead
   // of the list/detail handlers.
-  _Modal _modal = _Modal.none;
+  Modal _modal = Modal.none;
   // Command-menu state — live filter text and selected row index in
   // the filtered list.
   String _cmdMenuQuery = '';
@@ -235,7 +89,7 @@ class _TodosAppState extends State<TodosApp> {
   List<String> _formValues = const [];
   int _formFieldIdx = 0;
   CItem<Todo>? _formTarget;
-  // Live-narrow search overlay. When [_modal] is [_Modal.find], the
+  // Live-narrow search overlay. When [_modal] is [Modal.find], the
   // user types into [_findQuery] and the list pane renders a
   // `.where(title contains)` composition of the active preset's
   // query. Empty string → full unfiltered list. Esc closes and
@@ -248,7 +102,7 @@ class _TodosAppState extends State<TodosApp> {
   String? _initError;
 
   // ---- Subscriptions ----
-  StreamSubscription<List<_TodoWithNotes>>? _todosSub;
+  StreamSubscription<List<TodoWithNotes>>? _todosSub;
   StreamSubscription<int>? _openCountSub;
   StreamSubscription<int>? _overdueCountSub;
   StreamSubscription<int>? _sharedCountSub;
@@ -389,7 +243,7 @@ class _TodosAppState extends State<TodosApp> {
   /// composing this into `watchWithSub` means typing in the find
   /// bar narrows the visible list live.
   Query<Todo> _buildQuery() {
-    final preset = _todoPresetsByName[_activePresetName]!;
+    final preset = todoPresetsByName[_activePresetName]!;
     var q = preset.build(collection, atClient.atSign, _reverseSort);
     final needle = _findQuery.trim().toLowerCase();
     if (needle.isNotEmpty) {
@@ -418,7 +272,7 @@ class _TodosAppState extends State<TodosApp> {
   /// Applies an incoming snapshot to state: updates todos +
   /// notesByTodoId, sends pending read-receipts, primes readBy,
   /// clamps the selection index, schedules a redraw via [setState].
-  Future<void> _onCombinedSnapshot(List<_TodoWithNotes> snapshot) async {
+  Future<void> _onCombinedSnapshot(List<TodoWithNotes> snapshot) async {
     final nextTodos = [for (final r in snapshot) r.parent];
     final nextNotes = <String, List<CItem<TodoNote>>>{};
     for (final r in snapshot) {
@@ -454,7 +308,7 @@ class _TodosAppState extends State<TodosApp> {
   Future<void> refreshTodos() async {
     try {
       final parents = await _buildQuery().fetch();
-      final combined = <_TodoWithNotes>[];
+      final combined = <TodoWithNotes>[];
       for (final p in parents) {
         final notes = await _notesSubFor(p).query().fetch();
         combined.add((parent: p, children: notes));
@@ -466,7 +320,7 @@ class _TodosAppState extends State<TodosApp> {
   }
 
   void _setupCountStreams() {
-    _openCountSub = _todoPresetsByName['open']!
+    _openCountSub = todoPresetsByName['open']!
         .build(collection, atClient.atSign, false)
         .watch()
         .map((l) => l.length)
@@ -474,7 +328,7 @@ class _TodosAppState extends State<TodosApp> {
           if (!mounted) return;
           setState(() => _countOpen = n);
         });
-    _overdueCountSub = _todoPresetsByName['overdue']!
+    _overdueCountSub = todoPresetsByName['overdue']!
         .build(collection, atClient.atSign, false)
         .watch()
         .map((l) => l.length)
@@ -482,7 +336,7 @@ class _TodosAppState extends State<TodosApp> {
           if (!mounted) return;
           setState(() => _countOverdue = n);
         });
-    _sharedCountSub = _todoPresetsByName['shared']!
+    _sharedCountSub = todoPresetsByName['shared']!
         .build(collection, atClient.atSign, false)
         .watch()
         .map((l) => l.length)
@@ -493,7 +347,7 @@ class _TodosAppState extends State<TodosApp> {
   }
 
   void _setupNextDueStream() {
-    _nextDueSub = _todoPresetsByName['open']!
+    _nextDueSub = todoPresetsByName['open']!
         .build(collection, atClient.atSign, false)
         .watch()
         .listen((open) {
@@ -609,7 +463,7 @@ class _TodosAppState extends State<TodosApp> {
         ),
         // Modal overlay (if any). Rendered above the main content
         // with a dimmed barrier that obscures text beneath.
-        if (_modal != _Modal.none) _buildModal(),
+        if (_modal != Modal.none) _buildModal(),
       ],
     ),
   );
@@ -618,21 +472,21 @@ class _TodosAppState extends State<TodosApp> {
   /// one is open; otherwise to the pane-level handler [_onGlobalKey].
   /// `q` and `?` are handled globally so they work in any mode.
   bool _onTopKey(KeyboardEvent event) {
-    if (_modal == _Modal.commandMenu) return _onCommandMenuKey(event);
-    if (_modal == _Modal.help) return _onHelpKey(event);
-    if (_modal == _Modal.confirmDeleteTodo) return _onConfirmKey(event);
-    if (_modal == _Modal.find) return _onFindKey(event);
-    if (_modal == _Modal.createTodo ||
-        _modal == _Modal.editTodo ||
-        _modal == _Modal.addNote ||
-        _modal == _Modal.share ||
-        _modal == _Modal.schedule ||
-        _modal == _Modal.setDue) {
+    if (_modal == Modal.commandMenu) return _onCommandMenuKey(event);
+    if (_modal == Modal.help) return _onHelpKey(event);
+    if (_modal == Modal.confirmDeleteTodo) return _onConfirmKey(event);
+    if (_modal == Modal.find) return _onFindKey(event);
+    if (_modal == Modal.createTodo ||
+        _modal == Modal.editTodo ||
+        _modal == Modal.addNote ||
+        _modal == Modal.share ||
+        _modal == Modal.schedule ||
+        _modal == Modal.setDue) {
       return _onFormKey(event);
     }
     // Global shortcuts available from any pane:
     if (event.character == '?') {
-      setState(() => _modal = _Modal.help);
+      setState(() => _modal = Modal.help);
       return true;
     }
     if (event.character == '/') {
@@ -647,7 +501,7 @@ class _TodosAppState extends State<TodosApp> {
     // only, so they don't interfere with the detail pane's reserved
     // keys. Each dispatches into the same action path as the
     // corresponding command-menu entry.
-    if (_activePane == _Pane.list) {
+    if (_activePane == Pane.list) {
       if (event.logicalKey == LogicalKey.keyM &&
           !event.isShiftPressed &&
           !event.isControlPressed) {
@@ -714,7 +568,7 @@ class _TodosAppState extends State<TodosApp> {
       shutdownApp();
       return true;
     }
-    if (_activePane == _Pane.list) {
+    if (_activePane == Pane.list) {
       return _onListKey(event);
     } else {
       return _onDetailKey(event);
@@ -750,7 +604,7 @@ class _TodosAppState extends State<TodosApp> {
         event.logicalKey == LogicalKey.arrowRight ||
         event.logicalKey == LogicalKey.keyL) {
       if (todos.isNotEmpty) {
-        setState(() => _activePane = _Pane.detail);
+        setState(() => _activePane = Pane.detail);
       }
       return true;
     }
@@ -761,7 +615,7 @@ class _TodosAppState extends State<TodosApp> {
     if (event.logicalKey == LogicalKey.escape ||
         event.logicalKey == LogicalKey.arrowLeft ||
         event.logicalKey == LogicalKey.keyH) {
-      setState(() => _activePane = _Pane.list);
+      setState(() => _activePane = Pane.list);
       return true;
     }
     // Scrolling / note navigation inside the detail pane comes in a
@@ -776,7 +630,7 @@ class _TodosAppState extends State<TodosApp> {
   /// order; typing in the menu filters by substring over [label].
   /// Later milestones add form-backed entries like "Create todo"
   /// that open a modal form instead of running directly.
-  List<_Command> _commands() => [
+  List<Command> _commands() => [
     (
       label: 'Create todo',
       hint: 'c',
@@ -870,7 +724,7 @@ class _TodosAppState extends State<TodosApp> {
     (
       label: 'Help',
       hint: '?',
-      invoke: () => setState(() => _modal = _Modal.help),
+      invoke: () => setState(() => _modal = Modal.help),
     ),
     (
       label: 'Quit',
@@ -879,7 +733,7 @@ class _TodosAppState extends State<TodosApp> {
     ),
   ];
 
-  List<_Command> _filteredCommands() {
+  List<Command> _filteredCommands() {
     final q = _cmdMenuQuery.trim().toLowerCase();
     if (q.isEmpty) return _commands();
     return _commands()
@@ -889,7 +743,7 @@ class _TodosAppState extends State<TodosApp> {
 
   void _openCommandMenu() {
     setState(() {
-      _modal = _Modal.commandMenu;
+      _modal = Modal.commandMenu;
       _cmdMenuQuery = '';
       _cmdMenuIdx = 0;
     });
@@ -901,7 +755,7 @@ class _TodosAppState extends State<TodosApp> {
   /// predicate so the list filters in real time.
   void _openFindBar() {
     setState(() {
-      _modal = _Modal.find;
+      _modal = Modal.find;
       _findQuery = '';
     });
     unawaited(_applyActiveQuery());
@@ -910,7 +764,7 @@ class _TodosAppState extends State<TodosApp> {
   bool _onFindKey(KeyboardEvent event) {
     if (event.logicalKey == LogicalKey.escape) {
       setState(() {
-        _modal = _Modal.none;
+        _modal = Modal.none;
         _findQuery = '';
       });
       unawaited(_applyActiveQuery());
@@ -919,7 +773,7 @@ class _TodosAppState extends State<TodosApp> {
     if (event.logicalKey == LogicalKey.enter) {
       // Leave the narrow in place; just close the bar so the list
       // behaves normally until the user hits `/` again.
-      setState(() => _modal = _Modal.none);
+      setState(() => _modal = Modal.none);
       return true;
     }
     if (event.logicalKey == LogicalKey.backspace) {
@@ -942,7 +796,7 @@ class _TodosAppState extends State<TodosApp> {
 
   bool _onCommandMenuKey(KeyboardEvent event) {
     if (event.logicalKey == LogicalKey.escape) {
-      setState(() => _modal = _Modal.none);
+      setState(() => _modal = Modal.none);
       return true;
     }
     final items = _filteredCommands();
@@ -961,7 +815,7 @@ class _TodosAppState extends State<TodosApp> {
           _cmdMenuIdx >= 0 &&
           _cmdMenuIdx < items.length) {
         final chosen = items[_cmdMenuIdx];
-        setState(() => _modal = _Modal.none);
+        setState(() => _modal = Modal.none);
         unawaited(Future.sync(chosen.invoke));
       }
       return true;
@@ -994,7 +848,7 @@ class _TodosAppState extends State<TodosApp> {
     if (event.logicalKey == LogicalKey.escape ||
         event.character == '?' ||
         event.logicalKey == LogicalKey.enter) {
-      setState(() => _modal = _Modal.none);
+      setState(() => _modal = Modal.none);
       return true;
     }
     return false;
@@ -1006,7 +860,7 @@ class _TodosAppState extends State<TodosApp> {
     if (_activePresetName == name) return;
     setState(() => _activePresetName = name);
     unawaited(_applyActiveQuery());
-    log('Active preset: ${_todoPresetsByName[name]!.label}');
+    log('Active preset: ${todoPresetsByName[name]!.label}');
   }
 
   void _cmdToggleReverse() {
@@ -1092,38 +946,38 @@ class _TodosAppState extends State<TodosApp> {
 
   Component _buildModal() {
     switch (_modal) {
-      case _Modal.commandMenu:
+      case Modal.commandMenu:
         return _buildCommandMenu();
-      case _Modal.help:
+      case Modal.help:
         return _buildHelpOverlay();
-      case _Modal.createTodo:
+      case Modal.createTodo:
         return _buildFormModal('New todo');
-      case _Modal.editTodo:
+      case Modal.editTodo:
         return _buildFormModal('Edit todo');
-      case _Modal.addNote:
+      case Modal.addNote:
         return _buildFormModal(
           'Add note to "${_formTarget?.obj.title ?? "…"}"',
         );
-      case _Modal.share:
+      case Modal.share:
         return _buildFormModal(
           'Share "${_formTarget?.obj.title ?? "…"}"',
           hint: 'Enter comma-separated atSigns  ·  ⏎ submit  ·  Esc cancel',
         );
-      case _Modal.schedule:
+      case Modal.schedule:
         return _buildFormModal(
           'Schedule "${_formTarget?.obj.title ?? "…"}"',
           hint: 'Delay in seconds  ·  ⏎ submit  ·  Esc cancel',
         );
-      case _Modal.setDue:
+      case Modal.setDue:
         return _buildFormModal(
           'Set due for "${_formTarget?.obj.title ?? "…"}"',
           hint: 'YYYY-MM-DD  ·  ⏎ submit  ·  Esc cancel',
         );
-      case _Modal.confirmDeleteTodo:
+      case Modal.confirmDeleteTodo:
         return _buildConfirmDeleteModal();
-      case _Modal.find:
+      case Modal.find:
         return _buildFindBar();
-      case _Modal.none:
+      case Modal.none:
         return const SizedBox.shrink();
     }
   }
@@ -1222,7 +1076,7 @@ class _TodosAppState extends State<TodosApp> {
     );
   }
 
-  Component _buildCommandRow(_Command c, bool selected) {
+  Component _buildCommandRow(Command c, bool selected) {
     final label = c.label;
     final hint = c.hint;
     final styleLabel = TextStyle(
@@ -1262,7 +1116,7 @@ class _TodosAppState extends State<TodosApp> {
   void _closeModal() {
     if (!mounted) return;
     setState(() {
-      _modal = _Modal.none;
+      _modal = Modal.none;
       _formTarget = null;
       _formLabels = const [];
       _formValues = const [];
@@ -1271,7 +1125,7 @@ class _TodosAppState extends State<TodosApp> {
   }
 
   void _openForm(
-    _Modal modal,
+    Modal modal,
     List<String> labels,
     List<String> initialValues, {
     CItem<Todo>? target,
@@ -1291,7 +1145,7 @@ class _TodosAppState extends State<TodosApp> {
   void _openCreateForm() {
     final defaultDue = DateTime.now().add(const Duration(days: 7));
     _openForm(
-      _Modal.createTodo,
+      Modal.createTodo,
       ['Title', 'Description', 'Share with (comma @signs)', 'Due (YYYY-MM-DD)'],
       ['', '', '', defaultDue.toIso8601String().substring(0, 10)],
     );
@@ -1301,7 +1155,7 @@ class _TodosAppState extends State<TodosApp> {
     final t = _requireSelectedOwnTodo('Edit');
     if (t == null) return;
     _openForm(
-      _Modal.editTodo,
+      Modal.editTodo,
       ['Title', 'Description', 'Share with (comma @signs)'],
       [
         t.obj.title,
@@ -1320,14 +1174,14 @@ class _TodosAppState extends State<TodosApp> {
       return;
     }
     final t = todos[_selectedIdx];
-    _openForm(_Modal.addNote, ['Note'], [''], target: t);
+    _openForm(Modal.addNote, ['Note'], [''], target: t);
   }
 
   void _openShareForm() {
     final t = _requireSelectedOwnTodo('Share');
     if (t == null) return;
     _openForm(
-      _Modal.share,
+      Modal.share,
       ['Add atSigns (comma-separated)'],
       [''],
       target: t,
@@ -1338,7 +1192,7 @@ class _TodosAppState extends State<TodosApp> {
     final t = _requireSelectedOwnTodo('Schedule');
     if (t == null) return;
     _openForm(
-      _Modal.schedule,
+      Modal.schedule,
       ['Delay visibility by (seconds)'],
       ['30'],
       target: t,
@@ -1354,7 +1208,7 @@ class _TodosAppState extends State<TodosApp> {
           0,
           10,
         );
-    _openForm(_Modal.setDue, ['Due (YYYY-MM-DD)'], [current], target: t);
+    _openForm(Modal.setDue, ['Due (YYYY-MM-DD)'], [current], target: t);
   }
 
   void _openConfirmDeleteForm() {
@@ -1370,7 +1224,7 @@ class _TodosAppState extends State<TodosApp> {
       return;
     }
     setState(() {
-      _modal = _Modal.confirmDeleteTodo;
+      _modal = Modal.confirmDeleteTodo;
       _formTarget = t;
     });
   }
@@ -1457,19 +1311,19 @@ class _TodosAppState extends State<TodosApp> {
 
   Future<void> _submitForm() async {
     switch (_modal) {
-      case _Modal.createTodo:
+      case Modal.createTodo:
         await _submitCreate();
-      case _Modal.editTodo:
+      case Modal.editTodo:
         await _submitEdit();
-      case _Modal.addNote:
+      case Modal.addNote:
         await _submitAddNote();
-      case _Modal.share:
+      case Modal.share:
         await _submitShare();
-      case _Modal.schedule:
+      case Modal.schedule:
         await _submitSchedule();
-      case _Modal.setDue:
+      case Modal.setDue:
         await _submitSetDue();
-      case _Modal.confirmDeleteTodo:
+      case Modal.confirmDeleteTodo:
         await _submitDeleteTodo();
       // ignore: no_default_cases
       default:
@@ -1866,7 +1720,7 @@ class _TodosAppState extends State<TodosApp> {
   // ---- Widget builders ----
 
   Component _buildHeader() {
-    final preset = _todoPresetsByName[_activePresetName]!;
+    final preset = todoPresetsByName[_activePresetName]!;
     final arrow = _reverseSort ? '↓' : '↑';
     final nextDueFragment = _nextDueLabel.isEmpty
         ? ''
@@ -1898,7 +1752,7 @@ class _TodosAppState extends State<TodosApp> {
   }
 
   Component _buildListPane() {
-    final focused = _activePane == _Pane.list;
+    final focused = _activePane == Pane.list;
     return Container(
       decoration: BoxDecoration(
         border: BoxBorder.all(
@@ -1975,7 +1829,7 @@ class _TodosAppState extends State<TodosApp> {
   }
 
   Component _buildDetailPane() {
-    final focused = _activePane == _Pane.detail;
+    final focused = _activePane == Pane.detail;
     final borderColor = focused ? Colors.cyan : Colors.gray;
     if (todos.isEmpty) {
       return Container(
@@ -2131,15 +1985,15 @@ class _TodosAppState extends State<TodosApp> {
 
   Component _buildFooterBar() {
     final String hint;
-    if (_modal == _Modal.commandMenu) {
+    if (_modal == Modal.commandMenu) {
       hint = 'type to filter  ·  ↑↓ nav  ·  ⏎ run  ·  Esc close';
-    } else if (_modal == _Modal.help) {
+    } else if (_modal == Modal.help) {
       hint = 'Esc or ? to close help';
-    } else if (_modal == _Modal.find) {
+    } else if (_modal == Modal.find) {
       hint = 'type to narrow  ·  ⏎ keep filter  ·  Esc clear & close';
-    } else if (_modal != _Modal.none) {
+    } else if (_modal != Modal.none) {
       hint = 'Tab next  ·  ⏎ submit  ·  Esc cancel';
-    } else if (_activePane == _Pane.list) {
+    } else if (_activePane == Pane.list) {
       hint =
           '⏎/→ detail  ·  c new  ·  e edit  ·  d del  ·  '
           'space done  ·  n note  ·  / find  ·  m menu  ·  ? help  ·  q quit';
