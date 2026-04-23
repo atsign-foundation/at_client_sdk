@@ -90,6 +90,11 @@ final Map<String, _TodoPreset> _todoPresetsByName = {
 typedef _TodoWithNotes =
     ({CItem<Todo> parent, List<CItem<TodoNote>> children});
 
+/// Which pane currently owns keyboard focus. `list` is the default;
+/// `detail` is entered via Enter or Right-arrow so the user can read
+/// or (later) scroll through the detail pane; Esc / Left-arrow return.
+enum _Pane { list, detail }
+
 // -----------------------------------------------------------------------------
 // TodosApp — root `StatefulComponent`. Milestone 1 scaffold: basic
 // header / list / detail / log / footer layout, arrow-key list
@@ -126,6 +131,10 @@ class _TodosAppState extends State<TodosApp> {
 
   // Which todo row is currently selected (index into [todos]).
   int _selectedIdx = 0;
+  // Which pane is currently keyboard-focused. `list` is the default;
+  // `Enter` or Right-arrow moves focus to the detail pane so the user
+  // can scroll through its contents; `Esc` or Left-arrow comes back.
+  _Pane _activePane = _Pane.list;
 
   // Init state — the app renders a "Loading…" placeholder until
   // `_setup()` completes, or an error screen if init failed.
@@ -139,6 +148,12 @@ class _TodosAppState extends State<TodosApp> {
   StreamSubscription<int>? _sharedCountSub;
   StreamSubscription<CReadReceipt>? _receiptsTickerSub;
   StreamSubscription<List<CItem<Todo>>>? _nextDueSub;
+  // Detail-pane read-by timeline — subscribes to the selected
+  // todo's `__rr` sub-collection via the public `item.receipts`
+  // handle, re-subscribes when the selection changes.
+  StreamSubscription<List<CItem<Map<String, dynamic>>>>? _detailReceiptsSub;
+  List<CItem<Map<String, dynamic>>> _detailReceipts = [];
+  String _detailItemKey = ''; // "<owner>:<id>" of the subscribed item
 
   // ---- Derived counts rendered in the header ----
   int _countOpen = 0;
@@ -160,7 +175,45 @@ class _TodosAppState extends State<TodosApp> {
     _sharedCountSub?.cancel();
     _receiptsTickerSub?.cancel();
     _nextDueSub?.cancel();
+    _detailReceiptsSub?.cancel();
     super.dispose();
+  }
+
+  /// Ensures [_detailReceiptsSub] is subscribed to the currently-
+  /// selected todo's receipts sub-collection. Idempotent — a second
+  /// call with the same selection is a no-op.
+  void _subscribeSelectedReceipts() {
+    if (todos.isEmpty ||
+        _selectedIdx < 0 ||
+        _selectedIdx >= todos.length) {
+      _detailReceiptsSub?.cancel();
+      _detailReceiptsSub = null;
+      _detailItemKey = '';
+      if (mounted && _detailReceipts.isNotEmpty) {
+        setState(() => _detailReceipts = const []);
+      }
+      return;
+    }
+    final item = todos[_selectedIdx];
+    final key = '${item.owner}:${item.id}';
+    if (key == _detailItemKey) return;
+    _detailReceiptsSub?.cancel();
+    _detailItemKey = key;
+    // Reset the cached list synchronously so the UI doesn't flash the
+    // previous item's readers while we wait for the first emission.
+    if (mounted) setState(() => _detailReceipts = const []);
+    _detailReceiptsSub = item.receipts
+        .query()
+        .orderBy((r) => r.createdAt)
+        .watch()
+        .listen(
+          (list) {
+            if (!mounted) return;
+            setState(() => _detailReceipts = list);
+          },
+          onError: (Object e) =>
+              log('receipts stream: $e', error: true),
+        );
   }
 
   /// Full startup chain: open the collection, install the live stream
@@ -277,6 +330,7 @@ class _TodosAppState extends State<TodosApp> {
         _selectedIdx = todos.isEmpty ? 0 : todos.length - 1;
       }
     });
+    _subscribeSelectedReceipts();
   }
 
   /// One-shot fetch of the active query (parents + notes), pumped
@@ -438,14 +492,24 @@ class _TodosAppState extends State<TodosApp> {
   );
 
   bool _onGlobalKey(KeyboardEvent event) {
+    // Global keys — active regardless of pane focus.
     if (event.logicalKey == LogicalKey.keyQ) {
       shutdownApp();
       return true;
     }
+    if (_activePane == _Pane.list) {
+      return _onListKey(event);
+    } else {
+      return _onDetailKey(event);
+    }
+  }
+
+  bool _onListKey(KeyboardEvent event) {
     if (event.logicalKey == LogicalKey.arrowUp ||
         event.logicalKey == LogicalKey.keyK) {
       if (_selectedIdx > 0) {
         setState(() => _selectedIdx--);
+        _subscribeSelectedReceipts();
       }
       return true;
     }
@@ -453,21 +517,38 @@ class _TodosAppState extends State<TodosApp> {
         event.logicalKey == LogicalKey.keyJ) {
       if (_selectedIdx < todos.length - 1) {
         setState(() => _selectedIdx++);
+        _subscribeSelectedReceipts();
       }
       return true;
     }
     if (event.logicalKey == LogicalKey.keyG) {
-      if (event.isShiftPressed) {
-        if (todos.isNotEmpty) {
-          setState(() => _selectedIdx = todos.length - 1);
-        }
-      } else {
-        if (todos.isNotEmpty) {
-          setState(() => _selectedIdx = 0);
-        }
+      if (todos.isEmpty) return true;
+      setState(
+        () => _selectedIdx = event.isShiftPressed ? todos.length - 1 : 0,
+      );
+      _subscribeSelectedReceipts();
+      return true;
+    }
+    if (event.logicalKey == LogicalKey.enter ||
+        event.logicalKey == LogicalKey.arrowRight ||
+        event.logicalKey == LogicalKey.keyL) {
+      if (todos.isNotEmpty) {
+        setState(() => _activePane = _Pane.detail);
       }
       return true;
     }
+    return false;
+  }
+
+  bool _onDetailKey(KeyboardEvent event) {
+    if (event.logicalKey == LogicalKey.escape ||
+        event.logicalKey == LogicalKey.arrowLeft ||
+        event.logicalKey == LogicalKey.keyH) {
+      setState(() => _activePane = _Pane.list);
+      return true;
+    }
+    // Scrolling / note navigation inside the detail pane comes in a
+    // later milestone. For now the pane is read-only once focused.
     return false;
   }
 
@@ -506,8 +587,13 @@ class _TodosAppState extends State<TodosApp> {
   }
 
   Component _buildListPane() {
+    final focused = _activePane == _Pane.list;
     return Container(
-      decoration: BoxDecoration(border: BoxBorder.all(color: Colors.gray)),
+      decoration: BoxDecoration(
+        border: BoxBorder.all(
+          color: focused ? Colors.cyan : Colors.gray,
+        ),
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 1),
       child: todos.isEmpty
           ? const Center(child: Text('(no todos)'))
@@ -515,21 +601,31 @@ class _TodosAppState extends State<TodosApp> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 for (int i = 0; i < todos.length; i++)
-                  _buildTodoRow(i, todos[i]),
+                  _buildTodoRow(i, todos[i], listFocused: focused),
               ],
             ),
     );
   }
 
-  Component _buildTodoRow(int i, CItem<Todo> todo) {
+  Component _buildTodoRow(
+    int i,
+    CItem<Todo> todo, {
+    required bool listFocused,
+  }) {
     final selected = i == _selectedIdx;
     final marker = selected ? '▶' : ' ';
     final check = todo.obj.done ? '[x]' : '[ ]';
     final due = todo.obj.dueDate?.toIso8601String().substring(0, 10) ?? '——';
     final noteCount = notesByTodoId[todo.id]?.length ?? 0;
-    final noteTag = noteCount > 0 ? '  💬$noteCount' : '';
+    final noteTag = noteCount > 0 ? '  notes:$noteCount' : '';
+    // Highlight the selected row brighter when the list pane owns
+    // focus; dimmer when focus has moved to the detail pane but the
+    // user should still see which item they're reading.
+    final rowBg = selected
+        ? (listFocused ? Color.fromRGB(0, 0, 110) : Color.fromRGB(0, 0, 40))
+        : null;
     return Container(
-      color: selected ? Color.fromRGB(0, 0, 90) : null,
+      color: rowBg,
       padding: const EdgeInsets.symmetric(horizontal: 1),
       child: Text(
         '$marker $check  $due  ${todo.obj.title}$noteTag',
@@ -541,17 +637,18 @@ class _TodosAppState extends State<TodosApp> {
   }
 
   Component _buildDetailPane() {
+    final focused = _activePane == _Pane.detail;
+    final borderColor = focused ? Colors.cyan : Colors.gray;
     if (todos.isEmpty) {
       return Container(
-        decoration: BoxDecoration(border: BoxBorder.all(color: Colors.gray)),
+        decoration: BoxDecoration(border: BoxBorder.all(color: borderColor)),
         child: const Center(child: Text('(no todo selected)')),
       );
     }
     final todo = todos[_selectedIdx];
     final notes = notesByTodoId[todo.id] ?? const <CItem<TodoNote>>[];
-    final readers = todo.readBySnapshot;
     return Container(
-      decoration: BoxDecoration(border: BoxBorder.all(color: Colors.gray)),
+      decoration: BoxDecoration(border: BoxBorder.all(color: borderColor)),
       padding: const EdgeInsets.all(1),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -567,24 +664,42 @@ class _TodosAppState extends State<TodosApp> {
           const SizedBox(height: 1),
           Text('Owner    : ${todo.owner}'),
           Text(
-            'Due      : ${todo.obj.dueDate?.toIso8601String().substring(0, 19).replaceFirst("T", " ") ?? "—"}',
+            'Due      : ${_fmtDateTime(todo.obj.dueDate)}',
           ),
           Text(
-            'Created  : ${todo.createdAt.toIso8601String().substring(0, 19).replaceFirst("T", " ")}',
+            'Created  : ${_fmtDateTime(todo.createdAt)}',
           ),
           Text(
             'Shared   : ${todo.sharedWith.isEmpty ? "—" : todo.sharedWith.join(", ")}',
           ),
-          Text(
-            'Read by  : ${readers.isEmpty ? (todo.sharedWith.isEmpty ? "—" : "(nobody yet)") : readers.join(", ")}',
-          ),
           Text('Done     : ${todo.obj.done ? "yes" : "no"}'),
+          const SizedBox(height: 1),
+          // Live read-by timeline. Each row is one receipt CItem from
+          // `item.receipts.query().orderBy((r) => r.createdAt).watch()`
+          // (the public `__rr` sub-collection handle exposed in
+          // Bundle S1). Updates live as new atSigns mark the item as
+          // read without any app-level polling.
+          Text(
+            'Read by  (${_detailReceipts.length})',
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.cyan),
+          ),
+          if (_detailReceipts.isEmpty)
+            Text(
+              todo.sharedWith.isEmpty ? '  (—)' : '  (nobody yet)',
+              style: TextStyle(color: Colors.gray),
+            ),
+          for (final r in _detailReceipts)
+            Text(
+              '  • ${r.owner}  ${_fmtDateTime(r.createdAt)}',
+              style: TextStyle(color: Colors.gray),
+            ),
           const SizedBox(height: 1),
           Text(
             'Notes (${notes.length})',
             style: TextStyle(fontWeight: FontWeight.bold, color: Colors.cyan),
           ),
-          if (notes.isEmpty) const Text('  (none)'),
+          if (notes.isEmpty)
+            Text('  (none)', style: TextStyle(color: Colors.gray)),
           for (final n in notes)
             Text(
               '  • [${n.owner}] ${n.obj.note}',
@@ -594,6 +709,10 @@ class _TodosAppState extends State<TodosApp> {
       ),
     );
   }
+
+  static String _fmtDateTime(DateTime? d) => d == null
+      ? '—'
+      : d.toIso8601String().substring(0, 19).replaceFirst('T', ' ');
 
   Component _buildLogPane() {
     const logHeight = 8;
@@ -615,12 +734,13 @@ class _TodosAppState extends State<TodosApp> {
     );
   }
 
-  Component _buildFooterBar() => Container(
-    height: 1,
-    child: Text(
-      '↑↓ / j k   nav   ·   g / G   top / bottom   ·   q   quit   '
-      '·   commands & forms: coming in later milestones',
-      style: TextStyle(color: Colors.gray),
-    ),
-  );
+  Component _buildFooterBar() {
+    final hint = _activePane == _Pane.list
+        ? '↑↓/jk nav  ·  g/G top/bottom  ·  ⏎/→ open detail  ·  q quit'
+        : 'Esc/← back to list  ·  q quit';
+    return Container(
+      height: 1,
+      child: Text(hint, style: TextStyle(color: Colors.gray)),
+    );
+  }
 }
