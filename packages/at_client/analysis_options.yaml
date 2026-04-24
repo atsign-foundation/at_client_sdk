@@ -2,6 +2,7 @@
 # projects at Google. For details and rationale,
 # see https://pub.dev/packages/lints.
 include: package:lints/recommended.yaml
+# include: package:very_good_analysis/analysis_options.yaml
 
 # For lint rules and documentation, see http://dart-lang.github.io/linter/lints.
 # Uncomment to specify additional rules.
@@ -11,7 +12,7 @@ linter:
     unnecessary_string_interpolations : true
     await_only_futures : true
     unawaited_futures: true
-    depend_on_referenced_packages : false
+#    depend_on_referenced_packages : false
 
 #analyzer:
 #   exclude:

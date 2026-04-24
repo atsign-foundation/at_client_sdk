@@ -39,9 +39,10 @@ dependencies:
   mutex: ^3.1.0
 
 dev_dependencies:
-  collection: ^1.16.0
-  lints: ^6.0.0
-  test: ^1.25.0
+  collection: ^1.19.1
+  lints: ^6.1.0
+  test: ^1.31.0
   at_demo_data: ^1.2.0
-  coverage: ^1.14.0
-  mocktail: ^1.0.4
+  coverage: ^1.15.0
+  mocktail: ^1.0.5
+  very_good_analysis: ^10.2.0
