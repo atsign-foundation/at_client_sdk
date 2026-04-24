@@ -316,10 +316,10 @@ made the call site less greppable and the behaviour depend on
   generics land the same way via a factory callback
   (`withConverter<T>` vs `fromJson:`). Firestore's indexed server-side
   `.where()` is a real convenience — but it's a convenience that
-  Firestore can offer precisely because Google reads your plaintext
-  data; AtCollection's on-device `.where()` is what end-to-end
+  Firestore can offer because the data is not end-to-end encrypted.
+  AtCollection's on-device `.where()` is what end-to-end
   encryption looks like at the API layer. Firestore sub-collections
-  are the one other place AtCollection is *ahead*: Firestore
+  are the one other place AtCollection is arguably *ahead*: Firestore
   sub-collections are independent documents that do NOT delete on
   parent delete (well-known footgun). AtCollection binds
   sub-collection lifetime to the parent item, and
@@ -352,7 +352,7 @@ made the call site less greppable and the behaviour depend on
   AtCollection gives per-record ownership across decentralised
   atServers. Supabase's Postgres indexes are operationally beautiful
   and something AtCollection never competes with — but, as with
-  Firestore, they depend on Supabase reading your plaintext. For
+  Firestore, they depend on Supabase seeing data in the clear. For
   the end-to-end-encrypted peer-to-peer model AtCollection occupies,
   the server-side index isn't an option.
 
