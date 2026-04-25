@@ -13,7 +13,6 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     hide AtNotification;
 import 'package:at_utils/at_utils.dart';
-import 'package:cron/cron.dart';
 import 'package:meta/meta.dart';
 
 ///A [SyncService] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
@@ -38,12 +37,18 @@ class SyncServiceImpl implements SyncService {
   SyncUtil syncUtil = SyncUtil();
 
   final List<SyncProgressListener> _syncProgressListeners = [];
-  late final Cron _cron;
 
   @visibleForTesting
   final syncRequests = ListQueue<SyncRequest>(queueSize);
 
   bool _syncInProgress = false;
+
+  /// Concurrency guard for [processSyncRequests] entry. Distinct from
+  /// [_syncInProgress] because [_isInSync] short-circuits on the latter
+  /// — using [_syncInProgress] as the entry guard would cause every
+  /// run to take the in-sync fast path. Set true at the top of a run,
+  /// cleared in the run's `finally`.
+  bool _processInProgress = false;
 
   @override
   bool get isSyncInProgress => _syncInProgress;
@@ -76,7 +81,12 @@ class SyncServiceImpl implements SyncService {
         atChops: atClient.atChops, enrollmentId: atClient.enrollmentId);
     final syncService = SyncServiceImpl._(atClient, remoteSecondary);
     await syncService.statsServiceListener();
-    syncService._scheduleSyncRun();
+    // Note: no startup bootstrap is enqueued here. The original cron
+    // implementation enqueued a synthetic request on every tick so the
+    // cron had something to do; in the on-demand trigger model the
+    // queue should sit idle until a real trigger (an app `sync()` call
+    // or a stats notification) arrives. The `hasHadNoSyncRequests`
+    // flag is preserved for any callers that still inspect it.
     return syncService;
   }
 
@@ -87,33 +97,6 @@ class SyncServiceImpl implements SyncService {
     _skipDeletesUntilCommitId =
         AtKey.local('skipdeletesuntil', currentAtSign).build();
     atKeyDecryptionManager = AtKeyDecryptionManager(_atClient);
-  }
-
-  void _scheduleSyncRun() {
-    _cron = Cron();
-
-    _cron.schedule(Schedule.parse('*/$syncRunIntervalSeconds * * * * *'),
-        () async {
-      try {
-        await processSyncRequests();
-        // If no sync request has ever been made, let's enqueue one now.
-        // See https://github.com/atsign-foundation/at_client_sdk/issues/770
-        if (hasHadNoSyncRequests) {
-          final syncRequest = SyncRequest();
-          syncRequest.onDone = _onDone;
-          syncRequest.onError = _onError;
-          syncRequest.requestSource = SyncRequestSource.system;
-          syncRequest.requestedOn = DateTime.now().toUtc();
-          syncRequest.result = SyncResult();
-          _addSyncRequestToQueue(syncRequest);
-        }
-      } on Exception catch (e, trace) {
-        var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
-        _logger.finest(trace);
-        _logger.severe('exception while running process sync. Reason:  $cause');
-        _syncInProgress = false;
-      }
-    });
   }
 
   @override
@@ -191,12 +174,18 @@ class SyncServiceImpl implements SyncService {
       {bool respectSyncRequestQueueSizeAndRequestTriggerDuration =
           true}) async {
     _logger.finest('in _processSyncRequests');
-    if (_syncInProgress) {
-      _logger.finer('**** another sync in progress');
-      _informSyncProgress(SyncProgress()
-        ..syncStatus = SyncStatus.started
-        ..startedAt = DateTime.now().toUtc()
-        ..message = 'another sync in progress');
+    if (isStopped) {
+      _logger.info('processSyncRequests: service is stopped; ignoring');
+      return;
+    }
+    if (_processInProgress || _syncInProgress) {
+      // In the on-demand trigger model every enqueue (and every drain
+      // tail) calls processSyncRequests, so this branch fires
+      // routinely. Log only — no SyncProgress event, since "I tried to
+      // start a sync but one was already running" is not interesting
+      // to listeners and would amplify their event count linearly with
+      // queue activity.
+      _logger.finer('processSyncRequests: another sync in progress');
       return;
     }
     if (respectSyncRequestQueueSizeAndRequestTriggerDuration) {
@@ -212,6 +201,15 @@ class SyncServiceImpl implements SyncService {
         return;
       }
     }
+    if (syncRequests.isEmpty) {
+      _logger.finest('processSyncRequests: queue empty; nothing to do');
+      return;
+    }
+    // Claim the entry guard BEFORE awaiting anything so concurrent
+    // triggers (now arriving on every enqueue) can't both pass the
+    // guard above and race into the body. We use a separate flag from
+    // _syncInProgress because _isInSync short-circuits on the latter.
+    _processInProgress = true;
     final syncRequest = _getSyncRequest();
     try {
       if (await _isInSync()) {
@@ -264,6 +262,24 @@ class SyncServiceImpl implements SyncService {
         ..syncStatus = SyncStatus.failure
         ..startedAt = DateTime.now().toUtc()
         ..message = 'Exception: $e');
+    } catch (e) {
+      // Catch-all: with on-demand triggering, an unhandled exception
+      // from the sync path would become an unhandled async error and
+      // fail tests / propagate noise. Surface it as a failure
+      // SyncProgress event so listeners see it like any other sync
+      // failure.
+      _logger.warning(
+          'Unexpected exception in sync ${syncRequest.id}. Reason: $e');
+      syncRequest.result!.atClientException = AtClientException.message('$e');
+      _syncError(syncRequest);
+      _syncInProgress = false;
+      _informSyncProgress(SyncProgress()
+        ..syncStatus = SyncStatus.failure
+        ..startedAt = DateTime.now().toUtc()
+        ..message = 'Unexpected exception: $e');
+    } finally {
+      _processInProgress = false;
+      _drainQueueIfPending();
     }
     return;
   }
@@ -338,11 +354,38 @@ class SyncServiceImpl implements SyncService {
   bool hasHadNoSyncRequests = true;
 
   void _addSyncRequestToQueue(SyncRequest syncRequest) {
+    if (isStopped) {
+      _logger.finer('_addSyncRequestToQueue: service is stopped; ignoring');
+      return;
+    }
     hasHadNoSyncRequests = false;
     if (syncRequests.length == queueSize) {
       syncRequests.removeLast();
     }
     syncRequests.addLast(syncRequest);
+    // Trigger a sync run on the next microtask. Deferring (rather than
+    // calling synchronously) lets a burst of successive enqueues all
+    // land in the queue before the first run starts consuming it, and
+    // keeps `_addSyncRequestToQueue` itself free of side effects on
+    // `_syncInProgress`. The _syncInProgress / isStopped guards inside
+    // processSyncRequests make the call a cheap no-op when a run is
+    // already active or the service has been stopped.
+    scheduleMicrotask(() {
+      unawaited(processSyncRequests(
+          respectSyncRequestQueueSizeAndRequestTriggerDuration: false));
+    });
+  }
+
+  /// Schedules a follow-up [processSyncRequests] run if the queue is
+  /// non-empty. Called at the end of each completed run so requests
+  /// that arrived during the run aren't stranded. The microtask
+  /// scheduling lets the in-flight `await` chain return first.
+  void _drainQueueIfPending() {
+    if (isStopped || syncRequests.isEmpty) return;
+    scheduleMicrotask(() {
+      unawaited(processSyncRequests(
+          respectSyncRequestQueueSizeAndRequestTriggerDuration: false));
+    });
   }
 
   void _clearQueue() {
@@ -1095,13 +1138,6 @@ class SyncServiceImpl implements SyncService {
     } catch (e) {
       _logger.warning(
           'Error while cancelling stats notification subscription: $e');
-    }
-
-    _logger.finer('stopping cron');
-    try {
-      await _cron.close();
-    } catch (e) {
-      _logger.warning('Error while stopping cron: $e');
     }
 
     removeAllProgressListeners();

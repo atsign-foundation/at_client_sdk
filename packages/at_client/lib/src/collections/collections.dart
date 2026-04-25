@@ -13,6 +13,8 @@ import 'dart:typed_data';
 // API) can use `StringBuffer` with its standard Dart semantics.
 import 'package:at_client/at_client.dart' hide StringBuffer;
 import 'package:at_base2e15/at_base2e15.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
+    show AtData, AtMetaData;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart';
 import 'package:mutex/mutex.dart';
@@ -183,6 +185,7 @@ import 'package:mutex/mutex.dart';
 /// `.handleError(...)` before consuming the stream.
 @experimental
 class AtCollection<T> {
+  @visibleForTesting
   static const String readReceiptNamespacePart = '__rr';
   static const String _rr = readReceiptNamespacePart;
 
@@ -228,7 +231,7 @@ class AtCollection<T> {
   late final RegExp _regexObjAny;
   late final String _regexAllStr;
 
-  late final StreamSubscription<AtNotification> _rrSub;
+  late final StreamSubscription<AtNotification> _notificationSubscription;
 
   // The notification stream used for this collection's dispatch. Stored
   // so sub-collections built via [readReceiptsFor] can reuse an
@@ -313,7 +316,7 @@ class AtCollection<T> {
           regex: _regexAllStr,
           shouldDecrypt: true,
         );
-    _rrSub = notifStream.listen(handleNotification);
+    _notificationSubscription = notifStream.listen(handleNotification);
   }
 
   // ---------------------------------------------------------------------------
@@ -612,7 +615,8 @@ class AtCollection<T> {
             obj: _rehydrate<T>(decoded['obj']!, decoded['type'] as String),
             sharedWith: {},
             createdAt: v.metadata!.createdAt!,
-            expiresAt: v.metadata!.expiresAt!,
+            expiresAt: v.metadata!.expiresAt ??
+                DateTime.now().toUtc().add(defaultExpiration),
             availableAt: _liveAvailableAt(v.metadata!.availableAt),
             collection: this,
             parentOwners: parsedParents ?? _expectedAncestorOwners(),
@@ -622,7 +626,7 @@ class AtCollection<T> {
         if (k.sharedWith != null) {
           pending!.sharedWith.add(k.sharedWith!.toAtsign());
         }
-      } catch (e) {
+      } catch (e, st) {
         // Per-key decode failures are yielded as stream errors rather
         // than logged-and-skipped. The stream continues after an error
         // — subsequent iterations of this for-loop produce further
@@ -639,7 +643,7 @@ class AtCollection<T> {
         //     tolerate legacy `__rr` items written in the pre-
         //     refactor wire format).
         yield* Stream<CItem<T>>.error(
-          'getItemsAsStream decode failure on ${k.key}: $e',
+          'getItemsAsStream decode failure on ${k.key}: $e\n$st',
         );
       }
     }
@@ -1067,13 +1071,25 @@ class AtCollection<T> {
   /// to [handleSubObjNotification].
   @visibleForTesting
   Future<void> handleNotification(AtNotification n) async {
-    _rrSub.pause();
+    _notificationSubscription.pause();
     try {
       if (!_regexObjAny.hasMatch(n.key)) {
         logger.shout('handleNotification: No handler for ${n.key}');
         return;
       }
       final parts = _getPartsFromNotifKey(n);
+
+      // Until fsync is done, notifications will race ahead of sync events
+      // We need to keep the local keystore current
+      switch (n.operation) {
+        case 'update':
+          await _updateLocal(n);
+          break;
+        case 'delete':
+          await _deleteLocal(n);
+          break;
+      }
+
       if (parts.ancestry.isEmpty) {
         await handleObjNotification(n);
       } else {
@@ -1082,8 +1098,39 @@ class AtCollection<T> {
     } catch (e, st) {
       logger.shout('handleNotification: $e\nStackTrace:\n$st');
     } finally {
-      _rrSub.resume();
+      _notificationSubscription.resume();
     }
+  }
+
+  Future<void> _updateLocal(AtNotification n) async {
+    if (n.metadata == null || n.from == self) {
+      return;
+    }
+    final keyStore = atClient.getLocalSecondary()?.keyStore;
+    if (keyStore == null) return;
+
+    var atData = AtData();
+    atData.data = n.value;
+    atData.metaData = AtMetaData.fromCommonsMetadata(n.metadata!, n.from);
+    atData.metaData!.expiresAt = n.metadata!.expiresAt;
+    atData.metaData!.availableAt = n.metadata!.availableAt;
+    atData.metaData!.isEncrypted = false;
+    logger.shout('Updating cached:${n.key}');
+    await keyStore.put(
+      'cached:${n.key}',
+      atData,
+      skipCommit: true,
+    );
+  }
+
+  Future<void> _deleteLocal(AtNotification n) async {
+    if (n.from == self) {
+      return;
+    }
+    final keyStore = atClient.getLocalSecondary()?.keyStore;
+    if (keyStore == null) return;
+    logger.shout('Deleting cached:${n.key}');
+    await keyStore.remove('cached:${n.key}', skipCommit: true);
   }
 
   /// Handles direct-item notifications (a key with exactly the collection
@@ -2045,6 +2092,7 @@ final class _QuerySpec<T> {
 final class _OrderBy<T> {
   final Comparable<dynamic> Function(CItem<T>) keyFn;
   final bool descending;
+
   const _OrderBy(this.keyFn, {required this.descending});
 }
 
@@ -2315,18 +2363,22 @@ enum CollectionOp { put, delete }
 sealed class OpResult {
   final AtKey atKey;
   final CollectionOp op;
+
   OpResult(this.atKey, this.op);
 }
 
 class OpSuccess extends OpResult {
   OpSuccess(super.atKey, super.op);
+
   @override
   String toString() => '$atKey:${op.name}:Success';
 }
 
 class OpFailure extends OpResult {
   final Object reason;
+
   OpFailure(super.atKey, super.op, this.reason);
+
   @override
   String toString() => '$atKey:${op.name}:Failure:$reason';
 }
@@ -2337,6 +2389,7 @@ class OpFailure extends OpResult {
 /// subset that went wrong.
 class CollectionOpException implements Exception {
   final List<OpResult> results;
+
   CollectionOpException(this.results);
 
   List<OpFailure> get failures => results.whereType<OpFailure>().toList();
@@ -2379,6 +2432,7 @@ class CollectionOpException implements Exception {
 abstract class CEvent {
   final Atsign owner;
   final String id;
+
   CEvent({required this.owner, required this.id});
 }
 
@@ -2391,6 +2445,7 @@ abstract class CEvent {
 class CReadReceipt extends CEvent {
   final Atsign from;
   final DateTime readAt;
+
   CReadReceipt({
     required super.owner,
     required super.id,
@@ -2490,5 +2545,6 @@ typedef _CParts = ({
 class _FactoryEntry {
   final String tag;
   final Function fromJson;
+
   _FactoryEntry(this.tag, this.fromJson);
 }

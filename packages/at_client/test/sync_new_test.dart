@@ -4222,6 +4222,15 @@ void main() {
             mockSyncUtil.getLastSyncedEntry(any(that: startsWith('.buzz)')),
                 atSign: TestResources.atsign)).thenAnswer(
             (_) async => throw FormatException('.buzz) is not a valid regex'));
+        // statsServiceListener still enqueues a sync request after the
+        // FormatException is caught (because serverCommitId=10 >
+        // lastReceivedServerCommitId=-1). With on-demand triggering
+        // that enqueue immediately calls processSyncRequests, which
+        // reaches getLatestServerCommitId on the mocked SyncUtil — so
+        // it must be mocked too.
+        registerFallbackValue(FakeRemoteSecondary());
+        when(() => mockSyncUtil.getLatestServerCommitId(any(), any()))
+            .thenAnswer((_) async => 10);
 
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
@@ -4230,14 +4239,23 @@ void main() {
         var syncProgressListener = CustomSyncProgressListener();
         syncServiceImpl.addProgressListener(syncProgressListener);
 
-        syncProgressListener.streamController.stream
-            .listen(expectAsync1((syncProgress) {
+        // The first event is the FormatException-driven failure that
+        // this test is asserting. Subsequent events from the auto-
+        // triggered follow-up sync are out of scope.
+        var asserted = false;
+        syncProgressListener.streamController.stream.listen((syncProgress) {
+          if (asserted) return;
+          asserted = true;
           expect(syncProgress.syncStatus, SyncStatus.failure);
           expect(syncProgress.atClientException, isA<AtClientException>());
           expect(syncProgress.atClientException?.message,
               contains('.buzz) is not a valid regex'));
-          print(syncProgress.atClientException);
-        }));
+        });
+        // Wait long enough for the stats notification (delayed 1s) and
+        // for processSyncRequests to inform the listener.
+        await Future.delayed(Duration(seconds: 2));
+        expect(asserted, isTrue,
+            reason: 'expected a failure SyncProgress to be emitted');
       });
 
       tearDown(() async {
@@ -4272,6 +4290,12 @@ void main() {
     test(
         'A test to verify sync request is added to queue when server commit id is greater than local commit id',
         () async {
+      // Two stats notifications with serverCommitId=10 vs lastReceivedServerCommitId=5
+      // → statsServiceListener should call _addSyncRequestToQueue twice.
+      // Under on-demand triggering each enqueue immediately fires a
+      // sync attempt, so we assert via a progress listener counting
+      // sync attempts rather than via the queue length (which gets
+      // drained by the auto-trigger).
       when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
           .thenAnswer((_) {
         var streamController =
@@ -4279,7 +4303,6 @@ void main() {
         // Adding a delay of 1 second to let the sync service initialize and
         // add the progress listener to the sync service.
         Future.delayed(Duration(seconds: 1)).then((_) {
-          syncServiceImpl.clearSyncEntities();
           streamController.add(at_notification.AtNotification(
               '-1',
               'statsNotification',
@@ -4301,12 +4324,21 @@ void main() {
         });
         return streamController.stream;
       });
+      // The auto-triggered sync attempts will reach _isInSync; mock the
+      // stats verb so they don't crash on missing mocks.
+      when(() => mockRemoteSecondary
+              .executeVerb(any(that: isA<StatsVerbBuilder>())))
+          .thenAnswer((_) async => 'data:[{"value":"10"}]');
       syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      await Future.delayed(Duration(seconds: 1)).then((_) {
-        expect(syncServiceImpl.getSyncRequestQueueSize(), 2);
-      });
+      var attempts = 0;
+      syncServiceImpl.addProgressListener(_AttemptCountingListener(() {
+        attempts++;
+      }));
+      await Future.delayed(Duration(seconds: 2));
+      expect(attempts, 2,
+          reason: 'two stats notifications should drive two sync attempts');
     });
 
     test(
@@ -4702,6 +4734,19 @@ class CustomSyncProgressListener extends SyncProgressListener {
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
     streamController.add(syncProgress);
+  }
+}
+
+class _AttemptCountingListener extends SyncProgressListener {
+  final void Function() _onAttempt;
+  _AttemptCountingListener(this._onAttempt);
+
+  @override
+  void onSyncProgressEvent(SyncProgress syncProgress) {
+    final status = syncProgress.syncStatus;
+    if (status == SyncStatus.success || status == SyncStatus.failure) {
+      _onAttempt();
+    }
   }
 }
 
