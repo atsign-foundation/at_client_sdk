@@ -58,22 +58,6 @@ abstract class SyncService {
 
   /// Remove all progress listeners
   void removeAllProgressListeners();
-
-  /// Halts sync activity. Cancels the stats-notification subscription,
-  /// drains any pending requests in the queue (their callbacks are
-  /// invoked with an error), removes all progress listeners, and
-  /// causes future [sync] calls to become no-ops until [restart] is
-  /// invoked. Idempotent — calling [stop] when already stopped is a
-  /// no-op.
-  Future<void> stop();
-
-  /// Reverses a prior [stop]: re-subscribes to stats notifications and
-  /// allows new [sync] calls to fire again. Progress listeners removed
-  /// by [stop] are NOT restored — the caller must re-add them via
-  /// [addProgressListener]. The sync queue starts empty after restart
-  /// (it was drained on [stop]). Idempotent — calling [restart] when
-  /// not stopped is a no-op.
-  Future<void> restart();
 }
 
 class KeyInfo {

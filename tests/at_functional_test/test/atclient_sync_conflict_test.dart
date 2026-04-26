@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_progress_listener.dart';
@@ -33,7 +34,7 @@ void main() async {
     // trigger an immediate microtask-driven sync run, pushing each
     // phone_X to the server as it lands and eliminating the conflict
     // we're trying to create on phone_0.
-    await atClientManager.atClient.syncService.stop();
+    await (atClientManager.atClient.syncService as SyncServiceImpl).stop();
 
     // Insert 5 keys into the keystore for uncommitted entries
     // among which, one is a conflict key - phone_0.wavi is a conflict key.
@@ -51,7 +52,7 @@ void main() async {
 
     // Restart sync and add the listener AFTER the conflict has been
     // staged. stop() removed all listeners, so pl is added fresh.
-    await atClientManager.atClient.syncService.restart();
+    await (atClientManager.atClient.syncService as SyncServiceImpl).start();
     MySyncProgressListener pl = MySyncProgressListener(true);
     atClientManager.atClient.syncService.addProgressListener(pl);
 
