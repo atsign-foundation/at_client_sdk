@@ -3299,7 +3299,6 @@ void main() {
         //clearing sync objects
         syncService.clearSyncEntities();
       });
-
     });
 
     group('A group of tests to verify isSyncInProgress flag', () {
