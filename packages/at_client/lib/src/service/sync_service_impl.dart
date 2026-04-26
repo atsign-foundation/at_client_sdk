@@ -17,10 +17,11 @@ import 'package:meta/meta.dart';
 
 ///A [SyncService] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
 class SyncServiceImpl implements SyncService {
-  static int syncRequestThreshold = 3,
-      syncRequestTriggerInSeconds = 3,
-      syncRunIntervalSeconds = 5,
-      queueSize = 5;
+  /// Bound on the in-memory request queue. When the queue fills, the
+  /// oldest entry is dropped on the next enqueue. Mutable static so
+  /// test infrastructure can set it to 1 (one-at-a-time semantics)
+  /// for deterministic per-call assertions.
+  static int queueSize = 5;
   final AtClient _atClient;
   final RemoteSecondary _remoteSecondary;
   @visibleForTesting
@@ -227,9 +228,7 @@ class SyncServiceImpl implements SyncService {
   }
 
   @visibleForTesting
-  Future<void> processSyncRequests(
-      {bool respectSyncRequestQueueSizeAndRequestTriggerDuration =
-          true}) async {
+  Future<void> processSyncRequests() async {
     _logger.finest('in _processSyncRequests');
     if (isStopped) {
       _logger.info('processSyncRequests: service is stopped; ignoring');
@@ -244,19 +243,6 @@ class SyncServiceImpl implements SyncService {
       // queue activity.
       _logger.finer('processSyncRequests: another sync in progress');
       return;
-    }
-    if (respectSyncRequestQueueSizeAndRequestTriggerDuration) {
-      if (syncRequests.isEmpty ||
-          (syncRequests.length < syncRequestThreshold &&
-              (syncRequests.isNotEmpty &&
-                  DateTime.now()
-                          .toUtc()
-                          .difference(syncRequests.elementAt(0).requestedOn)
-                          .inSeconds <
-                      syncRequestTriggerInSeconds))) {
-        _logger.finest('skipping sync - queue length ${syncRequests.length}');
-        return;
-      }
     }
     if (syncRequests.isEmpty) {
       _logger.finest('processSyncRequests: queue empty; nothing to do');
@@ -429,8 +415,7 @@ class SyncServiceImpl implements SyncService {
     // processSyncRequests make the call a cheap no-op when a run is
     // already active or the service has been stopped.
     scheduleMicrotask(() {
-      unawaited(processSyncRequests(
-          respectSyncRequestQueueSizeAndRequestTriggerDuration: false));
+      unawaited(processSyncRequests());
     });
   }
 
@@ -441,8 +426,7 @@ class SyncServiceImpl implements SyncService {
   void _drainQueueIfPending() {
     if (isStopped || syncRequests.isEmpty) return;
     scheduleMicrotask(() {
-      unawaited(processSyncRequests(
-          respectSyncRequestQueueSizeAndRequestTriggerDuration: false));
+      unawaited(processSyncRequests());
     });
   }
 
