@@ -10,8 +10,6 @@ import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
-import 'package:at_client/src/manager/sync_manager.dart';
-import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
@@ -1144,15 +1142,8 @@ class AtClientImpl implements AtClient {
 
   // TODO v4 - remove the follow methods in version 4 of at_client package
 
-  @override
-  @Deprecated("Use AtClient.syncService")
-  SyncManager? getSyncManager() {
-    return SyncManagerImpl.getInstance().getSyncManager(_atSign);
-  }
-
-  @override
-
   ///[Deprecated] Use [AtClient.notificationService]
+  @override
   @Deprecated('Use AtClient.notificationService')
   Future<void> startMonitor(String privateKey, Function? notificationCallback,
       {String? regex}) async {

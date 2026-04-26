@@ -54,6 +54,17 @@ class FunctionalTestSyncService {
         for (final KeyInfo ki in syncProgress.keyInfoList ?? []) {
           _logger.finer('${ki.syncDirection} ${ki.key}');
         }
+        // The "no work to do" branch in processSyncRequests fires a
+        // SUCCESS SyncProgress with both commit ids null (it took the
+        // _isInSync == true fast path). Such an event carries no
+        // information about whether sync has actually caught up, so
+        // ignore it — wait for the next event that has commit ids.
+        if (syncProgress.syncStatus == SyncStatus.success &&
+            syncProgress.localCommitId == null &&
+            syncProgress.serverCommitId == null) {
+          _logger.info('SyncProgress $logLabel: in-sync no-op; ignoring');
+          return;
+        }
         if (syncProgress.syncStatus == SyncStatus.success &&
             syncProgress.localCommitId != syncProgress.serverCommitId) {
           if (syncCount >= maxSyncCount) {

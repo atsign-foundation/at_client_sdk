@@ -50,6 +50,18 @@ class SyncServiceImpl implements SyncService {
   /// cleared in the run's `finally`.
   bool _processInProgress = false;
 
+  /// Cached latest known server commit id. Kept fresh by three
+  /// authoritative sources:
+  ///   * [statsServiceListener]: push-side stats notifications.
+  ///   * [_syncToRemote]: each successful entry in the batch response
+  ///     carries the server commit id assigned to that op.
+  ///   * [_syncFromServer]: each pulled commit entry's `commitId`.
+  /// Read by [_getServerCommitId], which falls back to a remote
+  /// stats fetch only when this is `null` (cold start, before any
+  /// of the above has populated it).
+  @visibleForTesting
+  int? serverCommitId;
+
   @override
   bool get isSyncInProgress => _syncInProgress;
 
@@ -125,6 +137,14 @@ class SyncServiceImpl implements SyncService {
           _atClient.getPreferences()!.atClientParticulars,
           'RCVD: stats notification in sync: ${notification.value}'));
       final serverCommitId = notification.value;
+      if (serverCommitId != null) {
+        try {
+          _promoteServerCommitId(int.parse(serverCommitId));
+        } on FormatException {
+          _logger.warning(
+              'statsServiceListener: malformed commitId "$serverCommitId"');
+        }
+      }
       int lastReceivedServerCommitId = -1;
       try {
         lastReceivedServerCommitId = await getLastReceivedServerCommitId();
@@ -454,6 +474,12 @@ class SyncServiceImpl implements SyncService {
             if (commitId == -1) {
               _logger.severe(
                   '${commitEntry.operation} for key ${commitEntry.atKey} failed. Error code ${responseObject.errorCode} error message ${responseObject.errorMessage}');
+            } else {
+              // Each successful push returns the server commit id
+              // assigned to that op; promote the cache so the post-
+              // sync read in processSyncRequests reflects the new
+              // tip without a remote round-trip.
+              _promoteServerCommitId(commitId);
             }
 
             _logger.finer('***batchId:$batchId key: ${commitEntry.atKey}');
@@ -521,6 +547,7 @@ class SyncServiceImpl implements SyncService {
           if (isServerCommitEntryExistInUncommittedEntries) {
             lastReceivedServerCommitId =
                 _parseToInteger(serverCommitEntry['commitId']);
+            _promoteServerCommitId(lastReceivedServerCommitId);
             _logger.finer(_logger.getLogMessageWithClientParticulars(
                 _atClient.getPreferences()!.atClientParticulars,
                 'Server commitEntry ${serverCommitEntry['atKey']} exists in '
@@ -545,6 +572,7 @@ class SyncServiceImpl implements SyncService {
           // Convert the commit-id to "int" if in "String" data type.
           lastReceivedServerCommitId =
               _parseToInteger(serverCommitEntry['commitId']);
+          _promoteServerCommitId(lastReceivedServerCommitId);
           await _processServerCommitEntry(
               serverCommitEntry, uncommittedEntries, keyInfoList);
           _logger.finest(
@@ -912,17 +940,36 @@ class SyncServiceImpl implements SyncService {
   }
 
   /// Returns the cloud secondary latest commit id. if null, returns -1.
+  /// Monotonically promotes the cached [serverCommitId] to [observed]
+  /// when it represents progress. Centralised so the three update
+  /// paths (stats notifications, push batch responses, pull entries)
+  /// share the same monotonic guard — out-of-order arrivals can't
+  /// rewind the cache.
+  void _promoteServerCommitId(int observed) {
+    final current = serverCommitId;
+    if (current == null || observed > current) {
+      serverCommitId = observed;
+    }
+  }
+
   ///Throws [AtLookUpException] if secondary is not reachable
   Future<int> _getServerCommitId() async {
-    // ignore: no_leading_underscores_for_local_identifiers
-    var _serverCommitId = await syncUtil.getLatestServerCommitId(
+    final cached = serverCommitId;
+    if (cached != null) {
+      _logger.finer(_logger.getLogMessageWithClientParticulars(
+          _atClient.getPreferences()!.atClientParticulars,
+          'Returning serverCommitId $cached (cached)'));
+      return cached;
+    }
+    var fresh = await syncUtil.getLatestServerCommitId(
         _remoteSecondary, _atClient.getPreferences()!.syncRegex);
     // If server commit id is null, set to -1;
-    _serverCommitId ??= -1;
+    fresh ??= -1;
+    serverCommitId = fresh;
     _logger.info(_logger.getLogMessageWithClientParticulars(
         _atClient.getPreferences()!.atClientParticulars,
-        'Returning serverCommitId $_serverCommitId'));
-    return _serverCommitId;
+        'Returning serverCommitId $fresh (cold fetch)'));
+    return fresh;
   }
 
   @visibleForTesting
@@ -1122,6 +1169,7 @@ class SyncServiceImpl implements SyncService {
   @visibleForTesting
   bool isStopped = false;
 
+  @override
   Future<void> stop() async {
     if (isStopped) {
       _logger.info('stop() called, but service is already stopped. Ignoring.');
@@ -1141,6 +1189,23 @@ class SyncServiceImpl implements SyncService {
     }
 
     removeAllProgressListeners();
+  }
+
+  @override
+  Future<void> restart() async {
+    if (!isStopped) {
+      _logger.info('restart() called, but service is not stopped. Ignoring.');
+      return;
+    }
+    _logger.info('Restarting sync service for $currentAtSign');
+    isStopped = false;
+    // Re-subscribe to stats notifications. Note that any sync run that
+    // was in flight at the moment of stop() may still be on the call
+    // stack; its `finally` will set _processInProgress / _syncInProgress
+    // back to false on its own — restart() does not need to wait for
+    // it. New sync() calls after restart will queue normally and fire
+    // their microtask trigger as usual.
+    await statsServiceListener();
   }
 
   void _drainSyncQueue() {

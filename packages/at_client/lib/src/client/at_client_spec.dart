@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
@@ -11,10 +10,6 @@ import 'package:meta/meta.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
-  /// [Deprecated] Use [AtClient.syncService]
-  @Deprecated("Use AtClient.syncService")
-  SyncManager? getSyncManager();
-
   @experimental
   set telemetry(AtTelemetryService? telemetryService);
 

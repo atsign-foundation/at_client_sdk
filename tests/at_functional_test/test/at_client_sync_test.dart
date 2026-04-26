@@ -27,9 +27,9 @@ void main() {
 
   test('Verify local changes are synced to server - local ahead', () async {
     var atClient = atClientManager.atClient;
-    var serverCommitId = await SyncUtil()
+    var serverCommitIdBeforePut = await SyncUtil()
         .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
-    expect(serverCommitId != null, true);
+    expect(serverCommitIdBeforePut != null, true);
     // twitter.me@alice🛠
     var twitterKey = AtKey()
       ..key = 'twitter'
@@ -46,7 +46,7 @@ void main() {
         .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
     // After sync successful, the serverCommitId after put should be greater
     // than server commit before put
-    expect(serverCommitIdAfterPut! > serverCommitId!, true);
+    expect(serverCommitIdAfterPut! > serverCommitIdBeforePut!, true);
     // Getting value from remote secondary
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = (AtKey.shared('twitter.wavi', sharedBy: atSign)

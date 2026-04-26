@@ -28,6 +28,13 @@ void main() async {
   });
 
   test('notify updating of a key to sharedWith atSign - using await', () async {
+    // Suspend sync while we set up the conflict scenario. With the on-
+    // demand sync trigger model, every local put would otherwise
+    // trigger an immediate microtask-driven sync run, pushing each
+    // phone_X to the server as it lands and eliminating the conflict
+    // we're trying to create on phone_0.
+    await atClientManager.atClient.syncService.stop();
+
     // Insert 5 keys into the keystore for uncommitted entries
     // among which, one is a conflict key - phone_0.wavi is a conflict key.
     for (var i = 0; i < 5; i++) {
@@ -42,6 +49,9 @@ void main() async {
     await atClientManager.atClient.put(remoteKey, 'Things have changed',
         putRequestOptions: PutRequestOptions()..useRemoteAtServer = true);
 
+    // Restart sync and add the listener AFTER the conflict has been
+    // staged. stop() removed all listeners, so pl is added fresh.
+    await atClientManager.atClient.syncService.restart();
     MySyncProgressListener pl = MySyncProgressListener(true);
     atClientManager.atClient.syncService.addProgressListener(pl);
 
