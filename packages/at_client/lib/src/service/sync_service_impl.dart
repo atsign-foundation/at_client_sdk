@@ -62,6 +62,25 @@ class SyncServiceImpl implements SyncService {
   @visibleForTesting
   int? serverCommitId;
 
+  /// Wall-clock time at which the last [processSyncRequests] run
+  /// finished (whether it found work or took the in-sync fast path).
+  /// Read by the periodic safety-net timer to decide whether enough
+  /// time has elapsed to fire a defensive sync. `null` until the first
+  /// run completes.
+  @visibleForTesting
+  DateTime? lastSyncCompletedAt;
+
+  /// Periodic safety-net timer — fires every [_periodicSyncInterval]
+  /// and, if the last completed sync run is older than that interval,
+  /// calls [sync] to drive a fresh run. Production triggers (app
+  /// `sync()` calls, stats notifications, post-run drains) are still
+  /// the hot path; this timer just guards against the case where any
+  /// of those silently fail (a dropped notification, an unhandled
+  /// exception path, etc.). Cancelled in [stop], restarted in
+  /// [start].
+  Timer? _periodicSyncTimer;
+  static const Duration _periodicSyncInterval = Duration(seconds: 30);
+
   @override
   bool get isSyncInProgress => _syncInProgress;
 
@@ -93,6 +112,7 @@ class SyncServiceImpl implements SyncService {
         atChops: atClient.atChops, enrollmentId: atClient.enrollmentId);
     final syncService = SyncServiceImpl._(atClient, remoteSecondary);
     await syncService.statsServiceListener();
+    syncService._startPeriodicSyncTimer();
     // Note: no startup bootstrap is enqueued here. The original cron
     // implementation enqueued a synthetic request on every tick so the
     // cron had something to do; in the on-demand trigger model the
@@ -100,6 +120,23 @@ class SyncServiceImpl implements SyncService {
     // or a stats notification) arrives. The `hasHadNoSyncRequests`
     // flag is preserved for any callers that still inspect it.
     return syncService;
+  }
+
+  void _startPeriodicSyncTimer() {
+    _periodicSyncTimer?.cancel();
+    _periodicSyncTimer = Timer.periodic(_periodicSyncInterval, (_) {
+      if (isStopped) return;
+      final last = lastSyncCompletedAt;
+      if (last == null ||
+          DateTime.now().toUtc().difference(last) > _periodicSyncInterval) {
+        _logger.finer(
+            'Periodic safety-net timer firing sync (last completed: $last)');
+        sync();
+      } else {
+        _logger.finest(
+            'Periodic safety-net timer skipped (last completed: $last)');
+      }
+    });
   }
 
   SyncServiceImpl._(this._atClient, this._remoteSecondary) {
@@ -299,6 +336,7 @@ class SyncServiceImpl implements SyncService {
         ..message = 'Unexpected exception: $e');
     } finally {
       _processInProgress = false;
+      lastSyncCompletedAt = DateTime.now().toUtc();
       _drainQueueIfPending();
     }
     return;
@@ -1209,6 +1247,9 @@ class SyncServiceImpl implements SyncService {
 
     _drainSyncQueue();
 
+    _periodicSyncTimer?.cancel();
+    _periodicSyncTimer = null;
+
     _logger.finer('stopping stats notification subscription');
     try {
       await _statsNotificationSubscription?.cancel();
@@ -1240,6 +1281,7 @@ class SyncServiceImpl implements SyncService {
     // it. New sync() calls after restart will queue normally and fire
     // their microtask trigger as usual.
     await statsServiceListener();
+    _startPeriodicSyncTimer();
   }
 
   void _drainSyncQueue() {
