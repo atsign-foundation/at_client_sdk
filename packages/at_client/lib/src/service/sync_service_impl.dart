@@ -894,7 +894,10 @@ class SyncServiceImpl implements SyncService {
   @override
   Future<bool> isInSync() async {
     try {
-      var serverCommitId = await _getServerCommitId();
+      // Force-fresh: this is a decision point — staleness here would
+      // give the caller a false "in sync" answer when a recent
+      // direct-to-server change hasn't propagated to the cache yet.
+      var serverCommitId = await _getServerCommitId(forceFresh: true);
 
       var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
 
@@ -923,7 +926,9 @@ class SyncServiceImpl implements SyncService {
       _logger.finest('*** isInSync..sync in progress');
       return true;
     }
-    var serverCommitId = await _getServerCommitId();
+    // Force-fresh: see [_getServerCommitId] doc — we're deciding whether
+    // sync work is needed; a stale cache would skip the run.
+    var serverCommitId = await _getServerCommitId(forceFresh: true);
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
     var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
         _atClient.getPreferences()!.syncRegex,
@@ -952,23 +957,42 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
-  ///Throws [AtLookUpException] if secondary is not reachable
-  Future<int> _getServerCommitId() async {
-    final cached = serverCommitId;
-    if (cached != null) {
-      _logger.finer(_logger.getLogMessageWithClientParticulars(
-          _atClient.getPreferences()!.atClientParticulars,
-          'Returning serverCommitId $cached (cached)'));
-      return cached;
+  /// Returns the latest known server commit id. With [forceFresh: false]
+  /// (the default) the cached value is returned when non-null; the
+  /// cache is kept current by stats notifications, batch responses
+  /// from `_syncToRemote`, and pulled entries from `_syncFromServer`.
+  ///
+  /// With [forceFresh: true] the cache is bypassed and a remote stats
+  /// fetch is issued; the result is then written back into the cache
+  /// (subject to the monotonic [_promoteServerCommitId] guard) so
+  /// subsequent cached reads benefit from it.
+  ///
+  /// `forceFresh: true` is used by the sync-decision points
+  /// ([isInSync] / [_isInSync]) — if a recent direct-to-server
+  /// modification happened and the corresponding stats notification
+  /// hasn't arrived yet, the cache is stale and would cause
+  /// `processSyncRequests` to wrongly conclude "no work needed".
+  ///
+  /// Throws [AtLookUpException] if the remote secondary is not
+  /// reachable.
+  Future<int> _getServerCommitId({bool forceFresh = false}) async {
+    if (!forceFresh) {
+      final cached = serverCommitId;
+      if (cached != null) {
+        _logger.finer(_logger.getLogMessageWithClientParticulars(
+            _atClient.getPreferences()!.atClientParticulars,
+            'Returning serverCommitId $cached (cached)'));
+        return cached;
+      }
     }
     var fresh = await syncUtil.getLatestServerCommitId(
         _remoteSecondary, _atClient.getPreferences()!.syncRegex);
     // If server commit id is null, set to -1;
     fresh ??= -1;
-    serverCommitId = fresh;
+    _promoteServerCommitId(fresh);
     _logger.info(_logger.getLogMessageWithClientParticulars(
         _atClient.getPreferences()!.atClientParticulars,
-        'Returning serverCommitId $fresh (cold fetch)'));
+        'Returning serverCommitId $fresh ${forceFresh ? "(forced fresh)" : "(cold fetch)"}'));
     return fresh;
   }
 

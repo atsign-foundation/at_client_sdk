@@ -92,6 +92,11 @@ void main() async {
   test(
       'A test to verify sync conflict info when a key is expired and server value is null',
       () async {
+    // Same pattern as the first conflict test: stop sync while we
+    // stage the conflict so the on-demand trigger doesn't push the
+    // local entry before the remote-direct put creates the conflict.
+    await (atClientManager.atClient.syncService as SyncServiceImpl).stop();
+
     // Insert a key into local secondary for an uncommitted entry
     var testKey =
         AtKey.public('test', namespace: namespace, sharedBy: atSign).build();
@@ -111,6 +116,7 @@ void main() async {
     // Wait for a few milliseconds to the key to expire
     await Future.delayed(Duration(milliseconds: 10));
 
+    await (atClientManager.atClient.syncService as SyncServiceImpl).start();
     MySyncProgressListener mySyncProgressListener =
         MySyncProgressListener(true);
     atClientManager.atClient.syncService
