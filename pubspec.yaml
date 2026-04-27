@@ -120,3 +120,10 @@ dev_dependencies:
   plugin_platform_interface: ^2.1.6
   test: ^1.25.0
   test_process: ^2.1.0
+
+dependency_overrides:
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      ref: gkc-remove-at-persistence-singletons
+      path: packages/at_persistence_secondary_server
