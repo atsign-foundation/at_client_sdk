@@ -40,9 +40,6 @@ class FunctionalTestSyncService {
       _logger.info('syncData starting for $atSign ($logLabel)');
 
       SyncServiceImpl.queueSize = 1;
-      SyncServiceImpl.syncRequestThreshold = 1;
-      SyncServiceImpl.syncRequestTriggerInSeconds = 1;
-      SyncServiceImpl.syncRunIntervalSeconds = 1;
 
       testSyncProgressListener = TestSyncProgressListener(logLabel);
       syncSvc.addProgressListener(testSyncProgressListener);
@@ -79,9 +76,7 @@ class FunctionalTestSyncService {
           // Call to syncService.sync to expedite the sync progress
           syncImpl.sync();
           // ignore: invalid_use_of_visible_for_testing_member
-          unawaited(syncImpl.processSyncRequests(
-            respectSyncRequestQueueSizeAndRequestTriggerDuration: false,
-          ));
+          unawaited(syncImpl.processSyncRequests());
         } else if (syncProgress.syncStatus == SyncStatus.success ||
             syncProgress.syncStatus == SyncStatus.failure) {
           isSyncInProgress = false;
@@ -92,9 +87,7 @@ class FunctionalTestSyncService {
       // Call to syncService.sync to expedite the sync progress
       syncImpl.sync();
       // ignore: invalid_use_of_visible_for_testing_member
-      unawaited(syncImpl.processSyncRequests(
-        respectSyncRequestQueueSizeAndRequestTriggerDuration: false,
-      ));
+      unawaited(syncImpl.processSyncRequests());
 
       await syncOutcome.future;
 
