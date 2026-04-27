@@ -55,10 +55,9 @@ class AuthorisationListTile extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(8.0),
                   color: isSelected
-                      ? Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withValues(alpha: 0.1)
+                      ? Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.1)
                       : Colors.transparent,
                   child: Row(
                     children: [
@@ -74,15 +73,13 @@ class AuthorisationListTile extends StatelessWidget {
                         child: Text(
                           title,
                           maxLines: 2,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
+                          style: Theme.of(context).textTheme.headlineSmall
                               ?.copyWith(
                                 color: isSelected
                                     ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
+                                    : Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
                               ),
                         ),
                       ),
@@ -91,13 +88,10 @@ class AuthorisationListTile extends StatelessWidget {
                           padding: const EdgeInsets.all(4),
                           textColor: Theme.of(context).colorScheme.primary,
                           textStyle: Theme.of(context).textTheme.bodyMedium,
-                          backgroundColor: Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withValues(alpha: 0.3),
-                          label: Text(
-                            badgeCount.toString(),
-                          ),
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 0.3),
+                          label: Text(badgeCount.toString()),
                         ),
                       if (trailing != null) trailing!,
                     ],
