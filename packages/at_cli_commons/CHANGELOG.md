@@ -1,3 +1,10 @@
+## 3.1.0
+
+- feat: `CLIBase` constructor and `CLIBase.fromCommandLineArgs` now accept an
+  optional `preference` parameter (`AtOnboardingPreference`). When supplied,
+  `init()` updates that instance in place rather than creating a new one,
+  allowing callers to pre-set fields that `CLIBase` does not manage.
+
 ## 3.0.1
 
 - feat: Add support for legacy `-d` option. This will be added to the default
