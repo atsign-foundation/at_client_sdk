@@ -22,6 +22,12 @@ class LocalSecondary implements Secondary {
 
   LocalSecondary(this._atClient, {this.keyStore}) {
     _logger = AtSignLogger('LocalSecondary (${_atClient.getCurrentAtSign()})');
+    // The keystore is now expected to be supplied by the caller —
+    // typically AtClientImpl reads it off the AtPersistenceBundle
+    // produced by StorageManager. The legacy fallback through
+    // `SecondaryPersistenceStoreFactory.getInstance()` is retained
+    // only for callers that haven't migrated yet; it relies on the
+    // factory's Phase 1 routing through the same singletons.
     keyStore ??= SecondaryPersistenceStoreFactory.getInstance()
         .getSecondaryPersistenceStore(_atClient.getCurrentAtSign())!
         .getSecondaryKeyStore();

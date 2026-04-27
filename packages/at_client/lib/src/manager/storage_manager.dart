@@ -1,11 +1,25 @@
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 
-/// Manager to create local storage
+/// Manager to create local storage. Wraps a [HiveAtPersistenceFactory]
+/// so each AtClient owns one factory + one per-atSign bundle, replacing
+/// the historical pattern of reaching into shared singletons via
+/// `*Manager*.getInstance()`.
 class StorageManager {
   bool isStorageInitialized = false;
 
   AtClientPreference? preferences;
+
+  /// Factory that owns the per-atSign persistence lifecycle. New
+  /// instance per StorageManager → independent lifecycle per AtClient.
+  final HiveAtPersistenceFactory persistenceFactory =
+      HiveAtPersistenceFactory();
+
+  /// The per-atSign persistence bundle produced by [persistenceFactory]
+  /// during [init]. Null until [init] has run successfully. Holds the
+  /// keystore, commit log, access log and notification keystore that
+  /// the rest of at_client reads.
+  AtPersistenceBundle? bundle;
 
   StorageManager(this.preferences);
 
@@ -23,26 +37,19 @@ class StorageManager {
     if (storagePath == null || commitLogPath == null) {
       throw Exception('Please set local storage paths');
     }
-    var atCommitLog = await AtCommitLogManagerImpl.getInstance().getCommitLog(
-        currentAtSign,
+
+    bundle = await persistenceFactory.initialize(
+      currentAtSign,
+      HivePersistenceConfig(
+        storagePath: storagePath,
         commitLogPath: commitLogPath,
-        enableCommitId: false);
-    // Initialize Persistence
-    var hivePersistenceManager = SecondaryPersistenceStoreFactory.getInstance()
-        .getSecondaryPersistenceStore(currentAtSign)!
-        .getHivePersistenceManager()!;
-    await hivePersistenceManager.init(storagePath);
-    var hiveKeyStore = SecondaryPersistenceStoreFactory.getInstance()
-        .getSecondaryPersistenceStore(currentAtSign)!
-        .getSecondaryKeyStore()!;
-    hiveKeyStore.commitLog = atCommitLog;
-    var keyStoreManager = SecondaryPersistenceStoreFactory.getInstance()
-        .getSecondaryPersistenceStore(currentAtSign)!
-        .getSecondaryKeyStoreManager()!;
-    await hiveKeyStore.initialize();
-    keyStoreManager.keyStore = hiveKeyStore;
-    hivePersistenceManager
-        .scheduleKeyExpireTask(preferences?.expiryCheckTimeInterval.inMinutes);
+        accessLogPath: commitLogPath,
+        notificationStoragePath: storagePath,
+        enableCommitId: false,
+      ),
+    );
+    bundle!.scheduleKeyExpireTask(
+        preferences?.expiryCheckTimeInterval.inMinutes);
     isStorageInitialized = true;
   }
 }

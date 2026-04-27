@@ -39,6 +39,13 @@ import 'package:uuid/uuid.dart';
 /// Implements to [AtSignChangeListener] to get notified on switch atSign event. On switch atSign event,
 /// pause's the compaction job on currentAtSign and start/resume the compaction job on the new atSign
 class AtClientImpl implements AtClient {
+  /// Per-AtClient persistence bundle, populated by [StorageManager]
+  /// during [_init] when `isLocalStoreRequired` is true. Holds the
+  /// keystore / commit log / access log / notification keystore that
+  /// replaces the historical `*Manager*.getInstance()` singletons.
+  /// Null when local storage is disabled.
+  AtPersistenceBundle? _persistenceBundle;
+
   AtClientPreference? _preference;
 
   AtClientPreference? get preference => _preference;
@@ -271,9 +278,19 @@ class AtClientImpl implements AtClient {
       if (_localSecondaryKeyStore == null) {
         var storageManager = StorageManager(preference);
         await storageManager.init(_atSign, preference!.keyStoreSecret);
+        // Hold on to the persistence bundle so other code paths
+        // (compaction, sync, secondary access) can read keystore /
+        // commit log / access log without reaching for the deprecated
+        // *.getInstance() singletons.
+        _persistenceBundle = storageManager.bundle;
       }
 
-      localSecondary = LocalSecondary(this, keyStore: _localSecondaryKeyStore);
+      // Prefer the explicitly-injected keystore; otherwise read from
+      // the bundle StorageManager just produced. Falling through to a
+      // null keystore would only happen if the keystore was injected
+      // already (in which case _localSecondaryKeyStore is non-null).
+      localSecondary = LocalSecondary(this,
+          keyStore: _localSecondaryKeyStore ?? _persistenceBundle?.keyStore);
       _atChops ??= await _createAtChops(_atSign);
     }
 
@@ -359,10 +376,15 @@ class AtClientImpl implements AtClient {
     commitLogCompactionDuration ??= Duration(
         minutes:
             AtClientConfig.getInstance().commitLogCompactionTimeIntervalInMins);
+    final bundle = _persistenceBundle;
+    if (bundle == null) {
+      throw StateError(
+          'startCompactionJob called before local storage was initialised. '
+          'Ensure AtClientPreference.isLocalStoreRequired is true and the '
+          'AtClient has been fully initialised before calling this method.');
+    }
     AtCompactionJob atCompactionJob = AtCompactionJob(
-        (await AtCommitLogManagerImpl.getInstance().getCommitLog(_atSign))!,
-        SecondaryPersistenceStoreFactory.getInstance()
-            .getSecondaryPersistenceStore(_atSign)!);
+        bundle.commitLog, (bundle as HiveAtPersistenceBundle).secondaryPersistenceStore);
 
     _atClientCommitLogCompaction ??=
         AtClientCommitLogCompaction.create(_atSign, atCompactionJob);
