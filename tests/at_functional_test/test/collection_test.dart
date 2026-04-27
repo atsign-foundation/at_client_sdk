@@ -1,3 +1,6 @@
+// ignore_for_file: deprecated_member_use
+// ignore_for_file: deprecated_export_use
+
 import 'package:at_client/at_client.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';

@@ -1,0 +1,75 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:at_client/at_client.dart';
+
+import 'package:at_client_examples/init_example_context.dart';
+
+const String subNamespace = 'fire.and.forget';
+
+/// Example of simple messaging between atSigns using notifications.
+///
+/// Sender will send a notification on some namespace (like a 'topic' in
+/// pub-sub systems)
+///
+/// Receiver will listen for notifications on that topic
+void main(List<String> args) async {
+  stdout.writeln('Messaging');
+  ExampleContext c = await getExampleContext(args);
+  switch (c.role) {
+    case ExampleRole.sender:
+      await sender(c.atClient, c.otherAtSigns);
+      break;
+    case ExampleRole.receiver:
+      await receiver(c.atClient, c.otherAtSigns);
+      break;
+  }
+  exit(0);
+}
+
+Future<void> sender(AtClient atClient, Set<Atsign>? otherAtSigns) async {
+  final String msgId = DateTime.now().microsecondsSinceEpoch.toString();
+  String namespace = '$msgId.$subNamespace.$applicationNamespace';
+  await Future.wait(
+    otherAtSigns!.map((otherAtsign) {
+      String msg;
+      // Basic messaging - send notification, fire and forget
+      msg = 'Simple fire and forget message with ID part';
+      stdout.writeln('-> Sending $msg to $otherAtsign on $namespace');
+      return atClient.notificationService.send(
+        to: otherAtsign,
+        namespace: namespace,
+        body: msg,
+      );
+    }),
+  );
+  await Future.wait(
+    otherAtSigns.map((otherAtsign) {
+      String msg;
+      // Basic messaging - send notification, fire and forget
+      msg = 'Simple fire and forget message without ID part';
+      String namespace = '$subNamespace.$applicationNamespace';
+      stdout.writeln('-> Sending $msg to $otherAtsign on $namespace');
+      return atClient.notificationService.send(
+        to: otherAtsign,
+        namespace: namespace,
+        body: msg,
+      );
+    }),
+  );
+}
+
+Future<void> receiver(AtClient atClient, Set<Atsign>? otherAtSigns) async {
+  Completer done = Completer();
+  // ignore: unused_local_variable
+  StreamSubscription<AtNotification>? sub;
+  sub = atClient.notificationService
+      .subscribeFiltered(
+        acceptedSenders: otherAtSigns,
+        namespace: '$subNamespace.$applicationNamespace',
+      )
+      .listen((n) {
+        stdout.writeln('-> Received ${n.value} from ${n.from} : ${n.key}');
+      });
+  await done.future;
+}

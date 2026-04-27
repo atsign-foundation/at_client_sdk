@@ -1,15 +1,124 @@
-<a href="https://atsign.com#gh-light-mode-only"><img width=250px src="https://atsign.com/wp-content/uploads/2022/05/atsign-logo-horizontal-color2022.svg#gh-light-mode-only" alt="The Atsign Foundation"></a><a href="https://atsign.com#gh-dark-mode-only"><img width=250px src="https://atsign.com/wp-content/uploads/2023/08/atsign-logo-horizontal-reverse2022-Color.svg#gh-dark-mode-only" alt="The Atsign Foundation"></a>
+# at_client examples
 
-### Now for a little internet optimism
+Runnable Dart examples for the [`at_client`](https://pub.dev/packages/at_client) package — the SDK for building apps on the [atPlatform](https://docs.atsign.com/).
 
-# at_client_example library
+## Prerequisites
 
-The at_client package allows your Dart and Flutter applications to use the atPlatform.
-You may find it useful to read the [atPlatform overview](https://docs.atsign.com/).
+- Two registered atSigns (two free atSigns available at [my.noports.com/no-ports-plans](https://my.noports.com/no-ports-plans)) with their `.atKeys` files
+- Dart SDK ≥ 3.0.0
 
-> You can also follow the [getting started guide](https://docs.atsign.com/start/)
+```bash
+dart pub get
+```
 
-## Give it a try
+## Running the examples
 
-This package includes some simple sample code in
-the [example](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/packages/at_client/example/bin/example.dart)
+Run sender and receiver in two separate terminals. Pass `--help` to any program to see all available options:
+
+```bash
+dart run bin/collections_primitives.dart --help
+```
+
+`--role` and `--other-at-signs` can be abbreviated as `-R` and `-O`.
+
+### Collections — primitives
+Share `String` and `Map` values between atSigns.
+```bash
+dart run bin/collections_primitives.dart -R sender   -O @receiver
+dart run bin/collections_primitives.dart -R receiver -O @sender
+```
+
+### Collections — domain objects
+Share typed polymorphic domain objects (`Dog`, `Cat` as `Pet`) using registered type factories and a typed `AtCollection<Pet>`.
+```bash
+dart run bin/collections_domain_objects.dart -R sender   -O @receiver
+dart run bin/collections_domain_objects.dart -R receiver -O @sender
+```
+
+### Collections — generic / polymorphic objects
+Mix different types (`Uint8List`, `Dog`, `Cat`, `Map`, `String`) in a single untyped `AtCollection`. Also demonstrates read receipts and event-stream watching.
+```bash
+dart run bin/collections_generic.dart -R sender   -O @receiver
+dart run bin/collections_generic.dart -R receiver -O @sender
+```
+
+### Collections — binary data
+Share raw `Uint8List` binary payloads.
+```bash
+dart run bin/collections_binary.dart -R sender   -O @receiver
+dart run bin/collections_binary.dart -R receiver -O @sender
+```
+
+### Collections — todos app
+Interactive terminal-based shared todo list, built on the `nocterm`
+widget framework. (There is an equivalent Flutter app in
+`packages/at_client_flutter/examples/todos/` — the two apps have
+been deliberately given a similar UX so you can A/B the same
+scenarios across keyboard-driven and mouse-driven front-ends.)
+
+The app is a split-pane TUI: filter chips / dashboard counts header,
+list of todos on the left (keyboard-navigable), live detail pane on
+the right (per-reader read-receipt timeline via
+`item.receipts.query().watch()`, stitched notes via
+`Query.watchWithSub`), log pane, context-sensitive footer hints.
+Every command that takes input opens a modal form overlay.
+
+```bash
+dart run bin/collections_todos.dart --atsign @alice
+```
+
+Keyboard shortcuts (from the list pane):
+
+| Key           | Action                                                      |
+|---------------|-------------------------------------------------------------|
+| ↑ ↓ / j k     | Move selection                                              |
+| g / G         | First / last todo                                           |
+| ⏎ or →        | Focus detail pane                                           |
+| Esc or ←      | Back to list pane                                           |
+| c             | Create todo (modal form)                                    |
+| e             | Edit selected todo (modal form)                             |
+| d             | Delete selected todo (modal confirm)                        |
+| space         | Toggle done on selected                                     |
+| n             | Add note to selected (modal form)                           |
+| s             | Share selected — add atSigns (modal form)                   |
+| u             | Set due date (modal form, YYYY-MM-DD)                       |
+| S             | Schedule visibility via `availableAt` (modal form, seconds) |
+| r             | Reverse sort direction                                      |
+| /             | Live-narrow find bar                                        |
+| m or Alt-M    | Open command menu (searchable)                              |
+| ?             | Open help overlay                                           |
+| q             | Quit                                                        |
+
+The command menu (`m`) lists every shortcut and also includes
+`Cleanup orphans` (wraps `collection.cleanupOrphans()`) and `Stats`
+(composes `.count` / `.any` / `.firstOrNull` / `.groupBy` terminals
+on the active query). Presets (`All` / `Mine` / `Shared with me` /
+`Open` / `Done` / `Overdue`) are live `Query<Todo>` values — tapping
+one swaps the stream source; the list re-narrows live as shared
+todos come in.
+
+Shared TUI plumbing (palette, presets, typedefs) lives under
+`lib/todos_tui/`; the entry point and widget tree are in
+`bin/collections_todos.dart`.
+
+### Notifications
+Fire-and-forget messaging via `NotificationService`.
+```bash
+dart run bin/notifications.dart -R sender   -O @receiver
+dart run bin/notifications.dart -R receiver -O @sender
+```
+
+### RPCs
+RPC-style method invocation between atSigns.
+```bash
+dart run bin/rpcs.dart -R sender   -O @receiver
+dart run bin/rpcs.dart -R receiver -O @sender
+```
+
+## Key concepts
+
+- **`AtClient`** — authenticates with an atServer and provides encrypted key-value get/put/notify operations.
+- **`AtCollection<T>`** — higher-level API for sharing typed, expiring collections with other atSigns; supports read receipts and event streams.
+- **`CItem<T>`** — wrapper around a single collection item with value, metadata (TTL, expiry), and read-receipt state.
+
+Shared initialization logic (argument parsing, `AtClient` setup) lives in `lib/init_example_context.dart`. Domain objects used across examples are in `lib/domain_objects.dart`.
