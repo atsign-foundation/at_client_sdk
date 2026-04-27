@@ -5,6 +5,7 @@ import 'package:at_client/src/at_collection/collection_util.dart';
 import 'package:at_client/src/at_collection/impl/default_key_maker.dart';
 import 'package:at_utils/at_logger.dart';
 
+@Deprecated("Use AtClient.collection for collection-style operations")
 class AtCollectionQueryOperationsImpl implements AtCollectionQueryOperations {
   final _logger = AtSignLogger('AtCollectionQueryOperationsImpl');
   AtClientManager? atClientManager;
