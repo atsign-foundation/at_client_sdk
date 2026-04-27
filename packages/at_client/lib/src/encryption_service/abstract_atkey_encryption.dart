@@ -5,9 +5,7 @@ import 'package:at_client/src/encryption_service/encryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/encryption_service/stream_encryption.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
-import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:meta/meta.dart';
 
@@ -16,7 +14,6 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
   late final AtSignLogger _logger;
   late String _sharedKey;
   final AtClient _atClient;
-  AtCommitLog? atCommitLog;
 
   DefaultResponseParser defaultResponseParser = DefaultResponseParser();
 
@@ -26,8 +23,6 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     _logger = AtSignLogger(
         'AbstractAtKeyEncryption (${_atClient.getCurrentAtSign()})');
   }
-
-  SyncUtil syncUtil = SyncUtil();
 
   /// - Fetches the appropriate shared symmetric key by calling
   /// [getMyCopyOfSharedSymmetricKey]

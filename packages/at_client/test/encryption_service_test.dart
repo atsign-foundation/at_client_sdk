@@ -326,7 +326,6 @@ void main() {
           // Adding commit id to mock commit entry is synced from server
           CommitEntry('@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now())
             ..commitId = 0);
-      sharedKeyEncryption.atCommitLog = atCommitLog;
       var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
             ..sharedWith('@bob'))
           .build();
@@ -369,7 +368,6 @@ void main() {
           // Adding commit id to mock commit entry is synced from server
           CommitEntry('@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now())
             ..commitId = 0);
-      sharedKeyEncryption.atCommitLog = atCommitLog;
       var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
             ..sharedWith('@bob'))
           .build();
@@ -407,7 +405,6 @@ void main() {
       await atCommitLog?.commitLogKeyStore.add(
           CommitEntry('@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now())
             ..commitId = 0);
-      sharedKeyEncryption.atCommitLog = atCommitLog;
 
       when(() => mockLocalSecondary
               .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
@@ -459,7 +456,6 @@ void main() {
       await atCommitLog?.commitLogKeyStore.add(
           CommitEntry('@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now())
             ..commitId = 0);
-      sharedKeyEncryption.atCommitLog = atCommitLog;
 
       when(() => mockLocalSecondary
               .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
@@ -508,7 +504,6 @@ void main() {
           '@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now()));
 
       sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
-      sharedKeyEncryption.atCommitLog = atCommitLog;
 
       when(() => mockLocalSecondary
               .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
