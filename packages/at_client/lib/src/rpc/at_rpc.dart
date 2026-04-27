@@ -14,6 +14,11 @@ abstract class AtRpcCallbacks {
   Future<void> handleResponse(AtRpcResp response);
 }
 
+typedef RpcRequestHandler = Future<AtRpcResp> Function(
+  AtRpcReq request,
+  String fromAtSign,
+);
+
 class AtRpcClient implements AtRpcCallbacks {
   static final AtSignLogger logger = AtSignLogger(' AtRpcClient ',
       loggingHandler: AtSignLogger.stdErrLoggingHandler);
@@ -173,6 +178,30 @@ class AtRpc {
   /// When enabled, it prevents multiple [AtRpc] responses from being sent for
   /// the same request.
   final bool enableRequestMutex;
+
+  factory AtRpc.server({
+    required AtClient atClient,
+    required String baseNameSpace,
+    String rpcsNameSpace = '__rpcs',
+    required String domainNameSpace,
+    required RpcRequestHandler requestHandler,
+    Set<Atsign>? allowList,
+    required bool allowAll,
+    required bool enableRequestMutex,
+  }) {
+    return AtRpc(
+      atClient: atClient,
+      baseNameSpace: baseNameSpace,
+      rpcsNameSpace: rpcsNameSpace,
+      domainNameSpace: domainNameSpace,
+      callbacks: _Callbacks(requestHandler),
+      allowList: allowList ?? {},
+      allowAll: allowAll,
+      isClient: false,
+      isServer: true,
+      enableRequestMutex: enableRequestMutex,
+    );
+  }
 
   AtRpc({
     required this.atClient,
@@ -532,5 +561,22 @@ class AtRpc {
         }
       }
     }
+  }
+}
+
+class _Callbacks implements AtRpcCallbacks {
+  final RpcRequestHandler requestHandler;
+
+  _Callbacks(this.requestHandler);
+
+  @override
+  Future<AtRpcResp> handleRequest(AtRpcReq request, String fromAtSign) async {
+    return requestHandler(request, fromAtSign);
+  }
+
+  /// Never called - We are not a client so we don't handle responses
+  @override
+  Future<void> handleResponse(AtRpcResp response) {
+    throw UnimplementedError();
   }
 }

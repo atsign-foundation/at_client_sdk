@@ -1,5 +1,6 @@
 import 'package:at_client/at_client.dart';
 
+@Deprecated("Use AtClient.collection for collection-style operations")
 class DefaultKeyMaker implements KeyMaker {
   AtClient _getAtClient() {
     return AtClientManager.getInstance().atClient;
