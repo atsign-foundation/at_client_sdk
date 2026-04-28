@@ -6,7 +6,7 @@
 
 ## Overview:
 
-The AtLookup Library is the low-level direct implementation of the atProtocol verbs. The AtLookup package is an interface
+The AtLookup Library is the low-level direct implementation of the Atsign Protocol verbs. The AtLookup package is an interface
 to interact with the secondary server to execute commands(scan, update, lookup, llookup, plookup, etc).
 
 ## Get started:
