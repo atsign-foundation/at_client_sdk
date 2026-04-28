@@ -63,7 +63,8 @@ void main() {
       // auth using generated keysFile
       var atAuthResponse = await atAuth.authenticate(AtAuthRequest(
         apkamAtSign,
-        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
+        atKeysIo:
+            FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
       )..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64));
       expect(atAuthResponse.isSuccessful, true);
       expect(atAuthResponse.atAuthKeys, isNotNull);
@@ -107,7 +108,6 @@ void main() {
     test(
         'A test to verify SPP is set and enrollment request is submitted successfully',
         () async {
-      String spp = 'ABC123';
       var fromResponse = await atClientManager.atClient
           .getRemoteSecondary()!
           .executeCommand('from:$atSign\n');
@@ -141,13 +141,13 @@ void main() {
       atClientManager.atClient.getRemoteSecondary()?.atLookUp.enrollmentId =
           enrollResponseJson['enrollmentId'];
       // 4. Assert that SPP is set successfully.
-      AtResponse atResponse = await atClientManager.atClient.setSPP(spp);
-      expect(atResponse.response, 'ok');
+      var otp = (await atClientManager.atClient.getOTP()).response;
+
       // 4.a Close open connection to start an unauthenticated connection.
       atClientManager.atClient.getRemoteSecondary()?.atLookUp.close();
       // 5. Send enrollment request
       enrollRequest =
-          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"otp":"$spp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey", "encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}\n';
+          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"otp":"$otp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey", "encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}\n';
       String? serverResponse = await atClientManager.atClient
           .getRemoteSecondary()
           ?.executeCommand(enrollRequest, auth: false);
@@ -191,17 +191,14 @@ void main() {
     test(
         'A test to verify same OTP used twice results in error response from server',
         () async {
-      AtResponse atResponse = await atClientManager.atClient.getOTP();
-
-      expect(atResponse.response.isNotEmpty, true);
-      var otp = atResponse.response;
+      var otp = (await atClientManager.atClient.getOTP()).response;
       expect(otp.length, 6);
       AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
           atSign: atSign,
           appName: 'buzz',
           deviceName: 'iphone-${Uuid().v4().hashCode}',
           namespaces: {'buzz': 'rw'},
-          otp: otp); //random invalid OTP
+          otp: otp);
       var atEnrollment = AtEnrollment.create();
       var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
       var enrollmentResponse =
@@ -290,8 +287,6 @@ void main() {
       await atClientManager.atClient.getRemoteSecondary()!.executeCommand(
           'update:public:publickey$atSign ${encryptionPublicKeyMap[atSign]}\n',
           auth: true);
-      AtResponse atResponse = await atClientManager.atClient.setSPP('ABC123');
-      expect(atResponse.response, 'ok');
     });
 
     test(
@@ -309,7 +304,7 @@ void main() {
           atSign: atSign,
           appName: 'wavi-$random',
           deviceName: 'iphone',
-          otp: 'ABC123',
+          otp: (await atClientManager.atClient.getOTP()).response,
           namespaces: {'wavi': 'rw'});
       AtEnrollmentResponse? atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
@@ -359,7 +354,8 @@ void main() {
       AtAuth atAuth = AtAuth.create(atChops: atChops);
       AtAuthRequest atAuthRequest = AtAuthRequest(
         atSign,
-        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
+        atKeysIo:
+            FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
       );
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
@@ -413,7 +409,7 @@ void main() {
           atSign: atSign,
           appName: 'wavi-$random',
           deviceName: 'iphone',
-          otp: 'ABC123',
+          otp: (await atClientManager.atClient.getOTP()).response,
           namespaces: {'wavi': 'rw'});
       AtEnrollmentResponse? atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
@@ -455,7 +451,8 @@ void main() {
       AtAuth atAuth = AtAuth.create(atChops: atChops);
       AtAuthRequest atAuthRequest = AtAuthRequest(
         atSign,
-        atKeysIo: FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
+        atKeysIo:
+            FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
       );
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
@@ -488,7 +485,7 @@ void main() {
           atSign: atSign,
           appName: 'wavi-$random',
           deviceName: 'iphone',
-          otp: 'ABC123',
+          otp: (await atClientManager.atClient.getOTP()).response,
           namespaces: {'wavi': 'r'});
       AtEnrollmentResponse? atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
@@ -552,7 +549,8 @@ void main() {
 
       // Authenticate the atSign
       AtAuth atAuth = AtAuth.create(atChops: atChops);
-      AtAuthRequest atAuthRequest = AtAuthRequest(atSign, atKeysIo: FileAtKeysIo());
+      AtAuthRequest atAuthRequest =
+          AtAuthRequest(atSign, atKeysIo: FileAtKeysIo());
       atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
       atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
@@ -625,7 +623,8 @@ void main() {
           .listen((_) {});
       while ((atClientManager.atClient.notificationService
                   as NotificationServiceImpl)
-              .monitor.currentState !=
+              .monitor
+              .currentState !=
           NotificationListenerState.listening) {
         await Future.delayed(Duration(milliseconds: 100));
       }
@@ -641,13 +640,12 @@ void main() {
         received[enId] = enData;
       });
 
-      AtResponse otpResponse = await atClientManager.atClient.getOTP();
       AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.submit(
         AtEnrollmentRequest(
             atSign: atSign,
             appName: 'wavi',
             deviceName: 'device-$random',
-            otp: otpResponse.response,
+            otp: (await atClientManager.atClient.getOTP()).response,
             namespaces: {'wavi': 'rw'}),
         atLookUp,
       );
