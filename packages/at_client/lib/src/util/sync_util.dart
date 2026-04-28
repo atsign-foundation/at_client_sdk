@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -8,6 +6,16 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_utils/at_logger.dart';
 
 /// Class contains all the util methods that perform CRUD operations on the commit log keystore.
+///
+/// Callers must supply the per-atSign [AtCommitLog] either via the
+/// constructor or by setting [atCommitLog] before invoking any
+/// instance method. The historical lazy fallback that reached into
+/// `AtCommitLogManagerImpl.getInstance()` has been removed — that
+/// singleton is being phased out by `at_persistence_secondary_server`,
+/// and AtClient now hands SyncUtil a commit log produced by the
+/// `HiveAtPersistenceFactory` bundle during init. The `atSign`
+/// parameter on each method is retained for backward compatibility
+/// of the call signatures but is no longer used internally.
 class SyncUtil {
   static var logger = AtSignLogger('SyncUtil');
 
@@ -15,51 +23,41 @@ class SyncUtil {
 
   SyncUtil({this.atCommitLog});
 
-  Future<CommitEntry?> getCommitEntry(int sequenceNumber, String atSign) async {
-    atCommitLog ??=
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+  AtCommitLog _requireCommitLog() {
+    final log = atCommitLog;
+    if (log == null) {
+      throw StateError(
+          'SyncUtil.atCommitLog has not been set. Construct SyncUtil with '
+          'an AtCommitLog (e.g. AtClient injects one from its '
+          'AtPersistenceBundle) or assign syncUtil.atCommitLog before '
+          'invoking any method.');
+    }
+    return log;
+  }
 
-    var commitEntry = await atCommitLog?.getEntry(sequenceNumber);
-    return commitEntry;
+  Future<CommitEntry?> getCommitEntry(
+      int sequenceNumber, String atSign) async {
+    return _requireCommitLog().getEntry(sequenceNumber);
   }
 
   Future<void> updateCommitEntry(
       CommitEntry commitEntry, int commitId, String atSign) async {
-    atCommitLog ??=
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
-    await atCommitLog?.update(commitEntry, commitId);
+    await _requireCommitLog().update(commitEntry, commitId);
   }
 
   Future<CommitEntry?> getLastSyncedEntry(String? regex,
       {required String atSign}) async {
-    atCommitLog ??=
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
-
-    CommitEntry? lastEntry;
+    final log = _requireCommitLog();
     if (regex != null) {
-      lastEntry = await atCommitLog?.lastSyncedEntryWithRegex(regex);
-    } else {
-      lastEntry = await atCommitLog?.lastSyncedEntry();
+      return log.lastSyncedEntryWithRegex(regex);
     }
-    return lastEntry;
-  }
-
-  static Future<CommitEntry?> getEntry(int? seqNumber, String atSign) async {
-    var commitLogInstance = await (AtCommitLogManagerImpl.getInstance()
-        .getCommitLog(atSign) as FutureOr<AtCommitLog>);
-    var entry = await commitLogInstance.getEntry(seqNumber);
-    return entry;
+    return log.lastSyncedEntry();
   }
 
   Future<List<CommitEntry>> getChangesSinceLastCommit(
       int? seqNum, String? regex,
       {required String atSign}) async {
-    atCommitLog ??=
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
-    if (atCommitLog == null) {
-      return [];
-    }
-    return (await atCommitLog!.getChanges(seqNum, regex))
+    return (await _requireCommitLog().getChanges(seqNum, regex))
         .where((commitEntry) => !commitEntry.atKey!.startsWith('local:'))
         .toList();
   }
@@ -143,9 +141,7 @@ class SyncUtil {
   }
 
   Future<void> removeCommitEntry(dynamic key, String atSign) async {
-    atCommitLog ??=
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
-    await atCommitLog!.commitLogKeyStore.remove(key);
+    await _requireCommitLog().commitLogKeyStore.remove(key);
   }
 
   /// Sorts the commit entries in descending order.

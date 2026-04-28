@@ -72,7 +72,10 @@ void main() {
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClient.syncService);
 
-    var localEntry = await SyncUtil().getLastSyncedEntry('', atSign: atSign);
+    var localEntry = await SyncUtil(
+            atCommitLog:
+                (atClient as AtClientImpl).persistenceBundle?.commitLog)
+        .getLastSyncedEntry('', atSign: atSign);
     expect(localEntry?.commitId, isNotNull);
 
     var value = 'Some value';
@@ -88,7 +91,9 @@ void main() {
         .syncData(syncSvc: atClient.syncService);
     // Getting server commit id after put
     var localEntryAfterSync =
-        await SyncUtil().getLastSyncedEntry('', atSign: atSign);
+        await SyncUtil(
+                atCommitLog: atClient.persistenceBundle?.commitLog)
+            .getLastSyncedEntry('', atSign: atSign);
 
     // After sync successful, the localCommitId after put should be greater
     // than localCommitId before put
@@ -131,7 +136,10 @@ void main() {
     var serverCommitIdAfterPut = await SyncUtil()
         .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
     var localEntryAfterSync =
-        await SyncUtil().getLastSyncedEntry(namespace, atSign: atSign);
+        await SyncUtil(
+                atCommitLog:
+                    (atClient as AtClientImpl).persistenceBundle?.commitLog)
+            .getLastSyncedEntry(namespace, atSign: atSign);
     // As the regex is set to wavi, .mosphere key should not be synced
     expect(
         (localEntryAfterSync?.atKey!
@@ -200,7 +208,10 @@ void main() {
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClient.syncService);
     var localEntryAfterSync =
-        await SyncUtil().getLastSyncedEntry('', atSign: atSign);
+        await SyncUtil(
+                atCommitLog:
+                    (atClient as AtClientImpl).persistenceBundle?.commitLog)
+            .getLastSyncedEntry('', atSign: atSign);
     expect(localEntryAfterSync!.atKey, isNot('local:localkey.wavi$atSign'));
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = (AtKey()

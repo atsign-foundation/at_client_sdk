@@ -44,7 +44,7 @@ class AtClientImpl implements AtClient {
   /// keystore / commit log / access log / notification keystore that
   /// replaces the historical `*Manager*.getInstance()` singletons.
   /// Null when local storage is disabled.
-  AtPersistenceBundle? _persistenceBundle;
+  AtPersistenceBundle? persistenceBundle;
 
   AtClientPreference? _preference;
 
@@ -282,7 +282,7 @@ class AtClientImpl implements AtClient {
         // (compaction, sync, secondary access) can read keystore /
         // commit log / access log without reaching for the deprecated
         // *.getInstance() singletons.
-        _persistenceBundle = storageManager.bundle;
+        persistenceBundle = storageManager.bundle;
       }
 
       // Prefer the explicitly-injected keystore; otherwise read from
@@ -290,7 +290,7 @@ class AtClientImpl implements AtClient {
       // null keystore would only happen if the keystore was injected
       // already (in which case _localSecondaryKeyStore is non-null).
       localSecondary = LocalSecondary(this,
-          keyStore: _localSecondaryKeyStore ?? _persistenceBundle?.keyStore);
+          keyStore: _localSecondaryKeyStore ?? persistenceBundle?.keyStore);
       _atChops ??= await _createAtChops(_atSign);
     }
 
@@ -376,7 +376,7 @@ class AtClientImpl implements AtClient {
     commitLogCompactionDuration ??= Duration(
         minutes:
             AtClientConfig.getInstance().commitLogCompactionTimeIntervalInMins);
-    final bundle = _persistenceBundle;
+    final bundle = persistenceBundle;
     if (bundle == null) {
       throw StateError(
           'startCompactionJob called before local storage was initialised. '

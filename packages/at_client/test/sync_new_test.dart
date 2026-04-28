@@ -419,9 +419,10 @@ void main() {
       expect(keyStoreGetResult.metaData!.updatedAt!.isBefore(DateTime.now()),
           true);
       // verify the entries in the commit log
-      var commitEntriesResult = await SyncUtil().getChangesSinceLastCommit(
-          putCommitId, 'wavi',
-          atSign: TestResources.atsign);
+      var commitEntriesResult = await SyncUtil(
+              atCommitLog: TestResources.commitLog)
+          .getChangesSinceLastCommit(putCommitId, 'wavi',
+              atSign: TestResources.atsign);
       expect(commitEntriesResult[0].operation, CommitOp.DELETE);
       expect(commitEntriesResult[1].operation, CommitOp.UPDATE);
     });
@@ -597,9 +598,10 @@ void main() {
       expect(keyStoreGetResult.metaData!.updatedAt!.isBefore(DateTime.now()),
           true);
       // verify the entries in the commit log
-      var commitEntriesResult = await SyncUtil().getChangesSinceLastCommit(
-          putCommitId, 'wavi',
-          atSign: TestResources.atsign);
+      var commitEntriesResult = await SyncUtil(
+              atCommitLog: TestResources.commitLog)
+          .getChangesSinceLastCommit(putCommitId, 'wavi',
+              atSign: TestResources.atsign);
       expect(commitEntriesResult[0].operation, CommitOp.DELETE);
       expect(commitEntriesResult[1].operation, CommitOp.UPDATE);
     });
@@ -1435,6 +1437,7 @@ void main() {
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
       //------------------------------preconditions setup-----------------------
       await localSecondary.putValue(
@@ -1489,6 +1492,7 @@ void main() {
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
       //------------------preconditions setup-----------------------
       //create 5 random keys of types public/shared/self
@@ -1648,6 +1652,7 @@ void main() {
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
       //------------------preconditions setup-----------------------
       //create 5 random keys of types public/shared/self
@@ -2113,6 +2118,7 @@ void main() {
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
       var syncResult =
           await syncService.syncInternal(serverCommitId, syncRequest);
@@ -2307,7 +2313,7 @@ void main() {
       /// 1. At the end of sync, the local commit id should be updated to 3
       await TestResources.setupLocalStorage(TestResources.atsign);
 
-      SyncUtil syncUtil = SyncUtil();
+      SyncUtil syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
@@ -2350,6 +2356,7 @@ void main() {
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
       // The serverCommitId is 3
       await syncService.syncInternal(3, SyncRequest()..result = SyncResult());

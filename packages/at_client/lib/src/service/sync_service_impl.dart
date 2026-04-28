@@ -112,6 +112,14 @@ class SyncServiceImpl implements SyncService {
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
         atChops: atClient.atChops, enrollmentId: atClient.enrollmentId);
     final syncService = SyncServiceImpl._(atClient, remoteSecondary);
+    // Pre-populate SyncUtil with the per-atSign AtCommitLog so its
+    // lazy-init fallback (which reaches for the deprecated
+    // AtCommitLogManagerImpl.getInstance() singleton) never fires.
+    // The bundle is produced by StorageManager during AtClient init.
+    if (atClient is AtClientImpl) {
+      syncService.syncUtil.atCommitLog =
+          atClient.persistenceBundle?.commitLog;
+    }
     await syncService.statsServiceListener();
     syncService._startPeriodicSyncTimer();
     // Note: no startup bootstrap is enqueued here. The original cron
