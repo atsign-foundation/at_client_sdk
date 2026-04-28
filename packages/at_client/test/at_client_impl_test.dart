@@ -370,10 +370,12 @@ void main() {
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', pref,
           remoteSecondary: mockRemoteSecondary);
 
-      when(() => mockRemoteSecondary.executeCommand('otp:put:ABC123\n',
+      when(() => mockRemoteSecondary.executeCommand(
+          any(that: startsWith('otp:put:ABC123')),
           auth: true)).thenAnswer((_) async => await Future.value('data:ok'));
 
-      AtResponse atResponse = await atClient.setSPP('ABC123');
+      AtResponse atResponse =
+          await atClient.setSPP('ABC123', expiry: AtClient.defaultSppExpiry);
       expect(atResponse.response, 'ok');
     });
     tearDown(() async {
