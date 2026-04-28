@@ -41,31 +41,30 @@ void main() {
           currentAtSign, namespace, 'pkam',
           enableInitialSync: false);
       // Set SPP into the Remote Secondary
-      var atResponse =
-          await AtClientManager.getInstance().atClient.setSPP('ABC123');
-      expect(atResponse.response, 'ok');
+      var atClient = AtClientManager.getInstance().atClient;
+      var otp = (await atClient.getOTP()).response;
 
       // Submit an enrollment request with at_auth package
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
       int random = Uuid().v4().hashCode;
       AtLookUp atLookUp = AtLookupImpl(
           currentAtSign,
-          AtClientManager.getInstance().atClient.getPreferences()!.rootDomain,
-          AtClientManager.getInstance().atClient.getPreferences()!.rootPort);
+          atClient.getPreferences()!.rootDomain,
+          atClient.getPreferences()!.rootPort);
 
+      // Do an enrollment with access to the __config namespace
       AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
           atSign: currentAtSign,
           appName: 'wavi-$random',
           deviceName: 'iphone',
-          otp: 'ABC123',
-          namespaces: {TestConstants.namespace: 'rw'});
+          otp: otp,
+          namespaces: {TestConstants.namespace: 'rw', '__config': 'rw'});
       AtEnrollmentResponse? atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
 
       // Use enroll fetch to get the encryptedAPKAMSymmetricKey
-      String? enrollmentFetchResponse = await AtClientManager.getInstance()
-          .atClient
+      String? enrollmentFetchResponse = await atClient
           .getRemoteSecondary()
           ?.executeCommand(
               'enroll:fetch:{"enrollmentId":"${atEnrollmentResponse.enrollmentId}"}\n',
@@ -77,16 +76,13 @@ void main() {
 
       // Approve enrollment
       AtEnrollmentResponse? approveEnrollmentResponse =
-          await AtClientManager.getInstance()
-              .atClient
-              .enrollmentService
-              ?.approve(
-                EnrollmentRequestDecision.approved(
-                    enrollmentId: atEnrollmentResponse.enrollmentId,
-                    apkamSymmetricKey: AtBytes.fromString(
-                        enrollment.encryptedAPKAMSymmetricKey!),
-                    atSign: currentAtSign),
-              );
+          await atClient.enrollmentService?.approve(
+        EnrollmentRequestDecision.approved(
+            enrollmentId: atEnrollmentResponse.enrollmentId,
+            apkamSymmetricKey:
+                AtBytes.fromString(enrollment.encryptedAPKAMSymmetricKey!),
+            atSign: currentAtSign),
+      );
       expect(
           approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.approved);
 
@@ -139,8 +135,8 @@ void main() {
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
           AtBytes.fromString(atChops.atChopsKeys.selfEncryptionKey!.key);
       atAuthRequest.rootDomain = AtRootDomain(
-          AtClientManager.getInstance().atClient.getPreferences()!.rootDomain,
-          AtClientManager.getInstance().atClient.getPreferences()!.rootPort);
+          atClient.getPreferences()!.rootDomain,
+          atClient.getPreferences()!.rootPort);
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);

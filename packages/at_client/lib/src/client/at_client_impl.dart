@@ -1091,7 +1091,12 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<AtResponse> setSPP(String spp) async {
+  Future<AtResponse> setSPP(String spp, {Duration? expiry}) async {
+    if (expiry == null) {
+      _logger.shout('WARNING: Setting SPP without an expiration'
+          '- defaulting to ${AtClient.defaultSppExpiry}');
+      expiry = AtClient.defaultSppExpiry;
+    }
     // SPP should be 6 characters PIN. Throw exception if its less
     // or more than 6 characters
     if (spp.length != 6) {
@@ -1106,8 +1111,9 @@ class AtClientImpl implements AtClient {
     }
     String? otpVerbResponse;
     try {
-      otpVerbResponse =
-          await _remoteSecondary?.executeCommand('otp:put:$spp\n', auth: true);
+      otpVerbResponse = await _remoteSecondary?.executeCommand(
+          'otp:put:$spp:ttl:${expiry.inMilliseconds}\n',
+          auth: true);
     } on AtLookUpException catch (e) {
       throw AtClientException(e.errorCode, e.errorMessage);
     } on AtException catch (e) {
