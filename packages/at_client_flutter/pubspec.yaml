@@ -6,7 +6,7 @@ homepage: https://atsign.com
 documentation: https://docs.atsign.com/
 
 environment:
-  sdk: ^3.6.0
+  sdk: ^3.11.0
 resolution: workspace
 
 dependencies:

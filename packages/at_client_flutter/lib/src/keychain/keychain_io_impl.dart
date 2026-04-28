@@ -10,14 +10,15 @@ import 'keychain_storage.dart';
 class KeychainAtKeysIo extends WrittenAtKeysIo {
   KeychainStorage keychainStorage;
   KeychainAtKeysIo({KeychainStorage? keychainStorage})
-      : keychainStorage = keychainStorage ?? KeychainStorage();
+    : keychainStorage = keychainStorage ?? KeychainStorage();
 
   @override
   Future<AtKeys> read(String atSign) async {
     final AtKeys? atsignKey = await keychainStorage.getAtsign(atSign);
     if (atsignKey == null) {
       throw AtKeyException(
-          'AtsignKey not found in keychain for atSign: $atSign');
+        'AtsignKey not found in keychain for atSign: $atSign',
+      );
     }
     return atsignKey;
   }

@@ -78,15 +78,17 @@ class CramDialog extends StatelessWidget {
     });
     return AlertDialog(
       title: Text("Onboarding"),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        StreamBuilder(
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          StreamBuilder(
             stream: _authService.progressStream,
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
                 return LoadingDialog(
-                    title: title ?? "Onboarding Atsign via cram",
-                    description:
-                        description ?? "Authenticating, please wait...");
+                  title: title ?? "Onboarding Atsign via cram",
+                  description: description ?? "Authenticating, please wait...",
+                );
               }
               final progress = snapshot.data as ProgressEvent;
               if (progressBuilder == null) {
@@ -94,8 +96,10 @@ class CramDialog extends StatelessWidget {
               } else {
                 return progressBuilder!(progress);
               }
-            })
-      ]),
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -111,8 +115,9 @@ class CramDialog extends StatelessWidget {
 
 class ActivateRegex {
   // CRAM authentication: <atsign>:cram:<secret>
-  static final cram =
-      RegExp(r'^(?<atsign>[^:]+):activation_key:(?<secret>.+)$');
+  static final cram = RegExp(
+    r'^(?<atsign>[^:]+):activation_key:(?<secret>.+)$',
+  );
 
   // Enrollment: <atsign>:enroll:otp:<otp>[:name:<device>]
   static final enroll = RegExp(

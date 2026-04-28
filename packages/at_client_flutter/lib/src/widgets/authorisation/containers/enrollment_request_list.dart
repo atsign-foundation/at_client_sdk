@@ -41,34 +41,36 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
 
     try {
       _subscription = _service
-          .getEnrollments(statusFilters: [EnrollmentStatus.pending]).listen(
-        (request) {
-          if (mounted) {
-            setState(() {
-              if (!_requests
-                  .any((r) => r.enrollmentId == request.enrollmentId)) {
-                _requests.add(request);
+          .getEnrollments(statusFilters: [EnrollmentStatus.pending])
+          .listen(
+            (request) {
+              if (mounted) {
+                setState(() {
+                  if (!_requests.any(
+                    (r) => r.enrollmentId == request.enrollmentId,
+                  )) {
+                    _requests.add(request);
+                  }
+                });
               }
-            });
-          }
-        },
-        onError: (e) {
-          if (mounted) {
-            setState(() {
-              _error = 'Connection lost: $e';
-            });
-          }
-          debugPrint('Error in enrollment stream: $e');
-        },
-      );
+            },
+            onError: (e) {
+              if (mounted) {
+                setState(() {
+                  _error = 'Connection lost: $e';
+                });
+              }
+              debugPrint('Error in enrollment stream: $e');
+            },
+          );
 
       // Initial fetch of pending requests
-      final atLookUp =
-          AtClientManager.getInstance().atClient.getRemoteSecondary()!.atLookUp;
-      final initialRequests = await _service.list(
-        [EnrollmentStatus.pending],
-        atLookUp,
-      );
+      final atLookUp = AtClientManager.getInstance().atClient
+          .getRemoteSecondary()!
+          .atLookUp;
+      final initialRequests = await _service.list([
+        EnrollmentStatus.pending,
+      ], atLookUp);
 
       if (mounted) {
         setState(() {
@@ -93,13 +95,15 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   Future<void> _handleApprove(ServerEnrollmentRequest request) async {
     try {
       final atSign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
-      final atLookUp =
-          AtClientManager.getInstance().atClient.getRemoteSecondary()!.atLookUp;
+      final atLookUp = AtClientManager.getInstance().atClient
+          .getRemoteSecondary()!
+          .atLookUp;
       await _service.approve(
         EnrollmentRequestDecision.approved(
           enrollmentId: request.enrollmentId,
-          apkamSymmetricKey:
-              AtBytes.fromString(request.encryptedAPKAMSymmetricKey!),
+          apkamSymmetricKey: AtBytes.fromString(
+            request.encryptedAPKAMSymmetricKey!,
+          ),
           atSign: atSign,
         ),
         atLookUp,
@@ -118,9 +122,9 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
           errorMessage =
               'This keysFile/enrollment cannot approve this enrollment as it is not authorized to.';
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMessage)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(errorMessage)));
       }
     }
   }
@@ -128,8 +132,9 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   Future<void> _handleDeny(ServerEnrollmentRequest request) async {
     try {
       final atSign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
-      final atLookUp =
-          AtClientManager.getInstance().atClient.getRemoteSecondary()!.atLookUp;
+      final atLookUp = AtClientManager.getInstance().atClient
+          .getRemoteSecondary()!
+          .atLookUp;
       await _service.deny(
         EnrollmentRequestDecision.denied(request.enrollmentId, atSign),
         atLookUp,
@@ -148,15 +153,17 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
           errorMessage =
               'This keysFile/enrollment cannot deny this enrollment as it is not authorized to.';
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMessage)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(errorMessage)));
       }
     }
   }
 
   void _showFeedbackOverlay(
-      ServerEnrollmentRequest request, EnrollmentStatus status) {
+    ServerEnrollmentRequest request,
+    EnrollmentStatus status,
+  ) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       late final OverlayEntry overlayEntry;
@@ -222,15 +229,14 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
     }
 
     if (_requests.isEmpty) {
-      return const Center(
-        child: Text('No pending enrollment requests'),
-      );
+      return const Center(child: Text('No pending enrollment requests'));
     }
 
     return ListView.builder(
       shrinkWrap: widget.useShrinkWrap,
-      physics:
-          widget.useShrinkWrap ? const NeverScrollableScrollPhysics() : null,
+      physics: widget.useShrinkWrap
+          ? const NeverScrollableScrollPhysics()
+          : null,
       itemCount: _requests.length,
       itemBuilder: (context, index) {
         final request = _requests[index];

@@ -7,11 +7,7 @@ import 'package:flutter/material.dart';
 /// {@endtemplate}
 class TipCard extends StatelessWidget {
   /// {@macro tip_card}
-  const TipCard({
-    required this.tip,
-    this.onTap,
-    super.key,
-  });
+  const TipCard({required this.tip, this.onTap, super.key});
 
   /// The text of the tip to display.
   final String tip;
@@ -39,9 +35,9 @@ class TipCard extends StatelessWidget {
               Text(
                 'Tip',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -50,8 +46,8 @@ class TipCard extends StatelessWidget {
                   child: Text(
                     tip,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
                 ),
               ),

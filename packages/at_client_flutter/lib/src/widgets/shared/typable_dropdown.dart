@@ -80,7 +80,8 @@ class TypableDropdown extends StatelessWidget {
         return TextField(
           controller: controller,
           focusNode: focusNode,
-          decoration: decoration ??
+          decoration:
+              decoration ??
               InputDecoration(
                 hintText: hintText ?? 'Type to search...',
                 hintStyle: TextStyle(fontSize: 12),
