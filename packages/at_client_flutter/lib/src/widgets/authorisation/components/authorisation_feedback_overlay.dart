@@ -67,11 +67,7 @@ class AuthorisationFeedbackOverlay extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 16),
-              Icon(
-                icon,
-                size: 32,
-                color: color,
-              ),
+              Icon(icon, size: 32, color: color),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -81,16 +77,16 @@ class AuthorisationFeedbackOverlay extends StatelessWidget {
                     Text.rich(
                       TextSpan(
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                          fontWeight: FontWeight.bold,
+                        ),
                         text: request.appName,
                         children: [
                           TextSpan(
                             text: ' | ',
                             style: TextStyle(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
                               fontWeight: FontWeight.normal,
                             ),
                           ),
@@ -106,18 +102,15 @@ class AuthorisationFeedbackOverlay extends StatelessWidget {
                     ),
                     Text(
                       statusText,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: color,
-                          ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyLarge?.copyWith(color: color),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 32),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: onTap,
-              ),
+              IconButton(icon: const Icon(Icons.close), onPressed: onTap),
             ],
           ),
         ),

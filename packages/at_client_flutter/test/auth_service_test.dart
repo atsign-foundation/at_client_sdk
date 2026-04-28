@@ -25,39 +25,40 @@ void main() {
   late MockFileAtKeysIo mockFileAtKeysIo;
   late AtKeys fakeAtKeys;
   Map<String, AtKeys> atKeysList = {};
-  setUp(
-    () {
-      mockAtAuth = MockAtAuth();
-      mockKeychainAtKeysIo = MockKeychainAtKeysIo();
-      mockFileAtKeysIo = MockFileAtKeysIo();
-      registerFallbackValue(FakeAtAuthRequest());
-      registerFallbackValue(MockFileAtKeysIo());
-      registerFallbackValue(FakeAtKeys());
-      registerFallbackValue(FakeAtOnboardingRequest());
+  setUp(() {
+    mockAtAuth = MockAtAuth();
+    mockKeychainAtKeysIo = MockKeychainAtKeysIo();
+    mockFileAtKeysIo = MockFileAtKeysIo();
+    registerFallbackValue(FakeAtAuthRequest());
+    registerFallbackValue(MockFileAtKeysIo());
+    registerFallbackValue(FakeAtKeys());
+    registerFallbackValue(FakeAtOnboardingRequest());
 
-      fakeAtKeys = AtKeys()
-        ..apkamPrivateKey = AtBytes.fromString('dummykey')
-        ..apkamPublicKey = AtBytes.fromString('dummykey')
-        ..defaultEncryptionPrivateKey = AtBytes.fromString('dummykey')
-        ..defaultEncryptionPublicKey = AtBytes.fromString('dummykey')
-        ..defaultSelfEncryptionKey = AtBytes.fromString('dummykey')
-        ..metadata = {'atsign': '@alice'};
+    fakeAtKeys = AtKeys()
+      ..apkamPrivateKey = AtBytes.fromString('dummykey')
+      ..apkamPublicKey = AtBytes.fromString('dummykey')
+      ..defaultEncryptionPrivateKey = AtBytes.fromString('dummykey')
+      ..defaultEncryptionPublicKey = AtBytes.fromString('dummykey')
+      ..defaultSelfEncryptionKey = AtBytes.fromString('dummykey')
+      ..metadata = {'atsign': '@alice'};
 
-      when(() => mockKeychainAtKeysIo.write(any(), any())).thenAnswer(
-          (args) async => atKeysList[args.positionalArguments[0]] = fakeAtKeys);
-      when(() => mockKeychainAtKeysIo.read(any())).thenAnswer((atSign) async {
-        return fakeAtKeys;
-      });
-    },
-  );
+    when(() => mockKeychainAtKeysIo.write(any(), any())).thenAnswer(
+      (args) async => atKeysList[args.positionalArguments[0]] = fakeAtKeys,
+    );
+    when(() => mockKeychainAtKeysIo.read(any())).thenAnswer((atSign) async {
+      return fakeAtKeys;
+    });
+  });
   group('AuthService', () {
     test('assert authenticate() saves keys to keychain', () async {
-      when(() => mockAtAuth.authenticate(any()))
-          .thenAnswer((_) async => AtAuthResponse('@alice')
-            ..isSuccessful = true
-            ..atAuthKeys = fakeAtKeys);
-      when(() => mockFileAtKeysIo.read(any()))
-          .thenAnswer((_) async => fakeAtKeys);
+      when(() => mockAtAuth.authenticate(any())).thenAnswer(
+        (_) async => AtAuthResponse('@alice')
+          ..isSuccessful = true
+          ..atAuthKeys = fakeAtKeys,
+      );
+      when(
+        () => mockFileAtKeysIo.read(any()),
+      ).thenAnswer((_) async => fakeAtKeys);
       AuthService authService = AuthService(atAuth: mockAtAuth);
       AtAuthRequest atAuthRequest = AtAuthRequest(
         "@alice",
@@ -74,19 +75,23 @@ void main() {
     });
 
     test('assert onboard()', () {
-      when(() => mockAtAuth.onboard(any(), any()))
-          .thenAnswer((_) async => AtOnboardingResponse('@alice')
-            ..isSuccessful = true
-            ..atAuthKeys = fakeAtKeys);
+      when(() => mockAtAuth.onboard(any(), any())).thenAnswer(
+        (_) async => AtOnboardingResponse('@alice')
+          ..isSuccessful = true
+          ..atAuthKeys = fakeAtKeys,
+      );
       AuthService authService = AuthService(atAuth: mockAtAuth);
-      AtOnboardingRequest atOnboardingRequest =
-          AtOnboardingRequest("@alice", atKeysIo: mockFileAtKeysIo);
+      AtOnboardingRequest atOnboardingRequest = AtOnboardingRequest(
+        "@alice",
+        atKeysIo: mockFileAtKeysIo,
+      );
 
       //regardless of atKeysIo used in AtOnboardingRequest, keys should be saved to keychain
       expect(
-          () async =>
-              await authService.onboard(atOnboardingRequest, 'cramSecret'),
-          returnsNormally);
+        () async =>
+            await authService.onboard(atOnboardingRequest, 'cramSecret'),
+        returnsNormally,
+      );
     });
   });
 }
