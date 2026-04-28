@@ -12,7 +12,7 @@ linter:
     unnecessary_string_interpolations : true
     await_only_futures : true
     unawaited_futures: true
-#    depend_on_referenced_packages : false
+#     depend_on_referenced_packages : false
 
 #analyzer:
 #   exclude:

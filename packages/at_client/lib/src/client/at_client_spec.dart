@@ -553,6 +553,8 @@ abstract class AtClient {
       Function streamCompletionCallBack,
       Function streamReceiveCallBack);
 
+  static const defaultSppExpiry = Duration(minutes: 5);
+
   /// Sets a Semi Permanent Passcode(SPP) in the secondary server key-store.
   /// A Semi Permanent Passcode (SPP) is 6 character alpha-numeric for submitting
   /// an enrollment request. Only the connections which have access to manage
@@ -570,7 +572,7 @@ abstract class AtClient {
   /// ```dart
   /// AtResponse sppResponse = await atClient.setSPP(ABC123);
   /// ```
-  Future<AtResponse> setSPP(String otp);
+  Future<AtResponse> setSPP(String otp, {Duration? expiry});
 
   /// Returns an OTP (One-Time Password) from the secondary server.
   ///
