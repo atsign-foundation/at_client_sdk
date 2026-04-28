@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
@@ -673,41 +672,4 @@ AtClientPreference getClient2Preferences() {
     ..commitLogPath = 'test/hive/client_2/commit'
     ..hiveStoragePath = 'test/hive/client_2'
     ..rootDomain = 'vip.ve.atsign.zone';
-}
-
-Future<void> _generateAtKeysFile(String atSign, String? currentEnrollmentId,
-    AtKeys atAuthKeys, String keysFilePath) async {
-  final atKeysMap = <String, String>{
-    'aesPkamPublicKey': EncryptionUtil.encryptValue(
-        atAuthKeys.apkamPublicKey!.toString(),
-        atAuthKeys.defaultSelfEncryptionKey!.toString()),
-    'aesPkamPrivateKey': EncryptionUtil.encryptValue(
-        atAuthKeys.apkamPrivateKey!.toString(),
-        atAuthKeys.defaultSelfEncryptionKey!.toString()),
-    'aesEncryptPublicKey': EncryptionUtil.encryptValue(
-        atAuthKeys.defaultEncryptionPublicKey!.toString(),
-        atAuthKeys.defaultSelfEncryptionKey!.toString()),
-    'aesEncryptPrivateKey': EncryptionUtil.encryptValue(
-        atAuthKeys.defaultEncryptionPrivateKey!.toString(),
-        atAuthKeys.defaultSelfEncryptionKey!.toString()),
-    'selfEncryptionKey': atAuthKeys.defaultSelfEncryptionKey!.toString(),
-    atSign: atAuthKeys.defaultSelfEncryptionKey!.toString(),
-    'apkamSymmetricKey': atAuthKeys.apkamSymmetricKey!.toString()
-  };
-
-  if (currentEnrollmentId != null) {
-    atKeysMap['enrollmentId'] = currentEnrollmentId;
-  }
-
-  File atKeysFile = File(keysFilePath);
-
-  if (!atKeysFile.existsSync()) {
-    atKeysFile.createSync(recursive: true);
-  }
-  IOSink fileWriter = atKeysFile.openWrite();
-
-  //generating .atKeys file at path provided in onboardingConfig
-  fileWriter.write(jsonEncode(atKeysMap));
-  await fileWriter.flush();
-  await fileWriter.close();
 }

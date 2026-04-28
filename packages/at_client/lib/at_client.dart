@@ -1,9 +1,5 @@
 import 'package:meta/meta.dart';
 
-export 'package:at_client/src/at_collection/collections.dart';
-export 'package:at_client/src/at_collection/at_collection_model.dart';
-export 'package:at_client/src/at_collection/at_json_collection_model.dart';
-export 'package:at_client/src/at_collection/at_collection_model_factory.dart';
 export 'package:at_client/src/client/at_client_impl.dart';
 export 'package:at_client/src/client/at_client_spec.dart';
 export 'package:at_client/src/client/local_secondary.dart';
@@ -26,3 +22,15 @@ export 'package:at_client/src/util/at_client_util.dart';
 export 'package:at_client/src/util/encryption_util.dart';
 export 'package:at_client/src/util/enroll_list_request_param.dart';
 export 'package:at_commons/at_commons.dart';
+
+export 'package:at_client/src/collections/collections.dart';
+
+// The following have been deprecated and will be removed in next major version
+@Deprecated("Use AtClient.collection for collection-style operations")
+export 'package:at_client/src/at_collection/collections.dart';
+@Deprecated("Use AtClient.collection for collection-style operations")
+export 'package:at_client/src/at_collection/at_collection_model.dart';
+@Deprecated("Use AtClient.collection for collection-style operations")
+export 'package:at_client/src/at_collection/at_json_collection_model.dart';
+@Deprecated("Use AtClient.collection for collection-style operations")
+export 'package:at_client/src/at_collection/at_collection_model_factory.dart';

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
@@ -55,6 +56,7 @@ class Monitor {
   late AtClientPreference atClientPreference;
 
   OutboundConnection? _monitorConnection;
+  StreamSubscription<Uint8List>? _monitorSocketSubscription;
   Completer? _connectionDoneCompleter;
 
   final DefaultResponseParser _defaultResponseParser = DefaultResponseParser();
@@ -228,7 +230,7 @@ class Monitor {
         logger.finer('Connection created');
         runZonedGuarded(() {
           logger.finer('Calling listen');
-          _monitorConnection!.getSocket().listen(
+          _monitorSocketSubscription = _monitorConnection!.getSocket().listen(
             onSocketDataReceipt,
             onDone: () {
               if (_connectionDoneCompleter != null &&
@@ -439,12 +441,12 @@ class Monitor {
     }
   }
 
-  void handleAtServerResponse(String response) {
+  Future<void> handleAtServerResponse(String response) async {
     try {
       logger.finer('received response on monitor: $response');
       if (response.toString().startsWith('notification:')) {
         lastReceipt = DateTime.now().toUtc();
-        handleNotification(response);
+        await handleNotification(response);
       } else {
         if (requestCompleter != null && !requestCompleter!.isCompleted) {
           requestCompleter!.complete(_defaultResponseParser.parse(response));
@@ -463,37 +465,42 @@ class Monitor {
   /// Closes the inbound connection in case of any error.
   /// Throw a [BufferOverFlowException] if buffer is unable to hold incoming data
   @visibleForTesting
-  void onSocketDataReceipt(dynamic data) {
-    // check buffer overflow
-    _checkBufferOverFlow(data);
+  Future<void> onSocketDataReceipt(dynamic data) async {
+    _monitorSocketSubscription?.pause();
+    try {
+      // check buffer overflow
+      _checkBufferOverFlow(data);
 
-    // Loop from last index to until the end of data.
-    // If a new line character is found, then it is end
-    // of server response. process the data.
-    // Else add the byte to buffer.
-    for (int element = 0; element < data.length; element++) {
-      // If it's a '\n' then complete data has been received. process it.
-      if (data[element] == newLineCodeUnit) {
-        String result = '';
-        String doing = '';
-        try {
-          doing = '_messageHandler:utf8.decode data';
-          result = utf8.decode(_buffer.getData().toList());
+      // Loop from last index to until the end of data.
+      // If a new line character is found, then it is end
+      // of server response. process the data.
+      // Else add the byte to buffer.
+      for (int element = 0; element < data.length; element++) {
+        // If it's a '\n' then complete data has been received. process it.
+        if (data[element] == newLineCodeUnit) {
+          String result = '';
+          String doing = '';
+          try {
+            doing = '_messageHandler:utf8.decode data';
+            result = utf8.decode(_buffer.getData().toList());
 
-          doing = '_messageHandler:_stripPrompt';
-          result = _stripPrompt(result);
-          logger.finer('RECEIVED $result');
+            doing = '_messageHandler:_stripPrompt';
+            result = _stripPrompt(result);
+            logger.finer('RECEIVED $result');
 
-          doing = '_messageHandler:_handleResponse';
-          handleAtServerResponse(result);
-        } catch (e) {
-          logger.shout('$e from $doing while handling $result');
-        } finally {
-          _buffer.clear();
+            doing = '_messageHandler:_handleResponse';
+            await handleAtServerResponse(result);
+          } catch (e) {
+            logger.shout('$e from $doing while handling $result');
+          } finally {
+            _buffer.clear();
+          }
+        } else {
+          _buffer.addByte(data[element]);
         }
-      } else {
-        _buffer.addByte(data[element]);
       }
+    } finally {
+      _monitorSocketSubscription?.resume();
     }
   }
 
