@@ -25,7 +25,7 @@ class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {}
 
 class MockLocalSecondary extends Mock implements LocalSecondary {
   @override
-  SecondaryKeyStore? keyStore = MockSecondaryKeyStore();
+  SecondaryKeyStore keyStore = MockSecondaryKeyStore();
 }
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}

@@ -18,19 +18,13 @@ class LocalSecondary implements Secondary {
   late final AtSignLogger _logger;
 
   /// Local keystore used to store data for the current atSign.
-  SecondaryKeyStore? keyStore;
+  /// Required at construction time — the caller (typically
+  /// [AtClientImpl] reading from its [AtPersistenceBundle]) must
+  /// supply it.
+  SecondaryKeyStore keyStore;
 
-  LocalSecondary(this._atClient, {this.keyStore}) {
+  LocalSecondary(this._atClient, {required this.keyStore}) {
     _logger = AtSignLogger('LocalSecondary (${_atClient.getCurrentAtSign()})');
-    // The keystore is now expected to be supplied by the caller —
-    // typically AtClientImpl reads it off the AtPersistenceBundle
-    // produced by StorageManager. The legacy fallback through
-    // `SecondaryPersistenceStoreFactory.getInstance()` is retained
-    // only for callers that haven't migrated yet; it relies on the
-    // factory's Phase 1 routing through the same singletons.
-    keyStore ??= SecondaryPersistenceStoreFactory.getInstance()
-        .getSecondaryPersistenceStore(_atClient.getCurrentAtSign())!
-        .getSecondaryKeyStore();
   }
 
   // temporarily cache enrollmentDetails until we store in local secondary
@@ -84,7 +78,7 @@ class LocalSecondary implements Secondary {
             builder.atKey.metadata,
             _atClient.getCurrentAtSign()!,
           );
-          updateResult = await keyStore!.putMeta(updateKey, atMetadata);
+          updateResult = await keyStore.putMeta(updateKey, atMetadata);
           break;
         default:
           var atData = AtData();
@@ -93,7 +87,7 @@ class LocalSecondary implements Secondary {
             builder.atKey.metadata,
             _atClient.getCurrentAtSign()!,
           );
-          updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
+          updateResult = await keyStore.putAll(updateKey, atData, atMetadata);
           break;
       }
       // If we've already sent to remote atServer, update the commit log so we
@@ -113,11 +107,11 @@ class LocalSecondary implements Secondary {
         throw UnAuthorizedException(
             'Cannot perform llookup on $llookupKey due to insufficient privilege');
       }
-      var llookupMeta = await keyStore!.getMeta(llookupKey);
+      var llookupMeta = await keyStore.getMeta(llookupKey);
       var isActive = _isActiveKey(llookupMeta);
       String? result;
       if (isActive) {
-        var llookupResult = await keyStore!.get(llookupKey);
+        var llookupResult = await keyStore.get(llookupKey);
         result = _prepareResponseData(builder.operation, llookupResult);
       }
       return 'data:$result';
@@ -138,7 +132,7 @@ class LocalSecondary implements Secondary {
           'Cannot perform delete on $deleteKey due to insufficient privilege');
     }
     try {
-      var deleteResult = await keyStore!.remove(deleteKey);
+      var deleteResult = await keyStore.remove(deleteKey);
       return 'data:$deleteResult';
     } on DataStoreException catch (e) {
       _logger.severe('exception in delete:${e.toString()}');
@@ -157,7 +151,7 @@ class LocalSecondary implements Secondary {
             .executeCommand(command, auth: true);
       }
       List<String?> keys;
-      keys = keyStore!.getKeys(regex: builder.regex) as List<String?>;
+      keys = keyStore.getKeys(regex: builder.regex) as List<String?>;
       // Gets keys shared to sharedWith atSign.
       if (builder.sharedWith != null) {
         keys.retainWhere(
@@ -247,14 +241,14 @@ class LocalSecondary implements Secondary {
   /// get it from atChops if we have it, otherwise try the keystore
   Future<String?> getPkamPrivateKey() async {
     String? v = atChopsKeys?.atPkamKeyPair?.atPrivateKey.privateKey;
-    v ??= (await keyStore!.get(AtConstants.atPkamPrivateKey))?.data;
+    v ??= (await keyStore.get(AtConstants.atPkamPrivateKey))?.data;
     return v;
   }
 
   /// get it from atChops if we have it, otherwise try the keystore
   Future<String?> getEncryptionPrivateKey() async {
     String? v = atChopsKeys?.atEncryptionKeyPair?.atPrivateKey.privateKey;
-    v ??= (await keyStore!.get(AtConstants.atEncryptionPrivateKey))?.data;
+    v ??= (await keyStore.get(AtConstants.atEncryptionPrivateKey))?.data;
     return v;
   }
 
@@ -264,7 +258,7 @@ class LocalSecondary implements Secondary {
   /// get it from atChops if we have it, otherwise try the keystore
   Future<String?> getPkamPublicKey() async {
     String? v = atChopsKeys?.atPkamKeyPair?.atPublicKey.publicKey;
-    v ??= (await keyStore!.get(AtConstants.atPkamPublicKey))?.data;
+    v ??= (await keyStore.get(AtConstants.atPkamPublicKey))?.data;
     return v;
   }
 
@@ -272,7 +266,7 @@ class LocalSecondary implements Secondary {
   Future<String?> getEncryptionPublicKey(String atSign) async {
     atSign = AtUtils.fixAtSign(atSign);
     String? v = atChopsKeys?.atEncryptionKeyPair?.atPublicKey.publicKey;
-    v ??= (await keyStore!.get('${AtConstants.atEncryptionPublicKey}$atSign'))
+    v ??= (await keyStore.get('${AtConstants.atEncryptionPublicKey}$atSign'))
         ?.data;
 
     return v;
@@ -281,7 +275,7 @@ class LocalSecondary implements Secondary {
   /// get it from atChops if we have it, otherwise try the keystore
   Future<String?> getEncryptionSelfKey() async {
     String? v = atChopsKeys?.selfEncryptionKey?.key;
-    v ??= (await keyStore!.get(AtConstants.atEncryptionSelfKey))?.data;
+    v ??= (await keyStore.get(AtConstants.atEncryptionSelfKey))?.data;
     return v;
   }
 
@@ -289,7 +283,7 @@ class LocalSecondary implements Secondary {
   Future<bool> putValue(String key, String value) async {
     dynamic isStored;
     var atData = AtData()..data = value;
-    isStored = await keyStore!.put(key, atData);
+    isStored = await keyStore.put(key, atData);
     return isStored != null ? true : false;
   }
 
@@ -346,7 +340,7 @@ class LocalSecondary implements Secondary {
     // Fetch enrollment information from local secondary
     AtData? enrollmentInfoFromLocalSecondary;
     try {
-      enrollmentInfoFromLocalSecondary = await keyStore?.get(
+      enrollmentInfoFromLocalSecondary = await keyStore.get(
           'local:${_atClient.enrollmentId}${_atClient.getCurrentAtSign()}');
     } on Exception {
       _logger.finer(
@@ -384,7 +378,7 @@ class LocalSecondary implements Secondary {
       AtData atData = AtData()..data = jsonEncode(enrollment);
       // The enrollment data is fetch from server, Set skipCommit to true to prevent
       // the key sync back to server
-      await keyStore?.put(
+      await keyStore.put(
           '${_atClient.enrollmentId}.new.enrollments.__manage${_atClient.getCurrentAtSign()}',
           atData,
           skipCommit: true);

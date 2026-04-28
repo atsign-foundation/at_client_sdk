@@ -113,7 +113,7 @@ class NotificationServiceImpl extends NotificationService {
     AtValue? atValue;
     if (atClient
         .getLocalSecondary()!
-        .keyStore!
+        .keyStore
         .isKeyExists(lastReceivedNotificationAtKey.toString())) {
       atValue = await atClient.get(lastReceivedNotificationAtKey);
     }
@@ -125,7 +125,7 @@ class NotificationServiceImpl extends NotificationService {
       var atKey = AtKey.fromString(lastNotificationKeyStr);
       if (atClient
           .getLocalSecondary()!
-          .keyStore!
+          .keyStore
           .isKeyExists(lastNotificationKeyStr)) {
         try {
           atValue = await atClient.get(atKey);

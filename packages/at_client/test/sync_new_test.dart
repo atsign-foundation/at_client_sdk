@@ -36,7 +36,7 @@ class MockSyncUtil extends Mock implements SyncUtil {}
 
 class MockLocalSecondary extends Mock implements LocalSecondary {
   @override
-  SecondaryKeyStore? keyStore = MockSecondaryKeyStore();
+  SecondaryKeyStore keyStore = MockSecondaryKeyStore();
 }
 
 class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {}
@@ -1164,7 +1164,7 @@ void main() {
       registerFallbackValue(FakeAtKey());
       //----------------------------------setup---------------------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
-          keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
+          keyStore: TestResources.getHiveKeyStore(TestResources.atsign)!);
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
@@ -1280,7 +1280,7 @@ void main() {
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
       LocalSecondary? localSecondary =
-          LocalSecondary(mockAtClient, keyStore: keystore);
+          LocalSecondary(mockAtClient, keyStore: keystore!);
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
@@ -1430,7 +1430,7 @@ void main() {
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
       LocalSecondary? localSecondary =
-          LocalSecondary(mockAtClient, keyStore: keystore);
+          LocalSecondary(mockAtClient, keyStore: keystore!);
 
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
 
@@ -1485,7 +1485,7 @@ void main() {
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
       LocalSecondary? localSecondary =
-          LocalSecondary(mockAtClient, keyStore: keystore);
+          LocalSecondary(mockAtClient, keyStore: keystore!);
 
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
 
@@ -1554,7 +1554,7 @@ void main() {
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
       LocalSecondary? localSecondary =
-          LocalSecondary(mockAtClient, keyStore: keystore);
+          LocalSecondary(mockAtClient, keyStore: keystore!);
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
@@ -1645,7 +1645,7 @@ void main() {
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
       LocalSecondary? localSecondary =
-          LocalSecondary(mockAtClient, keyStore: keystore);
+          LocalSecondary(mockAtClient, keyStore: keystore!);
 
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
 
@@ -2011,7 +2011,7 @@ void main() {
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
       LocalSecondary? localSecondary =
-          LocalSecondary(mockAtClient, keyStore: keystore);
+          LocalSecondary(mockAtClient, keyStore: keystore!);
       AtClientPreference preference = AtClientPreference()..syncRegex = 'wavi';
 
       registerFallbackValue(FakeSyncVerbBuilder());
@@ -2076,7 +2076,7 @@ void main() {
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
       LocalSecondary? localSecondary =
-          LocalSecondary(mockAtClient, keyStore: keystore);
+          LocalSecondary(mockAtClient, keyStore: keystore!);
 
       // Create uncommitted entries in local storage
       await localSecondary.executeVerb(UpdateVerbBuilder()
@@ -2316,7 +2316,7 @@ void main() {
       SyncUtil syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
-          keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
+          keyStore: TestResources.getHiveKeyStore(TestResources.atsign)!);
 
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() => mockRemoteSecondary.executeVerb(
@@ -2451,7 +2451,7 @@ void main() {
         () async {
       //----------------------------------Setup---------------------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
-          keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
+          keyStore: TestResources.getHiveKeyStore(TestResources.atsign)!);
       // ------------------preconditions setup ---------------------------------
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() => mockRemoteSecondary.executeVerb(
@@ -2653,7 +2653,7 @@ void main() {
         () async {
       // --------------------- Setup ---------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
-          keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
+          keyStore: TestResources.getHiveKeyStore(TestResources.atsign)!);
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
@@ -2825,7 +2825,7 @@ void main() {
         () async {
       // ------------------------------ Setup ----------------------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
-          keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
+          keyStore: TestResources.getHiveKeyStore(TestResources.atsign)!);
       MockAtKeyDecryptionManager mockAtKeyDecryptionManager =
           MockAtKeyDecryptionManager();
       MockSharedKeyDecryption mockSharedKeyDecryption =
@@ -2941,7 +2941,7 @@ void main() {
         () async {
       // ------------------------------ Setup ----------------------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
-          keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
+          keyStore: TestResources.getHiveKeyStore(TestResources.atsign)!);
       MockAtKeyDecryptionManager mockAtKeyDecryptionManager =
           MockAtKeyDecryptionManager();
       MockSharedKeyDecryption mockSharedKeyDecryption =
@@ -3019,7 +3019,7 @@ void main() {
         'A test to verify conflict info when uncommitted entry has a delete operation',
         () async {
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
-          keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
+          keyStore: TestResources.getHiveKeyStore(TestResources.atsign)!);
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
@@ -3197,7 +3197,7 @@ void main() {
           () async {
         //------------------------------- Setup --------------------------------
         LocalSecondary localSecondary = LocalSecondary(mockAtClient,
-            keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
+            keyStore: TestResources.getHiveKeyStore(TestResources.atsign)!);
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
@@ -3350,7 +3350,7 @@ void main() {
         //---------------------setup--------------------------
         reset(mockRemoteSecondary);
         LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
-            keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
+            keyStore: TestResources.getHiveKeyStore(TestResources.atsign)!);
 
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
@@ -3548,7 +3548,7 @@ void main() {
         HiveKeystore? keystore =
             TestResources.getHiveKeyStore(TestResources.atsign);
         LocalSecondary? localSecondary =
-            LocalSecondary(mockAtClient, keyStore: keystore);
+            LocalSecondary(mockAtClient, keyStore: keystore!);
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
@@ -3711,7 +3711,7 @@ void main() {
           () async {
         //----------------- setup-----------------
         LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
-            keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
+            keyStore: TestResources.getHiveKeyStore(TestResources.atsign)!);
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
@@ -3811,7 +3811,7 @@ void main() {
           () async {
         // ----------------------------- setup ---------------------------------
         LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
-            keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
+            keyStore: TestResources.getHiveKeyStore(TestResources.atsign)!);
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
@@ -4307,7 +4307,7 @@ void main() {
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
       LocalSecondary? localSecondary =
-          LocalSecondary(mockAtClient, keyStore: keystore);
+          LocalSecondary(mockAtClient, keyStore: keystore!);
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
@@ -4408,7 +4408,7 @@ void main() {
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
       LocalSecondary? localSecondary =
-          LocalSecondary(mockAtClient, keyStore: keystore);
+          LocalSecondary(mockAtClient, keyStore: keystore!);
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
@@ -4500,7 +4500,7 @@ void main() {
       HiveKeystore? keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
       LocalSecondary? localSecondary =
-          LocalSecondary(mockAtClient, keyStore: keystore);
+          LocalSecondary(mockAtClient, keyStore: keystore!);
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,

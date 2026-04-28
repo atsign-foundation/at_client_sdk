@@ -76,7 +76,8 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final pkamPrivateKey = RSAKeypair.fromRandom().privateKey.toString();
       final success = await localSecondary.putValue(
           AtConstants.atPkamPrivateKey, pkamPrivateKey);
@@ -92,7 +93,8 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final pkamPublicKey = RSAKeypair.fromRandom().publicKey.toString();
       final success = await localSecondary.putValue(
           AtConstants.atPkamPublicKey, pkamPublicKey);
@@ -108,7 +110,8 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final encryptionPrivateKey =
           RSAKeypair.fromRandom().privateKey.toString();
       final success = await localSecondary.putValue(
@@ -126,7 +129,8 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final encryptionPublicKey = RSAKeypair.fromRandom().publicKey.toString();
       final success = await localSecondary.putValue(
           '${AtConstants.atEncryptionPublicKey}$atSign', encryptionPublicKey);
@@ -143,7 +147,8 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final selfEncryptionKey = EncryptionUtil.generateAESKey();
       final success = await localSecondary.putValue(
           AtConstants.atEncryptionSelfKey, selfEncryptionKey);
@@ -164,7 +169,8 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
@@ -185,7 +191,8 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       var key = TestUtils.createRandomString(250);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -211,7 +218,8 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       var key = TestUtils.createRandomString(250);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -238,7 +246,8 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
@@ -264,7 +273,8 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
@@ -295,7 +305,8 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient);
+      final localSecondary = LocalSecondary(atClient,
+          keyStore: atClient.getLocalSecondary()!.keyStore);
       final verbBuilder_1 = UpdateVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'

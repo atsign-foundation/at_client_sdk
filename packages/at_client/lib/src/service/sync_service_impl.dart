@@ -834,7 +834,7 @@ class SyncServiceImpl implements SyncService {
     switch (entry.operation!) {
       case CommitOp.UPDATE:
         var key = entry.atKey;
-        var value = await _atClient.getLocalSecondary()!.keyStore!.get(key);
+        var value = await _atClient.getLocalSecondary()!.keyStore.get(key);
         command = 'update:$key ${value?.data}';
         break;
       case CommitOp.DELETE:
@@ -844,7 +844,7 @@ class SyncServiceImpl implements SyncService {
       case CommitOp.UPDATE_META:
         var key = entry.atKey;
         var metaData =
-            await _atClient.getLocalSecondary()!.keyStore!.getMeta(key);
+            await _atClient.getLocalSecondary()!.keyStore.getMeta(key);
         if (metaData != null) {
           key = '$key${_metadataToString(metaData)}';
         }
@@ -852,7 +852,7 @@ class SyncServiceImpl implements SyncService {
         break;
       case CommitOp.UPDATE_ALL:
         var key = entry.atKey;
-        AtData value = await _atClient.getLocalSecondary()!.keyStore!.get(key);
+        AtData value = await _atClient.getLocalSecondary()!.keyStore.get(key);
         var keyGen = '';
         keyGen = _metadataToString(value.metaData);
         keyGen += ':$key';

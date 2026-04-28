@@ -286,11 +286,13 @@ class AtClientImpl implements AtClient {
       }
 
       // Prefer the explicitly-injected keystore; otherwise read from
-      // the bundle StorageManager just produced. Falling through to a
-      // null keystore would only happen if the keystore was injected
-      // already (in which case _localSecondaryKeyStore is non-null).
+      // the bundle StorageManager just produced. Either branch is
+      // guaranteed non-null inside this `isLocalStoreRequired` block:
+      // if _localSecondaryKeyStore is null we just ran StorageManager
+      // which populates persistenceBundle (and therefore .keyStore).
       localSecondary = LocalSecondary(this,
-          keyStore: _localSecondaryKeyStore ?? persistenceBundle?.keyStore);
+          keyStore:
+              (_localSecondaryKeyStore ?? persistenceBundle?.keyStore)!);
       _atChops ??= await _createAtChops(_atSign);
     }
 
@@ -430,7 +432,7 @@ class AtClientImpl implements AtClient {
   Future<bool> persistPrivateKey(String privateKey) async {
     var atData = AtData();
     atData.data = privateKey.toString();
-    await localSecondary!.keyStore!.put(AtConstants.atPkamPrivateKey, atData);
+    await localSecondary!.keyStore.put(AtConstants.atPkamPrivateKey, atData);
     return true;
   }
 
@@ -438,14 +440,14 @@ class AtClientImpl implements AtClient {
     var atData = AtData();
     atData.data = publicKey.toString();
     await getLocalSecondary()!
-        .keyStore!
+        .keyStore
         .put(AtConstants.atPkamPublicKey, atData);
     return true;
   }
 
   Future<String?> getPrivateKey(String atSign) async {
     var privateKeyData =
-        await getLocalSecondary()!.keyStore!.get(AtConstants.atPkamPrivateKey);
+        await getLocalSecondary()!.keyStore.get(AtConstants.atPkamPrivateKey);
     var privateKey = privateKeyData?.data;
     return privateKey;
   }
