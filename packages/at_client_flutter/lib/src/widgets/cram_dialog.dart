@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/src/services/auth_service.dart';
 import 'package:at_client_flutter/src/widgets/shared/loading.dart';
@@ -32,6 +34,7 @@ class CramDialog extends StatelessWidget {
     this.onOnboardingComplete,
     this.title,
     this.description,
+    this.operationTimeout = const Duration(seconds: 75),
     AuthService? authService,
   }) : _authService = authService ?? AuthService();
 
@@ -42,6 +45,7 @@ class CramDialog extends StatelessWidget {
   final void Function(AtOnboardingRequest)? onOnboardingComplete;
   final String? title;
   final String? description;
+  final Duration operationTimeout;
   final AtSignLogger _logger = AtSignLogger('CramDialog');
 
   static Future<AtOnboardingResponse?> show(
@@ -52,6 +56,7 @@ class CramDialog extends StatelessWidget {
     void Function(AtOnboardingRequest)? onOnboardingComplete,
     String? title,
     String? description,
+    Duration operationTimeout = const Duration(seconds: 75),
   }) async {
     return await showDialog<AtOnboardingResponse>(
       context: context,
@@ -62,6 +67,7 @@ class CramDialog extends StatelessWidget {
         onOnboardingComplete: onOnboardingComplete,
         title: title,
         description: description,
+        operationTimeout: operationTimeout,
       ),
     );
   }
@@ -71,7 +77,12 @@ class CramDialog extends StatelessWidget {
     String secret = _parseCramKey(cramKey);
     Future<void>(() async {
       try {
-        final response = await _authService.onboard(request, secret);
+        final response = await _authService.onboard(request, secret).timeout(
+          operationTimeout,
+          onTimeout: () => throw TimeoutException(
+            'Onboarding timed out. Please check your network and try again.',
+          ),
+        );
         if (onOnboardingComplete != null) {
           onOnboardingComplete!(request);
         } else {
@@ -95,6 +106,12 @@ class CramDialog extends StatelessWidget {
           StreamBuilder(
             stream: _authService.progressStream,
             builder: (context, snapshot) {
+              if (progressBuilder == null) {
+                return LoadingDialog(
+                  title: title ?? "Onboarding Atsign via cram",
+                  description: description ?? "Authenticating, please wait...",
+                );
+              }
               if (!snapshot.hasData) {
                 return LoadingDialog(
                   title: title ?? "Onboarding Atsign via cram",
@@ -102,11 +119,7 @@ class CramDialog extends StatelessWidget {
                 );
               }
               final progress = snapshot.data as ProgressEvent;
-              if (progressBuilder == null) {
-                return Container();
-              } else {
-                return progressBuilder!(progress);
-              }
+              return progressBuilder!(progress);
             },
           ),
         ],

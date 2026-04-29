@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/src/widgets/shared/loading.dart';
 import 'package:at_client_flutter/src/services/auth_service.dart';
@@ -31,6 +33,7 @@ class PkamDialog extends StatelessWidget {
     this.title,
     this.description,
     this.backupKeys,
+    this.operationTimeout = const Duration(seconds: 75),
     AuthService? authService,
   }) : auth = authService ?? AuthService();
   final AuthService auth;
@@ -40,6 +43,7 @@ class PkamDialog extends StatelessWidget {
   final String? title;
   final String? description;
   final List<WrittenAtKeysIo>? backupKeys;
+  final Duration operationTimeout;
   final AtSignLogger _logger = AtSignLogger('PkamDialog');
 
   static Future<AtAuthResponse?> show(
@@ -71,6 +75,11 @@ class PkamDialog extends StatelessWidget {
         final response = await auth.authenticate(
           request,
           backupKeys: backupKeys,
+        ).timeout(
+          operationTimeout,
+          onTimeout: () => throw TimeoutException(
+            'Authentication timed out. Please check your network and try again.',
+          ),
         );
         if (onAuthenticationComplete != null) {
           onAuthenticationComplete!(request);
@@ -93,6 +102,13 @@ class PkamDialog extends StatelessWidget {
         child: StreamBuilder(
           stream: auth.progressStream,
           builder: (context, snapshot) {
+            if (progressBuilder == null) {
+              return LoadingDialog(
+                title: title ?? "Authenticating via pkam",
+                description: description ?? "Validating your atKeys...",
+                themeData: Theme.of(context),
+              );
+            }
             if (!snapshot.hasData) {
               return LoadingDialog(
                 title: title ?? "Authenticating via pkam",
@@ -101,11 +117,7 @@ class PkamDialog extends StatelessWidget {
               );
             }
             final progress = snapshot.data as ProgressEvent;
-            if (progressBuilder == null) {
-              return Container();
-            } else {
-              return progressBuilder!(progress);
-            }
+            return progressBuilder!(progress);
           },
         ),
       ),
