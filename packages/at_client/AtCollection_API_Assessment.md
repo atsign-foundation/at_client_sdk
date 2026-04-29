@@ -7,12 +7,13 @@ A from-scratch assessment of the `AtCollection<T>` API in
 W9 (test hook off the public `subCollection` surface), W8
 (warning on unknown envelope type tags), W3-residual (existence-
 probe elision cache), W6-residual (chain-walk for legacy
-descendants), and the entire **W1 phase-2** bundle: W1(a)
-typed field accessors + predicate AST + `Query.wherePath`,
-W1(b) `Query.thenBy` multi-key sort, W1(c) per-stream delta
-maintenance in `Query.watch` (with limit/skip queries falling
-back to refetch), and W1(d) `Query.watchWithTree` recursive
-multi-level joins. All folded into 3.13.0.
+descendants), W5 (`getKeys` marked `@visibleForTesting`), and the
+entire **W1 phase-2** bundle: W1(a) typed field accessors +
+predicate AST + `Query.wherePath`, W1(b) `Query.thenBy` multi-key
+sort, W1(c) per-stream delta maintenance in `Query.watch` (with
+limit/skip queries falling back to refetch), and W1(d)
+`Query.watchWithTree` recursive multi-level joins. All folded
+into 3.13.0.
 
 ## TL;DR
 
@@ -290,7 +291,7 @@ made the call site less greppable and the behaviour depend on
 | Drafting                 | `draft({obj, id?, sharedWith?, expiresAt?, availableAt?})` (no I/O)                                                                                                                                                                                                                                                                                                                                                                                     |
 | Create / Update / Delete | `create({obj, id?, sharedWith?, expiresAt?, availableAt?})` (throws on collision), `update(item, {unshareWithOthers})` (throws if missing), `delete(item, {cascade})`                                                                                                                                                                                                                                                                                   |
 | Read one                 | `get(id, owner)` (throws if missing), `getOrNull(id, owner)` (null if missing)                                                                                                                                                                                                                                                                                                                                                                          |
-| Read many                | `getItems({id?, owner?})` (List, throws on decode error), `getItemsAsStream({id?, owner?})` (Stream, errors yielded in-band), `getKeys({id?, owner?})` (raw AtKeys)                                                                                                                                                                                                                                                                                     |
+| Read many                | `getItems({id?, owner?})` (List, throws on decode error), `getItemsAsStream({id?, owner?})` (Stream, errors yielded in-band), `getKeys({id?, owner?})` (raw AtKeys, `@visibleForTesting`)                                                                                                                                                                                                                                                               |
 | Query builder            | `query()` → `Query<T>`; modifiers `.where(p)`, `.wherePath(predicate)`, `.orderBy(keyFn, {descending})`, `.thenBy(keyFn, {descending})`, `.limit(n)`, `.skip(n)`; terminals `.fetch()`, `.watch()`, `.count()`, `.any([p])`, `.first()`, `.firstOrNull()`, `.groupBy<K>(keyFn)`, `.watchWithSub<U>(subName, subDefaultExpiration, {subFromJson, subTypeTag})` (live parent+children join), `.watchWithTree(List<SubSpec>)` (recursive multi-level join) |
 | Read receipts            | On `CItem`: `markReadByMe()`, `wasMarkedReadByMe()`, `readBy` (Future), `readBySnapshot` (sync), `receipts` (the `__rr` sub-collection). On `AtCollection`: `markReadByMe(item)` / `wasMarkedReadByMe(item)` shims, `readReceiptsFor(item)` → queryable receipts sub-collection.                                                                                                                                                                        |
 | Sub-collections          | `subCollection<U>({parent, subName, defaultExpiration, fromJson?, typeTag?})` (plus `notifications:` test hook — see §W9), `cleanupOrphans()` (works on root and sub)                                                                                                                                                                                                                                                                                   |
@@ -754,10 +755,20 @@ path, shared by the reader). Writing a parent item no longer
 round-trips to preserve receipts — the sub-collection is an
 independent, append-only side-car.
 
-### W5. `getKeys(...)` leaks `AtKey` into the public API
+### W5. ~~`getKeys(...)` leaks `AtKey` into the public API~~ (closed)
 
-Only used by the example apps for a debug command. Could be marked
-`@visibleForTesting` / `@protected`. Small API hygiene.
+Closed 2026-04-29. The public method now carries
+`@visibleForTesting`, so production callers outside `test/` /
+`integration_test/` get an analyzer warning when they touch it. The
+implementation moved to a private `_getKeysInternal`; every internal
+caller in `collections.dart` (the `getItemsAsStream` decode loop,
+the cleanup-orphans root scan, the `_put` recipient diff, the
+`_delete` self-and-recipients sweep) routes through the private
+path so they don't trip the annotation themselves. The dartdoc on
+`getKeys` now states explicitly that production code should reach
+for `getItems` / `getItemsAsStream` / `Query<T>` instead — `AtKey`
+is the Atsign Protocol primitive the rest of the surface
+deliberately keeps hidden.
 
 ### W6. ~~`cleanupOrphans` only catches root-ancestor orphans~~ (closed)
 
@@ -908,15 +919,16 @@ State as of 2026-04-29:
   with limit/skip queries falling back to refetch; (d)
   `Query.watchWithTree` recursive terminal with `SubSpec<U>` and
   `TreeNode<T>` for arbitrary-depth parent-children-grandchildren
-  joins.
+  joins. **W5 closed** 2026-04-29: `getKeys` is now
+  `@visibleForTesting` and the implementation moved to a private
+  `_getKeysInternal` so SDK-internal callers don't trip the
+  annotation; production code outside `test/` gets an analyzer
+  warning when it reaches for the raw-`AtKey` surface.
 - **Ranked for impact**, still open:
 
 1. **`CItemAvailable` / `CItemExpiringSoon` events** (§W7). Unlocks
    reminder / alarm UIs without app-level timers.
-2. **`getKeys` API hygiene** (§W5). Only used by the example apps
-   for a debug command; could be marked `@visibleForTesting` /
-   `@protected` to clear it from production auto-complete.
-3. **Transactional semantics** (§W10). Cross-key "save A and B
+2. **Transactional semantics** (§W10). Cross-key "save A and B
    atomically or neither". Open by design — most atSign use-cases
    (each recipient gets a copy independently) don't need it;
    cross-recipient atomicity would also clash with the
@@ -950,6 +962,6 @@ State as of 2026-04-29:
 The API covered in this assessment is the shape landed on the
 `gkc-enhance-api` branch of `at_client_sdk` as of 2026-04-23, plus
 the 2026-04-29 snagging round on `gkc-at-collection-snagging`
-that closed W2, W1 phase 2 (a/b/c/d), W3-residual, W6-residual, W8,
+that closed W2, W1 phase 2 (a/b/c/d), W3-residual, W5, W6-residual, W8,
 and W9. The implementation lives in
 `packages/at_client/lib/src/collections/collections.dart`.

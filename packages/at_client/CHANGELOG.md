@@ -69,6 +69,14 @@ Several significant enhancements to the API to make it much easier to use.
   of a full collection refetch every event. Pagination queries
   (`limit` / `skip`) keep the original full-refetch path because
   the next-out-of-window item isn't cached.
+- feat(AtCollection): `getKeys` now carries `@visibleForTesting`
+  so production callers outside `test/` / `integration_test/`
+  get an analyzer warning for the raw-`AtKey` surface.
+  Implementation moved to a private `_getKeysInternal` so the
+  SDK's own internal callers don't trip the annotation. App
+  code should reach for `getItems` / `getItemsAsStream` /
+  `Query<T>` instead — `AtKey` is the protocol primitive the
+  rest of the AtCollection surface deliberately keeps hidden.
 - feat: added a new method, `send`, to NotificationService which is much 
   easier to use than the old (still fine to use) `notify` method.
 - feat: added `factory AtRpc.server` to make it much simpler to create AtRpc 

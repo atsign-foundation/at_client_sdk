@@ -600,10 +600,27 @@ class AtCollection<T> {
   // ---------------------------------------------------------------------------
   // Reads
 
-  /// Raw [AtKey]s in this collection, optionally filtered by [id] / [owner].
-  /// Prefer [getItems] / [getItemsAsStream] for application code; this
-  /// hatch is kept for debugging and advanced cases.
-  Future<List<AtKey>> getKeys({String? id, Atsign? owner}) async {
+  /// Raw [AtKey]s in this collection, optionally filtered by [id] /
+  /// [owner]. **Test-only**: production callers should reach for
+  /// [getItems] / [getItemsAsStream] (typed) or the [Query<T>] builder.
+  /// `AtKey` is an Atsign Protocol primitive that the rest of the
+  /// AtCollection surface deliberately keeps hidden — exposing it
+  /// here would invite ad-hoc atKey manipulation at the app layer
+  /// and re-introduce the very ceremony the library exists to remove.
+  ///
+  /// Marked `@visibleForTesting` so it's available to the unit-test
+  /// suite (which uses it to assert key shapes and metadata) but the
+  /// analyzer flags any production use outside `test/` /
+  /// `integration_test/`.
+  @visibleForTesting
+  Future<List<AtKey>> getKeys({String? id, Atsign? owner}) =>
+      _getKeysInternal(id: id, owner: owner);
+
+  /// Internal entry point used by the rest of the SDK (cleanup
+  /// sweeps, write/delete diffs, decoders). Same logic as the public
+  /// [getKeys] but doesn't carry the `@visibleForTesting` annotation,
+  /// so internal callers don't trip the analyzer.
+  Future<List<AtKey>> _getKeysInternal({String? id, Atsign? owner}) async {
     // want a regex like (^|:)[^.]+\.collection\.name\.space@
     // e.g. (^|:)[^.]+\.notes\.todos\.demos@
     id ??= '[^.]+';
@@ -677,11 +694,11 @@ class AtCollection<T> {
   /// All higher-level read methods ([get], [getOrNull], [getItems]) are
   /// thin wrappers over this stream.
   Stream<CItem<T>> getItemsAsStream({String? id, Atsign? owner}) async* {
-    // [getKeys] returns keys sorted by `fullKeyAndOwner`, so all copies of
-    // the same item (self + per-recipient) are contiguous. We buffer each
-    // item, absorb its recipient siblings' `sharedWith` additions, and
-    // yield once per unique (owner, id).
-    final keys = await getKeys(id: id, owner: owner);
+    // [_getKeysInternal] returns keys sorted by `fullKeyAndOwner`, so
+    // all copies of the same item (self + per-recipient) are
+    // contiguous. We buffer each item, absorb its recipient siblings'
+    // `sharedWith` additions, and yield once per unique (owner, id).
+    final keys = await _getKeysInternal(id: id, owner: owner);
     CItem<T>? pending;
     String? pendingKey;
     for (final k in keys) {
@@ -1001,8 +1018,8 @@ class AtCollection<T> {
       // Deep scan — we must pick up not just direct sub-items
       // (`<id>.<ns>@<self>`) but also nested descendants
       // (`<subId>.<subName>.<id>.<ns>@<self>`, and deeper). Using
-      // `getKeys(owner: self)` alone would miss every level deeper
-      // than 1.
+      // `_getKeysInternal(owner: self)` alone would miss every level
+      // deeper than 1.
       final keys = await atClient.getAtKeys(
         regex: '(^|:).+\\.$namespace$self',
       );
@@ -1113,7 +1130,7 @@ class AtCollection<T> {
     // Legacy-fallback: set of root-ancestor ids that exist locally as
     // direct items (any owner).
     final aliveRootIds = <String>{};
-    for (final k in await getKeys()) {
+    for (final k in await _getKeysInternal()) {
       final parts = k.key.split('.');
       if (parts.length == nsSegments) {
         aliveRootIds.add(parts.first);
@@ -1786,7 +1803,7 @@ class AtCollection<T> {
     // 2. Diff: delete recipient copies whose atSign is no longer in
     //    item.sharedWith. Retained recipients are overwritten in step 3.
     if (unshareWithOthers) {
-      for (final k in await getKeys(id: item.id, owner: atSign)) {
+      for (final k in await _getKeysInternal(id: item.id, owner: atSign)) {
         final sw = k.sharedWith;
         if (sw == null || sw == atSign) continue;
         if (item.sharedWith.any((a) => a == sw)) continue;
@@ -1856,7 +1873,7 @@ class AtCollection<T> {
         }
       }
     }
-    for (final k in await getKeys(id: item.id, owner: atSign)) {
+    for (final k in await _getKeysInternal(id: item.id, owner: atSign)) {
       try {
         await atClient.delete(k);
         results.add(OpSuccess(k, CollectionOp.delete));
