@@ -938,31 +938,6 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
-  group('getKeys', () {
-    test('composes regex with id and owner filters', () async {
-      when(
-        () => atClient.getAtKeys(regex: any(named: 'regex')),
-      ).thenAnswer((_) async => <AtKey>[]);
-      final c = buildCollection<String>();
-      await c.getKeys(id: 'abc', owner: selfAtSign);
-      verify(
-        () => atClient.getAtKeys(regex: '(^|:)abc\\.$namespace$selfAtSignStr'),
-      ).called(1);
-    });
-
-    test('defaults id and owner to wildcards', () async {
-      when(
-        () => atClient.getAtKeys(regex: any(named: 'regex')),
-      ).thenAnswer((_) async => <AtKey>[]);
-      final c = buildCollection<String>();
-      await c.getKeys();
-      verify(
-        () => atClient.getAtKeys(regex: '(^|:)[^.]+\\.$namespace@'),
-      ).called(1);
-    });
-  });
-
-  // ---------------------------------------------------------------------------
   group('delete', () {
     // Partition `atClient.getAtKeys` responses by regex shape:
     // - descendant scan uses regex starting `(^|:).+\.`

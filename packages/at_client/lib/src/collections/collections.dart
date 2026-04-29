@@ -600,26 +600,21 @@ class AtCollection<T> {
   // ---------------------------------------------------------------------------
   // Reads
 
-  /// Raw [AtKey]s in this collection, optionally filtered by [id] /
-  /// [owner]. **Test-only**: production callers should reach for
-  /// [getItems] / [getItemsAsStream] (typed) or the [Query<T>] builder.
-  /// `AtKey` is an Atsign Protocol primitive that the rest of the
-  /// AtCollection surface deliberately keeps hidden — exposing it
-  /// here would invite ad-hoc atKey manipulation at the app layer
-  /// and re-introduce the very ceremony the library exists to remove.
+  /// Internal regex-keyed scan used by every higher-level read in
+  /// the SDK (the [getItemsAsStream] decode loop, the
+  /// cleanup-orphans root scan, the recipient diff in [_put], the
+  /// self-and-recipients sweep in [_delete]). Composes a regex from
+  /// optional [id] / [owner] filters, calls [AtClient.getAtKeys],
+  /// and returns the matching keys sorted by `fullKeyAndOwner` so
+  /// per-(owner, id) copies (self + recipients) are contiguous in
+  /// the output.
   ///
-  /// Marked `@visibleForTesting` so it's available to the unit-test
-  /// suite (which uses it to assert key shapes and metadata) but the
-  /// analyzer flags any production use outside `test/` /
-  /// `integration_test/`.
-  @visibleForTesting
-  Future<List<AtKey>> getKeys({String? id, Atsign? owner}) =>
-      _getKeysInternal(id: id, owner: owner);
-
-  /// Internal entry point used by the rest of the SDK (cleanup
-  /// sweeps, write/delete diffs, decoders). Same logic as the public
-  /// [getKeys] but doesn't carry the `@visibleForTesting` annotation,
-  /// so internal callers don't trip the analyzer.
+  /// Private by design: `AtKey` is an Atsign Protocol primitive the
+  /// rest of the AtCollection surface deliberately hides. Exposing
+  /// raw keys to app code would re-introduce the ceremony the
+  /// library exists to remove. Production callers reach for
+  /// [getItems] / [getItemsAsStream] (typed) or the [Query<T>]
+  /// builder instead.
   Future<List<AtKey>> _getKeysInternal({String? id, Atsign? owner}) async {
     // want a regex like (^|:)[^.]+\.collection\.name\.space@
     // e.g. (^|:)[^.]+\.notes\.todos\.demos@

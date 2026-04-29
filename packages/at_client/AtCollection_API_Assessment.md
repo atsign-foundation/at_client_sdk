@@ -7,7 +7,7 @@ A from-scratch assessment of the `AtCollection<T>` API in
 W9 (test hook off the public `subCollection` surface), W8
 (warning on unknown envelope type tags), W3-residual (existence-
 probe elision cache), W6-residual (chain-walk for legacy
-descendants), W5 (`getKeys` marked `@visibleForTesting`), and the
+descendants), W5 (`getKeys` removed from public surface), and the
 entire **W1 phase-2** bundle: W1(a) typed field accessors +
 predicate AST + `Query.wherePath`, W1(b) `Query.thenBy` multi-key
 sort, W1(c) per-stream delta maintenance in `Query.watch` (with
@@ -269,7 +269,7 @@ the caller no longer has to remember.
 | Cached-prefix semantics on received keys    | Caller strips `cached:@self:` to parse          | Hidden — surfaces as `CItem.owner != self`                            |
 | Namespace-aware vs namespace-free keys      | Caller sets `md.namespaceAware = false`         | Hidden — collection always uses namespace-free form                   |
 | Notification key format                     | Caller parses `@to:<id>.<subspace>.<ns>@<from>` | Hidden — events arrive as typed `CEvent`s                             |
-| Regex composition for key scans             | Caller writes regexes by hand                   | Hidden — `getKeys` / `getItems` compose internally                    |
+| Regex composition for key scans             | Caller writes regexes by hand                   | Hidden — `getItems` / `getItemsAsStream` compose internally           |
 | JSON envelope (type tag, readBy, obj)       | Caller invents it                               | Hidden — `CItem.toJson` / rehydrate machinery                         |
 | 255-char key length + 55-char atSign limit  | Caller may learn it the hard way                | Enforced at `subCollection` construction                              |
 | Read-receipt key pattern (`__rr`)           | Feature effectively unavailable to app authors  | One-line: `item.markReadByMe()` (reader) / `item.readBy` (owner)      |
@@ -291,7 +291,7 @@ made the call site less greppable and the behaviour depend on
 | Drafting                 | `draft({obj, id?, sharedWith?, expiresAt?, availableAt?})` (no I/O)                                                                                                                                                                                                                                                                                                                                                                                     |
 | Create / Update / Delete | `create({obj, id?, sharedWith?, expiresAt?, availableAt?})` (throws on collision), `update(item, {unshareWithOthers})` (throws if missing), `delete(item, {cascade})`                                                                                                                                                                                                                                                                                   |
 | Read one                 | `get(id, owner)` (throws if missing), `getOrNull(id, owner)` (null if missing)                                                                                                                                                                                                                                                                                                                                                                          |
-| Read many                | `getItems({id?, owner?})` (List, throws on decode error), `getItemsAsStream({id?, owner?})` (Stream, errors yielded in-band), `getKeys({id?, owner?})` (raw AtKeys, `@visibleForTesting`)                                                                                                                                                                                                                                                               |
+| Read many                | `getItems({id?, owner?})` (List, throws on decode error), `getItemsAsStream({id?, owner?})` (Stream, errors yielded in-band)                                                                                                                                                                                                                                                                                                                            |
 | Query builder            | `query()` → `Query<T>`; modifiers `.where(p)`, `.wherePath(predicate)`, `.orderBy(keyFn, {descending})`, `.thenBy(keyFn, {descending})`, `.limit(n)`, `.skip(n)`; terminals `.fetch()`, `.watch()`, `.count()`, `.any([p])`, `.first()`, `.firstOrNull()`, `.groupBy<K>(keyFn)`, `.watchWithSub<U>(subName, subDefaultExpiration, {subFromJson, subTypeTag})` (live parent+children join), `.watchWithTree(List<SubSpec>)` (recursive multi-level join) |
 | Read receipts            | On `CItem`: `markReadByMe()`, `wasMarkedReadByMe()`, `readBy` (Future), `readBySnapshot` (sync), `receipts` (the `__rr` sub-collection). On `AtCollection`: `markReadByMe(item)` / `wasMarkedReadByMe(item)` shims, `readReceiptsFor(item)` → queryable receipts sub-collection.                                                                                                                                                                        |
 | Sub-collections          | `subCollection<U>({parent, subName, defaultExpiration, fromJson?, typeTag?})` (plus `notifications:` test hook — see §W9), `cleanupOrphans()` (works on root and sub)                                                                                                                                                                                                                                                                                   |
@@ -757,18 +757,23 @@ independent, append-only side-car.
 
 ### W5. ~~`getKeys(...)` leaks `AtKey` into the public API~~ (closed)
 
-Closed 2026-04-29. The public method now carries
-`@visibleForTesting`, so production callers outside `test/` /
-`integration_test/` get an analyzer warning when they touch it. The
-implementation moved to a private `_getKeysInternal`; every internal
-caller in `collections.dart` (the `getItemsAsStream` decode loop,
-the cleanup-orphans root scan, the `_put` recipient diff, the
-`_delete` self-and-recipients sweep) routes through the private
-path so they don't trip the annotation themselves. The dartdoc on
-`getKeys` now states explicitly that production code should reach
-for `getItems` / `getItemsAsStream` / `Query<T>` instead — `AtKey`
-is the Atsign Protocol primitive the rest of the surface
-deliberately keeps hidden.
+Closed 2026-04-29 by **removing the public method entirely**, not
+merely marking it `@visibleForTesting`. There were no example or
+production callers, and the two unit tests that exercised it
+(`'composes regex with id and owner filters'` and `'defaults id
+and owner to wildcards'`) were testing an implementation detail
+in isolation — every other read/write/cleanup test in the suite
+uses the same regex composition through higher-level methods, so
+nothing test-side is lost.
+
+The implementation lives entirely behind a private
+`_getKeysInternal`; the four SDK-internal callers (the
+`getItemsAsStream` decode loop, the cleanup-orphans root scan,
+`_put`'s recipient diff, `_delete`'s self-and-recipients sweep)
+all route through it. With the public method gone, **`AtKey` no
+longer appears anywhere in the AtCollection public surface** —
+the design intent ("typed collection over an opaque protocol") now
+holds without an asterisk.
 
 ### W6. ~~`cleanupOrphans` only catches root-ancestor orphans~~ (closed)
 
@@ -866,8 +871,6 @@ Where the API still requires care:
   for the sake of explicit semantics.
 - **Factory registration via string tag.** An LLM occasionally
   mistypes the tag; we surface a clear `StateError` at draft time.
-- **`getKeys`, `AtKey`** — if an LLM wanders into these, raw
-  AtClient concepts leak through.
 
 On balance: the API is exceptionally friendly to AI code generation
 because it looks like every other good CRUD library the model has
@@ -919,11 +922,10 @@ State as of 2026-04-29:
   with limit/skip queries falling back to refetch; (d)
   `Query.watchWithTree` recursive terminal with `SubSpec<U>` and
   `TreeNode<T>` for arbitrary-depth parent-children-grandchildren
-  joins. **W5 closed** 2026-04-29: `getKeys` is now
-  `@visibleForTesting` and the implementation moved to a private
-  `_getKeysInternal` so SDK-internal callers don't trip the
-  annotation; production code outside `test/` gets an analyzer
-  warning when it reaches for the raw-`AtKey` surface.
+  joins. **W5 closed** 2026-04-29: public `getKeys` removed
+  entirely (zero production callers); implementation lives behind
+  the private `_getKeysInternal`. `AtKey` no longer appears
+  anywhere in the AtCollection public surface.
 - **Ranked for impact**, still open:
 
 1. **`CItemAvailable` / `CItemExpiringSoon` events** (§W7). Unlocks
@@ -951,9 +953,11 @@ State as of 2026-04-29:
   cancel), 10 for W1(a) wherePath (eq/lt/and/or/not/AST flatten/
   introspection), 4 for W1(c) delta maintenance (single-item read
   on update, zero-read delete, predicate-fail removal,
-  limit-fallback behaviour). **141 total passing** in the
-  AtCollection-focused suite; full `dart test --concurrency=1`
-  is clean (537 passing across the at_client suite).
+  limit-fallback behaviour). **139 total passing** (the W5
+  closure also removed two now-redundant regex-shape tests for
+  `getKeys` — the regex composition is exercised continuously
+  through every read/write/cleanup test, so nothing was lost).
+  Full `dart test --concurrency=1` is clean.
 - `flutter analyze` on the Flutter todos example
   (`packages/at_client_flutter/examples/todos`) → clean. That app is
   the idiomatic Flutter reference for AtCollection — CLI developers
