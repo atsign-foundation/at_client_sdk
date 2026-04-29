@@ -17,8 +17,7 @@ class SyncUtil {
     return atCommitLog.getEntry(sequenceNumber);
   }
 
-  Future<void> updateCommitEntry(
-      CommitEntry commitEntry, int commitId) async {
+  Future<void> updateCommitEntry(CommitEntry commitEntry, int commitId) async {
     await atCommitLog.update(commitEntry, commitId);
   }
 

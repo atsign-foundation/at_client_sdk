@@ -176,8 +176,7 @@ void main() {
         final atSign1 = '@hive_soft';
         final atSign2 = '@hive_soft2';
 
-        final atClient1 =
-            await _initializeAtClient(atSign1) as AtClientImpl;
+        final atClient1 = await _initializeAtClient(atSign1) as AtClientImpl;
         final keyStore1 = atClient1.persistenceBundle!.keyStore;
 
         // Switch to second atSign

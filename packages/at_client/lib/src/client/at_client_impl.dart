@@ -291,8 +291,7 @@ class AtClientImpl implements AtClient {
       // if _localSecondaryKeyStore is null we just ran StorageManager
       // which populates persistenceBundle (and therefore .keyStore).
       localSecondary = LocalSecondary(this,
-          keyStore:
-              (_localSecondaryKeyStore ?? persistenceBundle?.keyStore)!);
+          keyStore: (_localSecondaryKeyStore ?? persistenceBundle?.keyStore)!);
       _atChops ??= await _createAtChops(_atSign);
     }
 

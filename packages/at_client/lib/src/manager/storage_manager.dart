@@ -48,8 +48,8 @@ class StorageManager {
         enableCommitId: false,
       ),
     );
-    bundle!.scheduleKeyExpireTask(
-        preferences?.expiryCheckTimeInterval.inMinutes);
+    bundle!
+        .scheduleKeyExpireTask(preferences?.expiryCheckTimeInterval.inMinutes);
     isStorageInitialized = true;
   }
 }

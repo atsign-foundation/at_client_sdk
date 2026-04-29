@@ -44,7 +44,7 @@ void main() {
   group('A group of tests for APKAM scenarios using at_auth', () {
     test('A test to verify onboarding and initial enrollment using at_auth',
         () async {
-      var apkamAtSign = ConfigUtil.getYaml()['atSign']['apkamFirstAtSign'];
+      var apkamAtSign = ConfigUtil.getYaml()['atSign']['apkamSecondAtSign'];
       var atAuth = AtAuth.create();
       final onBoardingRequest = AtOnboardingRequest(apkamAtSign)
         ..appName = 'wavi'

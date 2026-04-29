@@ -1157,10 +1157,9 @@ void main() {
             ..namespace = 'wavi'
             ..fetchOfflineNotifications = false);
 
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore
-          .isKeyExists(any())).thenAnswer((_) => true);
+      when(() =>
+              mockAtClientImpl.getLocalSecondary()!.keyStore.isKeyExists(any()))
+          .thenAnswer((_) => true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
@@ -1181,10 +1180,9 @@ void main() {
             ..namespace = 'wavi'
             ..fetchOfflineNotifications = true);
 
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore
-          .isKeyExists(any())).thenAnswer((_) => true);
+      when(() =>
+              mockAtClientImpl.getLocalSecondary()!.keyStore.isKeyExists(any()))
+          .thenAnswer((_) => true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
@@ -1236,10 +1234,9 @@ void main() {
       when(() => mockAtClientImpl.put(any(), any()))
           .thenAnswer((_) async => true);
 
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore
-          .isKeyExists(any())).thenAnswer((_) => true);
+      when(() =>
+              mockAtClientImpl.getLocalSecondary()!.keyStore.isKeyExists(any()))
+          .thenAnswer((_) => true);
 
       notificationServiceImpl.stopAllSubscriptions();
 
@@ -1272,10 +1269,9 @@ void main() {
       when(() => mockAtClientImpl.put(any(), any()))
           .thenAnswer((_) async => true);
 
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore
-          .isKeyExists(any())).thenAnswer((_) => true);
+      when(() =>
+              mockAtClientImpl.getLocalSecondary()!.keyStore.isKeyExists(any()))
+          .thenAnswer((_) => true);
 
       notificationServiceImpl.stopAllSubscriptions();
 

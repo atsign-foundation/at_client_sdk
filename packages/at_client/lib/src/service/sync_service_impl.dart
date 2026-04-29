@@ -463,8 +463,8 @@ class SyncServiceImpl implements SyncService {
       {int? localCommitIdBeforeSync}) async {
     var syncResult = syncRequest.result!;
     _logger.finer('Sync in progress');
-    var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
-        _atClient.getPreferences()!.syncRegex);
+    var lastSyncedEntry = await syncUtil
+        .getLastSyncedEntry(_atClient.getPreferences()!.syncRegex);
     // Get lastSyncedLocalSeq to get the list of uncommitted entries.
     var lastSyncedLocalSeq = lastSyncedEntry != null ? lastSyncedEntry.key : -1;
     var unCommittedEntries = await syncUtil.getChangesSinceLastCommit(
@@ -941,8 +941,8 @@ class SyncServiceImpl implements SyncService {
 
       var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
 
-      var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
-          _atClient.getPreferences()!.syncRegex);
+      var lastSyncedEntry = await syncUtil
+          .getLastSyncedEntry(_atClient.getPreferences()!.syncRegex);
       var lastSyncedCommitId = lastSyncedEntry?.commitId;
       _logger.finest(
           'server commit id: $serverCommitId last synced commit id: $lastSyncedCommitId');
@@ -968,8 +968,8 @@ class SyncServiceImpl implements SyncService {
     // sync work is needed; a stale cache would skip the run.
     var serverCommitId = await _getServerCommitId(forceFresh: true);
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
-    var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
-        _atClient.getPreferences()!.syncRegex);
+    var lastSyncedEntry = await syncUtil
+        .getLastSyncedEntry(_atClient.getPreferences()!.syncRegex);
     var lastSyncedCommitId = lastSyncedEntry?.commitId;
     _logger.finest(
         'server commit id: $serverCommitId last synced commit id: $lastSyncedCommitId');
@@ -1056,8 +1056,8 @@ class SyncServiceImpl implements SyncService {
   /// Returns the local commit id. If null, returns -1.
   Future<int> _getLocalCommitId() async {
     // Get lastSynced local commit id.
-    var lastSyncEntry = await syncUtil.getLastSyncedEntry(
-        _atClient.getPreferences()!.syncRegex);
+    var lastSyncEntry = await syncUtil
+        .getLastSyncedEntry(_atClient.getPreferences()!.syncRegex);
     int localCommitId;
     // If lastSyncEntry not null, set localCommitId to lastSyncedEntry.commitId
     // Else set to -1.
