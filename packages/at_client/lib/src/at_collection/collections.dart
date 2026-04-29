@@ -1,6 +1,7 @@
 import 'package:at_client/at_client.dart';
 
 /// Contains CRUD operations that can be performed on [AtCollectionModel]
+@Deprecated("Use AtClient.collection for collection-style operations")
 abstract interface class AtCollectionModelOperations<T> {
   /// Saves the json representation of [AtCollectionModel] to the secondary server of a atSign.
   /// [save] calls [toJson] method to get the json representation of a [AtCollectionModel].
@@ -122,6 +123,7 @@ abstract interface class AtCollectionModelOperations<T> {
 }
 
 /// Contains query methods on [AtCollectionModel]
+@Deprecated("Use AtClient.collection for collection-style operations")
 abstract interface class AtCollectionQueryOperations {
   /// Returns list of AtCollectionModels that are shared by the given [atSign]
   /// Returns an empty list when nothing has been shared
@@ -178,6 +180,7 @@ abstract interface class AtCollectionQueryOperations {
 /// class MyModel extends AtCollectionModel {}
 /// ```
 ///
+@Deprecated("Use AtClient.collection for collection-style operations")
 abstract class AtCollectionModelStreamOperations {
   /// Saves the json representation of the object to the secondary server of the @sign.
   /// [save] calls [toJson] method to get the json representation.
@@ -272,6 +275,7 @@ abstract class AtCollectionModelStreamOperations {
   Stream<AtOperationItemStatus> delete();
 }
 
+@Deprecated("Use AtClient.collection for collection-style operations")
 class AtOperationItemStatus {
   late String atSign;
   late String key;
@@ -288,8 +292,10 @@ class AtOperationItemStatus {
   });
 }
 
+@Deprecated("Use AtClient.collection for collection-style operations")
 enum Operation { save, share, unshare, delete }
 
+@Deprecated("Use AtClient.collection for collection-style operations")
 abstract class KeyMaker {
   AtKey createSelfKey(
       {required String keyId,
@@ -305,6 +311,7 @@ abstract class KeyMaker {
       ObjectLifeCycleOptions? objectLifeCycleOptions});
 }
 
+@Deprecated("Use AtClient.collection for collection-style operations")
 class ObjectLifeCycleOptions {
   // How long the object is supposed to live
   Duration? timeToLive;

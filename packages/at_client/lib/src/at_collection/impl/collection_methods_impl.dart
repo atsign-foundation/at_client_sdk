@@ -11,6 +11,7 @@ import '../collections.dart';
 /// [AtCollectionMethodImpl] have the implementation of all the methods available in collections package.
 /// These methods are wrapped with a stream or future return types for the end consumption.
 
+@Deprecated("Use AtClient.collection for collection-style operations")
 class AtCollectionMethodImpl {
   final _logger = AtSignLogger('AtCollectionModelMethodsImpl');
 

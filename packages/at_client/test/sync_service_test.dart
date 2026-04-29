@@ -231,8 +231,7 @@ void main() async {
         actualSyncException = syncResult.atClientException;
       });
 
-      await syncServiceImpl.processSyncRequests(
-          respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+      await syncServiceImpl.processSyncRequests();
 
       while (!listener.syncComplete) {
         await Future.delayed(Duration(milliseconds: 10));
@@ -394,8 +393,7 @@ void main() async {
       syncServiceImpl.sync(onError: () => syncFailureCount++);
 
       expect(syncServiceImpl.syncRequests.length, 5);
-      unawaited(syncServiceImpl.processSyncRequests(
-          respectSyncRequestQueueSizeAndRequestTriggerDuration: false));
+      unawaited(syncServiceImpl.processSyncRequests());
       await Future.delayed(Duration(milliseconds: 200));
       expect(syncServiceImpl.isSyncInProgress, true);
 

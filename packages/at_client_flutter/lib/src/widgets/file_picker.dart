@@ -23,9 +23,7 @@ class AtKeysFileDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         padding: const EdgeInsets.all(24),
         constraints: const BoxConstraints(maxWidth: 500),
@@ -91,14 +89,16 @@ class AtKeysFileDialog extends StatelessWidget {
                     child: OutlinedButton(
                       onPressed: () async {
                         var result = await FilePicker.pickFiles(
-                            type: FileType.custom,
-                            initialDirectory: Directory.current.path,
-                            allowedExtensions: ['atKeys']);
+                          type: FileType.custom,
+                          initialDirectory: Directory.current.path,
+                          allowedExtensions: ['atKeys'],
+                        );
                         if (result != null && result.files.isNotEmpty) {
                           File file = File(result.files.single.path!);
                           print('Selected atKey file: ${file.path}');
-                          FileAtKeysIo fileAtKeysIo =
-                              FileAtKeysIo(filePath: (_) => file.path);
+                          FileAtKeysIo fileAtKeysIo = FileAtKeysIo(
+                            filePath: (_) => file.path,
+                          );
                           Navigator.of(context).pop(fileAtKeysIo);
                         }
                       },
@@ -114,10 +114,7 @@ class AtKeysFileDialog extends StatelessWidget {
                       ),
                       child: const Text(
                         'Select atKey',
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontSize: 14,
-                        ),
+                        style: TextStyle(color: Colors.black, fontSize: 14),
                       ),
                     ),
                   ),

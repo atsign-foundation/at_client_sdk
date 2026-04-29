@@ -4,7 +4,7 @@ echo "***********************************"
 echo "*** Getting dependencies" && dart pub get
 
 echo "***"
-echo "*** Running docker compose up" && sudo docker compose -f test/docker-compose.yaml up -d
+echo "*** Running docker compose up" && docker compose pull && sudo docker compose -f test/docker-compose.yaml up -d
 
 echo "***"
 echo "*** Checking docker readiness" && dart run test/check_docker_readiness.dart

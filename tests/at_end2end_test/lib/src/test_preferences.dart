@@ -22,7 +22,6 @@ class TestPreferences {
     var atClientPreference = AtClientPreference();
     atClientPreference.hiveStoragePath = 'test/hive/client';
     atClientPreference.commitLogPath = 'test/hive/client/commit';
-    atClientPreference.isLocalStoreRequired = true;
     atClientPreference.rootDomain = ConfigUtil.getYaml()['root_server']['url'];
     atClientPreference.syncRegex = TestConstants.namespace;
     atClientPreferencesMap.putIfAbsent(atSign, () => atClientPreference);

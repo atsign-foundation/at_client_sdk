@@ -165,7 +165,7 @@ void main() {
 
       String allFromServer = '';
       for (String fromServer in fromServerList) {
-        socketOnDataFn(utf8.encode(fromServer));
+        await socketOnDataFn(utf8.encode(fromServer));
         allFromServer += fromServer;
       }
       // The Monitor response handler should filter out data:ok\n responses (heartbeat responses)

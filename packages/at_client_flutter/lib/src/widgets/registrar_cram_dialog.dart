@@ -51,8 +51,10 @@ class RegistrarCramDialog extends StatefulWidget {
 }
 
 class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
-  final List<TextEditingController> _controllers =
-      List.generate(4, (_) => TextEditingController());
+  final List<TextEditingController> _controllers = List.generate(
+    4,
+    (_) => TextEditingController(),
+  );
   final List<FocusNode> _focusNodes = List.generate(4, (_) => FocusNode());
   Timer? _resendTimer;
   bool _isLoading = false;
@@ -122,10 +124,7 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
     return Center(
       child: RichText(
         text: TextSpan(
-          style: TextStyle(
-            fontSize: 14,
-            color: widget.themeData.primaryColor,
-          ),
+          style: TextStyle(fontSize: 14, color: widget.themeData.primaryColor),
           children: [
             const TextSpan(text: "Didn't receive a code? "),
             WidgetSpan(
@@ -157,9 +156,7 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       backgroundColor: Colors.white,
       child: Container(
         width: 360,
@@ -175,10 +172,7 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
                   onTap: () {
                     Navigator.of(context).pop();
                   },
-                  child: const Icon(
-                    Icons.arrow_back,
-                    size: 20,
-                  ),
+                  child: const Icon(Icons.arrow_back, size: 20),
                 ),
               ],
             ),
@@ -301,7 +295,8 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
                             });
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                  content: Text('Error verifying OTP: $e')),
+                                content: Text('Error verifying OTP: $e'),
+                              ),
                             );
                           }
                         }

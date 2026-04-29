@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_progress_listener.dart';
@@ -28,6 +29,13 @@ void main() async {
   });
 
   test('notify updating of a key to sharedWith atSign - using await', () async {
+    // Suspend sync while we set up the conflict scenario. With the on-
+    // demand sync trigger model, every local put would otherwise
+    // trigger an immediate microtask-driven sync run, pushing each
+    // phone_X to the server as it lands and eliminating the conflict
+    // we're trying to create on phone_0.
+    await (atClientManager.atClient.syncService as SyncServiceImpl).stop();
+
     // Insert 5 keys into the keystore for uncommitted entries
     // among which, one is a conflict key - phone_0.wavi is a conflict key.
     for (var i = 0; i < 5; i++) {
@@ -42,6 +50,9 @@ void main() async {
     await atClientManager.atClient.put(remoteKey, 'Things have changed',
         putRequestOptions: PutRequestOptions()..useRemoteAtServer = true);
 
+    // Restart sync and add the listener AFTER the conflict has been
+    // staged. stop() removed all listeners, so pl is added fresh.
+    await (atClientManager.atClient.syncService as SyncServiceImpl).start();
     MySyncProgressListener pl = MySyncProgressListener(true);
     atClientManager.atClient.syncService.addProgressListener(pl);
 
@@ -81,6 +92,11 @@ void main() async {
   test(
       'A test to verify sync conflict info when a key is expired and server value is null',
       () async {
+    // Same pattern as the first conflict test: stop sync while we
+    // stage the conflict so the on-demand trigger doesn't push the
+    // local entry before the remote-direct put creates the conflict.
+    await (atClientManager.atClient.syncService as SyncServiceImpl).stop();
+
     // Insert a key into local secondary for an uncommitted entry
     var testKey =
         AtKey.public('test', namespace: namespace, sharedBy: atSign).build();
@@ -100,6 +116,7 @@ void main() async {
     // Wait for a few milliseconds to the key to expire
     await Future.delayed(Duration(milliseconds: 10));
 
+    await (atClientManager.atClient.syncService as SyncServiceImpl).start();
     MySyncProgressListener mySyncProgressListener =
         MySyncProgressListener(true);
     atClientManager.atClient.syncService

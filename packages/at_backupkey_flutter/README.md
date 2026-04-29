@@ -39,7 +39,7 @@ Instructions on how to manually add this package to you project can be found on 
 
 ## How it works
 
-Secret keys are generated for an atSign during onboarding flow of atProtocol. This package helps to add those keys in '.atKeys' file. This file can then be saved in the local filesystem or iCloud/Gdrive.
+Secret keys are generated for an atSign during onboarding flow of Atsign Protocol. This package helps to add those keys in '.atKeys' file. This file can then be saved in the local filesystem or iCloud/Gdrive.
 
 ## Setup
 The following platform specific setups are required:

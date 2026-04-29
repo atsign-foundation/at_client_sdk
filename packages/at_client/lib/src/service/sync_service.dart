@@ -7,7 +7,10 @@ import 'package:uuid/uuid.dart';
 abstract class SyncService {
   /// Sync local secondary and cloud secondary.
   ///
-  /// NB: With current SyncServiceImpl this may not immediately sync. Instead, it will enqueue a request for sync to take place.
+  /// Enqueues a sync request and triggers a sync run as soon as the
+  /// currently-in-flight run (if any) completes; if none is in flight,
+  /// the run starts on the next event-loop tick. After [stop] is
+  /// called this method becomes a no-op.
   ///
   /// This method will be obsolete in the forthcoming alternative implementation which takes an event-driven
   /// streaming approach to syncing. Instead of requesting a sync, you will request that processing

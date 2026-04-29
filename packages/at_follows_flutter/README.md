@@ -20,7 +20,7 @@ following.
 
 ## Get Started
 
-To get a basic overview of the atProtocol and it's packages. Please visit
+To get a basic overview of the Atsign Protocol and it's packages. Please visit
 the [atsign docs](https://atsign.dev/docs/overview/).
 
 > To use this package you must be have a basic setup of the atPlatform/at_app.
