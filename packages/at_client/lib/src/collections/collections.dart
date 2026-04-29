@@ -726,9 +726,9 @@ class AtCollection<T> {
   }
 
   /// Builds a new [Query] scoped to this collection's direct items.
-  /// Chain [Query.where] / [Query.orderBy] / [Query.limit] / [Query.skip]
-  /// and terminate with [Query.fetch] (one-shot) or [Query.watch] (live
-  /// reactive).
+  /// Chain [Query.where] / [Query.orderBy] / [Query.thenBy] /
+  /// [Query.limit] / [Query.skip] and terminate with [Query.fetch]
+  /// (one-shot) or [Query.watch] (live reactive).
   ///
   /// ```dart
   /// final overdue = await todos.query()
@@ -1780,8 +1780,8 @@ class AtCollection<T> {
 // down to secondary indexes without changing the caller's code.
 
 /// A composable, value-typed query over an [AtCollection<T>]. Build up
-/// a query with [where] / [orderBy] / [limit] / [skip], then terminate
-/// with [fetch] (one-shot) or [watch] (live reactive).
+/// a query with [where] / [orderBy] / [thenBy] / [limit] / [skip], then
+/// terminate with [fetch] (one-shot) or [watch] (live reactive).
 ///
 /// ```dart
 /// final overdue = todos.query()
@@ -1818,9 +1818,9 @@ final class Query<T> {
   Query<T> where(bool Function(CItem<T> item) predicate) =>
       Query<T>._(_collection, _spec._withPredicate(predicate));
 
-  /// Sorts by [keyFn]. A subsequent [orderBy] replaces the previous
-  /// one; use a composite key (e.g. a record or derived value) for
-  /// multi-level sorts.
+  /// Sorts by [keyFn]. A subsequent [orderBy] **replaces** any
+  /// previous orderings (matches LINQ / Drift / Isar idiom — call
+  /// [thenBy] to add tiebreakers without resetting).
   ///
   /// The key type must implement `compareTo`; [Comparable] is passed
   /// as a raw type so `int`, `double`, `DateTime`, `String`, and any
@@ -1831,8 +1831,44 @@ final class Query<T> {
   }) =>
       Query<T>._(
         _collection,
-        _spec._withOrderBy(_OrderBy<T>(keyFn, descending: descending)),
+        _spec._withOrderBys([_OrderBy<T>(keyFn, descending: descending)]),
       );
+
+  /// Adds a secondary (tiebreaker) sort key. Multiple [thenBy] calls
+  /// accumulate, so:
+  ///
+  /// ```dart
+  /// q.orderBy((t) => t.obj.dueDate)
+  ///  .thenBy((t) => t.obj.title, descending: true)
+  ///  .thenBy((t) => t.createdAt);
+  /// ```
+  ///
+  /// orders by `dueDate`, then within ties by `title` descending,
+  /// then within still-ties by `createdAt`. Each level has its own
+  /// independent [descending].
+  ///
+  /// Throws [StateError] when called without a prior [orderBy] —
+  /// `thenBy` is a tiebreaker by definition, so it has nothing to
+  /// tiebreak against on its own.
+  Query<T> thenBy(
+    Comparable<dynamic> Function(CItem<T> item) keyFn, {
+    bool descending = false,
+  }) {
+    if (_spec.orderBys.isEmpty) {
+      throw StateError(
+        'thenBy() requires a prior orderBy(). Call .orderBy(...) first '
+        'to establish the primary sort, then chain .thenBy(...) for '
+        'tiebreakers.',
+      );
+    }
+    return Query<T>._(
+      _collection,
+      _spec._withOrderBys([
+        ..._spec.orderBys,
+        _OrderBy<T>(keyFn, descending: descending),
+      ]),
+    );
+  }
 
   /// Keeps at most [n] items after filter + sort + skip.
   Query<T> limit(int n) {
@@ -1902,7 +1938,7 @@ final class Query<T> {
   /// 1 for the purposes of this call; [skip] is respected.
   Future<CItem<T>?> firstOrNull() async {
     if (_spec.limitN != null && _spec.limitN! == 0) return null;
-    if (_spec.orderBy != null) {
+    if (_spec.orderBys.isNotEmpty) {
       final list = await fetch();
       return list.isEmpty ? null : list.first;
     }
@@ -2112,41 +2148,44 @@ final class Query<T> {
 /// the rest in memory.
 final class _QuerySpec<T> {
   final List<bool Function(CItem<T>)> predicates;
-  final _OrderBy<T>? orderBy;
+  // Ordered list of sort keys, primary first. Empty = no sort. Multi-
+  // entry compares are evaluated in registration order, falling
+  // through on ties — see [_apply].
+  final List<_OrderBy<T>> orderBys;
   final int? skipN;
   final int? limitN;
 
   const _QuerySpec({
     this.predicates = const [],
-    this.orderBy,
+    this.orderBys = const [],
     this.skipN,
     this.limitN,
   });
 
   _QuerySpec<T> _withPredicate(bool Function(CItem<T>) p) => _QuerySpec<T>(
         predicates: [...predicates, p],
-        orderBy: orderBy,
+        orderBys: orderBys,
         skipN: skipN,
         limitN: limitN,
       );
 
-  _QuerySpec<T> _withOrderBy(_OrderBy<T> o) => _QuerySpec<T>(
+  _QuerySpec<T> _withOrderBys(List<_OrderBy<T>> os) => _QuerySpec<T>(
         predicates: predicates,
-        orderBy: o,
+        orderBys: os,
         skipN: skipN,
         limitN: limitN,
       );
 
   _QuerySpec<T> _withSkip(int n) => _QuerySpec<T>(
         predicates: predicates,
-        orderBy: orderBy,
+        orderBys: orderBys,
         skipN: n,
         limitN: limitN,
       );
 
   _QuerySpec<T> _withLimit(int n) => _QuerySpec<T>(
         predicates: predicates,
-        orderBy: orderBy,
+        orderBys: orderBys,
         skipN: skipN,
         limitN: n,
       );
@@ -2156,10 +2195,13 @@ final class _QuerySpec<T> {
     for (final p in predicates) {
       out = out.where(p).toList();
     }
-    if (orderBy != null) {
+    if (orderBys.isNotEmpty) {
       out = [...out]..sort((a, b) {
-          final cmp = orderBy!.keyFn(a).compareTo(orderBy!.keyFn(b));
-          return orderBy!.descending ? -cmp : cmp;
+          for (final ob in orderBys) {
+            final cmp = ob.keyFn(a).compareTo(ob.keyFn(b));
+            if (cmp != 0) return ob.descending ? -cmp : cmp;
+          }
+          return 0;
         });
     }
     if (skipN != null && skipN! > 0) {

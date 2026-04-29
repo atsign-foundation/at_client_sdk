@@ -216,6 +216,97 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
+  group('thenBy()', () {
+    test('orderBy + thenBy: tiebreaks within equal primary keys', () async {
+      final c = buildCollection();
+      // Two tasks share due=d1; thenBy(title) decides their order.
+      seed({
+        'a': Task('charlie', done: false, due: d1),
+        'b': Task('alpha', done: false, due: d1),
+        'c': Task('bravo', done: false, due: d2),
+      });
+      final sorted = await c
+          .query()
+          .orderBy((t) => t.obj.due)
+          .thenBy((t) => t.obj.title)
+          .fetch();
+      // d1 group sorted by title (alpha, charlie), then d2 (bravo).
+      expect(sorted.map((i) => i.obj.title), ['alpha', 'charlie', 'bravo']);
+    });
+
+    test('thenBy honours its own descending flag independently', () async {
+      final c = buildCollection();
+      seed({
+        'a': Task('alpha', done: false, due: d1),
+        'b': Task('bravo', done: false, due: d1),
+        'c': Task('charlie', done: false, due: d2),
+      });
+      final sorted = await c
+          .query()
+          .orderBy((t) => t.obj.due) // primary asc
+          .thenBy((t) => t.obj.title, descending: true) // tiebreak desc
+          .fetch();
+      // d1 group: bravo before alpha (title desc), then d2 (charlie).
+      expect(sorted.map((i) => i.obj.title), ['bravo', 'alpha', 'charlie']);
+    });
+
+    test('multiple thenBy calls accumulate in registration order', () async {
+      final c = buildCollection();
+      // All four share due=d1 and done=false; only difference is title.
+      // Use done as the second key (all false → ties), title as the
+      // third tiebreaker — verifies a 3-level chain.
+      seed({
+        'a': Task('charlie', done: false, due: d1),
+        'b': Task('alpha', done: false, due: d1),
+        'c': Task('bravo', done: false, due: d1),
+        'd': Task('delta', done: false, due: d1),
+      });
+      final sorted = await c
+          .query()
+          .orderBy((t) => t.obj.due)
+          .thenBy((t) => t.obj.done ? 1 : 0)
+          .thenBy((t) => t.obj.title)
+          .fetch();
+      // Primary tied (all d1), secondary tied (all done=false), tertiary
+      // breaks them: alpha, bravo, charlie, delta.
+      expect(
+        sorted.map((i) => i.obj.title),
+        ['alpha', 'bravo', 'charlie', 'delta'],
+      );
+    });
+
+    test('thenBy without a prior orderBy throws StateError', () {
+      final c = buildCollection();
+      expect(
+        () => c.query().thenBy((t) => t.obj.title),
+        throwsA(isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('orderBy'),
+        )),
+      );
+    });
+
+    test('orderBy after thenBy chain resets to a single key', () async {
+      // .orderBy keeps replace semantics: a fresh .orderBy after a chain
+      // of .thenBy starts over with just that one key.
+      final c = buildCollection();
+      seed({
+        'a': Task('alpha', done: false, due: d3),
+        'b': Task('bravo', done: false, due: d1),
+        'c': Task('charlie', done: false, due: d2),
+      });
+      final sorted = await c
+          .query()
+          .orderBy((t) => t.obj.title)
+          .thenBy((t) => t.obj.due)
+          .orderBy((t) => t.obj.due) // resets — only this key remains
+          .fetch();
+      expect(sorted.map((i) => i.id), ['b', 'c', 'a']);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   group('limit() / skip()', () {
     test('limit() truncates after sort', () async {
       final c = buildCollection();
