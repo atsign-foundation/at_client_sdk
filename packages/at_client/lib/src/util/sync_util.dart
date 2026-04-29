@@ -6,50 +6,32 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_utils/at_logger.dart';
 
 /// Class contains all the util methods that perform CRUD operations on the commit log keystore.
-///
-/// Callers must supply the per-atSign [AtCommitLog] either via the
-/// constructor or by setting [atCommitLog] before invoking any
-/// instance method — AtClient injects one from its
-/// [AtPersistenceBundle] during init.
 class SyncUtil {
   static var logger = AtSignLogger('SyncUtil');
 
-  AtCommitLog? atCommitLog;
+  final AtCommitLog atCommitLog;
 
-  SyncUtil({this.atCommitLog});
-
-  AtCommitLog _requireCommitLog() {
-    final log = atCommitLog;
-    if (log == null) {
-      throw StateError(
-          'SyncUtil.atCommitLog has not been set. Construct SyncUtil with '
-          'an AtCommitLog (e.g. AtClient injects one from its '
-          'AtPersistenceBundle) or assign syncUtil.atCommitLog before '
-          'invoking any method.');
-    }
-    return log;
-  }
+  SyncUtil({required this.atCommitLog});
 
   Future<CommitEntry?> getCommitEntry(int sequenceNumber) async {
-    return _requireCommitLog().getEntry(sequenceNumber);
+    return atCommitLog.getEntry(sequenceNumber);
   }
 
   Future<void> updateCommitEntry(
       CommitEntry commitEntry, int commitId) async {
-    await _requireCommitLog().update(commitEntry, commitId);
+    await atCommitLog.update(commitEntry, commitId);
   }
 
   Future<CommitEntry?> getLastSyncedEntry(String? regex) async {
-    final log = _requireCommitLog();
     if (regex != null) {
-      return log.lastSyncedEntryWithRegex(regex);
+      return atCommitLog.lastSyncedEntryWithRegex(regex);
     }
-    return log.lastSyncedEntry();
+    return atCommitLog.lastSyncedEntry();
   }
 
   Future<List<CommitEntry>> getChangesSinceLastCommit(
       int? seqNum, String? regex) async {
-    return (await _requireCommitLog().getChanges(seqNum, regex))
+    return (await atCommitLog.getChanges(seqNum, regex))
         .where((commitEntry) => !commitEntry.atKey!.startsWith('local:'))
         .toList();
   }
@@ -133,7 +115,7 @@ class SyncUtil {
   }
 
   Future<void> removeCommitEntry(dynamic key) async {
-    await _requireCommitLog().commitLogKeyStore.remove(key);
+    await atCommitLog.commitLogKeyStore.remove(key);
   }
 
   /// Sorts the commit entries in descending order.

@@ -35,7 +35,7 @@ class SyncServiceImpl implements SyncService {
   }
 
   @visibleForTesting
-  SyncUtil syncUtil = SyncUtil();
+  late SyncUtil syncUtil;
 
   final List<SyncProgressListener> _syncProgressListeners = [];
 
@@ -107,18 +107,32 @@ class SyncServiceImpl implements SyncService {
   static Future<SyncService> create(AtClient atClient,
       {@Deprecated('will be removed in a future version')
       AtClientManager? atClientManager,
-      RemoteSecondary? remoteSecondary}) async {
+      RemoteSecondary? remoteSecondary,
+      @visibleForTesting AtCommitLog? atCommitLog}) async {
     remoteSecondary ??= RemoteSecondary(
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
         atChops: atClient.atChops, enrollmentId: atClient.enrollmentId);
-    final syncService = SyncServiceImpl._(atClient, remoteSecondary);
-    // SyncUtil's commit log is required at first use — preset it from
-    // the bundle so its methods don't throw. The bundle is produced
-    // by StorageManager during AtClient init.
-    if (atClient is AtClientImpl) {
-      syncService.syncUtil.atCommitLog =
-          atClient.persistenceBundle?.commitLog;
+    // SyncService requires a commit log to do anything useful, so refuse
+    // to construct one without one — fail eagerly here rather than on
+    // first sync attempt. Production callers pick up the commit log from
+    // the AtClient's bundle (populated by StorageManager during init when
+    // `AtClientPreference.isLocalStoreRequired` is true). Tests can
+    // inject a mock via the [atCommitLog] parameter and skip the bundle.
+    final commitLog = atCommitLog ??
+        (atClient is AtClientImpl
+            ? atClient.persistenceBundle?.commitLog
+            : null);
+    if (commitLog == null) {
+      throw StateError(
+          'SyncServiceImpl.create requires an AtCommitLog. In production '
+          'this comes from AtClient.persistenceBundle (populated when '
+          'AtClientPreference.isLocalStoreRequired is true). Tests can '
+          'inject one via the atCommitLog: parameter. Skip SyncService '
+          'creation entirely if your application only reads from the '
+          'remote secondary.');
     }
+    final syncService = SyncServiceImpl._(atClient, remoteSecondary);
+    syncService.syncUtil = SyncUtil(atCommitLog: commitLog);
     await syncService.statsServiceListener();
     syncService._startPeriodicSyncTimer();
     // Note: no startup bootstrap is enqueued here. The original cron

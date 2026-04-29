@@ -5,7 +5,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
-import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
@@ -106,8 +105,8 @@ void main() async {
 
     syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
         atClientManager: mockAtClientManager,
-        remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-    syncServiceImpl.syncUtil = SyncUtil(atCommitLog: mockAtCommitLog);
+        remoteSecondary: mockRemoteSecondary,
+        atCommitLog: mockAtCommitLog) as SyncServiceImpl;
   });
 
   group('A group of positive tests on sync service', () {

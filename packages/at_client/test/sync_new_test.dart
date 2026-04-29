@@ -1184,10 +1184,8 @@ void main() {
       //instantiate sync service using mocks
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-
-      //re-initialize sync util using the local commit log for unit tests
-      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
       final keystore =
           TestResources.getHiveKeyStore(TestResources.atsign);
       //------------------------------preconditions setup-----------------------
@@ -1320,8 +1318,8 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
 
       //capture hive seq_num before operation
       int? preOpSeqNum = TestResources.commitLog.lastCommittedSequenceNumber();
@@ -1349,7 +1347,7 @@ void main() {
 
       //capture hive_seq_num before creating uncommitted entries again
       preOpSeqNum =
-          syncService.syncUtil.atCommitLog?.lastCommittedSequenceNumber();
+          syncService.syncUtil.atCommitLog.lastCommittedSequenceNumber();
       //create new uncommitted entries
       await localSecondary.putValue(
           'public:test_key0.group3test1@bob', 'dummydata');
@@ -1429,8 +1427,8 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
 
       //------------------------------preconditions setup-----------------------
       await localSecondary.putValue(
@@ -1483,8 +1481,8 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
 
       //------------------preconditions setup-----------------------
       //create 5 random keys of types public/shared/self
@@ -1562,8 +1560,8 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
       //------------------preconditions setup-----------------------------------
       await localSecondary.putValue(
           'public:test_key0.group3test5@bob', 'dummydata');
@@ -1582,15 +1580,15 @@ void main() {
 
       //after sync assert that commitIds of all commit entries have been updated
       //seq_num starts from 0 and the commitIds start from 21 based on server response mocked above
-      var result = await syncService.syncUtil.atCommitLog?.getEntry(0);
+      var result = await syncService.syncUtil.atCommitLog.getEntry(0);
       expect(result?.commitId, 21);
-      result = await syncService.syncUtil.atCommitLog?.getEntry(1);
+      result = await syncService.syncUtil.atCommitLog.getEntry(1);
       expect(result?.commitId, 22);
-      result = await syncService.syncUtil.atCommitLog?.getEntry(2);
+      result = await syncService.syncUtil.atCommitLog.getEntry(2);
       expect(result?.commitId, 23);
-      result = await syncService.syncUtil.atCommitLog?.getEntry(3);
+      result = await syncService.syncUtil.atCommitLog.getEntry(3);
       expect(result?.commitId, 24);
-      result = await syncService.syncUtil.atCommitLog?.getEntry(4);
+      result = await syncService.syncUtil.atCommitLog.getEntry(4);
       expect(result?.commitId, 25);
       //clearing sync objects
       syncService.clearSyncEntities();
@@ -1642,8 +1640,8 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
 
       //------------------preconditions setup-----------------------
       //create 5 random keys of types public/shared/self
@@ -2027,15 +2025,15 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
 
       //------------------preconditions setup-----------------------
       //manipulating commitLog to make the commitId 100 the lastSyncedEntry
       await localSecondary.putValue(
           'public:dummy.group5test6@bob', 'dummydata');
-      var commitEntry = await syncService.syncUtil.atCommitLog?.getEntry(0);
-      await syncService.syncUtil.atCommitLog?.update(commitEntry!, 100);
+      var commitEntry = await syncService.syncUtil.atCommitLog.getEntry(0);
+      await syncService.syncUtil.atCommitLog.update(commitEntry!, 100);
 
       //creating uncommitted entries
       await localSecondary.putValue('public:test_key0.wavi@bob', 'dummydata');
@@ -2106,8 +2104,8 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
 
       var syncResult =
           await syncService.syncInternal(serverCommitId, syncRequest);
@@ -2344,8 +2342,8 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
 
       // The serverCommitId is 3
       await syncService.syncInternal(3, SyncRequest()..result = SyncResult());
@@ -2485,8 +2483,8 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
 
       //--------------------------Preconditions setup---------------------------
       await localSecondary.putValue(
@@ -2646,7 +2644,8 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
       syncService.syncUtil = mockSyncUtil;
 
       final keystore =
@@ -2753,7 +2752,8 @@ void main() {
           () async {
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+            remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
         expect(
             syncService.encryptedSharedKeyMatcher
                 .hasMatch('shared_keyyy.alice@alice'),
@@ -2786,7 +2786,8 @@ void main() {
       test('A test to verify valid shared_key matches the regex', () async {
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+            remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
         expect(
             syncService.encryptedSharedKeyMatcher
                 .hasMatch('shared_key.alice@alice'),
@@ -2819,8 +2820,8 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
       syncService.atKeyDecryptionManager = mockAtKeyDecryptionManager;
 
       registerFallbackValue(FakeSyncVerbBuilder());
@@ -2935,8 +2936,8 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
       syncService.atKeyDecryptionManager = mockAtKeyDecryptionManager;
 
       registerFallbackValue(FakeSyncVerbBuilder());
@@ -3009,8 +3010,8 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
@@ -3187,13 +3188,13 @@ void main() {
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+            remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
 
         CustomSyncProgressListener syncProgressListener =
             CustomSyncProgressListener();
         syncService.addProgressListener(syncProgressListener);
 
-        syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
@@ -3385,20 +3386,20 @@ void main() {
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-        syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+            remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
         //----------------- Assertions-----------------
         await syncService.syncInternal(4, SyncRequest()..result = SyncResult());
         expect(
-            (await syncService.syncUtil.atCommitLog?.getEntry(0))?.commitId, 0);
+            (await syncService.syncUtil.atCommitLog.getEntry(0))?.commitId, 0);
         expect(
-            (await syncService.syncUtil.atCommitLog?.getEntry(1))?.commitId, 1);
+            (await syncService.syncUtil.atCommitLog.getEntry(1))?.commitId, 1);
         expect(
-            (await syncService.syncUtil.atCommitLog?.getEntry(2))?.commitId, 2);
+            (await syncService.syncUtil.atCommitLog.getEntry(2))?.commitId, 2);
         expect(
-            (await syncService.syncUtil.atCommitLog?.getEntry(3))?.commitId, 3);
+            (await syncService.syncUtil.atCommitLog.getEntry(3))?.commitId, 3);
         expect(
-            (await syncService.syncUtil.atCommitLog?.getEntry(4))?.commitId, 4);
+            (await syncService.syncUtil.atCommitLog.getEntry(4))?.commitId, 4);
         expect(syncService.isSyncInProgress, false);
         //clearing sync objects
         syncService.clearSyncEntities();
@@ -3538,9 +3539,9 @@ void main() {
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+            remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
 
-        syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
 
@@ -3701,9 +3702,9 @@ void main() {
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+            remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
 
-        syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
 
@@ -3801,9 +3802,9 @@ void main() {
 
         SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+            remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
 
-        syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
         registerFallbackValue(FakeSyncVerbBuilder());
         registerFallbackValue(FakeUpdateVerbBuilder());
 
@@ -3864,9 +3865,8 @@ void main() {
             .thenAnswer((invocation) =>
                 throw AtKeyNotFoundException('key is not found in keystore'));
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
-            atClientManager: mockAtClientManager) as SyncServiceImpl;
-        syncServiceImpl.syncUtil =
-            SyncUtil(atCommitLog: TestResources.commitLog);
+            atClientManager: mockAtClientManager,
+            atCommitLog: TestResources.commitLog) as SyncServiceImpl;
         // -------------------Preconditions-------------------
         var listener = CustomSyncProgressListener();
         syncServiceImpl.addProgressListener(listener);
@@ -3920,7 +3920,8 @@ void main() {
             sync: false)).thenAnswer((_) => Future.value('data:5'));
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+            remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
         syncServiceImpl.syncUtil = mockSyncUtil;
         var progressListener = CustomSyncProgressListener();
         syncServiceImpl.addProgressListener(progressListener);
@@ -4002,7 +4003,8 @@ void main() {
 
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+            remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
         syncServiceImpl.syncUtil = mockSyncUtil;
         var progressListener = CustomSyncProgressListener();
         syncServiceImpl.addProgressListener(progressListener);
@@ -4069,7 +4071,8 @@ void main() {
 
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
-            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+            remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
         syncServiceImpl.syncUtil = mockSyncUtil;
         var syncProgressListener = CustomSyncProgressListener();
         syncServiceImpl.addProgressListener(syncProgressListener);
@@ -4166,7 +4169,8 @@ void main() {
           .thenAnswer((_) async => 'data:[{"value":"10"}]');
       syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
       var attempts = 0;
       syncServiceImpl.addProgressListener(_AttemptCountingListener(() {
         attempts++;
@@ -4201,7 +4205,8 @@ void main() {
       });
       syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
       await Future.delayed(Duration(seconds: 1)).then((_) {
         expect(syncServiceImpl.getSyncRequestQueueSize(), 0);
       });
@@ -4242,7 +4247,8 @@ void main() {
       SyncServiceImpl syncServiceImpl = await SyncServiceImpl.create(
           mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
       when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
           .thenAnswer((_) => Future.value(true));
       int? skipDeletesUntil =
@@ -4255,7 +4261,8 @@ void main() {
       SyncServiceImpl syncServiceImpl = await SyncServiceImpl.create(
           mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
       when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
@@ -4270,7 +4277,8 @@ void main() {
       SyncServiceImpl syncServiceImpl = await SyncServiceImpl.create(
           mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
       when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtClient.get(any(that: SkipDeletesUntilMatcher())))
@@ -4290,9 +4298,9 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
 
-      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
 
@@ -4391,9 +4399,9 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
 
-      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
 
@@ -4483,9 +4491,9 @@ void main() {
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
-          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+          remoteSecondary: mockRemoteSecondary,
+          atCommitLog: TestResources.commitLog) as SyncServiceImpl;
 
-      syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
 

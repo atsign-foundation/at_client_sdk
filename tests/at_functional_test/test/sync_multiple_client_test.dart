@@ -349,7 +349,11 @@ Future<dynamic> _getServerCommitEntries(String regex) async {
           demo_credentials.pkamPrivateKeyMap[currentAtSign]!));
 
   AtChops atChops = AtChopsImpl(atChopsKeys);
-  atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
+  // Use AtClientImpl.create directly (rather than
+  // AtClientManager.setCurrentAtSign) because we only want a remote-
+  // only client for querying the server. setCurrentAtSign would also
+  // construct a SyncService, which now requires local storage.
+  final atClient = await AtClientImpl.create(
       currentAtSign,
       namespace,
       AtClientPreference()
@@ -357,13 +361,12 @@ Future<dynamic> _getServerCommitEntries(String regex) async {
         ..isLocalStoreRequired = false
         ..rootDomain = 'vip.ve.atsign.zone',
       atChops: atChops);
-  var infoResponse = await atClientManager.atClient
-      .getRemoteSecondary()
-      ?.executeCommand('info:brief\n');
+  var infoResponse =
+      await atClient.getRemoteSecondary()?.executeCommand('info:brief\n');
   infoResponse = infoResponse?.replaceAll('data:', '');
   var serverVersion = await jsonDecode(infoResponse!)['version'];
   if (Version.parse(serverVersion.split('+')[0]) >= Version(3, 0, 32)) {
-    var serverCommitLogResponse = await atClientManager.atClient
+    var serverCommitLogResponse = await atClient
         .getRemoteSecondary()
         ?.executeCommand('stats:15:$regex\n', auth: true);
     var serverCommitLogMap = jsonDecode(
