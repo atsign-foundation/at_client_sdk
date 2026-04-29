@@ -46,7 +46,7 @@ class Task {
 void main() {
   setUpAll(() {
     registerFallbackValue(FakeAtKey());
-    AtCollection.registerFactory<Task>(Task.fromJson);
+    AtCollection.registerFactory<Task>(Task.fromJson, typeTag: 'Task');
   });
 
   late MockAtClient atClient;
@@ -73,6 +73,7 @@ void main() {
       const Duration(days: 7),
       notifications: notifStream.stream,
       fromJson: Task.fromJson,
+      typeTag: 'Task',
     );
   }
 

@@ -36,8 +36,11 @@ class Comment {
 void main() {
   setUpAll(() {
     registerFallbackValue(FakeAtKey());
-    AtCollection.registerFactory<Post>(Post.fromJson);
-    AtCollection.registerFactory<Comment>(Comment.fromJson);
+    AtCollection.registerFactory<Post>(Post.fromJson, typeTag: 'Post');
+    AtCollection.registerFactory<Comment>(
+      Comment.fromJson,
+      typeTag: 'Comment',
+    );
   });
 
   late MockAtClient atClient;
@@ -91,6 +94,7 @@ void main() {
       const Duration(days: 7),
       notifications: notifStream.stream,
       fromJson: Post.fromJson,
+      typeTag: 'Post',
     );
   }
 
@@ -138,6 +142,7 @@ void main() {
             subName: 'comments',
             subDefaultExpiration: const Duration(days: 7),
             subFromJson: Comment.fromJson,
+            subTypeTag: 'Comment',
           )
           .listen(snapshots.add);
       await pump();
@@ -162,6 +167,7 @@ void main() {
             subName: 'comments',
             subDefaultExpiration: const Duration(days: 7),
             subFromJson: Comment.fromJson,
+            subTypeTag: 'Comment',
           )
           .listen(snapshots.add);
       await pump();
@@ -198,6 +204,7 @@ void main() {
             subName: 'comments',
             subDefaultExpiration: const Duration(days: 7),
             subFromJson: Comment.fromJson,
+            subTypeTag: 'Comment',
           )
           .listen(snapshots.add);
       await pump();
@@ -238,6 +245,7 @@ void main() {
             subName: 'comments',
             subDefaultExpiration: const Duration(days: 7),
             subFromJson: Comment.fromJson,
+            subTypeTag: 'Comment',
           )
           .listen(snapshots.add);
       await pump();
@@ -289,6 +297,7 @@ void main() {
             subName: 'comments',
             subDefaultExpiration: const Duration(days: 7),
             subFromJson: Comment.fromJson,
+            subTypeTag: 'Comment',
           )
           .listen(snapshots.add);
       await pump();

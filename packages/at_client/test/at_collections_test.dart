@@ -60,6 +60,7 @@ void main() {
     String ns = namespace,
     Duration ttl = const Duration(days: 7),
     T Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
   }) {
     return AtCollection<T>.withInjectedNotifications(
       atClient,
@@ -67,6 +68,7 @@ void main() {
       ttl,
       notifications: notifStream.stream,
       fromJson: fromJson,
+      typeTag: typeTag,
     );
   }
 
@@ -84,10 +86,14 @@ void main() {
       );
     });
 
-    test('fromJson is auto-registered under T.toString()', () async {
+    test('fromJson + typeTag auto-registers the factory', () async {
       // Build a collection with a fromJson parameter and round-trip via
       // rehydrate (indirectly, through tryGetItems).
-      final c = buildCollection<Widget>(fromJson: Widget.fromJson);
+      AtCollection.clearFactoriesForTest();
+      final c = buildCollection<Widget>(
+        fromJson: Widget.fromJson,
+        typeTag: 'Widget',
+      );
       final selfKey = AtKey.fromString('id1.$namespace$selfAtSignStr');
       when(
         () => atClient.getAtKeys(regex: any(named: 'regex')),
@@ -155,9 +161,12 @@ void main() {
       expect(item.type, 'n/a');
     });
 
-    test('registered polymorphic type resolves to runtimeType key', () {
-      buildCollection<Widget>();
-      AtCollection.registerFactory<Widget>(Widget.fromJson);
+    test('registered polymorphic type resolves to its typeTag', () {
+      AtCollection.clearFactoriesForTest();
+      AtCollection.registerFactory<Widget>(
+        Widget.fromJson,
+        typeTag: 'Widget',
+      );
       final c = buildCollection<Widget>();
       final item = c.draft(obj: Widget('w1'));
       expect(item.type, 'Widget');
@@ -167,16 +176,24 @@ void main() {
   // ---------------------------------------------------------------------------
   group('factory registry (process-global)', () {
     test(
-        'registerFactory is static: last registration for a type wins, '
-        'and is visible from every collection instance', () async {
+        'registerFactory is static: last registration for the same '
+        '(type, typeTag) pair wins, and is visible from every '
+        'collection instance', () async {
       // Two collections with different namespaces — but factories are
       // process-global. Registering twice for the same `Widget` type
-      // means the second registration overwrites the first, and both
-      // collections will decode via the surviving factory.
+      // under the same typeTag is idempotent (replacement) and both
+      // collections decode via the surviving factory.
+      AtCollection.clearFactoriesForTest();
       final a = buildCollection<Widget>(ns: 'a.app.ns');
       final b = buildCollection<Widget>(ns: 'b.app.ns');
-      AtCollection.registerFactory<Widget>((j) => Widget('a:${j['name']}'));
-      AtCollection.registerFactory<Widget>((j) => Widget('b:${j['name']}'));
+      AtCollection.registerFactory<Widget>(
+        (j) => Widget('a:${j['name']}'),
+        typeTag: 'Widget',
+      );
+      AtCollection.registerFactory<Widget>(
+        (j) => Widget('b:${j['name']}'),
+        typeTag: 'Widget',
+      );
 
       final aKey = AtKey.fromString('id.a.app.ns$selfAtSignStr');
       when(
@@ -209,6 +226,78 @@ void main() {
       final decoded = jsonDecode(encoded);
       expect(decoded['type'], 'binary');
       expect(Base2e15.decode(decoded['obj']), raw);
+    });
+
+    test('rejects empty / whitespace typeTag', () {
+      AtCollection.clearFactoriesForTest();
+      expect(
+        () => AtCollection.registerFactory<Widget>(
+          Widget.fromJson,
+          typeTag: '',
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => AtCollection.registerFactory<Widget>(
+          Widget.fromJson,
+          typeTag: '   ',
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('rejects re-registering the same Type under a different typeTag',
+        () {
+      AtCollection.clearFactoriesForTest();
+      AtCollection.registerFactory<Widget>(Widget.fromJson, typeTag: 'Widget');
+      expect(
+        () => AtCollection.registerFactory<Widget>(
+          Widget.fromJson,
+          typeTag: 'Gadget',
+        ),
+        throwsA(isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          allOf(contains('Widget'), contains('Gadget')),
+        )),
+      );
+    });
+
+    test('rejects registering a typeTag already bound to a different Type',
+        () {
+      AtCollection.clearFactoriesForTest();
+      AtCollection.registerFactory<Widget>(Widget.fromJson, typeTag: 'Shared');
+      expect(
+        () => AtCollection.registerFactory<String>(
+          (j) => j['v'] as String,
+          typeTag: 'Shared',
+        ),
+        throwsA(isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('Shared'),
+        )),
+      );
+    });
+
+    test(
+        'AtCollection ctor: fromJson without typeTag throws ArgumentError',
+        () {
+      AtCollection.clearFactoriesForTest();
+      expect(
+        () => buildCollection<Widget>(fromJson: Widget.fromJson),
+        throwsArgumentError,
+      );
+    });
+
+    test(
+        'AtCollection ctor: typeTag without fromJson throws ArgumentError',
+        () {
+      AtCollection.clearFactoriesForTest();
+      expect(
+        () => buildCollection<Widget>(typeTag: 'Widget'),
+        throwsArgumentError,
+      );
     });
   });
 

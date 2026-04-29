@@ -50,12 +50,14 @@ void main() {
     CItem<dynamic> parent,
     String subName, {
     U Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
   }) {
     return c.parent.subCollection<U>(
       parent: parent,
       subName: subName,
       defaultExpiration: const Duration(days: 30),
       fromJson: fromJson,
+      typeTag: typeTag,
       notifications: c.notifStream.stream,
     );
   }

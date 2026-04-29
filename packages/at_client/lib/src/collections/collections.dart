@@ -199,9 +199,12 @@ class AtCollection<T> {
   //
   // A single global registry simplifies apps that use the same domain
   // type across multiple collection instances (tests, polymorphic
-  // parent/child, cross-namespace). Registrations are idempotent —
-  // last write wins — so if two parts of your app register different
-  // factories for the same type / tag, the later one takes effect.
+  // parent/child, cross-namespace). Re-registering the same
+  // `(Type, typeTag)` pair is idempotent — the factory body is
+  // replaced, last write wins. Re-registering a Type under a
+  // *different* tag, or a tag against a *different* Type, throws
+  // [StateError] — the wire-format tag is part of the cross-atSign
+  // contract and must not silently change underneath callers.
   static final Map<Type, _FactoryEntry> _factoriesByType = {};
   static final Map<String, Function> _factoriesByTag = {};
 
@@ -251,18 +254,24 @@ class AtCollection<T> {
   /// Creates a new [AtCollection] against [namespace] (which must be fully
   /// qualified — see [AtClient.collection]). When supplied, [fromJson]
   /// auto-registers the factory for type `T` — equivalent to calling
-  /// `registerFactory<T>(fromJson)` after construction.
+  /// `registerFactory<T>(fromJson, typeTag: typeTag)` after construction.
+  ///
+  /// [fromJson] and [typeTag] travel together: supplying one without the
+  /// other throws [ArgumentError]. See [registerFactory] for why
+  /// [typeTag] is required.
   factory AtCollection(
     AtClient atClient,
     String namespace,
     Duration defaultExpiration, {
     T Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
   }) =>
       AtCollection._(
         atClient,
         namespace,
         defaultExpiration,
         fromJson: fromJson,
+        typeTag: typeTag,
       );
 
   /// Test-only factory that bypasses `atClient.notificationService.subscribe`
@@ -275,12 +284,14 @@ class AtCollection<T> {
     Duration defaultExpiration, {
     required Stream<AtNotification> notifications,
     T Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
   }) =>
       AtCollection._(
         atClient,
         namespace,
         defaultExpiration,
         fromJson: fromJson,
+        typeTag: typeTag,
         notifications: notifications,
       );
 
@@ -289,13 +300,30 @@ class AtCollection<T> {
     this.namespace,
     this.defaultExpiration, {
     T Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
     Stream<AtNotification>? notifications,
   }) {
     if (!namespace.contains('.')) {
       throw ArgumentError('namespace must be fully qualified');
     }
+    if (fromJson != null && typeTag == null) {
+      throw ArgumentError(
+        'typeTag is required when fromJson is supplied. '
+        "Pass typeTag: '$T' alongside fromJson, or call "
+        "AtCollection.registerFactory<$T>(fromJson, typeTag: '$T') "
+        'separately. The typeTag pins the wire-format identifier so it '
+        'survives Dart minifier / tree-shaker renames in release builds.',
+      );
+    }
+    if (fromJson == null && typeTag != null) {
+      throw ArgumentError(
+        'typeTag was supplied without fromJson. Pass fromJson alongside '
+        'it, or omit both and register the factory separately via '
+        'AtCollection.registerFactory.',
+      );
+    }
     if (fromJson != null) {
-      registerFactory<T>(fromJson);
+      registerFactory<T>(fromJson, typeTag: typeTag!);
     }
 
     logger = AtSignLogger(' AtCollection<$T> $namespace ');
@@ -341,31 +369,78 @@ class AtCollection<T> {
 
   /// Registers a factory for type [U] so objects of that type can be
   /// drafted and rehydrated by any [AtCollection] in this process.
-  /// The wire-format tag is [typeTag] if supplied, otherwise
-  /// `U.toString()`.
+  ///
+  /// [typeTag] is the **wire-format identifier** for [U] — it is
+  /// written into every record's envelope and used to look the
+  /// factory up on rehydrate. It is required because deriving the
+  /// tag from `U.toString()` is unsafe under Dart's minifier /
+  /// tree-shaker (release-mode Flutter web, AOT obfuscated builds);
+  /// a renamed class name silently changes the on-wire tag and
+  /// rehydrate falls back to the raw map. Pinning [typeTag]
+  /// explicitly is the only way to guarantee the wire format is
+  /// stable across builds and across atSigns.
   ///
   /// Static by design: factories are process-global, shared across
-  /// every [AtCollection] instance. Callers that need to register a
-  /// factory implicitly by passing `fromJson:` to [AtClient.collection]
-  /// are just calling into this same registry.
+  /// every [AtCollection] instance. Callers that supply `fromJson:`
+  /// to [AtCollection.new] / [AtClient.collection] / [subCollection]
+  /// must also supply the matching `typeTag:` — those entry points
+  /// just forward into this method.
   ///
-  /// Use for polymorphic collections where `T` is an abstract supertype:
-  ///
-  ///     AtCollection.registerFactory<Dog>(Dog.fromJson);
-  ///     AtCollection.registerFactory<Cat>(Cat.fromJson);
-  ///     final pets = await atClient.collection<Pet>(ns, defaultExpiration);
-  ///
-  /// If you build with Dart's minifier / tree-shaker (e.g. release-mode
-  /// Flutter web) and class names may be renamed, pin the tag explicitly:
+  /// Use for polymorphic collections where `T` is an abstract
+  /// supertype:
   ///
   ///     AtCollection.registerFactory<Dog>(Dog.fromJson, typeTag: 'Dog');
+  ///     AtCollection.registerFactory<Cat>(Cat.fromJson, typeTag: 'Cat');
+  ///     final pets = await atClient.collection<Pet>(ns, defaultExpiration);
+  ///
+  /// **Re-registration rules.** Re-registering the same `(U, typeTag)`
+  /// pair replaces the factory body (last write wins; useful for
+  /// tests). Re-registering [U] under a *different* tag, or [typeTag]
+  /// against a different type, throws [StateError] — the tag is part
+  /// of the cross-atSign wire-format contract and must not silently
+  /// drift. To rotate a wire format, choose a new tag, deploy
+  /// readers that accept both old and new, then retire the old.
   static void registerFactory<U>(
     U Function(Map<String, dynamic>) fromJson, {
-    String? typeTag,
+    required String typeTag,
   }) {
-    final tag = typeTag ?? U.toString();
-    _factoriesByType[U] = _FactoryEntry(tag, fromJson);
-    _factoriesByTag[tag] = fromJson;
+    if (typeTag.trim().isEmpty) {
+      throw ArgumentError(
+        'typeTag must be non-empty / non-whitespace; got "$typeTag" for $U.',
+      );
+    }
+    final existing = _factoriesByType[U];
+    if (existing != null && existing.tag != typeTag) {
+      throw StateError(
+        'Type $U is already registered with typeTag "${existing.tag}"; '
+        'cannot re-register it under "$typeTag". The wire-format tag '
+        'for a given type is part of the cross-atSign contract — pick '
+        'one and keep it. To replace the factory body for the same '
+        'type, pass the same typeTag.',
+      );
+    }
+    for (final e in _factoriesByType.entries) {
+      if (e.key != U && e.value.tag == typeTag) {
+        throw StateError(
+          'typeTag "$typeTag" is already registered for type ${e.key}; '
+          'cannot register it for $U as well. typeTag is the wire-format '
+          'identifier and must be unique across all registered types.',
+        );
+      }
+    }
+    _factoriesByType[U] = _FactoryEntry(typeTag, fromJson);
+    _factoriesByTag[typeTag] = fromJson;
+  }
+
+  /// Test-only escape hatch that drops every registered factory.
+  /// Useful at the start of a test that wants a clean global registry
+  /// (process-global static state otherwise carries between tests).
+  /// Not for production use — the registry is meant to be append-only
+  /// from app code.
+  @visibleForTesting
+  static void clearFactoriesForTest() {
+    _factoriesByType.clear();
+    _factoriesByTag.clear();
   }
 
   // ---------------------------------------------------------------------------
@@ -769,6 +844,7 @@ class AtCollection<T> {
     required String subName,
     required Duration defaultExpiration,
     U Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
     Stream<AtNotification>? notifications,
   }) {
     if (subName == _rr) {
@@ -784,6 +860,7 @@ class AtCollection<T> {
       subName: subName,
       defaultExpiration: defaultExpiration,
       fromJson: fromJson,
+      typeTag: typeTag,
       notifications: notifications,
     );
   }
@@ -795,6 +872,7 @@ class AtCollection<T> {
     required String subName,
     required Duration defaultExpiration,
     U Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
     Stream<AtNotification>? notifications,
   }) {
     if (subName.isEmpty || subName.contains('.')) {
@@ -839,12 +917,14 @@ class AtCollection<T> {
             defaultExpiration,
             notifications: notifications,
             fromJson: fromJson,
+            typeTag: typeTag,
           )
         : AtCollection<U>(
             atClient,
             composedNs,
             defaultExpiration,
             fromJson: fromJson,
+            typeTag: typeTag,
           );
     sub._parentItem = parent;
     sub._parentCollection = this;
@@ -1869,6 +1949,7 @@ final class Query<T> {
   ///       subName: 'notes',
   ///       subDefaultExpiration: const Duration(days: 365),
   ///       subFromJson: TodoNote.fromJson,
+  ///       subTypeTag: 'TodoNote',
   ///     );
   /// // stream: Stream<List<({CItem<Todo> parent, List<CItem<TodoNote>> children})>>
   /// ```
@@ -1894,6 +1975,7 @@ final class Query<T> {
     required String subName,
     required Duration subDefaultExpiration,
     U Function(Map<String, dynamic>)? subFromJson,
+    String? subTypeTag,
   }) {
     // Per-parent state. Key is `<owner>:<id>` — the (owner, id) pair
     // under which a CItem is globally unique.
@@ -1936,6 +2018,7 @@ final class Query<T> {
           subName: subName,
           defaultExpiration: subDefaultExpiration,
           fromJson: subFromJson,
+          typeTag: subTypeTag,
           // Thread the parent collection's injected notification stream
           // (if any) through so tests driving events via a shared
           // controller see them at the child sub-collection too.

@@ -650,10 +650,18 @@ abstract class AtClient {
   /// **NOT** appended automatically — the caller must pass the complete
   /// namespace. Throws [ArgumentError] if [namespace] contains no dot.
   ///
-  /// If [fromJson] is supplied, it is registered as the factory for items
-  /// of type [T] (keyed by `T.toString()`), so they rehydrate correctly on
-  /// retrieval. For polymorphic collections, omit [fromJson] here and call
-  /// `collection.registerFactory<ConcreteType>(...)` per concrete type.
+  /// If [fromJson] is supplied it is registered as the factory for items
+  /// of type [T] under [typeTag] (the wire-format identifier), via
+  /// [AtCollection.registerFactory]. [fromJson] and [typeTag] travel
+  /// together — supplying one without the other throws [ArgumentError].
+  /// For polymorphic collections, omit both here and call
+  /// `AtCollection.registerFactory<ConcreteType>(fromJson, typeTag: ...)`
+  /// per concrete type.
+  ///
+  /// [typeTag] is required (whenever [fromJson] is supplied) because
+  /// deriving the tag from `T.toString()` is unsafe under Dart's
+  /// minifier / tree-shaker — see [AtCollection.registerFactory] for
+  /// the full rationale.
   ///
   /// When [cleanupOrphansOnCreation] is true, the returned collection runs
   /// a one-shot `cleanupOrphans()` sweep before the `Future` completes.
@@ -665,6 +673,7 @@ abstract class AtClient {
     String namespace,
     Duration defaultExpiration, {
     T Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
     bool cleanupOrphansOnCreation = false,
   });
 }

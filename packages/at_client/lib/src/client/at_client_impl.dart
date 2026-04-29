@@ -167,6 +167,7 @@ class AtClientImpl implements AtClient {
     String namespace,
     Duration defaultExpiration, {
     T Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
     bool cleanupOrphansOnCreation = false,
   }) async {
     if (!namespace.contains('.')) {
@@ -184,6 +185,7 @@ class AtClientImpl implements AtClient {
         namespace,
         defaultExpiration,
         fromJson: fromJson,
+        typeTag: typeTag,
       ),
     ) as AtCollection<T>;
     if (cleanupOrphansOnCreation && !_collectionsSwept.contains(namespace)) {
