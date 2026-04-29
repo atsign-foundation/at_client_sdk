@@ -31,8 +31,9 @@ class PkamDialog extends StatelessWidget {
     this.title,
     this.description,
     this.backupKeys,
-  });
-  final AuthService auth = AuthService();
+    AuthService? authService,
+  }) : auth = authService ?? AuthService();
+  final AuthService auth;
   final AtAuthRequest request;
   final Widget Function(ProgressEvent)? progressBuilder;
   final void Function(AtAuthRequest)? onAuthenticationComplete;
@@ -65,13 +66,26 @@ class PkamDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    auth.authenticate(request, backupKeys: backupKeys).then((response) {
-      if (onAuthenticationComplete != null) {
-        onAuthenticationComplete!(request);
-      } else {
-        _logger.info(response.toString());
+    Future<void>(() async {
+      try {
+        final response = await auth.authenticate(
+          request,
+          backupKeys: backupKeys,
+        );
+        if (onAuthenticationComplete != null) {
+          onAuthenticationComplete!(request);
+        } else {
+          _logger.info(response.toString());
+        }
+        if (context.mounted) {
+          Navigator.of(context).pop(response);
+        }
+      } catch (e, st) {
+        _logger.warning('Authentication failed', e, st);
+        if (!context.mounted) return;
+        _showError(context, e.toString());
+        Navigator.of(context).pop();
       }
-      Navigator.of(context).pop(response);
     });
     return Dialog(
       child: Container(
@@ -93,6 +107,18 @@ class PkamDialog extends StatelessWidget {
               return progressBuilder!(progress);
             }
           },
+        ),
+      ),
+    );
+  }
+
+  void _showError(BuildContext context, String error) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          error.isNotEmpty ? error : 'Authentication failed. Please try again.',
         ),
       ),
     );

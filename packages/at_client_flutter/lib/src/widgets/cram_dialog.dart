@@ -32,11 +32,12 @@ class CramDialog extends StatelessWidget {
     this.onOnboardingComplete,
     this.title,
     this.description,
-  });
+    AuthService? authService,
+  }) : _authService = authService ?? AuthService();
 
   final AtOnboardingRequest request;
   final String cramKey;
-  final AuthService _authService = AuthService();
+  final AuthService _authService;
   final Widget Function(ProgressEvent)? progressBuilder;
   final void Function(AtOnboardingRequest)? onOnboardingComplete;
   final String? title;
@@ -68,13 +69,23 @@ class CramDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     String secret = _parseCramKey(cramKey);
-    _authService.onboard(request, secret).then((response) {
-      if (onOnboardingComplete != null) {
-        onOnboardingComplete!(request);
-      } else {
-        _logger.info('Onboarding response: $response');
+    Future<void>(() async {
+      try {
+        final response = await _authService.onboard(request, secret);
+        if (onOnboardingComplete != null) {
+          onOnboardingComplete!(request);
+        } else {
+          _logger.info('Onboarding response: $response');
+        }
+        if (context.mounted) {
+          Navigator.of(context).pop(response);
+        }
+      } catch (e, st) {
+        _logger.warning('Onboarding failed', e, st);
+        if (!context.mounted) return;
+        _showError(context, e.toString());
+        Navigator.of(context).pop();
       }
-      Navigator.of(context).pop(response);
     });
     return AlertDialog(
       title: Text("Onboarding"),
@@ -99,6 +110,18 @@ class CramDialog extends StatelessWidget {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  void _showError(BuildContext context, String error) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          error.isNotEmpty ? error : 'Onboarding failed. Please try again.',
+        ),
       ),
     );
   }

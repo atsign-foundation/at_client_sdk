@@ -24,6 +24,7 @@ class ApkamActivationDialog extends StatefulWidget {
   final Map<String, String> namespaces;
 
   final ThemeData themeData;
+  final FlutterEnrollmentService? enrollmentService;
 
   ApkamActivationDialog({
     super.key,
@@ -33,6 +34,7 @@ class ApkamActivationDialog extends StatefulWidget {
     required this.deviceName,
     required this.namespaces,
     required this.themeData,
+    this.enrollmentService,
   });
 
   @override
@@ -74,7 +76,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   );
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
   bool _isLoading = false;
-  final enrollmentService = FlutterEnrollmentService();
+  late final FlutterEnrollmentService enrollmentService;
   final String atSign;
   final AtRootDomain rootDomain;
   final String appName;
@@ -92,6 +94,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   @override
   void initState() {
     super.initState();
+    enrollmentService = widget.enrollmentService ?? FlutterEnrollmentService();
   }
 
   Future<AtEnrollmentResponse> _sendEnrollment(String otp) async {
@@ -276,11 +279,22 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
                           setState(() {
                             _isLoading = true;
                           });
-                          final response = await _sendEnrollment(otp);
-                          Navigator.of(context).pop(response);
-                          setState(() {
-                            _isLoading = false;
-                          });
+                          try {
+                            final response = await _sendEnrollment(otp);
+                            if (!mounted) return;
+                            Navigator.of(context).pop(response);
+                          } catch (e) {
+                            if (mounted) {
+                              _showError(context, e.toString());
+                              Navigator.of(context).pop();
+                            }
+                          } finally {
+                            if (mounted) {
+                              setState(() {
+                                _isLoading = false;
+                              });
+                            }
+                          }
                         }
                       },
                       style: ElevatedButton.styleFrom(
@@ -302,6 +316,18 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
                   ),
             const SizedBox(height: 16),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showError(BuildContext context, String error) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          error.isNotEmpty ? error : 'Enrollment failed. Please try again.',
         ),
       ),
     );
