@@ -59,6 +59,7 @@ class TodosService {
       'todos.$ns',
       defaultExpiration,
       fromJson: Todo.fromJson,
+      typeTag: 'Todo',
       cleanupOrphansOnCreation: true,
     );
     // Legacy notes probe — pre-subcollection versions of this app
@@ -89,6 +90,7 @@ class TodosService {
         subName: 'notes',
         defaultExpiration: defaultExpiration,
         fromJson: TodoNote.fromJson,
+        typeTag: 'TodoNote',
       ),
     );
   }
@@ -133,6 +135,7 @@ class TodosService {
             subName: 'notes',
             subDefaultExpiration: defaultExpiration,
             subFromJson: TodoNote.fromJson,
+            subTypeTag: 'TodoNote',
           )
           .listen(_todosCtrl!.add, onError: _todosCtrl!.addError);
     }

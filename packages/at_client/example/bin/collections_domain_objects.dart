@@ -16,8 +16,8 @@ void main(List<String> args) async {
 
   // c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
-  AtCollection.registerFactory<Dog>(Dog.fromJson);
-  AtCollection.registerFactory<Cat>(Cat.fromJson);
+  AtCollection.registerFactory<Dog>(Dog.fromJson, typeTag: 'Dog');
+  AtCollection.registerFactory<Cat>(Cat.fromJson, typeTag: 'Cat');
   final pets = await c.atClient.collection<Pet>(
     'pets.$applicationNamespace',
     exampleDefaultExpiration,

@@ -54,6 +54,7 @@ void main(List<String> args) async {
     'posts.$applicationNamespace',
     exampleDefaultExpiration,
     fromJson: BlogPost.fromJson,
+    typeTag: 'BlogPost',
   );
 
   switch (c.role) {
@@ -87,6 +88,7 @@ Future<void> sender(ExampleContext c, AtCollection<BlogPost> posts) async {
     subName: 'comments',
     defaultExpiration: exampleDefaultExpiration,
     fromJson: BlogComment.fromJson,
+    typeTag: 'BlogComment',
   );
   final myComment = await comments.create(
     obj: BlogComment('Author\'s opening comment from ${c.atClient.atSign}'),
@@ -138,6 +140,7 @@ Future<void> receiver(ExampleContext c, AtCollection<BlogPost> posts) async {
         subName: 'comments',
         defaultExpiration: exampleDefaultExpiration,
         fromJson: BlogComment.fromJson,
+        typeTag: 'BlogComment',
       );
       final mine = await comments.create(
         obj: BlogComment('Receiver comment from ${c.atClient.atSign}'),

@@ -197,6 +197,7 @@ class _TodosAppState extends State<TodosApp> {
       'todos.$ns',
       const Duration(days: 365),
       fromJson: Todo.fromJson,
+      typeTag: 'Todo',
       cleanupOrphansOnCreation: true,
     );
     // Legacy-notes probe: prior versions stored notes in a sibling
@@ -228,6 +229,7 @@ class _TodosAppState extends State<TodosApp> {
         subName: 'notes',
         defaultExpiration: const Duration(days: 365),
         fromJson: TodoNote.fromJson,
+        typeTag: 'TodoNote',
       ),
     );
   }
@@ -257,6 +259,7 @@ class _TodosAppState extends State<TodosApp> {
           subName: 'notes',
           subDefaultExpiration: const Duration(days: 365),
           subFromJson: TodoNote.fromJson,
+          subTypeTag: 'TodoNote',
         )
         .listen(
           _onCombinedSnapshot,
