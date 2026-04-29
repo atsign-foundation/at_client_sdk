@@ -163,263 +163,285 @@ class MyHomePage extends StatelessWidget {
     return Scaffold(
       // Uses theme.scaffoldBackgroundColor automatically
       body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Spacer(flex: 2),
-
-                // Title
-                Text('My App', style: textTheme.headlineMedium),
-
-                const SizedBox(height: 8),
-
-                // Subtitl
-                Text(
-                  'Secure authentication with atSign',
-                  style: textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-
-                const SizedBox(height: 48),
-
-                // Login Button
-                ElevatedButton(
-                  onPressed: () async {
-                    _logger.info('═══ Login with Keychain button pressed ═══');
-                    try {
-                      await loginWithKeychain(context);
-                    } catch (e, stack) {
-                      _logger.info('CAUGHT in button handler: $e');
-                      _logger.info('Stack: $stack');
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-                      }
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colorScheme.primary,
-                    foregroundColor: colorScheme.onPrimary,
-                  ),
-                  child: const Text('Login with Existing atSign'),
-                ),
-                const SizedBox(height: 16),
-
-                // Login Button via enrollment
-                ElevatedButton(
-                  onPressed: () async {
-                    _logger.info('═══ Login with APKAM button pressed ═══');
-                    try {
-                      await loginWithApkam(context);
-                    } catch (e, stack) {
-                      _logger.info('CAUGHT in button handler: $e');
-                      _logger.info('Stack: $stack');
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-                      }
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colorScheme.primary,
-                    foregroundColor: colorScheme.onPrimary,
-                  ),
-                  child: const Text('Register an atSign with APKAM'),
-                ),
-                const SizedBox(height: 16),
-
-                // Divider with "OR"
-                Row(
-                  children: [
-                    const Expanded(child: Divider()),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'OR',
-                        style: textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurface.withValues(alpha: 0.5),
-                        ),
-                      ),
-                    ),
-                    const Expanded(child: Divider()),
-                  ],
-                ),
-
-                const SizedBox(height: 16),
-
-                // Register Button
-                OutlinedButton(
-                  onPressed: () async {
-                    _logger.info('═══ Onboard button pressed ═══');
-                    try {
-                      await onboard(context);
-                    } catch (e, stack) {
-                      _logger.info('CAUGHT in button handler: $e');
-                      _logger.info('Stack: $stack');
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-                      }
-                    }
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: colorScheme.primary,
-                    side: BorderSide(
-                      color: colorScheme.primary.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  child: const Text('Onboard a New atSign'),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Add atSign via File
-                OutlinedButton(
-                  onPressed: () async {
-                    _logger.info('═══ Login with File button pressed ═══');
-                    try {
-                      await loginWithFile(context);
-                    } catch (e, stack) {
-                      _logger.info('CAUGHT in button handler: $e');
-                      _logger.info('Stack: $stack');
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-                      }
-                    }
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: colorScheme.secondary,
-                    side: BorderSide(
-                      color: colorScheme.secondary.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  child: const Text('Add an atSign by File'),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Manage Paired atSigns text button
-                TextButton(
-                  onPressed: () {
-                    showModalBottomSheet(
-                      context: context,
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.vertical(
-                          top: Radius.circular(20),
-                        ),
-                      ),
-                      builder: (BuildContext context) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(vertical: 20),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 10,
-                                ),
-                                child: Text(
-                                  'Manage Paired atSigns',
-                                  style: textTheme.titleMedium?.copyWith(
-                                    color: colorScheme.onSurface.withValues(
-                                      alpha: 0.8,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const Divider(),
-
-                              // Clear atSign option
-                              ListTile(
-                                leading: Icon(
-                                  Icons.clear,
-                                  color: colorScheme.primary,
-                                ),
-                                title: const Text('Clear atSign'),
-                                onTap: () async {
-                                  try {
-                                    await removeAtsign(context);
-                                    if (context.mounted) {
-                                      Navigator.pop(context);
-                                    }
-                                  } catch (e, stack) {
-                                    _logger.info('Error removing atSign: $e');
-                                    _logger.info('Stack: $stack');
-                                  }
-                                },
-                              ),
-
-                              // Reset all atSigns option
-                              ListTile(
-                                leading: Icon(
-                                  Icons.restore,
-                                  color: colorScheme.primary,
-                                ),
-                                title: const Text('Reset All atSigns'),
-                                onTap: () async {
-                                  try {
-                                    Navigator.pop(context);
-                                    await clearAllAtsigns();
-                                  } catch (e, stack) {
-                                    _logger.info(
-                                      'Error clearing all atSigns: $e',
-                                    );
-                                    _logger.info('Stack: $stack');
-                                  }
-                                },
-                              ),
-
-                              const SizedBox(height: 10),
-                            ],
-                          ),
-                        );
-                      },
-                    );
-                  },
-                  child: Text(
-                    'Manage Paired atSigns',
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ),
-
-                const Spacer(flex: 2),
-
-                // Footer text
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 24),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
                   child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      const Spacer(flex: 2),
+
+                      // Title
+                      Text('My App', style: textTheme.headlineMedium),
+
+                      const SizedBox(height: 8),
+
+                      // Subtitl
                       Text(
-                        "Don't have an atSign yet?",
-                        style: textTheme.bodySmall?.copyWith(
+                        'Secure authentication with atSign',
+                        style: textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Get a free atSign at atsign.com',
-                        style: textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurface.withValues(alpha: 0.6),
+
+                      const SizedBox(height: 48),
+
+                      // Login Button
+                      ElevatedButton(
+                        onPressed: () async {
+                          _logger.info(
+                            '═══ Login with Keychain button pressed ═══',
+                          );
+                          try {
+                            await loginWithKeychain(context);
+                          } catch (e, stack) {
+                            _logger.info('CAUGHT in button handler: $e');
+                            _logger.info('Stack: $stack');
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e')),
+                              );
+                            }
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colorScheme.primary,
+                          foregroundColor: colorScheme.onPrimary,
+                        ),
+                        child: const Text('Login with Existing atSign'),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Login Button via enrollment
+                      ElevatedButton(
+                        onPressed: () async {
+                          _logger.info(
+                            '═══ Login with APKAM button pressed ═══',
+                          );
+                          try {
+                            await loginWithApkam(context);
+                          } catch (e, stack) {
+                            _logger.info('CAUGHT in button handler: $e');
+                            _logger.info('Stack: $stack');
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e')),
+                              );
+                            }
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colorScheme.primary,
+                          foregroundColor: colorScheme.onPrimary,
+                        ),
+                        child: const Text('Register an atSign with APKAM'),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Divider with "OR"
+                      Row(
+                        children: [
+                          const Expanded(child: Divider()),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Text(
+                              'OR',
+                              style: textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurface.withValues(
+                                  alpha: 0.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const Expanded(child: Divider()),
+                        ],
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Register Button
+                      OutlinedButton(
+                        onPressed: () async {
+                          _logger.info('═══ Onboard button pressed ═══');
+                          try {
+                            await onboard(context);
+                          } catch (e, stack) {
+                            _logger.info('CAUGHT in button handler: $e');
+                            _logger.info('Stack: $stack');
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e')),
+                              );
+                            }
+                          }
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: colorScheme.primary,
+                          side: BorderSide(
+                            color: colorScheme.primary.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        child: const Text('Onboard a New atSign'),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Add atSign via File
+                      OutlinedButton(
+                        onPressed: () async {
+                          _logger.info(
+                            '═══ Login with File button pressed ═══',
+                          );
+                          try {
+                            await loginWithFile(context);
+                          } catch (e, stack) {
+                            _logger.info('CAUGHT in button handler: $e');
+                            _logger.info('Stack: $stack');
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e')),
+                              );
+                            }
+                          }
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: colorScheme.secondary,
+                          side: BorderSide(
+                            color: colorScheme.secondary.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        child: const Text('Add an atSign by File'),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Manage Paired atSigns text button
+                      TextButton(
+                        onPressed: () {
+                          showModalBottomSheet(
+                            context: context,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(20),
+                              ),
+                            ),
+                            builder: (BuildContext context) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 20,
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 20,
+                                        vertical: 10,
+                                      ),
+                                      child: Text(
+                                        'Manage Paired atSigns',
+                                        style: textTheme.titleMedium?.copyWith(
+                                          color: colorScheme.onSurface
+                                              .withValues(alpha: 0.8),
+                                        ),
+                                      ),
+                                    ),
+                                    const Divider(),
+
+                                    // Clear atSign option
+                                    ListTile(
+                                      leading: Icon(
+                                        Icons.clear,
+                                        color: colorScheme.primary,
+                                      ),
+                                      title: const Text('Clear atSign'),
+                                      onTap: () async {
+                                        try {
+                                          await removeAtsign(context);
+                                          if (context.mounted) {
+                                            Navigator.pop(context);
+                                          }
+                                        } catch (e, stack) {
+                                          _logger.info(
+                                            'Error removing atSign: $e',
+                                          );
+                                          _logger.info('Stack: $stack');
+                                        }
+                                      },
+                                    ),
+
+                                    // Reset all atSigns option
+                                    ListTile(
+                                      leading: Icon(
+                                        Icons.restore,
+                                        color: colorScheme.primary,
+                                      ),
+                                      title: const Text('Reset All atSigns'),
+                                      onTap: () async {
+                                        try {
+                                          Navigator.pop(context);
+                                          await clearAllAtsigns();
+                                        } catch (e, stack) {
+                                          _logger.info(
+                                            'Error clearing all atSigns: $e',
+                                          );
+                                          _logger.info('Stack: $stack');
+                                        }
+                                      },
+                                    ),
+
+                                    const SizedBox(height: 10),
+                                  ],
+                                ),
+                              );
+                            },
+                          );
+                        },
+                        child: Text(
+                          'Manage Paired atSigns',
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurface.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ),
+
+                      const Spacer(flex: 2),
+
+                      // Footer text
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 24),
+                        child: Column(
+                          children: [
+                            Text(
+                              "Don't have an atSign yet?",
+                              style: textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Get a free atSign at atsign.com',
+                              style: textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
