@@ -358,6 +358,7 @@ Future<dynamic> _getServerCommitEntries(String regex) async {
       namespace,
       AtClientPreference()
         ..privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign]
+        // ignore: deprecated_member_use
         ..isLocalStoreRequired = false
         ..rootDomain = 'vip.ve.atsign.zone',
       atChops: atChops);
@@ -379,12 +380,13 @@ Future<dynamic> _getServerCommitEntries(String regex) async {
 Future<Map<String, Map<String, dynamic>>> _getLocalCommitEntries(
     List<String> atKeyList,
     {String clientId = ''}) async {
-  var commitLog =
-      await AtCommitLogManagerImpl.getInstance().getCommitLog(currentAtSign);
+  final commitLog = (atClientManager.atClient as AtClientImpl)
+      .persistenceBundle!
+      .commitLog;
   var commitLogEntriesMap = <String, Map<String, dynamic>>{};
 
   for (MapEntry<int, CommitEntry> mapEntry
-      in (await commitLog?.commitLogKeyStore.toMap())!.entries) {
+      in (await commitLog.commitLogKeyStore.toMap()).entries) {
     if (mapEntry.value.commitId == null) {
       continue;
     }
@@ -447,7 +449,6 @@ AtClientPreference _getAtClientPreference(String currentAtSign, String clientId,
   var preference = AtClientPreference();
   preference.hiveStoragePath = hiveStoragePath;
   preference.commitLogPath = commitLogPath;
-  preference.isLocalStoreRequired = true;
   preference.privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign];
   preference.rootDomain = 'vip.ve.atsign.zone';
   preference.atClientParticulars = AtClientParticulars()

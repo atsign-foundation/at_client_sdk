@@ -7,10 +7,13 @@ import 'test_utils.dart';
 
 late AtClientManager atClientManager;
 late String sharedWithAtSign;
-AtCommitLog? atCommitLog;
+late AtCommitLog atCommitLog;
 late String currentAtSign;
 var preference = TestUtils.getPreference(currentAtSign);
 String namespace = 'wavi';
+
+AtCommitLog _commitLog() =>
+    (atClientManager.atClient as AtClientImpl).persistenceBundle!.commitLog;
 
 Future<void> setUpMethod() async {
   currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
@@ -34,8 +37,7 @@ void main() {
       await atClientManager.atClient.put(atKey, value);
       await Future.delayed(Duration(milliseconds: 1));
     }
-    atCommitLog =
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(currentAtSign);
+    atCommitLog = _commitLog();
 
     // Now, let the duplicate entries sync to the cloud secondary.
     // Client side commit log compaction removes the duplicate entries only
@@ -44,7 +46,11 @@ void main() {
         .syncData(syncSvc: atClientManager.atClient.syncService);
     // Start the compaction job in async mode
     Future<AtCompactionStats> compactionFuture =
-        AtCompactionService.getInstance().executeCompaction(atCommitLog!);
+        // The replacement (per-job AtCompactionService) isn't wired up
+        // in the upstream package yet; the singleton accessor is the
+        // only way to get an instance today.
+        // ignore: deprecated_member_use
+        AtCompactionService.getInstance().executeCompaction(atCommitLog);
     // While the compaction job runs; create, update and delete a key and let the
     // sync service trigger.
     AtKey mobileAtKey = (AtKey.self('mobile', namespace: namespace)
@@ -89,8 +95,7 @@ void main() {
       await atClientManager.atClient.delete(atKey);
       await Future.delayed(Duration(milliseconds: 2));
     }
-    atCommitLog =
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(currentAtSign);
+    atCommitLog = _commitLog();
 
     // Now, let the duplicate entries sync to the cloud secondary.
     // Client side commit log compaction removes the duplicate entries only
@@ -99,7 +104,11 @@ void main() {
         .syncData(syncSvc: atClientManager.atClient.syncService);
 
     Future<AtCompactionStats> compactionFuture =
-        AtCompactionService.getInstance().executeCompaction(atCommitLog!);
+        // The replacement (per-job AtCompactionService) isn't wired up
+        // in the upstream package yet; the singleton accessor is the
+        // only way to get an instance today.
+        // ignore: deprecated_member_use
+        AtCompactionService.getInstance().executeCompaction(atCommitLog);
     await compactionFuture.then((atCompactionStats) {
       expect(
           atCompactionStats.postCompactionEntriesCount <
@@ -111,11 +120,14 @@ void main() {
   test(
       'A test to verify commit log compaction should be same when there are no operations',
       () async {
-    atCommitLog =
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(currentAtSign);
+    atCommitLog = _commitLog();
 
     Future<AtCompactionStats> compactionFuture =
-        AtCompactionService.getInstance().executeCompaction(atCommitLog!);
+        // The replacement (per-job AtCompactionService) isn't wired up
+        // in the upstream package yet; the singleton accessor is the
+        // only way to get an instance today.
+        // ignore: deprecated_member_use
+        AtCompactionService.getInstance().executeCompaction(atCommitLog);
 
     await compactionFuture.then((atCompactionStats) {
       expect(

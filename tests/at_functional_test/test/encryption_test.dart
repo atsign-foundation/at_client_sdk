@@ -40,7 +40,7 @@ void main() {
       String selfEncryptionKey =
           (await atClient.getLocalSecondary()!.getEncryptionSelfKey())!;
       var atData =
-          await (atClient.getLocalSecondary()!.keyStore!.get(atKey.toString()));
+          await (atClient.getLocalSecondary()!.keyStore.get(atKey.toString()));
       var cipherText = atData.data;
       expect(
           EncryptionUtil.decryptValue(cipherText, selfEncryptionKey,

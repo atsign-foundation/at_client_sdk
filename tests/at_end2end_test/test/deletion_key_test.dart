@@ -93,7 +93,7 @@ void main() {
         sharedWithAtClient
             .getLocalSecondary()
             ?.keyStore
-            ?.isKeyExists(cachedAtKey.toString()),
+            .isKeyExists(cachedAtKey.toString()),
         false);
     // When sync runs the test remains idle and timeout after 30 seconds
     // Adding timeout to allow sync to complete on current atSign and sharedWith atSign.
@@ -151,7 +151,7 @@ void main() {
         sharedWithAtClient
             .getLocalSecondary()
             ?.keyStore
-            ?.isKeyExists(cachedAtKey.toString()),
+            .isKeyExists(cachedAtKey.toString()),
         false);
     // Asserts cached key is deleted from the server in the sharedWith atSign
     var scanResultAfterDelete = await sharedWithAtClient

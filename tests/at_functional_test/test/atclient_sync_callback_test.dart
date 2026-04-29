@@ -267,11 +267,12 @@ void main() {
         jsonDecode(serverCommitEntries!.replaceAll('data:', ''))[0]['value']);
 
     //Get Commit Entries from local
-    var atCommitLog =
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
-    var localCommitEntries = await atCommitLog?.commitLogKeyStore.toMap();
+    var atCommitLog = (AtClientManager.getInstance().atClient as AtClientImpl)
+        .persistenceBundle!
+        .commitLog;
+    var localCommitEntries = await atCommitLog.commitLogKeyStore.toMap();
 
-    for (var commitEntry in localCommitEntries!.values) {
+    for (var commitEntry in localCommitEntries.values) {
       if (commitEntry.atKey == firstAtKey.toString()) {
         expect(
             commitEntry.commitId, serverCommitLogMap[firstAtKey.toString()][0]);

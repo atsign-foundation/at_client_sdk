@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
 import 'package:at_client/src/util/sync_util.dart';
 
@@ -11,6 +12,13 @@ import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 import 'test_utils.dart';
 import 'package:at_functional_test/src/config_util.dart';
+
+/// The AtClient owns one [SyncUtil] (wired up with the bundle's
+/// commit log during init). Tests should reuse it rather than
+/// constructing throwaway instances — `SyncUtil` now requires an
+/// AtCommitLog at construction.
+SyncUtil _syncUtil(AtClient atClient) =>
+    (atClient.syncService as SyncServiceImpl).syncUtil;
 
 void main() {
   late String atSign;
@@ -30,7 +38,7 @@ void main() {
 
   test('Verify local changes are synced to server - local ahead', () async {
     var atClient = atClientManager.atClient;
-    var serverCommitIdBeforePut = await SyncUtil()
+    var serverCommitIdBeforePut = await _syncUtil(atClient)
         .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
     expect(serverCommitIdBeforePut != null, true);
     // twitter.me@alice🛠
@@ -45,7 +53,7 @@ void main() {
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClient.syncService);
     // Getting server commit id after put
-    var serverCommitIdAfterPut = await SyncUtil()
+    var serverCommitIdAfterPut = await _syncUtil(atClient)
         .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
     // After sync successful, the serverCommitId after put should be greater
     // than server commit before put
@@ -72,10 +80,7 @@ void main() {
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClient.syncService);
 
-    var localEntry = await SyncUtil(
-            atCommitLog:
-                (atClient as AtClientImpl).persistenceBundle?.commitLog)
-        .getLastSyncedEntry('', atSign: atSign);
+    var localEntry = await _syncUtil(atClient).getLastSyncedEntry('');
     expect(localEntry?.commitId, isNotNull);
 
     var value = 'Some value';
@@ -91,9 +96,7 @@ void main() {
         .syncData(syncSvc: atClient.syncService);
     // Getting server commit id after put
     var localEntryAfterSync =
-        await SyncUtil(
-                atCommitLog: atClient.persistenceBundle?.commitLog)
-            .getLastSyncedEntry('', atSign: atSign);
+        await _syncUtil(atClient).getLastSyncedEntry('');
 
     // After sync successful, the localCommitId after put should be greater
     // than localCommitId before put
@@ -111,7 +114,7 @@ void main() {
     TestUtils.getPreference(atSign).syncRegex = namespace;
     var atClient = atClientManager.atClient;
     // Get server commit id before put operation
-    var serverCommitId = await SyncUtil()
+    var serverCommitId = await _syncUtil(atClient)
         .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
     expect(serverCommitId != null, true);
     // twitter.me@alice🛠
@@ -133,13 +136,10 @@ void main() {
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClient.syncService);
     // Getting server commit id after put
-    var serverCommitIdAfterPut = await SyncUtil()
+    var serverCommitIdAfterPut = await _syncUtil(atClient)
         .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
     var localEntryAfterSync =
-        await SyncUtil(
-                atCommitLog:
-                    (atClient as AtClientImpl).persistenceBundle?.commitLog)
-            .getLastSyncedEntry(namespace, atSign: atSign);
+        await _syncUtil(atClient).getLastSyncedEntry(namespace);
     // As the regex is set to wavi, .mosphere key should not be synced
     expect(
         (localEntryAfterSync?.atKey!
@@ -208,10 +208,7 @@ void main() {
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClient.syncService);
     var localEntryAfterSync =
-        await SyncUtil(
-                atCommitLog:
-                    (atClient as AtClientImpl).persistenceBundle?.commitLog)
-            .getLastSyncedEntry('', atSign: atSign);
+        await _syncUtil(atClient).getLastSyncedEntry('');
     expect(localEntryAfterSync!.atKey, isNot('local:localkey.wavi$atSign'));
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = (AtKey()
@@ -295,7 +292,7 @@ void main() {
       'Verify delete keys are not synced from server when skipDeletesUntil is set',
       () async {
     var atClient = atClientManager.atClient;
-    var serverCommitId = await SyncUtil()
+    var serverCommitId = await _syncUtil(atClient)
         .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
     for (int i = 0; i < 10; i++) {
       var value = 'alice.linkedin$i';
@@ -331,7 +328,7 @@ void main() {
 
   test('Verify sync response when skip deletes and regex are set', () async {
     var atClient = atClientManager.atClient;
-    var serverCommitId = await SyncUtil()
+    var serverCommitId = await _syncUtil(atClient)
         .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
     for (int i = 0; i < 3; i++) {
       var value = 'alice.linkedin$i';

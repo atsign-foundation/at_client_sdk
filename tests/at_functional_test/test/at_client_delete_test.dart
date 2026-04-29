@@ -30,7 +30,7 @@ void main() async {
       expect(
           atClientManager.atClient
               .getLocalSecondary()!
-              .keyStore!
+              .keyStore
               .isKeyExists(atKey.toString()),
           true);
 
@@ -39,7 +39,7 @@ void main() async {
       expect(
           atClientManager.atClient
               .getLocalSecondary()!
-              .keyStore!
+              .keyStore
               .isKeyExists(atKey.toString()),
           false);
     });
@@ -61,7 +61,7 @@ void main() async {
       var isLocalKeyExist = atClient
           .getLocalSecondary()
           ?.keyStore
-          ?.isKeyExists(localKey.toString());
+          .isKeyExists(localKey.toString());
       expect(isLocalKeyExist, false);
     });
 
@@ -85,7 +85,7 @@ void main() async {
       var isLocalKeyExist = atClient
           .getLocalSecondary()
           ?.keyStore
-          ?.isKeyExists(localKey.toString());
+          .isKeyExists(localKey.toString());
       expect(isLocalKeyExist, false);
     });
   });

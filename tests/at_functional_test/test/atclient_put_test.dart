@@ -56,7 +56,7 @@ void main() {
     // get the value from local keystore to check whether it is not encrypted
     var getKeyStoreResult = await atClientManager.atClient
         .getLocalSecondary()!
-        .keyStore!
+        .keyStore
         .get(phoneKey.toString());
     expect(getKeyStoreResult.data, value);
     var getResult = await atClientManager.atClient.get(phoneKey);
