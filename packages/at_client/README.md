@@ -139,8 +139,58 @@ final byOwner   = await todos.query().groupBy<Atsign>((t) => t.owner);
 ```
 
 Queries are immutable values — build once, store, pass, fetch or
-watch. For ad-hoc pipelines outside the builder's vocabulary,
-`getItemsAsStream().where(...)` remains supported as an escape hatch.
+watch. `watch()` does incremental delta maintenance for
+non-paginated queries (single-item read on each event, not a full
+re-scan). For ad-hoc pipelines outside the builder's vocabulary,
+`getItemsAsStream().where(...)` remains supported as an escape
+hatch.
+
+For typed, introspectable predicates that a future indexed
+executor can push down to a secondary index, declare `PathField`s
+on your domain type and use `wherePath`:
+
+```dart
+abstract class $Todo {
+  static final done = PathField<bool>(
+    path: ['obj', 'done'],
+    extract: (item) => (item.obj as Todo).done,
+  );
+  static final due = PathField<DateTime>(
+    path: ['obj', 'due'],
+    extract: (item) => (item.obj as Todo).due,
+  );
+}
+
+final overdue = await todos.query()
+    .wherePath($Todo.done.eq(false))
+    .wherePath($Todo.due.lt(DateTime.now()))
+    .fetch();
+```
+
+Multi-level parent → children → grandchildren joins use
+`watchWithTree`:
+
+```dart
+final stream = posts.query().watchWithTree([
+  SubSpec<Comment>(
+    subName: 'comments',
+    subDefaultExpiration: const Duration(days: 30),
+    subFromJson: Comment.fromJson,
+    subTypeTag: 'Comment',
+    children: [
+      SubSpec<Reply>(
+        subName: 'replies',
+        subDefaultExpiration: const Duration(days: 30),
+        subFromJson: Reply.fromJson,
+        subTypeTag: 'Reply',
+      ),
+    ],
+  ),
+]);
+// → Stream<List<TreeNode<Post>>> — branches['comments'] holds
+//   per-comment TreeNodes whose own branches['replies'] hold
+//   per-reply TreeNodes.
+```
 
 Read receipts ship built-in — one call on each side, no
 app-level bookkeeping:

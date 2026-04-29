@@ -47,6 +47,28 @@ Several significant enhancements to the API to make it much easier to use.
   any ancestor between root and direct parent is locally absent.
   The legacy fallback chain-walks by id-presence at each composed-
   namespace level (owner-agnostic, intentionally lenient).
+- feat(AtCollection): `Query<T>.watchWithTree(List<SubSpec>)` for
+  multi-level parent → children → grandchildren joins.
+  Generalises `watchWithSub` to arbitrary depth via recursive
+  `SubSpec<U>` nodes; emits a `List<TreeNode<T>>` whose
+  `branches[subName]` carry nested `TreeNode<dynamic>` lists.
+  Cascade-cancels descendant subscriptions when a parent leaves
+  the result set or the outer stream is cancelled.
+- feat(AtCollection): typed predicate AST. `PathField<V>` is a
+  declared accessor (`path` + `extract`) that mints `Predicate`
+  nodes via `eq` / `neq` / `lt` / `lte` / `gt` / `gte` / `isNull`
+  / `isNotNull`; `Predicate.and` / `.or` / `.not` compose them.
+  New `Query<T>.wherePath(Predicate)` modifier coexists with
+  closure-based `where` (both lists AND together at evaluation).
+  Today the AST evaluates in memory; a future SQLite-indexed
+  executor can walk the tree and push eligible clauses to a
+  secondary index without changing caller code.
+- perf(AtCollection): `Query<T>.watch()` now does incremental
+  delta maintenance for non-paginated queries — single-item read
+  on update events, zero-read cache mutation on deletes — instead
+  of a full collection refetch every event. Pagination queries
+  (`limit` / `skip`) keep the original full-refetch path because
+  the next-out-of-window item isn't cached.
 - feat: added a new method, `send`, to NotificationService which is much 
   easier to use than the old (still fine to use) `notify` method.
 - feat: added `factory AtRpc.server` to make it much simpler to create AtRpc 

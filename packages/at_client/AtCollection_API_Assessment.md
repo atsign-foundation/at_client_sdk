@@ -4,11 +4,15 @@ A from-scratch assessment of the `AtCollection<T>` API in
 `packages/at_client/lib/src/collections/collections.dart` as of
 2026-04-29 (UTC); originally written end-of-day Thu Apr 23. A
 2026-04-29 snagging pass closed W2 (required `typeTag`),
-W1(b) (`Query.thenBy` multi-key sort), W9 (test hook off the
-public `subCollection` surface), W8 (warning on unknown
-envelope type tags), W3-residual (existence-probe elision
-cache), and W6-residual (chain-walk for legacy descendants).
-All folded into 3.13.0.
+W9 (test hook off the public `subCollection` surface), W8
+(warning on unknown envelope type tags), W3-residual (existence-
+probe elision cache), W6-residual (chain-walk for legacy
+descendants), and the entire **W1 phase-2** bundle: W1(a)
+typed field accessors + predicate AST + `Query.wherePath`,
+W1(b) `Query.thenBy` multi-key sort, W1(c) per-stream delta
+maintenance in `Query.watch` (with limit/skip queries falling
+back to refetch), and W1(d) `Query.watchWithTree` recursive
+multi-level joins. All folded into 3.13.0.
 
 ## TL;DR
 
@@ -30,20 +34,21 @@ known footgun in Firestore and related systems (parent delete leaves
 children stranded) via a scoped-namespace design and an explicit
 `cleanupOrphans()` for offline-then-online recovery.
 
-Phase 1 of a composable query-builder (`collection.query()` →
-`Query<T>` with `.where` / `.orderBy` / `.thenBy` / `.limit` /
-`.skip` and terminals `.fetch` / `.watch` / `.count` / `.any` /
-`.first` / `.firstOrNull` / `.groupBy` / `.watchWithSub`) landed
-on 2026-04-23 alongside the rest of the v3 work, with `.thenBy`
-multi-key sort added 2026-04-29. The
+The composable query-builder (`collection.query()` → `Query<T>`)
+landed on 2026-04-23 with phase-1 modifiers (`.where`, `.orderBy`,
+`.limit`, `.skip`) and terminals (`.fetch`, `.watch`, `.count`,
+`.any`, `.first`, `.firstOrNull`, `.groupBy`, `.watchWithSub`).
+Phase-2 followed on 2026-04-29 and is now complete: `.thenBy`
+multi-key sort, `.wherePath` accepting a `Predicate` AST built
+from `PathField<V>` accessors (introspectable, ready for SQLite
+JSON-index push-down once the local store migrates that way),
+`.watchWithTree` for arbitrary-depth parent-children joins via
+`SubSpec<U>` and `TreeNode<T>`, and incremental delta maintenance
+in `.watch()` (single-item read on update, zero-read delete; limit
+/ skip queries fall back to refetch). The
 `getItemsAsStream().where(...)` stream-transformer path remains
 supported as an escape hatch for ad-hoc pipelines outside the
-builder's vocabulary. What's still outstanding is phase-2 polish:
-typed field-accessor values (so the spec can be introspected for
-secondary-index push-down when the local store eventually gains
-JSON indexes), deeper-than-one-level sub-collection joining
-(`watchWithTree`), and incremental delta maintenance in `.watch()`
-— see §W1. None of that is architectural.
+builder's vocabulary.
 
 Note: "no value-level server-side filter" is NOT a gap — it is
 architecturally impossible under end-to-end encryption (see §1a)
@@ -67,10 +72,11 @@ a collection. The principal types:
   composable `query()` entry point that mints a `Query<T>`; and the
   reactive surface (`watch()` + typed sub-streams).
 - **`Query<T>`** — an immutable, value-typed builder returned by
-  `collection.query()`. Modifiers (`.where`, `.orderBy`, `.thenBy`,
-  `.limit`, `.skip`) compose; terminals (`.fetch`, `.watch`,
-  `.count`, `.any`, `.first`, `.firstOrNull`, `.groupBy`,
-  `.watchWithSub`) execute against the synced local store.
+  `collection.query()`. Modifiers (`.where`, `.wherePath`,
+  `.orderBy`, `.thenBy`, `.limit`, `.skip`) compose; terminals
+  (`.fetch`, `.watch`, `.count`, `.any`, `.first`, `.firstOrNull`,
+  `.groupBy`, `.watchWithSub`, `.watchWithTree`) execute against
+  the synced local store.
 - **`CEvent`** hierarchy — deliberately **not** `sealed`:
   `CItemUpdated`, `CItemDeleted`, `CReadReceipt`, `CSubItemUpdated`,
   `CSubItemDeleted`. Kept as an `abstract class` so new event types
@@ -140,9 +146,10 @@ The downstream consequences for the API shape:
 
 - **Reads happen on-device against the synced local store.**
   `collection.query()` returns a composable `Query<T>` value
-  (`.where` / `.orderBy` / `.thenBy` / `.limit` / `.skip` /
-  terminals `.fetch` / `.watch` / `.count` / `.any` / `.first` /
-  `.firstOrNull` / `.groupBy` / `.watchWithSub`). `getItemsAsStream()` remains as
+  (`.where` / `.wherePath` / `.orderBy` / `.thenBy` / `.limit` /
+  `.skip` / terminals `.fetch` / `.watch` / `.count` / `.any` /
+  `.first` / `.firstOrNull` / `.groupBy` / `.watchWithSub` /
+  `.watchWithTree`). `getItemsAsStream()` remains as
   the untyped escape hatch for ad-hoc stream pipelines. Either way the filter evaluates
   locally over already-decrypted records, with a
   hundred-thousand-record budget comfortably in reach on typical
@@ -275,20 +282,20 @@ made the call site less greppable and the behaviour depend on
 
 ## 4. The current API surface, compact view
 
-| Category                 | Methods / fields exposed                                                                                                                                                                                                                                                                                                                                         |
-|--------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Construction             | `AtCollection(atClient, namespace, defaultExpiration, {fromJson, typeTag})`, `AtCollection.withInjectedNotifications(...)` (testing)                                                                                                                                                                                                                             |
-| Identity                 | `atSign`, `namespace`, `defaultExpiration`, `isSubCollection`                                                                                                                                                                                                                                                                                                    |
-| Factory                  | `registerFactory<U>(fromJson, {required typeTag})`                                                                                                                                                                                                                                                                                                               |
-| Drafting                 | `draft({obj, id?, sharedWith?, expiresAt?, availableAt?})` (no I/O)                                                                                                                                                                                                                                                                                              |
-| Create / Update / Delete | `create({obj, id?, sharedWith?, expiresAt?, availableAt?})` (throws on collision), `update(item, {unshareWithOthers})` (throws if missing), `delete(item, {cascade})`                                                                                                                                                                                            |
-| Read one                 | `get(id, owner)` (throws if missing), `getOrNull(id, owner)` (null if missing)                                                                                                                                                                                                                                                                                   |
-| Read many                | `getItems({id?, owner?})` (List, throws on decode error), `getItemsAsStream({id?, owner?})` (Stream, errors yielded in-band), `getKeys({id?, owner?})` (raw AtKeys)                                                                                                                                                                                              |
-| Query builder            | `query()` → `Query<T>`; modifiers `.where(p)`, `.orderBy(keyFn, {descending})`, `.thenBy(keyFn, {descending})`, `.limit(n)`, `.skip(n)`; terminals `.fetch()`, `.watch()`, `.count()`, `.any([p])`, `.first()`, `.firstOrNull()`, `.groupBy<K>(keyFn)`, `.watchWithSub<U>(subName, subDefaultExpiration, {subFromJson, subTypeTag})` (live parent+children join) |
-| Read receipts            | On `CItem`: `markReadByMe()`, `wasMarkedReadByMe()`, `readBy` (Future), `readBySnapshot` (sync), `receipts` (the `__rr` sub-collection). On `AtCollection`: `markReadByMe(item)` / `wasMarkedReadByMe(item)` shims, `readReceiptsFor(item)` → queryable receipts sub-collection.                                                                                 |
-| Sub-collections          | `subCollection<U>({parent, subName, defaultExpiration, fromJson?, typeTag?})` (plus `notifications:` test hook — see §W9), `cleanupOrphans()` (works on root and sub)                                                                                                                                                                                            |
-| Events                   | `watch()` → Stream<CEvent>; typed getters `updates` / `deletes` / `readReceipts` / `subUpdates` / `subDeletes`                                                                                                                                                                                                                                                   |
-| Exceptions               | `CollectionOpException` (write failures), `CollectionGetException` (read/decode failures), `StateError` (create-collides / update-missing / cascade-needed), `ArgumentError` (invalid input), `AtKeyNotFoundException` (get of absent)                                                                                                                           |
+| Category                 | Methods / fields exposed                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Construction             | `AtCollection(atClient, namespace, defaultExpiration, {fromJson, typeTag})`, `AtCollection.withInjectedNotifications(...)` (testing)                                                                                                                                                                                                                                                                                                                    |
+| Identity                 | `atSign`, `namespace`, `defaultExpiration`, `isSubCollection`                                                                                                                                                                                                                                                                                                                                                                                           |
+| Factory                  | `registerFactory<U>(fromJson, {required typeTag})`                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Drafting                 | `draft({obj, id?, sharedWith?, expiresAt?, availableAt?})` (no I/O)                                                                                                                                                                                                                                                                                                                                                                                     |
+| Create / Update / Delete | `create({obj, id?, sharedWith?, expiresAt?, availableAt?})` (throws on collision), `update(item, {unshareWithOthers})` (throws if missing), `delete(item, {cascade})`                                                                                                                                                                                                                                                                                   |
+| Read one                 | `get(id, owner)` (throws if missing), `getOrNull(id, owner)` (null if missing)                                                                                                                                                                                                                                                                                                                                                                          |
+| Read many                | `getItems({id?, owner?})` (List, throws on decode error), `getItemsAsStream({id?, owner?})` (Stream, errors yielded in-band), `getKeys({id?, owner?})` (raw AtKeys)                                                                                                                                                                                                                                                                                     |
+| Query builder            | `query()` → `Query<T>`; modifiers `.where(p)`, `.wherePath(predicate)`, `.orderBy(keyFn, {descending})`, `.thenBy(keyFn, {descending})`, `.limit(n)`, `.skip(n)`; terminals `.fetch()`, `.watch()`, `.count()`, `.any([p])`, `.first()`, `.firstOrNull()`, `.groupBy<K>(keyFn)`, `.watchWithSub<U>(subName, subDefaultExpiration, {subFromJson, subTypeTag})` (live parent+children join), `.watchWithTree(List<SubSpec>)` (recursive multi-level join) |
+| Read receipts            | On `CItem`: `markReadByMe()`, `wasMarkedReadByMe()`, `readBy` (Future), `readBySnapshot` (sync), `receipts` (the `__rr` sub-collection). On `AtCollection`: `markReadByMe(item)` / `wasMarkedReadByMe(item)` shims, `readReceiptsFor(item)` → queryable receipts sub-collection.                                                                                                                                                                        |
+| Sub-collections          | `subCollection<U>({parent, subName, defaultExpiration, fromJson?, typeTag?})` (plus `notifications:` test hook — see §W9), `cleanupOrphans()` (works on root and sub)                                                                                                                                                                                                                                                                                   |
+| Events                   | `watch()` → Stream<CEvent>; typed getters `updates` / `deletes` / `readReceipts` / `subUpdates` / `subDeletes`                                                                                                                                                                                                                                                                                                                                          |
+| Exceptions               | `CollectionOpException` (write failures), `CollectionGetException` (read/decode failures), `StateError` (create-collides / update-missing / cascade-needed), `ArgumentError` (invalid input), `AtKeyNotFoundException` (get of absent)                                                                                                                                                                                                                  |
 
 ## 5. Comparison with CRUD libraries in the Dart ecosystem and beyond
 
@@ -507,60 +514,64 @@ outside the builder's vocabulary.
 
 What's **not yet** in phase 1 (phase 2 material):
 
-### (a) Typed field-accessor values in predicates
+### (a) ~~Typed field-accessor values in predicates~~ (closed)
 
-**What's missing.** `.where((t) => !t.obj.done)` is an opaque Dart
-closure. The query spec (`_QuerySpec`) stores it as a
-`bool Function(CItem<T>)` — something the library can *execute* but
-can't *inspect*. It has no idea the predicate tests `obj.done`; all
-it sees is "a function".
-
-**Why it matters.** Two consequences:
-
-- **No secondary-index push-down.** When the local store migrates
-  from Hive to SQLite and grows JSON-field indexes, the library
-  would in principle be able to translate `$Todo.done == false`
-  into a SQL `WHERE obj_done = 0` and use the index rather than
-  scanning. It can't do that against a closure — a closure could
-  do anything.
-- **No predicate introspection for devtools, caching, or
-  serialisation.** "What queries are currently active?" "Can I
-  reuse this predicate's result set for a derived query?" "Show me
-  the query as a string in the log." All blocked by opacity.
-
-**Shape of a phase-2 fix.** Each domain type exposes a
-path-accessor object:
+Landed 2026-04-29 in 3.13.0. App code declares typed accessors per
+domain type (no codegen — one line per field):
 
 ```dart
-class $Todo {
-  static const done    = PathField<bool>(['obj', 'done']);
-  static const dueDate = PathField<DateTime?>(['obj', 'dueDate']);
-  static const owner   = PathField<Atsign>(['owner']);
+abstract class $Todo {
+  static final done = PathField<bool>(
+    path: ['obj', 'done'],
+    extract: (item) => (item.obj as Todo).done,
+  );
+  static final due = PathField<DateTime>(
+    path: ['obj', 'due'],
+    extract: (item) => (item.obj as Todo).due,
+  );
 }
-
-todos.query().where($Todo.done.eq(false).and($Todo.dueDate.lt(today)));
 ```
 
-`.eq` / `.lt` / `.and` return typed AST nodes. The resulting
-predicate is a data tree the library can walk:
+Then on `Query<T>`:
 
+```dart
+final overdue = await todos.query()
+    .wherePath($Todo.done.eq(false))
+    .wherePath($Todo.due.lt(DateTime.now()))
+    .fetch();
+
+// Or composed with .and / .or / .not:
+final urgent = await todos.query()
+    .wherePath($Todo.done.eq(false).and($Todo.due.lt(soon)))
+    .fetch();
 ```
-AndNode(
-  EqNode(path: ['obj', 'done'], value: false),
-  LtNode(path: ['obj', 'dueDate'], value: today),
-)
-```
 
-Now `_apply` can either evaluate the tree in-memory (same cost as
-today) or delegate to an indexed backend.
+Surface shipped:
 
-**Tradeoff / dependency.** Either the user writes `$Todo` by hand
-(boilerplate) or we adopt a build-step (`build_runner`, Drift-style)
-to generate it. Closures stay supported alongside for ad-hoc
-predicates — the field-accessor form is for predicates the library
-is expected to optimise. **Only worth landing once we have an
-indexed local store to push down to**; otherwise it's pure
-API-surface work with no performance payoff.
+- `PathField<V>` — typed accessor with `path` (introspection) and
+  `extract` (evaluation). `eq` / `neq` work on any `V`; `lt` /
+  `lte` / `gt` / `gte` are extension methods restricted to
+  `V extends Comparable`; `isNull` / `isNotNull` extension getters
+  on `PathField<V?>` for nullable fields.
+- `Predicate` — abstract AST root. Three concrete combinators
+  (`AndPredicate`, `OrPredicate`, `NotPredicate`) plus the
+  `CmpPredicate` leaf. `.and`, `.or` flatten on construction;
+  `.not.not` collapses double negation. All public so a future
+  indexed executor can pattern-match.
+- `PredicateOp` enum (`eq`, `neq`, `lt`, `lte`, `gt`, `gte`,
+  `isNull`, `isNotNull`) carried by `CmpPredicate` for switchable
+  push-down.
+- `Query<T>.wherePath(Predicate)` — new modifier; coexists with
+  closure-based `where`. Both lists AND together at evaluation
+  time. The typed-AST list is preserved on `_QuerySpec` so a
+  future SQLite-indexed executor can walk it.
+
+Today the library evaluates AST predicates in memory, behaviourally
+identical to the closure path. The forward-looking benefit is the
+introspection surface: when the local store migrates to SQLite +
+JSON-path indexes, `_apply` can split eligible AST clauses into
+`WHERE` push-downs and evaluate the rest in memory — no caller-code
+change.
 
 ### (b) ~~Multi-key `orderBy`~~ (closed)
 
@@ -580,91 +591,47 @@ Each level carries its own `descending:` independently.
 `thenBy` without a prior `orderBy` throws `StateError`. The single-
 composite-key workaround still works for callers that prefer it.
 
-### (c) Incremental delta maintenance in `watch()`
+### (c) ~~Incremental delta maintenance in `watch()`~~ (closed)
 
-**What's missing.** Today, when the collection emits a
-`CItemUpdated` / `CItemDeleted` event, `Query.watch()` reacts by
-calling `fetch()` — which re-runs the *full scan*: re-reads local
-keys, re-decodes every envelope, re-applies every predicate,
-re-sorts, re-limits. Every event. Every time.
+Landed 2026-04-29 in 3.13.0 for the no-pagination case. `Query.watch()`
+now keeps a per-stream result-list cache, mutated in place by each
+event:
 
-**Why it matters.** At demo scales (tens to a few thousand items),
-local scans are in the low-milliseconds range — invisible. Above
-~10K items with indexes gone, it starts to matter; above ~100K it's
-expensive enough to think about.
+- **Initial fetch** populates the cache.
+- **Update event** (`CItemUpdated(owner, id)`): single-item read
+  via `getOrNull(id, owner)`, then evaluate against predicates
+  (closure + AST). Insert / replace / remove from cache; re-sort
+  if `orderBy` is set; emit. Cost is **O(1) per event** vs. the
+  old O(N) refetch.
+- **Delete event** (`CItemDeleted(owner, id)`): remove from cache
+  if present, emit. **Zero reads** — purely cache-local.
 
-The event payload (`CItemUpdated` carries `owner` + `id`) already
-tells us *which* item changed. A smart implementation could:
+A per-stream serialiser (mutex) chains tasks so two
+near-simultaneous events can't interleave on the cached list.
+On per-item read errors the stream surfaces the error and falls
+back to a full refetch to realign with the store.
 
-- **Fetch only the affected item**, decode it once
-- **Re-evaluate predicates against just that item** — keep / drop
-  / reposition in the current sorted result set
-- **Emit a new snapshot** without re-scanning everything else
+**Pagination caveat.** `limit` / `skip` queries can't take the
+delta path: when an item falls out of the visible window, the
+next-out-of-window item isn't cached. So `_spec.limitN != null`
+or `_spec.skipN != null` opts back into the original full-refetch
+behaviour on each event — same correctness as before, same cost.
+A future variant that keeps `limit + lookahead` items cached could
+extend the delta path to pagination, but until a real workload
+measures the cost, the simpler fall-back is the right posture.
 
-**Shape of a phase-2 fix.** Cache the current result set as a
-sorted list inside `Query.watch()`'s state. On each event:
+**Pairing with (a).** The AST predicates added in (a) flow through
+the same `matchesPredicates` evaluator. A future indexed-executor
+landing can walk the AST, see that a `CItemUpdated` event for
+`(owner, id)` doesn't touch the indexed field's value, and skip
+predicate re-evaluation entirely — pushing the per-event cost
+below O(1) for index-eligible queries.
 
-```
-onUpdate(owner, id):
-  current = cache.findByOwnerId(owner, id)
-  fresh   = collection.getOne(owner, id)          // one local read
-  passes  = spec.predicates.every((p) => p(fresh))
-  if current != null && !passes:
-    cache.remove(current)                         // left the result set
-  else if current == null && passes:
-    cache.insertSorted(fresh)                     // entered the result set
-  else if current != null && passes:
-    cache.replaceInPlace(fresh, maybeReSort: true)
-  emit(cache.asList())
+### (d) ~~Deeper sub-collection queries~~ (closed)
 
-onDelete(owner, id):
-  cache.removeByOwnerId(owner, id)
-  emit(cache.asList())
-```
-
-**Hard bits.**
-
-- **Sort-stable insert** when `orderBy` is set — need a small
-  binary-search helper.
-- **limit/skip windows.** If a visible item falls out of the
-  window, the *next* item needs to come back in — which means the
-  cache has to keep one past the window, or fall back to a fetch
-  for the next page. The simple delta model breaks down a bit
-  when limit is in play.
-- **Race with concurrent events.** If two events land during an
-  in-flight single-item re-decode, their observed state can
-  interleave. Serialise via a small per-query queue.
-- **Cache correctness when the spec changes.** A new `.where()`
-  composed onto the query creates a new `Query<T>` value — the
-  cache belongs to the specific `watch()` call, not across
-  modifier chains. That's already fine given today's one-
-  controller-per-watch pattern.
-
-**Tradeoff / dependency.** Pairs cleanly with (a): once the
-library can see that a predicate tests `done` and the change event
-shows `done` didn't change, it can skip predicate re-evaluation
-entirely. Without that, delta maintenance is still beneficial but
-smaller — maybe a 10× win rather than 100×. **Only worth landing
-when a real workload (hundreds of events/second against a large
-collection) is measured.** "Correct before fast" is the right
-posture until that profile arrives.
-
-### (d) Deeper sub-collection queries
-
-**What's missing.** `watchWithSub<U>` joins a parent query with one
-named sub-collection level: `posts → comments`, or `todos → notes`.
-Two levels (`posts → comments → replies`) requires the caller to
-orchestrate the second `watchWithSub` manually per-parent and
-combineLatest the results — exactly the manual dance
-`watchWithSub` was introduced to eliminate.
-
-**Why it matters.** Any hierarchical model bumps into it. Blog
-comments with threaded replies. Kanban boards with cards with
-checklists. Issue tracker with comments with reactions. The todos
-app caps at one level, so the demo doesn't expose the gap, but a
-real app will hit it immediately.
-
-**Shape of a phase-2 fix.** A recursive / tree-shaped terminal:
+Landed 2026-04-29 in 3.13.0. `Query<T>.watchWithTree` takes a list
+of `SubSpec<U>` nodes describing the tree shape and live-orchestrates
+nested watchWithSub-style streams to arbitrary depth:
 
 ```dart
 posts.query().watchWithTree([
@@ -672,50 +639,68 @@ posts.query().watchWithTree([
     subName: 'comments',
     subDefaultExpiration: const Duration(days: 30),
     subFromJson: Comment.fromJson,
+    subTypeTag: 'Comment',
     children: [
       SubSpec<Reply>(
         subName: 'replies',
         subDefaultExpiration: const Duration(days: 30),
         subFromJson: Reply.fromJson,
+        subTypeTag: 'Reply',
       ),
     ],
   ),
 ]);
+// → Stream<List<TreeNode<Post>>>
+//   tree[i].parent              → CItem<Post>
+//   tree[i].branches['comments'] → List<TreeNode<dynamic>> (per comment)
+//   tree[i].branches['comments'][j].branches['replies']
+//                              → List<TreeNode<dynamic>> (per reply)
 ```
 
-Snapshot becomes a tree node rather than a flat `(parent, children)`
-record; for rendering, the widget tree maps directly onto it.
+Surface shipped:
 
-Internally: the terminal orchestrates layered `watchWithSub`
-subscriptions, combineLatest-style, and emits a fresh tree on any
-change at any level. When a level-1 parent leaves the result set,
-cascade-cancel all of its level-2 and level-3 subscriptions; when a
-level-2 child leaves, cancel its level-3.
+- `SubSpec<U>` — value-typed level descriptor (`subName`,
+  `subDefaultExpiration`, optional `subFromJson` + `subTypeTag`,
+  recursive `children: List<SubSpec<dynamic>>`).
+- `TreeNode<T>` — snapshot node carrying `CItem<T> parent` and
+  `Map<String, List<TreeNode<dynamic>>> branches` keyed by
+  `subName`. App code that knows the topology can
+  `branches['comments']!.cast<TreeNode<Comment>>()`.
+- `Query<T>.watchWithTree(List<SubSpec<dynamic>>)` →
+  `Stream<List<TreeNode<T>>>`. Implemented recursively: each level
+  opens a sub-collection and calls `watchWithTree` on its query
+  with that level's `children`. Empty `children` is the leaf case.
+- `SubSpec<U>.openOn<T>(parentColl, parent)` — `@visibleForTesting`
+  helper that preserves `U` through a heterogeneous
+  `List<SubSpec<dynamic>>` iteration (Dart erases per-element
+  generics; the per-spec method captures `U` lexically and avoids
+  a registry collision when the constructor's auto-register fires).
 
-**Tradeoff / dependency.** Independently useful — doesn't depend on
-(a) or (c). The SDK cost is the stream-orchestration plumbing
-(~150 LOC + tests, roughly double the size of phase-1 `watchWithSub`).
-Whether to land it depends on whether a concrete consumer app
-needs it; our reference apps don't (the todos app is deliberately
-one-level). First consumer to ask for two-level joining is the
-trigger.
+Cascade behaviour: when a parent leaves the result set, every
+descendant subscription rooted at that parent is cancelled
+transitively. Outer-stream cancellation does the same. The
+`TreeNode` lower levels lose generic typing because Dart can't
+thread per-level type parameters through a heterogeneous recursive
+structure without codegen — same trade `Map<String, dynamic>` makes.
+Apps that need tighter typing at every level can wrap with their
+own typed view.
 
 ### Summary (one sentence each)
 
-1. **(a) Typed field accessors** — turn closures into an inspectable
-   AST. Worthwhile only when we have an indexed local store to push
-   down to.
+1. **(a) ~~Typed field accessors~~** — landed 2026-04-29.
+   `PathField<V>` + `Predicate` AST + `Query.wherePath`; closures
+   still supported alongside.
 2. **(b) ~~Multi-key `orderBy`~~** — landed 2026-04-29. `Query.thenBy`
    appends tiebreakers; `orderBy` still resets.
-3. **(c) Delta maintenance in `.watch()`** — single-item cache
-   maintenance instead of full re-scan on each event. Worthwhile
-   once a real workload shows scan cost matters.
-4. **(d) `watchWithTree`** — recursive terminal for multi-level
-   parent/child joins. Worthwhile as soon as a real consumer
-   models more than one level.
+3. **(c) ~~Delta maintenance in `.watch()`~~** — landed 2026-04-29.
+   Per-stream cache, single-item re-evaluate on event; pagination
+   queries fall back to refetch.
+4. **(d) ~~`watchWithTree`~~** — landed 2026-04-29. Recursive
+   terminal with `SubSpec<U>` nodes and `TreeNode<T>` snapshots.
 
-None are blockers for 3.13; all four are the kind of polish that
-lands when the first caller bangs on them hard.
+All four phase-2 items closed; the original "wait for X" gating
+notes are preserved in the W1 prose above for the historical
+record.
 
 Server-side value-level filtering is **not** on this list. It is
 architecturally impossible under end-to-end encryption: the atServer
@@ -916,23 +901,22 @@ State as of 2026-04-29:
   **W6 residual closed** 2026-04-29: legacy descendants (no
   `parents` envelope) now chain-walk by id-presence at each
   composed-namespace level via a per-sweep `_aliveIdsAt` cache —
-  depth-2+ middleman orphans are reclaimed.
+  depth-2+ middleman orphans are reclaimed. **W1 phase-2 closed**
+  2026-04-29: (a) `PathField<V>` + `Predicate` AST + `Query.wherePath`
+  for typed, introspectable predicates (closures still supported);
+  (c) per-stream result-cache delta maintenance in `Query.watch`,
+  with limit/skip queries falling back to refetch; (d)
+  `Query.watchWithTree` recursive terminal with `SubSpec<U>` and
+  `TreeNode<T>` for arbitrary-depth parent-children-grandchildren
+  joins.
 - **Ranked for impact**, still open:
 
-1. **Query/filter phase 2** (residual of §W1). Typed field
-   accessors (so the spec can be introspected for index push-down,
-   unlocking the SQLite-indexed execution path when local storage
-   gets there); deeper sub-collection joining than one level
-   (`watchWithTree`); incremental delta maintenance in `.watch()`
-   (today any event triggers a full refetch — correct, but cheaper
-   options exist once profiling demands). Multi-key `orderBy` is
-   no longer in this list — closed 2026-04-29 with `Query.thenBy`.
-2. **`CItemAvailable` / `CItemExpiringSoon` events** (§W7). Unlocks
+1. **`CItemAvailable` / `CItemExpiringSoon` events** (§W7). Unlocks
    reminder / alarm UIs without app-level timers.
-3. **`getKeys` API hygiene** (§W5). Only used by the example apps
+2. **`getKeys` API hygiene** (§W5). Only used by the example apps
    for a debug command; could be marked `@visibleForTesting` /
    `@protected` to clear it from production auto-complete.
-4. **Transactional semantics** (§W10). Cross-key "save A and B
+3. **Transactional semantics** (§W10). Cross-key "save A and B
    atomically or neither". Open by design — most atSign use-cases
    (each recipient gets a copy independently) don't need it;
    cross-recipient atomicity would also clash with the
@@ -945,14 +929,19 @@ State as of 2026-04-29:
 - `dart test test/at_collections_test.dart test/at_collections_sub_test.dart test/at_collections_query_test.dart test/at_collections_query_sub_test.dart`
   → 110 passing as of 2026-04-23, post the Query<T> phase-1 work
   including the `watchWithSub` terminal and public
-  `readReceiptsFor` surface. **2026-04-29 sweep adds 14 tests:**
+  `readReceiptsFor` surface. **2026-04-29 sweep adds 31 tests:**
   5 for W2 (required typeTag + collision rules), 5 for W1(b)
   thenBy (chains, descending, no-prior-orderBy guard), 1 for W8
   (unknown type tag rehydrate fallback), 2 for W3 residual
   (probe elision + cache invalidation on delete), 1 for W6
-  residual (depth-2 legacy middleman orphan sweep).
-  **124 total passing** in the AtCollection-focused suite; full
-  `dart test --concurrency=1` is clean.
+  residual (depth-2 legacy middleman orphan sweep), 3 for W1(d)
+  watchWithTree (initial snapshot, grandchild arrival, cascade-
+  cancel), 10 for W1(a) wherePath (eq/lt/and/or/not/AST flatten/
+  introspection), 4 for W1(c) delta maintenance (single-item read
+  on update, zero-read delete, predicate-fail removal,
+  limit-fallback behaviour). **141 total passing** in the
+  AtCollection-focused suite; full `dart test --concurrency=1`
+  is clean (537 passing across the at_client suite).
 - `flutter analyze` on the Flutter todos example
   (`packages/at_client_flutter/examples/todos`) → clean. That app is
   the idiomatic Flutter reference for AtCollection — CLI developers
@@ -961,6 +950,6 @@ State as of 2026-04-29:
 The API covered in this assessment is the shape landed on the
 `gkc-enhance-api` branch of `at_client_sdk` as of 2026-04-23, plus
 the 2026-04-29 snagging round on `gkc-at-collection-snagging`
-that closed W2, W1(b), W8, W9, W3-residual, and W6-residual. The
-implementation lives in
+that closed W2, W1 phase 2 (a/b/c/d), W3-residual, W6-residual, W8,
+and W9. The implementation lives in
 `packages/at_client/lib/src/collections/collections.dart`.
