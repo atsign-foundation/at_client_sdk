@@ -2,7 +2,7 @@
 
 # at_login_flutter
 
-A flutter plugin project for adding zero trust logins using the atProtocol.
+A flutter plugin project for adding zero trust logins using the Atsign Protocol.
 
 ## Getting Started
 

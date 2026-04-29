@@ -4,152 +4,113 @@
 
 # at_onboarding_cli
 
-## Introduction
-at_onboarding_cli is a library to authenticate and onboard atSigns.
+CLI-side wrapper around [`at_auth`](../at_auth) that provides the
+command-line tooling end users and CLI apps need to **register**,
+**onboard**, and **enroll** atSigns — plus a library surface for
+building your own onboarding tooling.
 
-## Get Started
+If you're new to the Atsign Protocol lifecycle (register → onboard → APKAM
+enroll), read
+[`at_auth`'s README](../at_auth/README.md#the-atsign-lifecycle) first —
+this package is the CLI concretisation of that model. [`at_client_flutter`](../at_client_flutter)
+is the Flutter-UI equivalent.
 
-To add this package as the dependency in your pubspec.yaml
+## Turnkey CLI tools
 
-```yaml 
-dependencies:
-  at_onboarding_cli: ^1.3.0
-```
-Getting Dependencies
+Both ship as executables when this package is globally activated:
 
 ```sh
-dart pub get 
+dart pub global activate at_onboarding_cli
 ```
 
-To import the library in your application code
+### `at_register` — get a free atSign
+
+```sh
+at_register -e your_email@example.com
+```
+
+Fetches a free atSign, emails you a verification code, then runs
+`at_activate` automatically once you paste the code back. The generated
+`.atKeys` file lands in `~/.atsign/keys/`.
+
+### `at_activate` — onboard an atSign (Phase 2 of the lifecycle)
+
+```sh
+# Using a CRAM secret from email / registrar
+at_activate -a @alice -c <cram_secret>
+
+# OR using an email-delivered verification code
+at_activate -a @alice
+```
+
+Either form produces the **master `.atKeys`** in `~/.atsign/keys/`.
+**These are the root of trust for `@alice` — back them up.**
+
+## APKAM enrollment
+
+A new device / app authenticating as an existing atSign should go
+through APKAM rather than asking the user for their master keys. The
+worked example lives under [`example/apkam_examples/`](example/apkam_examples):
+
+- [`apkam_enroll.dart`](example/apkam_examples/apkam_enroll.dart) —
+  the **new** device submits an enrollment request scoped to specific
+  namespaces
+- [`enroll_app_listen.dart`](example/apkam_examples/enroll_app_listen.dart)
+  — a device holding the master keys listens for and approves /
+  denies incoming requests
+- [`apkam_authenticate.dart`](example/apkam_examples/apkam_authenticate.dart)
+  — the new device authenticates with its newly-issued scoped keys
+
+Full step-by-step walkthrough:
+[`example/README.md`](example/README.md).
+
+## Library usage
+
+If you're building your own onboarding tooling, `AtOnboardingService`
+is the main entry point:
 
 ```dart
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
+
+final pref = AtOnboardingPreference()
+  ..rootDomain = 'root.atsign.org'
+  ..namespace = 'my_app'
+  ..hiveStoragePath = 'storage/hive'
+  ..commitLogPath = 'storage/commitLog'
+  ..isLocalStoreRequired = true
+  ..atKeysFilePath = 'storage/@alice_key.atKeys';
+
+final svc = AtOnboardingServiceImpl('@alice', pref);
+
+// Onboard (Phase 2): CRAM-authenticate and generate master atKeys.
+// Provide cramSecret via pref.cramSecret; omit to trigger email OTP.
+await svc.onboard();
+
+// Or, for a previously-onboarded atSign, just authenticate (Phase 3).
+await svc.authenticate();
+
+final AtClient? atClient = await svc.atClient;
+final AtLookUp? atLookup = svc.atLookUp;
 ```
 
-## Usage
-Use cases for at_onboarding_cli:\
-    1) Authentication\
-    2) Onboarding (Activation)\
-    3) activate_cli\
-    4) register_cli
-    5) APKAM enrollments
+Worked examples covering each flow:
+[`example/`](example) and
+[`example/legacy_examples/`](example/legacy_examples).
 
-- Set `AtOnboardingPreference` to your preferred settings. These preferences will be used to configure the `AtOnboardingService`. 
-    
- ```
-  AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
-        ..rootDomain = 'root.atsign.org
-        ..qrCodePath = 'storage/qr_code.png'
-        ..hiveStoragePath = 'storage/hive'
-        ..namespace = 'example'
-        ..downloadPath = 'storage/files'
-        ..isLocalStoreRequired = true
-        ..commitLogPath = 'storage/commitLog'
-        ..cramSecret = '<your cram secret>'
-        ..privateKey = '<your private key here>'
-        ..atKeysFilePath = 'storage/alice_key.atKeys';
- ```
+Most **app** developers don't need this library directly — they use
+[`at_cli_commons`](../at_cli_commons)' `CLIBase` which calls
+`AtOnboardingService` internally.
 
-### Authentication:
-Proving that one actually owns the atSign. User needs to authenticate before performing operations on that atSign. Operations include reading, writing, deleting or updating data in the atsign's keystore and sending notifications from that atSign.
+## Where to go next
 
-#### Steps to Authenticate
-   1) Import at_onboarding_cli.
-   2) Set preferences using AtOnboardingPreference. Either of secret key or path to .atKeysFile need to be provided to authenticate.
-   3) Instantiate AtOnboardingServiceImpl using the required atSign and a valid instance of AtOnboardingPreference.
-   4) Call the authenticate method on AtOnboardingService.
-   5) Use getAtLookup/getAtClient to get authenticated instances of AtLookup and AtClient respectively which can be used to perform more complex operations on the atSign.
-```
-AtOnboardingService atOnboardingService = AtOnboardingServiceImpl('@alice', atOnboardingPreference);
-atOnboardingService.authenticate();
-AtClient? atClient = await atOnboardingService.atClient;
-AtLookup? atLookup = atOnboardingService.atLookUp;
-```
-
-### Onboarding: 
-Performing initial one-time authentication using cram secret encoded in the qr_code. This process activates the atSign making it ready to use.
-
-#### Steps to onboard:
-   1) Import at_cli_onboarding.
-   2) Set preferences using AtOnboardingPreference. Provide the cram secret for the atsign if you have one.
-   3) If you do not have a cram secret you can just leave it blank. In this case a verification code will be sent to your registered email which you can provide to activate your already registered atsign.
-   4) Instantiate AtOnboardingServiceImpl using the required atSign and a valid instance of AtOnboardingPreference.
-   5) Call the onboard() in AtOnboardingServiceImpl.
-   6) Use authenticated instances of atClient/atLookup now available in AtOnboardingServiceImpl's instance to perform complex operations on the atSign.
- ```
-AtOnboardingService atOnboardingService = AtOnboardingServiceImpl('@alice', atOnboardingPreference);
-atOnboardingService.onboard();
-> Successfully sent verification code to your registered e-mail
-> [Action Required] Enter your verification code:
-<your 4 charcter code here>
-AtClient? atClient = await atOnboardingService.atClient();
-AtLookup? atLookup = atOnboardingService.atLookUp();
-```
-Please refer to [example](https://pub.dev/packages/at_onboarding_cli/example) to better understand the usage.
-
-### activate_cli:
-A simple tool to onboard(activate) an atSign through command-line arguments
-
-#### Usage 1:
-Run the following commands in your command-line tool (Terminal, CMD, PowerShell, etc)
-
-##### To activate using a verification code
-```
-dart pub global activate at_onboarding_cli
-at_activate -a your_atsign
-> Successfully sent verification code to your registered e-mail
-> [Action Required] Enter your verification code:
-<your 4 charcter code here>
-```
-
-##### To activate using your cram secret
-```
-dart pub global activate at_onboarding_cli
-at_activate -a your_atsign -c your_cram_secret
-```
-
-#### Usage 2:
-   1) Clone code from https://github.com/atsign-foundation/at_libraries
-   2) Change directory to at_libraries/at_onboarding_cli in the cloned repository
-   3) Run `dart pub get`
-   4) Run the following command
-```
-dart run bin/activate_cli.dart -a your_atsign -c your_cram_secret
-
-                             (or)
-
-dart run bin/activate_cli.dart -a your_atsign (to activate using verification code)
-```
-[IMPORTANT] You can find your .atKeysFile in directory ~/.atsign/keys after successful activation
-
-
-### register_cli:
-A command-line tool to get yourself a free atsign. This tool fetches a free atsign and registers it to the email provided as arguments.
-
-#### Usage 1:
-Run the following commands in you command-line tool (Terminal, CMD, PowerShell, etc)
-```
-dart pub global activate at_onboarding_cli
-at_register -e your_email
-```
-
-#### Usage 2:
-   1) Clone code from https://github.com/atsign-foundation/at_libraries
-   2) Change directory to at_libraries/at_onboarding_cli in the cloned repository
-   3) Run `dart pub get`
-   4) Run the following command
-```
-dart run bin/register.dart -e email@email.com
-```
-   5) Enter verification code sent to the provided email when prompted
-   6) register_cli fetches the cramkey and the automatically calls activate_cli to activate the fetched atsign
-   7) You can find your .atKeysFile in directory at_onboarding_cli/keys after successful activation
-
-### APKAM Enrollments
-- Please refer to examples/readme.md in the github repository for at_onboarding_cli
+- [`at_auth`](../at_auth) — the lifecycle model this package exposes
+  via CLI
+- [`at_cli_commons`](../at_cli_commons) — thin layer that gets you from
+  already-onboarded atKeys to an authenticated `AtClient` in one line
+- [`at_client_flutter`](../at_client_flutter) — the Flutter-UI
+  equivalent of this package
 
 ## Open source usage and contributions
 
-This is freely licensed open source code, so feel free to use it as is, suggest changes or enhancements or create your
-own version. See CONTRIBUTING.md for detailed guidance on how to setup tools, tests and make a pull request.
+BSD3-licensed. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) for
+guidance on setting up tools, running tests, and raising a PR.
