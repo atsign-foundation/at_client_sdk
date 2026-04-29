@@ -43,6 +43,23 @@ class Task {
   String toString() => 'Task($title, done=$done, due=$due)';
 }
 
+/// Typed [PathField] accessors for [Task] — used by the wherePath
+/// tests to exercise the AST surface.
+abstract class $Task {
+  static final done = PathField<bool>(
+    path: ['obj', 'done'],
+    extract: (item) => (item.obj as Task).done,
+  );
+  static final due = PathField<DateTime>(
+    path: ['obj', 'due'],
+    extract: (item) => (item.obj as Task).due,
+  );
+  static final title = PathField<String>(
+    path: ['obj', 'title'],
+    extract: (item) => (item.obj as Task).title,
+  );
+}
+
 void main() {
   setUpAll(() {
     registerFallbackValue(FakeAtKey());
@@ -307,6 +324,124 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
+  group('wherePath() — typed predicate AST', () {
+    test('eq filters with the expected semantics', () async {
+      final c = buildCollection();
+      seed({
+        'a': Task('alpha', done: false, due: d1),
+        'b': Task('bravo', done: true, due: d2),
+        'c': Task('charlie', done: false, due: d3),
+      });
+      final open = await c.query().wherePath($Task.done.eq(false)).fetch();
+      expect(open.map((i) => i.obj.title).toSet(), {'alpha', 'charlie'});
+    });
+
+    test('lt on a Comparable PathField filters by < value', () async {
+      final c = buildCollection();
+      seed({
+        'a': Task('alpha', done: false, due: d1),
+        'b': Task('bravo', done: false, due: d2),
+        'c': Task('charlie', done: false, due: d3),
+      });
+      final early = await c.query().wherePath($Task.due.lt(d2)).fetch();
+      expect(early.map((i) => i.id), ['a']);
+    });
+
+    test('and combinator AND-ses two leaves', () async {
+      final c = buildCollection();
+      seed({
+        'a': Task('alpha', done: false, due: d1),
+        'b': Task('bravo', done: true, due: d1),
+        'c': Task('charlie', done: false, due: d3),
+      });
+      final result = await c
+          .query()
+          .wherePath($Task.done.eq(false).and($Task.due.lt(d2)))
+          .fetch();
+      expect(result.map((i) => i.id), ['a']);
+    });
+
+    test('or combinator OR-ses two leaves', () async {
+      final c = buildCollection();
+      seed({
+        'a': Task('alpha', done: false, due: d3),
+        'b': Task('bravo', done: true, due: d2),
+        'c': Task('charlie', done: false, due: d3),
+      });
+      final result = await c
+          .query()
+          .wherePath($Task.title.eq('alpha').or($Task.title.eq('bravo')))
+          .fetch();
+      expect(result.map((i) => i.id).toSet(), {'a', 'b'});
+    });
+
+    test('not negates the inner predicate', () async {
+      final c = buildCollection();
+      seed({
+        'a': Task('alpha', done: false, due: d1),
+        'b': Task('bravo', done: true, due: d2),
+      });
+      final result =
+          await c.query().wherePath($Task.done.eq(true).not).fetch();
+      expect(result.map((i) => i.id), ['a']);
+    });
+
+    test('multiple wherePath calls AND together', () async {
+      final c = buildCollection();
+      seed({
+        'a': Task('alpha', done: false, due: d1),
+        'b': Task('bravo', done: false, due: d3),
+        'c': Task('charlie', done: true, due: d1),
+      });
+      final result = await c
+          .query()
+          .wherePath($Task.done.eq(false))
+          .wherePath($Task.due.lt(d2))
+          .fetch();
+      expect(result.map((i) => i.id), ['a']);
+    });
+
+    test('wherePath composes with closure-based where', () async {
+      final c = buildCollection();
+      seed({
+        'a': Task('alpha', done: false, due: d1),
+        'b': Task('bravo', done: false, due: d2),
+        'c': Task('charlie', done: false, due: d3),
+      });
+      final result = await c
+          .query()
+          .wherePath($Task.done.eq(false))
+          .where((t) => t.obj.title.startsWith('b'))
+          .fetch();
+      expect(result.map((i) => i.id), ['b']);
+    });
+
+    test('Predicate.and flattens nested AND chains', () {
+      final p1 = $Task.done.eq(false);
+      final p2 = $Task.due.lt(d3);
+      final p3 = $Task.title.eq('alpha');
+      final composed = p1.and(p2).and(p3);
+      expect(composed, isA<AndPredicate>());
+      expect((composed as AndPredicate).children, hasLength(3));
+    });
+
+    test('Predicate.not collapses double negation', () {
+      final p = $Task.done.eq(false);
+      expect(p.not.not, same(p));
+    });
+
+    test('CmpPredicate exposes its field, op, and value for introspection',
+        () {
+      final p = $Task.done.eq(true);
+      expect(p, isA<CmpPredicate>());
+      final cmp = p as CmpPredicate;
+      expect(cmp.op, PredicateOp.eq);
+      expect(cmp.value, true);
+      expect(cmp.field.path, ['obj', 'done']);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   group('limit() / skip()', () {
     test('limit() truncates after sort', () async {
       final c = buildCollection();
@@ -480,6 +615,127 @@ void main() {
       ));
       await Future<void>.delayed(const Duration(milliseconds: 20));
       expect(snapshots.length, countAfterInitial);
+    });
+
+    test(
+        'delta path: an update event drives one item fetch, not N '
+        '(the whole-collection refetch path is avoided)', () async {
+      // The benefit of delta maintenance is O(1) reads per event vs
+      // O(N) under the old "full refetch" path. We assert that by
+      // seeding 4 items, then triggering a single update event and
+      // counting how many atClient.get calls follow — under refetch
+      // it would be 4; under delta, exactly 1 (for the affected id).
+      final c = buildCollection();
+      seed({
+        'a': Task('alpha', done: false, due: d1),
+        'b': Task('bravo', done: false, due: d2),
+        'c': Task('charlie', done: false, due: d3),
+        'd': Task('delta', done: false, due: d4),
+      });
+      final q = c.query();
+      final sub = q.watch().listen((_) {});
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      clearInteractions(atClient);
+      // Re-seed (mocktail's `when` survives clearInteractions for
+      // stubs; the call-count tracker is what gets reset).
+      seed({
+        'a': Task('alpha', done: true, due: d1),
+        'b': Task('bravo', done: false, due: d2),
+        'c': Task('charlie', done: false, due: d3),
+        'd': Task('delta', done: false, due: d4),
+      });
+      notifStream.add(objNotif(
+        key: 'a.$namespace$selfAtSignStr',
+        from: selfAtSignStr,
+        to: selfAtSignStr,
+        operation: 'update',
+      ));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      // Delta path = 1 get for the affected item only (refetch would
+      // be 4).
+      verify(() => atClient.get(any())).called(1);
+      await sub.cancel();
+    });
+
+    test(
+        'delta path: a delete event removes from cache with zero reads '
+        '(purely cache-local)', () async {
+      final c = buildCollection();
+      seed({
+        'a': Task('alpha', done: false, due: d1),
+        'b': Task('bravo', done: false, due: d2),
+      });
+      final q = c.query();
+      final snapshots = <List<CItem<Task>>>[];
+      final sub = q.watch().listen(snapshots.add);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(snapshots.last.map((i) => i.id).toSet(), {'a', 'b'});
+      clearInteractions(atClient);
+      notifStream.add(objNotif(
+        key: 'a.$namespace$selfAtSignStr',
+        from: selfAtSignStr,
+        to: selfAtSignStr,
+        operation: 'delete',
+      ));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      // Delete path is purely in-memory: zero gets, zero scans.
+      verifyNever(() => atClient.get(any()));
+      verifyNever(() => atClient.getAtKeys(regex: any(named: 'regex')));
+      expect(snapshots.last.map((i) => i.id), ['b']);
+      await sub.cancel();
+    });
+
+    test(
+        'delta path: an update for an item that no longer matches '
+        'predicates removes it from the result set', () async {
+      final c = buildCollection();
+      seed({'a': Task('alpha', done: false, due: d1)});
+      final q = c.query().where((t) => !t.obj.done);
+      final snapshots = <List<CItem<Task>>>[];
+      final sub = q.watch().listen(snapshots.add);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(snapshots.last.single.id, 'a');
+      // Flip a's done flag so it no longer matches the predicate.
+      seed({'a': Task('alpha', done: true, due: d1)});
+      notifStream.add(objNotif(
+        key: 'a.$namespace$selfAtSignStr',
+        from: selfAtSignStr,
+        to: selfAtSignStr,
+        operation: 'update',
+      ));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(snapshots.last, isEmpty);
+      await sub.cancel();
+    });
+
+    test(
+        'limit() falls back to full refetch (one get per matching item) '
+        'on each event', () async {
+      // With limit set, the next-out-of-window item isn't cached, so
+      // the implementation must refetch. Under refetch a 4-item seed
+      // produces 4 atClient.get calls per event (one per matching
+      // key); the delta path would produce just 1.
+      final c = buildCollection();
+      seed({
+        'a': Task('alpha', done: false, due: d1),
+        'b': Task('bravo', done: false, due: d2),
+        'c': Task('charlie', done: false, due: d3),
+        'd': Task('delta', done: false, due: d4),
+      });
+      final q = c.query().limit(5);
+      final sub = q.watch().listen((_) {});
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      clearInteractions(atClient);
+      notifStream.add(objNotif(
+        key: 'a.$namespace$selfAtSignStr',
+        from: selfAtSignStr,
+        to: selfAtSignStr,
+        operation: 'update',
+      ));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      // Refetch reads every key in the collection.
+      verify(() => atClient.get(any())).called(4);
+      await sub.cancel();
     });
   });
 

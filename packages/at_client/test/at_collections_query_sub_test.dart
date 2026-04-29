@@ -33,6 +33,14 @@ class Comment {
       Comment(j['body'] as String);
 }
 
+class Reply {
+  final String body;
+  Reply(this.body);
+  Map<String, dynamic> toJson() => {'body': body};
+  factory Reply.fromJson(Map<String, dynamic> j) =>
+      Reply(j['body'] as String);
+}
+
 void main() {
   setUpAll(() {
     registerFallbackValue(FakeAtKey());
@@ -41,6 +49,7 @@ void main() {
       Comment.fromJson,
       typeTag: 'Comment',
     );
+    AtCollection.registerFactory<Reply>(Reply.fromJson, typeTag: 'Reply');
   });
 
   late MockAtClient atClient;
@@ -111,6 +120,18 @@ void main() {
       'obj': {'body': body},
       // parent-chain envelope so child ancestry-filter passes.
       'parents': [
+        {'owner': selfAtSignStr},
+      ],
+    };
+  }
+
+  void seedReply(String postId, String commentId, String id, String body) {
+    seed['$id.replies.$commentId.comments.$postId.$namespace$selfAtSignStr'] = {
+      'type': 'Reply',
+      'obj': {'body': body},
+      // Two-level ancestry for the depth-2 sub-collection.
+      'parents': [
+        {'owner': selfAtSignStr},
         {'owner': selfAtSignStr},
       ],
     };
@@ -319,6 +340,153 @@ void main() {
       ));
       await pump();
       expect(snapshots.length, countAfterInitial);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  group('watchWithTree', () {
+    test(
+        'initial snapshot lists parents → comments → replies as nested '
+        'tree nodes', () async {
+      final posts = buildPosts();
+      seedPost('p1', 'first');
+      seedComment('p1', 'c1', 'hello');
+      seedReply('p1', 'c1', 'r1', 'thanks');
+      seedReply('p1', 'c1', 'r2', 'agree');
+
+      final snapshots = <List<TreeNode<Post>>>[];
+      final sub = posts
+          .query()
+          .watchWithTree([
+            SubSpec<Comment>(
+              subName: 'comments',
+              subDefaultExpiration: const Duration(days: 7),
+              subFromJson: Comment.fromJson,
+              subTypeTag: 'Comment',
+              children: [
+                SubSpec<Reply>(
+                  subName: 'replies',
+                  subDefaultExpiration: const Duration(days: 7),
+                  subFromJson: Reply.fromJson,
+                  subTypeTag: 'Reply',
+                ),
+              ],
+            ),
+          ])
+          .listen(snapshots.add);
+      await pump();
+      // Last snapshot has p1 with one comment c1 with two replies.
+      final last = snapshots.last;
+      expect(last, hasLength(1));
+      expect(last.single.parent.id, 'p1');
+      final comments = last.single.branches['comments']!;
+      expect(comments, hasLength(1));
+      expect(comments.single.parent.id, 'c1');
+      final replies = comments.single.branches['replies']!;
+      expect(replies.map((n) => n.parent.id).toSet(), {'r1', 'r2'});
+      // Replies have empty branches (leaf level).
+      for (final r in replies) {
+        expect(r.branches, isEmpty);
+      }
+      await sub.cancel();
+    });
+
+    test('grandchild arrival re-emits with the new reply included',
+        () async {
+      final posts = buildPosts();
+      seedPost('p1', 'first');
+      seedComment('p1', 'c1', 'hello');
+      final snapshots = <List<TreeNode<Post>>>[];
+      final sub = posts
+          .query()
+          .watchWithTree([
+            SubSpec<Comment>(
+              subName: 'comments',
+              subDefaultExpiration: const Duration(days: 7),
+              subFromJson: Comment.fromJson,
+              subTypeTag: 'Comment',
+              children: [
+                SubSpec<Reply>(
+                  subName: 'replies',
+                  subDefaultExpiration: const Duration(days: 7),
+                  subFromJson: Reply.fromJson,
+                  subTypeTag: 'Reply',
+                ),
+              ],
+            ),
+          ])
+          .listen(snapshots.add);
+      await pump();
+      // No replies initially.
+      expect(
+        snapshots.last.single.branches['comments']!.single.branches['replies'],
+        isEmpty,
+      );
+
+      // Grandchild reply arrives.
+      seedReply('p1', 'c1', 'rnew', 'first reply');
+      notifStream.add(AtNotification(
+        'nid-tree-1',
+        '$selfAtSignStr:rnew.replies.c1.comments.p1.$namespace$selfAtSignStr',
+        selfAtSignStr,
+        selfAtSignStr,
+        DateTime.now().millisecondsSinceEpoch,
+        'key',
+        false,
+        operation: 'update',
+      ));
+      await pump();
+      final replies = snapshots
+          .last.single.branches['comments']!.single.branches['replies']!;
+      expect(replies.map((n) => n.parent.id), contains('rnew'));
+      await sub.cancel();
+    });
+
+    test('parent-leaving cascade-cancels the entire subtree', () async {
+      final posts = buildPosts();
+      seedPost('p1', 'first');
+      seedComment('p1', 'c1', 'hello');
+      seedReply('p1', 'c1', 'r1', 'thanks');
+      final snapshots = <List<TreeNode<Post>>>[];
+      final sub = posts
+          .query()
+          .watchWithTree([
+            SubSpec<Comment>(
+              subName: 'comments',
+              subDefaultExpiration: const Duration(days: 7),
+              subFromJson: Comment.fromJson,
+              subTypeTag: 'Comment',
+              children: [
+                SubSpec<Reply>(
+                  subName: 'replies',
+                  subDefaultExpiration: const Duration(days: 7),
+                  subFromJson: Reply.fromJson,
+                  subTypeTag: 'Reply',
+                ),
+              ],
+            ),
+          ])
+          .listen(snapshots.add);
+      await pump();
+      expect(snapshots.last, hasLength(1));
+
+      // Delete p1: tree should collapse to empty.
+      seed.remove('p1.$namespace$selfAtSignStr');
+      seed.remove('c1.comments.p1.$namespace$selfAtSignStr');
+      seed.remove('r1.replies.c1.comments.p1.$namespace$selfAtSignStr');
+      notifStream.add(AtNotification(
+        'nid-tree-2',
+        '$selfAtSignStr:p1.$namespace$selfAtSignStr',
+        selfAtSignStr,
+        selfAtSignStr,
+        DateTime.now().millisecondsSinceEpoch,
+        'key',
+        false,
+        operation: 'delete',
+      ));
+      await pump();
+      expect(snapshots.last, isEmpty);
+      await sub.cancel();
     });
   });
 }

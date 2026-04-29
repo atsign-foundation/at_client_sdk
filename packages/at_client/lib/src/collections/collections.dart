@@ -1929,6 +1929,96 @@ class AtCollection<T> {
 }
 
 // -----------------------------------------------------------------------------
+// Recursive multi-level sub-collection terminal — [SubSpec] + [TreeNode]
+// + [Query.watchWithTree].
+
+/// Immutable description of one level in a sub-collection tree. Used
+/// with [Query.watchWithTree] to declare a parent → children → ...
+/// shape that the library will live-orchestrate.
+///
+/// Each [SubSpec] declares the [subName] under which this level lives,
+/// the [subDefaultExpiration] for items written through it, and an
+/// optional `subFromJson` + `subTypeTag` pair (required together if
+/// either is supplied, same rule as [AtCollection.subCollection]).
+/// Nested [children] describe further levels deeper in the tree.
+///
+/// ```dart
+/// SubSpec<Comment>(
+///   subName: 'comments',
+///   subDefaultExpiration: const Duration(days: 30),
+///   subFromJson: Comment.fromJson,
+///   subTypeTag: 'Comment',
+///   children: [
+///     SubSpec<Reply>(
+///       subName: 'replies',
+///       subDefaultExpiration: const Duration(days: 30),
+///       subFromJson: Reply.fromJson,
+///       subTypeTag: 'Reply',
+///     ),
+///   ],
+/// );
+/// ```
+@experimental
+final class SubSpec<U> {
+  final String subName;
+  final Duration subDefaultExpiration;
+  final U Function(Map<String, dynamic>)? subFromJson;
+  final String? subTypeTag;
+  final List<SubSpec<dynamic>> children;
+
+  const SubSpec({
+    required this.subName,
+    required this.subDefaultExpiration,
+    this.subFromJson,
+    this.subTypeTag,
+    this.children = const [],
+  });
+
+  /// Opens this sub-collection on [parent] using the parent collection
+  /// [parentColl]'s context. Generic over the parent type [T] but
+  /// preserves this spec's own [U] — required when callers iterate a
+  /// `List<SubSpec<dynamic>>` and Dart would otherwise erase the
+  /// per-element generic, causing the factory auto-register at the
+  /// constructor to register `(dynamic, typeTag)` and collide with any
+  /// previously-registered `(U, typeTag)` pair.
+  ///
+  /// Threads [parentColl]'s injected notification stream through so
+  /// nested `watchWithTree` recursion sees events from the same test
+  /// harness.
+  @visibleForTesting
+  AtCollection<U> openOn<T>(
+    AtCollection<T> parentColl,
+    CItem<T> parent,
+  ) =>
+      parentColl._subCollectionInternal<U>(
+        parent: parent,
+        subName: subName,
+        defaultExpiration: subDefaultExpiration,
+        fromJson: subFromJson,
+        typeTag: subTypeTag,
+        notifications: parentColl._injectedNotifications,
+      );
+}
+
+/// One node in the snapshot returned by [Query.watchWithTree]. Carries
+/// the [parent] [CItem<T>] and the per-sub-collection [branches] —
+/// each branch keyed by its [SubSpec.subName] and holding the current
+/// list of children at that level (which are themselves [TreeNode]s,
+/// recursing all the way down).
+///
+/// Children are [TreeNode<dynamic>] because Dart's type system can't
+/// thread the per-level generic parameter through a heterogeneous
+/// recursive structure without codegen. App code that knows the
+/// topology can `branches['comments']!.cast<TreeNode<Comment>>()`.
+@experimental
+final class TreeNode<T> {
+  final CItem<T> parent;
+  final Map<String, List<TreeNode<dynamic>>> branches;
+
+  const TreeNode({required this.parent, required this.branches});
+}
+
+// -----------------------------------------------------------------------------
 // Query<T> — fluent, composable, value-typed query over AtCollection<T>.
 //
 // Complements [AtCollection.getItemsAsStream] with a builder-style API
@@ -1981,6 +2071,30 @@ final class Query<T> {
   /// `q.where(a).where(b)` yields items where both [a] and [b] hold.
   Query<T> where(bool Function(CItem<T> item) predicate) =>
       Query<T>._(_collection, _spec._withPredicate(predicate));
+
+  /// Adds a typed [Predicate] from the [PathField]-based AST. Equivalent
+  /// in semantics to [where] (AND'd with any other predicates),
+  /// but introspectable: a future indexed executor can walk the tree
+  /// and push eligible clauses to a secondary index, while [where]'s
+  /// closures stay opaque.
+  ///
+  /// ```dart
+  /// final overdue = await todos.query()
+  ///     .wherePath($Todo.done.eq(false))
+  ///     .wherePath($Todo.due.lt(DateTime.now()))
+  ///     .fetch();
+  ///
+  /// // Or compose with .and / .or:
+  /// final urgent = await todos.query()
+  ///     .wherePath($Todo.done.eq(false).and($Todo.due.lt(soon)))
+  ///     .fetch();
+  /// ```
+  ///
+  /// Co-exists with [where]: both lists are evaluated, AND'd together.
+  /// Use [where] for ad-hoc closures; reach for [wherePath] when you'd
+  /// like the library to be able to optimise the predicate later.
+  Query<T> wherePath(Predicate predicate) =>
+      Query<T>._(_collection, _spec._withTypedPredicate(predicate));
 
   /// Sorts by [keyFn]. A subsequent [orderBy] **replaces** any
   /// previous orderings (matches LINQ / Drift / Isar idiom — call
@@ -2073,6 +2187,7 @@ final class Query<T> {
   Future<bool> any([bool Function(CItem<T> item)? predicate]) async {
     await for (final item in _collection.getItemsAsStream()) {
       if (!_spec.predicates.every((p) => p(item))) continue;
+      if (!_spec.typedPredicates.every((p) => p.evaluate(item))) continue;
       if (predicate != null && !predicate(item)) continue;
       return true;
     }
@@ -2109,6 +2224,7 @@ final class Query<T> {
     var toSkip = _spec.skipN ?? 0;
     await for (final item in _collection.getItemsAsStream()) {
       if (!_spec.predicates.every((p) => p(item))) continue;
+      if (!_spec.typedPredicates.every((p) => p.evaluate(item))) continue;
       if (toSkip > 0) {
         toSkip--;
         continue;
@@ -2261,14 +2377,160 @@ final class Query<T> {
     return ctrl.stream;
   }
 
+  /// Live reactive terminal that joins each parent matching this query
+  /// with **multiple levels** of sub-collections, each level described
+  /// by a [SubSpec]. Generalises [watchWithSub] to arbitrary depth.
+  ///
+  /// ```dart
+  /// final stream = posts.query()
+  ///     .watchWithTree([
+  ///       SubSpec<Comment>(
+  ///         subName: 'comments',
+  ///         subDefaultExpiration: const Duration(days: 30),
+  ///         subFromJson: Comment.fromJson,
+  ///         subTypeTag: 'Comment',
+  ///         children: [
+  ///           SubSpec<Reply>(
+  ///             subName: 'replies',
+  ///             subDefaultExpiration: const Duration(days: 30),
+  ///             subFromJson: Reply.fromJson,
+  ///             subTypeTag: 'Reply',
+  ///           ),
+  ///         ],
+  ///       ),
+  ///     ]);
+  /// // stream: Stream<List<TreeNode<Post>>>
+  /// // tree[i].parent              → CItem<Post>
+  /// // tree[i].branches['comments'] → List<TreeNode<dynamic>> (one per comment)
+  /// // tree[i].branches['comments'][j].branches['replies']
+  /// //                              → List<TreeNode<dynamic>> (one per reply)
+  /// ```
+  ///
+  /// Re-emits on any change at any level: parent updates/deletes that
+  /// affect the result set, plus child / grand-child / ... events
+  /// within any open sub-tree. When a parent leaves the result set, the
+  /// library cascade-cancels every descendant subscription rooted at
+  /// that parent — including transitively. Same on outer-stream
+  /// cancellation.
+  ///
+  /// The returned stream is single-subscription. Wrap with
+  /// [Stream.asBroadcastStream] for multi-listener UIs.
+  Stream<List<TreeNode<T>>> watchWithTree(List<SubSpec<dynamic>> subSpecs) {
+    // Per-parent state, keyed by `<owner>:<id>`:
+    //   childSubs[parentKey][subName] = stream subscription on that
+    //     sub-collection's recursive watchWithTree (one entry per spec).
+    //   childLatest[parentKey][subName] = latest emitted children list.
+    final childSubs = <String, Map<String,
+        StreamSubscription<List<TreeNode<dynamic>>>>>{};
+    final childLatest = <String, Map<String, List<TreeNode<dynamic>>>>{};
+    List<CItem<T>> latestParents = const [];
+    late final StreamController<List<TreeNode<T>>> ctrl;
+    StreamSubscription<List<CItem<T>>>? parentSub;
+
+    String keyOf(CItem<dynamic> p) => '${p.owner}:${p.id}';
+
+    void emit() {
+      if (ctrl.isClosed) return;
+      ctrl.add([
+        for (final p in latestParents)
+          TreeNode<T>(
+            parent: p,
+            branches: Map<String, List<TreeNode<dynamic>>>.from(
+              childLatest[keyOf(p)] ?? const {},
+            ),
+          ),
+      ]);
+    }
+
+    Future<void> onParents(List<CItem<T>> parents) async {
+      latestParents = parents;
+      final currentKeys = parents.map(keyOf).toSet();
+      // Cascade-cancel subs for parents that left the result set —
+      // their entire sub-tree is gone.
+      final leavers =
+          childSubs.keys.where((k) => !currentKeys.contains(k)).toList();
+      for (final k in leavers) {
+        final perParent = childSubs.remove(k);
+        if (perParent != null) {
+          for (final s in perParent.values) {
+            await s.cancel();
+          }
+        }
+        childLatest.remove(k);
+      }
+      // Open subs for newly-arrived parents — one stream per declared
+      // [SubSpec].
+      for (final p in parents) {
+        final k = keyOf(p);
+        if (childSubs.containsKey(k)) continue;
+        childSubs[k] = {};
+        childLatest[k] = {};
+        for (final spec in subSpecs) {
+          // Use SubSpec.openOn<T>(...) so this spec's own U survives
+          // the loop iteration over List<SubSpec<dynamic>> — without it
+          // Dart would erase U to dynamic and the constructor's
+          // implicit (Type, typeTag) registration would clash with the
+          // already-registered (RealType, typeTag) entry.
+          final subColl = spec.openOn(_collection, p);
+          // Recurse: each child's own children come from a nested
+          // watchWithTree on the sub-collection's query. Empty
+          // [spec.children] makes the recursion a single-level scan.
+          final stream = subColl.query().watchWithTree(spec.children);
+          childSubs[k]![spec.subName] = stream.listen(
+            (children) {
+              childLatest[k]![spec.subName] = children;
+              emit();
+            },
+            onError: (Object e, StackTrace st) {
+              if (!ctrl.isClosed) ctrl.addError(e, st);
+            },
+          );
+        }
+      }
+      emit();
+    }
+
+    ctrl = StreamController<List<TreeNode<T>>>(
+      onListen: () {
+        parentSub = watch().listen(
+          (parents) => unawaited(onParents(parents)),
+          onError: (Object e, StackTrace st) {
+            if (!ctrl.isClosed) ctrl.addError(e, st);
+          },
+        );
+      },
+      onCancel: () async {
+        await parentSub?.cancel();
+        for (final perParent in childSubs.values) {
+          for (final s in perParent.values) {
+            await s.cancel();
+          }
+        }
+        childSubs.clear();
+        childLatest.clear();
+      },
+    );
+    return ctrl.stream;
+  }
+
   /// Live reactive variant. Emits an initial snapshot on first listen,
   /// then re-emits a fresh snapshot whenever an update or delete on
   /// the source collection could affect the result set.
   ///
-  /// Implementation today: on any relevant event, re-run [fetch]. For
-  /// a local-store scan in the tens-of-milliseconds range this is
-  /// cheap. Future versions may switch to incremental delta
-  /// maintenance when profiling warrants.
+  /// **Execution shape.** For queries with no `limit` / `skip`, this
+  /// terminal maintains a per-stream cached result list and applies
+  /// each event as a single-item delta: fetch one item, evaluate
+  /// against predicates, insert / replace / remove, re-emit. That
+  /// avoids the full-collection re-scan on every event.
+  ///
+  /// For queries with `limit` or `skip` set, the next-out-of-window
+  /// item isn't cached, so the terminal falls back to a full
+  /// `fetch()` on each event — same behaviour as before. (Future
+  /// option: keep `limit + lookahead` items cached so deltas can
+  /// patch the window without a refetch.)
+  ///
+  /// Per-stream events are serialised via an internal mutex so two
+  /// near-simultaneous events can't race on the cached list.
   ///
   /// Listens to the collection's direct-item events ([AtCollection.updates]
   /// and [AtCollection.deletes]) only. Sub-collection events do not
@@ -2281,32 +2543,360 @@ final class Query<T> {
     StreamSubscription<CItemDeleted>? delSub;
     late final StreamController<List<CItem<T>>> controller;
 
+    // Per-stream result cache. Populated on the initial fetch;
+    // mutated in place by [onUpdate] / [onDelete]. `null` means
+    // "not yet primed" (initial fetch has not completed) — events
+    // arriving in that window queue behind the initial fetch via
+    // [serialize].
+    List<CItem<T>>? cache;
+
+    // Use the delta path only when there's no pagination — see the
+    // dartdoc above for the rationale.
+    final usesDeltaPath = _spec.limitN == null && _spec.skipN == null;
+
+    bool matchesPredicates(CItem<T> item) {
+      for (final p in _spec.predicates) {
+        if (!p(item)) return false;
+      }
+      for (final p in _spec.typedPredicates) {
+        if (!p.evaluate(item)) return false;
+      }
+      return true;
+    }
+
+    void resort() {
+      if (_spec.orderBys.isEmpty || cache == null) return;
+      cache!.sort((a, b) {
+        for (final ob in _spec.orderBys) {
+          final cmp = ob.keyFn(a).compareTo(ob.keyFn(b));
+          if (cmp != 0) return ob.descending ? -cmp : cmp;
+        }
+        return 0;
+      });
+    }
+
     Future<void> refresh() async {
       if (controller.isClosed) return;
       try {
         final snapshot = await fetch();
-        if (!controller.isClosed) controller.add(snapshot);
+        if (!controller.isClosed) {
+          cache = [...snapshot];
+          controller.add(snapshot);
+        }
       } catch (e, st) {
         if (!controller.isClosed) controller.addError(e, st);
       }
     }
 
+    Future<void> onUpdate(Atsign owner, String id) async {
+      if (!usesDeltaPath || cache == null) {
+        // Pagination, or pre-initial-fetch event: full refetch is the
+        // correct fallback.
+        return refresh();
+      }
+      if (controller.isClosed) return;
+      CItem<T>? fresh;
+      try {
+        fresh = await _collection.getOrNull(id, owner);
+      } catch (e, st) {
+        // Per-item read error — surface, then realign via a full
+        // refetch so we don't drift out of sync with the store.
+        if (!controller.isClosed) controller.addError(e, st);
+        return refresh();
+      }
+      if (controller.isClosed) return;
+      final idx =
+          cache!.indexWhere((c) => c.id == id && c.owner == owner);
+      final wasInCache = idx >= 0;
+      // `fresh == null` here means the item was deleted between the
+      // event and the per-item read — treat as a delete, not a
+      // negative match.
+      final passes = fresh != null && matchesPredicates(fresh);
+      if (passes) {
+        if (wasInCache) {
+          cache![idx] = fresh;
+        } else {
+          cache!.add(fresh);
+        }
+        resort();
+      } else if (wasInCache) {
+        cache!.removeAt(idx);
+      } else {
+        // Didn't match before, doesn't now — no emission needed.
+        return;
+      }
+      if (!controller.isClosed) {
+        controller.add(List<CItem<T>>.from(cache!));
+      }
+    }
+
+    Future<void> onDelete(Atsign owner, String id) async {
+      if (!usesDeltaPath || cache == null) {
+        return refresh();
+      }
+      if (controller.isClosed) return;
+      final idx =
+          cache!.indexWhere((c) => c.id == id && c.owner == owner);
+      if (idx < 0) return; // not in result set, nothing to emit
+      cache!.removeAt(idx);
+      if (!controller.isClosed) {
+        controller.add(List<CItem<T>>.from(cache!));
+      }
+    }
+
+    // Per-stream serialiser. Chains tasks so events can't interleave
+    // across an in-flight single-item fetch — the cache mutation is
+    // atomic from the perspective of the next event.
+    Future<void> processing = Future<void>.value();
+    void serialize(Future<void> Function() task) {
+      processing = processing.then((_) => task()).catchError((
+        Object e,
+        StackTrace st,
+      ) {
+        if (!controller.isClosed) controller.addError(e, st);
+      });
+    }
+
     controller = StreamController<List<CItem<T>>>(
       onListen: () {
         // Subscribe to events BEFORE the initial fetch so an event
-        // arriving during fetch() is still handled by a subsequent
-        // refresh — avoids a lost-update window.
-        updSub = _collection.updates.listen((_) => refresh());
-        delSub = _collection.deletes.listen((_) => refresh());
-        refresh();
+        // arriving during the initial fetch is still applied
+        // afterwards (the serialiser holds it behind the fetch).
+        updSub = _collection.updates.listen((e) {
+          serialize(() => onUpdate(e.owner, e.id));
+        });
+        delSub = _collection.deletes.listen((e) {
+          serialize(() => onDelete(e.owner, e.id));
+        });
+        serialize(refresh);
       },
       onCancel: () async {
         await updSub?.cancel();
         await delSub?.cancel();
+        // Drain in-flight work so we don't tear the controller down
+        // mid-cache-mutation.
+        await processing;
       },
     );
     return controller.stream;
   }
+}
+
+// -----------------------------------------------------------------------------
+// Predicate AST — typed, introspectable companion to the closure-based
+// [Query.where] path. See the [Query.wherePath] terminal for usage.
+//
+// The AST is an alternative to passing opaque closures to [Query.where]:
+// a closure can be *executed* but not *inspected*, which means the
+// library can't see "this predicate tests obj.done == false" — just
+// "a function". The AST nodes here let a future indexed executor walk
+// the tree, push eligible clauses to a secondary index (e.g. SQLite +
+// JSON-field indexes once the local store migrates that way), and
+// evaluate the rest in memory. Today the AST evaluates entirely in
+// memory, like the closure path; the work that lands here is the
+// surface that makes future push-down possible without a caller-code
+// change.
+//
+// Shape: [PathField] is a typed accessor (path + extractor). Operators
+// on [PathField] mint [Predicate] nodes ([CmpPredicate]); combinators
+// on [Predicate] ([AndPredicate], [OrPredicate], [NotPredicate])
+// compose them. The whole thing is `@experimental` and `final` rather
+// than `sealed` so new node types can land in minor versions without
+// breaking downstream `is` chains.
+
+/// A typed, introspectable accessor for one field on a [CItem<T>].
+/// Pair with [Query.wherePath] / [PathField.eq] etc. to build a
+/// [Predicate] the library can both evaluate and inspect.
+///
+/// ```dart
+/// // Declare once, reuse anywhere.
+/// abstract class $Todo {
+///   static final done = PathField<bool>(
+///     path: ['obj', 'done'],
+///     extract: (item) => (item.obj as Todo).done,
+///   );
+///   static final due = PathField<DateTime>(
+///     path: ['obj', 'due'],
+///     extract: (item) => (item.obj as Todo).due,
+///   );
+/// }
+///
+/// // Use:
+/// final overdue = await todos.query()
+///     .wherePath($Todo.done.eq(false))
+///     .wherePath($Todo.due.lt(DateTime.now()))
+///     .fetch();
+/// ```
+///
+/// [path] is metadata only — it describes which field this accessor
+/// reads, in dotted form (e.g. `['obj', 'done']`). It is not consulted
+/// at evaluation time; that's [extract]'s job. A future indexed
+/// executor uses [path] to decide whether a predicate over this field
+/// can be pushed down to a secondary index.
+///
+/// [extract] is the live evaluator. It is called once per item per
+/// predicate eval; keep it allocation-free where possible.
+@experimental
+final class PathField<V> {
+  final List<String> path;
+  final V Function(CItem<dynamic> item) extract;
+
+  const PathField({required this.path, required this.extract});
+
+  /// `field == value`.
+  Predicate eq(V value) =>
+      CmpPredicate._(this, PredicateOp.eq, value);
+
+  /// `field != value`.
+  Predicate neq(V value) =>
+      CmpPredicate._(this, PredicateOp.neq, value);
+}
+
+/// `<`, `<=`, `>`, `>=` for fields whose value is [Comparable].
+extension ComparablePathField<V extends Comparable<dynamic>>
+    on PathField<V> {
+  Predicate lt(V value) => CmpPredicate._(this, PredicateOp.lt, value);
+  Predicate lte(V value) => CmpPredicate._(this, PredicateOp.lte, value);
+  Predicate gt(V value) => CmpPredicate._(this, PredicateOp.gt, value);
+  Predicate gte(V value) => CmpPredicate._(this, PredicateOp.gte, value);
+}
+
+/// Null checks for fields whose declared value type is nullable.
+/// Declare the field as `PathField<Foo?>` to opt in.
+extension NullablePathField<V extends Object> on PathField<V?> {
+  Predicate get isNull => CmpPredicate._(this, PredicateOp.isNull, null);
+  Predicate get isNotNull =>
+      CmpPredicate._(this, PredicateOp.isNotNull, null);
+}
+
+/// Comparison operator carried by a [CmpPredicate]. Stored as a value
+/// (rather than encoded in the subclass) so `switch` over op stays
+/// exhaustive at evaluation time and indexed-executor pushdown can
+/// pattern-match on it.
+@experimental
+enum PredicateOp { eq, neq, lt, lte, gt, gte, isNull, isNotNull }
+
+/// Root of the typed-predicate AST. Mint with the operator methods on
+/// [PathField] (e.g. `field.eq(value)`); compose with [and] / [or] /
+/// [not]. Pass to [Query.wherePath] to apply.
+///
+/// Designed for future introspection: a SQLite-indexed local store
+/// (planned, see assessment §1a) will be able to walk the tree and
+/// translate eligible leaf nodes into `WHERE` clauses backed by JSON-
+/// path indexes. Until that landing, all evaluation is in memory and
+/// behaviourally identical to a closure passed to [Query.where].
+@experimental
+abstract class Predicate {
+  /// Evaluates this predicate against [item]. Implementations should
+  /// be allocation-free and side-effect-free.
+  bool evaluate(CItem<dynamic> item);
+
+  /// Returns a new [Predicate] that holds when both this and [other]
+  /// hold. Flattens chains: `a.and(b).and(c)` produces a single
+  /// 3-child [AndPredicate], not a nested tree.
+  Predicate and(Predicate other) {
+    if (this is AndPredicate) {
+      return AndPredicate([...(this as AndPredicate).children, other]);
+    }
+    return AndPredicate([this, other]);
+  }
+
+  /// Returns a new [Predicate] that holds when at least one of this or
+  /// [other] holds. Flattens chains the same way [and] does.
+  Predicate or(Predicate other) {
+    if (this is OrPredicate) {
+      return OrPredicate([...(this as OrPredicate).children, other]);
+    }
+    return OrPredicate([this, other]);
+  }
+
+  /// Returns the negation. Double-negation collapses: `p.not.not == p`.
+  Predicate get not =>
+      this is NotPredicate ? (this as NotPredicate).inner : NotPredicate(this);
+}
+
+/// Leaf comparison predicate produced by [PathField] operators.
+/// Carries the field, op, and value publicly so a future indexed
+/// executor can pattern-match.
+@experimental
+final class CmpPredicate extends Predicate {
+  final PathField<dynamic> field;
+  final PredicateOp op;
+  final Object? value;
+
+  CmpPredicate._(this.field, this.op, this.value);
+
+  @override
+  bool evaluate(CItem<dynamic> item) {
+    final actual = field.extract(item);
+    switch (op) {
+      case PredicateOp.eq:
+        return actual == value;
+      case PredicateOp.neq:
+        return actual != value;
+      case PredicateOp.isNull:
+        return actual == null;
+      case PredicateOp.isNotNull:
+        return actual != null;
+      case PredicateOp.lt:
+      case PredicateOp.lte:
+      case PredicateOp.gt:
+      case PredicateOp.gte:
+        // Both sides null are not orderable; treat as "false" rather
+        // than throw, matching SQL `NULL` comparison semantics.
+        if (actual == null || value == null) return false;
+        final cmp = (actual as Comparable<dynamic>).compareTo(value);
+        switch (op) {
+          case PredicateOp.lt:
+            return cmp < 0;
+          case PredicateOp.lte:
+            return cmp <= 0;
+          case PredicateOp.gt:
+            return cmp > 0;
+          case PredicateOp.gte:
+            return cmp >= 0;
+          default:
+            throw StateError('unreachable');
+        }
+    }
+  }
+}
+
+/// Conjunction. All children must hold. Flattens on construction via
+/// [Predicate.and] so chains don't build a left-leaning tree.
+@experimental
+final class AndPredicate extends Predicate {
+  final List<Predicate> children;
+
+  AndPredicate(this.children);
+
+  @override
+  bool evaluate(CItem<dynamic> item) =>
+      children.every((p) => p.evaluate(item));
+}
+
+/// Disjunction. At least one child must hold. Flattens via
+/// [Predicate.or].
+@experimental
+final class OrPredicate extends Predicate {
+  final List<Predicate> children;
+
+  OrPredicate(this.children);
+
+  @override
+  bool evaluate(CItem<dynamic> item) =>
+      children.any((p) => p.evaluate(item));
+}
+
+/// Negation. Double-negation collapses via [Predicate.not].
+@experimental
+final class NotPredicate extends Predicate {
+  final Predicate inner;
+
+  NotPredicate(this.inner);
+
+  @override
+  bool evaluate(CItem<dynamic> item) => !inner.evaluate(item);
 }
 
 /// Immutable spec for a [Query<T>]. Kept as data (not just closures)
@@ -2315,6 +2905,11 @@ final class Query<T> {
 /// the rest in memory.
 final class _QuerySpec<T> {
   final List<bool Function(CItem<T>)> predicates;
+  /// Typed-AST predicates (parallel to [predicates]). Both lists are
+  /// AND'd together at evaluation time. The library currently
+  /// evaluates these in memory; introspection is enabled for a future
+  /// indexed executor.
+  final List<Predicate> typedPredicates;
   // Ordered list of sort keys, primary first. Empty = no sort. Multi-
   // entry compares are evaluated in registration order, falling
   // through on ties — see [_apply].
@@ -2324,6 +2919,7 @@ final class _QuerySpec<T> {
 
   const _QuerySpec({
     this.predicates = const [],
+    this.typedPredicates = const [],
     this.orderBys = const [],
     this.skipN,
     this.limitN,
@@ -2331,6 +2927,15 @@ final class _QuerySpec<T> {
 
   _QuerySpec<T> _withPredicate(bool Function(CItem<T>) p) => _QuerySpec<T>(
         predicates: [...predicates, p],
+        typedPredicates: typedPredicates,
+        orderBys: orderBys,
+        skipN: skipN,
+        limitN: limitN,
+      );
+
+  _QuerySpec<T> _withTypedPredicate(Predicate p) => _QuerySpec<T>(
+        predicates: predicates,
+        typedPredicates: [...typedPredicates, p],
         orderBys: orderBys,
         skipN: skipN,
         limitN: limitN,
@@ -2338,6 +2943,7 @@ final class _QuerySpec<T> {
 
   _QuerySpec<T> _withOrderBys(List<_OrderBy<T>> os) => _QuerySpec<T>(
         predicates: predicates,
+        typedPredicates: typedPredicates,
         orderBys: os,
         skipN: skipN,
         limitN: limitN,
@@ -2345,6 +2951,7 @@ final class _QuerySpec<T> {
 
   _QuerySpec<T> _withSkip(int n) => _QuerySpec<T>(
         predicates: predicates,
+        typedPredicates: typedPredicates,
         orderBys: orderBys,
         skipN: n,
         limitN: limitN,
@@ -2352,6 +2959,7 @@ final class _QuerySpec<T> {
 
   _QuerySpec<T> _withLimit(int n) => _QuerySpec<T>(
         predicates: predicates,
+        typedPredicates: typedPredicates,
         orderBys: orderBys,
         skipN: skipN,
         limitN: n,
@@ -2361,6 +2969,9 @@ final class _QuerySpec<T> {
     var out = items;
     for (final p in predicates) {
       out = out.where(p).toList();
+    }
+    for (final p in typedPredicates) {
+      out = out.where(p.evaluate).toList();
     }
     if (orderBys.isNotEmpty) {
       out = [...out]..sort((a, b) {
