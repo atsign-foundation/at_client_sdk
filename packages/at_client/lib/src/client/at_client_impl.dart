@@ -385,8 +385,8 @@ class AtClientImpl implements AtClient {
           'Ensure AtClientPreference.isLocalStoreRequired is true and the '
           'AtClient has been fully initialised before calling this method.');
     }
-    AtCompactionJob atCompactionJob = AtCompactionJob(
-        bundle.commitLog, (bundle as HiveAtPersistenceBundle).secondaryPersistenceStore);
+    AtCompactionJob atCompactionJob =
+        AtCompactionJob(bundle.commitLog, bundle.keyStore);
 
     _atClientCommitLogCompaction ??=
         AtClientCommitLogCompaction.create(_atSign, atCompactionJob);

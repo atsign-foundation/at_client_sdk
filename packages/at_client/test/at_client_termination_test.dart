@@ -178,9 +178,7 @@ void main() {
 
         final atClient1 =
             await _initializeAtClient(atSign1) as AtClientImpl;
-        final hiveManager1 = (atClient1.persistenceBundle
-                as HiveAtPersistenceBundle)
-            .hivePersistenceManager;
+        final keyStore1 = atClient1.persistenceBundle!.keyStore;
 
         // Switch to second atSign
         await _initializeAtClient(atSign2);
@@ -195,9 +193,9 @@ void main() {
         expect(bundleAfter, isNotNull,
             reason: 'Hive storage should still be accessible');
 
-        final hiveManagerAfter =
-            (bundleAfter as HiveAtPersistenceBundle).hivePersistenceManager;
-        expect(identical(hiveManager1, hiveManagerAfter), true);
+        // Identity check on the keystore — the bundle's keystore is the
+        // observable proxy for "Hive state didn't get torn down".
+        expect(identical(keyStore1, bundleAfter!.keyStore), true);
         expect(AtClientImpl.atClientInstanceMap.containsKey(atSign1), true);
       });
 
