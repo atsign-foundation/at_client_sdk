@@ -20,6 +20,11 @@ Several significant enhancements to the API to make it much easier to use.
   `typeTag` to two different types — the wire-format contract no
   longer drifts silently. Same-(type, tag) re-registration is
   idempotent (last fromJson body wins).
+- feat(AtCollection): `Query<T>.thenBy(keyFn, {descending})` for
+  multi-key sort. Chains tiebreakers after a primary `orderBy`,
+  each level with its own independent `descending:`. `orderBy`
+  retains replace semantics (LINQ / Drift / Isar idiom);
+  `thenBy` without a prior `orderBy` throws `StateError`.
 - feat: added a new method, `send`, to NotificationService which is much 
   easier to use than the old (still fine to use) `notify` method.
 - feat: added `factory AtRpc.server` to make it much simpler to create AtRpc 

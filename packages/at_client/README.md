@@ -128,6 +128,7 @@ final overdue = todos.query()
     .where((t) => !t.obj.done)
     .where((t) => t.obj.due.isBefore(DateTime.now()))
     .orderBy((t) => t.obj.due)
+    .thenBy((t) => t.obj.title)   // tiebreak within same due date
     .limit(20);
 
 final list = await overdue.fetch();   // one-shot List

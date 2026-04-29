@@ -2,8 +2,10 @@
 
 A from-scratch assessment of the `AtCollection<T>` API in
 `packages/at_client/lib/src/collections/collections.dart` as of
-2026-04-29 (UTC); originally written end-of-day Thu Apr 23, with a
-2026-04-29 update for W2 closure (required `typeTag` in 3.14.0).
+2026-04-29 (UTC); originally written end-of-day Thu Apr 23, with
+2026-04-29 updates for W2 closure (required `typeTag`) and
+W1(b) closure (`Query.thenBy` for multi-key sort), both folded
+into 3.13.0.
 
 ## TL;DR
 
@@ -26,19 +28,19 @@ children stranded) via a scoped-namespace design and an explicit
 `cleanupOrphans()` for offline-then-online recovery.
 
 Phase 1 of a composable query-builder (`collection.query()` →
-`Query<T>` with `.where` / `.orderBy` / `.limit` / `.skip` and
-terminals `.fetch` / `.watch` / `.count` / `.any` / `.first` /
-`.firstOrNull` / `.groupBy` / `.watchWithSub`) landed on 2026-04-23
-alongside the rest of the v3 work. The
+`Query<T>` with `.where` / `.orderBy` / `.thenBy` / `.limit` /
+`.skip` and terminals `.fetch` / `.watch` / `.count` / `.any` /
+`.first` / `.firstOrNull` / `.groupBy` / `.watchWithSub`) landed
+on 2026-04-23 alongside the rest of the v3 work, with `.thenBy`
+multi-key sort added 2026-04-29. The
 `getItemsAsStream().where(...)` stream-transformer path remains
 supported as an escape hatch for ad-hoc pipelines outside the
 builder's vocabulary. What's still outstanding is phase-2 polish:
 typed field-accessor values (so the spec can be introspected for
 secondary-index push-down when the local store eventually gains
-JSON indexes), multi-key `orderBy`, deeper-than-one-level
-sub-collection joining (`watchWithTree`), and incremental delta
-maintenance in `.watch()` — see §W1. None of that is
-architectural.
+JSON indexes), deeper-than-one-level sub-collection joining
+(`watchWithTree`), and incremental delta maintenance in `.watch()`
+— see §W1. None of that is architectural.
 
 Note: "no value-level server-side filter" is NOT a gap — it is
 architecturally impossible under end-to-end encryption (see §1a)
@@ -62,10 +64,10 @@ a collection. The principal types:
   composable `query()` entry point that mints a `Query<T>`; and the
   reactive surface (`watch()` + typed sub-streams).
 - **`Query<T>`** — an immutable, value-typed builder returned by
-  `collection.query()`. Modifiers (`.where`, `.orderBy`, `.limit`,
-  `.skip`) compose; terminals (`.fetch`, `.watch`, `.count`, `.any`,
-  `.first`, `.firstOrNull`, `.groupBy`, `.watchWithSub`) execute
-  against the synced local store.
+  `collection.query()`. Modifiers (`.where`, `.orderBy`, `.thenBy`,
+  `.limit`, `.skip`) compose; terminals (`.fetch`, `.watch`,
+  `.count`, `.any`, `.first`, `.firstOrNull`, `.groupBy`,
+  `.watchWithSub`) execute against the synced local store.
 - **`CEvent`** hierarchy — deliberately **not** `sealed`:
   `CItemUpdated`, `CItemDeleted`, `CReadReceipt`, `CSubItemUpdated`,
   `CSubItemDeleted`. Kept as an `abstract class` so new event types
@@ -135,9 +137,9 @@ The downstream consequences for the API shape:
 
 - **Reads happen on-device against the synced local store.**
   `collection.query()` returns a composable `Query<T>` value
-  (`.where` / `.orderBy` / `.limit` / `.skip` / terminals
-  `.fetch` / `.watch` / `.count` / `.any` / `.first` / `.firstOrNull`
-  / `.groupBy` / `.watchWithSub`). `getItemsAsStream()` remains as
+  (`.where` / `.orderBy` / `.thenBy` / `.limit` / `.skip` /
+  terminals `.fetch` / `.watch` / `.count` / `.any` / `.first` /
+  `.firstOrNull` / `.groupBy` / `.watchWithSub`). `getItemsAsStream()` remains as
   the untyped escape hatch for ad-hoc stream pipelines. Either way the filter evaluates
   locally over already-decrypted records, with a
   hundred-thousand-record budget comfortably in reach on typical
@@ -270,20 +272,20 @@ made the call site less greppable and the behaviour depend on
 
 ## 4. The current API surface, compact view
 
-| Category                 | Methods / fields exposed                                                                                                                                                                                                                                                                                                         |
-|--------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Construction             | `AtCollection(atClient, namespace, defaultExpiration, {fromJson, typeTag})`, `AtCollection.withInjectedNotifications(...)` (testing)                                                                                                                                                                                             |
-| Identity                 | `atSign`, `namespace`, `defaultExpiration`, `isSubCollection`                                                                                                                                                                                                                                                                    |
-| Factory                  | `registerFactory<U>(fromJson, {required typeTag})`                                                                                                                                                                                                                                                                               |
-| Drafting                 | `draft({obj, id?, sharedWith?, expiresAt?, availableAt?})` (no I/O)                                                                                                                                                                                                                                                              |
-| Create / Update / Delete | `create({obj, id?, sharedWith?, expiresAt?, availableAt?})` (throws on collision), `update(item, {unshareWithOthers})` (throws if missing), `delete(item, {cascade})`                                                                                                                                                            |
-| Read one                 | `get(id, owner)` (throws if missing), `getOrNull(id, owner)` (null if missing)                                                                                                                                                                                                                                                   |
-| Read many                | `getItems({id?, owner?})` (List, throws on decode error), `getItemsAsStream({id?, owner?})` (Stream, errors yielded in-band), `getKeys({id?, owner?})` (raw AtKeys)                                                                                                                                                              |
-| Query builder            | `query()` → `Query<T>`; modifiers `.where(p)`, `.orderBy(keyFn, {descending})`, `.limit(n)`, `.skip(n)`; terminals `.fetch()`, `.watch()`, `.count()`, `.any([p])`, `.first()`, `.firstOrNull()`, `.groupBy<K>(keyFn)`, `.watchWithSub<U>(subName, subDefaultExpiration, {subFromJson, subTypeTag})` (live parent+children join) |
-| Read receipts            | On `CItem`: `markReadByMe()`, `wasMarkedReadByMe()`, `readBy` (Future), `readBySnapshot` (sync), `receipts` (the `__rr` sub-collection). On `AtCollection`: `markReadByMe(item)` / `wasMarkedReadByMe(item)` shims, `readReceiptsFor(item)` → queryable receipts sub-collection.                                                 |
-| Sub-collections          | `subCollection<U>({parent, subName, defaultExpiration, fromJson?, typeTag?})` (plus `notifications:` test hook — see §W9), `cleanupOrphans()` (works on root and sub)                                                                                                                                                            |
-| Events                   | `watch()` → Stream<CEvent>; typed getters `updates` / `deletes` / `readReceipts` / `subUpdates` / `subDeletes`                                                                                                                                                                                                                   |
-| Exceptions               | `CollectionOpException` (write failures), `CollectionGetException` (read/decode failures), `StateError` (create-collides / update-missing / cascade-needed), `ArgumentError` (invalid input), `AtKeyNotFoundException` (get of absent)                                                                                           |
+| Category                 | Methods / fields exposed                                                                                                                                                                                                                                                                                                                                         |
+|--------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Construction             | `AtCollection(atClient, namespace, defaultExpiration, {fromJson, typeTag})`, `AtCollection.withInjectedNotifications(...)` (testing)                                                                                                                                                                                                                             |
+| Identity                 | `atSign`, `namespace`, `defaultExpiration`, `isSubCollection`                                                                                                                                                                                                                                                                                                    |
+| Factory                  | `registerFactory<U>(fromJson, {required typeTag})`                                                                                                                                                                                                                                                                                                               |
+| Drafting                 | `draft({obj, id?, sharedWith?, expiresAt?, availableAt?})` (no I/O)                                                                                                                                                                                                                                                                                              |
+| Create / Update / Delete | `create({obj, id?, sharedWith?, expiresAt?, availableAt?})` (throws on collision), `update(item, {unshareWithOthers})` (throws if missing), `delete(item, {cascade})`                                                                                                                                                                                            |
+| Read one                 | `get(id, owner)` (throws if missing), `getOrNull(id, owner)` (null if missing)                                                                                                                                                                                                                                                                                   |
+| Read many                | `getItems({id?, owner?})` (List, throws on decode error), `getItemsAsStream({id?, owner?})` (Stream, errors yielded in-band), `getKeys({id?, owner?})` (raw AtKeys)                                                                                                                                                                                              |
+| Query builder            | `query()` → `Query<T>`; modifiers `.where(p)`, `.orderBy(keyFn, {descending})`, `.thenBy(keyFn, {descending})`, `.limit(n)`, `.skip(n)`; terminals `.fetch()`, `.watch()`, `.count()`, `.any([p])`, `.first()`, `.firstOrNull()`, `.groupBy<K>(keyFn)`, `.watchWithSub<U>(subName, subDefaultExpiration, {subFromJson, subTypeTag})` (live parent+children join) |
+| Read receipts            | On `CItem`: `markReadByMe()`, `wasMarkedReadByMe()`, `readBy` (Future), `readBySnapshot` (sync), `receipts` (the `__rr` sub-collection). On `AtCollection`: `markReadByMe(item)` / `wasMarkedReadByMe(item)` shims, `readReceiptsFor(item)` → queryable receipts sub-collection.                                                                                 |
+| Sub-collections          | `subCollection<U>({parent, subName, defaultExpiration, fromJson?, typeTag?})` (plus `notifications:` test hook — see §W9), `cleanupOrphans()` (works on root and sub)                                                                                                                                                                                            |
+| Events                   | `watch()` → Stream<CEvent>; typed getters `updates` / `deletes` / `readReceipts` / `subUpdates` / `subDeletes`                                                                                                                                                                                                                                                   |
+| Exceptions               | `CollectionOpException` (write failures), `CollectionGetException` (read/decode failures), `StateError` (create-collides / update-missing / cascade-needed), `ArgumentError` (invalid input), `AtKeyNotFoundException` (get of absent)                                                                                                                           |
 
 ## 5. Comparison with CRUD libraries in the Dart ecosystem and beyond
 
@@ -557,24 +559,11 @@ is expected to optimise. **Only worth landing once we have an
 indexed local store to push down to**; otherwise it's pure
 API-surface work with no performance payoff.
 
-### (b) Multi-key `orderBy`
+### (b) ~~Multi-key `orderBy`~~ (closed)
 
-**What's missing.** Calling `.orderBy(...)` twice replaces the first
-one; it doesn't append. Single sort key only.
-
-**Why it matters.** The common case is tie-breaking: "sort by due
-date ascending, then by title". Today the caller writes a composite
-key:
-
-```dart
-.orderBy((t) => (t.obj.dueDate ?? maxDate, t.obj.title))
-```
-
-Dart records are `Comparable` when all their fields are, so it
-works — but it's awkward, and you can't independently reverse one
-key's direction (the whole record reverses together).
-
-**Shape of a phase-2 fix.** Append rather than replace:
+Landed 2026-04-29. `Query<T>.orderBy(...)` keeps replace semantics
+(matches LINQ / Drift / Isar idiom), and a new `Query<T>.thenBy(...)`
+appends tiebreakers:
 
 ```dart
 q.orderBy((t) => t.obj.dueDate)
@@ -582,13 +571,11 @@ q.orderBy((t) => t.obj.dueDate)
  .thenBy((t) => t.createdAt);
 ```
 
-`_QuerySpec` holds a `List<_OrderBy<T>>` instead of a single
-`_OrderBy<T>?`. The `_apply` sort runs a stable multi-key
-comparison. Five to ten lines of SDK change plus a couple of tests.
-
-**Tradeoff / dependency.** None, really. This is the smallest of
-the four — the only reason it's phase 2 is that nobody has asked
-for it yet and the composite-key workaround exists.
+`_QuerySpec` now holds `List<_OrderBy<T>>` (primary first) and
+`_apply` runs a stable multi-key compare in registration order.
+Each level carries its own `descending:` independently.
+`thenBy` without a prior `orderBy` throws `StateError`. The single-
+composite-key workaround still works for callers that prefer it.
 
 ### (c) Incremental delta maintenance in `watch()`
 
@@ -715,8 +702,8 @@ trigger.
 1. **(a) Typed field accessors** — turn closures into an inspectable
    AST. Worthwhile only when we have an indexed local store to push
    down to.
-2. **(b) Multi-key `orderBy`** — append rather than replace on
-   repeated calls. Any time; small.
+2. **(b) ~~Multi-key `orderBy`~~** — landed 2026-04-29. `Query.thenBy`
+   appends tiebreakers; `orderBy` still resets.
 3. **(c) Delta maintenance in `.watch()`** — single-item cache
    maintenance instead of full re-scan on each event. Worthwhile
    once a real workload shows scan cost matters.
@@ -891,16 +878,22 @@ State as of 2026-04-29:
   2026-04-29 (folded into 3.13.0): `typeTag` is now required
   wherever a `fromJson` factory is supplied; the registry also
   rejects silently changing a registered type's tag or sharing a
-  tag across types.
+  tag across types. **W1(b) multi-key `orderBy` closed**
+  2026-04-29: `Query<T>.thenBy(keyFn, {descending})` appends
+  tiebreakers; `_QuerySpec` carries an ordered list of sort keys
+  and `_apply` runs a stable multi-key compare in registration
+  order. `orderBy` retains replace semantics (LINQ / Drift / Isar
+  idiom).
 - **Ranked for impact**, still open:
 
 1. **Query/filter phase 2** (residual of §W1). Typed field
    accessors (so the spec can be introspected for index push-down,
    unlocking the SQLite-indexed execution path when local storage
-   gets there); multi-key `orderBy`; deeper sub-collection joining
-   than one level; incremental delta maintenance in `.watch()`
+   gets there); deeper sub-collection joining than one level
+   (`watchWithTree`); incremental delta maintenance in `.watch()`
    (today any event triggers a full refetch — correct, but cheaper
-   options exist once profiling demands).
+   options exist once profiling demands). Multi-key `orderBy` is
+   no longer in this list — closed 2026-04-29 with `Query.thenBy`.
 2. **`CItemAvailable` / `CItemExpiringSoon` events** (§W7). Unlocks
    reminder / alarm UIs without app-level timers.
 3. **Existence-probe elision** (residual of §W3). Tiny cache of
@@ -922,9 +915,10 @@ State as of 2026-04-29:
 - `dart test test/at_collections_test.dart test/at_collections_sub_test.dart test/at_collections_query_test.dart test/at_collections_query_sub_test.dart`
   → 49 + 18 + 38 + 5 = 110 passing as of 2026-04-23, post the
   Query<T> phase-1 work including the `watchWithSub` terminal and
-  public `readReceiptsFor` surface. Plus 5 new W2 validation tests
-  added 2026-04-29: 115 total passing in the AtCollection-focused
-  suite; full `dart test --concurrency=1` is clean (511 passing).
+  public `readReceiptsFor` surface. Plus 5 W2 validation tests +
+  5 `thenBy` multi-key tests added 2026-04-29: 120 total passing
+  in the AtCollection-focused suite; full
+  `dart test --concurrency=1` is clean.
 - `flutter analyze` on the Flutter todos example
   (`packages/at_client_flutter/examples/todos`) → clean. That app is
   the idiomatic Flutter reference for AtCollection — CLI developers
