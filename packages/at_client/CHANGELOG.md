@@ -4,6 +4,22 @@ Several significant enhancements to the API to make it much easier to use.
 - feat: New feature - Collections - a clean API for storing, sharing, 
   unsharing and deleting objects in named collections, with sub-collections, 
   event streams, built-in support for read receipts, and more
+- feat(AtCollection): `typeTag` is required wherever a factory is
+  registered — `AtCollection.registerFactory<U>(...)`, the
+  `fromJson:` shortcut on `AtCollection.new` /
+  `AtCollection.withInjectedNotifications` / `AtClient.collection<T>`
+  / `AtCollection.subCollection<U>`, and
+  `Query<T>.watchWithSub<U>(subFromJson: ...)`. Pinning the
+  wire-format identifier explicitly stops Dart's minifier /
+  tree-shaker (release-mode Flutter web, AOT obfuscated builds)
+  silently renaming the on-wire type tag when class names move.
+  Pass `typeTag: 'YourType'` next to every `fromJson:` /
+  `registerFactory` call.
+- feat(AtCollection): registry rejects re-registering the same
+  type under a different `typeTag`, and rejects binding the same
+  `typeTag` to two different types — the wire-format contract no
+  longer drifts silently. Same-(type, tag) re-registration is
+  idempotent (last fromJson body wins).
 - feat: added a new method, `send`, to NotificationService which is much 
   easier to use than the old (still fine to use) `notify` method.
 - feat: added `factory AtRpc.server` to make it much simpler to create AtRpc 

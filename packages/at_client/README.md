@@ -98,6 +98,7 @@ final todos = await atClient.collection<Todo>(
   'todos.my_app',            // fully-qualified namespace
   const Duration(days: 7),
   fromJson: Todo.fromJson,
+  typeTag: 'Todo',           // wire-format identifier — required
 );
 
 final item = await todos.create(
@@ -162,6 +163,7 @@ final comments = posts.subCollection<Comment>(
   subName: 'comments',
   defaultExpiration: const Duration(days: 30),
   fromJson: Comment.fromJson,
+  typeTag: 'Comment',
 );
 await comments.create(obj: Comment('nice one'), sharedWith: {/* … */});
 
