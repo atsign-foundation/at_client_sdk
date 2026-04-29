@@ -112,10 +112,9 @@ class SyncServiceImpl implements SyncService {
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
         atChops: atClient.atChops, enrollmentId: atClient.enrollmentId);
     final syncService = SyncServiceImpl._(atClient, remoteSecondary);
-    // Pre-populate SyncUtil with the per-atSign AtCommitLog so its
-    // lazy-init fallback (which reaches for the deprecated
-    // AtCommitLogManagerImpl.getInstance() singleton) never fires.
-    // The bundle is produced by StorageManager during AtClient init.
+    // SyncUtil's commit log is required at first use — preset it from
+    // the bundle so its methods don't throw. The bundle is produced
+    // by StorageManager during AtClient init.
     if (atClient is AtClientImpl) {
       syncService.syncUtil.atCommitLog =
           atClient.persistenceBundle?.commitLog;
@@ -451,13 +450,11 @@ class SyncServiceImpl implements SyncService {
     var syncResult = syncRequest.result!;
     _logger.finer('Sync in progress');
     var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
-        _atClient.getPreferences()!.syncRegex,
-        atSign: _atClient.getCurrentAtSign()!);
+        _atClient.getPreferences()!.syncRegex);
     // Get lastSyncedLocalSeq to get the list of uncommitted entries.
     var lastSyncedLocalSeq = lastSyncedEntry != null ? lastSyncedEntry.key : -1;
     var unCommittedEntries = await syncUtil.getChangesSinceLastCommit(
-        lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex,
-        atSign: _atClient.getCurrentAtSign()!);
+        lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex);
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
     if (serverCommitId > lastReceivedServerCommitId) {
       _logger.finer(_logger.getLogMessageWithClientParticulars(
@@ -513,8 +510,7 @@ class SyncServiceImpl implements SyncService {
             }
 
             _logger.finer('***batchId:$batchId key: ${commitEntry.atKey}');
-            await syncUtil.updateCommitEntry(
-                commitEntry, commitId, _atClient.getCurrentAtSign()!);
+            await syncUtil.updateCommitEntry(commitEntry, commitId);
 
             keyInfoList.add(KeyInfo(commitEntry.atKey,
                 SyncDirection.localToRemote, commitEntry.operation));
@@ -816,7 +812,7 @@ class SyncServiceImpl implements SyncService {
       uncommittedEntries.remove(commitEntry);
       // Removing the entry from the commit log keystore to prevent stale entries
       try {
-        await syncUtil.removeCommitEntry(commitEntry.key, currentAtSign);
+        await syncUtil.removeCommitEntry(commitEntry.key);
       } catch (e) {
         _logger.shout('Exception $e - commitEntry is $commitEntry');
       }
@@ -932,16 +928,14 @@ class SyncServiceImpl implements SyncService {
       var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
 
       var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
-          _atClient.getPreferences()!.syncRegex,
-          atSign: _atClient.getCurrentAtSign()!);
+          _atClient.getPreferences()!.syncRegex);
       var lastSyncedCommitId = lastSyncedEntry?.commitId;
       _logger.finest(
           'server commit id: $serverCommitId last synced commit id: $lastSyncedCommitId');
       var lastSyncedLocalSeq =
           lastSyncedEntry != null ? lastSyncedEntry.key : -1;
       var unCommittedEntries = await syncUtil.getChangesSinceLastCommit(
-          lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex,
-          atSign: _atClient.getCurrentAtSign()!);
+          lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex);
       return SyncUtil.isInSync(
           unCommittedEntries, serverCommitId, lastReceivedServerCommitId);
     } on Exception catch (e) {
@@ -961,15 +955,13 @@ class SyncServiceImpl implements SyncService {
     var serverCommitId = await _getServerCommitId(forceFresh: true);
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
     var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
-        _atClient.getPreferences()!.syncRegex,
-        atSign: _atClient.getCurrentAtSign()!);
+        _atClient.getPreferences()!.syncRegex);
     var lastSyncedCommitId = lastSyncedEntry?.commitId;
     _logger.finest(
         'server commit id: $serverCommitId last synced commit id: $lastSyncedCommitId');
     var lastSyncedLocalSeq = lastSyncedEntry != null ? lastSyncedEntry.key : -1;
     var unCommittedEntries = await syncUtil.getChangesSinceLastCommit(
-        lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex,
-        atSign: _atClient.getCurrentAtSign()!);
+        lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex);
     return SyncUtil.isInSync(
         unCommittedEntries, serverCommitId, lastReceivedServerCommitId);
   }
@@ -1051,8 +1043,7 @@ class SyncServiceImpl implements SyncService {
   Future<int> _getLocalCommitId() async {
     // Get lastSynced local commit id.
     var lastSyncEntry = await syncUtil.getLastSyncedEntry(
-        _atClient.getPreferences()!.syncRegex,
-        atSign: _atClient.getCurrentAtSign()!);
+        _atClient.getPreferences()!.syncRegex);
     int localCommitId;
     // If lastSyncEntry not null, set localCommitId to lastSyncedEntry.commitId
     // Else set to -1.
@@ -1208,16 +1199,15 @@ class SyncServiceImpl implements SyncService {
       return;
     }
     var sequenceNumber = int.parse(verbResult.split(':')[1]);
-    var commitEntry = await (syncUtil.getCommitEntry(
-        sequenceNumber, _atClient.getCurrentAtSign()!));
+    var commitEntry = await syncUtil.getCommitEntry(sequenceNumber);
     if (commitEntry == null) {
       return;
     }
     commitEntry.operation = operation;
     _logger.finest(
         'Updating ${commitEntry.atKey} commitId to ${serverCommitEntry['commitId']} in local keystore');
-    await syncUtil.updateCommitEntry(commitEntry, serverCommitEntry['commitId'],
-        _atClient.getCurrentAtSign()!);
+    await syncUtil.updateCommitEntry(
+        commitEntry, serverCommitEntry['commitId']);
   }
 
   @visibleForTesting

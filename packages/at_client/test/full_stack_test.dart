@@ -99,7 +99,7 @@ void main() {
       atClient = (await AtClientImpl.create('@alice', 'gary', fullStackPrefs,
           remoteSecondary: mockRemoteSecondary,
           atChops: atChops)) as AtClientImpl;
-      localStore = atClient.getLocalSecondary()!.keyStore!;
+      localStore = atClient.getLocalSecondary()!.keyStore;
       localSecondary = atClient.getLocalSecondary()!;
       atClient.syncService = NoOpSyncService();
 
@@ -200,7 +200,7 @@ void main() {
 
         var atData = await (atClient
             .getLocalSecondary()!
-            .keyStore!
+            .keyStore
             .get(atKey.toString()));
         var cipherText = atData.data;
         expect(
@@ -228,7 +228,7 @@ void main() {
 
         var atData = await (atClient
             .getLocalSecondary()!
-            .keyStore!
+            .keyStore
             .get(atKey.toString()));
         var cipherText = atData.data;
         expect(

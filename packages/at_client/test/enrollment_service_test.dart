@@ -52,35 +52,35 @@ void main() {
     await atClient
         .getLocalSecondary()
         ?.keyStore
-        ?.put(localEnrollmentKey.toString(), atData);
+        .put(localEnrollmentKey.toString(), atData);
 
     AtEncryptionResult? atEncryptionResult = await atClient.atChops
         ?.encryptString(atChops.atChopsKeys.selfEncryptionKey!.key,
             EncryptionKeyType.rsa2048);
 
     // Store "currentAtSign" encrypted symmetric key : shared_key.bob@alice
-    await atClient.getLocalSecondary()?.keyStore?.put(
+    await atClient.getLocalSecondary()?.keyStore.put(
         'shared_key.bob$currentAtSign',
         AtData()..data = atEncryptionResult?.result);
 
     // Store the "sharedWith" atsign's encrypted shared key: @bob:shared_key@alice
-    await atClient.getLocalSecondary()?.keyStore?.put(
+    await atClient.getLocalSecondary()?.keyStore.put(
         '$sharedWithAtSign:shared_key$currentAtSign',
         AtData()..data = atEncryptionResult?.result);
     // Store the "sharedWith" atSign's encryption public key cached in current atSign
-    await atClient.getLocalSecondary()?.keyStore?.put(
+    await atClient.getLocalSecondary()?.keyStore.put(
         'cached:public:publickey$sharedWithAtSign',
         AtData()
           ..data =
               atChops.atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey);
 
     // Store cached shared_key
-    await atClient.getLocalSecondary()?.keyStore?.put(
+    await atClient.getLocalSecondary()?.keyStore.put(
         'cached:@alice:shared_key@bob',
         AtData()..data = atEncryptionResult?.result);
 
     // Store cached shared_key
-    await atClient.getLocalSecondary()?.keyStore?.put(
+    await atClient.getLocalSecondary()?.keyStore.put(
         'public:publickey@alice',
         AtData()
           ..data =
@@ -288,8 +288,7 @@ void main() {
       () {
     test('test llookup on cached:@bob:shared_key@alice', () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      LocalSecondary ls = atClient.getLocalSecondary()!;
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -304,8 +303,7 @@ void main() {
 
     test('test llookup on cached public key', () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      LocalSecondary ls = atClient.getLocalSecondary()!;
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -322,8 +320,7 @@ void main() {
         'test get on shared key with read-write access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      LocalSecondary ls = atClient.getLocalSecondary()!;
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -339,8 +336,7 @@ void main() {
     test('test get on shared key with read access with enrolled namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      LocalSecondary ls = atClient.getLocalSecondary()!;
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -356,8 +352,7 @@ void main() {
     test('test scan on shared key with read access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      LocalSecondary ls = atClient.getLocalSecondary()!;
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -378,8 +373,7 @@ void main() {
         'test update on shared key with only read access to enrollment namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      LocalSecondary ls = atClient.getLocalSecondary()!;
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -396,8 +390,7 @@ void main() {
         'test update on shared key with read-write access to enrollment namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      LocalSecondary ls = atClient.getLocalSecondary()!;
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -414,8 +407,7 @@ void main() {
         'test update on shared key with read-write access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      LocalSecondary ls = atClient.getLocalSecondary()!;
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -432,8 +424,7 @@ void main() {
         'test update on public key with read-write access to enrollment namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      LocalSecondary ls = atClient.getLocalSecondary()!;
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -450,8 +441,7 @@ void main() {
         'test update on public key with read-write access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      LocalSecondary ls = atClient.getLocalSecondary()!;
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -468,8 +458,7 @@ void main() {
         'test notify on shared key with read-write access with enrolled namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      LocalSecondary ls = atClient.getLocalSecondary()!;
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -486,8 +475,7 @@ void main() {
     test('test notify on shared key with read access with enrolled namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      LocalSecondary ls = atClient.getLocalSecondary()!;
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -505,8 +493,7 @@ void main() {
         'test notify on shared key with read-write access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      LocalSecondary ls = atClient.getLocalSecondary()!;
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -524,8 +511,7 @@ void main() {
         'test delete on shared key with read-write access with enrolled namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      LocalSecondary ls = atClient.getLocalSecondary()!;
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -541,8 +527,7 @@ void main() {
     test('test delete on shared key with read access with enrolled namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      LocalSecondary ls = atClient.getLocalSecondary()!;
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId
@@ -559,8 +544,7 @@ void main() {
         'test delete on shared key with read-write access with unauthorized namespace',
         () async {
       final testEnrollmentId = 'aaa111';
-      LocalSecondary ls = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      LocalSecondary ls = atClient.getLocalSecondary()!;
 
       ls.enrollment = Enrollment()
         ..enrollmentId = testEnrollmentId

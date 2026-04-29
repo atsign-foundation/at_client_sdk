@@ -9,13 +9,8 @@ import 'package:at_utils/at_logger.dart';
 ///
 /// Callers must supply the per-atSign [AtCommitLog] either via the
 /// constructor or by setting [atCommitLog] before invoking any
-/// instance method. The historical lazy fallback that reached into
-/// `AtCommitLogManagerImpl.getInstance()` has been removed — that
-/// singleton is being phased out by `at_persistence_secondary_server`,
-/// and AtClient now hands SyncUtil a commit log produced by the
-/// `HiveAtPersistenceFactory` bundle during init. The `atSign`
-/// parameter on each method is retained for backward compatibility
-/// of the call signatures but is no longer used internally.
+/// instance method — AtClient injects one from its
+/// [AtPersistenceBundle] during init.
 class SyncUtil {
   static var logger = AtSignLogger('SyncUtil');
 
@@ -35,18 +30,16 @@ class SyncUtil {
     return log;
   }
 
-  Future<CommitEntry?> getCommitEntry(
-      int sequenceNumber, String atSign) async {
+  Future<CommitEntry?> getCommitEntry(int sequenceNumber) async {
     return _requireCommitLog().getEntry(sequenceNumber);
   }
 
   Future<void> updateCommitEntry(
-      CommitEntry commitEntry, int commitId, String atSign) async {
+      CommitEntry commitEntry, int commitId) async {
     await _requireCommitLog().update(commitEntry, commitId);
   }
 
-  Future<CommitEntry?> getLastSyncedEntry(String? regex,
-      {required String atSign}) async {
+  Future<CommitEntry?> getLastSyncedEntry(String? regex) async {
     final log = _requireCommitLog();
     if (regex != null) {
       return log.lastSyncedEntryWithRegex(regex);
@@ -55,8 +48,7 @@ class SyncUtil {
   }
 
   Future<List<CommitEntry>> getChangesSinceLastCommit(
-      int? seqNum, String? regex,
-      {required String atSign}) async {
+      int? seqNum, String? regex) async {
     return (await _requireCommitLog().getChanges(seqNum, regex))
         .where((commitEntry) => !commitEntry.atKey!.startsWith('local:'))
         .toList();
@@ -140,7 +132,7 @@ class SyncUtil {
     return NullCommitEntry();
   }
 
-  Future<void> removeCommitEntry(dynamic key, String atSign) async {
+  Future<void> removeCommitEntry(dynamic key) async {
     await _requireCommitLog().commitLogKeyStore.remove(key);
   }
 

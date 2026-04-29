@@ -1159,7 +1159,7 @@ void main() {
 
       when(() => mockAtClientImpl
           .getLocalSecondary()!
-          .keyStore!
+          .keyStore
           .isKeyExists(any())).thenAnswer((_) => true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
@@ -1183,7 +1183,7 @@ void main() {
 
       when(() => mockAtClientImpl
           .getLocalSecondary()!
-          .keyStore!
+          .keyStore
           .isKeyExists(any())).thenAnswer((_) => true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
@@ -1238,7 +1238,7 @@ void main() {
 
       when(() => mockAtClientImpl
           .getLocalSecondary()!
-          .keyStore!
+          .keyStore
           .isKeyExists(any())).thenAnswer((_) => true);
 
       notificationServiceImpl.stopAllSubscriptions();
@@ -1274,7 +1274,7 @@ void main() {
 
       when(() => mockAtClientImpl
           .getLocalSecondary()!
-          .keyStore!
+          .keyStore
           .isKeyExists(any())).thenAnswer((_) => true);
 
       notificationServiceImpl.stopAllSubscriptions();
@@ -1302,13 +1302,13 @@ void main() {
           atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
-      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.isKeyExists(
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore.isKeyExists(
               notificationServiceImpl.lastReceivedNotificationAtKey.toString()))
           .thenAnswer((_) => false);
 
       when(() => mockAtClientImpl
           .getLocalSecondary()!
-          .keyStore!
+          .keyStore
           .isKeyExists(lastNotificationKey)).thenAnswer((_) => true);
 
       when(() => mockAtClientImpl.get(lastNotificationAtKey))

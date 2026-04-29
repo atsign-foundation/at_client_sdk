@@ -125,5 +125,5 @@ dependency_overrides:
   at_persistence_secondary_server:
     git:
       url: https://github.com/atsign-foundation/at_server.git
-      ref: gkc-remove-at-persistence-singletons
+      ref: gkc-at-persistence-overhaul
       path: packages/at_persistence_secondary_server

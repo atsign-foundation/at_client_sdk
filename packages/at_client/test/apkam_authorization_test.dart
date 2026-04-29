@@ -7,17 +7,26 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'test_persistence.dart';
+
 class MockLocalKeyStore extends Mock implements SecondaryKeyStore {}
 
 void main() {
   var storageDir = '${Directory.current.path}/test/hive';
   final String atSign = '@alice';
+  late TestPersistence persistence;
 
   group(
       'A group of authorization test on update/delete verbs in local secondary',
       () {
-    setUp(() async => await setupLocalStorage(storageDir, atSign));
-    tearDown(() async => await tearDownLocalStorage(storageDir));
+    setUp(() async {
+      persistence = TestPersistence(storageDir);
+      await persistence.init(atSign);
+    });
+    tearDown(() async {
+      await persistence.tearDown();
+      AtClientImpl.atClientInstanceMap.clear();
+    });
 
     test(
         'update/delete on different namespaces by enrollment with * namespace access',
@@ -35,7 +44,7 @@ void main() {
         ..isLocal = true
         ..key = testEnrollmentId
         ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
+      await atClient.getLocalSecondary()?.keyStore.put(
           localEnrollmentKey.toString(),
           AtData()
             ..data = jsonEncode(
@@ -138,7 +147,7 @@ void main() {
         ..isLocal = true
         ..key = testEnrollmentId
         ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
+      await atClient.getLocalSecondary()?.keyStore.put(
           localEnrollmentKey.toString(),
           AtData()
             ..data = jsonEncode(Enrollment()..namespace = {"wavi": "rw"}));
@@ -220,7 +229,7 @@ void main() {
         ..isLocal = true
         ..key = testEnrollmentId
         ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
+      await atClient.getLocalSecondary()?.keyStore.put(
           localEnrollmentKey.toString(),
           AtData()
             ..data = jsonEncode(
@@ -295,7 +304,7 @@ void main() {
         ..isLocal = true
         ..key = newEnrollmentId
         ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
+      await atClient.getLocalSecondary()?.keyStore.put(
           localEnrollmentKey_2.toString(),
           AtData()
             ..data = jsonEncode(Enrollment()..namespace = {"wavi": "rw"}));
@@ -337,8 +346,14 @@ void main() {
   });
   group('A group of authorization tests on llookup verb in local secondary',
       () {
-    setUp(() async => await setupLocalStorage(storageDir, atSign));
-    tearDown(() async => await tearDownLocalStorage(storageDir));
+    setUp(() async {
+      persistence = TestPersistence(storageDir);
+      await persistence.init(atSign);
+    });
+    tearDown(() async {
+      await persistence.tearDown();
+      AtClientImpl.atClientInstanceMap.clear();
+    });
     test(
         'get method on different namespaces can be accessed by enrollment with * namespace access',
         () async {
@@ -355,7 +370,7 @@ void main() {
         ..isLocal = true
         ..key = testEnrollmentId
         ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
+      await atClient.getLocalSecondary()?.keyStore.put(
           localEnrollmentKey.toString(),
           AtData()
             ..data = jsonEncode(
@@ -453,7 +468,7 @@ void main() {
         ..isLocal = true
         ..key = privilegedEnrollment
         ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
+      await atClient.getLocalSecondary()?.keyStore.put(
           localEnrollmentKey.toString(),
           AtData()..data = jsonEncode(Enrollment()..namespace = {"*": "rw"}));
       //1. create a key in wavi namespace
@@ -522,7 +537,7 @@ void main() {
         ..isLocal = true
         ..key = newEnrollmentId
         ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
+      await atClient.getLocalSecondary()?.keyStore.put(
           localEnrollmentKey_2.toString(),
           AtData()
             ..data = jsonEncode(Enrollment()..namespace = {"wavi": "rw"}));
@@ -562,8 +577,14 @@ void main() {
     });
   });
   group('A group of authorization tests on scan verb in local secondary', () {
-    setUp(() async => await setupLocalStorage(storageDir, atSign));
-    tearDown(() async => await tearDownLocalStorage(storageDir));
+    setUp(() async {
+      persistence = TestPersistence(storageDir);
+      await persistence.init(atSign);
+    });
+    tearDown(() async {
+      await persistence.tearDown();
+      AtClientImpl.atClientInstanceMap.clear();
+    });
     test('scan method return all keys on an enrollment with * namespace access',
         () async {
       final testEnrollmentId = 'aaa111';
@@ -579,7 +600,7 @@ void main() {
         ..isLocal = true
         ..key = testEnrollmentId
         ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
+      await atClient.getLocalSecondary()?.keyStore.put(
           localEnrollmentKey.toString(),
           AtData()
             ..data = jsonEncode(
@@ -662,7 +683,7 @@ void main() {
         ..isLocal = true
         ..key = newEnrollmentId
         ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
+      await atClient.getLocalSecondary()?.keyStore.put(
           localEnrollmentKey_2.toString(),
           AtData()
             ..data = jsonEncode(Enrollment()..namespace = {"wavi": "rw"}));
@@ -681,23 +702,3 @@ void main() {
   });
 }
 
-Future<void> setupLocalStorage(String storageDir, String atSign) async {
-  var commitLogInstance = await AtCommitLogManagerImpl.getInstance()
-      .getCommitLog(atSign, commitLogPath: storageDir);
-  var persistenceManager = SecondaryPersistenceStoreFactory.getInstance()
-      .getSecondaryPersistenceStore(atSign)!;
-  await persistenceManager.getHivePersistenceManager()!.init(storageDir);
-  persistenceManager.getSecondaryKeyStore()!.commitLog = commitLogInstance;
-}
-
-Future<void> tearDownLocalStorage(String storageDir) async {
-  try {
-    var isExists = await Directory(storageDir).exists();
-    if (isExists) {
-      Directory(storageDir).deleteSync(recursive: true);
-    }
-    AtClientImpl.atClientInstanceMap.clear();
-  } catch (e, st) {
-    print('local_secondary_test.dart: exception / error in tearDown: $e, $st');
-  }
-}

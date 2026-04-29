@@ -11,6 +11,8 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'test_persistence.dart';
+
 class MockAtClientManager extends Mock implements AtClientManager {}
 
 class MockLocalSecondary extends Mock implements LocalSecondary {}
@@ -280,7 +282,8 @@ void main() {
   group('A group of test related shared key encryption', () {
     String storageDir = '${Directory.current.path}/test/hive';
     SharedKeyEncryption sharedKeyEncryption;
-    AtCommitLog? atCommitLog;
+    late TestPersistence persistence;
+    late AtCommitLog atCommitLog;
 
     var encryptionPrivateKey =
         'MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCJ+42pSjfJ5DSe7jCh7RWSH9MlTiG3PPrYdEGHDoSNhtPflSiL6BhpEpodNMLSaYpWsoV9ad2vRgXqgN0qM3LufflkgAigpAU8ukzCUWs+7sHQZBPfiz/clO1GuajF7iV0CaOe7tJA7Hyod9StALDi/56kwhGqLi84rimLeNKxv7qCfOJowePJCrs5++KXQozQXWYoeeBrj1HGEWMCbuoaw3ihvwJPBo76GkR7seYcq9AlrFivf2HcvDaPx0fSMXejTS5aL0Kogz7hBrNNGi1WyjD51hZEvMssh1OYy6TKtYsj3veMO1zd9fBZT+9yXXNCZ3cXXnZqOHAetWEPsjoNAgMBAAECggEAQ7Bp4ECOebY/si+7H9SEnniKRmS72X5KuGDfvHd8w0j/K1Gq4Gdtgi4j+Gvnnv0zZjCRl+KVY+SABnhNBuTSXvjhnVHJ6bRM9WuXOERkziymW6qcrS9MltNgSy/NAbxAF1qbL96MuljJFoQiivQp0lH/62dg7xFVDQMzUj5lbdid0CIV9r9Jp6SxXCG8OTjhU8RupXyqWiIgg3xVr/Y2ayYnO2O8cnm9V8C0zTvX5290IijTfHXkbarGg0vY7sg2Krs1uk1sQ+70yHJSppTOfa+cfYLuoj4k+emqJWWn7TZKkTlfnc6ON566XN5eiH+t2AmKttW9MxWQhaWv50I7KQKBgQDH4yh3u8f+Pbj3L3SJMN0aQ/ZHMApJ96C+iAJRgYp0aYuVpHscQPRxS7p3JwT758cKdrUTHSji/t7PrtsLDlp9rLw8WHEng7rfA/hlL9Ghoks/3gxaX90+dCXMo1odKbCxTEEBGxUC0aFIOOQGJ8Ot47fNE15IuaoPDO/On1X36wKBgQCwt6H02nLxKY0ILdu8HRVGXcqOOcBQiMIrjjhmt7llAfB5cJKuwq29apyJdRglqWSHXuK3B42reiF3I0fm3+QfihqFUfchU+2N8LcCciNR1BM0l1t/Xkw/FW18lTld0WoTAI/EOE+VEOzzdO542f2m7EBjQZy9hVg4XtlKi1pP5wKBgCXrqVS1siZAbWOvhAs20utVs1Yj/f+0U7FxugbebXbSQyHbd2OPyw/nTvOl2mMzwGXyyT1cDdKqiXia8oExcudeqsNEAAuACSaf6TLBFKL2WBJAvNU0VJOxky40WzcnHpc0ISzlh2HmhRNff5rPVmcZyVfFceCYIHQEf0YSokuLAoGAFqnmXnWpqh4vFS50cOK1+MlMkgL8FBgF9voNZ7cGUtr10U1LspgLGjDTFJns19+qoeXcY6bXV3eZVSM0NHrgUd8vWYvSivatj7egcPLcbsEpGWST+njIhIql+QVWTx7tYLSAu6SRKEf8a5jCgMNMUZ0ZAOHITVINp2UarwHCOl8CgYBenz32mGQapDgw7fyw3aWe5e4i2rC3jHOxJOHSHTAcLzBZ7JrKOIoNtiHU9XWIjRB0kng4a0rDffywxM4YHI+ZMXgvYzHE1Ob2ei3Q/Q52bxkLEwEGrqwXl1kdmCb69imp1T92JBZ3ls2dX7+uJtJiy5KlZilGN61AwMgOxyg7Mg==';
@@ -313,16 +316,15 @@ void main() {
         return 'data:10';
       });
 
-      atCommitLog = await AtCommitLogManagerImpl.getInstance().getCommitLog(
-          '@alice',
-          commitLogPath: storageDir,
-          enableCommitId: false);
+      persistence = TestPersistence(storageDir);
+      final bundle = await persistence.init('@alice');
+      atCommitLog = bundle.commitLog;
     });
 
     test('test to verify legacy encryption when shared key is available',
         () async {
       sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
-      await atCommitLog?.commitLogKeyStore.add(
+      await atCommitLog.commitLogKeyStore.add(
           // Adding commit id to mock commit entry is synced from server
           CommitEntry('@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now())
             ..commitId = 0);
@@ -364,7 +366,7 @@ void main() {
 
     test('test to verify encryption when shared key is available', () async {
       sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
-      await atCommitLog?.commitLogKeyStore.add(
+      await atCommitLog.commitLogKeyStore.add(
           // Adding commit id to mock commit entry is synced from server
           CommitEntry('@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now())
             ..commitId = 0);
@@ -402,7 +404,7 @@ void main() {
         () async {
       sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
       // Adding commit id to mock that commit entry is synced from server
-      await atCommitLog?.commitLogKeyStore.add(
+      await atCommitLog.commitLogKeyStore.add(
           CommitEntry('@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now())
             ..commitId = 0);
 
@@ -453,7 +455,7 @@ void main() {
         () async {
       sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
       // Adding commit id to mock that commit entry is synced from server
-      await atCommitLog?.commitLogKeyStore.add(
+      await atCommitLog.commitLogKeyStore.add(
           CommitEntry('@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now())
             ..commitId = 0);
 
@@ -500,7 +502,7 @@ void main() {
     test(
         'test to verify exception is thrown when update command fails to store shared_key to remote secondary',
         () async {
-      await atCommitLog!.commitLogKeyStore.add(CommitEntry(
+      await atCommitLog.commitLogKeyStore.add(CommitEntry(
           '@bob:shared_key@alice', CommitOp.UPDATE, DateTime.now()));
 
       sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
@@ -539,11 +541,7 @@ void main() {
     });
 
     tearDown(() async {
-      await AtCommitLogManagerImpl.getInstance().close();
-      var isExists = await Directory(storageDir).exists();
-      if (isExists) {
-        Directory(storageDir).deleteSync(recursive: true);
-      }
+      await persistence.tearDown();
     });
   });
 }

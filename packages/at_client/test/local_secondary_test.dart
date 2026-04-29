@@ -8,6 +8,7 @@ import 'package:crypton/crypton.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'test_persistence.dart';
 import 'test_utils/test_utils.dart';
 
 class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {
@@ -57,15 +58,17 @@ void main() {
   var storageDir = '${Directory.current.path}/test/hive';
 
   final String atSign = '@alice';
+  late TestPersistence persistence;
 
   group('A group of local secondary get keys test', () {
     setUp(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
-      await setupLocalStorage(storageDir, atSign);
+      persistence = TestPersistence(storageDir);
+      await persistence.init(atSign);
     });
     tearDown(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
-      await tearDownLocalStorage(storageDir);
+      await persistence.tearDown();
     });
 
     test('test get private key', () async {
@@ -76,8 +79,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      final localSecondary = atClient.getLocalSecondary()!;
       final pkamPrivateKey = RSAKeypair.fromRandom().privateKey.toString();
       final success = await localSecondary.putValue(
           AtConstants.atPkamPrivateKey, pkamPrivateKey);
@@ -93,8 +95,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      final localSecondary = atClient.getLocalSecondary()!;
       final pkamPublicKey = RSAKeypair.fromRandom().publicKey.toString();
       final success = await localSecondary.putValue(
           AtConstants.atPkamPublicKey, pkamPublicKey);
@@ -110,8 +111,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      final localSecondary = atClient.getLocalSecondary()!;
       final encryptionPrivateKey =
           RSAKeypair.fromRandom().privateKey.toString();
       final success = await localSecondary.putValue(
@@ -129,8 +129,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      final localSecondary = atClient.getLocalSecondary()!;
       final encryptionPublicKey = RSAKeypair.fromRandom().publicKey.toString();
       final success = await localSecondary.putValue(
           '${AtConstants.atEncryptionPublicKey}$atSign', encryptionPublicKey);
@@ -147,8 +146,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      final localSecondary = atClient.getLocalSecondary()!;
       final selfEncryptionKey = EncryptionUtil.generateAESKey();
       final success = await localSecondary.putValue(
           AtConstants.atEncryptionSelfKey, selfEncryptionKey);
@@ -158,8 +156,13 @@ void main() {
   });
 
   group('A group of local secondary execute verb tests', () {
-    setUp(() async => await setupLocalStorage(storageDir, atSign));
-    tearDown(() async => await tearDownLocalStorage(storageDir));
+    setUp(() async {
+      persistence = TestPersistence(storageDir);
+      await persistence.init(atSign);
+    });
+    tearDown(() async {
+      await persistence.tearDown();
+    });
 
     test('test update verb builder', () async {
       final atClientManager = AtClientManager(atSign);
@@ -169,8 +172,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      final localSecondary = atClient.getLocalSecondary()!;
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
@@ -191,8 +193,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      final localSecondary = atClient.getLocalSecondary()!;
       var key = TestUtils.createRandomString(250);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -218,8 +219,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      final localSecondary = atClient.getLocalSecondary()!;
       var key = TestUtils.createRandomString(250);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -246,8 +246,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      final localSecondary = atClient.getLocalSecondary()!;
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
@@ -273,8 +272,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      final localSecondary = atClient.getLocalSecondary()!;
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
@@ -305,8 +303,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
-      final localSecondary = LocalSecondary(atClient,
-          keyStore: atClient.getLocalSecondary()!.keyStore);
+      final localSecondary = atClient.getLocalSecondary()!;
       final verbBuilder_1 = UpdateVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
@@ -795,26 +792,3 @@ void main() {
   });
 }
 
-Future<void> setupLocalStorage(String storageDir, String atSign) async {
-  var commitLogInstance = await AtCommitLogManagerImpl.getInstance()
-      .getCommitLog(atSign, commitLogPath: storageDir);
-  var persistenceManager = SecondaryPersistenceStoreFactory.getInstance()
-      .getSecondaryPersistenceStore(atSign)!;
-  await persistenceManager.getHivePersistenceManager()!.init(storageDir);
-  persistenceManager.getSecondaryKeyStore()!.commitLog = commitLogInstance;
-}
-
-Future<void> tearDownLocalStorage(String storageDir) async {
-  try {
-    // Close factories BEFORE deleting storage (prevents open file handles)
-    await SecondaryPersistenceStoreFactory.getInstance().close();
-    await AtCommitLogManagerImpl.getInstance().close();
-
-    var isExists = await Directory(storageDir).exists();
-    if (isExists) {
-      Directory(storageDir).deleteSync(recursive: true);
-    }
-  } catch (e, st) {
-    print('local_secondary_test.dart: exception / error in tearDown: $e, $st');
-  }
-}

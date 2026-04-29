@@ -176,12 +176,11 @@ void main() {
         final atSign1 = '@hive_soft';
         final atSign2 = '@hive_soft2';
 
-        await _initializeAtClient(atSign1);
-
-        // Get persistence store for first atSign
-        final persistenceStore1 = SecondaryPersistenceStoreFactory.getInstance()
-            .getSecondaryPersistenceStore(atSign1);
-        final hiveManager1 = persistenceStore1?.getHivePersistenceManager();
+        final atClient1 =
+            await _initializeAtClient(atSign1) as AtClientImpl;
+        final hiveManager1 = (atClient1.persistenceBundle
+                as HiveAtPersistenceBundle)
+            .hivePersistenceManager;
 
         // Switch to second atSign
         await _initializeAtClient(atSign2);
@@ -190,15 +189,14 @@ void main() {
         expect(AtClientImpl.atClientInstanceMap.containsKey(atSign1), true,
             reason: 'First client should remain in cache');
 
-        final persistenceStoreAfter =
-            SecondaryPersistenceStoreFactory.getInstance()
-                .getSecondaryPersistenceStore(atSign1);
-        expect(persistenceStoreAfter, isNotNull,
+        final atClient1Cached =
+            AtClientImpl.atClientInstanceMap[atSign1] as AtClientImpl;
+        final bundleAfter = atClient1Cached.persistenceBundle;
+        expect(bundleAfter, isNotNull,
             reason: 'Hive storage should still be accessible');
 
         final hiveManagerAfter =
-            persistenceStoreAfter?.getHivePersistenceManager();
-        expect(hiveManagerAfter, isNotNull);
+            (bundleAfter as HiveAtPersistenceBundle).hivePersistenceManager;
         expect(identical(hiveManager1, hiveManagerAfter), true);
         expect(AtClientImpl.atClientInstanceMap.containsKey(atSign1), true);
       });
