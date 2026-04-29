@@ -208,9 +208,26 @@ class AtCollection<T> {
   static final Map<Type, _FactoryEntry> _factoriesByType = {};
   static final Map<String, Function> _factoriesByTag = {};
 
+  // Tags we've already warned about during rehydrate. Per-tag, not
+  // per-collection or per-message — one SHOUT per unrecognised tag
+  // is enough to alert the developer; further occurrences are
+  // expected duplicates from the same registry drift.
+  static final Set<String> _warnedMissingFactoryTags = {};
+
   // Per-item cache of read-receipt sub-collections. Keyed by
   // (owner.toString(), id) so it survives CItem rehydrate cycles.
   final Map<String, AtCollection<Map<String, dynamic>>> _rrCache = {};
+
+  // Item ids whose self-key this process has successfully written
+  // (and not subsequently deleted). Lets [_selfKeyExists] short-
+  // circuit without a round-trip when the caller's about to update
+  // an item we just persisted — the common bulk-edit path. Cleared
+  // on successful self-delete; left alone on failures so a retry
+  // path still probes. Cross-process visibility: self-keys are
+  // owner-scoped and only this client writes them, so a local
+  // "I just wrote it" entry is authoritative for the
+  // does-it-exist question.
+  final Set<String> _seenSelfIds = <String>{};
 
   // Immutable wiring (set by the private constructor).
   final AtClient atClient;
@@ -845,6 +862,48 @@ class AtCollection<T> {
     required Duration defaultExpiration,
     U Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+  }) =>
+      _subCollectionInternal<U>(
+        parent: parent,
+        subName: subName,
+        defaultExpiration: defaultExpiration,
+        fromJson: fromJson,
+        typeTag: typeTag,
+      );
+
+  /// Test-only variant of [subCollection] that injects [notifications]
+  /// instead of subscribing through the live `NotificationService`.
+  /// Same surface as [subCollection] otherwise — same reserved-name
+  /// guard, same key-length budget check.
+  ///
+  /// Hidden behind a separate entry point (rather than an extra
+  /// optional parameter on [subCollection]) so production callers see
+  /// only the verbs they need; the test hook never appears in
+  /// IDE auto-complete on the public surface.
+  @visibleForTesting
+  AtCollection<U> subCollectionWithInjectedNotifications<U>({
+    required CItem<T> parent,
+    required String subName,
+    required Duration defaultExpiration,
+    required Stream<AtNotification> notifications,
+    U Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
+  }) =>
+      _subCollectionInternal<U>(
+        parent: parent,
+        subName: subName,
+        defaultExpiration: defaultExpiration,
+        fromJson: fromJson,
+        typeTag: typeTag,
+        notifications: notifications,
+      );
+
+  AtCollection<U> _subCollectionInternal<U>({
+    required CItem<T> parent,
+    required String subName,
+    required Duration defaultExpiration,
+    U Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
     Stream<AtNotification>? notifications,
   }) {
     if (subName == _rr) {
@@ -1061,6 +1120,12 @@ class AtCollection<T> {
       }
     }
 
+    // Per-sweep cache of alive ids at non-root composed namespaces,
+    // populated lazily by the legacy-fallback chain-walker. Keyed by
+    // composed namespace string. One getAtKeys probe per distinct
+    // level encountered across all legacy descendants in this sweep.
+    final legacyAliveCache = <String, Set<String>>{};
+
     final descendantKeys = await atClient.getAtKeys(
       regex: '(^|:).+\\.$namespace$atSign',
     );
@@ -1099,8 +1164,31 @@ class AtCollection<T> {
       }
 
       if (ancestorOwners == null) {
-        // Legacy fallback: only the root ancestor is checked.
-        if (aliveRootIds.contains(ancestorIds.first)) continue;
+        // Legacy fallback (no envelope `parents`). We can't recover
+        // ancestor owners from the key alone, so verify each level
+        // by id-presence regardless of owner — chain-walk against
+        // the local store. Depth-1 legacy items round-trip cleanly
+        // against [aliveRootIds]; depth-2+ items use lazily-cached
+        // per-composed-namespace alive sets via [_aliveIdsAt]. Since
+        // the local store may legitimately hold a same-id item under
+        // a different owner without it being our parent, this path
+        // is intentionally lenient — false negatives (preserving
+        // an item that's actually orphaned) are preferable to false
+        // positives (deleting a live one) under uncertainty.
+        bool orphaned = false;
+        String composed = namespace;
+        for (int i = 0; i < ancestorIds.length; i++) {
+          final aliveAtLevel = composed == namespace
+              ? aliveRootIds
+              : await _aliveIdsAt(composed, legacyAliveCache);
+          if (!aliveAtLevel.contains(ancestorIds[i])) {
+            orphaned = true;
+            break;
+          }
+          // Descend to the next-level namespace for the next iteration.
+          composed = '${ancestorSubNames[i]}.${ancestorIds[i]}.$composed';
+        }
+        if (!orphaned) continue;
         try {
           await atClient.delete(k);
           results.add(OpSuccess(k, CollectionOp.delete));
@@ -1139,6 +1227,38 @@ class AtCollection<T> {
       }
     }
     return results;
+  }
+
+  /// Returns the set of ids that exist as direct items at the given
+  /// [composedNs] locally, across any owner. Used by the legacy
+  /// (`parents`-less) chain-walker in [_cleanupOrphansFromRoot] to
+  /// verify each ancestor level on items that pre-date the
+  /// envelope-`parents` convention. Cached in [cache] so repeated
+  /// probes against the same composed namespace cost one round-trip
+  /// per sweep regardless of how many descendants fan out from it.
+  Future<Set<String>> _aliveIdsAt(
+    String composedNs,
+    Map<String, Set<String>> cache,
+  ) async {
+    final cached = cache[composedNs];
+    if (cached != null) return cached;
+    final escaped = composedNs.replaceAll('.', '\\.');
+    final keys = await atClient.getAtKeys(regex: '(^|:)[^.]+\\.$escaped@');
+    final levelSegments = composedNs.split('.').length;
+    final alive = <String>{};
+    for (final key in keys) {
+      final parts = key.key.split('.');
+      // AtKey strips the last namespace segment into AtKey.namespace,
+      // so a direct item at this composed level has exactly
+      // levelSegments dot-separated parts in `key.key` (1 id + the
+      // stripped-namespace tail = levelSegments). Deeper descendants
+      // have more.
+      if (parts.length == levelSegments) {
+        alive.add(parts.first);
+      }
+    }
+    cache[composedNs] = alive;
+    return alive;
   }
 
   // ---------------------------------------------------------------------------
@@ -1527,8 +1647,12 @@ class AtCollection<T> {
   }
 
   Future<bool> _selfKeyExists(String id) async {
+    if (_seenSelfIds.contains(id)) return true;
     try {
       await atClient.get(AtKey.fromString('$id.$namespace$atSign'));
+      // Populate the cache opportunistically so subsequent calls in
+      // this process skip the round-trip too.
+      _seenSelfIds.add(id);
       return true;
     } catch (_) {
       return false;
@@ -1576,8 +1700,38 @@ class AtCollection<T> {
       return Base2e15.decode(obj.toString()) as V;
     }
     final f = _factoriesByTag[type];
-    if (f == null) return obj as V;
+    if (f == null) {
+      // Tag `n/a` is the synthetic marker for primitives + unregistered
+      // objects written by this side; round-tripping a primitive
+      // through `obj as V` is the intended path. A non-`n/a` tag with
+      // no registered factory means the *writing* side declared a
+      // type contract that this reader doesn't share — registry drift,
+      // version skew, or a Dart minifier rename if a peer is on a
+      // pre-3.13 build that didn't pin `typeTag` explicitly. Surface
+      // it once per tag so the developer can register the missing
+      // factory; thereafter the silent cast still applies (dynamic /
+      // Map<String, dynamic> consumers continue to work).
+      if (type != 'n/a' && _warnedMissingFactoryTags.add(type)) {
+        logger.warning(
+          'No factory registered for envelope type tag "$type" while '
+          'rehydrating into $V. Falling back to a raw cast — typed '
+          'access will fail. Register the factory with '
+          'AtCollection.registerFactory<YourType>(YourType.fromJson, '
+          'typeTag: \'$type\') to close the gap. (Logged once per '
+          'unknown tag.)',
+        );
+      }
+      return obj as V;
+    }
     return f.call(obj) as V;
+  }
+
+  /// Test-only: drops the per-tag dedup set so re-runs of the same
+  /// "unknown tag" path emit a fresh warning. The registry itself
+  /// is cleared by [clearFactoriesForTest].
+  @visibleForTesting
+  static void clearMissingFactoryWarningsForTest() {
+    _warnedMissingFactoryTags.clear();
   }
 
   /// Writes [item] (self + recipient copies) and optionally diff-deletes
@@ -1622,6 +1776,9 @@ class AtCollection<T> {
       selfKey.metadata = md;
       await atClient.put(selfKey, jsonEncode(item.toJson()));
       results.add(OpSuccess(selfKey, CollectionOp.put));
+      // Mark this id as "we just wrote it" so a subsequent update()
+      // can elide its existence probe. See [_seenSelfIds] doc.
+      _seenSelfIds.add(item.id);
     } catch (e) {
       results.add(OpFailure(selfKey, CollectionOp.put, e));
     }
@@ -1703,6 +1860,13 @@ class AtCollection<T> {
       try {
         await atClient.delete(k);
         results.add(OpSuccess(k, CollectionOp.delete));
+        // The self-key (no `:`-prefixed recipient atSign in its
+        // string form) is the one that gates [_seenSelfIds]. When it
+        // goes, drop the cached "exists" mark so a future
+        // create()/update() probes correctly.
+        if (k.sharedWith == null) {
+          _seenSelfIds.remove(item.id);
+        }
       } catch (e) {
         results.add(OpFailure(k, CollectionOp.delete, e));
       }
@@ -2049,15 +2213,18 @@ final class Query<T> {
       for (final p in parents) {
         final k = keyOf(p);
         if (childSubs.containsKey(k)) continue;
-        final sub = _collection.subCollection<U>(
+        // Use the private internal entry point so we can thread the
+        // parent collection's injected notification stream (if any)
+        // through to the child sub-collection — required for tests
+        // that drive both parent and child events from a single
+        // controller. Production callers see only the public
+        // [subCollection] verb, which has no notifications: param.
+        final sub = _collection._subCollectionInternal<U>(
           parent: p,
           subName: subName,
           defaultExpiration: subDefaultExpiration,
           fromJson: subFromJson,
           typeTag: subTypeTag,
-          // Thread the parent collection's injected notification stream
-          // (if any) through so tests driving events via a shared
-          // controller see them at the child sub-collection too.
           notifications: _collection._injectedNotifications,
         );
         childSubs[k] = sub.query().watch().listen(

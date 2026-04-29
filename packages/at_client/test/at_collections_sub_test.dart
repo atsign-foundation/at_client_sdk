@@ -52,7 +52,7 @@ void main() {
     U Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
   }) {
-    return c.parent.subCollection<U>(
+    return c.parent.subCollectionWithInjectedNotifications<U>(
       parent: parent,
       subName: subName,
       defaultExpiration: const Duration(days: 30),
@@ -142,7 +142,7 @@ void main() {
       final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
       final comments = subOn<String>(c, post, 'comments');
       final comment = comments.draft(obj: 'great post', id: 'c1');
-      final replies = comments.subCollection<String>(
+      final replies = comments.subCollectionWithInjectedNotifications<String>(
         parent: comment,
         subName: 'replies',
         defaultExpiration: const Duration(days: 1),
@@ -647,6 +647,59 @@ void main() {
         () => c.atClient.delete(captureAny()),
       ).captured.cast<AtKey>().map((k) => k.toString()).toList();
       expect(deleted, contains(commentKey.toString()));
+    });
+
+    test(
+        'legacy depth-2 descendant whose middleman is gone is now '
+        'swept (W6 residual)', () async {
+      // Setup: a depth-2 reply r1 under comment c1 under post p1.
+      // The reply was written before envelope.parents was a thing
+      // (legacy item — no `parents` field). Root post p1 still
+      // exists locally; mid comment c1 is gone; reply r1 still on
+      // disk. Pre-W6-residual the legacy fallback only checked the
+      // root, so r1 survived. Post-W6-residual the chain-walker
+      // detects c1's absence and sweeps r1.
+      final c = buildParent();
+      final replyKey = AtKey.fromString(
+        'r1.replies.c1.comments.p1.$parentNs$selfAtSignStr',
+      );
+      final postKey =
+          AtKey.fromString('p1.$parentNs$selfAtSignStr');
+      // getKeys() (root-level scan) returns the root post.
+      // descendant scan returns the orphaned reply.
+      // alive-at-mid-namespace scan returns no comments.
+      when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((inv) async {
+        final regex = inv.namedArguments[#regex] as String;
+        // Root-level direct items: pattern `(^|:)[^.]+.posts.blog.app@`
+        if (regex == '(^|:)[^.]+\\.$parentNs@') return [postKey];
+        // Descendant scan: `(^|:).+.posts.blog.app@<self>`
+        if (regex == '(^|:).+\\.$parentNs$selfAtSignStr') {
+          return [replyKey];
+        }
+        // Alive-at mid-namespace `comments.p1.<parentNs>` (any owner):
+        if (regex.contains('comments\\.p1\\.posts\\.blog\\.app')) {
+          return <AtKey>[]; // c1 is gone — middleman orphan
+        }
+        return <AtKey>[];
+      });
+      // Envelope read for the reply: legacy (no `parents`).
+      when(() => c.atClient.get(replyKey)).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'orphan reply'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+      when(() => c.atClient.delete(any())).thenAnswer((_) async => true);
+
+      final results = await c.parent.cleanupOrphans();
+      expect(results, isNotEmpty);
+      final deleted = verify(
+        () => c.atClient.delete(captureAny()),
+      ).captured.cast<AtKey>().map((k) => k.toString()).toList();
+      expect(deleted, contains(replyKey.toString()));
     });
   });
 }

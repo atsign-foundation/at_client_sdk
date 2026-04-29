@@ -299,6 +299,41 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test(
+        'unknown envelope type-tag warns once and falls back to a '
+        'raw map cast', () async {
+      // Simulates registry drift: a peer wrote an envelope tagged
+      // "Mystery" that this reader has no factory for. The expected
+      // behaviour is: log a warning the first time it happens, return
+      // the raw map (so untyped consumers still work), no crash.
+      AtCollection.clearFactoriesForTest();
+      AtCollection.clearMissingFactoryWarningsForTest();
+      final c = buildCollection<Map<String, dynamic>>(ns: 'mystery.app.ns');
+      final selfKey = AtKey.fromString('mid.mystery.app.ns$selfAtSignStr');
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => [selfKey]);
+      when(() => atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({
+          'type': 'Mystery',
+          'obj': {'name': 'm1'},
+        });
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+      final items = await c.getItems();
+      // No throw — raw map fallback is the intended behaviour for
+      // unregistered tags. The warning side-effect is tested by
+      // visible inspection in `dart test` output (see "no factory
+      // registered for envelope type tag" SHOUT/WARNING lines).
+      expect(items, hasLength(1));
+      expect(items.single.obj, {'name': 'm1'});
+      expect(items.single.type, 'Mystery');
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -467,6 +502,62 @@ void main() {
         c.create(obj: 'x', id: 'fail-me'),
         throwsA(isA<CollectionOpException>()),
       );
+    });
+
+    test(
+        'update after create elides the existence probe (no atClient.get '
+        'round-trip for the just-written id)', () async {
+      // This group's setUp pre-stubs get() to return a stored value, so
+      // the existence probe always *would* succeed if it ran. We assert
+      // that it doesn't run at all on the second touch — the cache
+      // populated by create() short-circuits _selfKeyExists.
+      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+      final c = buildCollection<String>();
+      final item = await c.create(obj: 'first', id: 'cached-1');
+      // After create(): atClient.get may have been called for unrelated
+      // probes, but for the update path we want to see zero gets on the
+      // self-key. Reset the mock-call tracker so the next verify is
+      // scoped to update().
+      clearInteractions(atClient);
+      when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => <AtKey>[]);
+      await c.update(item);
+      // Zero get() calls — the cache short-circuited the existence probe.
+      verifyNever(() => atClient.get(any()));
+    });
+
+    test(
+        'delete drops the cached id so a subsequent update re-probes',
+        () async {
+      // Round-trip: create → delete → update should NOT pass the
+      // existence probe (since the item is now gone). Verifies the
+      // cache is invalidated on delete.
+      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+      when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
+      when(() => atClient.delete(any())).thenAnswer((_) async => true);
+      // Two regex shapes hit getAtKeys here:
+      //   - descendant scan from delete: `(^|:).+\.cached-2\.<ns>@self`
+      //     → must return [] (no descendants).
+      //   - self-key+recipients scan: `(^|:)cached-2\.<ns>@`
+      //     → must return [selfKey].
+      // Distinguish by the `.+\.` prefix.
+      final selfKey =
+          AtKey.fromString('cached-2.$namespace$selfAtSignStr');
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((inv) async {
+        final regex = inv.namedArguments[#regex] as String;
+        if (regex.contains('.+\\.cached-2')) return <AtKey>[];
+        return [selfKey];
+      });
+      final c = buildCollection<String>();
+      final item = await c.create(obj: 'x', id: 'cached-2');
+      await c.delete(item);
+      // After delete, the cache entry is gone — update must re-probe
+      // and find the key absent → StateError.
+      await expectLater(c.update(item), throwsStateError);
     });
   });
 
