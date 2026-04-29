@@ -2,10 +2,13 @@
 
 A from-scratch assessment of the `AtCollection<T>` API in
 `packages/at_client/lib/src/collections/collections.dart` as of
-2026-04-29 (UTC); originally written end-of-day Thu Apr 23, with
-2026-04-29 updates for W2 closure (required `typeTag`) and
-W1(b) closure (`Query.thenBy` for multi-key sort), both folded
-into 3.13.0.
+2026-04-29 (UTC); originally written end-of-day Thu Apr 23. A
+2026-04-29 snagging pass closed W2 (required `typeTag`),
+W1(b) (`Query.thenBy` multi-key sort), W9 (test hook off the
+public `subCollection` surface), W8 (warning on unknown
+envelope type tags), W3-residual (existence-probe elision
+cache), and W6-residual (chain-walk for legacy descendants).
+All folded into 3.13.0.
 
 ## TL;DR
 
@@ -740,16 +743,19 @@ idempotent (last-fromJson-body-wins) so test harnesses still work
 unchanged. Primitives and `Uint8List` continue to use their
 synthetic `'n/a'` / `'binary'` tags.
 
-### W3. ~~`put`-on-update is still reads-before-writes~~ (mostly closed)
+### W3. ~~`put`-on-update is still reads-before-writes~~ (closed)
 
-`update(item)` still does one round-trip for the existence probe, but
-the readBy-merge read was removed when read receipts moved to the
-reserved `__rr` sub-collection (see W4). For bulk edits, the cost is
-now one pre-write `get` per item (the existence check) plus the put —
-a measurable improvement over the previous two-read pattern. The
-existence probe itself could be elided via a small "I just wrote this"
-cache; parked until there's a concrete bulk-edit workload to measure
-against.
+The readBy-merge read was removed when read receipts moved to the
+reserved `__rr` sub-collection (see W4). The remaining existence
+probe is now elided too (closed 2026-04-29): each collection
+maintains a per-process `_seenSelfIds` set populated on successful
+`_put`, drained on successful self-key delete. `_selfKeyExists`
+short-circuits when the id is in the set, so a `create → update`
+sequence in the same process pays no probe round-trip on the
+update. Cross-process visibility is unaffected — self-keys are
+owner-scoped and only this client writes them, so a local
+"I just wrote it" entry is authoritative. The first `update` after
+process restart still probes (cache is in-memory only).
 
 ### W4. ~~`CItem.readBy` merge couples write cost to read semantics~~ (closed)
 
@@ -768,17 +774,21 @@ independent, append-only side-car.
 Only used by the example apps for a debug command. Could be marked
 `@visibleForTesting` / `@protected`. Small API hygiene.
 
-### W6. ~~`cleanupOrphans` only catches root-ancestor orphans~~ (mostly closed)
+### W6. ~~`cleanupOrphans` only catches root-ancestor orphans~~ (closed)
 
-`_cleanupOrphansFromRoot` now chain-walks every ancestor in the
+`_cleanupOrphansFromRoot` chain-walks every ancestor in the
 descendant's `parents` envelope — if any level between root and
 direct parent is locally absent, the descendant is orphaned and
-swept. Middleman-orphan case is handled for items written post-
-envelope (Commit 4 of the 2026-04-21 tidy-up). **Residual work**:
-legacy items (no `parents` field) still fall back to root-ancestor-
-only checking — intentional, since we can't recover owner info from
-the key alone. If a migration sweep is ever desired, that's where to
-add it.
+swept. Middleman-orphan case is handled for envelope-bearing items
+since the 2026-04-21 tidy-up. The legacy fallback (items predating
+the `parents` field) was extended on 2026-04-29 to also chain-walk
+by id-presence at each composed-namespace level via a per-sweep
+`_aliveIdsAt` cache — depth-2+ legacy descendants whose middleman
+is gone are now swept too. Lookups are owner-agnostic at each
+level (we can't recover ancestor owners from a legacy key), so the
+path is intentionally lenient: false negatives (sparing a possibly-
+orphaned item) beat false positives (deleting a live one) under
+ambiguity.
 
 ### W7. No timer-driven events
 
@@ -787,23 +797,34 @@ would require an internal timer; useful for reminder-style apps but
 non-trivial to implement efficiently. Consider adding later with a
 config knob so apps opt into the cost.
 
-### W8. Cross-atSign interop fragility via the `type` string
+### W8. ~~Cross-atSign interop fragility via the `type` string~~ (closed)
 
-Interop between two apps over the same collection relies on both
-sides agreeing on the `type` string of every record. There's no
-guard against a sender calling `registerFactory<Todo>(...)` while a
-receiver registers `Task.fromJson` under tag `'Task'`. Apps should
-document a "wire-format" contract, but the library could surface a
-warning when rehydration falls back to `n/a` because no matching
-factory exists.
+Closed 2026-04-29. The first time `_rehydrate` encounters an
+envelope `type` tag with no registered factory (and the tag isn't
+the synthetic `'n/a'` / `'binary'` markers), it logs a WARNING via
+the per-collection `AtSignLogger`, naming the missing tag and the
+target type, and points the developer at
+`AtCollection.registerFactory<YourType>(... typeTag: '...')`. A
+per-tag dedup set rate-limits the noise — one warning per unknown
+tag per process. The runtime fallback (return the raw map cast to
+V) is unchanged, so untyped consumers still work; the warning
+just makes registry drift visible. Together with the W2 required-
+`typeTag` change this closes the "silent rehydrate to wrong shape"
+class of bugs.
 
-### W9. `notifications:` test hook remains on `subCollection`
+### W9. ~~`notifications:` test hook remains on `subCollection`~~ (closed)
 
-We added `AtCollection.withInjectedNotifications` for constructor-
-level testing. The `subCollection(...)` method still accepts a
-`notifications:` param for the same purpose, which means production
-callers see it too. Low-priority polish — could be hidden behind a
-second test-only overload of `subCollection`.
+Closed 2026-04-29. The public `subCollection<U>(...)` method no
+longer accepts a `notifications:` parameter; production IDE
+auto-complete on the verb is back to just the parameters
+production callers need. The test hook moved to a separate
+`@visibleForTesting subCollectionWithInjectedNotifications<U>(...)`
+entry point with the same surface plus the required `notifications`
+stream. Internal callers (e.g. `Query<T>.watchWithSub`'s child
+sub-collection setup) route through a private
+`_subCollectionInternal<U>(...)` that keeps the optional
+notifications stream so injected test streams still propagate to
+descendants — no public surface leak.
 
 ### W10. No transactional semantics
 
@@ -883,7 +904,19 @@ State as of 2026-04-29:
   tiebreakers; `_QuerySpec` carries an ordered list of sort keys
   and `_apply` runs a stable multi-key compare in registration
   order. `orderBy` retains replace semantics (LINQ / Drift / Isar
-  idiom).
+  idiom). **W9 closed** 2026-04-29: public `subCollection` no
+  longer exposes the test-only `notifications:` parameter — a
+  separate `@visibleForTesting subCollectionWithInjectedNotifications`
+  surface carries it. **W8 closed** 2026-04-29: unknown envelope
+  type tags now log a one-shot WARNING via the per-collection
+  logger pointing at `registerFactory`, with per-tag dedup so the
+  noise is bounded. **W3 residual closed** 2026-04-29:
+  `_seenSelfIds` per-collection cache elides the existence-probe
+  round-trip on `update` for ids this process has just written.
+  **W6 residual closed** 2026-04-29: legacy descendants (no
+  `parents` envelope) now chain-walk by id-presence at each
+  composed-namespace level via a per-sweep `_aliveIdsAt` cache —
+  depth-2+ middleman orphans are reclaimed.
 - **Ranked for impact**, still open:
 
 1. **Query/filter phase 2** (residual of §W1). Typed field
@@ -896,28 +929,29 @@ State as of 2026-04-29:
    no longer in this list — closed 2026-04-29 with `Query.thenBy`.
 2. **`CItemAvailable` / `CItemExpiringSoon` events** (§W7). Unlocks
    reminder / alarm UIs without app-level timers.
-3. **Existence-probe elision** (residual of §W3). Tiny cache of
-   "keys we just wrote" so subsequent `update` can skip the
-   existence probe on the same process's own writes.
-4. **Recursive orphan sweep for deep legacy data** (residual of
-   §W6). Only matters if anyone ends up with middleman-orphaned
-   legacy sub-items (no `parents` envelope); chain-walk handles
-   the enveloped case today.
-5. **Cross-atSign `type` contract guard** (§W8). Warn when
-   rehydration falls back to `n/a` because no factory matches the
-   envelope's `type` tag — catches registry drift between peers.
-6. **Hide the `notifications:` test hook from public
-   `subCollection` surface** (§W9). Pure polish.
+3. **`getKeys` API hygiene** (§W5). Only used by the example apps
+   for a debug command; could be marked `@visibleForTesting` /
+   `@protected` to clear it from production auto-complete.
+4. **Transactional semantics** (§W10). Cross-key "save A and B
+   atomically or neither". Open by design — most atSign use-cases
+   (each recipient gets a copy independently) don't need it;
+   cross-recipient atomicity would also clash with the
+   asynchronous distribution model. Listed here only for
+   completeness; no current consumer asks for it.
 
 ## Verification
 
 - `dart analyze lib test example/bin` → clean.
 - `dart test test/at_collections_test.dart test/at_collections_sub_test.dart test/at_collections_query_test.dart test/at_collections_query_sub_test.dart`
-  → 49 + 18 + 38 + 5 = 110 passing as of 2026-04-23, post the
-  Query<T> phase-1 work including the `watchWithSub` terminal and
-  public `readReceiptsFor` surface. Plus 5 W2 validation tests +
-  5 `thenBy` multi-key tests added 2026-04-29: 120 total passing
-  in the AtCollection-focused suite; full
+  → 110 passing as of 2026-04-23, post the Query<T> phase-1 work
+  including the `watchWithSub` terminal and public
+  `readReceiptsFor` surface. **2026-04-29 sweep adds 14 tests:**
+  5 for W2 (required typeTag + collision rules), 5 for W1(b)
+  thenBy (chains, descending, no-prior-orderBy guard), 1 for W8
+  (unknown type tag rehydrate fallback), 2 for W3 residual
+  (probe elision + cache invalidation on delete), 1 for W6
+  residual (depth-2 legacy middleman orphan sweep).
+  **124 total passing** in the AtCollection-focused suite; full
   `dart test --concurrency=1` is clean.
 - `flutter analyze` on the Flutter todos example
   (`packages/at_client_flutter/examples/todos`) → clean. That app is
@@ -925,7 +959,8 @@ State as of 2026-04-29:
   can also consult `packages/at_client/example/bin/collections_*.dart`.
 
 The API covered in this assessment is the shape landed on the
-`gkc-enhance-api` branch of `at_client_sdk` as of 2026-04-23; the
+`gkc-enhance-api` branch of `at_client_sdk` as of 2026-04-23, plus
+the 2026-04-29 snagging round on `gkc-at-collection-snagging`
+that closed W2, W1(b), W8, W9, W3-residual, and W6-residual. The
 implementation lives in
-`packages/at_client/lib/src/collections/collections.dart`. The
-Query<T> builder (phase 1) was added in commits dated 2026-04-23.
+`packages/at_client/lib/src/collections/collections.dart`.

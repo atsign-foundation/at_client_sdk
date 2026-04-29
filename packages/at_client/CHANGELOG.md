@@ -25,6 +25,28 @@ Several significant enhancements to the API to make it much easier to use.
   each level with its own independent `descending:`. `orderBy`
   retains replace semantics (LINQ / Drift / Isar idiom);
   `thenBy` without a prior `orderBy` throws `StateError`.
+- feat(AtCollection)!: `subCollection<U>` no longer exposes the
+  `notifications:` test hook on its public surface. Tests that
+  inject a notification stream now call
+  `subCollectionWithInjectedNotifications<U>(...)` (a
+  `@visibleForTesting` sibling). Internal callers (e.g.
+  `Query.watchWithSub`) thread the parent collection's stream
+  through a private path, so live behaviour is unchanged.
+- feat(AtCollection): unknown envelope `type` tags are now logged
+  as a per-collection WARNING (once per tag) on rehydrate
+  fallback, naming the missing tag and pointing at
+  `registerFactory`. Closes the silent registry-drift footgun
+  alongside the W2 required-`typeTag` change.
+- perf(AtCollection): `update(item)` now elides the existence
+  probe when this process has already successfully written the
+  same self-key (per-collection `_seenSelfIds` cache, drained on
+  successful self-key delete). Same-process bulk-edit workloads
+  pay one fewer round-trip per item.
+- fix(AtCollection): `cleanupOrphans` now sweeps depth-2+ legacy
+  descendants (items written before the `parents` envelope) when
+  any ancestor between root and direct parent is locally absent.
+  The legacy fallback chain-walks by id-presence at each composed-
+  namespace level (owner-agnostic, intentionally lenient).
 - feat: added a new method, `send`, to NotificationService which is much 
   easier to use than the old (still fine to use) `notify` method.
 - feat: added `factory AtRpc.server` to make it much simpler to create AtRpc 
