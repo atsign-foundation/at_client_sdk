@@ -12,7 +12,7 @@ final namespace = 'at_client_flutter_example';
 final AtSignLogger _logger = AtSignLogger(namespace);
 final RegistrarService registrar = RegistrarService(
   registrarUrl: "my.atsign.com",
-  apiKey: "plsprovideownapi",
+  apiKey: "477b-876u-bcez-c42z-6a3d",
 );
 
 final KeychainStorage keychainStorage = KeychainStorage();
