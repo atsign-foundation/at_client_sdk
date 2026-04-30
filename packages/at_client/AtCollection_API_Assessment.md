@@ -781,9 +781,8 @@ Landed 2026-04-29 in 3.13.0. `typeTag` is now a required parameter of
 `AtCollection.withInjectedNotifications`, `AtClient.collection<T>`,
 `AtCollection.subCollection<U>`, `Query<T>.watchWithSub<U>`). The
 implicit `T.toString()` fallback is gone, so Dart's minifier /
-tree-shaker (release-mode Flutter web, AOT obfuscated builds) can
-no longer silently rename the on-wire type tag underneath
-deployed callers. The registry also now rejects re-registering the
+tree-shaker (AOT obfuscated builds) can no longer silently
+rename the on-wire type tag underneath deployed callers. The registry also now rejects re-registering the
 same type under a different tag, and rejects binding the same tag
 to two different types — same-(type, tag) re-registration remains
 idempotent (last-fromJson-body-wins) so test harnesses still work

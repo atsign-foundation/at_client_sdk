@@ -11,8 +11,8 @@ Several significant enhancements to the API to make it much easier to use.
   / `AtCollection.subCollection<U>`, and
   `Query<T>.watchWithSub<U>(subFromJson: ...)`. Pinning the
   wire-format identifier explicitly stops Dart's minifier /
-  tree-shaker (release-mode Flutter web, AOT obfuscated builds)
-  silently renaming the on-wire type tag when class names move.
+  tree-shaker (AOT obfuscated builds) silently renaming the
+  on-wire type tag when class names move.
   Pass `typeTag: 'YourType'` next to every `fromJson:` /
   `registerFactory` call.
 - feat(AtCollection): registry rejects re-registering the same

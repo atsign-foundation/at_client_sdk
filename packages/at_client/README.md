@@ -11,16 +11,18 @@ transparently handling key management, end-to-end encryption, sync, and
 notifications.
 
 `at_client` runs on **both Dart (CLI / server)** and **Flutter
-(mobile / desktop / web / IoT)**. It is intentionally platform-neutral:
+(mobile / desktop / IoT)**. It is intentionally platform-neutral:
 the actual onboarding dialogs, secure key storage, and CLI scaffolding
-live in sibling packages that depend on `at_client`.
+live in sibling packages that depend on `at_client`. **Flutter web
+is not supported** — atSign onboarding and key storage rely on
+platform plugins that don't have web implementations today.
 
 ## Which package do I actually want?
 
 | If you're building…                        | Start with                                                                                                               |
 |--------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
 | A **Dart CLI or server app**               | [`at_cli_commons`](../at_cli_commons) for boilerplate + [`at_onboarding_cli`](../at_onboarding_cli) to provision atSigns |
-| A **Flutter app** (mobile/desktop/web/IoT) | [`at_client_flutter`](../at_client_flutter) — ships pre-built onboarding / APKAM / keychain widgets                      |
+| A **Flutter app** (mobile/desktop/IoT)     | [`at_client_flutter`](../at_client_flutter) — ships pre-built onboarding / APKAM / keychain widgets (web not supported)  |
 | **Understanding** the atSign lifecycle     | [`at_auth`](../at_auth) — platform-neutral onboarding / authentication core with a detailed lifecycle writeup            |
 | **Shared types** (`AtKey`, `Metadata`, …)  | [`at_commons`](../at_commons)                                                                                            |
 

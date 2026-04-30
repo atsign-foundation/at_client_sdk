@@ -1,12 +1,18 @@
 # todos — Flutter reference app for `AtCollection<T>`
 
-A multi-platform (iOS / Android / macOS / Linux / Windows / web)
+A multi-platform (iOS / Android / macOS / Linux / Windows)
 Flutter app that drives a shared, end-to-end-encrypted todo list
 across atSigns. It's the **idiomatic Flutter consumer** of the
 `AtCollection<T>` API — written to be the first place to look when
 you're building a real Flutter application on the
 [atPlatform](https://docs.atsign.com/) and want to see every common
 collection-shaped pattern wired up correctly.
+
+> **Web is not a supported target.** The Flutter scaffold
+> generated a `web/` directory but `at_client` and
+> `at_client_flutter` don't run on web — atSign onboarding and
+> key storage rely on platform plugins that have no web
+> implementation today. Don't try `flutter run -d chrome`.
 
 ## Where this fits
 
@@ -69,8 +75,9 @@ records round-trip cleanly between them.
   [my.noports.com/no-ports-plans](https://my.noports.com/no-ports-plans);
   paid / custom at [my.atsign.com](https://my.atsign.com). For a
   meaningful demo of sharing, register two and onboard each on a
-  different device (or the same device with two app instances /
-  two browser windows).
+  different device (or the same device pointed at separate
+  application-support directories so each instance gets its own
+  keychain entry).
 
 ### First run
 
