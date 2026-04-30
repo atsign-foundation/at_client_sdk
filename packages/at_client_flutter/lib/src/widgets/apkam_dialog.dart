@@ -142,9 +142,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
         24,
         0,
       ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       backgroundColor: Colors.white,
       child: Container(
         width: 560,
@@ -222,7 +220,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
                 const itemGap = 12.0;
                 final idealSize =
                     (constraints.maxWidth - ((otpCount - 1) * itemGap)) /
-                        otpCount;
+                    otpCount;
                 final otpSize = idealSize.clamp(52.0, 56.0).toDouble();
                 final viewportWidth = constraints.maxWidth;
 
