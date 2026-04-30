@@ -70,8 +70,12 @@ summary is:
 
 1. **Register** an atSign (free at
    [my.noports.com/no-ports-plans](https://my.noports.com/no-ports-plans)
-   or paid/custom at [my.atsign.com](https://my.atsign.com)) to get a
-   one-time **CRAM key** delivered to the user's email.
+   or paid/custom at [my.atsign.com](https://my.atsign.com)). Once you have
+   a registered atSign, the application code needs to get the CRAM key for
+   step 2 below. Typically this is done by the app, once it knows the atSign
+   to be onboarded, requesting that an OTP for the atSign be sent to the
+   registered owner's email address. (There are other processes possible for
+   all of this, but this is typical.)
 2. **Onboard** the atSign exactly once: CRAM-authenticate, generate the
    master keypairs, and write them to disk (`.atKeys` file for CLI) or
    the device **keychain** (Flutter). These **master AtKeys** are the
