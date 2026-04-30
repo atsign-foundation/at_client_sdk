@@ -207,7 +207,7 @@ class NotificationServiceImpl extends NotificationService {
   @visibleForTesting
   Future<void> handleNotificationReceipt(String notificationJSON) async {
     try {
-      logger.info('DEBUG: $notificationJSON');
+      logger.finest('DEBUG: $notificationJSON');
       if (isStopped) return;
 
       final notifs = notificationParser
