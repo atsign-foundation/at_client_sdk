@@ -101,12 +101,21 @@ import 'package:mutex/mutex.dart';
 /// A [CItem] can be a parent of its own [AtCollection<U>]; that
 /// sub-collection's items can themselves be parents; and so on.
 /// Nesting is bounded only by the Atsign Protocol's 255-char key
-/// limit — roughly **200 characters** are available for the combined
-/// collection + sub-collection namespaces assuming two 24-character
-/// atSigns, given the shape of the underlying identifiers:
-/// `[cached:]@bob:<200 chars incl '.' separators>@alice`.
-/// Each [subCollection] call checks the budget and throws
-/// [ArgumentError] early if the composed namespace would overflow.
+/// limit. The absolute worst-case wire shape is the cached-copy
+/// form `cached:<other-atsign>:<itemId>.<composedNs>@<self-atsign>`
+/// where each atSign can be up to 55 chars. That fixes the wrapper
+/// overhead at `cached:` (7) + `<other>` (55) + `:` (1) + `@<self>`
+/// (55) = **118 chars**, leaving **137 chars** for everything
+/// inside (item id + every level of composed namespace).
+///
+/// In practice that's plenty. With a 15-char application namespace
+/// and a strategy of single-character collection / sub-collection
+/// names, each tree level costs 11 chars (`.<sub>.<parent.id>`),
+/// so the theoretical depth ceiling is **11 levels (root + 10
+/// nested sub-collections)** — far deeper than any realistic
+/// hierarchical model needs. Each [subCollection] call enforces
+/// the budget and throws [ArgumentError] before any I/O if the
+/// composed namespace would overflow.
 ///
 /// ```dart
 /// // Level 1: comments on a post.
@@ -564,10 +573,24 @@ class AtCollection<T> {
   /// recipient copies alone (useful when adding recipients without
   /// risking removal of existing ones during a concurrent read).
   ///
+  /// Pass [sharedWith] to replace the item's recipient set as part of
+  /// the update — the values in [item.sharedWith] are mutated in place
+  /// to match before the write goes out, and the diff-and-unshare
+  /// logic above applies to the new set. Equivalent to
+  /// `item.sharedWith..clear()..addAll(sharedWith); update(item)` but
+  /// self-documenting at the call site. Pass `null` (the default) to
+  /// preserve whatever's already on `item.sharedWith` — the call-site
+  /// equivalent of the original "mutate then update" pattern.
+  ///
+  /// If you only need to change recipients (no value change on the
+  /// item itself), prefer [updateSharedWith] — it skips the self-key
+  /// rewrite entirely and just diffs the recipient copies.
+  ///
   /// Typical usage: fetch an item via [get] / [getItems], mutate its
   /// fields, then call [update].
   Future<void> update(
     CItem<T> item, {
+    Set<Atsign>? sharedWith,
     bool unshareWithOthers = true,
   }) async {
     if (item.owner != atSign) {
@@ -579,10 +602,109 @@ class AtCollection<T> {
         'Use create() to add a new item.',
       );
     }
+    if (sharedWith != null) {
+      item.sharedWith
+        ..clear()
+        ..addAll(sharedWith);
+    }
     final results = await _put(item, unshareWithOthers: unshareWithOthers);
     if (results.any((r) => r is OpFailure)) {
       throw CollectionOpException(results);
     }
+  }
+
+  /// Updates only the recipient set on an existing [item] — does NOT
+  /// rewrite the self copy. Useful when you want to add or remove
+  /// recipients without bumping the item's commit-id or pushing a
+  /// fresh CItemUpdated to every existing recipient.
+  ///
+  /// Computes the delta against `item.sharedWith`:
+  ///
+  /// - With the default `unshareWithOthers: true`, any atSign in
+  ///   `item.sharedWith` but not in [sharedWith] has its recipient
+  ///   copy deleted.
+  /// - Any atSign in [sharedWith] but not in `item.sharedWith` gets
+  ///   a fresh recipient copy written (with the item's current value
+  ///   and metadata).
+  /// - Recipients present in BOTH sets are left untouched — their
+  ///   existing copies stay at the commit-id they already have.
+  ///
+  /// On success, `item.sharedWith` is mutated in place to match
+  /// [sharedWith]. If [sharedWith] equals `item.sharedWith`, the
+  /// method is a no-op (no I/O) but `item.sharedWith` is still
+  /// updated (handles the case where the caller passed a fresh `Set`
+  /// instance).
+  ///
+  /// Does NOT emit a local [CItemUpdated] / [CItemDeleted] on this
+  /// collection's events — the self-item's state hasn't changed from
+  /// this atSign's perspective. New recipients see their own
+  /// [CItemUpdated] via the round-trip notification path; removed
+  /// recipients see their own [CItemDeleted] the same way.
+  ///
+  /// Throws [ArgumentError] if `item.owner != self`. Throws
+  /// [StateError] if the item's self-key doesn't exist (use [create]
+  /// to add new items). Throws [CollectionOpException] on any
+  /// key-level put / delete failure.
+  Future<void> updateSharedWith(
+    CItem<T> item,
+    Set<Atsign> sharedWith, {
+    bool unshareWithOthers = true,
+  }) async {
+    if (item.owner != atSign) {
+      throw ArgumentError('You may not update items owned by other atSigns');
+    }
+    if (!await _selfKeyExists(item.id)) {
+      throw StateError(
+        'Cannot update sharedWith for item "${item.id}": no such item '
+        'exists in $namespace. Use create() to add it first.',
+      );
+    }
+    final toUnshare = unshareWithOthers
+        ? item.sharedWith.difference(sharedWith)
+        : const <Atsign>{};
+    final toShare = sharedWith.difference(item.sharedWith);
+    if (toUnshare.isEmpty && toShare.isEmpty) {
+      // No recipient-set delta. Still align the item's own Set with
+      // the caller's argument in case they passed a fresh instance.
+      item.sharedWith
+        ..clear()
+        ..addAll(sharedWith);
+      return;
+    }
+    final now = DateTime.now();
+    if (toShare.isNotEmpty &&
+        item.expiresAt.millisecondsSinceEpoch < now.millisecondsSinceEpoch) {
+      throw ArgumentError(
+        'item.expiresAt must be in the future to add new recipients',
+      );
+    }
+    final md = toShare.isEmpty ? null : _buildMetadata(item, now);
+    final results = <OpResult>[];
+    for (final r in toUnshare) {
+      final k = AtKey.fromString('$r:${item.id}.$namespace$atSign');
+      try {
+        await atClient.delete(k);
+        results.add(OpSuccess(k, CollectionOp.delete));
+      } catch (e) {
+        results.add(OpFailure(k, CollectionOp.delete, e));
+      }
+    }
+    for (final r in toShare) {
+      final k = AtKey.fromString('$r:${item.id}.$namespace$atSign');
+      try {
+        k.metadata = md!;
+        await atClient.put(k, jsonEncode(item.toJson()));
+        results.add(OpSuccess(k, CollectionOp.put));
+      } catch (e) {
+        results.add(OpFailure(k, CollectionOp.put, e));
+      }
+    }
+    if (results.any((r) => r is OpFailure)) {
+      throw CollectionOpException(results);
+    }
+    item.sharedWith
+      ..clear()
+      ..addAll(sharedWith);
   }
 
   /// Deletes [item] and every one of its recipient copies. Only the owner
@@ -854,18 +976,22 @@ class AtCollection<T> {
   /// );
   /// ```
   ///
-  /// **Nesting depth is bounded by the Atsign Protocol's 255-char key
-  /// limit.** The composed namespace is
-  /// `<subName>.<parent.id>.<this.namespace>`. The worst-case on-wire
-  /// key for any descendant is the cached-copy shape
-  /// `[cached:]@bob:<id>.<composedNs>@alice`; for two 24-character
-  /// atSigns that leaves **~200 characters** (inclusive of `.`
-  /// separators) for the combined item id + root namespace + all
-  /// sub-collection composition. Shorter atSigns give you more
-  /// budget, longer atSigns give you less. [subCollection] enforces
-  /// this budget at construction time and throws [ArgumentError]
-  /// before any I/O if it would overflow — errors never reach the
-  /// wire.
+  /// **Nesting depth is bounded by the Atsign Protocol's 255-char
+  /// key limit.** The composed namespace this call produces is
+  /// `<subName>.<parent.id>.<this.namespace>`. The absolute
+  /// worst-case on-wire key for any descendant is the cached-copy
+  /// shape `cached:<other-atsign>:<itemId>.<composedNs>@<self-atsign>`;
+  /// at 55 chars per atSign that's a fixed wrapper overhead of
+  /// 118 chars (`cached:` 7 + `<other>` 55 + `:` 1 + `@<self>` 55),
+  /// leaving 137 chars for `<itemId>.<composedNs>`. Reserving 8
+  /// chars for the SDK's auto-generated item id and 1 for the
+  /// separator, **`composedNs` is capped at 128 chars** — applied
+  /// independently of the actual self-atSign length so the same
+  /// SDK builds round-trip-safe keys regardless of which atSign
+  /// owns this client. [subCollection] enforces this budget at
+  /// construction time and throws [ArgumentError] before any I/O
+  /// if the composed namespace would overflow — errors never reach
+  /// the wire.
   ///
   /// The reserved sub-collection name `__rr` is rejected (it's used
   /// internally for read receipts); pick any other string.
@@ -960,28 +1086,32 @@ class AtCollection<T> {
     }
     final composedNs = '$subName.${parent.id}.$namespace';
     // Worst-case key shape (cached-shared-with form):
-    //   cached:<other>:<id>.<composedNs>@<self>
-    // Budget:
-    //   255 total
-    //   - 55 allowance for <other> atSign (worst-case max length)
-    //   - ~26 fixed overhead: cached: (7) + : (1) + <id> (~8) +
-    //     . separator (1) + @ (implicit in atSign) + slack
-    //   - len(<self>)
-    //   = 174 - len(<self>) available for composedNs.
+    //   cached:<other>:<itemId>.<composedNs>@<self>
+    // The Atsign Protocol caps every atSign at 55 chars (including
+    // the leading '@'). At absolute worst case BOTH atSigns are at
+    // that max, fixing the wrapper overhead at:
+    //   cached: (7) + <other> (55) + : (1) + @<self> (55) = 118
+    // which leaves 255 - 118 = 137 chars for <itemId>.<composedNs>.
+    // The SDK's auto-generated item ids are 8 chars; reserving 8 +
+    // 1 for the separator '.' gives a hard cap of 128 chars on
+    // composedNs.
     //
-    // This is a CONSERVATIVE check — it assumes the recipient's
-    // atSign is at the 55-char max. In practice atSigns tend to run
-    // ~24 chars, so real apps get more headroom than this bound
-    // reserves. Keeping the conservative check means a valid
-    // construction here will never produce an over-long key on any
-    // subsequent `put`, regardless of which atSign we eventually
-    // share with.
-    final maxLen = 174 - atSign.toString().length;
-    if (composedNs.length > maxLen) {
+    // The bound is INDEPENDENT of the actual self-atSign length —
+    // we want the same SDK to produce round-trip-safe keys
+    // regardless of which atSign owns this client. Custom item ids
+    // longer than 8 chars will still encounter a tighter limit at
+    // write time (atServer rejects keys > 255), but those callers
+    // will know they've stepped outside the SDK's documented
+    // contract.
+    const int maxComposedNsLength = 128;
+    if (composedNs.length > maxComposedNsLength) {
       throw ArgumentError(
         'Composed sub-collection namespace "$composedNs" is '
-        '${composedNs.length} chars, exceeds the max of $maxLen for atSign '
-        '$atSign. Use a shorter subName or a shallower nesting depth.',
+        '${composedNs.length} chars, exceeds the absolute-worst-case '
+        'max of $maxComposedNsLength chars (255-char key limit minus 118 chars '
+        'of wrapper overhead for two 55-char atSigns + cached: prefix, and 9 '
+        'chars reserved for an 8-char item id + separator). Use a shorter '
+        'subName or a shallower nesting depth.',
       );
     }
     // Constructing the sub-collection directly (not via `atClient.collection`)
@@ -1468,6 +1598,88 @@ class AtCollection<T> {
     ];
   }
 
+  /// Walks ancestor collections and emits [CSubItemUpdated] on each
+  /// ancestor's `_events` for a sub-item just written locally on this
+  /// collection. No-op when this collection is not a sub-collection
+  /// (root writes have no ancestors to notify).
+  ///
+  /// The ancestry slice emitted on each ancestor matches what the
+  /// notification path produces when the round-trip arrives — each
+  /// ancestor sees only the chain from its own perspective down to
+  /// the leaf's direct parent. See [handleSubObjNotification] for the
+  /// round-trip equivalent.
+  ///
+  /// Note: read receipts (`__rr` sub-items) intentionally do NOT
+  /// trigger a local [CReadReceipt] emit. CReadReceipt's semantic
+  /// meaning is "someone read MY item"; that event fires on the
+  /// owner's side via the round-trip. Locally on the reader's side,
+  /// the receipt write surfaces only as a [CSubItemUpdated] on the
+  /// reader's view (and the recipient round-trip on the owner's side
+  /// is what produces the CReadReceipt for the owner).
+  void _emitAncestorSubUpdated(CItem<T> item) {
+    if (_parentItem == null) return;
+    // links built innermost-first; we reverse on emit so each
+    // ancestor sees root-first ancestry (matching the notification
+    // path).
+    final links = <CAncestor>[
+      (
+        id: _parentItem!.id,
+        subName: namespace.split('.').first,
+        owner: _parentItem!.owner,
+      ),
+    ];
+    AtCollection<dynamic>? cursor = _parentCollection;
+    while (cursor != null) {
+      cursor._events.add(CSubItemUpdated(
+        owner: item.owner,
+        id: item.id,
+        ancestry: links.reversed.toList(),
+      ));
+      if (cursor._parentItem == null) break;
+      links.add((
+        id: cursor._parentItem!.id,
+        subName: cursor.namespace.split('.').first,
+        owner: cursor._parentItem!.owner,
+      ));
+      cursor = cursor._parentCollection;
+    }
+  }
+
+  /// Same shape as [_emitAncestorSubUpdated] but emits
+  /// [CSubItemDeleted]. **Better than the round-trip equivalent on
+  /// one axis:** the round-trip always carries `null` owners in
+  /// `ancestry` because the sub-item's envelope is gone by the time
+  /// the notification fires. Locally we still hold every ancestor's
+  /// (id, owner) pair on the in-process [CItem] graph, so the local
+  /// CSubItemDeleted has fully-populated ancestor owners. Apps that
+  /// hand-listen to deletes can take advantage; apps that
+  /// match-on-id-only continue to work unchanged.
+  void _emitAncestorSubDeleted(CItem<T> item) {
+    if (_parentItem == null) return;
+    final links = <CAncestor>[
+      (
+        id: _parentItem!.id,
+        subName: namespace.split('.').first,
+        owner: _parentItem!.owner,
+      ),
+    ];
+    AtCollection<dynamic>? cursor = _parentCollection;
+    while (cursor != null) {
+      cursor._events.add(CSubItemDeleted(
+        owner: item.owner,
+        id: item.id,
+        ancestry: links.reversed.toList(),
+      ));
+      if (cursor._parentItem == null) break;
+      links.add((
+        id: cursor._parentItem!.id,
+        subName: cursor.namespace.split('.').first,
+        owner: cursor._parentItem!.owner,
+      ));
+      cursor = cursor._parentCollection;
+    }
+  }
+
   _CParts _getPartsFromNotifKey(AtNotification n) {
     String keyName = n.key.replaceAll('${n.to}:', '').replaceAll(n.from, '');
     final ix = keyName.lastIndexOf('.$namespace');
@@ -1774,6 +1986,33 @@ class AtCollection<T> {
     return v.isAfter(DateTime.now()) ? v : null;
   }
 
+  /// Builds the Atsign Protocol [Metadata] for a write derived from
+  /// [item]'s `expiresAt` and `availableAt`. Shared between the
+  /// self-key and per-recipient writes in [_put] and the
+  /// recipient-only writes in [updateSharedWith] so both paths produce
+  /// bit-identical metadata.
+  ///
+  /// Skips `availableAt`/`ttb` when the scheduled time has already
+  /// passed — atServer rejects negative `ttb` values, and an item
+  /// whose `availableAt` is in the past is already available by
+  /// definition. A schedule set by an earlier write therefore persists
+  /// harmlessly once it has fired: subsequent writes don't try to
+  /// re-schedule it.
+  Metadata _buildMetadata(CItem<T> item, DateTime now) {
+    final md = Metadata()
+      ..ttr = -1
+      ..ccd = true
+      ..expiresAt = item.expiresAt
+      ..ttl = item.expiresAt.millisecondsSinceEpoch - now.millisecondsSinceEpoch
+      ..namespaceAware = false;
+    if (item.availableAt != null && item.availableAt!.isAfter(now)) {
+      md.availableAt = item.availableAt;
+      md.ttb =
+          item.availableAt!.millisecondsSinceEpoch - now.millisecondsSinceEpoch;
+    }
+    return md;
+  }
+
   /// Decodes a stored value into the CItem JSON envelope, with a
   /// diagnostic [FormatException] if the payload isn't a JSON object
   /// (e.g. legacy pre-refactor `__rr` keys stored a bare numeric
@@ -1850,23 +2089,7 @@ class AtCollection<T> {
 
     final results = <OpResult>[];
     final selfKey = AtKey.fromString('${item.id}.$namespace$atSign');
-
-    final md = Metadata()
-      ..ttr = -1
-      ..ccd = true
-      ..expiresAt = item.expiresAt
-      ..ttl = item.expiresAt.millisecondsSinceEpoch - now.millisecondsSinceEpoch
-      ..namespaceAware = false;
-    // Skip availableAt/ttb when the scheduled time has already passed —
-    // atServer rejects negative ttb values, and an item whose availableAt
-    // is in the past is already available by definition. This also means
-    // a schedule set by an earlier `update` persists harmlessly once it
-    // has fired: subsequent updates don't try to re-schedule it.
-    if (item.availableAt != null && item.availableAt!.isAfter(now)) {
-      md.availableAt = item.availableAt;
-      md.ttb =
-          item.availableAt!.millisecondsSinceEpoch - now.millisecondsSinceEpoch;
-    }
+    final md = _buildMetadata(item, now);
 
     // 1. Self copy.
     try {
@@ -1876,6 +2099,16 @@ class AtCollection<T> {
       // Mark this id as "we just wrote it" so a subsequent update()
       // can elide its existence probe. See [_seenSelfIds] doc.
       _seenSelfIds.add(item.id);
+      // Local CEvent emission so apps using Query.watch / hand-
+      // listened streams see the update synchronously after the
+      // local put rather than waiting 1–3 s for the round-trip.
+      // The round-trip notification will re-emit the same event
+      // when it arrives — Query.watch's delta path is idempotent
+      // so UIs redraw once. Hand-listened streams see two
+      // callbacks; consumers that care can dedupe by (op, owner,
+      // id) over a small window.
+      _events.add(CItemUpdated(owner: item.owner, id: item.id));
+      _emitAncestorSubUpdated(item);
     } catch (e) {
       results.add(OpFailure(selfKey, CollectionOp.put, e));
     }
@@ -1960,9 +2193,12 @@ class AtCollection<T> {
         // The self-key (no `:`-prefixed recipient atSign in its
         // string form) is the one that gates [_seenSelfIds]. When it
         // goes, drop the cached "exists" mark so a future
-        // create()/update() probes correctly.
+        // create()/update() probes correctly. Same gate fires the
+        // local CEvent emission — see [_put] for the rationale.
         if (k.sharedWith == null) {
           _seenSelfIds.remove(item.id);
+          _events.add(CItemDeleted(owner: item.owner, id: item.id));
+          _emitAncestorSubDeleted(item);
         }
       } catch (e) {
         results.add(OpFailure(k, CollectionOp.delete, e));

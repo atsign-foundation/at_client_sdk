@@ -559,6 +559,164 @@ void main() {
       // and find the key absent → StateError.
       await expectLater(c.update(item), throwsStateError);
     });
+
+    test(
+        'update with sharedWith param replaces the recipient set in '
+        'place', () async {
+      final existingDave =
+          AtKey.fromString('@dave:msg-sw1.$namespace$selfAtSignStr');
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => [existingDave]);
+      final c = buildCollection<String>();
+      final item = c.draft(obj: 'x', id: 'msg-sw1', sharedWith: {});
+      await c.update(item, sharedWith: {bob});
+      // item.sharedWith was {} before the call; now equals {bob}.
+      expect(item.sharedWith, {bob});
+      final written = verify(
+        () => atClient.put(captureAny(), any()),
+      ).captured.cast<AtKey>().map((k) => k.toString()).toList();
+      // self + bob recipient.
+      expect(
+        written,
+        containsAll([
+          'msg-sw1.$namespace$selfAtSignStr',
+          '$bobStr:msg-sw1.$namespace$selfAtSignStr',
+        ]),
+      );
+      // dave was NOT in the new sharedWith → unshared.
+      verify(() => atClient.delete(any())).called(1);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  group('updateSharedWith', () {
+    AtValue storedValue() {
+      final v = AtValue();
+      v.value = jsonEncode({'type': 'n/a', 'obj': 'hello'});
+      v.metadata = Metadata()
+        ..createdAt = DateTime.now().toUtc()
+        ..expiresAt = DateTime.now().add(const Duration(days: 1));
+      return v;
+    }
+
+    setUp(() {
+      when(() => atClient.get(any())).thenAnswer((_) async => storedValue());
+      when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
+      when(() => atClient.delete(any())).thenAnswer((_) async => true);
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => <AtKey>[]);
+    });
+
+    test('rejects items owned by another atSign', () async {
+      final aliceColl = buildCollection<String>();
+      final item = aliceColl.draft(obj: 'hi');
+      when(() => atClient.atSign).thenReturn(bob);
+      final bobColl = buildCollection<String>();
+      await expectLater(
+        bobColl.updateSharedWith(item, {bob}),
+        throwsArgumentError,
+      );
+    });
+
+    test('throws StateError if the item does not exist', () async {
+      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+      final c = buildCollection<String>();
+      final item = c.draft(obj: 'x', id: 'never-saved');
+      await expectLater(
+        c.updateSharedWith(item, {bob}),
+        throwsStateError,
+      );
+    });
+
+    test(
+        'add-only delta writes recipient copies without touching the '
+        'self key', () async {
+      final c = buildCollection<String>();
+      final item = c.draft(obj: 'x', id: 'sw-add', sharedWith: {});
+      await c.updateSharedWith(item, {bob});
+      expect(item.sharedWith, {bob});
+      // One put, to bob's recipient key — self key NOT rewritten.
+      final written = verify(
+        () => atClient.put(captureAny(), any()),
+      ).captured.cast<AtKey>().map((k) => k.toString()).toList();
+      expect(written, ['$bobStr:sw-add.$namespace$selfAtSignStr']);
+      verifyNever(() => atClient.delete(any()));
+    });
+
+    test(
+        'remove-only delta deletes obsolete recipient copies and skips '
+        'self', () async {
+      final c = buildCollection<String>();
+      final item = c.draft(obj: 'x', id: 'sw-rem', sharedWith: {bob});
+      await c.updateSharedWith(item, {});
+      expect(item.sharedWith, isEmpty);
+      // Bob's recipient deleted; no put on self.
+      final deleted = verify(
+        () => atClient.delete(captureAny()),
+      ).captured.cast<AtKey>().map((k) => k.toString()).toList();
+      expect(deleted, ['$bobStr:sw-rem.$namespace$selfAtSignStr']);
+      verifyNever(() => atClient.put(any(), any()));
+    });
+
+    test('mixed delta: removes some recipients, adds others', () async {
+      final c = buildCollection<String>();
+      final item = c.draft(obj: 'x', id: 'sw-mix', sharedWith: {bob});
+      final carol = '@carol'.toAtsign();
+      await c.updateSharedWith(item, {carol});
+      expect(item.sharedWith, {carol});
+      final written = verify(
+        () => atClient.put(captureAny(), any()),
+      ).captured.cast<AtKey>().map((k) => k.toString()).toList();
+      final deleted = verify(
+        () => atClient.delete(captureAny()),
+      ).captured.cast<AtKey>().map((k) => k.toString()).toList();
+      expect(written, ['@carol:sw-mix.$namespace$selfAtSignStr']);
+      expect(deleted, ['$bobStr:sw-mix.$namespace$selfAtSignStr']);
+    });
+
+    test(
+        'no-op when newSharedWith equals current; still aligns the item '
+        'Set with the caller arg', () async {
+      final c = buildCollection<String>();
+      final item = c.draft(obj: 'x', id: 'sw-noop', sharedWith: {bob});
+      // Pass a fresh Set instance with identical contents.
+      final fresh = {bob};
+      await c.updateSharedWith(item, fresh);
+      expect(item.sharedWith, {bob});
+      verifyNever(() => atClient.put(any(), any()));
+      verifyNever(() => atClient.delete(any()));
+    });
+
+    test(
+        'unshareWithOthers: false suppresses removal of dropped '
+        'recipients', () async {
+      final c = buildCollection<String>();
+      final item = c.draft(obj: 'x', id: 'sw-keep', sharedWith: {bob});
+      await c.updateSharedWith(item, {}, unshareWithOthers: false);
+      // bob's recipient copy stays; item.sharedWith is updated to
+      // match the caller's argument.
+      expect(item.sharedWith, isEmpty);
+      verifyNever(() => atClient.delete(any()));
+      verifyNever(() => atClient.put(any(), any()));
+    });
+
+    test(
+        'pure recipient changes do not emit a local CItemUpdated on '
+        'this collection', () async {
+      // Subscribe BEFORE the call so any synchronous emit lands.
+      final c = buildCollection<String>();
+      final received = <CItemUpdated>[];
+      final sub = c.updates.listen(received.add);
+      final item = c.draft(obj: 'x', id: 'sw-no-event', sharedWith: {});
+      await c.updateSharedWith(item, {bob});
+      // Spin the event loop a couple times so any queued add lands.
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(received, isEmpty);
+      await sub.cancel();
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -1167,6 +1325,96 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
       expect(received, isEmpty);
+      await sub.cancel();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Local CEvent emission for in-process writes. Apps that watch
+  // `updates` / `deletes` see the event synchronously after the
+  // local put/delete succeeds rather than waiting for the round-
+  // trip notification (~1–3 s). The round-trip will re-fire the
+  // same event when it arrives — Query.watch's delta path is
+  // idempotent so UIs redraw once; hand-listened streams see two
+  // callbacks (documented).
+  group('local CEvent emission on in-process writes', () {
+    setUp(() {
+      when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
+      when(() => atClient.delete(any())).thenAnswer((_) async => true);
+      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => <AtKey>[]);
+    });
+
+    test('create() fires CItemUpdated synchronously on this collection',
+        () async {
+      final c = buildCollection<String>();
+      final received = <CItemUpdated>[];
+      final sub = c.updates.listen(received.add);
+      await c.create(obj: 'hi', id: 'local-1');
+      // Spin the event loop once so any queued add lands.
+      await Future<void>.delayed(Duration.zero);
+      expect(received, hasLength(1));
+      expect(received.single.id, 'local-1');
+      expect(received.single.owner, selfAtSign);
+      await sub.cancel();
+    });
+
+    test('update() fires CItemUpdated', () async {
+      // Group setUp stubs get() to throw, which is fine for the
+      // create's existence probe (= "no such key, ok to create").
+      // After create the _seenSelfIds cache short-circuits the
+      // update's existence probe so the update path succeeds without
+      // re-stubbing get.
+      final c = buildCollection<String>();
+      final item = await c.create(obj: 'first', id: 'local-2');
+      // Listen AFTER create, so the create's emit doesn't pollute.
+      final received = <CItemUpdated>[];
+      final sub = c.updates.listen(received.add);
+      await c.update(item);
+      await Future<void>.delayed(Duration.zero);
+      expect(received, hasLength(1));
+      expect(received.single.id, 'local-2');
+      await sub.cancel();
+    });
+
+    test('delete() fires CItemDeleted', () async {
+      // The descendant scan from delete returns []; the
+      // self-key+recipients scan returns just the self-key.
+      final selfKey = AtKey.fromString('local-3.$namespace$selfAtSignStr');
+      when(() => atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((inv) async {
+        final regex = inv.namedArguments[#regex] as String;
+        if (regex.contains('.+\\.local-3')) return <AtKey>[];
+        return [selfKey];
+      });
+      final c = buildCollection<String>();
+      final item = await c.create(obj: 'x', id: 'local-3');
+      final received = <CItemDeleted>[];
+      final sub = c.deletes.listen(received.add);
+      await c.delete(item);
+      await Future<void>.delayed(Duration.zero);
+      expect(received, hasLength(1));
+      expect(received.single.id, 'local-3');
+      await sub.cancel();
+    });
+
+    test(
+        'create() with sharedWith fires CItemUpdated only once on this '
+        'side (recipients see their own via round-trip)', () async {
+      final c = buildCollection<String>();
+      final received = <CItemUpdated>[];
+      final sub = c.updates.listen(received.add);
+      await c.create(
+        obj: 'hi',
+        id: 'local-shared',
+        sharedWith: {bob, '@carol'.toAtsign()},
+      );
+      await Future<void>.delayed(Duration.zero);
+      // Self-side fires exactly one CItemUpdated regardless of how
+      // many recipients got recipient-key writes.
+      expect(received, hasLength(1));
       await sub.cancel();
     });
   });

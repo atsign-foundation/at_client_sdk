@@ -131,9 +131,45 @@ void main() {
           isA<ArgumentError>().having(
             (e) => e.message.toString(),
             'message',
-            contains('exceeds the max'),
+            contains('exceeds the absolute-worst-case max'),
           ),
         ),
+      );
+    });
+
+    test(
+        'composed namespace just under the 128-char budget succeeds; '
+        'just over throws', () {
+      // Compute lengths so the composed namespace `<sub>.<parent.id>.<ns>`
+      // lands at exactly 128 chars (just-under) and 129 (just-over).
+      // ns prefix overhead per level: '.' + parent.id (here 'p1' = 2 chars)
+      // + '.' + parentNs (here 'posts.blog.app' = 14 chars) = 18 chars.
+      // So sub-name length needed for composedNs == 128 is 128 - 18 = 110.
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      final justRight = 'a' * 110; // composedNs total = 128 chars
+      final tooBig = 'a' * 111; // composedNs total = 129 chars
+
+      // Sanity-check the arithmetic.
+      expect('$justRight.p1.$parentNs'.length, 128);
+      expect('$tooBig.p1.$parentNs'.length, 129);
+
+      // 128 chars: succeeds. Use `subOn` (the test helper) so the
+      // sub-collection's notification subscription gets a stream.
+      expect(
+        () => subOn<String>(c, post, justRight),
+        returnsNormally,
+      );
+      // 129 chars: throws — the budget check fires before any
+      // notification setup, so this works on the public surface
+      // too.
+      expect(
+        () => c.parent.subCollection<String>(
+          parent: post,
+          subName: tooBig,
+          defaultExpiration: const Duration(days: 1),
+        ),
+        throwsArgumentError,
       );
     });
 
@@ -700,6 +736,160 @@ void main() {
         () => c.atClient.delete(captureAny()),
       ).captured.cast<AtKey>().map((k) => k.toString()).toList();
       expect(deleted, contains(replyKey.toString()));
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Local CEvent emission for sub-collection writes. The sub-
+  // collection's own `updates` / `deletes` streams fire as on a
+  // root collection (see at_collections_test.dart). Additionally,
+  // each ancestor collection's `subUpdates` / `subDeletes` streams
+  // fire with the appropriate ancestry slice — matching the
+  // round-trip notification path's shape but synchronously, so UIs
+  // don't wait 1–3 s after a local write.
+  group('local CEvent emission on sub-collection writes', () {
+    test(
+        'depth-1 sub-item create fires CItemUpdated on the sub-collection '
+        'AND CSubItemUpdated on the parent with 1-link ancestry', () async {
+      final c = buildParent();
+      when(() => c.atClient.put(any(), any()))
+          .thenAnswer((_) async => true);
+      when(() => c.atClient.get(any())).thenThrow(Exception('no such key'));
+      when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((_) async => <AtKey>[]);
+
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      final comments = subOn<String>(c, post, 'comments');
+
+      final subUpdated = <CItemUpdated>[];
+      final parentSubUpdated = <CSubItemUpdated>[];
+      final subSub = comments.updates.listen(subUpdated.add);
+      final parentSub = c.parent.subUpdates.listen(parentSubUpdated.add);
+
+      await comments.create(obj: 'first comment', id: 'c1');
+      for (int i = 0; i < 3; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      // Sub-collection itself sees CItemUpdated for c1.
+      expect(subUpdated, hasLength(1));
+      expect(subUpdated.single.id, 'c1');
+      // Parent sees CSubItemUpdated with ancestry [(p1, comments,
+      // owner=selfAtSign)].
+      expect(parentSubUpdated, hasLength(1));
+      expect(parentSubUpdated.single.id, 'c1');
+      expect(parentSubUpdated.single.ancestry, hasLength(1));
+      expect(parentSubUpdated.single.ancestry[0].id, 'p1');
+      expect(parentSubUpdated.single.ancestry[0].subName, 'comments');
+      expect(parentSubUpdated.single.ancestry[0].owner, selfAtSign);
+
+      await subSub.cancel();
+      await parentSub.cancel();
+    });
+
+    test(
+        'depth-2 sub-sub-item create fires CSubItemUpdated on BOTH the '
+        'depth-1 ancestor (1-link) AND the depth-0 root (2-link)',
+        () async {
+      final c = buildParent();
+      when(() => c.atClient.put(any(), any()))
+          .thenAnswer((_) async => true);
+      when(() => c.atClient.get(any())).thenThrow(Exception('no such key'));
+      when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((_) async => <AtKey>[]);
+
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      final comments = subOn<String>(c, post, 'comments');
+      final comment = comments.draft(obj: 'great post', id: 'c1');
+      // subOn always chains off c.parent; for depth-2 we need to
+      // chain off comments directly so the replies sub-collection's
+      // _parentCollection is comments (not c.parent).
+      final replies = comments.subCollectionWithInjectedNotifications<String>(
+        parent: comment,
+        subName: 'replies',
+        defaultExpiration: const Duration(days: 30),
+        notifications: c.notifStream.stream,
+      );
+
+      final commentsSubUpdated = <CSubItemUpdated>[];
+      final rootSubUpdated = <CSubItemUpdated>[];
+      final commentsSub = comments.subUpdates.listen(commentsSubUpdated.add);
+      final rootSub = c.parent.subUpdates.listen(rootSubUpdated.add);
+
+      await replies.create(obj: 'thanks', id: 'r1');
+      for (int i = 0; i < 3; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      // Comments collection (depth-1) sees ancestry [(c1, replies,
+      // owner=selfAtSign)] — leaf is depth-1 from comments'
+      // perspective.
+      expect(commentsSubUpdated, hasLength(1));
+      expect(commentsSubUpdated.single.id, 'r1');
+      expect(commentsSubUpdated.single.ancestry, hasLength(1));
+      expect(commentsSubUpdated.single.ancestry[0].id, 'c1');
+      expect(commentsSubUpdated.single.ancestry[0].subName, 'replies');
+
+      // Root collection (depth-0) sees ancestry
+      // [(p1, comments, ...), (c1, replies, ...)] — leaf is
+      // depth-2 from root's perspective.
+      expect(rootSubUpdated, hasLength(1));
+      expect(rootSubUpdated.single.id, 'r1');
+      expect(rootSubUpdated.single.ancestry, hasLength(2));
+      expect(rootSubUpdated.single.ancestry[0].id, 'p1');
+      expect(rootSubUpdated.single.ancestry[0].subName, 'comments');
+      expect(rootSubUpdated.single.ancestry[1].id, 'c1');
+      expect(rootSubUpdated.single.ancestry[1].subName, 'replies');
+
+      await commentsSub.cancel();
+      await rootSub.cancel();
+    });
+
+    test(
+        'sub-item delete fires CSubItemDeleted on the parent with '
+        'fully-populated owner chain', () async {
+      // Locally-emitted CSubItemDeleted populates ancestor owners
+      // (we have the in-process item graph). The round-trip path
+      // can't — by the time the notification fires, the sub-item's
+      // envelope is gone — so this is strictly more information than
+      // the notification path provides.
+      final c = buildParent();
+      when(() => c.atClient.put(any(), any()))
+          .thenAnswer((_) async => true);
+      when(() => c.atClient.delete(any()))
+          .thenAnswer((_) async => true);
+      when(() => c.atClient.get(any())).thenThrow(Exception('no such key'));
+      // Self-key+recipients scan for c1: returns the self-key.
+      // Descendants scan for c1: returns [].
+      final c1Key =
+          AtKey.fromString('c1.comments.p1.$parentNs$selfAtSignStr');
+      when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((inv) async {
+        final regex = inv.namedArguments[#regex] as String;
+        if (regex.contains('.+\\.c1\\.')) return <AtKey>[];
+        if (regex.contains('c1\\.')) return [c1Key];
+        return <AtKey>[];
+      });
+
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      final comments = subOn<String>(c, post, 'comments');
+      final comment = await comments.create(obj: 'x', id: 'c1');
+
+      final received = <CSubItemDeleted>[];
+      final sub = c.parent.subDeletes.listen(received.add);
+      await comments.delete(comment);
+      for (int i = 0; i < 3; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(received, hasLength(1));
+      expect(received.single.id, 'c1');
+      expect(received.single.ancestry, hasLength(1));
+      expect(received.single.ancestry[0].id, 'p1');
+      expect(received.single.ancestry[0].subName, 'comments');
+      // Owner populated locally — better than the round-trip path
+      // which always carries null owners on delete events.
+      expect(received.single.ancestry[0].owner, selfAtSign);
+      await sub.cancel();
     });
   });
 }
