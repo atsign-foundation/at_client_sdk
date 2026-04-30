@@ -1,4 +1,4 @@
-## 3.13.0
+## 3.12.0
 
 Several significant enhancements to the API to make it much easier to use.
 - feat: New feature - Collections - a clean API for storing, sharing, 
@@ -130,11 +130,12 @@ Several significant enhancements to the API to make it much easier to use.
   easier to use than the old (still fine to use) `notify` method.
 - feat: added `factory AtRpc.server` to make it much simpler to create AtRpc 
   servers. 
+
+Major documentation uplift
 - docs: Rewrote the main README
 - docs: Added many examples in the [example](example/README.md) directory
 
-## 3.12.0
-
+And some tech debt cleanup
 - feat: explicit AtClient lifecycle control — cleanly stop and resume atClients without
   re-initialising storage or keys
 - feat: outgoing AtClient's sync and notification services will now be garbage collected
