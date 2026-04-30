@@ -26,6 +26,7 @@ dependencies:
   intl: ^0.20.2
   file_picker: ^11.0.02
   path: ^1.9.1
+  pinput: ^5.0.1
 
 dev_dependencies:
   lints: ^6.0.0
