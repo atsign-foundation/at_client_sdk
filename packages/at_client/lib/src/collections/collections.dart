@@ -229,6 +229,12 @@ class AtCollection<T> {
   // does-it-exist question.
   final Set<String> _seenSelfIds = <String>{};
 
+  // Lazy-init scheduler that fires CItemAvailable into [_events] when
+  // each tracked item's `availableAt` passes. Started on first access
+  // to [availableEvents] and runs for the lifetime of this
+  // collection — see the [CItemAvailable] dartdoc for the rationale.
+  _CItemTimerScheduler<CItemAvailable, T>? _availableScheduler;
+
   // Immutable wiring (set by the private constructor).
   final AtClient atClient;
 
@@ -1548,6 +1554,85 @@ class AtCollection<T> {
   /// [CSubItemUpdated] for correlation.
   Stream<CSubItemDeleted> get subDeletes =>
       watch().where((e) => e is CSubItemDeleted).cast<CSubItemDeleted>();
+
+  /// Fires when a scheduled item's `availableAt` time passes —
+  /// e.g. an item written with `availableAt: tomorrow` triggers a
+  /// [CItemAvailable] tomorrow at that moment. Items with no
+  /// `availableAt` (immediately visible) are not tracked.
+  ///
+  /// On first access to this getter the SDK lazy-starts a scheduler:
+  /// scans the current collection, registers every item with a
+  /// future `availableAt`, and arms a single shared `Timer` to the
+  /// soonest. Subsequent updates / deletes on this collection
+  /// reschedule (or unregister) accordingly. The scheduler runs for
+  /// the lifetime of the [AtCollection]; cancelling all subscribers
+  /// does not stop it.
+  ///
+  /// Also flows through [watch] alongside the other [CEvent]
+  /// subclasses, so a single `switch (event)` listener can handle
+  /// it without needing a separate subscription.
+  Stream<CItemAvailable> get availableEvents {
+    _availableScheduler ??= _CItemTimerScheduler<CItemAvailable, T>(
+      collection: this,
+      fireAtOf: (item) => item.availableAt,
+      makeEvent: (item) => CItemAvailable(
+        owner: item.owner,
+        id: item.id,
+        availableAt: item.availableAt!,
+      ),
+      emit: _events.add,
+      label: 'availableAt',
+    )..start();
+    return watch().where((e) => e is CItemAvailable).cast<CItemAvailable>();
+  }
+
+  /// Returns a stream that fires [CItemExpiringSoon] [leadTime] before
+  /// each tracked item's `expiresAt`. Items whose
+  /// `expiresAt - leadTime` is already in the past at subscription
+  /// time fire on the next event-loop turn so the listener doesn't
+  /// silently miss them.
+  ///
+  /// Single-subscription stream — each call to this method spins up
+  /// its own scheduler so different lead times can coexist. Stream
+  /// cancellation tears the scheduler down. Wrap with
+  /// [Stream.asBroadcastStream] for multi-listener UIs.
+  ///
+  /// Does **not** flow through [watch] — the lead time is per-
+  /// subscription, so emitting it on the master stream would force a
+  /// single canonical lead time which is not useful.
+  Stream<CItemExpiringSoon> expiringSoonEvents({
+    required Duration leadTime,
+  }) {
+    if (leadTime.isNegative) {
+      throw ArgumentError.value(
+        leadTime,
+        'leadTime',
+        'leadTime must be non-negative',
+      );
+    }
+    late final StreamController<CItemExpiringSoon> ctrl;
+    late final _CItemTimerScheduler<CItemExpiringSoon, T> scheduler;
+    ctrl = StreamController<CItemExpiringSoon>(
+      onListen: () {
+        scheduler = _CItemTimerScheduler<CItemExpiringSoon, T>(
+          collection: this,
+          fireAtOf: (item) => item.expiresAt.subtract(leadTime),
+          makeEvent: (item) => CItemExpiringSoon(
+            owner: item.owner,
+            id: item.id,
+            expiresAt: item.expiresAt,
+            leadTime: leadTime,
+          ),
+          emit: ctrl.add,
+          label: 'expiresAt-$leadTime',
+        )..start();
+      },
+      onCancel: () async {
+        await scheduler.dispose();
+      },
+    );
+    return ctrl.stream;
+  }
 
   // ---------------------------------------------------------------------------
   // Debug helper
@@ -3012,6 +3097,200 @@ final class _OrderBy<T> {
 }
 
 // -----------------------------------------------------------------------------
+// Timer-driven event scheduler used by [AtCollection.availableEvents]
+// and [AtCollection.expiringSoonEvents] (W7). Maintains a sorted list
+// of upcoming firings and a single shared `Timer` armed to the
+// soonest. Items are registered on the initial `getItems()` scan and
+// kept current via the collection's [updates] / [deletes] streams.
+//
+// The scheduler is generic over the event type [E] and the
+// collection's domain type [T], parameterised by:
+//   - [fireAtOf]: when the event should fire for an item (returning
+//     null skips registration).
+//   - [makeEvent]: builds the event payload from the item.
+//   - [emit]: receives the built event.
+//
+// Uses a plain sorted list for the firings — O(N) insert/remove is
+// fine at the scales AtCollection targets (low thousands of items
+// with a future fire time at any one moment). A heap or
+// SplayTreeMap would give O(log N) and is a straightforward swap if
+// a real workload ever needs it.
+
+final class _Firing<E> {
+  final DateTime fireAt;
+  final Atsign owner;
+  final String id;
+  final E event;
+
+  const _Firing(this.fireAt, this.owner, this.id, this.event);
+}
+
+final class _CItemTimerScheduler<E extends CEvent, T> {
+  final AtCollection<T> collection;
+
+  /// Returns when the event should fire for [item], or null if the
+  /// item shouldn't be tracked (no `availableAt` / already past).
+  final DateTime? Function(CItem<T> item) fireAtOf;
+
+  /// Builds the event payload from the item that just fired.
+  final E Function(CItem<T> item) makeEvent;
+
+  /// Receives each emitted event. Wired to the master `_events`
+  /// controller for `availableEvents`, or to a per-stream controller
+  /// for `expiringSoonEvents`.
+  final void Function(E event) emit;
+
+  /// Diagnostic label, surfaced in log lines so it's clear which
+  /// scheduler (`availableAt` vs `expiresAt-leadTime`) is firing.
+  final String label;
+
+  // Sorted ascending by fireAt.
+  final List<_Firing<E>> _firings = [];
+  Timer? _timer;
+  StreamSubscription<CItemUpdated>? _updSub;
+  StreamSubscription<CItemDeleted>? _delSub;
+  bool _started = false;
+  bool _disposed = false;
+
+  _CItemTimerScheduler({
+    required this.collection,
+    required this.fireAtOf,
+    required this.makeEvent,
+    required this.emit,
+    required this.label,
+  });
+
+  /// Begins tracking. Idempotent: a second call is a no-op so the
+  /// `availableEvents` getter can call it on every access without
+  /// caring whether a previous call already started it.
+  void start() {
+    if (_started || _disposed) return;
+    _started = true;
+    // Listen BEFORE the initial fetch so an event arriving during
+    // the scan is still captured and applied afterwards.
+    _updSub = collection.updates.listen((e) {
+      unawaited(_onUpdate(e.owner, e.id));
+    });
+    _delSub = collection.deletes.listen((e) {
+      _onDelete(e.owner, e.id);
+    });
+    unawaited(_initialPopulate());
+  }
+
+  Future<void> _initialPopulate() async {
+    try {
+      final items = await collection.getItems();
+      if (_disposed) return;
+      for (final item in items) {
+        _registerForItem(item);
+      }
+      _scheduleNext();
+    } catch (_) {
+      // Read errors are surfaced through the collection's existing
+      // error channels (e.g. the [CollectionGetException] path).
+      // The scheduler itself doesn't need to crash — items written
+      // after this point will register normally via the
+      // updates/deletes hooks.
+    }
+  }
+
+  void _registerForItem(CItem<T> item) {
+    final fireAt = fireAtOf(item);
+    if (fireAt == null) return;
+    // Past timestamps fire on the next event-loop turn so the
+    // listener doesn't silently miss them.
+    final clamped = fireAt.isAfter(DateTime.now())
+        ? fireAt
+        : DateTime.now();
+    final firing = _Firing<E>(clamped, item.owner, item.id, makeEvent(item));
+    _insertSorted(firing);
+  }
+
+  void _insertSorted(_Firing<E> f) {
+    // Linear insert — O(N). At scales of "thousands of pending
+    // firings" this is well below per-event Timer overhead.
+    int i = 0;
+    while (i < _firings.length && !_firings[i].fireAt.isAfter(f.fireAt)) {
+      i++;
+    }
+    _firings.insert(i, f);
+  }
+
+  void _removeByOwnerId(Atsign owner, String id) {
+    _firings.removeWhere((f) => f.owner == owner && f.id == id);
+  }
+
+  /// Arms the [Timer] to the soonest pending firing. Cancels the
+  /// previous timer first; safe to call after every mutation.
+  void _scheduleNext() {
+    _timer?.cancel();
+    _timer = null;
+    if (_disposed || _firings.isEmpty) return;
+    final now = DateTime.now();
+    final soonest = _firings.first.fireAt;
+    final wait = soonest.isAfter(now) ? soonest.difference(now) : Duration.zero;
+    _timer = Timer(wait, _onFire);
+  }
+
+  void _onFire() {
+    if (_disposed) return;
+    final now = DateTime.now();
+    // Drain every firing whose fireAt has now passed (a single Timer
+    // event may cover multiple co-scheduled items).
+    while (_firings.isNotEmpty && !_firings.first.fireAt.isAfter(now)) {
+      final f = _firings.removeAt(0);
+      try {
+        emit(f.event);
+      } catch (e, st) {
+        collection.logger.warning(
+          '$label scheduler: emit threw for (${f.owner}, ${f.id}): $e\n$st',
+        );
+      }
+    }
+    _scheduleNext();
+  }
+
+  Future<void> _onUpdate(Atsign owner, String id) async {
+    if (_disposed) return;
+    // Drop any pending firing for this (owner, id) — the new item's
+    // `availableAt` / `expiresAt` may differ.
+    _removeByOwnerId(owner, id);
+    try {
+      final fresh = await collection.getOrNull(id, owner);
+      if (_disposed) return;
+      if (fresh != null) {
+        _registerForItem(fresh);
+      }
+    } catch (_) {
+      // Read failure on a single id — surface the fact to logs but
+      // don't tear the scheduler down. The next event will retry
+      // implicitly.
+      collection.logger.warning(
+        '$label scheduler: getOrNull failed for ($owner, $id); '
+        'item will not fire until a subsequent update succeeds',
+      );
+    }
+    _scheduleNext();
+  }
+
+  void _onDelete(Atsign owner, String id) {
+    if (_disposed) return;
+    _removeByOwnerId(owner, id);
+    _scheduleNext();
+  }
+
+  Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    _timer?.cancel();
+    _timer = null;
+    await _updSub?.cancel();
+    await _delSub?.cancel();
+    _firings.clear();
+  }
+}
+
+// -----------------------------------------------------------------------------
 // CItem
 
 /// A single typed record in an [AtCollection]. Wraps an application's
@@ -3375,6 +3654,57 @@ class CItemUpdated extends CEvent {
 
 class CItemDeleted extends CEvent {
   CItemDeleted({required super.owner, required super.id});
+}
+
+/// Fires when a scheduled item's `availableAt` time passes — i.e. an
+/// item written with `availableAt` in the future has just become
+/// visible on the wire. Carries the item's [owner] + [id] so the
+/// listener can refetch it via [AtCollection.getOrNull].
+///
+/// Surfaced via [AtCollection.availableEvents] and [AtCollection.watch].
+/// Items written with no `availableAt`, or with an `availableAt` in
+/// the past, are not tracked. Cancelling the last subscriber to
+/// [AtCollection.availableEvents] does not stop the scheduler — it
+/// runs for the lifetime of the [AtCollection], so a re-subscription
+/// later still sees the same firings.
+class CItemAvailable extends CEvent {
+  /// The scheduled `availableAt` that just passed. Equal to or
+  /// fractionally before `DateTime.now()` at emission time.
+  final DateTime availableAt;
+
+  CItemAvailable({
+    required super.owner,
+    required super.id,
+    required this.availableAt,
+  });
+}
+
+/// Fires [leadTime] before an item's `expiresAt`. Useful for
+/// reminder / alarm UIs that need to nudge the user before a record
+/// disappears (the atServer expires items hard at `expiresAt`, so
+/// once that moment arrives the record is already gone).
+///
+/// Per-stream: returned by [AtCollection.expiringSoonEvents], which
+/// takes the [leadTime] as a parameter so different listeners can
+/// pick different lead times. Items whose `expiresAt - leadTime` is
+/// already in the past at subscription time fire immediately on the
+/// next event-loop turn.
+class CItemExpiringSoon extends CEvent {
+  /// The item's `expiresAt`. The event fires at
+  /// `expiresAt - leadTime`.
+  final DateTime expiresAt;
+
+  /// The lead time configured on the [AtCollection.expiringSoonEvents]
+  /// call that produced this event. Useful when a single listener
+  /// subscribes via multiple lead times and needs to disambiguate.
+  final Duration leadTime;
+
+  CItemExpiringSoon({
+    required super.owner,
+    required super.id,
+    required this.expiresAt,
+    required this.leadTime,
+  });
 }
 
 /// A single link in a sub-item's parent chain.

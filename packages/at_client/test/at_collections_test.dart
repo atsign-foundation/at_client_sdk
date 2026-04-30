@@ -1269,4 +1269,226 @@ void main() {
       verifyNever(() => atClient.put(any(), any()));
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Timer-driven events. Use small real-time durations (tens of ms)
+  // so the suite stays fast without a fake-async test harness. The
+  // scheduler reads `DateTime.now()` directly, so each test's
+  // assertions account for ~5-10ms of scheduling jitter.
+  group('availableEvents (W7)', () {
+    /// Helper: mock `getAtKeys` + `get` to surface a single item with
+    /// the given availableAt / expiresAt.
+    void seedSingleItem({
+      required String id,
+      DateTime? availableAt,
+      DateTime? expiresAt,
+    }) {
+      final selfKey = AtKey.fromString('$id.$namespace$selfAtSignStr');
+      when(() => atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((_) async => [selfKey]);
+      when(() => atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'hello'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = expiresAt ?? DateTime.now().add(const Duration(days: 7))
+          ..availableAt = availableAt;
+        return v;
+      });
+    }
+
+    test('fires when a future availableAt elapses', () async {
+      final fireAt = DateTime.now().add(const Duration(milliseconds: 80));
+      seedSingleItem(id: 'sched1', availableAt: fireAt);
+      final c = buildCollection<String>();
+      final received = <CItemAvailable>[];
+      final sub = c.availableEvents.listen(received.add);
+      // Before fireAt: no emission.
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(received, isEmpty);
+      // After fireAt + jitter window: emission.
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(received, hasLength(1));
+      expect(received.single.id, 'sched1');
+      expect(received.single.owner, selfAtSign);
+      expect(
+        received.single.availableAt.millisecondsSinceEpoch,
+        closeTo(fireAt.millisecondsSinceEpoch, 5),
+      );
+      await sub.cancel();
+    });
+
+    test('does not track items with no availableAt', () async {
+      seedSingleItem(id: 'instant'); // no availableAt
+      final c = buildCollection<String>();
+      final received = <CItemAvailable>[];
+      final sub = c.availableEvents.listen(received.add);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(received, isEmpty);
+      await sub.cancel();
+    });
+
+    test('also flows through the master watch() stream', () async {
+      final fireAt = DateTime.now().add(const Duration(milliseconds: 60));
+      seedSingleItem(id: 'sched2', availableAt: fireAt);
+      final c = buildCollection<String>();
+      final viaWatch = <CEvent>[];
+      final sub = c.availableEvents.listen((_) {});
+      final watchSub = c.watch().listen(viaWatch.add);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(
+        viaWatch.whereType<CItemAvailable>().toList(),
+        hasLength(1),
+      );
+      await sub.cancel();
+      await watchSub.cancel();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  group('expiringSoonEvents (W7)', () {
+    AtNotification objNotif({
+      required String key,
+      required String operation,
+    }) {
+      return AtNotification(
+        'nid-exp',
+        key,
+        selfAtSignStr,
+        selfAtSignStr,
+        DateTime.now().millisecondsSinceEpoch,
+        'key',
+        false,
+        operation: operation,
+      );
+    }
+
+    test('fires leadTime before expiresAt', () async {
+      // expiresAt at +120ms, leadTime 80ms → fire at +40ms.
+      final expiresAt =
+          DateTime.now().add(const Duration(milliseconds: 120));
+      final selfKey = AtKey.fromString('exp1.$namespace$selfAtSignStr');
+      when(() => atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((_) async => [selfKey]);
+      when(() => atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'hi'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = expiresAt;
+        return v;
+      });
+      final c = buildCollection<String>();
+      final received = <CItemExpiringSoon>[];
+      final sub = c
+          .expiringSoonEvents(leadTime: const Duration(milliseconds: 80))
+          .listen(received.add);
+      // Before fire-at (+40ms): no emission yet at +20ms.
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(received, isEmpty);
+      // After fire-at, before expiry: emission.
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(received, hasLength(1));
+      expect(received.single.id, 'exp1');
+      expect(received.single.leadTime, const Duration(milliseconds: 80));
+      expect(received.single.expiresAt.millisecondsSinceEpoch,
+          closeTo(expiresAt.millisecondsSinceEpoch, 5));
+      await sub.cancel();
+    });
+
+    test('items already in their warning window fire on next loop turn',
+        () async {
+      // expiresAt 100ms ahead, leadTime 200ms → fire-at is 100ms in
+      // the past at subscription. Should fire promptly.
+      final expiresAt =
+          DateTime.now().add(const Duration(milliseconds: 100));
+      final selfKey = AtKey.fromString('exp2.$namespace$selfAtSignStr');
+      when(() => atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((_) async => [selfKey]);
+      when(() => atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'hi'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = expiresAt;
+        return v;
+      });
+      final c = buildCollection<String>();
+      final received = <CItemExpiringSoon>[];
+      final sub = c
+          .expiringSoonEvents(leadTime: const Duration(milliseconds: 200))
+          .listen(received.add);
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(received, hasLength(1));
+      await sub.cancel();
+    });
+
+    test('cancellation tears the scheduler down', () async {
+      final expiresAt =
+          DateTime.now().add(const Duration(milliseconds: 200));
+      final selfKey = AtKey.fromString('exp3.$namespace$selfAtSignStr');
+      when(() => atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((_) async => [selfKey]);
+      when(() => atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'hi'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = expiresAt;
+        return v;
+      });
+      final c = buildCollection<String>();
+      final received = <CItemExpiringSoon>[];
+      final sub = c
+          .expiringSoonEvents(leadTime: const Duration(milliseconds: 100))
+          .listen(received.add);
+      // Cancel before the firing time.
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await sub.cancel();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(received, isEmpty);
+    });
+
+    test('a delete unregisters the firing', () async {
+      final expiresAt =
+          DateTime.now().add(const Duration(milliseconds: 150));
+      final selfKey = AtKey.fromString('exp4.$namespace$selfAtSignStr');
+      when(() => atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((_) async => [selfKey]);
+      when(() => atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'hi'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = expiresAt;
+        return v;
+      });
+      final c = buildCollection<String>();
+      final received = <CItemExpiringSoon>[];
+      final sub = c
+          .expiringSoonEvents(leadTime: const Duration(milliseconds: 50))
+          .listen(received.add);
+      // Let the initial population settle, then delete the item via
+      // a notification.
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      notifStream.add(objNotif(
+        key: 'exp4.$namespace$selfAtSignStr',
+        operation: 'delete',
+      ));
+      // Wait past where the firing would have happened.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(received, isEmpty);
+      await sub.cancel();
+    });
+
+    test('rejects a negative leadTime', () {
+      final c = buildCollection<String>();
+      expect(
+        () => c.expiringSoonEvents(
+          leadTime: const Duration(milliseconds: -1),
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
 }

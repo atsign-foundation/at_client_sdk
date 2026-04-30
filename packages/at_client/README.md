@@ -192,6 +192,24 @@ final stream = posts.query().watchWithTree([
 //   per-reply TreeNodes.
 ```
 
+Timer-driven events for items written with `availableAt`
+(scheduled visibility) and `expiresAt` (TTL):
+
+```dart
+// Fires when each scheduled item becomes visible.
+todos.availableEvents.listen((e) {
+  print('Item ${e.id} just became available');
+});
+
+// Fires `leadTime` before each item expires — useful for
+// reminder UIs that need to nudge the user before the atServer
+// expires the record.
+todos.expiringSoonEvents(leadTime: const Duration(minutes: 30))
+    .listen((e) {
+  print('Item ${e.id} expires at ${e.expiresAt}');
+});
+```
+
 Read receipts ship built-in — one call on each side, no
 app-level bookkeeping:
 

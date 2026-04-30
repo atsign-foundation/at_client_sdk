@@ -7,10 +7,12 @@ A from-scratch assessment of the `AtCollection<T>` API in
 W9 (test hook off the public `subCollection` surface), W8
 (warning on unknown envelope type tags), W3-residual (existence-
 probe elision cache), W6-residual (chain-walk for legacy
-descendants), W5 (`getKeys` removed from public surface), and the
-entire **W1 phase-2** bundle: W1(a) typed field accessors +
-predicate AST + `Query.wherePath`, W1(b) `Query.thenBy` multi-key
-sort, W1(c) per-stream delta maintenance in `Query.watch` (with
+descendants), W5 (`getKeys` removed from public surface),
+W7 (timer-driven `CItemAvailable` / `CItemExpiringSoon` events
+via `availableEvents` / `expiringSoonEvents`), and the entire
+**W1 phase-2** bundle: W1(a) typed field accessors + predicate
+AST + `Query.wherePath`, W1(b) `Query.thenBy` multi-key sort,
+W1(c) per-stream delta maintenance in `Query.watch` (with
 limit/skip queries falling back to refetch), and W1(d)
 `Query.watchWithTree` recursive multi-level joins. All folded
 into 3.13.0.
@@ -295,7 +297,7 @@ made the call site less greppable and the behaviour depend on
 | Query builder            | `query()` → `Query<T>`; modifiers `.where(p)`, `.wherePath(predicate)`, `.orderBy(keyFn, {descending})`, `.thenBy(keyFn, {descending})`, `.limit(n)`, `.skip(n)`; terminals `.fetch()`, `.watch()`, `.count()`, `.any([p])`, `.first()`, `.firstOrNull()`, `.groupBy<K>(keyFn)`, `.watchWithSub<U>(subName, subDefaultExpiration, {subFromJson, subTypeTag})` (live parent+children join), `.watchWithTree(List<SubSpec>)` (recursive multi-level join) |
 | Read receipts            | On `CItem`: `markReadByMe()`, `wasMarkedReadByMe()`, `readBy` (Future), `readBySnapshot` (sync), `receipts` (the `__rr` sub-collection). On `AtCollection`: `markReadByMe(item)` / `wasMarkedReadByMe(item)` shims, `readReceiptsFor(item)` → queryable receipts sub-collection.                                                                                                                                                                        |
 | Sub-collections          | `subCollection<U>({parent, subName, defaultExpiration, fromJson?, typeTag?})` (plus `notifications:` test hook — see §W9), `cleanupOrphans()` (works on root and sub)                                                                                                                                                                                                                                                                                   |
-| Events                   | `watch()` → Stream<CEvent>; typed getters `updates` / `deletes` / `readReceipts` / `subUpdates` / `subDeletes`                                                                                                                                                                                                                                                                                                                                          |
+| Events                   | `watch()` → Stream<CEvent>; typed getters `updates` / `deletes` / `readReceipts` / `subUpdates` / `subDeletes` / `availableEvents`; method `expiringSoonEvents({required leadTime})` for time-before-expiry alerts                                                                                                                                                                                                                                      |
 | Exceptions               | `CollectionOpException` (write failures), `CollectionGetException` (read/decode failures), `StateError` (create-collides / update-missing / cascade-needed), `ArgumentError` (invalid input), `AtKeyNotFoundException` (get of absent)                                                                                                                                                                                                                  |
 
 ## 5. Comparison with CRUD libraries in the Dart ecosystem and beyond
@@ -791,12 +793,42 @@ path is intentionally lenient: false negatives (sparing a possibly-
 orphaned item) beat false positives (deleting a live one) under
 ambiguity.
 
-### W7. No timer-driven events
+### W7. ~~No timer-driven events~~ (closed)
 
-`CItemAvailable` (when `availableAt` passes) and `CItemExpiringSoon`
-would require an internal timer; useful for reminder-style apps but
-non-trivial to implement efficiently. Consider adding later with a
-config knob so apps opt into the cost.
+Closed 2026-04-29 in 3.13.0. Two new event surfaces:
+
+- **`AtCollection<T>.availableEvents`** — `Stream<CItemAvailable>`
+  fired as each tracked item's `availableAt` passes. Lazy-starts a
+  per-collection scheduler on first access; runs for the life of
+  the collection. Items with no `availableAt` (immediately visible)
+  or with `availableAt` already in the past at write time (the
+  envelope rehydrator drops them — see `_liveAvailableAt`) aren't
+  tracked. Flows through [`watch`] alongside the other typed
+  sub-streams so a single `switch (event)` listener can pick it up.
+
+- **`AtCollection<T>.expiringSoonEvents({required Duration leadTime})`**
+  — single-subscription `Stream<CItemExpiringSoon>` fired
+  `leadTime` before each item's `expiresAt`. Per-call scheduler
+  lifecycle: spins up on listen, tears down on cancel. Items
+  already inside their warning window (`expiresAt - leadTime`
+  in the past) at subscription time fire on the next event-loop
+  turn so listeners don't silently miss them. Does **not** flow
+  through `watch` because the lead time is per-subscription —
+  there's no single canonical value to surface on the master
+  stream.
+
+Implementation: a `_CItemTimerScheduler<E, T>` keeps a sorted-by-
+`fireAt` list of pending `_Firing<E>` records and arms a single
+shared `Timer` to the soonest. The scheduler subscribes to the
+collection's `updates` / `deletes` streams to rebuild firings
+when an item's `availableAt` / `expiresAt` changes or the item
+disappears. On the initial scan it populates the heap from
+`getItems`. The implementation is generic over the event type
+and reused for both surfaces by passing a different
+`fireAtOf` / `makeEvent` pair. List-based heap is O(N) per
+mutation; with realistic item counts the per-event work is well
+below `Timer` overhead, and a binary-heap swap is straightforward
+if a real workload demands it.
 
 ### W8. ~~Cross-atSign interop fragility via the `type` string~~ (closed)
 
@@ -925,12 +957,15 @@ State as of 2026-04-29:
   joins. **W5 closed** 2026-04-29: public `getKeys` removed
   entirely (zero production callers); implementation lives behind
   the private `_getKeysInternal`. `AtKey` no longer appears
-  anywhere in the AtCollection public surface.
+  anywhere in the AtCollection public surface. **W7 closed**
+  2026-04-29: `availableEvents` (lazy per-collection scheduler,
+  flows through `watch`) and `expiringSoonEvents({leadTime})`
+  (per-subscription scheduler) added, backed by a generic
+  `_CItemTimerScheduler` that keeps a sorted firing list and a
+  single shared `Timer` per scheduler.
 - **Ranked for impact**, still open:
 
-1. **`CItemAvailable` / `CItemExpiringSoon` events** (§W7). Unlocks
-   reminder / alarm UIs without app-level timers.
-2. **Transactional semantics** (§W10). Cross-key "save A and B
+1. **Transactional semantics** (§W10). Cross-key "save A and B
    atomically or neither". Open by design — most atSign use-cases
    (each recipient gets a copy independently) don't need it;
    cross-recipient atomicity would also clash with the
@@ -953,11 +988,16 @@ State as of 2026-04-29:
   cancel), 10 for W1(a) wherePath (eq/lt/and/or/not/AST flatten/
   introspection), 4 for W1(c) delta maintenance (single-item read
   on update, zero-read delete, predicate-fail removal,
-  limit-fallback behaviour). **139 total passing** (the W5
+  limit-fallback behaviour), 8 for W7 (3 availableEvents and 5
+  expiringSoonEvents — fires-on-time, no-availableAt skip,
+  watch-master integration, leadTime semantics, late-subscriber
+  catch-up, cancellation tear-down, delete-unregisters,
+  negative-leadTime guard). **147 total passing** (the W5
   closure also removed two now-redundant regex-shape tests for
   `getKeys` — the regex composition is exercised continuously
   through every read/write/cleanup test, so nothing was lost).
-  Full `dart test --concurrency=1` is clean.
+  Full `dart test --concurrency=1` is clean (543 across the
+  at_client suite).
 - `flutter analyze` on the Flutter todos example
   (`packages/at_client_flutter/examples/todos`) → clean. That app is
   the idiomatic Flutter reference for AtCollection — CLI developers
@@ -966,6 +1006,6 @@ State as of 2026-04-29:
 The API covered in this assessment is the shape landed on the
 `gkc-enhance-api` branch of `at_client_sdk` as of 2026-04-23, plus
 the 2026-04-29 snagging round on `gkc-at-collection-snagging`
-that closed W2, W1 phase 2 (a/b/c/d), W3-residual, W5, W6-residual, W8,
-and W9. The implementation lives in
+that closed W2, W1 phase 2 (a/b/c/d), W3-residual, W5, W6-residual,
+W7, W8, and W9. The implementation lives in
 `packages/at_client/lib/src/collections/collections.dart`.

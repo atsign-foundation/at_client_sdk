@@ -75,6 +75,18 @@ Several significant enhancements to the API to make it much easier to use.
   example or production callers; app code should use `getItems`
   / `getItemsAsStream` / `Query<T>` instead. `AtKey` no longer
   appears anywhere in the AtCollection public API.
+- feat(AtCollection): timer-driven event streams (W7).
+  `availableEvents` (typed sub-stream getter, also flows through
+  `watch()`) fires `CItemAvailable` as each tracked item's
+  `availableAt` passes — lazy-starts a per-collection scheduler
+  on first access. `expiringSoonEvents({required leadTime})`
+  returns a fresh `Stream<CItemExpiringSoon>` per call, firing
+  `leadTime` before each item's `expiresAt`. Items already
+  inside their warning window at subscription time fire on the
+  next event-loop turn so listeners don't silently miss them.
+  Both backed by a generic `_CItemTimerScheduler` with a single
+  shared `Timer` armed to the soonest pending firing; subscribes
+  to `updates` / `deletes` to keep its firing list current.
 - feat: added a new method, `send`, to NotificationService which is much 
   easier to use than the old (still fine to use) `notify` method.
 - feat: added `factory AtRpc.server` to make it much simpler to create AtRpc 
