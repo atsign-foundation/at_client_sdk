@@ -87,6 +87,45 @@ Several significant enhancements to the API to make it much easier to use.
   Both backed by a generic `_CItemTimerScheduler` with a single
   shared `Timer` armed to the soonest pending firing; subscribes
   to `updates` / `deletes` to keep its firing list current.
+- feat(AtCollection): local CEvent emission for in-process
+  writes. `create()` / `update()` / `delete()` now fire the
+  corresponding `CItemUpdated` / `CItemDeleted` synchronously on
+  the writing collection's `_events` controller, plus
+  `CSubItemUpdated` / `CSubItemDeleted` on every ancestor
+  collection's controller (with correctly-sliced `ancestry`
+  matching the round-trip notification path's shape). UIs that
+  use `Query.watch` redraw immediately after a local write
+  rather than waiting 1–3 s for the round-trip notification.
+  Bonus: locally-emitted `CSubItemDeleted` carries fully-
+  populated `ancestry.owner` values — stricter than the round-
+  trip path which always sets owners to null on delete events
+  (the sub-item's envelope is gone by the time the notification
+  fires, so the round-trip can't recover them). Each event
+  fires twice per in-process write (once locally, once on
+  round-trip); `Query.watch`'s delta path is idempotent so this
+  is invisible to typical consumers, while hand-listened streams
+  may want to dedupe.
+- feat(AtCollection): two new ways to mutate `sharedWith`.
+  `update(item, {Set<Atsign>? sharedWith, ...})` accepts a
+  nullable `sharedWith` parameter that replaces `item.sharedWith`
+  in place before the write — self-documenting at the call
+  site, no more "mutate then update" pattern. New
+  `updateSharedWith(item, newSharedWith, {unshareWithOthers})`
+  applies *only* the recipient delta (un-shares atSigns dropped
+  from the new set, shares to atSigns added) without rewriting
+  the self copy. Cheap-and-quiet for the common workflow "I
+  just want @carol to see this too".
+- fix(AtCollection): `subCollection` key-length budget tightened
+  to the absolute worst case. Previously assumed 24-char atSigns
+  and reserved 174 - len(self) chars for the composed namespace;
+  now uses the protocol's 55-char-per-atSign maximum on both
+  sides (118-char wrapper overhead) and reserves a flat 128
+  chars regardless of self-atSign length, so the same SDK builds
+  round-trip-safe keys regardless of which atSign owns the
+  AtClient. Class dartdoc and runtime error message updated to
+  match. Theoretical depth ceiling (with 1-char collection
+  names and a 15-char application namespace) is 11 levels —
+  root + 10 nested sub-collections.
 - feat: added a new method, `send`, to NotificationService which is much 
   easier to use than the old (still fine to use) `notify` method.
 - feat: added `factory AtRpc.server` to make it much simpler to create AtRpc 

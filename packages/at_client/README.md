@@ -109,10 +109,20 @@ final item = await todos.create(
 item.obj.done = true;
 await todos.update(item);
 
+// Add @carol without rewriting the self copy:
+await todos.updateSharedWith(item, {'@bob'.toAtsign(), '@carol'.toAtsign()});
+
 await for (final e in todos.updates) {
   print('updated: ${e.id} by ${e.owner}');
 }
 ```
+
+`update` / `delete` / `create` fire `CItemUpdated` / `CItemDeleted`
+synchronously on the writing collection's event streams, so a UI
+using `Query.watch()` redraws immediately rather than waiting for
+the round-trip notification. The same event re-fires on the
+round-trip ~1–3 s later; `Query.watch`'s delta path is idempotent
+so the second occurrence is invisible.
 
 `AtCollection<T>` executes reads on-device by default, against a
 local copy that the `at_client` SDK keeps current via real-time
@@ -258,9 +268,19 @@ For Flutter, the canonical reference app is
 through the mobile / desktop widget stack the way a shipping app
 would use it.
 
-**Key-length note:** atServer keys are capped at 255 chars; atSigns at 55.
-`subCollection(...)` enforces this at construction time with a hard
-`ArgumentError` so oversized keys never reach the wire.
+**Key-length note.** atServer keys are capped at 255 chars and
+atSigns at 55. The absolute worst-case wire shape is the
+cached-copy form
+`cached:<other>:<itemId>.<composedNs>@<self>`, which fixes the
+wrapper overhead at 118 chars (`cached:` + 55 + `:` + 55) and
+leaves **137 chars** for everything inside (item id + every
+level of namespace). With 8-char auto-generated ids and 1 char
+for the separator, **`composedNs` is capped at 128 chars** — a
+budget enforced by `subCollection(...)` at construction time
+with a hard `ArgumentError`, so oversized keys never reach the
+wire. Plenty of room: with 1-char collection / sub-collection
+names and a 15-char application namespace, the theoretical
+ceiling is **11 levels (root + 10 nested sub-collections)**.
 
 ## Further reading
 

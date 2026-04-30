@@ -2,7 +2,7 @@
 
 A from-scratch assessment of the `AtCollection<T>` API in
 `packages/at_client/lib/src/collections/collections.dart` as of
-2026-04-29 (UTC); originally written end-of-day Thu Apr 23. A
+2026-04-30 (UTC); originally written end-of-day Thu Apr 23. A
 2026-04-29 snagging pass closed W2 (required `typeTag`),
 W9 (test hook off the public `subCollection` surface), W8
 (warning on unknown envelope type tags), W3-residual (existence-
@@ -14,8 +14,12 @@ via `availableEvents` / `expiringSoonEvents`), and the entire
 AST + `Query.wherePath`, W1(b) `Query.thenBy` multi-key sort,
 W1(c) per-stream delta maintenance in `Query.watch` (with
 limit/skip queries falling back to refetch), and W1(d)
-`Query.watchWithTree` recursive multi-level joins. All folded
-into 3.13.0.
+`Query.watchWithTree` recursive multi-level joins. A 2026-04-30
+post-snagging round (see §11) added local CEvent emission on
+in-process writes, two `sharedWith` mutation paths (a nullable
+`sharedWith` on `update`, plus a delta-only `updateSharedWith`),
+and tightened the `subCollection` key-length budget to the
+absolute protocol worst case. All folded into 3.13.0.
 
 ## TL;DR
 
@@ -166,6 +170,61 @@ The downstream consequences for the API shape:
   sync pass catches everything up — no merge/conflict layer is
   needed at the AtCollection level because there is only one owner
   per record.
+
+## 1b. Key-length budget and tree-depth ceiling
+
+The Atsign Protocol caps any atKey at 255 chars and any atSign at
+55 chars (including the leading `@`). The absolute worst-case
+on-wire shape for an item under a sub-collection is the
+cached-shared-with form:
+
+```
+cached:<other-atsign>:<itemId>.<composedNs>@<self-atsign>
+   7  +    ≤55       +1+   ≤8 +1+    ?     +    ≤55
+```
+
+Wrapper overhead at the worst case (both atSigns at 55 chars):
+
+| Segment      | Chars   | Note                                 |
+|--------------|---------|--------------------------------------|
+| `cached:`    | 7       | literal prefix                       |
+| `<other>`    | 55      | recipient's atSign at protocol max   |
+| `:`          | 1       | separator                            |
+| `@<self>`    | 55      | this client's atSign at protocol max |
+| **Subtotal** | **118** |                                      |
+
+That leaves **137 chars** for the content portion
+(`<itemId>.<composedNs>`). The SDK auto-generates 8-char item ids;
+reserving those 8 plus 1 char for the separator caps the composed
+namespace at **128 chars**, enforced at `subCollection`
+construction time with a hard `ArgumentError`.
+
+**Tree-depth implications.** A worst-case strategy of
+single-character collection / sub-collection names with an
+application namespace of 15 chars (e.g. `myapp.example`) leaves
+122 chars for the collections section. Each level adds:
+
+| Element                       | Cost                            |
+|-------------------------------|---------------------------------|
+| Item id                       | 8 chars                         |
+| `.` between id and innermost  | 1 char                          |
+| Each sub-collection level     | `.<sub>.<parent.id>` = 11 chars |
+| Root collection name (1 char) | 1 char                          |
+
+So an item at depth `D` (depth 0 = root collection) costs
+`10 + 11·D` chars beyond the application namespace. Solving
+`10 + 11·D ≤ 122` gives `D ≤ 10.18`, so the **theoretical
+maximum is depth 10 — 11 levels including the root**. Realistic
+hierarchical models (blog → comments → replies; kanban board →
+column → card → checklist; issue → comment → reaction) use 2–3
+levels, well inside the budget.
+
+The runtime check at `subCollection` is independent of the actual
+self-atSign length, so the same SDK builds round-trip-safe keys
+regardless of which atSign owns this AtClient. A custom item id
+longer than 8 chars (passed via `create(id: '...')` or `draft`)
+will still encounter a tighter limit at write time when atServer
+rejects the over-long key.
 
 ## 2. Pre-AtCollection: what a developer had to write
 
@@ -972,6 +1031,62 @@ State as of 2026-04-29:
    asynchronous distribution model. Listed here only for
    completeness; no current consumer asks for it.
 
+## 11. Post-snagging additions (2026-04-30)
+
+After the W-series snagging round closed everything actionable in
+§10, three more API improvements landed in 3.13.0:
+
+**11a. Local CEvent emission.** `create` / `update` / `delete`
+now fire `CItemUpdated` / `CItemDeleted` synchronously on the
+writing collection's `_events` controller. Sub-collection writes
+also fire `CSubItemUpdated` / `CSubItemDeleted` on every ancestor
+collection's `_events`, with `ancestry` slices matching what the
+notification path produces on round-trip. Closes the
+"UI redraws 1–3 s after I tap save" anti-feature on Flutter
+apps that use `Query.watch`. Each event fires twice for
+in-process writes (once locally, once on round-trip);
+`Query.watch`'s delta path is idempotent so this is invisible to
+typical consumers, while hand-listened streams may want to
+dedupe over a small window.
+
+A small bonus: locally-emitted `CSubItemDeleted` carries
+fully-populated ancestor `owner` values. The notification path
+can't — by the time a sub-item delete notification arrives the
+sub-item's envelope is gone and `parents` is unrecoverable. The
+local path keeps the in-process item graph hot, so the owner
+chain survives. Apps that filter by `(ancestor.id,
+ancestor.owner)` get strictly more information from local-emit
+than from the round-trip equivalent.
+
+**11b. `sharedWith` mutation API.** Two new shapes:
+
+- `update(item, {Set<Atsign>? sharedWith, ...})` — pass a
+  non-null `sharedWith` to replace `item.sharedWith` in place
+  before the write. Equivalent to the older
+  `item.sharedWith..clear()..addAll(newSet); update(item)`
+  pattern but self-documenting at the call site.
+- `updateSharedWith(item, newSharedWith, {unshareWithOthers})`
+  — applies *only* the recipient delta, no self-key rewrite.
+  Recipients in both old and new sets keep their existing copy
+  at its current commit-id; recipients dropped get their copy
+  deleted; recipients added get a fresh copy of the item's
+  current value. Cheap-and-quiet: the writer's atServer doesn't
+  bump its commit-id, so the existing recipients see no
+  spurious round-trip CItemUpdated. Does **not** emit a local
+  CEvent on this side — the self-item's state hasn't changed,
+  so nothing to redraw.
+
+**11c. Key-length budget tightened to absolute worst case.** See
+§1b. The runtime check in `subCollection` was using an
+optimistic 24-char-atSign assumption; it's now the protocol's
+55-char-per-atSign maximum, fixing the wrapper overhead at 118
+chars and capping the composed namespace at a flat 128 chars
+regardless of the actual self-atSign length. The same SDK
+build now produces round-trip-safe keys for any atSign instance
+that owns the AtClient. The documented depth ceiling (with
+1-char collection names) is 11 levels — root + 10 nested
+sub-collections.
+
 ## Verification
 
 - `dart analyze lib test example/bin` → clean.
@@ -992,11 +1107,21 @@ State as of 2026-04-29:
   expiringSoonEvents — fires-on-time, no-availableAt skip,
   watch-master integration, leadTime semantics, late-subscriber
   catch-up, cancellation tear-down, delete-unregisters,
-  negative-leadTime guard). **147 total passing** (the W5
-  closure also removed two now-redundant regex-shape tests for
-  `getKeys` — the regex composition is exercised continuously
-  through every read/write/cleanup test, so nothing was lost).
-  Full `dart test --concurrency=1` is clean (543 across the
+  negative-leadTime guard). **147 total passing** for the W-series
+  round (the W5 closure also removed two now-redundant
+  regex-shape tests for `getKeys` — the regex composition is
+  exercised continuously through every read/write/cleanup test,
+  so nothing was lost). The 2026-04-30 post-snagging round
+  added 17 more: 1 budget-bound test for §1b key-length math, 9
+  for §11b sharedWith mutation (1 update-with-sharedWith + 8
+  updateSharedWith covering happy path, owner / existence
+  guards, add-only / remove-only / mixed delta, no-op,
+  unshareWithOthers=false, no-local-emit), 7 for §11a local
+  CEvent emission (3 depth-0 + 1 sharedWith-recipient-no-fan-out
+  + 3 sub-collection ancestor-walk including
+  fully-populated-owner CSubItemDeleted). **164 total passing**
+  in the AtCollection-focused suite. Full
+  `dart test --concurrency=1` is clean (560 across the
   at_client suite).
 - `flutter analyze` on the Flutter todos example
   (`packages/at_client_flutter/examples/todos`) → clean. That app is
