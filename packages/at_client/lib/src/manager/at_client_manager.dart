@@ -28,7 +28,13 @@ class AtClientManager {
   late String _atSign;
   AtClient? _currentAtClient;
 
-  AtClient get atClient => _currentAtClient!;
+  AtClient get atClient {
+    if (_currentAtClient == null) {
+      throw StateError('No atClient yet');
+    } else {
+      return _currentAtClient!;
+    }
+  }
 
   @Deprecated('Use atClientManager.atClient.syncService')
   SyncService get syncService => atClient.syncService;

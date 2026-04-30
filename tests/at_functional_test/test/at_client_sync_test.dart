@@ -22,14 +22,17 @@ void main() {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     atClientManager = await TestUtils.initAtClient(atSign, namespace);
-    atClientManager.atClient.syncService.sync();
+    // Note: pre-commit cron-era code had a fire-and-forget
+    // `syncService.sync()` here. With on-demand triggering that
+    // races with the first test's setup; tests now manage their
+    // own sync state explicitly via FunctionalTestSyncService.
   });
 
   test('Verify local changes are synced to server - local ahead', () async {
     var atClient = atClientManager.atClient;
-    var serverCommitId = await SyncUtil()
+    var serverCommitIdBeforePut = await SyncUtil()
         .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
-    expect(serverCommitId != null, true);
+    expect(serverCommitIdBeforePut != null, true);
     // twitter.me@alice🛠
     var twitterKey = AtKey()
       ..key = 'twitter'
@@ -46,7 +49,7 @@ void main() {
         .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
     // After sync successful, the serverCommitId after put should be greater
     // than server commit before put
-    expect(serverCommitIdAfterPut! > serverCommitId!, true);
+    expect(serverCommitIdAfterPut! > serverCommitIdBeforePut!, true);
     // Getting value from remote secondary
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = (AtKey.shared('twitter.wavi', sharedBy: atSign)

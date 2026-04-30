@@ -2,7 +2,7 @@
 
 ## at_invitation_flutter example
 
-The at_invitation_flutter package is designed to make it easy to invite people through email or SMS into apps that use atProtocol.
+The at_invitation_flutter package is designed to make it easy to invite people through email or SMS into apps that use Atsign Protocol.
 
 ### Give it a try
 This package includes a working sample application in the [example](https://github.com/atsign-foundation/at_widgets/tree/trunk/at_invitation_flutter/example) directory that demonstrates the key features of the package. To create a personalized copy, use ```at_app create``` as shown below or check it out on GitHub.

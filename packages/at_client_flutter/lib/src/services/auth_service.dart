@@ -10,7 +10,7 @@ class AuthService {
   /// Stream of progress events during onboarding/authentication
   Stream<ProgressEvent> get progressStream => _atAuth.progressStream;
 
-// DI to allow mocking in tests
+  // DI to allow mocking in tests
   AuthService({AtAuth? atAuth}) : _atAuth = atAuth ?? AtAuth.create();
 
   /// Onboarding an atSign for the first time
@@ -21,7 +21,9 @@ class AuthService {
   ///
   /// Returns [AtOnboardingResponse] which contains keys and status of onboarding
   Future<AtOnboardingResponse> onboard(
-      AtOnboardingRequest request, String cramSecret) async {
+    AtOnboardingRequest request,
+    String cramSecret,
+  ) async {
     AtOnboardingResponse? atOnboardingResponse;
     try {
       request.atKeysIo ??= KeychainAtKeysIo();
@@ -39,8 +41,10 @@ class AuthService {
   ///		[backupKeys] - Optional Parameter allowing for your keys to be backed up via provided WrittenAtKeysIo implementations
   ///
   /// Returns [AtAuthResponse] which contains keys and status of authentication
-  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest,
-      {List<WrittenAtKeysIo>? backupKeys}) async {
+  Future<AtAuthResponse> authenticate(
+    AtAuthRequest atAuthRequest, {
+    List<WrittenAtKeysIo>? backupKeys,
+  }) async {
     AtAuthResponse? atAuthResponse;
     try {
       atAuthResponse = await _atAuth.authenticate(atAuthRequest);

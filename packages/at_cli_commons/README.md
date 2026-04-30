@@ -1,29 +1,68 @@
-## Summary
+# at_cli_commons
 
-A library of generic / reusable stuff which is useful when building cli programs
-which use the [AtClient SDK](https://pub.dev/packages/at_client)
+Small helper library for **Dart CLI / server programs** that use the
+[`at_client`](../at_client) SDK. Wraps the boilerplate of parsing
+command-line flags, loading keys, and producing an authenticated
+`AtClient` behind a single call.
 
-The simplest usage would be
+## Usage
+
 ```dart
-  AtClient atClient = (await CLIBase.fromCommandLineArgs(args)).atClient;
+import 'package:at_cli_commons/at_cli_commons.dart';
+
+Future<void> main(List<String> args) async {
+  final atClient = (await CLIBase.fromCommandLineArgs(args)).atClient;
+  // atClient is authenticated and ready to use
+}
 ```
-For further usage examples, see 
-- In the example/bin/ directory
-  - `scan_example.dart`
-  - `put_and_get_example.dart`
-- The demo software [here](https://github.com/atsign-foundation/at_lorawan)
 
-## Features
+`CLIBase.fromCommandLineArgs(...)` parses the standard at-SDK flags
+(`-a <atsign>`, `-k <keys-file>`, `-n <namespace>`, `-r <root-domain>`,
+etc.), loads the user's `.atKeys` file, runs PKAM authentication via
+[`at_onboarding_cli`](../at_onboarding_cli), and hands back a ready
+`AtClient`.
 
-- The CLIBase class in cli_base.dart takes care of all the boilerplate
-  involved in getting from program startup to having an AtClient object you can
-  use - parsing command-line arguments, standard configuration, loading
-  authentication keys, etc.
-- There are a few other small utilities in utils.dart which CLIBase uses
+Two worked examples live under [`example/bin/`](example/bin):
+
+- [`scan_example.dart`](example/bin/scan_example.dart) — list every key
+  on the atServer
+- [`put_and_get_example.dart`](example/bin/put_and_get_example.dart) —
+  end-to-end put / get round-trip with TTL
+
+More programs using `CLIBase` in anger:
+[`at_lorawan`](https://github.com/atsign-foundation/at_lorawan) and the
+examples under [`../at_client/example/`](../at_client/example/README.md).
+
+## Injecting an AtOnboardingPreference
+
+If you need to pre-configure fields on the `AtOnboardingPreference`
+before `CLIBase` builds its client — custom storage paths, hooks, test
+overrides — pass an instance in. `CLIBase` will fill in the
+CLI-derived fields in place rather than constructing its own preference
+object:
+
+```dart
+final pref = AtOnboardingPreference()
+  ..someCustomField = 'my value';
+
+final atClient = (await CLIBase.fromCommandLineArgs(
+  args,
+  preference: pref,
+)).atClient;
+
+// pref.hiveStoragePath, pref.namespace, etc. are now populated by CLIBase.
+// pref.someCustomField is untouched.
+```
+
+## Where to go next
+
+- [`at_client`](../at_client) — the SDK whose `AtClient` this produces
+- [`at_onboarding_cli`](../at_onboarding_cli) — how to first-time
+  **provision** an atSign (register, CRAM-onboard, APKAM-enroll). Once
+  you have a `.atKeys` file, `CLIBase` takes over.
+- [`at_auth`](../at_auth) — the lifecycle story behind those keys
 
 ## Open source usage and contributions
 
-This is freely licensed open source code, so feel free to use it as is, suggest
-changes or enhancements or create your own version.
-See [CONTRIBUTING.md](../../CONTRIBUTING.md) for
-detailed guidance on how to set up tools, tests and make a pull request.
+BSD3-licensed. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) for
+guidance on setting up tools, running tests, and raising a PR.

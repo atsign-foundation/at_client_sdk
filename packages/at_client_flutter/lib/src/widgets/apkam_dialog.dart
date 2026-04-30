@@ -37,7 +37,12 @@ class ApkamActivationDialog extends StatefulWidget {
 
   @override
   State<ApkamActivationDialog> createState() => _ApkamActivationDialogState(
-      atSign, rootDomain, appName, deviceName, namespaces);
+    atSign,
+    rootDomain,
+    appName,
+    deviceName,
+    namespaces,
+  );
 
   /// Show the ApkamActivationDialog and return the activation result.
   static Future<AtEnrollmentResponse?> show(
@@ -74,8 +79,13 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   final String deviceName;
   final Map<String, String> namespaces;
 
-  _ApkamActivationDialogState(this.atSign, this.rootDomain, this.appName,
-      this.deviceName, this.namespaces);
+  _ApkamActivationDialogState(
+    this.atSign,
+    this.rootDomain,
+    this.appName,
+    this.deviceName,
+    this.namespaces,
+  );
 
   @override
   void initState() {
@@ -150,10 +160,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
                   onTap: () {
                     Navigator.of(context).pop();
                   },
-                  child: const Icon(
-                    Icons.arrow_back,
-                    size: 20,
-                  ),
+                  child: const Icon(Icons.arrow_back, size: 20),
                 ),
               ],
             ),
@@ -311,10 +318,13 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
             // Submit button
             _isLoading
                 ? const Center(
-                    child: Column(children: [
-                    CircularProgressIndicator(),
-                    Text("Waiting for approval..")
-                  ]))
+                    child: Column(
+                      children: [
+                        CircularProgressIndicator(),
+                        Text("Waiting for approval.."),
+                      ],
+                    ),
+                  )
                 : SizedBox(
                     width: double.infinity,
                     height: 56,

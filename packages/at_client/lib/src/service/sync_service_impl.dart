@@ -13,15 +13,15 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     hide AtNotification;
 import 'package:at_utils/at_utils.dart';
-import 'package:cron/cron.dart';
 import 'package:meta/meta.dart';
 
 ///A [SyncService] object is used to ensure data in local secondary(e.g mobile device) and cloud secondary are in sync.
 class SyncServiceImpl implements SyncService {
-  static int syncRequestThreshold = 3,
-      syncRequestTriggerInSeconds = 3,
-      syncRunIntervalSeconds = 5,
-      queueSize = 5;
+  /// Bound on the in-memory request queue. When the queue fills, the
+  /// oldest entry is dropped on the next enqueue. Mutable static so
+  /// test infrastructure can set it to 1 (one-at-a-time semantics)
+  /// for deterministic per-call assertions.
+  static int queueSize = 5;
   final AtClient _atClient;
   final RemoteSecondary _remoteSecondary;
   @visibleForTesting
@@ -38,12 +38,49 @@ class SyncServiceImpl implements SyncService {
   SyncUtil syncUtil = SyncUtil();
 
   final List<SyncProgressListener> _syncProgressListeners = [];
-  late final Cron _cron;
 
   @visibleForTesting
   final syncRequests = ListQueue<SyncRequest>(queueSize);
 
   bool _syncInProgress = false;
+
+  /// Concurrency guard for [processSyncRequests] entry. Distinct from
+  /// [_syncInProgress] because [_isInSync] short-circuits on the latter
+  /// — using [_syncInProgress] as the entry guard would cause every
+  /// run to take the in-sync fast path. Set true at the top of a run,
+  /// cleared in the run's `finally`.
+  bool _processInProgress = false;
+
+  /// Cached latest known server commit id. Kept fresh by three
+  /// authoritative sources:
+  ///   * [statsServiceListener]: push-side stats notifications.
+  ///   * [_syncToRemote]: each successful entry in the batch response
+  ///     carries the server commit id assigned to that op.
+  ///   * [_syncFromServer]: each pulled commit entry's `commitId`.
+  /// Read by [_getServerCommitId], which falls back to a remote
+  /// stats fetch only when this is `null` (cold start, before any
+  /// of the above has populated it).
+  @visibleForTesting
+  int? serverCommitId;
+
+  /// Wall-clock time at which the last [processSyncRequests] run
+  /// finished (whether it found work or took the in-sync fast path).
+  /// Read by the periodic safety-net timer to decide whether enough
+  /// time has elapsed to fire a defensive sync. `null` until the first
+  /// run completes.
+  @visibleForTesting
+  DateTime? lastSyncCompletedAt;
+
+  /// Periodic safety-net timer — fires every [_periodicSyncInterval]
+  /// and, if the last completed sync run is older than that interval,
+  /// calls [sync] to drive a fresh run. Production triggers (app
+  /// `sync()` calls, stats notifications, post-run drains) are still
+  /// the hot path; this timer just guards against the case where any
+  /// of those silently fail (a dropped notification, an unhandled
+  /// exception path, etc.). Cancelled in [stop], restarted in
+  /// [start].
+  Timer? _periodicSyncTimer;
+  static const Duration _periodicSyncInterval = Duration(seconds: 30);
 
   @override
   bool get isSyncInProgress => _syncInProgress;
@@ -76,8 +113,31 @@ class SyncServiceImpl implements SyncService {
         atChops: atClient.atChops, enrollmentId: atClient.enrollmentId);
     final syncService = SyncServiceImpl._(atClient, remoteSecondary);
     await syncService.statsServiceListener();
-    syncService._scheduleSyncRun();
+    syncService._startPeriodicSyncTimer();
+    // Note: no startup bootstrap is enqueued here. The original cron
+    // implementation enqueued a synthetic request on every tick so the
+    // cron had something to do; in the on-demand trigger model the
+    // queue should sit idle until a real trigger (an app `sync()` call
+    // or a stats notification) arrives. The `hasHadNoSyncRequests`
+    // flag is preserved for any callers that still inspect it.
     return syncService;
+  }
+
+  void _startPeriodicSyncTimer() {
+    _periodicSyncTimer?.cancel();
+    _periodicSyncTimer = Timer.periodic(_periodicSyncInterval, (_) {
+      if (isStopped) return;
+      final last = lastSyncCompletedAt;
+      if (last == null ||
+          DateTime.now().toUtc().difference(last) > _periodicSyncInterval) {
+        _logger.finer(
+            'Periodic safety-net timer firing sync (last completed: $last)');
+        sync();
+      } else {
+        _logger.finest(
+            'Periodic safety-net timer skipped (last completed: $last)');
+      }
+    });
   }
 
   SyncServiceImpl._(this._atClient, this._remoteSecondary) {
@@ -87,33 +147,6 @@ class SyncServiceImpl implements SyncService {
     _skipDeletesUntilCommitId =
         AtKey.local('skipdeletesuntil', currentAtSign).build();
     atKeyDecryptionManager = AtKeyDecryptionManager(_atClient);
-  }
-
-  void _scheduleSyncRun() {
-    _cron = Cron();
-
-    _cron.schedule(Schedule.parse('*/$syncRunIntervalSeconds * * * * *'),
-        () async {
-      try {
-        await processSyncRequests();
-        // If no sync request has ever been made, let's enqueue one now.
-        // See https://github.com/atsign-foundation/at_client_sdk/issues/770
-        if (hasHadNoSyncRequests) {
-          final syncRequest = SyncRequest();
-          syncRequest.onDone = _onDone;
-          syncRequest.onError = _onError;
-          syncRequest.requestSource = SyncRequestSource.system;
-          syncRequest.requestedOn = DateTime.now().toUtc();
-          syncRequest.result = SyncResult();
-          _addSyncRequestToQueue(syncRequest);
-        }
-      } on Exception catch (e, trace) {
-        var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
-        _logger.finest(trace);
-        _logger.severe('exception while running process sync. Reason:  $cause');
-        _syncInProgress = false;
-      }
-    });
   }
 
   @override
@@ -142,6 +175,14 @@ class SyncServiceImpl implements SyncService {
           _atClient.getPreferences()!.atClientParticulars,
           'RCVD: stats notification in sync: ${notification.value}'));
       final serverCommitId = notification.value;
+      if (serverCommitId != null) {
+        try {
+          _promoteServerCommitId(int.parse(serverCommitId));
+        } on FormatException {
+          _logger.warning(
+              'statsServiceListener: malformed commitId "$serverCommitId"');
+        }
+      }
       int lastReceivedServerCommitId = -1;
       try {
         lastReceivedServerCommitId = await getLastReceivedServerCommitId();
@@ -187,31 +228,31 @@ class SyncServiceImpl implements SyncService {
   }
 
   @visibleForTesting
-  Future<void> processSyncRequests(
-      {bool respectSyncRequestQueueSizeAndRequestTriggerDuration =
-          true}) async {
+  Future<void> processSyncRequests() async {
     _logger.finest('in _processSyncRequests');
-    if (_syncInProgress) {
-      _logger.finer('**** another sync in progress');
-      _informSyncProgress(SyncProgress()
-        ..syncStatus = SyncStatus.started
-        ..startedAt = DateTime.now().toUtc()
-        ..message = 'another sync in progress');
+    if (isStopped) {
+      _logger.info('processSyncRequests: service is stopped; ignoring');
       return;
     }
-    if (respectSyncRequestQueueSizeAndRequestTriggerDuration) {
-      if (syncRequests.isEmpty ||
-          (syncRequests.length < syncRequestThreshold &&
-              (syncRequests.isNotEmpty &&
-                  DateTime.now()
-                          .toUtc()
-                          .difference(syncRequests.elementAt(0).requestedOn)
-                          .inSeconds <
-                      syncRequestTriggerInSeconds))) {
-        _logger.finest('skipping sync - queue length ${syncRequests.length}');
-        return;
-      }
+    if (_processInProgress || _syncInProgress) {
+      // In the on-demand trigger model every enqueue (and every drain
+      // tail) calls processSyncRequests, so this branch fires
+      // routinely. Log only — no SyncProgress event, since "I tried to
+      // start a sync but one was already running" is not interesting
+      // to listeners and would amplify their event count linearly with
+      // queue activity.
+      _logger.finer('processSyncRequests: another sync in progress');
+      return;
     }
+    if (syncRequests.isEmpty) {
+      _logger.finest('processSyncRequests: queue empty; nothing to do');
+      return;
+    }
+    // Claim the entry guard BEFORE awaiting anything so concurrent
+    // triggers (now arriving on every enqueue) can't both pass the
+    // guard above and race into the body. We use a separate flag from
+    // _syncInProgress because _isInSync short-circuits on the latter.
+    _processInProgress = true;
     final syncRequest = _getSyncRequest();
     try {
       if (await _isInSync()) {
@@ -264,6 +305,25 @@ class SyncServiceImpl implements SyncService {
         ..syncStatus = SyncStatus.failure
         ..startedAt = DateTime.now().toUtc()
         ..message = 'Exception: $e');
+    } catch (e) {
+      // Catch-all: with on-demand triggering, an unhandled exception
+      // from the sync path would become an unhandled async error and
+      // fail tests / propagate noise. Surface it as a failure
+      // SyncProgress event so listeners see it like any other sync
+      // failure.
+      _logger.warning(
+          'Unexpected exception in sync ${syncRequest.id}. Reason: $e');
+      syncRequest.result!.atClientException = AtClientException.message('$e');
+      _syncError(syncRequest);
+      _syncInProgress = false;
+      _informSyncProgress(SyncProgress()
+        ..syncStatus = SyncStatus.failure
+        ..startedAt = DateTime.now().toUtc()
+        ..message = 'Unexpected exception: $e');
+    } finally {
+      _processInProgress = false;
+      lastSyncCompletedAt = DateTime.now().toUtc();
+      _drainQueueIfPending();
     }
     return;
   }
@@ -338,11 +398,36 @@ class SyncServiceImpl implements SyncService {
   bool hasHadNoSyncRequests = true;
 
   void _addSyncRequestToQueue(SyncRequest syncRequest) {
+    if (isStopped) {
+      _logger.finer('_addSyncRequestToQueue: service is stopped; ignoring');
+      return;
+    }
     hasHadNoSyncRequests = false;
     if (syncRequests.length == queueSize) {
       syncRequests.removeLast();
     }
     syncRequests.addLast(syncRequest);
+    // Trigger a sync run on the next microtask. Deferring (rather than
+    // calling synchronously) lets a burst of successive enqueues all
+    // land in the queue before the first run starts consuming it, and
+    // keeps `_addSyncRequestToQueue` itself free of side effects on
+    // `_syncInProgress`. The _syncInProgress / isStopped guards inside
+    // processSyncRequests make the call a cheap no-op when a run is
+    // already active or the service has been stopped.
+    scheduleMicrotask(() {
+      unawaited(processSyncRequests());
+    });
+  }
+
+  /// Schedules a follow-up [processSyncRequests] run if the queue is
+  /// non-empty. Called at the end of each completed run so requests
+  /// that arrived during the run aren't stranded. The microtask
+  /// scheduling lets the in-flight `await` chain return first.
+  void _drainQueueIfPending() {
+    if (isStopped || syncRequests.isEmpty) return;
+    scheduleMicrotask(() {
+      unawaited(processSyncRequests());
+    });
   }
 
   void _clearQueue() {
@@ -411,6 +496,12 @@ class SyncServiceImpl implements SyncService {
             if (commitId == -1) {
               _logger.severe(
                   '${commitEntry.operation} for key ${commitEntry.atKey} failed. Error code ${responseObject.errorCode} error message ${responseObject.errorMessage}');
+            } else {
+              // Each successful push returns the server commit id
+              // assigned to that op; promote the cache so the post-
+              // sync read in processSyncRequests reflects the new
+              // tip without a remote round-trip.
+              _promoteServerCommitId(commitId);
             }
 
             _logger.finer('***batchId:$batchId key: ${commitEntry.atKey}');
@@ -478,6 +569,7 @@ class SyncServiceImpl implements SyncService {
           if (isServerCommitEntryExistInUncommittedEntries) {
             lastReceivedServerCommitId =
                 _parseToInteger(serverCommitEntry['commitId']);
+            _promoteServerCommitId(lastReceivedServerCommitId);
             _logger.finer(_logger.getLogMessageWithClientParticulars(
                 _atClient.getPreferences()!.atClientParticulars,
                 'Server commitEntry ${serverCommitEntry['atKey']} exists in '
@@ -502,6 +594,7 @@ class SyncServiceImpl implements SyncService {
           // Convert the commit-id to "int" if in "String" data type.
           lastReceivedServerCommitId =
               _parseToInteger(serverCommitEntry['commitId']);
+          _promoteServerCommitId(lastReceivedServerCommitId);
           await _processServerCommitEntry(
               serverCommitEntry, uncommittedEntries, keyInfoList);
           _logger.finest(
@@ -823,7 +916,10 @@ class SyncServiceImpl implements SyncService {
   @override
   Future<bool> isInSync() async {
     try {
-      var serverCommitId = await _getServerCommitId();
+      // Force-fresh: this is a decision point — staleness here would
+      // give the caller a false "in sync" answer when a recent
+      // direct-to-server change hasn't propagated to the cache yet.
+      var serverCommitId = await _getServerCommitId(forceFresh: true);
 
       var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
 
@@ -852,7 +948,9 @@ class SyncServiceImpl implements SyncService {
       _logger.finest('*** isInSync..sync in progress');
       return true;
     }
-    var serverCommitId = await _getServerCommitId();
+    // Force-fresh: see [_getServerCommitId] doc — we're deciding whether
+    // sync work is needed; a stale cache would skip the run.
+    var serverCommitId = await _getServerCommitId(forceFresh: true);
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
     var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
         _atClient.getPreferences()!.syncRegex,
@@ -869,17 +967,55 @@ class SyncServiceImpl implements SyncService {
   }
 
   /// Returns the cloud secondary latest commit id. if null, returns -1.
-  ///Throws [AtLookUpException] if secondary is not reachable
-  Future<int> _getServerCommitId() async {
-    // ignore: no_leading_underscores_for_local_identifiers
-    var _serverCommitId = await syncUtil.getLatestServerCommitId(
+  /// Monotonically promotes the cached [serverCommitId] to [observed]
+  /// when it represents progress. Centralised so the three update
+  /// paths (stats notifications, push batch responses, pull entries)
+  /// share the same monotonic guard — out-of-order arrivals can't
+  /// rewind the cache.
+  void _promoteServerCommitId(int observed) {
+    final current = serverCommitId;
+    if (current == null || observed > current) {
+      serverCommitId = observed;
+    }
+  }
+
+  /// Returns the latest known server commit id. With [forceFresh: false]
+  /// (the default) the cached value is returned when non-null; the
+  /// cache is kept current by stats notifications, batch responses
+  /// from `_syncToRemote`, and pulled entries from `_syncFromServer`.
+  ///
+  /// With [forceFresh: true] the cache is bypassed and a remote stats
+  /// fetch is issued; the result is then written back into the cache
+  /// (subject to the monotonic [_promoteServerCommitId] guard) so
+  /// subsequent cached reads benefit from it.
+  ///
+  /// `forceFresh: true` is used by the sync-decision points
+  /// ([isInSync] / [_isInSync]) — if a recent direct-to-server
+  /// modification happened and the corresponding stats notification
+  /// hasn't arrived yet, the cache is stale and would cause
+  /// `processSyncRequests` to wrongly conclude "no work needed".
+  ///
+  /// Throws [AtLookUpException] if the remote secondary is not
+  /// reachable.
+  Future<int> _getServerCommitId({bool forceFresh = false}) async {
+    if (!forceFresh) {
+      final cached = serverCommitId;
+      if (cached != null) {
+        _logger.finer(_logger.getLogMessageWithClientParticulars(
+            _atClient.getPreferences()!.atClientParticulars,
+            'Returning serverCommitId $cached (cached)'));
+        return cached;
+      }
+    }
+    var fresh = await syncUtil.getLatestServerCommitId(
         _remoteSecondary, _atClient.getPreferences()!.syncRegex);
     // If server commit id is null, set to -1;
-    _serverCommitId ??= -1;
+    fresh ??= -1;
+    _promoteServerCommitId(fresh);
     _logger.info(_logger.getLogMessageWithClientParticulars(
         _atClient.getPreferences()!.atClientParticulars,
-        'Returning serverCommitId $_serverCommitId'));
-    return _serverCommitId;
+        'Returning serverCommitId $fresh ${forceFresh ? "(forced fresh)" : "(cold fetch)"}'));
+    return fresh;
   }
 
   @visibleForTesting
@@ -1079,6 +1215,12 @@ class SyncServiceImpl implements SyncService {
   @visibleForTesting
   bool isStopped = false;
 
+  /// Halts sync activity. Cancels the stats-notification subscription,
+  /// drains any pending requests in the queue (their callbacks are
+  /// invoked with an error), removes all progress listeners, and
+  /// causes future [sync] calls to become no-ops until [restart] is
+  /// invoked. Idempotent — calling [stop] when already stopped is a
+  /// no-op.
   Future<void> stop() async {
     if (isStopped) {
       _logger.info('stop() called, but service is already stopped. Ignoring.');
@@ -1089,6 +1231,9 @@ class SyncServiceImpl implements SyncService {
 
     _drainSyncQueue();
 
+    _periodicSyncTimer?.cancel();
+    _periodicSyncTimer = null;
+
     _logger.finer('stopping stats notification subscription');
     try {
       await _statsNotificationSubscription?.cancel();
@@ -1097,14 +1242,30 @@ class SyncServiceImpl implements SyncService {
           'Error while cancelling stats notification subscription: $e');
     }
 
-    _logger.finer('stopping cron');
-    try {
-      await _cron.close();
-    } catch (e) {
-      _logger.warning('Error while stopping cron: $e');
-    }
-
     removeAllProgressListeners();
+  }
+
+  /// Reverses a prior [stop]: re-subscribes to stats notifications and
+  /// allows new [sync] calls to fire again. Progress listeners removed
+  /// by [stop] are NOT restored — the caller must re-add them via
+  /// [addProgressListener]. The sync queue starts empty after restart
+  /// (it was drained on [stop]). Idempotent — calling [restart] when
+  /// not stopped is a no-op.
+  Future<void> start() async {
+    if (!isStopped) {
+      _logger.info('restart() called, but service is not stopped. Ignoring.');
+      return;
+    }
+    _logger.info('Restarting sync service for $currentAtSign');
+    isStopped = false;
+    // Re-subscribe to stats notifications. Note that any sync run that
+    // was in flight at the moment of stop() may still be on the call
+    // stack; its `finally` will set _processInProgress / _syncInProgress
+    // back to false on its own — restart() does not need to wait for
+    // it. New sync() calls after restart will queue normally and fire
+    // their microtask trigger as usual.
+    await statsServiceListener();
+    _startPeriodicSyncTimer();
   }
 
   void _drainSyncQueue() {

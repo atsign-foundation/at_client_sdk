@@ -4,3 +4,6 @@
 
 # Conventional directory for build output.
 build/
+
+# Local Claude Code guidance, kept out of git.
+CLAUDE.md

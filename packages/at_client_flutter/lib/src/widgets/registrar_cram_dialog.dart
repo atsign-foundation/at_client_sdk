@@ -129,10 +129,7 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
     return Center(
       child: RichText(
         text: TextSpan(
-          style: TextStyle(
-            fontSize: 14,
-            color: widget.themeData.primaryColor,
-          ),
+          style: TextStyle(fontSize: 14, color: widget.themeData.primaryColor),
           children: [
             const TextSpan(text: "Didn't receive a code? "),
             WidgetSpan(
@@ -164,9 +161,7 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       backgroundColor: Colors.white,
       child: Container(
         width: 360,
@@ -182,10 +177,7 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
                   onTap: () {
                     Navigator.of(context).pop();
                   },
-                  child: const Icon(
-                    Icons.arrow_back,
-                    size: 20,
-                  ),
+                  child: const Icon(Icons.arrow_back, size: 20),
                 ),
               ],
             ),
