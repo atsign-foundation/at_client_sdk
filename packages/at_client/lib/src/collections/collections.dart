@@ -3923,6 +3923,16 @@ final class CItem<T> {
     await _markReadByMeMutex.protect(() async {
       if (await wasMarkedReadByMe()) return;
       final rr = _collection.readReceiptsFor(this);
+      // Receipt id is the fixed string 'r'. Single-char is enough
+      // because there is only ever one receipt per (reader, item)
+      // pair and the owner half of the AtCollection (owner, id)
+      // identity already disambiguates per-reader: the same id 'r'
+      // from two readers (@alice and @charlie) lands at two distinct
+      // recipient-copy keys via their differing self-atSign suffixes
+      // (`<itemOwner>:r.__rr.<id>.<ns>@alice` vs `…@charlie`).
+      // Picking the shortest legible mnemonic ('r' for "receipt")
+      // also returns bytes to the 128-char composed-namespace
+      // budget that deeply-nested subCollection chains share.
       final receipt = rr.draft(
         obj: {'readAt': DateTime.now().toUtc().toIso8601String()},
         id: 'r',
