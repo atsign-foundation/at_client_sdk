@@ -95,7 +95,7 @@ Future<void> poll(
     progressSink.add('${DateTime.now().toString()} : Fetching');
 
     for (final pet in await pets.getItems()) {
-      progressSink.add('Fetched ${pets.prettyString(pet)}');
+      progressSink.add('Fetched ${pet.prettyString}');
     }
     await Future.delayed(Duration(seconds: 3));
   }

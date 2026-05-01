@@ -253,7 +253,7 @@ interface class AtCollection<T> {
 
   final Duration defaultExpiration;
 
-  late final AtSignLogger logger;
+  late final AtSignLogger _logger;
 
   // Internal event controller and derived streams.
   final StreamController<CEvent> _events = StreamController.broadcast();
@@ -358,7 +358,7 @@ interface class AtCollection<T> {
       registerFactory<T>(fromJson, typeTag: typeTag!);
     }
 
-    logger = AtSignLogger(' AtCollection<$T> $namespace ');
+    _logger = AtSignLogger(' AtCollection<$T> $namespace ');
 
     // TODO: namespace may contain periods - the regular expression should
     // escape those periods
@@ -1159,11 +1159,11 @@ interface class AtCollection<T> {
           }
           await atClient.delete(k);
         } catch (e) {
-          logger.shout('_cascadeFromParentDelete: $e');
+          _logger.shout('_cascadeFromParentDelete: $e');
         }
       }));
     } catch (e) {
-      logger.shout('_cascadeFromParentDelete scan: $e');
+      _logger.shout('_cascadeFromParentDelete scan: $e');
     }
   }
 
@@ -1411,7 +1411,7 @@ interface class AtCollection<T> {
     _notificationSubscription.pause();
     try {
       if (!_regexObjAny.hasMatch(n.key)) {
-        logger.shout('handleNotification: No handler for ${n.key}');
+        _logger.shout('handleNotification: No handler for ${n.key}');
         return;
       }
       final parts = _getPartsFromNotifKey(n);
@@ -1433,7 +1433,7 @@ interface class AtCollection<T> {
         await handleSubObjNotification(n);
       }
     } catch (e, st) {
-      logger.shout('handleNotification: $e\nStackTrace:\n$st');
+      _logger.shout('handleNotification: $e\nStackTrace:\n$st');
     } finally {
       _notificationSubscription.resume();
     }
@@ -1452,7 +1452,7 @@ interface class AtCollection<T> {
     atData.metaData!.expiresAt = n.metadata!.expiresAt;
     atData.metaData!.availableAt = n.metadata!.availableAt;
     atData.metaData!.isEncrypted = false;
-    logger.shout('Updating cached:${n.key}');
+    _logger.shout('Updating cached:${n.key}');
     await keyStore.put(
       'cached:${n.key}',
       atData,
@@ -1466,7 +1466,7 @@ interface class AtCollection<T> {
     }
     final keyStore = atClient.getLocalSecondary()?.keyStore;
     if (keyStore == null) return;
-    logger.shout('Deleting cached:${n.key}');
+    _logger.shout('Deleting cached:${n.key}');
     await keyStore.remove('cached:${n.key}', skipCommit: true);
   }
 
@@ -1481,7 +1481,7 @@ interface class AtCollection<T> {
       case 'delete':
         _events.add(CItemDeleted(owner: parts.from, id: parts.id));
       default:
-        logger.shout(
+        _logger.shout(
           'handleObjNotification: No handler for operation ${n.operation}',
         );
     }
@@ -1512,7 +1512,7 @@ interface class AtCollection<T> {
   Future<void> handleSubObjNotification(AtNotification n) async {
     final parts = _getPartsFromNotifKey(n);
     if (parts.ancestry.isEmpty) {
-      logger.shout('handleSubObjNotification: empty ancestry ${n.key}');
+      _logger.shout('handleSubObjNotification: empty ancestry ${n.key}');
       return;
     }
     final directParent = parts.ancestry.last;
@@ -1530,7 +1530,7 @@ interface class AtCollection<T> {
           final v = await atClient.get(k);
           parentOwners = _decodeParentOwners(_decodeEnvelope(v.value!, k));
         } catch (e) {
-          logger.warning(
+          _logger.warning(
             'handleSubObjNotification: envelope fetch for ${n.key} '
             'failed: $e — emitting with null ancestor owners',
           );
@@ -1561,7 +1561,7 @@ interface class AtCollection<T> {
           ancestry: parts.ancestry,
         ));
       default:
-        logger.shout(
+        _logger.shout(
           'handleSubObjNotification: No handler for operation ${n.operation}',
         );
     }
@@ -1835,24 +1835,6 @@ interface class AtCollection<T> {
     return ctrl.stream;
   }
 
-  // ---------------------------------------------------------------------------
-  // Debug helper
-
-  /// Returns a multi-line human-readable dump of [item] — useful for
-  /// example-app logging and debugging.
-  String prettyString(CItem<dynamic> item) {
-    final base = '${item.id}.$namespace${item.owner}'
-        '\n\tsharedWith: ${item.sharedWith}'
-        '\n\texpiresAt: ${item.expiresAt}'
-        '\n\tavailableAt: ${item.availableAt}'
-        '\n\ttype: ${item.type}'
-        '\n\truntimeType: ${item.obj.runtimeType}';
-    if (item.type == 'binary') {
-      return '$base\n\tlength: ${item.obj.length} bytes';
-    }
-    return '$base\n\tobj: ${item.obj}';
-  }
-
   // ===========================================================================
   // Internals
   // ===========================================================================
@@ -2037,7 +2019,7 @@ interface class AtCollection<T> {
       // factory; thereafter the silent cast still applies (dynamic /
       // Map<String, dynamic> consumers continue to work).
       if (type != 'n/a' && _warnedMissingFactoryTags.add(type)) {
-        logger.warning(
+        _logger.warning(
           'No factory registered for envelope type tag "$type" while '
           'rehydrating into $V. Falling back to a raw cast — typed '
           'access will fail. Register the factory with '
@@ -2233,7 +2215,7 @@ interface class AtCollection<T> {
         // Bad envelope / unreadable — err on the side of keeping the
         // candidate (so `prevent` fires rather than silently stranding
         // a malformed descendant). Cascade will try to delete it.
-        logger.warning('descendant envelope decode failed on ${k.key}: $e');
+        _logger.warning('descendant envelope decode failed on ${k.key}: $e');
         keep.add(k);
       }
     }
@@ -3481,7 +3463,7 @@ final class _CItemTimerScheduler<E extends CEvent, T> {
       try {
         emit(f.event);
       } catch (e, st) {
-        collection.logger.warning(
+        collection._logger.warning(
           '$label scheduler: emit threw for (${f.owner}, ${f.id}): $e\n$st',
         );
       }
@@ -3504,7 +3486,7 @@ final class _CItemTimerScheduler<E extends CEvent, T> {
       // Read failure on a single id — surface the fact to logs but
       // don't tear the scheduler down. The next event will retry
       // implicitly.
-      collection.logger.warning(
+      collection._logger.warning(
         '$label scheduler: getOrNull failed for ($owner, $id); '
         'item will not fire until a subsequent update succeeds',
       );
@@ -3738,7 +3720,7 @@ final class CItem<T> {
       // `wasMarkedReadByMe`).
       final rr = _collection.readReceiptsFor(this);
       final tolerant = rr.getItemsAsStream().handleError((Object e) {
-        _collection.logger.warning('readBy: skipping __rr decode error: $e');
+        _collection._logger.warning('readBy: skipping __rr decode error: $e');
       });
       await for (final receipt in tolerant) {
         readers.add(receipt.owner);
@@ -3833,6 +3815,24 @@ final class CollectionOpException implements Exception {
   String toString() =>
       'CollectionOpException with ${failures.length} failure(s):\n'
       '  ${failures.join('\n  ')}';
+}
+
+/// Multi-line human-readable dump of a [CItem] — useful for
+/// example-app logging and debugging. Reads at the call site as
+/// `item.prettyString`.
+extension CItemPrettyString on CItem<dynamic> {
+  String get prettyString {
+    final base = '$id.${_collection.namespace}$owner'
+        '\n\tsharedWith: $sharedWith'
+        '\n\texpiresAt: $expiresAt'
+        '\n\tavailableAt: $availableAt'
+        '\n\ttype: $type'
+        '\n\truntimeType: ${obj.runtimeType}';
+    if (type == 'binary') {
+      return '$base\n\tlength: ${obj.length} bytes';
+    }
+    return '$base\n\tobj: $obj';
+  }
 }
 
 // -----------------------------------------------------------------------------

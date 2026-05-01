@@ -139,7 +139,7 @@ Future<void> receiver(
   progressSink.add('${DateTime.now().toString()} : Fetching');
 
   for (final item in await generic.getItems()) {
-    String msg = 'Fetched ${generic.prettyString(item)}';
+    String msg = 'Fetched ${item.prettyString}';
     if (item.type == 'binary') {
       msg = '$msg : ${String.fromCharCodes(item.obj)}';
     }

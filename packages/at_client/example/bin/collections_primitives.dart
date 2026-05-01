@@ -105,7 +105,7 @@ Future<void> poll({
 
     final stringItems = await strings.getItems();
     for (final i in stringItems) {
-      progressSink.add('Fetched ${strings.prettyString(i)}');
+      progressSink.add('Fetched ${i.prettyString}');
     }
     await Future.delayed(Duration(seconds: 3));
   }
