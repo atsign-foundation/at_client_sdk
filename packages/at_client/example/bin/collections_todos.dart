@@ -1865,6 +1865,10 @@ class _TodosAppState extends State<TodosApp> {
             Text(todo.obj.description),
           ],
           const SizedBox(height: 1),
+          Text(
+            'Id       : ${todo.id}',
+            style: TextStyle(color: Colors.gray),
+          ),
           RichText(
             text: TextSpan(
               children: [
