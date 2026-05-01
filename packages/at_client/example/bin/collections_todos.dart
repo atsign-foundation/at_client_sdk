@@ -1506,7 +1506,14 @@ class _TodosAppState extends State<TodosApp> {
           decoration: BoxDecoration(
             border: BoxBorder.all(color: focused ? Colors.yellow : Colors.gray),
           ),
-          child: Text(focused ? '$value█' : value),
+          // The enclosing modal paints a black background; without an
+          // explicit foreground colour here, the input text falls
+          // through to the terminal's default fg — which on a black
+          // bg is invisible (or near-invisible) on most terminals.
+          child: Text(
+            focused ? '$value█' : value,
+            style: const TextStyle(color: Colors.white),
+          ),
         ),
       ],
     );
