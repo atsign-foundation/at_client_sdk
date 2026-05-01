@@ -127,7 +127,8 @@ await for (final e in todos.updates) {
 synchronously on the writing collection's event streams, so a UI
 using `Query.watch()` redraws immediately rather than waiting for
 the round-trip notification. The same event re-fires on the
-round-trip ~1–3 s later; `Query.watch`'s delta path is idempotent
+round-trip ~50–200 ms later (and ~10–30 ms excluding network
+transit once fsync ships); `Query.watch`'s delta path is idempotent
 so the second occurrence is invisible.
 
 `AtCollection<T>` executes reads on-device by default, against a

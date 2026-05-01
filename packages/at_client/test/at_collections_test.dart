@@ -1306,7 +1306,8 @@ void main() {
   // Local CEvent emission for in-process writes. Apps that watch
   // `updates` / `deletes` see the event synchronously after the
   // local put/delete succeeds rather than waiting for the round-
-  // trip notification (~1–3 s). The round-trip will re-fire the
+  // trip notification (~50-200 ms today, ~10-30 ms post-fsync
+  // excluding network). The round-trip will re-fire the
   // same event when it arrives — Query.watch's delta path is
   // idempotent so UIs redraw once; hand-listened streams see two
   // callbacks (documented).

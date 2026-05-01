@@ -748,7 +748,8 @@ void main() {
   // each ancestor collection's `subUpdates` / `subDeletes` streams
   // fire with the appropriate ancestry slice — matching the
   // round-trip notification path's shape but synchronously, so UIs
-  // don't wait 1–3 s after a local write.
+  // don't wait ~50-200 ms (or ~10-30 ms post-fsync) after a local
+  // write.
   group('local CEvent emission on sub-collection writes', () {
     test(
         'depth-1 sub-item create fires CItemUpdated on the sub-collection '

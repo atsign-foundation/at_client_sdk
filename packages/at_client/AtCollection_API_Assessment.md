@@ -105,9 +105,9 @@ Four facts about the Atsign Protocol that shape every decision in
    planned move to SQLite for end-user apps, pluggable RDBMS for
    backend services). By default, reads hit that local store; the
    `at_client` SDK keeps the cache current via a bidirectional sync
-   channel with the user's atServer. Current sync latency is ~1–3 s
-   end-to-end; the in-development "fsync" replacement drops that to
-   ~100 ms including network transit. Offline writes queue locally
+   channel with the user's atServer. Typical sync latency today is
+   ~50–200 ms end-to-end; the in-development "fsync" replacement
+   drops that to ~10–30 ms excluding network transit. Offline writes queue locally
    and flush on reconnect. (An `AtClientPreference.remoteLocalPref`
    setting can route individual fetches at the remote atServer
    instead — an escape hatch for edge cases. Once fsync is generally
@@ -1041,7 +1041,7 @@ writing collection's `_events` controller. Sub-collection writes
 also fire `CSubItemUpdated` / `CSubItemDeleted` on every ancestor
 collection's `_events`, with `ancestry` slices matching what the
 notification path produces on round-trip. Closes the
-"UI redraws 1–3 s after I tap save" anti-feature on Flutter
+"UI redraws hundreds of ms after I tap save" anti-feature on Flutter
 apps that use `Query.watch`. Each event fires twice for
 in-process writes (once locally, once on round-trip);
 `Query.watch`'s delta path is idempotent so this is invisible to

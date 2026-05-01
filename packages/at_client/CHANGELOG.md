@@ -151,7 +151,8 @@ findings closed and post-stable work deferred.
   collection's controller (with correctly-sliced `ancestry`
   matching the round-trip notification path's shape). UIs that
   use `Query.watch` redraw immediately after a local write
-  rather than waiting 1–3 s for the round-trip notification.
+  rather than waiting ~50–200 ms (or ~10–30 ms excluding network
+  transit, once fsync ships) for the round-trip notification.
   Bonus: locally-emitted `CSubItemDeleted` carries fully-
   populated `ancestry.owner` values — stricter than the round-
   trip path which always sets owners to null on delete events

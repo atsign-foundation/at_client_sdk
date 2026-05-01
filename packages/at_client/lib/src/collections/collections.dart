@@ -2106,7 +2106,9 @@ interface class AtCollection<T> {
       _seenSelfIds.add(item.id);
       // Local CEvent emission so apps using Query.watch / hand-
       // listened streams see the update synchronously after the
-      // local put rather than waiting 1–3 s for the round-trip.
+      // local put rather than waiting ~50-200 ms (or ~10-30 ms
+      // excluding network transit, once fsync ships) for the
+      // round-trip notification.
       // The round-trip notification will re-emit the same event
       // when it arrives — Query.watch's delta path is idempotent
       // so UIs redraw once. Hand-listened streams see two
@@ -2974,9 +2976,10 @@ final class Query<T> {
   /// Two reasons this is still deferred:
   ///   1. **Justification today is weak.** Reads are local-first;
   ///      a "full refetch" is a Hive scan, not a network call.
-  ///      Events arrive at the ~1-3 s sync cadence (or fsync's
-  ///      ~100 ms once that ships), so even a UI showing a
-  ///      `limit=20` window isn't doing much work per event.
+  ///      Events arrive at ~50-200 ms today (and ~10-30 ms
+  ///      excluding network transit once fsync ships), so even a
+  ///      UI showing a `limit=20` window isn't doing much work
+  ///      per event.
   ///   2. **SQLite migration may make it moot.** When the local
   ///      store moves to SQLite with JSON-field indexes (see
   ///      `AtCollection_API_Assessment.md` §1a), a sort+limit

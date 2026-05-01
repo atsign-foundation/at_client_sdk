@@ -109,7 +109,8 @@ To see live sharing:
 2. Run the app on Device B (or the same device with a different
    build target), log in as `@bob`.
 3. On A: create a todo with `sharedWith: {@bob}`. On B: it appears
-   within ~1–3 s (sync interval).
+   within ~50–200 ms (and ~10–30 ms excluding network transit
+   once fsync ships).
 4. On B: tap the todo to mark it read; on A you'll see `@bob`'s
    read receipt show up live in the detail panel.
 5. Edit / delete on either side; the other syncs.
