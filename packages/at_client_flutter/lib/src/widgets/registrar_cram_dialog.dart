@@ -119,9 +119,9 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
       setState(() {
         _isLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error verifying OTP: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error verifying OTP: $e')));
     }
   }
 
@@ -232,7 +232,7 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
                 const itemGap = 12.0;
                 final idealSize =
                     (constraints.maxWidth - ((otpCount - 1) * itemGap)) /
-                        otpCount;
+                    otpCount;
                 final otpSize = idealSize.clamp(52.0, 56.0).toDouble();
                 final viewportWidth = constraints.maxWidth;
 
