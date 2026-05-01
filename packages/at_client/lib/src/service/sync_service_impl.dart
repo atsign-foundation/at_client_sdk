@@ -432,7 +432,7 @@ class SyncServiceImpl implements SyncService {
         ..atClientException = AtClientException(
           error_codes['AtClientException'],
           'Sync request evicted: queue at capacity ($queueSize); '
-              'superseded by a newer sync request',
+          'superseded by a newer sync request',
         );
       _safeInvokeOnError(evicted);
     }
@@ -479,7 +479,7 @@ class SyncServiceImpl implements SyncService {
     final exception = AtClientException(
       error_codes['AtClientException'],
       'Sync request superseded by a coalesced sync run that just '
-          'completed',
+      'completed',
     );
     while (syncRequests.isNotEmpty) {
       final r = syncRequests.removeFirst();

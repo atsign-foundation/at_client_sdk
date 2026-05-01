@@ -448,16 +448,10 @@ class _TodosAppState extends State<TodosApp> {
         children: [
           Text(
             'Terminal too small',
-            style: TextStyle(
-              color: Colors.yellow,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: Colors.yellow, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 1),
-          Text(
-            'Current: ${cols}x$rows',
-            style: TextStyle(color: Colors.gray),
-          ),
+          Text('Current: ${cols}x$rows', style: TextStyle(color: Colors.gray)),
           Text(
             'Minimum: ${_minCols}x$_minRows',
             style: TextStyle(color: Colors.gray),
@@ -1747,11 +1741,8 @@ class _TodosAppState extends State<TodosApp> {
       child:
           todos.isEmpty
               ? const Center(
-                  child: Text(
-                    '(no todos)',
-                    style: TextStyle(color: Colors.gray),
-                  ),
-                )
+                child: Text('(no todos)', style: TextStyle(color: Colors.gray)),
+              )
               : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1781,11 +1772,12 @@ class _TodosAppState extends State<TodosApp> {
     // without an explicit foreground rendered illegibly on it on
     // common terminal themes. The current values are mid-luminance
     // blues that read against both light and dark default fg.
-    final rowBg = selected
-        ? (listFocused
-            ? const Color.fromRGB(20, 60, 130)
-            : const Color.fromRGB(60, 60, 70))
-        : null;
+    final rowBg =
+        selected
+            ? (listFocused
+                ? const Color.fromRGB(20, 60, 130)
+                : const Color.fromRGB(60, 60, 70))
+            : null;
     final weight = selected ? FontWeight.bold : FontWeight.normal;
     final done = todo.obj.done;
     // Every TextSpan below carries an explicit color — without one,
@@ -1797,10 +1789,7 @@ class _TodosAppState extends State<TodosApp> {
     final checkColor = done ? Colors.green : Colors.white;
     final titleColor = done ? Colors.gray : Colors.white;
     final dimColor = Colors.gray;
-    final titleStyle = TextStyle(
-      fontWeight: weight,
-      color: titleColor,
-    );
+    final titleStyle = TextStyle(fontWeight: weight, color: titleColor);
     return Container(
       color: rowBg,
       padding: const EdgeInsets.symmetric(horizontal: 1),
@@ -1865,10 +1854,7 @@ class _TodosAppState extends State<TodosApp> {
             Text(todo.obj.description),
           ],
           const SizedBox(height: 1),
-          Text(
-            'Id       : ${todo.id}',
-            style: TextStyle(color: Colors.gray),
-          ),
+          Text('Id       : ${todo.id}', style: TextStyle(color: Colors.gray)),
           RichText(
             text: TextSpan(
               children: [
@@ -1946,10 +1932,7 @@ class _TodosAppState extends State<TodosApp> {
                     text: '${n.owner}',
                     style: _theme.styleForAtSign(n.owner),
                   ),
-                  TextSpan(
-                    text: '] ',
-                    style: TextStyle(color: Colors.gray),
-                  ),
+                  TextSpan(text: '] ', style: TextStyle(color: Colors.gray)),
                   TextSpan(
                     text: '${_fmtDateTime(n.createdAt)}  ',
                     style: TextStyle(color: Colors.gray),
@@ -2009,10 +1992,7 @@ class _TodosAppState extends State<TodosApp> {
         children: [
           Text(
             'Log',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
           for (final line in tail)
             Text(line, style: TextStyle(color: Colors.gray)),

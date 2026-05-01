@@ -2851,8 +2851,8 @@ final class Query<T> {
     //   childSubs[parentKey][subName] = stream subscription on that
     //     sub-collection's recursive watchWithTree (one entry per spec).
     //   childLatest[parentKey][subName] = latest emitted children list.
-    final childSubs = <String, Map<String,
-        StreamSubscription<List<TreeNode<dynamic>>>>>{};
+    final childSubs =
+        <String, Map<String, StreamSubscription<List<TreeNode<dynamic>>>>>{};
     final childLatest = <String, Map<String, List<TreeNode<dynamic>>>>{};
     List<CItem<T>> latestParents = const [];
     late final StreamController<List<TreeNode<T>>> ctrl;
@@ -3064,8 +3064,7 @@ final class Query<T> {
         return refresh();
       }
       if (controller.isClosed) return;
-      final idx =
-          cache!.indexWhere((c) => c.id == id && c.owner == owner);
+      final idx = cache!.indexWhere((c) => c.id == id && c.owner == owner);
       final wasInCache = idx >= 0;
       // `fresh == null` here means the item was deleted between the
       // event and the per-item read — treat as a delete, not a
@@ -3094,8 +3093,7 @@ final class Query<T> {
         return refresh();
       }
       if (controller.isClosed) return;
-      final idx =
-          cache!.indexWhere((c) => c.id == id && c.owner == owner);
+      final idx = cache!.indexWhere((c) => c.id == id && c.owner == owner);
       if (idx < 0) return; // not in result set, nothing to emit
       cache!.removeAt(idx);
       if (!controller.isClosed) {
@@ -3202,17 +3200,14 @@ final class PathField<V> {
   const PathField({required this.path, required this.extract});
 
   /// `field == value`.
-  Predicate eq(V value) =>
-      CmpPredicate._(this, PredicateOp.eq, value);
+  Predicate eq(V value) => CmpPredicate._(this, PredicateOp.eq, value);
 
   /// `field != value`.
-  Predicate neq(V value) =>
-      CmpPredicate._(this, PredicateOp.neq, value);
+  Predicate neq(V value) => CmpPredicate._(this, PredicateOp.neq, value);
 }
 
 /// `<`, `<=`, `>`, `>=` for fields whose value is [Comparable].
-extension ComparablePathField<V extends Comparable<dynamic>>
-    on PathField<V> {
+extension ComparablePathField<V extends Comparable<dynamic>> on PathField<V> {
   Predicate lt(V value) => CmpPredicate._(this, PredicateOp.lt, value);
   Predicate lte(V value) => CmpPredicate._(this, PredicateOp.lte, value);
   Predicate gt(V value) => CmpPredicate._(this, PredicateOp.gt, value);
@@ -3223,8 +3218,7 @@ extension ComparablePathField<V extends Comparable<dynamic>>
 /// Declare the field as `PathField<Foo?>` to opt in.
 extension NullablePathField<V extends Object> on PathField<V?> {
   Predicate get isNull => CmpPredicate._(this, PredicateOp.isNull, null);
-  Predicate get isNotNull =>
-      CmpPredicate._(this, PredicateOp.isNotNull, null);
+  Predicate get isNotNull => CmpPredicate._(this, PredicateOp.isNotNull, null);
 }
 
 /// Comparison operator carried by a [CmpPredicate]. Stored as a value
@@ -3356,8 +3350,7 @@ final class AndPredicate extends Predicate {
   AndPredicate(this.children);
 
   @override
-  bool evaluate(CItem<dynamic> item) =>
-      children.every((p) => p.evaluate(item));
+  bool evaluate(CItem<dynamic> item) => children.every((p) => p.evaluate(item));
 }
 
 /// Disjunction. At least one child must hold. Flattens via
@@ -3368,8 +3361,7 @@ final class OrPredicate extends Predicate {
   OrPredicate(this.children);
 
   @override
-  bool evaluate(CItem<dynamic> item) =>
-      children.any((p) => p.evaluate(item));
+  bool evaluate(CItem<dynamic> item) => children.any((p) => p.evaluate(item));
 }
 
 /// Negation. Double-negation collapses via [Predicate.not].
@@ -3388,6 +3380,7 @@ final class NotPredicate extends Predicate {
 /// the rest in memory.
 final class _QuerySpec<T> {
   final List<bool Function(CItem<T>)> predicates;
+
   /// Typed-AST predicates (parallel to [predicates]). Both lists are
   /// AND'd together at evaluation time. The library currently
   /// evaluates these in memory; introspection is enabled for a future
@@ -3585,9 +3578,7 @@ final class _CItemTimerScheduler<E extends CEvent, T> {
     if (fireAt == null) return;
     // Past timestamps fire on the next event-loop turn so the
     // listener doesn't silently miss them.
-    final clamped = fireAt.isAfter(DateTime.now())
-        ? fireAt
-        : DateTime.now();
+    final clamped = fireAt.isAfter(DateTime.now()) ? fireAt : DateTime.now();
     final firing = _Firing<E>(clamped, item.owner, item.id, makeEvent(item));
     _insertSorted(firing);
   }

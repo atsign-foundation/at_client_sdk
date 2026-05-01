@@ -701,8 +701,7 @@ void main() {
       final replyKey = AtKey.fromString(
         'r1.replies.c1.comments.p1.$parentNs$selfAtSignStr',
       );
-      final postKey =
-          AtKey.fromString('p1.$parentNs$selfAtSignStr');
+      final postKey = AtKey.fromString('p1.$parentNs$selfAtSignStr');
       // getKeys() (root-level scan) returns the root post.
       // descendant scan returns the orphaned reply.
       // alive-at-mid-namespace scan returns no comments.
@@ -755,8 +754,7 @@ void main() {
         'depth-1 sub-item create fires CItemUpdated on the sub-collection '
         'AND CSubItemUpdated on the parent with 1-link ancestry', () async {
       final c = buildParent();
-      when(() => c.atClient.put(any(), any()))
-          .thenAnswer((_) async => true);
+      when(() => c.atClient.put(any(), any())).thenAnswer((_) async => true);
       when(() => c.atClient.get(any())).thenThrow(Exception('no such key'));
       when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
           .thenAnswer((_) async => <AtKey>[]);
@@ -792,11 +790,9 @@ void main() {
 
     test(
         'depth-2 sub-sub-item create fires CSubItemUpdated on BOTH the '
-        'depth-1 ancestor (1-link) AND the depth-0 root (2-link)',
-        () async {
+        'depth-1 ancestor (1-link) AND the depth-0 root (2-link)', () async {
       final c = buildParent();
-      when(() => c.atClient.put(any(), any()))
-          .thenAnswer((_) async => true);
+      when(() => c.atClient.put(any(), any())).thenAnswer((_) async => true);
       when(() => c.atClient.get(any())).thenThrow(Exception('no such key'));
       when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
           .thenAnswer((_) async => <AtKey>[]);
@@ -858,15 +854,12 @@ void main() {
       // envelope is gone — so this is strictly more information than
       // the notification path provides.
       final c = buildParent();
-      when(() => c.atClient.put(any(), any()))
-          .thenAnswer((_) async => true);
-      when(() => c.atClient.delete(any()))
-          .thenAnswer((_) async => true);
+      when(() => c.atClient.put(any(), any())).thenAnswer((_) async => true);
+      when(() => c.atClient.delete(any())).thenAnswer((_) async => true);
       when(() => c.atClient.get(any())).thenThrow(Exception('no such key'));
       // Self-key+recipients scan for c1: returns the self-key.
       // Descendants scan for c1: returns [].
-      final c1Key =
-          AtKey.fromString('c1.comments.p1.$parentNs$selfAtSignStr');
+      final c1Key = AtKey.fromString('c1.comments.p1.$parentNs$selfAtSignStr');
       when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
           .thenAnswer((inv) async {
         final regex = inv.namedArguments[#regex] as String;

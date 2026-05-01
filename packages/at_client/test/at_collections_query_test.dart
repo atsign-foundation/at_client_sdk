@@ -381,8 +381,7 @@ void main() {
         'a': Task('alpha', done: false, due: d1),
         'b': Task('bravo', done: true, due: d2),
       });
-      final result =
-          await c.query().wherePath($Task.done.eq(true).not).get();
+      final result = await c.query().wherePath($Task.done.eq(true).not).get();
       expect(result.map((i) => i.id), ['a']);
     });
 
@@ -430,8 +429,7 @@ void main() {
       expect(p.not.not, same(p));
     });
 
-    test('CmpPredicate exposes its field, op, and value for introspection',
-        () {
+    test('CmpPredicate exposes its field, op, and value for introspection', () {
       final p = $Task.done.eq(true);
       expect(p, isA<CmpPredicate>());
       final cmp = p as CmpPredicate;
@@ -932,8 +930,7 @@ void main() {
       expect(q, isNotNull);
       // Sub-collection's namespace is the `__rr` form scoped to the
       // parent item id + owner.
-      expect(
-          receipts.namespace, contains(readReceiptNamespacePart));
+      expect(receipts.namespace, contains(readReceiptNamespacePart));
       expect(receipts.namespace, contains(item.id));
     });
 
@@ -1005,8 +1002,7 @@ void main() {
 
   // ---------------------------------------------------------------------------
   group('distinct()', () {
-    test('keeps first item per keyFn output, drops later duplicates',
-        () async {
+    test('keeps first item per keyFn output, drops later duplicates', () async {
       final c = buildCollection();
       seed({
         'a': Task('alpha', done: false, due: d1),

@@ -37,8 +37,7 @@ class Reply {
   final String body;
   Reply(this.body);
   Map<String, dynamic> toJson() => {'body': body};
-  factory Reply.fromJson(Map<String, dynamic> j) =>
-      Reply(j['body'] as String);
+  factory Reply.fromJson(Map<String, dynamic> j) => Reply(j['body'] as String);
 }
 
 void main() {
@@ -155,8 +154,7 @@ void main() {
       seedComment('p1', 'c1', 'hello');
       seedComment('p1', 'c2', 'world');
 
-      final snapshots =
-          <List<WithChildren<Post, Comment>>>[];
+      final snapshots = <List<WithChildren<Post, Comment>>>[];
       final sub = posts
           .query()
           .watchWithSub<Comment>(
@@ -180,8 +178,7 @@ void main() {
     test('child arrival re-emits with the added child', () async {
       final posts = buildPosts();
       seedPost('p1', 'first');
-      final snapshots =
-          <List<WithChildren<Post, Comment>>>[];
+      final snapshots = <List<WithChildren<Post, Comment>>>[];
       final sub = posts
           .query()
           .watchWithSub<Comment>(
@@ -217,8 +214,7 @@ void main() {
       seedPost('p1', 'first');
       seedPost('p2', 'second');
       seedComment('p1', 'c1', 'hello');
-      final snapshots =
-          <List<WithChildren<Post, Comment>>>[];
+      final snapshots = <List<WithChildren<Post, Comment>>>[];
       final sub = posts
           .query()
           .watchWithSub<Comment>(
@@ -258,8 +254,7 @@ void main() {
       seedPost('p2', 'second');
       seedComment('p1', 'c1', 'hello');
       seedComment('p2', 'c9', 'other');
-      final snapshots =
-          <List<WithChildren<Post, Comment>>>[];
+      final snapshots = <List<WithChildren<Post, Comment>>>[];
       final sub = posts
           .query()
           .watchWithSub<Comment>(
@@ -310,8 +305,7 @@ void main() {
       final posts = buildPosts();
       seedPost('p1', 'first');
       seedPost('p2', 'second');
-      final snapshots =
-          <List<WithChildren<Post, Comment>>>[];
+      final snapshots = <List<WithChildren<Post, Comment>>>[];
       final sub = posts
           .query()
           .watchWithSub<Comment>(
@@ -355,25 +349,22 @@ void main() {
       seedReply('p1', 'c1', 'r2', 'agree');
 
       final snapshots = <List<TreeNode<Post>>>[];
-      final sub = posts
-          .query()
-          .watchWithTree([
-            SubSpec<Comment>(
-              subName: 'comments',
+      final sub = posts.query().watchWithTree([
+        SubSpec<Comment>(
+          subName: 'comments',
+          subDefaultExpiration: const Duration(days: 7),
+          subFromJson: Comment.fromJson,
+          subTypeTag: 'Comment',
+          children: [
+            SubSpec<Reply>(
+              subName: 'replies',
               subDefaultExpiration: const Duration(days: 7),
-              subFromJson: Comment.fromJson,
-              subTypeTag: 'Comment',
-              children: [
-                SubSpec<Reply>(
-                  subName: 'replies',
-                  subDefaultExpiration: const Duration(days: 7),
-                  subFromJson: Reply.fromJson,
-                  subTypeTag: 'Reply',
-                ),
-              ],
+              subFromJson: Reply.fromJson,
+              subTypeTag: 'Reply',
             ),
-          ])
-          .listen(snapshots.add);
+          ],
+        ),
+      ]).listen(snapshots.add);
       await pump();
       // Last snapshot has p1 with one comment c1 with two replies.
       final last = snapshots.last;
@@ -391,31 +382,27 @@ void main() {
       await sub.cancel();
     });
 
-    test('grandchild arrival re-emits with the new reply included',
-        () async {
+    test('grandchild arrival re-emits with the new reply included', () async {
       final posts = buildPosts();
       seedPost('p1', 'first');
       seedComment('p1', 'c1', 'hello');
       final snapshots = <List<TreeNode<Post>>>[];
-      final sub = posts
-          .query()
-          .watchWithTree([
-            SubSpec<Comment>(
-              subName: 'comments',
+      final sub = posts.query().watchWithTree([
+        SubSpec<Comment>(
+          subName: 'comments',
+          subDefaultExpiration: const Duration(days: 7),
+          subFromJson: Comment.fromJson,
+          subTypeTag: 'Comment',
+          children: [
+            SubSpec<Reply>(
+              subName: 'replies',
               subDefaultExpiration: const Duration(days: 7),
-              subFromJson: Comment.fromJson,
-              subTypeTag: 'Comment',
-              children: [
-                SubSpec<Reply>(
-                  subName: 'replies',
-                  subDefaultExpiration: const Duration(days: 7),
-                  subFromJson: Reply.fromJson,
-                  subTypeTag: 'Reply',
-                ),
-              ],
+              subFromJson: Reply.fromJson,
+              subTypeTag: 'Reply',
             ),
-          ])
-          .listen(snapshots.add);
+          ],
+        ),
+      ]).listen(snapshots.add);
       await pump();
       // No replies initially.
       expect(
@@ -448,25 +435,22 @@ void main() {
       seedComment('p1', 'c1', 'hello');
       seedReply('p1', 'c1', 'r1', 'thanks');
       final snapshots = <List<TreeNode<Post>>>[];
-      final sub = posts
-          .query()
-          .watchWithTree([
-            SubSpec<Comment>(
-              subName: 'comments',
+      final sub = posts.query().watchWithTree([
+        SubSpec<Comment>(
+          subName: 'comments',
+          subDefaultExpiration: const Duration(days: 7),
+          subFromJson: Comment.fromJson,
+          subTypeTag: 'Comment',
+          children: [
+            SubSpec<Reply>(
+              subName: 'replies',
               subDefaultExpiration: const Duration(days: 7),
-              subFromJson: Comment.fromJson,
-              subTypeTag: 'Comment',
-              children: [
-                SubSpec<Reply>(
-                  subName: 'replies',
-                  subDefaultExpiration: const Duration(days: 7),
-                  subFromJson: Reply.fromJson,
-                  subTypeTag: 'Reply',
-                ),
-              ],
+              subFromJson: Reply.fromJson,
+              subTypeTag: 'Reply',
             ),
-          ])
-          .listen(snapshots.add);
+          ],
+        ),
+      ]).listen(snapshots.add);
       await pump();
       expect(snapshots.last, hasLength(1));
 

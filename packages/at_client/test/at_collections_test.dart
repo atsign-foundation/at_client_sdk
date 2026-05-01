@@ -246,8 +246,7 @@ void main() {
       );
     });
 
-    test('rejects re-registering the same Type under a different typeTag',
-        () {
+    test('rejects re-registering the same Type under a different typeTag', () {
       clearFactoriesForTest();
       AtCollection.registerFactory<Widget>(Widget.fromJson, typeTag: 'Widget');
       expect(
@@ -263,8 +262,7 @@ void main() {
       );
     });
 
-    test('rejects registering a typeTag already bound to a different Type',
-        () {
+    test('rejects registering a typeTag already bound to a different Type', () {
       clearFactoriesForTest();
       AtCollection.registerFactory<Widget>(Widget.fromJson, typeTag: 'Shared');
       expect(
@@ -280,8 +278,7 @@ void main() {
       );
     });
 
-    test(
-        'AtCollection ctor: fromJson without typeTag throws ArgumentError',
+    test('AtCollection ctor: fromJson without typeTag throws ArgumentError',
         () {
       clearFactoriesForTest();
       expect(
@@ -290,8 +287,7 @@ void main() {
       );
     });
 
-    test(
-        'AtCollection ctor: typeTag without fromJson throws ArgumentError',
+    test('AtCollection ctor: typeTag without fromJson throws ArgumentError',
         () {
       clearFactoriesForTest();
       expect(
@@ -528,8 +524,7 @@ void main() {
       verifyNever(() => atClient.get(any()));
     });
 
-    test(
-        'delete drops the cached id so a subsequent update re-probes',
+    test('delete drops the cached id so a subsequent update re-probes',
         () async {
       // Round-trip: create → delete → update should NOT pass the
       // existence probe (since the item is now gone). Verifies the
@@ -543,8 +538,7 @@ void main() {
       //   - self-key+recipients scan: `(^|:)cached-2\.<ns>@`
       //     → must return [selfKey].
       // Distinguish by the `.+\.` prefix.
-      final selfKey =
-          AtKey.fromString('cached-2.$namespace$selfAtSignStr');
+      final selfKey = AtKey.fromString('cached-2.$namespace$selfAtSignStr');
       when(
         () => atClient.getAtKeys(regex: any(named: 'regex')),
       ).thenAnswer((inv) async {
@@ -559,7 +553,6 @@ void main() {
       // and find the key absent → StateError.
       await expectLater(c.update(item), throwsStateError);
     });
-
   });
 
   // ---------------------------------------------------------------------------
@@ -1437,9 +1430,7 @@ void main() {
       ).called(1);
     });
 
-    test(
-        'markReadByMe writes ONLY the recipient copy, no self copy',
-        () async {
+    test('markReadByMe writes ONLY the recipient copy, no self copy', () async {
       // AtKey lowercases ids → 'idm'.
       final bobKey = AtKey.fromString('idm.$namespace$bobStr');
       when(
@@ -1477,9 +1468,7 @@ void main() {
       // recipient form sharedWith bob. A self-key for the receipt
       // (`r.__rr.idm....@<self>`) would be storage waste because
       // the writer never reads their own receipts back.
-      final receiptWrites = strings
-          .where((s) => s.contains('__rr'))
-          .toList();
+      final receiptWrites = strings.where((s) => s.contains('__rr')).toList();
       expect(receiptWrites, hasLength(1));
       expect(receiptWrites.single.startsWith('$bobStr:'), isTrue,
           reason: 'receipt copy shared with bob');
@@ -1593,8 +1582,7 @@ void main() {
 
     test('fires leadTime before expiresAt', () async {
       // expiresAt at +120ms, leadTime 80ms → fire at +40ms.
-      final expiresAt =
-          DateTime.now().add(const Duration(milliseconds: 120));
+      final expiresAt = DateTime.now().add(const Duration(milliseconds: 120));
       final selfKey = AtKey.fromString('exp1.$namespace$selfAtSignStr');
       when(() => atClient.getAtKeys(regex: any(named: 'regex')))
           .thenAnswer((_) async => [selfKey]);
@@ -1628,8 +1616,7 @@ void main() {
         () async {
       // expiresAt 100ms ahead, leadTime 200ms → fire-at is 100ms in
       // the past at subscription. Should fire promptly.
-      final expiresAt =
-          DateTime.now().add(const Duration(milliseconds: 100));
+      final expiresAt = DateTime.now().add(const Duration(milliseconds: 100));
       final selfKey = AtKey.fromString('exp2.$namespace$selfAtSignStr');
       when(() => atClient.getAtKeys(regex: any(named: 'regex')))
           .thenAnswer((_) async => [selfKey]);
@@ -1652,8 +1639,7 @@ void main() {
     });
 
     test('cancellation tears the scheduler down', () async {
-      final expiresAt =
-          DateTime.now().add(const Duration(milliseconds: 200));
+      final expiresAt = DateTime.now().add(const Duration(milliseconds: 200));
       final selfKey = AtKey.fromString('exp3.$namespace$selfAtSignStr');
       when(() => atClient.getAtKeys(regex: any(named: 'regex')))
           .thenAnswer((_) async => [selfKey]);
@@ -1678,8 +1664,7 @@ void main() {
     });
 
     test('a delete unregisters the firing', () async {
-      final expiresAt =
-          DateTime.now().add(const Duration(milliseconds: 150));
+      final expiresAt = DateTime.now().add(const Duration(milliseconds: 150));
       final selfKey = AtKey.fromString('exp4.$namespace$selfAtSignStr');
       when(() => atClient.getAtKeys(regex: any(named: 'regex')))
           .thenAnswer((_) async => [selfKey]);
