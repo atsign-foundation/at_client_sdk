@@ -29,11 +29,11 @@ part 'collections_test_hooks.dart';
 /// for all CRUD, sub-collection, event-stream, and read-receipt
 /// operations on that namespace.
 ///
-/// **NOTE:**
-/// Intended as the new standard way to manage CRUD operations. Marked
-/// as `@experimental` for this release since it is the first release - i.e.
-/// there _may_ be some breaking changes in the next minor version(s) if we get
-/// feedback which leads to change of any major design decisions.
+/// **Status:** stable. The API surface is committed to non-breaking
+/// minor changes — `interface class` modifier, `final` event
+/// subclasses, named-class return types, and pre-allocated enum
+/// slack are in place so additive evolution stays compatible.
+/// Behavioural improvements continue to land in minor releases.
 ///
 /// **Obtain one via [AtClient.collection]**, never directly:
 ///
@@ -206,7 +206,6 @@ part 'collections_test_hooks.dart';
 /// `await for` without an `onError` handler will throw on the first
 /// bad key. Apps that want the old silent-skip posture should chain
 /// `.handleError(...)` before consuming the stream.
-@experimental
 interface class AtCollection<T> {
   static const String _rr = '__rr';
 
@@ -2297,7 +2296,6 @@ interface class AtCollection<T> {
 ///   ],
 /// );
 /// ```
-@experimental
 final class SubSpec<U> {
   final String subName;
   final Duration subDefaultExpiration;
@@ -2348,7 +2346,6 @@ final class SubSpec<U> {
 /// thread the per-level generic parameter through a heterogeneous
 /// recursive structure without codegen. App code that knows the
 /// topology can `branches['comments']!.cast<TreeNode<Comment>>()`.
-@experimental
 final class TreeNode<T> {
   final CItem<T> parent;
   final Map<String, List<TreeNode<dynamic>>> branches;
@@ -2363,7 +2360,6 @@ final class TreeNode<T> {
 /// Equivalent to a `(parent, children)` record but a named class so
 /// the SDK can add fields in future minor versions without breaking
 /// destructuring code at consumer sites.
-@experimental
 final class WithChildren<P, C> {
   final CItem<P> parent;
   final List<CItem<C>> children;
@@ -2413,7 +2409,6 @@ final class WithChildren<P, C> {
 /// For ad-hoc stream pipelines outside this builder's vocabulary, use
 /// [AtCollection.getItemsAsStream] directly with Dart's stream
 /// transformers. [Query] complements that path; it does not replace it.
-@experimental
 final class Query<T> {
   final AtCollection<T> _collection;
   final _QuerySpec<T> _spec;
@@ -3080,9 +3075,9 @@ final class Query<T> {
 // Shape: [PathField] is a typed accessor (path + extractor). Operators
 // on [PathField] mint [Predicate] nodes ([CmpPredicate]); combinators
 // on [Predicate] ([AndPredicate], [OrPredicate], [NotPredicate])
-// compose them. The whole thing is `@experimental` and `final` rather
-// than `sealed` so new node types can land in minor versions without
-// breaking downstream `is` chains.
+// compose them. Concrete leaves and combinators are `final class`
+// rather than `sealed` so new node types can land in minor versions
+// without breaking downstream `is` chains.
 
 /// A typed, introspectable accessor for one field on a [CItem<T>].
 /// Pair with [Query.wherePath] / [PathField.eq] etc. to build a
@@ -3116,7 +3111,6 @@ final class Query<T> {
 ///
 /// [extract] is the live evaluator. It is called once per item per
 /// predicate eval; keep it allocation-free where possible.
-@experimental
 final class PathField<V> {
   final List<String> path;
   final V Function(CItem<dynamic> item) extract;
@@ -3162,7 +3156,6 @@ extension NullablePathField<V extends Object> on PathField<V?> {
 /// shape (which would force user `switch` statements to refactor).
 /// Apps that pattern-match on [PredicateOp] should always include a
 /// `default:` branch.
-@experimental
 enum PredicateOp {
   eq,
   neq,
@@ -3188,7 +3181,6 @@ enum PredicateOp {
 /// translate eligible leaf nodes into `WHERE` clauses backed by JSON-
 /// path indexes. Until that landing, all evaluation is in memory and
 /// behaviourally identical to a closure passed to [Query.where].
-@experimental
 abstract class Predicate {
   /// Evaluates this predicate against [item]. Implementations should
   /// be allocation-free and side-effect-free.
@@ -3221,7 +3213,6 @@ abstract class Predicate {
 /// Leaf comparison predicate produced by [PathField] operators.
 /// Carries the field, op, and value publicly so a future indexed
 /// executor can pattern-match.
-@experimental
 final class CmpPredicate extends Predicate {
   final PathField<dynamic> field;
   final PredicateOp op;
@@ -3275,7 +3266,6 @@ final class CmpPredicate extends Predicate {
 
 /// Conjunction. All children must hold. Flattens on construction via
 /// [Predicate.and] so chains don't build a left-leaning tree.
-@experimental
 final class AndPredicate extends Predicate {
   final List<Predicate> children;
 
@@ -3288,7 +3278,6 @@ final class AndPredicate extends Predicate {
 
 /// Disjunction. At least one child must hold. Flattens via
 /// [Predicate.or].
-@experimental
 final class OrPredicate extends Predicate {
   final List<Predicate> children;
 
@@ -3300,7 +3289,6 @@ final class OrPredicate extends Predicate {
 }
 
 /// Negation. Double-negation collapses via [Predicate.not].
-@experimental
 final class NotPredicate extends Predicate {
   final Predicate inner;
 

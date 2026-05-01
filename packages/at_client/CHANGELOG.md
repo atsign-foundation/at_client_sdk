@@ -2,12 +2,20 @@
 
 Several significant enhancements to the API to make it much easier to use.
 
-**Pre-stable readiness sweep** (2026-04-29) — drops `@experimental`
-from the AtCollection<T> surface. Tightens class modifiers, removes
-record-typed return values, and pre-allocates evolution slack so
-the next minor releases stay non-breaking. See
+**Pre-stable readiness sweep** (2026-04-29) — `AtCollection<T>` is
+no longer `@experimental`. The pre-stable plan tightened class
+modifiers, removed record-typed return values, and pre-allocated
+evolution slack so the next minor releases stay non-breaking. See
 `AtCollection_API_Assessment.md` §11.5 for the full list of
 findings closed and post-stable work deferred.
+
+- feat(AtCollection)!: drop `@experimental` annotation from every
+  collection-related public type (`AtCollection`, `CItem`,
+  `Query`, `SubSpec`, `TreeNode`, `WithChildren`, `PathField`,
+  `Predicate` and subclasses, `PredicateOp`, all `CEvent`
+  subclasses, all `OpResult` subclasses,
+  `CollectionOpException`). The library is committed to
+  non-breaking minor changes from this release forward.
 
 - feat(AtCollection)!: tighten class modifiers for stable release.
   `OpResult` is now `abstract base class` (was `sealed`); user
