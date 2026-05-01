@@ -204,10 +204,10 @@ class TodosService {
     final ctrl = _todosCtrl;
     if (q == null || ctrl == null || ctrl.isClosed) return;
     try {
-      final parents = await q.fetch();
+      final parents = await q.get();
       final combined = <TodoWithNotes>[];
       for (final p in parents) {
-        final notes = await _notesSubFor(p).query().fetch();
+        final notes = await _notesSubFor(p).query().get();
         combined.add(WithChildren(parent: p, children: notes));
       }
       ctrl.add(combined);

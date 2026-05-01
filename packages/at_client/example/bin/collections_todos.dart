@@ -305,10 +305,10 @@ class _TodosAppState extends State<TodosApp> {
   /// by write-path command handlers for immediate UI feedback.
   Future<void> refreshTodos() async {
     try {
-      final parents = await _buildQuery().fetch();
+      final parents = await _buildQuery().get();
       final combined = <TodoWithNotes>[];
       for (final p in parents) {
-        final notes = await _notesSubFor(p).query().fetch();
+        final notes = await _notesSubFor(p).query().get();
         combined.add(WithChildren(parent: p, children: notes));
       }
       await _onCombinedSnapshot(combined);

@@ -76,7 +76,7 @@ import 'package:mutex/mutex.dart';
 /// ### 1a. Composable queries
 ///
 /// [query] returns a [Query<T>] you can chain and terminate with
-/// either [Query.fetch] (one-shot `Future<List<CItem<T>>>`) or
+/// either [Query.get] (one-shot `Future<List<CItem<T>>>`) or
 /// [Query.watch] (live reactive `Stream<List<CItem<T>>>`). Queries
 /// are immutable values — build once, pass around, reuse. Execution
 /// is always on-device against the local synced store.
@@ -88,7 +88,7 @@ import 'package:mutex/mutex.dart';
 ///     .orderBy((t) => t.obj.due)
 ///     .limit(20);
 ///
-/// final list = await overdue.fetch();
+/// final list = await overdue.get();
 /// final live = overdue.watch();  // re-emits on update/delete
 /// ```
 ///
@@ -890,7 +890,7 @@ interface class AtCollection<T> {
 
   /// Builds a new [Query] scoped to this collection's direct items.
   /// Chain [Query.where] / [Query.orderBy] / [Query.thenBy] /
-  /// [Query.limit] / [Query.skip] and terminate with [Query.fetch]
+  /// [Query.limit] / [Query.skip] and terminate with [Query.get]
   /// (one-shot) or [Query.watch] (live reactive).
   ///
   /// ```dart
@@ -899,7 +899,7 @@ interface class AtCollection<T> {
   ///     .where((t) => t.obj.due.isBefore(DateTime.now()))
   ///     .orderBy((t) => t.obj.due)
   ///     .limit(20)
-  ///     .fetch();
+  ///     .get();
   /// ```
   ///
   /// For genuinely ad-hoc pipelines you can still use
@@ -2358,7 +2358,7 @@ final class WithChildren<P, C> {
 // Query<T> — fluent, composable, value-typed query over AtCollection<T>.
 //
 // Complements [AtCollection.getItemsAsStream] with a builder-style API
-// you can store, pass around, and terminate with either [Query.fetch]
+// you can store, pass around, and terminate with either [Query.get]
 // (one-shot List) or [Query.watch] (live reactive Stream). Executes
 // on-device over the local synced store — end-to-end encryption means
 // the atServer can't filter plaintext on your behalf, so on-device is
@@ -2371,7 +2371,7 @@ final class WithChildren<P, C> {
 
 /// A composable, value-typed query over an [AtCollection<T>]. Build up
 /// a query with [where] / [orderBy] / [thenBy] / [limit] / [skip], then
-/// terminate with [fetch] (one-shot) or [watch] (live reactive).
+/// terminate with [get] (one-shot) or [watch] (live reactive).
 ///
 /// ```dart
 /// final overdue = todos.query()
@@ -2380,7 +2380,7 @@ final class WithChildren<P, C> {
 ///     .orderBy((t) => t.obj.due)
 ///     .limit(20);
 ///
-/// final list = await overdue.fetch();
+/// final list = await overdue.get();
 /// final live = overdue.watch();
 /// ```
 ///
@@ -2418,12 +2418,12 @@ final class Query<T> {
   /// final overdue = await todos.query()
   ///     .wherePath($Todo.done.eq(false))
   ///     .wherePath($Todo.due.lt(DateTime.now()))
-  ///     .fetch();
+  ///     .get();
   ///
   /// // Or compose with .and / .or:
   /// final urgent = await todos.query()
   ///     .wherePath($Todo.done.eq(false).and($Todo.due.lt(soon)))
-  ///     .fetch();
+  ///     .get();
   /// ```
   ///
   /// Co-exists with [where]: both lists are evaluated, AND'd together.
@@ -2502,22 +2502,27 @@ final class Query<T> {
   /// Propagates any error from the underlying [AtCollection.getItems]
   /// (e.g. a per-key decode failure). Use [watch] if you need errors
   /// on a live channel instead of a single throw.
-  Future<List<CItem<T>>> fetch() async {
+  Future<List<CItem<T>>> get() async {
     final all = await _collection.getItems();
     return _spec._apply(all);
   }
 
+  /// Deprecated alias for [get] — keeps existing call-sites compiling
+  /// while they migrate. Will be removed in the next minor release.
+  @Deprecated('use get() instead — fetch() will be removed in the next minor')
+  Future<List<CItem<T>>> fetch() => get();
+
   /// One-shot fetch with duplicates removed by [keyFn]. The first
   /// matching item per key is kept; subsequent items mapping to the
   /// same key are dropped. Order is the same first-seen order as
-  /// [fetch] — apply [orderBy] / [thenBy] before [distinct] to control
+  /// [get] — apply [orderBy] / [thenBy] before [distinct] to control
   /// which item wins each key bucket.
   ///
   /// Cheap convenience for "give me one of each X" queries —
   /// equivalent to calling [groupBy] and taking each bucket's first
   /// element, but without materialising the buckets.
   Future<List<CItem<T>>> distinct<K>(K Function(CItem<T> item) keyFn) async {
-    final items = await fetch();
+    final items = await get();
     final seen = <K>{};
     final result = <CItem<T>>[];
     for (final item in items) {
@@ -2527,9 +2532,9 @@ final class Query<T> {
   }
 
   /// Number of items matching the full spec (predicates + sort + skip
-  /// + limit). Equivalent to `(await fetch()).length` but makes the
+  /// + limit). Equivalent to `(await get()).length` but makes the
   /// intent explicit at the call site.
-  Future<int> count() async => (await fetch()).length;
+  Future<int> count() async => (await get()).length;
 
   /// True iff at least one item matches the predicates. Short-circuits
   /// on the first match — does **not** apply [orderBy], [skip], or
@@ -2573,7 +2578,7 @@ final class Query<T> {
   Future<CItem<T>?> firstOrNull() async {
     if (_spec.limitN != null && _spec.limitN! == 0) return null;
     if (_spec.orderBys.isNotEmpty) {
-      final list = await fetch();
+      final list = await get();
       return list.isEmpty ? null : list.first;
     }
     var toSkip = _spec.skipN ?? 0;
@@ -2591,7 +2596,7 @@ final class Query<T> {
 
   /// Groups the matching items by a key derived from each. Runs the
   /// full spec (predicates + sort + skip + limit) before grouping, so
-  /// within each bucket items are in the same order [fetch] would
+  /// within each bucket items are in the same order [get] would
   /// return.
   ///
   /// ```dart
@@ -2603,7 +2608,7 @@ final class Query<T> {
   Future<Map<K, List<CItem<T>>>> groupBy<K>(
     K Function(CItem<T> item) keyFn,
   ) async {
-    final items = await fetch();
+    final items = await get();
     final out = <K, List<CItem<T>>>{};
     for (final item in items) {
       out.putIfAbsent(keyFn(item), () => <CItem<T>>[]).add(item);
@@ -2932,7 +2937,7 @@ final class Query<T> {
     Future<void> refresh() async {
       if (controller.isClosed) return;
       try {
-        final snapshot = await fetch();
+        final snapshot = await get();
         if (!controller.isClosed) {
           cache = [...snapshot];
           controller.add(snapshot);
@@ -3079,7 +3084,7 @@ final class Query<T> {
 /// final overdue = await todos.query()
 ///     .wherePath($Todo.done.eq(false))
 ///     .wherePath($Todo.due.lt(DateTime.now()))
-///     .fetch();
+///     .get();
 /// ```
 ///
 /// [path] is metadata only — it describes which field this accessor
@@ -3843,7 +3848,7 @@ final class CItem<T> {
   ///
   /// ```dart
   /// final unreadCount = item.receipts.query().watch().map((l) => l.length);
-  /// final readers = await item.receipts.query().fetch();
+  /// final readers = await item.receipts.query().get();
   /// ```
   AtCollection<Map<String, dynamic>> get receipts =>
       _collection.readReceiptsFor(this);

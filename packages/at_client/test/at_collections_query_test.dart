@@ -134,7 +134,7 @@ void main() {
         'a': Task('alpha', done: false, due: d2),
         'b': Task('bravo', done: true, due: d1),
       });
-      final viaQuery = await c.query().fetch();
+      final viaQuery = await c.query().get();
       final viaGetItems = await c.getItems();
       expect(viaQuery.map((i) => i.id).toSet(),
           viaGetItems.map((i) => i.id).toSet());
@@ -150,7 +150,7 @@ void main() {
         'b': Task('bravo', done: true, due: d2),
         'c': Task('charlie', done: false, due: d3),
       });
-      final open = await c.query().where((t) => !t.obj.done).fetch();
+      final open = await c.query().where((t) => !t.obj.done).get();
       expect(open.map((i) => i.obj.title).toSet(), {'alpha', 'charlie'});
     });
 
@@ -165,7 +165,7 @@ void main() {
           .query()
           .where((t) => !t.obj.done)
           .where((t) => t.obj.due.isBefore(d2))
-          .fetch();
+          .get();
       expect(overdueOpen, hasLength(1));
       expect(overdueOpen.single.obj.title, 'alpha');
     });
@@ -173,7 +173,7 @@ void main() {
     test('where() with no matches returns empty list', () async {
       final c = buildCollection();
       seed({'a': Task('alpha', done: true, due: d1)});
-      final none = await c.query().where((t) => !t.obj.done).fetch();
+      final none = await c.query().where((t) => !t.obj.done).get();
       expect(none, isEmpty);
     });
   });
@@ -187,7 +187,7 @@ void main() {
         'b': Task('bravo', done: false, due: d1),
         'c': Task('charlie', done: false, due: d2),
       });
-      final sorted = await c.query().orderBy((t) => t.obj.due).fetch();
+      final sorted = await c.query().orderBy((t) => t.obj.due).get();
       expect(sorted.map((i) => i.obj.title), ['bravo', 'charlie', 'alpha']);
     });
 
@@ -199,7 +199,7 @@ void main() {
         'c': Task('charlie', done: false, due: d2),
       });
       final sorted =
-          await c.query().orderBy((t) => t.obj.due, descending: true).fetch();
+          await c.query().orderBy((t) => t.obj.due, descending: true).get();
       expect(sorted.map((i) => i.obj.title), ['alpha', 'charlie', 'bravo']);
     });
 
@@ -210,7 +210,7 @@ void main() {
         'b': Task('alpha', done: false, due: d1),
         'c': Task('bravo', done: false, due: d1),
       });
-      final sorted = await c.query().orderBy((t) => t.obj.title).fetch();
+      final sorted = await c.query().orderBy((t) => t.obj.title).get();
       expect(sorted.map((i) => i.obj.title), ['alpha', 'bravo', 'charlie']);
     });
 
@@ -226,7 +226,7 @@ void main() {
           .orderBy((t) => t.obj.title) // would give alpha/bravo/charlie
           .orderBy(
               (t) => t.obj.due) // wins — bravo (d1)/charlie(d2)/alpha(d3)? no
-          .fetch();
+          .get();
       // Orders by due: b(d1), c(d2), a(d3). Titles: alpha(a), bravo(b), charlie(c) → b, c, a.
       expect(sorted.map((i) => i.id), ['b', 'c', 'a']);
     });
@@ -246,7 +246,7 @@ void main() {
           .query()
           .orderBy((t) => t.obj.due)
           .thenBy((t) => t.obj.title)
-          .fetch();
+          .get();
       // d1 group sorted by title (alpha, charlie), then d2 (bravo).
       expect(sorted.map((i) => i.obj.title), ['alpha', 'charlie', 'bravo']);
     });
@@ -262,7 +262,7 @@ void main() {
           .query()
           .orderBy((t) => t.obj.due) // primary asc
           .thenBy((t) => t.obj.title, descending: true) // tiebreak desc
-          .fetch();
+          .get();
       // d1 group: bravo before alpha (title desc), then d2 (charlie).
       expect(sorted.map((i) => i.obj.title), ['bravo', 'alpha', 'charlie']);
     });
@@ -283,7 +283,7 @@ void main() {
           .orderBy((t) => t.obj.due)
           .thenBy((t) => t.obj.done ? 1 : 0)
           .thenBy((t) => t.obj.title)
-          .fetch();
+          .get();
       // Primary tied (all d1), secondary tied (all done=false), tertiary
       // breaks them: alpha, bravo, charlie, delta.
       expect(
@@ -318,7 +318,7 @@ void main() {
           .orderBy((t) => t.obj.title)
           .thenBy((t) => t.obj.due)
           .orderBy((t) => t.obj.due) // resets — only this key remains
-          .fetch();
+          .get();
       expect(sorted.map((i) => i.id), ['b', 'c', 'a']);
     });
   });
@@ -332,7 +332,7 @@ void main() {
         'b': Task('bravo', done: true, due: d2),
         'c': Task('charlie', done: false, due: d3),
       });
-      final open = await c.query().wherePath($Task.done.eq(false)).fetch();
+      final open = await c.query().wherePath($Task.done.eq(false)).get();
       expect(open.map((i) => i.obj.title).toSet(), {'alpha', 'charlie'});
     });
 
@@ -343,7 +343,7 @@ void main() {
         'b': Task('bravo', done: false, due: d2),
         'c': Task('charlie', done: false, due: d3),
       });
-      final early = await c.query().wherePath($Task.due.lt(d2)).fetch();
+      final early = await c.query().wherePath($Task.due.lt(d2)).get();
       expect(early.map((i) => i.id), ['a']);
     });
 
@@ -357,7 +357,7 @@ void main() {
       final result = await c
           .query()
           .wherePath($Task.done.eq(false).and($Task.due.lt(d2)))
-          .fetch();
+          .get();
       expect(result.map((i) => i.id), ['a']);
     });
 
@@ -371,7 +371,7 @@ void main() {
       final result = await c
           .query()
           .wherePath($Task.title.eq('alpha').or($Task.title.eq('bravo')))
-          .fetch();
+          .get();
       expect(result.map((i) => i.id).toSet(), {'a', 'b'});
     });
 
@@ -382,7 +382,7 @@ void main() {
         'b': Task('bravo', done: true, due: d2),
       });
       final result =
-          await c.query().wherePath($Task.done.eq(true).not).fetch();
+          await c.query().wherePath($Task.done.eq(true).not).get();
       expect(result.map((i) => i.id), ['a']);
     });
 
@@ -397,7 +397,7 @@ void main() {
           .query()
           .wherePath($Task.done.eq(false))
           .wherePath($Task.due.lt(d2))
-          .fetch();
+          .get();
       expect(result.map((i) => i.id), ['a']);
     });
 
@@ -412,7 +412,7 @@ void main() {
           .query()
           .wherePath($Task.done.eq(false))
           .where((t) => t.obj.title.startsWith('b'))
-          .fetch();
+          .get();
       expect(result.map((i) => i.id), ['b']);
     });
 
@@ -483,7 +483,7 @@ void main() {
         'c': Task('charlie', done: false, due: d2),
         'd': Task('delta', done: false, due: d4),
       });
-      final top2 = await c.query().orderBy((t) => t.obj.due).limit(2).fetch();
+      final top2 = await c.query().orderBy((t) => t.obj.due).limit(2).get();
       expect(top2.map((i) => i.id), ['b', 'c']);
     });
 
@@ -496,7 +496,7 @@ void main() {
         'd': Task('delta', done: false, due: d4),
       });
       final afterFirst =
-          await c.query().orderBy((t) => t.obj.due).skip(2).fetch();
+          await c.query().orderBy((t) => t.obj.due).skip(2).get();
       expect(afterFirst.map((i) => i.id), ['a', 'd']);
     });
 
@@ -509,14 +509,14 @@ void main() {
         'd': Task('delta', done: false, due: d4),
       });
       final page2 =
-          await c.query().orderBy((t) => t.obj.due).skip(2).limit(1).fetch();
+          await c.query().orderBy((t) => t.obj.due).skip(2).limit(1).get();
       expect(page2.map((i) => i.id), ['a']);
     });
 
     test('limit(0) returns empty', () async {
       final c = buildCollection();
       seed({'a': Task('alpha', done: false, due: d1)});
-      final none = await c.query().limit(0).fetch();
+      final none = await c.query().limit(0).get();
       expect(none, isEmpty);
     });
 
@@ -544,11 +544,11 @@ void main() {
       final open = base.where((t) => !t.obj.done);
       final done = base.where((t) => t.obj.done);
 
-      expect((await open.fetch()).map((i) => i.id).toSet(), {'a', 'c'});
-      expect((await done.fetch()).map((i) => i.id).toSet(), {'b'});
+      expect((await open.get()).map((i) => i.id).toSet(), {'a', 'c'});
+      expect((await done.get()).map((i) => i.id).toSet(), {'b'});
       // Base is still unfiltered — confirming the two branches are
       // independent from each other and from the base.
-      expect((await base.fetch()).map((i) => i.id).toSet(), {'a', 'b', 'c'});
+      expect((await base.get()).map((i) => i.id).toSet(), {'a', 'b', 'c'});
     });
   });
 
@@ -791,7 +791,7 @@ void main() {
           .orderBy((t) => t.obj.due)
           .skip(1)
           .limit(2)
-          .fetch();
+          .get();
       expect(page.map((i) => i.id), ['c', 'a']);
     });
   });
@@ -924,7 +924,7 @@ void main() {
     test('readReceiptsFor returns a query-able AtCollection', () async {
       final c = buildCollection();
       seed({'a': Task('alpha', done: false, due: d1)});
-      final items = await c.query().fetch();
+      final items = await c.query().get();
       final item = items.single;
       final receipts = c.readReceiptsFor(item);
       // It's a proper AtCollection — we can build a Query from it.
@@ -940,14 +940,14 @@ void main() {
     test('CItem.receipts delegates to AtCollection.readReceiptsFor', () async {
       final c = buildCollection();
       seed({'a': Task('alpha', done: false, due: d1)});
-      final item = (await c.query().fetch()).single;
+      final item = (await c.query().get()).single;
       expect(identical(item.receipts, c.readReceiptsFor(item)), isTrue);
     });
 
     test('memoised per (owner, id) across calls', () async {
       final c = buildCollection();
       seed({'a': Task('alpha', done: false, due: d1)});
-      final item = (await c.query().fetch()).single;
+      final item = (await c.query().get()).single;
       final a = c.readReceiptsFor(item);
       final b = c.readReceiptsFor(item);
       expect(identical(a, b), isTrue);
