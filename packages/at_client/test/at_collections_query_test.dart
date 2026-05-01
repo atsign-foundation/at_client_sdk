@@ -84,7 +84,7 @@ void main() {
   });
 
   AtCollection<Task> buildCollection() {
-    return AtCollection<Task>.withInjectedNotifications(
+    return collectionWithInjectedNotifications<Task>(
       atClient,
       namespace,
       const Duration(days: 7),
@@ -460,7 +460,7 @@ void main() {
         PredicateOp.startsWith,
       ];
       for (final op in reserved) {
-        final cmp = CmpPredicate.forTest($Task.title, op, 'whatever');
+        final cmp = cmpPredicateForTest($Task.title, op, 'whatever');
         expect(
           () => cmp.evaluate(item),
           throwsA(isA<UnimplementedError>().having(
@@ -933,7 +933,7 @@ void main() {
       // Sub-collection's namespace is the `__rr` form scoped to the
       // parent item id + owner.
       expect(
-          receipts.namespace, contains(AtCollection.readReceiptNamespacePart));
+          receipts.namespace, contains(readReceiptNamespacePart));
       expect(receipts.namespace, contains(item.id));
     });
 

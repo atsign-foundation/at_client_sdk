@@ -62,7 +62,7 @@ void main() {
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
   }) {
-    return AtCollection<T>.withInjectedNotifications(
+    return collectionWithInjectedNotifications<T>(
       atClient,
       ns,
       ttl,
@@ -76,7 +76,7 @@ void main() {
   group('construction', () {
     test('rejects a namespace without a dot', () {
       expect(
-        () => AtCollection<String>.withInjectedNotifications(
+        () => collectionWithInjectedNotifications<String>(
           atClient,
           'notqualified',
           const Duration(days: 1),
@@ -89,7 +89,7 @@ void main() {
     test('fromJson + typeTag auto-registers the factory', () async {
       // Build a collection with a fromJson parameter and round-trip via
       // rehydrate (indirectly, through tryGetItems).
-      AtCollection.clearFactoriesForTest();
+      clearFactoriesForTest();
       final c = buildCollection<Widget>(
         fromJson: Widget.fromJson,
         typeTag: 'Widget',
@@ -162,7 +162,7 @@ void main() {
     });
 
     test('registered polymorphic type resolves to its typeTag', () {
-      AtCollection.clearFactoriesForTest();
+      clearFactoriesForTest();
       AtCollection.registerFactory<Widget>(
         Widget.fromJson,
         typeTag: 'Widget',
@@ -183,7 +183,7 @@ void main() {
       // process-global. Registering twice for the same `Widget` type
       // under the same typeTag is idempotent (replacement) and both
       // collections decode via the surviving factory.
-      AtCollection.clearFactoriesForTest();
+      clearFactoriesForTest();
       final a = buildCollection<Widget>(ns: 'a.app.ns');
       final b = buildCollection<Widget>(ns: 'b.app.ns');
       AtCollection.registerFactory<Widget>(
@@ -229,7 +229,7 @@ void main() {
     });
 
     test('rejects empty / whitespace typeTag', () {
-      AtCollection.clearFactoriesForTest();
+      clearFactoriesForTest();
       expect(
         () => AtCollection.registerFactory<Widget>(
           Widget.fromJson,
@@ -248,7 +248,7 @@ void main() {
 
     test('rejects re-registering the same Type under a different typeTag',
         () {
-      AtCollection.clearFactoriesForTest();
+      clearFactoriesForTest();
       AtCollection.registerFactory<Widget>(Widget.fromJson, typeTag: 'Widget');
       expect(
         () => AtCollection.registerFactory<Widget>(
@@ -265,7 +265,7 @@ void main() {
 
     test('rejects registering a typeTag already bound to a different Type',
         () {
-      AtCollection.clearFactoriesForTest();
+      clearFactoriesForTest();
       AtCollection.registerFactory<Widget>(Widget.fromJson, typeTag: 'Shared');
       expect(
         () => AtCollection.registerFactory<String>(
@@ -283,7 +283,7 @@ void main() {
     test(
         'AtCollection ctor: fromJson without typeTag throws ArgumentError',
         () {
-      AtCollection.clearFactoriesForTest();
+      clearFactoriesForTest();
       expect(
         () => buildCollection<Widget>(fromJson: Widget.fromJson),
         throwsArgumentError,
@@ -293,7 +293,7 @@ void main() {
     test(
         'AtCollection ctor: typeTag without fromJson throws ArgumentError',
         () {
-      AtCollection.clearFactoriesForTest();
+      clearFactoriesForTest();
       expect(
         () => buildCollection<Widget>(typeTag: 'Widget'),
         throwsArgumentError,
@@ -307,8 +307,8 @@ void main() {
       // "Mystery" that this reader has no factory for. The expected
       // behaviour is: log a warning the first time it happens, return
       // the raw map (so untyped consumers still work), no crash.
-      AtCollection.clearFactoriesForTest();
-      AtCollection.clearMissingFactoryWarningsForTest();
+      clearFactoriesForTest();
+      clearMissingFactoryWarningsForTest();
       final c = buildCollection<Map<String, dynamic>>(ns: 'mystery.app.ns');
       final selfKey = AtKey.fromString('mid.mystery.app.ns$selfAtSignStr');
       when(

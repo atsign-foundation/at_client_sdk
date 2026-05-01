@@ -97,7 +97,7 @@ void main() {
   });
 
   AtCollection<Post> buildPosts() {
-    return AtCollection<Post>.withInjectedNotifications(
+    return collectionWithInjectedNotifications<Post>(
       atClient,
       namespace,
       const Duration(days: 7),

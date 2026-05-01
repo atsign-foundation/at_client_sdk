@@ -33,7 +33,7 @@ void main() {
     final atClient = MockAtClient();
     final notifStream = StreamController<AtNotification>.broadcast();
     when(() => atClient.atSign).thenReturn(selfAtSign);
-    final parent = AtCollection<String>.withInjectedNotifications(
+    final parent = collectionWithInjectedNotifications<String>(
       atClient,
       parentNs,
       const Duration(days: 7),
@@ -52,8 +52,9 @@ void main() {
     U Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
   }) {
-    return c.parent.subCollectionWithInjectedNotifications<U>(
-      parent: parent,
+    return subCollectionWithInjectedNotifications<dynamic, U>(
+      c.parent,
+      parentItem: parent,
       subName: subName,
       defaultExpiration: const Duration(days: 30),
       fromJson: fromJson,
@@ -178,8 +179,9 @@ void main() {
       final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
       final comments = subOn<String>(c, post, 'comments');
       final comment = comments.draft(obj: 'great post', id: 'c1');
-      final replies = comments.subCollectionWithInjectedNotifications<String>(
-        parent: comment,
+      final replies = subCollectionWithInjectedNotifications<String, String>(
+        comments,
+        parentItem: comment,
         subName: 'replies',
         defaultExpiration: const Duration(days: 1),
         notifications: c.notifStream.stream,
@@ -804,8 +806,9 @@ void main() {
       // subOn always chains off c.parent; for depth-2 we need to
       // chain off comments directly so the replies sub-collection's
       // _parentCollection is comments (not c.parent).
-      final replies = comments.subCollectionWithInjectedNotifications<String>(
-        parent: comment,
+      final replies = subCollectionWithInjectedNotifications<String, String>(
+        comments,
+        parentItem: comment,
         subName: 'replies',
         defaultExpiration: const Duration(days: 30),
         notifications: c.notifStream.stream,

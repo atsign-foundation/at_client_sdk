@@ -19,6 +19,8 @@ import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart';
 import 'package:mutex/mutex.dart';
 
+part 'collections_test_hooks.dart';
+
 // -----------------------------------------------------------------------------
 // AtCollection<T>
 
@@ -194,9 +196,7 @@ import 'package:mutex/mutex.dart';
 /// `.handleError(...)` before consuming the stream.
 @experimental
 interface class AtCollection<T> {
-  @visibleForTesting
-  static const String readReceiptNamespacePart = '__rr';
-  static const String _rr = readReceiptNamespacePart;
+  static const String _rr = '__rr';
 
   // Random-id alphabet and RNG (for auto-generated item ids).
   static const String _idAlphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -308,9 +308,9 @@ interface class AtCollection<T> {
 
   /// Test-only factory that bypasses `atClient.notificationService.subscribe`
   /// and drives notification dispatch from [notifications] instead. Keeps
-  /// the production constructor's surface clean.
-  @visibleForTesting
-  factory AtCollection.withInjectedNotifications(
+  /// the production constructor's surface clean. Reachable only through
+  /// `collectionWithInjectedNotifications` in `collections_test_hooks.dart`.
+  factory AtCollection._withInjectedNotifications(
     AtClient atClient,
     String namespace,
     Duration defaultExpiration, {
@@ -376,7 +376,7 @@ interface class AtCollection<T> {
           regex: _regexAllStr,
           shouldDecrypt: true,
         );
-    _notificationSubscription = notifStream.listen(handleNotification);
+    _notificationSubscription = notifStream.listen(_handleNotificationImpl);
   }
 
   // ---------------------------------------------------------------------------
@@ -469,8 +469,7 @@ interface class AtCollection<T> {
   /// (process-global static state otherwise carries between tests).
   /// Not for production use — the registry is meant to be append-only
   /// from app code.
-  @visibleForTesting
-  static void clearFactoriesForTest() {
+  static void _clearFactoriesForTestImpl() {
     _factoriesByType.clear();
     _factoriesByTag.clear();
   }
@@ -1030,8 +1029,7 @@ interface class AtCollection<T> {
   /// optional parameter on [subCollection]) so production callers see
   /// only the verbs they need; the test hook never appears in
   /// IDE auto-complete on the public surface.
-  @visibleForTesting
-  AtCollection<U> subCollectionWithInjectedNotifications<U>({
+  AtCollection<U> _subCollectionWithInjectedNotifications<U>({
     required CItem<T> parent,
     required String subName,
     required Duration defaultExpiration,
@@ -1124,7 +1122,7 @@ interface class AtCollection<T> {
     // so that `notifications` can be threaded straight through to its
     // constructor for test wiring.
     final sub = notifications != null
-        ? AtCollection<U>.withInjectedNotifications(
+        ? AtCollection<U>._withInjectedNotifications(
             atClient,
             composedNs,
             defaultExpiration,
@@ -1421,10 +1419,9 @@ interface class AtCollection<T> {
   /// Top-level notification dispatcher. Pauses its own subscription for
   /// the duration of handling so re-entrant notifications don't cause
   /// overlapping work. Dispatch is depth-agnostic: L0 items go to
-  /// [handleObjNotification]; any sub-item at any nesting depth goes
-  /// to [handleSubObjNotification].
-  @visibleForTesting
-  Future<void> handleNotification(AtNotification n) async {
+  /// [_handleObjNotificationImpl]; any sub-item at any nesting depth
+  /// goes to [_handleSubObjNotificationImpl].
+  Future<void> _handleNotificationImpl(AtNotification n) async {
     _notificationSubscription.pause();
     try {
       if (!_regexObjAny.hasMatch(n.key)) {
@@ -1445,9 +1442,9 @@ interface class AtCollection<T> {
       }
 
       if (parts.ancestry.isEmpty) {
-        await handleObjNotification(n);
+        await _handleObjNotificationImpl(n);
       } else {
-        await handleSubObjNotification(n);
+        await _handleSubObjNotificationImpl(n);
       }
     } catch (e, st) {
       _logger.shout('handleNotification: $e\nStackTrace:\n$st');
@@ -1489,8 +1486,7 @@ interface class AtCollection<T> {
 
   /// Handles direct-item notifications (a key with exactly the collection
   /// namespace as its suffix) and emits [CItemUpdated] / [CItemDeleted].
-  @visibleForTesting
-  Future<void> handleObjNotification(AtNotification n) async {
+  Future<void> _handleObjNotificationImpl(AtNotification n) async {
     final parts = _getPartsFromNotifKey(n);
     switch (n.operation) {
       case 'update':
@@ -1525,8 +1521,7 @@ interface class AtCollection<T> {
   /// receipts directly via [readReceipts]. The receipt's `id` is the
   /// direct parent's id (i.e. `ancestry.last.id` — the item being
   /// read).
-  @visibleForTesting
-  Future<void> handleSubObjNotification(AtNotification n) async {
+  Future<void> _handleSubObjNotificationImpl(AtNotification n) async {
     final parts = _getPartsFromNotifKey(n);
     if (parts.ancestry.isEmpty) {
       _logger.shout('handleSubObjNotification: empty ancestry ${n.key}');
@@ -2052,9 +2047,8 @@ interface class AtCollection<T> {
 
   /// Test-only: drops the per-tag dedup set so re-runs of the same
   /// "unknown tag" path emit a fresh warning. The registry itself
-  /// is cleared by [clearFactoriesForTest].
-  @visibleForTesting
-  static void clearMissingFactoryWarningsForTest() {
+  /// is cleared by [_clearFactoriesForTestImpl].
+  static void _clearMissingFactoryWarningsForTestImpl() {
     _warnedMissingFactoryTags.clear();
   }
 
@@ -2306,8 +2300,7 @@ final class SubSpec<U> {
   /// Threads [parentColl]'s injected notification stream through so
   /// nested `watchWithTree` recursion sees events from the same test
   /// harness.
-  @visibleForTesting
-  AtCollection<U> openOn<T>(
+  AtCollection<U> _openOnForTest<T>(
     AtCollection<T> parentColl,
     CItem<T> parent,
   ) =>
@@ -2825,12 +2818,13 @@ final class Query<T> {
         childSubs[k] = {};
         childLatest[k] = {};
         for (final spec in subSpecs) {
-          // Use SubSpec.openOn<T>(...) so this spec's own U survives
-          // the loop iteration over List<SubSpec<dynamic>> — without it
-          // Dart would erase U to dynamic and the constructor's
-          // implicit (Type, typeTag) registration would clash with the
-          // already-registered (RealType, typeTag) entry.
-          final subColl = spec.openOn(_collection, p);
+          // Use SubSpec._openOnForTest<T>(...) so this spec's own U
+          // survives the loop iteration over List<SubSpec<dynamic>> —
+          // without it Dart would erase U to dynamic and the
+          // constructor's implicit (Type, typeTag) registration would
+          // clash with the already-registered (RealType, typeTag)
+          // entry.
+          final subColl = spec._openOnForTest(_collection, p);
           // Recurse: each child's own children come from a nested
           // watchWithTree on the sub-collection's query. Empty
           // [spec.children] makes the recursion a single-level scan.
@@ -3207,18 +3201,6 @@ final class CmpPredicate extends Predicate {
   final Object? value;
 
   CmpPredicate._(this.field, this.op, this.value);
-
-  /// Build a [CmpPredicate] directly from its parts. Public-but-test-only
-  /// — use [PathField] operators (`.eq`, `.lt`, etc.) for production
-  /// construction. Exposed so tests can exercise reserved [PredicateOp]
-  /// values that don't yet have a corresponding [PathField] operator.
-  @visibleForTesting
-  factory CmpPredicate.forTest(
-    PathField<dynamic> field,
-    PredicateOp op,
-    Object? value,
-  ) =>
-      CmpPredicate._(field, op, value);
 
   @override
   bool evaluate(CItem<dynamic> item) {
