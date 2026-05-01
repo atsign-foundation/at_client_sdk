@@ -573,14 +573,9 @@ interface class AtCollection<T> {
   /// recipient copies alone (useful when adding recipients without
   /// risking removal of existing ones during a concurrent read).
   ///
-  /// Pass [sharedWith] to replace the item's recipient set as part of
-  /// the update — the values in [item.sharedWith] are mutated in place
-  /// to match before the write goes out, and the diff-and-unshare
-  /// logic above applies to the new set. Equivalent to
-  /// `item.sharedWith..clear()..addAll(sharedWith); update(item)` but
-  /// self-documenting at the call site. Pass `null` (the default) to
-  /// preserve whatever's already on `item.sharedWith` — the call-site
-  /// equivalent of the original "mutate then update" pattern.
+  /// To change the value AND the recipient set in one call, mutate
+  /// `item.sharedWith` directly before calling [update] — e.g.
+  /// `item.sharedWith..clear()..addAll(newSet); update(item)`.
   ///
   /// If you only need to change recipients (no value change on the
   /// item itself), prefer [updateSharedWith] — it skips the self-key
@@ -590,7 +585,6 @@ interface class AtCollection<T> {
   /// fields, then call [update].
   Future<void> update(
     CItem<T> item, {
-    Set<Atsign>? sharedWith,
     bool unshareWithOthers = true,
   }) async {
     if (item.owner != atSign) {
@@ -601,11 +595,6 @@ interface class AtCollection<T> {
         'Cannot update item "${item.id}": no such item exists in $namespace. '
         'Use create() to add a new item.',
       );
-    }
-    if (sharedWith != null) {
-      item.sharedWith
-        ..clear()
-        ..addAll(sharedWith);
     }
     final results = await _put(item, unshareWithOthers: unshareWithOthers);
     if (results.any((r) => r is OpFailure)) {

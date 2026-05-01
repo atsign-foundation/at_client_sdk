@@ -560,33 +560,6 @@ void main() {
       await expectLater(c.update(item), throwsStateError);
     });
 
-    test(
-        'update with sharedWith param replaces the recipient set in '
-        'place', () async {
-      final existingDave =
-          AtKey.fromString('@dave:msg-sw1.$namespace$selfAtSignStr');
-      when(
-        () => atClient.getAtKeys(regex: any(named: 'regex')),
-      ).thenAnswer((_) async => [existingDave]);
-      final c = buildCollection<String>();
-      final item = c.draft(obj: 'x', id: 'msg-sw1', sharedWith: {});
-      await c.update(item, sharedWith: {bob});
-      // item.sharedWith was {} before the call; now equals {bob}.
-      expect(item.sharedWith, {bob});
-      final written = verify(
-        () => atClient.put(captureAny(), any()),
-      ).captured.cast<AtKey>().map((k) => k.toString()).toList();
-      // self + bob recipient.
-      expect(
-        written,
-        containsAll([
-          'msg-sw1.$namespace$selfAtSignStr',
-          '$bobStr:msg-sw1.$namespace$selfAtSignStr',
-        ]),
-      );
-      // dave was NOT in the new sharedWith → unshared.
-      verify(() => atClient.delete(any())).called(1);
-    });
   });
 
   // ---------------------------------------------------------------------------
