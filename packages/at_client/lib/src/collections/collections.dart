@@ -2150,6 +2150,49 @@ interface class AtCollection<T> {
     return results;
   }
 
+  /// Trimmed [_put] variant: writes only recipient copies, skipping
+  /// the self-key write and the unshare-others diff. Used by
+  /// [CItem.markReadByMe] — read receipts are pure outbound
+  /// notifications, so a self copy at the writer would be storage
+  /// waste (the writer never queries their own receipt back).
+  ///
+  /// Still emits the same local [CItemUpdated] on this collection's
+  /// stream and [CSubItemUpdated] on ancestors as [_put] does, so
+  /// `Query.watch()` consumers on the writer's side see the recipient
+  /// copy land immediately rather than waiting for the round-trip
+  /// notification (which never arrives for self-written records).
+  ///
+  /// Does NOT touch [_seenSelfIds] — no self key was written, so the
+  /// "we just wrote this id" cache must not claim otherwise.
+  Future<List<OpResult>> _putRecipientsOnly(CItem<T> item) async {
+    if (item.owner != atSign) {
+      throw ArgumentError('You may not send items owned by other atSigns');
+    }
+    final now = DateTime.now();
+    if (item.expiresAt.millisecondsSinceEpoch < now.millisecondsSinceEpoch) {
+      throw ArgumentError('item.expiresAt must be in the future');
+    }
+    final results = <OpResult>[];
+    final md = _buildMetadata(item, now);
+    for (final otherAtSign in item.sharedWith) {
+      final k = AtKey.fromString(
+        '$otherAtSign:${item.id}.$namespace$atSign',
+      );
+      try {
+        k.metadata = md;
+        await atClient.put(k, jsonEncode(item.toJson()));
+        results.add(OpSuccess(k, CollectionOp.put));
+      } catch (e) {
+        results.add(OpFailure(k, CollectionOp.put, e));
+      }
+    }
+    if (results.any((r) => r is OpSuccess)) {
+      _events.add(CItemUpdated(owner: item.owner, id: item.id));
+      _emitAncestorSubUpdated(item);
+    }
+    return results;
+  }
+
   /// Deletes [item] and its recipient copies; if [cascade] is true also
   /// deletes self-owned descendants. Never throws on key-level failure —
   /// [delete] wraps this and raises [CollectionOpException] if any op
@@ -3855,34 +3898,47 @@ final class CItem<T> {
   }
 
   /// Idempotent: if the current atSign has already posted a read
-  /// receipt for this item, does nothing. Otherwise creates a receipt
-  /// sub-item shared with [owner]. No-op on self-owned items.
+  /// receipt for this item, does nothing. Otherwise writes a
+  /// recipient-only receipt sub-item shared with [owner]. No-op on
+  /// self-owned items.
   ///
-  /// The receipt's id is the fixed string `'r'` — receipt identity
-  /// within the `__rr` sub-collection is determined by the
-  /// `(owner, id)` pair, where `owner` is the reader's atSign.
-  /// Repeated calls from the same reader resolve to the same key
-  /// and the duplicate-id guard in [AtCollection.create] short-
-  /// circuits the second write, regardless of which caller wins
-  /// any race between [wasMarkedReadByMe] and [AtCollection.create]
-  /// on the local store.
+  /// Receipts are recipient-only: no self copy is written on the
+  /// reader's side. The recipient form alone (cached locally as
+  /// `<owner>:r.__rr.<itemId>.<...>@<self>`) is enough to:
+  ///   - deliver the receipt to the item's owner via the
+  ///     standard sharedWith propagation, and
+  ///   - keep [wasMarkedReadByMe] returning true on subsequent
+  ///     calls, because [AtCollection.getItemsAsStream]'s key regex
+  ///     matches the recipient form too and surfaces the writer
+  ///     (this atSign) as a reader.
+  ///
+  /// Concurrent callers on the same [CItem] instance serialise via
+  /// [_markReadByMeMutex]; once one call has written the receipt,
+  /// subsequent callers see [_readers] containing [self] and return
+  /// without writing. Cross-instance races (two CItem instances for
+  /// the same logical record) resolve to the same recipient key so
+  /// the second `put` overwrites the first idempotently.
   Future<void> markReadByMe() async {
     if (owner == self) return;
     await _markReadByMeMutex.protect(() async {
+      if (await wasMarkedReadByMe()) return;
       final rr = _collection.readReceiptsFor(this);
-      const receiptId = 'r';
-      if (await rr.exists(receiptId, self)) return;
-      try {
-        await rr.create(
-          id: receiptId,
-          obj: {'readAt': DateTime.now().toUtc().toIso8601String()},
-          sharedWith: {owner},
-        );
-      } on StateError {
-        // Cross-CItem-instance race: a different CItem instance for
-        // the same (owner, id) just wrote the receipt. Receipt now
-        // exists; the logical state is preserved.
+      final receipt = rr.draft(
+        obj: {'readAt': DateTime.now().toUtc().toIso8601String()},
+        id: 'r',
+        sharedWith: {owner},
+      );
+      final results = await rr._putRecipientsOnly(receipt);
+      if (results.any((r) => r is OpFailure)) {
+        throw CollectionOpException(results);
       }
+      // Patch the in-process readers cache so a subsequent
+      // wasMarkedReadByMe on this CItem instance returns true even
+      // if the cache was primed before the receipt was written.
+      // Across process restarts the cache re-primes from the local
+      // store (which has the recipient copy) and arrives at the
+      // same answer.
+      _readers?.add(self);
     });
   }
 

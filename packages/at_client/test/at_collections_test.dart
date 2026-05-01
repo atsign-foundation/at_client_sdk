@@ -1436,7 +1436,8 @@ void main() {
       ).called(1);
     });
 
-    test('markReadByMe writes a __rr sub-item with the owner in sharedWith',
+    test(
+        'markReadByMe writes ONLY the recipient copy, no self copy',
         () async {
       // AtKey lowercases ids → 'idm'.
       final bobKey = AtKey.fromString('idm.$namespace$bobStr');
@@ -1448,7 +1449,7 @@ void main() {
         return [bobKey];
       });
       // get() returns bob's item for the parent read; throws for any
-      // __rr sub-key (existence probe inside create()).
+      // __rr sub-key probe.
       when(() => atClient.get(any())).thenAnswer((invocation) async {
         final k = invocation.positionalArguments.first as AtKey;
         if (k.toString().contains('__rr')) {
@@ -1471,15 +1472,20 @@ void main() {
         () => atClient.put(captureAny(), any()),
       ).captured.cast<AtKey>();
       final strings = writes.map((k) => k.toString()).toList();
+      // Receipts are pure outbound — exactly one put, the
+      // recipient form sharedWith bob. A self-key for the receipt
+      // (`r.__rr.idm....@<self>`) would be storage waste because
+      // the writer never reads their own receipts back.
+      final receiptWrites = strings
+          .where((s) => s.contains('__rr'))
+          .toList();
+      expect(receiptWrites, hasLength(1));
+      expect(receiptWrites.single.startsWith('$bobStr:'), isTrue,
+          reason: 'receipt copy shared with bob');
       expect(
-        strings.any((s) => RegExp(r'^[^.:]+\.__rr\.idm\.').hasMatch(s)),
-        isTrue,
-        reason: 'self-copy of __rr receipt written',
-      );
-      expect(
-        strings.any((s) => s.startsWith('$bobStr:')),
-        isTrue,
-        reason: 'receipt copy shared with bob',
+        receiptWrites.single,
+        isNot(matches(RegExp(r'^[^:]+\.__rr\.'))),
+        reason: 'no self-copy of __rr receipt should be written',
       );
     });
 
