@@ -185,6 +185,18 @@ part 'collections_test_hooks.dart';
 /// collection.subDeletes       // Stream<CSubItemDeleted>  — descendants
 /// ```
 ///
+/// ### Event surfaces — getter vs method
+///
+/// Event surfaces that take no parameters are exposed as
+/// **parameterless getters** ([updates], [deletes], [readReceipts],
+/// [subUpdates], [subDeletes], [availableEvents]). Surfaces that
+/// take parameters are **methods** ([watch], [expiringSoonEvents]).
+///
+/// [availableEvents] lazy-starts a single per-collection scheduler
+/// the first time it's read; [expiringSoonEvents(leadTime:)] takes
+/// per-call parameters so it stays a method and starts an
+/// independent scheduler per call.
+///
 /// ---
 ///
 /// Per-key decode failures on the read path are yielded into the
@@ -432,6 +444,15 @@ interface class AtCollection<T> {
   /// of the cross-atSign wire-format contract and must not silently
   /// drift. To rotate a wire format, choose a new tag, deploy
   /// readers that accept both old and new, then retire the old.
+  ///
+  /// **Process-global scope.** The registry is a single static map per
+  /// Dart isolate, shared across every [AtCollection] / [AtClient] in
+  /// that isolate. There is intentionally no per-AtClient registry —
+  /// the same wire format must round-trip identically regardless of
+  /// which atSign happens to be active when a record is read or
+  /// written. Apps that load multiple atSigns sequentially register
+  /// each `(T, typeTag)` once at startup and reuse the registry across
+  /// switches.
   static void registerFactory<U>(
     U Function(Map<String, dynamic>) fromJson, {
     required String typeTag,
@@ -2057,6 +2078,9 @@ interface class AtCollection<T> {
   /// key-level failure — callers that want throwing semantics (like
   /// [create] and [update]) inspect the returned results and raise
   /// [CollectionOpException].
+  // TODO(post-stable): expose createBatch / deleteBatch returning
+  // List<OpResult> — best-effort batched per-atSign writes built on
+  // the same _put primitive. See AtCollection_API_Assessment §11.5.
   Future<List<OpResult>> _put(
     CItem<T> item, {
     bool unshareWithOthers = true,
@@ -2484,6 +2508,9 @@ final class Query<T> {
   }
 
   /// Skips the first [n] items after filter + sort, before [limit].
+  // TODO(post-stable): add Query.startAfter(CItem) cursor pagination
+  // for stable scrolling on dynamic data. See
+  // AtCollection_API_Assessment §11.5.
   Query<T> skip(int n) {
     if (n < 0) throw ArgumentError.value(n, 'n', 'skip must be non-negative');
     return Query<T>._(_collection, _spec._withSkip(n));
@@ -3614,6 +3641,15 @@ final class _CItemTimerScheduler<E extends CEvent, T> {
 /// [AtCollection.create]; the constructor is private so every CItem
 /// is bound to a collection it can delegate to for reads, sub-
 /// collection resolution, and event streaming.
+///
+/// **Mutability.** [sharedWith], [expiresAt], and [availableAt] are
+/// intentionally mutable so the natural "fetch, mutate, persist"
+/// idiom works without a separate copy step. Mutate them in place,
+/// then call [AtCollection.update] to persist. Internally [obj] is
+/// also assigned-to during rehydrate; app code should treat the
+/// rehydrated value as the canonical state and not mutate the
+/// rehydrated [obj] reference itself — model objects implement
+/// `toJson` / `fromJson` and the round-trip is the supported path.
 final class CItem<T> {
   /// The atSign which created this [CItem]. For example if we are
   /// currently `@alice`, then the owner of a [CItem] which we create is

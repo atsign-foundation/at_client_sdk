@@ -1,6 +1,54 @@
 ## 3.12.0
 
 Several significant enhancements to the API to make it much easier to use.
+
+**Pre-stable readiness sweep** (2026-04-29) — drops `@experimental`
+from the AtCollection<T> surface. Tightens class modifiers, removes
+record-typed return values, and pre-allocates evolution slack so
+the next minor releases stay non-breaking. See
+`AtCollection_API_Assessment.md` §11.5 for the full list of
+findings closed and post-stable work deferred.
+
+- feat(AtCollection)!: tighten class modifiers for stable release.
+  `OpResult` is now `abstract base class` (was `sealed`); user
+  exhaustive switches no longer break when a new variant lands.
+  `AtCollection<T>` is now `interface class` — `extends`
+  forbidden, `implements` still works for mocking. `OpSuccess`,
+  `OpFailure`, `CollectionOpException`, and every `CEvent`
+  subclass marked `final class`.
+- feat(AtCollection)!: replace anonymous records with named
+  classes. `CAncestor` typedef → `final class CAncestor` with
+  named-only ctor. `Query.watchWithSub` returns
+  `Stream<List<WithChildren<P, C>>>` — a new `final class` —
+  instead of an anonymous record type.
+- refactor(AtCollection)!: drop the `sharedWith:` named-optional
+  on `update`. Use `updateSharedWith` to change recipients only,
+  or mutate `item.sharedWith` directly before calling
+  `update(item)` to bundle a value change with a recipient
+  change.
+- feat(AtCollection): pre-allocate `PredicateOp` values `like`,
+  `inSet`, `between`, `contains`, `startsWith`. Their
+  implementations throw `UnimplementedError` until landed; adding
+  the impl later is non-breaking. Apps that exhaustively switch
+  on `PredicateOp` should always include a `default:` branch.
+- feat(AtCollection): `exists(id, owner)` — presence check that
+  doesn't materialise the value.
+- feat(AtCollection): `Query<T>.distinct(keyFn)` — first-seen-
+  per-key dedupe terminal.
+- feat(AtCollection)!: rename `Query.fetch` → `Query.get`.
+  `fetch()` retained as a `@Deprecated` shim for one minor.
+- chore(AtCollection): privatise `logger`; move `prettyString` to
+  a `CItem` extension (reads as `item.prettyString`).
+- chore(AtCollection)!: relocate every `@visibleForTesting` member
+  to a `part of` test-hooks file. The instance-method names
+  (`handleNotification`,
+  `subCollectionWithInjectedNotifications`, etc.) and the static
+  helpers (`clearFactoriesForTest` etc.) no longer hang off
+  `AtCollection<T>` — they're top-level helpers with a `ForTest`
+  suffix in `collections_test_hooks.dart`. Tests call e.g.
+  `collectionWithInjectedNotifications<T>(...)` instead of
+  `AtCollection<T>.withInjectedNotifications(...)`.
+
 - feat: New feature - Collections - a clean API for storing, sharing, 
   unsharing and deleting objects in named collections, with sub-collections, 
   event streams, built-in support for read receipts, and more

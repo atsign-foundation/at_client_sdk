@@ -1086,6 +1086,59 @@ that owns the AtClient. The documented depth ceiling (with
 1-char collection names) is 11 levels — root + 10 nested
 sub-collections.
 
+### 11.5 Pre-stable readiness sweep (2026-04-29)
+
+Findings from the deep API audit performed before dropping
+`@experimental`. Captures the consistency / completeness /
+evolvability gaps that were closed in the pre-stable PR plus the
+work intentionally deferred to post-stable minor releases.
+
+**Closed in the pre-stable cut:**
+
+- Class modifiers tightened: `OpResult` no longer `sealed`
+  (variant set is open in practice — drop sealed avoids forcing
+  a major-version bump when a new variant lands).
+  `AtCollection<T>` is `interface class` (forbids `extends`,
+  preserves `implements` for mocking). `OpSuccess` /
+  `OpFailure` / every `CEvent` subclass / `CollectionOpException`
+  marked `final class` so user code can't subclass and lock the
+  field set.
+- `CAncestor` typedef → `final class` with named-only ctor;
+  `Query.watchWithSub` return type → `final class WithChildren<P, C>`.
+  Anonymous records lock destructuring; named classes can grow
+  fields without breaking call sites.
+- `update(item, sharedWith:)` named-optional removed —
+  `updateSharedWith` is the single sharing-mutation path.
+- `logger` privatised; `prettyString` moved to a `CItem` extension.
+- `PredicateOp` enum pre-allocates `like`, `inSet`, `between`,
+  `contains`, `startsWith`. `CmpPredicate.evaluate` throws
+  `UnimplementedError` for these until they have implementations
+  — adding the impl later is a non-breaking change.
+- `exists(id, owner)` — presence check that doesn't materialise
+  the value.
+- `Query<T>.distinct(keyFn)` — first-seen-per-key dedupe
+  terminal.
+- `Query.fetch` renamed to `Query.get`; `fetch` retained as a
+  `@Deprecated` shim for one minor.
+- `@visibleForTesting` symbols relocated into a part-of file
+  (`collections_test_hooks.dart`) and re-exposed as top-level
+  test helpers; the old instance-method names no longer appear
+  on `coll.<TAB>` auto-complete.
+
+**Deferred to post-stable (TODO comments in `collections.dart`):**
+
+- `createBatch` / `deleteBatch` — best-effort batched per-atSign
+  writes returning `List<OpResult>`. Highest-impact future
+  completeness gap (every peer library exposes some batching
+  primitive). Atsign Protocol can't offer cross-atSign ACID;
+  per-atSign batching is the achievable target.
+- `Query<T>.startAfter(CItem)` cursor pagination — for stable
+  scrolling on a dynamic data set. Today only offset-based
+  `skip` / `limit` is offered.
+
+Both are additive — they slot in without touching existing call
+sites — so deferring them is non-breaking.
+
 ## Verification
 
 - `dart analyze lib test example/bin` → clean.

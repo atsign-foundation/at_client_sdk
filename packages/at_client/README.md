@@ -147,7 +147,7 @@ final overdue = todos.query()
     .thenBy((t) => t.obj.title)   // tiebreak within same due date
     .limit(20);
 
-final list = await overdue.fetch();   // one-shot List
+final list = await overdue.get();     // one-shot List
 final live = overdue.watch();         // Stream<List<CItem<Todo>>>
 
 final openCount = await todos.query().where((t) => !t.obj.done).count();
@@ -180,7 +180,7 @@ abstract class $Todo {
 final overdue = await todos.query()
     .wherePath($Todo.done.eq(false))
     .wherePath($Todo.due.lt(DateTime.now()))
-    .fetch();
+    .get();
 ```
 
 Multi-level parent → children → grandchildren joins use
