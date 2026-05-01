@@ -401,13 +401,22 @@ class _TodosAppState extends State<TodosApp> {
   // ---------------------------------------------------------------------------
   // Build — widget tree
 
-  // Minimum terminal size below which the layout clips badly:
-  // - Footer hint line is ~93 chars long.
-  // - Header (3) + log pane (10) + footer (1) = 14 rows of fixed
-  //   chrome, leaving room for a usable list/detail pane and a
-  //   centred form-modal stack.
+  // Minimum terminal size below which the layout clips badly.
+  //
+  // Width: footer hint line is ~93 chars long; below ~95 cols it
+  // wraps or truncates.
+  //
+  // Height: header (3) + log pane (10) + footer (1) = 14 rows of
+  // fixed chrome. The detail pane's intrinsic content (title,
+  // notes, sharedWith row, owner / due / scheduling rows, read-
+  // receipt timeline) is around 17-20 rows when populated, so the
+  // remaining Expanded area needs to be at least that tall — any
+  // less and the detail pane overflows downward and paints over
+  // the log pane. 36 rows gives a comfortable margin (Expanded
+  // gets 22) for both the populated detail view and the form
+  // modal stack.
   static const int _minCols = 95;
-  static const int _minRows = 28;
+  static const int _minRows = 36;
 
   @override
   Component build(BuildContext context) {
@@ -1695,6 +1704,9 @@ class _TodosAppState extends State<TodosApp> {
     final nextDueFragment =
         _nextDueLabel.isEmpty ? '' : ' · next due $_nextDueLabel';
     return Container(
+      // Stretch full-width so the cyan border spans the column even
+      // when the header text happens to be short.
+      width: double.infinity,
       height: 3,
       padding: const EdgeInsets.symmetric(horizontal: 1),
       decoration: BoxDecoration(border: BoxBorder.all(color: Colors.cyan)),
@@ -1957,13 +1969,23 @@ class _TodosAppState extends State<TodosApp> {
             ? logMessages.sublist(logMessages.length - logHeight)
             : logMessages;
     return Container(
+      // Stretch to the column's full width — without this, Container
+      // sizes to its child Column, which (when the log only holds the
+      // 'Log' header line) collapses to a 5-cell-wide strip.
+      width: double.infinity,
       height: logHeight + 2,
       decoration: BoxDecoration(border: BoxBorder.all(color: Colors.gray)),
       padding: const EdgeInsets.symmetric(horizontal: 1),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Log', style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+            'Log',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           for (final line in tail)
             Text(line, style: TextStyle(color: Colors.gray)),
         ],
