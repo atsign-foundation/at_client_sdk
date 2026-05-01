@@ -193,7 +193,7 @@ import 'package:mutex/mutex.dart';
 /// bad key. Apps that want the old silent-skip posture should chain
 /// `.handleError(...)` before consuming the stream.
 @experimental
-class AtCollection<T> {
+interface class AtCollection<T> {
   @visibleForTesting
   static const String readReceiptNamespacePart = '__rr';
   static const String _rr = readReceiptNamespacePart;
@@ -3790,21 +3790,21 @@ final class CItem<T> {
 
 enum CollectionOp { put, delete }
 
-sealed class OpResult {
+abstract base class OpResult {
   final AtKey atKey;
   final CollectionOp op;
 
   OpResult(this.atKey, this.op);
 }
 
-class OpSuccess extends OpResult {
+final class OpSuccess extends OpResult {
   OpSuccess(super.atKey, super.op);
 
   @override
   String toString() => '$atKey:${op.name}:Success';
 }
 
-class OpFailure extends OpResult {
+final class OpFailure extends OpResult {
   final Object reason;
 
   OpFailure(super.atKey, super.op, this.reason);
@@ -3817,7 +3817,7 @@ class OpFailure extends OpResult {
 /// [AtCollection.delete] when any key-level op failed. Inspect [results]
 /// for the per-key breakdown, or [failures] / [firstFailure] for the
 /// subset that went wrong.
-class CollectionOpException implements Exception {
+final class CollectionOpException implements Exception {
   final List<OpResult> results;
 
   CollectionOpException(this.results);
@@ -3872,7 +3872,7 @@ abstract class CEvent {
 /// they match the `owner` + `id` of the corresponding [CItem].
 /// [from] is the reader; [readAt] is the moment the notification was
 /// received (not the moment the reader wrote it).
-class CReadReceipt extends CEvent {
+final class CReadReceipt extends CEvent {
   final Atsign from;
   final DateTime readAt;
 
@@ -3884,11 +3884,11 @@ class CReadReceipt extends CEvent {
   });
 }
 
-class CItemUpdated extends CEvent {
+final class CItemUpdated extends CEvent {
   CItemUpdated({required super.owner, required super.id});
 }
 
-class CItemDeleted extends CEvent {
+final class CItemDeleted extends CEvent {
   CItemDeleted({required super.owner, required super.id});
 }
 
@@ -3903,7 +3903,7 @@ class CItemDeleted extends CEvent {
 /// [AtCollection.availableEvents] does not stop the scheduler — it
 /// runs for the lifetime of the [AtCollection], so a re-subscription
 /// later still sees the same firings.
-class CItemAvailable extends CEvent {
+final class CItemAvailable extends CEvent {
   /// The scheduled `availableAt` that just passed. Equal to or
   /// fractionally before `DateTime.now()` at emission time.
   final DateTime availableAt;
@@ -3925,7 +3925,7 @@ class CItemAvailable extends CEvent {
 /// pick different lead times. Items whose `expiresAt - leadTime` is
 /// already in the past at subscription time fire immediately on the
 /// next event-loop turn.
-class CItemExpiringSoon extends CEvent {
+final class CItemExpiringSoon extends CEvent {
   /// The item's `expiresAt`. The event fires at
   /// `expiresAt - leadTime`.
   final DateTime expiresAt;
@@ -3970,7 +3970,7 @@ class CItemExpiringSoon extends CEvent {
 /// two atSigns independently pick the same id.
 typedef CAncestor = ({String id, String subName, Atsign? owner});
 
-class CSubItemUpdated extends CEvent {
+final class CSubItemUpdated extends CEvent {
   /// Root-to-direct-parent chain. Length equals the sub-item's
   /// nesting depth (1 for a direct sub-item, 2 for a sub-sub, …).
   /// Owners are populated from the sub-item's envelope on arrival;
@@ -3989,7 +3989,7 @@ class CSubItemUpdated extends CEvent {
   String get subName => ancestry.last.subName;
 }
 
-class CSubItemDeleted extends CEvent {
+final class CSubItemDeleted extends CEvent {
   /// Root-to-direct-parent chain. Length equals the sub-item's
   /// nesting depth. **Owners are always `null` on delete events** —
   /// the sub-item is gone by the time the notification arrives, so
