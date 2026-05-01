@@ -1486,7 +1486,7 @@ interface class AtCollection<T> {
     atData.metaData!.expiresAt = n.metadata!.expiresAt;
     atData.metaData!.availableAt = n.metadata!.availableAt;
     atData.metaData!.isEncrypted = false;
-    _logger.shout('Updating cached:${n.key}');
+    _logger.info('Updating cached:${n.key}');
     await keyStore.put(
       'cached:${n.key}',
       atData,
@@ -1500,7 +1500,7 @@ interface class AtCollection<T> {
     }
     final keyStore = atClient.getLocalSecondary()?.keyStore;
     if (keyStore == null) return;
-    _logger.shout('Deleting cached:${n.key}');
+    _logger.info('Deleting cached:${n.key}');
     await keyStore.remove('cached:${n.key}', skipCommit: true);
   }
 
@@ -1544,7 +1544,7 @@ interface class AtCollection<T> {
   Future<void> _handleSubObjNotificationImpl(AtNotification n) async {
     final parts = _getPartsFromNotifKey(n);
     if (parts.ancestry.isEmpty) {
-      _logger.shout('handleSubObjNotification: empty ancestry ${n.key}');
+      _logger.info('handleSubObjNotification: empty ancestry ${n.key}');
       return;
     }
     final directParent = parts.ancestry.last;
@@ -2699,7 +2699,13 @@ final class Query<T> {
         await childSubs.remove(k)?.cancel();
         childLatest.remove(k);
       }
-      // Open subs for newly-arrived parents.
+      // Track whether we opened any new child sub. If we did, skip
+      // the explicit emit below — each new sub's initial-fetch
+      // emission already calls emit() through its listener, and
+      // emitting from both paths produced duplicate snapshots
+      // (consumers that did per-snapshot work, e.g. a TUI sending a
+      // read-receipt on every new todo, were doing it twice).
+      bool openedNewSub = false;
       for (final p in parents) {
         final k = keyOf(p);
         if (childSubs.containsKey(k)) continue;
@@ -2726,8 +2732,14 @@ final class Query<T> {
             if (!ctrl.isClosed) ctrl.addError(e, st);
           },
         );
+        openedNewSub = true;
       }
-      emit();
+      // No new subs opened (either only leavers, or the parent set
+      // is unchanged) — emit now, otherwise no event is delivered
+      // for the leaver removal / parent-set churn.
+      if (!openedNewSub) {
+        emit();
+      }
     }
 
     ctrl = StreamController<List<WithChildren<T, U>>>(
@@ -3837,14 +3849,31 @@ final class CItem<T> {
   /// Idempotent: if the current atSign has already posted a read
   /// receipt for this item, does nothing. Otherwise creates a receipt
   /// sub-item shared with [owner]. No-op on self-owned items.
+  ///
+  /// The receipt's id is the fixed string `'r'` — receipt identity
+  /// within the `__rr` sub-collection is determined by the
+  /// `(owner, id)` pair, where `owner` is the reader's atSign.
+  /// Repeated calls from the same reader resolve to the same key
+  /// and the duplicate-id guard in [AtCollection.create] short-
+  /// circuits the second write, regardless of which caller wins
+  /// any race between [wasMarkedReadByMe] and [AtCollection.create]
+  /// on the local store.
   Future<void> markReadByMe() async {
     if (owner == self) return;
-    if (await wasMarkedReadByMe()) return;
     final rr = _collection.readReceiptsFor(this);
-    await rr.create(
-      obj: {'readAt': DateTime.now().toUtc().toIso8601String()},
-      sharedWith: {owner},
-    );
+    const receiptId = 'r';
+    if (await rr.exists(receiptId, self)) return;
+    try {
+      await rr.create(
+        id: receiptId,
+        obj: {'readAt': DateTime.now().toUtc().toIso8601String()},
+        sharedWith: {owner},
+      );
+    } on StateError {
+      // Lost a race with another concurrent caller from this
+      // reader: the receipt now exists. The logical state ("this
+      // reader has acknowledged this item") is preserved.
+    }
   }
 
   /// Shortcut for [AtCollection.readReceiptsFor] on this item — the
