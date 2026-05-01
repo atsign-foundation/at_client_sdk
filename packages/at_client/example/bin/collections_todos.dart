@@ -1947,7 +1947,15 @@ class _TodosAppState extends State<TodosApp> {
                     style: _theme.styleForAtSign(n.owner),
                   ),
                   TextSpan(
-                    text: '] ${n.obj.note}',
+                    text: '] ',
+                    style: TextStyle(color: Colors.gray),
+                  ),
+                  TextSpan(
+                    text: '${_fmtDateTime(n.createdAt)}  ',
+                    style: TextStyle(color: Colors.gray),
+                  ),
+                  TextSpan(
+                    text: n.obj.note,
                     style: TextStyle(color: Colors.gray),
                   ),
                 ],
