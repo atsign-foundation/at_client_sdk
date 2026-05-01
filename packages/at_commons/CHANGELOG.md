@@ -1,9 +1,7 @@
-## 5.10.0
+## 5.9.0
 
 - feat: add `AtKey.fullKey` getter — key name including its namespace
 - feat: add `AtKey.fullKeyAndOwner` getter — `fullKey` combined with the owning atSign
-
-## 5.9.0
 - feat: add equals method for `AtBytes`
 
 ## 5.8.0
