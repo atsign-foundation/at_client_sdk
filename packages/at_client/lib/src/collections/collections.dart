@@ -742,6 +742,23 @@ interface class AtCollection<T> {
       ..sort((a, b) => a.fullKeyAndOwner.compareTo(b.fullKeyAndOwner));
   }
 
+  /// True iff an item with the given [id] owned by [owner] exists in
+  /// this collection — without fetching or decoding its value. Cheap
+  /// presence-check: use this in preference to `getOrNull(id, owner) != null`
+  /// when you only care whether the item is there.
+  ///
+  /// For self-owned items the call hits the seen-id cache populated
+  /// by every successful read/write in this process; for items owned
+  /// by other atSigns it does a key-listing scan and returns true if
+  /// any cached copy exists locally.
+  Future<bool> exists(String id, Atsign owner) async {
+    if (owner == atSign) {
+      return _selfKeyExists(id);
+    }
+    final keys = await _getKeysInternal(id: id, owner: owner);
+    return keys.isNotEmpty;
+  }
+
   /// Fetches a single item. Throws [AtKeyNotFoundException] if no item
   /// with this [id] owned by this [owner] exists. For a null-returning
   /// variant, see [getOrNull].
@@ -2488,6 +2505,25 @@ final class Query<T> {
   Future<List<CItem<T>>> fetch() async {
     final all = await _collection.getItems();
     return _spec._apply(all);
+  }
+
+  /// One-shot fetch with duplicates removed by [keyFn]. The first
+  /// matching item per key is kept; subsequent items mapping to the
+  /// same key are dropped. Order is the same first-seen order as
+  /// [fetch] — apply [orderBy] / [thenBy] before [distinct] to control
+  /// which item wins each key bucket.
+  ///
+  /// Cheap convenience for "give me one of each X" queries —
+  /// equivalent to calling [groupBy] and taking each bucket's first
+  /// element, but without materialising the buckets.
+  Future<List<CItem<T>>> distinct<K>(K Function(CItem<T> item) keyFn) async {
+    final items = await fetch();
+    final seen = <K>{};
+    final result = <CItem<T>>[];
+    for (final item in items) {
+      if (seen.add(keyFn(item))) result.add(item);
+    }
+    return result;
   }
 
   /// Number of items matching the full spec (predicates + sort + skip

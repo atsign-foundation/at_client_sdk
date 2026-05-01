@@ -1002,4 +1002,77 @@ void main() {
       expect(byDone[true]!.map((i) => i.id), ['c']);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  group('distinct()', () {
+    test('keeps first item per keyFn output, drops later duplicates',
+        () async {
+      final c = buildCollection();
+      seed({
+        'a': Task('alpha', done: false, due: d1),
+        'b': Task('bravo', done: true, due: d2),
+        'c': Task('charlie', done: false, due: d3),
+        'd': Task('delta', done: true, due: d4),
+      });
+      // Without orderBy, order is fetch-order; first seen per key wins.
+      final ids = (await c.query().distinct<bool>((t) => t.obj.done))
+          .map((i) => i.id)
+          .toSet();
+      // Two entries — one for `done: true`, one for `done: false`.
+      expect(ids.length, 2);
+    });
+
+    test('honours orderBy/thenBy first — winner per bucket is sort-minimum',
+        () async {
+      final c = buildCollection();
+      seed({
+        'a': Task('alpha', done: false, due: d3),
+        'b': Task('bravo', done: false, due: d1),
+        'c': Task('charlie', done: true, due: d4),
+        'd': Task('delta', done: true, due: d2),
+      });
+      final ids = (await c
+              .query()
+              .orderBy((t) => t.obj.due)
+              .distinct<bool>((t) => t.obj.done))
+          .map((i) => i.id)
+          .toList();
+      // Sorted by due: b (d1, !done), d (d2, done), a (d3, !done), c (d4, done).
+      // First-seen-per-bucket -> b (false), d (true).
+      expect(ids, ['b', 'd']);
+    });
+
+    test('empty result-set returns empty list', () async {
+      final c = buildCollection();
+      seed({});
+      final list = await c.query().distinct<int>((t) => t.obj.title.length);
+      expect(list, isEmpty);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  group('exists()', () {
+    test('returns true for a self-owned item present in the seed', () async {
+      final c = buildCollection();
+      seed({'a': Task('alpha', done: false, due: d1)});
+      // Materialise once so the seen-id cache is primed.
+      await c.getItems();
+      expect(await c.exists('a', selfAtSign), isTrue);
+    });
+
+    test('returns false for a self-owned id that does not exist', () async {
+      final c = buildCollection();
+      // _selfKeyExists falls back to atClient.get(); have it throw so the
+      // method returns false as documented.
+      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+      expect(await c.exists('nope', selfAtSign), isFalse);
+    });
+
+    test('returns false for an other-owner id with no cached copy', () async {
+      final c = buildCollection();
+      when(() => atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((_) async => <AtKey>[]);
+      expect(await c.exists('a', '@bob'.toAtsign()), isFalse);
+    });
+  });
 }
