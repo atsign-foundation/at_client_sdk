@@ -2955,9 +2955,35 @@ final class Query<T> {
   ///
   /// For queries with `limit` or `skip` set, the next-out-of-window
   /// item isn't cached, so the terminal falls back to a full
-  /// `fetch()` on each event — same behaviour as before. (Future
-  /// option: keep `limit + lookahead` items cached so deltas can
-  /// patch the window without a refetch.)
+  /// `fetch()` on each event — same behaviour as before.
+  ///
+  /// **Future option: lookahead cache.** Cache `limit + K` items in
+  /// sort order so an event that evicts an item from the visible
+  /// window can promote the head of the lookahead in its place,
+  /// without a refetch. Refill the lookahead asynchronously when it
+  /// drops below a watermark. A full refetch is still the right
+  /// fallback when the lookahead is exhausted faster than refill,
+  /// or when an event arrives for an `(owner, id)` pair we've
+  /// never seen (it could rank into the window from outside the
+  /// cached prefix). `skip` queries are messier — they need a
+  /// before-window lookahead too, which mostly defeats the point
+  /// of `skip` as a memory saver, so the pragmatic shape is
+  /// "lookahead for `limit`-only queries; `skip`-bearing queries
+  /// stay on full-refetch."
+  ///
+  /// Two reasons this is still deferred:
+  ///   1. **Justification today is weak.** Reads are local-first;
+  ///      a "full refetch" is a Hive scan, not a network call.
+  ///      Events arrive at the ~1-3 s sync cadence (or fsync's
+  ///      ~100 ms once that ships), so even a UI showing a
+  ///      `limit=20` window isn't doing much work per event.
+  ///   2. **SQLite migration may make it moot.** When the local
+  ///      store moves to SQLite with JSON-field indexes (see
+  ///      `AtCollection_API_Assessment.md` §1a), a sort+limit
+  ///      `get()` becomes an indexed query rather than a scan.
+  ///      The cost the lookahead would amortise mostly evaporates,
+  ///      and the simpler "refetch on every event" stays correct
+  ///      and cheap.
   ///
   /// Per-stream events are serialised via an internal mutex so two
   /// near-simultaneous events can't race on the cached list.
