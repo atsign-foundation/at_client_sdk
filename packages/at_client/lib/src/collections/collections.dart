@@ -3775,6 +3775,14 @@ final class CItem<T> {
   final Mutex _readersLoadMutex = Mutex();
   StreamSubscription<CReadReceipt>? _readReceiptSub;
 
+  // Serialises concurrent [markReadByMe] callers on this CItem so two
+  // overlapping callers don't both reach _put and issue duplicate
+  // wire writes for the same (owner, id) receipt. Cross-CItem-instance
+  // racing is still resolved by the deterministic receipt id + the
+  // duplicate-id guard in [AtCollection.create] — this mutex just
+  // avoids the wasted round-trip on the common single-instance path.
+  final Mutex _markReadByMeMutex = Mutex();
+
   // Cancel per-CItem read-receipt subscriptions when the CItem is GC'd
   // (CItems churn on every refreshTodos-style loop; we'd leak otherwise).
   static final Finalizer<StreamSubscription> _subFinalizer =
@@ -3860,20 +3868,22 @@ final class CItem<T> {
   /// on the local store.
   Future<void> markReadByMe() async {
     if (owner == self) return;
-    final rr = _collection.readReceiptsFor(this);
-    const receiptId = 'r';
-    if (await rr.exists(receiptId, self)) return;
-    try {
-      await rr.create(
-        id: receiptId,
-        obj: {'readAt': DateTime.now().toUtc().toIso8601String()},
-        sharedWith: {owner},
-      );
-    } on StateError {
-      // Lost a race with another concurrent caller from this
-      // reader: the receipt now exists. The logical state ("this
-      // reader has acknowledged this item") is preserved.
-    }
+    await _markReadByMeMutex.protect(() async {
+      final rr = _collection.readReceiptsFor(this);
+      const receiptId = 'r';
+      if (await rr.exists(receiptId, self)) return;
+      try {
+        await rr.create(
+          id: receiptId,
+          obj: {'readAt': DateTime.now().toUtc().toIso8601String()},
+          sharedWith: {owner},
+        );
+      } on StateError {
+        // Cross-CItem-instance race: a different CItem instance for
+        // the same (owner, id) just wrote the receipt. Receipt now
+        // exists; the logical state is preserved.
+      }
+    });
   }
 
   /// Shortcut for [AtCollection.readReceiptsFor] on this item — the
