@@ -439,6 +439,38 @@ void main() {
       expect(cmp.value, true);
       expect(cmp.field.path, ['obj', 'done']);
     });
+
+    test(
+        'reserved-but-unimplemented PredicateOp values throw UnimplementedError',
+        () async {
+      // The reserved set is pre-allocated so adding implementations
+      // later isn't a breaking enum change. Until those landings,
+      // evaluate() on a CmpPredicate built around one must throw a
+      // descriptive UnimplementedError so callers find out at use
+      // time rather than via silent false-results.
+      final c = buildCollection();
+      seed({'a': Task('alpha', done: false, due: d1)});
+      final items = await c.getItems();
+      final item = items.single;
+      const reserved = [
+        PredicateOp.like,
+        PredicateOp.inSet,
+        PredicateOp.between,
+        PredicateOp.contains,
+        PredicateOp.startsWith,
+      ];
+      for (final op in reserved) {
+        final cmp = CmpPredicate.forTest($Task.title, op, 'whatever');
+        expect(
+          () => cmp.evaluate(item),
+          throwsA(isA<UnimplementedError>().having(
+            (e) => e.message,
+            'message',
+            contains('PredicateOp.${op.name}'),
+          )),
+        );
+      }
+    });
   });
 
   // ---------------------------------------------------------------------------

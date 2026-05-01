@@ -3091,8 +3091,31 @@ extension NullablePathField<V extends Object> on PathField<V?> {
 /// (rather than encoded in the subclass) so `switch` over op stays
 /// exhaustive at evaluation time and indexed-executor pushdown can
 /// pattern-match on it.
+///
+/// The set is **not** truly closed: members [like], [inSet], [between],
+/// [contains], and [startsWith] are pre-allocated names for operators
+/// that aren't yet implemented in [CmpPredicate.evaluate]. Calling
+/// `evaluate` with one throws [UnimplementedError]. They're declared
+/// now so adding their implementations later doesn't expand the enum
+/// shape (which would force user `switch` statements to refactor).
+/// Apps that pattern-match on [PredicateOp] should always include a
+/// `default:` branch.
 @experimental
-enum PredicateOp { eq, neq, lt, lte, gt, gte, isNull, isNotNull }
+enum PredicateOp {
+  eq,
+  neq,
+  lt,
+  lte,
+  gt,
+  gte,
+  isNull,
+  isNotNull,
+  like,
+  inSet,
+  between,
+  contains,
+  startsWith,
+}
 
 /// Root of the typed-predicate AST. Mint with the operator methods on
 /// [PathField] (e.g. `field.eq(value)`); compose with [and] / [or] /
@@ -3144,6 +3167,18 @@ final class CmpPredicate extends Predicate {
 
   CmpPredicate._(this.field, this.op, this.value);
 
+  /// Build a [CmpPredicate] directly from its parts. Public-but-test-only
+  /// — use [PathField] operators (`.eq`, `.lt`, etc.) for production
+  /// construction. Exposed so tests can exercise reserved [PredicateOp]
+  /// values that don't yet have a corresponding [PathField] operator.
+  @visibleForTesting
+  factory CmpPredicate.forTest(
+    PathField<dynamic> field,
+    PredicateOp op,
+    Object? value,
+  ) =>
+      CmpPredicate._(field, op, value);
+
   @override
   bool evaluate(CItem<dynamic> item) {
     final actual = field.extract(item);
@@ -3176,6 +3211,14 @@ final class CmpPredicate extends Predicate {
           default:
             throw StateError('unreachable');
         }
+      case PredicateOp.like:
+      case PredicateOp.inSet:
+      case PredicateOp.between:
+      case PredicateOp.contains:
+      case PredicateOp.startsWith:
+        throw UnimplementedError(
+          'PredicateOp.${op.name} is reserved but not yet implemented.',
+        );
     }
   }
 }
