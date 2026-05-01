@@ -1729,16 +1729,29 @@ class _TodosAppState extends State<TodosApp> {
     );
   }
 
+  // List pane background. Dark navy gives a deterministic backdrop
+  // for the row foregrounds — without it, non-selected rows fall
+  // through to the terminal default, which on a light-themed
+  // terminal makes Colors.white text effectively invisible against
+  // the user's bg. Pairs with [_buildTodoRow]'s explicit fg colours.
+  static const Color _listPaneBg = Color.fromRGB(18, 22, 32);
+
   Component _buildListPane() {
     final focused = _activePane == Pane.list;
     return Container(
       decoration: BoxDecoration(
         border: BoxBorder.all(color: focused ? Colors.cyan : Colors.gray),
+        color: _listPaneBg,
       ),
       padding: const EdgeInsets.symmetric(horizontal: 1),
       child:
           todos.isEmpty
-              ? const Center(child: Text('(no todos)'))
+              ? const Center(
+                  child: Text(
+                    '(no todos)',
+                    style: TextStyle(color: Colors.gray),
+                  ),
+                )
               : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1957,10 +1970,13 @@ class _TodosAppState extends State<TodosApp> {
     return RichText(text: TextSpan(children: children));
   }
 
-  static String _fmtDateTime(DateTime? d) =>
-      d == null
-          ? '—'
-          : d.toIso8601String().substring(0, 19).replaceFirst('T', ' ');
+  static String _fmtDateTime(DateTime? d) {
+    if (d == null) return '—';
+    String pad(int n, [int width = 2]) => n.toString().padLeft(width, '0');
+    return '${d.year}-${pad(d.month)}-${pad(d.day)} '
+        '${pad(d.hour)}:${pad(d.minute)}:${pad(d.second)}'
+        '.${pad(d.millisecond, 3)}';
+  }
 
   Component _buildLogPane() {
     const logHeight = 8;
