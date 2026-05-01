@@ -309,7 +309,7 @@ class _TodosAppState extends State<TodosApp> {
       final combined = <TodoWithNotes>[];
       for (final p in parents) {
         final notes = await _notesSubFor(p).query().fetch();
-        combined.add((parent: p, children: notes));
+        combined.add(WithChildren(parent: p, children: notes));
       }
       await _onCombinedSnapshot(combined);
     } catch (e) {

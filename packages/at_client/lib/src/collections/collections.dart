@@ -1590,7 +1590,7 @@ interface class AtCollection<T> {
     if (ownersFromEnvelope == null) return ancestry;
     return [
       for (int i = 0; i < ancestry.length; i++)
-        (
+        CAncestor(
           id: ancestry[i].id,
           subName: ancestry[i].subName,
           owner: i < ownersFromEnvelope.length ? ownersFromEnvelope[i] : null,
@@ -1622,7 +1622,7 @@ interface class AtCollection<T> {
     // ancestor sees root-first ancestry (matching the notification
     // path).
     final links = <CAncestor>[
-      (
+      CAncestor(
         id: _parentItem!.id,
         subName: namespace.split('.').first,
         owner: _parentItem!.owner,
@@ -1636,7 +1636,7 @@ interface class AtCollection<T> {
         ancestry: links.reversed.toList(),
       ));
       if (cursor._parentItem == null) break;
-      links.add((
+      links.add(CAncestor(
         id: cursor._parentItem!.id,
         subName: cursor.namespace.split('.').first,
         owner: cursor._parentItem!.owner,
@@ -1657,7 +1657,7 @@ interface class AtCollection<T> {
   void _emitAncestorSubDeleted(CItem<T> item) {
     if (_parentItem == null) return;
     final links = <CAncestor>[
-      (
+      CAncestor(
         id: _parentItem!.id,
         subName: namespace.split('.').first,
         owner: _parentItem!.owner,
@@ -1671,7 +1671,7 @@ interface class AtCollection<T> {
         ancestry: links.reversed.toList(),
       ));
       if (cursor._parentItem == null) break;
-      links.add((
+      links.add(CAncestor(
         id: cursor._parentItem!.id,
         subName: cursor.namespace.split('.').first,
         owner: cursor._parentItem!.owner,
@@ -1700,7 +1700,7 @@ interface class AtCollection<T> {
       // (i.e. the child-step toward the current item). Owners are
       // not recoverable from a key — the dispatcher fetches the
       // sub-item's envelope to fill them in for update events.
-      ancestry.add((id: parts[i], subName: parts[i - 1], owner: null));
+      ancestry.add(CAncestor(id: parts[i], subName: parts[i - 1]));
     }
     return (
       from: n.from.toAtsign(),
@@ -2351,6 +2351,21 @@ final class TreeNode<T> {
   const TreeNode({required this.parent, required this.branches});
 }
 
+/// One row in the snapshot returned by [Query.watchWithSub] — a
+/// parent [CItem<P>] alongside the current list of its children
+/// [CItem<C>] from a single named sub-collection.
+///
+/// Equivalent to a `(parent, children)` record but a named class so
+/// the SDK can add fields in future minor versions without breaking
+/// destructuring code at consumer sites.
+@experimental
+final class WithChildren<P, C> {
+  final CItem<P> parent;
+  final List<CItem<C>> children;
+
+  const WithChildren({required this.parent, required this.children});
+}
+
 // -----------------------------------------------------------------------------
 // Query<T> — fluent, composable, value-typed query over AtCollection<T>.
 //
@@ -2600,7 +2615,7 @@ final class Query<T> {
   ///       subFromJson: TodoNote.fromJson,
   ///       subTypeTag: 'TodoNote',
   ///     );
-  /// // stream: Stream<List<({CItem<Todo> parent, List<CItem<TodoNote>> children})>>
+  /// // stream: Stream<List<WithChildren<Todo, TodoNote>>>
   /// ```
   ///
   /// Re-emits on any parent update/delete that could affect the
@@ -2620,7 +2635,7 @@ final class Query<T> {
   /// child-query parameter so callers can filter / sort the children
   /// too; today the children are the sub-collection's full default
   /// view.
-  Stream<List<({CItem<T> parent, List<CItem<U>> children})>> watchWithSub<U>({
+  Stream<List<WithChildren<T, U>>> watchWithSub<U>({
     required String subName,
     required Duration subDefaultExpiration,
     U Function(Map<String, dynamic>)? subFromJson,
@@ -2631,8 +2646,7 @@ final class Query<T> {
     final childLatest = <String, List<CItem<U>>>{};
     final childSubs = <String, StreamSubscription<List<CItem<U>>>>{};
     List<CItem<T>> latestParents = const [];
-    late final StreamController<
-        List<({CItem<T> parent, List<CItem<U>> children})>> ctrl;
+    late final StreamController<List<WithChildren<T, U>>> ctrl;
     StreamSubscription<List<CItem<T>>>? parentSub;
 
     String keyOf(CItem<T> p) => '${p.owner}:${p.id}';
@@ -2641,7 +2655,7 @@ final class Query<T> {
       if (ctrl.isClosed) return;
       ctrl.add([
         for (final p in latestParents)
-          (
+          WithChildren<T, U>(
             parent: p,
             children: List<CItem<U>>.from(childLatest[keyOf(p)] ?? const []),
           ),
@@ -2689,7 +2703,7 @@ final class Query<T> {
       emit();
     }
 
-    ctrl = StreamController<List<({CItem<T> parent, List<CItem<U>> children})>>(
+    ctrl = StreamController<List<WithChildren<T, U>>>(
       onListen: () {
         parentSub = watch().listen(
           (parents) => unawaited(onParents(parents)),
@@ -3968,7 +3982,30 @@ final class CItemExpiringSoon extends CEvent {
 /// App code that filters event streams by an ancestor must match on
 /// **both** `id` AND `owner` to avoid cross-owner collisions when
 /// two atSigns independently pick the same id.
-typedef CAncestor = ({String id, String subName, Atsign? owner});
+final class CAncestor {
+  final String id;
+  final String subName;
+  final Atsign? owner;
+
+  const CAncestor({
+    required this.id,
+    required this.subName,
+    this.owner,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is CAncestor &&
+      other.id == id &&
+      other.subName == subName &&
+      other.owner == owner;
+
+  @override
+  int get hashCode => Object.hash(id, subName, owner);
+
+  @override
+  String toString() => 'CAncestor(id: $id, subName: $subName, owner: $owner)';
+}
 
 final class CSubItemUpdated extends CEvent {
   /// Root-to-direct-parent chain. Length equals the sub-item's

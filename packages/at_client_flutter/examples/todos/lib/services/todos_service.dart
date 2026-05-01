@@ -6,10 +6,10 @@ import 'package:flutter/foundation.dart';
 import '../models/todo.dart';
 import 'atsign_colors.dart';
 
-/// Record type for the combined parent-plus-notes stream emitted by
+/// Type alias for the combined parent-plus-notes stream emitted by
 /// [TodosService.watchTodosWithNotes]. Each row carries one todo and
 /// its current list of notes.
-typedef TodoWithNotes = ({CItem<Todo> parent, List<CItem<TodoNote>> children});
+typedef TodoWithNotes = WithChildren<Todo, TodoNote>;
 
 /// Wraps the two `AtCollection`s (todos and notes) and exposes reactive
 /// state for Flutter widgets. Mirrors the TUI's in-file logic verbatim for
@@ -208,7 +208,7 @@ class TodosService {
       final combined = <TodoWithNotes>[];
       for (final p in parents) {
         final notes = await _notesSubFor(p).query().fetch();
-        combined.add((parent: p, children: notes));
+        combined.add(WithChildren(parent: p, children: notes));
       }
       ctrl.add(combined);
     } catch (e, st) {

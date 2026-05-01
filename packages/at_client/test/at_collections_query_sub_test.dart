@@ -156,7 +156,7 @@ void main() {
       seedComment('p1', 'c2', 'world');
 
       final snapshots =
-          <List<({CItem<Post> parent, List<CItem<Comment>> children})>>[];
+          <List<WithChildren<Post, Comment>>>[];
       final sub = posts
           .query()
           .watchWithSub<Comment>(
@@ -181,7 +181,7 @@ void main() {
       final posts = buildPosts();
       seedPost('p1', 'first');
       final snapshots =
-          <List<({CItem<Post> parent, List<CItem<Comment>> children})>>[];
+          <List<WithChildren<Post, Comment>>>[];
       final sub = posts
           .query()
           .watchWithSub<Comment>(
@@ -218,7 +218,7 @@ void main() {
       seedPost('p2', 'second');
       seedComment('p1', 'c1', 'hello');
       final snapshots =
-          <List<({CItem<Post> parent, List<CItem<Comment>> children})>>[];
+          <List<WithChildren<Post, Comment>>>[];
       final sub = posts
           .query()
           .watchWithSub<Comment>(
@@ -259,7 +259,7 @@ void main() {
       seedComment('p1', 'c1', 'hello');
       seedComment('p2', 'c9', 'other');
       final snapshots =
-          <List<({CItem<Post> parent, List<CItem<Comment>> children})>>[];
+          <List<WithChildren<Post, Comment>>>[];
       final sub = posts
           .query()
           .watchWithSub<Comment>(
@@ -311,7 +311,7 @@ void main() {
       seedPost('p1', 'first');
       seedPost('p2', 'second');
       final snapshots =
-          <List<({CItem<Post> parent, List<CItem<Comment>> children})>>[];
+          <List<WithChildren<Post, Comment>>>[];
       final sub = posts
           .query()
           .watchWithSub<Comment>(
