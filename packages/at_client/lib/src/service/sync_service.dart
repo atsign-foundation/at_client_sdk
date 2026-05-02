@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:at_commons/at_commons.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show CommitOp;
+import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 
@@ -174,4 +177,110 @@ abstract class SyncProgressListener {
 @experimental
 class SyncTelemetryEvent extends AtTelemetryEvent {
   SyncTelemetryEvent(super.name, super.value);
+}
+
+/// Adds [waitUntilCaughtUp] to every [SyncService] without forcing
+/// existing implementers to add a method to satisfy a new abstract
+/// member. Implemented as an extension (not a method on [SyncService]
+/// or a mixin) so:
+///
+///   - third-party code that uses `implements SyncService` keeps
+///     compiling unchanged;
+///   - callers holding a [SyncService] typed reference can call
+///     `syncSvc.waitUntilCaughtUp(...)` directly, no cast or opt-in
+///     required;
+///   - the body uses only the existing public API ([sync],
+///     [addProgressListener], [removeProgressListener]), so the
+///     behaviour rides on whatever progress events the underlying
+///     [SyncService] emits — not on private internals of
+///     `SyncServiceImpl`.
+extension SyncServiceWaitUntilCaughtUp on SyncService {
+  static final AtSignLogger _waitLogger =
+      AtSignLogger(' SyncServiceWaitUntilCaughtUp ');
+
+  /// Returns a [Future] that completes once the local commit id has
+  /// caught up to the remote commit id **as it stood at the time of
+  /// this call**. Captures the remote commit id reported by the first
+  /// [SyncProgress] event that fires after the call and completes the
+  /// future once a subsequent event reports
+  /// `localCommitId >= snapshotServerCommitId`. New remote changes
+  /// that arrive after the call do NOT extend the wait.
+  ///
+  /// If local is already caught up at the time of the next sync
+  /// iteration (the iteration short-circuits with "server and local
+  /// are in sync", emitting a [SyncStatus.success] event with both
+  /// commit ids null), the future completes immediately.
+  ///
+  /// Transient sync failures while waiting are tolerated — the
+  /// returned future does not reject on a [SyncStatus.failure] event;
+  /// callers bound the wait by passing [timeout]. With no [timeout]
+  /// and a stalled sync (e.g. network loss for the duration), the
+  /// future hangs.
+  ///
+  /// Throws [TimeoutException] when [timeout] elapses before catch-up.
+  Future<void> waitUntilCaughtUp({Duration? timeout}) {
+    final completer = Completer<void>();
+    int? snapshotServerCommitId;
+    late final SyncProgressListener listener;
+
+    void detach() {
+      // Defer removal so we don't mutate the listener list while the
+      // implementation is iterating it on the same call frame.
+      Future.microtask(() => removeProgressListener(listener));
+    }
+
+    listener = _ClosureProgressListener((progress) {
+      if (completer.isCompleted) return;
+      if (snapshotServerCommitId == null) {
+        // The "server and local are in sync" early-exit fires a
+        // SyncStatus.success event with both commit ids null — treat
+        // that as "already caught up at call time" and complete.
+        if (progress.syncStatus == SyncStatus.success &&
+            progress.serverCommitId == null &&
+            progress.localCommitId == null) {
+          detach();
+          completer.complete();
+          return;
+        }
+        // Wait for an event that actually carries commit ids.
+        if (progress.serverCommitId == null) return;
+        snapshotServerCommitId = progress.serverCommitId;
+      }
+      _waitLogger.shout('serverCommitId (target): $snapshotServerCommitId'
+          ' localCommitId (actual): ${progress.localCommitId}');
+      final local = progress.localCommitId;
+      if (local != null && local >= snapshotServerCommitId!) {
+        detach();
+        completer.complete();
+      }
+    });
+
+    addProgressListener(listener);
+    // Trigger an iteration so a progress event is guaranteed to fire
+    // even when nothing else is currently driving sync.
+    sync();
+
+    if (timeout == null) return completer.future;
+    return completer.future.timeout(timeout, onTimeout: () {
+      detach();
+      throw TimeoutException(
+        'waitUntilCaughtUp timed out after $timeout',
+        timeout,
+      );
+    });
+  }
+}
+
+/// Internal [SyncProgressListener] that delegates to a closure. Used by
+/// [SyncServiceWaitUntilCaughtUp.waitUntilCaughtUp] so the extension can
+/// register a one-shot listener without forcing each call site to
+/// declare its own subclass.
+class _ClosureProgressListener implements SyncProgressListener {
+  final void Function(SyncProgress) _onEvent;
+
+  _ClosureProgressListener(this._onEvent);
+
+  @override
+  void onSyncProgressEvent(SyncProgress syncProgress) =>
+      _onEvent(syncProgress);
 }

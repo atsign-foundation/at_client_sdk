@@ -24,21 +24,23 @@ platform plugins that don't have web implementations today.
 | A **Dart CLI or server app**               | [`at_cli_commons`](../at_cli_commons) for boilerplate + [`at_onboarding_cli`](../at_onboarding_cli) to provision atSigns |
 | A **Flutter app** (mobile/desktop/IoT)     | [`at_client_flutter`](../at_client_flutter) — ships pre-built onboarding / APKAM / keychain widgets (web not supported)  |
 | **Understanding** the atSign lifecycle     | [`at_auth`](../at_auth) — platform-neutral onboarding / authentication core with a detailed lifecycle writeup            |
-| **Shared types** (`AtKey`, `Metadata`, …)  | [`at_commons`](../at_commons)                                                                                            |
 
 ## Core surface
 
 The `AtClient` interface ([`lib/src/client/at_client_spec.dart`](lib/src/client/at_client_spec.dart))
 is the main entry point once authentication is complete.
 
-- `put(AtKey, value)` / `get(AtKey)` / `delete(AtKey)` — CRUD against
-  the keystore
+- `collection<T>(namespace, defaultExpiration, {fromJson})` — returns a
+  `Future<AtCollection<T>>`. AtCollections do not leak any low-level details 
+  and allow you to work with your own domain objects and types (see 
+  [Collections] (#collections) below)
 - `notificationService` — fire-and-forget and pub/sub messaging
   ([`lib/src/service/notification_service.dart`](lib/src/service/notification_service.dart))
 - `syncService` — background sync between the local store and the
   atServer
-- `collection<T>(namespace, defaultExpiration, {fromJson})` — returns a
-  `Future<AtCollection<T>>` (see [Collections](#collections) below)
+- `put(AtKey, value)` / `get(AtKey)` / `delete(AtKey)` — low level CRUD against
+  the keystore. You should almost never need to do this if you are using 
+  AtCollections.
 
 ## Examples
 
