@@ -277,12 +277,31 @@ interface class AtCollection<T> {
   late final RegExp _regexObjAny;
   late final String _regexAllStr;
 
-  late final StreamSubscription<AtNotification> _notificationSubscription;
+  /// True iff this collection consumes events from
+  /// [LocalSecondary.dataEvents] instead of [NotificationService].
+  /// Set once at construction and immutable for the lifetime of the
+  /// collection. Sub-collections built via [readReceiptsFor] /
+  /// [subCollection] inherit the parent's choice.
+  final bool _eventsFromLocalSecondary;
+
+  /// Subscription to [NotificationService] events. Non-null only when
+  /// [_eventsFromLocalSecondary] is `false`.
+  StreamSubscription<AtNotification>? _notificationSubscription;
+
+  /// Subscription to [LocalSecondary.dataEvents]. Non-null only when
+  /// [_eventsFromLocalSecondary] is `true`.
+  StreamSubscription<DataEvent>? _dataEventSubscription;
 
   // The notification stream used for this collection's dispatch. Stored
   // so sub-collections built via [readReceiptsFor] can reuse an
   // injected (test) stream rather than hit the NotificationService.
+  // Only relevant when _eventsFromLocalSecondary is false.
   Stream<AtNotification>? _injectedNotifications;
+
+  // Mirror of [_injectedNotifications] for the data-event path:
+  // sub-collections inherit the parent's injected stream so test
+  // hooks compose cleanly.
+  Stream<DataEvent>? _injectedDataEvents;
 
   // Sub-collection bookkeeping. On instances returned by [subCollection],
   // these point at the parent item and the parent collection; they're null
@@ -306,6 +325,7 @@ interface class AtCollection<T> {
     AtClient atClient,
     String namespace,
     Duration defaultExpiration, {
+    required bool eventsFromLocalSecondary,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
   }) =>
@@ -313,6 +333,7 @@ interface class AtCollection<T> {
         atClient,
         namespace,
         defaultExpiration,
+        eventsFromLocalSecondary: eventsFromLocalSecondary,
         fromJson: fromJson,
         typeTag: typeTag,
       );
@@ -333,19 +354,45 @@ interface class AtCollection<T> {
         atClient,
         namespace,
         defaultExpiration,
+        eventsFromLocalSecondary: false,
         fromJson: fromJson,
         typeTag: typeTag,
         notifications: notifications,
+      );
+
+  /// Test-only factory mirroring [_withInjectedNotifications] but for
+  /// the event-driven path: drives the dispatch from an injected
+  /// [Stream<DataEvent>] instead of subscribing to the live
+  /// [LocalSecondary.dataEvents]. Reachable only through
+  /// `collectionWithInjectedDataEvents` in `collections_test_hooks.dart`.
+  factory AtCollection._withInjectedDataEvents(
+    AtClient atClient,
+    String namespace,
+    Duration defaultExpiration, {
+    required Stream<DataEvent> dataEvents,
+    T Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
+  }) =>
+      AtCollection._(
+        atClient,
+        namespace,
+        defaultExpiration,
+        eventsFromLocalSecondary: true,
+        fromJson: fromJson,
+        typeTag: typeTag,
+        injectedDataEvents: dataEvents,
       );
 
   AtCollection._(
     this.atClient,
     this.namespace,
     this.defaultExpiration, {
+    required bool eventsFromLocalSecondary,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
     Stream<AtNotification>? notifications,
-  }) {
+    Stream<DataEvent>? injectedDataEvents,
+  }) : _eventsFromLocalSecondary = eventsFromLocalSecondary {
     if (!namespace.contains('.')) {
       throw ArgumentError('namespace must be fully qualified');
     }
@@ -382,12 +429,28 @@ interface class AtCollection<T> {
     _regexObjAny = RegExp('(^|:)[^.]+(\\.[^.]+)*\\.$namespace@');
 
     _injectedNotifications = notifications;
-    final notifStream = notifications ??
-        atClient.notificationService.subscribe(
-          regex: _regexAllStr,
-          shouldDecrypt: true,
-        );
-    _notificationSubscription = notifStream.listen(_handleNotificationImpl);
+    _injectedDataEvents = injectedDataEvents;
+
+    if (_eventsFromLocalSecondary) {
+      // Event-driven path: subscribe to LocalSecondary.dataEvents
+      // (filtered by this collection's namespace regex) instead of
+      // NotificationService. The keystore mutations themselves drive
+      // CItemUpdated/CItemDeleted/CSubItem* — including locally-driven
+      // writes that don't generate notifications.
+      final dataEventStream = injectedDataEvents ??
+          (atClient as AtClientImpl)
+              .getLocalSecondary()!
+              .dataEvents
+              .where((e) => _regexObjAny.hasMatch(e.key.toString()));
+      _dataEventSubscription = dataEventStream.listen(_handleDataEventImpl);
+    } else {
+      final notifStream = notifications ??
+          atClient.notificationService.subscribe(
+            regex: _regexAllStr,
+            shouldDecrypt: true,
+          );
+      _notificationSubscription = notifStream.listen(_handleNotificationImpl);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -578,7 +641,24 @@ interface class AtCollection<T> {
     if (results.any((r) => r is OpFailure)) {
       throw CollectionOpException(results);
     }
+    await _awaitLocalEmissions();
     return item;
+  }
+
+  /// When this collection consumes events from
+  /// [LocalSecondary.dataEvents], awaits the underlying stream's
+  /// `pendingEmissions` so callers see "watch streams up-to-date"
+  /// semantics by default — by the time `await create(...)` resolves,
+  /// listeners on `watch()` / `updates` / `deletes` have already seen
+  /// the corresponding `CItemUpdated` / `CItemDeleted`.
+  ///
+  /// No-op when this collection consumes notifications (the
+  /// notification path is async-driven by the remote round-trip and
+  /// does not have an equivalent guarantee).
+  Future<void> _awaitLocalEmissions() async {
+    if (!_eventsFromLocalSecondary) return;
+    final ls = (atClient as AtClientImpl).getLocalSecondary();
+    if (ls != null) await ls.pendingEmissions;
   }
 
   /// Updates an existing [item]. Throws [StateError] if the self-key does
@@ -619,6 +699,7 @@ interface class AtCollection<T> {
     if (results.any((r) => r is OpFailure)) {
       throw CollectionOpException(results);
     }
+    await _awaitLocalEmissions();
   }
 
   /// Updates only the recipient set on an existing [item] — does NOT
@@ -713,6 +794,7 @@ interface class AtCollection<T> {
     item.sharedWith
       ..clear()
       ..addAll(sharedWith);
+    await _awaitLocalEmissions();
   }
 
   /// Deletes [item] and every one of its recipient copies. Only the owner
@@ -731,6 +813,7 @@ interface class AtCollection<T> {
     if (results.any((r) => r is OpFailure)) {
       throw CollectionOpException(results);
     }
+    await _awaitLocalEmissions();
   }
 
   // ---------------------------------------------------------------------------
@@ -883,6 +966,24 @@ interface class AtCollection<T> {
         if (k.sharedWith != null) {
           pending!.sharedWith.add(k.sharedWith!.toAtsign());
         }
+      } on KeyNotFoundException {
+        // Expiry race: the key passed the keystore's expiry filter
+        // when [_getKeysInternal] snapshotted, but the per-key
+        // [atClient.get] above resolved to data:null because the
+        // record's expiresAt slipped into the past in between. Treat
+        // as "already deleted" and skip silently — same outcome as
+        // if the scan had observed the post-expiration state.
+        _logger.finer(
+          'getItemsAsStream skipping ${k.key}: '
+          'KeyNotFoundException (expiry race)',
+        );
+        continue;
+      } on AtKeyNotFoundException {
+        _logger.finer(
+          'getItemsAsStream skipping ${k.key}: '
+          'AtKeyNotFoundException (expiry race)',
+        );
+        continue;
       } catch (e, st) {
         // Per-key decode failures are yielded as stream errors rather
         // than logged-and-skipped. The stream continues after an error
@@ -1140,23 +1241,38 @@ interface class AtCollection<T> {
     }
     // Constructing the sub-collection directly (not via `atClient.collection`)
     // so that `notifications` can be threaded straight through to its
-    // constructor for test wiring.
-    final sub = notifications != null
-        ? AtCollection<U>._withInjectedNotifications(
-            atClient,
-            composedNs,
-            defaultExpiration,
-            notifications: notifications,
-            fromJson: fromJson,
-            typeTag: typeTag,
-          )
-        : AtCollection<U>(
-            atClient,
-            composedNs,
-            defaultExpiration,
-            fromJson: fromJson,
-            typeTag: typeTag,
-          );
+    // constructor for test wiring. Sub-collections inherit the parent's
+    // event-source choice — apps that opt into eventsFromLocalSecondary
+    // on the parent get it transitively on every sub-collection.
+    final AtCollection<U> sub;
+    if (notifications != null) {
+      sub = AtCollection<U>._withInjectedNotifications(
+        atClient,
+        composedNs,
+        defaultExpiration,
+        notifications: notifications,
+        fromJson: fromJson,
+        typeTag: typeTag,
+      );
+    } else if (_eventsFromLocalSecondary && _injectedDataEvents != null) {
+      sub = AtCollection<U>._withInjectedDataEvents(
+        atClient,
+        composedNs,
+        defaultExpiration,
+        dataEvents: _injectedDataEvents!,
+        fromJson: fromJson,
+        typeTag: typeTag,
+      );
+    } else {
+      sub = AtCollection<U>(
+        atClient,
+        composedNs,
+        defaultExpiration,
+        eventsFromLocalSecondary: _eventsFromLocalSecondary,
+        fromJson: fromJson,
+        typeTag: typeTag,
+      );
+    }
     sub._parentItem = parent;
     sub._parentCollection = this;
     sub._parentDeleteSub?.cancel();
@@ -1193,6 +1309,18 @@ interface class AtCollection<T> {
             return; // not our chain — leave it alone
           }
           await atClient.delete(k);
+        } on KeyNotFoundException {
+          // Expiry race: descendant key passed the scan's expiry filter
+          // but expired before the per-key get returned. The cascade
+          // intent is "ensure this is gone", so a missing key is the
+          // desired terminal state — skip without escalating.
+          _logger.finer(
+            '_cascadeFromParentDelete: ${k.key} already gone (expiry race)',
+          );
+        } on AtKeyNotFoundException {
+          _logger.finer(
+            '_cascadeFromParentDelete: ${k.key} already gone (expiry race)',
+          );
         } catch (e) {
           _logger.shout('_cascadeFromParentDelete: $e');
         }
@@ -1442,7 +1570,7 @@ interface class AtCollection<T> {
   /// [_handleObjNotificationImpl]; any sub-item at any nesting depth
   /// goes to [_handleSubObjNotificationImpl].
   Future<void> _handleNotificationImpl(AtNotification n) async {
-    _notificationSubscription.pause();
+    _notificationSubscription?.pause();
     try {
       if (!_regexObjAny.hasMatch(n.key)) {
         _logger.shout('handleNotification: No handler for ${n.key}');
@@ -1469,7 +1597,127 @@ interface class AtCollection<T> {
     } catch (e, st) {
       _logger.shout('handleNotification: $e\nStackTrace:\n$st');
     } finally {
-      _notificationSubscription.resume();
+      _notificationSubscription?.resume();
+    }
+  }
+
+  /// Mirror of [_handleNotificationImpl] for the event-driven path.
+  /// LocalSecondary's [_emit] fires AFTER the keystore mutation, so the
+  /// "mirror notification into local store" step that
+  /// [_handleNotificationImpl] runs (`_updateLocal` / `_deleteLocal`)
+  /// is unnecessary here — the store is already current. Otherwise the
+  /// shape is identical: parse parts, dispatch to the L0 or sub-item
+  /// handler, emit CEvents on `_events`.
+  Future<void> _handleDataEventImpl(DataEvent event) async {
+    _dataEventSubscription?.pause();
+    try {
+      final keyStr = event.key.toString();
+      if (!_regexObjAny.hasMatch(keyStr)) {
+        // Filter pre-applied at the stream level when reading from
+        // LocalSecondary directly, but redundant guard for injected
+        // streams that may not pre-filter.
+        return;
+      }
+      final parts = _getPartsFromAtKey(event.key);
+      final operation = switch (event) {
+        DataUpdated() => 'update',
+        DataDeleted() => 'delete',
+      };
+      if (parts.ancestry.isEmpty) {
+        await _handleObjEvent(operation, parts);
+      } else {
+        await _handleSubObjEvent(operation, parts, event.key);
+      }
+    } catch (e, st) {
+      _logger.shout('handleDataEvent: $e\nStackTrace:\n$st');
+    } finally {
+      _dataEventSubscription?.resume();
+    }
+  }
+
+  /// Parts extractor that takes an [AtKey] directly. The notification
+  /// path uses [_getPartsFromNotifKey] which strips notification
+  /// envelope prefixes; here we're given the raw key from the keystore
+  /// mutation and parse it the same way.
+  _CParts _getPartsFromAtKey(AtKey atKey) {
+    final fromStr = atKey.sharedBy ?? '';
+    final toStr = atKey.sharedWith ?? '';
+    String keyName = atKey.toString();
+    if (toStr.isNotEmpty) keyName = keyName.replaceAll('$toStr:', '');
+    if (fromStr.isNotEmpty) keyName = keyName.replaceAll(fromStr, '');
+    final ix = keyName.lastIndexOf('.$namespace');
+    if (ix >= 0) keyName = keyName.substring(0, ix);
+    final parts = keyName.split('.');
+    final ancestry = <CAncestor>[];
+    for (int i = parts.length - 1; i >= 2; i -= 2) {
+      ancestry.add(CAncestor(id: parts[i], subName: parts[i - 1]));
+    }
+    return (
+      from: fromStr.toAtsign(),
+      id: parts.first,
+      ancestry: ancestry,
+    );
+  }
+
+  /// Shared L0-item dispatcher used by both the notification and
+  /// data-event paths. Emits [CItemUpdated] / [CItemDeleted].
+  Future<void> _handleObjEvent(String operation, _CParts parts) async {
+    switch (operation) {
+      case 'update':
+        _events.add(CItemUpdated(owner: parts.from, id: parts.id));
+      case 'delete':
+        _events.add(CItemDeleted(owner: parts.from, id: parts.id));
+      default:
+        _logger.shout('No handler for L0 operation $operation');
+    }
+  }
+
+  /// Shared sub-item dispatcher. [atKeyForEnvelope] is the key to
+  /// pass to `atClient.get(...)` to fetch the envelope on update
+  /// events (so we can recover ancestor owners).
+  Future<void> _handleSubObjEvent(
+    String operation,
+    _CParts parts,
+    AtKey atKeyForEnvelope,
+  ) async {
+    final directParent = parts.ancestry.last;
+    switch (operation) {
+      case 'update':
+        List<Atsign>? parentOwners;
+        try {
+          final v = await atClient.get(atKeyForEnvelope);
+          parentOwners =
+              _decodeParentOwners(_decodeEnvelope(v.value!, atKeyForEnvelope));
+        } catch (e) {
+          _logger.warning(
+            'handleSubObjEvent: envelope fetch for $atKeyForEnvelope '
+            'failed: $e — emitting with null ancestor owners',
+          );
+        }
+        _events.add(CSubItemUpdated(
+          owner: parts.from,
+          id: parts.id,
+          ancestry: _zipAncestryOwners(parts.ancestry, parentOwners),
+        ));
+        if (directParent.subName == _rr) {
+          // For an incoming __rr write the parent's owner is `self`
+          // (the receipt was sent TO us) — same identity that
+          // `n.to.toAtsign()` carries on the notification path.
+          _events.add(CReadReceipt(
+            owner: self,
+            id: directParent.id,
+            from: parts.from,
+            readAt: DateTime.now(),
+          ));
+        }
+      case 'delete':
+        _events.add(CSubItemDeleted(
+          owner: parts.from,
+          id: parts.id,
+          ancestry: parts.ancestry,
+        ));
+      default:
+        _logger.shout('No handler for sub-item operation $operation');
     }
   }
 
@@ -1506,18 +1754,11 @@ interface class AtCollection<T> {
 
   /// Handles direct-item notifications (a key with exactly the collection
   /// namespace as its suffix) and emits [CItemUpdated] / [CItemDeleted].
+  /// Thin wrapper around [_handleObjEvent] — the same body the
+  /// data-event path calls into, so the two paths can't drift.
   Future<void> _handleObjNotificationImpl(AtNotification n) async {
     final parts = _getPartsFromNotifKey(n);
-    switch (n.operation) {
-      case 'update':
-        _events.add(CItemUpdated(owner: parts.from, id: parts.id));
-      case 'delete':
-        _events.add(CItemDeleted(owner: parts.from, id: parts.id));
-      default:
-        _logger.shout(
-          'handleObjNotification: No handler for operation ${n.operation}',
-        );
-    }
+    await _handleObjEvent(n.operation ?? '', parts);
   }
 
   /// Handles notifications for items in a sub-collection at any depth.
@@ -1541,62 +1782,17 @@ interface class AtCollection<T> {
   /// receipts directly via [readReceipts]. The receipt's `id` is the
   /// direct parent's id (i.e. `ancestry.last.id` — the item being
   /// read).
+  /// Thin wrapper around [_handleSubObjEvent] — both paths share the
+  /// same body so behaviour can't drift between notification and
+  /// data-event entry points.
   Future<void> _handleSubObjNotificationImpl(AtNotification n) async {
     final parts = _getPartsFromNotifKey(n);
     if (parts.ancestry.isEmpty) {
       _logger.info('handleSubObjNotification: empty ancestry ${n.key}');
       return;
     }
-    final directParent = parts.ancestry.last;
-    switch (n.operation) {
-      case 'update':
-        // Fetch the sub-item envelope to recover ancestor owners. The
-        // get is typically local-cache hot (we were just notified
-        // about this key). A malformed / legacy envelope yields a null
-        // owner chain which is tolerated lenient-ly.
-        List<Atsign>? parentOwners;
-        try {
-          final k = AtKey.fromString(
-            n.key.replaceAll('${n.to}:', ''),
-          );
-          final v = await atClient.get(k);
-          parentOwners = _decodeParentOwners(_decodeEnvelope(v.value!, k));
-        } catch (e) {
-          _logger.warning(
-            'handleSubObjNotification: envelope fetch for ${n.key} '
-            'failed: $e — emitting with null ancestor owners',
-          );
-        }
-        _events.add(CSubItemUpdated(
-          owner: parts.from,
-          id: parts.id,
-          ancestry: _zipAncestryOwners(parts.ancestry, parentOwners),
-        ));
-        if (directParent.subName == _rr) {
-          // A __rr sub-item is always shared WITH the parent's owner
-          // (that's how receipts reach them). The notification's `to`
-          // field therefore identifies the parent's owner — which is
-          // what `CReadReceipt.owner` carries, so events can be
-          // filtered unambiguously against a specific CItem even when
-          // item ids collide across atSigns.
-          _events.add(CReadReceipt(
-            owner: n.to.toAtsign(),
-            id: directParent.id,
-            from: parts.from,
-            readAt: DateTime.now(),
-          ));
-        }
-      case 'delete':
-        _events.add(CSubItemDeleted(
-          owner: parts.from,
-          id: parts.id,
-          ancestry: parts.ancestry,
-        ));
-      default:
-        _logger.shout(
-          'handleSubObjNotification: No handler for operation ${n.operation}',
-        );
-    }
+    final atKey = AtKey.fromString(n.key.replaceAll('${n.to}:', ''));
+    await _handleSubObjEvent(n.operation ?? '', parts, atKey);
   }
 
   /// Pairs [ancestry] (ids + subNames from the key) with [ownersFromEnvelope]

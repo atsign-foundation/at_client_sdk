@@ -65,6 +65,29 @@ AtCollection<U> subCollectionWithInjectedNotifications<T, U>(
       typeTag: typeTag,
     );
 
+/// Constructs an [AtCollection<T>] with an injected [DataEvent]
+/// stream — the data-events analogue of
+/// [collectionWithInjectedNotifications]. Lets tests drive the
+/// `eventsFromLocalSecondary: true` path without a live LocalSecondary
+/// stream subscription.
+@visibleForTesting
+AtCollection<T> collectionWithInjectedDataEvents<T>(
+  AtClient atClient,
+  String namespace,
+  Duration defaultExpiration, {
+  required Stream<DataEvent> dataEvents,
+  T Function(Map<String, dynamic>)? fromJson,
+  String? typeTag,
+}) =>
+    AtCollection<T>._withInjectedDataEvents(
+      atClient,
+      namespace,
+      defaultExpiration,
+      dataEvents: dataEvents,
+      fromJson: fromJson,
+      typeTag: typeTag,
+    );
+
 /// Routes [n] through [coll]'s top-level notification handler — the
 /// same entry point the live monitor subscription uses.
 @visibleForTesting
@@ -73,6 +96,16 @@ Future<void> handleNotificationForTest(
   AtNotification n,
 ) =>
     coll._handleNotificationImpl(n);
+
+/// Routes [event] through [coll]'s data-event handler — the same entry
+/// point the live LocalSecondary subscription uses on the
+/// `eventsFromLocalSecondary: true` path.
+@visibleForTesting
+Future<void> handleDataEventForTest(
+  AtCollection<dynamic> coll,
+  DataEvent event,
+) =>
+    coll._handleDataEventImpl(event);
 
 /// Routes [n] through [coll]'s value-event branch directly — bypasses
 /// the regex dispatcher; tests exercise the value-handler in isolation.

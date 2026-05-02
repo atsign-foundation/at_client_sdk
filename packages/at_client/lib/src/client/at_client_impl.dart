@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/hive_keystore_expiry_extension.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
@@ -29,6 +30,12 @@ import 'package:at_client/src/util/constants.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+// HiveKeystore isn't exported from the at_persistence_secondary_server
+// barrel; the private import is needed for the `is HiveKeystore` guard
+// in `_armExpiryTimer`. Will go away when the parallel persistence
+// project promotes nextExpiryAt to a public method on SecondaryKeyStore.
+// ignore: implementation_imports
+import 'package:at_persistence_secondary_server/src/keystore/hive_keystore.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart';
@@ -89,6 +96,18 @@ class AtClientImpl implements AtClient {
 
   @override
   AtChops? get atChops => _atChops;
+
+  // ---------------------------------------------------------------------------
+  // Event-driven expiry timer. Replaces the cron-based persistence-layer
+  // sweep that used to be wired up in StorageManager. Arms a one-shot
+  // Timer at the keystore's nextExpiryAt(); on fire, drives a sweep via
+  // LocalSecondary.deleteExpiredKeys (whose deletes go through _delete
+  // and emit DataDeleted events). The _sweepInFlight flag suppresses
+  // re-arms triggered by the sweep's own emissions — one re-arm at the
+  // end picks up the post-sweep state including any mid-sweep writes.
+  Timer? _expiryTimer;
+  StreamSubscription<DataEvent>? _expirySub;
+  bool _sweepInFlight = false;
 
   SyncService? _syncService;
 
@@ -159,13 +178,17 @@ class AtClientImpl implements AtClient {
     _logger.finer('Outgoing $service has been garbage collected');
   });
 
-  final Map<String, AtCollection> _collections = {};
-  final Set<String> _collectionsSwept = <String>{};
+  // Cache key combines (namespace, eventsFromLocalSecondary). Two
+  // collections on the same namespace with different event sources are
+  // independent instances — see plan §Risks.
+  final Map<(String, bool), AtCollection> _collections = {};
+  final Set<(String, bool)> _collectionsSwept = <(String, bool)>{};
 
   @override
   Future<AtCollection<T>> collection<T>(
     String namespace,
     Duration defaultExpiration, {
+    required bool eventsFromLocalSecondary,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
     bool cleanupOrphansOnCreation = false,
@@ -178,18 +201,20 @@ class AtClientImpl implements AtClient {
         'automatically.',
       );
     }
+    final cacheKey = (namespace, eventsFromLocalSecondary);
     final c = _collections.putIfAbsent(
-      namespace,
+      cacheKey,
       () => AtCollection<T>(
         this,
         namespace,
         defaultExpiration,
+        eventsFromLocalSecondary: eventsFromLocalSecondary,
         fromJson: fromJson,
         typeTag: typeTag,
       ),
     ) as AtCollection<T>;
-    if (cleanupOrphansOnCreation && !_collectionsSwept.contains(namespace)) {
-      _collectionsSwept.add(namespace);
+    if (cleanupOrphansOnCreation && !_collectionsSwept.contains(cacheKey)) {
+      _collectionsSwept.add(cacheKey);
       try {
         await c.cleanupOrphans();
       } catch (e, st) {
@@ -277,6 +302,15 @@ class AtClientImpl implements AtClient {
 
       localSecondary = LocalSecondary(this, keyStore: _localSecondaryKeyStore);
       _atChops ??= await _createAtChops(_atSign);
+
+      // Wire the event-driven expiry timer to LocalSecondary's data
+      // events. Re-arms on every keystore mutation; first arm uses the
+      // current cache state (no-op when nothing has TTL).
+      _expirySub = localSecondary!.dataEvents.listen((_) {
+        if (_sweepInFlight) return;
+        _armExpiryTimer();
+      });
+      _armExpiryTimer();
     }
 
     // Using ??= because we may be injecting a RemoteSecondary
@@ -294,6 +328,46 @@ class AtClientImpl implements AtClient {
     putRequestTransformer.atClient = this;
 
     _cascadeSetTelemetryService();
+  }
+
+  /// Arms (or re-arms) the one-shot expiry [Timer] at the underlying
+  /// keystore's earliest pending expiration. No-op when:
+  ///   - the local secondary isn't a [HiveKeystore] (non-Hive deployments
+  ///     are responsible for their own expiry mechanism — see plan §Risks);
+  ///   - the cache reports no TTL'd keys.
+  ///
+  /// A timestamp in the past arms a `Duration.zero` timer that fires on
+  /// the next microtask — effectively immediate.
+  void _armExpiryTimer() {
+    _expiryTimer?.cancel();
+    _expiryTimer = null;
+    final ks = localSecondary?.keyStore;
+    if (ks is! HiveKeystore) return;
+    final when = ks.nextExpiryAt();
+    if (when == null) return;
+    final wait = when.difference(DateTime.timestamp());
+    _expiryTimer = Timer(
+      wait.isNegative ? Duration.zero : wait,
+      _onExpiryFire,
+    );
+  }
+
+  /// Drives one expiry sweep and re-arms the timer for the next.
+  /// `_sweepInFlight` suppresses re-arms triggered by the sweep's own
+  /// `DataDeleted` events; the single re-arm in `finally` picks up the
+  /// post-sweep state, including any mid-sweep writes (the keystore's
+  /// in-memory cache is updated synchronously inside each put before
+  /// the corresponding [DataEvent] microtask runs).
+  Future<void> _onExpiryFire() async {
+    _sweepInFlight = true;
+    try {
+      await localSecondary?.deleteExpiredKeys();
+    } catch (e, st) {
+      _logger.warning('Expiry sweep failed: $e\n$st');
+    } finally {
+      _sweepInFlight = false;
+      _armExpiryTimer();
+    }
   }
 
   bool _isStopped = false;
@@ -324,6 +398,16 @@ class AtClientImpl implements AtClient {
   }
 
   Future<void> _stopBackgroundProcesses() async {
+    try {
+      _expiryTimer?.cancel();
+      _expiryTimer = null;
+      await _expirySub?.cancel();
+      _expirySub = null;
+      await localSecondary?.dispose();
+    } catch (e) {
+      _logger.warning('Error while tearing down expiry timer: $e');
+    }
+
     try {
       await stopCompactionJob();
     } catch (e) {

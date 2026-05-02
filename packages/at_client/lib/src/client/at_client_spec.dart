@@ -669,9 +669,32 @@ abstract class AtClient {
   /// regardless of how many times [collection] is invoked with the flag.
   /// Useful at app-startup to reclaim descendants whose parent was
   /// deleted on another atSign while this app was offline.
+  ///
+  /// [eventsFromLocalSecondary] is **required** — no default. The choice
+  /// is significant enough that callers must make it consciously per
+  /// collection.
+  ///
+  /// - When `true`, the returned collection subscribes to
+  ///   [LocalSecondary.dataEvents] and produces `CItemUpdated`,
+  ///   `CItemDeleted`, `CSubItemUpdated`, `CSubItemDeleted` from
+  ///   `DataUpdated` / `DataDeleted` events on the keystore-write
+  ///   chokepoint. This sees ALL changes including locally-driven
+  ///   ones. Recommended when a real `SyncService` is running and
+  ///   the app wants tight write→event semantics. Note: expired-key
+  ///   removals fire `DataDeleted` because at_client's expiry sweep
+  ///   loops through `LocalSecondary._delete`.
+  /// - When `false`, the collection subscribes to
+  ///   `NotificationService` (the legacy / default path). Locally
+  ///   driven writes that don't generate notifications are NOT
+  ///   visible on the watch streams.
+  ///
+  /// Adding the parameter with no default is a breaking change for
+  /// existing callers — the migration is mechanical (most callers add
+  /// `false`).
   Future<AtCollection<T>> collection<T>(
     String namespace,
     Duration defaultExpiration, {
+    required bool eventsFromLocalSecondary,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
     bool cleanupOrphansOnCreation = false,
