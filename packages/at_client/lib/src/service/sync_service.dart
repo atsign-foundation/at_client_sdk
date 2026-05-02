@@ -318,6 +318,5 @@ class _ClosureProgressListener implements SyncProgressListener {
   _ClosureProgressListener(this._onEvent);
 
   @override
-  void onSyncProgressEvent(SyncProgress syncProgress) =>
-      _onEvent(syncProgress);
+  void onSyncProgressEvent(SyncProgress syncProgress) => _onEvent(syncProgress);
 }
