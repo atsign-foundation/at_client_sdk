@@ -534,6 +534,13 @@ class SyncServiceImpl implements SyncService {
       List<CommitEntry> unCommittedEntries) async {
     List<KeyInfo> keyInfoList = [];
     var uncommittedEntryBatch = getUnCommittedEntryBatch(unCommittedEntries);
+    // The local commit-log tip doesn't advance during a push — pushed
+    // entries were already locally committed before this run started.
+    // Read the tip once and reuse it for every per-batch progress
+    // event below.
+    final localTip = await _getLocalCommitId();
+    final batchTotal = uncommittedEntryBatch.length;
+    var batchesDone = 0;
     for (var unCommittedEntryList in uncommittedEntryBatch) {
       try {
         var batchRequests = await getBatchRequests(unCommittedEntryList);
@@ -571,6 +578,18 @@ class SyncServiceImpl implements SyncService {
                 'exception while updating commit entry for entry:$entry Reason: $cause');
           }
         }
+        // Per-batch push progress event. Symmetric with the pull-side
+        // emit in [_syncFromServer]: lets listeners (and apps showing
+        // "syncing N of M" UIs) observe push throughput instead of
+        // staying silent until the whole batch list is drained.
+        batchesDone++;
+        _informSyncProgress(
+            SyncProgress()
+              ..syncStatus = SyncStatus.inProgress
+              ..startedAt = DateTime.now().toUtc()
+              ..message = 'Push batch $batchesDone / $batchTotal applied',
+            localCommitId: localTip,
+            serverCommitId: serverCommitId);
       } on Exception catch (e) {
         var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
         _logger.severe(
@@ -655,6 +674,19 @@ class SyncServiceImpl implements SyncService {
           _logger.finest(
               'Updating lastReceivedServerCommitId to $lastReceivedServerCommitId');
         }
+        // Per-batch progress event: lets long syncs (e.g. server at
+        // 20000, local at 1000) report incremental advancement to
+        // listeners (and to `waitUntilCaughtUp`) instead of staying
+        // silent until the entire pull finishes.
+        _informSyncProgress(
+            SyncProgress()
+              ..syncStatus = SyncStatus.inProgress
+              ..startedAt = DateTime.now().toUtc()
+              ..message =
+                  'Pull batch applied: $lastReceivedServerCommitId / $serverCommitId',
+            localCommitIdBeforeSync: localCommitIdBeforeSync,
+            localCommitId: lastReceivedServerCommitId,
+            serverCommitId: serverCommitId);
       }
     } finally {
       // The put method persists the lastReceivedServerCommitId which will be used to

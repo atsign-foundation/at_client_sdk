@@ -141,8 +141,14 @@ class SyncRequest {
   }
 }
 
-///Enum to represent the sync status
-enum SyncStatus { started, notStarted, success, failure }
+///Enum to represent the sync status.
+///
+/// [inProgress] is emitted at intra-iteration checkpoints (currently:
+/// after each batch processed by `_syncFromServer` / `_syncToRemote`)
+/// so listeners can observe progress on long syncs without waiting
+/// for the iteration to finish. Listeners that only care about
+/// terminal events should filter to [success] / [failure].
+enum SyncStatus { started, notStarted, inProgress, success, failure }
 
 class SyncProgress {
   SyncStatus? syncStatus;
@@ -211,6 +217,22 @@ extension SyncServiceWaitUntilCaughtUp on SyncService {
   /// are in sync", emitting a [SyncStatus.success] event with both
   /// commit ids null), the future completes immediately.
   ///
+  /// On a [SyncService] that emits per-batch [SyncStatus.inProgress]
+  /// events (see [SyncServiceImpl] from `at_client` 3.x onward),
+  /// completion can fire mid-iteration as soon as `localCommitId`
+  /// crosses the captured snapshot — no need to wait for the entire
+  /// pull/push run to finish.
+  ///
+  /// [onProgress], when supplied, is invoked for every [SyncProgress]
+  /// event observed while waiting (including the [SyncStatus.inProgress]
+  /// per-batch events on the pull and push paths). Use it to drive
+  /// "syncing N of M" UIs — typically by reading
+  /// `progress.localCommitId` against `progress.serverCommitId`. The
+  /// callback fires before the catch-up completion check, so apps see
+  /// the same final event the future completes on. Exceptions thrown
+  /// by [onProgress] are caught and logged; they do not affect the
+  /// completion logic.
+  ///
   /// Transient sync failures while waiting are tolerated — the
   /// returned future does not reject on a [SyncStatus.failure] event;
   /// callers bound the wait by passing [timeout]. With no [timeout]
@@ -218,7 +240,10 @@ extension SyncServiceWaitUntilCaughtUp on SyncService {
   /// future hangs.
   ///
   /// Throws [TimeoutException] when [timeout] elapses before catch-up.
-  Future<void> waitUntilCaughtUp({Duration? timeout}) {
+  Future<void> waitUntilCaughtUp({
+    Duration? timeout,
+    void Function(SyncProgress progress)? onProgress,
+  }) {
     final completer = Completer<void>();
     int? snapshotServerCommitId;
     late final SyncProgressListener listener;
@@ -230,6 +255,18 @@ extension SyncServiceWaitUntilCaughtUp on SyncService {
     }
 
     listener = _ClosureProgressListener((progress) {
+      // Surface every event to the caller's progress callback first,
+      // before the catch-up completion check, so apps see the same
+      // final event we use to fulfil the future. Defensive try/catch:
+      // a misbehaving callback must not derail the completion logic.
+      if (onProgress != null) {
+        try {
+          onProgress(progress);
+        } catch (e, st) {
+          _waitLogger
+              .warning('onProgress callback threw and was swallowed: $e\n$st');
+        }
+      }
       if (completer.isCompleted) return;
       if (snapshotServerCommitId == null) {
         // The "server and local are in sync" early-exit fires a

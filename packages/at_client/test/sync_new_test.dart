@@ -4582,6 +4582,11 @@ class CustomSyncProgressListener extends SyncProgressListener {
 
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
+    // Drop intra-iteration progress: the tests using this listener
+    // assert on terminal events (success / failure) via
+    // expectAsync1, and per-batch [SyncStatus.inProgress] events
+    // would push them over count.
+    if (syncProgress.syncStatus == SyncStatus.inProgress) return;
     streamController.add(syncProgress);
   }
 }
