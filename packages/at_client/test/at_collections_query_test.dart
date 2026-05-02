@@ -1066,9 +1066,30 @@ void main() {
 
     test('returns false for an other-owner id with no cached copy', () async {
       final c = buildCollection();
-      when(() => atClient.getAtKeys(regex: any(named: 'regex')))
-          .thenAnswer((_) async => <AtKey>[]);
+      // Non-self exists() now probes via atClient.get against the
+      // recipient copy `<self>:<id>.<namespace><owner>`. Have it throw
+      // so the method returns false as documented.
+      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
       expect(await c.exists('a', '@bob'.toAtsign()), isFalse);
+    });
+
+    test('returns true for an other-owner id with a cached copy', () async {
+      final c = buildCollection();
+      // Non-self exists() probes the recipient-copy key directly. Stub
+      // atClient.get to succeed for any key (the exists() implementation
+      // discards the value — only the no-throw signals presence).
+      when(() => atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({
+          'type': 'Task',
+          'obj': Task('alpha', done: false, due: d1).toJson(),
+        });
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 7));
+        return v;
+      });
+      expect(await c.exists('a', '@bob'.toAtsign()), isTrue);
     });
   });
 }

@@ -845,20 +845,28 @@ interface class AtCollection<T> {
   }
 
   /// True iff an item with the given [id] owned by [owner] exists in
-  /// this collection — without fetching or decoding its value. Cheap
-  /// presence-check: use this in preference to `getOrNull(id, owner) != null`
-  /// when you only care whether the item is there.
+  /// this collection. Cheap presence-check: use this in preference to
+  /// `getOrNull(id, owner) != null` when you only care whether the
+  /// item is there.
   ///
-  /// For self-owned items the call hits the seen-id cache populated
-  /// by every successful read/write in this process; for items owned
-  /// by other atSigns it does a key-listing scan and returns true if
-  /// any cached copy exists locally.
+  /// Both paths issue a single [AtClient.get] probe. For self-owned
+  /// items the call short-circuits on the seen-id cache populated by
+  /// every successful read/write in this process and only probes on
+  /// a miss. For items owned by other atSigns it probes the
+  /// recipient copy `<self>:<id>.<namespace><owner>` directly. The
+  /// probe still performs the fetch + decode work [AtClient.get]
+  /// entails — a planned keystore-level `exists()` primitive will
+  /// retire that overhead.
   Future<bool> exists(String id, Atsign owner) async {
     if (owner == atSign) {
       return _selfKeyExists(id);
     }
-    final keys = await _getKeysInternal(id: id, owner: owner);
-    return keys.isNotEmpty;
+    try {
+      await atClient.get(AtKey.fromString('$atSign:$id.$namespace$owner'));
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Fetches a single item. Throws [AtKeyNotFoundException] if no item
