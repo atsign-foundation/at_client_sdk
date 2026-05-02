@@ -3101,17 +3101,16 @@ final class Query<T> {
       }
     }
 
-    // Per-stream serialiser. Chains tasks so events can't interleave
-    // across an in-flight single-item fetch — the cache mutation is
-    // atomic from the perspective of the next event.
-    Future<void> processing = Future<void>.value();
-    void serialize(Future<void> Function() task) {
-      processing = processing.then((_) => task()).catchError((
-        Object e,
-        StackTrace st,
-      ) {
+    // Per-stream serialiser. [package:mutex] grants the lock in
+    // FIFO order, so tasks queued via [serialize] run in arrival
+    // order — the cache mutation is atomic from the perspective of
+    // the next event, same semantics as a chain-of-futures but
+    // with explicit lock ownership.
+    final serializer = Mutex();
+    void serialize(Mutex mutex, Future<void> Function() task) {
+      unawaited(mutex.protect(task).catchError((Object e, StackTrace st) {
         if (!controller.isClosed) controller.addError(e, st);
-      });
+      }));
     }
 
     controller = StreamController<List<CItem<T>>>(
@@ -3120,19 +3119,20 @@ final class Query<T> {
         // arriving during the initial fetch is still applied
         // afterwards (the serialiser holds it behind the fetch).
         updSub = _collection.updates.listen((e) {
-          serialize(() => onUpdate(e.owner, e.id));
+          serialize(serializer, () => onUpdate(e.owner, e.id));
         });
         delSub = _collection.deletes.listen((e) {
-          serialize(() => onDelete(e.owner, e.id));
+          serialize(serializer, () => onDelete(e.owner, e.id));
         });
-        serialize(refresh);
+        serialize(serializer, refresh);
       },
       onCancel: () async {
         await updSub?.cancel();
         await delSub?.cancel();
-        // Drain in-flight work so we don't tear the controller down
-        // mid-cache-mutation.
-        await processing;
+        // Drain queued/in-flight work by acquiring the serialiser:
+        // FIFO ordering means this empty critical section fires only
+        // after every prior task has finished.
+        await serializer.protect(() async {});
       },
     );
     return controller.stream;
