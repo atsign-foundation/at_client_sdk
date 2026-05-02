@@ -58,6 +58,7 @@ class TodosService {
     collection = await atClient.collection<Todo>(
       'todos.$ns',
       defaultExpiration,
+      eventsFromLocalSecondary: false,
       fromJson: Todo.fromJson,
       typeTag: 'Todo',
       cleanupOrphansOnCreation: true,

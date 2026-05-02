@@ -21,6 +21,7 @@ void main(List<String> args) async {
   final pets = await c.atClient.collection<Pet>(
     'pets.$applicationNamespace',
     exampleDefaultExpiration,
+    eventsFromLocalSecondary: false,
   );
 
   switch (c.role) {

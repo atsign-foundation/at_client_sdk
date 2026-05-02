@@ -18,10 +18,12 @@ void main(List<String> args) async {
   final AtCollection<Map> maps = await c.atClient.collection<Map>(
     'maps.$applicationNamespace',
     exampleDefaultExpiration,
+    eventsFromLocalSecondary: false,
   );
   final AtCollection<String> strings = await c.atClient.collection<String>(
     'strings.$applicationNamespace',
     exampleDefaultExpiration,
+    eventsFromLocalSecondary: false,
   );
 
   switch (c.role) {
