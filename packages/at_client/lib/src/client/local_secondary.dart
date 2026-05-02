@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
@@ -6,6 +7,13 @@ import 'package:at_client/src/client/secondary.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+// Private path: HiveKeystore isn't exported from the package barrel, but
+// this file's `deleteExpiredKeys` needs the concrete class for the
+// `is HiveKeystore` guard and the `getExpiredKeys()` call. The parallel
+// persistence project will eventually expose these via a public method on
+// SecondaryKeyStore at which point this private import goes away.
+// ignore: implementation_imports
+import 'package:at_persistence_secondary_server/src/keystore/hive_keystore.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 
@@ -19,6 +27,76 @@ class LocalSecondary implements Secondary {
 
   /// Local keystore used to store data for the current atSign.
   SecondaryKeyStore? keyStore;
+
+  // ---------------------------------------------------------------------------
+  // DataEvent stream — fires on every successful keystore mutation that
+  // passes through `_update` or `_delete`. Subscribers see local app
+  // writes AND sync-applied remote changes via a single uniform stream.
+  // putValue (used internally for SDK bookkeeping) intentionally does
+  // NOT emit on this stream — see the DataEvent dartdoc.
+
+  final StreamController<DataEvent> _dataEventsCtrl =
+      StreamController<DataEvent>.broadcast();
+
+  /// In-flight emit count. Each [_emit] call increments this before
+  /// scheduling the listener-invocation microtask, and decrements after
+  /// the microtask runs. Drives [pendingEmissions]'s "all events
+  /// delivered" semantics.
+  int _pending = 0;
+
+  /// Completers registered by callers awaiting [pendingEmissions]
+  /// while there were already events in flight. Completed and cleared
+  /// whenever [_pending] returns to zero.
+  final List<Completer<void>> _drainWaiters = [];
+
+  /// Stream of [DataEvent]s — `DataUpdated` for every successful
+  /// `_update`, `DataDeleted` for every successful `_delete`. Async
+  /// (microtask-scheduled) by default; pair with [pendingEmissions]
+  /// when caller-side semantics need "all events for my write have
+  /// been delivered to listeners".
+  Stream<DataEvent> get dataEvents => _dataEventsCtrl.stream;
+
+  /// Resolves once every event currently in-flight on [dataEvents]
+  /// has been delivered to all listeners. Useful for callers that
+  /// just performed a write and want to observe the resulting event
+  /// before continuing — `await localSecondary.pendingEmissions` gives
+  /// "watch streams up-to-date" semantics without sync-emission's
+  /// re-entrancy / listener-stalls-writer hazards.
+  ///
+  /// Returns `Future.value()` immediately when there are no in-flight
+  /// emits; otherwise returns a future that completes when [_pending]
+  /// next reaches zero.
+  Future<void> get pendingEmissions {
+    if (_pending == 0) return Future.value();
+    final c = Completer<void>();
+    _drainWaiters.add(c);
+    return c.future;
+  }
+
+  void _emit(DataEvent e) {
+    _pending++;
+    scheduleMicrotask(() {
+      try {
+        if (!_dataEventsCtrl.isClosed) _dataEventsCtrl.add(e);
+      } finally {
+        if (--_pending == 0 && _drainWaiters.isNotEmpty) {
+          final waiters = List<Completer<void>>.from(_drainWaiters);
+          _drainWaiters.clear();
+          for (final c in waiters) {
+            if (!c.isCompleted) c.complete();
+          }
+        }
+      }
+    });
+  }
+
+  /// Closes the [dataEvents] controller. Idempotent. Called by
+  /// [AtClientImpl._stopBackgroundProcesses] during teardown.
+  Future<void> dispose() async {
+    if (!_dataEventsCtrl.isClosed) await _dataEventsCtrl.close();
+  }
+
+  // ---------------------------------------------------------------------------
 
   LocalSecondary(this._atClient, {this.keyStore}) {
     _logger = AtSignLogger('LocalSecondary (${_atClient.getCurrentAtSign()})');
@@ -72,6 +150,7 @@ class LocalSecondary implements Secondary {
         throw UnAuthorizedException(
             'Cannot perform update on $updateKey due to insufficient privilege');
       }
+      late AtMetaData emittedMetadata;
       switch (builder.operation) {
         case AtConstants.updateMeta:
           var atMetadata = AtMetaData.fromCommonsMetadata(
@@ -79,6 +158,7 @@ class LocalSecondary implements Secondary {
             _atClient.getCurrentAtSign()!,
           );
           updateResult = await keyStore!.putMeta(updateKey, atMetadata);
+          emittedMetadata = atMetadata;
           break;
         default:
           var atData = AtData();
@@ -88,8 +168,10 @@ class LocalSecondary implements Secondary {
             _atClient.getCurrentAtSign()!,
           );
           updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
+          emittedMetadata = atMetadata;
           break;
       }
+      _emit(DataUpdated(builder.atKey, metadata: emittedMetadata));
       // If we've already sent to remote atServer, update the commit log so we
       // don't send the update again via the sync process
       return 'data:$updateResult';
@@ -133,11 +215,46 @@ class LocalSecondary implements Secondary {
     }
     try {
       var deleteResult = await keyStore!.remove(deleteKey);
+      _emit(DataDeleted(builder.atKey));
       return 'data:$deleteResult';
     } on DataStoreException catch (e) {
       _logger.severe('exception in delete:${e.toString()}');
       rethrow;
     }
+  }
+
+  /// Deletes every key currently flagged expired by the underlying
+  /// [HiveKeystore]'s in-memory cache. Each deletion goes through
+  /// [_delete], which fires a [DataDeleted] on [dataEvents] — so
+  /// subscribers see expirations the same way they see any other
+  /// delete. Returns the number of keys removed.
+  ///
+  /// Callers arming a timer via [dataEvents] should suppress re-arms
+  /// while a sweep is in flight (the events fired during this method
+  /// would otherwise cause N redundant re-arms).
+  /// [AtClientImpl._onExpiryFire] does this via a `_sweepInFlight`
+  /// flag.
+  ///
+  /// Returns 0 (no-op) when the underlying keystore is not a
+  /// [HiveKeystore]; non-Hive keystores are responsible for their own
+  /// expiry mechanism if any.
+  Future<int> deleteExpiredKeys() async {
+    final ks = keyStore;
+    if (ks is! HiveKeystore) return 0;
+    final expired = await ks.getExpiredKeys();
+    if (expired.isEmpty) return 0;
+    var deleted = 0;
+    for (final keyString in expired) {
+      try {
+        final atKey = AtKey.fromString(keyString);
+        final builder = DeleteVerbBuilder()..atKey = atKey;
+        await _delete(builder);
+        deleted++;
+      } on Exception catch (e) {
+        _logger.warning('expiry sweep failed for $keyString: $e');
+      }
+    }
+    return deleted;
   }
 
   Future<String?> _scan(ScanVerbBuilder builder) async {
