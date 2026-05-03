@@ -21,6 +21,30 @@ abstract class AtClient {
 
   LocalSecondary? getLocalSecondary();
 
+  /// Stream of [DataEvent]s — `DataUpdated` for every successful local
+  /// keystore mutation that passes through the update path,
+  /// `DataDeleted` for every successful one that passes through the
+  /// delete path. Subscribers see local app writes AND sync-applied
+  /// remote changes via a single uniform stream. Internal-bookkeeping
+  /// writes (e.g. `putValue`) intentionally do NOT emit — see the
+  /// [DataEvent] dartdoc.
+  ///
+  /// Async (microtask-scheduled) by default; pair with
+  /// [pendingEmissions] when caller-side semantics need "all events
+  /// for my write have been delivered to listeners".
+  Stream<DataEvent> get dataEvents;
+
+  /// Resolves once every event currently in-flight on [dataEvents]
+  /// has been delivered to all listeners. Useful for callers that
+  /// just performed a write and want to observe the resulting event
+  /// before continuing — `await atClient.pendingEmissions` gives
+  /// "watch streams up-to-date" semantics without sync-emission's
+  /// re-entrancy / listener-stalls-writer hazards.
+  ///
+  /// Returns `Future.value()` immediately when there are no in-flight
+  /// emits.
+  Future<void> get pendingEmissions;
+
   /// Set an instance of [AtChops] for data encryption and signing operations
   set atChops(AtChops? atChops);
 
@@ -675,7 +699,7 @@ abstract class AtClient {
   /// collection.
   ///
   /// - When `true`, the returned collection subscribes to
-  ///   [LocalSecondary.dataEvents] and produces `CItemUpdated`,
+  ///   [AtClient.dataEvents] and produces `CItemUpdated`,
   ///   `CItemDeleted`, `CSubItemUpdated`, `CSubItemDeleted` from
   ///   `DataUpdated` / `DataDeleted` events on the keystore-write
   ///   chokepoint. This sees ALL changes including locally-driven

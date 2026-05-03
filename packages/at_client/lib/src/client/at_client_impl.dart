@@ -98,6 +98,61 @@ class AtClientImpl implements AtClient {
   AtChops? get atChops => _atChops;
 
   // ---------------------------------------------------------------------------
+  // DataEvent stream — fires on every successful keystore mutation that
+  // passes through `LocalSecondary._update` or `LocalSecondary._delete`,
+  // which call into [emitDataEvent]. Subscribers see local app writes
+  // AND sync-applied remote changes via a single uniform stream.
+  // putValue (used internally for SDK bookkeeping) intentionally does
+  // NOT emit — see the [DataEvent] dartdoc.
+
+  final StreamController<DataEvent> _dataEventsCtrl =
+      StreamController<DataEvent>.broadcast();
+
+  /// In-flight emit count. Each [emitDataEvent] call increments this
+  /// before scheduling the listener-invocation microtask, and decrements
+  /// after the microtask runs. Drives [pendingEmissions]'s
+  /// "all events delivered" semantics.
+  int _pending = 0;
+
+  /// Completers registered by callers awaiting [pendingEmissions]
+  /// while there were already events in flight. Completed and cleared
+  /// whenever [_pending] returns to zero.
+  final List<Completer<void>> _drainWaiters = [];
+
+  @override
+  Stream<DataEvent> get dataEvents => _dataEventsCtrl.stream;
+
+  @override
+  Future<void> get pendingEmissions {
+    if (_pending == 0) return Future.value();
+    final c = Completer<void>();
+    _drainWaiters.add(c);
+    return c.future;
+  }
+
+  /// Pushes [e] onto [dataEvents] asynchronously (microtask-scheduled).
+  /// Called from [LocalSecondary]'s update/delete chokepoints. Public on
+  /// [AtClientImpl] only because [LocalSecondary] needs to invoke it
+  /// across the class boundary; not part of the [AtClient] interface.
+  @internal
+  void emitDataEvent(DataEvent e) {
+    _pending++;
+    scheduleMicrotask(() {
+      try {
+        if (!_dataEventsCtrl.isClosed) _dataEventsCtrl.add(e);
+      } finally {
+        if (--_pending == 0 && _drainWaiters.isNotEmpty) {
+          final waiters = List<Completer<void>>.from(_drainWaiters);
+          _drainWaiters.clear();
+          for (final c in waiters) {
+            if (!c.isCompleted) c.complete();
+          }
+        }
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Event-driven expiry timer. Replaces the cron-based persistence-layer
   // sweep that used to be wired up in StorageManager. Arms a one-shot
   // Timer at the keystore's nextExpiryAt(); on fire, drives a sweep via
@@ -300,13 +355,17 @@ class AtClientImpl implements AtClient {
         await storageManager.init(_atSign, preference!.keyStoreSecret);
       }
 
-      localSecondary = LocalSecondary(this, keyStore: _localSecondaryKeyStore);
+      localSecondary = LocalSecondary(
+        this,
+        keyStore: _localSecondaryKeyStore,
+        onEvent: emitDataEvent,
+      );
       _atChops ??= await _createAtChops(_atSign);
 
-      // Wire the event-driven expiry timer to LocalSecondary's data
-      // events. Re-arms on every keystore mutation; first arm uses the
-      // current cache state (no-op when nothing has TTL).
-      _expirySub = localSecondary!.dataEvents.listen((_) {
+      // Wire the event-driven expiry timer to the data-events stream.
+      // Re-arms on every keystore mutation; first arm uses the current
+      // cache state (no-op when nothing has TTL).
+      _expirySub = dataEvents.listen((_) {
         if (_sweepInFlight) return;
         _armExpiryTimer();
       });
@@ -403,7 +462,7 @@ class AtClientImpl implements AtClient {
       _expiryTimer = null;
       await _expirySub?.cancel();
       _expirySub = null;
-      await localSecondary?.dispose();
+      if (!_dataEventsCtrl.isClosed) await _dataEventsCtrl.close();
     } catch (e) {
       _logger.warning('Error while tearing down expiry timer: $e');
     }

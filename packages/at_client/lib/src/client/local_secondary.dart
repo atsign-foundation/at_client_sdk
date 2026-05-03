@@ -28,77 +28,19 @@ class LocalSecondary implements Secondary {
   /// Local keystore used to store data for the current atSign.
   SecondaryKeyStore? keyStore;
 
-  // ---------------------------------------------------------------------------
-  // DataEvent stream — fires on every successful keystore mutation that
-  // passes through `_update` or `_delete`. Subscribers see local app
-  // writes AND sync-applied remote changes via a single uniform stream.
-  // putValue (used internally for SDK bookkeeping) intentionally does
-  // NOT emit on this stream — see the DataEvent dartdoc.
+  /// Sink for keystore-mutation events. Wired by [AtClientImpl] at
+  /// construction to its [AtClientImpl.emitDataEvent]; left null by
+  /// callers that don't need event propagation (most unit-test
+  /// fixtures). Emits are silently dropped when null.
+  final void Function(DataEvent)? _onEvent;
 
-  final StreamController<DataEvent> _dataEventsCtrl =
-      StreamController<DataEvent>.broadcast();
+  void _emit(DataEvent e) => _onEvent?.call(e);
 
-  /// In-flight emit count. Each [_emit] call increments this before
-  /// scheduling the listener-invocation microtask, and decrements after
-  /// the microtask runs. Drives [pendingEmissions]'s "all events
-  /// delivered" semantics.
-  int _pending = 0;
-
-  /// Completers registered by callers awaiting [pendingEmissions]
-  /// while there were already events in flight. Completed and cleared
-  /// whenever [_pending] returns to zero.
-  final List<Completer<void>> _drainWaiters = [];
-
-  /// Stream of [DataEvent]s — `DataUpdated` for every successful
-  /// `_update`, `DataDeleted` for every successful `_delete`. Async
-  /// (microtask-scheduled) by default; pair with [pendingEmissions]
-  /// when caller-side semantics need "all events for my write have
-  /// been delivered to listeners".
-  Stream<DataEvent> get dataEvents => _dataEventsCtrl.stream;
-
-  /// Resolves once every event currently in-flight on [dataEvents]
-  /// has been delivered to all listeners. Useful for callers that
-  /// just performed a write and want to observe the resulting event
-  /// before continuing — `await localSecondary.pendingEmissions` gives
-  /// "watch streams up-to-date" semantics without sync-emission's
-  /// re-entrancy / listener-stalls-writer hazards.
-  ///
-  /// Returns `Future.value()` immediately when there are no in-flight
-  /// emits; otherwise returns a future that completes when [_pending]
-  /// next reaches zero.
-  Future<void> get pendingEmissions {
-    if (_pending == 0) return Future.value();
-    final c = Completer<void>();
-    _drainWaiters.add(c);
-    return c.future;
-  }
-
-  void _emit(DataEvent e) {
-    _pending++;
-    scheduleMicrotask(() {
-      try {
-        if (!_dataEventsCtrl.isClosed) _dataEventsCtrl.add(e);
-      } finally {
-        if (--_pending == 0 && _drainWaiters.isNotEmpty) {
-          final waiters = List<Completer<void>>.from(_drainWaiters);
-          _drainWaiters.clear();
-          for (final c in waiters) {
-            if (!c.isCompleted) c.complete();
-          }
-        }
-      }
-    });
-  }
-
-  /// Closes the [dataEvents] controller. Idempotent. Called by
-  /// [AtClientImpl._stopBackgroundProcesses] during teardown.
-  Future<void> dispose() async {
-    if (!_dataEventsCtrl.isClosed) await _dataEventsCtrl.close();
-  }
-
-  // ---------------------------------------------------------------------------
-
-  LocalSecondary(this._atClient, {this.keyStore}) {
+  LocalSecondary(
+    this._atClient, {
+    this.keyStore,
+    void Function(DataEvent)? onEvent,
+  }) : _onEvent = onEvent {
     _logger = AtSignLogger('LocalSecondary (${_atClient.getCurrentAtSign()})');
     keyStore ??= SecondaryPersistenceStoreFactory.getInstance()
         .getSecondaryPersistenceStore(_atClient.getCurrentAtSign())!
@@ -225,13 +167,13 @@ class LocalSecondary implements Secondary {
 
   /// Deletes every key currently flagged expired by the underlying
   /// [HiveKeystore]'s in-memory cache. Each deletion goes through
-  /// [_delete], which fires a [DataDeleted] on [dataEvents] — so
-  /// subscribers see expirations the same way they see any other
+  /// [_delete], which fires a [DataDeleted] on [AtClient.dataEvents]
+  /// — so subscribers see expirations the same way they see any other
   /// delete. Returns the number of keys removed.
   ///
-  /// Callers arming a timer via [dataEvents] should suppress re-arms
-  /// while a sweep is in flight (the events fired during this method
-  /// would otherwise cause N redundant re-arms).
+  /// Callers arming a timer via [AtClient.dataEvents] should suppress
+  /// re-arms while a sweep is in flight (the events fired during this
+  /// method would otherwise cause N redundant re-arms).
   /// [AtClientImpl._onExpiryFire] does this via a `_sweepInFlight`
   /// flag.
   ///

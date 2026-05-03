@@ -278,7 +278,7 @@ interface class AtCollection<T> {
   late final String _regexAllStr;
 
   /// True iff this collection consumes events from
-  /// [LocalSecondary.dataEvents] instead of [NotificationService].
+  /// [AtClient.dataEvents] instead of [NotificationService].
   /// Set once at construction and immutable for the lifetime of the
   /// collection. Sub-collections built via [readReceiptsFor] /
   /// [subCollection] inherit the parent's choice.
@@ -288,7 +288,7 @@ interface class AtCollection<T> {
   /// [_eventsFromLocalSecondary] is `false`.
   StreamSubscription<AtNotification>? _notificationSubscription;
 
-  /// Subscription to [LocalSecondary.dataEvents]. Non-null only when
+  /// Subscription to [AtClient.dataEvents]. Non-null only when
   /// [_eventsFromLocalSecondary] is `true`.
   StreamSubscription<DataEvent>? _dataEventSubscription;
 
@@ -363,7 +363,7 @@ interface class AtCollection<T> {
   /// Test-only factory mirroring [_withInjectedNotifications] but for
   /// the event-driven path: drives the dispatch from an injected
   /// [Stream<DataEvent>] instead of subscribing to the live
-  /// [LocalSecondary.dataEvents]. Reachable only through
+  /// [AtClient.dataEvents]. Reachable only through
   /// `collectionWithInjectedDataEvents` in `collections_test_hooks.dart`.
   factory AtCollection._withInjectedDataEvents(
     AtClient atClient,
@@ -432,15 +432,13 @@ interface class AtCollection<T> {
     _injectedDataEvents = injectedDataEvents;
 
     if (_eventsFromLocalSecondary) {
-      // Event-driven path: subscribe to LocalSecondary.dataEvents
-      // (filtered by this collection's namespace regex) instead of
+      // Event-driven path: subscribe to AtClient.dataEvents (filtered
+      // by this collection's namespace regex) instead of
       // NotificationService. The keystore mutations themselves drive
       // CItemUpdated/CItemDeleted/CSubItem* — including locally-driven
       // writes that don't generate notifications.
       final dataEventStream = injectedDataEvents ??
-          (atClient as AtClientImpl)
-              .getLocalSecondary()!
-              .dataEvents
+          atClient.dataEvents
               .where((e) => _regexObjAny.hasMatch(e.key.toString()));
       _dataEventSubscription = dataEventStream.listen(_handleDataEventImpl);
     } else {
@@ -645,20 +643,19 @@ interface class AtCollection<T> {
     return item;
   }
 
-  /// When this collection consumes events from
-  /// [LocalSecondary.dataEvents], awaits the underlying stream's
-  /// `pendingEmissions` so callers see "watch streams up-to-date"
-  /// semantics by default — by the time `await create(...)` resolves,
-  /// listeners on `watch()` / `updates` / `deletes` have already seen
-  /// the corresponding `CItemUpdated` / `CItemDeleted`.
+  /// When this collection consumes events from [AtClient.dataEvents],
+  /// awaits the host client's [AtClient.pendingEmissions] so callers
+  /// see "watch streams up-to-date" semantics by default — by the
+  /// time `await create(...)` resolves, listeners on `watch()` /
+  /// `updates` / `deletes` have already seen the corresponding
+  /// `CItemUpdated` / `CItemDeleted`.
   ///
   /// No-op when this collection consumes notifications (the
   /// notification path is async-driven by the remote round-trip and
   /// does not have an equivalent guarantee).
   Future<void> _awaitLocalEmissions() async {
     if (!_eventsFromLocalSecondary) return;
-    final ls = (atClient as AtClientImpl).getLocalSecondary();
-    if (ls != null) await ls.pendingEmissions;
+    await atClient.pendingEmissions;
   }
 
   /// Updates an existing [item]. Throws [StateError] if the self-key does

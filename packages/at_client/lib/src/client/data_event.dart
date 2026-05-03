@@ -1,11 +1,11 @@
 import 'package:at_commons/at_commons.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 
-/// Event emitted by [LocalSecondary]'s `dataEvents` stream whenever a
-/// keystore mutation passes through the chokepoint methods (`_update` /
-/// `_delete`). Subscribers see every change driven by this client —
-/// local app writes AND sync-applied remote changes — in a single
-/// uniform stream.
+/// Event emitted on [AtClient.dataEvents] whenever a keystore
+/// mutation passes through [LocalSecondary]'s chokepoint methods
+/// (`_update` / `_delete`). Subscribers see every change driven by
+/// this client — local app writes AND sync-applied remote changes —
+/// in a single uniform stream.
 ///
 /// Sealed so listeners can pattern-match against the two concrete
 /// subtypes ([DataUpdated] / [DataDeleted]) exhaustively.
