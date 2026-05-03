@@ -182,7 +182,10 @@ class LocalSecondary implements Secondary {
   /// expiry mechanism if any.
   Future<int> deleteExpiredKeys() async {
     final ks = keyStore;
-    if (ks is! HiveKeystore) return 0;
+    if (ks is! HiveKeystore) {
+      _logger.shout('Underlying keyStore is not HiveKeystore');
+      return 0;
+    }
     final expired = await ks.getExpiredKeys();
     if (expired.isEmpty) return 0;
     var deleted = 0;
@@ -190,6 +193,7 @@ class LocalSecondary implements Secondary {
       try {
         final atKey = AtKey.fromString(keyString);
         final builder = DeleteVerbBuilder()..atKey = atKey;
+        _logger.finer('Deleting expired key $atKey');
         await _delete(builder);
         deleted++;
       } on Exception catch (e) {

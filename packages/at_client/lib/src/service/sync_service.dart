@@ -283,7 +283,7 @@ extension SyncServiceWaitUntilCaughtUp on SyncService {
         if (progress.serverCommitId == null) return;
         snapshotServerCommitId = progress.serverCommitId;
       }
-      _waitLogger.shout('serverCommitId (target): $snapshotServerCommitId'
+      _waitLogger.finer('serverCommitId (target): $snapshotServerCommitId'
           ' localCommitId (actual): ${progress.localCommitId}');
       final local = progress.localCommitId;
       if (local != null && local >= snapshotServerCommitId!) {

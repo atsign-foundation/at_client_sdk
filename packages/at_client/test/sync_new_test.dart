@@ -4191,16 +4191,32 @@ void main() {
     });
 
     test(
-        'A test to verify sync request is not added to queue when server commit id is equal to local commit id',
+        'A test to verify a stats notification triggers a sync attempt even '
+        'when persisted lastReceivedServerCommitId is ahead of notification.value',
         () async {
+      // Regression scenario: `_syncFromServer` persists
+      // `lastReceivedServerCommitId` in its finally block reflecting
+      // entries RECEIVED from the server, not entries successfully
+      // APPLIED to the local commit log. If a pull received N entries
+      // but _syncLocal rejected some, persisted lastReceived advances
+      // while local commit log lags. Subsequent stats notifications
+      // then carry a server commitId that is <= persisted lastReceived
+      // even though local is genuinely behind the server — the
+      // previous listener guard
+      // (`notification.value > lastReceivedServerCommitId`) suppressed
+      // every retry, leaving local stuck.
+      //
+      // The listener now enqueues unconditionally; _isInSync (which
+      // inspects the actual local commit log via getLastSyncedEntry,
+      // not the persisted proxy) decides whether work is needed.
+      when(() =>
+              mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+          .thenAnswer((_) => Future.value(AtValue()..value = '10'));
       when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
           .thenAnswer((_) {
         var streamController =
             StreamController<at_notification.AtNotification>();
-        // Adding a delay of 1 second to let the sync service initialize and
-        // add the progress listener to the sync service.
         Future.delayed(Duration(seconds: 1)).then((_) {
-          syncServiceImpl.clearSyncEntities();
           streamController.add(at_notification.AtNotification(
               '-1',
               'statsNotification',
@@ -4213,12 +4229,24 @@ void main() {
         });
         return streamController.stream;
       });
+      // Stub the stats verb so the auto-triggered processSyncRequests
+      // can complete its _isInSync probe.
+      when(() => mockRemoteSecondary
+              .executeVerb(any(that: isA<StatsVerbBuilder>())))
+          .thenAnswer((_) async => 'data:[{"value":"5"}]');
       syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      await Future.delayed(Duration(seconds: 1)).then((_) {
-        expect(syncServiceImpl.getSyncRequestQueueSize(), 0);
-      });
+      var attempts = 0;
+      syncServiceImpl.addProgressListener(_AttemptCountingListener(() {
+        attempts++;
+      }));
+      await Future.delayed(Duration(seconds: 2));
+      expect(attempts, 1,
+          reason: 'a stats notification must drive a sync attempt regardless '
+              'of how the notification.value compares to the persisted '
+              'lastReceivedServerCommitId — the comparison is against a '
+              'proxy that can drift past actual local progress');
     });
     tearDown(() {
       syncServiceImpl.clearSyncEntities();

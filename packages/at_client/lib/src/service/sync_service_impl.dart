@@ -6,7 +6,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
-import 'package:at_client/src/util/logger_util.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -163,57 +162,43 @@ class SyncServiceImpl implements SyncService {
     return;
   }
 
-  /// Listens on stats notification sent by the cloud secondary server
+  /// Listens on stats notification sent by the cloud secondary server.
+  ///
+  /// Every well-formed notification promotes the cached
+  /// `serverCommitId` (monotonically — see [_promoteServerCommitId])
+  /// and unconditionally enqueues a sync request. The actual
+  /// "is sync work needed?" decision is made by
+  /// [processSyncRequests] via [_isInSync], which considers BOTH
+  /// pull-side (server has new commits) AND push-side (local writes
+  /// awaiting upload) work. A previous local pre-filter here gated
+  /// only on pull-side progress
+  /// (`notification.value > lastReceivedServerCommitId`); that
+  /// suppressed sync attempts whenever local writes were pending
+  /// but the server had not advanced, leaving those writes stuck on
+  /// disk until some unrelated trigger fired.
   @visibleForTesting
   Future<void> statsServiceListener() async {
-    // Setting the regex to 'statsNotification' to receive only the notifications
-    // from stats notification service.
     _statsNotificationSubscription = _atClient.notificationService
         .subscribe(regex: 'statsNotification')
         .listen((notification) async {
-      _logger.finer(_logger.getLogMessageWithClientParticulars(
-          _atClient.getPreferences()!.atClientParticulars,
-          'RCVD: stats notification in sync: ${notification.value}'));
-      final serverCommitId = notification.value;
-      if (serverCommitId != null) {
-        try {
-          _promoteServerCommitId(int.parse(serverCommitId));
-        } on FormatException {
-          _logger.warning(
-              'statsServiceListener: malformed commitId "$serverCommitId"');
-        }
-      }
-      int lastReceivedServerCommitId = -1;
+      _logger.finer('RCVD: stats notification in sync: ${notification.value}');
+      final raw = notification.value;
+      if (raw == null) return;
+      final int observedServerCommitId;
       try {
-        lastReceivedServerCommitId = await getLastReceivedServerCommitId();
-      } on FormatException catch (e) {
-        String msg = 'Exception in SyncService statsNotification listener:'
-            ' ${e.message}';
-        _logger.warning(msg);
-
-        // TODO Need to revisit this code, it's not clear how we could get a
-        // FormatException, nor is it clear what the behaviour should be if
-        // we do
-        var syncRequest = SyncRequest()
-          ..result = (SyncResult()
-            ..atClientException = AtClientException.message(msg));
-        _syncError(syncRequest);
-
-        SyncProgress syncProgress = SyncProgress()
-          ..atClientException = AtClientException.message(msg)
-          ..syncStatus = SyncStatus.failure;
-        _informSyncProgress(syncProgress);
+        observedServerCommitId = int.parse(raw);
+      } on FormatException {
+        _logger.warning('statsServiceListener: malformed commitId "$raw"');
+        return;
       }
-      if (serverCommitId != null &&
-          int.parse(serverCommitId) > lastReceivedServerCommitId) {
-        final syncRequest = SyncRequest();
-        syncRequest.onDone = _onDone;
-        syncRequest.onError = _onError;
-        syncRequest.requestSource = SyncRequestSource.system;
-        syncRequest.requestedOn = DateTime.now().toUtc();
-        syncRequest.result = SyncResult();
-        _addSyncRequestToQueue(syncRequest);
-      }
+      _promoteServerCommitId(observedServerCommitId);
+      final syncRequest = SyncRequest()
+        ..onDone = _onDone
+        ..onError = _onError
+        ..requestSource = SyncRequestSource.system
+        ..requestedOn = DateTime.now().toUtc()
+        ..result = SyncResult();
+      _addSyncRequestToQueue(syncRequest);
     });
   }
 
@@ -297,14 +282,15 @@ class SyncServiceImpl implements SyncService {
           ExceptionScenario.remoteVerbExecutionFailed, e.message));
       _logger.warning(
           'Exception in sync ${syncRequest.id}. Reason: ${e.getTraceMessage()}');
-      syncRequest.result!.atClientException =
-          AtExceptionManager.createException(e);
+      final wrapped = AtExceptionManager.createException(e);
+      syncRequest.result!.atClientException = wrapped;
       _syncError(syncRequest);
       _syncInProgress = false;
       _informSyncProgress(SyncProgress()
         ..syncStatus = SyncStatus.failure
         ..startedAt = DateTime.now().toUtc()
-        ..message = 'Exception: $e');
+        ..message = 'Exception: $e'
+        ..atClientException = wrapped);
     } catch (e) {
       // Catch-all: with on-demand triggering, an unhandled exception
       // from the sync path would become an unhandled async error and
@@ -313,13 +299,15 @@ class SyncServiceImpl implements SyncService {
       // failure.
       _logger.warning(
           'Unexpected exception in sync ${syncRequest.id}. Reason: $e');
-      syncRequest.result!.atClientException = AtClientException.message('$e');
+      final wrapped = AtClientException.message('$e');
+      syncRequest.result!.atClientException = wrapped;
       _syncError(syncRequest);
       _syncInProgress = false;
       _informSyncProgress(SyncProgress()
         ..syncStatus = SyncStatus.failure
         ..startedAt = DateTime.now().toUtc()
-        ..message = 'Unexpected exception: $e');
+        ..message = 'Unexpected exception: $e'
+        ..atClientException = wrapped);
     } finally {
       _processInProgress = false;
       lastSyncCompletedAt = DateTime.now().toUtc();
@@ -383,9 +371,8 @@ class SyncServiceImpl implements SyncService {
 
   void _syncComplete(SyncRequest syncRequest) {
     syncRequest.result!.lastSyncedOn = DateTime.now().toUtc();
-    _logger.info(_logger.getLogMessageWithClientParticulars(
-        _atClient.getPreferences()!.atClientParticulars,
-        'Inside syncComplete. syncRequest.requestSource : ${syncRequest.requestSource}; syncRequest.onDone : ${syncRequest.onDone}'));
+    _logger.info(
+        'Inside syncComplete. syncRequest.requestSource : ${syncRequest.requestSource}; syncRequest.onDone : ${syncRequest.onDone}');
     // If specific onDone callback is set, call specific onDone callback,
     // else call the global onDone callback.
     if (syncRequest.onDone != null &&
@@ -473,9 +460,7 @@ class SyncServiceImpl implements SyncService {
   /// `onError` here. Identity comparison is exact (`identical`) so
   /// only the specific in-flight instance is skipped.
   void _clearQueue({SyncRequest? alreadyHandled}) {
-    _logger.finer(_logger.getLogMessageWithClientParticulars(
-        _atClient.getPreferences()!.atClientParticulars,
-        'Clearing sync queue'));
+    _logger.finer('Clearing sync queue');
     final exception = AtClientException(
       error_codes['AtClientException'],
       'Sync request superseded by a coalesced sync run that just '
@@ -507,9 +492,9 @@ class SyncServiceImpl implements SyncService {
         atSign: _atClient.getCurrentAtSign()!);
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
     if (serverCommitId > lastReceivedServerCommitId) {
-      _logger.finer(_logger.getLogMessageWithClientParticulars(
-          _atClient.getPreferences()!.atClientParticulars,
-          'Pulling changes into local secondary | lastReceivedServerCommitId $lastReceivedServerCommitId | serverCommitId $serverCommitId'));
+      _logger.finer('Pulling changes into local secondary'
+          ' | lastReceivedServerCommitId $lastReceivedServerCommitId'
+          ' | serverCommitId $serverCommitId');
       // Hint to casual reader: This is where we sync new changes from the server to this client
       final keyInfoList = await _syncFromServer(
           serverCommitId, lastReceivedServerCommitId, unCommittedEntries,
@@ -517,9 +502,8 @@ class SyncServiceImpl implements SyncService {
       syncResult.keyInfoList.addAll(keyInfoList);
     }
     if (unCommittedEntries.isNotEmpty) {
-      _logger.finer(_logger.getLogMessageWithClientParticulars(
-          _atClient.getPreferences()!.atClientParticulars,
-          'Found uncommitted entries to sync to remote. Total uncommitted entries: ${unCommittedEntries.length}'));
+      _logger.finer(
+          'Found uncommitted entries to sync to remote. Total uncommitted entries: ${unCommittedEntries.length}');
       // Hint to casual reader: This is where we sync new changes from this client to the server
       final keyInfoList = await _syncToRemote(unCommittedEntries);
       syncResult.keyInfoList.addAll(keyInfoList);
@@ -623,9 +607,8 @@ class SyncServiceImpl implements SyncService {
                 localCommitIdBeforeSync: localCommitIdBeforeSync,
                 skipDeletesUntil: skipDeletesUntil);
         if (listOfCommitEntriesFromServer.isEmpty) {
-          _logger.finer(_logger.getLogMessageWithClientParticulars(
-              _atClient.getPreferences()!.atClientParticulars,
-              'sync response is empty | local commitID: $lastReceivedServerCommitId | server commitID: $serverCommitId'));
+          _logger.finer(
+              'sync response is empty | local commitID: $lastReceivedServerCommitId | server commitID: $serverCommitId');
           break;
         }
         // Iterates over each commit entry
@@ -644,11 +627,10 @@ class SyncServiceImpl implements SyncService {
             lastReceivedServerCommitId =
                 _parseToInteger(serverCommitEntry['commitId']);
             _promoteServerCommitId(lastReceivedServerCommitId);
-            _logger.finer(_logger.getLogMessageWithClientParticulars(
-                _atClient.getPreferences()!.atClientParticulars,
+            _logger.finer(
                 'Server commitEntry ${serverCommitEntry['atKey']} exists in '
                 'uncommitted entries. So skipping the commit entry and '
-                'updating the lastReceivedServerCommitId to $lastReceivedServerCommitId'));
+                'updating the lastReceivedServerCommitId to $lastReceivedServerCommitId');
             ConflictInfo? conflictInfo =
                 await _setConflictInfo(serverCommitEntry);
             final keyInfo = KeyInfo(
@@ -735,9 +717,7 @@ class SyncServiceImpl implements SyncService {
       syncBuilder.skipDeletesUntil = skipDeletesUntil;
     }
 
-    _logger.finer(_logger.getLogMessageWithClientParticulars(
-        _atClient.getPreferences()!.atClientParticulars,
-        'syncBuilder ${syncBuilder.buildCommand()}'));
+    _logger.finer('syncBuilder ${syncBuilder.buildCommand()}');
     List syncResponseJson = [];
     try {
       syncResponseJson = JsonUtils.decodeJson(DefaultResponseParser()
@@ -750,9 +730,7 @@ class SyncServiceImpl implements SyncService {
           'Exception occurred in fetching sync response : ${e.getTraceMessage()}');
       rethrow;
     }
-    _logger.finest(_logger.getLogMessageWithClientParticulars(
-        _atClient.getPreferences()!.atClientParticulars,
-        'syncResponse $syncResponseJson'));
+    _logger.finest('syncResponse $syncResponseJson');
     return syncResponseJson;
   }
 
@@ -1088,9 +1066,7 @@ class SyncServiceImpl implements SyncService {
     if (!forceFresh) {
       final cached = serverCommitId;
       if (cached != null) {
-        _logger.finer(_logger.getLogMessageWithClientParticulars(
-            _atClient.getPreferences()!.atClientParticulars,
-            'Returning serverCommitId $cached (cached)'));
+        _logger.finer('Returning serverCommitId $cached (cached)');
         return cached;
       }
     }
@@ -1099,9 +1075,8 @@ class SyncServiceImpl implements SyncService {
     // If server commit id is null, set to -1;
     fresh ??= -1;
     _promoteServerCommitId(fresh);
-    _logger.info(_logger.getLogMessageWithClientParticulars(
-        _atClient.getPreferences()!.atClientParticulars,
-        'Returning serverCommitId $fresh ${forceFresh ? "(forced fresh)" : "(cold fetch)"}'));
+    _logger.info(
+        'Returning serverCommitId $fresh ${forceFresh ? "(forced fresh)" : "(cold fetch)"}');
     return fresh;
   }
 
@@ -1111,17 +1086,15 @@ class SyncServiceImpl implements SyncService {
     // last received server commit id.
     try {
       var response = await _atClient.get(_lastReceivedServerCommitIdAtKey);
-      _logger.finer(_logger.getLogMessageWithClientParticulars(
-          _atClient.getPreferences()!.atClientParticulars,
-          'Returning lastReceivedServerCommitId from AtKey: ${response.value}'));
+      _logger.finer(
+          'Returning lastReceivedServerCommitId from AtKey: ${response.value}');
       return int.parse(response.value);
     } on AtKeyNotFoundException {
       // If the key does not exist, fall back to previous logic, which is
       // return last synced commit id.
       int localCommitId = await _getLocalCommitId();
-      _logger.finer(_logger.getLogMessageWithClientParticulars(
-          _atClient.getPreferences()!.atClientParticulars,
-          'lastReceivedServerCommitId AtKey not found. Returning localCommitId: $localCommitId'));
+      _logger.finer(
+          'lastReceivedServerCommitId AtKey not found. Returning localCommitId: $localCommitId');
       return localCommitId;
     }
   }
@@ -1146,13 +1119,9 @@ class SyncServiceImpl implements SyncService {
     var command = 'batch:';
     command += jsonEncode(requests);
     command += '\n';
-    _logger.finer(_logger.getLogMessageWithClientParticulars(
-        _atClient.getPreferences()!.atClientParticulars,
-        'Sending batch to sync: $command'));
+    _logger.finer('Sending batch to sync: $command');
     var verbResult = await _remoteSecondary.executeCommand(command, auth: true);
-    _logger.finer(_logger.getLogMessageWithClientParticulars(
-        _atClient.getPreferences()!.atClientParticulars,
-        'batch result:$verbResult'));
+    _logger.finer('batch result:$verbResult');
     if (verbResult != null) {
       verbResult = verbResult.replaceFirst(RegExp('^data:'), '');
     }

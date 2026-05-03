@@ -601,7 +601,7 @@ class AtClientImpl implements AtClient {
     }
     var builder = DeleteVerbBuilder()..atKey = atKey;
 
-    var deleteResult = await executeVerb(
+    var deleteResult = await executeUpdateOrDelete(
         builder,
         SecondaryManager.getRemoteLocalPrefForOp(
           deleteRequestOptions?.useRemoteAtServer,
@@ -611,7 +611,7 @@ class AtClientImpl implements AtClient {
     return deleteResult != null;
   }
 
-  Future<String?> executeVerb(
+  Future<String?> executeUpdateOrDelete(
       VerbBuilder builder, RemoteLocalPref prefForOp) async {
     switch (prefForOp) {
       case RemoteLocalPref.localOnly:
@@ -891,7 +891,7 @@ class AtClientImpl implements AtClient {
         preference?.remoteLocalPref,
       );
     }
-    var putResponse = await executeVerb(putBuilder, remoteLocalPref);
+    var putResponse = await executeUpdateOrDelete(putBuilder, remoteLocalPref);
 
     // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
@@ -933,7 +933,7 @@ class AtClientImpl implements AtClient {
       ..atKey = atKey
       ..operation = AtConstants.updateMeta;
 
-    var updateMetaResult = await executeVerb(
+    var updateMetaResult = await executeUpdateOrDelete(
         builder,
         SecondaryManager.getRemoteLocalPrefForOp(
           putRequestOptions?.useRemoteAtServer,

@@ -961,7 +961,9 @@ interface class AtCollection<T> {
             sharedWith: {},
             createdAt: v.metadata!.createdAt!,
             expiresAt: v.metadata!.expiresAt ??
-                DateTime.now().toUtc().add(defaultExpiration),
+                v.metadata!.createdAt!.add(Duration(
+                    milliseconds:
+                        v.metadata!.ttl ?? defaultExpiration.inMilliseconds)),
             availableAt: _liveAvailableAt(v.metadata!.availableAt),
             collection: this,
             parentOwners: parsedParents ?? _expectedAncestorOwners(),
@@ -1644,10 +1646,23 @@ interface class AtCollection<T> {
   /// path uses [_getPartsFromNotifKey] which strips notification
   /// envelope prefixes; here we're given the raw key from the keystore
   /// mutation and parse it the same way.
+  ///
+  /// Sync-pulled shared keys arrive with `cached:` (or
+  /// `cached:public:`) wrappers in [AtKey.toString]'s output —
+  /// [_syncFromServer] writes them via `AtKey.fromString('cached:...')`
+  /// which sets `metadata.isCached = true`, and the toString includes
+  /// the prefix. Strip the wrapper before splitting so `parts.first`
+  /// is the bare item id, not `cached:<id>`.
   _CParts _getPartsFromAtKey(AtKey atKey) {
     final fromStr = atKey.sharedBy ?? '';
     final toStr = atKey.sharedWith ?? '';
     String keyName = atKey.toString();
+    if (keyName.startsWith('cached:')) {
+      keyName = keyName.substring('cached:'.length);
+    }
+    if (keyName.startsWith('public:')) {
+      keyName = keyName.substring('public:'.length);
+    }
     if (toStr.isNotEmpty) keyName = keyName.replaceAll('$toStr:', '');
     if (fromStr.isNotEmpty) keyName = keyName.replaceAll(fromStr, '');
     final ix = keyName.lastIndexOf('.$namespace');
@@ -1736,7 +1751,9 @@ interface class AtCollection<T> {
     var atData = AtData();
     atData.data = n.value;
     atData.metaData = AtMetaData.fromCommonsMetadata(n.metadata!, n.from);
-    atData.metaData!.expiresAt = n.metadata!.expiresAt;
+    atData.metaData!.expiresAt = n.metadata!.expiresAt ??
+        (n.metadata!.createdAt ?? DateTime.now().toUtc()).add(Duration(
+            milliseconds: n.metadata!.ttl ?? defaultExpiration.inMilliseconds));
     atData.metaData!.availableAt = n.metadata!.availableAt;
     atData.metaData!.isEncrypted = false;
     _logger.info('Updating cached:${n.key}');
@@ -3410,8 +3427,11 @@ final class PathField<V> {
 /// `<`, `<=`, `>`, `>=` for fields whose value is [Comparable].
 extension ComparablePathField<V extends Comparable<dynamic>> on PathField<V> {
   Predicate lt(V value) => CmpPredicate._(this, PredicateOp.lt, value);
+
   Predicate lte(V value) => CmpPredicate._(this, PredicateOp.lte, value);
+
   Predicate gt(V value) => CmpPredicate._(this, PredicateOp.gt, value);
+
   Predicate gte(V value) => CmpPredicate._(this, PredicateOp.gte, value);
 }
 
@@ -3419,6 +3439,7 @@ extension ComparablePathField<V extends Comparable<dynamic>> on PathField<V> {
 /// Declare the field as `PathField<Foo?>` to opt in.
 extension NullablePathField<V extends Object> on PathField<V?> {
   Predicate get isNull => CmpPredicate._(this, PredicateOp.isNull, null);
+
   Predicate get isNotNull => CmpPredicate._(this, PredicateOp.isNotNull, null);
 }
 
@@ -3587,6 +3608,7 @@ final class _QuerySpec<T> {
   /// evaluates these in memory; introspection is enabled for a future
   /// indexed executor.
   final List<Predicate> typedPredicates;
+
   // Ordered list of sort keys, primary first. Empty = no sort. Multi-
   // entry compares are evaluated in registration order, falling
   // through on ties — see [_apply].
@@ -3953,6 +3975,8 @@ final class CItem<T> {
   /// The collection that minted this item. Used internally to resolve
   /// the item's `__rr` sub-collection for read-receipt queries.
   final AtCollection<T> _collection;
+
+  AtCollection<T> get collection => _collection;
 
   /// Root-to-direct-parent owner chain persisted in the envelope.
   /// Empty for items in a root collection. Length equals the item's

@@ -117,6 +117,34 @@ void main() {
       await delSub.cancel();
     });
 
+    test('sync-pulled cached shared keys dispatch with the bare item id',
+        () async {
+      // Regression: sync-pulled shared keys are constructed via
+      // `AtKey.fromString('cached:<self>:<id>.<ns>@<other>')`. AtKey
+      // sets metadata.isCached=true on parse and AtKey.toString() then
+      // re-emits the `cached:` prefix. The previous parts extractor
+      // stripped only `<sharedWith>:` and `<sharedBy>`, leaving
+      // `cached:` glued to the id — `parts.first` came out as
+      // `cached:idC` and downstream consumers couldn't match. The
+      // extractor now strips the `cached:` (and `public:`) wrapper
+      // before splitting.
+      final c = buildCollection<String>();
+      final updates = <CItemUpdated>[];
+      final sub = c.updates.listen(updates.add);
+
+      dataEvents.add(DataUpdated(
+        AtKey.fromString('cached:$selfAtSignStr:idc.$namespace$bobStr'),
+      ));
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(updates, hasLength(1));
+      expect(updates.single.id, 'idc',
+          reason: 'item id should be the bare value, not "cached:idc"');
+      expect(updates.single.owner, bob);
+      await sub.cancel();
+    });
+
     test('unrelated namespaces are filtered out', () async {
       final c = buildCollection<String>();
       final received = <CEvent>[];
