@@ -1,3 +1,4 @@
+@Deprecated("Use AtClient.collection for collection-style operations")
 class CollectionUtil {
   /// replaces character with '-' if it's not alphanumeric.
   static String format(String id) {

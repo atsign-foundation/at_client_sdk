@@ -149,6 +149,7 @@ class CLIBase {
     String? namespace,
     Set<String> hide = const {},
     bool addLegacyRootDomainArg = true,
+    AtOnboardingPreference? preference,
   }) async {
     parser ??= createArgsParser(
       namespace: namespace,
@@ -190,7 +191,8 @@ class CLIBase {
         verbose: parsedArgs['verbose'],
         syncDisabled: parsedArgs['never-sync'],
         maxConnectAttempts: int.parse(parsedArgs['max-connect-attempts']),
-        passPhrase: parsedArgs['pass-phrase']);
+        passPhrase: parsedArgs['pass-phrase'],
+        preference: preference);
 
     await cliBase.init();
 
@@ -208,6 +210,8 @@ class CLIBase {
   final String? passPhrase;
   final bool syncDisabled;
   final int maxConnectAttempts;
+
+  final AtOnboardingPreference? preference;
 
   late final String atKeysFilePathToUse;
   late final String localStoragePathToUse;
@@ -249,7 +253,8 @@ class CLIBase {
       this.downloadDir,
       this.syncDisabled = false,
       this.maxConnectAttempts = defaultMaxConnectAttempts,
-      this.passPhrase}) {
+      this.passPhrase,
+      this.preference}) {
     this.atSign = AtUtils.fixAtSign(atSign);
     if (homeDir == null) {
       if (atKeysFilePath == null) {
@@ -311,11 +316,12 @@ class CLIBase {
       atServiceFactory = ServiceFactoryWithNoOpSyncService();
     }
 
-    AtOnboardingPreference atOnboardingConfig = AtOnboardingPreference()
+    final AtOnboardingPreference atOnboardingConfig =
+        preference ?? AtOnboardingPreference();
+    atOnboardingConfig
       ..hiveStoragePath = localStoragePathToUse
       ..namespace = nameSpace
       ..downloadPath = downloadPathToUse
-      ..isLocalStoreRequired = true
       ..commitLogPath = '$localStoragePathToUse/commitLog'
           .replaceAll('/', Platform.pathSeparator)
       ..rootDomain = atRootDomain.rootDomain

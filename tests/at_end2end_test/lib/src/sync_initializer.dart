@@ -31,9 +31,6 @@ class E2ESyncService {
       _logger.info('syncData starting for $atSign');
 
       SyncServiceImpl.queueSize = 1;
-      SyncServiceImpl.syncRequestThreshold = 1;
-      SyncServiceImpl.syncRequestTriggerInSeconds = 1;
-      SyncServiceImpl.syncRunIntervalSeconds = 1;
 
       DateTime startTime = DateTime.now().toUtc();
       DateTime lastReceivedDateTime = DateTime.now().toUtc();
@@ -63,9 +60,7 @@ class E2ESyncService {
       // Call to syncService.sync to expedite the sync progress
       syncImpl.sync();
       // ignore: invalid_use_of_visible_for_testing_member
-      await syncImpl.processSyncRequests(
-        respectSyncRequestQueueSizeAndRequestTriggerDuration: false,
-      );
+      await syncImpl.processSyncRequests();
 
       while (isSyncInProgress) {
         final now = DateTime.now().toUtc();

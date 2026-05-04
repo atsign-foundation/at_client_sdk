@@ -36,6 +36,9 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
     return '@alice';
   }
 
+  @override
+  Atsign get atSign => getCurrentAtSign()!.toAtsign();
+
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
 
   @override
@@ -874,7 +877,7 @@ void main() {
       String fromAtServer =
           'notification: ${jsonEncode(atNotification.toJson())}\n'
           '@${mockAtClientImpl.getCurrentAtSign()}@';
-      ns.monitor.onSocketDataReceipt(fromAtServer.codeUnits);
+      await ns.monitor.onSocketDataReceipt(fromAtServer.codeUnits);
 
       expect(ns.lastReceipt, isNotNull);
       expect(ns.lastReceipt!.microsecondsSinceEpoch,
@@ -907,7 +910,7 @@ void main() {
       String fromAtServer =
           'notification: ${jsonEncode(atNotification.toJson())}\n'
           '@${mockAtClientImpl.getCurrentAtSign()}@';
-      ns.monitor.onSocketDataReceipt(fromAtServer.codeUnits);
+      await ns.monitor.onSocketDataReceipt(fromAtServer.codeUnits);
 
       await Future.delayed(Duration(milliseconds: 1));
       expect(received, isNotEmpty);

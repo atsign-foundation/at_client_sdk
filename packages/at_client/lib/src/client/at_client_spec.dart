@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/manager/sync_manager.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
@@ -11,10 +10,6 @@ import 'package:meta/meta.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
-  /// [Deprecated] Use [AtClient.syncService]
-  @Deprecated("Use AtClient.syncService")
-  SyncManager? getSyncManager();
-
   @experimental
   set telemetry(AtTelemetryService? telemetryService);
 
@@ -331,6 +326,9 @@ abstract class AtClient {
   Future<bool> delete(AtKey key,
       {bool isDedicated = false, DeleteRequestOptions? deleteRequestOptions});
 
+  /// Does a key exist
+  Future<bool> keyExists(AtKey key, bool? useRemoteAtServer);
+
   /// Get all the keys stored in user's secondary in [AtKey] format. If [regex] is specified only matching keys are returned.
   /// If [sharedBy] is specified, then gets the keys from [sharedBy] user shared with current atClient user.
   /// If [sharedWith] is specified, then gets the keys shared to [sharedWith] user from the current atClient user.
@@ -555,6 +553,8 @@ abstract class AtClient {
       Function streamCompletionCallBack,
       Function streamReceiveCallBack);
 
+  static const defaultSppExpiry = Duration(minutes: 5);
+
   /// Sets a Semi Permanent Passcode(SPP) in the secondary server key-store.
   /// A Semi Permanent Passcode (SPP) is 6 character alpha-numeric for submitting
   /// an enrollment request. Only the connections which have access to manage
@@ -572,7 +572,7 @@ abstract class AtClient {
   /// ```dart
   /// AtResponse sppResponse = await atClient.setSPP(ABC123);
   /// ```
-  Future<AtResponse> setSPP(String otp);
+  Future<AtResponse> setSPP(String otp, {Duration? expiry});
 
   /// Returns an OTP (One-Time Password) from the secondary server.
   ///
@@ -635,5 +635,36 @@ abstract class AtClient {
   /// could change - but an AtClient should only ever have one atSign.
   String? getCurrentAtSign();
 
+  Atsign get atSign;
+
   EncryptionService? get encryptionService;
+
+  /// Returns an [AtCollection] of [CItem]s for the given [namespace].
+  ///
+  /// [namespace] **MUST be fully qualified**. For example:
+  /// - if your application namespace is "app_1.my_apps"
+  /// - and the collection name is "tasks"
+  /// - then the fully qualified namespace is `"tasks.app_1.my_apps"`.
+  ///
+  /// The application namespace configured on [AtClientPreference] is
+  /// **NOT** appended automatically — the caller must pass the complete
+  /// namespace. Throws [ArgumentError] if [namespace] contains no dot.
+  ///
+  /// If [fromJson] is supplied, it is registered as the factory for items
+  /// of type [T] (keyed by `T.toString()`), so they rehydrate correctly on
+  /// retrieval. For polymorphic collections, omit [fromJson] here and call
+  /// `collection.registerFactory<ConcreteType>(...)` per concrete type.
+  ///
+  /// When [cleanupOrphansOnCreation] is true, the returned collection runs
+  /// a one-shot `cleanupOrphans()` sweep before the `Future` completes.
+  /// Idempotent: the sweep runs at most once per collection instance
+  /// regardless of how many times [collection] is invoked with the flag.
+  /// Useful at app-startup to reclaim descendants whose parent was
+  /// deleted on another atSign while this app was offline.
+  Future<AtCollection<T>> collection<T>(
+    String namespace,
+    Duration defaultExpiration, {
+    T Function(Map<String, dynamic>)? fromJson,
+    bool cleanupOrphansOnCreation = false,
+  });
 }

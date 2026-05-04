@@ -2907,8 +2907,7 @@ void main() {
           CustomSyncProgressListener();
       syncService.addProgressListener(progressListener);
       syncService.sync();
-      await syncService.processSyncRequests(
-          respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+      await syncService.processSyncRequests();
       // ------------------------------ Assertions -----------------------------
       progressListener.streamController.stream
           .listen(expectAsync1((syncProgress) {
@@ -2994,8 +2993,7 @@ void main() {
           CustomSyncProgressListener();
       syncService.addProgressListener(progressListener);
       syncService.sync();
-      await syncService.processSyncRequests(
-          respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+      await syncService.processSyncRequests();
 
       progressListener.streamController.stream
           .listen(expectAsync1((syncProgress) {
@@ -3061,8 +3059,7 @@ void main() {
           CustomSyncProgressListener();
       syncService.addProgressListener(progressListener);
       syncService.sync();
-      await syncService.processSyncRequests(
-          respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+      await syncService.processSyncRequests();
 
       progressListener.streamController.stream
           .listen(expectAsync1((syncProgress) {
@@ -3183,34 +3180,6 @@ void main() {
 
       ///***********************************
       ///unable to assert if sync has happened
-      ///***********************************
-      test(
-          'A test to verify sync process triggers at configured values for frequent intervals',
-          () {
-        /// Preconditions:
-        /// 1. The _syncRunIntervalSeconds is set to 3 seconds
-        /// 2. The sync process is yet to start
-        ///
-        /// Assertions:
-        /// Assert that sync process is triggered at 3 seconds
-      });
-
-      ///***********************************
-      ///unable to assert if sync is in process as the process happens extremely fast
-      ///ToDo need to figure out a way to pause sync to perform assertions (if that is even possible)
-      ///***********************************
-      test(
-          'A test to verify new sync process does not start when existing sync process is running',
-          () {
-        /// Preconditions:
-        /// 1. The _syncRunIntervalSeconds is set to 3 seconds
-        /// 2. The previous sync process is still running
-        ///
-        /// Assertions:
-        /// Assert that new sync process is not started(when time interval or
-        ///  threshold value is reached) while the existing sync process is still running
-      });
-
       /// Preconditions:
       /// 1. atServer is unreachable
       /// 2. The sync process is yet to start
@@ -3272,8 +3241,7 @@ void main() {
 
         // sync immediately
         syncService.sync();
-        await syncService.processSyncRequests(
-            respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+        await syncService.processSyncRequests();
 
         // Make the atServer 'reachable'
         when(() => mockRemoteSecondary
@@ -3307,8 +3275,7 @@ void main() {
 
         // sync immediately
         syncService.sync();
-        await syncService.processSyncRequests(
-            respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+        await syncService.processSyncRequests();
 
         //------------------Assertions -------------------
         // The syncProgress is notified twice:
@@ -3329,120 +3296,6 @@ void main() {
           // is triggered twice.
         }, count: 2));
 
-        //clearing sync objects
-        syncService.clearSyncEntities();
-      });
-
-      /// Preconditions:
-      /// 1. There are no uncommitted entries/ requests.
-      ///
-      /// Assertions:
-      /// Assert that sync process is not started till the syncRequestThreshold is met
-      test(
-          'A test to verify sync process does not start when sync request queue is empty',
-          () async {
-        //------------------------------- Setup -------------------------------
-        LocalSecondary localSecondary = LocalSecondary(mockAtClient,
-            keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
-
-        registerFallbackValue(FakeSyncVerbBuilder());
-        registerFallbackValue(FakeUpdateVerbBuilder());
-
-        SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
-            atClientManager: mockAtClientManager,
-            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-
-        syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
-
-        when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
-        //----------------------operation---------------------------------------
-        //sync will not be performed as trigger threshold is not met
-        syncService.sync();
-        await syncService.processSyncRequests();
-        expect(syncService.isSyncInProgress, false);
-        syncService.clearSyncEntities();
-      });
-
-      /// Preconditions:
-      /// 1. The _syncRequestThreshold is set to 3.
-      /// 2. The sync process is yet to start and there are no requests in the queue
-      /// Assertions:
-      /// Assert that sync process is not started before the queue size is reached
-      test(
-          'A test to verify sync process does not start when sync request queue does not meet the threshold',
-          () async {
-        //------------------ setup -------------------
-        LocalSecondary localSecondary = LocalSecondary(mockAtClient,
-            keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
-
-        SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
-            atClientManager: mockAtClientManager,
-            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-        CustomSyncProgressListener syncProgressListener =
-            CustomSyncProgressListener();
-        syncService.addProgressListener(syncProgressListener);
-
-        syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
-
-        registerFallbackValue(FakeSyncVerbBuilder());
-        registerFallbackValue(FakeUpdateVerbBuilder());
-
-        when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
-        when(() => mockRemoteSecondary
-                .executeVerb(any(that: StatsVerbBuilderMatcher())))
-            .thenAnswer((invocation) => Future.value('data:[{"value":"3"}]'));
-        when(() => mockRemoteSecondary.executeVerb(
-                any(that: SyncVerbBuilderMatcher()),
-                sync: any(named: "sync")))
-            .thenAnswer((invocation) => Future.value('data:['
-                '{"atKey":"cached:@bob:shared_key@guiltytaurus27",'
-                '"value":"dummy",'
-                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-                '"commitId":1,"operation":"*"}'
-                ','
-                '{"atKey":"public:test_key1.demo@bob",'
-                '"value":"dummy",'
-                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-                '"commitId":2,"operation":"*"}'
-                ','
-                '{"atKey":"public:test_key2.demo@bob",'
-                '"value":"dummy",'
-                '"metadata":{"createdAt":"2022-11-07 13:42:02.703Z"},'
-                '"commitId":3,"operation":"*"}]'));
-        when(() => mockRemoteSecondary.executeCommand(any(),
-                auth: any(named: "auth")))
-            .thenAnswer((invocation) =>
-                Future.value('data:[{"id":1,"response":{"data":"4"}},'
-                    '{"id":2,"response":{"data":"5"}}]'));
-        when(() => mockAtClient.put(
-                any(that: InitialSyncDoneFlagMatcher()), any()))
-            .thenAnswer((_) => Future.value(true));
-        when(() => mockAtClient.get(any(that: InitialSyncDoneFlagMatcher())))
-            .thenAnswer((invocation) =>
-                throw AtKeyNotFoundException('key is not found in keystore'));
-        when(() => mockAtClient.getPreferences())
-            .thenAnswer((_) => AtClientPreference());
-
-        //------------------Assertions -------------------
-        //onDoneCallback when triggered, flips the switch in TestResources
-        //the below assertion is to check if the switch has been flipped
-        //that is done by storing the switchState before sync and then checking
-        //if the switch state is in the opposite state after sync
-        //
-        //switch will not be flipped for request - 1 as sync will not be performed
-        syncService.sync();
-        await syncService.processSyncRequests();
-        expect(syncService.isSyncInProgress, false);
-        syncService.sync();
-        await syncService.processSyncRequests();
-        expect(syncService.isSyncInProgress, false);
-
-        syncService.sync();
-        await syncService.processSyncRequests();
-        //switch will be flipped for request - 3 as the request threshold for sync is 3
-        syncProgressListener.streamController.stream.listen((syncProgress) {
-          expect(syncProgress.syncStatus, SyncStatus.success);
-        });
         //clearing sync objects
         syncService.clearSyncEntities();
       });
@@ -3917,8 +3770,7 @@ void main() {
             CustomSyncProgressListener();
         syncService.addProgressListener(progressListener);
         syncService.sync();
-        await syncService.processSyncRequests(
-            respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+        await syncService.processSyncRequests();
         //------------------------------ assertions-----------------------------
 
         progressListener.streamController.stream
@@ -3990,8 +3842,7 @@ void main() {
             CustomSyncProgressListener();
         syncService.addProgressListener(progressListener);
         syncService.sync();
-        await syncService.processSyncRequests(
-            respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+        await syncService.processSyncRequests();
 
         //----------------------------- assertions------------------------------
         progressListener.streamController.stream
@@ -4084,8 +3935,7 @@ void main() {
         var progressListener = CustomSyncProgressListener();
         syncServiceImpl.addProgressListener(progressListener);
         syncServiceImpl.sync();
-        await syncServiceImpl.processSyncRequests(
-            respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+        await syncServiceImpl.processSyncRequests();
 
         progressListener.streamController.stream
             .listen(expectAsync1((syncProgress) {
@@ -4170,8 +4020,7 @@ void main() {
         var progressListener = CustomSyncProgressListener();
         syncServiceImpl.addProgressListener(progressListener);
         syncServiceImpl.sync();
-        await syncServiceImpl.processSyncRequests(
-            respectSyncRequestQueueSizeAndRequestTriggerDuration: false);
+        await syncServiceImpl.processSyncRequests();
 
         progressListener.streamController.stream
             .listen(expectAsync1((syncProgress) {
@@ -4222,6 +4071,15 @@ void main() {
             mockSyncUtil.getLastSyncedEntry(any(that: startsWith('.buzz)')),
                 atSign: TestResources.atsign)).thenAnswer(
             (_) async => throw FormatException('.buzz) is not a valid regex'));
+        // statsServiceListener still enqueues a sync request after the
+        // FormatException is caught (because serverCommitId=10 >
+        // lastReceivedServerCommitId=-1). With on-demand triggering
+        // that enqueue immediately calls processSyncRequests, which
+        // reaches getLatestServerCommitId on the mocked SyncUtil — so
+        // it must be mocked too.
+        registerFallbackValue(FakeRemoteSecondary());
+        when(() => mockSyncUtil.getLatestServerCommitId(any(), any()))
+            .thenAnswer((_) async => 10);
 
         var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
             atClientManager: mockAtClientManager,
@@ -4230,14 +4088,23 @@ void main() {
         var syncProgressListener = CustomSyncProgressListener();
         syncServiceImpl.addProgressListener(syncProgressListener);
 
-        syncProgressListener.streamController.stream
-            .listen(expectAsync1((syncProgress) {
+        // The first event is the FormatException-driven failure that
+        // this test is asserting. Subsequent events from the auto-
+        // triggered follow-up sync are out of scope.
+        var asserted = false;
+        syncProgressListener.streamController.stream.listen((syncProgress) {
+          if (asserted) return;
+          asserted = true;
           expect(syncProgress.syncStatus, SyncStatus.failure);
           expect(syncProgress.atClientException, isA<AtClientException>());
           expect(syncProgress.atClientException?.message,
               contains('.buzz) is not a valid regex'));
-          print(syncProgress.atClientException);
-        }));
+        });
+        // Wait long enough for the stats notification (delayed 1s) and
+        // for processSyncRequests to inform the listener.
+        await Future.delayed(Duration(seconds: 2));
+        expect(asserted, isTrue,
+            reason: 'expected a failure SyncProgress to be emitted');
       });
 
       tearDown(() async {
@@ -4272,6 +4139,12 @@ void main() {
     test(
         'A test to verify sync request is added to queue when server commit id is greater than local commit id',
         () async {
+      // Two stats notifications with serverCommitId=10 vs lastReceivedServerCommitId=5
+      // → statsServiceListener should call _addSyncRequestToQueue twice.
+      // Under on-demand triggering each enqueue immediately fires a
+      // sync attempt, so we assert via a progress listener counting
+      // sync attempts rather than via the queue length (which gets
+      // drained by the auto-trigger).
       when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
           .thenAnswer((_) {
         var streamController =
@@ -4279,7 +4152,6 @@ void main() {
         // Adding a delay of 1 second to let the sync service initialize and
         // add the progress listener to the sync service.
         Future.delayed(Duration(seconds: 1)).then((_) {
-          syncServiceImpl.clearSyncEntities();
           streamController.add(at_notification.AtNotification(
               '-1',
               'statsNotification',
@@ -4301,12 +4173,21 @@ void main() {
         });
         return streamController.stream;
       });
+      // The auto-triggered sync attempts will reach _isInSync; mock the
+      // stats verb so they don't crash on missing mocks.
+      when(() => mockRemoteSecondary
+              .executeVerb(any(that: isA<StatsVerbBuilder>())))
+          .thenAnswer((_) async => 'data:[{"value":"10"}]');
       syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
-      await Future.delayed(Duration(seconds: 1)).then((_) {
-        expect(syncServiceImpl.getSyncRequestQueueSize(), 2);
-      });
+      var attempts = 0;
+      syncServiceImpl.addProgressListener(_AttemptCountingListener(() {
+        attempts++;
+      }));
+      await Future.delayed(Duration(seconds: 2));
+      expect(attempts, 2,
+          reason: 'two stats notifications should drive two sync attempts');
     });
 
     test(
@@ -4702,6 +4583,19 @@ class CustomSyncProgressListener extends SyncProgressListener {
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
     streamController.add(syncProgress);
+  }
+}
+
+class _AttemptCountingListener extends SyncProgressListener {
+  final void Function() _onAttempt;
+  _AttemptCountingListener(this._onAttempt);
+
+  @override
+  void onSyncProgressEvent(SyncProgress syncProgress) {
+    final status = syncProgress.syncStatus;
+    if (status == SyncStatus.success || status == SyncStatus.failure) {
+      _onAttempt();
+    }
   }
 }
 

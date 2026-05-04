@@ -2,6 +2,7 @@ import 'at_collection_model.dart';
 import 'at_collection_model_factory.dart';
 
 // Represents a generic JSON model of a atCollection model
+@Deprecated("Use AtClient.collection for collection-style operations")
 class AtJsonCollectionModel extends AtCollectionModel {
   late Map<String, dynamic> jsonModel;
 
@@ -18,6 +19,7 @@ class AtJsonCollectionModel extends AtCollectionModel {
 
 // Factory for creating instance of AtJsonCollectionModel
 // Factory accepts ay collection name
+@Deprecated("Use AtClient.collection for collection-style operations")
 class AtJsonCollectionModelFactory extends AtCollectionModelFactory {
   @override
   AtCollectionModel create() {

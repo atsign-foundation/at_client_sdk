@@ -109,6 +109,10 @@ class AtKey {
     }
   }
 
+  String get fullKey => '$key${_dotNamespaceIfPresent()}';
+
+  String get fullKeyAndOwner => '$fullKey$sharedBy';
+
   @override
   String toString() {
     if (key.isNullOrEmpty) {

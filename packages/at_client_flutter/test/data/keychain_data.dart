@@ -16,20 +16,19 @@ final AtKeys dummyAtKeys = AtKeys()
   ..metadata['secret'] = 'secret1';
 
 final String emptyAtKeysData = jsonEncode(AtKeysData().toJson());
-final String dummyAtKeysData = jsonEncode(AtKeysData(
-  keys: [
-    dummyAtKeys,
-  ],
-  defaultAtsign: '@alice',
-));
+final String dummyAtKeysData = jsonEncode(
+  AtKeysData(keys: [dummyAtKeys], defaultAtsign: '@alice'),
+);
 
-final String dummyEnrollmentData = jsonEncode(EnrollmentData(
-  'enrollId1',
-  dummyAtKeys,
-  1625079600000000,
-  namespace: {'namespace': 'namespace1'},
-  keysFilePath: '/path/to/keysfile',
-));
+final String dummyEnrollmentData = jsonEncode(
+  EnrollmentData(
+    'enrollId1',
+    dummyAtKeys,
+    1625079600000000,
+    namespace: {'namespace': 'namespace1'},
+    keysFilePath: '/path/to/keysfile',
+  ),
+);
 
 const legacyAtClientData = '''
     {

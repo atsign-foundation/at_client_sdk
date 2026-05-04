@@ -12,8 +12,6 @@ import 'package:at_client/src/crypto/legacy_crypto_scheme.dart';
 import 'package:at_client/src/crypto/shared_crypto_scheme.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
-import 'package:at_client/src/manager/sync_manager.dart';
-import 'package:at_client/src/manager/sync_manager_impl.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
@@ -46,7 +44,10 @@ class AtClientImpl implements AtClient {
   AtClientPreference? _preference;
 
   AtClientPreference? get preference => _preference;
-  late final String _atSign;
+  late final Atsign _atSign;
+
+  @override
+  Atsign get atSign => _atSign;
   SecondaryKeyStore? _localSecondaryKeyStore;
   @visibleForTesting
   LocalSecondary? localSecondary;
@@ -160,6 +161,46 @@ class AtClientImpl implements AtClient {
     _logger.finer('Outgoing $service has been garbage collected');
   });
 
+  final Map<String, AtCollection> _collections = {};
+  final Set<String> _collectionsSwept = <String>{};
+
+  @override
+  Future<AtCollection<T>> collection<T>(
+    String namespace,
+    Duration defaultExpiration, {
+    T Function(Map<String, dynamic>)? fromJson,
+    bool cleanupOrphansOnCreation = false,
+  }) async {
+    if (!namespace.contains('.')) {
+      throw ArgumentError(
+        'namespace must be fully qualified — provide the complete namespace '
+        '(e.g. "tasks.my_app"), NOT just the collection name. The '
+        'application namespace from AtClientPreference will NOT be appended '
+        'automatically.',
+      );
+    }
+    final c = _collections.putIfAbsent(
+      namespace,
+      () => AtCollection<T>(
+        this,
+        namespace,
+        defaultExpiration,
+        fromJson: fromJson,
+      ),
+    ) as AtCollection<T>;
+    if (cleanupOrphansOnCreation && !_collectionsSwept.contains(namespace)) {
+      _collectionsSwept.add(namespace);
+      try {
+        await c.cleanupOrphans();
+      } catch (e, st) {
+        _logger.warning(
+          'cleanupOrphans on $namespace failed: $e\n$st',
+        );
+      }
+    }
+    return c;
+  }
+
   static Future<AtClient> create(
       String currentAtSign, String? namespace, AtClientPreference preferences,
       {@Deprecated('no longer needed. will be removed in a future release')
@@ -210,7 +251,7 @@ class AtClientImpl implements AtClient {
     AtClientConfig? atClientConfig,
     this.enrollmentId,
   }) {
-    _atSign = AtUtils.fixAtSign(theAtSign);
+    _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
     _preference?.namespace ??= namespace;
@@ -448,16 +489,20 @@ class AtClientImpl implements AtClient {
       var verbBuilder = GetRequestTransformer(this)
           .transform(atKey, requestOptions: getRequestOptions);
       // Execute the verb.
-      if (getRequestOptions?.useRemoteAtServer == true) {
-        secondary = getRemoteSecondary()!;
+      if (atKey.isLocal) {
+        secondary = getLocalSecondary()!;
       } else {
-        secondary = SecondaryManager.getSecondary(
-            this,
-            verbBuilder,
-            SecondaryManager.getRemoteLocalPrefForOp(
-              getRequestOptions?.useRemoteAtServer,
-              preference?.remoteLocalPref,
-            ));
+        if (getRequestOptions?.useRemoteAtServer == true) {
+          secondary = getRemoteSecondary()!;
+        } else {
+          secondary = SecondaryManager.getSecondary(
+              this,
+              verbBuilder,
+              SecondaryManager.getRemoteLocalPrefForOp(
+                getRequestOptions?.useRemoteAtServer,
+                preference?.remoteLocalPref,
+              ));
+        }
       }
       var getResponse = await secondary.executeVerb(verbBuilder);
       // Return empty value if getResponse is null.
@@ -488,6 +533,16 @@ class AtClientImpl implements AtClient {
   Future<Metadata?> getMeta(AtKey atKey, {bool isDedicated = false}) async {
     var atValue = await get(atKey);
     return atValue.metadata;
+  }
+
+  @override
+  Future<bool> keyExists(AtKey key, bool? useRemoteAtServer) async {
+    String s = key.toString();
+    final matches = await getKeys(
+      regex: s,
+      useRemoteAtServer: useRemoteAtServer,
+    );
+    return matches.contains(s);
   }
 
   @override
@@ -684,12 +739,16 @@ class AtClientImpl implements AtClient {
           'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference!.maxDataSize} bytes. Found ${value.toString().length} bytes');
     }
 
-    var putResponse = await executeVerb(
-        putBuilder,
-        SecondaryManager.getRemoteLocalPrefForOp(
-          putRequestOptions?.useRemoteAtServer,
-          preference?.remoteLocalPref,
-        ));
+    RemoteLocalPref remoteLocalPref;
+    if (atKey.isLocal) {
+      remoteLocalPref = RemoteLocalPref.localOnly;
+    } else {
+      remoteLocalPref = SecondaryManager.getRemoteLocalPrefForOp(
+        putRequestOptions?.useRemoteAtServer,
+        preference?.remoteLocalPref,
+      );
+    }
+    var putResponse = await executeVerb(putBuilder, remoteLocalPref);
 
     // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
@@ -1037,7 +1096,12 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<AtResponse> setSPP(String spp) async {
+  Future<AtResponse> setSPP(String spp, {Duration? expiry}) async {
+    if (expiry == null) {
+      _logger.shout('WARNING: Setting SPP without an expiration'
+          '- defaulting to ${AtClient.defaultSppExpiry}');
+      expiry = AtClient.defaultSppExpiry;
+    }
     // SPP should be 6 characters PIN. Throw exception if its less
     // or more than 6 characters
     if (spp.length != 6) {
@@ -1052,8 +1116,9 @@ class AtClientImpl implements AtClient {
     }
     String? otpVerbResponse;
     try {
-      otpVerbResponse =
-          await _remoteSecondary?.executeCommand('otp:put:$spp\n', auth: true);
+      otpVerbResponse = await _remoteSecondary?.executeCommand(
+          'otp:put:$spp:ttl:${expiry.inMilliseconds}\n',
+          auth: true);
     } on AtLookUpException catch (e) {
       throw AtClientException(e.errorCode, e.errorMessage);
     } on AtException catch (e) {
@@ -1088,15 +1153,8 @@ class AtClientImpl implements AtClient {
 
   // TODO v4 - remove the follow methods in version 4 of at_client package
 
-  @override
-  @Deprecated("Use AtClient.syncService")
-  SyncManager? getSyncManager() {
-    return SyncManagerImpl.getInstance().getSyncManager(_atSign);
-  }
-
-  @override
-
   ///[Deprecated] Use [AtClient.notificationService]
+  @override
   @Deprecated('Use AtClient.notificationService')
   Future<void> startMonitor(String privateKey, Function? notificationCallback,
       {String? regex}) async {

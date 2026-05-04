@@ -5,6 +5,7 @@ import 'package:at_client/src/at_collection/collection_util.dart';
 import 'package:at_client/src/at_collection/collections.dart';
 import 'collection_methods_impl.dart';
 
+@Deprecated("Use AtClient.collection for collection-style operations")
 class AtCollectionModelStreamOperationsImpl
     extends AtCollectionModelStreamOperations {
   late AtCollectionModel atCollectionModel;

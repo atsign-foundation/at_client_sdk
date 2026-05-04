@@ -65,9 +65,6 @@ late Completer clientTwoAck;
 void main() async {
   AtSignLogger.root_level = 'shout';
   var mainIsolateReceivePort = ReceivePort('MainIsolateReceivePort');
-  SyncServiceImpl.syncRequestThreshold = 1;
-  SyncServiceImpl.syncRequestTriggerInSeconds = 1;
-  SyncServiceImpl.syncRunIntervalSeconds = 1;
   SyncServiceImpl.queueSize = 1;
   String uniqueId = Uuid().v4().hashCode.toString();
 

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:pinput/pinput.dart';
 
 /// A dialog widget that facilitates APKAM activation via OTP verification.
 ///
@@ -37,7 +37,12 @@ class ApkamActivationDialog extends StatefulWidget {
 
   @override
   State<ApkamActivationDialog> createState() => _ApkamActivationDialogState(
-      atSign, rootDomain, appName, deviceName, namespaces);
+    atSign,
+    rootDomain,
+    appName,
+    deviceName,
+    namespaces,
+  );
 
   /// Show the ApkamActivationDialog and return the activation result.
   static Future<AtEnrollmentResponse?> show(
@@ -63,9 +68,9 @@ class ApkamActivationDialog extends StatefulWidget {
 }
 
 class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
-  final List<TextEditingController> _controllers =
-      List.generate(6, (_) => TextEditingController());
-  final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
+  final TextEditingController _otpController = TextEditingController();
+  final FocusNode _otpFocusNode = FocusNode();
+  final ScrollController _pinScrollController = ScrollController();
   bool _isLoading = false;
   final enrollmentService = FlutterEnrollmentService();
   final String atSign;
@@ -74,8 +79,13 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   final String deviceName;
   final Map<String, String> namespaces;
 
-  _ApkamActivationDialogState(this.atSign, this.rootDomain, this.appName,
-      this.deviceName, this.namespaces);
+  _ApkamActivationDialogState(
+    this.atSign,
+    this.rootDomain,
+    this.appName,
+    this.deviceName,
+    this.namespaces,
+  );
 
   @override
   void initState() {
@@ -96,36 +106,43 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
 
   @override
   void dispose() {
-    for (var controller in _controllers) {
-      controller.dispose();
-    }
-    for (var node in _focusNodes) {
-      node.dispose();
-    }
+    _otpController.dispose();
+    _otpFocusNode.dispose();
+    _pinScrollController.dispose();
     super.dispose();
   }
 
-  void _onChanged(String value, int index) {
-    if (value.isNotEmpty && index < 5) {
-      _focusNodes[index + 1].requestFocus();
-    }
-  }
+  Future<void> _submitOtp() async {
+    final otp = _otpController.text;
+    if (otp.length != 6 || _isLoading) return;
 
-  void _onKeyEvent(KeyEvent event, int index) {
-    if (event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.backspace &&
-        _controllers[index].text.isEmpty &&
-        index > 0) {
-      _focusNodes[index - 1].requestFocus();
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final response = await _sendEnrollment(otp);
+      if (!mounted) return;
+      Navigator.of(context).pop(response);
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+      alignment: Alignment.topCenter,
+      insetPadding: EdgeInsets.fromLTRB(
+        24,
+        MediaQuery.of(context).padding.top + 24,
+        24,
+        0,
       ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       backgroundColor: Colors.white,
       child: Container(
         width: 560,
@@ -141,10 +158,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
                   onTap: () {
                     Navigator.of(context).pop();
                   },
-                  child: const Icon(
-                    Icons.arrow_back,
-                    size: 20,
-                  ),
+                  child: const Icon(Icons.arrow_back, size: 20),
                 ),
               ],
             ),
@@ -200,79 +214,120 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
             const SizedBox(height: 32),
 
             // OTP Input boxes
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(6, (index) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: SizedBox(
-                    width: 50,
-                    height: 64,
-                    child: KeyboardListener(
-                      focusNode: FocusNode(),
-                      onKeyEvent: (event) => _onKeyEvent(event, index),
-                      child: TextField(
-                        controller: _controllers[index],
-                        focusNode: _focusNodes[index],
-                        textAlign: TextAlign.center,
-                        keyboardType: TextInputType.number,
-                        maxLength: 1,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        decoration: InputDecoration(
-                          counterText: '',
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFE0E0E0),
-                              width: 1,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(
-                              color: widget.themeData.colorScheme.secondary,
-                              width: 2,
-                            ),
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
-                        ),
-                        onChanged: (value) => _onChanged(value, index),
-                      ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                const otpCount = 6;
+                const itemGap = 12.0;
+                final idealSize =
+                    (constraints.maxWidth - ((otpCount - 1) * itemGap)) /
+                    otpCount;
+                final otpSize = idealSize.clamp(52.0, 56.0).toDouble();
+                final viewportWidth = constraints.maxWidth;
+
+                final defaultPinTheme = PinTheme(
+                  width: otpSize,
+                  height: otpSize,
+                  textStyle: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: const Border.fromBorderSide(
+                      BorderSide(color: Color(0xFFE0E0E0), width: 1),
                     ),
                   ),
                 );
-              }),
+
+                return SingleChildScrollView(
+                  controller: _pinScrollController,
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Pinput(
+                    controller: _otpController,
+                    focusNode: _otpFocusNode,
+                    autofocus: true,
+                    length: otpCount,
+                    closeKeyboardWhenCompleted: false,
+                    separatorBuilder: (_) => const SizedBox(width: itemGap),
+                    keyboardType: TextInputType.number,
+                    defaultPinTheme: defaultPinTheme,
+                    focusedPinTheme: defaultPinTheme.copyWith(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: widget.themeData.colorScheme.secondary,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    submittedPinTheme: defaultPinTheme,
+                    onChanged: (value) {
+                      final activeIndex = value.length >= otpCount
+                          ? otpCount - 1
+                          : value.length;
+
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted || !_pinScrollController.hasClients) {
+                          return;
+                        }
+
+                        final pinStart = activeIndex * (otpSize + itemGap);
+                        final pinEnd = pinStart + otpSize;
+                        final currentOffset = _pinScrollController.offset;
+                        final viewStart = currentOffset;
+                        final viewEnd = currentOffset + viewportWidth;
+                        const edgePadding = 8.0;
+
+                        double? targetOffset;
+                        if (pinStart < viewStart + edgePadding) {
+                          targetOffset = pinStart - edgePadding;
+                        } else if (pinEnd > viewEnd - edgePadding) {
+                          targetOffset = pinEnd - viewportWidth + edgePadding;
+                        }
+
+                        if (targetOffset == null) return;
+
+                        final clampedOffset = targetOffset.clamp(
+                          _pinScrollController.position.minScrollExtent,
+                          _pinScrollController.position.maxScrollExtent,
+                        );
+
+                        if ((clampedOffset - currentOffset).abs() < 1) {
+                          return;
+                        }
+
+                        _pinScrollController.animateTo(
+                          clampedOffset,
+                          duration: const Duration(milliseconds: 140),
+                          curve: Curves.easeOut,
+                        );
+                      });
+                    },
+                    onCompleted: (_) => _submitOtp(),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 32),
 
             // Submit button
             _isLoading
                 ? const Center(
-                    child: Column(children: [
-                    CircularProgressIndicator(),
-                    Text("Waiting for approval..")
-                  ]))
+                    child: Column(
+                      children: [
+                        CircularProgressIndicator(),
+                        Text("Waiting for approval.."),
+                      ],
+                    ),
+                  )
                 : SizedBox(
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: () async {
-                        String otp = _controllers.map((c) => c.text).join();
-                        if (otp.length == 6 && !_isLoading) {
-                          setState(() {
-                            _isLoading = true;
-                          });
-                          final response = await _sendEnrollment(otp);
-                          Navigator.of(context).pop(response);
-                          setState(() {
-                            _isLoading = false;
-                          });
-                        }
-                      },
+                      onPressed: _submitOtp,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: widget.themeData.colorScheme.secondary,
                         foregroundColor: Colors.white,

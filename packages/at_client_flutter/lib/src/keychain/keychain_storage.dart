@@ -100,16 +100,16 @@ class KeychainStorage {
   ///   [keys] - [AtKeys] instance to persist
   ///
   /// Note: the Atsign must be included in the [AtKeys.metadata] field
-  Future<void> appendAtKeysToKeychain({
-    required AtKeys keys,
-  }) async {
+  Future<void> appendAtKeysToKeychain({required AtKeys keys}) async {
     String? existingData;
     try {
-      existingData =
-          await _read(keychainStoreName: (await AtKeysStore.getName()));
+      existingData = await _read(
+        keychainStoreName: (await AtKeysStore.getName()),
+      );
     } catch (e) {
       _logger.info(
-          'No existing atKeysData found in keychain. A new one will be created.');
+        'No existing atKeysData found in keychain. A new one will be created.',
+      );
     }
     if (existingData == null) {
       final atKeysData = AtKeysData(keys: [keys]);
@@ -132,15 +132,18 @@ class KeychainStorage {
   ///   [atSign] - Atsign whose persisted keys should be removed
   Future<void> removeAtsignFromKeychain(String atSign) async {
     try {
-      final data =
-          await _read(keychainStoreName: (await AtKeysStore.getName()));
+      final data = await _read(
+        keychainStoreName: (await AtKeysStore.getName()),
+      );
       if (data != null) {
         final atKeysData = AtKeysData.fromJson(jsonDecode(data));
-        atKeysData.keys
-            .removeWhere((element) => element.metadata['atsign'] == atSign);
+        atKeysData.keys.removeWhere(
+          (element) => element.metadata['atsign'] == atSign,
+        );
         await _write(
-            biometricStoreName: (await AtKeysStore.getName()),
-            keychainData: atKeysData);
+          biometricStoreName: (await AtKeysStore.getName()),
+          keychainData: atKeysData,
+        );
       } else {
         throw Exception('Unexpected data type found in keychain');
       }
@@ -169,8 +172,9 @@ class KeychainStorage {
   ///
   /// Returns [EnrollmentData] if present, otherwise `null`
   Future<EnrollmentData?> readEnrollmentData(String atSign) async {
-    final String? data =
-        await _read(keychainStoreName: EnrollmentStore(atSign).getName());
+    final String? data = await _read(
+      keychainStoreName: EnrollmentStore(atSign).getName(),
+    );
     if (data != null) {
       final Map<String, dynamic> jsonData = jsonDecode(data);
       return EnrollmentData.fromJson(jsonData);
@@ -197,8 +201,9 @@ class KeychainStorage {
   ///
   ///   [atSign] - Atsign whose enrollment data should be removed
   Future<void> deleteEnrollmentData(String atSign) async {
-    final BiometricStorageFile biometricStore =
-        await _getBiometricStorageFile(EnrollmentStore(atSign).getName());
+    final BiometricStorageFile biometricStore = await _getBiometricStorageFile(
+      EnrollmentStore(atSign).getName(),
+    );
     await biometricStore.delete();
   }
 
@@ -217,8 +222,11 @@ class KeychainStorage {
       }
       if (DateTime.now()
               .toUtc()
-              .difference(DateTime.fromMillisecondsSinceEpoch(
-                  data.enrollmentSubmissionTimeEpoch))
+              .difference(
+                DateTime.fromMillisecondsSinceEpoch(
+                  data.enrollmentSubmissionTimeEpoch,
+                ),
+              )
               .inHours >=
           _maxEnrollmentAuthenticationRetryInHours) {
         await deleteEnrollmentData(atSign);
@@ -243,8 +251,9 @@ class KeychainStorage {
 
     SppListData sppListData;
     try {
-      final existingData =
-          await _read(keychainStoreName: SppStore(atSign).getName());
+      final existingData = await _read(
+        keychainStoreName: SppStore(atSign).getName(),
+      );
       if (existingData != null) {
         sppListData = SppListData.fromJson(jsonDecode(existingData));
       } else {
@@ -256,12 +265,14 @@ class KeychainStorage {
 
     // Remove expired and the same value if it exists
     sppListData.spps.removeWhere(
-        (element) => element.isExpired || element.value == spp.value);
+      (element) => element.isExpired || element.value == spp.value,
+    );
     sppListData.spps.add(spp);
 
     await _write(
-        biometricStoreName: SppStore(atSign).getName(),
-        keychainData: sppListData);
+      biometricStoreName: SppStore(atSign).getName(),
+      keychainData: sppListData,
+    );
     _logger.info('SPP saved to keychain');
   }
 
@@ -280,8 +291,9 @@ class KeychainStorage {
       SppListData sppListData = SppListData.fromJson(jsonDecode(data));
 
       // Filter out expired ones
-      final activeSpps =
-          sppListData.spps.where((spp) => !spp.isExpired).toList();
+      final activeSpps = sppListData.spps
+          .where((spp) => !spp.isExpired)
+          .toList();
 
       // If some were expired, update the store
       if (activeSpps.length != sppListData.spps.length) {
@@ -289,8 +301,9 @@ class KeychainStorage {
           await deleteSppData(atSign);
         } else {
           await _write(
-              biometricStoreName: SppStore(atSign).getName(),
-              keychainData: SppListData(spps: activeSpps));
+            biometricStoreName: SppStore(atSign).getName(),
+            keychainData: SppListData(spps: activeSpps),
+          );
         }
       }
 
@@ -328,12 +341,11 @@ class KeychainStorage {
     }
   }
 
-  Future<String?> _read({
-    required String keychainStoreName,
-  }) async {
+  Future<String?> _read({required String keychainStoreName}) async {
     try {
-      final BiometricStorageFile store =
-          await _getBiometricStorageFile(keychainStoreName);
+      final BiometricStorageFile store = await _getBiometricStorageFile(
+        keychainStoreName,
+      );
       String? value;
       if (!isWindows) {
         value = await store.read();
@@ -370,13 +382,15 @@ class KeychainStorage {
         }
         final results = <String>[];
         for (int i = 0; i < segmentCount; i++) {
-          final segmentStore =
-              await _getBiometricStorageFile('${segmentPrefix}_$i');
+          final segmentStore = await _getBiometricStorageFile(
+            '${segmentPrefix}_$i',
+          );
           String? segmentValue = await segmentStore.read();
           log(
-              '  => READ: Fetched segment $i, length ${segmentValue?.length}'
-              ' from $segmentPrefix',
-              false);
+            '  => READ: Fetched segment $i, length ${segmentValue?.length}'
+            ' from $segmentPrefix',
+            false,
+          );
           // log('  => READ: segmentValue was $segmentValue', false);
           results.add(segmentValue ?? '');
         }
@@ -389,8 +403,9 @@ class KeychainStorage {
       print(s);
       _logger.severe('Removing data');
       await _write(
-          biometricStoreName: keychainStoreName,
-          keychainData: EmptyKeychainData());
+        biometricStoreName: keychainStoreName,
+        keychainData: EmptyKeychainData(),
+      );
       rethrow;
     }
   }
@@ -400,8 +415,9 @@ class KeychainStorage {
     required KeychainData keychainData,
   }) async {
     final data = jsonEncode(keychainData.toJson());
-    BiometricStorageFile store =
-        await _getBiometricStorageFile(biometricStoreName);
+    BiometricStorageFile store = await _getBiometricStorageFile(
+      biometricStoreName,
+    );
     if (!isWindows) {
       //log("WRITE: _writeDataToStore called", true);
       await store.write(data);
@@ -413,8 +429,9 @@ class KeychainStorage {
       await store.write(segmentCountInfo);
 
       for (int i = 0; i < dataList.length; i++) {
-        final segmentStore =
-            await _getBiometricStorageFile('${biometricStoreName}_segment_$i');
+        final segmentStore = await _getBiometricStorageFile(
+          '${biometricStoreName}_segment_$i',
+        );
         //log('  => WRITE: Writing segment $i length ${dataList[i].length} to ${segmentStore.name}',
         //    false);
         // log('  => WRITE: segmentValue was ${dataList[i]}', false);
@@ -424,11 +441,12 @@ class KeychainStorage {
   }
 
   Future<BiometricStorageFile> _getBiometricStorageFile(
-      String storeName) async {
-    return await biometricStorage.getStorage(storeName,
-        options: StorageFileInitOptions(
-          authenticationRequired: false,
-        ));
+    String storeName,
+  ) async {
+    return await biometricStorage.getStorage(
+      storeName,
+      options: StorageFileInitOptions(authenticationRequired: false),
+    );
   }
 
   /// Split a string into fixed-size segments
