@@ -2,7 +2,8 @@
 
 import 'dart:async';
 
-import 'package:at_client/src/encryption_service/encryption.dart';
+import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
@@ -13,12 +14,11 @@ import 'package:at_commons/at_commons.dart';
 /// Class is responsible for taking the [NotificationParams] and converting into [NotifyVerbBuilder]
 class NotificationRequestTransformer
     implements Transformer<NotificationParams, VerbBuilder> {
-  late String currentAtSign;
-  late AtClientPreference atClientPreference;
-  late AtKeyEncryption atKeyEncryption;
+  String get currentAtSign => _atClient.getCurrentAtSign()!;
+  AtClientPreference get atClientPreference => _atClient.getPreferences()!;
+  final AtClient _atClient;
 
-  NotificationRequestTransformer(
-      this.currentAtSign, this.atClientPreference, this.atKeyEncryption);
+  NotificationRequestTransformer(this._atClient);
 
   @override
   Future<NotifyVerbBuilder> transform(
@@ -126,8 +126,24 @@ class NotificationRequestTransformer
   }
 
   Future<String> _encryptNotificationValue(AtKey atKey, String value) async {
+    // Fetch encryption scheme
+    CryptoScheme scheme;
+    if (atKey.metadata.appMetadata != null) {
+      try {
+        var schemeName = atKey.metadata.appMetadata!.encryptionScheme;
+        scheme = _atClient.atChops!.schemes.lookup(schemeName);
+      } on AtException catch (e) {
+        e.stack(AtChainedException(
+            Intent.fetchCryptoScheme,
+            ExceptionScenario.decryptionFailed,
+            'Failed to fetch crypto scheme'));
+        rethrow;
+      }
+    } else {
+      scheme = _atClient.atChops!.schemes.lookup('legacy');
+    }
     try {
-      return await atKeyEncryption.encrypt(atKey, value);
+      return await scheme.encrypt(atKey, value);
     } on AtException catch (e) {
       e.stack(AtChainedException(Intent.notifyData,
           ExceptionScenario.encryptionFailed, 'Failed to encrypt the data'));

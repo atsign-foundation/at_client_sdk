@@ -4,7 +4,7 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
-import 'package:at_client/src/encryption_service/encryption_manager.dart';
+import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -95,8 +95,7 @@ class MockAtClientManager extends Mock implements AtClientManager {}
 class MockSecondaryAddressFinder extends Mock
     implements SecondaryAddressFinder {}
 
-class MockAtKeyEncryptionManager extends Mock
-    implements AtKeyEncryptionManager {}
+class MockAtKeyEncryptionManager extends Mock implements LegacyEncryption {}
 
 class MockAtLookupImpl extends Mock implements AtLookupImpl {}
 
@@ -115,7 +114,7 @@ void main() {
   FakeMonitor fakeMonitor = FakeMonitor();
   SecondaryAddressFinder mockSecondaryAddressFinder =
       MockSecondaryAddressFinder();
-  AtKeyEncryptionManager mockEncryptionManager = MockAtKeyEncryptionManager();
+  LegacyEncryption mockEncryptionManager = MockAtKeyEncryptionManager();
   AtLookupImpl mockAtLookupImpl = MockAtLookupImpl();
   group('A group of test to validate notification request transformer', () {
     var value = '+91908909933';

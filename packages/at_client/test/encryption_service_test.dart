@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/encryption_service/encryption_manager.dart';
+import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
 import 'package:at_client/src/encryption_service/self_key_encryption.dart';
 import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
@@ -111,7 +111,7 @@ void main() {
       when(() => mockAtClient.getCurrentAtSign()).thenAnswer((_) => '@sitaram');
 
       var encryptionService =
-          AtKeyEncryptionManager(mockAtClient).get(atKey, currentAtSign);
+          LegacyEncryption(mockAtClient).get(atKey, currentAtSign);
       expect(encryptionService, isA<SharedKeyEncryption>());
     });
 
@@ -124,7 +124,7 @@ void main() {
         ..metadata = Metadata();
 
       var encryptionService =
-          AtKeyEncryptionManager(mockAtClient).get(atKey, currentAtSign);
+          LegacyEncryption(mockAtClient).get(atKey, currentAtSign);
       expect(encryptionService, isA<SelfKeyEncryption>());
     });
   });
@@ -141,7 +141,7 @@ void main() {
       var value = 918078908676;
 
       var encryptionService =
-          AtKeyEncryptionManager(mockAtClient).get(atKey, currentAtSign);
+          LegacyEncryption(mockAtClient).get(atKey, currentAtSign);
 
       expect(
           () => encryptionService.encrypt(atKey, value),

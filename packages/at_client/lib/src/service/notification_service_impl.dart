@@ -39,9 +39,6 @@ class NotificationServiceImpl extends NotificationService {
   DateTime? _lastReceipt;
 
   @visibleForTesting
-  late AtKeyEncryptionManager atKeyEncryptionManager;
-
-  @visibleForTesting
   AtClientValidation atClientValidation = AtClientValidation();
 
   @visibleForTesting
@@ -93,7 +90,6 @@ class NotificationServiceImpl extends NotificationService {
             lastReceivedNotificationKey, atClient.getCurrentAtSign()!,
             namespace: atClient.getPreferences()!.namespace)
         .build();
-    atKeyEncryptionManager = AtKeyEncryptionManager(atClient);
   }
 
   /// Return the last received notification DateTime in epochMillis when
@@ -375,14 +371,8 @@ class NotificationServiceImpl extends NotificationService {
           notificationParams,
           atClient.getPreferences()!,
           atClient.getCurrentAtSign()!);
-      // Get the EncryptionInstance to encrypt the data.
-      var atKeyEncryption = atKeyEncryptionManager.get(
-          notificationParams.atKey, atClient.getCurrentAtSign()!);
       // Get the NotifyVerbBuilder from NotificationParams
-      var builder = await NotificationRequestTransformer(
-              atClient.getCurrentAtSign()!,
-              atClient.getPreferences()!,
-              atKeyEncryption)
+      var builder = await NotificationRequestTransformer(atClient)
           .transform(notificationParams);
 
       notificationValueValidation(notificationParams, builder);
