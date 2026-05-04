@@ -4107,6 +4107,84 @@ void main() {
             reason: 'expected a failure SyncProgress to be emitted');
       });
 
+      /// Preconditions:
+      /// 1. serverCommitId at sync start is 110
+      /// 2. persisted lastReceivedServerCommitId is 100
+      /// 3. server returns an empty sync response — every commit in
+      ///    (100, 110] was filtered out server-side (apkam namespace
+      ///    scope, syncRegex, or skipDeletesUntil)
+      /// 4. local has no uncommitted entries to push
+      ///
+      /// Assertion:
+      /// 1. The persisted lastReceivedServerCommitId is advanced to
+      ///    110 (the sync-start serverCommitId snapshot), not left at
+      ///    100. Subsequent sync rounds then no-op until the server
+      ///    actually advances past 110, instead of re-probing the
+      ///    same filtered range every round.
+      test(
+          'A test to verify lastReceivedServerCommitId is advanced to '
+          'the sync-start serverCommitId when the server returns an '
+          'empty sync response (filtered range)', () async {
+        TestResources.atsign = '@bob';
+
+        registerFallbackValue(FakeRemoteSecondary());
+        registerFallbackValue(FakeSyncVerbBuilder());
+
+        LocalSecondary mockLocalSecondary = MockLocalSecondary();
+        SyncUtil mockSyncUtil = MockSyncUtil();
+
+        // server reports commitId 110 at sync start.
+        when(() => mockSyncUtil.getLatestServerCommitId(
+                any(that: RemoteSecondaryMatcher()), null))
+            .thenAnswer((_) async => 110);
+        // local commit log has been synced up through commitId 100.
+        when(() => mockSyncUtil.getLastSyncedEntry(null,
+            atSign: TestResources.atsign)).thenAnswer((invocation) =>
+            Future.value(CommitEntry(
+                '@alice:phone@bob', CommitOp.UPDATE_ALL, DateTime.now())
+              ..commitId = 100));
+        // no uncommitted local entries to push.
+        when(() => mockSyncUtil.getChangesSinceLastCommit(null, null,
+            atSign: TestResources.atsign)).thenAnswer((_) => Future.value([]));
+
+        // override the setUp stub: persisted cursor is 100 (the
+        // setUp default throws AtKeyNotFoundException, which would
+        // fall back to localCommitId).
+        when(() =>
+                mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+            .thenAnswer((_) => Future.value(AtValue()..value = '100'));
+
+        // server returns an empty pull response — everything in the
+        // (100, 110] range was filtered out server-side.
+        when(() => mockRemoteSecondary.executeVerb(
+                any(that: SyncVerbBuilderMatcher()),
+                sync: any(named: "sync")))
+            .thenAnswer((_) async => 'data:[]');
+        when(() => mockAtClient.getLocalSecondary())
+            .thenAnswer((_) => mockLocalSecondary);
+
+        var syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
+            atClientManager: mockAtClientManager,
+            remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+        syncServiceImpl.syncUtil = mockSyncUtil;
+
+        syncServiceImpl.sync();
+        await syncServiceImpl.processSyncRequests();
+
+        // The cursor must be advanced to 110 — the sync-start
+        // serverCommitId snapshot — even though the server returned
+        // no entries. Without this, every subsequent sync round
+        // re-probes (100, 110] indefinitely until the server happens
+        // to advance past 110 with a non-filtered commit.
+        final captured = verify(() => mockAtClient.put(
+                any(that: LastReceivedServerCommitIdMatcher()), captureAny()))
+            .captured;
+        expect(captured.last, '110',
+            reason:
+                'empty sync response with serverCommitId > lastReceivedServerCommitId '
+                'must advance the persisted cursor to the sync-start serverCommitId');
+      });
+
       tearDown(() async {
         await TestResources.tearDownLocalStorage();
         resetMocktailState();

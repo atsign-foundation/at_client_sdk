@@ -21,6 +21,13 @@ And some tech debt cleanup
 - feat: outgoing AtClient's sync and notification services will now be garbage collected
 - chore: deprecated `atClientManager` param in the factories of AtClient, NotificationService, and SyncService
 - fix: added null guards to AtClient service getters
+- perf(SyncServiceImpl): when a `sync:from:` request returns no entries because
+  the entire `(lastReceivedServerCommitId, serverCommitId]` range was filtered
+  out server-side (apkam namespace scope, syncRegex, or skipDeletesUntil),
+  advance the persisted server-commit cursor to the sync-start `serverCommitId`
+  snapshot instead of breaking out without advancing. Subsequent sync rounds
+  no-op until the server actually advances past it, rather than re-probing
+  the same filtered range every round.
 
 ## 3.11.0     
 

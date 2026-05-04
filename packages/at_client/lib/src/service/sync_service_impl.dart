@@ -613,8 +613,22 @@ class SyncServiceImpl implements SyncService {
                 localCommitIdBeforeSync: localCommitIdBeforeSync,
                 skipDeletesUntil: skipDeletesUntil);
         if (listOfCommitEntriesFromServer.isEmpty) {
+          // Server walked the full (lastReceivedServerCommitId,
+          // serverCommitId] range and returned no entries for this
+          // client — every commit in that window was filtered out
+          // server-side (apkam namespace scope, syncRegex, or
+          // skipDeletesUntil). Advance the cursor to serverCommitId
+          // (the sync-start snapshot, NOT the live
+          // [_latestKnownServerCommitId], which may have advanced
+          // into commits we haven't yet examined) so subsequent
+          // rounds no-op until the server moves past it, instead
+          // of re-probing the same filtered range every round.
           _logger.finer(
-              'sync response is empty | local commitID: $lastReceivedServerCommitId | server commitID: $serverCommitId');
+              'sync response is empty | advancing cursor past filtered range | '
+              'local commitID: $lastReceivedServerCommitId -> $serverCommitId | '
+              'server commitID: $serverCommitId');
+          lastReceivedServerCommitId = serverCommitId;
+          _promoteServerCommitId(lastReceivedServerCommitId);
           break;
         }
         // Iterates over each commit entry
