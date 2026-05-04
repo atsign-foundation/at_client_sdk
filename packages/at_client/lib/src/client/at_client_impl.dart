@@ -8,6 +8,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
+import 'package:at_client/src/crypto/legacy_crypto_scheme.dart';
+import 'package:at_client/src/crypto/shared_crypto_scheme.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/manager/sync_manager.dart';
@@ -797,7 +799,10 @@ class AtClientImpl implements AtClient {
           '_createAtChops  - Exception while getting pkam key pair from local secondary: ${e.toString()}');
     }
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-    return AtChopsImpl(atChopsKeys);
+    AtChopsImpl chops = AtChopsImpl(atChopsKeys);
+    chops.schemes.register('shared', StandardSharedScheme(this));
+    chops.schemes.register('legacy', LegacyCryptoScheme(this));
+    return chops;
   }
 
   @override

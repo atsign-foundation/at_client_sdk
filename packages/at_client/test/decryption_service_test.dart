@@ -2,7 +2,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/decryption_service/shared_with_me_decryption.dart';
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
-import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/decryption_service/shared_by_me_decryption.dart';
 import 'package:at_client/src/decryption_service/self_key_decryption.dart';
 import 'package:at_commons/at_builders.dart';

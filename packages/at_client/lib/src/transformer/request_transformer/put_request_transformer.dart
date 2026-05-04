@@ -2,7 +2,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
-import 'package:at_client/src/encryption_service/encryption_manager.dart';
+import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -56,15 +56,36 @@ class PutRequestTransformer
 
   Future<void> _encryptData(
       UpdateVerbBuilder updateVerbBuilder, PutRequestOptions options) async {
-    var encryptionService = AtKeyEncryptionManager(_atClient)
-        .get(updateVerbBuilder.atKey, _atClient.getCurrentAtSign()!);
+    CryptoScheme scheme;
+    if (updateVerbBuilder.atKey.metadata.appMetadata != null) {
+      try {
+        var schemeName =
+            updateVerbBuilder.atKey.metadata.appMetadata!.encryptionScheme;
+        scheme = _atClient.atChops!.schemes.lookup(schemeName);
+      } on AtException catch (e) {
+        e.stack(
+          AtChainedException(
+              Intent.fetchCryptoScheme,
+              ExceptionScenario.decryptionFailed,
+              'Failed to fetch crypto scheme'),
+        );
+        rethrow;
+      }
+    } else {
+      scheme = _atClient.atChops!.schemes.lookup('legacy');
+    }
+
     try {
-      updateVerbBuilder.value = await encryptionService.encrypt(
-          updateVerbBuilder.atKey, updateVerbBuilder.value);
+      updateVerbBuilder.value = await scheme.encrypt(
+        updateVerbBuilder.atKey,
+        updateVerbBuilder.value,
+      );
       updateVerbBuilder.atKey.metadata.isEncrypted = true;
     } on AtException catch (e) {
-      e.stack(AtChainedException(Intent.shareData,
-          ExceptionScenario.encryptionFailed, 'Failed to encrypt the data'));
+      e.stack(
+        AtChainedException(Intent.shareData, ExceptionScenario.encryptionFailed,
+            'Failed to encrypt the data'),
+      );
       rethrow;
     }
   }

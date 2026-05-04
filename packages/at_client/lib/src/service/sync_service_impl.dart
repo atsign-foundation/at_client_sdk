@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/decryption_service/decryption_builder.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/util/logger_util.dart';
@@ -644,12 +644,19 @@ class SyncServiceImpl implements SyncService {
       final serverMetaData = serverCommitEntry['metadata'];
       if (serverMetaData != null &&
           serverMetaData[AtConstants.isEncrypted] == "true") {
-        final decrypter = AtKeyDecryptionBuilder.build(serverAtKey, _atClient);
         // ignore: prefer_typing_uninitialized_variables
-        var serverDecryptedValue;
+        var serverDecryptedValue; // Fetch encryption scheme, default if non existent
+        CryptoScheme scheme;
+        try {
+          var schemeName = serverAtKey.metadata.appMetadata?.encryptionScheme;
+          scheme = _atClient.atChops!.schemes.lookup(schemeName!);
+        } catch (_) {
+          // catching null case & StateError on lookup
+          scheme = _atClient.atChops!.schemes.lookup('default');
+        }
         if (serverEncryptedValue != null && serverEncryptedValue.isNotEmpty) {
           serverDecryptedValue =
-              await decrypter.decrypt(serverAtKey, serverEncryptedValue);
+              await scheme.decrypt(serverAtKey, serverEncryptedValue);
         }
         if (localAtValue.value != serverDecryptedValue) {
           conflictInfo.localValue = localAtValue.value;

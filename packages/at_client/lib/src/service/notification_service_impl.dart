@@ -3,7 +3,6 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/encryption_service/encryption_manager.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
@@ -33,9 +32,6 @@ class NotificationServiceImpl extends NotificationService {
   late final Monitor monitor;
   late final AtSignLogger logger;
   DateTime? _lastReceipt;
-
-  @visibleForTesting
-  late AtKeyEncryptionManager atKeyEncryptionManager;
 
   @visibleForTesting
   AtClientValidation atClientValidation = AtClientValidation();
@@ -86,7 +82,6 @@ class NotificationServiceImpl extends NotificationService {
             lastReceivedNotificationKey, atClient.getCurrentAtSign()!,
             namespace: atClient.getPreferences()!.namespace)
         .build();
-    atKeyEncryptionManager = AtKeyEncryptionManager(atClient);
   }
 
   /// Return the last received notification DateTime in epochMillis when
@@ -277,14 +272,8 @@ class NotificationServiceImpl extends NotificationService {
           notificationParams,
           atClient.getPreferences()!,
           atClient.getCurrentAtSign()!);
-      // Get the EncryptionInstance to encrypt the data.
-      var atKeyEncryption = atKeyEncryptionManager.get(
-          notificationParams.atKey, atClient.getCurrentAtSign()!);
       // Get the NotifyVerbBuilder from NotificationParams
-      var builder = await NotificationRequestTransformer(
-              atClient.getCurrentAtSign()!,
-              atClient.getPreferences()!,
-              atKeyEncryption)
+      var builder = await NotificationRequestTransformer(atClient)
           .transform(notificationParams);
 
       notificationValueValidation(notificationParams, builder);
