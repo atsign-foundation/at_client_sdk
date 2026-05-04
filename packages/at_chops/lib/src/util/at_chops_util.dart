@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_iv.dart';
-import 'package:at_chops/src/key/at_key_pair.dart';
+import 'package:at_chops/src/key/keys.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
 import 'package:at_chops/src/key/impl/at_encryption_key_pair.dart';
 import 'package:at_chops/src/key/impl/at_pkam_key_pair.dart';
