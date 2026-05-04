@@ -800,17 +800,14 @@ class AtValue {
 }
 
 class AppMetadata {
-  // all crypto related details
-  // ie: iv, ephemeralKeys, encapsulation coins, and any signing related business
-  List<CryptoScheme> crypto;
-
-  // any fields that aren't crypto or keyNames get placed here.
+  String encryptionScheme;
+  // additional is flat in the json structure
   Map<String, dynamic>? additional;
-  AppMetadata(this.crypto, {this.additional});
+  AppMetadata(this.encryptionScheme, {this.additional});
 
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{
-      'crypto': crypto.map((scheme) => scheme.toJson()).toList(),
+      'encryptionScheme': encryptionScheme,
     };
     if (additional != null) {
       map.addAll(additional!);
@@ -819,25 +816,7 @@ class AppMetadata {
   }
 
   static AppMetadata fromJson(Map json) {
-    final crypto = <CryptoScheme>[];
-    final cryptoJson = json['crypto'];
-    if (cryptoJson is List) {
-      for (final value in cryptoJson) {
-        if (value is CryptoScheme) {
-          crypto.add(value);
-        } else if (value is Map) {
-          crypto.add(CryptoScheme.fromJson(Map<String, dynamic>.from(value)));
-        }
-      }
-    } else if (cryptoJson is Map) {
-      for (final value in cryptoJson.values) {
-        if (value is CryptoScheme) {
-          crypto.add(value);
-        } else if (value is Map) {
-          crypto.add(CryptoScheme.fromJson(Map<String, dynamic>.from(value)));
-        }
-      }
-    }
+    final scheme = json['encryptionScheme'];
     final additional = <String, dynamic>{};
     json.forEach((key, value) {
       if (key != 'crypto') {
@@ -846,7 +825,7 @@ class AppMetadata {
     });
 
     return AppMetadata(
-      crypto,
+      scheme,
       additional: additional.isEmpty ? null : additional,
     );
   }
