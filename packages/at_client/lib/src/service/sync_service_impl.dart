@@ -59,8 +59,13 @@ class SyncServiceImpl implements SyncService {
   /// Read by [_getServerCommitId], which falls back to a remote
   /// stats fetch only when this is `null` (cold start, before any
   /// of the above has populated it).
-  @visibleForTesting
-  int? serverCommitId;
+  ///
+  /// Distinct from the `serverCommitId` parameters / locals used
+  /// inside a single sync run, which are *snapshots* captured at
+  /// the start of that run and held constant for its duration.
+  /// This field is the live, monotonic high-water mark across the
+  /// whole [SyncServiceImpl] lifetime.
+  int? _latestKnownServerCommitId;
 
   /// Wall-clock time at which the last [processSyncRequests] run
   /// finished (whether it found work or took the in-sync fast path).
@@ -165,8 +170,9 @@ class SyncServiceImpl implements SyncService {
   /// Listens on stats notification sent by the cloud secondary server.
   ///
   /// Every well-formed notification promotes the cached
-  /// `serverCommitId` (monotonically — see [_promoteServerCommitId])
-  /// and unconditionally enqueues a sync request. The actual
+  /// [_latestKnownServerCommitId] (monotonically — see
+  /// [_promoteServerCommitId]) and unconditionally enqueues a
+  /// sync request. The actual
   /// "is sync work needed?" decision is made by
   /// [processSyncRequests] via [_isInSync], which considers BOTH
   /// pull-side (server has new commits) AND push-side (local writes
@@ -573,7 +579,7 @@ class SyncServiceImpl implements SyncService {
               ..startedAt = DateTime.now().toUtc()
               ..message = 'Push batch $batchesDone / $batchTotal applied',
             localCommitId: localTip,
-            serverCommitId: serverCommitId);
+            serverCommitId: _latestKnownServerCommitId);
       } on Exception catch (e) {
         var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
         _logger.severe(
@@ -736,7 +742,7 @@ class SyncServiceImpl implements SyncService {
 
   @visibleForTesting
 
-  /// When a new client is authenticated, set the [_skipDeletesUntilCommitId] to [serverCommitId] for initial sync
+  /// When a new client is authenticated, set the [_skipDeletesUntilCommitId] to the supplied `serverCommitId` for initial sync
   /// If initial sync is interrupted before client fully syncs from the server and client authenticates again, retrieve
   /// [_skipDeletesUntilCommitId] from local secondary and return
   Future<int?> setAndGetSkipDeletesUntil(
@@ -1032,15 +1038,15 @@ class SyncServiceImpl implements SyncService {
   }
 
   /// Returns the cloud secondary latest commit id. if null, returns -1.
-  /// Monotonically promotes the cached [serverCommitId] to [observed]
-  /// when it represents progress. Centralised so the three update
-  /// paths (stats notifications, push batch responses, pull entries)
-  /// share the same monotonic guard — out-of-order arrivals can't
-  /// rewind the cache.
+  /// Monotonically promotes the cached [_latestKnownServerCommitId]
+  /// to [observed] when it represents progress. Centralised so the
+  /// three update paths (stats notifications, push batch responses,
+  /// pull entries) share the same monotonic guard — out-of-order
+  /// arrivals can't rewind the cache.
   void _promoteServerCommitId(int observed) {
-    final current = serverCommitId;
+    final current = _latestKnownServerCommitId;
     if (current == null || observed > current) {
-      serverCommitId = observed;
+      _latestKnownServerCommitId = observed;
     }
   }
 
@@ -1064,7 +1070,7 @@ class SyncServiceImpl implements SyncService {
   /// reachable.
   Future<int> _getServerCommitId({bool forceFresh = false}) async {
     if (!forceFresh) {
-      final cached = serverCommitId;
+      final cached = _latestKnownServerCommitId;
       if (cached != null) {
         _logger.finer('Returning serverCommitId $cached (cached)');
         return cached;
