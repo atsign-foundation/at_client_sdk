@@ -4139,9 +4139,9 @@ void main() {
             .thenAnswer((_) async => 110);
         // local commit log has been synced up through commitId 100.
         when(() => mockSyncUtil.getLastSyncedEntry(null,
-            atSign: TestResources.atsign)).thenAnswer((invocation) =>
-            Future.value(CommitEntry(
-                '@alice:phone@bob', CommitOp.UPDATE_ALL, DateTime.now())
+            atSign:
+                TestResources.atsign)).thenAnswer((invocation) => Future.value(
+            CommitEntry('@alice:phone@bob', CommitOp.UPDATE_ALL, DateTime.now())
               ..commitId = 100));
         // no uncommitted local entries to push.
         when(() => mockSyncUtil.getChangesSinceLastCommit(null, null,
@@ -4150,16 +4150,15 @@ void main() {
         // override the setUp stub: persisted cursor is 100 (the
         // setUp default throws AtKeyNotFoundException, which would
         // fall back to localCommitId).
-        when(() =>
-                mockAtClient.get(any(that: LastReceivedServerCommitIdMatcher())))
+        when(() => mockAtClient
+                .get(any(that: LastReceivedServerCommitIdMatcher())))
             .thenAnswer((_) => Future.value(AtValue()..value = '100'));
 
         // server returns an empty pull response — everything in the
         // (100, 110] range was filtered out server-side.
         when(() => mockRemoteSecondary.executeVerb(
-                any(that: SyncVerbBuilderMatcher()),
-                sync: any(named: "sync")))
-            .thenAnswer((_) async => 'data:[]');
+            any(that: SyncVerbBuilderMatcher()),
+            sync: any(named: "sync"))).thenAnswer((_) async => 'data:[]');
         when(() => mockAtClient.getLocalSecondary())
             .thenAnswer((_) => mockLocalSecondary);
 
