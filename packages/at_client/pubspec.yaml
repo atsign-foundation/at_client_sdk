@@ -33,7 +33,7 @@ dependencies:
   at_chops: ^3.0.0
   at_lookup: ^3.1.0
   at_auth: ^3.0.0
-  at_persistence_secondary_server: ^4.2.0
+  at_persistence_secondary_server: ^4.3.5
   meta: ^1.16.0
   version: ^3.0.2
   mutex: ^3.1.0
