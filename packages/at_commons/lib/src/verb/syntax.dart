@@ -18,8 +18,12 @@ class VerbSyntax {
       r'^plookup:(bypassCache:(?<bypassCache>true|false):)?((?<operation>meta|all):)?(?<atKey>[^@\s]+)@(?<atSign>[^:@\s]+)$';
   static const lookup =
       r'^lookup:(bypassCache:(?<bypassCache>true|false):)?((?<operation>meta|all):)?(?<atKey>(?:[^:]).+)@(?<atSign>[^:@\s]+)$';
-  static const scan =
-      r'^scan$|scan(:showhidden:(?<showhidden>true|false))?(:(?<forAtSign>@[^:@\s]+))?(:page:(?<page>\d+))?( (?<regex>\S+))?$';
+  static const scan = r'^scan$|scan'
+      r'(:cl(?<commitLog>))?'
+      r'(:showhidden:(?<showhidden>true|false))?'
+      r'(:(?<forAtSign>@[^:@\s]+))?'
+      r'(:page:(?<page>\d+))?'
+      r'( (?<regex>\S+))?$';
   static const config =
       r'^config:(?:(?<=config:)block:(?<operation>add|remove|show)(?:(?<=show)\s?$|(?:(?<=add|remove):(?<atSign>(?:@[^:@\s]+)( (?:@[^\s@]+))*$))))|(?:(?<=config:)(?<setOperation>set|reset|print):(?<configNew>.+)$)';
   static const stats =
@@ -34,6 +38,10 @@ class VerbSyntax {
       r'(:ttb:(?<ttb>(-?)\d+))?'
       r'(:ttr:(?<ttr>(-?)\d+))?'
       r'(:ccd:(?<ccd>true|false))?'
+      r'(:cAt:(?<createdAt>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z))?'
+      r'(:uAt:(?<updatedAt>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z))?'
+      r'(:eAt:(?<expiresAt>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z))?'
+      r'(:aAt:(?<availableAt>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z))?'
       r'(:dataSignature:(?<dataSignature>[^:@\s]+))?'
       r'(:sharedKeyStatus:(?<sharedKeyStatus>[^:@\s]+))?'
       r'(:isBinary:(?<isBinary>true|false))?'
@@ -50,24 +58,30 @@ class VerbSyntax {
       r'(:skeEncAlgo:(?<skeEncAlgo>[^:@\s]+))?'
       r'(:immutable:(?<immutable>true|false))?';
 
-  static const update = r'^update:json:(?<json>.+)$'
+  static const update = r'^update'
+      r'(:nc(?<noCommit>))?'
+      r'('
+      r':json:(?<json>.+)'
       r'|'
-      r'^update'
       '$metadataFragment'
       r'(:((?<publicScope>public)|(@(?<forAtSign>[^:@\s]+))))?'
       r':(?<atKey>(([^:@\s]+)|(privatekey:at_pkam_publickey)))'
       r'(@(?<atSign>[^:@\s]+))?'
       r' (?<value>.+)'
+      r')'
       r'$';
 
   // ignore: constant_identifier_names
   static const update_meta = r'^update:meta'
+      r'(:nc(?<noCommit>))?'
       r'(:((?<publicScope>public)|(@(?<forAtSign>[^:@\s]+))))?'
       r':(?<atKey>[^:@]((?!:{2})[^:@])+)'
       r'@(?<atSign>[^:@\s]+)'
       '$metadataFragment'
       r'$';
   static const delete = r'^delete'
+      r'(:dAt:(?<deletedAt>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z))?'
+      r'(:nc(?<noCommit>))?'
       r'(:(?<force>force))?'
       r'(:priority:(?<priority>low|medium|high))?'
       r'(:cached)?'

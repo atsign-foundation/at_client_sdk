@@ -71,4 +71,36 @@ void main() {
       expect(verbParams[AtConstants.regex], '.wavi');
     });
   });
+
+  group('A group of tests for ScanVerbBuilder commitLog flag', () {
+    test('commitLog is false by default and :cl is not emitted', () {
+      var builder = ScanVerbBuilder();
+      expect(builder.commitLog, false);
+      expect(builder.buildCommand(), 'scan\n');
+    });
+
+    test('commitLog=true emits :cl immediately after scan', () {
+      var builder = ScanVerbBuilder()..commitLog = true;
+      expect(builder.buildCommand(), 'scan:cl\n');
+    });
+
+    test('commitLog=true combines with showHidden, sharedBy and regex', () {
+      var builder = ScanVerbBuilder()
+        ..commitLog = true
+        ..showHiddenKeys = true
+        ..sharedBy = '@alice'
+        ..regex = '.wavi';
+      expect(builder.buildCommand(), 'scan:cl:showhidden:true:@alice .wavi\n');
+    });
+
+    test('commitLog command parses back through the regex', () {
+      var builder = ScanVerbBuilder()
+        ..commitLog = true
+        ..sharedBy = '@alice';
+      var verbParams =
+          getVerbParams(VerbSyntax.scan, builder.buildCommand().trim());
+      expect(verbParams['commitLog'], '');
+      expect(verbParams[AtConstants.forAtSign], '@alice');
+    });
+  });
 }

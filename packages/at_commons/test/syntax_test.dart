@@ -354,6 +354,260 @@ void main() {
       expect(enrollVerbParams['operation'], 'get');
     });
   });
+
+  group('A group of tests for the scan verb commitLog flag', () {
+    test('scan with :cl flag sets commitLog group', () {
+      var command = 'scan:cl';
+      var verbParams = getVerbParams(VerbSyntax.scan, command);
+      expect(verbParams['commitLog'], '');
+    });
+
+    test('scan without :cl flag leaves commitLog group null', () {
+      var command = 'scan';
+      var verbParams = getVerbParams(VerbSyntax.scan, command);
+      expect(verbParams['commitLog'], null);
+    });
+
+    test('scan with :cl combined with showhidden, forAtSign, page, regex', () {
+      var command = 'scan:cl:showhidden:true:@alice:page:2 .wavi';
+      var verbParams = getVerbParams(VerbSyntax.scan, command);
+      expect(verbParams['commitLog'], '');
+      expect(verbParams[AtConstants.showHidden], 'true');
+      expect(verbParams[AtConstants.forAtSign], '@alice');
+      expect(verbParams[AtConstants.page], '2');
+      expect(verbParams[AtConstants.regex], '.wavi');
+    });
+
+    test('scan: :cl must precede showhidden — wrong order does not match', () {
+      var command = 'scan:showhidden:true:cl';
+      expect(
+          () => getVerbParams(VerbSyntax.scan, command),
+          throwsA(predicate((dynamic e) =>
+              e is InvalidSyntaxException &&
+              e.message == 'command does not match the regex')));
+    });
+  });
+
+  group('A group of tests for the update verb noCommit flag', () {
+    test('update with :nc flag sets noCommit group', () {
+      var command = 'update:nc:@alice:phone@bob 12345';
+      var verbParams = getVerbParams(VerbSyntax.update, command);
+      expect(verbParams['noCommit'], '');
+      expect(verbParams[AtConstants.atKey], 'phone');
+      expect(verbParams[AtConstants.forAtSign], 'alice');
+      expect(verbParams[AtConstants.atSign], 'bob');
+      expect(verbParams[AtConstants.value], '12345');
+    });
+
+    test('update without :nc flag leaves noCommit group null', () {
+      var command = 'update:@alice:phone@bob 12345';
+      var verbParams = getVerbParams(VerbSyntax.update, command);
+      expect(verbParams['noCommit'], null);
+    });
+
+    test('update with :nc and metadata fields', () {
+      var command = 'update:nc:ttl:1000:ttr:-1:@alice:phone@bob 12345';
+      var verbParams = getVerbParams(VerbSyntax.update, command);
+      expect(verbParams['noCommit'], '');
+      expect(verbParams[AtConstants.ttl], '1000');
+      expect(verbParams[AtConstants.ttr], '-1');
+    });
+  });
+
+  group('A group of tests for the update:meta verb noCommit flag', () {
+    test('update:meta with :nc flag sets noCommit group', () {
+      var command = 'update:meta:nc:@alice:phone@bob:ttl:5000';
+      var verbParams = getVerbParams(VerbSyntax.update_meta, command);
+      expect(verbParams['noCommit'], '');
+      expect(verbParams[AtConstants.atKey], 'phone');
+      expect(verbParams[AtConstants.forAtSign], 'alice');
+      expect(verbParams[AtConstants.atSign], 'bob');
+      expect(verbParams[AtConstants.ttl], '5000');
+    });
+
+    test('update:meta without :nc flag leaves noCommit group null', () {
+      var command = 'update:meta:@alice:phone@bob:ttl:5000';
+      var verbParams = getVerbParams(VerbSyntax.update_meta, command);
+      expect(verbParams['noCommit'], null);
+    });
+  });
+
+  group('A group of tests for metadata timestamp fields', () {
+    const cAt = '2026-05-05T11:59:44.123456Z';
+    const uAt = '2026-05-05T11:59:45.000000Z';
+    const eAt = '2026-05-05T11:59:46.999000Z';
+    const aAt = '2026-05-05T11:59:47.500000Z';
+
+    test('update with all timestamp fields captures ISO values', () {
+      var command = 'update'
+          ':cAt:$cAt'
+          ':uAt:$uAt'
+          ':eAt:$eAt'
+          ':aAt:$aAt'
+          ':@alice:phone@bob 12345';
+      var verbParams = getVerbParams(VerbSyntax.update, command);
+      expect(verbParams[AtConstants.createdAt], cAt);
+      expect(verbParams[AtConstants.updatedAt], uAt);
+      expect(verbParams['expiresAt'], eAt);
+      expect(verbParams['availableAt'], aAt);
+    });
+
+    test('update with only createdAt captures the ISO value', () {
+      var command = 'update:cAt:$cAt:@alice:phone@bob 12345';
+      var verbParams = getVerbParams(VerbSyntax.update, command);
+      expect(verbParams[AtConstants.createdAt], cAt);
+      expect(verbParams[AtConstants.updatedAt], null);
+      expect(verbParams['expiresAt'], null);
+      expect(verbParams['availableAt'], null);
+    });
+
+    test('update without any timestamp fields leaves them null', () {
+      var command = 'update:@alice:phone@bob 12345';
+      var verbParams = getVerbParams(VerbSyntax.update, command);
+      expect(verbParams[AtConstants.createdAt], null);
+      expect(verbParams[AtConstants.updatedAt], null);
+      expect(verbParams['expiresAt'], null);
+      expect(verbParams['availableAt'], null);
+    });
+
+    test('update:meta with all timestamp fields captures ISO values', () {
+      var command = 'update:meta:@alice:phone@bob'
+          ':cAt:$cAt'
+          ':uAt:$uAt'
+          ':eAt:$eAt'
+          ':aAt:$aAt';
+      var verbParams = getVerbParams(VerbSyntax.update_meta, command);
+      expect(verbParams[AtConstants.createdAt], cAt);
+      expect(verbParams[AtConstants.updatedAt], uAt);
+      expect(verbParams['expiresAt'], eAt);
+      expect(verbParams['availableAt'], aAt);
+    });
+
+    test('update with timestamps alongside ttl/ttr and dataSignature', () {
+      var command = 'update'
+          ':ttl:1000'
+          ':ttr:-1'
+          ':cAt:$cAt'
+          ':uAt:$uAt'
+          ':dataSignature:abc'
+          ':@alice:phone@bob 12345';
+      var verbParams = getVerbParams(VerbSyntax.update, command);
+      expect(verbParams[AtConstants.ttl], '1000');
+      expect(verbParams[AtConstants.ttr], '-1');
+      expect(verbParams[AtConstants.createdAt], cAt);
+      expect(verbParams[AtConstants.updatedAt], uAt);
+      expect(verbParams[AtConstants.publicDataSignature], 'abc');
+    });
+
+    test('timestamps with millisecond-precision fractional seconds match', () {
+      var command = 'update:cAt:2026-05-05T11:59:44.123Z'
+          ':@alice:phone@bob 12345';
+      var verbParams = getVerbParams(VerbSyntax.update, command);
+      expect(verbParams[AtConstants.createdAt], '2026-05-05T11:59:44.123Z');
+    });
+
+    test('timestamps with no fractional-second component match', () {
+      var command = 'update:cAt:2026-05-05T11:59:44Z'
+          ':@alice:phone@bob 12345';
+      var verbParams = getVerbParams(VerbSyntax.update, command);
+      expect(verbParams[AtConstants.createdAt], '2026-05-05T11:59:44Z');
+    });
+
+    test('non-UTC ISO (no Z suffix) is rejected', () {
+      var command = 'update:cAt:2026-05-05T11:59:44.123456'
+          ':@alice:phone@bob 12345';
+      expect(
+          () => getVerbParams(VerbSyntax.update, command),
+          throwsA(predicate((dynamic e) =>
+              e is InvalidSyntaxException &&
+              e.message == 'command does not match the regex')));
+    });
+
+    test('numeric ms-since-epoch is not accepted', () {
+      var command = 'update:cAt:1730000000000:@alice:phone@bob 12345';
+      expect(
+          () => getVerbParams(VerbSyntax.update, command),
+          throwsA(predicate((dynamic e) =>
+              e is InvalidSyntaxException &&
+              e.message == 'command does not match the regex')));
+    });
+  });
+
+  group('A group of tests for the delete verb deletedAt and noCommit', () {
+    const dAt = '2026-05-05T11:59:44.123456Z';
+
+    test('delete with :dAt captures the deletedAt ISO value', () {
+      var command = 'delete:dAt:$dAt:@alice:phone@bob';
+      var verbParams = getVerbParams(VerbSyntax.delete, command);
+      expect(verbParams['deletedAt'], dAt);
+      expect(verbParams[AtConstants.forAtSign], 'alice');
+      expect(verbParams[AtConstants.atKey], 'phone');
+      expect(verbParams[AtConstants.atSign], 'bob');
+    });
+
+    test('delete with :nc flag sets noCommit group', () {
+      var command = 'delete:nc:@alice:phone@bob';
+      var verbParams = getVerbParams(VerbSyntax.delete, command);
+      expect(verbParams['noCommit'], '');
+      expect(verbParams['deletedAt'], null);
+    });
+
+    test('delete with :dAt and :nc together', () {
+      var command = 'delete:dAt:$dAt:nc:@alice:phone@bob';
+      var verbParams = getVerbParams(VerbSyntax.delete, command);
+      expect(verbParams['deletedAt'], dAt);
+      expect(verbParams['noCommit'], '');
+    });
+
+    test('delete with :dAt, :nc, :force, :priority, public scope', () {
+      var command = 'delete:dAt:$dAt:nc:force:priority:high:public:phone@bob';
+      var verbParams = getVerbParams(VerbSyntax.delete, command);
+      expect(verbParams['deletedAt'], dAt);
+      expect(verbParams['noCommit'], '');
+      expect(verbParams[AtConstants.force], 'force');
+      expect(verbParams[AtConstants.priority], 'high');
+      expect(verbParams[AtConstants.publicScopeParam], 'public');
+      expect(verbParams[AtConstants.atKey], 'phone');
+      expect(verbParams[AtConstants.atSign], 'bob');
+    });
+
+    test('delete without :dAt or :nc still parses (regression)', () {
+      var command = 'delete:@alice:phone@bob';
+      var verbParams = getVerbParams(VerbSyntax.delete, command);
+      expect(verbParams['deletedAt'], null);
+      expect(verbParams['noCommit'], null);
+      expect(verbParams[AtConstants.forAtSign], 'alice');
+      expect(verbParams[AtConstants.atKey], 'phone');
+      expect(verbParams[AtConstants.atSign], 'bob');
+    });
+
+    test('delete: order is fixed — :nc before :dAt does not match', () {
+      var command = 'delete:nc:dAt:$dAt:@alice:phone@bob';
+      expect(
+          () => getVerbParams(VerbSyntax.delete, command),
+          throwsA(predicate((dynamic e) =>
+              e is InvalidSyntaxException &&
+              e.message == 'command does not match the regex')));
+    });
+
+    test('delete: :dAt rejects non-UTC ISO (no Z suffix)', () {
+      var command = 'delete:dAt:2026-05-05T11:59:44.123456:@alice:phone@bob';
+      expect(
+          () => getVerbParams(VerbSyntax.delete, command),
+          throwsA(predicate((dynamic e) =>
+              e is InvalidSyntaxException &&
+              e.message == 'command does not match the regex')));
+    });
+
+    test('delete: numeric ms-since-epoch is not accepted', () {
+      var command = 'delete:dAt:1730000000000:@alice:phone@bob';
+      expect(
+          () => getVerbParams(VerbSyntax.delete, command),
+          throwsA(predicate((dynamic e) =>
+              e is InvalidSyntaxException &&
+              e.message == 'command does not match the regex')));
+    });
+  });
 }
 
 Map getVerbParams(String regex, String command) {

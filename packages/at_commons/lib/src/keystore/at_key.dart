@@ -4,6 +4,7 @@ import 'package:at_commons/src/keystore/at_key_builder_impl.dart';
 import 'package:at_commons/src/keystore/public_key_hash.dart';
 import 'package:at_commons/src/utils/at_key_regex_utils.dart';
 import 'package:at_commons/src/utils/string_utils.dart';
+import 'package:at_commons/src/verb/verb_util.dart';
 
 import '../at_constants.dart';
 import '../exception/at_exceptions.dart';
@@ -548,6 +549,18 @@ class Metadata {
     }
     if (ccd != null) {
       sb.write(':ccd:$ccd');
+    }
+    if (createdAt != null) {
+      sb.write(':cAt:${VerbUtil.formatIso8601Micros(createdAt!)}');
+    }
+    if (updatedAt != null) {
+      sb.write(':uAt:${VerbUtil.formatIso8601Micros(updatedAt!)}');
+    }
+    if (expiresAt != null) {
+      sb.write(':eAt:${VerbUtil.formatIso8601Micros(expiresAt!)}');
+    }
+    if (availableAt != null) {
+      sb.write(':aAt:${VerbUtil.formatIso8601Micros(availableAt!)}');
     }
     if (dataSignature.isNotNullOrEmpty) {
       sb.write(':${AtConstants.publicDataSignature}:$dataSignature');
