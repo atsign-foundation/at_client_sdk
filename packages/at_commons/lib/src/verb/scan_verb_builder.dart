@@ -39,10 +39,17 @@ class ScanVerbBuilder implements VerbBuilder {
   /// Defaulted to false.
   bool showHiddenKeys = false;
 
+  /// If set to true, the server is asked to scan the commit log rather than
+  /// the keystore. Emitted on the wire as the `:cl` flag.
+  bool commitLog = false;
+
   @override
   String buildCommand() {
     StringBuffer serverCommandBuffer = StringBuffer('scan');
 
+    if (commitLog) {
+      serverCommandBuffer.write(':cl');
+    }
     if (showHiddenKeys) {
       serverCommandBuffer.write(':${AtConstants.showHidden}:true');
     }

@@ -46,4 +46,23 @@ class VerbUtil {
   static String getFormattedValue(String value) {
     return value.replaceAll(newLineReplacePattern, '\n');
   }
+
+  /// Formats [dt] as an ISO 8601 UTC string with exactly six fractional-second
+  /// digits, e.g. `2026-05-05T11:59:44.123456Z`. The wire grammar for
+  /// timestamp metadata fields (cAt/uAt/eAt/aAt/dAt) accepts this shape;
+  /// `DateTime.toIso8601String()` is not used directly because it emits a
+  /// variable number of fractional digits depending on whether the source
+  /// value carries microseconds.
+  static String formatIso8601Micros(DateTime dt) {
+    final utc = dt.toUtc();
+    final y = utc.year.toString().padLeft(4, '0');
+    final mo = utc.month.toString().padLeft(2, '0');
+    final d = utc.day.toString().padLeft(2, '0');
+    final h = utc.hour.toString().padLeft(2, '0');
+    final mi = utc.minute.toString().padLeft(2, '0');
+    final s = utc.second.toString().padLeft(2, '0');
+    final us =
+        (utc.millisecond * 1000 + utc.microsecond).toString().padLeft(6, '0');
+    return '$y-$mo-${d}T$h:$mi:$s.${us}Z';
+  }
 }
