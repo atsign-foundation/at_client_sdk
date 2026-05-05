@@ -1,3 +1,18 @@
+## 5.10.0
+
+- feat: add `:cl` flag to the `scan` verb syntax, plus
+  `ScanVerbBuilder.commitLog`
+- feat: add `:nc` (no-commit) flag to the `update`, `update:meta`, `update:json`
+  and `delete` verb syntaxes, plus `UpdateVerbBuilder.noCommit` and
+  `DeleteVerbBuilder.noCommit`
+- feat: add `:dAt` (deletedAt) timestamp to the `delete` verb syntax, plus
+  `DeleteVerbBuilder.deletedAt`
+- feat: emit `Metadata.createdAt` / `updatedAt` / `expiresAt` / `availableAt` on
+  the wire as `:cAt:` / `:uAt:` / `:eAt:` / `:aAt:` (used by `update`,
+  `update:meta` and `notify`)
+- feat: timestamp wire format is ISO 8601 UTC with 6 fractional-second digits,
+  e.g. `2026-05-05T11:59:44.123456Z`; helper at `VerbUtil.formatIso8601Micros`
+
 ## 5.9.0
 
 - feat: add `AtKey.fullKey` getter — key name including its namespace
