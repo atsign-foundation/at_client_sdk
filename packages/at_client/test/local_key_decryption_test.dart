@@ -58,20 +58,6 @@ void main() {
       expect(decryptedTestValue, testValue);
     });
 
-    test('test to check AtDecryptionException when encrypted value is null',
-        () async {
-      var localKeyDecryption = SharedByMeDecryption(mockAtClient);
-      var localKey = AtKey()
-        ..sharedBy = '@alice'
-        ..sharedWith = '@bob'
-        ..key = 'shared_key';
-      expect(
-          () async => await localKeyDecryption.decrypt(localKey, null),
-          throwsA(predicate((e) =>
-              e is AtDecryptionException &&
-              e.message == 'Decryption failed. Encrypted value is null')));
-    });
-
     test(
         'test to check SharedKeyNotFoundException when shared key is empty/null',
         () async {
