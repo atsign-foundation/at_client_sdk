@@ -318,6 +318,16 @@ class NotificationServiceImpl extends NotificationService {
     required String namespace,
   }) {
     String r = '^$atSign:([^.]+\\.)?$namespace@';
+    // Single-subscription controller. Its onPause/onResume hooks are
+    // deliberately NOT wired to pause the upstream subscription:
+    // [subscribe] returns a broadcast stream, and broadcast
+    // subscriptions DO NOT buffer events emitted during pause()
+    // (events are delivered to other live subscribers and dropped
+    // for the paused one). When the downstream consumer pauses
+    // [sc.stream], the single-sub controller buffers incoming
+    // notifications internally; we keep accepting from upstream
+    // and adding to the controller, and the controller delivers
+    // the buffered notifications when the consumer resumes.
     StreamController<AtNotification> sc = StreamController<AtNotification>();
     StreamSubscription<AtNotification>? notifStreamSubscription;
     sc.onListen = () {
@@ -335,12 +345,6 @@ class NotificationServiceImpl extends NotificationService {
     };
     sc.onCancel = () {
       notifStreamSubscription?.cancel();
-    };
-    sc.onPause = () {
-      notifStreamSubscription?.pause();
-    };
-    sc.onResume = () {
-      notifStreamSubscription?.resume();
     };
     return sc.stream;
   }
