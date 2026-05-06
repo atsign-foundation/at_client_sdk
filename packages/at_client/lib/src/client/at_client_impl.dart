@@ -8,8 +8,9 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
-import 'package:at_client/src/crypto/legacy_crypto_scheme.dart';
-import 'package:at_client/src/crypto/shared_crypto_scheme.dart';
+import 'package:at_client/src/crypto/aes_crypto_scheme.dart';
+import 'package:at_client/src/crypto/legacy/legacy_crypto_scheme.dart';
+import 'package:at_client/src/crypto/rsa_crypto_scheme.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
@@ -277,6 +278,9 @@ class AtClientImpl implements AtClient {
 
       localSecondary = LocalSecondary(this, keyStore: _localSecondaryKeyStore);
       _atChops ??= await _createAtChops(_atSign);
+      _atChops!.schemes.register('rsa', RSAScheme(this));
+      _atChops!.schemes.register('aes', AESScheme(this));
+      _atChops!.schemes.register('legacy', LegacyCryptoScheme(this));
     }
 
     // Using ??= because we may be injecting a RemoteSecondary
@@ -859,8 +863,6 @@ class AtClientImpl implements AtClient {
     }
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
     AtChopsImpl chops = AtChopsImpl(atChopsKeys);
-    chops.schemes.register('shared', StandardSharedScheme(this));
-    chops.schemes.register('legacy', LegacyCryptoScheme(this));
     return chops;
   }
 

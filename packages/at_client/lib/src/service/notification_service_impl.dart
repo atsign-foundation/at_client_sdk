@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart' hide StringBuffer;
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
@@ -250,6 +251,7 @@ class NotificationServiceImpl extends NotificationService {
     bool shouldEncrypt = true,
     Duration expiration = NotificationService.defaultExpiration,
     bool cacheAtRecipient = false,
+    String cryptoAlgorithm = 'legacy',
     DateTime? recipientCacheExpiration,
   }) async {
     if (cacheAtRecipient && recipientCacheExpiration == null) {
@@ -262,10 +264,8 @@ class NotificationServiceImpl extends NotificationService {
     final String notifPayload;
     body = body.trim();
     if (body.isNotEmpty && shouldEncrypt) {
-      AtKeyEncryption encrypter = atSign == to
-          ? SelfKeyEncryption(atClient)
-          : SharedKeyEncryption(atClient);
-      notifPayload = await encrypter.encrypt(atKey, body);
+      CryptoScheme scheme = atClient.atChops!.schemes.lookup(cryptoAlgorithm);
+      notifPayload = await scheme.encrypt(atKey, body);
       atKey.metadata.isEncrypted = true;
     } else {
       notifPayload = body;

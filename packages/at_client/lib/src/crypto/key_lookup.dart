@@ -13,7 +13,7 @@ class KeyLookup {
     required String keyName,
     required String sharedWith,
     required String sharedBy,
-    required String keyType,
+    required String algo,
   }) async {
     AbstractKey encryptionKey;
     try {
@@ -22,7 +22,7 @@ class KeyLookup {
         sharedWith,
         sharedBy,
         keyName,
-        keyType: keyType,
+        keyType: algo,
       );
     } catch (_) {
       encryptionKey = await _fetchKey(
@@ -30,7 +30,7 @@ class KeyLookup {
         sharedWith,
         sharedBy,
         keyName,
-        keyType: keyType,
+        keyType: algo,
       );
     }
     return encryptionKey;
