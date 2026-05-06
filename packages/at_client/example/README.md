@@ -101,10 +101,14 @@ Shared TUI plumbing (palette, presets, typedefs) lives under
 `lib/todos_tui/`; the entry point and widget tree are in
 `bin/collections_todos.dart`.
 
-### Collections — sub-collections (3 levels deep)
-Publishes live docker container stats — one snapshot per cycle per
-container — to a tree of typed sub-collections:
-`nodes` → `atsigns` → `samples`. Pairs with the Flutter dashboard at
+### Dockerstats — 3-level sub-collections, streaming
+Publishes a snapshot per docker container per polling cycle into a
+tree of typed sub-collections (`nodes` → `atsigns` → `samples`)
+shared with N other atSigns. The publisher uses
+`AtCollection.upsert` so it's safely re-runnable within the
+collection's TTL; the subscriber uses `AtCollection.getDescendant`
+to fetch typed leaves in one call when a `CSubItemUpdated` event
+fires. Pairs with the Flutter dashboard at
 `packages/at_client_flutter/examples/dockerstats/`.
 
 Real mode shells out to the `docker` CLI; simulate mode synthesises

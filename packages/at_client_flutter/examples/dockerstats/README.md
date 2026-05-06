@@ -18,20 +18,27 @@ rolling 5-minute window.
 
 The receiver subscribes to `nodes.dockerstats.demos` (the root
 `AtCollection<HostNode>`) and listens to `subUpdates` for any
-descendant. On a `samples` event (`subName == 'samples'`, ancestry
-length 2) we walk the parent chain via
-[`AtCollection.subCollection`](../../../at_client/lib/src/collections/collections.dart):
-fetch the host CItem, build the `atsigns` sub on it, fetch the
-atSign CItem, build the `samples` sub-sub. Each level is memoised
-so the chain only resolves once per `(host, atSign)` pair.
+descendant. On a `samples` event (`subName == 'samples'`,
+ancestry length 2) we hand the ancestry plus leaf identity to
+[`AtCollection.getDescendant<StatSample>`](../../../at_client/lib/src/collections/collections.dart),
+which walks the parent chain (host CItem → `atsigns` sub →
+atSign CItem → `samples` sub-sub) in one call and returns the
+typed leaf. The whole receiver is `~10` lines of Dart on top of
+the rolling-window store.
 
 See `lib/services/dockerstats_service.dart` for the wiring and
 `lib/services/rolling_window.dart` for the eviction logic. There is
 also a CLI counterpart at
 `packages/at_client/example/bin/dockerstats_subscribe.dart` that
-mirrors the same chain and prints one line per arriving sample —
-handy for verifying publisher↔receiver round-trip without launching
-the Flutter app.
+uses the same `getDescendant` call and prints one line per
+arriving sample — handy for verifying publisher↔receiver
+round-trip without launching the Flutter app.
+
+The publisher uses [`AtCollection.upsert`](../../../at_client/lib/src/collections/collections.dart)
+for the host and atSign parent CItems so it's safely
+re-runnable within the collection's TTL: a previous run's
+self-keys persist server-side past process exit, and the strict
+`create` verb would refuse on each restart. `upsert` doesn't.
 
 ## Running
 
