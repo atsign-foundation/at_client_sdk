@@ -1,3 +1,11 @@
+// HiveKeystore.getExpiryKeysCache() is @visibleForTesting in the
+// at_persistence package, but is the canonical access point we read
+// here to surface nextExpiryAt / nextAvailableAt without duplicating
+// the cache in this layer. The parallel persistence project will
+// promote it to a public method on SecondaryKeyStore — at that point
+// this file-level ignore goes away.
+// ignore_for_file: invalid_use_of_visible_for_testing_member
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -35,6 +43,19 @@ class LocalSecondary implements Secondary {
   final void Function(DataEvent)? _onEvent;
 
   void _emit(DataEvent e) => _onEvent?.call(e);
+
+  /// Tracks the `availableAt` timestamp [_onAvailableFire] last
+  /// emitted `DataUpdated` for, per key. Lets the available-timer
+  /// sweep skip keys we've already fired for (the underlying record's
+  /// `availableAt` is now in the past but unchanged). A subsequent
+  /// `_update` that rewrites the record with a new future
+  /// `availableAt` causes the cache's value to differ from this map's
+  /// — the sweep then refires.
+  ///
+  /// In-memory only — does NOT survive process restart. Restart-side
+  /// re-fire is acceptable: subscribers come up fresh and a single
+  /// `DataUpdated` per restart is the consistent answer.
+  final Map<String, DateTime> _firedAvailableAt = {};
 
   LocalSecondary(
     this._atClient, {
@@ -92,6 +113,25 @@ class LocalSecondary implements Secondary {
         throw UnAuthorizedException(
             'Cannot perform update on $updateKey due to insufficient privilege');
       }
+
+      // Probe previous metadata BEFORE the write so we can compute
+      // visibility transitions for event emission. May throw
+      // KeyNotFoundException for first-write — treat as "no previous".
+      // The cross-tier safety property here: this LocalSecondary is the
+      // only in-process emit point for keystore-mutation events. The
+      // notification path from the remote atServer comes through a
+      // separate channel (NotificationServiceImpl) and already carries
+      // availableAt in the envelope.
+      AtMetaData? prevMeta;
+      try {
+        prevMeta = await keyStore!.getMeta(updateKey);
+      } on Exception {
+        prevMeta = null;
+      }
+      final now = DateTime.timestamp();
+      final bool? prevVisible =
+          prevMeta == null ? null : _visibleAt(prevMeta.availableAt, now);
+
       late AtMetaData emittedMetadata;
       switch (builder.operation) {
         case AtConstants.updateMeta:
@@ -113,9 +153,34 @@ class LocalSecondary implements Secondary {
           emittedMetadata = atMetadata;
           break;
       }
-      _emit(DataUpdated(builder.atKey, metadata: emittedMetadata));
-      // If we've already sent to remote atServer, update the commit log so we
-      // don't send the update again via the sync process
+
+      final newVisible = _visibleAt(emittedMetadata.availableAt, now);
+      if (newVisible) {
+        _emit(DataUpdated(builder.atKey, metadata: emittedMetadata));
+        // If the record carries an availableAt (necessarily in the
+        // past since newVisible is true), record it so the
+        // available-timer sweep won't re-emit DataUpdated for the
+        // same crossing.
+        final avail = emittedMetadata.availableAt;
+        if (avail != null) {
+          _firedAvailableAt[updateKey] = avail;
+        } else {
+          _firedAvailableAt.remove(updateKey);
+        }
+      } else if (prevVisible == true) {
+        // visible → not-yet: record dropped out of listeners' view.
+        // Clear any prior fire record — when the new future
+        // availableAt crosses, the timer should fire DataUpdated.
+        _emit(DataDeleted(builder.atKey));
+        _firedAvailableAt.remove(updateKey);
+      } else {
+        // Silent (fresh future-write or future→future re-write).
+        // The new availableAt differs from any previously fired
+        // value, so let the sweep evaluate normally — clear any
+        // stale fire record.
+        _firedAvailableAt.remove(updateKey);
+      }
+
       return 'data:$updateResult';
     } on DataStoreException catch (e) {
       _logger.severe('exception in local update:${e.toString()}');
@@ -158,6 +223,7 @@ class LocalSecondary implements Secondary {
     try {
       var deleteResult = await keyStore!.remove(deleteKey);
       _emit(DataDeleted(builder.atKey));
+      _firedAvailableAt.remove(deleteKey);
       return 'data:$deleteResult';
     } on DataStoreException catch (e) {
       _logger.severe('exception in delete:${e.toString()}');
@@ -275,6 +341,96 @@ class LocalSecondary implements Secondary {
     }
     //If TTB or TTL populated but not met, return true.
     return true;
+  }
+
+  /// Visibility predicate for event-emission decisions: a record
+  /// with this `availableAt` is considered visible at [at]. Mirrors
+  /// the `availableAt` arm of [_isActiveKey] but excludes the
+  /// `expiresAt` arm — visibility for emit purposes is independent
+  /// of expiry (an already-expired record's `_update` should still
+  /// emit normally; the expiry timer fires `DataDeleted` on its own
+  /// schedule).
+  bool _visibleAt(DateTime? availableAt, DateTime at) {
+    if (availableAt == null) return true;
+    return availableAt.toUtc().millisecondsSinceEpoch <=
+        at.toUtc().millisecondsSinceEpoch;
+  }
+
+  /// Earliest pending `expiresAt` across keys with TTL, or `null`
+  /// if none. Reads from the underlying [HiveKeystore]'s
+  /// `_expiryKeysCache` — which is rebuilt on keystore open and
+  /// maintained on every put. O(n) over the cache size; n is the
+  /// count of keys with TTL or TTB set, NOT the total record count.
+  ///
+  /// Returns `null` when the keystore isn't a [HiveKeystore]
+  /// (non-Hive backends are responsible for their own timer
+  /// surfaces).
+  DateTime? nextExpiryAt() {
+    final ks = keyStore;
+    if (ks is! HiveKeystore) return null;
+    DateTime? earliest;
+    for (final entry in ks.getExpiryKeysCache().values) {
+      final exp = entry['expiresAt'];
+      if (exp == null) continue;
+      if (earliest == null || exp.isBefore(earliest)) earliest = exp;
+    }
+    return earliest;
+  }
+
+  /// Earliest pending `availableAt` across keys with TTB, excluding
+  /// keys whose current `availableAt` matches a previously fired
+  /// timestamp ([_firedAvailableAt]). Returns `null` if none.
+  DateTime? nextAvailableAt() {
+    final ks = keyStore;
+    if (ks is! HiveKeystore) return null;
+    DateTime? earliest;
+    for (final entry in ks.getExpiryKeysCache().entries) {
+      final avail = entry.value['availableAt'];
+      if (avail == null) continue;
+      final fired = _firedAvailableAt[entry.key];
+      if (fired != null && fired.isAtSameMomentAs(avail)) continue;
+      if (earliest == null || avail.isBefore(earliest)) earliest = avail;
+    }
+    return earliest;
+  }
+
+  /// Yields every key with `availableAt <= cutoff` whose current
+  /// `availableAt` doesn't match a previously fired timestamp. Used
+  /// by [AtClientImpl._onAvailableFire] to drive the visibility-
+  /// onset sweep.
+  ///
+  /// Iteration order is unspecified — the underlying cache is a
+  /// `HashMap`. Snapshots before yielding so concurrent writes
+  /// during the sweep don't perturb the walk.
+  Iterable<String> keysWithAvailableAtAtOrBefore(DateTime cutoff) sync* {
+    final ks = keyStore;
+    if (ks is! HiveKeystore) return;
+    final cutoffMs = cutoff.toUtc().millisecondsSinceEpoch;
+    final snapshot = List<MapEntry<String, Map<String, DateTime?>>>.from(
+        ks.getExpiryKeysCache().entries);
+    for (final entry in snapshot) {
+      final avail = entry.value['availableAt'];
+      if (avail == null) continue;
+      if (avail.toUtc().millisecondsSinceEpoch > cutoffMs) continue;
+      final fired = _firedAvailableAt[entry.key];
+      if (fired != null && fired.isAtSameMomentAs(avail)) continue;
+      yield entry.key;
+    }
+  }
+
+  /// Records that the available-timer sweep just emitted
+  /// `DataUpdated` for [key], so subsequent sweeps don't re-fire
+  /// for the same `availableAt` crossing. A subsequent `_update`
+  /// that rewrites the record with a new future `availableAt`
+  /// (different from the recorded one) re-enables firing.
+  void dropAvailabilityCacheEntry(String key) {
+    final ks = keyStore;
+    if (ks is! HiveKeystore) return;
+    final entry = ks.getExpiryKeysCache()[key];
+    final avail = entry?['availableAt'];
+    if (avail != null) {
+      _firedAvailableAt[key] = avail;
+    }
   }
 
   String? _prepareResponseData(String? operation, AtData? atData) {

@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/client/hive_keystore_expiry_extension.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
@@ -30,12 +29,6 @@ import 'package:at_client/src/util/constants.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
-// HiveKeystore isn't exported from the at_persistence_secondary_server
-// barrel; the private import is needed for the `is HiveKeystore` guard
-// in `_armExpiryTimer`. Will go away when the parallel persistence
-// project promotes nextExpiryAt to a public method on SecondaryKeyStore.
-// ignore: implementation_imports
-import 'package:at_persistence_secondary_server/src/keystore/hive_keystore.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart';
@@ -155,14 +148,26 @@ class AtClientImpl implements AtClient {
   // ---------------------------------------------------------------------------
   // Event-driven expiry timer. Replaces the cron-based persistence-layer
   // sweep that used to be wired up in StorageManager. Arms a one-shot
-  // Timer at the keystore's nextExpiryAt(); on fire, drives a sweep via
+  // Timer at LocalSecondary.nextExpiryAt(); on fire, drives a sweep via
   // LocalSecondary.deleteExpiredKeys (whose deletes go through _delete
-  // and emit DataDeleted events). The _sweepInFlight flag suppresses
+  // and emit DataDeleted events). _expirySweepInFlight suppresses
   // re-arms triggered by the sweep's own emissions — one re-arm at the
   // end picks up the post-sweep state including any mid-sweep writes.
   Timer? _expiryTimer;
   StreamSubscription<DataEvent>? _expirySub;
-  bool _sweepInFlight = false;
+  bool _expirySweepInFlight = false;
+
+  // ---------------------------------------------------------------------------
+  // Event-driven availability timer. Symmetric counterpart to the
+  // expiry timer above — arms at LocalSecondary.nextAvailableAt(); on
+  // fire, walks every key whose availableAt has crossed now, emits
+  // DataUpdated for each, and re-arms at the next pending availableAt.
+  // Drives the visibility-onset event for records whose availableAt
+  // was in the future at write time. _availableSweepInFlight
+  // suppresses re-arms during the sweep's own emissions.
+  Timer? _availableTimer;
+  StreamSubscription<DataEvent>? _availableSub;
+  bool _availableSweepInFlight = false;
 
   SyncService? _syncService;
 
@@ -366,10 +371,17 @@ class AtClientImpl implements AtClient {
       // Re-arms on every keystore mutation; first arm uses the current
       // cache state (no-op when nothing has TTL).
       _expirySub = dataEvents.listen((_) {
-        if (_sweepInFlight) return;
+        if (_expirySweepInFlight) return;
         _armExpiryTimer();
       });
       _armExpiryTimer();
+
+      // Symmetric wire-up for the availability timer.
+      _availableSub = dataEvents.listen((_) {
+        if (_availableSweepInFlight) return;
+        _armAvailableTimer();
+      });
+      _armAvailableTimer();
     }
 
     // Using ??= because we may be injecting a RemoteSecondary
@@ -389,20 +401,18 @@ class AtClientImpl implements AtClient {
     _cascadeSetTelemetryService();
   }
 
-  /// Arms (or re-arms) the one-shot expiry [Timer] at the underlying
-  /// keystore's earliest pending expiration. No-op when:
-  ///   - the local secondary isn't a [HiveKeystore] (non-Hive deployments
-  ///     are responsible for their own expiry mechanism — see plan §Risks);
-  ///   - the cache reports no TTL'd keys.
+  /// Arms (or re-arms) the one-shot expiry [Timer] at the
+  /// LocalSecondary's earliest pending expiration. No-op when the
+  /// LocalSecondary's event cache reports no TTL'd keys.
   ///
-  /// A timestamp in the past arms a `Duration.zero` timer that fires on
-  /// the next microtask — effectively immediate.
+  /// A timestamp in the past arms a `Duration.zero` timer that fires
+  /// on the next microtask — effectively immediate.
   void _armExpiryTimer() {
     _expiryTimer?.cancel();
     _expiryTimer = null;
-    final ks = localSecondary?.keyStore;
-    if (ks is! HiveKeystore) return;
-    final when = ks.nextExpiryAt();
+    final ls = localSecondary;
+    if (ls == null) return;
+    final when = ls.nextExpiryAt();
     if (when == null) return;
     final wait = when.difference(DateTime.timestamp());
     _expiryTimer = Timer(
@@ -412,20 +422,77 @@ class AtClientImpl implements AtClient {
   }
 
   /// Drives one expiry sweep and re-arms the timer for the next.
-  /// `_sweepInFlight` suppresses re-arms triggered by the sweep's own
-  /// `DataDeleted` events; the single re-arm in `finally` picks up the
-  /// post-sweep state, including any mid-sweep writes (the keystore's
-  /// in-memory cache is updated synchronously inside each put before
-  /// the corresponding [DataEvent] microtask runs).
+  /// `_expirySweepInFlight` suppresses re-arms triggered by the
+  /// sweep's own `DataDeleted` events; the single re-arm in `finally`
+  /// picks up the post-sweep state, including any mid-sweep writes
+  /// (the keystore's in-memory cache is updated synchronously inside
+  /// each put before the corresponding [DataEvent] microtask runs).
   Future<void> _onExpiryFire() async {
-    _sweepInFlight = true;
+    _expirySweepInFlight = true;
     try {
       await localSecondary?.deleteExpiredKeys();
     } catch (e, st) {
       _logger.warning('Expiry sweep failed: $e\n$st');
     } finally {
-      _sweepInFlight = false;
+      _expirySweepInFlight = false;
       _armExpiryTimer();
+    }
+  }
+
+  /// Arms (or re-arms) the one-shot availability [Timer] at the
+  /// LocalSecondary's earliest pending availableAt. No-op when no
+  /// cached key has TTB.
+  ///
+  /// A timestamp in the past arms a `Duration.zero` timer that fires
+  /// on the next microtask — covers the rare race where a record's
+  /// availableAt slid into the past between the previous re-arm and
+  /// this one.
+  void _armAvailableTimer() {
+    _availableTimer?.cancel();
+    _availableTimer = null;
+    final ls = localSecondary;
+    if (ls == null) return;
+    final when = ls.nextAvailableAt();
+    if (when == null) return;
+    final wait = when.difference(DateTime.timestamp());
+    _availableTimer = Timer(
+      wait.isNegative ? Duration.zero : wait,
+      _onAvailableFire,
+    );
+  }
+
+  /// Drives one availability sweep and re-arms the timer for the
+  /// next. Walks every key whose `availableAt <= now`, emits a
+  /// [DataUpdated] for each, and re-arms in `finally` so a mid-sweep
+  /// error doesn't leave the timer disarmed.
+  Future<void> _onAvailableFire() async {
+    _availableSweepInFlight = true;
+    try {
+      final ls = localSecondary;
+      if (ls == null) return;
+      final now = DateTime.timestamp();
+      for (final keyStr in ls.keysWithAvailableAtAtOrBefore(now)) {
+        try {
+          final atKey = AtKey.fromString(keyStr);
+          AtMetaData? meta;
+          try {
+            meta = await ls.keyStore!.getMeta(keyStr);
+          } on Exception {
+            meta = null;
+          }
+          if (meta == null) continue;
+          emitDataEvent(DataUpdated(atKey, metadata: meta));
+          // Drop from the availability cache so it won't fire again.
+          ls.dropAvailabilityCacheEntry(keyStr);
+        } on Exception catch (e) {
+          _logger.warning('availability sweep failed for $keyStr: $e');
+        }
+      }
+    } catch (e, st) {
+      _logger.warning('Availability sweep failed: $e\n$st');
+    } finally {
+      _availableSweepInFlight = false;
+      _armAvailableTimer();
     }
   }
 
@@ -462,9 +529,13 @@ class AtClientImpl implements AtClient {
       _expiryTimer = null;
       await _expirySub?.cancel();
       _expirySub = null;
+      _availableTimer?.cancel();
+      _availableTimer = null;
+      await _availableSub?.cancel();
+      _availableSub = null;
       if (!_dataEventsCtrl.isClosed) await _dataEventsCtrl.close();
     } catch (e) {
-      _logger.warning('Error while tearing down expiry timer: $e');
+      _logger.warning('Error while tearing down keystore-event timers: $e');
     }
 
     try {
