@@ -533,8 +533,25 @@ Three additive items to the API surface as it stands.
    distribution model anyway, so this is open by design rather
    than as a roadmap item; listed for completeness.
 
-All three are additive, they slot in without touching existing
-call sites, so deferring them is non-breaking.
+4. **Default `eventsFromLocalSecondary` to `true`.** The flag is
+   currently a required named parameter on `AtClient.collection`
+   and on the `AtCollection.new` factories; production callers
+   typically want `true` (consume events from the local
+   keystore's `DataUpdated` / `DataDeleted` stream, which is
+   sync-completion-aware and avoids a redundant remote fetch on
+   every notification). The `false` path (subscribe to
+   `NotificationService` regex over the wire) is what the SDK
+   used to do, and it produces measurably worse latency on
+   streaming workloads because each leaf event triggers an
+   `atClient.get` round-trip to fetch the envelope. Switching the
+   default to `true` is a one-line change inside the constructors,
+   plus a doc note. Open callers that want the old behaviour
+   would pass `eventsFromLocalSecondary: false` explicitly.
+
+All four are additive (or, in the case of #4, behaviour-preserving
+for callers that pin the flag). They slot in without touching
+existing call sites that already pass the flag, so deferring them
+is non-breaking.
 
 ## Appendix: key-length budget and tree-depth ceiling
 

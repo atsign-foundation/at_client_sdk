@@ -308,6 +308,24 @@ interface class AtCollection<T> {
   // (owner.toString(), id) so it survives CItem rehydrate cycles.
   final Map<String, AtCollection<Map<String, dynamic>>> _rrCache = {};
 
+  // Per-ancestry-prefix cache of sub-collections built lazily during
+  // [getDescendant]. Without this, every leaf event triggers fresh
+  // [subCollection] construction for every intermediate level — and
+  // each one registers its own notification (or data-event) listener
+  // that stays alive for the lifetime of this collection. Under a
+  // streaming workload (dockerstats: hundreds of leaf events / minute
+  // across a few host × atSign pairs) the listeners accumulate to the
+  // thousands within a few minutes, every event flows through every
+  // listener's filter, and per-event latency degrades roughly
+  // quadratically. Memoising the intermediate and leaf subs by
+  // ancestry-prefix collapses that to one sub-collection per
+  // (host, atSign, ...) pair, regardless of leaf throughput.
+  //
+  // Cache key for intermediate levels: composed prefix string.
+  // Cache key for leaf level: prefix + leaf type discriminator
+  // (typeTag if supplied, otherwise `'$U'`).
+  final Map<String, AtCollection<dynamic>> _descendantCache = {};
+
   // Item ids whose self-key this process has successfully written
   // (and not subsequently deleted). Lets [_selfKeyExists] short-
   // circuit without a round-trip when the caller's about to update
@@ -355,11 +373,17 @@ interface class AtCollection<T> {
   final bool _eventsFromLocalSecondary;
 
   /// Subscription to [NotificationService] events. Non-null only when
-  /// [_eventsFromLocalSecondary] is `false`.
+  /// [_eventsFromLocalSecondary] is `false`. Held so a future
+  /// `dispose()` can cancel cleanly; not currently consumed at
+  /// runtime now that [_handleNotificationImpl] no longer pauses.
+  // ignore: unused_field
   StreamSubscription<AtNotification>? _notificationSubscription;
 
   /// Subscription to [AtClient.dataEvents]. Non-null only when
-  /// [_eventsFromLocalSecondary] is `true`.
+  /// [_eventsFromLocalSecondary] is `true`. Held so a future
+  /// `dispose()` can cancel cleanly; not currently consumed at
+  /// runtime now that [_handleDataEventImpl] no longer pauses.
+  // ignore: unused_field
   StreamSubscription<DataEvent>? _dataEventSubscription;
 
   // The notification stream used for this collection's dispatch. Stored
@@ -501,6 +525,18 @@ interface class AtCollection<T> {
     _injectedNotifications = notifications;
     _injectedDataEvents = injectedDataEvents;
 
+    // Both event sources are broadcast streams (`atClient.dataEvents`
+    // and `NotificationServiceImpl.subscribe(...)`), and broadcast
+    // subscriptions DO NOT buffer events emitted while the
+    // subscription is paused. The earlier implementation paused the
+    // subscription around the async handler body; under bursty sync /
+    // notification delivery that silently dropped events. Both paths
+    // now capture events synchronously from the listen() callback
+    // into a per-AtCollection queue ([_dataEventQueue] /
+    // [_notificationQueue]) and drain them serially via the
+    // corresponding async drain methods. The drain awaits each
+    // handler invocation before pulling the next, so serial
+    // semantics are preserved without the pause-and-drop hazard.
     if (_eventsFromLocalSecondary) {
       // Event-driven path: subscribe to AtClient.dataEvents (filtered
       // by this collection's namespace regex) instead of
@@ -510,14 +546,14 @@ interface class AtCollection<T> {
       final dataEventStream = injectedDataEvents ??
           atClient.dataEvents
               .where((e) => _regexObjAny.hasMatch(e.key.toString()));
-      _dataEventSubscription = dataEventStream.listen(_handleDataEventImpl);
+      _dataEventSubscription = dataEventStream.listen(_enqueueDataEvent);
     } else {
       final notifStream = notifications ??
           atClient.notificationService.subscribe(
             regex: _regexAllStr,
             shouldDecrypt: true,
           );
-      _notificationSubscription = notifStream.listen(_handleNotificationImpl);
+      _notificationSubscription = notifStream.listen(_enqueueNotification);
     }
   }
 
@@ -1436,34 +1472,72 @@ interface class AtCollection<T> {
     }
     final intermediateExp = intermediateExpiration ?? leafExpiration;
 
+    // Build a stable prefix key as we descend. Each level's key
+    // captures (id, owner, subName) at that level so cache entries
+    // partition by the chain they belong to.
     AtCollection<dynamic> ctx = this;
+    final prefix = StringBuffer();
     for (var i = 0; i < ancestry.length; i++) {
       final ancestor = ancestry[i];
-      // [getOrNull] returns null for items the Atsign Protocol treats
-      // as logically non-existent right now — expired records, items
-      // whose `availableAt` is in the future, or any link that's
-      // simply absent. Treat all three the same: chain incomplete →
-      // return null and let the caller retry on the next
+      prefix.write(ancestor.id);
+      prefix.write('@');
+      prefix.write(ancestor.owner!);
+      prefix.write('/');
+      prefix.write(ancestor.subName);
+      prefix.write('|');
+      final isLast = (i == ancestry.length - 1);
+
+      // Cache key. Leaf entries are discriminated by typeTag (or `$U`
+      // when the caller didn't supply one) so two callers asking for
+      // different leaf types under the same chain get different
+      // cached sub-collections.
+      final cacheKey =
+          isLast ? '$prefix#${leafTypeTag ?? '$U'}' : prefix.toString();
+      final cached = _descendantCache[cacheKey];
+      if (cached != null) {
+        if (isLast) {
+          // Cast is safe: the cached sub was constructed with this
+          // exact U at first build; Dart erases T at runtime, and the
+          // factory backing the rehydrate produces values of U.
+          return (cached as AtCollection<U>).getOrNull(id, owner);
+        }
+        ctx = cached;
+        continue;
+      }
+
+      // Cache miss: fetch the parent CItem at this level and build the
+      // sub-collection. [getOrNull] returns null for items the Atsign
+      // Protocol treats as logically non-existent right now: expired
+      // records, items whose `availableAt` is in the future, or any
+      // link that's simply absent. Treat all three the same — chain
+      // incomplete → return null and let the caller retry on the next
       // [CSubItemUpdated] event. (Real decode bugs still propagate as
-      // exceptions; we don't want to swallow those.)
+      // exceptions; we don't swallow those.)
       final parent = await ctx.getOrNull(ancestor.id, ancestor.owner!);
       if (parent == null) return null;
-      final isLast = (i == ancestry.length - 1);
+
+      final AtCollection<dynamic> sub;
       if (isLast) {
-        final leaf = ctx.subCollection<U>(
+        sub = ctx.subCollection<U>(
           parent: parent,
           subName: ancestor.subName,
           defaultExpiration: leafExpiration,
           fromJson: leafFromJson,
           typeTag: leafTypeTag,
         );
-        return leaf.getOrNull(id, owner);
+      } else {
+        sub = ctx.subCollection<dynamic>(
+          parent: parent,
+          subName: ancestor.subName,
+          defaultExpiration: intermediateExp,
+        );
       }
-      ctx = ctx.subCollection<dynamic>(
-        parent: parent,
-        subName: ancestor.subName,
-        defaultExpiration: intermediateExp,
-      );
+      _descendantCache[cacheKey] = sub;
+
+      if (isLast) {
+        return (sub as AtCollection<U>).getOrNull(id, owner);
+      }
+      ctx = sub;
     }
     // Unreachable — the loop's `isLast` branch always returns.
     return null;
@@ -1892,13 +1966,15 @@ interface class AtCollection<T> {
   // ---------------------------------------------------------------------------
   // Notification dispatch
 
-  /// Top-level notification dispatcher. Pauses its own subscription for
-  /// the duration of handling so re-entrant notifications don't cause
-  /// overlapping work. Dispatch is depth-agnostic: L0 items go to
+  /// Top-level notification dispatcher. Serial execution is enforced
+  /// by [_drainNotificationQueue] which awaits each call before
+  /// pulling the next from [_notificationQueue]; the listener
+  /// captures into the queue synchronously, so events emitted on
+  /// the underlying broadcast stream while a handler is running are
+  /// preserved. Dispatch is depth-agnostic: L0 items go to
   /// [_handleObjNotificationImpl]; any sub-item at any nesting depth
   /// goes to [_handleSubObjNotificationImpl].
   Future<void> _handleNotificationImpl(AtNotification n) async {
-    _notificationSubscription?.pause();
     try {
       if (!_regexObjAny.hasMatch(n.key)) {
         _logger.shout('handleNotification: No handler for ${n.key}');
@@ -1924,8 +2000,6 @@ interface class AtCollection<T> {
       }
     } catch (e, st) {
       _logger.shout('handleNotification: $e\nStackTrace:\n$st');
-    } finally {
-      _notificationSubscription?.resume();
     }
   }
 
@@ -1936,8 +2010,82 @@ interface class AtCollection<T> {
   /// is unnecessary here — the store is already current. Otherwise the
   /// shape is identical: parse parts, dispatch to the L0 or sub-item
   /// handler, emit CEvents on `_events`.
+  // Synchronous capture queue for events arriving on the data-event
+  // broadcast stream. The listener (called from the broadcast
+  // subscription) appends to this list and (if no drain is running)
+  // kicks off [_drainDataEventQueue]. Capturing synchronously is the
+  // load-bearing property: a paused broadcast subscription drops
+  // events emitted during the pause, so the handler can't await
+  // anything before it has hold of the event.
+  final List<DataEvent> _dataEventQueue = [];
+  bool _dataEventDraining = false;
+
+  void _enqueueDataEvent(DataEvent e) {
+    _dataEventQueue.add(e);
+    if (!_dataEventDraining) {
+      _dataEventDraining = true;
+      unawaited(_drainDataEventQueue());
+    }
+  }
+
+  Future<void> _drainDataEventQueue() async {
+    try {
+      while (_dataEventQueue.isNotEmpty) {
+        final e = _dataEventQueue.removeAt(0);
+        try {
+          await _handleDataEventImpl(e);
+        } catch (err, st) {
+          _logger.shout(
+            'drainDataEventQueue: handler threw for ${e.key}: $err\n$st',
+          );
+        }
+      }
+    } finally {
+      _dataEventDraining = false;
+    }
+  }
+
+  // Same shape as the data-event queue, applied to the notification
+  // path. `NotificationServiceImpl.subscribe` returns a broadcast
+  // stream too, so the same pause-and-drop hazard exists. Capture
+  // notifications synchronously into [_notificationQueue] from the
+  // listen() callback and drain serially from
+  // [_drainNotificationQueue]; the handler is no longer responsible
+  // for self-pausing.
+  final List<AtNotification> _notificationQueue = [];
+  bool _notificationDraining = false;
+
+  void _enqueueNotification(AtNotification n) {
+    _notificationQueue.add(n);
+    if (!_notificationDraining) {
+      _notificationDraining = true;
+      unawaited(_drainNotificationQueue());
+    }
+  }
+
+  Future<void> _drainNotificationQueue() async {
+    try {
+      while (_notificationQueue.isNotEmpty) {
+        final n = _notificationQueue.removeAt(0);
+        try {
+          await _handleNotificationImpl(n);
+        } catch (err, st) {
+          _logger.shout(
+            'drainNotificationQueue: handler threw for ${n.key}: $err\n$st',
+          );
+        }
+      }
+    } finally {
+      _notificationDraining = false;
+    }
+  }
+
   Future<void> _handleDataEventImpl(DataEvent event) async {
-    _dataEventSubscription?.pause();
+    // Serial execution is enforced by [_drainDataEventQueue] which
+    // awaits each call before pulling the next; capture happens
+    // synchronously in the listen() callback so we don't rely on
+    // pause()/resume() of a broadcast subscription (which would
+    // drop events emitted during the await window).
     try {
       final keyStr = event.key.toString();
       if (!_regexObjAny.hasMatch(keyStr)) {
@@ -1958,8 +2106,6 @@ interface class AtCollection<T> {
       }
     } catch (e, st) {
       _logger.shout('handleDataEvent: $e\nStackTrace:\n$st');
-    } finally {
-      _dataEventSubscription?.resume();
     }
   }
 

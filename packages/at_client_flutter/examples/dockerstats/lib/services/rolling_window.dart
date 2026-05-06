@@ -21,7 +21,7 @@ class RollingWindow extends ChangeNotifier {
   /// host -> Set of raw atSigns seen on it.
   final Map<String, Map<String, String>> atSignsByHost = {};
 
-  RollingWindow({this.window = const Duration(minutes: 5)});
+  RollingWindow({this.window = const Duration(minutes: 1)});
 
   /// Iterates known hosts (sanitised id keys).
   Iterable<String> get hostIds => _byHostAtSign.keys;

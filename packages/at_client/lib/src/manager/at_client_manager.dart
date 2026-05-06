@@ -108,6 +108,7 @@ class AtClientManager {
     var syncService = await serviceFactory.syncService(
         _currentAtClient!, this, notificationService);
     _currentAtClient!.syncService = syncService;
+    syncService.sync();
 
     EnrollmentService enrollmentService =
         serviceFactory.enrollmentService(_currentAtClient!);

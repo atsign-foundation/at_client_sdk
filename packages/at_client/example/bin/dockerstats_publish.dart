@@ -28,7 +28,7 @@ import 'package:at_client_examples/dockerstats/simulator.dart';
 import 'package:at_client_examples/dockerstats/stats_source.dart';
 
 const String applicationNamespace = 'dockerstats.demos';
-const Duration sampleExpiration = Duration(minutes: 10);
+const Duration sampleExpiration = Duration(minutes: 5);
 
 void main(List<String> args) async {
   final ap = _buildParser();
@@ -85,7 +85,7 @@ void main(List<String> args) async {
   final nodes = await atClient.collection<HostNode>(
     '$collectionRootName.$applicationNamespace',
     sampleExpiration,
-    eventsFromLocalSecondary: false,
+    eventsFromLocalSecondary: true,
   );
 
   // Build the source(s).

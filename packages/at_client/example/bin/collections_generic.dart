@@ -22,7 +22,7 @@ void main(List<String> args) async {
   final AtCollection generic = await c.atClient.collection(
     'generic.$applicationNamespace',
     exampleDefaultExpiration,
-    eventsFromLocalSecondary: false,
+    eventsFromLocalSecondary: true,
   );
 
   switch (c.role) {

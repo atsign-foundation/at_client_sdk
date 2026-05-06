@@ -50,7 +50,7 @@ class DockerstatsService {
     nodes = await atClient.collection<HostNode>(
       '$collectionRootName.$dockerstatsNamespace',
       sampleExpiration,
-      eventsFromLocalSecondary: false,
+      eventsFromLocalSecondary: true,
     );
 
     _subUpdatesSub = nodes.subUpdates.listen(

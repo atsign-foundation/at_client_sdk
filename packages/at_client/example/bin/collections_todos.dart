@@ -196,7 +196,7 @@ class _TodosAppState extends State<TodosApp> {
     collection = await atClient.collection<Todo>(
       'todos.$ns',
       const Duration(days: 365),
-      eventsFromLocalSecondary: false,
+      eventsFromLocalSecondary: true,
       fromJson: Todo.fromJson,
       typeTag: 'Todo',
       cleanupOrphansOnCreation: true,

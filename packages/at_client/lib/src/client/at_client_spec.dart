@@ -718,7 +718,7 @@ abstract class AtClient {
   Future<AtCollection<T>> collection<T>(
     String namespace,
     Duration defaultExpiration, {
-    required bool eventsFromLocalSecondary,
+    bool eventsFromLocalSecondary = true,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
     bool cleanupOrphansOnCreation = false,

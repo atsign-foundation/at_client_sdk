@@ -23,7 +23,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client_examples/dockerstats/models.dart';
 
 const String applicationNamespace = 'dockerstats.demos';
-const Duration sampleExpiration = Duration(minutes: 10);
+const Duration sampleExpiration = Duration(minutes: 5);
 
 void main(List<String> args) async {
   final ap = _buildParser();
