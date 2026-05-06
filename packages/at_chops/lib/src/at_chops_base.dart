@@ -12,6 +12,8 @@ abstract class AtChops {
   final AtChopsKeys _atChopsKeys;
   final SchemeRegistry _registry = SchemeRegistry();
   AtChopsKeys get atChopsKeys => _atChopsKeys;
+
+  /// Defaults: aes, rsa, legacy
   SchemeRegistry get schemes => _registry;
 
   AtChops(this._atChopsKeys);
