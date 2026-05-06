@@ -22,7 +22,7 @@ echo "***"
 echo "*** Checking test environment" && dart run test/check_test_env.dart
 
 echo "***"
-echo "*** Clearing client test storage" && rm -rf test/hive && rm -f test/testData/*.atKeys
+echo "*** Clearing client test storage" && rm -rf test/hive && rm -f test/testData/@srie.atKeys
 
 echo "***"
 echo "*** Running tests" && dart test --concurrency=1 -r expanded

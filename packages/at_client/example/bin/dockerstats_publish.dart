@@ -50,6 +50,14 @@ void main(List<String> args) async {
   final simulateHosts =
       int.tryParse((parsed['simulate-hosts'] as String?) ?? '3') ?? 3;
   final simulateAtsigns = _splitCsv(parsed['simulate-atsigns'] as String?);
+  final cyclesLimitRaw = parsed['cycles'] as String?;
+  final int? cyclesLimit =
+      cyclesLimitRaw == null ? null : int.tryParse(cyclesLimitRaw);
+  if (cyclesLimitRaw != null && (cyclesLimit == null || cyclesLimit <= 0)) {
+    stderr.writeln('--cycles must be a positive integer');
+    exit(64);
+  }
+  final postSyncDelay = _parseDuration(parsed['post-sync-delay'] as String);
   final otherAtSigns =
       _splitCsv(
         parsed['other-at-signs'] as String?,
@@ -131,6 +139,8 @@ void main(List<String> args) async {
   }
 
   // Main loop.
+  var cyclesCompleted = 0;
+  var totalSamples = 0;
   while (!stop.isCompleted) {
     for (final src in sources) {
       try {
@@ -138,12 +148,54 @@ void main(List<String> args) async {
         for (final s in samples) {
           await publisher.publishSample(s);
         }
+        totalSamples += samples.length;
         log('published ${samples.length} sample(s) from ${src.hostname}');
       } catch (e, st) {
         log('source ${src.hostname} failed: $e');
         log(st.toString());
       }
     }
+    cyclesCompleted++;
+
+    if (cyclesLimit != null && cyclesCompleted >= cyclesLimit) {
+      log(
+        'reached --cycles=$cyclesLimit ($totalSamples sample(s) total); '
+        'flushing sync before exit',
+      );
+      // Trigger an immediate sync round and wait until the local
+      // commit-id reaches the atServer's snapshot. With a write-only
+      // publisher, "local caught up to server" means our pushes have
+      // landed and been acknowledged. The closed-loop subscriber
+      // assertion ("subscriber received exactly $totalSamples
+      // samples") is only meaningful once this completes.
+      atClient.syncService.sync();
+      try {
+        await atClient.syncService.waitUntilCaughtUp(
+          timeout: const Duration(seconds: 60),
+        );
+        log('sync caught up; emitted $totalSamples sample(s) total');
+      } on TimeoutException {
+        log(
+          'sync did not catch up within 60s; '
+          'subscriber-side count may be lower than $totalSamples',
+        );
+      }
+      // Even after waitUntilCaughtUp returns, in-flight push tasks
+      // for the very last batch of writes (specifically the
+      // recipient-copy puts inside [_put]) may still be queued in
+      // the publisher's sync pipeline waiting to be picked up by the
+      // next sync round. waitUntilCaughtUp completes on commitId
+      // equality at the time of the call, but the final cycle's
+      // recipient writes can still be enqueued behind it. Sleep a
+      // beat so they have a chance to flush before we tear the
+      // process down. Bounded by --post-sync-delay (default 5s).
+      if (postSyncDelay > Duration.zero) {
+        log('post-sync settle: waiting ${postSyncDelay.inMilliseconds}ms');
+        await Future.delayed(postSyncDelay);
+      }
+      break;
+    }
+
     await Future.any([Future.delayed(pollingInterval), stop.future]);
   }
   log('shutting down');
@@ -299,6 +351,21 @@ ArgParser _buildParser() {
           help:
               'Comma-separated atSigns to use on each fake host '
               '(default: 3 auto-named atSigns per host)',
+        )
+        ..addOption(
+          'cycles',
+          help:
+              'Bounded run: emit exactly this many polling cycles, '
+              'flush sync, and exit. Useful for closed-loop verification '
+              'against a subscriber. Defaults to unbounded.',
+        )
+        ..addOption(
+          'post-sync-delay',
+          defaultsTo: '5s',
+          help:
+              'Settle time after waitUntilCaughtUp before exit, to let '
+              'the last cycle\'s recipient-copy writes flush through '
+              'the sync pipeline. Only relevant with --cycles.',
         )
         // Standard at_cli_commons knobs, hidden by default.
         ..addOption('key-file', abbr: 'k', hide: true)

@@ -40,6 +40,18 @@ void main(List<String> args) async {
     return;
   }
 
+  // Optional bounded-run flags. With both, the subscriber stops as
+  // soon as it has either received [expect] samples or waited
+  // [expectTimeout]. Designed for closed-loop verification against
+  // the publisher's `--cycles` flag.
+  final expectStr = parsed['expect'] as String?;
+  final int? expectCount = expectStr == null ? null : int.tryParse(expectStr);
+  if (expectStr != null && (expectCount == null || expectCount <= 0)) {
+    stderr.writeln('--expect must be a positive integer');
+    exit(64);
+  }
+  final expectTimeout = _parseDuration(parsed['expect-timeout'] as String);
+
   stdout.writeln('Connecting...');
   final cliBase = await CLIBase.fromCommandLineArgs(args, parser: ap);
   final atClient = cliBase.atClient;
@@ -66,6 +78,18 @@ void main(List<String> args) async {
 
   // ---------------------------------------------------------------------
   // Subscribe.
+
+  // Graceful shutdown plumbing — installed BEFORE the listener so
+  // --expect can complete the same Completer the signal handlers do.
+  final stop = Completer<void>();
+  ProcessSignal.sigint.watch().listen((_) {
+    if (!stop.isCompleted) stop.complete();
+  });
+  if (!Platform.isWindows) {
+    ProcessSignal.sigterm.watch().listen((_) {
+      if (!stop.isCompleted) stop.complete();
+    });
+  }
 
   var samplesSeen = 0;
   final sub = nodes.subUpdates.listen((e) async {
@@ -94,6 +118,14 @@ void main(List<String> args) async {
       final s = item.obj;
       samplesSeen++;
       stdout.writeln(_formatSample(s, samplesSeen));
+      // Closed-loop early-exit: once we've seen the expected count,
+      // signal the main loop to stop. The publisher and subscriber
+      // can then be treated as a hermetic pair under test.
+      if (expectCount != null &&
+          samplesSeen >= expectCount &&
+          !stop.isCompleted) {
+        stop.complete();
+      }
     } catch (err, st) {
       stderr.writeln('${DateTime.now()} | fetch failed: $err\n$st');
     }
@@ -103,22 +135,51 @@ void main(List<String> args) async {
     '${DateTime.now()} | listening for stats on $applicationNamespace',
   );
 
-  // Graceful shutdown.
-  final stop = Completer<void>();
-  ProcessSignal.sigint.watch().listen((_) {
-    if (!stop.isCompleted) stop.complete();
-  });
-  if (!Platform.isWindows) {
-    ProcessSignal.sigterm.watch().listen((_) {
+  if (expectCount != null) {
+    // Race the expected-count completion against the timeout.
+    Timer? timeout;
+    timeout = Timer(expectTimeout, () {
       if (!stop.isCompleted) stop.complete();
     });
+    await stop.future;
+    timeout.cancel();
+  } else {
+    await stop.future;
   }
-  await stop.future;
   await sub.cancel();
   stdout.writeln(
     '${DateTime.now()} | shutting down ($samplesSeen sample(s) received)',
   );
+  if (expectCount != null) {
+    final hit = samplesSeen >= expectCount;
+    stdout.writeln(
+      '${DateTime.now()} | expect=$expectCount actual=$samplesSeen '
+      '${hit ? "OK" : "MISSING ${expectCount - samplesSeen}"}',
+    );
+    exit(hit ? 0 : 1);
+  }
   exit(0);
+}
+
+Duration _parseDuration(String raw) {
+  final s = raw.trim().toLowerCase();
+  if (s.isEmpty) return const Duration(seconds: 60);
+  final m = RegExp(r'^([0-9]+(?:\.[0-9]+)?)\s*(ms|s|m|h)?$').firstMatch(s);
+  if (m == null) {
+    throw FormatException('Bad duration "$raw" — try 30s / 2m');
+  }
+  final value = double.parse(m.group(1)!);
+  switch (m.group(2) ?? 's') {
+    case 'ms':
+      return Duration(milliseconds: value.round());
+    case 's':
+      return Duration(milliseconds: (value * 1000).round());
+    case 'm':
+      return Duration(milliseconds: (value * 60 * 1000).round());
+    case 'h':
+      return Duration(milliseconds: (value * 3600 * 1000).round());
+  }
+  return Duration(seconds: value.round());
 }
 
 String _formatSample(StatSample s, int n) {
@@ -144,6 +205,20 @@ ArgParser _buildParser() {
       abbr: 'a',
       mandatory: true,
       help: 'The atSign to subscribe as',
+    )
+    ..addOption(
+      'expect',
+      help:
+          'Closed-loop verification: exit with status 0 once this many '
+          'samples have been received, or status 1 on --expect-timeout. '
+          'Pair with the publisher\'s --cycles flag.',
+    )
+    ..addOption(
+      'expect-timeout',
+      defaultsTo: '60s',
+      help:
+          'Time to wait for --expect to be reached before exiting '
+          'with status 1.',
     )
     ..addOption(
       'namespace',
