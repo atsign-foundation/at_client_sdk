@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/response/response.dart';
@@ -11,6 +12,9 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'enrollment_service_test.dart';
+import 'test_utils/mocks.dart';
+import 'test_utils/test_crypto_scheme.dart';
 import 'test_utils/test_utils.dart';
 
 class MockAtCompactionJob extends Mock implements AtCompactionJob {
@@ -399,6 +403,41 @@ void main() {
               e is AtClientException &&
               e.message ==
                   'Key length exceeds maximum permissible length of 248 characters')));
+    });
+  });
+
+  group(
+      'A group of tests to validate AtClient registers schemes in SchemeRegistry',
+      () {
+    MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+    MockLocalSecondary mockLocalSecondary = MockLocalSecondary();
+    MockAtChopsKeys mockAtChopsKeys = MockAtChopsKeys();
+    setUp(() {
+      var key = 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=';
+      registerFallbackValue(FakeLookupVerbBuilder());
+      when(() => mockLocalSecondary.executeVerb(any()))
+          .thenAnswer((_) => Future.value('yuh'));
+      when(() => mockRemoteSecondary.executeVerb(any()))
+          .thenAnswer((_) => Future.value('yuh'));
+      when(() => mockAtChopsKeys.selfEncryptionKey).thenReturn(AESKey(key));
+    });
+    test('preregistered during at_client creation', () async {
+      AtClientPreference preferences = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
+      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+      AtClient ac = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        preferences,
+        remoteSecondary: mockRemoteSecondary,
+        atChops: chops,
+      );
+      expect(ac.atChops!.schemes.lookup('legacy'), isA<CryptoScheme>());
+      expect(ac.atChops!.schemes.lookup('aes'), isA<CryptoScheme>());
+      expect(ac.atChops!.schemes.lookup('rsa'), isA<CryptoScheme>());
+      expect(() => ac.atChops!.schemes.lookup('bubblesort'),
+          throwsA(isA<CryptoSchemeNotRegistered>()));
     });
   });
 }

@@ -3,28 +3,12 @@ import 'dart:io';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
-import 'package:at_client/src/encryption_service/self_key_encryption.dart';
-import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-
-class MockAtClientManager extends Mock implements AtClientManager {}
-
-class MockLocalSecondary extends Mock implements LocalSecondary {}
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
-class MockAtChops extends Mock implements AtChops {}
-
-class MockAtClient extends Mock implements AtClient {
-  @override
-  AtClientPreference getPreferences() {
-    return AtClientPreference()..namespace = 'wavi';
-  }
-}
+import 'test_utils/mocks.dart';
 
 class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
 
@@ -101,7 +85,6 @@ void main() {
 
   group('A group of test to validate the encryption service manager', () {
     test('Test to verify the encryption of shared key', () async {
-      var currentAtSign = '@sitaram';
       var atKey = AtKey()
         ..key = 'phone.wavi'
         ..sharedWith = '@bob'
@@ -110,21 +93,18 @@ void main() {
       when(() => mockAtClientManager.atClient).thenAnswer((_) => mockAtClient);
       when(() => mockAtClient.getCurrentAtSign()).thenAnswer((_) => '@sitaram');
 
-      var encryptionService =
-          LegacyEncryption(mockAtClient).get(atKey, currentAtSign);
+      var encryptionService = LegacyEncryption.build(atKey, mockAtClient);
       expect(encryptionService, isA<SharedKeyEncryption>());
     });
 
     test('Test to verify the encryption of self key', () async {
-      var currentAtSign = '@alice';
       var atKey = AtKey()
         ..key = 'phone.wavi'
         ..sharedWith = '@alice'
         ..sharedBy = '@alice'
         ..metadata = Metadata();
 
-      var encryptionService =
-          LegacyEncryption(mockAtClient).get(atKey, currentAtSign);
+      var encryptionService = LegacyEncryption.build(atKey, mockAtClient);
       expect(encryptionService, isA<SelfKeyEncryption>());
     });
   });
@@ -133,15 +113,14 @@ void main() {
       'A group of test to validate the incorrect data type sent for encryption value',
       () {
     test('Throws error when encrypted value is of type Integer', () {
-      var currentAtSign = '@alice';
       var atKey = AtKey()
+        ..sharedBy = '@alice'
         ..key = 'phone.wavi'
         ..sharedWith = '@bob'
         ..metadata = (Metadata()..isPublic = false);
       var value = 918078908676;
 
-      var encryptionService =
-          LegacyEncryption(mockAtClient).get(atKey, currentAtSign);
+      var encryptionService = LegacyEncryption.build(atKey, mockAtClient);
 
       expect(
           () => encryptionService.encrypt(atKey, value),

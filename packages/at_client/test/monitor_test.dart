@@ -11,8 +11,7 @@ import 'package:test/test.dart';
 
 import 'package:mocktail/mocktail.dart';
 
-class MockSecondaryAddressFinder extends Mock
-    implements SecondaryAddressFinder {}
+import 'test_utils/mocks.dart';
 
 class MockSecureSocket extends Mock implements SecureSocket {}
 
@@ -22,8 +21,6 @@ class MockOutboundConnection extends Mock implements OutboundConnection {}
 
 class MockMonitorOutboundConnectionFactory extends Mock
     implements MonitorOutboundConnectionFactory {}
-
-class MockAtChops extends Mock implements AtChops {}
 
 class FakeAtSigningInput extends Fake implements AtSigningInput {}
 

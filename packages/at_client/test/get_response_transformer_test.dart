@@ -1,38 +1,27 @@
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
-import 'package:at_client/src/decryption_service/decryption.dart';
-import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-class MockAtClient extends Mock implements AtClient {
-  @override
-  AtClientPreference getPreferences() {
-    return AtClientPreference()..namespace = 'wavi';
-  }
-}
-
-class MockAtKeyDecryptionManager extends Mock
-    implements AtKeyDecryptionManager {}
-
-class MockAtKeyDecryption extends Mock implements AtKeyDecryption {}
+import 'test_utils/mocks.dart';
+import 'test_utils/test_crypto_scheme.dart';
 
 void main() {
   group('A group of test for GetResponseTransformer', () {
     late MockAtClient mockAtClient;
-    late MockAtKeyDecryptionManager mockDecryptionManager;
-    late MockAtKeyDecryption mockDecryptionService;
+    late MockAtChops mockAtChops;
+    late MockSchemeRegistry mockSchemeRegistry;
     late GetResponseTransformer transformer;
-    // late Tuple<AtKey, String> mockTuple;
     setUp(() {
       mockAtClient = MockAtClient();
-      mockDecryptionManager = MockAtKeyDecryptionManager();
-      mockDecryptionService = MockAtKeyDecryption();
-      transformer = GetResponseTransformer(mockAtClient,
-          decrypterManager: mockDecryptionManager);
+      mockAtChops = MockAtChops();
+      mockSchemeRegistry = MockSchemeRegistry(mockAtClient);
+      transformer = GetResponseTransformer(mockAtClient);
       when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
+      when(() => mockAtClient.atChops).thenReturn(mockAtChops);
+      when(() => mockAtChops.schemes).thenReturn(mockSchemeRegistry);
     });
     test('A test to validate new line character decoding', () async {
       var atKey = AtKey()
@@ -124,15 +113,14 @@ void main() {
       final tuple = Tuple<AtKey, String>()
         ..one = atKey
         ..two =
-            '{"data": "shared_phone_number", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": true}}';
-      when(() => mockDecryptionManager.get(atKey))
-          .thenReturn(mockDecryptionService);
-      when(() => mockDecryptionService.decrypt(atKey, "shared_phone_number"))
-          .thenAnswer((_) async => 'decrypted_data');
+            '{"data": "abcshared_phone_number", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": true}}';
+
+      when(() => mockSchemeRegistry.lookup('legacy'))
+          .thenReturn(CipherScheme());
 
       var result = await transformer.transform(tuple);
 
-      expect(result.value, equals('decrypted_data'));
+      expect(result.value, equals('shared_phone_number'));
     });
 
     test(
@@ -147,15 +135,33 @@ void main() {
       final tuple = Tuple<AtKey, String>()
         ..one = atKey
         ..two =
-            '{"data": "shared_phone_number", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": false}}';
-      when(() => mockDecryptionManager.get(atKey))
-          .thenReturn(mockDecryptionService);
-      when(() => mockDecryptionService.decrypt(atKey, "shared_phone_number"))
-          .thenAnswer((_) async => 'decrypted_data');
+            '{"data": "abcdecrypted_data", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": false}}';
+
+      when(() => mockSchemeRegistry.lookup('legacy'))
+          .thenReturn(CipherScheme());
 
       var result = await transformer.transform(tuple);
 
       expect(result.value, equals('decrypted_data'));
+    });
+
+    test(
+        'A test to verify transform throws AtException on crypto scheme lookup failure',
+        () async {
+      final atKey = AtKey()
+        ..metadata = Metadata()
+        ..key = 'phone'
+        ..sharedBy = '@alice'
+        ..sharedWith = '@bob';
+      final tuple = Tuple<AtKey, String>()
+        ..one = atKey
+        ..two =
+            '{"data": "shared_phone_number", "key": "@bob:phone@alice","metaData": {"isEncrypted": true}}';
+      when(() => mockSchemeRegistry.lookup(any()))
+          .thenThrow(CryptoSchemeNotRegistered('error'));
+
+      expect(() async => await transformer.transform(tuple),
+          throwsA(isA<AtException>()));
     });
 
     test('A test to verify transform throws AtException on decryption failure',
@@ -169,11 +175,8 @@ void main() {
         ..one = atKey
         ..two =
             '{"data": "shared_phone_number", "key": "@bob:phone@alice","metaData": {"isEncrypted": true}}';
-      when(() => mockDecryptionManager.get(atKey))
-          .thenReturn(mockDecryptionService);
-      when(() => mockDecryptionService.decrypt(atKey, "shared_phone_number"))
-          .thenThrow(AtException('Decryption failed'));
 
+      when(() => mockSchemeRegistry.lookup(any())).thenReturn(ErrorScheme());
       expect(() async => await transformer.transform(tuple),
           throwsA(isA<AtException>()));
     });

@@ -2,9 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/decryption_service/decryption_manager.dart';
-import 'package:at_client/src/decryption_service/shared_with_me_decryption.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -15,6 +14,8 @@ import 'package:at_persistence_secondary_server/src/keystore/hive_keystore.dart'
 import 'package:crypton/crypton.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+
+import 'test_utils/mocks.dart';
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {
   var remoteKeyStore = {};
@@ -40,11 +41,6 @@ class MockLocalSecondary extends Mock implements LocalSecondary {
 }
 
 class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {}
-
-class MockAtKeyDecryptionManager extends Mock
-    implements AtKeyDecryptionManager {}
-
-class MockSharedKeyDecryption extends Mock implements SharedWithMeDecryption {}
 
 class FakeSyncVerbBuilder extends Fake implements SyncVerbBuilder {}
 
@@ -2732,6 +2728,9 @@ void main() {
 
   group('A group of test to verify sync conflict resolution', () {
     AtClient mockAtClient = MockAtClient();
+    AtChops mockAtChops = MockAtChops();
+    SchemeRegistry mockSchemes = MockSchemeRegistry(mockAtClient);
+    CryptoScheme mockScheme = MockScheme();
     AtClientManager mockAtClientManager = MockAtClientManager();
     NotificationServiceImpl mockNotificationService =
         MockNotificationServiceImpl();
@@ -2753,6 +2752,9 @@ void main() {
               throw AtKeyNotFoundException('key is not found in keystore'));
       when(() => mockAtClient.notificationService)
           .thenReturn(mockNotificationService);
+      when(() => mockAtClient.atChops).thenReturn(mockAtChops);
+      when(() => mockAtChops.schemes).thenReturn(mockSchemes);
+      when(() => mockSchemes.lookup(any())).thenReturn(mockScheme);
     });
 
     group('A group of tests to validate shared key matcher regex', () {
@@ -2819,16 +2821,11 @@ void main() {
       // ------------------------------ Setup ----------------------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
-      MockAtKeyDecryptionManager mockAtKeyDecryptionManager =
-          MockAtKeyDecryptionManager();
-      MockSharedKeyDecryption mockSharedKeyDecryption =
-          MockSharedKeyDecryption();
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
-      syncService.atKeyDecryptionManager = mockAtKeyDecryptionManager;
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
@@ -2891,10 +2888,7 @@ void main() {
               AtKey.fromString('@alice:shared_key${TestResources.atsign}')))
           .thenAnswer((invocation) =>
               Future.value(AtValue()..value = 'shared_key_local_value'));
-      when(() =>
-              mockAtKeyDecryptionManager.get(any(that: ConflictKeyMatcher())))
-          .thenAnswer((_) => mockSharedKeyDecryption);
-      when(() => mockSharedKeyDecryption.decrypt(
+      when(() => mockScheme.decrypt(
               any(that: ConflictKeyMatcher()), 'shared_key_remote_value'))
           .thenAnswer((_) => Future.value('shared_key_remote_value'));
 
@@ -2935,16 +2929,11 @@ void main() {
       // ------------------------------ Setup ----------------------------------
       LocalSecondary? localSecondary = LocalSecondary(mockAtClient,
           keyStore: TestResources.getHiveKeyStore(TestResources.atsign));
-      MockAtKeyDecryptionManager mockAtKeyDecryptionManager =
-          MockAtKeyDecryptionManager();
-      MockSharedKeyDecryption mockSharedKeyDecryption =
-          MockSharedKeyDecryption();
 
       SyncServiceImpl syncService = await SyncServiceImpl.create(mockAtClient,
           atClientManager: mockAtClientManager,
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       syncService.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
-      syncService.atKeyDecryptionManager = mockAtKeyDecryptionManager;
 
       registerFallbackValue(FakeSyncVerbBuilder());
       registerFallbackValue(FakeUpdateVerbBuilder());
@@ -2972,10 +2961,7 @@ void main() {
               '@alice:conflict_phone_key.demo${TestResources.atsign}')))
           .thenAnswer((invocation) =>
               Future.value(AtValue()..value = 'phone_key_local_value'));
-      when(() =>
-              mockAtKeyDecryptionManager.get(any(that: ConflictKeyMatcher())))
-          .thenAnswer((_) => mockSharedKeyDecryption);
-      when(() => mockSharedKeyDecryption.decrypt(
+      when(() => mockScheme.decrypt(
               any(that: ConflictKeyMatcher()), 'phone_key_remote_value'))
           .thenAnswer((_) => throw AtPublicKeyNotFoundException(
               'Encryption public key not found'));
