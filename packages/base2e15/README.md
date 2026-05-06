@@ -9,11 +9,11 @@ binary-to-text encoding schemes that represent binary data in an unicode string 
 
 #### Example ####
 
-| Encoding | Data | chararacters |
-|:-:|:-:|:-:|
-| Plain text | Base2e15 is awesome! | 20 |
-| **Base2e15** | **嗺둽嬖蟝巍媖疌켉溁닽壪** | **11** |
-| Base64 | QmFzZTJlMTUgaXMgYXdlc29tZSE= | 27+1 |
+|   Encoding   |             Data             | characters |
+|:------------:|:----------------------------:|:----------:|
+|  Plain text  |     Base2e15 is awesome!     |     20     |
+| **Base2e15** |       **嗺둽嬖蟝巍媖疌켉溁닽壪**        |   **11**   |
+|    Base64    | QmFzZTJlMTUgaXMgYXdlc29tZSE= |    27+1    |
  
 ## Mapping table
 Every character represent 15 bits of data, except the last character 7 bits or 15 bits
