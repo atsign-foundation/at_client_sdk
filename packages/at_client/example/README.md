@@ -101,6 +101,34 @@ Shared TUI plumbing (palette, presets, typedefs) lives under
 `lib/todos_tui/`; the entry point and widget tree are in
 `bin/collections_todos.dart`.
 
+### Collections — sub-collections (3 levels deep)
+Publishes live docker container stats — one snapshot per cycle per
+container — to a tree of typed sub-collections:
+`nodes` → `atsigns` → `samples`. Pairs with the Flutter dashboard at
+`packages/at_client_flutter/examples/dockerstats/`.
+
+Real mode shells out to the `docker` CLI; simulate mode synthesises
+fake hosts and atSigns via a bounded random walk, useful for chart-UI
+development without running containers.
+```bash
+# Publisher — real (requires `docker` on PATH):
+dart run bin/dockerstats_publish.dart \
+    -a @alice -P 5s --other-at-signs @bob
+
+# Publisher — simulated multi-host fanout:
+dart run bin/dockerstats_publish.dart \
+    -a @alice -P 2s --other-at-signs @bob \
+    --simulate --simulate-hosts 3
+
+# Subscriber — prints one line per arriving sample:
+dart run bin/dockerstats_subscribe.dart -a @bob
+```
+`-P` is the polling interval; samples expire after 10 minutes so
+receivers see a rolling window without any client-side eviction. The
+subscriber is a CLI counterpart to the Flutter dashboard — useful
+for verifying publisher↔receiver round-trip without spinning up the
+Flutter app.
+
 ### Notifications
 Fire-and-forget messaging via `NotificationService`.
 ```bash

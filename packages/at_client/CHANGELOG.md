@@ -1,6 +1,26 @@
 ## 3.12.0
 
 Several significant enhancements to the API to make it much easier to use.
+- feat: AtCollection.upsert — idempotent create-or-update verb that
+  persists the supplied content whether or not the self-key already
+  exists. Use this for re-runnable publishers (periodic polling jobs,
+  retry loops) where the prior run's TTL-bounded self-key would
+  otherwise make `create` throw on restart.
+- feat: AtCollection.getDescendant — single-call walk down a sub-item
+  ancestry. Drop-in for the receiver-side
+  `getOrNull → subCollection → getOrNull → ...` chain you'd otherwise
+  hand-write whenever you handle a `CSubItemUpdated` for a deeply-
+  nested item. Returns null gracefully when any link in the chain is
+  missing or not yet synced.
+- fix: read path uniformly treats not-yet-available items
+  (`availableAt` in the future) as logically non-existent — same
+  lifecycle bucket as expired items. `getItems`, `getOrNull`,
+  `getItemsAsStream`, `Query`, and `getDescendant` filter them out.
+  Apps that need to react when an item *becomes* available subscribe
+  to `availableEvents`. Previously the read path either threw a null-
+  check error on `data:null` returns or surfaced the scheduled record
+  as visible, which broke chain walks the moment a parent CItem was
+  written with a future `availableAt`.
 - feat: New feature - Collections - a clean API for storing, sharing, 
   unsharing and deleting objects in named collections, with sub-collections, 
   event streams, built-in support for read receipts, live queries with 

@@ -199,6 +199,76 @@ part 'collections_test_hooks.dart';
 ///
 /// ---
 ///
+/// ## Common pitfalls
+///
+/// ### Availability lifecycle: not-yet-available == doesn't exist
+///
+/// An item whose `availableAt` is in the future is treated as
+/// **logically non-existent** by the read path — same lifecycle
+/// bucket as items past their `expiresAt`. [getItems], [getOrNull],
+/// [getItemsAsStream], and [Query] all filter them out. So does
+/// [getDescendant] (it returns `null` if any link in the ancestry
+/// chain is currently unavailable). Apps that need to react when an
+/// item *becomes* available subscribe to [availableEvents], then
+/// re-read once the firing lands. Don't try to use `getOrNull` to
+/// poll a pre-availability item; you'll get `null` until the
+/// scheduled time, then the real record.
+///
+/// ### Re-running a publisher within the collection's TTL
+///
+/// `await collection.create(id: …)` throws [StateError] when the
+/// supplied id's self-key already exists on the atServer. Periodic
+/// publishers that may restart within their TTL window hit this
+/// routinely: the previous run's self-keys persist server-side past
+/// the process exit, so a fresh `getOrNull` returns null (local cache
+/// gone) but `create`'s server-side existence probe sees the leftover
+/// and refuses. **Use [upsert] for re-runnable writes** — it persists
+/// the supplied content whether or not the self-key already exists.
+/// Reserve [create] for the strict semantics ("treat an existing id
+/// as a bug") — typically only useful when the SDK auto-generates
+/// the id.
+///
+/// ### Fetching a typed sub-sub item
+///
+/// To **read** a descendant in a sub-collection chain, walk via
+/// [subCollection] (or call [getDescendant] in one step). **Don't**
+/// flatten the chain by constructing a root-level collection at the
+/// composed namespace — i.e. **don't write**:
+///
+/// ```dart
+/// // ❌ Receives notifications, but reads return null.
+/// final leaves = await atClient.collection<Sample>(
+///   'samples.<atSignId>.atsigns.<hostId>.nodes.<app>.<demos>',
+///   ttl,
+///   eventsFromLocalSecondary: false,
+/// );
+/// final s = await leaves.getOrNull(id, owner);   // null
+/// ```
+///
+/// Instead use the chained walk that the [subCollection] verb
+/// already supports — or, when reacting to [CSubItemUpdated] events,
+/// call [getDescendant] which performs the walk for you:
+///
+/// ```dart
+/// // ✅ Walks the parent chain via typed sub-collections.
+/// final s = await rootColl.getDescendant<Sample>(
+///   ancestry: e.ancestry,
+///   id: e.id,
+///   owner: e.owner,
+///   leafExpiration: ttl,
+///   leafFromJson: Sample.fromJson,
+///   leafTypeTag: 'Sample',
+/// );
+/// ```
+///
+/// The flat construction subscribes to notifications correctly
+/// (its regex still matches the descendant key shape) but its read
+/// path fails to materialise the cached recipient copies — the
+/// chained walk threads the parent CItem context through that
+/// `subCollection` needs.
+///
+/// ---
+///
 /// Per-key decode failures on the read path are yielded into the
 /// stream as errors — not logged and swallowed. Every higher-level
 /// read method is a thin wrapper over [getItemsAsStream], so
@@ -574,6 +644,13 @@ interface class AtCollection<T> {
   /// future `DateTime` to delay visibility of recipient copies
   /// (time-to-birth). A past timestamp is treated the same as `null` by
   /// the write path, so setting one is harmless but has no effect.
+  ///
+  /// **Read-side semantics:** an item whose `availableAt` is in the
+  /// future is treated as logically non-existent — same lifecycle
+  /// bucket as expired items — and is filtered out by [getItems],
+  /// [getOrNull], [getItemsAsStream], and [Query]. Apps that need to
+  /// react when the firing arrives subscribe to [availableEvents],
+  /// then re-read once the event lands.
   CItem<T> draft({
     required T obj,
     String? id,
@@ -656,6 +733,65 @@ interface class AtCollection<T> {
   Future<void> _awaitLocalEmissions() async {
     if (!_eventsFromLocalSecondary) return;
     await atClient.pendingEmissions;
+  }
+
+  /// Idempotent write: creates an item with the supplied [id] if it
+  /// doesn't already exist, or rewrites the existing one in place if it
+  /// does. Equivalent to [create] for a brand-new item; equivalent to
+  /// constructing a draft and calling [update] when the self-key
+  /// already exists.
+  ///
+  /// Use this when **re-runnability matters more than catching
+  /// accidental id collisions**. Periodic publishers that may restart
+  /// within the collection's TTL hit this case routinely: the
+  /// atServer-side self-key persists past the previous process's exit,
+  /// so [create] would throw [StateError] on each restart even though
+  /// the caller's intent ("make this item exist with this content") is
+  /// well-defined. [upsert] is the canonical idempotent verb for that
+  /// pattern.
+  ///
+  /// [create] remains the strict variant — prefer it when an existing
+  /// id IS unexpected (e.g. when the SDK auto-generates the id).
+  ///
+  /// [expiresAt] / [availableAt] are forwarded to [draft]; same
+  /// defaults as [create] / [update]. Returns the persisted item.
+  /// Throws [CollectionOpException] on any key-level failure.
+  ///
+  /// ```dart
+  /// // Periodic stat publisher: re-runs within TTL must be safe.
+  /// for (final s in samples) {
+  ///   await stats.upsert(
+  ///     id: s.timestamp.toString(),
+  ///     obj: s,
+  ///     sharedWith: subscribers,
+  ///   );
+  /// }
+  /// ```
+  Future<CItem<T>> upsert({
+    required String id,
+    required T obj,
+    Set<Atsign>? sharedWith,
+    DateTime? expiresAt,
+    DateTime? availableAt,
+  }) async {
+    final draft = this.draft(
+      obj: obj,
+      id: id,
+      sharedWith: sharedWith,
+      expiresAt: expiresAt,
+      availableAt: availableAt,
+    );
+    final exists = await _selfKeyExists(id);
+    final results = await _put(draft);
+    if (results.any((r) => r is OpFailure)) {
+      throw CollectionOpException(results);
+    }
+    if (!exists) {
+      // Mirror [create]'s seen-id bookkeeping for the brand-new case.
+      _seenSelfIds.add(id);
+    }
+    await _awaitLocalEmissions();
+    return draft;
   }
 
   /// Updates an existing [item]. Throws [StateError] if the self-key does
@@ -929,7 +1065,25 @@ interface class AtCollection<T> {
   ///
   /// All higher-level read methods ([get], [getOrNull], [getItems]) are
   /// thin wrappers over this stream.
-  Stream<CItem<T>> getItemsAsStream({String? id, Atsign? owner}) async* {
+  Stream<CItem<T>> getItemsAsStream({String? id, Atsign? owner}) =>
+      _getItemsAsStreamInternal(
+        id: id,
+        owner: owner,
+        includeNotYetAvailable: false,
+      );
+
+  /// Internal variant of [getItemsAsStream] that lets the
+  /// [_CItemTimerScheduler] enumerate items whose `availableAt` is in
+  /// the future — exactly the items the public path filters out — so
+  /// it can enroll their pending firings on startup. Production app
+  /// code should never need to flip this; an item that "logically does
+  /// not exist yet" should be observed via [availableEvents], not
+  /// [getItems].
+  Stream<CItem<T>> _getItemsAsStreamInternal({
+    String? id,
+    Atsign? owner,
+    required bool includeNotYetAvailable,
+  }) async* {
     // [_getKeysInternal] returns keys sorted by `fullKeyAndOwner`, so
     // all copies of the same item (self + per-recipient) are
     // contiguous. We buffer each item, absorb its recipient siblings'
@@ -937,11 +1091,73 @@ interface class AtCollection<T> {
     final keys = await _getKeysInternal(id: id, owner: owner);
     CItem<T>? pending;
     String? pendingKey;
+    final now = DateTime.now();
     for (final k in keys) {
       try {
         if (k.fullKeyAndOwner != pendingKey) {
           if (pending != null) yield pending;
           final v = await atClient.get(k);
+          // An item that is not yet available (`availableAt` in the
+          // future) or whose value the keystore won't return for any
+          // other reason resolves to `data:null`. In the Atsign Protocol
+          // those records are "logically non-existent" right now —
+          // same lifecycle bucket as expired records — so we skip them
+          // silently rather than yielding a decode failure. Apps that
+          // care about the schedule subscribe to [availableEvents]
+          // and re-read once the firing arrives.
+          //
+          // Caller can flip [includeNotYetAvailable] to surface those
+          // items anyway — used by the availableAt scheduler so it can
+          // enroll the very items it's about to fire CItemAvailable on.
+          if (v.value == null) {
+            if (!includeNotYetAvailable) {
+              _logger.finer(
+                'getItemsAsStream skipping ${k.key}: '
+                'data:null (availableAt in future, or post-expiry)',
+              );
+              continue;
+            }
+            // Without a value we cannot rehydrate. Surface the key as a
+            // bare CItem placeholder for the scheduler — owner + id
+            // are sufficient for [_CItemTimerScheduler._registerForItem]
+            // to compute fireAt and emit the event when the time
+            // arrives. We synthesise minimal metadata derived from
+            // `k` and `v.metadata`, which the scheduler then ignores
+            // beyond `availableAt`.
+            final md = v.metadata;
+            if (md == null || md.availableAt == null) continue;
+            final placeholder = CItem._(
+              owner: k.sharedBy!.toAtsign(),
+              id: k.key.split('.').first,
+              type: 'n/a',
+              obj: null as T,
+              sharedWith: {},
+              createdAt: md.createdAt ?? DateTime.now().toUtc(),
+              expiresAt: md.expiresAt ??
+                  DateTime.now().add(
+                      Duration(milliseconds: defaultExpiration.inMilliseconds)),
+              availableAt: md.availableAt,
+              collection: this,
+              parentOwners: _expectedAncestorOwners(),
+            );
+            yield placeholder;
+            pendingKey = k.fullKeyAndOwner;
+            pending = null;
+            continue;
+          }
+          // Belt-and-braces: if the keystore returned a record we
+          // happened to read with `availableAt` in the future,
+          // treat it the same way. Some keystore backends still
+          // return the AtValue with metadata even when the record
+          // shouldn't be visible yet.
+          final av = v.metadata?.availableAt;
+          if (av != null && av.isAfter(now) && !includeNotYetAvailable) {
+            _logger.finer(
+              'getItemsAsStream skipping ${k.key}: '
+              'availableAt $av is in the future',
+            );
+            continue;
+          }
           final decoded = _decodeEnvelope(v.value!, k);
           // Parent-owner ancestry filter (see §3 of the post-
           // implementation tidy-up plan). Legacy items whose envelope
@@ -1147,6 +1363,111 @@ interface class AtCollection<T> {
         fromJson: fromJson,
         typeTag: typeTag,
       );
+
+  /// Walks a descendant chain in one call and returns the typed leaf
+  /// [CItem<U>]. Drop-in replacement for the hand-written
+  /// `getOrNull → subCollection → getOrNull → subCollection → getOrNull`
+  /// dance receivers otherwise have to write whenever they handle a
+  /// [CSubItemUpdated] for a deeply-nested sub-item.
+  ///
+  /// [ancestry] is the same ordered chain a [CSubItemUpdated.ancestry]
+  /// carries: each [CAncestor] names the id, owner, and sub-collection
+  /// name at one nesting level, root-to-direct-parent. The leaf
+  /// itself is identified by [id] + [owner] (which match the
+  /// [CSubItemUpdated.id] and [CSubItemUpdated.owner] fields).
+  ///
+  /// ```dart
+  /// nodes.subUpdates.listen((e) async {
+  ///   if (e.subName != 'samples') return;
+  ///   final sample = await nodes.getDescendant<StatSample>(
+  ///     ancestry: e.ancestry,
+  ///     id: e.id,
+  ///     owner: e.owner,
+  ///     leafExpiration: const Duration(minutes: 10),
+  ///     leafFromJson: StatSample.fromJson,
+  ///     leafTypeTag: 'StatSample',
+  ///   );
+  ///   if (sample != null) window.add(sample.obj);
+  /// });
+  /// ```
+  ///
+  /// Returns `null` if any link in the chain is missing (e.g. a
+  /// parent CItem expired before the leaf event arrived). Intermediate
+  /// sub-collections are typed `<dynamic>` — their values are not
+  /// decoded with registered factories. The leaf collection IS typed
+  /// `<U>` and uses [leafFromJson] / [leafTypeTag] to decode.
+  ///
+  /// **Pre-conditions on [ancestry]:**
+  ///
+  /// - Must be non-empty. For direct children of this collection,
+  ///   call [getOrNull] instead — there's no chain to walk.
+  /// - Every [CAncestor.owner] must be non-null. [CSubItemDeleted]
+  ///   events carry null owners by design (the sub-item is gone, so
+  ///   there's no envelope to recover ancestor owners from); apps
+  ///   that need to walk a chain on a delete should cache the most
+  ///   recent [CSubItemUpdated] for the same `(id, subName)` and
+  ///   reuse its ancestry.
+  ///
+  /// Throws [ArgumentError] when either pre-condition is violated.
+  Future<CItem<U>?> getDescendant<U>({
+    required List<CAncestor> ancestry,
+    required String id,
+    required Atsign owner,
+    required Duration leafExpiration,
+    Duration? intermediateExpiration,
+    U Function(Map<String, dynamic>)? leafFromJson,
+    String? leafTypeTag,
+  }) async {
+    if (ancestry.isEmpty) {
+      throw ArgumentError(
+        'ancestry must be non-empty. For a direct child of this collection '
+        'use getOrNull(id, owner) instead — there is no chain to walk.',
+      );
+    }
+    for (final a in ancestry) {
+      if (a.owner == null) {
+        throw ArgumentError(
+          'CAncestor.owner is null for (id: ${a.id}, subName: ${a.subName}). '
+          'CSubItemDeleted events carry null owners by design — getDescendant '
+          'cannot fetch typed parents without them. Cache the most recent '
+          'CSubItemUpdated for this (id, subName) and reuse its ancestry.',
+        );
+      }
+    }
+    final intermediateExp = intermediateExpiration ?? leafExpiration;
+
+    AtCollection<dynamic> ctx = this;
+    for (var i = 0; i < ancestry.length; i++) {
+      final ancestor = ancestry[i];
+      // [getOrNull] returns null for items the Atsign Protocol treats
+      // as logically non-existent right now — expired records, items
+      // whose `availableAt` is in the future, or any link that's
+      // simply absent. Treat all three the same: chain incomplete →
+      // return null and let the caller retry on the next
+      // [CSubItemUpdated] event. (Real decode bugs still propagate as
+      // exceptions; we don't want to swallow those.)
+      final parent = await ctx.getOrNull(ancestor.id, ancestor.owner!);
+      if (parent == null) return null;
+      final isLast = (i == ancestry.length - 1);
+      if (isLast) {
+        final leaf = ctx.subCollection<U>(
+          parent: parent,
+          subName: ancestor.subName,
+          defaultExpiration: leafExpiration,
+          fromJson: leafFromJson,
+          typeTag: leafTypeTag,
+        );
+        return leaf.getOrNull(id, owner);
+      }
+      ctx = ctx.subCollection<dynamic>(
+        parent: parent,
+        subName: ancestor.subName,
+        defaultExpiration: intermediateExp,
+      );
+    }
+    // Unreachable — the loop's `isLast` branch always returns.
+    return null;
+  }
 
   /// Test-only variant of [subCollection] that injects [notifications]
   /// instead of subscribing through the live `NotificationService`.
@@ -3727,6 +4048,23 @@ final class _Firing<E> {
   const _Firing(this.fireAt, this.owner, this.id, this.event);
 }
 
+/// Generic per-collection timer scheduler shared by
+/// [AtCollection.availableEvents] and
+/// [AtCollection.expiringSoonEvents].
+///
+/// Keeps a list of pending [_Firing] records sorted ascending by
+/// `fireAt`, and arms a single shared [Timer] to the soonest one.
+/// On the initial scan it populates the list from `getItems`, then
+/// subscribes to the collection's `updates` / `deletes` streams to
+/// rebuild firings when an item's `availableAt` / `expiresAt`
+/// changes or the item disappears. The implementation is generic
+/// over the event type [E] and reused for both surfaces by passing
+/// a different [fireAtOf] / [makeEvent] pair.
+///
+/// The list-based heap is O(N) per mutation; with realistic item
+/// counts the per-event work stays well below `Timer` overhead.
+/// A binary-heap swap is straightforward if a real workload
+/// demands it.
 final class _CItemTimerScheduler<E extends CEvent, T> {
   final AtCollection<T> collection;
 
@@ -3781,7 +4119,15 @@ final class _CItemTimerScheduler<E extends CEvent, T> {
 
   Future<void> _initialPopulate() async {
     try {
-      final items = await collection.getItems();
+      // Include items whose availableAt is in the future — they're
+      // exactly the items we need to schedule firings on.
+      // [_getItemsAsStreamInternal] yields a value-less placeholder
+      // (just owner + id + availableAt) for those, which is enough
+      // for [_registerForItem] to compute fireAt; we never read the
+      // body, so the obj being null is fine.
+      final items = await collection
+          ._getItemsAsStreamInternal(includeNotYetAvailable: true)
+          .toList();
       if (_disposed) return;
       for (final item in items) {
         _registerForItem(item);

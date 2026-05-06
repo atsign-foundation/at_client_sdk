@@ -1,0 +1,12 @@
+analyzer:
+  errors:
+    unnecessary_underscores: ignore
+    # AtCollection is currently @experimental on the SDK side. Silence
+    # the noise here only — consumers of the SDK use their own
+    # analysis_options and will still see it.
+    experimental_member_use: ignore
+
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:

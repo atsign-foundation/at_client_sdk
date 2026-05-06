@@ -820,6 +820,104 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
+  group('upsert — idempotent create-or-update', () {
+    test('writes when the self-key does not exist (create path)', () async {
+      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+      when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => <AtKey>[]);
+      final c = buildCollection<String>();
+      final item = await c.upsert(id: 'u1', obj: 'first');
+      expect(item.id, 'u1');
+      expect(item.obj, 'first');
+      verify(() => atClient.put(any(), any())).called(1);
+    });
+
+    test('writes when the self-key already exists (update path)', () async {
+      // get() returns an existing record → _selfKeyExists is true. Upsert
+      // must still write the new value (this is the re-runnable case
+      // create() rejects).
+      when(() => atClient.get(any())).thenAnswer((_) async {
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'readBy': <String>[], 'obj': 'x'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+      when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => <AtKey>[]);
+      final c = buildCollection<String>();
+      final item = await c.upsert(id: 'u2', obj: 'rewritten');
+      expect(item.obj, 'rewritten');
+      // The self-key write itself happens; create() would have refused.
+      verify(() => atClient.put(any(), any())).called(1);
+    });
+
+    test(
+      'two consecutive upserts with the same id both succeed',
+      () async {
+        when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+        when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
+        when(
+          () => atClient.getAtKeys(regex: any(named: 'regex')),
+        ).thenAnswer((_) async => <AtKey>[]);
+        final c = buildCollection<String>();
+        await c.upsert(id: 'u3', obj: 'a');
+        await c.upsert(id: 'u3', obj: 'b');
+        verify(() => atClient.put(any(), any())).called(2);
+      },
+    );
+
+    test('propagates put failures as CollectionOpException', () async {
+      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+      when(() => atClient.put(any(), any())).thenThrow(Exception('boom'));
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => <AtKey>[]);
+      final c = buildCollection<String>();
+      await expectLater(
+        c.upsert(id: 'u4', obj: 'x'),
+        throwsA(isA<CollectionOpException>()),
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  group('getDescendant — argument validation', () {
+    test('throws ArgumentError when ancestry is empty', () async {
+      final c = buildCollection<String>();
+      await expectLater(
+        c.getDescendant<String>(
+          ancestry: const [],
+          id: 'x',
+          owner: bob,
+          leafExpiration: const Duration(minutes: 1),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('throws ArgumentError when any ancestor owner is null', () async {
+      final c = buildCollection<String>();
+      await expectLater(
+        c.getDescendant<String>(
+          ancestry: [
+            const CAncestor(id: 'p', subName: 'comments', owner: null),
+          ],
+          id: 'x',
+          owner: bob,
+          leafExpiration: const Duration(minutes: 1),
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   group('reads — get, getOrNull, getItems, getItemsAsStream', () {
     AtValue atValueFor(Object obj, {String type = 'n/a'}) {
       final v = AtValue();
@@ -953,6 +1051,58 @@ void main() {
       );
     });
 
+    test(
+      'items with availableAt in the future are treated as non-existent',
+      () async {
+        // The atServer-side keystore may either drop value or carry an
+        // AtValue with metadata that flags `availableAt` in the future.
+        // Either way, the read path should treat the item as if it
+        // doesn't exist yet — same lifecycle bucket as expired items
+        // (see [getItemsAsStream]).
+        final pendingKey = AtKey.fromString('soon.$namespace$selfAtSignStr');
+        when(
+          () => atClient.getAtKeys(regex: any(named: 'regex')),
+        ).thenAnswer((_) async => [pendingKey]);
+        when(() => atClient.get(any())).thenAnswer((_) async {
+          final v = AtValue();
+          // null value: keystore is hiding it.
+          v.value = null;
+          v.metadata = Metadata()
+            ..createdAt = DateTime.now().toUtc()
+            ..expiresAt = DateTime.now().add(const Duration(days: 1));
+          return v;
+        });
+
+        final c = buildCollection<String>();
+        expect(await c.getOrNull('soon', selfAtSign), isNull);
+        expect(await c.getItems(), isEmpty);
+      },
+    );
+
+    test(
+      'items returned with metadata.availableAt in the future are skipped',
+      () async {
+        // Fallback case: a keystore that DOES return the value but with
+        // metadata.availableAt in the future. Same treatment.
+        final pendingKey = AtKey.fromString('soon2.$namespace$selfAtSignStr');
+        when(
+          () => atClient.getAtKeys(regex: any(named: 'regex')),
+        ).thenAnswer((_) async => [pendingKey]);
+        when(() => atClient.get(any())).thenAnswer((_) async {
+          final v = AtValue();
+          v.value = jsonEncode({'type': 'n/a', 'obj': 'hi'});
+          v.metadata = Metadata()
+            ..createdAt = DateTime.now().toUtc()
+            ..availableAt = DateTime.now().add(const Duration(hours: 1))
+            ..expiresAt = DateTime.now().add(const Duration(days: 1));
+          return v;
+        });
+
+        final c = buildCollection<String>();
+        expect(await c.getOrNull('soon2', selfAtSign), isNull);
+      },
+    );
+
     test('getOrNull returns null when missing, item when present', () async {
       final selfKey = AtKey.fromString('id4.$namespace$selfAtSignStr');
       when(
@@ -1038,27 +1188,37 @@ void main() {
       expect(itemsStream.single.availableAt, isNull);
     });
 
-    test('rehydrate preserves future availableAt', () async {
-      final future = DateTime.now().add(const Duration(hours: 2));
-      final selfKey = AtKey.fromString('futsched.$namespace$selfAtSignStr');
-      when(
-        () => atClient.getAtKeys(regex: any(named: 'regex')),
-      ).thenAnswer((_) async => [selfKey]);
-      when(() => atClient.get(any())).thenAnswer((_) async {
-        final v = AtValue();
-        v.value = jsonEncode({'type': 'n/a', 'readBy': <String>[], 'obj': 'x'});
-        v.metadata = Metadata()
-          ..createdAt = DateTime.now().toUtc()
-          ..expiresAt = DateTime.now().add(const Duration(days: 1))
-          ..availableAt = future;
-        return v;
-      });
+    test(
+      'items with future availableAt are filtered out — '
+      'apps subscribe to availableEvents to see them when they fire',
+      () async {
+        // Atsign Protocol semantic: an item whose `availableAt` is in
+        // the future "logically does not exist yet" — same lifecycle
+        // bucket as expired items. The read APIs (getItems / getOrNull
+        // / getItemsAsStream) reflect that uniformly. Apps that care
+        // about scheduled records use [availableEvents] to learn when
+        // the firing arrives, then re-read.
+        final future = DateTime.now().add(const Duration(hours: 2));
+        final selfKey = AtKey.fromString('futsched.$namespace$selfAtSignStr');
+        when(
+          () => atClient.getAtKeys(regex: any(named: 'regex')),
+        ).thenAnswer((_) async => [selfKey]);
+        when(() => atClient.get(any())).thenAnswer((_) async {
+          final v = AtValue();
+          v.value =
+              jsonEncode({'type': 'n/a', 'readBy': <String>[], 'obj': 'x'});
+          v.metadata = Metadata()
+            ..createdAt = DateTime.now().toUtc()
+            ..expiresAt = DateTime.now().add(const Duration(days: 1))
+            ..availableAt = future;
+          return v;
+        });
 
-      final c = buildCollection<String>();
-      final itemsList = await c.getItems();
-      expect(itemsList.single.availableAt, isNotNull);
-      expect(itemsList.single.availableAt!.isAfter(DateTime.now()), isTrue);
-    });
+        final c = buildCollection<String>();
+        expect(await c.getItems(), isEmpty);
+        expect(await c.getOrNull('futsched', selfAtSign), isNull);
+      },
+    );
   });
 
   // ---------------------------------------------------------------------------
