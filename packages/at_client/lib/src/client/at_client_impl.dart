@@ -8,8 +8,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
-import 'package:at_client/src/crypto/legacy_crypto_scheme.dart';
-import 'package:at_client/src/crypto/shared_crypto_scheme.dart';
+import 'package:at_client/src/crypto/legacy/legacy_crypto_scheme.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
@@ -367,6 +366,7 @@ class AtClientImpl implements AtClient {
         onEvent: emitDataEvent,
       );
       _atChops ??= await _createAtChops(_atSign);
+      _atChops!.schemes.register('legacy', LegacyCryptoScheme(this));
 
       // Wire the event-driven expiry timer to the data-events stream.
       // Re-arms on every keystore mutation; first arm uses the current
