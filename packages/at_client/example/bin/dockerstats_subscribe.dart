@@ -73,7 +73,7 @@ void main(List<String> args) async {
   final nodes = await atClient.collection<HostNode>(
     '$collectionRootName.$applicationNamespace',
     sampleExpiration,
-    eventsFromLocalSecondary: false,
+    eventsFromLocalSecondary: true,
   );
 
   // ---------------------------------------------------------------------
