@@ -4325,6 +4325,58 @@ void main() {
               'lastReceivedServerCommitId — the comparison is against a '
               'proxy that can drift past actual local progress');
     });
+    test(
+        'A test to verify sync requests enqueued during a round are NOT '
+        'cleared when the round completes (regression for tail-of-burst '
+        'write loss)', () async {
+      // Regression scenario: prior to the requestedOnOrBefore filter on
+      // `_clearQueue`, every queued sync request was wiped at the end of
+      // each round — including requests enqueued *during* the round,
+      // whose corresponding local writes were not in the round's
+      // unCommittedEntries snapshot. Those writes then sat in the
+      // commit log unpushed until the 30-second periodic safety-net
+      // timer fired. Symptom: dockerstats smoke tests dropped 2-9
+      // samples per run, all from the tail of the publisher's burst.
+      //
+      // The test exercises the early-exit path of processSyncRequests
+      // (server already in sync) so we don't need to mock the full
+      // syncInternal pipeline. The path still flows through
+      // _syncComplete -> _clearQueue, which is the code under test.
+      when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
+          .thenAnswer(
+              (_) => StreamController<at_notification.AtNotification>().stream);
+      when(() => mockRemoteSecondary
+              .executeVerb(any(that: isA<StatsVerbBuilder>())))
+          .thenAnswer((_) async => 'data:[{"value":"-1"}]');
+
+      syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
+          atClientManager: mockAtClientManager,
+          remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
+      syncServiceImpl.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
+
+      // Subsumed: requestedOn well in the past.
+      final subsumed = SyncRequest()
+        ..result = SyncResult()
+        ..requestedOn =
+            DateTime.now().toUtc().subtract(const Duration(seconds: 10));
+      // Retained: requestedOn in the future, guaranteed > roundStartedAt.
+      final retained = SyncRequest()
+        ..result = SyncResult()
+        ..requestedOn = DateTime.now().toUtc().add(const Duration(seconds: 30));
+
+      syncServiceImpl.syncRequests.addLast(subsumed);
+      syncServiceImpl.syncRequests.addLast(retained);
+      expect(syncServiceImpl.getSyncRequestQueueSize(), 2);
+
+      await syncServiceImpl.processSyncRequests();
+
+      expect(syncServiceImpl.getSyncRequestQueueSize(), 1,
+          reason: 'request enqueued during the round should be retained');
+      expect(syncServiceImpl.syncRequests.first, same(retained),
+          reason: 'the retained request should be the one with future '
+              'requestedOn — the subsumed (past) one is cleared');
+    });
+
     tearDown(() {
       syncServiceImpl.clearSyncEntities();
     });

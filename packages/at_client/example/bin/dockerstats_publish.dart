@@ -168,11 +168,26 @@ void main(List<String> args) async {
       // landed and been acknowledged. The closed-loop subscriber
       // assertion ("subscriber received exactly $totalSamples
       // samples") is only meaningful once this completes.
+      final waitStart = DateTime.now().microsecondsSinceEpoch;
+      log('TRACE sync_start t_us=$waitStart');
       atClient.syncService.sync();
       try {
         await atClient.syncService.waitUntilCaughtUp(
           timeout: const Duration(seconds: 60),
+          onProgress: (p) {
+            final t = DateTime.now().microsecondsSinceEpoch;
+            log(
+              'TRACE sync_progress t_us=$t status=${p.syncStatus} '
+              'localCommitIdBeforeSync=${p.localCommitIdBeforeSync} '
+              'localCommitId=${p.localCommitId} '
+              'serverCommitId=${p.serverCommitId} '
+              'keyInfoListLen=${p.keyInfoList?.length} '
+              'msg=${p.message}',
+            );
+          },
         );
+        final waitEnd = DateTime.now().microsecondsSinceEpoch;
+        log('TRACE sync_caught_up t_us=$waitEnd dt_us=${waitEnd - waitStart}');
         log('sync caught up; emitted $totalSamples sample(s) total');
       } on TimeoutException {
         log(
@@ -250,10 +265,17 @@ class _Publisher {
       ),
     );
 
+    final preMs = DateTime.now().microsecondsSinceEpoch;
+    log('TRACE pub_pre id=${s.millis} pair=$hostId/$atSignId t_us=$preMs');
     await samples.create(
       id: s.millis.toString(),
       obj: s,
       sharedWith: otherAtSigns,
+    );
+    final postMs = DateTime.now().microsecondsSinceEpoch;
+    log(
+      'TRACE pub_post id=${s.millis} pair=$hostId/$atSignId '
+      't_us=$postMs dt_us=${postMs - preMs}',
     );
   }
 

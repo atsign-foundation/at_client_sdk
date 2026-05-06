@@ -94,13 +94,13 @@ void main(List<String> args) async {
   var samplesSeen = 0;
   final sub = nodes.subUpdates.listen((e) async {
     if (e.subName != subSamplesName || e.ancestry.length != 2) return;
+    final evtUs = DateTime.now().microsecondsSinceEpoch;
+    stderr.writeln(
+      'TRACE sub_event id=${e.id} owner=${e.owner} '
+      'ancestry=${e.ancestry.map((a) => "${a.id}/${a.subName}").join(",")} '
+      't_us=$evtUs',
+    );
     try {
-      // [AtCollection.getDescendant] walks the
-      //   nodes → atsigns → samples
-      // chain in one call. Cheaper than the hand-coded version since
-      // every link is the same lookup logic — and it's the canonical
-      // way to read deeply-nested sub-items, so this stays correct
-      // even if the SDK's internal lookup mechanics shift.
       final item = await nodes.getDescendant<StatSample>(
         ancestry: e.ancestry,
         id: e.id,
@@ -110,13 +110,19 @@ void main(List<String> args) async {
         leafTypeTag: 'StatSample',
       );
       if (item == null) {
-        // Parent CItem not yet synced or chain incomplete — will
-        // retry on the next event for the same pair (e.g. the next
-        // sample arriving moments later).
+        final missUs = DateTime.now().microsecondsSinceEpoch;
+        stderr.writeln(
+          'TRACE sub_chain_miss id=${e.id} owner=${e.owner} t_us=$missUs',
+        );
         return;
       }
       final s = item.obj;
       samplesSeen++;
+      final recvUs = DateTime.now().microsecondsSinceEpoch;
+      stderr.writeln(
+        'TRACE sub_recv id=${s.millis} pair=${s.hostname}/${s.atSign} '
+        't_us=$recvUs',
+      );
       stdout.writeln(_formatSample(s, samplesSeen));
       // Closed-loop early-exit: once we've seen the expected count,
       // signal the main loop to stop. The publisher and subscriber

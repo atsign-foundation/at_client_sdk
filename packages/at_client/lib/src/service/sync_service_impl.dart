@@ -244,6 +244,17 @@ class SyncServiceImpl implements SyncService {
     // guard above and race into the body. We use a separate flag from
     // _syncInProgress because _isInSync short-circuits on the latter.
     _processInProgress = true;
+    // Round-start timestamp captured BEFORE the first await. Used by
+    // [_clearQueue] to coalesce only those queued requests that arrived
+    // before this round started — i.e. requests whose corresponding
+    // local writes are guaranteed to be in the round's
+    // unCommittedEntries snapshot (the snapshot is taken strictly after
+    // [roundStartedAt] inside [_isInSync] and [syncInternal]). Requests
+    // enqueued at or after [roundStartedAt] may represent writes the
+    // round didn't see; clearing them silently is the bug that left
+    // tail-of-burst writes stranded until the 30-second periodic
+    // safety-net timer.
+    final roundStartedAt = DateTime.now().toUtc();
     final syncRequest = _getSyncRequest();
     try {
       if (await _isInSync()) {
@@ -252,7 +263,7 @@ class SyncServiceImpl implements SyncService {
           ..syncStatus = SyncStatus.success
           ..lastSyncedOn = DateTime.now().toUtc()
           ..dataChange = false;
-        _syncComplete(syncRequest);
+        _syncComplete(syncRequest, roundStartedAt: roundStartedAt);
         _syncInProgress = false;
         _informSyncProgress(SyncProgress()
           ..syncStatus = SyncStatus.success
@@ -269,7 +280,7 @@ class SyncServiceImpl implements SyncService {
       final syncResult = await syncInternal(serverCommitId, syncRequest,
           localCommitIdBeforeSync: localCommitIdBeforeSync);
 
-      _syncComplete(syncRequest);
+      _syncComplete(syncRequest, roundStartedAt: roundStartedAt);
       serverCommitId = await _getServerCommitId();
       final localCommitId = await _getLocalCommitId();
 
@@ -375,7 +386,8 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
-  void _syncComplete(SyncRequest syncRequest) {
+  void _syncComplete(SyncRequest syncRequest,
+      {required DateTime roundStartedAt}) {
     syncRequest.result!.lastSyncedOn = DateTime.now().toUtc();
     _logger.info(
         'Inside syncComplete. syncRequest.requestSource : ${syncRequest.requestSource}; syncRequest.onDone : ${syncRequest.onDone}');
@@ -388,7 +400,8 @@ class SyncServiceImpl implements SyncService {
     } else if (onDone != null) {
       onDone!(syncRequest.result);
     }
-    _clearQueue(alreadyHandled: syncRequest);
+    _clearQueue(
+        alreadyHandled: syncRequest, requestedOnOrBefore: roundStartedAt);
   }
 
   void _onDone(SyncResult syncResult) {
@@ -453,33 +466,73 @@ class SyncServiceImpl implements SyncService {
     });
   }
 
-  /// Drains the queue at the end of a successful sync run. Each
-  /// remaining request — every queued sync intent that wasn't the
-  /// one chosen for processing — is conceptually answered by the
-  /// run that just completed (the run brought local up to date), so
-  /// we fire `onError` on each with a "superseded" failure rather
-  /// than leaving its callback dangling forever.
+  /// Drains queued sync requests that the just-completed run subsumed.
+  ///
+  /// A request is **subsumed** iff its [SyncRequest.requestedOn] is
+  /// earlier than (or equal to) [requestedOnOrBefore], the timestamp
+  /// captured at the start of the round before any awaits. Local
+  /// writes happen synchronously inside [LocalSecondary.executeVerb]
+  /// before the trailing `syncService.sync()` enqueues a request, so
+  /// the write is committed strictly before its request's
+  /// `requestedOn`. The round's `unCommittedEntries` snapshot is taken
+  /// strictly after [requestedOnOrBefore] (inside [_isInSync] / inside
+  /// [syncInternal]), so any request whose `requestedOn` precedes that
+  /// timestamp is guaranteed to have its triggering write captured by
+  /// the snapshot — and thus pushed by the round.
+  ///
+  /// Requests with `requestedOn > requestedOnOrBefore` are NOT
+  /// subsumed: their writes may or may not be in the round's snapshot
+  /// (they could have landed after the snapshot was taken). They stay
+  /// in the queue so [_drainQueueIfPending] schedules a follow-up run
+  /// that takes a fresh snapshot.
+  ///
+  /// Before the timestamp filter was added, this method cleared the
+  /// queue indiscriminately — and tail-of-burst writes whose requests
+  /// arrived during a long round were silently discarded, leaving
+  /// their commit-log entries unpushed until the 30-second periodic
+  /// safety-net timer fired.
   ///
   /// The just-processed request's `onDone` has already fired by
   /// the time this is called from [_syncComplete]; passing it as
   /// [alreadyHandled] keeps it from also being notified via
   /// `onError` here. Identity comparison is exact (`identical`) so
   /// only the specific in-flight instance is skipped.
-  void _clearQueue({SyncRequest? alreadyHandled}) {
-    _logger.finer('Clearing sync queue');
+  void _clearQueue({
+    SyncRequest? alreadyHandled,
+    required DateTime requestedOnOrBefore,
+  }) {
+    _logger.finer('Clearing sync queue (subsumed by round started at '
+        '$requestedOnOrBefore)');
     final exception = AtClientException(
       error_codes['AtClientException'],
       'Sync request superseded by a coalesced sync run that just '
       'completed',
     );
+    final retained = <SyncRequest>[];
+    var supersededCount = 0;
     while (syncRequests.isNotEmpty) {
       final r = syncRequests.removeFirst();
       if (identical(r, alreadyHandled)) continue;
+      if (r.requestedOn.isAfter(requestedOnOrBefore)) {
+        // Arrived during or after this round started — its triggering
+        // write may not be in the round's snapshot. Keep it for the
+        // next round.
+        retained.add(r);
+        continue;
+      }
       r.result ??= SyncResult();
       r.result!
         ..syncStatus = SyncStatus.failure
         ..atClientException = exception;
       _safeInvokeOnError(r);
+      supersededCount++;
+    }
+    for (final r in retained) {
+      syncRequests.addLast(r);
+    }
+    if (supersededCount > 0 || retained.isNotEmpty) {
+      _logger.finer('Cleared $supersededCount superseded sync request(s); '
+          'retained ${retained.length} for the next round');
     }
   }
 
