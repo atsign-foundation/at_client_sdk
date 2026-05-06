@@ -10,14 +10,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-class MockAtLookup extends Mock implements AtLookUp {}
-
-class MockAtChops extends Mock implements AtChops {}
-
-class MockSecondaryAddressFinder extends Mock
-    implements SecondaryAddressFinder {}
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
+import 'test_utils/mocks.dart';
 
 class MockSecondaryPersistenceStore extends Mock
     implements SecondaryPersistenceStore {}

@@ -5,14 +5,9 @@ import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'package:at_chops/at_chops.dart';
-
-class MockAtClient extends Mock implements AtClient {}
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
+import 'test_utils/mocks.dart';
 
 class MockPutRequestTransformer extends Mock implements PutRequestTransformer {}
-
-class MockAtChops extends Mock implements AtChops {}
 
 class FakeTuple extends Fake implements Tuple<AtKey, dynamic> {}
 

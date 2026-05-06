@@ -1,6 +1,5 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -9,13 +8,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/no_op_services.dart';
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
-class MockLocalSecondary extends Mock implements LocalSecondary {}
-
-class MockSecondaryAddressFinder extends Mock
-    implements SecondaryAddressFinder {}
+import 'test_utils/mocks.dart';
 
 bool wrappedDecryptSucceeds(
     {required String cipherText,

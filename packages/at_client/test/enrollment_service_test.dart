@@ -10,8 +10,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/test_utils.dart';
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
+import 'test_utils/mocks.dart';
 
 class MockSyncService extends Mock implements SyncService {}
 
