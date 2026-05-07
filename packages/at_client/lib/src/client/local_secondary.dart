@@ -172,20 +172,34 @@ class LocalSecondary implements Secondary {
   ///
   /// Visible for testing so the predicate's semantics can be locked
   /// down independently of the enqueue flow.
+  ///
+  /// **Why we check `cached:` as a string prefix first** instead of
+  /// relying solely on `AtKey.getKeyType`: the regex-based classifier
+  /// in at_commons checks `reservedKey` via `isPartialMatch`, which
+  /// returns true for any input that *contains* a reserved-key
+  /// substring. `cached:public:publickey@<atSign>` contains
+  /// `publickey@<atSign>` (a reserved key) and is therefore
+  /// misclassified as `KeyType.reservedKey` rather than
+  /// `KeyType.cachedPublicKey`. Without the prefix check, that
+  /// misclassification let cached encryption-public-key writes (e.g.
+  /// from `AbstractAtKeyEncryption._fetchEncryptionPublicKey`'s local
+  /// cache write) flow into the sync queue, where the server then
+  /// rejects them with `AT0003 Invalid syntax` and the no-progress
+  /// guard burns retries forever.
   @visibleForTesting
   static bool shouldEnqueueForSync(String atKey, SyncQueueOp op) {
+    if (atKey.startsWith('cached:')) {
+      // Receiver-initiated delete of a cached key is the one
+      // legitimate client→server case for cached:; everything else
+      // (puts, meta updates) is server-originated and shouldn't be
+      // pushed back.
+      return op == SyncQueueOp.delete;
+    }
     final type = AtKey.getKeyType(atKey);
-    if (type == KeyType.selfKey ||
+    return type == KeyType.selfKey ||
         type == KeyType.sharedKey ||
         type == KeyType.publicKey ||
-        type == KeyType.reservedKey) {
-      return true;
-    }
-    if (op == SyncQueueOp.delete &&
-        (type == KeyType.cachedSharedKey || type == KeyType.cachedPublicKey)) {
-      return true;
-    }
-    return false;
+        type == KeyType.reservedKey;
   }
 
   /// Enqueues [atKey] for client→server sync with operation [op] and

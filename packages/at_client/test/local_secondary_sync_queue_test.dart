@@ -292,6 +292,33 @@ void main() {
         reason: 'receiver-initiated delete of a cached public key '
             'IS sync-eligible',
       );
+
+      // Regression: AbstractAtKeyEncryption fetches the recipient's
+      // encryption public key from the remote and writes it locally
+      // as `cached:public:publickey@<sharedWith>`. Without an
+      // explicit `cached:` string-prefix check, the regex-based
+      // `AtKey.getKeyType` misclassifies this key as
+      // `KeyType.reservedKey` (because of `isPartialMatch` on the
+      // embedded `publickey@<sharedWith>` reserved-key substring),
+      // and the predicate would then incorrectly return true. The
+      // value would land in the sync queue, the server would reject
+      // the push with `AT0003 Invalid syntax`, and the entry would
+      // sit in the queue retrying forever — observed in the
+      // dockerstats smoke run.
+      expect(
+        LocalSecondary.shouldEnqueueForSync(
+            'cached:public:publickey@bob', SyncQueueOp.updateAll),
+        isFalse,
+        reason: 'cached:public:publickey@<atSign> writes are server-'
+            'originated (encryption layer caches them from a remote '
+            'PLookup); they MUST NOT be enqueued for push',
+      );
+      expect(
+        LocalSecondary.shouldEnqueueForSync(
+            'cached:public:publickey@bob', SyncQueueOp.delete),
+        isTrue,
+        reason: 'receiver-initiated delete still allowed',
+      );
     });
   });
 }

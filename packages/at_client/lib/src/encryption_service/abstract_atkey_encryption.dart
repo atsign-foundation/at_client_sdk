@@ -244,12 +244,19 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
               .executeVerb(encryptionPublicKeyBuilder))
           .response;
 
-      // Got it - first of all, cache it locally (in case sync is not enabled)
+      // Got it - first of all, cache it locally (in case sync is not enabled).
+      // `cameFromServer: true` because the value WE just fetched from
+      // the remote — the SDK's gate on push enqueue uses it to skip
+      // pushing this back to our atServer (the cached:public: key
+      // came FROM the server's view of the recipient's public key
+      // and isn't ours to publish).
       final uvb = UpdateVerbBuilder()
         ..atKey = AtKey.fromString('cached:public:publickey${atKey.sharedWith}')
         ..value = fetchedPK;
       _logger.info('Updating public key locally: ${uvb.buildCommand()}');
-      await _atClient.getLocalSecondary()!.executeVerb(uvb, sync: false);
+      await _atClient
+          .getLocalSecondary()!
+          .executeVerb(uvb, sync: false, cameFromServer: true);
 
       // Then return it
       return fetchedPK;
