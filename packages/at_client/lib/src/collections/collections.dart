@@ -1679,9 +1679,19 @@ interface class AtCollection<T> {
     sub._parentCollection = this;
     sub._parentDeleteSub?.cancel();
     sub._parentDeleteSub = deletes.listen((e) {
-      if (e.id == parent.id && e.owner == parent.owner) {
-        unawaited(sub._cascadeFromParentDelete());
-      }
+      if (e.id != parent.id || e.owner != parent.owner) return;
+      // Skip cascade for expiry-driven parent deletes. Every tier
+      // (publisher atServer, receiver atServer, every atClient) runs
+      // its own TTL expiry off the same metadata, so descendants
+      // will be removed locally on each side without us pushing
+      // explicit deletes. Cascading on expiry would only enqueue
+      // redundant client→server deletes, which under load can
+      // crowd out legitimate UPDATE pushes in the sync queue —
+      // observed in dockerstats smoke as the queue dominated by
+      // delete entries while new sample updates appeared to stop
+      // flowing.
+      if (e.wasExpired) return;
+      unawaited(sub._cascadeFromParentDelete());
     });
     return sub;
   }
@@ -2099,8 +2109,9 @@ interface class AtCollection<T> {
         DataUpdated() => 'update',
         DataDeleted() => 'delete',
       };
+      final wasExpired = event is DataDeleted && event.wasExpired;
       if (parts.ancestry.isEmpty) {
-        await _handleObjEvent(operation, parts);
+        await _handleObjEvent(operation, parts, wasExpired: wasExpired);
       } else {
         await _handleSubObjEvent(operation, parts, event.key);
       }
@@ -2148,12 +2159,14 @@ interface class AtCollection<T> {
 
   /// Shared L0-item dispatcher used by both the notification and
   /// data-event paths. Emits [CItemUpdated] / [CItemDeleted].
-  Future<void> _handleObjEvent(String operation, _CParts parts) async {
+  Future<void> _handleObjEvent(String operation, _CParts parts,
+      {bool wasExpired = false}) async {
     switch (operation) {
       case 'update':
         _events.add(CItemUpdated(owner: parts.from, id: parts.id));
       case 'delete':
-        _events.add(CItemDeleted(owner: parts.from, id: parts.id));
+        _events.add(CItemDeleted(
+            owner: parts.from, id: parts.id, wasExpired: wasExpired));
       default:
         _logger.shout('No handler for L0 operation $operation');
     }
@@ -4824,7 +4837,22 @@ final class CItemUpdated extends CEvent {
 }
 
 final class CItemDeleted extends CEvent {
-  CItemDeleted({required super.owner, required super.id});
+  /// `true` when this delete was driven by autonomous TTL expiry on
+  /// THIS client (mirrors [DataDeleted.wasExpired]). Sub-collection
+  /// parent-delete cascades use this to skip cascading on expiry —
+  /// every tier (publisher atServer, receiver atServer, every
+  /// atClient) handles TTL cleanup independently, so cascading
+  /// would only enqueue redundant client→server deletes. For
+  /// user-initiated deletes (and remote-pulled deletes, where the
+  /// SDK can't know whether the publisher's intent was deletion or
+  /// expiry) `wasExpired` is `false` and the cascade still fires.
+  final bool wasExpired;
+
+  CItemDeleted({
+    required super.owner,
+    required super.id,
+    this.wasExpired = false,
+  });
 }
 
 /// Fires when a scheduled item's `availableAt` time passes — i.e. an

@@ -116,6 +116,16 @@ class LocalSecondary implements Secondary {
     return q.size;
   }
 
+  /// Synchronous, side-effect-free snapshot of the current queue
+  /// size. Returns `null` when the queue hasn't been opened yet
+  /// (the caller hasn't done any sync-eligible writes). Used by
+  /// `SyncServiceImpl._informSyncProgress` to attach
+  /// `pendingPushCount` to events without awaiting (which would
+  /// change the relative ordering of progress emission and the
+  /// sync round it describes). Production callers that don't mind
+  /// the lazy-open should use [syncQueueSize] instead.
+  int? get syncQueueSyncSnapshot => _syncQueue?.size;
+
   /// Returns up to [limit] atKey strings from the front of the
   /// pending-write queue in FIFO order. Does NOT remove them; the
   /// caller is expected to call [removeFromSyncQueue] per atKey
@@ -449,7 +459,7 @@ class LocalSecondary implements Secondary {
   }
 
   Future<String> _delete(DeleteVerbBuilder builder,
-      {bool cameFromServer = false}) async {
+      {bool cameFromServer = false, bool localOnly = false}) async {
     var deleteKey = builder.buildKey();
     if (!await isEnrollmentAuthorizedForOperation(deleteKey, builder)) {
       throw UnAuthorizedException(
@@ -457,26 +467,46 @@ class LocalSecondary implements Secondary {
     }
     try {
       var deleteResult = await keyStore!.remove(deleteKey);
-      _emit(DataDeleted(builder.atKey));
+      // `wasExpired` mirrors `localOnly` here — the only caller that
+      // sets `localOnly: true` is the expiry sweep (see
+      // [deleteExpiredKeys]). Tagging the DataDeleted event lets
+      // downstream listeners (notably AtCollection's parent-delete
+      // cascade) distinguish autonomous TTL cleanup from
+      // user-initiated deletes and skip redundant work for the
+      // former.
+      _emit(DataDeleted(builder.atKey, wasExpired: localOnly));
       _firedAvailableAt.remove(deleteKey);
       // Enqueue for client→server sync after the keystore op
-      // succeeded. Note: even if the key never existed locally
-      // (deleteResult is whatever `remove` returns for a missing
-      // key, typically a sequence number anyway), we still enqueue
-      // so the server gets the delete — the user's intent is
-      // "make sure it's gone everywhere". The plan accepts the
-      // edge case of a delete for a never-synced record (no
-      // harmful side effect server-side beyond a commitId++).
+      // succeeded — UNLESS this is a local-only deletion that
+      // doesn't need to propagate. Two suppression paths:
+      //
+      // - `cameFromServer: true` — the delete was replayed from
+      //   the server (`_pullToLocal`), no point bouncing it back.
+      // - `localOnly: true` — TTL-driven local cleanup. Both ends
+      //   of an Atsign Protocol key relationship expire keys
+      //   independently from their own metadata; the publisher's
+      //   atServer drops the original at TTL, the receiver's
+      //   atServer drops its `cached:` copy at the same TTL. No
+      //   client→server tell needed.
+      //
+      // For caller-initiated deletes (the default both-flags-false
+      // case) we DO enqueue, even if the key never existed locally
+      // (`deleteResult` may be whatever `remove` returns for a
+      // missing key) — the user's intent is "make sure it's gone
+      // everywhere", and a delete for a never-synced record costs
+      // only a commitId++ server-side.
       //
       // `keyStore.remove` returns `Future<int?>` — the commit-log
       // sequence number; thread it through so the push path can do
       // an O(1) commit-log lookup for the back-write.
-      await _enqueueForSync(
-        deleteKey,
-        SyncQueueOp.delete,
-        cameFromServer: cameFromServer,
-        commitLogSeqNum: deleteResult,
-      );
+      if (!localOnly) {
+        await _enqueueForSync(
+          deleteKey,
+          SyncQueueOp.delete,
+          cameFromServer: cameFromServer,
+          commitLogSeqNum: deleteResult,
+        );
+      }
       return 'data:$deleteResult';
     } on DataStoreException catch (e) {
       _logger.severe('exception in delete:${e.toString()}');
@@ -513,7 +543,13 @@ class LocalSecondary implements Secondary {
         final atKey = AtKey.fromString(keyString);
         final builder = DeleteVerbBuilder()..atKey = atKey;
         _logger.finer('Deleting expired key $atKey');
-        await _delete(builder);
+        // localOnly: true — TTL expiry happens autonomously at every
+        // tier of the Atsign Protocol (publisher atServer, receiver
+        // atServer, every atClient). No client→server push needed;
+        // the publisher's atServer has already dropped (or will drop)
+        // its own copy at the same TTL, and is responsible for the
+        // recipients' `cached:` evictions.
+        await _delete(builder, localOnly: true);
         deleted++;
       } on Exception catch (e) {
         _logger.warning('expiry sweep failed for $keyString: $e');

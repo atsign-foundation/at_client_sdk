@@ -169,6 +169,16 @@ class SyncProgress {
   int? localCommitIdBeforeSync;
   int? localCommitId;
   int? serverCommitId;
+
+  /// Number of pending atKeys still in the local sync queue at the
+  /// moment this event was emitted — i.e. local writes that have
+  /// been enqueued for client→server push but haven't been
+  /// acknowledged by the server yet. Listeners (notably
+  /// [SyncServiceWaitUntilCaughtUp.waitUntilCaughtUp]) use this to
+  /// decide whether the client is truly "caught up": commit-id
+  /// equality alone isn't sufficient when new writes have arrived
+  /// in the queue between sync rounds.
+  int? pendingPushCount;
   AtClientException? atClientException;
 
   @override
@@ -177,7 +187,7 @@ class SyncProgress {
         '\n\t isInitialSync: $isInitialSync, startedAt: $startedAt,'
         ' completedAt: $completedAt, message: $message, '
         '\n\t keyInfoList:$keyInfoList,'
-        '\n\t localCommitIdBeforeSync:$localCommitIdBeforeSync, localCommitId:$localCommitId, serverCommitId:$serverCommitId}';
+        '\n\t localCommitIdBeforeSync:$localCommitIdBeforeSync, localCommitId:$localCommitId, serverCommitId:$serverCommitId, pendingPushCount:$pendingPushCount}';
   }
 }
 
@@ -276,6 +286,21 @@ extension SyncServiceWaitUntilCaughtUp on SyncService {
         }
       }
       if (completer.isCompleted) return;
+      // Don't complete while there are still pending client→server
+      // pushes in the local sync queue. commit-id equality alone is
+      // not sufficient: writes that arrived in the queue AFTER the
+      // sync round started won't have been pushed in the round we're
+      // currently observing, even though localCommitId may have
+      // caught up to the round's snapshot serverCommitId. A
+      // null `pendingPushCount` (older event shape, or queue not
+      // opened yet) is treated as zero pending — i.e. don't block
+      // on it.
+      final pending = progress.pendingPushCount ?? 0;
+      if (pending > 0) {
+        _waitLogger.finer('waitUntilCaughtUp: $pending pending pushes — '
+            'not caught up yet');
+        return;
+      }
       if (snapshotServerCommitId == null) {
         // The "server and local are in sync" early-exit fires a
         // SyncStatus.success event with both commit ids null — treat

@@ -174,6 +174,7 @@ class SyncServiceImpl implements SyncService {
 
   SyncServiceImpl._(this._atClient, this._remoteSecondary) {
     _logger = AtSignLogger('SyncService (${_atClient.getCurrentAtSign()})');
+    _logger.level = 'info';
     _lastReceivedServerCommitIdAtKey =
         AtKey.local('lastreceivedservercommitid', currentAtSign).build();
     _skipDeletesUntilCommitId =
@@ -215,7 +216,7 @@ class SyncServiceImpl implements SyncService {
     _statsNotificationSubscription = _atClient.notificationService
         .subscribe(regex: 'statsNotification')
         .listen((notification) async {
-      _logger.finer('RCVD: stats notification in sync: ${notification.value}');
+      _logger.info('RCVD: stats notification in sync: ${notification.value}');
       final raw = notification.value;
       if (raw == null) return;
       final int observedServerCommitId;
@@ -275,7 +276,7 @@ class SyncServiceImpl implements SyncService {
     final syncRequest = _getSyncRequest();
     try {
       if (await _isInSync()) {
-        _logger.finer('server and local are in sync - ${syncRequest.id}');
+        _logger.info('server and local are in sync - ${syncRequest.id}');
         syncRequest.result!
           ..syncStatus = SyncStatus.success
           ..lastSyncedOn = DateTime.now().toUtc()
@@ -360,6 +361,27 @@ class SyncServiceImpl implements SyncService {
     syncProgress.localCommitIdBeforeSync = localCommitIdBeforeSync;
     syncProgress.localCommitId = localCommitId;
     syncProgress.serverCommitId = serverCommitId;
+    // Cheap (in-memory `LinkedHashSet.length`) snapshot of how many
+    // local writes are still queued for client→server push at the
+    // moment this event is emitted. Surfaces the queue state to
+    // [SyncServiceWaitUntilCaughtUp.waitUntilCaughtUp] so it can
+    // decide "truly caught up" rather than just "the most recent
+    // round acknowledged everything that was queued at its start".
+    final lc = _atClient.getLocalSecondary();
+    if (lc != null) {
+      try {
+        // syncQueueSize is async only because of the lazy-open guard;
+        // once opened it returns from the in-memory length. We don't
+        // await here to keep _informSyncProgress synchronous (its
+        // callers fire it from within sync rounds where awaits would
+        // change ordering); instead we read the cached value via the
+        // opened queue and skip if it isn't open yet.
+        final q = lc.syncQueueSyncSnapshot;
+        if (q != null) syncProgress.pendingPushCount = q;
+      } on Exception {
+        // Defensive — never let the snapshot read derail event emission.
+      }
+    }
     for (var listener in _syncProgressListeners) {
       try {
         listener.onSyncProgressEvent(syncProgress);
@@ -629,6 +651,7 @@ class SyncServiceImpl implements SyncService {
           await localSecondary.removeFromSyncQueue(atKey);
           continue;
         }
+        _logger.info('Batching ${entry.op} for $atKey : $command');
         final batchId = batchRequests.length + 1;
         batchRequests
             .add(BatchRequest(batchId, VerbUtil.replaceNewline(command)));
@@ -1231,7 +1254,7 @@ class SyncServiceImpl implements SyncService {
     var serverCommitId = await _getServerCommitId(forceFresh: true);
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
     final pendingPushCount = await _atClient.getLocalSecondary()!.syncQueueSize;
-    _logger.finest('server commit id: $serverCommitId '
+    _logger.info('server commit id: $serverCommitId '
         'lastReceivedServerCommitId: $lastReceivedServerCommitId '
         'pending push count: $pendingPushCount');
     // We're "in sync" iff the client→server queue is empty AND the
@@ -1370,6 +1393,7 @@ class SyncServiceImpl implements SyncService {
       case '+':
       case '#':
       case '*':
+        _logger.info('Pulling to local: UPDATE: ${serverCommitEntry['atKey']}');
         var builder = UpdateVerbBuilder()
           ..atKey = AtKey.fromString(serverCommitEntry['atKey'])
           ..value = serverCommitEntry['value'];
@@ -1378,6 +1402,7 @@ class SyncServiceImpl implements SyncService {
         await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_ALL);
         break;
       case '-':
+        _logger.info('Pulling to local: DELETE: ${serverCommitEntry['atKey']}');
         var builder = DeleteVerbBuilder()
           ..atKey = AtKey.fromString(serverCommitEntry['atKey']);
         await _pullToLocal(builder, serverCommitEntry, CommitOp.DELETE);

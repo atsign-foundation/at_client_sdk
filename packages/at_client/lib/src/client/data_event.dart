@@ -34,6 +34,18 @@ final class DataUpdated extends DataEvent {
 }
 
 /// A keystore record was removed.
+///
+/// [wasExpired] is `true` when the removal was driven by TTL expiry
+/// (this client's own expiry sweep, [LocalSecondary.deleteExpiredKeys]).
+/// AtCollection's `_cascadeFromParentDelete` listener uses this to
+/// skip the cascade for expiry-driven parent deletes — every tier
+/// (publisher atServer, receiver atServer, every atClient) expires
+/// records autonomously off the same TTL metadata, so cascading the
+/// children would only generate redundant deletes. For
+/// user-initiated parent deletes (`wasExpired == false`) the cascade
+/// still runs.
 final class DataDeleted extends DataEvent {
-  const DataDeleted(super.key);
+  final bool wasExpired;
+
+  const DataDeleted(super.key, {this.wasExpired = false});
 }
