@@ -28,7 +28,7 @@ import 'package:at_client_examples/dockerstats/simulator.dart';
 import 'package:at_client_examples/dockerstats/stats_source.dart';
 
 const String applicationNamespace = 'dockerstats.demos';
-const Duration sampleExpiration = Duration(minutes: 5);
+const Duration sampleExpiration = Duration(minutes: 1);
 
 void main(List<String> args) async {
   final ap = _buildParser();
@@ -127,15 +127,29 @@ void main(List<String> args) async {
     log: log,
   );
 
-  // Graceful shutdown on SIGINT / SIGTERM.
+  // Graceful shutdown on SIGINT / SIGTERM. First signal completes
+  // the `stop` Completer and the main loop unwinds at the next
+  // race-against-stop await. A SECOND SIGINT (or SIGTERM) forces an
+  // immediate process exit — the conventional CLI behaviour for
+  // "user is hitting Ctrl-C twice because the graceful path is
+  // slower than they're willing to wait".
   final stop = Completer<void>();
-  ProcessSignal.sigint.watch().listen((_) {
-    if (!stop.isCompleted) stop.complete();
-  });
+  void onSignal() {
+    if (!stop.isCompleted) {
+      stop.complete();
+      stderr.writeln(
+        '\n${DateTime.now()} | shutdown signal received — flushing in-flight '
+        'work; press Ctrl-C again to force exit',
+      );
+    } else {
+      stderr.writeln('${DateTime.now()} | second signal — forcing exit');
+      exit(130);
+    }
+  }
+
+  ProcessSignal.sigint.watch().listen((_) => onSignal());
   if (!Platform.isWindows) {
-    ProcessSignal.sigterm.watch().listen((_) {
-      if (!stop.isCompleted) stop.complete();
-    });
+    ProcessSignal.sigterm.watch().listen((_) => onSignal());
   }
 
   // Main loop.
@@ -143,9 +157,11 @@ void main(List<String> args) async {
   var totalSamples = 0;
   while (!stop.isCompleted) {
     for (final src in sources) {
+      if (stop.isCompleted) break;
       try {
         final samples = await src.sample();
         for (final s in samples) {
+          if (stop.isCompleted) break;
           await publisher.publishSample(s);
         }
         totalSamples += samples.length;
@@ -155,6 +171,7 @@ void main(List<String> args) async {
         log(st.toString());
       }
     }
+    if (stop.isCompleted) break;
     cyclesCompleted++;
 
     if (cyclesLimit != null && cyclesCompleted >= cyclesLimit) {
@@ -172,23 +189,33 @@ void main(List<String> args) async {
       log('TRACE sync_start t_us=$waitStart');
       atClient.syncService.sync();
       try {
-        await atClient.syncService.waitUntilCaughtUp(
-          timeout: const Duration(seconds: 60),
-          onProgress: (p) {
-            final t = DateTime.now().microsecondsSinceEpoch;
-            log(
-              'TRACE sync_progress t_us=$t status=${p.syncStatus} '
-              'localCommitIdBeforeSync=${p.localCommitIdBeforeSync} '
-              'localCommitId=${p.localCommitId} '
-              'serverCommitId=${p.serverCommitId} '
-              'keyInfoListLen=${p.keyInfoList?.length} '
-              'msg=${p.message}',
-            );
-          },
-        );
-        final waitEnd = DateTime.now().microsecondsSinceEpoch;
-        log('TRACE sync_caught_up t_us=$waitEnd dt_us=${waitEnd - waitStart}');
-        log('sync caught up; emitted $totalSamples sample(s) total');
+        // Race against `stop.future` so a Ctrl-C during the catch-
+        // up wait is observed promptly rather than blocking up to
+        // the 60s timeout.
+        await Future.any([
+          atClient.syncService.waitUntilCaughtUp(
+            timeout: const Duration(seconds: 60),
+            onProgress: (p) {
+              final t = DateTime.now().microsecondsSinceEpoch;
+              log(
+                'TRACE sync_progress t_us=$t status=${p.syncStatus} '
+                'localCommitIdBeforeSync=${p.localCommitIdBeforeSync} '
+                'localCommitId=${p.localCommitId} '
+                'serverCommitId=${p.serverCommitId} '
+                'keyInfoListLen=${p.keyInfoList?.length} '
+                'msg=${p.message}',
+              );
+            },
+          ),
+          stop.future,
+        ]);
+        if (!stop.isCompleted) {
+          final waitEnd = DateTime.now().microsecondsSinceEpoch;
+          log(
+            'TRACE sync_caught_up t_us=$waitEnd dt_us=${waitEnd - waitStart}',
+          );
+          log('sync caught up; emitted $totalSamples sample(s) total');
+        }
       } on TimeoutException {
         log(
           'sync did not catch up within 60s; '
@@ -204,9 +231,10 @@ void main(List<String> args) async {
       // recipient writes can still be enqueued behind it. Sleep a
       // beat so they have a chance to flush before we tear the
       // process down. Bounded by --post-sync-delay (default 5s).
-      if (postSyncDelay > Duration.zero) {
+      // Race against `stop.future` so Ctrl-C cuts the settle short.
+      if (postSyncDelay > Duration.zero && !stop.isCompleted) {
         log('post-sync settle: waiting ${postSyncDelay.inMilliseconds}ms');
-        await Future.delayed(postSyncDelay);
+        await Future.any([Future.delayed(postSyncDelay), stop.future]);
       }
       break;
     }

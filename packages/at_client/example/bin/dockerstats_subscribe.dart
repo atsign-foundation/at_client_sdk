@@ -23,7 +23,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client_examples/dockerstats/models.dart';
 
 const String applicationNamespace = 'dockerstats.demos';
-const Duration sampleExpiration = Duration(minutes: 5);
+const Duration sampleExpiration = Duration(minutes: 1);
 
 void main(List<String> args) async {
   final ap = _buildParser();
@@ -76,19 +76,34 @@ void main(List<String> args) async {
     eventsFromLocalSecondary: true,
   );
 
+  // TODO This should not be necessary but it is
+  atClient.notificationService.startListening();
+
   // ---------------------------------------------------------------------
   // Subscribe.
 
   // Graceful shutdown plumbing — installed BEFORE the listener so
   // --expect can complete the same Completer the signal handlers do.
+  // First SIGINT/SIGTERM completes `stop` and lets the main loop
+  // unwind; a SECOND signal forces exit (the conventional CLI shape
+  // for "user pressed Ctrl-C twice because they don't want to wait").
   final stop = Completer<void>();
-  ProcessSignal.sigint.watch().listen((_) {
-    if (!stop.isCompleted) stop.complete();
-  });
+  void onSignal() {
+    if (!stop.isCompleted) {
+      stop.complete();
+      stderr.writeln(
+        '\n${DateTime.now()} | shutdown signal received; '
+        'press Ctrl-C again to force exit',
+      );
+    } else {
+      stderr.writeln('${DateTime.now()} | second signal — forcing exit');
+      exit(130);
+    }
+  }
+
+  ProcessSignal.sigint.watch().listen((_) => onSignal());
   if (!Platform.isWindows) {
-    ProcessSignal.sigterm.watch().listen((_) {
-      if (!stop.isCompleted) stop.complete();
-    });
+    ProcessSignal.sigterm.watch().listen((_) => onSignal());
   }
 
   var samplesSeen = 0;
