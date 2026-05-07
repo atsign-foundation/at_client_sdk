@@ -124,22 +124,34 @@ class SyncServiceImpl implements SyncService {
   /// A local AtKey to store skipDeletesUntil value
   late final AtKey _skipDeletesUntilCommitId;
 
+  /// [warmStartSync] (default `true`) enqueues a single sync request
+  /// at the end of construction so the first round runs immediately
+  /// — important for read-only subscribers that don't trigger sync
+  /// via writes and whose local cache may be arbitrarily stale at
+  /// startup. The round calls `_isInSync()` →
+  /// `_getServerCommitId(forceFresh: true)`, which sends a stats verb
+  /// to the server so the cache learns its current commitId without
+  /// waiting for the 30s periodic timer or the next stats
+  /// notification. This is NOT the rejected cron pattern (a synthetic
+  /// request on every tick); it fires exactly once at process start,
+  /// then the queue is idle again until a real trigger arrives.
+  ///
+  /// Tests pass `warmStartSync: false` to keep the request queue
+  /// pristine for assertion-style scenarios.
   static Future<SyncService> create(AtClient atClient,
       {@Deprecated('will be removed in a future version')
       AtClientManager? atClientManager,
-      RemoteSecondary? remoteSecondary}) async {
+      RemoteSecondary? remoteSecondary,
+      bool warmStartSync = true}) async {
     remoteSecondary ??= RemoteSecondary(
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
         atChops: atClient.atChops, enrollmentId: atClient.enrollmentId);
     final syncService = SyncServiceImpl._(atClient, remoteSecondary);
     await syncService.statsServiceListener();
     syncService._startPeriodicSyncTimer();
-    // Note: no startup bootstrap is enqueued here. The original cron
-    // implementation enqueued a synthetic request on every tick so the
-    // cron had something to do; in the on-demand trigger model the
-    // queue should sit idle until a real trigger (an app `sync()` call
-    // or a stats notification) arrives. The `hasHadNoSyncRequests`
-    // flag is preserved for any callers that still inspect it.
+    if (warmStartSync) {
+      syncService.sync();
+    }
     return syncService;
   }
 
@@ -1625,6 +1637,7 @@ class SyncServiceImpl implements SyncService {
     // their microtask trigger as usual.
     await statsServiceListener();
     _startPeriodicSyncTimer();
+    sync();
   }
 
   void _drainSyncQueue() {
