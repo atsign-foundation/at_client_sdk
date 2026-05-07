@@ -150,23 +150,42 @@ class LocalSecondary implements Secondary {
   @visibleForTesting
   Future<AtSyncQueue> get syncQueueForTest => _ensureSyncQueueOpen();
 
-  /// Predicate: should a write to [atKey] be enqueued for client→server
-  /// sync? Returns true for self / shared / public / reserved keys
-  /// (the last covers `publickey.<sharedWith>@me` and
-  /// `shared_key.<sharedWith>@me` which the encryption layer needs
-  /// to reach the recipient). Returns false for local keys (`local:`
-  /// prefix), cached-shared / cached-public keys (`cached:` prefix —
-  /// those came FROM the server), and invalid keys (defensive).
+  /// Predicate: should a write to [atKey] (with operation [op]) be
+  /// enqueued for client→server sync? Returns true for self / shared
+  /// / public / reserved keys (the last covers
+  /// `publickey.<sharedWith>@me` and `shared_key.<sharedWith>@me`
+  /// which the encryption layer needs to reach the recipient).
+  ///
+  /// Returns false for local keys (`local:` prefix) and invalid keys
+  /// (defensive).
+  ///
+  /// **`cached:` keys, special case for delete:** cached-shared /
+  /// cached-public keys are normally created by the pull path
+  /// (`_pullToLocal`, with `cameFromServer: true`), so a put-side
+  /// enqueue is suppressed by the `cameFromServer` gate before we
+  /// reach this predicate. But a *receiver-initiated delete* of a
+  /// cached key is genuinely client→server: the user wants the
+  /// server to drop its cached copy. Allow `delete` ops on
+  /// `cached:` keys to flow through; everything else on `cached:`
+  /// stays filtered (rare and ambiguous — the server typically
+  /// owns cached-key writes).
   ///
   /// Visible for testing so the predicate's semantics can be locked
   /// down independently of the enqueue flow.
   @visibleForTesting
-  static bool shouldEnqueueForSync(String atKey) {
+  static bool shouldEnqueueForSync(String atKey, SyncQueueOp op) {
     final type = AtKey.getKeyType(atKey);
-    return type == KeyType.selfKey ||
+    if (type == KeyType.selfKey ||
         type == KeyType.sharedKey ||
         type == KeyType.publicKey ||
-        type == KeyType.reservedKey;
+        type == KeyType.reservedKey) {
+      return true;
+    }
+    if (op == SyncQueueOp.delete &&
+        (type == KeyType.cachedSharedKey || type == KeyType.cachedPublicKey)) {
+      return true;
+    }
+    return false;
   }
 
   /// Enqueues [atKey] for client→server sync with operation [op] and
@@ -194,7 +213,7 @@ class LocalSecondary implements Secondary {
     int? commitLogSeqNum,
   }) async {
     if (cameFromServer) return;
-    if (!shouldEnqueueForSync(atKey)) return;
+    if (!shouldEnqueueForSync(atKey, op)) return;
     try {
       final q = await _ensureSyncQueueOpen();
       final prior = q.readEntry(atKey);

@@ -241,35 +241,56 @@ void main() {
       // Unit-test the predicate directly so the rules are pinned
       // independently of the runtime path.
       expect(
-        LocalSecondary.shouldEnqueueForSync('public:email.wavi@alice'),
+        LocalSecondary.shouldEnqueueForSync(
+            'public:email.wavi@alice', SyncQueueOp.updateAll),
         isTrue,
         reason: 'public keys are sync-eligible',
       );
       expect(
-        LocalSecondary.shouldEnqueueForSync('phone.wavi@alice'),
+        LocalSecondary.shouldEnqueueForSync(
+            'phone.wavi@alice', SyncQueueOp.updateAll),
         isTrue,
         reason: 'self keys are sync-eligible',
       );
       expect(
-        LocalSecondary.shouldEnqueueForSync('@bob:phone.wavi@alice'),
+        LocalSecondary.shouldEnqueueForSync(
+            '@bob:phone.wavi@alice', SyncQueueOp.updateAll),
         isTrue,
         reason: 'shared keys are sync-eligible',
       );
       expect(
-        LocalSecondary.shouldEnqueueForSync('local:marker@alice'),
+        LocalSecondary.shouldEnqueueForSync(
+            'local:marker@alice', SyncQueueOp.updateAll),
         isFalse,
         reason: 'local keys are NOT sync-eligible',
       );
       expect(
-        LocalSecondary.shouldEnqueueForSync('cached:@bob:phone.wavi@alice'),
+        LocalSecondary.shouldEnqueueForSync(
+            'cached:@bob:phone.wavi@alice', SyncQueueOp.updateAll),
         isFalse,
-        reason: 'cached shared keys are NOT sync-eligible '
-            '(they came FROM the server)',
+        reason: 'updates to cached shared keys are NOT sync-eligible '
+            '(those writes typically come from the server pull path)',
       );
       expect(
-        LocalSecondary.shouldEnqueueForSync('cached:public:email.wavi@bob'),
+        LocalSecondary.shouldEnqueueForSync(
+            'cached:public:email.wavi@bob', SyncQueueOp.updateAll),
         isFalse,
-        reason: 'cached public keys are NOT sync-eligible',
+        reason: 'updates to cached public keys are NOT sync-eligible',
+      );
+      expect(
+        LocalSecondary.shouldEnqueueForSync(
+            'cached:@bob:phone.wavi@alice', SyncQueueOp.delete),
+        isTrue,
+        reason: 'receiver-initiated delete of a cached shared key '
+            'IS sync-eligible — pushing the delete tells the server '
+            'to drop its cached copy',
+      );
+      expect(
+        LocalSecondary.shouldEnqueueForSync(
+            'cached:public:email.wavi@bob', SyncQueueOp.delete),
+        isTrue,
+        reason: 'receiver-initiated delete of a cached public key '
+            'IS sync-eligible',
       );
     });
   });
