@@ -94,6 +94,16 @@ void main(List<String> args) async {
   var samplesSeen = 0;
   final sub = nodes.subUpdates.listen((e) async {
     if (e.subName != subSamplesName || e.ancestry.length != 2) return;
+    // Skip events whose ancestry has any null owner. A non-null
+    // CAncestor.owner is required to fetch the typed parent via
+    // getDescendant — see the dartdoc on CAncestor. Null owners on
+    // a CSubItemUpdated are legacy / stale-envelope artefacts (the
+    // `parents` envelope field wasn't populated for that write); on
+    // a CSubItemDeleted they're populated by design (the sub-item
+    // is gone, so there's no envelope to read), but subUpdates
+    // shouldn't carry deletes anyway. Either way: nothing for this
+    // subscriber to do — quietly skip.
+    if (e.ancestry.any((a) => a.owner == null)) return;
     final evtUs = DateTime.now().microsecondsSinceEpoch;
     stderr.writeln(
       'TRACE sub_event id=${e.id} owner=${e.owner} '
@@ -132,8 +142,8 @@ void main(List<String> args) async {
           !stop.isCompleted) {
         stop.complete();
       }
-    } catch (err, st) {
-      stderr.writeln('${DateTime.now()} | fetch failed: $err\n$st');
+    } catch (err) {
+      stderr.writeln('${DateTime.now()} | fetch failed: $err');
     }
   });
 
