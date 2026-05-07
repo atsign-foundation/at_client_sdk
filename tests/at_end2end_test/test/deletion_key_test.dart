@@ -30,7 +30,7 @@ Future<bool> _pollUntilCachedExistsMatches(
   AtClient client,
   String cachedAtKeyStr,
   bool wantedExists, {
-  Duration timeout = const Duration(seconds: 30),
+  Duration timeout = const Duration(seconds: 60),
 }) async {
   final deadline = DateTime.now().add(timeout);
   while (true) {
@@ -42,6 +42,22 @@ Future<bool> _pollUntilCachedExistsMatches(
     if (!DateTime.now().isBefore(deadline)) return false;
     await Future.delayed(Duration(seconds: 1));
   }
+}
+
+/// Forces `autoNotify=true` on the publisher (sharedBy) atServer.
+/// Defensive: a prior CI run's bypasscache_test may have left
+/// `autoNotify=false` persisted on the server (its `finally`-based
+/// reset is unreliable on test timeouts). Without auto-notify, a
+/// publisher's put-with-TTR doesn't trigger the cross-server notify
+/// to the receiver atServer, the receiver's cached entry is never
+/// created, and these tests hang forever waiting for it.
+Future<void> _ensurePublisherAutoNotifyTrue() async {
+  await AtClientManager.getInstance().setCurrentAtSign(sharedByAtSign,
+      namespace, TestPreferences.getInstance().getPreference(sharedByAtSign));
+  await AtClientManager.getInstance()
+      .atClient
+      .getRemoteSecondary()!
+      .executeCommand('config:set:autoNotify=true\n', auth: true);
 }
 
 void main() {
@@ -66,6 +82,9 @@ void main() {
             namespace,
             TestPreferences.getInstance().getPreference(sharedByAtSign)))
         .atClient;
+    // Defensive: ensure auto-notify is on for the publisher atServer
+    // before any TTR-using test runs.
+    await _ensurePublisherAutoNotifyTrue();
   });
 
   test(

@@ -60,6 +60,22 @@ void main() async {
         ..ttr = 1000
         ..ttl = TestConstants.oneMinuteMillis);
 
+    // CRITICAL: register the autoNotify=true reset via addTearDown so
+    // it runs even if this test times out. A `finally` block won't
+    // reliably run when the dart test framework cancels the test
+    // future on timeout — leaving `autoNotify=false` persisted on the
+    // sharedBy atServer for the next CI run, which then breaks every
+    // downstream test that depends on auto-notify firing the cross-
+    // server cache notify (deletion_key CCD, sharing_key TTR).
+    addTearDown(() async {
+      try {
+        await setAtSignOneAutoNotify(true);
+      } catch (e) {
+        // Best-effort; the next test (or the next run's setUp) will
+        // re-attempt if needed.
+      }
+    });
+
     // Ensure autoNotify is set to true to begin with
     await setAtSignOneAutoNotify(true);
 
@@ -101,79 +117,75 @@ void main() async {
     await AtClientManager.getInstance().setCurrentAtSign(sharedByAtSign,
         namespace, TestPreferences.getInstance().getPreference(sharedByAtSign));
 
-    try {
-      // Set autoNotify to false so that the update doesn't propagate to sharedWith AtSign automatically
-      await setAtSignOneAutoNotify(false);
+    // Set autoNotify to false so that the update doesn't propagate to sharedWith AtSign automatically
+    await setAtSignOneAutoNotify(false);
 
-      var newPutResult = await AtClientManager.getInstance()
-          .atClient
-          .put(testByPassCacheAtKey, updatedValue);
-      expect(newPutResult, true);
-      // Sync the data to the remote secondary
-      await E2ESyncService.getInstance()
-          .syncData(AtClientManager.getInstance().atClient.syncService);
+    var newPutResult = await AtClientManager.getInstance()
+        .atClient
+        .put(testByPassCacheAtKey, updatedValue);
+    expect(newPutResult, true);
+    // Sync the data to the remote secondary
+    await E2ESyncService.getInstance()
+        .syncData(AtClientManager.getInstance().atClient.syncService);
 
-      // As atSignTwo
-      await AtClientManager.getInstance().setCurrentAtSign(
-          sharedWithAtSign,
-          namespace,
-          TestPreferences.getInstance().getPreference(sharedWithAtSign));
+    // As atSignTwo
+    await AtClientManager.getInstance().setCurrentAtSign(
+        sharedWithAtSign,
+        namespace,
+        TestPreferences.getInstance().getPreference(sharedWithAtSign));
 
-      // Sync - after this we still should have the old value
-      await E2ESyncService.getInstance()
-          .syncData(AtClientManager.getInstance().atClient.syncService);
+    // Sync - after this we still should have the old value
+    await E2ESyncService.getInstance()
+        .syncData(AtClientManager.getInstance().atClient.syncService);
 
-      // Get result with bypassCache set to false
-      // Since bypassCache is set to false, the value from the returned from the
-      // cached key. So the initial value should be returned.
-      getKey = AtKey()
-        ..key = keyEntity
-        ..sharedBy = sharedByAtSign;
+    // Get result with bypassCache set to false
+    // Since bypassCache is set to false, the value from the returned from the
+    // cached key. So the initial value should be returned.
+    getKey = AtKey()
+      ..key = keyEntity
+      ..sharedBy = sharedByAtSign;
+    getResult = await AtClientManager.getInstance().atClient.get(getKey,
+        getRequestOptions: GetRequestOptions()..bypassCache = false);
+    expect(getResult.value, initialValue);
+    expect(getResult.metadata!.isCached, true);
+
+    // Get result with bypassCache set to true
+    // Since bypassCache is set to true, a lookup should be performed to the
+    // sharedBy AtSign and updated value should be fetched.
+    // syncData on sharedBy returning success confirms the SDK acked
+    // the put, but on long-running real atServers there can be tail
+    // latency between the publisher's atServer committing the value
+    // and that value being readable via the receiver atServer's
+    // outbound `lookup:` (the path bypassCache=true takes). Poll the
+    // lookup until we observe updatedValue, with a generous timeout,
+    // so this test isn't flaky on cross-server propagation tail.
+    getKey = AtKey()
+      ..key = keyEntity
+      ..sharedBy = sharedByAtSign;
+    final pollDeadline = DateTime.now().add(Duration(seconds: 60));
+    while (true) {
       getResult = await AtClientManager.getInstance().atClient.get(getKey,
-          getRequestOptions: GetRequestOptions()..bypassCache = false);
-      expect(getResult.value, initialValue);
-      expect(getResult.metadata!.isCached, true);
-
-      // Get result with bypassCache set to true
-      // Since bypassCache is set to true, a lookup should be performed to the
-      // sharedBy AtSign and updated value should be fetched.
-      // syncData on sharedBy returning success confirms the SDK acked
-      // the put, but on long-running real atServers there can be tail
-      // latency between the publisher's atServer committing the value
-      // and that value being readable via the receiver atServer's
-      // outbound `lookup:` (the path bypassCache=true takes). Poll the
-      // lookup until we observe updatedValue, with a generous timeout,
-      // so this test isn't flaky on cross-server propagation tail.
-      getKey = AtKey()
-        ..key = keyEntity
-        ..sharedBy = sharedByAtSign;
-      final pollDeadline = DateTime.now().add(Duration(seconds: 30));
-      while (true) {
-        getResult = await AtClientManager.getInstance().atClient.get(getKey,
-            getRequestOptions: GetRequestOptions()..bypassCache = true);
-        if (getResult.value == updatedValue) break;
-        if (!DateTime.now().isBefore(pollDeadline)) break;
-        await Future.delayed(Duration(seconds: 1));
-      }
-      expect(getResult.value, updatedValue);
-      expect(getResult.metadata!.isCached, false);
-      // Sync - after this we should now have the new value
-      await E2ESyncService.getInstance()
-          .syncData(AtClientManager.getInstance().atClient.syncService);
-
-      // Get Result with byPassCache set to false again
-      // should also now return the new value, since cached value will have been updated with the
-      // results of the remote lookup, and the cached value will have been synced to the client
-      getKey = AtKey()
-        ..key = keyEntity
-        ..sharedBy = sharedByAtSign;
-      var getResultWithFalse = await AtClientManager.getInstance().atClient.get(
-          getKey,
-          getRequestOptions: GetRequestOptions()..bypassCache = false);
-      expect(getResultWithFalse.value, updatedValue);
-      expect(getResultWithFalse.metadata!.isCached, true);
-    } finally {
-      await setAtSignOneAutoNotify(true);
+          getRequestOptions: GetRequestOptions()..bypassCache = true);
+      if (getResult.value == updatedValue) break;
+      if (!DateTime.now().isBefore(pollDeadline)) break;
+      await Future.delayed(Duration(seconds: 1));
     }
-  });
+    expect(getResult.value, updatedValue);
+    expect(getResult.metadata!.isCached, false);
+    // Sync - after this we should now have the new value
+    await E2ESyncService.getInstance()
+        .syncData(AtClientManager.getInstance().atClient.syncService);
+
+    // Get Result with byPassCache set to false again
+    // should also now return the new value, since cached value will have been updated with the
+    // results of the remote lookup, and the cached value will have been synced to the client
+    getKey = AtKey()
+      ..key = keyEntity
+      ..sharedBy = sharedByAtSign;
+    var getResultWithFalse = await AtClientManager.getInstance().atClient.get(
+        getKey,
+        getRequestOptions: GetRequestOptions()..bypassCache = false);
+    expect(getResultWithFalse.value, updatedValue);
+    expect(getResultWithFalse.metadata!.isCached, true);
+  }, timeout: Timeout(Duration(minutes: 3)));
 }

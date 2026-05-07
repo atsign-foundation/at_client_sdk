@@ -26,6 +26,17 @@ void main() async {
         .testInitializer(currentAtSign, namespace, authType);
     await TestSuiteInitializer.getInstance()
         .testInitializer(sharedWithAtSign, namespace, authType);
+
+    // Defensive: ensure auto-notify is on for the publisher atServer
+    // before any TTR-using test runs. A prior CI run's
+    // bypasscache_test may have left `autoNotify=false` persisted on
+    // the server (its `finally`-based reset is unreliable on test
+    // timeouts).
+    await acm.setCurrentAtSign(currentAtSign, namespace,
+        TestPreferences.getInstance().getPreference(currentAtSign));
+    await acm.atClient
+        .getRemoteSecondary()!
+        .executeCommand('config:set:autoNotify=true\n', auth: true);
   });
 
   /// The purpose of this test verify the following:
@@ -99,17 +110,30 @@ void main() async {
       ..sharedBy = currentAtSign
       ..namespace = namespace
       ..metadata = (Metadata()..isCached = true);
-    await E2ESyncService.getInstance().syncData(acm.atClient.syncService);
+    final cachedVerificationKeyStr = cachedVerificationKey.toString();
 
-    var getResult =
-        await acm.atClient.getKeys(regex: cachedVerificationKey.toString());
-    expect(getResult.contains(cachedVerificationKey.toString()), true);
+    // Poll for the cached entry to appear via getKeys. The cross-
+    // server notify (publisher atServer -> receiver atServer creating
+    // the `cached:@<sharedWith>:...@<sharedBy>` entry) is async and
+    // can take several seconds on long-running real atServers.
+    final pollDeadline = DateTime.now().add(Duration(seconds: 60));
+    List<String> getResult = [];
+    while (true) {
+      await E2ESyncService.getInstance().syncData(acm.atClient.syncService);
+      getResult = await acm.atClient.getKeys(regex: cachedVerificationKeyStr);
+      if (getResult.contains(cachedVerificationKeyStr)) break;
+      if (!DateTime.now().isBefore(pollDeadline)) break;
+      await Future.delayed(Duration(seconds: 1));
+    }
+    expect(getResult.contains(cachedVerificationKeyStr), true,
+        reason: 'cached key never appeared in receiver local hive within '
+            'the propagation window');
 
     AtValue getCachedKeyResponse =
         await acm.atClient.get(AtKey.fromString(getResult.first));
     expect(getCachedKeyResponse.value, '0873');
     expect(getCachedKeyResponse.metadata!.isCached, true);
-  }, timeout: Timeout(Duration(minutes: 1)));
+  }, timeout: Timeout(Duration(minutes: 2)));
 
   /// The purpose of this test verify the following:
   /// 1. Backward compatibility for [metadata.sharedKeyEnc] and [metadata?.pubKeyCS]
