@@ -57,6 +57,15 @@ void main() {
     assert(putResult == true);
     await E2ESyncService.getInstance().syncData(sharedByAtClient.syncService);
 
+    // Give the cross-server notify time to propagate from sharedBy's
+    // atServer to sharedWith's atServer (the latter creates the
+    // `cached:@<sharedWith>:...@<sharedBy>` entry on its side).
+    // Without this wait the receiver-side syncData below can return
+    // "in sync" before the cached entry has appeared on the receiver's
+    // atServer, leaving local hive empty and the get below failing.
+    // Pattern matches `bypasscache_test.dart`.
+    await Future.delayed(Duration(seconds: 2));
+
     // Switch to sharedWith AtSign and fetch the cached key
     sharedWithAtClient = (await AtClientManager.getInstance().setCurrentAtSign(
             sharedWithAtSign,
@@ -81,6 +90,9 @@ void main() {
         .atClient;
     await sharedByAtClient.delete(atKey);
     await E2ESyncService.getInstance().syncData(sharedByAtClient.syncService);
+
+    // Same propagation delay before the receiver checks the delete.
+    await Future.delayed(Duration(seconds: 2));
 
     // Switch to sharedWith AtSign and let the deleted cached key sync to local Secondary
     sharedWithAtClient = (await AtClientManager.getInstance().setCurrentAtSign(
