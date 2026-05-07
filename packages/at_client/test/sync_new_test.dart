@@ -4326,22 +4326,25 @@ void main() {
               'proxy that can drift past actual local progress');
     });
     test(
-        'A test to verify sync requests enqueued during a round are NOT '
-        'cleared when the round completes (regression for tail-of-burst '
-        'write loss)', () async {
-      // Regression scenario: prior to the requestedOnOrBefore filter on
-      // `_clearQueue`, every queued sync request was wiped at the end of
-      // each round — including requests enqueued *during* the round,
-      // whose corresponding local writes were not in the round's
-      // unCommittedEntries snapshot. Those writes then sat in the
-      // commit log unpushed until the 30-second periodic safety-net
-      // timer fired. Symptom: dockerstats smoke tests dropped 2-9
-      // samples per run, all from the tail of the publisher's burst.
+        'A test to verify _clearQueue retains one follow-up trigger '
+        'when extras are pending (regression for tail-of-burst write '
+        'loss)', () async {
+      // Regression scenario: tail-of-burst writes whose local-secondary
+      // sync-trigger arrives AFTER `processSyncRequests` has snapshotted
+      // its `unCommittedEntries` would, with a blanket-clear `_clearQueue`
+      // (no follow-up retention), sit on disk with `commitId == null`
+      // until the periodic safety-net timer fired (default 30s).
+      // Symptom: dockerstats smoke tests dropped 2-9 samples per run,
+      // all from the tail of the publisher's burst.
       //
-      // The test exercises the early-exit path of processSyncRequests
-      // (server already in sync) so we don't need to mock the full
-      // syncInternal pipeline. The path still flows through
-      // _syncComplete -> _clearQueue, which is the code under test.
+      // The fix: when extras are pending at end-of-round, retain ONE
+      // as a follow-up trigger. The drain at the bottom of
+      // `processSyncRequests` then schedules another round which takes
+      // a fresh snapshot and picks up the late writes. The remaining
+      // extras get the same `onError`-with-superseded notification as
+      // before. Convergence: if no new writes landed during the round,
+      // the follow-up round's `_isInSync` short-circuits and the kept
+      // request gets cleared — no extra work, no infinite chain.
       when(() => mockNotificationService.subscribe(regex: 'statsNotification'))
           .thenAnswer(
               (_) => StreamController<at_notification.AtNotification>().stream);
@@ -4354,27 +4357,61 @@ void main() {
           remoteSecondary: mockRemoteSecondary) as SyncServiceImpl;
       syncServiceImpl.syncUtil = SyncUtil(atCommitLog: TestResources.commitLog);
 
-      // Subsumed: requestedOn well in the past.
-      final subsumed = SyncRequest()
+      // Seed: the request that triggers the round. It's the
+      // `alreadyHandled` one — _clearQueue must drop it.
+      final handled = SyncRequest()
         ..result = SyncResult()
-        ..requestedOn =
-            DateTime.now().toUtc().subtract(const Duration(seconds: 10));
-      // Retained: requestedOn in the future, guaranteed > roundStartedAt.
-      final retained = SyncRequest()
+        ..requestSource = SyncRequestSource.app
+        ..requestedOn = DateTime.now().toUtc();
+      // Two extras simulating writes that landed during the round.
+      // Per the fix, ONE is retained as a follow-up trigger and the
+      // other gets onError-superseded.
+      var extra1OnErrorCalled = false;
+      final extra1 = SyncRequest()
         ..result = SyncResult()
-        ..requestedOn = DateTime.now().toUtc().add(const Duration(seconds: 30));
+        ..requestSource = SyncRequestSource.app
+        ..requestedOn = DateTime.now().toUtc()
+        ..onError = (_) {
+          extra1OnErrorCalled = true;
+        };
+      final extra2 = SyncRequest()
+        ..result = SyncResult()
+        ..requestSource = SyncRequestSource.app
+        ..requestedOn = DateTime.now().toUtc();
 
-      syncServiceImpl.syncRequests.addLast(subsumed);
-      syncServiceImpl.syncRequests.addLast(retained);
-      expect(syncServiceImpl.getSyncRequestQueueSize(), 2);
+      syncServiceImpl.syncRequests
+        ..addLast(handled)
+        ..addLast(extra1)
+        ..addLast(extra2);
+      expect(syncServiceImpl.getSyncRequestQueueSize(), 3);
 
       await syncServiceImpl.processSyncRequests();
+      // Yield so any drain-scheduled microtask can run; the follow-up
+      // round's _isInSync short-circuits (server in sync per mocks),
+      // and clears the retained trigger as `alreadyHandled`.
+      await Future.delayed(Duration.zero);
+      await Future.delayed(Duration.zero);
 
-      expect(syncServiceImpl.getSyncRequestQueueSize(), 1,
-          reason: 'request enqueued during the round should be retained');
-      expect(syncServiceImpl.syncRequests.first, same(retained),
-          reason: 'the retained request should be the one with future '
-              'requestedOn — the subsumed (past) one is cleared');
+      // Either:
+      //   (a) processSyncRequests handled `handled`; _clearQueue kept
+      //       extra2 as a follow-up; drain ran another round which
+      //       handled extra2 (alreadyHandled, dropped) — final queue
+      //       size = 0; OR
+      //   (b) processSyncRequests handled extra2 first (it was
+      //       app-source, _getSyncRequest finds the first app match);
+      //       _clearQueue kept one of the others as follow-up; drain
+      //       ran another round which short-circuits — final queue
+      //       size = 0.
+      // Either way the queue must drain to empty (no infinite chain).
+      // What we verify is the SUPERSEDED extra got its onError fired,
+      // and the queue is empty post-convergence.
+      expect(extra1OnErrorCalled, true,
+          reason: 'extras beyond the kept follow-up trigger must get '
+              'onError(superseded), as before the fix');
+      expect(syncServiceImpl.getSyncRequestQueueSize(), 0,
+          reason: 'with no fresh writes during the round, the kept '
+              'follow-up trigger must converge to an empty queue '
+              'instead of chaining indefinitely');
     });
 
     tearDown(() {

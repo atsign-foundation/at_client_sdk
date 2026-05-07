@@ -12,6 +12,7 @@ import 'dart:convert';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -73,7 +74,16 @@ class LocalSecondary implements Secondary {
   Enrollment? enrollment;
 
   /// Executes a verb builder on the local secondary.
-  /// If [sync] is true then a sync request will be queued.
+  /// If [sync] is true then a sync request will be queued — except for
+  /// writes to `local:` keys, which are never sync candidates (they're
+  /// filtered out of the sync regex by definition). Triggering a sync
+  /// request for a local-key write is pure overhead pre-fix; post the
+  /// `_clearQueue` fix in `SyncServiceImpl` (which retains requests
+  /// arriving during a round) it actively chains an empty follow-up
+  /// round, with knock-on effects for tests that rely on a single sync
+  /// round per `syncData()` call (cf. the
+  /// `_lastReceivedServerCommitId` cursor put inside `_syncFromServer`,
+  /// which fires from inside the very round that's wrapping it).
   @override
   Future<String?> executeVerb(VerbBuilder builder, {bool? sync}) async {
     String? verbResult;
@@ -87,10 +97,27 @@ class LocalSecondary implements Secondary {
         } else if (builder is DeleteVerbBuilder) {
           verbResult = await _delete(builder);
         }
-        // 3. sync latest update/delete if strategy is immediate
-        if (sync != null && sync) {
+        // 3. sync latest update/delete if strategy is immediate AND
+        //    the key is actually a sync candidate (not a `local:` key).
+        final isLocalKey =
+            (builder is UpdateVerbBuilder && builder.atKey.isLocal) ||
+                (builder is DeleteVerbBuilder && builder.atKey.isLocal);
+        if (sync != null && sync && !isLocalKey) {
           _logger.finer('calling sync immediate from local secondary');
-          _atClient.syncService.sync();
+          // Use the write-trigger entry point so [_clearQueue] knows
+          // not to discard this request just because it landed during
+          // an in-flight round — the write itself may not be in that
+          // round's `unCommittedEntries` snapshot, and we need a
+          // follow-up round to flush it.
+          final syncSvc = _atClient.syncService;
+          if (syncSvc is SyncServiceImpl) {
+            syncSvc.syncFromWrite();
+          } else {
+            // Third-party implementations of SyncService still get the
+            // legacy `sync()` trigger — we can't tag the request from
+            // here, so they fall back to the pre-fix behaviour.
+            syncSvc.sync();
+          }
         }
       } else if (builder is LLookupVerbBuilder) {
         verbResult = await _llookup(builder);

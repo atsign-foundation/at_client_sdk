@@ -125,7 +125,21 @@ class SyncResult {
   }
 }
 
-enum SyncRequestSource { app, system }
+/// Identifies the origin of a [SyncRequest], so [SyncServiceImpl] can
+/// distinguish requests that need an explicit follow-up round (write-
+/// triggers, which represent specific local writes whose commit-log
+/// snapshot may not be in the current round) from request-from-app
+/// or stats-notification requests (which are idempotent "please sync"
+/// triggers and can be coalesced wholesale at end-of-round).
+///
+/// - [app]: an app or test caller invoked [SyncService.sync] directly.
+/// - [system]: a stats notification from the atServer enqueued a sync.
+/// - [writeTrigger]: a local write (`LocalSecondary.executeVerb`)
+///   completed and asked the sync service to flush the new entry.
+///   These requests survive the end-of-round queue clear so the
+///   newly-written entry, if it landed after the round's
+///   `unCommittedEntries` snapshot, gets a fresh round of its own.
+enum SyncRequestSource { app, system, writeTrigger }
 
 class SyncRequest {
   late String id;
