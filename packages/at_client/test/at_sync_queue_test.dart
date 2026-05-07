@@ -1,6 +1,6 @@
 // Unit tests for AtSyncQueue — the persisted+in-memory queue that
 // SyncServiceImpl will drain in phase 4 of the
-// distributed-tickling-moler refactor. These tests cover the
+// decouple-sync-from-commit-log refactor. These tests cover the
 // queue mechanics in isolation; SyncServiceImpl integration is
 // validated separately in phase 4 tests.
 //
@@ -129,6 +129,29 @@ void main() {
       expect(q.size, 1, reason: 'in-memory dedup by atKey');
       expect(q.readEntry('phone.demo@alice')!.op, SyncQueueOp.delete);
       await q.close();
+    });
+
+    test('commitLogSeqNum round-trips through persist + replay', () async {
+      final q = AtSyncQueue(atSign: '@alice');
+      await q.open();
+
+      await q.enqueue('phone.demo@alice', SyncQueueOp.update,
+          ts: 100, commitLogSeqNum: 42);
+      await q.enqueue('email.demo@alice', SyncQueueOp.delete, ts: 200);
+
+      // In-memory after enqueue.
+      expect(q.readEntry('phone.demo@alice')!.commitLogSeqNum, 42);
+      expect(q.readEntry('email.demo@alice')!.commitLogSeqNum, isNull,
+          reason: 'enqueues without seq carry null');
+
+      // Close and reopen with a fresh instance — verifies persistence
+      // and replay both preserve the seqNum.
+      await q.close();
+      final q2 = AtSyncQueue(atSign: '@alice');
+      await q2.open();
+      expect(q2.readEntry('phone.demo@alice')!.commitLogSeqNum, 42);
+      expect(q2.readEntry('email.demo@alice')!.commitLogSeqNum, isNull);
+      await q2.close();
     });
   });
 

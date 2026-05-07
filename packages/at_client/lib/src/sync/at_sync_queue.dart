@@ -27,9 +27,34 @@ class SyncQueueEntry {
   /// recent enqueue for [atKey]. Used for ordering on startup replay.
   final int ts;
 
-  SyncQueueEntry({required this.atKey, required this.op, required this.ts});
+  /// Sequence number of the commit-log entry that the local
+  /// keystore wrote for this enqueue. Lets `_pushFromSyncQueue`
+  /// look up the entry directly via `getCommitEntry(seqNum)` (O(1))
+  /// to back-write the server-assigned commitId after a successful
+  /// push, instead of scanning every entry in the commit log to find
+  /// the latest one for [atKey].
+  ///
+  /// Nullable because: (a) the keystore's `putAll` / `putMeta` /
+  /// `remove` methods have `Future<int?>` return type — `skipCommit`
+  /// callers and edge cases (delete of a never-existing key) yield
+  /// null; (b) entries persisted by an earlier release of this client
+  /// (before the seq field was added) won't carry it. In both cases
+  /// the back-write falls back to the slow path
+  /// (`getLatestCommitEntry` scan).
+  final int? commitLogSeqNum;
 
-  Map<String, dynamic> _toJson() => {'op': op.name, 'ts': ts};
+  SyncQueueEntry({
+    required this.atKey,
+    required this.op,
+    required this.ts,
+    this.commitLogSeqNum,
+  });
+
+  Map<String, dynamic> _toJson() {
+    final m = <String, dynamic>{'op': op.name, 'ts': ts};
+    if (commitLogSeqNum != null) m['seq'] = commitLogSeqNum;
+    return m;
+  }
 
   String _serialise() => jsonEncode(_toJson());
 
@@ -42,7 +67,12 @@ class SyncQueueEntry {
         'Unknown SyncQueueOp "$opName" for $atKey in sync queue',
       ),
     );
-    return SyncQueueEntry(atKey: atKey, op: op, ts: map['ts'] as int);
+    return SyncQueueEntry(
+      atKey: atKey,
+      op: op,
+      ts: map['ts'] as int,
+      commitLogSeqNum: map['seq'] as int?,
+    );
   }
 }
 
@@ -161,12 +191,25 @@ class AtSyncQueue {
   ///
   /// Use [DateTime.now().millisecondsSinceEpoch] as the timestamp
   /// unless [ts] is supplied (for tests).
-  Future<void> enqueue(String atKey, SyncQueueOp op, {int? ts}) async {
+  ///
+  /// [commitLogSeqNum] is the sequence number of the commit-log entry
+  /// that the keystore op produced; threading it through here lets
+  /// the push path back-write the server-assigned commitId without a
+  /// full commit-log scan. Pass `null` when the caller doesn't have
+  /// one (e.g. tests, or a `skipCommit` write whose op didn't append
+  /// a commit-log entry).
+  Future<void> enqueue(
+    String atKey,
+    SyncQueueOp op, {
+    int? ts,
+    int? commitLogSeqNum,
+  }) async {
     _ensureOpen();
     final entry = SyncQueueEntry(
       atKey: atKey,
       op: op,
       ts: ts ?? DateTime.now().millisecondsSinceEpoch,
+      commitLogSeqNum: commitLogSeqNum,
     );
     await _box!.put(atKey, entry._serialise());
     _inMemoryQueue.add(atKey);

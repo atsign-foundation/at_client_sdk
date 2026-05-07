@@ -126,7 +126,7 @@ class SyncResult {
 }
 
 /// Identifies the origin of a [SyncRequest]. After the
-/// `distributed-tickling-moler` refactor every sync request is
+/// `decouple-sync-from-commit-log` refactor every sync request is
 /// idempotent — "what to push" is owned by `LocalSecondary`'s
 /// `AtSyncQueue`, so requests are just "please drain" triggers that
 /// can be coalesced wholesale at end-of-round. The previous

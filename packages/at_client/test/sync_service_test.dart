@@ -113,7 +113,7 @@ void main() async {
   group('A group of positive tests on sync service', () {
     var localCommitId = -1;
     test(
-        skip: 'distributed-tickling-moler: this test mocks LocalSecondary '
+        skip: 'decouple-sync-from-commit-log: this test mocks LocalSecondary '
             'and SyncUtil for the legacy commit-log-driven push path. '
             'Server→client behaviour is unchanged in production but the '
             'fixture also exercises post-pull cursor writes via '
@@ -191,7 +191,7 @@ void main() async {
 
   group('A group of tests to validate exception chaining in sync service', () {
     test(
-        skip: 'distributed-tickling-moler: same root as the previous test '
+        skip: 'decouple-sync-from-commit-log: same root as the previous test '
             '— the fixture relies on the (removed) commit-log push path. '
             'Server-timeout error chaining is itself unchanged and is '
             'exercised by atclient_sync_test.dart.',
@@ -259,7 +259,7 @@ void main() async {
   group('A group of tests to validate exception during sync processing', () {
     var localCommitId = -1;
     test(
-        skip: 'distributed-tickling-moler: invalid-batch-json error path '
+        skip: 'decouple-sync-from-commit-log: invalid-batch-json error path '
             'is part of `_pushFromSyncQueue` now (was `_syncToRemote`). '
             'Same shape (sendBatch → JSON decode → exception); the '
             'fixture mocked the legacy path. Wire-error chaining is '
@@ -372,7 +372,7 @@ void main() async {
     });
 
     test(
-        skip: 'distributed-tickling-moler: mid-sync stop fixture mocks the '
+        skip: 'decouple-sync-from-commit-log: mid-sync stop fixture mocks the '
             'commit-log push path. stop()/start() lifecycle behaviour is '
             'unchanged in production and exercised end-to-end by '
             'atclient_sync_conflict_test.dart (which uses stop() to '

@@ -73,7 +73,7 @@ class SyncServiceImpl implements SyncService {
   /// [_pushFromSyncQueue]; advances on each per-entry success in
   /// the batch response. `null` until the first successful push.
   ///
-  /// Pre-`distributed-tickling-moler` this number was derived by
+  /// Pre-`decouple-sync-from-commit-log` this number was derived by
   /// scanning the local commit log for the highest entry whose
   /// `commitId` field was non-null — `_syncToRemote` wrote each
   /// server-assigned commitId back into its source `CommitEntry`
@@ -518,7 +518,7 @@ class SyncServiceImpl implements SyncService {
     // Snapshot of pending-push atKeys at sync-round start. Used by
     // [_syncFromServer] for conflict detection (a server-pulled key
     // is in conflict iff it's in this snapshot — i.e. we have a
-    // pending local write for it). Pre-`distributed-tickling-moler`
+    // pending local write for it). Pre-`decouple-sync-from-commit-log`
     // this snapshot was the commit log's `unCommittedEntries` list;
     // the new sync queue carries the same information directly.
     final pendingPushAtKeys =
@@ -620,7 +620,11 @@ class SyncServiceImpl implements SyncService {
         final batchId = batchRequests.length + 1;
         batchRequests
             .add(BatchRequest(batchId, VerbUtil.replaceNewline(command)));
-        batchSources.add(_BatchSource(atKey: atKey, op: entry.op));
+        batchSources.add(_BatchSource(
+          atKey: atKey,
+          op: entry.op,
+          commitLogSeqNum: entry.commitLogSeqNum,
+        ));
       }
       if (batchRequests.isEmpty) {
         // Every queued atKey we pulled was a phantom; loop and try
@@ -664,6 +668,16 @@ class SyncServiceImpl implements SyncService {
               commitId > _highestPushedCommitId!) {
             _highestPushedCommitId = commitId;
           }
+          // Back-write the server-assigned commitId onto the
+          // commit-log entry that the originating local write
+          // produced. Required by the commit-log compaction job
+          // (which only compacts entries with non-null commitId) and
+          // by `SyncUtil.getLastSyncedEntry`. The seqNum threaded
+          // through the sync queue gives O(1) lookup; missing seqNum
+          // (older queue entries / skipCommit writes) falls back to
+          // a commit-log scan.
+          await _backWriteCommitIdForPushedEntry(
+              source.atKey, commitId, source.commitLogSeqNum);
           await localSecondary.removeFromSyncQueue(source.atKey);
           keyInfoList.add(KeyInfo(
             source.atKey,
@@ -763,7 +777,7 @@ class SyncServiceImpl implements SyncService {
   /// `LocalSecondary`'s sync queue. Used here for conflict detection:
   /// a server-pulled key is in conflict iff it appears in this set
   /// (i.e. we have a local write the server doesn't know about).
-  /// Pre-`distributed-tickling-moler` this was a `List<CommitEntry>`
+  /// Pre-`decouple-sync-from-commit-log` this was a `List<CommitEntry>`
   /// pulled from the commit log; the new sync queue carries the same
   /// information directly.
   Future<List<KeyInfo>> _syncFromServer(int serverCommitId,
@@ -1268,37 +1282,61 @@ class SyncServiceImpl implements SyncService {
   @visibleForTesting
   Future<int> getLastReceivedServerCommitId() async {
     // If "lastReceivedServerCommitId" key exists, fetch the data and return the
-    // last received server commit id.
+    // last received server commit id. If not, return -1 (no pull has
+    // ever applied to this client). Pre-`decouple-sync-from-commit-log`
+    // this fell back to `_getLocalCommitId`; that fallback only made
+    // sense when `_getLocalCommitId` read the local commit log (a
+    // post-pull entry was a reasonable proxy for "last received
+    // server cursor"). Post-refactor `_getLocalCommitId` itself
+    // composes this method's value, so the fallback would recurse
+    // and is no longer correct semantically.
     try {
       var response = await _atClient.get(_lastReceivedServerCommitIdAtKey);
       _logger.finer(
           'Returning lastReceivedServerCommitId from AtKey: ${response.value}');
       return int.parse(response.value);
     } on AtKeyNotFoundException {
-      // If the key does not exist, fall back to previous logic, which is
-      // return last synced commit id.
-      int localCommitId = await _getLocalCommitId();
-      _logger.finer(
-          'lastReceivedServerCommitId AtKey not found. Returning localCommitId: $localCommitId');
-      return localCommitId;
+      _logger.finer('lastReceivedServerCommitId AtKey not found. Returning -1');
+      return -1;
     }
   }
 
-  /// Returns the highest server commit id we've assigned to one of
-  /// OUR local writes (via push success), or -1 if we've never
-  /// pushed. Reads [_highestPushedCommitId].
+  /// Returns the highest commit id this client has observed for ITS
+  /// OWN view of server state — the union of:
   ///
-  /// Distinct from [_latestKnownServerCommitId], which is the
-  /// broader high-water mark across stats notifications + pulls +
-  /// pushes. Pre-`distributed-tickling-moler` this number lived in
-  /// the local commit log (each successfully pushed `CommitEntry`
-  /// got its `commitId` field set); now it lives in a dedicated
-  /// in-memory field promoted in `_pushFromSyncQueue`.
+  /// * [_highestPushedCommitId] — server commit ids assigned to our
+  ///   successful pushes (see `_pushFromSyncQueue`).
+  /// * `lastReceivedServerCommitId` — the cursor written after each
+  ///   pull batch in `_syncFromServer`'s finally block.
   ///
-  /// Stays `Future<int>` (not `int`) to keep the call-site signature
-  /// stable across the refactor; the body is now synchronous.
+  /// Returns `-1` when neither has ever advanced (truly fresh
+  /// client). The `localCommitIdBeforeSync == -1` check uses this
+  /// value to set the `isInitialSync` flag on the first round.
+  ///
+  /// Pre-`decouple-sync-from-commit-log` this number was the local
+  /// commit log's max commitId, which naturally tracked both
+  /// directions because `_pullToLocal` back-wrote the server-assigned
+  /// commitId into each pulled entry. The refactor split push and
+  /// pull bookkeeping; we recompose them here so the externally
+  /// observed `localCommitId` (in `SyncProgress` events) keeps the
+  /// same union semantic — the existing test harnesses
+  /// (`FunctionalTestSyncService`, `E2ESyncService`) check
+  /// `localCommitId == serverCommitId` as their "in sync" signal,
+  /// which only holds with the union.
+  ///
+  /// Reads the cursor key inline rather than via
+  /// [getLastReceivedServerCommitId] to keep the dependency one-way
+  /// (callee → callee, not mutual).
   Future<int> _getLocalCommitId() async {
-    return _highestPushedCommitId ?? -1;
+    final pushed = _highestPushedCommitId ?? -1;
+    int pulled = -1;
+    try {
+      final response = await _atClient.get(_lastReceivedServerCommitIdAtKey);
+      pulled = int.parse(response.value);
+    } on AtKeyNotFoundException {
+      // pulled stays -1
+    }
+    return pushed > pulled ? pushed : pulled;
   }
 
   @visibleForTesting
@@ -1433,7 +1471,7 @@ class SyncServiceImpl implements SyncService {
     String? verbResult;
     try {
       // `cameFromServer: true` flags this write as a server-replay so
-      // `LocalSecondary` (post phase 4 of distributed-tickling-moler)
+      // `LocalSecondary` (post phase 4 of decouple-sync-from-commit-log)
       // skips enqueuing it for client→server sync — the server is
       // where this entry just came from. `sync: false` is the legacy
       // signal expressing the same intent against today's
@@ -1451,17 +1489,86 @@ class SyncServiceImpl implements SyncService {
     if (verbResult == null) {
       return;
     }
-    // Pre-`distributed-tickling-moler` we'd find the commit-log entry
-    // created by the local apply (`getCommitEntry(sequenceNumber)`)
-    // and write the server-side commitId into its `commitId` field —
-    // so the next `getLastSyncedEntry` would return the right
-    // high-water mark. The new push path doesn't read commit-log
-    // entries' commitId fields anymore (it tracks
+    // Back-write the server-side commitId into the local commit-log
+    // entry that `executeVerb` just appended. The new sync push path
+    // no longer reads commit-log commitIds (it tracks
     // `_highestPushedCommitId` directly + `lastReceivedServerCommitId`
-    // for the cursor), so the back-write is dead. Drop it. The
-    // commit-log entry still exists in the keystore's transaction
-    // log (HiveKeystore writes it on every put); it's just no longer
-    // a sync-correctness concern.
+    // for the cursor) — but commit-log compaction still needs every
+    // synced entry to carry a commitId (its `removeWhere(value.commitId
+    // == null)` step would otherwise skip every server-pulled entry,
+    // leaving the log to grow unboundedly). `SyncUtil.getLastSyncedEntry`
+    // also still depends on this for the downstream functional tests
+    // and any external consumers.
+    final sequenceNumber = int.parse(verbResult.split(':')[1]);
+    final commitEntry = await syncUtil.getCommitEntry(
+        sequenceNumber, _atClient.getCurrentAtSign()!);
+    if (commitEntry == null) {
+      return;
+    }
+    commitEntry.operation = operation;
+    final serverCommitId = serverCommitEntry['commitId'];
+    if (serverCommitId == null) {
+      return;
+    }
+    await syncUtil.updateCommitEntry(
+        commitEntry, serverCommitId, _atClient.getCurrentAtSign()!);
+  }
+
+  /// Stamps the server-assigned [commitId] onto the commit-log entry
+  /// that the local keystore op for [atKey] produced. Used by
+  /// [_pushFromSyncQueue] after each successful per-entry batch
+  /// response.
+  ///
+  /// **Fast path**: when [seqNum] is supplied (the keystore op's
+  /// `Future<int?>` return value, threaded through the sync queue),
+  /// the entry is fetched directly via [SyncUtil.getCommitEntry] —
+  /// O(1).
+  ///
+  /// **Slow path**: when [seqNum] is null (older queue entries
+  /// persisted before the field was added; or a `skipCommit` write
+  /// whose op didn't append a commit-log entry — though those don't
+  /// reach the sync queue), fall back to scanning the commit log for
+  /// the latest entry matching [atKey] — O(N log N).
+  ///
+  /// The back-write is required by:
+  /// - the commit-log compaction job (only compacts entries with
+  ///   non-null commitId);
+  /// - `SyncUtil.getLastSyncedEntry`, used by downstream functional
+  ///   tests and external consumers.
+  ///
+  /// Best-effort: failures are logged at warning, not surfaced to
+  /// the caller. Sync correctness doesn't depend on the back-write
+  /// succeeding (the actual write reached the server; only the
+  /// commit-log metadata is at stake).
+  Future<void> _backWriteCommitIdForPushedEntry(
+      String atKey, int commitId, int? seqNum) async {
+    try {
+      final atSign = _atClient.getCurrentAtSign()!;
+      if (seqNum != null) {
+        final entry = await syncUtil.getCommitEntry(seqNum, atSign);
+        if (entry == null) {
+          return;
+        }
+        await syncUtil.updateCommitEntry(entry, commitId, atSign);
+        return;
+      }
+      final atCommitLog =
+          await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+      if (atCommitLog == null) {
+        return;
+      }
+      final entry = await syncUtil.getLatestCommitEntry(atCommitLog, atKey);
+      if (entry is NullCommitEntry) {
+        return;
+      }
+      await syncUtil.updateCommitEntry(entry, commitId, atSign);
+    } on Exception catch (e) {
+      // Best-effort metadata update; sync correctness doesn't depend
+      // on this back-write succeeding. Log and continue.
+      final cause = (e is AtException) ? e.getTraceMessage() : e.toString();
+      _logger.warning(
+          'back-write of commitId $commitId for $atKey failed: $cause');
+    }
   }
 
   @visibleForTesting
@@ -1591,11 +1698,21 @@ class SyncServiceImpl implements SyncService {
 /// [_pushFromSyncQueue]. The wire response only carries the batch
 /// `id`, but we need to know which atKey + op corresponds to that
 /// id when handling per-entry success/failure (`removeFromSyncQueue`
-/// / `KeyInfo` build). This is a tiny private helper, not part of
-/// the public surface.
+/// / `KeyInfo` build). The [commitLogSeqNum] field lets the success
+/// handler back-write the server-assigned commitId onto the
+/// originating commit-log entry in O(1) (`getCommitEntry(seqNum)`)
+/// instead of O(N log N) (full-log scan for the latest entry by
+/// atKey). Nullable because tests + edge cases (skipCommit writes,
+/// older queue entries persisted before the field was added) won't
+/// have one — the slow path is the fallback in those cases.
 class _BatchSource {
   final String atKey;
   final SyncQueueOp op;
+  final int? commitLogSeqNum;
 
-  const _BatchSource({required this.atKey, required this.op});
+  const _BatchSource({
+    required this.atKey,
+    required this.op,
+    this.commitLogSeqNum,
+  });
 }

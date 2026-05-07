@@ -62,7 +62,7 @@ class LocalSecondary implements Secondary {
   /// strings whose latest local write hasn't yet been pushed. Opened
   /// lazily on first use via [_ensureSyncQueueOpen]; replaces the
   /// commit-log scan that drove the push side of `SyncServiceImpl`
-  /// before the `distributed-tickling-moler` refactor. Wired through
+  /// before the `decouple-sync-from-commit-log` refactor. Wired through
   /// [_update] / [_delete] in phase 2; consumed by `SyncServiceImpl`
   /// in phase 4. See `lib/src/sync/at_sync_queue.dart` for the
   /// queue's full contract.
@@ -175,16 +175,33 @@ class LocalSecondary implements Secondary {
   /// enqueuing when the write is a server replay
   /// ([cameFromServer] true) or when the key isn't sync-eligible
   /// per [shouldEnqueueForSync].
+  ///
+  /// **Orphaned commit-log entry handling:** when a queue entry for
+  /// the same [atKey] already exists (UPDATE→UPDATE, UPDATE→DELETE,
+  /// etc.), the prior keystore op's commit-log entry never made it
+  /// to the server — the queue dedup means we'll only push the
+  /// newer op. We delete that prior commit-log entry by its seqNum
+  /// here so it doesn't sit forever with a null commitId. Without
+  /// this cleanup the pre-refactor invariant
+  /// ("every commit-log entry has commitId set after its sync round")
+  /// would break: orphans would skip the back-write, fail commit-log
+  /// compaction's `removeWhere(commitId == null)` filter, and leak
+  /// in the log indefinitely.
   Future<void> _enqueueForSync(
     String atKey,
     SyncQueueOp op, {
     required bool cameFromServer,
+    int? commitLogSeqNum,
   }) async {
     if (cameFromServer) return;
     if (!shouldEnqueueForSync(atKey)) return;
     try {
       final q = await _ensureSyncQueueOpen();
-      await q.enqueue(atKey, op);
+      final prior = q.readEntry(atKey);
+      if (prior != null && prior.commitLogSeqNum != null) {
+        await _removeOrphanedCommitLogEntry(prior.commitLogSeqNum!);
+      }
+      await q.enqueue(atKey, op, commitLogSeqNum: commitLogSeqNum);
       // Trigger SyncServiceImpl to drain. Today this enqueues a
       // sync request via the existing request-coalescing layer
       // (`_addSyncRequestToQueue` → microtask → `processSyncRequests`).
@@ -196,6 +213,24 @@ class LocalSecondary implements Secondary {
       // safety-net timer if the queue's box becomes accessible
       // again, but the immediate sync trigger is gone). Log loudly.
       _logger.shout('failed to enqueue $atKey for sync: $e\n$st');
+    }
+  }
+
+  /// Removes the commit-log entry at [seqNum]. Called when a queue
+  /// re-enqueue supersedes an earlier op for the same atKey, leaving
+  /// the earlier op's commit-log entry orphaned. Best-effort —
+  /// failures here would just leave a null-commitId entry behind,
+  /// which is undesirable (compaction skips it) but not corrupting.
+  Future<void> _removeOrphanedCommitLogEntry(int seqNum) async {
+    try {
+      final atSign = _atClient.getCurrentAtSign();
+      if (atSign == null) return;
+      final atCommitLog =
+          await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+      if (atCommitLog == null) return;
+      await atCommitLog.commitLogKeyStore.remove(seqNum);
+    } on Exception catch (e) {
+      _logger.warning('failed to remove orphaned commit-log entry $seqNum: $e');
     }
   }
 
@@ -309,10 +344,15 @@ class LocalSecondary implements Secondary {
       // succeeded (so the queue never points at a missing record
       // for normal writes). `_enqueueForSync` is a no-op when
       // [cameFromServer] is true or the key isn't sync-eligible.
+      // The keystore op's return value IS the commit-log sequence
+      // number (`Future<int?>` from putAll/putMeta); thread it
+      // through so the push path can do an O(1) commit-log lookup
+      // for the back-write of the server-assigned commitId.
       await _enqueueForSync(
         updateKey,
         syncQueueOp,
         cameFromServer: cameFromServer,
+        commitLogSeqNum: updateResult is int ? updateResult : null,
       );
 
       final newVisible = _visibleAt(emittedMetadata.availableAt, now);
@@ -394,10 +434,15 @@ class LocalSecondary implements Secondary {
       // "make sure it's gone everywhere". The plan accepts the
       // edge case of a delete for a never-synced record (no
       // harmful side effect server-side beyond a commitId++).
+      //
+      // `keyStore.remove` returns `Future<int?>` — the commit-log
+      // sequence number; thread it through so the push path can do
+      // an O(1) commit-log lookup for the back-write.
       await _enqueueForSync(
         deleteKey,
         SyncQueueOp.delete,
         cameFromServer: cameFromServer,
+        commitLogSeqNum: deleteResult,
       );
       return 'data:$deleteResult';
     } on DataStoreException catch (e) {

@@ -1,4 +1,4 @@
-// Phase 4 tests for the `distributed-tickling-moler` refactor:
+// Phase 4 tests for the `decouple-sync-from-commit-log` refactor:
 // LocalSecondary.executeVerb's new contract for enqueuing
 // client→server writes into the sync queue, and skipping enqueue
 // when the write is a server replay (`cameFromServer: true`).

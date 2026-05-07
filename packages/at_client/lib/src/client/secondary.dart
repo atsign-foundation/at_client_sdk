@@ -7,7 +7,7 @@ abstract class Secondary {
   /// only; remote-secondary implementations ignore it). [cameFromServer]
   /// signals the write is a server-originated replay (LocalSecondary
   /// uses it to skip enqueuing the write into the client→server sync
-  /// queue introduced by `distributed-tickling-moler`); other
+  /// queue introduced by `decouple-sync-from-commit-log`); other
   /// implementations may ignore it.
   Future<String?> executeVerb(VerbBuilder builder,
       {bool? sync, bool cameFromServer = false});
