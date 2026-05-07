@@ -12,7 +12,7 @@ import 'dart:convert';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
-import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -58,6 +58,17 @@ class LocalSecondary implements Secondary {
   /// `DataUpdated` per restart is the consistent answer.
   final Map<String, DateTime> _firedAvailableAt = {};
 
+  /// Pending client→server writes: a per-key dedup'd queue of atKey
+  /// strings whose latest local write hasn't yet been pushed. Opened
+  /// lazily on first use via [_ensureSyncQueueOpen]; replaces the
+  /// commit-log scan that drove the push side of `SyncServiceImpl`
+  /// before the `distributed-tickling-moler` refactor. Wired through
+  /// [_update] / [_delete] in phase 2; consumed by `SyncServiceImpl`
+  /// in phase 4. See `lib/src/sync/at_sync_queue.dart` for the
+  /// queue's full contract.
+  AtSyncQueue? _syncQueue;
+  Future<AtSyncQueue>? _syncQueueOpenInflight;
+
   LocalSecondary(
     this._atClient, {
     this.keyStore,
@@ -69,56 +80,164 @@ class LocalSecondary implements Secondary {
         .getSecondaryKeyStore();
   }
 
+  /// Idempotent lazy-open of the sync queue. The first caller wins
+  /// the open; concurrent callers await the same in-flight future so
+  /// we never call `Hive.openBox` twice for the same atSign.
+  ///
+  /// Must run AFTER the at_persistence_secondary_server's
+  /// `HivePersistenceManager.init(storagePath)` has called
+  /// `Hive.init(...)`, which is guaranteed by the
+  /// [StorageManager._initStorage] call ordering during AtClient
+  /// init. We intentionally do not call `Hive.init` here — rerunning
+  /// it with a different path would silently misroute the box.
+  Future<AtSyncQueue> _ensureSyncQueueOpen() {
+    final existing = _syncQueue;
+    if (existing != null) return Future.value(existing);
+    return _syncQueueOpenInflight ??= () async {
+      final atSign = _atClient.getCurrentAtSign();
+      if (atSign == null) {
+        throw StateError(
+          'LocalSecondary.syncQueue accessed before currentAtSign was '
+          'set; AtClientManager.setCurrentAtSign must run first',
+        );
+      }
+      final q = AtSyncQueue(atSign: atSign);
+      await q.open();
+      _syncQueue = q;
+      return q;
+    }();
+  }
+
+  /// Number of atKeys with pending client→server writes. Reads the
+  /// in-memory queue length (no Hive I/O). Triggers a one-time
+  /// open of the queue on first call.
+  Future<int> get syncQueueSize async {
+    final q = await _ensureSyncQueueOpen();
+    return q.size;
+  }
+
+  /// Returns up to [limit] atKey strings from the front of the
+  /// pending-write queue in FIFO order. Does NOT remove them; the
+  /// caller is expected to call [removeFromSyncQueue] per atKey
+  /// after a successful push.
+  Future<List<String>> peekSyncQueue({int? limit}) async {
+    final q = await _ensureSyncQueueOpen();
+    return q.peek(limit: limit);
+  }
+
+  /// Reads the persisted record (op + ts) for [atKey], or null if
+  /// no record exists. Used by `SyncServiceImpl` when building the
+  /// outgoing batch — the atKey itself comes from [peekSyncQueue],
+  /// the op tells us whether to build update / delete / etc.
+  Future<SyncQueueEntry?> readSyncQueueEntry(String atKey) async {
+    final q = await _ensureSyncQueueOpen();
+    return q.readEntry(atKey);
+  }
+
+  /// Removes [atKey] from both the in-memory queue and the persisted
+  /// box. Called after a successful server-side push, OR when a
+  /// drain attempt finds the underlying keystore value missing
+  /// (race-tolerated removal — see plan).
+  Future<void> removeFromSyncQueue(String atKey) async {
+    final q = await _ensureSyncQueueOpen();
+    await q.remove(atKey);
+  }
+
+  /// Test seam — production code goes through the public API above.
+  /// Direct access to the queue lets tests inject pre-populated
+  /// state, assert on persistence-layer behaviour, or close the
+  /// queue without tearing down the whole LocalSecondary.
+  @visibleForTesting
+  Future<AtSyncQueue> get syncQueueForTest => _ensureSyncQueueOpen();
+
+  /// Predicate: should a write to [atKey] be enqueued for client→server
+  /// sync? Returns true for self / shared / public / reserved keys
+  /// (the last covers `publickey.<sharedWith>@me` and
+  /// `shared_key.<sharedWith>@me` which the encryption layer needs
+  /// to reach the recipient). Returns false for local keys (`local:`
+  /// prefix), cached-shared / cached-public keys (`cached:` prefix —
+  /// those came FROM the server), and invalid keys (defensive).
+  ///
+  /// Visible for testing so the predicate's semantics can be locked
+  /// down independently of the enqueue flow.
+  @visibleForTesting
+  static bool shouldEnqueueForSync(String atKey) {
+    final type = AtKey.getKeyType(atKey);
+    return type == KeyType.selfKey ||
+        type == KeyType.sharedKey ||
+        type == KeyType.publicKey ||
+        type == KeyType.reservedKey;
+  }
+
+  /// Enqueues [atKey] for client→server sync with operation [op] and
+  /// triggers the sync service to drain. Called from [_update] /
+  /// [_delete] AFTER the real keystore operation succeeds. Skips
+  /// enqueuing when the write is a server replay
+  /// ([cameFromServer] true) or when the key isn't sync-eligible
+  /// per [shouldEnqueueForSync].
+  Future<void> _enqueueForSync(
+    String atKey,
+    SyncQueueOp op, {
+    required bool cameFromServer,
+  }) async {
+    if (cameFromServer) return;
+    if (!shouldEnqueueForSync(atKey)) return;
+    try {
+      final q = await _ensureSyncQueueOpen();
+      await q.enqueue(atKey, op);
+      // Trigger SyncServiceImpl to drain. Today this enqueues a
+      // sync request via the existing request-coalescing layer
+      // (`_addSyncRequestToQueue` → microtask → `processSyncRequests`).
+      // The sync service then peeks our queue and pushes batches.
+      _atClient.syncService.sync();
+    } catch (e, st) {
+      // Failing to enqueue is a serious correctness problem (the
+      // write WILL eventually be picked up by the periodic 30s
+      // safety-net timer if the queue's box becomes accessible
+      // again, but the immediate sync trigger is gone). Log loudly.
+      _logger.shout('failed to enqueue $atKey for sync: $e\n$st');
+    }
+  }
+
   // temporarily cache enrollmentDetails until we store in local secondary
   @visibleForTesting
   Enrollment? enrollment;
 
   /// Executes a verb builder on the local secondary.
-  /// If [sync] is true then a sync request will be queued — except for
-  /// writes to `local:` keys, which are never sync candidates (they're
-  /// filtered out of the sync regex by definition). Triggering a sync
-  /// request for a local-key write is pure overhead pre-fix; post the
-  /// `_clearQueue` fix in `SyncServiceImpl` (which retains requests
-  /// arriving during a round) it actively chains an empty follow-up
-  /// round, with knock-on effects for tests that rely on a single sync
-  /// round per `syncData()` call (cf. the
-  /// `_lastReceivedServerCommitId` cursor put inside `_syncFromServer`,
-  /// which fires from inside the very round that's wrapping it).
+  ///
+  /// The [sync] parameter is retained for back-compat with the
+  /// `Secondary` interface but no longer drives a separate
+  /// post-write trigger — `_update` / `_delete` now enqueue into
+  /// the client→server sync queue themselves (when the key is
+  /// sync-eligible and the write didn't originate from the server).
+  /// Callers that previously passed `sync: false` to suppress the
+  /// trigger should now pass `cameFromServer: true` instead;
+  /// the legacy `sync: false` is honoured by the corresponding
+  /// `_pullToLocal` site already, and the legacy `sync: true`
+  /// callers get the same enqueue behaviour they used to get from
+  /// the old `syncFromWrite()` path.
+  ///
+  /// When [cameFromServer] is true the caller is replaying a
+  /// server-originated change into local storage (today only
+  /// `SyncServiceImpl._pullToLocal` does this). The flag tells
+  /// `_update` / `_delete` to skip the sync-queue enqueue — the
+  /// server already has the entry; bouncing it back would be a
+  /// loop.
   @override
-  Future<String?> executeVerb(VerbBuilder builder, {bool? sync}) async {
+  Future<String?> executeVerb(VerbBuilder builder,
+      {bool? sync, bool cameFromServer = false}) async {
     String? verbResult;
 
     try {
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
-        //1. if local and server are out of sync, first sync before updating current key-value
-        //2 . update/delete to local store
         if (builder is UpdateVerbBuilder) {
-          verbResult = await _update(builder);
+          verbResult = await _update(builder, cameFromServer: cameFromServer);
         } else if (builder is DeleteVerbBuilder) {
-          verbResult = await _delete(builder);
+          verbResult = await _delete(builder, cameFromServer: cameFromServer);
         }
-        // 3. sync latest update/delete if strategy is immediate AND
-        //    the key is actually a sync candidate (not a `local:` key).
-        final isLocalKey =
-            (builder is UpdateVerbBuilder && builder.atKey.isLocal) ||
-                (builder is DeleteVerbBuilder && builder.atKey.isLocal);
-        if (sync != null && sync && !isLocalKey) {
-          _logger.finer('calling sync immediate from local secondary');
-          // Use the write-trigger entry point so [_clearQueue] knows
-          // not to discard this request just because it landed during
-          // an in-flight round — the write itself may not be in that
-          // round's `unCommittedEntries` snapshot, and we need a
-          // follow-up round to flush it.
-          final syncSvc = _atClient.syncService;
-          if (syncSvc is SyncServiceImpl) {
-            syncSvc.syncFromWrite();
-          } else {
-            // Third-party implementations of SyncService still get the
-            // legacy `sync()` trigger — we can't tag the request from
-            // here, so they fall back to the pre-fix behaviour.
-            syncSvc.sync();
-          }
-        }
+        // Note: the previous `sync: true` → `syncFromWrite()` branch
+        // is gone. Enqueue happens inside `_update` / `_delete`,
+        // gated by `cameFromServer` and `shouldEnqueueForSync`.
       } else if (builder is LLookupVerbBuilder) {
         verbResult = await _llookup(builder);
       } else if (builder is ScanVerbBuilder) {
@@ -132,7 +251,8 @@ class LocalSecondary implements Secondary {
     return verbResult;
   }
 
-  Future<String> _update(UpdateVerbBuilder builder) async {
+  Future<String> _update(UpdateVerbBuilder builder,
+      {bool cameFromServer = false}) async {
     try {
       dynamic updateResult;
       var updateKey = builder.buildKey();
@@ -160,6 +280,9 @@ class LocalSecondary implements Secondary {
           prevMeta == null ? null : _visibleAt(prevMeta.availableAt, now);
 
       late AtMetaData emittedMetadata;
+      // Track which op variant we performed so we can record the
+      // matching `SyncQueueOp` after the keystore op succeeds.
+      late SyncQueueOp syncQueueOp;
       switch (builder.operation) {
         case AtConstants.updateMeta:
           var atMetadata = AtMetaData.fromCommonsMetadata(
@@ -168,6 +291,7 @@ class LocalSecondary implements Secondary {
           );
           updateResult = await keyStore!.putMeta(updateKey, atMetadata);
           emittedMetadata = atMetadata;
+          syncQueueOp = SyncQueueOp.updateMeta;
           break;
         default:
           var atData = AtData();
@@ -178,8 +302,18 @@ class LocalSecondary implements Secondary {
           );
           updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
           emittedMetadata = atMetadata;
+          syncQueueOp = SyncQueueOp.updateAll;
           break;
       }
+      // Enqueue for client→server sync after the keystore write
+      // succeeded (so the queue never points at a missing record
+      // for normal writes). `_enqueueForSync` is a no-op when
+      // [cameFromServer] is true or the key isn't sync-eligible.
+      await _enqueueForSync(
+        updateKey,
+        syncQueueOp,
+        cameFromServer: cameFromServer,
+      );
 
       final newVisible = _visibleAt(emittedMetadata.availableAt, now);
       if (newVisible) {
@@ -241,7 +375,8 @@ class LocalSecondary implements Secondary {
     }
   }
 
-  Future<String> _delete(DeleteVerbBuilder builder) async {
+  Future<String> _delete(DeleteVerbBuilder builder,
+      {bool cameFromServer = false}) async {
     var deleteKey = builder.buildKey();
     if (!await isEnrollmentAuthorizedForOperation(deleteKey, builder)) {
       throw UnAuthorizedException(
@@ -251,6 +386,19 @@ class LocalSecondary implements Secondary {
       var deleteResult = await keyStore!.remove(deleteKey);
       _emit(DataDeleted(builder.atKey));
       _firedAvailableAt.remove(deleteKey);
+      // Enqueue for client→server sync after the keystore op
+      // succeeded. Note: even if the key never existed locally
+      // (deleteResult is whatever `remove` returns for a missing
+      // key, typically a sequence number anyway), we still enqueue
+      // so the server gets the delete — the user's intent is
+      // "make sure it's gone everywhere". The plan accepts the
+      // edge case of a delete for a never-synced record (no
+      // harmful side effect server-side beyond a commitId++).
+      await _enqueueForSync(
+        deleteKey,
+        SyncQueueOp.delete,
+        cameFromServer: cameFromServer,
+      );
       return 'data:$deleteResult';
     } on DataStoreException catch (e) {
       _logger.severe('exception in delete:${e.toString()}');

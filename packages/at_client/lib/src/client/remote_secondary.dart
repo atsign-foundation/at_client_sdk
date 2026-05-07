@@ -85,8 +85,12 @@ class RemoteSecondary implements Secondary {
 
   /// Executes the command returned by [VerbBuilder] build command on a remote secondary server.
   /// Optionally [privateKey] is passed for verb builders which require authentication.
+  /// [cameFromServer] is accepted for [Secondary] interface compatibility but
+  /// ignored — remote secondaries don't have a client→server sync queue
+  /// to skip enqueuing into.
   @override
-  Future<String> executeVerb(VerbBuilder builder, {sync = false}) async {
+  Future<String> executeVerb(VerbBuilder builder,
+      {sync = false, bool cameFromServer = false}) async {
     try {
       String verbResult;
       logger.finer('Command sent to server: ${builder.buildCommand()}');

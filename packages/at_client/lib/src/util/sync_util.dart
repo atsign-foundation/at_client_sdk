@@ -8,6 +8,24 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_utils/at_logger.dart';
 
 /// Class contains all the util methods that perform CRUD operations on the commit log keystore.
+///
+/// **Most methods deprecated since the `distributed-tickling-moler`
+/// refactor (3.12.0)**: the client→server sync push path no longer
+/// reads or writes the commit log — it drains
+/// `LocalSecondary.AtSyncQueue` instead. The methods marked
+/// `@Deprecated` here have no remaining production callers in
+/// `at_client`; they're kept only so downstream packages (and the
+/// existing test suite) can compile during the transition. They
+/// will be removed one minor release after this one.
+///
+/// Still in use (NOT deprecated):
+///
+/// * [getLatestServerCommitId] — `_getServerCommitId` calls this on
+///   each cold-fetch / forced-fresh round.
+/// * [shouldSync] (static) — general filter for which keys should
+///   ever leave this device.
+/// * [getLatestCommitEntry] — kept for downstream consumers; no
+///   `at_client` production caller.
 class SyncUtil {
   static var logger = AtSignLogger('SyncUtil');
 
@@ -15,6 +33,10 @@ class SyncUtil {
 
   SyncUtil({this.atCommitLog});
 
+  @Deprecated('No longer used by SyncServiceImpl post '
+      'distributed-tickling-moler. The push path is queue-driven; '
+      'commit-log entries are no longer round-tripped through the '
+      'sync layer. Will be removed one minor release after 3.12.0.')
   Future<CommitEntry?> getCommitEntry(int sequenceNumber, String atSign) async {
     atCommitLog ??=
         await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
@@ -23,6 +45,11 @@ class SyncUtil {
     return commitEntry;
   }
 
+  @Deprecated('No longer used by SyncServiceImpl post '
+      'distributed-tickling-moler. _pullToLocal previously back-wrote '
+      'the server-assigned commitId into the local commit-log entry; '
+      'the new push path tracks _highestPushedCommitId in memory '
+      'instead. Will be removed one minor release after 3.12.0.')
   Future<void> updateCommitEntry(
       CommitEntry commitEntry, int commitId, String atSign) async {
     atCommitLog ??=
@@ -30,6 +57,11 @@ class SyncUtil {
     await atCommitLog?.update(commitEntry, commitId);
   }
 
+  @Deprecated('No longer used by SyncServiceImpl post '
+      'distributed-tickling-moler. The push-side cursor lives on '
+      'AtSyncQueue (its in-memory FIFO + persisted box); the pull '
+      'cursor is `lastReceivedServerCommitId`. Will be removed one '
+      'minor release after 3.12.0.')
   Future<CommitEntry?> getLastSyncedEntry(String? regex,
       {required String atSign}) async {
     atCommitLog ??=
@@ -44,6 +76,8 @@ class SyncUtil {
     return lastEntry;
   }
 
+  @Deprecated('No longer used by SyncServiceImpl. Will be removed '
+      'one minor release after 3.12.0.')
   static Future<CommitEntry?> getEntry(int? seqNumber, String atSign) async {
     var commitLogInstance = await (AtCommitLogManagerImpl.getInstance()
         .getCommitLog(atSign) as FutureOr<AtCommitLog>);
@@ -51,6 +85,10 @@ class SyncUtil {
     return entry;
   }
 
+  @Deprecated('No longer used by SyncServiceImpl post '
+      'distributed-tickling-moler. The push path reads from '
+      '`LocalSecondary.AtSyncQueue` instead of the commit log. Will '
+      'be removed one minor release after 3.12.0.')
   Future<List<CommitEntry>> getChangesSinceLastCommit(
       int? seqNum, String? regex,
       {required String atSign}) async {
@@ -65,6 +103,10 @@ class SyncUtil {
   }
 
   //#TODO change return type to enum which says in sync, local ahead or server ahead
+  @Deprecated('No longer used by SyncServiceImpl. The new private '
+      '`_isInSync` consults `LocalSecondary.syncQueueSize` and '
+      '`lastReceivedServerCommitId` directly. Will be removed one '
+      'minor release after 3.12.0.')
   static bool isInSync(List<CommitEntry?>? unCommittedEntries,
       int? serverCommitId, int? lastReceivedServerCommitId) {
     logger.finer('lastReceivedServerCommitId:$lastReceivedServerCommitId');
@@ -142,6 +184,10 @@ class SyncUtil {
     return NullCommitEntry();
   }
 
+  @Deprecated('No longer used by SyncServiceImpl post '
+      'distributed-tickling-moler. The push path no longer prunes '
+      'commit-log entries — they\'re managed by AtCompactionJob. '
+      'Will be removed one minor release after 3.12.0.')
   Future<void> removeCommitEntry(dynamic key, String atSign) async {
     atCommitLog ??=
         await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
