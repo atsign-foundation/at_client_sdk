@@ -13,6 +13,37 @@ late String sharedByAtSign;
 late String sharedWithAtSign;
 final namespace = TestConstants.namespace;
 
+/// Polls the receiver's local hive, syncing on each iteration, until
+/// `isKeyExists(cachedAtKeyStr)` matches [wantedExists] or [timeout]
+/// elapses. Returns true if the desired state was observed within
+/// the timeout, false otherwise.
+///
+/// Used in this file to ride the cross-server-notify tail: when the
+/// publisher puts (or deletes) a key with TTR, the publisher atServer
+/// notifies the receiver atServer to create (or drop) the cached
+/// copy. That hop is async — on long-running real atServers it can
+/// take several seconds. A single `syncData` call may sample the
+/// receiver atServer's commitId before the cross-server notify has
+/// landed, in which case `_isInSync` returns true with no pull and
+/// the cached entry never reaches local hive.
+Future<bool> _pollUntilCachedExistsMatches(
+  AtClient client,
+  String cachedAtKeyStr,
+  bool wantedExists, {
+  Duration timeout = const Duration(seconds: 30),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (true) {
+    await E2ESyncService.getInstance().syncData(client.syncService);
+    final exists =
+        client.getLocalSecondary()?.keyStore?.isKeyExists(cachedAtKeyStr) ??
+            false;
+    if (exists == wantedExists) return true;
+    if (!DateTime.now().isBefore(deadline)) return false;
+    await Future.delayed(Duration(seconds: 1));
+  }
+}
+
 void main() {
   setUpAll(() async {
     sharedByAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
@@ -57,15 +88,6 @@ void main() {
     assert(putResult == true);
     await E2ESyncService.getInstance().syncData(sharedByAtClient.syncService);
 
-    // Give the cross-server notify time to propagate from sharedBy's
-    // atServer to sharedWith's atServer (the latter creates the
-    // `cached:@<sharedWith>:...@<sharedBy>` entry on its side).
-    // Without this wait the receiver-side syncData below can return
-    // "in sync" before the cached entry has appeared on the receiver's
-    // atServer, leaving local hive empty and the get below failing.
-    // Pattern matches `bypasscache_test.dart`.
-    await Future.delayed(Duration(seconds: 5));
-
     // Switch to sharedWith AtSign and fetch the cached key
     sharedWithAtClient = (await AtClientManager.getInstance().setCurrentAtSign(
             sharedWithAtSign,
@@ -78,7 +100,17 @@ void main() {
       ..sharedBy = sharedByAtSign
       ..namespace = namespace
       ..metadata = (Metadata()..isCached = true);
-    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService);
+    final cachedAtKeyStr = cachedAtKey.toString();
+
+    // Poll for the cached entry to appear in the receiver's local hive.
+    // The cross-server notify (publisher atServer -> receiver atServer
+    // creating `cached:@<sharedWith>:...@<sharedBy>`) is async and on
+    // long-running real atServers can take several seconds.
+    final cachedAppeared = await _pollUntilCachedExistsMatches(
+        sharedWithAtClient, cachedAtKeyStr, true);
+    expect(cachedAppeared, true,
+        reason: 'cached key never appeared in receiver local hive within '
+            'the propagation window');
     var getResponse = await sharedWithAtClient.get(cachedAtKey);
     expect(getResponse.value, 'dummy_cached_value');
 
@@ -91,25 +123,21 @@ void main() {
     await sharedByAtClient.delete(atKey);
     await E2ESyncService.getInstance().syncData(sharedByAtClient.syncService);
 
-    // Same propagation delay before the receiver checks the delete.
-    await Future.delayed(Duration(seconds: 5));
-
-    // Switch to sharedWith AtSign and let the deleted cached key sync to local Secondary
+    // Switch to sharedWith AtSign and poll for the CCD-driven removal
+    // of the cached entry from local hive. CCD=true means the
+    // publisher's delete propagates a delete-the-cache directive to
+    // the receiver's atServer; same cross-server-notify tail applies.
     sharedWithAtClient = (await AtClientManager.getInstance().setCurrentAtSign(
             sharedWithAtSign,
             namespace,
             TestPreferences.getInstance().getPreference(sharedWithAtSign)))
         .atClient;
-    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService);
-    expect(
-        sharedWithAtClient
-            .getLocalSecondary()
-            ?.keyStore
-            ?.isKeyExists(cachedAtKey.toString()),
-        false);
-    // When sync runs the test remains idle and timeout after 30 seconds
-    // Adding timeout to allow sync to complete on current atSign and sharedWith atSign.
-  }, timeout: Timeout(Duration(minutes: 1)));
+    final cachedRemoved = await _pollUntilCachedExistsMatches(
+        sharedWithAtClient, cachedAtKeyStr, false);
+    expect(cachedRemoved, true,
+        reason: 'cached key was not CCD-removed from receiver local hive '
+            'within the propagation window');
+  }, timeout: Timeout(Duration(minutes: 2)));
 
   test(
       'A test to verify cached key is deleted when receiver deletes the cached key in the local',
@@ -142,7 +170,14 @@ void main() {
       ..sharedBy = sharedByAtSign
       ..namespace = namespace
       ..metadata = (Metadata()..isCached = true);
-    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService);
+    final cachedAtKeyStr = cachedAtKey.toString();
+
+    // Poll for the cached entry to appear in the receiver's local hive.
+    final cachedAppeared = await _pollUntilCachedExistsMatches(
+        sharedWithAtClient, cachedAtKeyStr, true);
+    expect(cachedAppeared, true,
+        reason: 'cached key never appeared in receiver local hive within '
+            'the propagation window');
 
     // Assert cached key is present in the local storage of the sharedWith atSign
     var getResponse = await sharedWithAtClient.get(cachedAtKey);
@@ -151,24 +186,38 @@ void main() {
     var scanResultBeforeDelete = await sharedWithAtClient
         .getRemoteSecondary()!
         .executeCommand('scan $key\n', auth: true);
-    expect(scanResultBeforeDelete!.contains(cachedAtKey.toString()), true);
+    expect(scanResultBeforeDelete!.contains(cachedAtKeyStr), true);
     // Delete the cached key in the local secondary of sharedWith atSign
     var deleteResult = await sharedWithAtClient.delete(cachedAtKey);
     expect(deleteResult, true);
 
-    // Sync the deleted cached key commit entry to secondary of sharedWith atSign
-    await E2ESyncService.getInstance().syncData(sharedWithAtClient.syncService);
-    // Asserts cached key is deleted from the local storage in the sharedWith atSign
-    expect(
-        sharedWithAtClient
-            .getLocalSecondary()
-            ?.keyStore
-            ?.isKeyExists(cachedAtKey.toString()),
-        false);
-    // Asserts cached key is deleted from the server in the sharedWith atSign
-    var scanResultAfterDelete = await sharedWithAtClient
-        .getRemoteSecondary()!
-        .executeCommand('scan $key\n', auth: true);
-    expect(scanResultAfterDelete!.contains(cachedAtKey.toString()), false);
-  }, timeout: Timeout(Duration(minutes: 1)));
+    // Poll for the local-then-server delete to propagate. Local hive
+    // empties immediately; the receiver's atServer drops the cached
+    // entry once the sync queue's delete entry is pushed and the
+    // server processes it. Both should be observable within the poll
+    // window.
+    final cachedRemovedLocally = await _pollUntilCachedExistsMatches(
+        sharedWithAtClient, cachedAtKeyStr, false);
+    expect(cachedRemovedLocally, true,
+        reason: 'cached key was not removed from receiver local hive after '
+            'receiver-initiated delete + sync');
+
+    // Poll the server-side scan too — the sync queue's delete push
+    // is async with respect to local completion, and on long-running
+    // real atServers the server takes a moment to reflect the delete.
+    final serverScanDeadline = DateTime.now().add(Duration(seconds: 30));
+    String? scanResultAfterDelete;
+    while (true) {
+      scanResultAfterDelete = await sharedWithAtClient
+          .getRemoteSecondary()!
+          .executeCommand('scan $key\n', auth: true);
+      if (scanResultAfterDelete != null &&
+          !scanResultAfterDelete.contains(cachedAtKeyStr)) {
+        break;
+      }
+      if (!DateTime.now().isBefore(serverScanDeadline)) break;
+      await Future.delayed(Duration(seconds: 1));
+    }
+    expect(scanResultAfterDelete!.contains(cachedAtKeyStr), false);
+  }, timeout: Timeout(Duration(minutes: 2)));
 }
