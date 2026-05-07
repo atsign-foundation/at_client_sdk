@@ -87,6 +87,9 @@ void main() async {
     await acm.setCurrentAtSign(currentAtSign, namespace,
         TestPreferences.getInstance().getPreference(currentAtSign));
     var uniqueId = uuid.v4().hashCode;
+    // TTL set to 5 minutes so the publisher's atServer doesn't
+    // expire the key before our 60s cache-propagation polling
+    // window completes.
     var verificationKey = AtKey()
       ..key = 'verificationnumber-$uniqueId'
       ..sharedWith = sharedWithAtSign
@@ -95,7 +98,7 @@ void main() async {
       ..metadata = (Metadata()
         ..ttr = 1000
         ..ccd = true
-        ..ttl = TestConstants.oneMinuteMillis);
+        ..ttl = 5 * TestConstants.oneMinuteMillis);
     var value = '0873';
     var putResult = await acm.atClient.put(verificationKey, value);
     expect(putResult, true);

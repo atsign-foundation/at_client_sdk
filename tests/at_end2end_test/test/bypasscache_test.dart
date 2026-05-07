@@ -51,6 +51,14 @@ void main() async {
     String initialValue = 'initial_value-$uniqueId';
     String updatedValue = 'updated_value-$uniqueId';
 
+    // Use a long TTL (5 minutes) — the test does a put on the
+    // publisher, then later does a bypassCache=true lookup that
+    // proxies back to the publisher. With our polling deadline of
+    // 60s plus the surrounding setCurrentAtSign / sync hops, the
+    // total test run can exceed 60s; a 60s TTL would have the
+    // publisher's atServer expire the key before the bypassCache
+    // lookup arrives, causing
+    // `remoteLookUp: remote atServer returned String value 'null'`.
     final AtKey testByPassCacheAtKey = AtKey()
       ..key = keyEntity
       ..sharedWith = sharedWithAtSign
@@ -58,7 +66,7 @@ void main() async {
       ..sharedBy = sharedByAtSign
       ..metadata = (Metadata()
         ..ttr = 1000
-        ..ttl = TestConstants.oneMinuteMillis);
+        ..ttl = 5 * TestConstants.oneMinuteMillis);
 
     // CRITICAL: register the autoNotify=true reset via addTearDown so
     // it runs even if this test times out. A `finally` block won't

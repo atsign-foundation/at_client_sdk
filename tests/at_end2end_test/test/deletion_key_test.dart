@@ -92,11 +92,15 @@ void main() {
       () async {
     // Create a key with TTR set
     var key = 'deletecachedkey-${Uuid().v4().hashCode}';
+    // TTL set to 5 minutes — long enough that the publisher's atServer
+    // doesn't expire the key before our 60s polling windows complete.
+    // 60s would have the test racing TTL expiry and seeing the cached
+    // entry disappear for the wrong reason.
     final atKey =
         (AtKey.shared(key, namespace: namespace, sharedBy: sharedByAtSign)
               ..sharedWith(sharedWithAtSign)
               ..cache(-1, true)
-              ..timeToLive(TestConstants.oneMinuteMillis))
+              ..timeToLive(5 * TestConstants.oneMinuteMillis))
             .build();
     sharedByAtClient = (await AtClientManager.getInstance().setCurrentAtSign(
             sharedByAtSign,
@@ -162,11 +166,13 @@ void main() {
       'A test to verify cached key is deleted when receiver deletes the cached key in the local',
       () async {
     var key = 'testcachedkey-${Uuid().v4().hashCode}';
+    // 5-minute TTL for the same reason as the CCD test above —
+    // 60s leaves no margin for our polling deadlines.
     final atKey =
         (AtKey.shared(key, namespace: namespace, sharedBy: sharedByAtSign)
               ..sharedWith(sharedWithAtSign)
               ..cache(-1, true)
-              ..timeToLive(TestConstants.oneMinuteMillis))
+              ..timeToLive(5 * TestConstants.oneMinuteMillis))
             .build();
     var value = 'test_cached_value';
 
