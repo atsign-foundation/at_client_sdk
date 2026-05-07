@@ -113,15 +113,6 @@ void main() async {
       await E2ESyncService.getInstance()
           .syncData(AtClientManager.getInstance().atClient.syncService);
 
-      // Wait for the put to be fully committed on the publisher's
-      // atServer before the bypassCache=true lookup below traverses
-      // sharedWith's atServer → sharedBy's atServer for it.
-      // syncData returning success confirms the SDK pushed
-      // updatedValue, but on a long-running real atServer there can
-      // be a small post-commit window before the value is readable
-      // via lookup.
-      await Future.delayed(Duration(seconds: 5));
-
       // As atSignTwo
       await AtClientManager.getInstance().setCurrentAtSign(
           sharedWithAtSign,
@@ -146,11 +137,24 @@ void main() async {
       // Get result with bypassCache set to true
       // Since bypassCache is set to true, a lookup should be performed to the
       // sharedBy AtSign and updated value should be fetched.
+      // syncData on sharedBy returning success confirms the SDK acked
+      // the put, but on long-running real atServers there can be tail
+      // latency between the publisher's atServer committing the value
+      // and that value being readable via the receiver atServer's
+      // outbound `lookup:` (the path bypassCache=true takes). Poll the
+      // lookup until we observe updatedValue, with a generous timeout,
+      // so this test isn't flaky on cross-server propagation tail.
       getKey = AtKey()
         ..key = keyEntity
         ..sharedBy = sharedByAtSign;
-      getResult = await AtClientManager.getInstance().atClient.get(getKey,
-          getRequestOptions: GetRequestOptions()..bypassCache = true);
+      final pollDeadline = DateTime.now().add(Duration(seconds: 30));
+      while (true) {
+        getResult = await AtClientManager.getInstance().atClient.get(getKey,
+            getRequestOptions: GetRequestOptions()..bypassCache = true);
+        if (getResult.value == updatedValue) break;
+        if (!DateTime.now().isBefore(pollDeadline)) break;
+        await Future.delayed(Duration(seconds: 1));
+      }
       expect(getResult.value, updatedValue);
       expect(getResult.metadata!.isCached, false);
       // Sync - after this we should now have the new value
