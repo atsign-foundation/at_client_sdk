@@ -75,8 +75,8 @@ void main() async {
     await E2ESyncService.getInstance()
         .syncData(AtClientManager.getInstance().atClient.syncService);
 
-    // Give it a couple of seconds to propagate from one atServer to the other
-    await Future.delayed(Duration(seconds: 2));
+    // Give it time to propagate from one atServer to the other.
+    await Future.delayed(Duration(seconds: 5));
 
     // Switch to sharedWithAtSign
     await AtClientManager.getInstance().setCurrentAtSign(
@@ -112,6 +112,15 @@ void main() async {
       // Sync the data to the remote secondary
       await E2ESyncService.getInstance()
           .syncData(AtClientManager.getInstance().atClient.syncService);
+
+      // Wait for the put to be fully committed on the publisher's
+      // atServer before the bypassCache=true lookup below traverses
+      // sharedWith's atServer → sharedBy's atServer for it.
+      // syncData returning success confirms the SDK pushed
+      // updatedValue, but on a long-running real atServer there can
+      // be a small post-commit window before the value is readable
+      // via lookup.
+      await Future.delayed(Duration(seconds: 5));
 
       // As atSignTwo
       await AtClientManager.getInstance().setCurrentAtSign(

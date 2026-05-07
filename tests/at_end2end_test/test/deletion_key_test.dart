@@ -64,7 +64,7 @@ void main() {
     // "in sync" before the cached entry has appeared on the receiver's
     // atServer, leaving local hive empty and the get below failing.
     // Pattern matches `bypasscache_test.dart`.
-    await Future.delayed(Duration(seconds: 2));
+    await Future.delayed(Duration(seconds: 5));
 
     // Switch to sharedWith AtSign and fetch the cached key
     sharedWithAtClient = (await AtClientManager.getInstance().setCurrentAtSign(
@@ -92,7 +92,7 @@ void main() {
     await E2ESyncService.getInstance().syncData(sharedByAtClient.syncService);
 
     // Same propagation delay before the receiver checks the delete.
-    await Future.delayed(Duration(seconds: 2));
+    await Future.delayed(Duration(seconds: 5));
 
     // Switch to sharedWith AtSign and let the deleted cached key sync to local Secondary
     sharedWithAtClient = (await AtClientManager.getInstance().setCurrentAtSign(
