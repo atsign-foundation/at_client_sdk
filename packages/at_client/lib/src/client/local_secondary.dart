@@ -722,6 +722,39 @@ class LocalSecondary implements Secondary {
     }
   }
 
+  /// Pre-marks every key whose `availableAt` is at or before [now] as
+  /// "already fired" in the in-memory [_firedAvailableAt] map. The
+  /// availability sweep ([AtClientImpl._onAvailableFire]) checks this
+  /// map and skips matching entries, so this prevents the sweep from
+  /// replaying historical `availableAt` crossings on every process
+  /// start.
+  ///
+  /// Without this seeding, a freshly-started AtClient with a populated
+  /// local hive (e.g. a subscriber restarted with the same
+  /// `--storage-dir` while cached entries from a prior publisher
+  /// session are still alive) would emit a [DataUpdated] for every
+  /// such entry — and AtCollection would forward those as
+  /// [CSubItemUpdated] / [CItemUpdated], so consumer listeners would
+  /// see what looks like a fresh stream of arrivals when nothing new
+  /// has actually been written.
+  ///
+  /// The seed is unconditional: any key with a past `availableAt` is
+  /// treated as already-fired on this process. New writes that arrive
+  /// AFTER seeding go through `_update`, which fires DataUpdated
+  /// itself (and records its own `_firedAvailableAt` entry) — so this
+  /// only suppresses HISTORICAL replay, not fresh emissions.
+  void seedAvailabilityFiredAsOf(DateTime now) {
+    final ks = keyStore;
+    if (ks is! HiveKeystore) return;
+    final cutoffMs = now.toUtc().millisecondsSinceEpoch;
+    for (final entry in ks.getExpiryKeysCache().entries) {
+      final avail = entry.value['availableAt'];
+      if (avail == null) continue;
+      if (avail.toUtc().millisecondsSinceEpoch > cutoffMs) continue;
+      _firedAvailableAt[entry.key] = avail;
+    }
+  }
+
   String? _prepareResponseData(String? operation, AtData? atData) {
     String? result;
     if (atData == null) {

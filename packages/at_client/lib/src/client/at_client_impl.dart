@@ -376,7 +376,19 @@ class AtClientImpl implements AtClient {
       });
       _armExpiryTimer();
 
-      // Symmetric wire-up for the availability timer.
+      // Symmetric wire-up for the availability timer. SEED the
+      // already-fired set BEFORE arming the timer: every cached
+      // record whose `availableAt` is in the past at startup gets
+      // marked as already-emitted so the first sweep doesn't replay
+      // it. Without this, restarting the AtClient against an
+      // existing storage-dir would re-emit `DataUpdated` for every
+      // such record, which AtCollection forwards as
+      // CSubItemUpdated / CItemUpdated — making listeners see a
+      // fresh stream of "arrivals" when nothing has actually
+      // arrived. The semantic of `_onAvailableFire` is "fire when
+      // availableAt JUST CROSSED" — past crossings observed by an
+      // earlier process run shouldn't replay on a later one.
+      localSecondary?.seedAvailabilityFiredAsOf(DateTime.timestamp());
       _availableSub = dataEvents.listen((_) {
         if (_availableSweepInFlight) return;
         _armAvailableTimer();
