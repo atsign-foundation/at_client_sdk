@@ -98,8 +98,8 @@ class NotificationResponseTransformer
       // Return decrypted value
       return decrypted.toString().trim();
     } on AtException catch (e) {
-      e.stack(AtChainedException(Intent.notifyData,
-          ExceptionScenario.encryptionFailed, 'Failed to encrypt the data'));
+      e.stack(AtChainedException(
+          Intent.notifyData, ExceptionScenario.encryptionFailed, e.message));
       rethrow;
     }
   }

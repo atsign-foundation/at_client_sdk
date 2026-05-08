@@ -98,6 +98,7 @@ void main() {
     });
 
     test('Test to verify the encryption of self key', () async {
+      when(() => mockAtClient.getCurrentAtSign()).thenAnswer((_) => '@alice');
       var atKey = AtKey()
         ..key = 'phone.wavi'
         ..sharedWith = '@alice'

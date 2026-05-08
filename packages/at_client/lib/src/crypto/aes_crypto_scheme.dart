@@ -10,7 +10,7 @@ import '../client/at_client_spec.dart';
 import '../util/encryption_util.dart';
 
 class AESScheme extends CryptoScheme {
-  final AtSignLogger _logger = AtSignLogger('AESCryptoScheme');
+  final AtSignLogger _logger = AtSignLogger('AESScheme');
   final AtClient _atClient;
   final KeyLookup _keyLookup;
 

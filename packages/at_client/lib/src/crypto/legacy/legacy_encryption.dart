@@ -23,19 +23,20 @@ class LegacyEncryption {
     // Setting the following condition in OR clause as well to support instances of
     // concrete AtKey class - "atKey.sharedWith != null && atKey.sharedWith != currentAtSign"
     Atsign currentAtSign = atClient.getCurrentAtSign()!.toAtsign();
-    if ((atKey is SharedKey &&
-            atKey.sharedWith != null &&
-            atKey.sharedWith != currentAtSign) ||
-        atKey.sharedWith != null && atKey.sharedWith != currentAtSign) {
+    if (_isSharedKey(atKey, currentAtSign)) {
       return SharedKeyEncryption(atClient);
     }
     return SelfKeyEncryption(atClient);
+  }
+
+  static bool _isSharedKey(AtKey key, Atsign atsign) {
+    return key.sharedWith != null && key.sharedWith != atsign;
   }
 }
 
 /// Contains the common code for [SharedKeyEncryption] and [StreamEncryption]
 abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
-  late final AtSignLogger _logger;
+  final AtSignLogger _logger = AtSignLogger('AtKeyEncryption');
   late String _sharedKey;
   final AtClient _atClient;
   AtCommitLog? atCommitLog;
@@ -44,10 +45,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
 
   String get sharedKey => _sharedKey;
 
-  AbstractAtKeyEncryption(this._atClient) {
-    _logger = AtSignLogger(
-        'AbstractAtKeyEncryption (${_atClient.getCurrentAtSign()})');
-  }
+  AbstractAtKeyEncryption(this._atClient);
 
   SyncUtil syncUtil = SyncUtil();
 
@@ -328,14 +326,10 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
 
 ///Class responsible for encrypting the selfKey's
 class SelfKeyEncryption implements AtKeyEncryption {
-  late final AtSignLogger _logger;
-
+  final _logger = AtSignLogger('SelfKeyEncryption');
   final AtClient atClient;
 
-  SelfKeyEncryption(this.atClient) {
-    _logger =
-        AtSignLogger('SelfKeyEncryption (${atClient.getCurrentAtSign()})');
-  }
+  SelfKeyEncryption(this.atClient);
 
   @override
   Future<dynamic> encrypt(AtKey atKey, dynamic value) async {
@@ -400,10 +394,7 @@ class SelfKeyEncryption implements AtKeyEncryption {
 }
 
 class SharedKeyEncryption extends AbstractAtKeyEncryption {
-  SharedKeyEncryption(super._atClient) {
-    _logger =
-        AtSignLogger('SelfKeyEncryption (${_atClient.getCurrentAtSign()})');
-  }
+  SharedKeyEncryption(super._atClient);
 
   @override
   Future<dynamic> encrypt(AtKey atKey, dynamic value) async {

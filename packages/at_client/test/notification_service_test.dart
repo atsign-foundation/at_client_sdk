@@ -2,6 +2,7 @@
 
 import 'dart:convert';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -14,6 +15,9 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
+
+import 'test_utils/mocks.dart';
+import 'test_utils/test_crypto_scheme.dart';
 
 String? lastNotificationJson;
 
@@ -79,11 +83,16 @@ class FakeAtKey extends Fake implements AtKey {}
 
 void main() {
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
+  AtChops mockAtChops = MockAtChops();
+  SchemeRegistry mockSchemeRegsitry = MockSchemeRegistry(mockAtClientImpl);
   AtClientManager mockAtClientManager = MockAtClientManager();
   FakeMonitor fakeMonitor = FakeMonitor();
   SecondaryAddressFinder mockSecondaryAddressFinder =
       MockSecondaryAddressFinder();
   AtLookupImpl mockAtLookupImpl = MockAtLookupImpl();
+  when(() => mockSchemeRegsitry.lookup(any())).thenReturn(CipherScheme());
+  when(() => mockAtChops.schemes).thenReturn(mockSchemeRegsitry);
+  when(() => mockAtClientImpl.atChops).thenReturn(mockAtChops);
   group('A group of test to validate notification request transformer', () {
     var value = '+91908909933';
     setUp(() {});
@@ -173,8 +182,8 @@ void main() {
       test(
           'Notification request without namespace but with multi-part namespace in prefs',
           () async {
-        when(() => mockAtClientImpl.preference!.namespace)
-            .thenReturn('foo.bar.baz');
+        when(() => mockAtClientImpl.getPreferences())
+            .thenReturn(AtClientPreference()..namespace = 'foo.bar.baz');
         var notificationParams = NotificationParams.forUpdate(
             AtKey.fromString('@bob:phone@alice')
               ..metadata.namespaceAware = true);
@@ -194,8 +203,8 @@ void main() {
       test(
           'Notification request with namespace and with same namespace in prefs',
           () async {
-        when(() => mockAtClientImpl.preference!.namespace)
-            .thenReturn('foo.bar.baz');
+        when(() => mockAtClientImpl.getPreferences())
+            .thenReturn(AtClientPreference()..namespace = 'foo.bar.baz');
         var notificationParams = NotificationParams.forUpdate(
             AtKey.fromString('@bob:phone.foo.bar.baz@alice')
               ..metadata.namespaceAware = true);
@@ -215,8 +224,8 @@ void main() {
       test(
           'Notification request with a namespace but a different namespace in prefs',
           () async {
-        when(() => mockAtClientImpl.preference!.namespace)
-            .thenReturn('foo.bar.baz');
+        when(() => mockAtClientImpl.getPreferences())
+            .thenReturn(AtClientPreference()..namespace = 'foo.bar.baz');
         var notificationParams = NotificationParams.forUpdate(
             AtKey.fromString('@bob:phone.my_app@alice')
               ..metadata.namespaceAware = true);
@@ -236,8 +245,8 @@ void main() {
       test(
           'with namespace and different namespace in prefs but not namespace aware',
           () async {
-        when(() => mockAtClientImpl.preference!.namespace)
-            .thenReturn('foo.bar.baz');
+        when(() => mockAtClientImpl.getPreferences())
+            .thenReturn(AtClientPreference()..namespace = 'foo.bar.baz');
         var notificationParams = NotificationParams.forUpdate(
             AtKey.fromString('@bob:phone.my_app@alice')
               ..metadata.namespaceAware = false);
@@ -259,6 +268,9 @@ void main() {
         'A test to validate notification request without value return verb builder',
         () async {
       when(() => mockAtClientImpl.preference!.namespace).thenReturn('wavi');
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()..namespace = 'wavi',
+      );
       var notificationParams = NotificationParams.forUpdate(
           (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob'))
               .build());
@@ -326,7 +338,7 @@ void main() {
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
       expect(notifyVerbBuilder.priority, PriorityEnum.high);
       expect(notifyVerbBuilder.strategy, StrategyEnum.latest);
-      expect(notifyVerbBuilder.value, 'encryptedValue');
+      expect(notifyVerbBuilder.value, 'abc$value');
       expect(notifyVerbBuilder.atKey.metadata.sharedKeyEnc, 'sharedKeyEnc');
       expect(notifyVerbBuilder.notifier, 'test-notifier');
       expect(notifyVerbBuilder.latestN, 2);
@@ -361,7 +373,7 @@ void main() {
       var notifyVerbBuilder =
           await NotificationRequestTransformer(mockAtClientImpl)
               .transform(notificationParams);
-      expect(notifyVerbBuilder.atKey.key, 'encryptedValue');
+      expect(notifyVerbBuilder.atKey.key, 'abcHi How are you');
       expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
       // ignore: deprecated_member_use
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
@@ -390,19 +402,19 @@ void main() {
         () async {
       when(() => mockAtClientImpl.preference!.namespace).thenReturn('wavi');
       var notificationParams = NotificationParams.forUpdate(
-          (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob'))
-              .build(),
-          value: value,
-          priority: PriorityEnum.high,
-          strategy: StrategyEnum.latest,
-          notifier: 'test-notifier',
-          latestN: 2,
-          notificationExpiry: Duration(minutes: 1));
+        (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob')).build(),
+        value: value,
+        priority: PriorityEnum.high,
+        strategy: StrategyEnum.latest,
+        notifier: 'test-notifier',
+        latestN: 2,
+        notificationExpiry: Duration(minutes: 1),
+      );
       notificationParams.atKey.metadata.isEncrypted = true;
       var notifyVerbBuilder =
           await NotificationRequestTransformer(mockAtClientImpl)
               .transform(notificationParams);
-      expect(notifyVerbBuilder.value, 'encryptedValue');
+      expect(notifyVerbBuilder.value, 'abc$value');
       expect(notifyVerbBuilder.atKey.metadata.sharedKeyEnc, 'sharedKeyEnc');
     });
     test(
@@ -461,7 +473,7 @@ void main() {
           DateTime.now().millisecondsSinceEpoch,
           MessageTypeEnum.key.toString(),
           isEncrypted,
-          value: 'encryptedValue');
+          value: '123encryptedValue');
       var notificationResponseTransformer =
           NotificationResponseTransformer(mockAtClientImpl);
 
@@ -471,7 +483,7 @@ void main() {
             ..two = (NotificationConfig()
               ..regex = '.*'
               ..shouldDecrypt = true));
-      expect(transformedNotification.value, 'decryptedValue');
+      expect(transformedNotification.value, 'encryptedValue');
     });
 
     test(
@@ -486,7 +498,7 @@ void main() {
           DateTime.now().millisecondsSinceEpoch,
           MessageTypeEnum.key.toString(),
           isEncrypted,
-          value: 'encryptedValue');
+          value: '123encryptedValue');
       var notificationResponseTransformer =
           NotificationResponseTransformer(mockAtClientImpl);
 
@@ -496,7 +508,7 @@ void main() {
             ..two = (NotificationConfig()
               ..regex = '.*'
               ..shouldDecrypt = true));
-      expect(transformedNotification.value, 'decryptedValue');
+      expect(transformedNotification.value, 'encryptedValue');
     });
 
     test(
@@ -614,6 +626,9 @@ void main() {
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
       when(() => mockAtClientManager.secondaryAddressFinder)
           .thenAnswer((_) => mockSecondaryAddressFinder);
+      when(() => mockSchemeRegsitry.lookup(any())).thenReturn(ErrorScheme());
+      when(() => mockAtChops.schemes).thenReturn(mockSchemeRegsitry);
+      when(() => mockAtClientImpl.atChops).thenReturn(mockAtChops);
       when(() => mockAtClientManager.atClient)
           .thenAnswer((_) => mockAtClientImpl);
 
@@ -647,8 +662,6 @@ void main() {
       when(() => mockAtClientImpl.getRemoteSecondary())
           .thenAnswer((_) => remoteSecondary);
       registerFallbackValue(FakeNotifyVerbBuilder());
-      when(() => mockAtLookupImpl.executeVerb(any()))
-          .thenThrow(AtLookUpException('AT0013', 'Invalid syntax exception'));
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
@@ -659,8 +672,9 @@ void main() {
           NotificationParams.forUpdate(atKey, value: value),
           checkForFinalDeliveryStatus: false);
       expect(notificationResult.atClientException, isA<AtClientException>());
+      //throwing from ErrorScheme, used for testing only
       expect(notificationResult.atClientException?.getTraceMessage(),
-          'Failed to notifyData caused by\nInvalid syntax exception');
+          'Failed to notifyData caused by\nerror');
       expect(notificationResult.notificationStatusEnum,
           NotificationStatusEnum.undelivered);
     });
