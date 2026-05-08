@@ -23,7 +23,16 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client_examples/dockerstats/models.dart';
 
 const String applicationNamespace = 'dockerstats.demos';
+
+/// TTL for the LEAF [StatSample] CItems (high-frequency telemetry).
+/// Must match the publisher.
 const Duration sampleExpiration = Duration(minutes: 1);
+
+/// TTL for the structural CItems — the [HostNode] root collection
+/// and the per-host [AtsignOnHost] sub-collection nodes. Longer
+/// than [sampleExpiration] because they represent membership state,
+/// not per-cycle telemetry. Must match the publisher.
+const Duration nodeExpiration = Duration(hours: 1);
 
 void main(List<String> args) async {
   final ap = _buildParser();
@@ -73,7 +82,7 @@ void main(List<String> args) async {
 
   final nodes = await atClient.collection<HostNode>(
     '$collectionRootName.$applicationNamespace',
-    sampleExpiration,
+    nodeExpiration,
     eventsFromLocalSecondary: true,
   );
 
@@ -133,7 +142,14 @@ void main(List<String> args) async {
         ancestry: e.ancestry,
         id: e.id,
         owner: e.owner,
+        // Leaf is the high-frequency StatSample; intermediate is
+        // the per-host atsigns sub-collection node, which we
+        // expect to live longer (matches the publisher's
+        // nodeExpiration). Both are required for the cached
+        // sub-collections that getDescendant constructs to apply
+        // the right TTL on the receiver side too.
         leafExpiration: sampleExpiration,
+        intermediateExpiration: nodeExpiration,
         leafFromJson: StatSample.fromJson,
         leafTypeTag: 'StatSample',
       );

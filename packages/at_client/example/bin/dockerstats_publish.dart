@@ -28,7 +28,20 @@ import 'package:at_client_examples/dockerstats/simulator.dart';
 import 'package:at_client_examples/dockerstats/stats_source.dart';
 
 const String applicationNamespace = 'dockerstats.demos';
+
+/// TTL for the LEAF [StatSample] CItems — high-frequency telemetry,
+/// short TTL so receivers see a rolling window of recent samples
+/// without manual eviction.
 const Duration sampleExpiration = Duration(minutes: 1);
+
+/// TTL for the structural CItems — root-level [HostNode]s and the
+/// per-host [AtsignOnHost] sub-collection nodes. These represent
+/// "membership" (which hosts exist, which atSigns run on each
+/// host) rather than per-sample telemetry, so they live longer:
+/// they get refreshed on each cycle's `upsert`, but a publisher that
+/// pauses for ~minutes shouldn't lose its host/atSign skeleton from
+/// the receiver's view.
+const Duration nodeExpiration = Duration(hours: 1);
 
 void main(List<String> args) async {
   final ap = _buildParser();
@@ -93,7 +106,7 @@ void main(List<String> args) async {
 
   final nodes = await atClient.collection<HostNode>(
     '$collectionRootName.$applicationNamespace',
-    sampleExpiration,
+    nodeExpiration,
     eventsFromLocalSecondary: true,
   );
 
@@ -118,7 +131,9 @@ void main(List<String> args) async {
 
   log(
     'sharing dockerstats with ${otherAtSigns.join(", ")} '
-    'every ${pollingInterval.inMilliseconds}ms (TTL ${sampleExpiration.inMinutes}m)',
+    'every ${pollingInterval.inMilliseconds}ms '
+    '(samples TTL ${sampleExpiration.inMinutes}m, '
+    'host/atSign TTL ${nodeExpiration.inMinutes}m)',
   );
 
   // Memoised sub-collections so we don't rebuild them per cycle.
@@ -290,7 +305,7 @@ class _Publisher {
         atsigns: nodes.subCollection<AtsignOnHost>(
           parent: hostItem,
           subName: subAtsignsName,
-          defaultExpiration: sampleExpiration,
+          defaultExpiration: nodeExpiration,
         ),
       ),
     );
