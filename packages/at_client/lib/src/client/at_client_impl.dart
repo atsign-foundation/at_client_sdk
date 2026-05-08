@@ -278,8 +278,6 @@ class AtClientImpl implements AtClient {
 
       localSecondary = LocalSecondary(this, keyStore: _localSecondaryKeyStore);
       _atChops ??= await _createAtChops(_atSign);
-      _atChops!.schemes.register('rsa', RSAScheme(this));
-      _atChops!.schemes.register('aes', AESScheme(this));
       _atChops!.schemes.register('legacy', LegacyCryptoScheme(this));
     }
 

@@ -434,8 +434,6 @@ void main() {
         atChops: chops,
       );
       expect(ac.atChops!.schemes.lookup('legacy'), isA<CryptoScheme>());
-      expect(ac.atChops!.schemes.lookup('aes'), isA<CryptoScheme>());
-      expect(ac.atChops!.schemes.lookup('rsa'), isA<CryptoScheme>());
       expect(() => ac.atChops!.schemes.lookup('bubblesort'),
           throwsA(isA<CryptoSchemeNotRegistered>()));
     });

@@ -12,10 +12,8 @@ class SchemeRegistry {
   /// Lookup in the scheme registry
   /// throws a [CryptoSchemeNotRegistered] if not registered
   ///
-  /// there exists some default cryptoschemes:
+  /// there exists a default cryptoscheme:
   /// 'legacy' -> legacy cryptographic scheme, controlled by us
-  /// 'shared' -> shared key scheme, rsa2048 & aes256
-  /// 'aes' -> for self and apkam
   CryptoScheme lookup(String name) {
     try {
       return _schemes[name]!;

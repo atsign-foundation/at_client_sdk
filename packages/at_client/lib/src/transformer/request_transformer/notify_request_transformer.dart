@@ -145,8 +145,8 @@ class NotificationRequestTransformer
     try {
       return await scheme.encrypt(atKey, value);
     } on AtException catch (e) {
-      e.stack(AtChainedException(Intent.notifyData,
-          ExceptionScenario.encryptionFailed, 'Failed to encrypt the data'));
+      e.stack(AtChainedException(
+          Intent.notifyData, ExceptionScenario.encryptionFailed, e.message));
       rethrow;
     }
   }

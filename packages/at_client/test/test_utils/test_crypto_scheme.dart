@@ -9,6 +9,8 @@ class CipherScheme extends CryptoScheme {
 
   @override
   Future<dynamic> encrypt(AtKey atKey, value) async {
+    //for notifications? typically expecting this to populated in legacy scheme.
+    atKey.metadata.sharedKeyEnc = 'sharedKeyEnc';
     return 'abc$value';
   }
 

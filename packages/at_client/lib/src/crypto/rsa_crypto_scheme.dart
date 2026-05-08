@@ -12,7 +12,7 @@ import '../client/at_client_spec.dart';
 import '../util/encryption_util.dart';
 
 class RSAScheme extends CryptoScheme {
-  final AtSignLogger _logger = AtSignLogger('StandardSharedScheme');
+  final AtSignLogger _logger = AtSignLogger('RSAScheme');
   final AtClient _atClient;
   final KeyLookup _keyLookup;
 
@@ -36,10 +36,13 @@ class RSAScheme extends CryptoScheme {
     } else {
       iV = AtChopsUtil.generateIVLegacy();
     }
-    AESKey sharedKey;
+    AESKey? sharedKey;
     //decryption
     try {
-      sharedKey = await _keyLookup.fetchKey(
+      if (atKey.metadata.sharedKeyEnc != null) {
+        sharedKey = AESKey(atKey.metadata.sharedKeyEnc!);
+      }
+      sharedKey ??= await _keyLookup.fetchKey(
         keyName: AtConstants.atEncryptionSharedKey,
         sharedWith: atKey.sharedWith!,
         sharedBy: atKey.sharedBy!,
