@@ -339,6 +339,17 @@ class LocalSecondary implements Secondary {
             'Cannot perform update on $updateKey due to insufficient privilege');
       }
 
+      // Defensive code. Somewhere, something is turning a ttb == null into a
+      // ttb == 0. The result of this is that availableAt is being set. This is
+      // no particular biggie except it's annoying. It does also consume
+      // storage.
+      // TODO Track this down; it's either in atServer receiving from another
+      // one, or it's when it's receiving from client, or the client is
+      // inventing it. My guess is it's when the first atServer is receiving
+      // the request from the client.
+      if (builder.atKey.metadata.ttb == 0) {
+        builder.atKey.metadata.ttb = null;
+      }
       // Probe previous metadata BEFORE the write so we can compute
       // visibility transitions for event emission. May throw
       // KeyNotFoundException for first-write — treat as "no previous".

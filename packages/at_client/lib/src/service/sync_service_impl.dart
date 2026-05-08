@@ -21,7 +21,7 @@ class SyncServiceImpl implements SyncService {
   /// oldest entry is dropped on the next enqueue. Mutable static so
   /// test infrastructure can set it to 1 (one-at-a-time semantics)
   /// for deterministic per-call assertions.
-  static int queueSize = 5;
+  static int queueSize = 10;
   final AtClient _atClient;
   final RemoteSecondary _remoteSecondary;
   @visibleForTesting
@@ -174,7 +174,7 @@ class SyncServiceImpl implements SyncService {
 
   SyncServiceImpl._(this._atClient, this._remoteSecondary) {
     _logger = AtSignLogger('SyncService (${_atClient.getCurrentAtSign()})');
-    _logger.level = 'info';
+    // _logger.level = 'info';
     _lastReceivedServerCommitIdAtKey =
         AtKey.local('lastreceivedservercommitid', currentAtSign).build();
     _skipDeletesUntilCommitId =
@@ -228,8 +228,6 @@ class SyncServiceImpl implements SyncService {
       }
       _promoteServerCommitId(observedServerCommitId);
       final syncRequest = SyncRequest()
-        ..onDone = _onDone
-        ..onError = _onError
         ..requestSource = SyncRequestSource.system
         ..requestedOn = DateTime.now().toUtc()
         ..result = SyncResult();
@@ -441,10 +439,12 @@ class SyncServiceImpl implements SyncService {
     _clearQueue(alreadyHandled: syncRequest);
   }
 
+  // ignore: unused_element
   void _onDone(SyncResult syncResult) {
     _logger.finer('system sync completed on ${syncResult.lastSyncedOn}');
   }
 
+  // ignore: unused_element
   void _onError(SyncResult syncResult) {
     _logger
         .severe('system sync error ${syncResult.atClientException?.message}');
@@ -529,8 +529,7 @@ class SyncServiceImpl implements SyncService {
     _logger.finer('Clearing sync queue');
     final exception = AtClientException(
       error_codes['AtClientException'],
-      'Sync request superseded by a coalesced sync run that just '
-      'completed',
+      'Sync request superseded by a coalesced sync run that just completed',
     );
     while (syncRequests.isNotEmpty) {
       final r = syncRequests.removeFirst();
@@ -651,7 +650,7 @@ class SyncServiceImpl implements SyncService {
           await localSecondary.removeFromSyncQueue(atKey);
           continue;
         }
-        _logger.info('Batching ${entry.op} for $atKey : $command');
+        _logger.info('Will push ${entry.op} for $atKey');
         final batchId = batchRequests.length + 1;
         batchRequests
             .add(BatchRequest(batchId, VerbUtil.replaceNewline(command)));
@@ -856,6 +855,8 @@ class SyncServiceImpl implements SyncService {
           _promoteServerCommitId(lastReceivedServerCommitId);
           break;
         }
+        _logger.info('Received ${listOfCommitEntriesFromServer.length}'
+            ' from server');
         // Iterates over each commit entry. If the serverCommitEntry's
         // atKey is in the [pendingPushAtKeys] set we have a local
         // write for the same key — record a conflict and don't
