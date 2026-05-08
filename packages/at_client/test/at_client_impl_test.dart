@@ -14,7 +14,6 @@ import 'package:test/test.dart';
 
 import 'enrollment_service_test.dart';
 import 'test_utils/mocks.dart';
-import 'test_utils/test_crypto_scheme.dart';
 import 'test_utils/test_utils.dart';
 
 class MockAtCompactionJob extends Mock implements AtCompactionJob {
