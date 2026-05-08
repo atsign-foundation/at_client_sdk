@@ -51,6 +51,7 @@ void main(List<String> args) async {
     exit(64);
   }
   final expectTimeout = _parseDuration(parsed['expect-timeout'] as String);
+  final traceEnabled = parsed['trace'] as bool;
 
   stdout.writeln('Connecting...');
   final cliBase = await CLIBase.fromCommandLineArgs(args, parser: ap);
@@ -119,12 +120,14 @@ void main(List<String> args) async {
     // shouldn't carry deletes anyway. Either way: nothing for this
     // subscriber to do — quietly skip.
     if (e.ancestry.any((a) => a.owner == null)) return;
-    final evtUs = DateTime.now().microsecondsSinceEpoch;
-    stderr.writeln(
-      'TRACE sub_event id=${e.id} owner=${e.owner} '
-      'ancestry=${e.ancestry.map((a) => "${a.id}/${a.subName}").join(",")} '
-      't_us=$evtUs',
-    );
+    if (traceEnabled) {
+      final evtUs = DateTime.now().microsecondsSinceEpoch;
+      stderr.writeln(
+        'TRACE sub_event id=${e.id} owner=${e.owner} '
+        'ancestry=${e.ancestry.map((a) => "${a.id}/${a.subName}").join(",")} '
+        't_us=$evtUs',
+      );
+    }
     try {
       final item = await nodes.getDescendant<StatSample>(
         ancestry: e.ancestry,
@@ -135,19 +138,32 @@ void main(List<String> args) async {
         leafTypeTag: 'StatSample',
       );
       if (item == null) {
-        final missUs = DateTime.now().microsecondsSinceEpoch;
-        stderr.writeln(
-          'TRACE sub_chain_miss id=${e.id} owner=${e.owner} t_us=$missUs',
-        );
+        if (traceEnabled) {
+          final missUs = DateTime.now().microsecondsSinceEpoch;
+          stderr.writeln(
+            'TRACE sub_chain_miss id=${e.id} owner=${e.owner} t_us=$missUs',
+          );
+        }
         return;
       }
       final s = item.obj;
       samplesSeen++;
-      final recvUs = DateTime.now().microsecondsSinceEpoch;
-      stderr.writeln(
-        'TRACE sub_recv id=${s.millis} pair=${s.hostname}/${s.atSign} '
-        't_us=$recvUs',
-      );
+      if (expectCount != null) {
+        final hit = samplesSeen >= expectCount;
+        stdout.writeln(
+          '${DateTime.now()} | expect=$expectCount actual=$samplesSeen '
+          '${hit ? "OK" : "MISSING ${expectCount - samplesSeen}"}',
+        );
+      } else {
+        stdout.writeln('${DateTime.now()} | actual=$samplesSeen ');
+      }
+      if (traceEnabled) {
+        final recvUs = DateTime.now().microsecondsSinceEpoch;
+        stderr.writeln(
+          'TRACE sub_recv id=${s.millis} pair=${s.hostname}/${s.atSign} '
+          't_us=$recvUs',
+        );
+      }
       stdout.writeln(_formatSample(s, samplesSeen));
       // Closed-loop early-exit: once we've seen the expected count,
       // signal the main loop to stop. The publisher and subscriber
@@ -250,6 +266,13 @@ ArgParser _buildParser() {
       help:
           'Time to wait for --expect to be reached before exiting '
           'with status 1.',
+    )
+    ..addFlag(
+      'trace',
+      negatable: false,
+      help:
+          'Emit per-event TRACE log lines on stderr (sub_event, '
+          'sub_chain_miss, sub_recv). Off by default.',
     )
     ..addOption(
       'namespace',

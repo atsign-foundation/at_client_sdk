@@ -58,6 +58,7 @@ void main(List<String> args) async {
     exit(64);
   }
   final postSyncDelay = _parseDuration(parsed['post-sync-delay'] as String);
+  final traceEnabled = parsed['trace'] as bool;
   final otherAtSigns =
       _splitCsv(
         parsed['other-at-signs'] as String?,
@@ -125,6 +126,7 @@ void main(List<String> args) async {
     nodes: nodes,
     otherAtSigns: otherAtSigns,
     log: log,
+    traceEnabled: traceEnabled,
   );
 
   // Graceful shutdown on SIGINT / SIGTERM. First signal completes
@@ -186,7 +188,9 @@ void main(List<String> args) async {
       // assertion ("subscriber received exactly $totalSamples
       // samples") is only meaningful once this completes.
       final waitStart = DateTime.now().microsecondsSinceEpoch;
-      log('TRACE sync_start t_us=$waitStart');
+      if (traceEnabled) {
+        log('TRACE sync_start t_us=$waitStart');
+      }
       atClient.syncService.sync();
       try {
         // Race against `stop.future` so a Ctrl-C during the catch-
@@ -196,6 +200,7 @@ void main(List<String> args) async {
           atClient.syncService.waitUntilCaughtUp(
             timeout: const Duration(seconds: 60),
             onProgress: (p) {
+              if (!traceEnabled) return;
               final t = DateTime.now().microsecondsSinceEpoch;
               log(
                 'TRACE sync_progress t_us=$t status=${p.syncStatus} '
@@ -210,10 +215,12 @@ void main(List<String> args) async {
           stop.future,
         ]);
         if (!stop.isCompleted) {
-          final waitEnd = DateTime.now().microsecondsSinceEpoch;
-          log(
-            'TRACE sync_caught_up t_us=$waitEnd dt_us=${waitEnd - waitStart}',
-          );
+          if (traceEnabled) {
+            final waitEnd = DateTime.now().microsecondsSinceEpoch;
+            log(
+              'TRACE sync_caught_up t_us=$waitEnd dt_us=${waitEnd - waitStart}',
+            );
+          }
           log('sync caught up; emitted $totalSamples sample(s) total');
         }
       } on TimeoutException {
@@ -253,6 +260,11 @@ class _Publisher {
   final Set<Atsign> otherAtSigns;
   final void Function(String) log;
 
+  /// When true the per-sample TRACE log lines (pub_pre / pub_post)
+  /// are emitted. Off by default to keep the demo's stdout readable;
+  /// flip on with `--trace` for closed-loop diagnostics.
+  final bool traceEnabled;
+
   /// hostId → host CItem. Cached after first ensure to skip the
   /// existence probe on subsequent cycles.
   final Map<String, CItem<HostNode>> _hostItems = {};
@@ -264,6 +276,7 @@ class _Publisher {
     required this.nodes,
     required this.otherAtSigns,
     required this.log,
+    required this.traceEnabled,
   });
 
   Future<void> publishSample(StatSample s) async {
@@ -294,17 +307,21 @@ class _Publisher {
     );
 
     final preMs = DateTime.now().microsecondsSinceEpoch;
-    log('TRACE pub_pre id=${s.millis} pair=$hostId/$atSignId t_us=$preMs');
+    if (traceEnabled) {
+      log('TRACE pub_pre id=${s.millis} pair=$hostId/$atSignId t_us=$preMs');
+    }
     await samples.create(
       id: s.millis.toString(),
       obj: s,
       sharedWith: otherAtSigns,
     );
-    final postMs = DateTime.now().microsecondsSinceEpoch;
-    log(
-      'TRACE pub_post id=${s.millis} pair=$hostId/$atSignId '
-      't_us=$postMs dt_us=${postMs - preMs}',
-    );
+    if (traceEnabled) {
+      final postMs = DateTime.now().microsecondsSinceEpoch;
+      log(
+        'TRACE pub_post id=${s.millis} pair=$hostId/$atSignId '
+        't_us=$postMs dt_us=${postMs - preMs}',
+      );
+    }
   }
 
   Future<CItem<HostNode>> _ensureHost(String hostId, String hostname) async {
@@ -416,6 +433,13 @@ ArgParser _buildParser() {
               'Settle time after waitUntilCaughtUp before exit, to let '
               'the last cycle\'s recipient-copy writes flush through '
               'the sync pipeline. Only relevant with --cycles.',
+        )
+        ..addFlag(
+          'trace',
+          negatable: false,
+          help:
+              'Emit per-event TRACE log lines (pub_pre, pub_post, '
+              'sync_start, sync_progress, sync_caught_up). Off by default.',
         )
         // Standard at_cli_commons knobs, hidden by default.
         ..addOption('key-file', abbr: 'k', hide: true)
