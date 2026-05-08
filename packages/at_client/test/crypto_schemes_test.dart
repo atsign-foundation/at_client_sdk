@@ -26,8 +26,7 @@ void main() {
         .thenAnswer((_) => Future.value('yuh'));
     when(() => mockLocalSecondary.executeVerb(any(), sync: any(named: 'sync')))
         .thenAnswer((_) => Future.value('yuh'));
-    when(() =>
-            mockRemoteSecondary.executeVerb(any(), sync: any(named: 'sync')))
+    when(() => mockRemoteSecondary.executeVerb(any(), sync: any(named: 'sync')))
         .thenAnswer((_) => Future.value('yuh'));
     when(() => mockLocalSecondary.getEncryptionPublicKey(any()))
         .thenAnswer((_) => Future.value('some-public-key'));

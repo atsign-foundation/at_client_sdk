@@ -5,7 +5,6 @@ import 'package:at_client/src/crypto/key_lookup.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:encrypt/encrypt.dart';
 import 'package:meta/meta.dart';
 
 import '../client/at_client_spec.dart';
