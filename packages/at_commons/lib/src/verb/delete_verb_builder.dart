@@ -15,9 +15,24 @@ import 'package:at_commons/src/verb/verb_util.dart';
 class DeleteVerbBuilder extends AbstractVerbBuilder {
   bool force = false;
 
+  /// When true, the server is asked not to write a commit-log entry for this
+  /// delete. Emitted on the wire as the `:nc` flag.
+  bool noCommit = false;
+
+  /// When set, the timestamp at which the deletion is asserted to have
+  /// occurred. Emitted on the wire as `:dAt:<millisecondsSinceEpoch>`.
+  DateTime? deletedAt;
+
   @override
   String buildCommand() {
     StringBuffer serverCommandBuffer = StringBuffer('delete:');
+    if (deletedAt != null) {
+      serverCommandBuffer
+          .write('dAt:${VerbUtil.formatIso8601Micros(deletedAt!)}:');
+    }
+    if (noCommit) {
+      serverCommandBuffer.write('nc:');
+    }
     if (force) {
       serverCommandBuffer.write('force:');
     }
@@ -33,6 +48,10 @@ class DeleteVerbBuilder extends AbstractVerbBuilder {
     builder.atKey.metadata.isPublic =
         verbParams[AtConstants.publicScopeParam] == 'public';
     builder.force = verbParams[AtConstants.force] == AtConstants.force;
+    builder.noCommit = verbParams['noCommit'] != null;
+    if (verbParams['deletedAt'] != null) {
+      builder.deletedAt = DateTime.parse(verbParams['deletedAt']!);
+    }
     builder.atKey.sharedWith =
         VerbUtil.formatAtSign(verbParams[AtConstants.forAtSign]);
     builder.atKey.sharedBy =
