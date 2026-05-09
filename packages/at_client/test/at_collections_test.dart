@@ -1652,7 +1652,7 @@ void main() {
   // so the suite stays fast without a fake-async test harness. The
   // scheduler reads `DateTime.now()` directly, so each test's
   // assertions account for ~5-10ms of scheduling jitter.
-  group('availableEvents (W7)', () {
+  group('availableEvents', () {
     /// Helper: mock `getAtKeys` + `get` to surface a single item with
     /// the given availableAt / expiresAt.
     void seedSingleItem({
@@ -1723,7 +1723,7 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
-  group('expiringSoonEvents (W7)', () {
+  group('expiringSoonEvents', () {
     AtNotification objNotif({
       required String key,
       required String operation,

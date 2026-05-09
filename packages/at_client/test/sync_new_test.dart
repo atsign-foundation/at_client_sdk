@@ -1158,7 +1158,7 @@ void main() {
     ///  1. After sync completion:
     ///     a. The keystore should have test4_key0 with value: +445-446-4847
     test(
-        skip: 'decouple-sync-from-commit-log: tests delete-then-recreate via '
+        skip: 'obsolete: tests delete-then-recreate via '
             'direct keystore.put + commit-log manipulation. The new push '
             'path doesn\'t observe commit-log entries; the queue carries '
             'the same dedup semantics (test in at_sync_queue_test.dart '
@@ -1281,11 +1281,10 @@ void main() {
     /// 1. The entries from server should be created at hive_seq 9,10 and 11
     /// 2. When fetching uncommitted entries only entries with hive_seq 6,7,8 should be returned.
     test(
-        skip: 'decouple-sync-from-commit-log: tests that the (now-removed) '
-            '_syncToRemote skipped commit-log entries that already had a '
-            'commitId. The new push path drains the AtSyncQueue, which '
-            'has no concept of "already-synced" entries — successful '
-            'pushes remove from the queue. Coverage in '
+        skip: 'obsolete: tests the removed _syncToRemote skip-on-'
+            'commitId behaviour. The push path drains AtSyncQueue, '
+            'which has no concept of "already-synced" entries — '
+            'successful pushes remove from the queue. Coverage in '
             'at_sync_queue_test.dart.',
         'A test to verify batch requests does not sync entries with commitId',
         () async {
@@ -1562,7 +1561,7 @@ void main() {
     /// Assertions:
     /// Batch response should contain the commitId for every key sent in the batch request
     test(
-        skip: 'decouple-sync-from-commit-log: obsolete commit-log push path. '
+        skip: 'obsolete: obsolete commit-log push path. '
             'Push side now drains LocalSecondary.AtSyncQueue; commitId '
             'no longer round-trips into commit-log entries. Coverage is '
             'in test/local_secondary_sync_queue_test.dart and '
@@ -2027,7 +2026,7 @@ void main() {
     /// 1. Server and local should be in sync and 5 uncommitted entries
     ///    must be synced to cloud secondary
     test(
-        skip: 'decouple-sync-from-commit-log: obsolete commit-log push path. '
+        skip: 'obsolete: obsolete commit-log push path. '
             'Push side no longer reads commit log; syncRegex is not '
             'applied to push (the queue contains exactly what was '
             'enqueued). Pull-side syncRegex semantics are unchanged.',
@@ -2095,9 +2094,9 @@ void main() {
     });
 
     test(
-        skip: 'decouple-sync-from-commit-log: dedup behaviour now lives on '
-            'AtSyncQueue (per-key dedup by overwrite + UPDATE→DELETE '
-            'collapse). Tested in test/at_sync_queue_test.dart.',
+        skip: 'obsolete: dedup behaviour lives on AtSyncQueue '
+            '(per-key dedup by overwrite + UPDATE→DELETE collapse). '
+            'Coverage in test/at_sync_queue_test.dart.',
         'A test to verify update and delete of same key in a single batch',
         () async {
       int serverCommitId = 1;
@@ -2333,7 +2332,7 @@ void main() {
     });
 
     test(
-        skip: 'decouple-sync-from-commit-log: same root as the other '
+        skip: 'obsolete: same root as the other '
             'commit-log-entry assertions — checks the back-written '
             'commitId on local commit-log entries after a pull. The new '
             '_pullToLocal doesn\'t do that back-write. Bad-key handling '
@@ -2861,7 +2860,7 @@ void main() {
     /// Assertions:
     /// 1. The key should be added to the keyListInfo
     test(
-        skip: 'decouple-sync-from-commit-log: conflict detection input '
+        skip: 'obsolete: conflict detection input '
             'switched from List<CommitEntry> uncommittedEntries to '
             'Set<String> pendingPushAtKeys (from the sync queue). '
             'End-to-end conflict behaviour is exercised by '
@@ -2983,11 +2982,11 @@ void main() {
     });
 
     test(
-        skip: 'decouple-sync-from-commit-log: same root as the previous test '
+        skip: 'obsolete: same root as the previous test '
             '— conflict-detection setup uses the obsolete commit-log path. '
-            'errorOrExceptionMessage propagation through ConflictInfo is '
-            'a pull-side concern that survives the refactor; behaviour '
-            'verified end-to-end by atclient_sync_conflict_test.dart.',
+            'errorOrExceptionMessage propagation through ConflictInfo '
+            'is still a pull-side concern; behaviour is verified '
+            'end-to-end by atclient_sync_conflict_test.dart.',
         'A test to verify conflict info sets errorOrExceptionMessage when exception occurs in setConflictInfo',
         () async {
       // ------------------------------ Setup ----------------------------------
@@ -3068,7 +3067,7 @@ void main() {
     });
 
     test(
-        skip: 'decouple-sync-from-commit-log: same root as the other '
+        skip: 'obsolete: same root as the other '
             'conflict-info tests in this group — fixture sets up the '
             'commit-log push path. Conflict on a local DELETE is '
             'covered semantically by atclient_sync_conflict_test.dart.',
@@ -3403,7 +3402,7 @@ void main() {
       ///   a. the local commit id and server commit id should be equal
       ///   b. the isSyncInProgress should be set to false
       test(
-          skip: 'decouple-sync-from-commit-log: assertion checks that pulled '
+          skip: 'obsolete: assertion checks that pulled '
               'commit-log entries have their commitId field back-written. '
               'The new _pullToLocal no longer touches the commit log\'s '
               'commitId — sync state lives in _highestPushedCommitId + '
@@ -3774,7 +3773,7 @@ void main() {
       ///    i. int? localCommitId: The local commit id after sync; here 15
       ///    j. int? serverCommitId: The server commit id; here 15
       test(
-          skip: 'decouple-sync-from-commit-log: relies on the (removed) '
+          skip: 'obsolete: relies on the (removed) '
               'commit-log push path to advance localCommitId during sync. '
               'SyncProgressListener wiring itself is unchanged and is '
               'exercised by the dockerstats smoke (which uses the listener '
@@ -3972,7 +3971,7 @@ void main() {
       });
 
       test(
-          skip: 'decouple-sync-from-commit-log: pull-side observability test '
+          skip: 'obsolete: pull-side observability test '
               'works in principle but its mockSyncUtil-driven setup '
               'doubles as a check on the (removed) push path. SyncProgress '
               'callbacks themselves are exercised end-to-end by the '
@@ -4047,11 +4046,10 @@ void main() {
       });
 
       test(
-          skip:
-              'decouple-sync-from-commit-log: client-ahead push observability '
-              'now lives on the AtSyncQueue → batch verb path. Tested in '
-              'local_secondary_sync_queue_test.dart and end-to-end by '
-              'the dockerstats smoke pack.',
+          skip: 'obsolete: client-ahead push observability is '
+              'covered on the AtSyncQueue → batch verb path by '
+              'local_secondary_sync_queue_test.dart and end-to-end '
+              'by the dockerstats smoke pack.',
           'A test to verify commit operation is populated in sync progress callback when client is ahead',
           () async {
         TestResources.atsign = '@bob';
@@ -4140,7 +4138,7 @@ void main() {
       });
 
       test(
-          skip: 'decouple-sync-from-commit-log: invalid-regex error path '
+          skip: 'obsolete: invalid-regex error path '
               'lived inside SyncUtil.getLastSyncedEntry, which the new '
               '_isInSync no longer calls (it consults '
               'LocalSecondary.syncQueueSize instead). Regex validation '
@@ -4229,7 +4227,7 @@ void main() {
       ///    actually advances past 110, instead of re-probing the
       ///    same filtered range every round.
       test(
-          skip: 'decouple-sync-from-commit-log: pull-side cursor-advancement '
+          skip: 'obsolete: pull-side cursor-advancement '
               'logic is unchanged but the test fixture mocks now-removed '
               'commit-log-driven push-path methods. Pull-side cursor '
               'advancement is implicitly verified by the dockerstats '

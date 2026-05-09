@@ -86,7 +86,8 @@ void main(List<String> args) async {
     eventsFromLocalSecondary: true,
   );
 
-  // TODO This should not be necessary but it is
+  // Force the notification listener up front so the first event
+  // doesn't race the lazy startup inside subscribe().
   atClient.notificationService.startListening();
 
   // ---------------------------------------------------------------------

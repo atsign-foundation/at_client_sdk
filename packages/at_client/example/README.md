@@ -127,11 +127,13 @@ dart run bin/dockerstats_publish.dart \
 # Subscriber — prints one line per arriving sample:
 dart run bin/dockerstats_subscribe.dart -a @bob
 ```
-`-P` is the polling interval; samples expire after 10 minutes so
-receivers see a rolling window without any client-side eviction. The
-subscriber is a CLI counterpart to the Flutter dashboard — useful
-for verifying publisher↔receiver round-trip without spinning up the
-Flutter app.
+`-P` is the polling interval. Samples expire after 1 minute so
+receivers see a rolling window without any client-side eviction;
+the structural nodes (`atsigns` and `nodes` levels) carry a
+1-hour TTL so the tree itself doesn't churn at the sample cadence.
+The subscriber is a CLI counterpart to the Flutter dashboard —
+useful for verifying publisher↔receiver round-trip without spinning
+up the Flutter app.
 
 ### Notifications
 Fire-and-forget messaging via `NotificationService`.

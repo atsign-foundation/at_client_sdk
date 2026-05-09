@@ -1,32 +1,27 @@
 // Regression tests for the pause/resume behaviour of
 // [KeyStreamMixin] and [NotificationServiceImpl.subscribeFiltered].
 //
-// Both APIs used to forward consumer-side pause()/resume() through to
-// a subscription on `notificationService.subscribe(...)`, which is a
-// broadcast stream. Even though Dart's broadcast subscriptions DO
-// buffer events delivered while a subscription is paused, propagating
-// the pause has two undesirable side-effects:
+// Contract under test: a consumer-side pause does NOT propagate to
+// the upstream broadcast subscription returned by
+// `notificationService.subscribe(...)`. Propagating the pause would
+// back-pressure every other subscriber on the same broadcast (the
+// underlying controller is cached per regex) and would leak the
+// upstream-pause as a publicly-observable signal.
 //
-//   (a) it back-pressures every other subscriber on the same broadcast
-//       (`subscribe` returns a cached broadcast controller per regex,
-//        shared across listeners);
-//   (b) it leaks the upstream-pause as a publicly-observable signal,
-//       making the API harder to reason about.
+// How that contract is enforced:
+//   - `subscribeFiltered`: the downstream consumer's pause only
+//     pauses the inner single-sub controller; upstream broadcast
+//     deliveries continue and accumulate in that controller's
+//     native buffer.
+//   - `KeyStreamMixin`: an internal `_pauseBuffer` + pause-depth
+//     counter holds notifications received while the depth is
+//     non-zero. The upstream broadcast subscription is never
+//     paused; the buffer drains on the resume that returns depth
+//     to zero.
 //
-// The fixes:
-//   - `subscribeFiltered`: dropped `sc.onPause` / `sc.onResume`. The
-//     downstream consumer's pause now only pauses the inner
-//     single-sub `sc` controller; upstream broadcast deliveries
-//     continue and accumulate in `sc`'s native buffer.
-//   - `KeyStreamMixin`: replaced upstream-pause with an internal
-//     `_pauseBuffer` + pause-depth counter. Notifications received
-//     while the depth is non-zero are buffered and drained on the
-//     resume that returns the depth to zero. The upstream broadcast
-//     subscription is never paused.
-//
-// The tests below verify the contract of the new behaviour: when the
-// consumer pauses, events are still received and held; when the
-// consumer resumes, they are delivered in arrival order.
+// The tests below verify that contract: when the consumer pauses,
+// events are still received and held; when the consumer resumes,
+// they are delivered in arrival order.
 
 import 'dart:async';
 

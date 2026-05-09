@@ -228,7 +228,8 @@ class AtSyncQueue {
   /// Removes [atKey] from both the in-memory queue and the persisted
   /// box. Called after a successful push to the server, or when a
   /// drain attempt finds the underlying keystore value missing
-  /// (race-tolerated removal — see plan).
+  /// (race-tolerated removal: a queue write may have committed
+  /// without the keystore write landing, e.g. across a crash).
   Future<void> remove(String atKey) async {
     _ensureOpen();
     _inMemoryQueue.remove(atKey);

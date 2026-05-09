@@ -47,8 +47,8 @@ against a collection. Principal types:
   plus typed sub-streams); sub-collection construction
   (`subCollection<U>(...)`) plus `getDescendant<U>(...)` for a
   one-call walk down a sub-item ancestry; two sharing-mutation
-  paths (`update` taking an optional `sharedWith:` set, plus
-  `updateSharedWith` for delta-only recipient changes); and
+  paths (mutate `item.sharedWith` in place then call `update`,
+  or call `updateSharedWith` for delta-only recipient changes); and
   orphan recovery (`cleanupOrphans()`). `upsert` is the
   idempotent create-or-update verb (use it from any publisher
   that may restart within the collection's TTL); `getDescendant`
@@ -248,7 +248,7 @@ cost of a raw implementation is high enough that the feature is
 | Filter + list (e.g. `.where(done).toList()`)                  | ~30                 | 3                     | ~90 %     |
 | Subscribe to updates with typed payload                       | ~15-20              | 1                     | ~94 %     |
 | Send a read receipt (and receive one)                         | ~30 + invent scheme | 1 + 1 auto            | ~93 %     |
-| Sub-collection scoped to a parent, cascade on delete          | N/A (invent it)     | 3                     |,         |
+| Sub-collection scoped to a parent, cascade on delete          | N/A (invent it)     | 3                     | n/a       |
 
 The current-API side of each row corresponds to genuine
 single-line invocations:
@@ -284,8 +284,8 @@ right is a concept the caller no longer has to remember.
 | Application namespace composition           | Caller must know it explicitly                  | Still exposed, caller provides fully-qualified namespace (by design) |
 
 Net: ten of eleven concepts move from "app must maintain" to
-"library handles". The one that stays exposed ,
-fully-qualified namespace, is a deliberate design choice:
+"library handles". The one that stays exposed —
+fully-qualified namespace — is a deliberate design choice:
 implicit namespace composition would make the call site less
 greppable and the behaviour depend on `AtClientPreference`
 context.
@@ -295,14 +295,14 @@ context.
 | Category                 | Methods / fields exposed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 |--------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Drafting                 | `draft({obj, id?, sharedWith?, expiresAt?, availableAt?})` (no I/O)                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Create / Update / Delete | `create({obj, id?, sharedWith?, expiresAt?, availableAt?})` (throws on collision); `upsert({id, obj, sharedWith?, expiresAt?, availableAt?})` (idempotent create-or-update); `update(item, {sharedWith?, unshareWithOthers})` (throws if missing); `updateSharedWith(item, newSharedWith, {unshareWithOthers})` (recipient-delta only); `delete(item, {cascade})`                                                                                                                                                       |
+| Create / Update / Delete | `create({obj, id?, sharedWith?, expiresAt?, availableAt?})` (throws on collision); `upsert({id, obj, sharedWith?, expiresAt?, availableAt?})` (idempotent create-or-update); `update(item, {unshareWithOthers = true})` (rewrites self + recipients; mutate `item.sharedWith` in place to change recipients); `updateSharedWith(item, newSharedWith, {unshareWithOthers = true})` (recipient-delta only, no self-key rewrite); `delete(item, {cascade = false})`                                                                       |
 | Read one                 | `get(id, owner)` (throws if missing), `getOrNull(id, owner)` (null if missing or not yet available), `exists(id, owner)`                                                                                                                                                                                                                                                                                                                                                                                                |
 | Read many                | `getItems({id?, owner?})` (List, throws on decode error), `getItemsAsStream({id?, owner?})` (Stream, errors yielded in-band; items past `expiresAt` or with `availableAt` in the future are skipped silently — same lifecycle bucket: logically non-existent)                                                                                                                                                                                                                                                          |
-| Query builder            | `query()` → `Query<T>`; modifiers `.where(p)`, `.wherePath(predicate)`, `.orderBy(keyFn, {descending})`, `.thenBy(keyFn, {descending})`, `.limit(n)`, `.skip(n)`, `.distinct(keyFn)`; terminals `.get()` (with `.fetch()` retained as a `@Deprecated` alias for one minor), `.watch()`, `.count()`, `.any([p])`, `.first()`, `.firstOrNull()`, `.groupBy<K>(keyFn)`, `.watchWithSub<U>(subName, subDefaultExpiration, {subFromJson, subTypeTag})` (live parent+children join), `.watchWithTree(List<SubSpec>)` (recursive multi-level join) |
+| Query builder            | `query()` → `Query<T>`; modifiers `.where(p)`, `.wherePath(predicate)`, `.orderBy(keyFn, {descending = false})`, `.thenBy(keyFn, {descending = false})`, `.limit(n)`, `.skip(n)`, `.distinct(keyFn)`; terminals `.get()` (with `.fetch()` retained as a `@Deprecated` alias), `.watch()`, `.count()`, `.any([p])`, `.first()`, `.firstOrNull()`, `.groupBy<K>(keyFn)`, `.watchWithSub<U>(subName, subDefaultExpiration, {subFromJson, subTypeTag})` (live parent+children join), `.watchWithTree(List<SubSpec>)` (recursive multi-level join) |
 | Read receipts            | On `CItem`: `markReadByMe()`, `wasMarkedReadByMe()`, `readBy` (Future), `readBySnapshot` (sync), `receipts` (the `__rr` sub-collection). On `AtCollection`: `markReadByMe(item)` / `wasMarkedReadByMe(item)` shims, `readReceiptsFor(item)` → queryable receipts sub-collection.                                                                                                                                                                                                                                        |
 | Sub-collections          | `subCollection<U>({parent, subName, defaultExpiration, fromJson?, typeTag?})`; `getDescendant<U>({ancestry, id, owner, leafExpiration, intermediateExpiration?, leafFromJson?, leafTypeTag?})` (one-call walk that's the receiver-side dual of `subCollection` for sub-item events); `cleanupOrphans()` (works on root and sub)                                                                                                                                                                                          |
 | Events                   | `watch()` → `Stream<CEvent>`; typed getters `updates` / `deletes` / `readReceipts` / `subUpdates` / `subDeletes` / `availableEvents`; method `expiringSoonEvents({required leadTime})` for time-before-expiry alerts                                                                                                                                                                                                                                                                                                    |
-| Exceptions               | `CollectionOpException` (write failures, with `.results` / `.failures` / `.firstFailure`); `CollectionGetException` (read/decode failures, with `.partialItems` / `.errors`); `StateError` (create-collides / update-missing / cascade-needed); `ArgumentError` (invalid input); `AtKeyNotFoundException` (get of absent)                                                                                                                                                                                               |
+| Exceptions               | `CollectionOpException` (write failures, with `.results` / `.failures` / `.firstFailure`); `StateError` (create-collides / update-missing / cascade-needed); `ArgumentError` (invalid input); `AtKeyNotFoundException` (get of absent); `FormatException` (per-key decode error — yielded as `Stream.error` from `getItemsAsStream`, thrown synchronously from `getItems`)                                                                                                                                                                                               |
 
 ## 5. What's distinctive
 
@@ -509,17 +509,17 @@ store" is what makes the AtCollection sync model unusual.
 
 Three additive items to the API surface as it stands.
 
-1. **Batched writes** (`createBatch` / `deleteBatch`) ,
+1. **Batched writes** (`createBatch` / `deleteBatch`) —
    best-effort batched per-atSign writes returning
    `List<OpResult>`. Most peer libraries expose some batching
-   primitive; we don't. Atsign Protocol can't offer cross-atSign
-   ACID, but per-atSign batching is achievable and is the
-   highest-impact gap. Stub TODOs are present in
-   `collections.dart`. The `PredicateOp` enum already
-   pre-allocates `like`, `inSet`, `between`, `contains`,
-   `startsWith` against the same future-extension posture
-   (`CmpPredicate.evaluate` throws `UnimplementedError` until
-   each is implemented, adding them is non-breaking).
+   primitive; this API does not. Atsign Protocol can't offer
+   cross-atSign ACID, but per-atSign batching is achievable and
+   is the highest-impact gap. The `PredicateOp` enum is
+   structured to admit additive operators the same way:
+   `like`, `inSet`, `between`, `contains`, `startsWith` are
+   pre-allocated values whose `CmpPredicate.evaluate` throws
+   `UnimplementedError` today, so wiring an evaluator for any
+   of them is non-breaking.
 
 2. **Cursor pagination** (`Query<T>.startAfter(CItem)`), for
    stable scrolling on a dynamic data set. Today only
@@ -533,25 +533,8 @@ Three additive items to the API surface as it stands.
    distribution model anyway, so this is open by design rather
    than as a roadmap item; listed for completeness.
 
-4. **Default `eventsFromLocalSecondary` to `true`.** The flag is
-   currently a required named parameter on `AtClient.collection`
-   and on the `AtCollection.new` factories; production callers
-   typically want `true` (consume events from the local
-   keystore's `DataUpdated` / `DataDeleted` stream, which is
-   sync-completion-aware and avoids a redundant remote fetch on
-   every notification). The `false` path (subscribe to
-   `NotificationService` regex over the wire) is what the SDK
-   used to do, and it produces measurably worse latency on
-   streaming workloads because each leaf event triggers an
-   `atClient.get` round-trip to fetch the envelope. Switching the
-   default to `true` is a one-line change inside the constructors,
-   plus a doc note. Open callers that want the old behaviour
-   would pass `eventsFromLocalSecondary: false` explicitly.
-
-All four are additive (or, in the case of #4, behaviour-preserving
-for callers that pin the flag). They slot in without touching
-existing call sites that already pass the flag, so deferring them
-is non-breaking.
+All three are additive. They slot in without touching existing
+call sites, so deferring them is non-breaking.
 
 ## Appendix: key-length budget and tree-depth ceiling
 

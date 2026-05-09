@@ -687,16 +687,13 @@ void main() {
       expect(deleted, contains(commentKey.toString()));
     });
 
-    test(
-        'legacy depth-2 descendant whose middleman is gone is now '
-        'swept (W6 residual)', () async {
+    test('legacy depth-2 descendant whose middleman is gone is swept',
+        () async {
       // Setup: a depth-2 reply r1 under comment c1 under post p1.
-      // The reply was written before envelope.parents was a thing
-      // (legacy item — no `parents` field). Root post p1 still
-      // exists locally; mid comment c1 is gone; reply r1 still on
-      // disk. Pre-W6-residual the legacy fallback only checked the
-      // root, so r1 survived. Post-W6-residual the chain-walker
-      // detects c1's absence and sweeps r1.
+      // The reply is a legacy item (no `parents` envelope field).
+      // Root post p1 still exists locally; mid comment c1 is gone;
+      // reply r1 still on disk. The chain-walker detects c1's
+      // absence and sweeps r1 even though the root is alive.
       final c = buildParent();
       final replyKey = AtKey.fromString(
         'r1.replies.c1.comments.p1.$parentNs$selfAtSignStr',

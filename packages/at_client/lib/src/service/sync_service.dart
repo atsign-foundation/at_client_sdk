@@ -125,14 +125,10 @@ class SyncResult {
   }
 }
 
-/// Identifies the origin of a [SyncRequest]. After the
-/// `decouple-sync-from-commit-log` refactor every sync request is
+/// Identifies the origin of a [SyncRequest]. Every sync request is
 /// idempotent — "what to push" is owned by `LocalSecondary`'s
 /// `AtSyncQueue`, so requests are just "please drain" triggers that
-/// can be coalesced wholesale at end-of-round. The previous
-/// `writeTrigger` variant (briefly added at `de48210bf` to retain
-/// write-originated requests across a round) was removed when the
-/// dedicated sync queue took over its role.
+/// can be coalesced wholesale at end-of-round.
 enum SyncRequestSource { app, system }
 
 class SyncRequest {
@@ -152,7 +148,7 @@ class SyncRequest {
 ///Enum to represent the sync status.
 ///
 /// [inProgress] is emitted at intra-iteration checkpoints (currently:
-/// after each batch processed by `_syncFromServer` / `_syncToRemote`)
+/// after each batch processed by `_syncFromServer` / `_pushFromSyncQueue`)
 /// so listeners can observe progress on long syncs without waiting
 /// for the iteration to finish. Listeners that only care about
 /// terminal events should filter to [success] / [failure].

@@ -83,11 +83,12 @@ class RemoteSecondary implements Secondary {
     return clientConfig;
   }
 
-  /// Executes the command returned by [VerbBuilder] build command on a remote secondary server.
-  /// Optionally [privateKey] is passed for verb builders which require authentication.
-  /// [cameFromServer] is accepted for [Secondary] interface compatibility but
-  /// ignored — remote secondaries don't have a client→server sync queue
-  /// to skip enqueuing into.
+  /// Executes the command returned by [VerbBuilder] on a remote
+  /// secondary server. Authentication is handled by the injected
+  /// `AtLookUp`. [sync] is accepted for [Secondary] interface
+  /// compatibility but is ignored. [cameFromServer] is also accepted
+  /// for interface compatibility and ignored — remote secondaries
+  /// don't have a client→server sync queue to skip enqueuing into.
   @override
   Future<String> executeVerb(VerbBuilder builder,
       {sync = false, bool cameFromServer = false}) async {
@@ -185,7 +186,7 @@ class RemoteSecondary implements Secondary {
       var host = secondaryInfo[0];
       var port = secondaryInfo[1];
       var internetAddress = await InternetAddress.lookup(host);
-      //TODO getting first ip for now. explore best solution
+      // TODO: getting first ip for now. explore best solution
       var addressCheckOptions = AddressCheckOptions(
           address: internetAddress[0], port: int.parse(port));
       var addressCheckResult = await InternetConnectionChecker()

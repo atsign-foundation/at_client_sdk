@@ -563,12 +563,12 @@ abstract class AtClient {
       {String? regex});
 
   /// Streams the file in [filePath] to [sharedWith] atSign.
-  @Deprecated("Obsolete, wil be removed in v4")
+  @Deprecated("Obsolete, will be removed in v4")
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String namespace});
 
   /// Sends stream acknowledgement
-  @Deprecated("Obsolete, wil be removed in v4")
+  @Deprecated("Obsolete, will be removed in v4")
   Future<void> sendStreamAck(
       String streamId,
       String fileName,
@@ -579,22 +579,26 @@ abstract class AtClient {
 
   static const defaultSppExpiry = Duration(minutes: 5);
 
-  /// Sets a Semi Permanent Passcode(SPP) in the secondary server key-store.
-  /// A Semi Permanent Passcode (SPP) is 6 character alpha-numeric for submitting
-  /// an enrollment request. Only the connections which have access to manage
-  /// namespace are allowed to set SPP
+  /// Sets a Semi Permanent Passcode (SPP) in the secondary server
+  /// key-store. An SPP is a 6-character alphanumeric code used when
+  /// submitting an enrollment request. Only connections with access
+  /// to the "__manage" namespace are allowed to set an SPP.
   ///
-  /// Returns "ok" when SPP is set successfully.
+  /// [expiry] caps how long the SPP is valid; defaults to
+  /// [defaultSppExpiry] (5 minutes) when omitted, with a warning
+  /// logged. Pass an explicit duration to opt into a different TTL.
   ///
-  /// Throws [InvalidPinException] when an invalid SPP is provided.
+  /// Returns an [AtResponse] whose `response` field is "ok" on
+  /// success.
   ///
-  /// Throws [AtClientException] when an enrollmentId does not exist.
+  /// Throws [InvalidPinException] when [otp] is not 6 alphanumeric
+  /// characters.
   ///
-  /// Throws [AtClientException] when an enrollmentId does not have access to "__manage"
-  /// namespace.
+  /// Throws [AtClientException] when the enrollmentId does not exist
+  /// or does not have access to the "__manage" namespace.
   ///
   /// ```dart
-  /// AtResponse sppResponse = await atClient.setSPP(ABC123);
+  /// AtResponse sppResponse = await atClient.setSPP('ABC123');
   /// ```
   Future<AtResponse> setSPP(String otp, {Duration? expiry});
 
@@ -610,13 +614,14 @@ abstract class AtClient {
 
   /// Initiates a compaction job for the commit log.
   ///
-  /// The [commitLogCompactionTimeIntervalInMins] parameter specifies the time interval,
-  /// in minutes, after which the commit log should be compacted. By default, it is set
-  /// to 11 minutes.
+  /// [commitLogCompactionDuration] specifies the interval between
+  /// compaction runs. Defaults to 11 minutes when omitted (from
+  /// `AtClientConfig.commitLogCompactionTimeIntervalInMins`).
   ///
-  /// The compaction job removes duplicate entries of a key from the commit log that are already synced
-  /// to the remote secondary. Only the latest commit entry of the key is retained.
-  /// Uncommitted entries that are duplicates will not be removed/compacted.
+  /// The compaction job removes duplicate entries of a key from the
+  /// commit log that are already synced to the remote secondary —
+  /// only the latest commit entry per key is retained. Uncommitted
+  /// duplicates are not removed.
   Future<void> startCompactionJob({Duration? commitLogCompactionDuration});
 
   /// Stops the commit log compaction job
@@ -694,9 +699,8 @@ abstract class AtClient {
   /// Useful at app-startup to reclaim descendants whose parent was
   /// deleted on another atSign while this app was offline.
   ///
-  /// [eventsFromLocalSecondary] is **required** — no default. The choice
-  /// is significant enough that callers must make it consciously per
-  /// collection.
+  /// [eventsFromLocalSecondary] selects the source for the
+  /// collection's update / delete event streams. Defaults to `true`.
   ///
   /// - When `true`, the returned collection subscribes to
   ///   [AtClient.dataEvents] and produces `CItemUpdated`,
@@ -708,13 +712,9 @@ abstract class AtClient {
   ///   removals fire `DataDeleted` because at_client's expiry sweep
   ///   loops through `LocalSecondary._delete`.
   /// - When `false`, the collection subscribes to
-  ///   `NotificationService` (the legacy / default path). Locally
-  ///   driven writes that don't generate notifications are NOT
-  ///   visible on the watch streams.
-  ///
-  /// Adding the parameter with no default is a breaking change for
-  /// existing callers — the migration is mechanical (most callers add
-  /// `false`).
+  ///   `NotificationService` instead. Locally-driven writes that
+  ///   don't generate notifications are NOT visible on the watch
+  ///   streams.
   Future<AtCollection<T>> collection<T>(
     String namespace,
     Duration defaultExpiration, {

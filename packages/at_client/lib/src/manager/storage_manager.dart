@@ -46,9 +46,8 @@ class StorageManager {
     // off LocalSecondary's data-event stream and drives sweeps via
     // LocalSecondary.deleteExpiredKeys() — whose deletes go through
     // _delete and are visible to subscribers, unlike the cron path
-    // which calls keyStore.remove directly. See the plan
-    // (idempotent-cuddling-puzzle.md) §Migration for the rationale and
-    // rollback recipe.
+    // which would call keyStore.remove directly and bypass the event
+    // bus.
     isStorageInitialized = true;
   }
 }

@@ -141,23 +141,13 @@ class NotificationServiceImpl extends NotificationService {
       return jsonDecode(atValue?.value)['epochMillis'];
     }
 
-    // If we're here, we've never received a notification, since the last
-    // notification received time has never been saved.
-    //
-    // In that case, we're going to set the last notification received time to
-    // _now_
-    //
-    // But we're still going to return null. But then, next time we're called,
-    // we'll have a value to return.
-    //
-    // This upholds the principle of least surprise which is that
-    // - I run a client for the first time, I get no notifications from the past
-    // - But let's assume you only run the client for a very short period, so
-    //   you get no notifications before you shut it down.
-    // - You run up the client again some time later, assuming that any
-    //   notifications received while you were offline will be delivered to you
-    // - And now because we did this last time, that will be true. Whereas
-    //   previously, you would simply have got no notifications, again.
+    // First-call branch: no last-received-notification record exists.
+    // Set the record to "now" so that subsequent calls (after a
+    // restart, say) will return a value, but return null for THIS
+    // call to keep first-run semantics ("don't replay history I never
+    // saw"). Without this seed, a short-lived first session followed
+    // by a longer second session would silently miss any notifications
+    // that arrived in between.
     AtNotification n = AtNotification(
       'abcd-123456-wxyz',
       '@bob:notification.foo.bar.baz@alice',
@@ -351,12 +341,9 @@ class NotificationServiceImpl extends NotificationService {
 
   @override
   Future<NotificationResult> notify(NotificationParams notificationParams,
-      {bool waitForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
-      bool checkForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
-      bool encryptValue =
-          true, // this was the behaviour before introducing this parameter
+      {bool waitForFinalDeliveryStatus = true,
+      bool checkForFinalDeliveryStatus = true,
+      bool encryptValue = true,
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary}) async {
@@ -548,7 +535,7 @@ class NotificationServiceImpl extends NotificationService {
     //
     // Additionally, in order to give application code full control over the
     // lifecycle of the notifications listener, we will only start the monitor
-    // for subscriptions when AtClientPreference.autoStartMonitor] is true,
+    // for subscriptions when AtClientPreference.monitorAutoStart is true,
     // which it is by default (legacy behaviour). This gives application code
     // much better clear control over the notification listening lifecycle.
     if (atClient.getPreferences()?.monitorAutoStart == true) {

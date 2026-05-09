@@ -8,7 +8,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
-import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/response/response.dart';
@@ -34,10 +33,7 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
-/// Implementation of [AtClient] interface and [AtSignChangeListener] interface
-///
-/// Implements to [AtSignChangeListener] to get notified on switch atSign event. On switch atSign event,
-/// pause's the compaction job on currentAtSign and start/resume the compaction job on the new atSign
+/// Implementation of the [AtClient] interface.
 class AtClientImpl implements AtClient {
   AtClientPreference? _preference;
 
@@ -146,9 +142,8 @@ class AtClientImpl implements AtClient {
   }
 
   // ---------------------------------------------------------------------------
-  // Event-driven expiry timer. Replaces the cron-based persistence-layer
-  // sweep that used to be wired up in StorageManager. Arms a one-shot
-  // Timer at LocalSecondary.nextExpiryAt(); on fire, drives a sweep via
+  // Event-driven expiry timer. Arms a one-shot Timer at
+  // LocalSecondary.nextExpiryAt(); on fire, drives a sweep via
   // LocalSecondary.deleteExpiredKeys (whose deletes go through _delete
   // and emit DataDeleted events). _expirySweepInFlight suppresses
   // re-arms triggered by the sweep's own emissions — one re-arm at the
@@ -163,7 +158,7 @@ class AtClientImpl implements AtClient {
   // fire, walks every key whose availableAt has crossed now, emits
   // DataUpdated for each, and re-arms at the next pending availableAt.
   // Drives the visibility-onset event for records whose availableAt
-  // was in the future at write time. _availableSweepInFlight
+  // is set in the future at write time. _availableSweepInFlight
   // suppresses re-arms during the sweep's own emissions.
   Timer? _availableTimer;
   StreamSubscription<DataEvent>? _availableSub;
@@ -239,8 +234,10 @@ class AtClientImpl implements AtClient {
   });
 
   // Cache key combines (namespace, eventsFromLocalSecondary). Two
-  // collections on the same namespace with different event sources are
-  // independent instances — see plan §Risks.
+  // collections on the same namespace with different event sources
+  // are independent instances: each has its own listener wiring and
+  // pending-events buffer, so sharing one cache slot would conflate
+  // their event streams.
   final Map<(String, bool), AtCollection> _collections = {};
   final Set<(String, bool)> _collectionsSwept = <(String, bool)>{};
 
@@ -866,7 +863,7 @@ class AtClientImpl implements AtClient {
     return atResponse.response.isNotEmpty;
   }
 
-  /// put's the text data into the keystore
+  /// Puts text data into the keystore.
   @override
   Future<AtResponse> putText(AtKey atKey, String value,
       {PutRequestOptions? putRequestOptions}) async {
@@ -879,7 +876,7 @@ class AtClientImpl implements AtClient {
     }
   }
 
-  /// put's the binary data(e.g. images, files etc) into the keystore
+  /// Puts binary data (e.g. images, files etc.) into the keystore.
   @override
   Future<AtResponse> putBinary(AtKey atKey, List<int> value,
       {PutRequestOptions? putRequestOptions}) async {
@@ -1088,7 +1085,7 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  @Deprecated("Obsolete, wil be removed in v4")
+  @Deprecated("Obsolete, will be removed in v4")
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String? namespace}) async {
     var streamResponse = AtStreamResponse();
@@ -1130,7 +1127,7 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  @Deprecated("Obsolete, wil be removed in v4")
+  @Deprecated("Obsolete, will be removed in v4")
   Future<void> sendStreamAck(
       String streamId,
       String fileName,
@@ -1373,8 +1370,6 @@ class AtClientImpl implements AtClient {
   AtClientPreference? getPreferences() {
     return _preference;
   }
-
-  // TODO v4 - remove the follow methods in version 4 of at_client package
 
   ///[Deprecated] Use [AtClient.notificationService]
   @override

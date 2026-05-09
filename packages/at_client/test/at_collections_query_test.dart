@@ -651,7 +651,7 @@ void main() {
         'delta path: an update event drives one item fetch, not N '
         '(the whole-collection refetch path is avoided)', () async {
       // The benefit of delta maintenance is O(1) reads per event vs
-      // O(N) under the old "full refetch" path. We assert that by
+      // O(N) under the full-refetch fallback. We assert that by
       // seeding 4 items, then triggering a single update event and
       // counting how many atClient.get calls follow — under refetch
       // it would be 4; under delta, exactly 1 (for the affected id).

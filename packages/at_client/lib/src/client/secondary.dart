@@ -3,12 +3,10 @@ import 'package:at_commons/at_builders.dart';
 abstract class Secondary {
   /// Executes a verb on this secondary.
   ///
-  /// [sync] requests an immediate post-write sync trigger (LocalSecondary
-  /// only; remote-secondary implementations ignore it). [cameFromServer]
+  /// [sync] is retained for back-compat and is ignored. [cameFromServer]
   /// signals the write is a server-originated replay (LocalSecondary
   /// uses it to skip enqueuing the write into the client→server sync
-  /// queue introduced by `decouple-sync-from-commit-log`); other
-  /// implementations may ignore it.
+  /// queue); other implementations may ignore it.
   Future<String?> executeVerb(VerbBuilder builder,
       {bool? sync, bool cameFromServer = false});
 }

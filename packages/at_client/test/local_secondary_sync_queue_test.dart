@@ -1,6 +1,5 @@
-// Phase 4 tests for the `decouple-sync-from-commit-log` refactor:
-// LocalSecondary.executeVerb's new contract for enqueuing
-// client→server writes into the sync queue, and skipping enqueue
+// Tests for LocalSecondary.executeVerb's contract for enqueuing
+// client→server writes into the sync queue, and for skipping enqueue
 // when the write is a server replay (`cameFromServer: true`).
 //
 // Distinct from `local_secondary_test.dart` (verb-builder shape /
@@ -59,7 +58,7 @@ void main() {
     }
   }
 
-  group('LocalSecondary sync-queue enqueue (phase 4)', () {
+  group('LocalSecondary sync-queue enqueue', () {
     setUp(() async {});
     tearDown(() async => await tearDownLocalSecondary());
 

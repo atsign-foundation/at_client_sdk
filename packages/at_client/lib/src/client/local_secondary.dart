@@ -60,12 +60,9 @@ class LocalSecondary implements Secondary {
 
   /// Pending client→server writes: a per-key dedup'd queue of atKey
   /// strings whose latest local write hasn't yet been pushed. Opened
-  /// lazily on first use via [_ensureSyncQueueOpen]; replaces the
-  /// commit-log scan that drove the push side of `SyncServiceImpl`
-  /// before the `decouple-sync-from-commit-log` refactor. Wired through
-  /// [_update] / [_delete] in phase 2; consumed by `SyncServiceImpl`
-  /// in phase 4. See `lib/src/sync/at_sync_queue.dart` for the
-  /// queue's full contract.
+  /// lazily on first use via [_ensureSyncQueueOpen]. Populated by
+  /// [_update] / [_delete] and consumed by `SyncServiceImpl`. See
+  /// `lib/src/sync/at_sync_queue.dart` for the queue's full contract.
   AtSyncQueue? _syncQueue;
   Future<AtSyncQueue>? _syncQueueOpenInflight;
 
@@ -147,7 +144,8 @@ class LocalSecondary implements Secondary {
   /// Removes [atKey] from both the in-memory queue and the persisted
   /// box. Called after a successful server-side push, OR when a
   /// drain attempt finds the underlying keystore value missing
-  /// (race-tolerated removal — see plan).
+  /// (race-tolerated removal: a queue write may have committed
+  /// without the keystore write landing, e.g. across a crash).
   Future<void> removeFromSyncQueue(String atKey) async {
     final q = await _ensureSyncQueueOpen();
     await q.remove(atKey);
@@ -191,8 +189,8 @@ class LocalSecondary implements Secondary {
   /// `publickey@<atSign>` (a reserved key) and is therefore
   /// misclassified as `KeyType.reservedKey` rather than
   /// `KeyType.cachedPublicKey`. Without the prefix check, that
-  /// misclassification let cached encryption-public-key writes (e.g.
-  /// from `AbstractAtKeyEncryption._fetchEncryptionPublicKey`'s local
+  /// misclassification lets cached encryption-public-key writes
+  /// (from `AbstractAtKeyEncryption._getSharedWithPublicKey`'s local
   /// cache write) flow into the sync queue, where the server then
   /// rejects them with `AT0003 Invalid syntax` and the no-progress
   /// guard burns retries forever.
@@ -221,15 +219,13 @@ class LocalSecondary implements Secondary {
   ///
   /// **Orphaned commit-log entry handling:** when a queue entry for
   /// the same [atKey] already exists (UPDATE→UPDATE, UPDATE→DELETE,
-  /// etc.), the prior keystore op's commit-log entry never made it
-  /// to the server — the queue dedup means we'll only push the
-  /// newer op. We delete that prior commit-log entry by its seqNum
-  /// here so it doesn't sit forever with a null commitId. Without
-  /// this cleanup the pre-refactor invariant
-  /// ("every commit-log entry has commitId set after its sync round")
-  /// would break: orphans would skip the back-write, fail commit-log
-  /// compaction's `removeWhere(commitId == null)` filter, and leak
-  /// in the log indefinitely.
+  /// etc.), the prior keystore op's commit-log entry will never be
+  /// pushed — queue dedup means only the newer op makes it to the
+  /// server. We delete that prior commit-log entry by its seqNum
+  /// here so it doesn't sit forever with a null commitId, which
+  /// would skip the back-write, fail commit-log compaction's
+  /// `removeWhere(commitId == null)` filter, and leak in the log
+  /// indefinitely.
   Future<void> _enqueueForSync(
     String atKey,
     SyncQueueOp op, {
@@ -284,16 +280,9 @@ class LocalSecondary implements Secondary {
   /// Executes a verb builder on the local secondary.
   ///
   /// The [sync] parameter is retained for back-compat with the
-  /// `Secondary` interface but no longer drives a separate
-  /// post-write trigger — `_update` / `_delete` now enqueue into
-  /// the client→server sync queue themselves (when the key is
-  /// sync-eligible and the write didn't originate from the server).
-  /// Callers that previously passed `sync: false` to suppress the
-  /// trigger should now pass `cameFromServer: true` instead;
-  /// the legacy `sync: false` is honoured by the corresponding
-  /// `_pullToLocal` site already, and the legacy `sync: true`
-  /// callers get the same enqueue behaviour they used to get from
-  /// the old `syncFromWrite()` path.
+  /// `Secondary` interface and is ignored: `_update` / `_delete`
+  /// enqueue into the client→server sync queue themselves whenever
+  /// the key is sync-eligible and [cameFromServer] is false.
   ///
   /// When [cameFromServer] is true the caller is replaying a
   /// server-originated change into local storage (today only
@@ -313,9 +302,6 @@ class LocalSecondary implements Secondary {
         } else if (builder is DeleteVerbBuilder) {
           verbResult = await _delete(builder, cameFromServer: cameFromServer);
         }
-        // Note: the previous `sync: true` → `syncFromWrite()` branch
-        // is gone. Enqueue happens inside `_update` / `_delete`,
-        // gated by `cameFromServer` and `shouldEnqueueForSync`.
       } else if (builder is LLookupVerbBuilder) {
         verbResult = await _llookup(builder);
       } else if (builder is ScanVerbBuilder) {
@@ -831,7 +817,7 @@ class LocalSecondary implements Secondary {
     return v;
   }
 
-  ///Returns `true` on successfully storing the values into local secondary.
+  /// Returns `true` on successfully storing the values into local secondary.
   Future<bool> putValue(String key, String value) async {
     dynamic isStored;
     var atData = AtData()..data = value;

@@ -54,8 +54,8 @@ class SyncServiceImpl implements SyncService {
   /// Cached latest known server commit id. Kept fresh by three
   /// authoritative sources:
   ///   * [statsServiceListener]: push-side stats notifications.
-  ///   * [_syncToRemote]: each successful entry in the batch response
-  ///     carries the server commit id assigned to that op.
+  ///   * [_pushFromSyncQueue]: each successful entry in the batch
+  ///     response carries the server commit id assigned to that op.
   ///   * [_syncFromServer]: each pulled commit entry's `commitId`.
   /// Read by [_getServerCommitId], which falls back to a remote
   /// stats fetch only when this is `null` (cold start, before any
@@ -72,15 +72,11 @@ class SyncServiceImpl implements SyncService {
   /// via a successful push response. Promoted only by
   /// [_pushFromSyncQueue]; advances on each per-entry success in
   /// the batch response. `null` until the first successful push.
-  ///
-  /// Pre-`decouple-sync-from-commit-log` this number was derived by
-  /// scanning the local commit log for the highest entry whose
-  /// `commitId` field was non-null — `_syncToRemote` wrote each
-  /// server-assigned commitId back into its source `CommitEntry`
-  /// for exactly that purpose. The new push path doesn't touch
-  /// commit-log entries (they're not the source of truth for sync
-  /// any more), so we track the same high-water mark in this
-  /// field directly. [_getLocalCommitId] reads from here.
+  /// [_getLocalCommitId] reads from here. The push path no longer
+  /// reads or writes commit-log entries — the sync queue is the
+  /// source of truth for "what is pending" and this field is the
+  /// source of truth for "highest commit id we've successfully
+  /// pushed".
   int? _highestPushedCommitId;
 
   /// Wall-clock time at which the last [processSyncRequests] run
@@ -510,15 +506,14 @@ class SyncServiceImpl implements SyncService {
   /// fire `onError` on each with a "superseded" failure rather than
   /// leaving its callback dangling forever.
   ///
-  /// **Tail-of-burst handling**: under the post-`distributed-tickling-
-  /// moler` design, "what to push" is owned by `LocalSecondary`'s
-  /// `AtSyncQueue`, not by this request queue. A late-arriving local
-  /// write (one whose `_update` / `_delete` enqueue lands during a
-  /// running round) lives in the sync-queue Hive box; the next
-  /// `processSyncRequests` round peeks the queue from a fresh
-  /// snapshot and drains those entries. We therefore no longer need
-  /// the per-source retention logic that briefly lived here at
-  /// `de48210bf` — clearing wholesale is correct again.
+  /// **Tail-of-burst handling**: "what to push" is owned by
+  /// `LocalSecondary`'s `AtSyncQueue`, not by this request queue. A
+  /// late-arriving local write (one whose `_update` / `_delete`
+  /// enqueue lands during a running round) lives in the sync-queue
+  /// Hive box; the next `processSyncRequests` round peeks the queue
+  /// from a fresh snapshot and drains those entries. Wholesale
+  /// clearing of the request queue here is therefore safe — no
+  /// pending-write information lives on it.
   ///
   /// The just-processed request's `onDone` has already fired by the
   /// time this is called from [_syncComplete]; passing it as
@@ -551,9 +546,7 @@ class SyncServiceImpl implements SyncService {
     // Snapshot of pending-push atKeys at sync-round start. Used by
     // [_syncFromServer] for conflict detection (a server-pulled key
     // is in conflict iff it's in this snapshot — i.e. we have a
-    // pending local write for it). Pre-`decouple-sync-from-commit-log`
-    // this snapshot was the commit log's `unCommittedEntries` list;
-    // the new sync queue carries the same information directly.
+    // pending local write for it).
     final pendingPushAtKeys =
         Set<String>.from(await localSecondary.peekSyncQueue());
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
@@ -593,8 +586,8 @@ class SyncServiceImpl implements SyncService {
   ///    timing windows (rare, but the alternative is leaking queue
   ///    entries forever).
   /// 3. Build a `BatchRequest` list and send via [sendBatch] (single
-  ///    network round-trip per batch — preserves the pre-refactor
-  ///    network-roundtrip savings under heavy load).
+  ///    network round-trip per batch — keeps push throughput high
+  ///    under heavy load).
   /// 4. For each per-entry response: on success, remove from the
   ///    queue and promote `_latestKnownServerCommitId`. On failure,
   ///    leave in queue for retry on the next round.
@@ -640,11 +633,11 @@ class SyncServiceImpl implements SyncService {
           command = await _buildCommandFromQueueEntry(atKey, entry.op);
         } on KeyNotFoundException {
           // The keystore doesn't have a value for this atKey
-          // (UPDATE / UPDATE_ALL / UPDATE_META). This is the race
-          // mentioned in the plan: queue write committed but the
-          // backing keystore write never landed (a crash between
-          // them). Drop the queue entry — there's nothing we can
-          // push, and the user-level write was lost anyway.
+          // (UPDATE / UPDATE_ALL / UPDATE_META). The race-tolerated
+          // case: queue write committed but the backing keystore
+          // write never landed (a crash between them). Drop the
+          // queue entry — there's nothing we can push, and the
+          // user-level write is already lost.
           _logger
               .info('keystore miss for $atKey on push; dropping queue entry');
           await localSecondary.removeFromSyncQueue(atKey);
@@ -697,7 +690,7 @@ class SyncServiceImpl implements SyncService {
           // Track the high-water mark of OUR successful pushes
           // separately from the broader server cursor so
           // [_getLocalCommitId] reflects "our writes the server has
-          // acked" the way the pre-refactor commit-log scan did.
+          // acked" alongside the pull-side cursor.
           if (_highestPushedCommitId == null ||
               commitId > _highestPushedCommitId!) {
             _highestPushedCommitId = commitId;
@@ -763,8 +756,7 @@ class SyncServiceImpl implements SyncService {
   }
 
   /// Builds the wire command for one queued atKey + op. Shape
-  /// matches the pre-refactor `_getCommand` (CommitOp variant), so
-  /// the at_server side parses it identically.
+  /// matches the at_server's expected wire format for each op.
   Future<String> _buildCommandFromQueueEntry(
       String atKey, SyncQueueOp op) async {
     final keyStore = _atClient.getLocalSecondary()!.keyStore!;
@@ -786,11 +778,10 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
-  /// Maps a [SyncQueueOp] back to its [CommitOp] equivalent so we
-  /// can populate the [KeyInfo.commitOp] field in
-  /// [SyncProgress.keyInfoList] events the same way the
-  /// pre-refactor code did. Kept symmetric with the converse map
-  /// in `LocalSecondary._update` / `_delete`.
+  /// Maps a [SyncQueueOp] back to its [CommitOp] equivalent for
+  /// the [KeyInfo.commitOp] field in [SyncProgress.keyInfoList]
+  /// events. Kept symmetric with the converse map in
+  /// `LocalSecondary._update` / `_delete`.
   CommitOp _syncQueueOpToCommitOp(SyncQueueOp op) {
     switch (op) {
       case SyncQueueOp.update:
@@ -811,9 +802,6 @@ class SyncServiceImpl implements SyncService {
   /// `LocalSecondary`'s sync queue. Used here for conflict detection:
   /// a server-pulled key is in conflict iff it appears in this set
   /// (i.e. we have a local write the server doesn't know about).
-  /// Pre-`decouple-sync-from-commit-log` this was a `List<CommitEntry>`
-  /// pulled from the commit log; the new sync queue carries the same
-  /// information directly.
   Future<List<KeyInfo>> _syncFromServer(int serverCommitId,
       int lastReceivedServerCommitId, Set<String> pendingPushAtKeys,
       {int? localCommitIdBeforeSync}) async {
@@ -1260,8 +1248,8 @@ class SyncServiceImpl implements SyncService {
         'pending push count: $pendingPushCount');
     // We're "in sync" iff the client→server queue is empty AND the
     // server hasn't moved past what we've already pulled. The
-    // client-side push backlog now lives in `LocalSecondary`'s
-    // sync queue (was: `unCommittedEntries` from the commit log).
+    // client-side push backlog lives in `LocalSecondary`'s sync
+    // queue.
     return pendingPushCount == 0 &&
         lastReceivedServerCommitId == serverCommitId;
   }
@@ -1282,7 +1270,8 @@ class SyncServiceImpl implements SyncService {
   /// Returns the latest known server commit id. With [forceFresh: false]
   /// (the default) the cached value is returned when non-null; the
   /// cache is kept current by stats notifications, batch responses
-  /// from `_syncToRemote`, and pulled entries from `_syncFromServer`.
+  /// from `_pushFromSyncQueue`, and pulled entries from
+  /// `_syncFromServer`.
   ///
   /// With [forceFresh: true] the cache is bypassed and a remote stats
   /// fetch is issued; the result is then written back into the cache
@@ -1317,15 +1306,11 @@ class SyncServiceImpl implements SyncService {
 
   @visibleForTesting
   Future<int> getLastReceivedServerCommitId() async {
-    // If "lastReceivedServerCommitId" key exists, fetch the data and return the
-    // last received server commit id. If not, return -1 (no pull has
-    // ever applied to this client). Pre-`decouple-sync-from-commit-log`
-    // this fell back to `_getLocalCommitId`; that fallback only made
-    // sense when `_getLocalCommitId` read the local commit log (a
-    // post-pull entry was a reasonable proxy for "last received
-    // server cursor"). Post-refactor `_getLocalCommitId` itself
-    // composes this method's value, so the fallback would recurse
-    // and is no longer correct semantically.
+    // If "lastReceivedServerCommitId" key exists, fetch the data and
+    // return the last received server commit id. If not, return -1 (no
+    // pull has ever applied to this client). Do NOT fall back to
+    // [_getLocalCommitId]: it composes this method's value, so a
+    // fallback would recurse.
     try {
       var response = await _atClient.get(_lastReceivedServerCommitIdAtKey);
       _logger.finer(
@@ -1349,13 +1334,9 @@ class SyncServiceImpl implements SyncService {
   /// client). The `localCommitIdBeforeSync == -1` check uses this
   /// value to set the `isInitialSync` flag on the first round.
   ///
-  /// Pre-`decouple-sync-from-commit-log` this number was the local
-  /// commit log's max commitId, which naturally tracked both
-  /// directions because `_pullToLocal` back-wrote the server-assigned
-  /// commitId into each pulled entry. The refactor split push and
-  /// pull bookkeeping; we recompose them here so the externally
-  /// observed `localCommitId` (in `SyncProgress` events) keeps the
-  /// same union semantic — the existing test harnesses
+  /// Push and pull bookkeeping are kept in separate fields, but
+  /// the externally observed `localCommitId` (in `SyncProgress`
+  /// events) is their union — the test harnesses
   /// (`FunctionalTestSyncService`, `E2ESyncService`) check
   /// `localCommitId == serverCommitId` as their "in sync" signal,
   /// which only holds with the union.
@@ -1509,12 +1490,10 @@ class SyncServiceImpl implements SyncService {
     String? verbResult;
     try {
       // `cameFromServer: true` flags this write as a server-replay so
-      // `LocalSecondary` (post phase 4 of decouple-sync-from-commit-log)
-      // skips enqueuing it for client→server sync — the server is
-      // where this entry just came from. `sync: false` is the legacy
-      // signal expressing the same intent against today's
-      // `syncFromWrite` path; both stay in place during the
-      // transition.
+      // `LocalSecondary` skips enqueuing it for client→server sync —
+      // the server is where this entry just came from. `sync: false`
+      // expresses the same intent on the legacy interface and is
+      // retained for back-compat.
       verbResult = await _atClient.getLocalSecondary()!.executeVerb(
             builder,
             sync: false,
@@ -1528,15 +1507,15 @@ class SyncServiceImpl implements SyncService {
       return;
     }
     // Back-write the server-side commitId into the local commit-log
-    // entry that `executeVerb` just appended. The new sync push path
-    // no longer reads commit-log commitIds (it tracks
-    // `_highestPushedCommitId` directly + `lastReceivedServerCommitId`
-    // for the cursor) — but commit-log compaction still needs every
+    // entry that `executeVerb` just appended. The push path tracks
+    // its cursor in `_highestPushedCommitId` and
+    // `lastReceivedServerCommitId` rather than reading commit-log
+    // commitIds — but commit-log compaction still needs every
     // synced entry to carry a commitId (its `removeWhere(value.commitId
     // == null)` step would otherwise skip every server-pulled entry,
     // leaving the log to grow unboundedly). `SyncUtil.getLastSyncedEntry`
-    // also still depends on this for the downstream functional tests
-    // and any external consumers.
+    // also depends on this for downstream functional tests and any
+    // external consumers.
     final sequenceNumber = int.parse(verbResult.split(':')[1]);
     final commitEntry = await syncUtil.getCommitEntry(
         sequenceNumber, _atClient.getCurrentAtSign()!);

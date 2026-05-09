@@ -30,10 +30,11 @@ platform plugins that don't have web implementations today.
 The `AtClient` interface ([`lib/src/client/at_client_spec.dart`](lib/src/client/at_client_spec.dart))
 is the main entry point once authentication is complete.
 
-- `collection<T>(namespace, defaultExpiration, {fromJson})` — returns a
-  `Future<AtCollection<T>>`. AtCollections do not leak any low-level details 
-  and allow you to work with your own domain objects and types (see 
-  [Collections] (#collections) below)
+- `collection<T>(namespace, defaultExpiration, {fromJson, typeTag, eventsFromLocalSecondary, cleanupOrphansOnCreation})` —
+  returns a `Future<AtCollection<T>>`. `fromJson` and `typeTag` travel
+  together; pass either both or neither. AtCollections hide the
+  low-level keystore plumbing and let you work directly with your own
+  domain objects and types (see [Collections](#collections) below).
 - `notificationService` — fire-and-forget and pub/sub messaging
   ([`lib/src/service/notification_service.dart`](lib/src/service/notification_service.dart))
 - `syncService` — background sync between the local store and the
@@ -126,12 +127,12 @@ await for (final e in todos.updates) {
 ```
 
 `update` / `delete` / `create` fire `CItemUpdated` / `CItemDeleted`
-synchronously on the writing collection's event streams, so a UI
-using `Query.watch()` redraws immediately rather than waiting for
-the round-trip notification. The same event re-fires on the
-round-trip ~50–200 ms later (and ~10–30 ms excluding network
-transit once fsync ships); `Query.watch`'s delta path is idempotent
-so the second occurrence is invisible.
+on the writing collection's event streams as soon as the local write
+lands — no waiting for the network round-trip — so a UI using
+`Query.watch()` redraws immediately. The same event re-fires on the
+round-trip ~50–200 ms later (and ~10–30 ms excluding network transit
+once fsync ships); `Query.watch`'s delta path is idempotent so the
+second occurrence is invisible.
 
 `AtCollection<T>` executes reads on-device by default, against a
 local copy that the `at_client` SDK keeps current via real-time

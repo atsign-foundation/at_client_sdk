@@ -1,8 +1,7 @@
 // Unit tests for AtSyncQueue — the persisted+in-memory queue that
-// SyncServiceImpl will drain in phase 4 of the
-// decouple-sync-from-commit-log refactor. These tests cover the
-// queue mechanics in isolation; SyncServiceImpl integration is
-// validated separately in phase 4 tests.
+// SyncServiceImpl drains for client→server writes. These tests
+// cover the queue mechanics in isolation; the wiring against
+// LocalSecondary lives in `local_secondary_sync_queue_test.dart`.
 //
 // Each test gets its own temp Hive directory so there's no leakage
 // across runs.

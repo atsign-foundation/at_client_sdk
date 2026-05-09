@@ -1022,10 +1022,7 @@ interface class AtCollection<T> {
   /// items the call short-circuits on the seen-id cache populated by
   /// every successful read/write in this process and only probes on
   /// a miss. For items owned by other atSigns it probes the
-  /// recipient copy `<self>:<id>.<namespace><owner>` directly. The
-  /// probe still performs the fetch + decode work [AtClient.get]
-  /// entails — a planned keystore-level `exists()` primitive will
-  /// retire that overhead.
+  /// recipient copy `<self>:<id>.<namespace><owner>` directly.
   Future<bool> exists(String id, Atsign owner) async {
     if (owner == atSign) {
       return _selfKeyExists(id);
@@ -1195,8 +1192,7 @@ interface class AtCollection<T> {
             continue;
           }
           final decoded = _decodeEnvelope(v.value!, k);
-          // Parent-owner ancestry filter (see §3 of the post-
-          // implementation tidy-up plan). Legacy items whose envelope
+          // Parent-owner ancestry filter. Legacy items whose envelope
           // lacks `parents` are accepted lenient-ly as matching this
           // sub-collection's expected chain.
           final parsedParents = _decodeParentOwners(decoded);
@@ -1373,13 +1369,16 @@ interface class AtCollection<T> {
   /// separator, **`composedNs` is capped at 128 chars** — applied
   /// independently of the actual self-atSign length so the same
   /// SDK builds round-trip-safe keys regardless of which atSign
-  /// owns this client. [subCollection] enforces this budget at
-  /// construction time and throws [ArgumentError] before any I/O
-  /// if the composed namespace would overflow — errors never reach
-  /// the wire.
+  /// owns this client.
   ///
-  /// The reserved sub-collection name `__rr` is rejected (it's used
-  /// internally for read receipts); pick any other string.
+  /// Throws [ArgumentError] when:
+  /// - [subName] is empty;
+  /// - [subName] contains a `.`;
+  /// - [subName] is `__rr` (reserved for the built-in read-receipt
+  ///   sub-collection — use `item.readBy` / `item.markReadByMe` /
+  ///   `AtCollection.readReceiptsFor` instead);
+  /// - `parent.id` contains a `.`;
+  /// - the composed namespace would exceed 128 chars.
   ///
   /// **Parent-delete behaviour.** When [parent] is deleted — locally,
   /// or via a remote-delete notification — the sub-collection
@@ -1580,9 +1579,9 @@ interface class AtCollection<T> {
     if (subName == _rr) {
       throw ArgumentError(
         'subName "$_rr" is reserved for the built-in read-receipt '
-        'sub-collection. Use item.readers() / item.wasMarkedReadByMe() '
-        '/ item.markReadByMe() — or AtCollection.markReadByMe / '
-        'wasMarkedReadByMe — instead of constructing it directly.',
+        'sub-collection. Use item.readBy / item.wasMarkedReadByMe() '
+        '/ item.markReadByMe() — or AtCollection.readReceiptsFor — '
+        'instead of constructing it directly.',
       );
     }
     return _buildSubCollection<U>(
@@ -1784,8 +1783,7 @@ interface class AtCollection<T> {
     // Parent is gone — delete every self-owned item in this sub-
     // collection AND its nested descendants, but only those whose
     // persisted `parents` chain starts with this sub-collection's
-    // expected ancestor chain (ancestry filter — see §3 of the post-
-    // implementation tidy-up plan).
+    // expected ancestor chain (ancestry filter).
     final expectedPrefix = _expectedAncestorOwners();
     final results = <OpResult>[];
     final deep = await atClient.getAtKeys(
@@ -1818,8 +1816,8 @@ interface class AtCollection<T> {
     //   4. If any ancestor is absent → orphaned → delete.
     //
     // Legacy items (no `parents`) cannot have their ancestor-owner
-    // chain verified, so we preserve the old behaviour: check only
-    // the ROOT ancestor's id against direct items locally (any owner).
+    // chain verified, so a lenient fallback is used: check only the
+    // ROOT ancestor's id against direct items locally (any owner).
     final nsSegments = namespace.split('.').length;
 
     // Legacy-fallback: set of root-ancestor ids that exist locally as
@@ -2716,9 +2714,9 @@ interface class AtCollection<T> {
 
   /// Decodes a stored value into the CItem JSON envelope, with a
   /// diagnostic [FormatException] if the payload isn't a JSON object
-  /// (e.g. legacy pre-refactor `__rr` keys stored a bare numeric
-  /// receiptId; `jsonDecode` returns an `int`, and the subsequent
-  /// `as Map` cast blows up with a bare `_TypeError`). A typed
+  /// (e.g. legacy `__rr` keys that stored a bare numeric receiptId;
+  /// `jsonDecode` returns an `int`, and the subsequent `as Map` cast
+  /// would blow up with a bare `_TypeError`). A typed
   /// [FormatException] is collected cleanly by `_loadItems` as a
   /// per-key error instead of crashing the whole read.
   Map<String, dynamic> _decodeEnvelope(String value, AtKey k) {
@@ -2775,9 +2773,6 @@ interface class AtCollection<T> {
   /// key-level failure — callers that want throwing semantics (like
   /// [create] and [update]) inspect the returned results and raise
   /// [CollectionOpException].
-  // TODO(post-stable): expose createBatch / deleteBatch returning
-  // List<OpResult> — best-effort batched per-atSign writes built on
-  // the same _put primitive. See AtCollection_API_Assessment §11.5.
   Future<List<OpResult>> _put(
     CItem<T> item, {
     bool unshareWithOthers = true,
@@ -2963,8 +2958,8 @@ interface class AtCollection<T> {
   /// Variant of [_selfOwnedDescendantKeys] that also filters each
   /// candidate by its envelope's `parents` chain. Only descendants
   /// whose `parents` **begins with** [expectedChainPrefix] are kept.
-  /// Legacy items lacking the `parents` field pass the filter (lenient
-  /// tolerance per the post-implementation tidy-up plan).
+  /// Legacy items lacking the `parents` field pass the filter
+  /// (lenient tolerance for items written before the field existed).
   Future<List<AtKey>> _selfOwnedDescendantKeysFiltered(
     String parentId,
     List<Atsign> expectedChainPrefix,
@@ -3246,9 +3241,6 @@ final class Query<T> {
   }
 
   /// Skips the first [n] items after filter + sort, before [limit].
-  // TODO(post-stable): add Query.startAfter(CItem) cursor pagination
-  // for stable scrolling on dynamic data. See
-  // AtCollection_API_Assessment §11.5.
   Query<T> skip(int n) {
     if (n < 0) throw ArgumentError.value(n, 'n', 'skip must be non-negative');
     return Query<T>._(_collection, _spec._withSkip(n));
@@ -3400,11 +3392,9 @@ final class Query<T> {
   /// parent leaves the result set (via filter change or delete) and
   /// when the outer stream is cancelled.
   ///
-  /// This is a first-class terminal — implemented in ~80 LOC here
-  /// rather than re-invented by every consumer. Phase 2 may add a
-  /// child-query parameter so callers can filter / sort the children
-  /// too; today the children are the sub-collection's full default
-  /// view.
+  /// This is a first-class terminal — implemented here rather than
+  /// re-invented by every consumer. The children are the
+  /// sub-collection's full default view.
   Stream<List<WithChildren<T, U>>> watchWithSub<U>({
     required String subName,
     required Duration subDefaultExpiration,
@@ -3655,36 +3645,7 @@ final class Query<T> {
   ///
   /// For queries with `limit` or `skip` set, the next-out-of-window
   /// item isn't cached, so the terminal falls back to a full
-  /// `fetch()` on each event — same behaviour as before.
-  ///
-  /// **Future option: lookahead cache.** Cache `limit + K` items in
-  /// sort order so an event that evicts an item from the visible
-  /// window can promote the head of the lookahead in its place,
-  /// without a refetch. Refill the lookahead asynchronously when it
-  /// drops below a watermark. A full refetch is still the right
-  /// fallback when the lookahead is exhausted faster than refill,
-  /// or when an event arrives for an `(owner, id)` pair we've
-  /// never seen (it could rank into the window from outside the
-  /// cached prefix). `skip` queries are messier — they need a
-  /// before-window lookahead too, which mostly defeats the point
-  /// of `skip` as a memory saver, so the pragmatic shape is
-  /// "lookahead for `limit`-only queries; `skip`-bearing queries
-  /// stay on full-refetch."
-  ///
-  /// Two reasons this is still deferred:
-  ///   1. **Justification today is weak.** Reads are local-first;
-  ///      a "full refetch" is a Hive scan, not a network call.
-  ///      Events arrive at ~50-200 ms today (and ~10-30 ms
-  ///      excluding network transit once fsync ships), so even a
-  ///      UI showing a `limit=20` window isn't doing much work
-  ///      per event.
-  ///   2. **SQLite migration may make it moot.** When the local
-  ///      store moves to SQLite with JSON-field indexes (see
-  ///      `AtCollection_API_Assessment.md` §1a), a sort+limit
-  ///      `get()` becomes an indexed query rather than a scan.
-  ///      The cost the lookahead would amortise mostly evaporates,
-  ///      and the simpler "refetch on every event" stays correct
-  ///      and cheap.
+  /// `get()` on each event.
   ///
   /// Per-stream events are serialised via an internal mutex so two
   /// near-simultaneous events can't race on the cached list.
@@ -3956,11 +3917,11 @@ enum PredicateOp {
 /// [PathField] (e.g. `field.eq(value)`); compose with [and] / [or] /
 /// [not]. Pass to [Query.wherePath] to apply.
 ///
-/// Designed for future introspection: a SQLite-indexed local store
-/// (planned, see assessment §1a) will be able to walk the tree and
-/// translate eligible leaf nodes into `WHERE` clauses backed by JSON-
-/// path indexes. Until that landing, all evaluation is in memory and
-/// behaviourally identical to a closure passed to [Query.where].
+/// Designed for future introspection: an indexed local store can
+/// walk the tree and translate eligible leaf nodes into `WHERE`
+/// clauses backed by JSON-path indexes. The current Hive-backed
+/// implementation evaluates predicates in memory; behaviour is
+/// identical to a closure passed to [Query.where].
 abstract class Predicate {
   /// Evaluates this predicate against [item]. Implementations should
   /// be allocation-free and side-effect-free.
@@ -4180,10 +4141,10 @@ final class _OrderBy<T> {
 
 // -----------------------------------------------------------------------------
 // Timer-driven event scheduler used by [AtCollection.availableEvents]
-// and [AtCollection.expiringSoonEvents] (W7). Maintains a sorted list
-// of upcoming firings and a single shared `Timer` armed to the
-// soonest. Items are registered on the initial `getItems()` scan and
-// kept current via the collection's [updates] / [deletes] streams.
+// and [AtCollection.expiringSoonEvents]. Maintains a sorted list of
+// upcoming firings and a single shared `Timer` armed to the soonest.
+// Items are registered on the initial `getItems()` scan and kept
+// current via the collection's [updates] / [deletes] streams.
 //
 // The scheduler is generic over the event type [E] and the
 // collection's domain type [T], parameterised by:
@@ -4614,8 +4575,8 @@ final class CItem<T> {
           .listen((e) => readers.add(e.from));
       _subFinalizer.attach(this, _readReceiptSub!, detach: this);
       // Chain `.handleError` on the __rr sub-collection stream so a
-      // single malformed receipt (e.g. legacy pre-refactor record
-      // with a bare-numeric value) doesn't poison this whole load.
+      // single malformed receipt (e.g. a legacy record with a
+      // bare-numeric value) doesn't poison this whole load.
       // `getItemsAsStream` yields decode errors into the stream; we
       // swallow them HERE because `readBy` is a best-effort cache —
       // missing one reader is far preferable to crashing every read
