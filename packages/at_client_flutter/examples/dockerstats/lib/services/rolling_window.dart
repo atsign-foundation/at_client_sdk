@@ -9,7 +9,7 @@ import 'package:flutter/foundation.dart';
 import '../models/stats_models.dart';
 
 class RollingWindow extends ChangeNotifier {
-  final Duration window;
+  Duration _window;
 
   /// host -> ordered list of (host, atSign, samples), oldest first.
   /// Per (host, atSign) pair we keep a list ordered by `millis`.
@@ -21,7 +21,16 @@ class RollingWindow extends ChangeNotifier {
   /// host -> Set of raw atSigns seen on it.
   final Map<String, Map<String, String>> atSignsByHost = {};
 
-  RollingWindow({this.window = const Duration(minutes: 1)});
+  RollingWindow({Duration window = const Duration(minutes: 2)})
+    : _window = window;
+
+  Duration get window => _window;
+  set window(Duration value) {
+    if (value == _window) return;
+    _window = value;
+    _trim();
+    notifyListeners();
+  }
 
   /// Iterates known hosts (sanitised id keys).
   Iterable<String> get hostIds => _byHostAtSign.keys;

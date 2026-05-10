@@ -32,7 +32,7 @@ const String applicationNamespace = 'dockerstats.demos';
 /// TTL for the LEAF [StatSample] CItems — high-frequency telemetry,
 /// short TTL so receivers see a rolling window of recent samples
 /// without manual eviction.
-const Duration sampleExpiration = Duration(minutes: 1);
+const Duration sampleExpiration = Duration(minutes: 5);
 
 /// TTL for the structural CItems — root-level [HostNode]s and the
 /// per-host [AtsignOnHost] sub-collection nodes. These represent

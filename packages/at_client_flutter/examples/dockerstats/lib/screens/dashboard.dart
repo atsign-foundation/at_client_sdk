@@ -7,14 +7,15 @@ library;
 
 import 'dart:async';
 
+import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/material.dart';
 
 import '../models/stats_models.dart';
 import '../onboarding.dart' show logout;
 import '../services/atsign_colors.dart';
 import '../services/dockerstats_service.dart';
+import '../services/rolling_window.dart';
 import '../widgets/stats_chart.dart';
-import 'package:at_client_flutter/at_client_flutter.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -23,10 +24,25 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
+/// Selectable rolling-window sizes for the dashboard. The publisher's
+/// per-sample TTL bounds how much history actually exists in the
+/// network — selecting a window larger than that is harmless, the
+/// chart just shows whatever data is present (clustered to the right).
+const List<({String label, Duration value})> _windowOptions = [
+  (label: '2m', value: Duration(minutes: 2)),
+  (label: '10m', value: Duration(minutes: 10)),
+  (label: '1h', value: Duration(hours: 1)),
+  (label: '24h', value: Duration(hours: 24)),
+];
+
 class _DashboardScreenState extends State<DashboardScreen> {
   DockerstatsService? _service;
   String? _error;
-  Timer? _redraw;
+  Timer? _redrawTimer;
+  Timer? _evictTimer;
+  bool _catchingUp = true;
+  SyncProgress? _lastSyncProgress;
+  Duration _windowDuration = _windowOptions.first.value;
   final StableColors _colors = StableColors();
   String? _drillHostId;
   final Set<String> _hiddenAtSigns = {};
@@ -39,7 +55,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
-    _redraw?.cancel();
+    _redrawTimer?.cancel();
+    _evictTimer?.cancel();
     _service?.dispose();
     super.dispose();
   }
@@ -47,20 +64,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _init() async {
     try {
       final atClient = AtClientManager.getInstance().atClient;
-      final s = DockerstatsService(atClient: atClient);
+      // Drain the local sync queue first so the dashboard only renders
+      // once we're caught up to whatever the atServer had at app start.
+      try {
+        await atClient.syncService.waitUntilCaughtUp(
+          timeout: const Duration(seconds: 60),
+          onProgress: (p) {
+            if (!mounted) return;
+            setState(() => _lastSyncProgress = p);
+          },
+        );
+      } catch (_) {
+        // Tolerate a slow / failed sync — keep going so the user sees
+        // whatever does arrive over the live subscription.
+      }
+      if (!mounted) return;
+      final s = DockerstatsService(
+        atClient: atClient,
+        window: RollingWindow(window: _windowDuration),
+      );
       await s.init();
-      // Tick once per second to age out points past the rolling window.
-      _redraw = Timer.periodic(const Duration(seconds: 1), (_) {
+      s.window.addListener(_onChange);
+      // Frequent setState so the x-axis scrolls smoothly between
+      // sample arrivals; eviction runs more rarely since it's O(N).
+      _redrawTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+        if (!mounted) return;
+        setState(() {});
+      });
+      _evictTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (!mounted) return;
         s.window.evictExpired();
       });
-      s.window.addListener(_onChange);
       if (!mounted) return;
-      setState(() => _service = s);
+      setState(() {
+        _service = s;
+        _catchingUp = false;
+      });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = '$e');
+      setState(() {
+        _error = '$e';
+        _catchingUp = false;
+      });
     }
+  }
+
+  void _setWindow(Duration d) {
+    setState(() => _windowDuration = d);
+    _service?.window.window = d;
   }
 
   void _onChange() {
@@ -114,27 +165,106 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       );
     }
+    if (_catchingUp) {
+      final p = _lastSyncProgress;
+      String commitsLine;
+      if (p == null) {
+        commitsLine = 'waiting for first sync event…';
+      } else {
+        final local = p.localCommitId?.toString() ?? '–';
+        final server = p.serverCommitId?.toString() ?? '–';
+        commitsLine = 'localCommitId: $local   serverCommitId: $server';
+      }
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            const Text('… catching up'),
+            const SizedBox(height: 8),
+            Text(commitsLine, style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+      );
+    }
     if (s == null) {
       return const Center(child: CircularProgressIndicator());
     }
     final hostIds = s.window.hostIds.toList()..sort();
     if (hostIds.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'Waiting for stats…\n\nRun the publisher CLI:\n'
-            '  dart run bin/dockerstats_publish.dart \\\n'
-            '      -a <your-atsign> --other-at-signs <this-app-atsign> --simulate',
-            textAlign: TextAlign.center,
+      return Column(
+        children: [
+          _windowSelector(),
+          const Expanded(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'Waiting for stats…\n\nRun the publisher CLI:\n'
+                  '  dart run bin/dockerstats_publish.dart \\\n'
+                  '      -a <your-atsign> --other-at-signs <this-app-atsign> --simulate',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
           ),
-        ),
+        ],
       );
     }
 
     return _drillHostId == null
         ? _buildHostsView(s, hostIds)
         : _buildDrillView(s, _drillHostId!);
+  }
+
+  Widget _windowSelector() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(right: 8),
+            child: Text('Window:'),
+          ),
+          SegmentedButton<Duration>(
+            showSelectedIcon: false,
+            segments: [
+              for (final opt in _windowOptions)
+                ButtonSegment(value: opt.value, label: Text(opt.label)),
+            ],
+            selected: {_windowDuration},
+            onSelectionChanged: (s) => _setWindow(s.first),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chartGrid(List<StatsChart> charts) {
+    assert(charts.length == 4);
+    return Expanded(
+      child: Column(
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(child: charts[0]),
+                Expanded(child: charts[1]),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(child: charts[2]),
+                Expanded(child: charts[3]),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -191,37 +321,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       );
     }
-    return ListView(
+    return Column(
       children: [
+        _windowSelector(),
         _hostChips(s, hostIds),
-        StatsChart(
-          title: 'CPU',
-          yLabel: 'sum CPU% across atSigns',
-          window: s.window.window,
-          series: cpu,
-          yFormatter: (v) => '${v.toStringAsFixed(0)}%',
-        ),
-        StatsChart(
-          title: 'Memory',
-          yLabel: 'sum memUsage (MiB)',
-          window: s.window.window,
-          series: mem,
-          yFormatter: (v) => v.toStringAsFixed(0),
-        ),
-        StatsChart(
-          title: 'Network I/O (cumulative rx + tx)',
-          yLabel: 'MiB',
-          window: s.window.window,
-          series: net,
-          yFormatter: (v) => v.toStringAsFixed(0),
-        ),
-        StatsChart(
-          title: 'Block I/O (cumulative read + write)',
-          yLabel: 'MiB',
-          window: s.window.window,
-          series: blk,
-          yFormatter: (v) => v.toStringAsFixed(0),
-        ),
+        _chartGrid([
+          StatsChart(
+            title: 'CPU',
+            yLabel: 'sum CPU% across atSigns',
+            window: s.window.window,
+            series: cpu,
+            yFormatter: (v) => '${v.toStringAsFixed(0)}%',
+          ),
+          StatsChart(
+            title: 'Memory',
+            yLabel: 'sum memUsage (MiB)',
+            window: s.window.window,
+            series: mem,
+            yFormatter: (v) => v.toStringAsFixed(0),
+          ),
+          StatsChart(
+            title: 'Network I/O (cumulative rx + tx)',
+            yLabel: 'MiB',
+            window: s.window.window,
+            series: net,
+            yFormatter: (v) => v.toStringAsFixed(0),
+          ),
+          StatsChart(
+            title: 'Block I/O (cumulative read + write)',
+            yLabel: 'MiB',
+            window: s.window.window,
+            series: blk,
+            yFormatter: (v) => v.toStringAsFixed(0),
+          ),
+        ]),
       ],
     );
   }
@@ -289,37 +422,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
         seriesFor(k, (s) => (s.blkRead + s.blkWrite) / (1024 * 1024)),
     ];
 
-    return ListView(
+    return Column(
       children: [
+        _windowSelector(),
         _atSignFilter(s, hostId, atSignKeys),
-        StatsChart(
-          title: 'CPU',
-          yLabel: 'CPU% per atSign',
-          window: s.window.window,
-          series: cpu,
-          yFormatter: (v) => '${v.toStringAsFixed(0)}%',
-        ),
-        StatsChart(
-          title: 'Memory',
-          yLabel: 'memUsage (MiB) per atSign',
-          window: s.window.window,
-          series: mem,
-          yFormatter: (v) => v.toStringAsFixed(0),
-        ),
-        StatsChart(
-          title: 'Network I/O (cumulative rx + tx)',
-          yLabel: 'MiB per atSign',
-          window: s.window.window,
-          series: net,
-          yFormatter: (v) => v.toStringAsFixed(0),
-        ),
-        StatsChart(
-          title: 'Block I/O (cumulative read + write)',
-          yLabel: 'MiB per atSign',
-          window: s.window.window,
-          series: blk,
-          yFormatter: (v) => v.toStringAsFixed(0),
-        ),
+        _chartGrid([
+          StatsChart(
+            title: 'CPU',
+            yLabel: 'CPU% per atSign',
+            window: s.window.window,
+            series: cpu,
+            yFormatter: (v) => '${v.toStringAsFixed(0)}%',
+          ),
+          StatsChart(
+            title: 'Memory',
+            yLabel: 'memUsage (MiB) per atSign',
+            window: s.window.window,
+            series: mem,
+            yFormatter: (v) => v.toStringAsFixed(0),
+          ),
+          StatsChart(
+            title: 'Network I/O (cumulative rx + tx)',
+            yLabel: 'MiB per atSign',
+            window: s.window.window,
+            series: net,
+            yFormatter: (v) => v.toStringAsFixed(0),
+          ),
+          StatsChart(
+            title: 'Block I/O (cumulative read + write)',
+            yLabel: 'MiB per atSign',
+            window: s.window.window,
+            series: blk,
+            yFormatter: (v) => v.toStringAsFixed(0),
+          ),
+        ]),
       ],
     );
   }
