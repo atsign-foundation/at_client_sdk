@@ -50,7 +50,7 @@ class DockerstatsService {
     nodes = await atClient.collection<HostNode>(
       '$collectionRootName.$dockerstatsNamespace',
       sampleExpiration,
-      eventsFromLocalSecondary: true,
+      eventSource: EventSource.both,
     );
 
     _subUpdatesSub = nodes.subUpdates.listen(
@@ -62,6 +62,11 @@ class DockerstatsService {
 
   Future<void> _onSubUpdate(CSubItemUpdated e) async {
     if (e.subName != subSamplesName || e.ancestry.length != 2) return;
+    // Skip any defensive null-owner events. With current at_client the
+    // notification path recovers `parents` from the decrypted payload
+    // directly, so this should be unreachable for live events — but
+    // legacy items predating that change can still surface here.
+    if (e.ancestry.any((a) => a.owner == null)) return;
     try {
       final item = await nodes.getDescendant<StatSample>(
         ancestry: e.ancestry,

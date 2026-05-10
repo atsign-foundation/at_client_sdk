@@ -109,24 +109,24 @@ void main() {
   group('A group of tests to validate appending namespace to key', () {
     test('A test to verify namespace from AtKey is appended to key', () {
       String atKey = AtClientUtil.getKeyWithNameSpace(
-          AtKey.self('phone', namespace: 'wavi').build(),
+          AtKey.self('phone', namespace: 'wavi.demos').build(),
           (AtClientPreference()));
-      expect(atKey, 'phone.wavi');
+      expect(atKey, 'phone.wavi.demos');
     });
 
     test('A test to verify namespace from preference is appended to key', () {
       String atKey = AtClientUtil.getKeyWithNameSpace(
           AtKey.self('phone').build(),
-          (AtClientPreference()..namespace = 'wavi'));
-      expect(atKey, 'phone.wavi');
+          (AtClientPreference()..namespace = 'wavi.demos'));
+      expect(atKey, 'phone.wavi.demos');
     });
 
     test(
         'A test to verify namespace is not appended to key when already present',
         () {
       String atKey = AtClientUtil.getKeyWithNameSpace(
-          AtKey.self('phone.wavi').build(), (AtClientPreference()));
-      expect(atKey, 'phone.wavi');
+          AtKey.self('phone.wavi.demos').build(), (AtClientPreference()));
+      expect(atKey, 'phone.wavi.demos');
     });
 
     test(
@@ -135,7 +135,7 @@ void main() {
       String atKey = AtClientUtil.getKeyWithNameSpace(
           AtKey()
             ..key = 'phone'
-            ..namespace = 'wavi'
+            ..namespace = 'wavi.demos'
             ..metadata = (Metadata()..namespaceAware = false),
           (AtClientPreference()));
       expect(atKey, 'phone');
@@ -149,9 +149,9 @@ void main() {
         ..key = 'phone'
         ..sharedBy = '@alice'
         ..sharedWith = '@bob'
-        ..namespace = 'wavi';
+        ..namespace = 'wavi.demos';
       String key = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference);
-      expect(key, 'phone.wavi');
+      expect(key, 'phone.wavi.demos');
     });
   });
   group('A group of tests to check bypass cache flag', () {

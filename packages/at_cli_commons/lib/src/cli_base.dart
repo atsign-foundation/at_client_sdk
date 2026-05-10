@@ -300,7 +300,7 @@ class CLIBase {
     logger = AtSignLogger(runtimeType.toString());
     logger.hierarchicalLoggingEnabled = true;
     if (verbose) {
-      AtSignLogger.root_level = 'FINEST';
+      AtSignLogger.root_level = 'INFO';
       logger.logger.level = Level.INFO;
     } else {
       AtSignLogger.root_level = 'SHOUT';

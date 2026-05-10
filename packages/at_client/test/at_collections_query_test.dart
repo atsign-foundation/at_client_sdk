@@ -6,6 +6,11 @@
 // tests exercise the builder surface and the two terminal operations
 // against a mocked [AtClient], matching the pattern in
 // `at_collections_test.dart`.
+//
+// Event-source coverage: exercises the [EventSource.notifs] path. The
+// data-events path equivalent is `at_collections_data_events_test.dart`;
+// dual-emission semantics under [EventSource.both] are covered by
+// `at_collections_events_both_test.dart`.
 
 import 'dart:async';
 import 'dart:convert';

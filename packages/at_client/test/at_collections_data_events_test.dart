@@ -1,4 +1,4 @@
-// Coverage for AtCollection's `eventsFromLocalSecondary: true` path —
+// Coverage for AtCollection's [EventSource.data] path —
 // CEvent production driven by DataUpdated / DataDeleted events from
 // LocalSecondary, mirroring the notification-driven coverage in
 // at_collections_test.dart.
@@ -6,6 +6,12 @@
 // Tests use `collectionWithInjectedDataEvents` from the test hooks so
 // no live LocalSecondary subscription is needed; we drive events
 // through a controllable broadcast stream.
+//
+// Event-source coverage: this file is the [EventSource.data]
+// counterpart to `at_collections_test.dart` (and the related sub /
+// query / query_sub files), which exercise the [EventSource.notifs]
+// path. Dual-emission semantics under [EventSource.both] are covered
+// by `at_collections_events_both_test.dart`.
 
 import 'dart:async';
 

@@ -233,19 +233,20 @@ class AtClientImpl implements AtClient {
     _logger.finer('Outgoing $service has been garbage collected');
   });
 
-  // Cache key combines (namespace, eventsFromLocalSecondary). Two
-  // collections on the same namespace with different event sources
-  // are independent instances: each has its own listener wiring and
-  // pending-events buffer, so sharing one cache slot would conflate
-  // their event streams.
-  final Map<(String, bool), AtCollection> _collections = {};
-  final Set<(String, bool)> _collectionsSwept = <(String, bool)>{};
+  // Cache key combines (namespace, eventSource). Two collections on
+  // the same namespace with different event sources are independent
+  // instances: each has its own listener wiring and pending-events
+  // buffer, so sharing one cache slot would conflate their event
+  // streams.
+  final Map<(String, EventSource), AtCollection> _collections = {};
+  final Set<(String, EventSource)> _collectionsSwept =
+      <(String, EventSource)>{};
 
   @override
   Future<AtCollection<T>> collection<T>(
     String namespace,
     Duration defaultExpiration, {
-    bool eventsFromLocalSecondary = true,
+    EventSource eventSource = EventSource.both,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
     bool cleanupOrphansOnCreation = false,
@@ -258,14 +259,14 @@ class AtClientImpl implements AtClient {
         'automatically.',
       );
     }
-    final cacheKey = (namespace, eventsFromLocalSecondary);
+    final cacheKey = (namespace, eventSource);
     final c = _collections.putIfAbsent(
       cacheKey,
       () => AtCollection<T>(
         this,
         namespace,
         defaultExpiration,
-        eventsFromLocalSecondary: eventsFromLocalSecondary,
+        eventSource: eventSource,
         fromJson: fromJson,
         typeTag: typeTag,
       ),

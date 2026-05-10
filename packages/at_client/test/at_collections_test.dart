@@ -6,6 +6,12 @@
 // atClient stubbed via mocktail. The notification stream is injected
 // directly via the constructor's [notifications] parameter, so tests drive
 // events without having to mock NotificationService.
+//
+// Event-source coverage: this file (and the related sub / query / query_sub
+// files) exercise the [EventSource.notifs] path. The [EventSource.data]
+// path is covered by `at_collections_data_events_test.dart`. The
+// [EventSource.both] dual-emission semantics are covered by
+// `at_collections_events_both_test.dart`.
 
 import 'dart:async';
 import 'dart:convert';

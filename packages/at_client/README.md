@@ -30,7 +30,7 @@ platform plugins that don't have web implementations today.
 The `AtClient` interface ([`lib/src/client/at_client_spec.dart`](lib/src/client/at_client_spec.dart))
 is the main entry point once authentication is complete.
 
-- `collection<T>(namespace, defaultExpiration, {fromJson, typeTag, eventsFromLocalSecondary, cleanupOrphansOnCreation})` —
+- `collection<T>(namespace, defaultExpiration, {fromJson, typeTag, eventSource, cleanupOrphansOnCreation})` —
   returns a `Future<AtCollection<T>>`. `fromJson` and `typeTag` travel
   together; pass either both or neither. AtCollections hide the
   low-level keystore plumbing and let you work directly with your own

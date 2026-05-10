@@ -6,6 +6,11 @@
 // tests drive both parent and child changes without real I/O. The
 // helpers here shape a store where each AtKey resolves to a JSON
 // envelope we construct from seed data.
+//
+// Event-source coverage: exercises the [EventSource.notifs] path. The
+// data-events path equivalent is `at_collections_data_events_test.dart`;
+// dual-emission semantics under [EventSource.both] are covered by
+// `at_collections_events_both_test.dart`.
 
 import 'dart:async';
 import 'dart:convert';

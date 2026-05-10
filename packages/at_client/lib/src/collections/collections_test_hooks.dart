@@ -68,8 +68,8 @@ AtCollection<U> subCollectionWithInjectedNotifications<T, U>(
 /// Constructs an [AtCollection<T>] with an injected [DataEvent]
 /// stream — the data-events analogue of
 /// [collectionWithInjectedNotifications]. Lets tests drive the
-/// `eventsFromLocalSecondary: true` path without a live LocalSecondary
-/// stream subscription.
+/// [EventSource.data] path without a live LocalSecondary stream
+/// subscription.
 @visibleForTesting
 AtCollection<T> collectionWithInjectedDataEvents<T>(
   AtClient atClient,
@@ -88,6 +88,29 @@ AtCollection<T> collectionWithInjectedDataEvents<T>(
       typeTag: typeTag,
     );
 
+/// Constructs an [AtCollection<T>] on the [EventSource.both] path
+/// with both source streams injected: tests drive each path
+/// independently and assert un-deduplicated dual emission.
+@visibleForTesting
+AtCollection<T> collectionWithInjectedBoth<T>(
+  AtClient atClient,
+  String namespace,
+  Duration defaultExpiration, {
+  required Stream<AtNotification> notifications,
+  required Stream<DataEvent> dataEvents,
+  T Function(Map<String, dynamic>)? fromJson,
+  String? typeTag,
+}) =>
+    AtCollection<T>._withInjectedBoth(
+      atClient,
+      namespace,
+      defaultExpiration,
+      notifications: notifications,
+      dataEvents: dataEvents,
+      fromJson: fromJson,
+      typeTag: typeTag,
+    );
+
 /// Routes [n] through [coll]'s top-level notification handler — the
 /// same entry point the live monitor subscription uses.
 @visibleForTesting
@@ -99,7 +122,7 @@ Future<void> handleNotificationForTest(
 
 /// Routes [event] through [coll]'s data-event handler — the same entry
 /// point the live LocalSecondary subscription uses on the
-/// `eventsFromLocalSecondary: true` path.
+/// [EventSource.data] path.
 @visibleForTesting
 Future<void> handleDataEventForTest(
   AtCollection<dynamic> coll,

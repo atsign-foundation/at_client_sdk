@@ -87,7 +87,10 @@ void main(List<String> args) async {
   stdout.writeln('Connecting...');
   final cliBase = await CLIBase.fromCommandLineArgs(args, parser: ap);
   final atClient = cliBase.atClient;
-  stdout.writeln('Connected as ${atClient.atSign}');
+  stdout.writeln(
+    'Connected as ${atClient.atSign} with'
+    ' prefs.namespace=${atClient.getPreferences()?.namespace}',
+  );
 
   // Domain-object factories. Required up front for sub-collection
   // rehydrate to recognise the wire-format tags.
@@ -104,10 +107,14 @@ void main(List<String> args) async {
     typeTag: 'StatSample',
   );
 
+  // Force the notification listener up front so the first event
+  // doesn't race the lazy startup inside subscribe().
+  atClient.notificationService.startListening();
+
   final nodes = await atClient.collection<HostNode>(
     '$collectionRootName.$applicationNamespace',
     nodeExpiration,
-    eventsFromLocalSecondary: true,
+    eventSource: EventSource.data,
   );
 
   // Build the source(s).

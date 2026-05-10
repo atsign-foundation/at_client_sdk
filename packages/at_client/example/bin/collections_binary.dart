@@ -20,7 +20,7 @@ void main(List<String> args) async {
       .collection<Uint8List>(
         'binary.$applicationNamespace',
         exampleDefaultExpiration,
-        eventsFromLocalSecondary: true,
+        eventSource: EventSource.data,
       );
 
   switch (c.role) {

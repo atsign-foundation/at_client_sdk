@@ -22,6 +22,32 @@ import 'package:mutex/mutex.dart';
 part 'collections_test_hooks.dart';
 
 // -----------------------------------------------------------------------------
+// EventSource
+
+/// Selects which underlying source(s) an [AtCollection] consumes its
+/// `CItemUpdated` / `CItemDeleted` / `CSubItemUpdated` /
+/// `CSubItemDeleted` events from.
+///
+/// - [data] subscribes to [AtClient.dataEvents]. Sees ALL local
+///   keystore mutations — including locally-driven writes (which never
+///   generate notifications) and TTL expiry deletions. Recommended
+///   when a real `SyncService` is running and the app wants tight
+///   write→event semantics.
+/// - [notifs] subscribes to [NotificationService]. Only cross-atSign
+///   writes received from the atServer's notification pipeline produce
+///   events; locally-driven writes are NOT visible on the watch
+///   streams.
+/// - [both] subscribes to BOTH and emits events from each as they
+///   arrive — no de-duplication. The same logical change on the
+///   notification path (peer write delivered to this atSign) and the
+///   data-event path (sync applies that write to the local keystore)
+///   surfaces twice.
+///
+/// Sub-collections built via [AtCollection.subCollection] /
+/// [AtCollection.readReceiptsFor] inherit the parent's choice.
+enum EventSource { data, notifs, both }
+
+// -----------------------------------------------------------------------------
 // AtCollection<T>
 
 /// A typed collection of [CItem<T>] records scoped to a
@@ -240,7 +266,7 @@ part 'collections_test_hooks.dart';
 /// final leaves = await atClient.collection<Sample>(
 ///   'samples.<atSignId>.atsigns.<hostId>.nodes.<app>.<demos>',
 ///   ttl,
-///   eventsFromLocalSecondary: false,
+///   eventSource: EventSource.notifs,
 /// );
 /// final s = await leaves.getOrNull(id, owner);   // null
 /// ```
@@ -365,31 +391,35 @@ interface class AtCollection<T> {
   late final RegExp _regexObjAny;
   late final String _regexAllStr;
 
-  /// True iff this collection consumes events from
-  /// [AtClient.dataEvents] instead of [NotificationService].
-  /// Set once at construction and immutable for the lifetime of the
-  /// collection. Sub-collections built via [readReceiptsFor] /
-  /// [subCollection] inherit the parent's choice.
-  final bool _eventsFromLocalSecondary;
+  /// Which source(s) this collection consumes events from. Set once
+  /// at construction and immutable for the lifetime of the collection.
+  /// Sub-collections built via [readReceiptsFor] / [subCollection]
+  /// inherit the parent's choice.
+  final EventSource _eventSource;
 
-  /// Subscription to [NotificationService] events. Non-null only when
-  /// [_eventsFromLocalSecondary] is `false`. Held so a future
-  /// `dispose()` can cancel cleanly; not currently consumed at
-  /// runtime now that [_handleNotificationImpl] no longer pauses.
+  bool get _consumesData => _eventSource != EventSource.notifs;
+  bool get _consumesNotifs => _eventSource != EventSource.data;
+
+  /// Subscription to [NotificationService] events. Non-null when
+  /// [_eventSource] includes notifications ([EventSource.notifs] or
+  /// [EventSource.both]). Held so a future `dispose()` can cancel
+  /// cleanly; not currently consumed at runtime now that
+  /// [_handleNotificationImpl] no longer pauses.
   // ignore: unused_field
   StreamSubscription<AtNotification>? _notificationSubscription;
 
-  /// Subscription to [AtClient.dataEvents]. Non-null only when
-  /// [_eventsFromLocalSecondary] is `true`. Held so a future
-  /// `dispose()` can cancel cleanly; not currently consumed at
-  /// runtime now that [_handleDataEventImpl] no longer pauses.
+  /// Subscription to [AtClient.dataEvents]. Non-null when
+  /// [_eventSource] includes data events ([EventSource.data] or
+  /// [EventSource.both]). Held so a future `dispose()` can cancel
+  /// cleanly; not currently consumed at runtime now that
+  /// [_handleDataEventImpl] no longer pauses.
   // ignore: unused_field
   StreamSubscription<DataEvent>? _dataEventSubscription;
 
   // The notification stream used for this collection's dispatch. Stored
   // so sub-collections built via [readReceiptsFor] can reuse an
   // injected (test) stream rather than hit the NotificationService.
-  // Only relevant when _eventsFromLocalSecondary is false.
+  // Only relevant when [_consumesNotifs] is true.
   Stream<AtNotification>? _injectedNotifications;
 
   // Mirror of [_injectedNotifications] for the data-event path:
@@ -419,7 +449,7 @@ interface class AtCollection<T> {
     AtClient atClient,
     String namespace,
     Duration defaultExpiration, {
-    required bool eventsFromLocalSecondary,
+    EventSource eventSource = EventSource.both,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
   }) =>
@@ -427,7 +457,7 @@ interface class AtCollection<T> {
         atClient,
         namespace,
         defaultExpiration,
-        eventsFromLocalSecondary: eventsFromLocalSecondary,
+        eventSource: eventSource,
         fromJson: fromJson,
         typeTag: typeTag,
       );
@@ -448,7 +478,7 @@ interface class AtCollection<T> {
         atClient,
         namespace,
         defaultExpiration,
-        eventsFromLocalSecondary: false,
+        eventSource: EventSource.notifs,
         fromJson: fromJson,
         typeTag: typeTag,
         notifications: notifications,
@@ -471,9 +501,34 @@ interface class AtCollection<T> {
         atClient,
         namespace,
         defaultExpiration,
-        eventsFromLocalSecondary: true,
+        eventSource: EventSource.data,
         fromJson: fromJson,
         typeTag: typeTag,
+        injectedDataEvents: dataEvents,
+      );
+
+  /// Test-only factory for the [EventSource.both] path: subscribes
+  /// to BOTH an injected notification stream and an injected
+  /// [DataEvent] stream so tests can drive each path independently
+  /// and assert un-deduplicated dual emission. Reachable only through
+  /// `collectionWithInjectedBoth` in `collections_test_hooks.dart`.
+  factory AtCollection._withInjectedBoth(
+    AtClient atClient,
+    String namespace,
+    Duration defaultExpiration, {
+    required Stream<AtNotification> notifications,
+    required Stream<DataEvent> dataEvents,
+    T Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
+  }) =>
+      AtCollection._(
+        atClient,
+        namespace,
+        defaultExpiration,
+        eventSource: EventSource.both,
+        fromJson: fromJson,
+        typeTag: typeTag,
+        notifications: notifications,
         injectedDataEvents: dataEvents,
       );
 
@@ -481,12 +536,12 @@ interface class AtCollection<T> {
     this.atClient,
     this.namespace,
     this.defaultExpiration, {
-    required bool eventsFromLocalSecondary,
+    required EventSource eventSource,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
     Stream<AtNotification>? notifications,
     Stream<DataEvent>? injectedDataEvents,
-  }) : _eventsFromLocalSecondary = eventsFromLocalSecondary {
+  }) : _eventSource = eventSource {
     if (!namespace.contains('.')) {
       throw ArgumentError('namespace must be fully qualified');
     }
@@ -537,17 +592,21 @@ interface class AtCollection<T> {
     // corresponding async drain methods. The drain awaits each
     // handler invocation before pulling the next, so serial
     // semantics are preserved without the pause-and-drop hazard.
-    if (_eventsFromLocalSecondary) {
-      // Event-driven path: subscribe to AtClient.dataEvents (filtered
-      // by this collection's namespace regex) instead of
-      // NotificationService. The keystore mutations themselves drive
-      // CItemUpdated/CItemDeleted/CSubItem* — including locally-driven
-      // writes that don't generate notifications.
+    // Subscribe to one or both source streams depending on
+    // [_eventSource]. With [EventSource.both] events from each path
+    // are emitted as they arrive — no de-duplication; the same
+    // logical change can surface twice (once on the notification path
+    // when a peer write is delivered, once on the data-event path
+    // when sync applies that write to the local keystore). The
+    // data-event path also sees locally-driven writes (which never
+    // generate notifications) and TTL-expiry deletions.
+    if (_consumesData) {
       final dataEventStream = injectedDataEvents ??
           atClient.dataEvents
               .where((e) => _regexObjAny.hasMatch(e.key.toString()));
       _dataEventSubscription = dataEventStream.listen(_enqueueDataEvent);
-    } else {
+    }
+    if (_consumesNotifs) {
       final notifStream = notifications ??
           atClient.notificationService.subscribe(
             regex: _regexAllStr,
@@ -763,11 +822,12 @@ interface class AtCollection<T> {
   /// `updates` / `deletes` have already seen the corresponding
   /// `CItemUpdated` / `CItemDeleted`.
   ///
-  /// No-op when this collection consumes notifications (the
+  /// No-op when this collection only consumes notifications (the
   /// notification path is async-driven by the remote round-trip and
-  /// does not have an equivalent guarantee).
+  /// does not have an equivalent guarantee). Active for
+  /// [EventSource.data] and [EventSource.both].
   Future<void> _awaitLocalEmissions() async {
-    if (!_eventsFromLocalSecondary) return;
+    if (!_consumesData) return;
     await atClient.pendingEmissions;
   }
 
@@ -1643,7 +1703,7 @@ interface class AtCollection<T> {
     // Constructing the sub-collection directly (not via `atClient.collection`)
     // so that `notifications` can be threaded straight through to its
     // constructor for test wiring. Sub-collections inherit the parent's
-    // event-source choice — apps that opt into eventsFromLocalSecondary
+    // event-source choice — apps that pick a particular [EventSource]
     // on the parent get it transitively on every sub-collection.
     final AtCollection<U> sub;
     if (notifications != null) {
@@ -1655,7 +1715,7 @@ interface class AtCollection<T> {
         fromJson: fromJson,
         typeTag: typeTag,
       );
-    } else if (_eventsFromLocalSecondary && _injectedDataEvents != null) {
+    } else if (_consumesData && _injectedDataEvents != null) {
       sub = AtCollection<U>._withInjectedDataEvents(
         atClient,
         composedNs,
@@ -1669,7 +1729,7 @@ interface class AtCollection<T> {
         atClient,
         composedNs,
         defaultExpiration,
-        eventsFromLocalSecondary: _eventsFromLocalSecondary,
+        eventSource: _eventSource,
         fromJson: fromJson,
         typeTag: typeTag,
       );
@@ -2173,24 +2233,35 @@ interface class AtCollection<T> {
   /// Shared sub-item dispatcher. [atKeyForEnvelope] is the key to
   /// pass to `atClient.get(...)` to fetch the envelope on update
   /// events (so we can recover ancestor owners).
+  ///
+  /// [precomputedParentOwners], when supplied, short-circuits the
+  /// keystore round-trip — the dispatcher uses the supplied list
+  /// directly. The notification path uses this to recover owners
+  /// from the decrypted notification payload (which IS the envelope)
+  /// instead of waiting for sync to mirror the value into the local
+  /// keystore under a key shape the readback would resolve.
   Future<void> _handleSubObjEvent(
     String operation,
     _CParts parts,
-    AtKey atKeyForEnvelope,
-  ) async {
+    AtKey atKeyForEnvelope, {
+    List<Atsign>? precomputedParentOwners,
+  }) async {
     final directParent = parts.ancestry.last;
     switch (operation) {
       case 'update':
-        List<Atsign>? parentOwners;
-        try {
-          final v = await atClient.get(atKeyForEnvelope);
-          parentOwners =
-              _decodeParentOwners(_decodeEnvelope(v.value!, atKeyForEnvelope));
-        } catch (e) {
-          _logger.warning(
-            'handleSubObjEvent: envelope fetch for $atKeyForEnvelope '
-            'failed: $e — emitting with null ancestor owners',
-          );
+        List<Atsign>? parentOwners = precomputedParentOwners;
+        if (parentOwners == null) {
+          try {
+            final v = await atClient.get(atKeyForEnvelope);
+            parentOwners = _decodeParentOwners(
+              _decodeEnvelope(v.value!, atKeyForEnvelope),
+            );
+          } catch (e) {
+            _logger.warning(
+              'handleSubObjEvent: envelope fetch for $atKeyForEnvelope '
+              'failed: $e — emitting with null ancestor owners',
+            );
+          }
         }
         _events.add(CSubItemUpdated(
           owner: parts.from,
@@ -2291,8 +2362,62 @@ interface class AtCollection<T> {
       _logger.info('handleSubObjNotification: empty ancestry ${n.key}');
       return;
     }
-    final atKey = AtKey.fromString(n.key.replaceAll('${n.to}:', ''));
-    await _handleSubObjEvent(n.operation ?? '', parts, atKey);
+
+    // Recover ancestor owners directly from the notification payload
+    // (n.value is the decrypted envelope JSON, with the same `parents`
+    // field the publisher stamped in at write time). Skipping the
+    // keystore round-trip avoids two failure modes that produce
+    // null-owner CSubItemUpdated events on the notification path:
+    //   - the [_updateLocal] mirror writes under `cached:${n.key}`
+    //     while [atClient.get] looks under the bare AtKey shape, so
+    //     the readback yields nothing on shared-key notifications;
+    //   - even when that resolves, the dispatcher could otherwise
+    //     race ahead of sync writing the bare key.
+    // Only meaningful for updates — deletes carry no payload, and
+    // ancestors are intentionally null on [CSubItemDeleted] (the
+    // sub-item is gone, no envelope to read).
+    // Construct an AtKey whose `toString()` reproduces the storage
+    // key `_updateLocal` wrote — `'cached:${n.key}'`. We build it
+    // field-by-field rather than going through
+    // `AtKey.fromString('cached:${n.key}')` because:
+    //   - fromString assumes a 3-part `cached:<sharedWith>:<key>@<sharedBy>`
+    //     shape and throws RangeError on `cached:<key>@<sharedBy>`
+    //     (self-key notifications, or test fixtures that don't carry
+    //     the `<to>:` envelope prefix);
+    //   - fromString can only peel ONE `.<segment>` as the namespace,
+    //     so a multi-segment composed namespace (AtCollection sub-
+    //     collections) gets split incorrectly between key and
+    //     namespace. The toString() round-trip happens to reassemble
+    //     the same string, but downstream code that reads `atKey.key`
+    //     and `atKey.namespace` separately misbehaves.
+    final bare = AtKey.fromString(
+      n.to.isEmpty ? n.key : n.key.replaceAll('${n.to}:', ''),
+    );
+    final atKey = AtKey()
+      ..key = bare.key
+      ..namespace = bare.namespace
+      ..sharedBy = n.from.isEmpty ? bare.sharedBy : n.from
+      ..sharedWith = n.to.isEmpty ? bare.sharedWith : n.to
+      ..metadata = (Metadata()..isCached = true);
+
+    List<Atsign>? parentOwners;
+    if (n.operation == 'update' && n.value != null) {
+      try {
+        parentOwners = _decodeParentOwners(_decodeEnvelope(n.value!, atKey));
+      } catch (e) {
+        _logger.warning(
+          'handleSubObjNotification: envelope decode of n.value failed '
+          'for ${n.key}: $e — emitting with null ancestor owners',
+        );
+      }
+    }
+
+    await _handleSubObjEvent(
+      n.operation ?? '',
+      parts,
+      atKey,
+      precomputedParentOwners: parentOwners,
+    );
   }
 
   /// Pairs [ancestry] (ids + subNames from the key) with [ownersFromEnvelope]
@@ -2698,12 +2823,22 @@ interface class AtCollection<T> {
   /// harmlessly once it has fired: subsequent writes don't try to
   /// re-schedule it.
   Metadata _buildMetadata(CItem<T> item, DateTime now) {
+    // Leave [Metadata.namespaceAware] at its `true` default. Forcing it
+    // to false here would corrupt the read path: `getKeyWithNameSpace`
+    // short-circuits on `!namespaceAware` and returns `atKey.key`
+    // unchanged. With multi-segment composed namespaces (AtCollection
+    // sub-collections), `AtKey.fromString` only peels the last
+    // `.<segment>` as the namespace and leaves the rest in `key`, so
+    // returning `key` unchanged drops the trailing namespace segment
+    // from the lookup string. Writes are unaffected because
+    // `atKey.toString()` reassembles via `_dotNamespaceIfPresent()`
+    // regardless of `namespaceAware`.
     final md = Metadata()
       ..ttr = -1
       ..ccd = true
       ..expiresAt = item.expiresAt
-      ..ttl = item.expiresAt.millisecondsSinceEpoch - now.millisecondsSinceEpoch
-      ..namespaceAware = false;
+      ..ttl =
+          item.expiresAt.millisecondsSinceEpoch - now.millisecondsSinceEpoch;
     if (item.availableAt != null && item.availableAt!.isAfter(now)) {
       md.availableAt = item.availableAt;
       md.ttb =

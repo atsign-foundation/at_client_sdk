@@ -2,6 +2,11 @@
 // at_collections_test.dart; this file exercises only sub-collection-specific
 // behaviour: namespace composition, key-length guard, the CSubItem* event
 // pipeline, parent-delete cascade, and cleanupOrphans.
+//
+// Event-source coverage: exercises the [EventSource.notifs] path. The
+// data-events path equivalent is `at_collections_data_events_test.dart`;
+// dual-emission semantics under [EventSource.both] are covered by
+// `at_collections_events_both_test.dart`.
 
 import 'dart:async';
 import 'dart:convert';
@@ -192,6 +197,12 @@ void main() {
 
   // ---------------------------------------------------------------------------
   group('CSubItem events via handleNotification', () {
+    // Helper builds notifications with the `<to>:<bareKey>@<from>`
+    // envelope shape that AtServer actually emits — production
+    // notifications always carry the recipient atSign as the
+    // `<to>:` prefix on the key. Tests previously omitted that
+    // prefix, which left `_handleSubObjNotificationImpl`'s cached-
+    // form construction unable to round-trip the storage key.
     AtNotification subNotif({
       required String key,
       required String from,
@@ -200,7 +211,7 @@ void main() {
     }) {
       return AtNotification(
         'nid-sub',
-        key,
+        '$to:$key',
         from,
         to,
         DateTime.now().millisecondsSinceEpoch,
@@ -366,6 +377,52 @@ void main() {
       expect(received.single.ancestry.last.owner, isNull);
       expect(received.single.ancestry.first.owner, isNull);
       expect(received.single.subName, 'replies');
+      await sub.cancel();
+    });
+
+    test(
+        'depth-2 update with `parents` in n.value recovers ancestor owners '
+        'from the payload directly (no keystore round-trip)', () async {
+      final c = buildParent();
+      // Fail loudly if the dispatcher tries to fetch the envelope —
+      // the notification payload already carries `parents`, so the
+      // keystore round-trip should be skipped entirely.
+      when(() => c.atClient.get(any())).thenAnswer(
+        (_) async => throw StateError(
+          'atClient.get must not be called when n.value carries parents',
+        ),
+      );
+
+      final received = <CSubItemUpdated>[];
+      final sub = c.parent.subUpdates.listen(received.add);
+
+      c.notifStream.add(AtNotification(
+        'nid-sub-payload',
+        'r1.replies.c1.comments.p1.$parentNs$bobStr',
+        bobStr,
+        selfAtSignStr,
+        DateTime.now().millisecondsSinceEpoch,
+        'key',
+        false,
+        operation: 'update',
+        value: jsonEncode({
+          'type': 'n/a',
+          'obj': 'r1 body',
+          'parents': [
+            {'owner': bobStr},
+            {'owner': selfAtSignStr},
+          ],
+        }),
+      ));
+      for (int i = 0; i < 5; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(received, hasLength(1));
+      expect(received.single.id, 'r1');
+      expect(received.single.ancestry, hasLength(2));
+      expect(received.single.ancestry[0].owner, bobStr.toAtsign());
+      expect(received.single.ancestry[1].owner, selfAtSign);
+      verifyNever(() => c.atClient.get(any()));
       await sub.cancel();
     });
 

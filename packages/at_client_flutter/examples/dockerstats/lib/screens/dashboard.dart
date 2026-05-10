@@ -40,8 +40,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _error;
   Timer? _redrawTimer;
   Timer? _evictTimer;
-  bool _catchingUp = true;
   SyncProgress? _lastSyncProgress;
+  SyncProgressListener? _progressListener;
   Duration _windowDuration = _windowOptions.first.value;
   final StableColors _colors = StableColors();
   String? _drillHostId;
@@ -57,6 +57,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void dispose() {
     _redrawTimer?.cancel();
     _evictTimer?.cancel();
+    if (_progressListener != null) {
+      AtClientManager.getInstance().atClient.syncService.removeProgressListener(
+        _progressListener!,
+      );
+    }
     _service?.dispose();
     super.dispose();
   }
@@ -64,21 +69,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _init() async {
     try {
       final atClient = AtClientManager.getInstance().atClient;
-      // Drain the local sync queue first so the dashboard only renders
-      // once we're caught up to whatever the atServer had at app start.
-      try {
-        await atClient.syncService.waitUntilCaughtUp(
-          timeout: const Duration(seconds: 60),
-          onProgress: (p) {
-            if (!mounted) return;
-            setState(() => _lastSyncProgress = p);
-          },
-        );
-      } catch (_) {
-        // Tolerate a slow / failed sync — keep going so the user sees
-        // whatever does arrive over the live subscription.
-      }
-      if (!mounted) return;
+      // Subscribe to all SyncProgress events for the lifetime of the
+      // dashboard so the status bar always reflects current sync state.
+      _progressListener = _ProgressForwarder((p) {
+        if (!mounted) return;
+        setState(() => _lastSyncProgress = p);
+      });
+      atClient.syncService.addProgressListener(_progressListener!);
       final s = DockerstatsService(
         atClient: atClient,
         window: RollingWindow(window: _windowDuration),
@@ -96,16 +93,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         s.window.evictExpired();
       });
       if (!mounted) return;
-      setState(() {
-        _service = s;
-        _catchingUp = false;
-      });
+      setState(() => _service = s);
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _error = '$e';
-        _catchingUp = false;
-      });
+      setState(() => _error = '$e');
     }
   }
 
@@ -153,6 +144,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       body: SafeArea(child: _buildBody(s)),
+      bottomNavigationBar: _SyncStatusBar(progress: _lastSyncProgress),
     );
   }
 
@@ -162,29 +154,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text('Failed to start: $_error'),
-        ),
-      );
-    }
-    if (_catchingUp) {
-      final p = _lastSyncProgress;
-      String commitsLine;
-      if (p == null) {
-        commitsLine = 'waiting for first sync event…';
-      } else {
-        final local = p.localCommitId?.toString() ?? '–';
-        final server = p.serverCommitId?.toString() ?? '–';
-        commitsLine = 'localCommitId: $local   serverCommitId: $server';
-      }
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            const Text('… catching up'),
-            const SizedBox(height: 8),
-            Text(commitsLine, style: Theme.of(context).textTheme.bodySmall),
-          ],
         ),
       );
     }
@@ -528,4 +497,80 @@ class _HostAgg {
   int blkRead = 0;
   int blkWrite = 0;
   _HostAgg({required this.millis});
+}
+
+/// Trivial adapter so we can register a closure as a SyncProgressListener
+/// without having to define a full subclass at every call site.
+class _ProgressForwarder implements SyncProgressListener {
+  final void Function(SyncProgress) _onEvent;
+  _ProgressForwarder(this._onEvent);
+  @override
+  void onSyncProgressEvent(SyncProgress progress) => _onEvent(progress);
+}
+
+/// Persistent footer that reflects sync state: amber spinner +
+/// commit-id readout when local is behind server; green tick + "in
+/// sync" otherwise (including the "both null" early-exit shape that
+/// SyncServiceImpl emits when there's nothing to do).
+class _SyncStatusBar extends StatelessWidget {
+  final SyncProgress? progress;
+  const _SyncStatusBar({required this.progress});
+
+  bool get _isBehind {
+    final p = progress;
+    if (p == null) return false;
+    final local = p.localCommitId;
+    final server = p.serverCommitId;
+    if (local == null || server == null) return false;
+    return local < server;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final p = progress;
+    final local = p?.localCommitId?.toString() ?? '–';
+    final server = p?.serverCommitId?.toString() ?? '–';
+    final pending = p?.pendingPushCount;
+
+    final Widget icon;
+    final String label;
+    final Color color;
+    if (_isBehind) {
+      color = Colors.amber.shade700;
+      icon = SizedBox(
+        width: 14,
+        height: 14,
+        child: CircularProgressIndicator(strokeWidth: 2, color: color),
+      );
+      label = 'syncing';
+    } else {
+      color = Colors.green.shade700;
+      icon = Icon(Icons.check_circle, size: 16, color: color);
+      label = 'in sync';
+    }
+
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Row(
+          children: [
+            icon,
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(color: color),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'local $local · server $server'
+              '${pending != null && pending > 0 ? ' · pending push $pending' : ''}',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

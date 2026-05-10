@@ -53,7 +53,7 @@ void main(List<String> args) async {
   final posts = await c.atClient.collection<BlogPost>(
     'posts.$applicationNamespace',
     exampleDefaultExpiration,
-    eventsFromLocalSecondary: true,
+    eventSource: EventSource.both,
     fromJson: BlogPost.fromJson,
     typeTag: 'BlogPost',
   );

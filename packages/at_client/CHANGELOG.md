@@ -10,6 +10,13 @@ Several significant enhancements to the API to make it much easier to use.
   easier to use than the old (still fine to use) `notify` method.
 - feat: added `factory AtRpc.server` to make it much simpler to create AtRpc 
   servers. 
+- fix(AtCollection): notification-path sub-item dispatch now recovers
+  ancestor owners directly from the decrypted notification payload
+  (which IS the envelope) instead of round-tripping through the local
+  keystore. Eliminates a class of null-owner `CSubItemUpdated` events
+  that surfaced under `EventSource.notifs` (and `EventSource.both`)
+  when the keystore mirror landed under a key shape the readback
+  couldn't resolve, or raced ahead of sync writing the bare key.
 
 Major documentation uplift
 - docs: Rewrote the main README

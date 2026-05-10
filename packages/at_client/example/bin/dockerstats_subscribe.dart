@@ -83,7 +83,7 @@ void main(List<String> args) async {
   final nodes = await atClient.collection<HostNode>(
     '$collectionRootName.$applicationNamespace',
     nodeExpiration,
-    eventsFromLocalSecondary: true,
+    eventSource: EventSource.data,
   );
 
   // Force the notification listener up front so the first event

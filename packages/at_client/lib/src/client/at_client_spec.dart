@@ -699,26 +699,24 @@ abstract class AtClient {
   /// Useful at app-startup to reclaim descendants whose parent was
   /// deleted on another atSign while this app was offline.
   ///
-  /// [eventsFromLocalSecondary] selects the source for the
-  /// collection's update / delete event streams. Defaults to `true`.
+  /// [eventSource] selects which underlying source(s) feed the
+  /// collection's update / delete event streams. Defaults to
+  /// [EventSource.both]. See the [EventSource] enum dartdoc for the
+  /// per-value semantics.
   ///
-  /// - When `true`, the returned collection subscribes to
-  ///   [AtClient.dataEvents] and produces `CItemUpdated`,
-  ///   `CItemDeleted`, `CSubItemUpdated`, `CSubItemDeleted` from
-  ///   `DataUpdated` / `DataDeleted` events on the keystore-write
-  ///   chokepoint. This sees ALL changes including locally-driven
-  ///   ones. Recommended when a real `SyncService` is running and
-  ///   the app wants tight write→event semantics. Note: expired-key
-  ///   removals fire `DataDeleted` because at_client's expiry sweep
-  ///   loops through `LocalSecondary._delete`.
-  /// - When `false`, the collection subscribes to
-  ///   `NotificationService` instead. Locally-driven writes that
-  ///   don't generate notifications are NOT visible on the watch
-  ///   streams.
+  /// - [EventSource.data] subscribes to [AtClient.dataEvents] only.
+  ///   Sees ALL local keystore mutations — including locally-driven
+  ///   writes (which never generate notifications) and TTL expiry
+  ///   deletions. Recommended when a real `SyncService` is running.
+  /// - [EventSource.notifs] subscribes to `NotificationService` only.
+  ///   Locally-driven writes that don't generate notifications are
+  ///   NOT visible on the watch streams.
+  /// - [EventSource.both] subscribes to both and emits events from
+  ///   each as they arrive — no de-duplication.
   Future<AtCollection<T>> collection<T>(
     String namespace,
     Duration defaultExpiration, {
-    bool eventsFromLocalSecondary = true,
+    EventSource eventSource = EventSource.both,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
     bool cleanupOrphansOnCreation = false,
