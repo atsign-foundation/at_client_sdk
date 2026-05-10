@@ -64,10 +64,13 @@ class NotificationServiceImpl extends NotificationService {
         secondaryAddressFinder: secondaryAddressFinder);
   }
 
+  final String myStatsNotifKey;
+
   NotificationServiceImpl._(
       {required this.atClient,
       Monitor? monitor,
-      SecondaryAddressFinder? secondaryAddressFinder}) {
+      SecondaryAddressFinder? secondaryAddressFinder})
+      : myStatsNotifKey = 'statsNotification.${atClient.atSign}' {
     logger = AtSignLogger(
         'NotificationServiceImpl (${atClient.getCurrentAtSign()})');
 
@@ -203,13 +206,17 @@ class NotificationServiceImpl extends NotificationService {
       final notifs = notificationParser
           .getAtNotifications(notificationParser.parse(notificationJSON));
       _lastReceipt = DateTime.now().toUtc();
-      for (var notif in notifs) {
-        logger.info('Received ${notif.key}');
+      for (var n in notifs) {
+        if (n.key == myStatsNotifKey) {
+          logger.finer('Received ${n.key} (serverCommitId) ${n.value}');
+        } else {
+          logger.info('Received ${n.key}');
+        }
         // Saves latest notification id to the keys if its not a stats notification.
-        if (notif.id != '-1') {
+        if (n.id != '-1') {
           try {
             await atClient.put(
-                lastReceivedNotificationAtKey, jsonEncode(notif.toJson()));
+                lastReceivedNotificationAtKey, jsonEncode(n.toJson()));
           } catch (e) {
             logger.warning('Failed to save last received notification ID: $e');
           }
@@ -219,11 +226,11 @@ class NotificationServiceImpl extends NotificationService {
             var transformedNotification =
                 await NotificationResponseTransformer(atClient)
                     .transform(Tuple()
-                      ..one = notif
+                      ..one = n
                       ..two = notificationConfig);
 
             if (notificationConfig.regex != emptyRegex) {
-              if (hasRegexMatch(notif.key, notificationConfig.regex)) {
+              if (hasRegexMatch(n.key, notificationConfig.regex)) {
                 streamController.add(transformedNotification);
               }
             } else {
