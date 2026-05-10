@@ -32,7 +32,7 @@ const String applicationNamespace = 'dockerstats.demos';
 /// TTL for the LEAF [StatSample] CItems — high-frequency telemetry,
 /// short TTL so receivers see a rolling window of recent samples
 /// without manual eviction.
-const Duration sampleExpiration = Duration(minutes: 5);
+const Duration sampleExpiration = Duration(hours: 1);
 
 /// TTL for the structural CItems — root-level [HostNode]s and the
 /// per-host [AtsignOnHost] sub-collection nodes. These represent
@@ -110,7 +110,6 @@ void main(List<String> args) async {
   // Force the notification listener up front so the first event
   // doesn't race the lazy startup inside subscribe().
   atClient.notificationService.startListening();
-
   final nodes = await atClient.collection<HostNode>(
     '$collectionRootName.$applicationNamespace',
     nodeExpiration,

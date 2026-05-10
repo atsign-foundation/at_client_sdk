@@ -1,10 +1,15 @@
 /// Owns the AtCollections that back the dockerstats dashboard.
 ///
-/// Subscribes to the root `nodes` collection's `subUpdates` stream;
-/// for each `samples` event we fetch the typed leaf via
-/// [AtCollection.getDescendant], which walks the parent chain
-/// (nodes → atsigns → samples) internally and returns the typed
-/// `CItem<StatSample>`.
+/// Two listeners on the root `nodes` collection drive the rolling
+/// window:
+///   - `subUpdates`: each `samples`-level update walks the parent
+///     chain via [AtCollection.getDescendant] to fetch the typed
+///     `CItem<StatSample>`, then adds it to the window.
+///   - `subDeletes`: each `samples`-level delete (most often a
+///     keystore-side TTL expiry, dispatched from
+///     `DataDeleted(wasExpired: true)` on the data-event path) maps
+///     `event.id` (= the publisher's `s.millis.toString()`) back to
+///     the matching sample and removes it from the window.
 library;
 
 import 'dart:async';
@@ -29,6 +34,7 @@ class DockerstatsService {
   late final AtCollection<HostNode> nodes;
 
   StreamSubscription<CSubItemUpdated>? _subUpdatesSub;
+  StreamSubscription<CSubItemDeleted>? _subDeletesSub;
 
   DockerstatsService({required this.atClient, RollingWindow? window})
     : window = window ?? RollingWindow();
@@ -58,6 +64,61 @@ class DockerstatsService {
       onError: (Object e, StackTrace st) =>
           _log.warning('subUpdates error: $e\n$st'),
     );
+    _subDeletesSub = nodes.subDeletes.listen(
+      _onSubDelete,
+      onError: (Object e, StackTrace st) =>
+          _log.warning('subDeletes error: $e\n$st'),
+    );
+
+    // Seed the rolling window from anything the previous session
+    // already synced into the local keystore. Subscriptions are
+    // attached first so any concurrent live events are not lost;
+    // [RollingWindow.add] is idempotent on (host, atSign, millis),
+    // so a backfilled sample arriving twice (once via getItems,
+    // once via a live event) is safe.
+    await _backfill();
+  }
+
+  /// Walk the parent chain (nodes → atsigns → samples) and seed the
+  /// rolling window from everything currently in the local keystore.
+  /// Each level's failure is logged and skipped — one bad host or
+  /// atSign chain doesn't abort the rest.
+  Future<void> _backfill() async {
+    try {
+      final hosts = await nodes.getItems();
+      for (final hostItem in hosts) {
+        final atsignsColl = nodes.subCollection<AtsignOnHost>(
+          parent: hostItem,
+          subName: subAtsignsName,
+          defaultExpiration: sampleExpiration,
+        );
+        try {
+          final atsigns = await atsignsColl.getItems();
+          for (final atsignItem in atsigns) {
+            final samplesColl = atsignsColl.subCollection<StatSample>(
+              parent: atsignItem,
+              subName: subSamplesName,
+              defaultExpiration: sampleExpiration,
+            );
+            try {
+              final samples = await samplesColl.getItems();
+              for (final sampleItem in samples) {
+                window.add(sampleItem.obj);
+              }
+            } catch (e, st) {
+              _log.warning(
+                'backfill samples for atsign=${atsignItem.id} '
+                'host=${hostItem.id}: $e\n$st',
+              );
+            }
+          }
+        } catch (e, st) {
+          _log.warning('backfill atsigns for host=${hostItem.id}: $e\n$st');
+        }
+      }
+    } catch (e, st) {
+      _log.warning('backfill hosts: $e\n$st');
+    }
   }
 
   Future<void> _onSubUpdate(CSubItemUpdated e) async {
@@ -84,7 +145,13 @@ class DockerstatsService {
     }
   }
 
+  void _onSubDelete(CSubItemDeleted e) {
+    if (e.subName != subSamplesName || e.ancestry.length != 2) return;
+    window.removeById(e.id);
+  }
+
   void dispose() {
     _subUpdatesSub?.cancel();
+    _subDeletesSub?.cancel();
   }
 }

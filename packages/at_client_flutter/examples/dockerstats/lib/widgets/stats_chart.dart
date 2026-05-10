@@ -78,13 +78,7 @@ class StatsChart extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Text(title, style: theme.textTheme.titleMedium),
-                const Spacer(),
-                _Legend(series: series),
-              ],
-            ),
+            Text(title, style: theme.textTheme.titleMedium),
             const SizedBox(height: 4),
             Text(yLabel, style: theme.textTheme.bodySmall),
             const SizedBox(height: 8),
@@ -191,35 +185,4 @@ String _formatTimeLabel(int ms, Duration window) {
     return '${two(dt.minute)}:${two(dt.second)}';
   }
   return '${two(dt.hour)}:${two(dt.minute)}';
-}
-
-class _Legend extends StatelessWidget {
-  final List<ChartSeries> series;
-  const _Legend({required this.series});
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 4,
-      children: [
-        for (final s in series)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 12,
-                height: 4,
-                margin: const EdgeInsets.only(right: 4),
-                decoration: BoxDecoration(
-                  color: s.color,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Text(s.label, style: Theme.of(context).textTheme.bodySmall),
-            ],
-          ),
-      ],
-    );
-  }
 }

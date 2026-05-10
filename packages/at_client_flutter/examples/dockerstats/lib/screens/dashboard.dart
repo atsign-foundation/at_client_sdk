@@ -144,7 +144,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       body: SafeArea(child: _buildBody(s)),
-      bottomNavigationBar: _SyncStatusBar(progress: _lastSyncProgress),
+      bottomNavigationBar: _SyncStatusBar(
+        progress: _lastSyncProgress,
+        noData: s != null && s.window.hostIds.isEmpty,
+      ),
     );
   }
 
@@ -161,27 +164,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     final hostIds = s.window.hostIds.toList()..sort();
-    if (hostIds.isEmpty) {
-      return Column(
-        children: [
-          _windowSelector(),
-          const Expanded(
-            child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'Waiting for stats…\n\nRun the publisher CLI:\n'
-                  '  dart run bin/dockerstats_publish.dart \\\n'
-                  '      -a <your-atsign> --other-at-signs <this-app-atsign> --simulate',
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
+    // Always render the chart layout — when there's no data the
+    // status bar surfaces a "no data in this time window" alert.
     return _drillHostId == null
         ? _buildHostsView(s, hostIds)
         : _buildDrillView(s, _drillHostId!);
@@ -329,29 +313,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _hostChips(DockerstatsService s, List<String> hostIds) {
+    // SizedBox(width: double.infinity) gives Wrap an explicit
+    // bounded width so it word-wraps onto a new run instead of
+    // overflowing past the right edge when there are many hosts.
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 6),
-            child: Text('Tap a host to drill down: '),
-          ),
-          for (final hostId in hostIds)
-            ActionChip(
-              avatar: CircleAvatar(
-                radius: 6,
-                backgroundColor: _colors.colorFor('host:$hostId'),
-              ),
-              label: Text(s.window.hostnames[hostId] ?? hostId),
-              onPressed: () => setState(() {
-                _drillHostId = hostId;
-                _hiddenAtSigns.clear();
-              }),
+      child: SizedBox(
+        width: double.infinity,
+        child: Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 6),
+              child: Text('Tap a host to drill down: '),
             ),
-        ],
+            for (final hostId in hostIds)
+              ActionChip(
+                avatar: CircleAvatar(
+                  radius: 6,
+                  backgroundColor: _colors.colorFor('host:$hostId'),
+                ),
+                label: Text(s.window.hostnames[hostId] ?? hostId),
+                onPressed: () => setState(() {
+                  _drillHostId = hostId;
+                  _hiddenAtSigns.clear();
+                }),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -436,31 +426,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 6),
-            child: Text('atSigns: '),
-          ),
-          for (final atKey in atSignKeys)
-            FilterChip(
-              avatar: CircleAvatar(
-                radius: 6,
-                backgroundColor: _colors.colorFor('atsign:$atKey'),
-              ),
-              label: Text(s.window.atSignsByHost[hostId]?[atKey] ?? atKey),
-              selected: !_hiddenAtSigns.contains(atKey),
-              onSelected: (selected) => setState(() {
-                if (selected) {
-                  _hiddenAtSigns.remove(atKey);
-                } else {
-                  _hiddenAtSigns.add(atKey);
-                }
-              }),
+      child: SizedBox(
+        width: double.infinity,
+        child: Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 6),
+              child: Text('atSigns: '),
             ),
-        ],
+            for (final atKey in atSignKeys)
+              FilterChip(
+                avatar: CircleAvatar(
+                  radius: 6,
+                  backgroundColor: _colors.colorFor('atsign:$atKey'),
+                ),
+                label: Text(s.window.atSignsByHost[hostId]?[atKey] ?? atKey),
+                selected: !_hiddenAtSigns.contains(atKey),
+                onSelected: (selected) => setState(() {
+                  if (selected) {
+                    _hiddenAtSigns.remove(atKey);
+                  } else {
+                    _hiddenAtSigns.add(atKey);
+                  }
+                }),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -508,13 +501,15 @@ class _ProgressForwarder implements SyncProgressListener {
   void onSyncProgressEvent(SyncProgress progress) => _onEvent(progress);
 }
 
-/// Persistent footer that reflects sync state: amber spinner +
-/// commit-id readout when local is behind server; green tick + "in
-/// sync" otherwise (including the "both null" early-exit shape that
-/// SyncServiceImpl emits when there's nothing to do).
+/// Persistent footer that reflects sync state and any "no data"
+/// alert. Top row: amber spinner + commit-ids when local is behind
+/// server; green tick + "in sync" otherwise. Optional bottom row:
+/// warning triangle + "no data in this time window" hint, only when
+/// the rolling window is empty.
 class _SyncStatusBar extends StatelessWidget {
   final SyncProgress? progress;
-  const _SyncStatusBar({required this.progress});
+  final bool noData;
+  const _SyncStatusBar({required this.progress, required this.noData});
 
   bool get _isBehind {
     final p = progress;
@@ -554,20 +549,50 @@ class _SyncStatusBar extends StatelessWidget {
       color: theme.colorScheme.surfaceContainerHighest,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            icon,
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: theme.textTheme.bodySmall?.copyWith(color: color),
+            Row(
+              children: [
+                icon,
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: theme.textTheme.bodySmall?.copyWith(color: color),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'local $local · server $server'
+                  '${pending != null && pending > 0 ? ' · pending push $pending' : ''}',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Text(
-              'local $local · server $server'
-              '${pending != null && pending > 0 ? ' · pending push $pending' : ''}',
-              style: theme.textTheme.bodySmall,
-            ),
+            if (noData) ...[
+              const SizedBox(height: 4),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    size: 16,
+                    color: Colors.amber.shade800,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'no data in this time window — run the publisher CLI: '
+                      'dart run bin/dockerstats_publish.dart '
+                      '-a <your-atsign> --other-at-signs <this-app-atsign> --simulate',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.amber.shade800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
