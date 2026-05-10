@@ -84,8 +84,12 @@ class DockerstatsService {
   /// Each level's failure is logged and skipped — one bad host or
   /// atSign chain doesn't abort the rest.
   Future<void> _backfill() async {
+    var totalSamples = 0;
+    var totalHosts = 0;
+    var totalAtSigns = 0;
     try {
       final hosts = await nodes.getItems();
+      totalHosts = hosts.length;
       for (final hostItem in hosts) {
         final atsignsColl = nodes.subCollection<AtsignOnHost>(
           parent: hostItem,
@@ -94,6 +98,7 @@ class DockerstatsService {
         );
         try {
           final atsigns = await atsignsColl.getItems();
+          totalAtSigns += atsigns.length;
           for (final atsignItem in atsigns) {
             final samplesColl = atsignsColl.subCollection<StatSample>(
               parent: atsignItem,
@@ -104,6 +109,7 @@ class DockerstatsService {
               final samples = await samplesColl.getItems();
               for (final sampleItem in samples) {
                 window.add(sampleItem.obj);
+                totalSamples++;
               }
             } catch (e, st) {
               _log.warning(
@@ -119,6 +125,11 @@ class DockerstatsService {
     } catch (e, st) {
       _log.warning('backfill hosts: $e\n$st');
     }
+    _log.info(
+      'backfill complete: hosts=$totalHosts atSigns=$totalAtSigns '
+      'samples=$totalSamples (display-window cutoff '
+      '${window.window.inSeconds}s may drop older samples)',
+    );
   }
 
   Future<void> _onSubUpdate(CSubItemUpdated e) async {
@@ -139,6 +150,11 @@ class DockerstatsService {
       );
       if (item != null) {
         window.add(item.obj);
+      } else {
+        _log.info(
+          'subUpdate getDescendant returned null for sample id=${e.id} '
+          'owner=${e.owner}',
+        );
       }
     } catch (err, st) {
       _log.warning('failed to fetch sample ${e.id}: $err\n$st');
@@ -147,7 +163,15 @@ class DockerstatsService {
 
   void _onSubDelete(CSubItemDeleted e) {
     if (e.subName != subSamplesName || e.ancestry.length != 2) return;
-    window.removeById(e.id);
+    // ancestry[0]: (sanitised hostId, 'atsigns'); ancestry[1]:
+    // (sanitised atSignOnHostId, 'samples'). The rolling window keys
+    // its buckets by the same sanitised forms, so the lookup is
+    // direct — no scanning across buckets, no over-eviction.
+    window.removeById(
+      hostId: e.ancestry[0].id,
+      atSignId: e.ancestry[1].id,
+      id: e.id,
+    );
   }
 
   void dispose() {

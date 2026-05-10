@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import 'onboarding.dart';
 import 'screens/dashboard.dart';
+import 'package:at_utils/at_logger.dart' show AtSignLogger;
 
 void main() {
   runApp(const DockerstatsApp());
+  AtSignLogger.root_level = 'info';
 }
 
 class DockerstatsApp extends StatelessWidget {

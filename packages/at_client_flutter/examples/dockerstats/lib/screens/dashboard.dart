@@ -39,7 +39,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   DockerstatsService? _service;
   String? _error;
   Timer? _redrawTimer;
-  Timer? _evictTimer;
   SyncProgress? _lastSyncProgress;
   SyncProgressListener? _progressListener;
   Duration _windowDuration = _windowOptions.first.value;
@@ -56,7 +55,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _redrawTimer?.cancel();
-    _evictTimer?.cancel();
     if (_progressListener != null) {
       AtClientManager.getInstance().atClient.syncService.removeProgressListener(
         _progressListener!,
@@ -83,14 +81,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await s.init();
       s.window.addListener(_onChange);
       // Frequent setState so the x-axis scrolls smoothly between
-      // sample arrivals; eviction runs more rarely since it's O(N).
+      // sample arrivals. Storage eviction is event-driven (via
+      // `nodes.subDeletes` in DockerstatsService), so no separate
+      // periodic trim is needed.
       _redrawTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
         if (!mounted) return;
         setState(() {});
-      });
-      _evictTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (!mounted) return;
-        s.window.evictExpired();
       });
       if (!mounted) return;
       setState(() => _service = s);

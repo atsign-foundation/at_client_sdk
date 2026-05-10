@@ -16,6 +16,7 @@ import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+
 // Private path: HiveKeystore isn't exported from the package barrel, but
 // this file's `deleteExpiredKeys` needs the concrete class for the
 // `is HiveKeystore` guard and the `getExpiredKeys()` call. The parallel
@@ -375,7 +376,32 @@ class LocalSecondary implements Secondary {
             builder.atKey.metadata,
             _atClient.getCurrentAtSign()!,
           );
+
+          if (_logger.isLoggable('finest')) {
+            _logger.finest('Before keyStore.putAll'
+                ' $updateKey'
+                ' cameFromServer: $cameFromServer'
+                ' ttl ${atMetadata.ttl}'
+                ' expiresAt ${atMetadata.expiresAt}'
+                ' ttb ${atMetadata.ttb}'
+                ' availableAt ${atMetadata.availableAt}'
+                '');
+          }
+
           updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
+
+          if (_logger.isLoggable('finest')) {
+            final AtData fetchedBack = await keyStore!.get(updateKey);
+            _logger.finest('After keyStore.get fetched back'
+                ' $updateKey'
+                ' cameFromServer: $cameFromServer'
+                ' ttl ${fetchedBack.metaData?.ttl}'
+                ' expiresAt ${fetchedBack.metaData?.expiresAt}'
+                ' ttb ${fetchedBack.metaData?.ttb}'
+                ' availableAt ${fetchedBack.metaData?.availableAt}'
+                '');
+          }
+
           emittedMetadata = atMetadata;
           syncQueueOp = SyncQueueOp.updateAll;
           break;
