@@ -28,7 +28,7 @@ dependencies:
   internet_connection_checker: ^1.0.0+1
   async: ^2.9.0
   at_base2e15: ^1.0.0
-  at_commons: ^5.7.0
+  at_commons: ^5.9.0
   at_utils: ^3.2.0
   at_chops: ^3.0.0
   at_lookup: ^3.1.0
