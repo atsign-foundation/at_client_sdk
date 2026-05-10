@@ -142,7 +142,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       body: SafeArea(child: _buildBody(s)),
       bottomNavigationBar: _SyncStatusBar(
         progress: _lastSyncProgress,
-        noData: s != null && s.window.hostIds.isEmpty,
+        backfilling: s?.backfilling ?? false,
+        noData: s != null && !s.backfilling && s.window.hostIds.isEmpty,
       ),
     );
   }
@@ -505,7 +506,12 @@ class _ProgressForwarder implements SyncProgressListener {
 class _SyncStatusBar extends StatelessWidget {
   final SyncProgress? progress;
   final bool noData;
-  const _SyncStatusBar({required this.progress, required this.noData});
+  final bool backfilling;
+  const _SyncStatusBar({
+    required this.progress,
+    required this.noData,
+    required this.backfilling,
+  });
 
   bool get _isBehind {
     final p = progress;
@@ -565,6 +571,26 @@ class _SyncStatusBar extends StatelessWidget {
                 ),
               ],
             ),
+            if (backfilling) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'loading historical samples from local store…',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ],
             if (noData) ...[
               const SizedBox(height: 4),
               Row(

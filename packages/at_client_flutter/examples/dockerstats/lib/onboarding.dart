@@ -106,7 +106,8 @@ Future<void> _setupAtClient(
     ..rootPort = authRequest.rootDomain.rootPort
     ..namespace = _namespace
     ..commitLogPath = dir.path
-    ..hiveStoragePath = dir.path;
+    ..hiveStoragePath = dir.path
+    ..fetchOfflineNotifications = false;
 
   await AtClientManager.getInstance().setCurrentAtSign(
     response.atSign,

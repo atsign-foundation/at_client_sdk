@@ -10,6 +10,13 @@ import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
+/// Maximum gap (in milliseconds) between two consecutive samples
+/// before the chart breaks the line between them. A publisher
+/// pausing / restarting / dropping a few cycles shows as a visible
+/// hole in the trace rather than a misleading straight-line
+/// interpolation across the gap.
+const int _gapThresholdMs = 30 * 1000;
+
 class ChartSeries {
   final String label;
   final Color color;
@@ -57,19 +64,42 @@ class StatsChart extends StatelessWidget {
     final yMax = _niceCeiling(rawMax == 0 ? 1 : rawMax * 1.1);
     final yInterval = yMax / 5;
 
-    final lines = [
-      for (final s in series)
-        LineChartBarData(
-          isCurved: false,
-          color: s.color,
-          barWidth: 2,
-          dotData: const FlDotData(show: false),
-          spots: [
-            for (final p in s.points)
-              if (p.millis >= xMin) FlSpot(p.millis.toDouble(), p.value),
-          ],
-        ),
-    ];
+    // Split each series into contiguous segments wherever consecutive
+    // samples are more than [_gapThresholdMs] apart, so the publisher
+    // pausing / restarting shows as a visible break rather than a
+    // misleading straight line interpolated across the gap. Each
+    // segment becomes its own LineChartBarData sharing the parent
+    // series' color/style.
+    final lines = <LineChartBarData>[];
+    for (final s in series) {
+      final visible = [
+        for (final p in s.points)
+          if (p.millis >= xMin) p,
+      ];
+      if (visible.isEmpty) continue;
+      var segmentStart = 0;
+      for (var i = 1; i <= visible.length; i++) {
+        final atEnd = i == visible.length;
+        final breakHere =
+            !atEnd &&
+            visible[i].millis - visible[i - 1].millis > _gapThresholdMs;
+        if (atEnd || breakHere) {
+          lines.add(
+            LineChartBarData(
+              isCurved: false,
+              color: s.color,
+              barWidth: 2,
+              dotData: const FlDotData(show: false),
+              spots: [
+                for (final p in visible.sublist(segmentStart, i))
+                  FlSpot(p.millis.toDouble(), p.value),
+              ],
+            ),
+          );
+          segmentStart = i;
+        }
+      }
+    }
 
     return Card(
       margin: const EdgeInsets.all(8),

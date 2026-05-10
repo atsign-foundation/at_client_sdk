@@ -36,6 +36,13 @@ class DockerstatsService {
   StreamSubscription<CSubItemUpdated>? _subUpdatesSub;
   StreamSubscription<CSubItemDeleted>? _subDeletesSub;
 
+  /// True while [_backfill] is still walking the local keystore.
+  /// Surfaces to the dashboard so the status bar can show a
+  /// "loading historical samples" indicator without blocking the
+  /// chart render path.
+  bool _backfilling = false;
+  bool get backfilling => _backfilling;
+
   DockerstatsService({required this.atClient, RollingWindow? window})
     : window = window ?? RollingWindow();
 
@@ -76,7 +83,14 @@ class DockerstatsService {
     // [RollingWindow.add] is idempotent on (host, atSign, millis),
     // so a backfilled sample arriving twice (once via getItems,
     // once via a live event) is safe.
-    await _backfill();
+    //
+    // Run in the background — backfill of a saturated keystore
+    // (thousands of samples) can take seconds, and the dashboard
+    // should render immediately and populate the charts as samples
+    // come in. The status bar reflects the in-progress state via
+    // [backfilling].
+    _backfilling = true;
+    unawaited(_backfill().whenComplete(() => _backfilling = false));
   }
 
   /// Walk the parent chain (nodes → atsigns → samples) and seed the
