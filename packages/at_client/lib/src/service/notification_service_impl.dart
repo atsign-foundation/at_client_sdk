@@ -4,10 +4,6 @@ import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart' hide StringBuffer;
-import 'package:at_client/src/encryption_service/encryption.dart';
-import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_client/src/encryption_service/self_key_encryption.dart';
-import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
