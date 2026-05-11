@@ -6,7 +6,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/decryption_service/decryption_manager.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
-import 'package:at_client/src/util/logger_util.dart';
+import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -21,7 +21,7 @@ class SyncServiceImpl implements SyncService {
   /// oldest entry is dropped on the next enqueue. Mutable static so
   /// test infrastructure can set it to 1 (one-at-a-time semantics)
   /// for deterministic per-call assertions.
-  static int queueSize = 5;
+  static int queueSize = 10;
   final AtClient _atClient;
   final RemoteSecondary _remoteSecondary;
   @visibleForTesting
@@ -54,14 +54,30 @@ class SyncServiceImpl implements SyncService {
   /// Cached latest known server commit id. Kept fresh by three
   /// authoritative sources:
   ///   * [statsServiceListener]: push-side stats notifications.
-  ///   * [_syncToRemote]: each successful entry in the batch response
-  ///     carries the server commit id assigned to that op.
+  ///   * [_pushFromSyncQueue]: each successful entry in the batch
+  ///     response carries the server commit id assigned to that op.
   ///   * [_syncFromServer]: each pulled commit entry's `commitId`.
   /// Read by [_getServerCommitId], which falls back to a remote
   /// stats fetch only when this is `null` (cold start, before any
   /// of the above has populated it).
-  @visibleForTesting
-  int? serverCommitId;
+  ///
+  /// Distinct from the `serverCommitId` parameters / locals used
+  /// inside a single sync run, which are *snapshots* captured at
+  /// the start of that run and held constant for its duration.
+  /// This field is the live, monotonic high-water mark across the
+  /// whole [SyncServiceImpl] lifetime.
+  int? _latestKnownServerCommitId;
+
+  /// Highest server commit id assigned to one of OUR local writes
+  /// via a successful push response. Promoted only by
+  /// [_pushFromSyncQueue]; advances on each per-entry success in
+  /// the batch response. `null` until the first successful push.
+  /// [_getLocalCommitId] reads from here. The push path no longer
+  /// reads or writes commit-log entries — the sync queue is the
+  /// source of truth for "what is pending" and this field is the
+  /// source of truth for "highest commit id we've successfully
+  /// pushed".
+  int? _highestPushedCommitId;
 
   /// Wall-clock time at which the last [processSyncRequests] run
   /// finished (whether it found work or took the in-sync fast path).
@@ -104,22 +120,34 @@ class SyncServiceImpl implements SyncService {
   /// A local AtKey to store skipDeletesUntil value
   late final AtKey _skipDeletesUntilCommitId;
 
+  /// [warmStartSync] (default `true`) enqueues a single sync request
+  /// at the end of construction so the first round runs immediately
+  /// — important for read-only subscribers that don't trigger sync
+  /// via writes and whose local cache may be arbitrarily stale at
+  /// startup. The round calls `_isInSync()` →
+  /// `_getServerCommitId(forceFresh: true)`, which sends a stats verb
+  /// to the server so the cache learns its current commitId without
+  /// waiting for the 30s periodic timer or the next stats
+  /// notification. This is NOT the rejected cron pattern (a synthetic
+  /// request on every tick); it fires exactly once at process start,
+  /// then the queue is idle again until a real trigger arrives.
+  ///
+  /// Tests pass `warmStartSync: false` to keep the request queue
+  /// pristine for assertion-style scenarios.
   static Future<SyncService> create(AtClient atClient,
       {@Deprecated('will be removed in a future version')
       AtClientManager? atClientManager,
-      RemoteSecondary? remoteSecondary}) async {
+      RemoteSecondary? remoteSecondary,
+      bool warmStartSync = true}) async {
     remoteSecondary ??= RemoteSecondary(
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
         atChops: atClient.atChops, enrollmentId: atClient.enrollmentId);
     final syncService = SyncServiceImpl._(atClient, remoteSecondary);
     await syncService.statsServiceListener();
     syncService._startPeriodicSyncTimer();
-    // Note: no startup bootstrap is enqueued here. The original cron
-    // implementation enqueued a synthetic request on every tick so the
-    // cron had something to do; in the on-demand trigger model the
-    // queue should sit idle until a real trigger (an app `sync()` call
-    // or a stats notification) arrives. The `hasHadNoSyncRequests`
-    // flag is preserved for any callers that still inspect it.
+    if (warmStartSync) {
+      syncService.sync();
+    }
     return syncService;
   }
 
@@ -142,6 +170,7 @@ class SyncServiceImpl implements SyncService {
 
   SyncServiceImpl._(this._atClient, this._remoteSecondary) {
     _logger = AtSignLogger('SyncService (${_atClient.getCurrentAtSign()})');
+    // _logger.level = 'info';
     _lastReceivedServerCommitIdAtKey =
         AtKey.local('lastreceivedservercommitid', currentAtSign).build();
     _skipDeletesUntilCommitId =
@@ -163,57 +192,42 @@ class SyncServiceImpl implements SyncService {
     return;
   }
 
-  /// Listens on stats notification sent by the cloud secondary server
+  /// Listens on stats notification sent by the cloud secondary server.
+  ///
+  /// Every well-formed notification promotes the cached
+  /// [_latestKnownServerCommitId] (monotonically — see
+  /// [_promoteServerCommitId]) and unconditionally enqueues a
+  /// sync request. The actual
+  /// "is sync work needed?" decision is made by
+  /// [processSyncRequests] via [_isInSync], which considers BOTH
+  /// pull-side (server has new commits) AND push-side (local writes
+  /// awaiting upload) work. A previous local pre-filter here gated
+  /// only on pull-side progress
+  /// (`notification.value > lastReceivedServerCommitId`); that
+  /// suppressed sync attempts whenever local writes were pending
+  /// but the server had not advanced, leaving those writes stuck on
+  /// disk until some unrelated trigger fired.
   @visibleForTesting
   Future<void> statsServiceListener() async {
-    // Setting the regex to 'statsNotification' to receive only the notifications
-    // from stats notification service.
     _statsNotificationSubscription = _atClient.notificationService
         .subscribe(regex: 'statsNotification')
         .listen((notification) async {
-      _logger.finer(_logger.getLogMessageWithClientParticulars(
-          _atClient.getPreferences()!.atClientParticulars,
-          'RCVD: stats notification in sync: ${notification.value}'));
-      final serverCommitId = notification.value;
-      if (serverCommitId != null) {
-        try {
-          _promoteServerCommitId(int.parse(serverCommitId));
-        } on FormatException {
-          _logger.warning(
-              'statsServiceListener: malformed commitId "$serverCommitId"');
-        }
-      }
-      int lastReceivedServerCommitId = -1;
+      _logger.info('RCVD: stats notification in sync: ${notification.value}');
+      final raw = notification.value;
+      if (raw == null) return;
+      final int observedServerCommitId;
       try {
-        lastReceivedServerCommitId = await getLastReceivedServerCommitId();
-      } on FormatException catch (e) {
-        String msg = 'Exception in SyncService statsNotification listener:'
-            ' ${e.message}';
-        _logger.warning(msg);
-
-        // TODO Need to revisit this code, it's not clear how we could get a
-        // FormatException, nor is it clear what the behaviour should be if
-        // we do
-        var syncRequest = SyncRequest()
-          ..result = (SyncResult()
-            ..atClientException = AtClientException.message(msg));
-        _syncError(syncRequest);
-
-        SyncProgress syncProgress = SyncProgress()
-          ..atClientException = AtClientException.message(msg)
-          ..syncStatus = SyncStatus.failure;
-        _informSyncProgress(syncProgress);
+        observedServerCommitId = int.parse(raw);
+      } on FormatException {
+        _logger.warning('statsServiceListener: malformed commitId "$raw"');
+        return;
       }
-      if (serverCommitId != null &&
-          int.parse(serverCommitId) > lastReceivedServerCommitId) {
-        final syncRequest = SyncRequest();
-        syncRequest.onDone = _onDone;
-        syncRequest.onError = _onError;
-        syncRequest.requestSource = SyncRequestSource.system;
-        syncRequest.requestedOn = DateTime.now().toUtc();
-        syncRequest.result = SyncResult();
-        _addSyncRequestToQueue(syncRequest);
-      }
+      _promoteServerCommitId(observedServerCommitId);
+      final syncRequest = SyncRequest()
+        ..requestSource = SyncRequestSource.system
+        ..requestedOn = DateTime.now().toUtc()
+        ..result = SyncResult();
+      _addSyncRequestToQueue(syncRequest);
     });
   }
 
@@ -256,7 +270,7 @@ class SyncServiceImpl implements SyncService {
     final syncRequest = _getSyncRequest();
     try {
       if (await _isInSync()) {
-        _logger.finer('server and local are in sync - ${syncRequest.id}');
+        _logger.info('server and local are in sync - ${syncRequest.id}');
         syncRequest.result!
           ..syncStatus = SyncStatus.success
           ..lastSyncedOn = DateTime.now().toUtc()
@@ -297,14 +311,15 @@ class SyncServiceImpl implements SyncService {
           ExceptionScenario.remoteVerbExecutionFailed, e.message));
       _logger.warning(
           'Exception in sync ${syncRequest.id}. Reason: ${e.getTraceMessage()}');
-      syncRequest.result!.atClientException =
-          AtExceptionManager.createException(e);
+      final wrapped = AtExceptionManager.createException(e);
+      syncRequest.result!.atClientException = wrapped;
       _syncError(syncRequest);
       _syncInProgress = false;
       _informSyncProgress(SyncProgress()
         ..syncStatus = SyncStatus.failure
         ..startedAt = DateTime.now().toUtc()
-        ..message = 'Exception: $e');
+        ..message = 'Exception: $e'
+        ..atClientException = wrapped);
     } catch (e) {
       // Catch-all: with on-demand triggering, an unhandled exception
       // from the sync path would become an unhandled async error and
@@ -313,13 +328,15 @@ class SyncServiceImpl implements SyncService {
       // failure.
       _logger.warning(
           'Unexpected exception in sync ${syncRequest.id}. Reason: $e');
-      syncRequest.result!.atClientException = AtClientException.message('$e');
+      final wrapped = AtClientException.message('$e');
+      syncRequest.result!.atClientException = wrapped;
       _syncError(syncRequest);
       _syncInProgress = false;
       _informSyncProgress(SyncProgress()
         ..syncStatus = SyncStatus.failure
         ..startedAt = DateTime.now().toUtc()
-        ..message = 'Unexpected exception: $e');
+        ..message = 'Unexpected exception: $e'
+        ..atClientException = wrapped);
     } finally {
       _processInProgress = false;
       lastSyncCompletedAt = DateTime.now().toUtc();
@@ -338,6 +355,27 @@ class SyncServiceImpl implements SyncService {
     syncProgress.localCommitIdBeforeSync = localCommitIdBeforeSync;
     syncProgress.localCommitId = localCommitId;
     syncProgress.serverCommitId = serverCommitId;
+    // Cheap (in-memory `LinkedHashSet.length`) snapshot of how many
+    // local writes are still queued for client→server push at the
+    // moment this event is emitted. Surfaces the queue state to
+    // [SyncServiceWaitUntilCaughtUp.waitUntilCaughtUp] so it can
+    // decide "truly caught up" rather than just "the most recent
+    // round acknowledged everything that was queued at its start".
+    final lc = _atClient.getLocalSecondary();
+    if (lc != null) {
+      try {
+        // syncQueueSize is async only because of the lazy-open guard;
+        // once opened it returns from the in-memory length. We don't
+        // await here to keep _informSyncProgress synchronous (its
+        // callers fire it from within sync rounds where awaits would
+        // change ordering); instead we read the cached value via the
+        // opened queue and skip if it isn't open yet.
+        final q = lc.syncQueueSyncSnapshot;
+        if (q != null) syncProgress.pendingPushCount = q;
+      } on Exception {
+        // Defensive — never let the snapshot read derail event emission.
+      }
+    }
     for (var listener in _syncProgressListeners) {
       try {
         listener.onSyncProgressEvent(syncProgress);
@@ -360,16 +398,31 @@ class SyncServiceImpl implements SyncService {
   }
 
   void _syncError(SyncRequest syncRequest) {
-    if (syncRequest.onError != null) {
-      syncRequest.onError!(syncRequest.result);
+    _safeInvokeOnError(syncRequest);
+  }
+
+  /// Calls [request.onError] (if non-null) with [request.result],
+  /// wrapping the callback in a try-catch and logging anything
+  /// thrown. The queue's eviction / drain / completion flows must
+  /// not be derailed by a misbehaving caller-supplied callback —
+  /// neither a single overflow nor a service stop should fail
+  /// because one onError handler threw.
+  ///
+  /// Caller is responsible for populating [request.result] with the
+  /// failure status and exception before calling.
+  void _safeInvokeOnError(SyncRequest request) {
+    if (request.onError == null) return;
+    try {
+      request.onError!(request.result);
+    } catch (e) {
+      _logger.warning('SyncRequest.onError threw and was swallowed: $e');
     }
   }
 
   void _syncComplete(SyncRequest syncRequest) {
     syncRequest.result!.lastSyncedOn = DateTime.now().toUtc();
-    _logger.info(_logger.getLogMessageWithClientParticulars(
-        _atClient.getPreferences()!.atClientParticulars,
-        'Inside syncComplete. syncRequest.requestSource : ${syncRequest.requestSource}; syncRequest.onDone : ${syncRequest.onDone}'));
+    _logger.info(
+        'Inside syncComplete. syncRequest.requestSource : ${syncRequest.requestSource}; syncRequest.onDone : ${syncRequest.onDone}');
     // If specific onDone callback is set, call specific onDone callback,
     // else call the global onDone callback.
     if (syncRequest.onDone != null &&
@@ -379,13 +432,15 @@ class SyncServiceImpl implements SyncService {
     } else if (onDone != null) {
       onDone!(syncRequest.result);
     }
-    _clearQueue();
+    _clearQueue(alreadyHandled: syncRequest);
   }
 
+  // ignore: unused_element
   void _onDone(SyncResult syncResult) {
     _logger.finer('system sync completed on ${syncResult.lastSyncedOn}');
   }
 
+  // ignore: unused_element
   void _onError(SyncResult syncResult) {
     _logger
         .severe('system sync error ${syncResult.atClientException?.message}');
@@ -404,7 +459,21 @@ class SyncServiceImpl implements SyncService {
     }
     hasHadNoSyncRequests = false;
     if (syncRequests.length == queueSize) {
-      syncRequests.removeLast();
+      // Drop-oldest sliding window: evict the head, not the tail. The
+      // newest request is always retained (it represents the most
+      // recent caller's intent to sync). The evicted request gets
+      // an explicit onError invocation so its caller isn't left
+      // waiting indefinitely on a callback that will never fire.
+      final evicted = syncRequests.removeFirst();
+      evicted.result ??= SyncResult();
+      evicted.result!
+        ..syncStatus = SyncStatus.failure
+        ..atClientException = AtClientException(
+          error_codes['AtClientException'],
+          'Sync request evicted: queue at capacity ($queueSize); '
+          'superseded by a newer sync request',
+        );
+      _safeInvokeOnError(evicted);
     }
     syncRequests.addLast(syncRequest);
     // Trigger a sync run on the next microtask. Deferring (rather than
@@ -430,11 +499,42 @@ class SyncServiceImpl implements SyncService {
     });
   }
 
-  void _clearQueue() {
-    _logger.finer(_logger.getLogMessageWithClientParticulars(
-        _atClient.getPreferences()!.atClientParticulars,
-        'Clearing sync queue'));
-    syncRequests.clear();
+  /// Drains the queue at the end of a successful sync run. Each
+  /// remaining request — every queued sync intent that wasn't the
+  /// one chosen for processing — is conceptually answered by the
+  /// run that just completed (it brought local up to date), so we
+  /// fire `onError` on each with a "superseded" failure rather than
+  /// leaving its callback dangling forever.
+  ///
+  /// **Tail-of-burst handling**: "what to push" is owned by
+  /// `LocalSecondary`'s `AtSyncQueue`, not by this request queue. A
+  /// late-arriving local write (one whose `_update` / `_delete`
+  /// enqueue lands during a running round) lives in the sync-queue
+  /// Hive box; the next `processSyncRequests` round peeks the queue
+  /// from a fresh snapshot and drains those entries. Wholesale
+  /// clearing of the request queue here is therefore safe — no
+  /// pending-write information lives on it.
+  ///
+  /// The just-processed request's `onDone` has already fired by the
+  /// time this is called from [_syncComplete]; passing it as
+  /// [alreadyHandled] keeps it from also being notified via `onError`
+  /// here. Identity comparison is exact (`identical`) so only the
+  /// specific in-flight instance is skipped.
+  void _clearQueue({SyncRequest? alreadyHandled}) {
+    _logger.finer('Clearing sync queue');
+    final exception = AtClientException(
+      error_codes['AtClientException'],
+      'Sync request superseded by a coalesced sync run that just completed',
+    );
+    while (syncRequests.isNotEmpty) {
+      final r = syncRequests.removeFirst();
+      if (identical(r, alreadyHandled)) continue;
+      r.result ??= SyncResult();
+      r.result!
+        ..syncStatus = SyncStatus.failure
+        ..atClientException = exception;
+      _safeInvokeOnError(r);
+    }
   }
 
   @visibleForTesting
@@ -442,31 +542,30 @@ class SyncServiceImpl implements SyncService {
       {int? localCommitIdBeforeSync}) async {
     var syncResult = syncRequest.result!;
     _logger.finer('Sync in progress');
-    var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
-        _atClient.getPreferences()!.syncRegex,
-        atSign: _atClient.getCurrentAtSign()!);
-    // Get lastSyncedLocalSeq to get the list of uncommitted entries.
-    var lastSyncedLocalSeq = lastSyncedEntry != null ? lastSyncedEntry.key : -1;
-    var unCommittedEntries = await syncUtil.getChangesSinceLastCommit(
-        lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex,
-        atSign: _atClient.getCurrentAtSign()!);
+    final localSecondary = _atClient.getLocalSecondary()!;
+    // Snapshot of pending-push atKeys at sync-round start. Used by
+    // [_syncFromServer] for conflict detection (a server-pulled key
+    // is in conflict iff it's in this snapshot — i.e. we have a
+    // pending local write for it).
+    final pendingPushAtKeys =
+        Set<String>.from(await localSecondary.peekSyncQueue());
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
     if (serverCommitId > lastReceivedServerCommitId) {
-      _logger.finer(_logger.getLogMessageWithClientParticulars(
-          _atClient.getPreferences()!.atClientParticulars,
-          'Pulling changes into local secondary | lastReceivedServerCommitId $lastReceivedServerCommitId | serverCommitId $serverCommitId'));
+      _logger.finer('Pulling changes into local secondary'
+          ' | lastReceivedServerCommitId $lastReceivedServerCommitId'
+          ' | serverCommitId $serverCommitId');
       // Hint to casual reader: This is where we sync new changes from the server to this client
       final keyInfoList = await _syncFromServer(
-          serverCommitId, lastReceivedServerCommitId, unCommittedEntries,
+          serverCommitId, lastReceivedServerCommitId, pendingPushAtKeys,
           localCommitIdBeforeSync: localCommitIdBeforeSync);
       syncResult.keyInfoList.addAll(keyInfoList);
     }
-    if (unCommittedEntries.isNotEmpty) {
-      _logger.finer(_logger.getLogMessageWithClientParticulars(
-          _atClient.getPreferences()!.atClientParticulars,
-          'Found uncommitted entries to sync to remote. Total uncommitted entries: ${unCommittedEntries.length}'));
+    final pushQueueSize = await localSecondary.syncQueueSize;
+    if (pushQueueSize > 0) {
+      _logger.finer(
+          'Found $pushQueueSize pending atKeys in the sync queue; pushing.');
       // Hint to casual reader: This is where we sync new changes from this client to the server
-      final keyInfoList = await _syncToRemote(unCommittedEntries);
+      final keyInfoList = await _pushFromSyncQueue();
       syncResult.keyInfoList.addAll(keyInfoList);
     }
     syncResult.lastSyncedOn = DateTime.now().toUtc();
@@ -474,60 +573,237 @@ class SyncServiceImpl implements SyncService {
     return syncResult;
   }
 
-  /// Syncs the local entries to cloud secondary.
-  Future<List<KeyInfo>> _syncToRemote(
-      List<CommitEntry> unCommittedEntries) async {
-    List<KeyInfo> keyInfoList = [];
-    var uncommittedEntryBatch = getUnCommittedEntryBatch(unCommittedEntries);
-    for (var unCommittedEntryList in uncommittedEntryBatch) {
-      try {
-        var batchRequests = await getBatchRequests(unCommittedEntryList);
-        var batchResponse = await sendBatch(batchRequests);
-        for (var entry in batchResponse) {
-          try {
-            var batchId = entry['id'];
-            var serverResponse = entry['response'];
-            var responseObject = Response.fromJson(serverResponse);
-            var commitId = -1;
-            if (responseObject.data != null) {
-              commitId = int.parse(responseObject.data!);
-            }
-            var commitEntry = unCommittedEntryList.elementAt(batchId - 1);
-            if (commitId == -1) {
-              _logger.severe(
-                  '${commitEntry.operation} for key ${commitEntry.atKey} failed. Error code ${responseObject.errorCode} error message ${responseObject.errorMessage}');
-            } else {
-              // Each successful push returns the server commit id
-              // assigned to that op; promote the cache so the post-
-              // sync read in processSyncRequests reflects the new
-              // tip without a remote round-trip.
-              _promoteServerCommitId(commitId);
-            }
-
-            _logger.finer('***batchId:$batchId key: ${commitEntry.atKey}');
-            await syncUtil.updateCommitEntry(
-                commitEntry, commitId, _atClient.getCurrentAtSign()!);
-
-            keyInfoList.add(KeyInfo(commitEntry.atKey,
-                SyncDirection.localToRemote, commitEntry.operation));
-          } on Exception catch (e) {
-            var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
-            _logger.severe(
-                'exception while updating commit entry for entry:$entry Reason: $cause');
-          }
+  /// Drains the [LocalSecondary]'s sync queue, pushing each pending
+  /// atKey to the cloud secondary as part of a batched `batch:` verb.
+  ///
+  /// Per round:
+  /// 1. Peek the next [AtClientPreference.syncBatchSize] atKeys from
+  ///    the queue (FIFO).
+  /// 2. For each, read the queued op (and value+metadata from the
+  ///    keystore for non-DELETE ops). Skip + remove the queue entry
+  ///    if the keystore value is missing — race-tolerated handling
+  ///    of a write that landed between queue-write and keystore-write
+  ///    timing windows (rare, but the alternative is leaking queue
+  ///    entries forever).
+  /// 3. Build a `BatchRequest` list and send via [sendBatch] (single
+  ///    network round-trip per batch — keeps push throughput high
+  ///    under heavy load).
+  /// 4. For each per-entry response: on success, remove from the
+  ///    queue and promote `_latestKnownServerCommitId`. On failure,
+  ///    leave in queue for retry on the next round.
+  /// 5. Emit a per-batch [SyncStatus.inProgress] event so listeners
+  ///    can render "pushed N of M" progress.
+  /// 6. Repeat until the queue is empty.
+  ///
+  /// Returns the per-entry [KeyInfo] list for the round (used by
+  /// [SyncProgress.keyInfoList] in the terminal success event).
+  Future<List<KeyInfo>> _pushFromSyncQueue() async {
+    final localSecondary = _atClient.getLocalSecondary()!;
+    final batchSize = _atClient.getPreferences()!.syncBatchSize;
+    final keyInfoList = <KeyInfo>[];
+    var batchesDone = 0;
+    while (true) {
+      final atKeys = await localSecondary.peekSyncQueue(limit: batchSize);
+      if (atKeys.isEmpty) break;
+      // Snapshot the queue size BEFORE this batch so the
+      // no-progress guard at the bottom can detect "the entries
+      // we just tried didn't get removed" without conflating it
+      // with "the queue is large because more writes arrived".
+      final queueSizeBefore = await localSecondary.syncQueueSize;
+      // Build the batch. Order in `batchRequests` mirrors the order
+      // we got from `peekSyncQueue` — and the response comes back
+      // 1-indexed by batch id, so index N-1 in our list is the entry
+      // for batch id N. Track the source atKey + op alongside so we
+      // can correlate the response without re-parsing the wire.
+      final batchRequests = <BatchRequest>[];
+      final batchSources = <_BatchSource>[];
+      for (final atKey in atKeys) {
+        final entry = await localSecondary.readSyncQueueEntry(atKey);
+        if (entry == null) {
+          // The queue says we should push this atKey but the
+          // persisted record is gone (rare race — concurrent remove,
+          // or replay-time corruption). Drop it.
+          _logger.warning(
+              'sync queue race: $atKey missing persisted record; removing');
+          await localSecondary.removeFromSyncQueue(atKey);
+          continue;
         }
+        final String command;
+        try {
+          command = await _buildCommandFromQueueEntry(atKey, entry.op);
+        } on KeyNotFoundException {
+          // The keystore doesn't have a value for this atKey
+          // (UPDATE / UPDATE_ALL / UPDATE_META). The race-tolerated
+          // case: queue write committed but the backing keystore
+          // write never landed (a crash between them). Drop the
+          // queue entry — there's nothing we can push, and the
+          // user-level write is already lost.
+          _logger
+              .info('keystore miss for $atKey on push; dropping queue entry');
+          await localSecondary.removeFromSyncQueue(atKey);
+          continue;
+        }
+        _logger.info('Will push ${entry.op} for $atKey');
+        final batchId = batchRequests.length + 1;
+        batchRequests
+            .add(BatchRequest(batchId, VerbUtil.replaceNewline(command)));
+        batchSources.add(_BatchSource(
+          atKey: atKey,
+          op: entry.op,
+          commitLogSeqNum: entry.commitLogSeqNum,
+        ));
+      }
+      if (batchRequests.isEmpty) {
+        // Every queued atKey we pulled was a phantom; loop and try
+        // the next batch (the queue may still have more).
+        continue;
+      }
+      List<dynamic> batchResponse;
+      try {
+        batchResponse = await sendBatch(batchRequests);
       } on Exception catch (e) {
-        var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
-        _logger.severe(
-            'exception occurred while syncing batch commit entries: $unCommittedEntryList  Reason: $cause');
+        // Network or auth failure for the whole batch. Leave queue
+        // entries in place — next round retries.
+        final cause = (e is AtException) ? e.getTraceMessage() : e.toString();
+        _logger.severe('sendBatch failed: $cause');
+        return keyInfoList;
+      }
+      for (final entry in batchResponse) {
+        try {
+          final batchId = entry['id'] as int;
+          final serverResponse = entry['response'];
+          final responseObject = Response.fromJson(serverResponse);
+          final source = batchSources.elementAt(batchId - 1);
+          var commitId = -1;
+          if (responseObject.data != null) {
+            commitId = int.parse(responseObject.data!);
+          }
+          if (commitId == -1) {
+            _logger.severe(
+                '${source.op} for key ${source.atKey} failed. Error code '
+                '${responseObject.errorCode} error message '
+                '${responseObject.errorMessage}');
+            // Leave in queue for retry. Don't remove.
+            continue;
+          }
+          _promoteServerCommitId(commitId);
+          // Track the high-water mark of OUR successful pushes
+          // separately from the broader server cursor so
+          // [_getLocalCommitId] reflects "our writes the server has
+          // acked" alongside the pull-side cursor.
+          if (_highestPushedCommitId == null ||
+              commitId > _highestPushedCommitId!) {
+            _highestPushedCommitId = commitId;
+          }
+          // Back-write the server-assigned commitId onto the
+          // commit-log entry that the originating local write
+          // produced. Required by the commit-log compaction job
+          // (which only compacts entries with non-null commitId) and
+          // by `SyncUtil.getLastSyncedEntry`. The seqNum threaded
+          // through the sync queue gives O(1) lookup; missing seqNum
+          // (older queue entries / skipCommit writes) falls back to
+          // a commit-log scan.
+          await _backWriteCommitIdForPushedEntry(
+              source.atKey, commitId, source.commitLogSeqNum);
+          await localSecondary.removeFromSyncQueue(source.atKey);
+          keyInfoList.add(KeyInfo(
+            source.atKey,
+            SyncDirection.localToRemote,
+            _syncQueueOpToCommitOp(source.op),
+          ));
+        } on Exception catch (e) {
+          final cause = (e is AtException) ? e.getTraceMessage() : e.toString();
+          _logger.severe(
+              'exception processing batch response entry $entry: $cause');
+        }
+      }
+      batchesDone++;
+      _informSyncProgress(
+        SyncProgress()
+          ..syncStatus = SyncStatus.inProgress
+          ..startedAt = DateTime.now().toUtc()
+          ..message = 'Push batch $batchesDone applied; '
+              '${await localSecondary.syncQueueSize} pending',
+        localCommitId: _latestKnownServerCommitId,
+        serverCommitId: _latestKnownServerCommitId,
+      );
+      // Defensive: if every entry in this batch failed (e.g. a
+      // server-side per-key authorization issue), the entries we
+      // tried weren't removed from the queue. Compare against the
+      // pre-batch snapshot — if size hasn't dropped at all (after
+      // accounting for any new writes that arrived during the
+      // batch), bail out and let a subsequent round retry.
+      // Concurrent writes during the batch can keep `pendingNow`
+      // ≥ `queueSizeBefore`, which is fine — those new writes will
+      // be drained when the next round picks them up; what matters
+      // here is whether the in-batch entries themselves got
+      // removed.
+      final pendingNow = await localSecondary.syncQueueSize;
+      final pendingFront = await localSecondary.peekSyncQueue(limit: 1);
+      final atKeysSet = atKeys.toSet();
+      final allBatchKeysStillPresent =
+          pendingFront.isNotEmpty && atKeysSet.contains(pendingFront.first);
+      if (pendingNow > 0 &&
+          pendingNow >= queueSizeBefore &&
+          allBatchKeysStillPresent) {
+        _logger.warning('sync queue: $pendingNow pending after batch (was '
+            '$queueSizeBefore); none of the in-batch entries were '
+            'removed — bailing out, will retry next round');
+        break;
       }
     }
     return keyInfoList;
   }
 
+  /// Builds the wire command for one queued atKey + op. Shape
+  /// matches the at_server's expected wire format for each op.
+  Future<String> _buildCommandFromQueueEntry(
+      String atKey, SyncQueueOp op) async {
+    final keyStore = _atClient.getLocalSecondary()!.keyStore!;
+    switch (op) {
+      case SyncQueueOp.delete:
+        return 'delete:$atKey';
+      case SyncQueueOp.update:
+        final value = await keyStore.get(atKey);
+        return 'update:$atKey ${value?.data}';
+      case SyncQueueOp.updateMeta:
+        final metaData = await keyStore.getMeta(atKey);
+        final keyWithMeta =
+            metaData != null ? '$atKey${_metadataToString(metaData)}' : atKey;
+        return 'update:meta:$keyWithMeta';
+      case SyncQueueOp.updateAll:
+        final AtData value = await keyStore.get(atKey);
+        final keyGen = '${_metadataToString(value.metaData)}:$atKey';
+        return 'update$keyGen ${value.data}';
+    }
+  }
+
+  /// Maps a [SyncQueueOp] back to its [CommitOp] equivalent for
+  /// the [KeyInfo.commitOp] field in [SyncProgress.keyInfoList]
+  /// events. Kept symmetric with the converse map in
+  /// `LocalSecondary._update` / `_delete`.
+  CommitOp _syncQueueOpToCommitOp(SyncQueueOp op) {
+    switch (op) {
+      case SyncQueueOp.update:
+        return CommitOp.UPDATE;
+      case SyncQueueOp.updateAll:
+        return CommitOp.UPDATE_ALL;
+      case SyncQueueOp.updateMeta:
+        return CommitOp.UPDATE_META;
+      case SyncQueueOp.delete:
+        return CommitOp.DELETE;
+    }
+  }
+
   /// Syncs the cloud secondary changes to local secondary.
+  ///
+  /// [pendingPushAtKeys] is a snapshot taken at sync-round start of
+  /// the atKeys that have a pending client→server write in
+  /// `LocalSecondary`'s sync queue. Used here for conflict detection:
+  /// a server-pulled key is in conflict iff it appears in this set
+  /// (i.e. we have a local write the server doesn't know about).
   Future<List<KeyInfo>> _syncFromServer(int serverCommitId,
-      int lastReceivedServerCommitId, List<CommitEntry> uncommittedEntries,
+      int lastReceivedServerCommitId, Set<String> pendingPushAtKeys,
       {int? localCommitIdBeforeSync}) async {
     // Iterates until serverCommitId is greater than lastReceivedServerCommitId.
     // replacing localCommitId with lastReceivedServerCommitId fixes infinite loop issue
@@ -549,32 +825,41 @@ class SyncServiceImpl implements SyncService {
                 localCommitIdBeforeSync: localCommitIdBeforeSync,
                 skipDeletesUntil: skipDeletesUntil);
         if (listOfCommitEntriesFromServer.isEmpty) {
-          _logger.finer(_logger.getLogMessageWithClientParticulars(
-              _atClient.getPreferences()!.atClientParticulars,
-              'sync response is empty | local commitID: $lastReceivedServerCommitId | server commitID: $serverCommitId'));
+          // Server walked the full (lastReceivedServerCommitId,
+          // serverCommitId] range and returned no entries for this
+          // client — every commit in that window was filtered out
+          // server-side (apkam namespace scope, syncRegex, or
+          // skipDeletesUntil). Advance the cursor to serverCommitId
+          // (the sync-start snapshot, NOT the live
+          // [_latestKnownServerCommitId], which may have advanced
+          // into commits we haven't yet examined) so subsequent
+          // rounds no-op until the server moves past it, instead
+          // of re-probing the same filtered range every round.
+          _logger.finer(
+              'sync response is empty | advancing cursor past filtered range | '
+              'local commitID: $lastReceivedServerCommitId -> $serverCommitId | '
+              'server commitID: $serverCommitId');
+          lastReceivedServerCommitId = serverCommitId;
+          _promoteServerCommitId(lastReceivedServerCommitId);
           break;
         }
-        // Iterates over each commit entry
-        // If the serverCommitEntry exists in the uncommitted entries list,
-        // ignore the serverCommitEntry.
+        _logger.info('Received ${listOfCommitEntriesFromServer.length}'
+            ' from server');
+        // Iterates over each commit entry. If the serverCommitEntry's
+        // atKey is in the [pendingPushAtKeys] set we have a local
+        // write for the same key — record a conflict and don't
+        // overwrite the local copy.
         for (dynamic serverCommitEntry in listOfCommitEntriesFromServer) {
-          bool isServerCommitEntryExistInUncommittedEntries = false;
-          for (CommitEntry entry in uncommittedEntries) {
-            if (entry.atKey!.trim() ==
-                serverCommitEntry['atKey'].toString().trim()) {
-              isServerCommitEntryExistInUncommittedEntries = true;
-              break;
-            }
-          }
-          if (isServerCommitEntryExistInUncommittedEntries) {
+          final serverAtKey = serverCommitEntry['atKey'].toString().trim();
+          final hasLocalConflict = pendingPushAtKeys.contains(serverAtKey);
+          if (hasLocalConflict) {
             lastReceivedServerCommitId =
                 _parseToInteger(serverCommitEntry['commitId']);
             _promoteServerCommitId(lastReceivedServerCommitId);
-            _logger.finer(_logger.getLogMessageWithClientParticulars(
-                _atClient.getPreferences()!.atClientParticulars,
+            _logger.finer(
                 'Server commitEntry ${serverCommitEntry['atKey']} exists in '
                 'uncommitted entries. So skipping the commit entry and '
-                'updating the lastReceivedServerCommitId to $lastReceivedServerCommitId'));
+                'updating the lastReceivedServerCommitId to $lastReceivedServerCommitId');
             ConflictInfo? conflictInfo =
                 await _setConflictInfo(serverCommitEntry);
             final keyInfo = KeyInfo(
@@ -595,11 +880,23 @@ class SyncServiceImpl implements SyncService {
           lastReceivedServerCommitId =
               _parseToInteger(serverCommitEntry['commitId']);
           _promoteServerCommitId(lastReceivedServerCommitId);
-          await _processServerCommitEntry(
-              serverCommitEntry, uncommittedEntries, keyInfoList);
+          await _processServerCommitEntry(serverCommitEntry, keyInfoList);
           _logger.finest(
               'Updating lastReceivedServerCommitId to $lastReceivedServerCommitId');
         }
+        // Per-batch progress event: lets long syncs (e.g. server at
+        // 20000, local at 1000) report incremental advancement to
+        // listeners (and to `waitUntilCaughtUp`) instead of staying
+        // silent until the entire pull finishes.
+        _informSyncProgress(
+            SyncProgress()
+              ..syncStatus = SyncStatus.inProgress
+              ..startedAt = DateTime.now().toUtc()
+              ..message =
+                  'Pull batch applied: $lastReceivedServerCommitId / $serverCommitId',
+            localCommitIdBeforeSync: localCommitIdBeforeSync,
+            localCommitId: lastReceivedServerCommitId,
+            serverCommitId: serverCommitId);
       }
     } finally {
       // The put method persists the lastReceivedServerCommitId which will be used to
@@ -612,8 +909,8 @@ class SyncServiceImpl implements SyncService {
     return keyInfoList;
   }
 
-  Future<void> _processServerCommitEntry(Map serverCommitEntry,
-      List<CommitEntry> uncommittedEntries, List<KeyInfo> keyInfoList) async {
+  Future<void> _processServerCommitEntry(
+      Map serverCommitEntry, List<KeyInfo> keyInfoList) async {
     try {
       final keyInfo = KeyInfo(
           serverCommitEntry['atKey'],
@@ -648,9 +945,7 @@ class SyncServiceImpl implements SyncService {
       syncBuilder.skipDeletesUntil = skipDeletesUntil;
     }
 
-    _logger.finer(_logger.getLogMessageWithClientParticulars(
-        _atClient.getPreferences()!.atClientParticulars,
-        'syncBuilder ${syncBuilder.buildCommand()}'));
+    _logger.finer('syncBuilder ${syncBuilder.buildCommand()}');
     List syncResponseJson = [];
     try {
       syncResponseJson = JsonUtils.decodeJson(DefaultResponseParser()
@@ -663,15 +958,13 @@ class SyncServiceImpl implements SyncService {
           'Exception occurred in fetching sync response : ${e.getTraceMessage()}');
       rethrow;
     }
-    _logger.finest(_logger.getLogMessageWithClientParticulars(
-        _atClient.getPreferences()!.atClientParticulars,
-        'syncResponse $syncResponseJson'));
+    _logger.finest('syncResponse $syncResponseJson');
     return syncResponseJson;
   }
 
   @visibleForTesting
 
-  /// When a new client is authenticated, set the [_skipDeletesUntilCommitId] to [serverCommitId] for initial sync
+  /// When a new client is authenticated, set the [_skipDeletesUntilCommitId] to the supplied `serverCommitId` for initial sync
   /// If initial sync is interrupted before client fully syncs from the server and client authenticates again, retrieve
   /// [_skipDeletesUntilCommitId] from local secondary and return
   Future<int?> setAndGetSkipDeletesUntil(
@@ -919,23 +1212,20 @@ class SyncServiceImpl implements SyncService {
       // Force-fresh: this is a decision point — staleness here would
       // give the caller a false "in sync" answer when a recent
       // direct-to-server change hasn't propagated to the cache yet.
-      var serverCommitId = await _getServerCommitId(forceFresh: true);
-
-      var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
-
-      var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
-          _atClient.getPreferences()!.syncRegex,
-          atSign: _atClient.getCurrentAtSign()!);
-      var lastSyncedCommitId = lastSyncedEntry?.commitId;
-      _logger.finest(
-          'server commit id: $serverCommitId last synced commit id: $lastSyncedCommitId');
-      var lastSyncedLocalSeq =
-          lastSyncedEntry != null ? lastSyncedEntry.key : -1;
-      var unCommittedEntries = await syncUtil.getChangesSinceLastCommit(
-          lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex,
-          atSign: _atClient.getCurrentAtSign()!);
-      return SyncUtil.isInSync(
-          unCommittedEntries, serverCommitId, lastReceivedServerCommitId);
+      final serverCommitId = await _getServerCommitId(forceFresh: true);
+      final lastReceivedServerCommitId = await getLastReceivedServerCommitId();
+      final pendingPushCount =
+          await _atClient.getLocalSecondary()!.syncQueueSize;
+      _logger.finest('public isInSync: serverCommitId=$serverCommitId '
+          'lastReceivedServerCommitId=$lastReceivedServerCommitId '
+          'pendingPushCount=$pendingPushCount');
+      // We're "in sync" iff the client→server queue is empty AND the
+      // server hasn't moved past what we've already pulled. Same
+      // shape as the private [_isInSync] used by `processSyncRequests`
+      // — kept aligned so app-level `isInSync()` callers see the
+      // same answer the round-decision sees.
+      return pendingPushCount == 0 &&
+          lastReceivedServerCommitId == serverCommitId;
     } on Exception catch (e) {
       var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
       _logger.severe('exception in isInSync $cause');
@@ -952,37 +1242,36 @@ class SyncServiceImpl implements SyncService {
     // sync work is needed; a stale cache would skip the run.
     var serverCommitId = await _getServerCommitId(forceFresh: true);
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
-    var lastSyncedEntry = await syncUtil.getLastSyncedEntry(
-        _atClient.getPreferences()!.syncRegex,
-        atSign: _atClient.getCurrentAtSign()!);
-    var lastSyncedCommitId = lastSyncedEntry?.commitId;
-    _logger.finest(
-        'server commit id: $serverCommitId last synced commit id: $lastSyncedCommitId');
-    var lastSyncedLocalSeq = lastSyncedEntry != null ? lastSyncedEntry.key : -1;
-    var unCommittedEntries = await syncUtil.getChangesSinceLastCommit(
-        lastSyncedLocalSeq, _atClient.getPreferences()!.syncRegex,
-        atSign: _atClient.getCurrentAtSign()!);
-    return SyncUtil.isInSync(
-        unCommittedEntries, serverCommitId, lastReceivedServerCommitId);
+    final pendingPushCount = await _atClient.getLocalSecondary()!.syncQueueSize;
+    _logger.info('server commit id: $serverCommitId '
+        'lastReceivedServerCommitId: $lastReceivedServerCommitId '
+        'pending push count: $pendingPushCount');
+    // We're "in sync" iff the client→server queue is empty AND the
+    // server hasn't moved past what we've already pulled. The
+    // client-side push backlog lives in `LocalSecondary`'s sync
+    // queue.
+    return pendingPushCount == 0 &&
+        lastReceivedServerCommitId == serverCommitId;
   }
 
   /// Returns the cloud secondary latest commit id. if null, returns -1.
-  /// Monotonically promotes the cached [serverCommitId] to [observed]
-  /// when it represents progress. Centralised so the three update
-  /// paths (stats notifications, push batch responses, pull entries)
-  /// share the same monotonic guard — out-of-order arrivals can't
-  /// rewind the cache.
+  /// Monotonically promotes the cached [_latestKnownServerCommitId]
+  /// to [observed] when it represents progress. Centralised so the
+  /// three update paths (stats notifications, push batch responses,
+  /// pull entries) share the same monotonic guard — out-of-order
+  /// arrivals can't rewind the cache.
   void _promoteServerCommitId(int observed) {
-    final current = serverCommitId;
+    final current = _latestKnownServerCommitId;
     if (current == null || observed > current) {
-      serverCommitId = observed;
+      _latestKnownServerCommitId = observed;
     }
   }
 
   /// Returns the latest known server commit id. With [forceFresh: false]
   /// (the default) the cached value is returned when non-null; the
   /// cache is kept current by stats notifications, batch responses
-  /// from `_syncToRemote`, and pulled entries from `_syncFromServer`.
+  /// from `_pushFromSyncQueue`, and pulled entries from
+  /// `_syncFromServer`.
   ///
   /// With [forceFresh: true] the cache is bypassed and a remote stats
   /// fetch is issued; the result is then written back into the cache
@@ -999,11 +1288,9 @@ class SyncServiceImpl implements SyncService {
   /// reachable.
   Future<int> _getServerCommitId({bool forceFresh = false}) async {
     if (!forceFresh) {
-      final cached = serverCommitId;
+      final cached = _latestKnownServerCommitId;
       if (cached != null) {
-        _logger.finer(_logger.getLogMessageWithClientParticulars(
-            _atClient.getPreferences()!.atClientParticulars,
-            'Returning serverCommitId $cached (cached)'));
+        _logger.finer('Returning serverCommitId $cached (cached)');
         return cached;
       }
     }
@@ -1012,46 +1299,61 @@ class SyncServiceImpl implements SyncService {
     // If server commit id is null, set to -1;
     fresh ??= -1;
     _promoteServerCommitId(fresh);
-    _logger.info(_logger.getLogMessageWithClientParticulars(
-        _atClient.getPreferences()!.atClientParticulars,
-        'Returning serverCommitId $fresh ${forceFresh ? "(forced fresh)" : "(cold fetch)"}'));
+    _logger.info(
+        'Returning serverCommitId $fresh ${forceFresh ? "(forced fresh)" : "(cold fetch)"}');
     return fresh;
   }
 
   @visibleForTesting
   Future<int> getLastReceivedServerCommitId() async {
-    // If "lastReceivedServerCommitId" key exists, fetch the data and return the
-    // last received server commit id.
+    // If "lastReceivedServerCommitId" key exists, fetch the data and
+    // return the last received server commit id. If not, return -1 (no
+    // pull has ever applied to this client). Do NOT fall back to
+    // [_getLocalCommitId]: it composes this method's value, so a
+    // fallback would recurse.
     try {
       var response = await _atClient.get(_lastReceivedServerCommitIdAtKey);
-      _logger.finer(_logger.getLogMessageWithClientParticulars(
-          _atClient.getPreferences()!.atClientParticulars,
-          'Returning lastReceivedServerCommitId from AtKey: ${response.value}'));
+      _logger.finer(
+          'Returning lastReceivedServerCommitId from AtKey: ${response.value}');
       return int.parse(response.value);
     } on AtKeyNotFoundException {
-      // If the key does not exist, fall back to previous logic, which is
-      // return last synced commit id.
-      int localCommitId = await _getLocalCommitId();
-      _logger.finer(_logger.getLogMessageWithClientParticulars(
-          _atClient.getPreferences()!.atClientParticulars,
-          'lastReceivedServerCommitId AtKey not found. Returning localCommitId: $localCommitId'));
-      return localCommitId;
+      _logger.finer('lastReceivedServerCommitId AtKey not found. Returning -1');
+      return -1;
     }
   }
 
-  /// Returns the local commit id. If null, returns -1.
+  /// Returns the highest commit id this client has observed for ITS
+  /// OWN view of server state — the union of:
+  ///
+  /// * [_highestPushedCommitId] — server commit ids assigned to our
+  ///   successful pushes (see `_pushFromSyncQueue`).
+  /// * `lastReceivedServerCommitId` — the cursor written after each
+  ///   pull batch in `_syncFromServer`'s finally block.
+  ///
+  /// Returns `-1` when neither has ever advanced (truly fresh
+  /// client). The `localCommitIdBeforeSync == -1` check uses this
+  /// value to set the `isInitialSync` flag on the first round.
+  ///
+  /// Push and pull bookkeeping are kept in separate fields, but
+  /// the externally observed `localCommitId` (in `SyncProgress`
+  /// events) is their union — the test harnesses
+  /// (`FunctionalTestSyncService`, `E2ESyncService`) check
+  /// `localCommitId == serverCommitId` as their "in sync" signal,
+  /// which only holds with the union.
+  ///
+  /// Reads the cursor key inline rather than via
+  /// [getLastReceivedServerCommitId] to keep the dependency one-way
+  /// (callee → callee, not mutual).
   Future<int> _getLocalCommitId() async {
-    // Get lastSynced local commit id.
-    var lastSyncEntry = await syncUtil.getLastSyncedEntry(
-        _atClient.getPreferences()!.syncRegex,
-        atSign: _atClient.getCurrentAtSign()!);
-    int localCommitId;
-    // If lastSyncEntry not null, set localCommitId to lastSyncedEntry.commitId
-    // Else set to -1.
-    (lastSyncEntry != null && lastSyncEntry.commitId != null)
-        ? localCommitId = lastSyncEntry.commitId!
-        : localCommitId = -1;
-    return localCommitId;
+    final pushed = _highestPushedCommitId ?? -1;
+    int pulled = -1;
+    try {
+      final response = await _atClient.get(_lastReceivedServerCommitIdAtKey);
+      pulled = int.parse(response.value);
+    } on AtKeyNotFoundException {
+      // pulled stays -1
+    }
+    return pushed > pulled ? pushed : pulled;
   }
 
   @visibleForTesting
@@ -1059,13 +1361,9 @@ class SyncServiceImpl implements SyncService {
     var command = 'batch:';
     command += jsonEncode(requests);
     command += '\n';
-    _logger.finer(_logger.getLogMessageWithClientParticulars(
-        _atClient.getPreferences()!.atClientParticulars,
-        'Sending batch to sync: $command'));
+    _logger.finer('Sending batch to sync: $command');
     var verbResult = await _remoteSecondary.executeCommand(command, auth: true);
-    _logger.finer(_logger.getLogMessageWithClientParticulars(
-        _atClient.getPreferences()!.atClientParticulars,
-        'batch result:$verbResult'));
+    _logger.finer('batch result:$verbResult');
     if (verbResult != null) {
       verbResult = verbResult.replaceFirst(RegExp('^data:'), '');
     }
@@ -1077,6 +1375,7 @@ class SyncServiceImpl implements SyncService {
       case '+':
       case '#':
       case '*':
+        _logger.info('Pulling to local: UPDATE: ${serverCommitEntry['atKey']}');
         var builder = UpdateVerbBuilder()
           ..atKey = AtKey.fromString(serverCommitEntry['atKey'])
           ..value = serverCommitEntry['value'];
@@ -1085,6 +1384,7 @@ class SyncServiceImpl implements SyncService {
         await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_ALL);
         break;
       case '-':
+        _logger.info('Pulling to local: DELETE: ${serverCommitEntry['atKey']}');
         var builder = DeleteVerbBuilder()
           ..atKey = AtKey.fromString(serverCommitEntry['atKey']);
         await _pullToLocal(builder, serverCommitEntry, CommitOp.DELETE);
@@ -1189,9 +1489,16 @@ class SyncServiceImpl implements SyncService {
       VerbBuilder builder, serverCommitEntry, CommitOp operation) async {
     String? verbResult;
     try {
-      verbResult = await _atClient
-          .getLocalSecondary()!
-          .executeVerb(builder, sync: false);
+      // `cameFromServer: true` flags this write as a server-replay so
+      // `LocalSecondary` skips enqueuing it for client→server sync —
+      // the server is where this entry just came from. `sync: false`
+      // expresses the same intent on the legacy interface and is
+      // retained for back-compat.
+      verbResult = await _atClient.getLocalSecondary()!.executeVerb(
+            builder,
+            sync: false,
+            cameFromServer: true,
+          );
     } on UnAuthorizedException catch (e) {
       _logger.finer(
           'Failed to sync ${(builder as UpdateVerbBuilder).atKey.toString()} caused by ${e.toString()}');
@@ -1199,17 +1506,86 @@ class SyncServiceImpl implements SyncService {
     if (verbResult == null) {
       return;
     }
-    var sequenceNumber = int.parse(verbResult.split(':')[1]);
-    var commitEntry = await (syncUtil.getCommitEntry(
-        sequenceNumber, _atClient.getCurrentAtSign()!));
+    // Back-write the server-side commitId into the local commit-log
+    // entry that `executeVerb` just appended. The push path tracks
+    // its cursor in `_highestPushedCommitId` and
+    // `lastReceivedServerCommitId` rather than reading commit-log
+    // commitIds — but commit-log compaction still needs every
+    // synced entry to carry a commitId (its `removeWhere(value.commitId
+    // == null)` step would otherwise skip every server-pulled entry,
+    // leaving the log to grow unboundedly). `SyncUtil.getLastSyncedEntry`
+    // also depends on this for downstream functional tests and any
+    // external consumers.
+    final sequenceNumber = int.parse(verbResult.split(':')[1]);
+    final commitEntry = await syncUtil.getCommitEntry(
+        sequenceNumber, _atClient.getCurrentAtSign()!);
     if (commitEntry == null) {
       return;
     }
     commitEntry.operation = operation;
-    _logger.finest(
-        'Updating ${commitEntry.atKey} commitId to ${serverCommitEntry['commitId']} in local keystore');
-    await syncUtil.updateCommitEntry(commitEntry, serverCommitEntry['commitId'],
-        _atClient.getCurrentAtSign()!);
+    final serverCommitId = serverCommitEntry['commitId'];
+    if (serverCommitId == null) {
+      return;
+    }
+    await syncUtil.updateCommitEntry(
+        commitEntry, serverCommitId, _atClient.getCurrentAtSign()!);
+  }
+
+  /// Stamps the server-assigned [commitId] onto the commit-log entry
+  /// that the local keystore op for [atKey] produced. Used by
+  /// [_pushFromSyncQueue] after each successful per-entry batch
+  /// response.
+  ///
+  /// **Fast path**: when [seqNum] is supplied (the keystore op's
+  /// `Future<int?>` return value, threaded through the sync queue),
+  /// the entry is fetched directly via [SyncUtil.getCommitEntry] —
+  /// O(1).
+  ///
+  /// **Slow path**: when [seqNum] is null (older queue entries
+  /// persisted before the field was added; or a `skipCommit` write
+  /// whose op didn't append a commit-log entry — though those don't
+  /// reach the sync queue), fall back to scanning the commit log for
+  /// the latest entry matching [atKey] — O(N log N).
+  ///
+  /// The back-write is required by:
+  /// - the commit-log compaction job (only compacts entries with
+  ///   non-null commitId);
+  /// - `SyncUtil.getLastSyncedEntry`, used by downstream functional
+  ///   tests and external consumers.
+  ///
+  /// Best-effort: failures are logged at warning, not surfaced to
+  /// the caller. Sync correctness doesn't depend on the back-write
+  /// succeeding (the actual write reached the server; only the
+  /// commit-log metadata is at stake).
+  Future<void> _backWriteCommitIdForPushedEntry(
+      String atKey, int commitId, int? seqNum) async {
+    try {
+      final atSign = _atClient.getCurrentAtSign()!;
+      if (seqNum != null) {
+        final entry = await syncUtil.getCommitEntry(seqNum, atSign);
+        if (entry == null) {
+          return;
+        }
+        await syncUtil.updateCommitEntry(entry, commitId, atSign);
+        return;
+      }
+      final atCommitLog =
+          await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
+      if (atCommitLog == null) {
+        return;
+      }
+      final entry = await syncUtil.getLatestCommitEntry(atCommitLog, atKey);
+      if (entry is NullCommitEntry) {
+        return;
+      }
+      await syncUtil.updateCommitEntry(entry, commitId, atSign);
+    } on Exception catch (e) {
+      // Best-effort metadata update; sync correctness doesn't depend
+      // on this back-write succeeding. Log and continue.
+      final cause = (e is AtException) ? e.getTraceMessage() : e.toString();
+      _logger.warning(
+          'back-write of commitId $commitId for $atKey failed: $cause');
+    }
   }
 
   @visibleForTesting
@@ -1266,6 +1642,7 @@ class SyncServiceImpl implements SyncService {
     // their microtask trigger as usual.
     await statsServiceListener();
     _startPeriodicSyncTimer();
+    sync();
   }
 
   void _drainSyncQueue() {
@@ -1274,16 +1651,12 @@ class SyncServiceImpl implements SyncService {
         error_codes['AtClientException'], 'SyncService has been stopped');
 
     while (syncRequests.isNotEmpty) {
-      var request = syncRequests.removeFirst();
-      try {
-        if (request.onError != null) {
-          request.onError!(SyncResult()
-            ..syncStatus = SyncStatus.failure
-            ..atClientException = exception);
-        }
-      } catch (e) {
-        _logger.warning('Error while draining sync request: $e');
-      }
+      final request = syncRequests.removeFirst();
+      request.result ??= SyncResult();
+      request.result!
+        ..syncStatus = SyncStatus.failure
+        ..atClientException = exception;
+      _safeInvokeOnError(request);
     }
 
     // 2. Notify progress listeners of the failure
@@ -1337,4 +1710,27 @@ class SyncServiceImpl implements SyncService {
   int getSyncRequestQueueSize() {
     return syncRequests.length;
   }
+}
+
+/// Per-entry breadcrumb threaded alongside [BatchRequest]s in
+/// [_pushFromSyncQueue]. The wire response only carries the batch
+/// `id`, but we need to know which atKey + op corresponds to that
+/// id when handling per-entry success/failure (`removeFromSyncQueue`
+/// / `KeyInfo` build). The [commitLogSeqNum] field lets the success
+/// handler back-write the server-assigned commitId onto the
+/// originating commit-log entry in O(1) (`getCommitEntry(seqNum)`)
+/// instead of O(N log N) (full-log scan for the latest entry by
+/// atKey). Nullable because tests + edge cases (skipCommit writes,
+/// older queue entries persisted before the field was added) won't
+/// have one — the slow path is the fallback in those cases.
+class _BatchSource {
+  final String atKey;
+  final SyncQueueOp op;
+  final int? commitLogSeqNum;
+
+  const _BatchSource({
+    required this.atKey,
+    required this.op,
+    this.commitLogSeqNum,
+  });
 }

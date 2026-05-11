@@ -96,7 +96,7 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
 
     notificationSubscription = _atClientManager.atClient.notificationService
         .subscribe(shouldDecrypt: true, regex: regex)
-        .listen(_notificationListener);
+        .listen(_dispatchNotification);
 
     if (disposeOnAtsignChange) {
       _atClientManager.listenToAtSignChange(KeyStreamDisposeListener(this));
@@ -131,6 +131,30 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
     }
   }
 
+  /// Notifications captured while [pause] depth is non-zero. Drained
+  /// in arrival order by [resume] when the depth returns to zero.
+  /// Capturing into the buffer (rather than pause()ing the upstream
+  /// broadcast subscription) is the load-bearing property: pausing
+  /// a broadcast subscription drops events emitted during the pause
+  /// window, since broadcast streams don't buffer for paused
+  /// subscribers.
+  final List<AtNotification> _pauseBuffer = [];
+
+  /// Pause counter. Each [pause] increments it; each [resume]
+  /// decrements. While non-zero, [_dispatchNotification] buffers
+  /// instead of forwarding to [_notificationListener].
+  int _pauseCount = 0;
+
+  /// Entry point bound to [notificationSubscription.listen]. Captures
+  /// events synchronously so a paused KeyStream doesn't lose them.
+  void _dispatchNotification(AtNotification event) {
+    if (_pauseCount > 0) {
+      _pauseBuffer.add(event);
+      return;
+    }
+    _notificationListener(event);
+  }
+
   /// Internal notification listener
   ///
   /// Validates the sharedBy and sharedWith values before
@@ -163,64 +187,74 @@ abstract class KeyStreamMixin<T> implements Stream<T> {
   /// which is used by [getKeys()] to indicate that this key was preloaded.
   void handleNotification(AtKey key, AtValue value, String? operation);
 
-  /// Requests that the [notificationSubscription] stream pauses events until further notice.
+  /// Pauses delivery of notifications to [handleNotification] until a
+  /// matching [resume] (or completion of [resumeSignal]).
   ///
-  /// While paused, the subscription will not fire any events.
-  /// If it receives events from its source, they will be buffered until
-  /// the subscription is resumed.
-  /// For non-broadcast streams, the underlying source is usually informed
-  /// about the pause,
-  /// so it can stop generating events until the subscription is resumed.
+  /// Notifications received while paused are **buffered inside this
+  /// mixin** and delivered, in arrival order, when the pause depth
+  /// returns to zero. The mixin does NOT pause the underlying
+  /// notification subscription, because that subscription sits on a
+  /// broadcast stream and pausing a broadcast subscription would
+  /// silently drop events emitted during the pause window.
   ///
-  /// To avoid buffering events on a broadcast stream, it is better to
-  /// cancel this subscription, and start to listen again when events
-  /// are needed, if the intermediate events are not important.
-  ///
-  /// If [resumeSignal] is provided, the stream subscription will undo the pause
-  /// when the future completes, as if by a call to [resume].
-  /// If the future completes with an error,
-  /// the stream will still resume, but the error will be considered unhandled
-  /// and is passed to [Zone.handleUncaughtError].
-  ///
-  /// A call to [resume] will also undo a pause.
+  /// If [resumeSignal] is provided, the pause is undone when the
+  /// future completes (success or error), as if by a call to
+  /// [resume]. Errors on [resumeSignal] are not propagated.
   ///
   /// If the subscription is paused more than once, an equal number
-  /// of resumes must be performed to resume the stream.
+  /// of resumes must be performed before delivery resumes.
   /// Calls to [resume] and the completion of a [resumeSignal] are
-  /// interchangeable - the [pause] which was passed a [resumeSignal] may be
-  /// ended by a call to [resume], and completing the [resumeSignal] may end a
-  /// different [pause].
+  /// interchangeable - the [pause] which was passed a [resumeSignal]
+  /// may be ended by a call to [resume], and completing the
+  /// [resumeSignal] may end a different [pause].
   ///
-  /// It is safe to [resume] or complete a [resumeSignal] even when the
-  /// subscription is not paused, and the resume will have no effect.
+  /// It is safe to [resume] or complete a [resumeSignal] even when
+  /// the subscription is not paused; the call has no effect.
   void pause([Future<void>? resumeSignal]) {
-    _logger.finer('notificationSubscription pause');
-    notificationSubscription.pause(resumeSignal);
+    _logger.finer('KeyStream pause (depth ${_pauseCount + 1})');
+    _pauseCount++;
+    if (resumeSignal != null) {
+      resumeSignal.then(
+        (_) => resume(),
+        onError: (Object _, [StackTrace? __]) => resume(),
+      );
+    }
   }
 
-  /// Resumes the [notificationSubscription] after a pause.
+  /// Resumes delivery of buffered notifications.
   ///
-  /// This undoes one previous call to [pause].
-  /// When all previously calls to [pause] have been matched by a calls to
-  /// [resume], possibly through a `resumeSignal` passed to [pause],
-  /// the stream subscription may emit events again.
+  /// Decrements the pause depth. When the depth returns to zero, any
+  /// notifications received during the paused window are dispatched
+  /// to [handleNotification] in arrival order before this method
+  /// returns control. New notifications arriving during the drain
+  /// are appended and processed in the same drain.
   ///
-  /// It is safe to [resume] even when the subscription is not paused, and the
-  /// resume will have no effect.
+  /// It is safe to [resume] even when the subscription is not paused;
+  /// the call has no effect.
   void resume() {
-    _logger.finer('notificationSubscription resume');
-    notificationSubscription.resume();
+    _logger.finer('KeyStream resume (depth ${_pauseCount - 1})');
+    if (_pauseCount == 0) return;
+    _pauseCount--;
+    if (_pauseCount > 0) return;
+    // Drain buffered events. Process by index so any event added
+    // during the drain (e.g. via a re-entrant pause/resume in
+    // handleNotification) is picked up too.
+    for (var i = 0; i < _pauseBuffer.length; i++) {
+      final event = _pauseBuffer[i];
+      try {
+        _notificationListener(event);
+      } catch (e, st) {
+        _logger.warning('drain: handler threw for ${event.key}: $e\n$st');
+      }
+    }
+    _pauseBuffer.clear();
   }
 
-  /// Whether the [notificationSubscription] is currently paused.
+  /// Whether the KeyStream is currently paused.
   ///
-  /// If there have been more calls to [pause] than to [resume] on this
-  /// stream subscription, the subscription is paused, and this getter
-  /// returns `true`.
-  ///
-  /// Returns `false` if the stream can currently emit events, or if
-  /// the subscription has completed or been cancelled.
-  bool get isPaused => notificationSubscription.isPaused;
+  /// Returns `true` iff there have been more calls to [pause] than
+  /// to [resume] on this KeyStream.
+  bool get isPaused => _pauseCount > 0;
 
   /// Closes the stream and cancels the notification subscription.
   ///

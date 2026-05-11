@@ -502,7 +502,10 @@ class _TodoRow extends StatelessWidget {
 
   String _fmtDate(DateTime? d) {
     if (d == null) return '—';
-    return d.toIso8601String().substring(0, 19).replaceFirst('T', ' ');
+    String pad(int n, [int width = 2]) => n.toString().padLeft(width, '0');
+    return '${d.year}-${pad(d.month)}-${pad(d.day)} '
+        '${pad(d.hour)}:${pad(d.minute)}:${pad(d.second)}'
+        '.${pad(d.millisecond, 3)}';
   }
 
   @override

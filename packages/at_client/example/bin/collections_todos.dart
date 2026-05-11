@@ -196,7 +196,9 @@ class _TodosAppState extends State<TodosApp> {
     collection = await atClient.collection<Todo>(
       'todos.$ns',
       const Duration(days: 365),
+      eventSource: EventSource.both,
       fromJson: Todo.fromJson,
+      typeTag: 'Todo',
       cleanupOrphansOnCreation: true,
     );
     // Legacy-notes probe: prior versions stored notes in a sibling
@@ -228,6 +230,7 @@ class _TodosAppState extends State<TodosApp> {
         subName: 'notes',
         defaultExpiration: const Duration(days: 365),
         fromJson: TodoNote.fromJson,
+        typeTag: 'TodoNote',
       ),
     );
   }
@@ -257,6 +260,7 @@ class _TodosAppState extends State<TodosApp> {
           subName: 'notes',
           subDefaultExpiration: const Duration(days: 365),
           subFromJson: TodoNote.fromJson,
+          subTypeTag: 'TodoNote',
         )
         .listen(
           _onCombinedSnapshot,
@@ -302,11 +306,11 @@ class _TodosAppState extends State<TodosApp> {
   /// by write-path command handlers for immediate UI feedback.
   Future<void> refreshTodos() async {
     try {
-      final parents = await _buildQuery().fetch();
+      final parents = await _buildQuery().get();
       final combined = <TodoWithNotes>[];
       for (final p in parents) {
-        final notes = await _notesSubFor(p).query().fetch();
-        combined.add((parent: p, children: notes));
+        final notes = await _notesSubFor(p).query().get();
+        combined.add(WithChildren(parent: p, children: notes));
       }
       await _onCombinedSnapshot(combined);
     } catch (e) {
@@ -398,16 +402,72 @@ class _TodosAppState extends State<TodosApp> {
   // ---------------------------------------------------------------------------
   // Build — widget tree
 
+  // Minimum terminal size below which the layout clips badly.
+  //
+  // Width: footer hint line is ~93 chars long; below ~95 cols it
+  // wraps or truncates.
+  //
+  // Height: header (3) + log pane (10) + footer (1) = 14 rows of
+  // fixed chrome. The detail pane's intrinsic content (title,
+  // notes, sharedWith row, owner / due / scheduling rows, read-
+  // receipt timeline) is around 17-20 rows when populated, so the
+  // remaining Expanded area needs to be at least that tall — any
+  // less and the detail pane overflows downward and paints over
+  // the log pane. 36 rows gives a comfortable margin (Expanded
+  // gets 22) for both the populated detail view and the form
+  // modal stack.
+  static const int _minCols = 95;
+  static const int _minRows = 36;
+
   @override
   Component build(BuildContext context) {
-    if (_initError != null) {
-      return _errorView(_initError!);
-    }
-    if (!_ready) {
-      return _loadingView();
-    }
-    return _mainView();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cols = constraints.maxWidth.toInt();
+        final rows = constraints.maxHeight.toInt();
+        if (cols < _minCols || rows < _minRows) {
+          return _tooSmallView(cols, rows);
+        }
+        if (_initError != null) {
+          return _errorView(_initError!);
+        }
+        if (!_ready) {
+          return _loadingView();
+        }
+        return _mainView();
+      },
+    );
   }
+
+  Component _tooSmallView(int cols, int rows) => Focusable(
+    focused: true,
+    onKeyEvent: _onGlobalKey,
+    child: Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            'Terminal too small',
+            style: TextStyle(color: Colors.yellow, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 1),
+          Text('Current: ${cols}x$rows', style: TextStyle(color: Colors.gray)),
+          Text(
+            'Minimum: ${_minCols}x$_minRows',
+            style: TextStyle(color: Colors.gray),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            'Resize the window and the UI will recover automatically.',
+            style: TextStyle(color: Colors.white),
+          ),
+          const SizedBox(height: 1),
+          Text('Press q to quit', style: TextStyle(color: Colors.gray)),
+        ],
+      ),
+    ),
+  );
 
   Component _errorView(String msg) => Center(
     child: Column(
@@ -1503,7 +1563,14 @@ class _TodosAppState extends State<TodosApp> {
           decoration: BoxDecoration(
             border: BoxBorder.all(color: focused ? Colors.yellow : Colors.gray),
           ),
-          child: Text(focused ? '$value█' : value),
+          // The enclosing modal paints a black background; without an
+          // explicit foreground colour here, the input text falls
+          // through to the terminal's default fg — which on a black
+          // bg is invisible (or near-invisible) on most terminals.
+          child: Text(
+            focused ? '$value█' : value,
+            style: const TextStyle(color: Colors.white),
+          ),
         ),
       ],
     );
@@ -1632,6 +1699,9 @@ class _TodosAppState extends State<TodosApp> {
     final nextDueFragment =
         _nextDueLabel.isEmpty ? '' : ' · next due $_nextDueLabel';
     return Container(
+      // Stretch full-width so the cyan border spans the column even
+      // when the header text happens to be short.
+      width: double.infinity,
       height: 3,
       padding: const EdgeInsets.symmetric(horizontal: 1),
       decoration: BoxDecoration(border: BoxBorder.all(color: Colors.cyan)),
@@ -1654,16 +1724,26 @@ class _TodosAppState extends State<TodosApp> {
     );
   }
 
+  // List pane background. Dark navy gives a deterministic backdrop
+  // for the row foregrounds — without it, non-selected rows fall
+  // through to the terminal default, which on a light-themed
+  // terminal makes Colors.white text effectively invisible against
+  // the user's bg. Pairs with [_buildTodoRow]'s explicit fg colours.
+  static const Color _listPaneBg = Color.fromRGB(18, 22, 32);
+
   Component _buildListPane() {
     final focused = _activePane == Pane.list;
     return Container(
       decoration: BoxDecoration(
         border: BoxBorder.all(color: focused ? Colors.cyan : Colors.gray),
+        color: _listPaneBg,
       ),
       padding: const EdgeInsets.symmetric(horizontal: 1),
       child:
           todos.isEmpty
-              ? const Center(child: Text('(no todos)'))
+              ? const Center(
+                child: Text('(no todos)', style: TextStyle(color: Colors.gray)),
+              )
               : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1684,27 +1764,48 @@ class _TodosAppState extends State<TodosApp> {
     final check = todo.obj.done ? '[x]' : '[ ]';
     final due = todo.obj.dueDate?.toIso8601String().substring(0, 10) ?? '——';
     final noteCount = notesByTodoId[todo.id]?.length ?? 0;
-    // Highlight the selected row brighter when the list pane owns
-    // focus; dimmer when focus has moved to the detail pane but the
-    // user should still see which item they're reading.
+    // Selection background. Brighter when the list pane owns focus
+    // so the active row pops; muted-but-still-distinct when focus
+    // has moved to the detail pane so the user can still see which
+    // item they're reading.
+    //
+    // The earlier (0,0,110)/(0,0,40) palette was too dark — text
+    // without an explicit foreground rendered illegibly on it on
+    // common terminal themes. The current values are mid-luminance
+    // blues that read against both light and dark default fg.
     final rowBg =
         selected
-            ? (listFocused ? Color.fromRGB(0, 0, 110) : Color.fromRGB(0, 0, 40))
+            ? (listFocused
+                ? const Color.fromRGB(20, 60, 130)
+                : const Color.fromRGB(60, 60, 70))
             : null;
     final weight = selected ? FontWeight.bold : FontWeight.normal;
     final done = todo.obj.done;
-    final titleStyle = TextStyle(
-      fontWeight: weight,
-      color: done ? Colors.gray : null,
-    );
+    // Every TextSpan below carries an explicit color — without one,
+    // nocterm renders with the terminal's default foreground, which
+    // can be invisible against the row's selection background or
+    // even against the pane's transparent backdrop on themes whose
+    // default fg approaches the body color.
+    final markerColor = selected ? Colors.cyan : Colors.gray;
+    final checkColor = done ? Colors.green : Colors.white;
+    final titleColor = done ? Colors.gray : Colors.white;
+    final dimColor = Colors.gray;
+    final titleStyle = TextStyle(fontWeight: weight, color: titleColor);
     return Container(
       color: rowBg,
       padding: const EdgeInsets.symmetric(horizontal: 1),
       child: RichText(
         text: TextSpan(
-          style: TextStyle(fontWeight: weight),
+          style: TextStyle(fontWeight: weight, color: Colors.white),
           children: [
-            TextSpan(text: '$marker $check  '),
+            TextSpan(
+              text: '$marker ',
+              style: TextStyle(color: markerColor, fontWeight: weight),
+            ),
+            TextSpan(
+              text: '$check  ',
+              style: TextStyle(color: checkColor, fontWeight: weight),
+            ),
             TextSpan(
               text: due,
               style: TextStyle(
@@ -1712,18 +1813,18 @@ class _TodosAppState extends State<TodosApp> {
                 fontWeight: weight,
               ),
             ),
-            TextSpan(text: '  '),
+            TextSpan(text: '  ', style: TextStyle(color: titleColor)),
             TextSpan(text: todo.obj.title, style: titleStyle),
-            TextSpan(text: '  ('),
+            TextSpan(text: '  (', style: TextStyle(color: dimColor)),
             TextSpan(
               text: '${todo.owner}',
               style: _theme.styleForAtSign(todo.owner, bold: selected),
             ),
-            TextSpan(text: ')'),
+            TextSpan(text: ')', style: TextStyle(color: dimColor)),
             if (noteCount > 0)
               TextSpan(
                 text: '  notes:$noteCount',
-                style: TextStyle(color: Colors.gray, fontWeight: weight),
+                style: TextStyle(color: dimColor, fontWeight: weight),
               ),
           ],
         ),
@@ -1754,6 +1855,7 @@ class _TodosAppState extends State<TodosApp> {
             Text(todo.obj.description),
           ],
           const SizedBox(height: 1),
+          Text('Id       : ${todo.id}', style: TextStyle(color: Colors.gray)),
           RichText(
             text: TextSpan(
               children: [
@@ -1831,8 +1933,13 @@ class _TodosAppState extends State<TodosApp> {
                     text: '${n.owner}',
                     style: _theme.styleForAtSign(n.owner),
                   ),
+                  TextSpan(text: '] ', style: TextStyle(color: Colors.gray)),
                   TextSpan(
-                    text: '] ${n.obj.note}',
+                    text: '${_fmtDateTime(n.createdAt)}  ',
+                    style: TextStyle(color: Colors.gray),
+                  ),
+                  TextSpan(
+                    text: n.obj.note,
                     style: TextStyle(color: Colors.gray),
                   ),
                 ],
@@ -1859,10 +1966,13 @@ class _TodosAppState extends State<TodosApp> {
     return RichText(text: TextSpan(children: children));
   }
 
-  static String _fmtDateTime(DateTime? d) =>
-      d == null
-          ? '—'
-          : d.toIso8601String().substring(0, 19).replaceFirst('T', ' ');
+  static String _fmtDateTime(DateTime? d) {
+    if (d == null) return '—';
+    String pad(int n, [int width = 2]) => n.toString().padLeft(width, '0');
+    return '${d.year}-${pad(d.month)}-${pad(d.day)} '
+        '${pad(d.hour)}:${pad(d.minute)}:${pad(d.second)}'
+        '.${pad(d.millisecond, 3)}';
+  }
 
   Component _buildLogPane() {
     const logHeight = 8;
@@ -1871,13 +1981,20 @@ class _TodosAppState extends State<TodosApp> {
             ? logMessages.sublist(logMessages.length - logHeight)
             : logMessages;
     return Container(
+      // Stretch to the column's full width — without this, Container
+      // sizes to its child Column, which (when the log only holds the
+      // 'Log' header line) collapses to a 5-cell-wide strip.
+      width: double.infinity,
       height: logHeight + 2,
       decoration: BoxDecoration(border: BoxBorder.all(color: Colors.gray)),
       padding: const EdgeInsets.symmetric(horizontal: 1),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Log', style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+            'Log',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
           for (final line in tail)
             Text(line, style: TextStyle(color: Colors.gray)),
         ],

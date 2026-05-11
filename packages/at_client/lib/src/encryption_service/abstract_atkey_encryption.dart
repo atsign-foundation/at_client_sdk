@@ -190,15 +190,11 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     return encryptedSharedSymmetricKey;
   }
 
-  /// There was a whole set of legacy code here which has been removed
-  /// since it is not actually useful other than causing race conditions.
-  ///
-  /// In order to mitigate race conditions caused by the soon-to-be-legacy
-  /// behaviour of having a single symmetric key, we will always
-  /// encrypt the actual symmetric key we are using and set it in the
-  /// metadata, rather than storing it to data stores etc. It is safe to do
-  /// this because for a long time, clients have been decrypting using the
-  /// `sharedKeyEnc` in the metadata, which we are always setting.
+  /// Always encrypts the symmetric key we are using and returns it for
+  /// the recipient to set in the metadata, rather than storing it in
+  /// per-atSign data stores. Avoids the race conditions that the
+  /// shared-symmetric-key approach is prone to: clients decrypt using
+  /// the `sharedKeyEnc` in the metadata, which we are always setting.
   Future<String> getTheirCopyOfLegacySharedSymmetricKey(
       AtKey atKey, String symmetricKeyBase64) async {
     return await encryptSymmetricKeyForRecipient(atKey, symmetricKeyBase64);
@@ -244,12 +240,19 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
               .executeVerb(encryptionPublicKeyBuilder))
           .response;
 
-      // Got it - first of all, cache it locally (in case sync is not enabled)
+      // Got it - first of all, cache it locally (in case sync is not enabled).
+      // `cameFromServer: true` because the value WE just fetched from
+      // the remote — the SDK's gate on push enqueue uses it to skip
+      // pushing this back to our atServer (the cached:public: key
+      // came FROM the server's view of the recipient's public key
+      // and isn't ours to publish).
       final uvb = UpdateVerbBuilder()
         ..atKey = AtKey.fromString('cached:public:publickey${atKey.sharedWith}')
         ..value = fetchedPK;
       _logger.info('Updating public key locally: ${uvb.buildCommand()}');
-      await _atClient.getLocalSecondary()!.executeVerb(uvb, sync: false);
+      await _atClient
+          .getLocalSecondary()!
+          .executeVerb(uvb, sync: false, cameFromServer: true);
 
       // Then return it
       return fetchedPK;

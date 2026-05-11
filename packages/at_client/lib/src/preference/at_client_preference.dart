@@ -112,7 +112,7 @@ class AtClientPreference {
   /// * Defaults to true, as applications should always be placing keys within a namespace
   @Deprecated(
       "namespace presence will become mandatory in next major version of the SDK")
-  bool enforceNamespace = true; // TODO Remove this in next major version
+  bool enforceNamespace = true;
 
   /// Fetch the notifications received when the client is offline. Defaults to true.
   /// Set to false to ignore the notifications received when device is offline.

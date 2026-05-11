@@ -16,11 +16,12 @@ void main(List<String> args) async {
 
   // c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
-  AtCollection.registerFactory<Dog>(Dog.fromJson);
-  AtCollection.registerFactory<Cat>(Cat.fromJson);
+  AtCollection.registerFactory<Dog>(Dog.fromJson, typeTag: 'Dog');
+  AtCollection.registerFactory<Cat>(Cat.fromJson, typeTag: 'Cat');
   final pets = await c.atClient.collection<Pet>(
     'pets.$applicationNamespace',
     exampleDefaultExpiration,
+    eventSource: EventSource.both,
   );
 
   switch (c.role) {
@@ -95,7 +96,7 @@ Future<void> poll(
     progressSink.add('${DateTime.now().toString()} : Fetching');
 
     for (final pet in await pets.getItems()) {
-      progressSink.add('Fetched ${pets.prettyString(pet)}');
+      progressSink.add('Fetched ${pet.prettyString}');
     }
     await Future.delayed(Duration(seconds: 3));
   }

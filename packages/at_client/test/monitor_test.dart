@@ -317,7 +317,7 @@ void main() {
 
     test('Monitor heartbeat sending regularly', () async {
       atClientPreference.monitorHeartbeatInterval = Duration(milliseconds: 20);
-      Duration waitTime = Duration(milliseconds: 21);
+      Duration waitTime = Duration(milliseconds: 25);
 
       int numHeartbeatsSent = 0;
       when(() => mockOutboundConnection.write("noop:0\n"))

@@ -5,7 +5,7 @@
 - Docker Compose
 - Docker Engine
 - this line in `/etc/hosts`: `127.0.0.1       vip.ve.atsign.zone`
-- certs in a folder called `certs/` in teh same directory
+- certs in a folder called `certs/` in the same directory
 
 ## Running the Tests
 

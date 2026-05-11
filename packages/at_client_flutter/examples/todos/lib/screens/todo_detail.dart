@@ -189,9 +189,13 @@ class _TodoDetailScreenState extends State<TodoDetailScreen> {
     );
   }
 
-  String _fmtDate(DateTime? d) => d == null
-      ? '—'
-      : d.toIso8601String().substring(0, 19).replaceFirst('T', ' ');
+  String _fmtDate(DateTime? d) {
+    if (d == null) return '—';
+    String pad(int n, [int width = 2]) => n.toString().padLeft(width, '0');
+    return '${d.year}-${pad(d.month)}-${pad(d.day)} '
+        '${pad(d.hour)}:${pad(d.minute)}:${pad(d.second)}'
+        '.${pad(d.millisecond, 3)}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -262,6 +266,7 @@ class _TodoDetailScreenState extends State<TodoDetailScreen> {
                       Text(todo.obj.description),
                     ],
                     const SizedBox(height: 12),
+                    _meta('Id', Text(todo.id)),
                     _meta('Due', Text(_fmtDate(todo.obj.dueDate))),
                     _meta('Created', Text(_fmtDate(todo.createdAt))),
                     _meta(

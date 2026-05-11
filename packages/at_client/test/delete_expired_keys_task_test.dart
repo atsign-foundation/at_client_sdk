@@ -51,6 +51,9 @@ void main() {
           ?.getSecondaryKeyStore()
           ?.deleteExpiredKeys();
 
+      // Allow time for the ttl==1 records to expire
+      await Future.delayed(Duration(milliseconds: 2));
+
       int exceptionCatchCount = 0;
       try {
         await getKeyStore(atsign)?.get(key1);

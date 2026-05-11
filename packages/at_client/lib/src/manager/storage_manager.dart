@@ -41,8 +41,13 @@ class StorageManager {
         .getSecondaryKeyStoreManager()!;
     await hiveKeyStore.initialize();
     keyStoreManager.keyStore = hiveKeyStore;
-    hivePersistenceManager
-        .scheduleKeyExpireTask(preferences?.expiryCheckTimeInterval.inMinutes);
+    // The persistence-layer cron sweep is intentionally not scheduled
+    // here. AtClientImpl owns an event-driven expiry timer that re-arms
+    // off LocalSecondary's data-event stream and drives sweeps via
+    // LocalSecondary.deleteExpiredKeys() — whose deletes go through
+    // _delete and are visible to subscribers, unlike the cron path
+    // which would call keyStore.remove directly and bypass the event
+    // bus.
     isStorageInitialized = true;
   }
 }

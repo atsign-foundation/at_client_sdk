@@ -11,32 +11,37 @@ transparently handling key management, end-to-end encryption, sync, and
 notifications.
 
 `at_client` runs on **both Dart (CLI / server)** and **Flutter
-(mobile / desktop / web / IoT)**. It is intentionally platform-neutral:
+(mobile / desktop / IoT)**. It is intentionally platform-neutral:
 the actual onboarding dialogs, secure key storage, and CLI scaffolding
-live in sibling packages that depend on `at_client`.
+live in sibling packages that depend on `at_client`. **Flutter web
+is not supported** — atSign onboarding and key storage rely on
+platform plugins that don't have web implementations today.
 
 ## Which package do I actually want?
 
 | If you're building…                        | Start with                                                                                                               |
 |--------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
 | A **Dart CLI or server app**               | [`at_cli_commons`](../at_cli_commons) for boilerplate + [`at_onboarding_cli`](../at_onboarding_cli) to provision atSigns |
-| A **Flutter app** (mobile/desktop/web/IoT) | [`at_client_flutter`](../at_client_flutter) — ships pre-built onboarding / APKAM / keychain widgets                      |
+| A **Flutter app** (mobile/desktop/IoT)     | [`at_client_flutter`](../at_client_flutter) — ships pre-built onboarding / APKAM / keychain widgets (web not supported)  |
 | **Understanding** the atSign lifecycle     | [`at_auth`](../at_auth) — platform-neutral onboarding / authentication core with a detailed lifecycle writeup            |
-| **Shared types** (`AtKey`, `Metadata`, …)  | [`at_commons`](../at_commons)                                                                                            |
 
 ## Core surface
 
 The `AtClient` interface ([`lib/src/client/at_client_spec.dart`](lib/src/client/at_client_spec.dart))
 is the main entry point once authentication is complete.
 
-- `put(AtKey, value)` / `get(AtKey)` / `delete(AtKey)` — CRUD against
-  the keystore
+- `collection<T>(namespace, defaultExpiration, {fromJson, typeTag, eventSource, cleanupOrphansOnCreation})` —
+  returns a `Future<AtCollection<T>>`. `fromJson` and `typeTag` travel
+  together; pass either both or neither. AtCollections hide the
+  low-level keystore plumbing and let you work directly with your own
+  domain objects and types (see [Collections](#collections) below).
 - `notificationService` — fire-and-forget and pub/sub messaging
   ([`lib/src/service/notification_service.dart`](lib/src/service/notification_service.dart))
 - `syncService` — background sync between the local store and the
   atServer
-- `collection<T>(namespace, defaultExpiration, {fromJson})` — returns a
-  `Future<AtCollection<T>>` (see [Collections](#collections) below)
+- `put(AtKey, value)` / `get(AtKey)` / `delete(AtKey)` — low level CRUD against
+  the keystore. You should almost never need to do this if you are using 
+  AtCollections.
 
 ## Examples
 
@@ -70,8 +75,12 @@ summary is:
 
 1. **Register** an atSign (free at
    [my.noports.com/no-ports-plans](https://my.noports.com/no-ports-plans)
-   or paid/custom at [my.atsign.com](https://my.atsign.com)) to get a
-   one-time **CRAM key** delivered to the user's email.
+   or paid/custom at [my.atsign.com](https://my.atsign.com)). Once you have
+   a registered atSign, the application code needs to get the CRAM key for
+   step 2 below. Typically this is done by the app, once it knows the atSign
+   to be onboarded, requesting that an OTP for the atSign be sent to the
+   registered owner's email address. (There are other processes possible for
+   all of this, but this is typical.)
 2. **Onboard** the atSign exactly once: CRAM-authenticate, generate the
    master keypairs, and write them to disk (`.atKeys` file for CLI) or
    the device **keychain** (Flutter). These **master AtKeys** are the
@@ -98,6 +107,7 @@ final todos = await atClient.collection<Todo>(
   'todos.my_app',            // fully-qualified namespace
   const Duration(days: 7),
   fromJson: Todo.fromJson,
+  typeTag: 'Todo',           // wire-format identifier — required
 );
 
 final item = await todos.create(
@@ -108,10 +118,21 @@ final item = await todos.create(
 item.obj.done = true;
 await todos.update(item);
 
+// Add @carol without rewriting the self copy:
+await todos.updateSharedWith(item, {'@bob'.toAtsign(), '@carol'.toAtsign()});
+
 await for (final e in todos.updates) {
   print('updated: ${e.id} by ${e.owner}');
 }
 ```
+
+`update` / `delete` / `create` fire `CItemUpdated` / `CItemDeleted`
+on the writing collection's event streams as soon as the local write
+lands — no waiting for the network round-trip — so a UI using
+`Query.watch()` redraws immediately. The same event re-fires on the
+round-trip ~50–200 ms later (and ~10–30 ms excluding network transit
+once fsync ships); `Query.watch`'s delta path is idempotent so the
+second occurrence is invisible.
 
 `AtCollection<T>` executes reads on-device by default, against a
 local copy that the `at_client` SDK keeps current via real-time
@@ -127,9 +148,10 @@ final overdue = todos.query()
     .where((t) => !t.obj.done)
     .where((t) => t.obj.due.isBefore(DateTime.now()))
     .orderBy((t) => t.obj.due)
+    .thenBy((t) => t.obj.title)   // tiebreak within same due date
     .limit(20);
 
-final list = await overdue.fetch();   // one-shot List
+final list = await overdue.get();     // one-shot List
 final live = overdue.watch();         // Stream<List<CItem<Todo>>>
 
 final openCount = await todos.query().where((t) => !t.obj.done).count();
@@ -137,8 +159,76 @@ final byOwner   = await todos.query().groupBy<Atsign>((t) => t.owner);
 ```
 
 Queries are immutable values — build once, store, pass, fetch or
-watch. For ad-hoc pipelines outside the builder's vocabulary,
-`getItemsAsStream().where(...)` remains supported as an escape hatch.
+watch. `watch()` does incremental delta maintenance for
+non-paginated queries (single-item read on each event, not a full
+re-scan). For ad-hoc pipelines outside the builder's vocabulary,
+`getItemsAsStream().where(...)` remains supported as an escape
+hatch.
+
+For typed, introspectable predicates that a future indexed
+executor can push down to a secondary index, declare `PathField`s
+on your domain type and use `wherePath`:
+
+```dart
+abstract class $Todo {
+  static final done = PathField<bool>(
+    path: ['obj', 'done'],
+    extract: (item) => (item.obj as Todo).done,
+  );
+  static final due = PathField<DateTime>(
+    path: ['obj', 'due'],
+    extract: (item) => (item.obj as Todo).due,
+  );
+}
+
+final overdue = await todos.query()
+    .wherePath($Todo.done.eq(false))
+    .wherePath($Todo.due.lt(DateTime.now()))
+    .get();
+```
+
+Multi-level parent → children → grandchildren joins use
+`watchWithTree`:
+
+```dart
+final stream = posts.query().watchWithTree([
+  SubSpec<Comment>(
+    subName: 'comments',
+    subDefaultExpiration: const Duration(days: 30),
+    subFromJson: Comment.fromJson,
+    subTypeTag: 'Comment',
+    children: [
+      SubSpec<Reply>(
+        subName: 'replies',
+        subDefaultExpiration: const Duration(days: 30),
+        subFromJson: Reply.fromJson,
+        subTypeTag: 'Reply',
+      ),
+    ],
+  ),
+]);
+// → Stream<List<TreeNode<Post>>> — branches['comments'] holds
+//   per-comment TreeNodes whose own branches['replies'] hold
+//   per-reply TreeNodes.
+```
+
+Timer-driven events for items written with `availableAt`
+(scheduled visibility) and `expiresAt` (TTL):
+
+```dart
+// Fires when each scheduled item becomes visible.
+todos.availableEvents.listen((e) {
+  print('Item ${e.id} just became available');
+});
+
+// Fires `leadTime` before each item expires — useful for
+// reminder UIs that need to nudge the user before the atServer
+// expires the record.
+todos.expiringSoonEvents(leadTime: const Duration(minutes: 30))
+    .listen((e) {
+  print('Item ${e.id} expires at ${e.expiresAt}');
+});
+```
 
 Read receipts ship built-in — one call on each side, no
 app-level bookkeeping:
@@ -162,6 +252,7 @@ final comments = posts.subCollection<Comment>(
   subName: 'comments',
   defaultExpiration: const Duration(days: 30),
   fromJson: Comment.fromJson,
+  typeTag: 'Comment',
 );
 await comments.create(obj: Comment('nice one'), sharedWith: {/* … */});
 
@@ -187,9 +278,19 @@ For Flutter, the canonical reference app is
 through the mobile / desktop widget stack the way a shipping app
 would use it.
 
-**Key-length note:** atServer keys are capped at 255 chars; atSigns at 55.
-`subCollection(...)` enforces this at construction time with a hard
-`ArgumentError` so oversized keys never reach the wire.
+**Key-length note.** atServer keys are capped at 255 chars and
+atSigns at 55. The absolute worst-case wire shape is the
+cached-copy form
+`cached:<other>:<itemId>.<composedNs>@<self>`, which fixes the
+wrapper overhead at 118 chars (`cached:` + 55 + `:` + 55) and
+leaves **137 chars** for everything inside (item id + every
+level of namespace). With 8-char auto-generated ids and 1 char
+for the separator, **`composedNs` is capped at 128 chars** — a
+budget enforced by `subCollection(...)` at construction time
+with a hard `ArgumentError`, so oversized keys never reach the
+wire. Plenty of room: with 1-char collection / sub-collection
+names and a 15-char application namespace, the theoretical
+ceiling is **11 levels (root + 10 nested sub-collections)**.
 
 ## Further reading
 

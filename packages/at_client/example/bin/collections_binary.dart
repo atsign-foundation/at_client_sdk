@@ -20,6 +20,7 @@ void main(List<String> args) async {
       .collection<Uint8List>(
         'binary.$applicationNamespace',
         exampleDefaultExpiration,
+        eventSource: EventSource.data,
       );
 
   switch (c.role) {
@@ -77,7 +78,7 @@ Future<void> poll(
     // single malformed record no longer poisons the read.
     final items = await binaries.getItems();
     for (final item in items) {
-      String msg = '==> Fetched ${binaries.prettyString(item)}';
+      String msg = '==> Fetched ${item.prettyString}';
       if (item.type == 'binary') {
         msg = '$msg : ${String.fromCharCodes(item.obj)}';
       }

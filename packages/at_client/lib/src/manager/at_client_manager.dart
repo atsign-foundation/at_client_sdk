@@ -108,6 +108,16 @@ class AtClientManager {
     var syncService = await serviceFactory.syncService(
         _currentAtClient!, this, notificationService);
     _currentAtClient!.syncService = syncService;
+    // Do NOT call `syncService.sync()` here: `SyncServiceImpl.create()`
+    // already enqueues a one-shot warm-start sync request internally
+    // (see its `warmStartSync` parameter). A second sync at startup
+    // races the e2e harness — the first round can emit
+    // `SyncStatus.success` with no work to do and let the listener
+    // exit before the second round pulls the cross-server-notify
+    // entries that haven't yet arrived on the local atServer.
+    //
+    // TODO Clean up for the above; shouldn't matter when or how often
+    // code calls `sync()`
 
     EnrollmentService enrollmentService =
         serviceFactory.enrollmentService(_currentAtClient!);

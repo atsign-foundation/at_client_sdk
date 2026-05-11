@@ -12,7 +12,14 @@ class MySyncProgressListener extends SyncProgressListener {
 
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
-    if (skipSyncStartedEvent && syncProgress.syncStatus == SyncStatus.started) {
+    // When the caller opted to skip the per-iteration "started" event
+    // they want terminal-only signals; per-batch [SyncStatus.inProgress]
+    // events fall in the same "non-terminal noise" bucket and are
+    // dropped together. Tests that actually want to observe progress
+    // can construct with `false`.
+    if (skipSyncStartedEvent &&
+        (syncProgress.syncStatus == SyncStatus.started ||
+            syncProgress.syncStatus == SyncStatus.inProgress)) {
       return;
     } else {
       streamController.add(syncProgress);
