@@ -27,6 +27,11 @@ class PutRequestOptions extends RequestOptions {
   /// Except public keys, shared keys and self keys are encrypted by default.
   /// If client prefers not to encrypt a shared key or self key/ use their own encryption scheme, set this flag to false.
   bool shouldEncrypt = true;
+
+  /// Used to specify which encryption scheme to use
+  /// Can provide your own encryption scheme see [AtChops.schemes.register()]
+  /// Otherwise, defaults to the legacy Atsign encryption scheme
+  String encryptionScheme = 'legacy';
 }
 
 /// Parameters that application code can optionally provide when calling

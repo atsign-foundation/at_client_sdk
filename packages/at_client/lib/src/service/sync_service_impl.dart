@@ -1033,12 +1033,15 @@ class SyncServiceImpl implements SyncService {
         // ignore: prefer_typing_uninitialized_variables
         var serverDecryptedValue; // Fetch encryption scheme, default if non existent
         CryptoScheme scheme;
-        try {
-          var schemeName = serverAtKey.metadata.appMetadata?.encryptionScheme;
-          scheme = _atClient.atChops!.schemes.lookup(schemeName!);
-        } catch (_) {
-          // catching null case & StateError on lookup
-          scheme = _atClient.atChops!.schemes.lookup('default');
+        if (serverAtKey.metadata.appMetadata != null) {
+          try {
+            var schemeName = serverAtKey.metadata.appMetadata?.encryptionScheme;
+            scheme = _atClient.atChops!.schemes.lookup(schemeName!);
+          } catch (_) {
+            rethrow;
+          }
+        } else {
+          scheme = _atClient.atChops!.schemes.lookup('legacy');
         }
         if (serverEncryptedValue != null && serverEncryptedValue.isNotEmpty) {
           serverDecryptedValue =

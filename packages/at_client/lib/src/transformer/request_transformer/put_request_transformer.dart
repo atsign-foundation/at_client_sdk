@@ -34,6 +34,9 @@ class PutRequestTransformer
     // Append '@' to the atSign if missed.
     AtClientUtil.fixAtSign(updateVerbBuilder.atKey.sharedWith);
     AtClientUtil.fixAtSign(updateVerbBuilder.atKey.sharedBy);
+    // Add metadata for encryption scheme
+    updateVerbBuilder.atKey.metadata.appMetadata =
+        AppMetadata(options.encryptionScheme);
     // Setting updateVerbBuilder.value
     updateVerbBuilder.value = tuple.two;
     final atKey = updateVerbBuilder.atKey;

@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
@@ -150,10 +152,64 @@ void main() {
     var getResult = await atClientManager.atClient.get(phoneKey);
     expect(getResult.value, value);
   });
+
+  test('put method - using pluggable encryption', () async {
+    var phoneKey = AtKey()
+      ..key = 'city'
+      ..metadata = (Metadata()..isPublic = true);
+    var value = 'copenhagen';
+    PutRequestOptions options = PutRequestOptions()
+      ..encryptionScheme = 'test'
+      ..shouldEncrypt = true;
+    atClientManager.atClient.atChops!.schemes.register('test', TestScheme());
+    var putResult = await atClientManager.atClient.put(
+      phoneKey,
+      value,
+      putRequestOptions: options,
+    );
+    expect(putResult, true);
+
+    var getResult = await atClientManager.atClient.get(phoneKey);
+    expect(getResult.value, value);
+  });
+
+  test('put method - using pluggable encryption: failure', () async {
+    var phoneKey = AtKey()..key = 'city';
+    var value = 'copenhagen';
+    PutRequestOptions options = PutRequestOptions()
+      ..encryptionScheme = 'testfail'
+      ..shouldEncrypt = true;
+
+    expect(
+      () async => await atClientManager.atClient.put(
+        phoneKey,
+        value,
+        putRequestOptions: options,
+      ),
+      throwsA(isA<CryptoSchemeNotRegistered>()),
+    );
+  });
 }
 
 Uint8List _getBinaryData(dynamic filePath) {
   var dir = Directory.current.path;
   var pathToFile = '$dir$filePath';
   return File(pathToFile).readAsBytesSync();
+}
+
+class TestScheme extends CryptoScheme {
+  @override
+  Future<dynamic> decrypt(AtKey atKey, value) async {
+    return 'decrypted';
+  }
+
+  @override
+  Future<dynamic> encrypt(AtKey atKey, value) async {
+    return 'encrypted';
+  }
+
+  @override
+  Future<void> register() async {
+    return;
+  }
 }
