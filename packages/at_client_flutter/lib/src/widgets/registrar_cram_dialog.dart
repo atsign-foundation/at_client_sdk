@@ -36,9 +36,7 @@ class RegistrarCramDialog extends StatefulWidget {
     AtOnboardingRequest request, {
     required RegistrarService registrar,
   }) async {
-    if (!await registrar.sendActivationOtp(request.atSign)) {
-      throw Exception('Failed to send activation OTP');
-    }
+    await registrar.requestActivationOtp(request.atSign);
     return showDialog<String>(
       context: context,
       builder: (context) => RegistrarCramDialog(
@@ -86,7 +84,7 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
 
   void _handleResendCode() {
     if (_canResend) {
-      widget.registrar.sendActivationOtp(widget.request.atSign);
+      widget.registrar.requestActivationOtp(widget.request.atSign);
       _startResendTimer(); // Restart the timer after resending
     }
   }
