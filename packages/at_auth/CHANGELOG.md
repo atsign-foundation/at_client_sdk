@@ -1,3 +1,6 @@
+## 3.1.1
+- feat: added `requestActivationOtp` to `RegistrarService` with exceptions
+
 ## 3.1.0
 - feat: `validateAtServer()` now emits progress events and probes atSign connectivity before returning
 - fix: `decodeAtKeys()` now throws when an invalid passphrase is provided

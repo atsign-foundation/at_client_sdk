@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/src/registrar/registrar.dart';
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/at_auth.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -64,7 +65,7 @@ class RegistrarService implements Registrar {
 
   // AtSign Activation Methods
   @override
-  //TODO: this should return void, throw if fails
+  @Deprecated('Use requestActivationOtp instead')
   Future<bool> sendActivationOtp(String atsign) async {
     var res = await registrarApiRequest(
       RegistrarApiEndpoint.requestOtp,
@@ -78,6 +79,21 @@ class RegistrarService implements Registrar {
       return false;
     }
     return true;
+  }
+
+  @override
+  Future<void> requestActivationOtp(String atsign) async {
+    var res = await registrarApiRequest(
+      RegistrarApiEndpoint.requestOtp,
+      {'atsign': atsign},
+    );
+    if (res.statusCode != 200) {
+      throw RegistrarException(res.body);
+    }
+    var payload = jsonDecode(res.body);
+    if (payload["message"] != "Sent Successfully") {
+      throw RegistrarException(res.body);
+    }
   }
 
   @override

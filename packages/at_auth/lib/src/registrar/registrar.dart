@@ -55,7 +55,10 @@ abstract interface class Registrar {
   // ===========================================================================
 
   /// Sends an activation OTP to the email/phone associated with the atSign
+  @Deprecated('Use requestActivationOtp instead')
   Future<bool> sendActivationOtp(String atSign);
+
+  Future<void> requestActivationOtp(String atsign);
 
   /// Verifies the activation OTP and returns the CRAM key
   Future<String?> verifyActivation({
