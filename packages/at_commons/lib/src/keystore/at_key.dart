@@ -6,7 +6,6 @@ import 'package:at_commons/src/utils/at_key_regex_utils.dart';
 import 'package:at_commons/src/utils/string_utils.dart';
 import 'package:at_commons/src/verb/verb_util.dart';
 
-import '../../at_commons.dart' show CryptoScheme;
 import '../at_constants.dart';
 import '../exception/at_exceptions.dart';
 import 'key_type.dart';
