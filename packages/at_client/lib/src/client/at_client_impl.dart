@@ -8,7 +8,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
-import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/response/response.dart';
@@ -34,10 +33,7 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
-/// Implementation of [AtClient] interface and [AtSignChangeListener] interface
-///
-/// Implements to [AtSignChangeListener] to get notified on switch atSign event. On switch atSign event,
-/// pause's the compaction job on currentAtSign and start/resume the compaction job on the new atSign
+/// Implementation of the [AtClient] interface.
 class AtClientImpl implements AtClient {
   AtClientPreference? _preference;
 
@@ -89,6 +85,84 @@ class AtClientImpl implements AtClient {
 
   @override
   AtChops? get atChops => _atChops;
+
+  // ---------------------------------------------------------------------------
+  // DataEvent stream — fires on every successful keystore mutation that
+  // passes through `LocalSecondary._update` or `LocalSecondary._delete`,
+  // which call into [emitDataEvent]. Subscribers see local app writes
+  // AND sync-applied remote changes via a single uniform stream.
+  // putValue (used internally for SDK bookkeeping) intentionally does
+  // NOT emit — see the [DataEvent] dartdoc.
+
+  final StreamController<DataEvent> _dataEventsCtrl =
+      StreamController<DataEvent>.broadcast();
+
+  /// In-flight emit count. Each [emitDataEvent] call increments this
+  /// before scheduling the listener-invocation microtask, and decrements
+  /// after the microtask runs. Drives [pendingEmissions]'s
+  /// "all events delivered" semantics.
+  int _pending = 0;
+
+  /// Completers registered by callers awaiting [pendingEmissions]
+  /// while there were already events in flight. Completed and cleared
+  /// whenever [_pending] returns to zero.
+  final List<Completer<void>> _drainWaiters = [];
+
+  @override
+  Stream<DataEvent> get dataEvents => _dataEventsCtrl.stream;
+
+  @override
+  Future<void> get pendingEmissions {
+    if (_pending == 0) return Future.value();
+    final c = Completer<void>();
+    _drainWaiters.add(c);
+    return c.future;
+  }
+
+  /// Pushes [e] onto [dataEvents] asynchronously (microtask-scheduled).
+  /// Called from [LocalSecondary]'s update/delete chokepoints. Public on
+  /// [AtClientImpl] only because [LocalSecondary] needs to invoke it
+  /// across the class boundary; not part of the [AtClient] interface.
+  @internal
+  void emitDataEvent(DataEvent e) {
+    _pending++;
+    scheduleMicrotask(() {
+      try {
+        if (!_dataEventsCtrl.isClosed) _dataEventsCtrl.add(e);
+      } finally {
+        if (--_pending == 0 && _drainWaiters.isNotEmpty) {
+          final waiters = List<Completer<void>>.from(_drainWaiters);
+          _drainWaiters.clear();
+          for (final c in waiters) {
+            if (!c.isCompleted) c.complete();
+          }
+        }
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Event-driven expiry timer. Arms a one-shot Timer at
+  // LocalSecondary.nextExpiryAt(); on fire, drives a sweep via
+  // LocalSecondary.deleteExpiredKeys (whose deletes go through _delete
+  // and emit DataDeleted events). _expirySweepInFlight suppresses
+  // re-arms triggered by the sweep's own emissions — one re-arm at the
+  // end picks up the post-sweep state including any mid-sweep writes.
+  Timer? _expiryTimer;
+  StreamSubscription<DataEvent>? _expirySub;
+  bool _expirySweepInFlight = false;
+
+  // ---------------------------------------------------------------------------
+  // Event-driven availability timer. Symmetric counterpart to the
+  // expiry timer above — arms at LocalSecondary.nextAvailableAt(); on
+  // fire, walks every key whose availableAt has crossed now, emits
+  // DataUpdated for each, and re-arms at the next pending availableAt.
+  // Drives the visibility-onset event for records whose availableAt
+  // is set in the future at write time. _availableSweepInFlight
+  // suppresses re-arms during the sweep's own emissions.
+  Timer? _availableTimer;
+  StreamSubscription<DataEvent>? _availableSub;
+  bool _availableSweepInFlight = false;
 
   SyncService? _syncService;
 
@@ -159,14 +233,22 @@ class AtClientImpl implements AtClient {
     _logger.finer('Outgoing $service has been garbage collected');
   });
 
-  final Map<String, AtCollection> _collections = {};
-  final Set<String> _collectionsSwept = <String>{};
+  // Cache key combines (namespace, eventSource). Two collections on
+  // the same namespace with different event sources are independent
+  // instances: each has its own listener wiring and pending-events
+  // buffer, so sharing one cache slot would conflate their event
+  // streams.
+  final Map<(String, EventSource), AtCollection> _collections = {};
+  final Set<(String, EventSource)> _collectionsSwept =
+      <(String, EventSource)>{};
 
   @override
   Future<AtCollection<T>> collection<T>(
     String namespace,
     Duration defaultExpiration, {
+    EventSource eventSource = EventSource.both,
     T Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
     bool cleanupOrphansOnCreation = false,
   }) async {
     if (!namespace.contains('.')) {
@@ -177,17 +259,20 @@ class AtClientImpl implements AtClient {
         'automatically.',
       );
     }
+    final cacheKey = (namespace, eventSource);
     final c = _collections.putIfAbsent(
-      namespace,
+      cacheKey,
       () => AtCollection<T>(
         this,
         namespace,
         defaultExpiration,
+        eventSource: eventSource,
         fromJson: fromJson,
+        typeTag: typeTag,
       ),
     ) as AtCollection<T>;
-    if (cleanupOrphansOnCreation && !_collectionsSwept.contains(namespace)) {
-      _collectionsSwept.add(namespace);
+    if (cleanupOrphansOnCreation && !_collectionsSwept.contains(cacheKey)) {
+      _collectionsSwept.add(cacheKey);
       try {
         await c.cleanupOrphans();
       } catch (e, st) {
@@ -273,8 +358,40 @@ class AtClientImpl implements AtClient {
         await storageManager.init(_atSign, preference!.keyStoreSecret);
       }
 
-      localSecondary = LocalSecondary(this, keyStore: _localSecondaryKeyStore);
+      localSecondary = LocalSecondary(
+        this,
+        keyStore: _localSecondaryKeyStore,
+        onEvent: emitDataEvent,
+      );
       _atChops ??= await _createAtChops(_atSign);
+
+      // Wire the event-driven expiry timer to the data-events stream.
+      // Re-arms on every keystore mutation; first arm uses the current
+      // cache state (no-op when nothing has TTL).
+      _expirySub = dataEvents.listen((_) {
+        if (_expirySweepInFlight) return;
+        _armExpiryTimer();
+      });
+      _armExpiryTimer();
+
+      // Symmetric wire-up for the availability timer. SEED the
+      // already-fired set BEFORE arming the timer: every cached
+      // record whose `availableAt` is in the past at startup gets
+      // marked as already-emitted so the first sweep doesn't replay
+      // it. Without this, restarting the AtClient against an
+      // existing storage-dir would re-emit `DataUpdated` for every
+      // such record, which AtCollection forwards as
+      // CSubItemUpdated / CItemUpdated — making listeners see a
+      // fresh stream of "arrivals" when nothing has actually
+      // arrived. The semantic of `_onAvailableFire` is "fire when
+      // availableAt JUST CROSSED" — past crossings observed by an
+      // earlier process run shouldn't replay on a later one.
+      localSecondary?.seedAvailabilityFiredAsOf(DateTime.timestamp());
+      _availableSub = dataEvents.listen((_) {
+        if (_availableSweepInFlight) return;
+        _armAvailableTimer();
+      });
+      _armAvailableTimer();
     }
 
     // Using ??= because we may be injecting a RemoteSecondary
@@ -292,6 +409,101 @@ class AtClientImpl implements AtClient {
     putRequestTransformer.atClient = this;
 
     _cascadeSetTelemetryService();
+  }
+
+  /// Arms (or re-arms) the one-shot expiry [Timer] at the
+  /// LocalSecondary's earliest pending expiration. No-op when the
+  /// LocalSecondary's event cache reports no TTL'd keys.
+  ///
+  /// A timestamp in the past arms a `Duration.zero` timer that fires
+  /// on the next microtask — effectively immediate.
+  void _armExpiryTimer() {
+    _expiryTimer?.cancel();
+    _expiryTimer = null;
+    final ls = localSecondary;
+    if (ls == null) return;
+    final when = ls.nextExpiryAt();
+    if (when == null) return;
+    final wait = when.difference(DateTime.timestamp());
+    _expiryTimer = Timer(
+      wait.isNegative ? Duration.zero : wait,
+      _onExpiryFire,
+    );
+  }
+
+  /// Drives one expiry sweep and re-arms the timer for the next.
+  /// `_expirySweepInFlight` suppresses re-arms triggered by the
+  /// sweep's own `DataDeleted` events; the single re-arm in `finally`
+  /// picks up the post-sweep state, including any mid-sweep writes
+  /// (the keystore's in-memory cache is updated synchronously inside
+  /// each put before the corresponding [DataEvent] microtask runs).
+  Future<void> _onExpiryFire() async {
+    _expirySweepInFlight = true;
+    try {
+      await localSecondary?.deleteExpiredKeys();
+    } catch (e, st) {
+      _logger.warning('Expiry sweep failed: $e\n$st');
+    } finally {
+      _expirySweepInFlight = false;
+      _armExpiryTimer();
+    }
+  }
+
+  /// Arms (or re-arms) the one-shot availability [Timer] at the
+  /// LocalSecondary's earliest pending availableAt. No-op when no
+  /// cached key has TTB.
+  ///
+  /// A timestamp in the past arms a `Duration.zero` timer that fires
+  /// on the next microtask — covers the rare race where a record's
+  /// availableAt slid into the past between the previous re-arm and
+  /// this one.
+  void _armAvailableTimer() {
+    _availableTimer?.cancel();
+    _availableTimer = null;
+    final ls = localSecondary;
+    if (ls == null) return;
+    final when = ls.nextAvailableAt();
+    if (when == null) return;
+    final wait = when.difference(DateTime.timestamp());
+    _availableTimer = Timer(
+      wait.isNegative ? Duration.zero : wait,
+      _onAvailableFire,
+    );
+  }
+
+  /// Drives one availability sweep and re-arms the timer for the
+  /// next. Walks every key whose `availableAt <= now`, emits a
+  /// [DataUpdated] for each, and re-arms in `finally` so a mid-sweep
+  /// error doesn't leave the timer disarmed.
+  Future<void> _onAvailableFire() async {
+    _availableSweepInFlight = true;
+    try {
+      final ls = localSecondary;
+      if (ls == null) return;
+      final now = DateTime.timestamp();
+      for (final keyStr in ls.keysWithAvailableAtAtOrBefore(now)) {
+        try {
+          final atKey = AtKey.fromString(keyStr);
+          AtMetaData? meta;
+          try {
+            meta = await ls.keyStore!.getMeta(keyStr);
+          } on Exception {
+            meta = null;
+          }
+          if (meta == null) continue;
+          emitDataEvent(DataUpdated(atKey, metadata: meta));
+          // Drop from the availability cache so it won't fire again.
+          ls.dropAvailabilityCacheEntry(keyStr);
+        } on Exception catch (e) {
+          _logger.warning('availability sweep failed for $keyStr: $e');
+        }
+      }
+    } catch (e, st) {
+      _logger.warning('Availability sweep failed: $e\n$st');
+    } finally {
+      _availableSweepInFlight = false;
+      _armAvailableTimer();
+    }
   }
 
   bool _isStopped = false;
@@ -322,6 +534,20 @@ class AtClientImpl implements AtClient {
   }
 
   Future<void> _stopBackgroundProcesses() async {
+    try {
+      _expiryTimer?.cancel();
+      _expiryTimer = null;
+      await _expirySub?.cancel();
+      _expirySub = null;
+      _availableTimer?.cancel();
+      _availableTimer = null;
+      await _availableSub?.cancel();
+      _availableSub = null;
+      if (!_dataEventsCtrl.isClosed) await _dataEventsCtrl.close();
+    } catch (e) {
+      _logger.warning('Error while tearing down keystore-event timers: $e');
+    }
+
     try {
       await stopCompactionJob();
     } catch (e) {
@@ -456,7 +682,7 @@ class AtClientImpl implements AtClient {
     }
     var builder = DeleteVerbBuilder()..atKey = atKey;
 
-    var deleteResult = await executeVerb(
+    var deleteResult = await executeUpdateOrDelete(
         builder,
         SecondaryManager.getRemoteLocalPrefForOp(
           deleteRequestOptions?.useRemoteAtServer,
@@ -466,7 +692,7 @@ class AtClientImpl implements AtClient {
     return deleteResult != null;
   }
 
-  Future<String?> executeVerb(
+  Future<String?> executeUpdateOrDelete(
       VerbBuilder builder, RemoteLocalPref prefForOp) async {
     switch (prefForOp) {
       case RemoteLocalPref.localOnly:
@@ -638,7 +864,7 @@ class AtClientImpl implements AtClient {
     return atResponse.response.isNotEmpty;
   }
 
-  /// put's the text data into the keystore
+  /// Puts text data into the keystore.
   @override
   Future<AtResponse> putText(AtKey atKey, String value,
       {PutRequestOptions? putRequestOptions}) async {
@@ -651,7 +877,7 @@ class AtClientImpl implements AtClient {
     }
   }
 
-  /// put's the binary data(e.g. images, files etc) into the keystore
+  /// Puts binary data (e.g. images, files etc.) into the keystore.
   @override
   Future<AtResponse> putBinary(AtKey atKey, List<int> value,
       {PutRequestOptions? putRequestOptions}) async {
@@ -746,7 +972,7 @@ class AtClientImpl implements AtClient {
         preference?.remoteLocalPref,
       );
     }
-    var putResponse = await executeVerb(putBuilder, remoteLocalPref);
+    var putResponse = await executeUpdateOrDelete(putBuilder, remoteLocalPref);
 
     // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
@@ -788,7 +1014,7 @@ class AtClientImpl implements AtClient {
       ..atKey = atKey
       ..operation = AtConstants.updateMeta;
 
-    var updateMetaResult = await executeVerb(
+    var updateMetaResult = await executeUpdateOrDelete(
         builder,
         SecondaryManager.getRemoteLocalPrefForOp(
           putRequestOptions?.useRemoteAtServer,
@@ -860,7 +1086,7 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  @Deprecated("Obsolete, wil be removed in v4")
+  @Deprecated("Obsolete, will be removed in v4")
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String? namespace}) async {
     var streamResponse = AtStreamResponse();
@@ -902,7 +1128,7 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  @Deprecated("Obsolete, wil be removed in v4")
+  @Deprecated("Obsolete, will be removed in v4")
   Future<void> sendStreamAck(
       String streamId,
       String fileName,
@@ -1145,8 +1371,6 @@ class AtClientImpl implements AtClient {
   AtClientPreference? getPreferences() {
     return _preference;
   }
-
-  // TODO v4 - remove the follow methods in version 4 of at_client package
 
   ///[Deprecated] Use [AtClient.notificationService]
   @override

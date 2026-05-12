@@ -10,7 +10,10 @@ for atKeys, and Flutter-specific extensions — so a new Flutter app can
 go from "user has an atSign" to "authenticated `AtClient` in hand" with
 a few widget calls.
 
-Supports mobile, desktop, web, and IoT targets via Flutter.
+Supports mobile, desktop, and IoT targets via Flutter. **Flutter
+web is not supported** — atSign onboarding and key handling rely
+on platform plugins (key-chain, file storage) that don't have web
+implementations today.
 
 ## What's in the box
 

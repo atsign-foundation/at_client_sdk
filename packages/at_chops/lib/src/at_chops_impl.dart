@@ -134,6 +134,7 @@ class AtChopsImpl extends AtChops {
     try {
       final utfEncodedData = utf8.encode(data);
       final encryptionResult = await encryptBytes(
+
           Uint8List.fromList(utfEncodedData), encryptionKeyType,
           keyName: keyName, encryptionAlgorithm: encryptionAlgorithm, iv: iv);
       final atEncryptionResult = AtEncryptionResult()

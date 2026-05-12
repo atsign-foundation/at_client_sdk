@@ -6,7 +6,7 @@ import '../domain_objects.dart';
 
 /// Parent+children snapshot emitted by [Query.watchWithSub] — one
 /// todo paired with its current notes.
-typedef TodoWithNotes = ({CItem<Todo> parent, List<CItem<TodoNote>> children});
+typedef TodoWithNotes = WithChildren<Todo, TodoNote>;
 
 /// Which pane currently owns keyboard focus. `list` is the default;
 /// `detail` is entered via Enter or Right-arrow so the user can read

@@ -64,10 +64,13 @@ class NotificationServiceImpl extends NotificationService {
         secondaryAddressFinder: secondaryAddressFinder);
   }
 
+  final String myStatsNotifKey;
+
   NotificationServiceImpl._(
       {required this.atClient,
       Monitor? monitor,
-      SecondaryAddressFinder? secondaryAddressFinder}) {
+      SecondaryAddressFinder? secondaryAddressFinder})
+      : myStatsNotifKey = 'statsNotification.${atClient.atSign}' {
     logger = AtSignLogger(
         'NotificationServiceImpl (${atClient.getCurrentAtSign()})');
 
@@ -141,23 +144,13 @@ class NotificationServiceImpl extends NotificationService {
       return jsonDecode(atValue?.value)['epochMillis'];
     }
 
-    // If we're here, we've never received a notification, since the last
-    // notification received time has never been saved.
-    //
-    // In that case, we're going to set the last notification received time to
-    // _now_
-    //
-    // But we're still going to return null. But then, next time we're called,
-    // we'll have a value to return.
-    //
-    // This upholds the principle of least surprise which is that
-    // - I run a client for the first time, I get no notifications from the past
-    // - But let's assume you only run the client for a very short period, so
-    //   you get no notifications before you shut it down.
-    // - You run up the client again some time later, assuming that any
-    //   notifications received while you were offline will be delivered to you
-    // - And now because we did this last time, that will be true. Whereas
-    //   previously, you would simply have got no notifications, again.
+    // First-call branch: no last-received-notification record exists.
+    // Set the record to "now" so that subsequent calls (after a
+    // restart, say) will return a value, but return null for THIS
+    // call to keep first-run semantics ("don't replay history I never
+    // saw"). Without this seed, a short-lived first session followed
+    // by a longer second session would silently miss any notifications
+    // that arrived in between.
     AtNotification n = AtNotification(
       'abcd-123456-wxyz',
       '@bob:notification.foo.bar.baz@alice',
@@ -207,19 +200,23 @@ class NotificationServiceImpl extends NotificationService {
   @visibleForTesting
   Future<void> handleNotificationReceipt(String notificationJSON) async {
     try {
-      logger.info('DEBUG: $notificationJSON');
+      logger.finest('DEBUG: $notificationJSON');
       if (isStopped) return;
 
       final notifs = notificationParser
           .getAtNotifications(notificationParser.parse(notificationJSON));
       _lastReceipt = DateTime.now().toUtc();
-      for (var notif in notifs) {
-        logger.info('Received ${notif.key}');
+      for (var n in notifs) {
+        if (n.key == myStatsNotifKey) {
+          logger.finer('Received ${n.key} (serverCommitId) ${n.value}');
+        } else {
+          logger.info('Received ${n.key}');
+        }
         // Saves latest notification id to the keys if its not a stats notification.
-        if (notif.id != '-1') {
+        if (n.id != '-1') {
           try {
             await atClient.put(
-                lastReceivedNotificationAtKey, jsonEncode(notif.toJson()));
+                lastReceivedNotificationAtKey, jsonEncode(n.toJson()));
           } catch (e) {
             logger.warning('Failed to save last received notification ID: $e');
           }
@@ -229,11 +226,11 @@ class NotificationServiceImpl extends NotificationService {
             var transformedNotification =
                 await NotificationResponseTransformer(atClient)
                     .transform(Tuple()
-                      ..one = notif
+                      ..one = n
                       ..two = notificationConfig);
 
             if (notificationConfig.regex != emptyRegex) {
-              if (hasRegexMatch(notif.key, notificationConfig.regex)) {
+              if (hasRegexMatch(n.key, notificationConfig.regex)) {
                 streamController.add(transformedNotification);
               }
             } else {
@@ -318,6 +315,16 @@ class NotificationServiceImpl extends NotificationService {
     required String namespace,
   }) {
     String r = '^$atSign:([^.]+\\.)?$namespace@';
+    // Single-subscription controller. Its onPause/onResume hooks are
+    // deliberately NOT wired to pause the upstream subscription:
+    // [subscribe] returns a broadcast stream, and broadcast
+    // subscriptions DO NOT buffer events emitted during pause()
+    // (events are delivered to other live subscribers and dropped
+    // for the paused one). When the downstream consumer pauses
+    // [sc.stream], the single-sub controller buffers incoming
+    // notifications internally; we keep accepting from upstream
+    // and adding to the controller, and the controller delivers
+    // the buffered notifications when the consumer resumes.
     StreamController<AtNotification> sc = StreamController<AtNotification>();
     StreamSubscription<AtNotification>? notifStreamSubscription;
     sc.onListen = () {
@@ -336,23 +343,14 @@ class NotificationServiceImpl extends NotificationService {
     sc.onCancel = () {
       notifStreamSubscription?.cancel();
     };
-    sc.onPause = () {
-      notifStreamSubscription?.pause();
-    };
-    sc.onResume = () {
-      notifStreamSubscription?.resume();
-    };
     return sc.stream;
   }
 
   @override
   Future<NotificationResult> notify(NotificationParams notificationParams,
-      {bool waitForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
-      bool checkForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
-      bool encryptValue =
-          true, // this was the behaviour before introducing this parameter
+      {bool waitForFinalDeliveryStatus = true,
+      bool checkForFinalDeliveryStatus = true,
+      bool encryptValue = true,
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary}) async {
@@ -544,7 +542,7 @@ class NotificationServiceImpl extends NotificationService {
     //
     // Additionally, in order to give application code full control over the
     // lifecycle of the notifications listener, we will only start the monitor
-    // for subscriptions when AtClientPreference.autoStartMonitor] is true,
+    // for subscriptions when AtClientPreference.monitorAutoStart is true,
     // which it is by default (legacy behaviour). This gives application code
     // much better clear control over the notification listening lifecycle.
     if (atClient.getPreferences()?.monitorAutoStart == true) {

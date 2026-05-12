@@ -6,10 +6,10 @@ import 'package:flutter/foundation.dart';
 import '../models/todo.dart';
 import 'atsign_colors.dart';
 
-/// Record type for the combined parent-plus-notes stream emitted by
+/// Type alias for the combined parent-plus-notes stream emitted by
 /// [TodosService.watchTodosWithNotes]. Each row carries one todo and
 /// its current list of notes.
-typedef TodoWithNotes = ({CItem<Todo> parent, List<CItem<TodoNote>> children});
+typedef TodoWithNotes = WithChildren<Todo, TodoNote>;
 
 /// Wraps the two `AtCollection`s (todos and notes) and exposes reactive
 /// state for Flutter widgets. Mirrors the TUI's in-file logic verbatim for
@@ -58,7 +58,9 @@ class TodosService {
     collection = await atClient.collection<Todo>(
       'todos.$ns',
       defaultExpiration,
+      eventSource: EventSource.both,
       fromJson: Todo.fromJson,
+      typeTag: 'Todo',
       cleanupOrphansOnCreation: true,
     );
     // Legacy notes probe — pre-subcollection versions of this app
@@ -89,6 +91,7 @@ class TodosService {
         subName: 'notes',
         defaultExpiration: defaultExpiration,
         fromJson: TodoNote.fromJson,
+        typeTag: 'TodoNote',
       ),
     );
   }
@@ -133,6 +136,7 @@ class TodosService {
             subName: 'notes',
             subDefaultExpiration: defaultExpiration,
             subFromJson: TodoNote.fromJson,
+            subTypeTag: 'TodoNote',
           )
           .listen(_todosCtrl!.add, onError: _todosCtrl!.addError);
     }
@@ -201,11 +205,11 @@ class TodosService {
     final ctrl = _todosCtrl;
     if (q == null || ctrl == null || ctrl.isClosed) return;
     try {
-      final parents = await q.fetch();
+      final parents = await q.get();
       final combined = <TodoWithNotes>[];
       for (final p in parents) {
-        final notes = await _notesSubFor(p).query().fetch();
-        combined.add((parent: p, children: notes));
+        final notes = await _notesSubFor(p).query().get();
+        combined.add(WithChildren(parent: p, children: notes));
       }
       ctrl.add(combined);
     } catch (e, st) {

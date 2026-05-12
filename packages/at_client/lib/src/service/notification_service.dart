@@ -14,11 +14,11 @@ abstract class NotificationService {
   /// - When [shouldDecrypt] is true, then [AtNotification.value] is decrypted
   /// (if it was encrypted). [shouldDecrypt] defaults to false in order to
   /// preserve backwards compatibility.
-  /// - when [AtClientPreference.autoStartListening] is true, then the notifications listener
+  /// - when [AtClientPreference.monitorAutoStart] is true, the notifications listener
   /// will be started either the first time that [subscribe] is called by the
   /// application code, or 30 seconds after creation if there have been no
   /// subscriptions.
-  /// - when [autoStartListening] is false, then the notifications listener
+  /// - when [AtClientPreference.monitorAutoStart] is false, the notifications listener
   /// will not be started until explicitly requested to do so by the
   /// application, via [startListening]
   Stream<AtNotification> subscribe({String? regex, bool shouldDecrypt});
@@ -108,6 +108,8 @@ abstract class NotificationService {
 
   /// Sends notification to [notificationParams.atKey.sharedWith] atSign.
   ///
+  /// See [send] for the more recent, simpler way to do this.
+  ///
   /// Returns [NotificationResult] when calling the method synchronously using `await`. Be aware that it could take
   /// many minutes before we get to a final delivery status when we run synchronously, so we advise against that.
   /// However there is something in between 'fire and forget' and 'wait a long time' available - if you call the
@@ -182,12 +184,9 @@ abstract class NotificationService {
   ///   await notificationService.notify(NotificationParams.forText('Hello','@bob'));
   ///```
   Future<NotificationResult> notify(NotificationParams notificationParams,
-      {bool waitForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
-      bool checkForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
-      bool encryptValue =
-          true, // this was the behaviour before introducing this parameter
+      {bool waitForFinalDeliveryStatus = true,
+      bool checkForFinalDeliveryStatus = true,
+      bool encryptValue = true,
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary});

@@ -8,6 +8,29 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_utils/at_logger.dart';
 
 /// Class contains all the util methods that perform CRUD operations on the commit log keystore.
+///
+/// **Partially deprecated**: the client→server sync push path
+/// drains `LocalSecondary.AtSyncQueue` directly rather than
+/// scanning the commit log. The commit log itself is still the
+/// substrate for client-side compaction and for downstream callers
+/// of [getLastSyncedEntry], so commitId back-writes after each
+/// successful push (and after each pull) are still required. The
+/// methods marked `@Deprecated` here are the ones with no current
+/// caller (read-side scans of `getChangesSinceLastCommit` etc.) and
+/// are scheduled for removal.
+///
+/// Still in use (NOT deprecated):
+///
+/// * [getLatestServerCommitId] — `_getServerCommitId` calls this on
+///   each cold-fetch / forced-fresh round.
+/// * [shouldSync] (static) — general filter for which keys should
+///   ever leave this device.
+/// * [getLatestCommitEntry] — used by `_pushFromSyncQueue` to find
+///   the entry to stamp the server-assigned commitId on.
+/// * [getCommitEntry] — used by `_pullToLocal` to find the entry
+///   that `executeVerb` just appended.
+/// * [updateCommitEntry] — used by both `_pushFromSyncQueue` and
+///   `_pullToLocal` to stamp the server-side commitId.
 class SyncUtil {
   static var logger = AtSignLogger('SyncUtil');
 
@@ -15,6 +38,10 @@ class SyncUtil {
 
   SyncUtil({this.atCommitLog});
 
+  /// Returns the commit-log entry at [sequenceNumber] for [atSign].
+  /// Used by `_pullToLocal` to find the entry that the local apply
+  /// just appended, so its commitId can be stamped with the server's
+  /// value (required by client-side commit-log compaction).
   Future<CommitEntry?> getCommitEntry(int sequenceNumber, String atSign) async {
     atCommitLog ??=
         await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
@@ -23,6 +50,12 @@ class SyncUtil {
     return commitEntry;
   }
 
+  /// Stamps [commitId] onto [commitEntry] in the local commit log
+  /// for [atSign]. Called from both push and pull paths in
+  /// `SyncServiceImpl` — required for client-side commit-log
+  /// compaction (which only compacts entries with non-null commitId)
+  /// and for [getLastSyncedEntry] to return a meaningful high-water
+  /// mark to downstream callers.
   Future<void> updateCommitEntry(
       CommitEntry commitEntry, int commitId, String atSign) async {
     atCommitLog ??=
@@ -30,6 +63,15 @@ class SyncUtil {
     await atCommitLog?.update(commitEntry, commitId);
   }
 
+  /// Returns the latest commit-log entry with a non-null commitId
+  /// (i.e. the most recently sync'd entry) for [atSign], optionally
+  /// filtered by [regex]. SyncServiceImpl itself doesn't consult
+  /// this method — its cursors live in `_highestPushedCommitId` and
+  /// `lastReceivedServerCommitId`. But the back-writes that
+  /// `_pushFromSyncQueue` and `_pullToLocal` perform onto the commit
+  /// log keep the entries' commitId fields current, so this method
+  /// keeps returning a meaningful answer for downstream callers and
+  /// for the functional test pack.
   Future<CommitEntry?> getLastSyncedEntry(String? regex,
       {required String atSign}) async {
     atCommitLog ??=
@@ -44,6 +86,7 @@ class SyncUtil {
     return lastEntry;
   }
 
+  @Deprecated('No longer used by SyncServiceImpl. Scheduled for removal.')
   static Future<CommitEntry?> getEntry(int? seqNumber, String atSign) async {
     var commitLogInstance = await (AtCommitLogManagerImpl.getInstance()
         .getCommitLog(atSign) as FutureOr<AtCommitLog>);
@@ -51,6 +94,9 @@ class SyncUtil {
     return entry;
   }
 
+  @Deprecated('No longer used by SyncServiceImpl. The push path '
+      'reads from `LocalSecondary.AtSyncQueue` instead of the '
+      'commit log. Scheduled for removal.')
   Future<List<CommitEntry>> getChangesSinceLastCommit(
       int? seqNum, String? regex,
       {required String atSign}) async {
@@ -65,6 +111,9 @@ class SyncUtil {
   }
 
   //#TODO change return type to enum which says in sync, local ahead or server ahead
+  @Deprecated('No longer used by SyncServiceImpl. The private '
+      '`_isInSync` consults `LocalSecondary.syncQueueSize` and '
+      '`lastReceivedServerCommitId` directly. Scheduled for removal.')
   static bool isInSync(List<CommitEntry?>? unCommittedEntries,
       int? serverCommitId, int? lastReceivedServerCommitId) {
     logger.finer('lastReceivedServerCommitId:$lastReceivedServerCommitId');
@@ -142,6 +191,9 @@ class SyncUtil {
     return NullCommitEntry();
   }
 
+  @Deprecated('No longer used by SyncServiceImpl. The push path '
+      'does not prune commit-log entries — they are managed by '
+      'AtCompactionJob. Scheduled for removal.')
   Future<void> removeCommitEntry(dynamic key, String atSign) async {
     atCommitLog ??=
         await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);

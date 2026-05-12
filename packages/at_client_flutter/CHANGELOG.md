@@ -1,35 +1,49 @@
 # CHANGELOG
 
+## 1.1.1
+
+- refactor: updated example app deprecated methods.
+- fix: example app over flow error fixed.
+- fix: APKM Dialog scrolls to reveal OTP pin outside of viewport.
+- fix: Registrar Dialog scrolls to reveal OTP pin outside of viewport.
+- fix: Soft keyboard for Registrar Dialog OTP field is Capitalized by default and set to show numbers and text.
+
 ## 1.1.0
- - feat: models NamespacePermission, Otp, ServerEnrollmentRequest, AuthorisationException
- - feat: additional functionality on FlutterEnrollmentService
- - rework: lifecycle on FlutterEnrollmentService
- - feat: new widgets for Enrollment related activities
- - feat: extensions for additional functionality
- - fix: bug where example app consumes atsigns with '_' inside them
+
+- feat: models NamespacePermission, Otp, ServerEnrollmentRequest, AuthorisationException
+- feat: additional functionality on FlutterEnrollmentService
+- rework: lifecycle on FlutterEnrollmentService
+- feat: new widgets for Enrollment related activities
+- feat: extensions for additional functionality
+- fix: bug where example app consumes atsigns with '\_' inside them
 
 ## 1.0.2
-- fix(ai): automatically prepend @ symbol into text box 
+
+- fix(ai): automatically prepend @ symbol into text box
 
 ## 1.0.1
- - deps: at_auth 3.0.1
+
+- deps: at_auth 3.0.1
 
 ## 1.0.0
- - feat: `ApkamActivationDialog` introduced for apkam onboarding
- - fix: proxy parsing on root domains
- - chore: file_picker pinned at 10.3.10
- - feat: list to `AtEnrollment`
+
+- feat: `ApkamActivationDialog` introduced for apkam onboarding
+- fix: proxy parsing on root domains
+- chore: file_picker pinned at 10.3.10
+- feat: list to `AtEnrollment`
 
 ## 0.1.2
+
 - pin file_picker to 10.3.9 (BC)
 
 ## 0.1.1
+
 - chore: removed unused dependencies
-    - flutter_keychain
-    - hive
-    - crypton
-    - flutter_riverpod
-    - at_persistence_secondary_server
+  - flutter_keychain
+  - hive
+  - crypton
+  - flutter_riverpod
+  - at_persistence_secondary_server
 - docs: Update README with more documentation
 - fix: broken links in README
 

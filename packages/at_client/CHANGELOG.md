@@ -1,23 +1,45 @@
-## 3.13.0
+## 3.12.0-rc.1
 
 Several significant enhancements to the API to make it much easier to use.
 - feat: New feature - Collections - a clean API for storing, sharing, 
   unsharing and deleting objects in named collections, with sub-collections, 
-  event streams, built-in support for read receipts, and more
+  event streams, built-in support for read receipts, live queries with 
+  incremental delta maintenance, and more. For detail, see the READMEs, 
+  dartdocs and examples
 - feat: added a new method, `send`, to NotificationService which is much 
   easier to use than the old (still fine to use) `notify` method.
 - feat: added `factory AtRpc.server` to make it much simpler to create AtRpc 
   servers. 
+- fix(AtCollection): notification-path sub-item dispatch now recovers
+  ancestor owners directly from the decrypted notification payload
+  (which IS the envelope) instead of round-tripping through the local
+  keystore. Eliminates a class of null-owner `CSubItemUpdated` events
+  that surfaced under `EventSource.notifs` (and `EventSource.both`)
+  when the keystore mirror landed under a key shape the readback
+  couldn't resolve, or raced ahead of sync writing the bare key.
+
+Major documentation uplift
 - docs: Rewrote the main README
 - docs: Added many examples in the [example](example/README.md) directory
 
-## 3.12.0
-
+And some tech debt cleanup
 - feat: explicit AtClient lifecycle control — cleanly stop and resume atClients without
   re-initialising storage or keys
 - feat: outgoing AtClient's sync and notification services will now be garbage collected
 - chore: deprecated `atClientManager` param in the factories of AtClient, NotificationService, and SyncService
 - fix: added null guards to AtClient service getters
+- perf(SyncServiceImpl): when a `sync:from:` request returns no entries because
+  the entire `(lastReceivedServerCommitId, serverCommitId]` range was filtered
+  out server-side (apkam namespace scope, syncRegex, or skipDeletesUntil),
+  advance the persisted server-commit cursor to the sync-start `serverCommitId`
+  snapshot instead of breaking out without advancing. Subsequent sync rounds
+  no-op until the server actually advances past it, rather than re-probing
+  the same filtered range every round.
+- perf(SyncServiceImpl): round 1 of fsync - push to server based on a simple 
+  queue mechanism. Also fixed a bunch of related bugs. Note that a follow-up 
+  PR will fully remove the use of the "Commit Log" part of the 
+  at_persistence package on the client side; commit log was never the 
+  appropriate vehicle mechanism to support client-side sync push
 
 ## 3.11.0     
 
