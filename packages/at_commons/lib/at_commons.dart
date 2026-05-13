@@ -39,3 +39,4 @@ export 'package:at_commons/src/telemetry/at_telemetry.dart';
 export 'package:at_commons/src/utils/string_utils.dart';
 export 'package:at_commons/src/keystore/public_key_hash.dart';
 export 'package:at_commons/src/atserver/atserver_events.dart';
+export 'package:at_commons/src/scheme.dart';

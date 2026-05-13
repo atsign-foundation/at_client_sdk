@@ -7,7 +7,6 @@ export 'src/algorithm/default_signing_algo.dart';
 export 'src/algorithm/ecc_signing_algo.dart';
 export 'src/algorithm/pkam_signing_algo.dart';
 export 'src/algorithm/rsa_encryption_algo.dart';
-export 'src/algorithm/schemes.dart';
 export 'src/at_chops_base.dart';
 export 'src/at_chops_impl.dart';
 

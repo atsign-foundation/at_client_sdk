@@ -1,4 +1,3 @@
-import 'package:at_chops/at_chops.dart' show CryptoScheme;
 import 'package:at_commons/at_commons.dart';
 
 class SchemeRegistry {
