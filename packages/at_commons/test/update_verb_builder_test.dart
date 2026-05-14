@@ -68,6 +68,30 @@ void main() {
           skeEncAlgo);
     });
 
+    test('verify update command with app metadata', () {
+      final appMetadata = AppMetadata('test_scheme', additional: {
+        'encKeyName': 'key_12345.__shared_keys.wavi',
+        'encAlgo': 'test_algo',
+      });
+      final encodedAppMetadata = Metadata.encodeAppMetadata(appMetadata);
+      var updateBuilder = UpdateVerbBuilder()
+        ..value = 'alice@atsign.com'
+        ..atKey.key = 'email.wavi'
+        ..atKey.sharedBy = '@alice'
+        ..atKey.sharedWith = '@bob'
+        ..atKey.metadata.appMetadata = appMetadata;
+      var updateCommand = updateBuilder.buildCommand();
+      expect(
+          updateCommand,
+          'update:isEncrypted:false'
+          ':appMetadata:$encodedAppMetadata'
+          ':@bob:email.wavi@alice alice@atsign.com'
+          '\n');
+      var roundTrippedBuilder =
+          UpdateVerbBuilder.getBuilder(updateCommand.trim())!;
+      expect(roundTrippedBuilder.atKey.metadata.appMetadata, appMetadata);
+    });
+
     test('verify local key command', () {
       var updateBuilder = UpdateVerbBuilder()
         ..value = 'alice@atsign.com'
@@ -159,6 +183,25 @@ void main() {
           skeEncKeyName);
       expect(updateMetaVerbParams[AtConstants.sharedKeyEncryptedEncryptingAlgo],
           skeEncAlgo);
+    });
+
+    test('verify update:meta command with app metadata', () {
+      final appMetadata = AppMetadata('test_scheme');
+      final encodedAppMetadata = Metadata.encodeAppMetadata(appMetadata);
+      var updateBuilder = UpdateVerbBuilder()
+        ..atKey.key = 'email.wavi'
+        ..atKey.sharedBy = '@alice'
+        ..atKey.sharedWith = '@bob'
+        ..atKey.metadata.appMetadata = appMetadata;
+      var updateMetaCommand = updateBuilder.buildCommandForMeta();
+      expect(
+          updateMetaCommand,
+          'update:meta:@bob:email.wavi@alice:isEncrypted:false'
+          ':appMetadata:$encodedAppMetadata'
+          '\n');
+      var roundTrippedBuilder =
+          UpdateVerbBuilder.getBuilder(updateMetaCommand.trim())!;
+      expect(roundTrippedBuilder.atKey.metadata.appMetadata, appMetadata);
     });
   });
 

@@ -613,6 +613,10 @@ class Metadata {
     if (immutable) {
       sb.write(':${AtConstants.immutable}:$immutable');
     }
+    if (appMetadata != null) {
+      sb.write(
+          ':${AtConstants.appMetadata}:${Metadata.encodeAppMetadata(appMetadata!)}');
+    }
     return sb.toString();
   }
 
@@ -643,6 +647,7 @@ class Metadata {
     map[AtConstants.sharedKeyEncryptedEncryptingKeyName] = skeEncKeyName;
     map[AtConstants.sharedKeyEncryptedEncryptingAlgo] = skeEncAlgo;
     map[AtConstants.immutable] = immutable;
+    map[AtConstants.appMetadata] = appMetadata?.toJson();
     map['namespaceAware'] = namespaceAware;
     map['isCached'] = isCached;
 
@@ -707,8 +712,34 @@ class Metadata {
     metaData.skeEncAlgo = json[AtConstants.sharedKeyEncryptedEncryptingAlgo];
     metaData.namespaceAware = json['namespaceAware'] ?? false;
     metaData.immutable = json[AtConstants.immutable] ?? false;
+    metaData.appMetadata =
+        Metadata.decodeAppMetadata(json[AtConstants.appMetadata]);
 
     return metaData;
+  }
+
+  static String encodeAppMetadata(AppMetadata appMetadata) {
+    return base64Encode(utf8.encode(jsonEncode(appMetadata.toJson())));
+  }
+
+  static AppMetadata? decodeAppMetadata(dynamic value) {
+    if (value == null || value == 'null') {
+      return null;
+    }
+    if (value is AppMetadata) {
+      return value;
+    }
+    if (value is Map) {
+      return AppMetadata.fromJson(value);
+    }
+    if (value is String && value.isNotEmpty) {
+      final decoded = utf8.decode(base64Decode(value));
+      final decodedJson = jsonDecode(decoded);
+      if (decodedJson is Map) {
+        return AppMetadata.fromJson(decodedJson);
+      }
+    }
+    throw FormatException('Invalid appMetadata: $value');
   }
 
   @override
@@ -743,7 +774,8 @@ class Metadata {
           ivNonce == other.ivNonce &&
           skeEncKeyName == other.skeEncKeyName &&
           skeEncAlgo == other.skeEncAlgo &&
-          immutable == other.immutable;
+          immutable == other.immutable &&
+          appMetadata == other.appMetadata;
 
   @override
   int get hashCode =>
@@ -774,7 +806,8 @@ class Metadata {
       ivNonce.hashCode ^
       skeEncKeyName.hashCode ^
       skeEncAlgo.hashCode ^
-      immutable.hashCode;
+      immutable.hashCode ^
+      appMetadata.hashCode;
 }
 
 class AtValue {
@@ -818,7 +851,7 @@ class AppMetadata {
     final scheme = json['encryptionScheme'];
     final additional = <String, dynamic>{};
     json.forEach((key, value) {
-      if (key != 'crypto') {
+      if (key != 'encryptionScheme') {
         additional[key.toString()] = value;
       }
     });
@@ -827,5 +860,42 @@ class AppMetadata {
       scheme,
       additional: additional.isEmpty ? null : additional,
     );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppMetadata &&
+          runtimeType == other.runtimeType &&
+          encryptionScheme == other.encryptionScheme &&
+          _mapEquals(additional, other.additional);
+
+  @override
+  int get hashCode => encryptionScheme.hashCode ^ _mapHash(additional);
+
+  static bool _mapEquals(Map<String, dynamic>? a, Map<String, dynamic>? b) {
+    if (a == null || a.isEmpty) {
+      return b == null || b.isEmpty;
+    }
+    if (b == null || a.length != b.length) {
+      return false;
+    }
+    for (final entry in a.entries) {
+      if (!b.containsKey(entry.key) || b[entry.key] != entry.value) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static int _mapHash(Map<String, dynamic>? map) {
+    if (map == null || map.isEmpty) {
+      return 0;
+    }
+    var hash = 0;
+    for (final key in map.keys.toList()..sort()) {
+      hash = hash ^ key.hashCode ^ map[key].hashCode;
+    }
+    return hash;
   }
 }

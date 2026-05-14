@@ -1001,6 +1001,7 @@ void main() {
       expect(metadataMap['skeEncAlgo'], null);
       expect(metadataMap['immutable'], false);
       expect(metadataMap['pubKeyHash'], null);
+      expect(metadataMap['appMetadata'], null);
     });
 
     Metadata createMetadata({
@@ -1032,6 +1033,10 @@ void main() {
         ..ivNonce = '16'
         ..skeEncKeyName = 'dummy_enc_key_name'
         ..skeEncAlgo = 'RSA'
+        ..appMetadata = AppMetadata('test_scheme', additional: {
+          'encKeyName': 'key_12345.__shared_keys.wavi',
+          'encAlgo': 'test_algo',
+        })
         ..immutable = immutable;
     }
 
@@ -1067,6 +1072,11 @@ void main() {
       expect(metadataMap['ivNonce'], '16');
       expect(metadataMap['skeEncKeyName'], 'dummy_enc_key_name');
       expect(metadataMap['skeEncAlgo'], 'RSA');
+      expect(metadataMap['appMetadata'], {
+        'encryptionScheme': 'test_scheme',
+        'encKeyName': 'key_12345.__shared_keys.wavi',
+        'encAlgo': 'test_algo',
+      });
       expect(metadataMap['immutable'], immutable);
     }
 
