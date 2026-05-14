@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
@@ -1481,6 +1480,10 @@ class SyncServiceImpl implements SyncService {
       }
       if (metaData[AtConstants.sharedKeyEncryptedEncryptingAlgo] != null) {
         md.skeEncAlgo = metaData[AtConstants.sharedKeyEncryptedEncryptingAlgo];
+      }
+      if (metaData[AtConstants.appMetadata] != null) {
+        md.appMetadata =
+            Metadata.decodeAppMetadata(metaData[AtConstants.appMetadata]);
       }
 
       if (metaData[AtConstants.sharedWithPublicKeyHash] != null &&

@@ -53,4 +53,17 @@ void main() {
       expect(secondaryInfo.length, 0);
     });
   });
+
+  group('A group of prepareMetadata tests', () {
+    test('prepareMetadata decodes appMetadata', () {
+      final appMetadata = AppMetadata('test_scheme');
+      final metadata = AtClientUtil.prepareMetadata({
+        AtConstants.isEncrypted: true,
+        AtConstants.appMetadata: Metadata.encodeAppMetadata(appMetadata),
+      }, false);
+
+      expect(metadata?.appMetadata, appMetadata);
+      expect(metadata?.isEncrypted, true);
+    });
+  });
 }

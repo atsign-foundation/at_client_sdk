@@ -2,7 +2,6 @@
 
 import 'dart:async';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -123,6 +122,8 @@ class NotificationRequestTransformer
         notificationParams.atKey.metadata.skeEncAlgo;
     builder.atKey.metadata.pubKeyHash =
         notificationParams.atKey.metadata.pubKeyHash;
+    builder.atKey.metadata.appMetadata =
+        notificationParams.atKey.metadata.appMetadata;
   }
 
   Future<String> _encryptNotificationValue(AtKey atKey, String value) async {

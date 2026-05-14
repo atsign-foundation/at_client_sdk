@@ -411,11 +411,15 @@ void main() {
         notificationExpiry: Duration(minutes: 1),
       );
       notificationParams.atKey.metadata.isEncrypted = true;
+      notificationParams.atKey.metadata.appMetadata =
+          AppMetadata('test_scheme');
       var notifyVerbBuilder =
           await NotificationRequestTransformer(mockAtClientImpl)
               .transform(notificationParams);
       expect(notifyVerbBuilder.value, 'abc$value');
       expect(notifyVerbBuilder.atKey.metadata.sharedKeyEnc, 'sharedKeyEnc');
+      expect(notifyVerbBuilder.atKey.metadata.appMetadata,
+          notificationParams.atKey.metadata.appMetadata);
     });
     test(
         'A test to validate unencrypted value is set in verb builder when isEncrypted is set to false in metadata',
@@ -459,6 +463,24 @@ void main() {
   group('A group of test to validate notification response transformer', () {
     setUp(() {
       registerFallbackValue(FakeAtKey());
+    });
+
+    test('AtNotification.fromJson decodes app metadata', () {
+      final appMetadata = AppMetadata('test_scheme');
+      final notification = AtNotification.fromJson({
+        'id': '124',
+        'key': '@bob:key-1.foo@alice',
+        'from': '@alice',
+        'to': '@bob',
+        'epochMillis': DateTime.now().millisecondsSinceEpoch,
+        'messageType': MessageTypeEnum.key.toString(),
+        AtConstants.isEncrypted: true,
+        'metadata': {
+          AtConstants.appMetadata: Metadata.encodeAppMetadata(appMetadata),
+        },
+      });
+
+      expect(notification.metadata?.appMetadata, appMetadata);
     });
 
     test(
