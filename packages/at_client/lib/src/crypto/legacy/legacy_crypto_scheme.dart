@@ -1,4 +1,3 @@
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/legacy/legacy_decryption.dart';
 import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';

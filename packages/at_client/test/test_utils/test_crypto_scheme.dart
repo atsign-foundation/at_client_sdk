@@ -1,4 +1,3 @@
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 
 class CipherScheme extends CryptoScheme {
