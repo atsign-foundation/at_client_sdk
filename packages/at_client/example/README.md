@@ -51,10 +51,13 @@ dart run bin/collections_binary.dart -R receiver -O @sender
 
 ### Collections — todos app
 Interactive terminal-based shared todo list, built on the `nocterm`
-widget framework. (There is an equivalent Flutter app in
-`packages/at_client_flutter/examples/todos/` — the two apps have
-been deliberately given a similar UX so you can A/B the same
-scenarios across keyboard-driven and mouse-driven front-ends.)
+widget framework. There is an equivalent Flutter app at
+[`packages/at_client_flutter/examples/todos/`](../../at_client_flutter/examples/todos/README.md)
+— the two apps have been deliberately given a similar UX so you
+can A/B the same scenarios across keyboard-driven and mouse-driven
+front-ends, and their wire formats are byte-compatible so logging
+into both with two atSigns and sharing a todo from one shows it
+live in the other.
 
 The app is a split-pane TUI: filter chips / dashboard counts header,
 list of todos on the left (keyboard-navigable), live detail pane on
@@ -101,19 +104,27 @@ Shared TUI plumbing (palette, presets, typedefs) lives under
 `lib/todos_tui/`; the entry point and widget tree are in
 `bin/collections_todos.dart`.
 
-### Dockerstats — 3-level sub-collections, streaming
-Publishes a snapshot per docker container per polling cycle into a
-tree of typed sub-collections (`nodes` → `atsigns` → `samples`)
-shared with N other atSigns. The publisher uses
-`AtCollection.upsert` so it's safely re-runnable within the
-collection's TTL; the subscriber uses `AtCollection.getDescendant`
-to fetch typed leaves in one call when a `CSubItemUpdated` event
-fires. Pairs with the Flutter dashboard at
-`packages/at_client_flutter/examples/dockerstats/`.
+### Dockerstats — notification-based live telemetry
+Publishes one `docker stats` sample per container per polling cycle
+as a single `notificationService.send(...)` call — no AtCollection,
+no keystore writes, no sync queue. Each notification carries the
+JSON-encoded sample as its body, namespaced
+`sample.<container>.<host>.dockerstats.demos` so a single
+subscriber regex catches every container's stream.
+
+This is the deliberate counterpart to the AtCollection-based
+examples above. It demonstrates **picking the right tool for the
+job**: high-frequency observations don't belong in a typed shared
+dataset — they belong on a transient delivery channel
+(notifications) feeding a database designed for time series. The
+companion [Flutter dashboard](../../at_client_flutter/examples/dockerstats/README.md)
+shows the full pipeline: subscribe, persist to SQLite, render
+charts off the local store with a five-tier roll-up for bounded
+storage and uniform chart resolution.
 
 Real mode shells out to the `docker` CLI; simulate mode synthesises
-fake hosts and atSigns via a bounded random walk, useful for chart-UI
-development without running containers.
+fake hosts via a bounded random walk, useful for development
+without running containers.
 ```bash
 # Publisher — real (requires `docker` on PATH):
 dart run bin/dockerstats_publish.dart \
@@ -127,13 +138,15 @@ dart run bin/dockerstats_publish.dart \
 # Subscriber — prints one line per arriving sample:
 dart run bin/dockerstats_subscribe.dart -a @bob
 ```
-`-P` is the polling interval. Samples expire after 1 minute so
-receivers see a rolling window without any client-side eviction;
-the structural nodes (`atsigns` and `nodes` levels) carry a
-1-hour TTL so the tree itself doesn't churn at the sample cadence.
-The subscriber is a CLI counterpart to the Flutter dashboard —
-useful for verifying publisher↔receiver round-trip without spinning
-up the Flutter app.
+`-P` is the polling interval. Notifications expire after 5 minutes
+(`ttln`) so receivers that reconnect after a longer outage just
+resume from the next live sample rather than replaying stale ones.
+
+The subscriber is the CLI counterpart to the Flutter dashboard —
+prints one line per arriving sample, useful for verifying
+publisher↔receiver round-trip without launching the dashboard. The
+full app design, roll-up table, and seed-DB workflow are in the
+[Flutter dashboard's README](../../at_client_flutter/examples/dockerstats/README.md).
 
 ### Notifications
 Fire-and-forget messaging via `NotificationService`.

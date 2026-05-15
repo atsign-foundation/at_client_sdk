@@ -1,8 +1,8 @@
 /// Top dashboard. Two view modes:
 ///   - **Hosts** (default): one chart series per host, summed across the
-///     atSigns reporting on that host.
+///     containers reporting on that host.
 ///   - **Drill-down** (after selecting a host): one chart series per
-///     atSign on that host, with multi-select chips to keep visible.
+///     container on that host, with multi-select chips to keep visible.
 library;
 
 import 'dart:async';
@@ -14,7 +14,6 @@ import '../models/stats_models.dart';
 import '../onboarding.dart' show logout;
 import '../services/atsign_colors.dart';
 import '../services/dockerstats_service.dart';
-import '../services/rolling_window.dart';
 import '../widgets/stats_chart.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -24,27 +23,39 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-/// Selectable rolling-window sizes for the dashboard. The publisher's
-/// per-sample TTL bounds how much history actually exists in the
-/// network — selecting a window larger than that is harmless, the
-/// chart just shows whatever data is present (clustered to the right).
+/// Selectable display windows. SQLite holds every sample
+/// indefinitely under a multi-tier roll-up; the window only
+/// controls what the chart renders. Switching the selector
+/// triggers a fresh `db.queryWindow(...)` so widening (e.g.
+/// 5m → all) immediately reveals every sample in the new range.
+///
+/// The `all` entry uses [Duration.zero] as a sentinel meaning
+/// "fit to the actual data range" — the chart computes `xMin`
+/// from the earliest sample in the series rather than `now -
+/// window`. Labels follow the user's spec verbatim — `m` is
+/// minutes early in the list (`5m`, `15m`) and months later
+/// in the list (`1m`, `6m`); positional context disambiguates.
 const List<({String label, Duration value})> _windowOptions = [
-  (label: '2m', value: Duration(minutes: 2)),
-  (label: '10m', value: Duration(minutes: 10)),
+  (label: '5m', value: Duration(minutes: 5)),
+  (label: '15m', value: Duration(minutes: 15)),
   (label: '1h', value: Duration(hours: 1)),
-  (label: '24h', value: Duration(hours: 24)),
+  (label: '5h', value: Duration(hours: 5)),
+  (label: '1d', value: Duration(days: 1)),
+  (label: '7d', value: Duration(days: 7)),
+  (label: '1m', value: Duration(days: 30)),
+  (label: '6m', value: Duration(days: 180)),
+  (label: '2y', value: Duration(days: 730)),
+  (label: 'all', value: Duration.zero),
 ];
 
 class _DashboardScreenState extends State<DashboardScreen> {
   DockerstatsService? _service;
   String? _error;
   Timer? _redrawTimer;
-  SyncProgress? _lastSyncProgress;
-  SyncProgressListener? _progressListener;
   Duration _windowDuration = _windowOptions.first.value;
   final StableColors _colors = StableColors();
   String? _drillHostId;
-  final Set<String> _hiddenAtSigns = {};
+  final Set<String> _hiddenContainers = {};
 
   @override
   void initState() {
@@ -55,11 +66,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _redrawTimer?.cancel();
-    if (_progressListener != null) {
-      AtClientManager.getInstance().atClient.syncService.removeProgressListener(
-        _progressListener!,
-      );
-    }
     _service?.dispose();
     super.dispose();
   }
@@ -67,27 +73,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _init() async {
     try {
       final atClient = AtClientManager.getInstance().atClient;
-      // Subscribe to all SyncProgress events for the lifetime of the
-      // dashboard so the status bar always reflects current sync state.
-      _progressListener = _ProgressForwarder((p) {
-        if (!mounted) return;
-        setState(() => _lastSyncProgress = p);
-      });
-      atClient.syncService.addProgressListener(_progressListener!);
-      final s = DockerstatsService(
+      final s = await DockerstatsService.create(
         atClient: atClient,
-        window: RollingWindow(window: _windowDuration),
+        window: _windowDuration,
       );
-      await s.init();
-      s.window.addListener(_onChange);
-      // Frequent setState so the x-axis scrolls smoothly between
-      // sample arrivals. Storage eviction is event-driven (via
-      // `nodes.subDeletes` in DockerstatsService), so no separate
-      // periodic trim is needed.
-      _redrawTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
-        if (!mounted) return;
-        setState(() {});
-      });
+      s.cache.addListener(_onChange);
+      _startRedrawTimer();
       if (!mounted) return;
       setState(() => _service = s);
     } catch (e) {
@@ -96,9 +87,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  void _setWindow(Duration d) {
+  /// Pick a redraw cadence matching the visible window. Short
+  /// windows want 50 ms (smooth axis scroll for live tier-0 5s
+  /// data); wide windows (hours / days / months) move <1 px per
+  /// real second so a 1 Hz tick is plenty and saves us from
+  /// rebuilding 4 charts × 1000 spots 20 times a second for no
+  /// visual gain.
+  void _startRedrawTimer() {
+    _redrawTimer?.cancel();
+    final intervalMs = _windowDuration == Duration.zero
+        ? 1000
+        : (_windowDuration.inMilliseconds ~/ 14400).clamp(50, 1000);
+    _redrawTimer = Timer.periodic(Duration(milliseconds: intervalMs), (_) {
+      if (!mounted) return;
+      setState(() {});
+    });
+  }
+
+  Future<void> _setWindow(Duration d) async {
     setState(() => _windowDuration = d);
-    _service?.window.window = d;
+    _startRedrawTimer();
+    await _service?.setWindow(d);
   }
 
   void _onChange() {
@@ -120,7 +129,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: Text(
           _drillHostId == null
               ? 'Docker stats'
-              : 'Docker stats – ${s?.window.hostnames[_drillHostId] ?? _drillHostId}',
+              : 'Docker stats – ${s?.cache.hostnames[_drillHostId] ?? _drillHostId}',
         ),
         leading: _drillHostId == null
             ? null
@@ -128,7 +137,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () => setState(() {
                   _drillHostId = null;
-                  _hiddenAtSigns.clear();
+                  _hiddenContainers.clear();
                 }),
               ),
         actions: [
@@ -140,10 +149,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       body: SafeArea(child: _buildBody(s)),
-      bottomNavigationBar: _SyncStatusBar(
-        progress: _lastSyncProgress,
+      bottomNavigationBar: _StatusBar(
         backfilling: s?.backfilling ?? false,
-        noData: s != null && !s.backfilling && s.window.hostIds.isEmpty,
+        noData: s != null && !s.backfilling && s.cache.isEmpty,
       ),
     );
   }
@@ -160,7 +168,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (s == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    final hostIds = s.window.hostIds.toList()..sort();
+    final hostIds = s.cache.hostIds.toList()..sort();
     // Always render the chart layout — when there's no data the
     // status bar surfaces a "no data in this time window" alert.
     return _drillHostId == null
@@ -177,14 +185,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
             padding: EdgeInsets.only(right: 8),
             child: Text('Window:'),
           ),
-          SegmentedButton<Duration>(
-            showSelectedIcon: false,
-            segments: [
-              for (final opt in _windowOptions)
-                ButtonSegment(value: opt.value, label: Text(opt.label)),
-            ],
-            selected: {_windowDuration},
-            onSelectionChanged: (s) => _setWindow(s.first),
+          // Horizontal scroll defensively bounds the SegmentedButton
+          // on narrow windows — 10 segments × ~36 px ≈ 360 px is
+          // comfortable on desktop but tight on a side panel.
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SegmentedButton<Duration>(
+                showSelectedIcon: false,
+                segments: [
+                  for (final opt in _windowOptions)
+                    ButtonSegment(value: opt.value, label: Text(opt.label)),
+                ],
+                selected: {_windowDuration},
+                onSelectionChanged: (s) => _setWindow(s.first),
+              ),
+            ),
           ),
         ],
       ),
@@ -225,49 +241,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final mem = <ChartSeries>[];
     final net = <ChartSeries>[];
     final blk = <ChartSeries>[];
+    // Render-time re-bucketing: snap every sample to a bucket whose
+    // size matches the coarsest tier currently visible. That hides
+    // the per-tier density change at tier boundaries — at 7d view
+    // tier-0 5s samples get averaged into 15-min buckets just like
+    // the tier-1 / tier-2 rows already are, so the entire trace is
+    // uniform-density.
+    final bucketMs = _chartBucketMs(s.window);
+    final smoothWin = _smoothingWindow(bucketMs);
     for (final hostId in hostIds) {
-      final hostname = s.window.hostnames[hostId] ?? hostId;
+      final hostname = s.cache.hostnames[hostId] ?? hostId;
       final color = _colors.colorFor('host:$hostId');
-      final samples = s.window.samplesForHost(hostId);
-      final agg = _aggregateByMillis(samples);
+      final perContainer = s.cache.samplesForHostByContainer(hostId);
+      final bucketed = <StatSample>[];
+      for (final list in perContainer.values) {
+        bucketed.addAll(_rebucketSeries(list, bucketMs));
+      }
+      bucketed.sort((a, b) => a.millis.compareTo(b.millis));
+      final agg = _aggregateByMillis(bucketed);
       cpu.add(
         ChartSeries(
           label: hostname,
           color: color,
-          points: [for (final e in agg) (millis: e.millis, value: e.cpuPct)],
+          points: _smoothPoints([
+            for (final e in agg) (millis: e.millis, value: e.cpuPct),
+          ], smoothWin),
         ),
       );
       mem.add(
         ChartSeries(
           label: hostname,
           color: color,
-          points: [
+          points: _smoothPoints([
             for (final e in agg)
               (millis: e.millis, value: e.memUsage / (1024 * 1024)),
-          ],
+          ], smoothWin),
         ),
       );
       net.add(
         ChartSeries(
           label: hostname,
           color: color,
-          points: [
+          points: _smoothPoints([
             for (final e in agg)
               (millis: e.millis, value: (e.netRx + e.netTx) / (1024 * 1024)),
-          ],
+          ], smoothWin),
         ),
       );
       blk.add(
         ChartSeries(
           label: hostname,
           color: color,
-          points: [
+          points: _smoothPoints([
             for (final e in agg)
               (
                 millis: e.millis,
                 value: (e.blkRead + e.blkWrite) / (1024 * 1024),
               ),
-          ],
+          ], smoothWin),
         ),
       );
     }
@@ -278,31 +309,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _chartGrid([
           StatsChart(
             title: 'CPU',
-            yLabel: 'sum CPU% across atSigns',
-            window: s.window.window,
+            yLabel: 'sum CPU% across containers',
+            window: s.window,
             series: cpu,
             yFormatter: (v) => '${v.toStringAsFixed(0)}%',
           ),
           StatsChart(
             title: 'Memory',
             yLabel: 'sum memUsage (MiB)',
-            window: s.window.window,
+            window: s.window,
             series: mem,
-            yFormatter: (v) => v.toStringAsFixed(0),
+            yFormatter: _compactNumber,
           ),
           StatsChart(
             title: 'Network I/O (cumulative rx + tx)',
             yLabel: 'MiB',
-            window: s.window.window,
+            window: s.window,
             series: net,
-            yFormatter: (v) => v.toStringAsFixed(0),
+            yFormatter: _compactNumber,
           ),
           StatsChart(
             title: 'Block I/O (cumulative read + write)',
             yLabel: 'MiB',
-            window: s.window.window,
+            window: s.window,
             series: blk,
-            yFormatter: (v) => v.toStringAsFixed(0),
+            yFormatter: _compactNumber,
           ),
         ]),
       ],
@@ -331,10 +362,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   radius: 6,
                   backgroundColor: _colors.colorFor('host:$hostId'),
                 ),
-                label: Text(s.window.hostnames[hostId] ?? hostId),
+                label: Text(s.cache.hostnames[hostId] ?? hostId),
                 onPressed: () => setState(() {
                   _drillHostId = hostId;
-                  _hiddenAtSigns.clear();
+                  _hiddenContainers.clear();
                 }),
               ),
           ],
@@ -344,82 +375,95 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // -------------------------------------------------------------------------
-  // Drill view — one series per atSign on the selected host
+  // Drill view — one series per container on the selected host
 
   Widget _buildDrillView(DockerstatsService s, String hostId) {
-    final perAtSign = s.window.samplesForHostByAtSign(hostId);
-    final atSignKeys = perAtSign.keys.toList()..sort();
-    final visibleAtSignKeys = atSignKeys
-        .where((k) => !_hiddenAtSigns.contains(k))
+    final perContainer = s.cache.samplesForHostByContainer(hostId);
+    final containerIds = perContainer.keys.toList()..sort();
+    final visibleContainerIds = containerIds
+        .where((k) => !_hiddenContainers.contains(k))
         .toList();
+    // Same render-time re-bucketing as the hosts view — keeps the
+    // trace uniform-density across tier boundaries.
+    final bucketMs = _chartBucketMs(s.window);
+    final bucketedByCid = <String, List<StatSample>>{
+      for (final cid in visibleContainerIds)
+        cid: _rebucketSeries(
+          perContainer[cid] ?? const <StatSample>[],
+          bucketMs,
+        ),
+    };
 
-    ChartSeries seriesFor(String atKey, double Function(StatSample) extract) {
-      final raw = perAtSign[atKey] ?? const <StatSample>[];
+    final smoothWin = _smoothingWindow(bucketMs);
+    ChartSeries seriesFor(String cid, double Function(StatSample) extract) {
+      final raw = bucketedByCid[cid] ?? const <StatSample>[];
       return ChartSeries(
-        label: s.window.atSignsByHost[hostId]?[atKey] ?? atKey,
-        color: _colors.colorFor('atsign:$atKey'),
-        points: [for (final p in raw) (millis: p.millis, value: extract(p))],
+        label: s.cache.containerNamesByHost[hostId]?[cid] ?? cid,
+        color: _colors.colorFor('container:$cid'),
+        points: _smoothPoints([
+          for (final p in raw) (millis: p.millis, value: extract(p)),
+        ], smoothWin),
       );
     }
 
     final cpu = [
-      for (final k in visibleAtSignKeys) seriesFor(k, (s) => s.cpuPct),
+      for (final cid in visibleContainerIds) seriesFor(cid, (s) => s.cpuPct),
     ];
     final mem = [
-      for (final k in visibleAtSignKeys)
-        seriesFor(k, (s) => s.memUsage / (1024 * 1024)),
+      for (final cid in visibleContainerIds)
+        seriesFor(cid, (s) => s.memUsage / (1024 * 1024)),
     ];
     final net = [
-      for (final k in visibleAtSignKeys)
-        seriesFor(k, (s) => (s.netRx + s.netTx) / (1024 * 1024)),
+      for (final cid in visibleContainerIds)
+        seriesFor(cid, (s) => (s.netRx + s.netTx) / (1024 * 1024)),
     ];
     final blk = [
-      for (final k in visibleAtSignKeys)
-        seriesFor(k, (s) => (s.blkRead + s.blkWrite) / (1024 * 1024)),
+      for (final cid in visibleContainerIds)
+        seriesFor(cid, (s) => (s.blkRead + s.blkWrite) / (1024 * 1024)),
     ];
 
     return Column(
       children: [
         _windowSelector(),
-        _atSignFilter(s, hostId, atSignKeys),
+        _containerFilter(s, hostId, containerIds),
         _chartGrid([
           StatsChart(
             title: 'CPU',
-            yLabel: 'CPU% per atSign',
-            window: s.window.window,
+            yLabel: 'CPU% per container',
+            window: s.window,
             series: cpu,
             yFormatter: (v) => '${v.toStringAsFixed(0)}%',
           ),
           StatsChart(
             title: 'Memory',
-            yLabel: 'memUsage (MiB) per atSign',
-            window: s.window.window,
+            yLabel: 'memUsage (MiB) per container',
+            window: s.window,
             series: mem,
-            yFormatter: (v) => v.toStringAsFixed(0),
+            yFormatter: _compactNumber,
           ),
           StatsChart(
             title: 'Network I/O (cumulative rx + tx)',
-            yLabel: 'MiB per atSign',
-            window: s.window.window,
+            yLabel: 'MiB per container',
+            window: s.window,
             series: net,
-            yFormatter: (v) => v.toStringAsFixed(0),
+            yFormatter: _compactNumber,
           ),
           StatsChart(
             title: 'Block I/O (cumulative read + write)',
-            yLabel: 'MiB per atSign',
-            window: s.window.window,
+            yLabel: 'MiB per container',
+            window: s.window,
             series: blk,
-            yFormatter: (v) => v.toStringAsFixed(0),
+            yFormatter: _compactNumber,
           ),
         ]),
       ],
     );
   }
 
-  Widget _atSignFilter(
+  Widget _containerFilter(
     DockerstatsService s,
     String hostId,
-    List<String> atSignKeys,
+    List<String> containerIds,
   ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -431,21 +475,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 6),
-              child: Text('atSigns: '),
+              child: Text('containers: '),
             ),
-            for (final atKey in atSignKeys)
+            for (final cid in containerIds)
               FilterChip(
                 avatar: CircleAvatar(
                   radius: 6,
-                  backgroundColor: _colors.colorFor('atsign:$atKey'),
+                  backgroundColor: _colors.colorFor('container:$cid'),
                 ),
-                label: Text(s.window.atSignsByHost[hostId]?[atKey] ?? atKey),
-                selected: !_hiddenAtSigns.contains(atKey),
+                label: Text(s.cache.containerNamesByHost[hostId]?[cid] ?? cid),
+                selected: !_hiddenContainers.contains(cid),
                 onSelected: (selected) => setState(() {
                   if (selected) {
-                    _hiddenAtSigns.remove(atKey);
+                    _hiddenContainers.remove(cid);
                   } else {
-                    _hiddenAtSigns.add(atKey);
+                    _hiddenContainers.add(cid);
                   }
                 }),
               ),
@@ -458,7 +502,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // -------------------------------------------------------------------------
   // Aggregation helper — bucket samples on identical timestamps and sum
   // the relevant fields. Within a single publishing cycle the publisher
-  // writes the same `millis` for every atSign on a host, so a flat
+  // writes the same `millis` for every container on a host, so a flat
   // millis-equality bucketing is enough.
 
   List<_HostAgg> _aggregateByMillis(List<StatSample> samples) {
@@ -489,64 +533,201 @@ class _HostAgg {
   _HostAgg({required this.millis});
 }
 
-/// Trivial adapter so we can register a closure as a SyncProgressListener
-/// without having to define a full subclass at every call site.
-class _ProgressForwarder implements SyncProgressListener {
-  final void Function(SyncProgress) _onEvent;
-  _ProgressForwarder(this._onEvent);
-  @override
-  void onSyncProgressEvent(SyncProgress progress) => _onEvent(progress);
+/// Compact y-axis formatter for byte-quantity-derived numbers. The
+/// chart pre-scales raw bytes to MiB before display, but cumulative
+/// counters (`netRx`/`netTx`/`blkRead`/`blkWrite`) accumulate without
+/// bound — across a year a single container can produce values in
+/// the millions or billions of MiB — and a 9-digit literal will not
+/// fit in a y-tick slot at any reasonable chart width. Use SI-style
+/// suffixes (k/M/G/T) so every tick fits in ~5 characters.
+String _compactNumber(double v) {
+  final abs = v.abs();
+  if (abs >= 1e12) return '${(v / 1e12).toStringAsFixed(1)}T';
+  if (abs >= 1e9) return '${(v / 1e9).toStringAsFixed(1)}G';
+  if (abs >= 1e6) return '${(v / 1e6).toStringAsFixed(1)}M';
+  if (abs >= 1e3) return '${(v / 1e3).toStringAsFixed(1)}k';
+  return v.toStringAsFixed(0);
 }
 
-/// Persistent footer that reflects sync state and any "no data"
-/// alert. Top row: amber spinner + commit-ids when local is behind
-/// server; green tick + "in sync" otherwise. Optional bottom row:
-/// warning triangle + "no data in this time window" hint, only when
-/// the rolling window is empty.
-class _SyncStatusBar extends StatelessWidget {
-  final SyncProgress? progress;
-  final bool noData;
-  final bool backfilling;
-  const _SyncStatusBar({
-    required this.progress,
-    required this.noData,
-    required this.backfilling,
-  });
-
-  bool get _isBehind {
-    final p = progress;
-    if (p == null) return false;
-    final local = p.localCommitId;
-    final server = p.serverCommitId;
-    if (local == null || server == null) return false;
-    return local < server;
+/// Pick the render-time bucket size for a given display window so
+/// the chart shows uniform-density data across all visible tiers.
+/// Returns the bucket size of the coarsest tier whose retention
+/// boundary falls within the window (so eg the 7d window includes
+/// up-to-tier-2 data and we re-bucket finer rows to 15-min).
+int _chartBucketMs(Duration window) {
+  const tier0 = Duration(seconds: 5);
+  const tier1 = Duration(minutes: 1);
+  const tier2 = Duration(minutes: 15);
+  const tier3 = Duration(hours: 1);
+  const tier4 = Duration(hours: 8);
+  if (window == Duration.zero) return tier4.inMilliseconds;
+  final ms = window.inMilliseconds;
+  if (ms <= const Duration(hours: 6).inMilliseconds) {
+    return tier0.inMilliseconds;
   }
+  if (ms <= const Duration(hours: 72).inMilliseconds) {
+    return tier1.inMilliseconds;
+  }
+  if (ms <= const Duration(days: 45).inMilliseconds) {
+    return tier2.inMilliseconds;
+  }
+  if (ms <= const Duration(days: 180).inMilliseconds) {
+    return tier3.inMilliseconds;
+  }
+  return tier4.inMilliseconds;
+}
+
+/// Pick a moving-average smoothing window for chart series, sized
+/// against the render bucket. Re-bucketing alone matches the
+/// coarsest visible tier's bucket SIZE but doesn't change how many
+/// underlying samples each visible bucket aggregates: a tier-4 row
+/// holds the integrated mean of 8 h of source samples, but if the
+/// upstream source only contributed one sample per tier-4 bucket
+/// (e.g. legacy seed data), no averaging happens at render. A small
+/// moving average over neighbouring buckets masks the residual.
+/// For tier-0-only windows (5 m – 5 h) we leave it at 1 so live
+/// updates aren't temporally smeared.
+int _smoothingWindow(int bucketMs) {
+  if (bucketMs <= Duration(seconds: 5).inMilliseconds) return 1;
+  return 9;
+}
+
+/// Centred moving average over a series of `(millis, value)` points.
+/// Output preserves the input length and `millis` values; only
+/// `value` is smoothed. Window is automatically truncated at the
+/// series edges so the first and last points still get emitted with
+/// an asymmetric mean of their neighbours rather than dropped.
+List<({int millis, double value})> _smoothPoints(
+  List<({int millis, double value})> points,
+  int windowSize,
+) {
+  if (points.length < 2 || windowSize <= 1) return points;
+  final half = windowSize ~/ 2;
+  final out = <({int millis, double value})>[];
+  for (var i = 0; i < points.length; i++) {
+    final lo = (i - half) < 0 ? 0 : (i - half);
+    final hi = (i + half + 1) > points.length ? points.length : (i + half + 1);
+    var sum = 0.0;
+    for (var j = lo; j < hi; j++) {
+      sum += points[j].value;
+    }
+    out.add((millis: points[i].millis, value: sum / (hi - lo)));
+  }
+  return out;
+}
+
+/// Group [samples] into uniform [bucketMs] buckets per container.
+/// Aggregation mirrors the SQLite roller's semantics: weighted-mean
+/// for rates (cpu/mem), last-in-bucket for cumulative counters
+/// (net/blk), max for monotonic event counts (restartCount). The
+/// returned samples carry the bucket-start millis so the resulting
+/// trace lines up neighbour-to-neighbour without phase ripples at
+/// tier boundaries.
+///
+/// Caller passes a single container's samples — bucketing across
+/// containers would lose per-container identity and would conflict
+/// with the chart's downstream cross-container summation.
+List<StatSample> _rebucketSeries(List<StatSample> samples, int bucketMs) {
+  if (samples.isEmpty || bucketMs <= 0) return samples;
+  final byBucket = <int, _BucketAcc>{};
+  for (final s in samples) {
+    final b = (s.millis ~/ bucketMs) * bucketMs;
+    final cur = byBucket.putIfAbsent(b, () => _BucketAcc(b, s));
+    cur.absorb(s);
+  }
+  final out = byBucket.values.map((a) => a.toSample()).toList()
+    ..sort((a, b) => a.millis.compareTo(b.millis));
+  return out;
+}
+
+class _BucketAcc {
+  final int bucketStart;
+  final StatSample template;
+  int n = 0;
+  double cpuSum = 0;
+  int memSum = 0;
+  double memPctSum = 0;
+  int pidsSum = 0;
+  int maxRestart = 0;
+  int lastMillis = -1;
+  int lastNetRx = 0;
+  int lastNetTx = 0;
+  int lastBlkRead = 0;
+  int lastBlkWrite = 0;
+
+  _BucketAcc(this.bucketStart, this.template);
+
+  void absorb(StatSample s) {
+    n += 1;
+    cpuSum += s.cpuPct;
+    memSum += s.memUsage;
+    memPctSum += s.memPct;
+    pidsSum += s.pidsCount;
+    if (s.restartCount > maxRestart) maxRestart = s.restartCount;
+    if (s.millis > lastMillis) {
+      lastMillis = s.millis;
+      lastNetRx = s.netRx;
+      lastNetTx = s.netTx;
+      lastBlkRead = s.blkRead;
+      lastBlkWrite = s.blkWrite;
+    }
+  }
+
+  StatSample toSample() => StatSample(
+    atSign: template.atSign,
+    hostname: template.hostname,
+    containerId: template.containerId,
+    containerName: template.containerName,
+    image: template.image,
+    restartCount: maxRestart,
+    pidsCount: n == 0 ? template.pidsCount : pidsSum ~/ n,
+    cpuPct: n == 0 ? 0 : cpuSum / n,
+    memUsage: n == 0 ? 0 : memSum ~/ n,
+    memLimit: template.memLimit,
+    memPct: n == 0 ? 0 : memPctSum / n,
+    netRx: lastNetRx,
+    netTx: lastNetTx,
+    blkRead: lastBlkRead,
+    blkWrite: lastBlkWrite,
+    millis: bucketStart,
+  );
+}
+
+/// Persistent footer. Two optional rows:
+///   - spinner + "loading historical samples from local store…"
+///     while the SQLite query is running on startup or after a
+///     window-selector change;
+///   - warning triangle + "no data in this time window…" hint
+///     when the cache is empty post-load.
+/// Sync state is no longer surfaced — the dockerstats receiver
+/// doesn't use AtCollection (and hence the sync queue) any more;
+/// every sample arrives as a single notification.
+class _StatusBar extends StatelessWidget {
+  final bool backfilling;
+  final bool noData;
+  const _StatusBar({required this.backfilling, required this.noData});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final p = progress;
-    final local = p?.localCommitId?.toString() ?? '–';
-    final server = p?.serverCommitId?.toString() ?? '–';
-    final pending = p?.pendingPushCount;
-
-    final Widget icon;
-    final String label;
-    final Color color;
-    if (_isBehind) {
-      color = Colors.amber.shade700;
-      icon = SizedBox(
-        width: 14,
-        height: 14,
-        child: CircularProgressIndicator(strokeWidth: 2, color: color),
+    if (!backfilling && !noData) {
+      // Reserve a single thin row so the bottom-nav slot has a
+      // stable height; otherwise toggling the alerts on/off jumps
+      // the chart grid vertically.
+      return Material(
+        color: theme.colorScheme.surfaceContainerHighest,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            children: [
+              Icon(Icons.check_circle, size: 16, color: Colors.green.shade700),
+              const SizedBox(width: 8),
+              Text('ready', style: theme.textTheme.bodySmall),
+            ],
+          ),
+        ),
       );
-      label = 'syncing';
-    } else {
-      color = Colors.green.shade700;
-      icon = Icon(Icons.check_circle, size: 16, color: color);
-      label = 'in sync';
     }
-
     return Material(
       color: theme.colorScheme.surfaceContainerHighest,
       child: Padding(
@@ -555,24 +736,7 @@ class _SyncStatusBar extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              children: [
-                icon,
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: theme.textTheme.bodySmall?.copyWith(color: color),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  'local $local · server $server'
-                  '${pending != null && pending > 0 ? ' · pending push $pending' : ''}',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ],
-            ),
-            if (backfilling) ...[
-              const SizedBox(height: 4),
+            if (backfilling)
               Row(
                 children: [
                   SizedBox(
@@ -590,9 +754,8 @@ class _SyncStatusBar extends StatelessWidget {
                   ),
                 ],
               ),
-            ],
             if (noData) ...[
-              const SizedBox(height: 4),
+              if (backfilling) const SizedBox(height: 4),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
