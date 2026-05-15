@@ -72,20 +72,23 @@ relational database**. The publisher (a [Dart CLI](../at_client/example/README.m
 emits one `docker stats` sample per container per cycle as a
 single `notificationService.send(...)` — no AtCollection, no
 keystore writes, no sync queue. The Flutter dashboard subscribes,
-persists each sample to a per-atSign **SQLite** database with a
-**five-tier roll-up** for bounded storage and uniform chart
-resolution across zoom levels, and renders charts off that local
-store with a user-selectable window (5 m → all).
+persists every sample as-received to a per-atSign **SQLite**
+database (no roll-up, no compaction at rest), and renders charts
+off that local store with a user-selectable window (5 m → all).
+Each window change runs one SQL `GROUP BY` query sized to the
+chart's pixel budget, so even an "all" view over years of raw
+data stays responsive; live notifications fold into the visible
+buckets incrementally.
 
 It exists to demonstrate the trade-off explicitly: mis-applying
 `AtCollection<T>` to a high-frequency observation stream — where
-downsampling, roll-up, and retention tiering are the dominant
-design concerns — would be wrong. `AtCollection<T>` is for typed
-shared *datasets* (the `todos` example above); notifications +
-local DB is for *streams* of observations.
+query / aggregation / windowing is the dominant design concern —
+would be wrong. `AtCollection<T>` is for typed shared *datasets*
+(the `todos` example above); notifications + local DB is for
+*streams* of observations.
 
-Full design, roll-up table and rationale, aggregation semantics,
-and the seed-DB workflow for cross-tier chart development are in
+Full design, query-time aggregation semantics, and the seed-DB
+workflow for cross-window chart development are in
 [`examples/dockerstats/README.md`](examples/dockerstats/README.md).
 
 ## Post-authentication initialization

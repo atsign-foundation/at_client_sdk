@@ -72,7 +72,15 @@ class ChartSeries {
 class StatsChart extends StatelessWidget {
   final String title;
   final String yLabel;
-  final Duration window;
+
+  /// Left edge of the chart in epoch ms (inclusive).
+  final int xMinMs;
+
+  /// Right edge of the chart in epoch ms (typically `now` when the
+  /// dashboard is in live mode, an older fixed timestamp when
+  /// historical).
+  final int xMaxMs;
+
   final List<ChartSeries> series;
   final String Function(double) yFormatter;
 
@@ -80,7 +88,8 @@ class StatsChart extends StatelessWidget {
     super.key,
     required this.title,
     required this.yLabel,
-    required this.window,
+    required this.xMinMs,
+    required this.xMaxMs,
     required this.series,
     required this.yFormatter,
   });
@@ -88,28 +97,9 @@ class StatsChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final nowMs = DateTime.now().millisecondsSinceEpoch.toDouble();
-    final double xMin;
-    if (window == Duration.zero) {
-      // "All" mode: fit to data. Find the earliest sample millis
-      // across every series; fall back to `now - 5 min` when the
-      // chart has no data so the axes still render sensibly.
-      double earliest = double.infinity;
-      for (final s in series) {
-        for (final p in s.points) {
-          if (p.millis < earliest) earliest = p.millis.toDouble();
-        }
-      }
-      xMin = earliest.isFinite
-          ? earliest
-          : nowMs - const Duration(minutes: 5).inMilliseconds;
-    } else {
-      xMin = nowMs - window.inMilliseconds;
-    }
-    // Effective window — what the tick interval and label format
-    // should size against. For fixed windows this equals `window`;
-    // for `all` it equals the data range.
-    final effectiveWindowMs = (nowMs - xMin).clamp(1, double.infinity);
+    final xMin = xMinMs.toDouble();
+    final xMax = xMaxMs.toDouble();
+    final effectiveWindowMs = (xMax - xMin).clamp(1, double.infinity);
 
     double rawMax = 0;
     for (final s in series) {
@@ -209,7 +199,7 @@ class StatsChart extends StatelessWidget {
                     duration: Duration.zero,
                     LineChartData(
                       minX: xMin,
-                      maxX: nowMs,
+                      maxX: xMax,
                       minY: 0,
                       maxY: yMax,
                       lineBarsData: lines,
@@ -276,7 +266,7 @@ class StatsChart extends StatelessWidget {
                               // label can't overlap the next one
                               // entering view as the x-axis scrolls.
                               final guard = xInterval / 3;
-                              if (v < xMin + guard || v > nowMs - guard) {
+                              if (v < xMin + guard || v > xMax - guard) {
                                 return const SizedBox.shrink();
                               }
                               return Text(

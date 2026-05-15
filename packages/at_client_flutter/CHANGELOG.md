@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 1.1.2-rc.1
+
+- build(deps): use at_client 3.12.0-rc.1
+- docs(examples): improved READMEs, added dockerstats flutter app
+
 ## 1.1.1
 
 - refactor: updated example app deprecated methods.

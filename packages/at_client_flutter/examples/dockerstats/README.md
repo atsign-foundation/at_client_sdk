@@ -2,10 +2,16 @@
 
 A multi-platform (macOS / Linux / Windows / Android / iOS) Flutter
 app that subscribes to live docker-container stats over the Atsign
-Protocol, persists each sample to an on-device SQLite database
-under a multi-tier roll-up, and renders four time-series charts
-(CPU, Memory, Network I/O, Block I/O) over a user-selectable
-window (5 m → all).
+Protocol, persists every sample to an on-device SQLite database
+under a **five-tier incremental roll-up** (tier 0 raw, then 1 min /
+15 min / 1 h / 8 h aggregates, all maintained on insert), and
+renders four time-series charts (CPU, Memory, Network I/O, Block
+I/O). The visible time window is a fully dynamic zoomable /
+scrollable range — pick a span from 5 minutes to the full data
+extent and drag through history, or jump to a preset (1h / 1d /
+1m / 1y / all). Charts read **one tier per query** at the
+resolution the visible window needs, so a year-of-data view
+renders in milliseconds.
 
 This is the **canonical worked example** of an SDK pattern that
 isn't enforced by the API but is the right shape for a class of
@@ -59,7 +65,18 @@ publisher CLI ── notificationService.send ──▶ recipient atServer
                               Flutter dashboard subscribes
                                        │
                                        ▼
-                        on-device SQLite (5-tier roll-up)
+       on-device SQLite — single `tiered_samples` table with a
+       `granularity` column (0=raw, 1=1min, 2=15min, 3=1h, 4=8h).
+       Each notification triggers ONE transaction:
+         · INSERT OR IGNORE the raw row at tier 0;
+         · UPSERT the bucket containing it at tiers 1..4
+           (sums += values, count += 1, last-in-bucket
+            preserved for cumulative counters).
+                                       │
+                                       ▼
+       read path picks ONE tier whose source bucket ≤ chart's
+       pixel-budget bucket size, optionally GROUP BY further in
+       SQL to match the budget exactly
                                        │
                                        ▼
                                 charts (fl_chart)
@@ -76,97 +93,102 @@ notification body = jsonEncode(sample.toJson())
 ```
 
 The dashboard subscribes once with a regex anchored on its own
-atSign, decodes each body into a `StatSample`, and writes it to
-the local SQLite store. Charts render off the local store; the
-display-window selector controls how far back to query, not what
-to fetch from the network (every sample is already on-device).
+atSign, decodes each body into a `StatSample`, and feeds it into
+the storage layer (which writes raw + maintains tier rollups in
+one transaction — see "Storage" below).
 
-## Roll-up: balancing storage size against chart usability
+## Storage: tiered, sums + count
 
-The SQLite layer implements a **five-tier roll-up** that compacts
-older raw samples into progressively coarser averages. Each tier
-has a bucket size (the time window samples are averaged over) and
-a retention duration (how long rows live at that bucket size before
-being rolled into the next coarser tier).
+The SQLite schema is a single `tiered_samples` table, primary key
+`(granularity, at_sign, hostname, container_id, millis)`, with
+each row representing one bucket at one tier:
 
-| tier | bucket  | retention before roll-up | rows / container, steady state |
-|------|---------|--------------------------|-------------------------------:|
-| 0 (raw) | 5 s     | last 6 h                 | ~4320 |
-| 1       | 1 min   | 6 h – 72 h               | ~3960 |
-| 2       | 15 min  | 72 h – 45 d              | ~4320 |
-| 3       | 1 hour  | 45 d – 6 mo              | ~4320 |
-| 4       | 8 hours | 6 mo onwards, indefinite | ~1095 / year |
+| tier | bucket    | source values held                                      | retention            |
+|------|-----------|---------------------------------------------------------|----------------------|
+| 0    | raw       | one row per raw notification, `sample_count = 1`        | last 90 days only    |
+| 1    | 1 min     | running sums + count of raw rows in the minute         | forever              |
+| 2    | 15 min    | running sums + count of raw rows in the bucket         | forever              |
+| 3    | 1 hour    | running sums + count of raw rows in the bucket         | forever              |
+| 4    | 8 hours   | running sums + count of raw rows in the bucket         | forever              |
 
-Tier boundaries are chosen so that **every tier holds approximately
-the same number of rows per container** in steady state (within
-±1.5 % at the default 5 s publishing rate) — each boundary scales
-both the bucket size and the retention by the same factor (12× /
-15× / 4× / 8×). Two consequences:
+The aggregated tiers store **running sums and a count** rather
+than pre-computed averages. The read query both:
 
-- **Storage stays bounded.** A year of raw 5 s samples is ~6.3 M
-  rows per container; rolled up under this scheme it's ~16 k.
-  Roughly 400× compression with no information loss at the
-  resolution the chart can actually render.
-- **Chart fidelity stays consistent across zoom levels.** At any
-  selected window the chart's x-axis fits a few hundred to a few
-  thousand pixels, and the rolled-up bucket size at each tier is
-  the same order of magnitude as the per-pixel time span:
-  - 5 m – 5 h window → tier 0 (5 s buckets, ~1 sample / px).
-  - 1 d – 7 d window → tier 0 + 1 + 2 (1-min / 15-min on the
-    older side).
-  - 1 mo – 6 mo window → tier 2 + 3 (15-min / 1-hour).
-  - 2 y – all → all tiers; tier 4 8-hour buckets on the oldest
-    end.
+  - emits the right average per row (`cpu_sum / sample_count`);
+    and
+  - aggregates FURTHER across multiple tier rows when the
+    dashboard's pixel-budget bucket is larger than the source
+    tier's bucket (`SUM(cpu_sum) / SUM(sample_count)` — a correct
+    weighted mean, unlike `AVG(cpu_avg)` which would be an
+    unweighted mean of means).
 
-  So the resolution roll-up drops is resolution the chart couldn't
-  show anyway.
+Cumulative monotonic counters (`net_rx`, `net_tx`, `blk_read`,
+`blk_write`) are stored as the **last value in the bucket**.
+Monotonic event counters (`restart_count`) keep the max.
 
-### Render-time re-bucketing
+Writes are **synchronous on insert**: one transaction per
+notification containing a tier-0 `INSERT OR IGNORE` plus four
+tier-1..4 UPSERTs. `INSERT OR IGNORE` makes the whole transaction
+idempotent on `(at_sign, hostname, container_id, millis)` — a
+re-delivered notification doesn't double-count any tier.
 
-To hide the *visual* phase change as the chart crosses a tier
-boundary (a denser tier-0 trace meeting the sparser tier-2 trace
-would otherwise show a step in apparent sampling rate), the
-dashboard does a second, render-time re-bucketing: every visible
-sample is snapped to a bucket whose size matches the coarsest tier
-in the selected window. Picking the 7-day window, for example,
-re-buckets the on-device tier-0 5-second samples into 15-minute
-buckets at render time so the whole trace is uniform-density.
+**Tier-0 retention.** Tier 0 (raw) is kept for the last 90 days
+only; older raw rows are swept once a day. Aggregated tiers 1–4
+are kept indefinitely, and because they're maintained incrementally
+during each bucket's lifetime, dropping older raw rows doesn't lose
+any chart fidelity — the aggregated tiers carry every metric the
+dashboard reads at all but the very newest windows. At the
+publisher's default 5 s cadence that caps disk growth to ~3 GB
+per container per 90 days for raw plus a few hundred MiB per
+container per year for the aggregated tiers.
 
-The render-time helpers live in
-[`lib/screens/dashboard.dart`](lib/screens/dashboard.dart)
-(`_chartBucketMs` / `_rebucketSeries`).
+## Read path: pick a tier per window
 
-### Aggregation semantics
+For each visible time range the dashboard picks **one tier** whose
+natural bucket is ≤ the chart's pixel-budget bucket (~1000
+buckets per series). When the visible span / 1000 lands between
+two tier sizes, the query reads the coarser tier and runs one
+additional SQL `GROUP BY` to combine multiple tier rows into
+chart-budget buckets.
 
-Per-bucket aggregation is per-field — picked to preserve **meaning**
-across roll-up boundaries, not just produce a numerically plausible
-average:
+Indicative behaviour for a year of 5 s data (38 M tier-0 rows,
+~9 % more across tiers 1–4):
 
-| field                              | aggregation across a bucket                              |
-|------------------------------------|----------------------------------------------------------|
-| `cpu_pct`, `mem_usage`, `mem_pct`  | **weighted mean** (by `sample_count` of the source row)  |
-| `net_rx`, `net_tx`, `blk_read`, `blk_write` | **last-in-bucket** (cumulative counters — consumers diff neighbouring buckets to recover a rate) |
-| `restart_count`                    | **max** (monotonic event count)                          |
-| `sample_count` (synthetic column)  | **sum** (records how many raw samples a row represents)  |
+| visible span      | chosen tier | source rows scanned | chart-budget bucket  | query time  |
+|-------------------|-------------|--------------------:|----------------------|------------:|
+| 5 min – 1 h       | 0 (raw)     | ≤ 4,000             | 5 s                  | < 5 ms      |
+| 5 h               | 0           | ~21,000             | ~18 s                | ~15 ms      |
+| 1 d               | 1 (1 min)   | ~8,600              | ~1.4 min             | < 10 ms     |
+| 7 d               | 1           | ~60,000             | ~10 min              | ~40 ms      |
+| 1 mo              | 2 (15 min)  | ~17,000             | ~43 min              | ~10 ms      |
+| 6 mo              | 3 (1 h)     | ~26,000             | ~4.3 h               | ~15 ms      |
+| 1 y, 2 y, all     | 4 (8 h)     | ~6,600              | ~8.8 h               | < 10 ms     |
 
-The `sample_count` column is the lever that keeps weighted means
-correct across cascading roll-up passes — when a tier-2 row gets
-rolled into a tier-3 bucket it still carries the count of the
-underlying raw samples it represents, so a tier-2 row that
-absorbed 900 raw samples weights its average accordingly against
-a tier-2 row that only absorbed 60.
+Every window comes in well under the human "instant" threshold
+because no query ever scans more than a few tens of thousands of
+rows, regardless of how dense the underlying raw data is. There's
+no rendering or visual seam at the tier boundary — the dashboard
+reads a single tier per query.
 
-The algorithm is in
-[`lib/services/roller.dart`](lib/services/roller.dart); unit
-tests in [`test/roller_test.dart`](test/roller_test.dart) cover
-the boundary firing, aggregation math, and the cascade behaviour
-where a single roll-up call moves a stale sample from tier 0 all
-the way through to tier 4.
+## Incremental live updates
 
-Roll-up itself runs as a `Timer.periodic` job (catch-up pass at
-service init, then hourly); each pass processes everything that
-has aged past its tier boundary and migrates it into the next
-coarser tier under a single atomic SQLite transaction.
+Each new notification:
+
+  1. is `INSERT`ed at tier 0 and rolled into tiers 1–4 in one
+     transaction (the synchronous write path described above);
+  2. is also folded into the in-memory
+     [`WindowCache`](lib/services/window_cache.dart) — when the
+     sample falls inside the currently visible range, the cache
+     merges it into the existing accumulator for its bucket. The
+     chart's latest-bucket value updates smoothly as new samples
+     fold in. Samples outside the current visible range are
+     dropped from the live-update path (they're already in the
+     DB and surface on the next range change).
+
+There's no DB re-query per notification. The SQL aggregation only
+runs on a range change. At the publisher default 5 s cadence × 6
+containers that's ~1 cache merge / second per notification —
+nothing.
 
 ## Why notifications, not AtCollection
 
@@ -181,7 +203,7 @@ sample across the network.
 | What it's optimized for       | typed shared *dataset* (todos, contacts, documents)     | *stream* of high-frequency observations            |
 | Where authoritative data sits | atServer (per-record), sync mirrors to every viewer     | publisher chooses retention; each subscriber has its own local store |
 | Per-record server cost        | one keystore entry + sync per write                     | one notification, dropped after `ttln`             |
-| Per-record client storage     | follows server; sync queue maintains it                 | application chooses (here: tiered roll-up)         |
+| Per-record client storage     | follows server; sync queue maintains it                 | application chooses (here: raw kept 90 d, tier-rollups kept forever) |
 | Filter / aggregate over time  | scan local copy of dataset                              | SQL over the local store                           |
 | When samples are lost         | doesn't happen — sync recovers                          | publisher-offline ≤ `ttln`: delivered; > `ttln`: gone, next sample flows |
 
@@ -189,13 +211,46 @@ sample across the network.
 end-to-end-encrypted shared *dataset* (todos, contacts, documents)
 — a tree of records each side reads, queries, and writes against.
 It is the wrong tool when you want a *stream* of high-frequency
-observations whose long-term storage layout (downsampling, roll-up,
-retention tiering) is the dominant design concern. dockerstats
-picks the right tool for each half of that pipeline.
+observations whose query / aggregation / windowing is the dominant
+design concern. dockerstats picks the right tool for each half of
+that pipeline.
 
 The CLI sibling [`todos`](../todos/README.md) example shows the
 *other* side of this trade-off in the same monorepo — a typed,
 shared, real-time dataset rendered through the AtCollection API.
+
+## Dashboard controls: visible time range
+
+The visible time range is a freely scrollable, freely zoomable
+window. The toolbar above the chart grid carries (left to right):
+
+- ⏪ / ◀ — pan left by one full span / by half a span.
+- − / + — zoom out / in by 2×, **centred on the current view's
+  midpoint**.
+- ▶ / ⏩ — pan right by half / one full span.
+- A readout — either `"Past 1h (live)"` when the right edge is
+  pinned to `now`, or `"<from> → <to> (<span> ending <relative>
+  ago)"` when scrolled to a historical window.
+- Preset chips: **1h · 1d · 1m · 1y · all**. Tapping one jumps to
+  a live range of that span; `all` zooms out to the full data
+  extent.
+- A **LIVE** badge — **bright blue when live, dimmed when
+  historical** — also a button to snap back to live without
+  losing the current span.
+- A **Fit** button — zooms the range to cover all data and pins
+  live.
+
+The 2×2 chart grid also accepts **mouse-wheel zoom** (cursor-
+anchored — the time point under the pointer stays fixed across
+zoom) and **click-drag pan** (drag right to reveal older data,
+drag left to advance toward `now`). Both gestures share the same
+"snap to live when past `now`, clamp at earliest sample on the
+left" rules as the toolbar buttons.
+
+The minimum visible span is 5 minutes; the maximum is the full
+data extent. Zooming out beyond available data does nothing
+(no extrapolation past `earliestMs`); zooming in past 5 min stops
+at 5 min.
 
 ## Running
 
@@ -236,11 +291,11 @@ The launch screen offers the same onboarding paths as the
 file. After login the four-chart dashboard appears; samples start
 filling in as the publisher cycle ticks.
 
-### Seeding the DB for cross-tier chart development
+### Seeding the DB for cross-window chart development
 
 To see what the dashboard looks like with realistic data across
-every roll-up tier without waiting for actual roll-ups to elapse,
-use the seed-DB tool:
+all the window selectors without waiting for a real publisher to
+emit samples for hours / days / months, use the seed-DB tool:
 
 ```sh
 cd packages/at_client_flutter/examples/dockerstats
@@ -253,21 +308,32 @@ flutter run -d macos -t lib/main_smoke.dart \
 # 2. Find the DB file the app created.
 DB="$(find ~/Library -name '_<your-atSign>.db' 2>/dev/null | head -1)"
 
-# 3. Seed a year of synthetic cross-tier data (~96 k rows).
-dart run tool/seed_db.dart --db-path "$DB" --span 1y \
-  --containers 6 --clear-first
+# 3. Seed 90 days of synthetic samples at 30s spacing
+#    (~260k tier-0 rows / container × 6 = ~1.5M raw rows,
+#    plus tiers 1–4 populated by cascading SQL GROUP BY).
+dart run tool/seed_db.dart --db-path "$DB" \
+  --span 90d --rate 30s --containers 6 --clear-first
 
-# 4. Re-launch and step through the window selector
-#    (5m → 15m → 1h → 5h → 1d → 7d → 1m → 6m → 2y → all).
-#    Each window pulls from a different tier mix.
+# 4. Re-launch and exercise the zoom / pan controls. Every
+#    visible window reads from one tier — no rendering pause
+#    even at "all" over a full year of 5s data.
 flutter run -d macos -t lib/main_smoke.dart \
   --dart-define=DOCKERSTATS_SMOKE_ATSIGN=@<your-atSign>
 ```
 
-See the tool's own `--help` for the full set of flags
-(`--run-rollup` triggers `Roller.rollUpAll()` after seeding,
-useful as a no-op smoke test of the roll-up code path; the seed
-samples are already pre-aligned to each tier's bucket size).
+The seed tool writes tier-0 rows at the publisher cadence you
+choose, then post-aggregates tiers 1–4 via cascading SQL
+`GROUP BY` — each tier built from the one immediately below.
+Output is indistinguishable from a DB populated by a live
+publisher running for the same span.
+
+To stress-test the worst-case ("all" over a year of 5 s data,
+~38 M raw rows), pass `--rate 5s --span 1y`. The raw seed takes
+several minutes; the aggregated tiers add ~1 minute total. The
+benchmark tool [`tool/bench_queries.dart`](tool/bench_queries.dart)
+times each window's query against the resulting DB and is what
+produced the per-window numbers in [Read path: pick a tier per
+window](#read-path-pick-a-tier-per-window) above.
 
 ## Source tour
 
@@ -277,15 +343,15 @@ samples are already pre-aligned to each tier's bucket size).
 | [`lib/main_smoke.dart`](lib/main_smoke.dart)                                                  | Headless main for the seed-DB workflow — bypasses onboarding                  |
 | [`lib/onboarding.dart`](lib/onboarding.dart)                                                  | Keychain + .atKeys file login flows; AtClient construction                    |
 | [`lib/models/stats_models.dart`](lib/models/stats_models.dart)                                | `StatSample` and friends — mirror of the publisher's domain types             |
-| [`lib/services/dockerstats_service.dart`](lib/services/dockerstats_service.dart)              | Notification subscribe + DB write + roll-up scheduler + window cache          |
-| [`lib/services/samples_db.dart`](lib/services/samples_db.dart)                                | SQLite schema, per-atSign DB path, raw insert / query helpers                 |
-| [`lib/services/roller.dart`](lib/services/roller.dart)                                        | The five-tier roll-up algorithm — pure-Dart, takes a raw `Database`           |
-| [`lib/services/window_cache.dart`](lib/services/window_cache.dart)                            | In-memory `ChangeNotifier` over the current window's samples; chart data source |
+| [`lib/models/visible_range.dart`](lib/models/visible_range.dart)                              | `VisibleRange` value class + pure-function transformations (zoom / pan / live / fit) |
+| [`lib/services/dockerstats_service.dart`](lib/services/dockerstats_service.dart)              | Notification subscribe + DB write + tier pick + cache management              |
+| [`lib/services/samples_db.dart`](lib/services/samples_db.dart)                                | `tiered_samples` schema, transactional insert + UPSERT, range-aware query     |
+| [`lib/services/window_cache.dart`](lib/services/window_cache.dart)                            | In-memory `ChangeNotifier` over the current range; bucket accumulators        |
 | [`lib/services/atsign_colors.dart`](lib/services/atsign_colors.dart)                          | Stable per-atSign / per-host / per-container colour assignment                |
-| [`lib/screens/dashboard.dart`](lib/screens/dashboard.dart)                                    | Two-mode dashboard (hosts view, drill-down view); render-time re-bucketing    |
-| [`lib/widgets/stats_chart.dart`](lib/widgets/stats_chart.dart)                                | One `fl_chart` time-series chart; gap-break + downsample + adaptive ticks     |
-| [`test/roller_test.dart`](test/roller_test.dart)                                              | Tier transitions, aggregation math, multi-tier cascade                        |
-| [`tool/seed_db.dart`](tool/seed_db.dart)                                                      | Synthetic year-of-data seeder for cross-tier chart development                |
+| [`lib/screens/dashboard.dart`](lib/screens/dashboard.dart)                                    | Two-mode dashboard, range control bar, wheel-zoom + drag-pan gestures         |
+| [`lib/widgets/stats_chart.dart`](lib/widgets/stats_chart.dart)                                | One `fl_chart` time-series chart; gap-break + adaptive ticks                  |
+| [`tool/seed_db.dart`](tool/seed_db.dart)                                                      | Synthetic-data seeder: tier-0 raw write + cascading tier-1..4 roll-up         |
+| [`tool/bench_queries.dart`](tool/bench_queries.dart)                                          | Per-window SQL-query timing harness against a seeded DB                       |
 
 ## Tests
 
@@ -293,11 +359,7 @@ samples are already pre-aligned to each tier's bucket size).
 flutter test --concurrency=1
 ```
 
-The roll-up algorithm is covered by pure-Dart unit tests in
-[`test/roller_test.dart`](test/roller_test.dart) and uses
-`sqflite_common_ffi`'s in-memory database (`inMemoryDatabasePath`)
-so the tests run without touching disk. Widget tests live in
-[`test/widget_test.dart`](test/widget_test.dart).
+Widget tests live in [`test/widget_test.dart`](test/widget_test.dart).
 
 ## Further reading
 

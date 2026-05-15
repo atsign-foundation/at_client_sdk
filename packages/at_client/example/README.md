@@ -118,9 +118,10 @@ job**: high-frequency observations don't belong in a typed shared
 dataset — they belong on a transient delivery channel
 (notifications) feeding a database designed for time series. The
 companion [Flutter dashboard](../../at_client_flutter/examples/dockerstats/README.md)
-shows the full pipeline: subscribe, persist to SQLite, render
-charts off the local store with a five-tier roll-up for bounded
-storage and uniform chart resolution.
+shows the full pipeline: subscribe, persist every sample to
+SQLite (no roll-up, no compaction at rest), and render charts off
+the local store with one SQL `GROUP BY` aggregation per
+window-change sized to the chart's pixel budget.
 
 Real mode shells out to the `docker` CLI; simulate mode synthesises
 fake hosts via a bounded random walk, useful for development
@@ -145,7 +146,8 @@ resume from the next live sample rather than replaying stale ones.
 The subscriber is the CLI counterpart to the Flutter dashboard —
 prints one line per arriving sample, useful for verifying
 publisher↔receiver round-trip without launching the dashboard. The
-full app design, roll-up table, and seed-DB workflow are in the
+full app design, query-time aggregation semantics, and seed-DB
+workflow are in the
 [Flutter dashboard's README](../../at_client_flutter/examples/dockerstats/README.md).
 
 ### Notifications

@@ -69,41 +69,13 @@ tutorials or blog posts:
     two apps can share data live.
   - [`../at_client_flutter/examples/dockerstats/README.md`](../at_client_flutter/examples/dockerstats/README.md)
     — live telemetry dashboard. The deliberate counterpart to
-    `todos`: see "dockerstats" below.
-
-### dockerstats — picking the right tool for live telemetry
-
-`dockerstats` is the canonical worked example of a pattern the
-SDK supports but doesn't impose: **deliver via short-lived
-notifications, store in a relational database**. It demonstrates
-the trade-off explicitly because mis-applying `AtCollection<T>` to
-this shape of workload — a high-frequency stream of observations
-whose long-term storage layout (downsampling, roll-up, retention
-tiering) is the dominant design concern — would be wrong.
-
-The pipeline:
-
-- **Publisher CLI** ([`example/bin/dockerstats_publish.dart`](example/bin/dockerstats_publish.dart))
-  — one `notificationService.send(...)` per container per cycle,
-  JSON sample in the body, 5-minute `ttln`. No AtCollection, no
-  keystore writes, no sync queue.
-- **Subscriber CLI** ([`example/bin/dockerstats_subscribe.dart`](example/bin/dockerstats_subscribe.dart))
-  — prints each arriving sample. Useful for verifying the round
-  trip without launching the Flutter app.
-- **Flutter dashboard** ([`../at_client_flutter/examples/dockerstats/`](../at_client_flutter/examples/dockerstats/README.md))
-  — subscribes, persists each sample to a per-atSign **SQLite**
-  database with a **five-tier roll-up** for bounded storage and
-  uniform chart resolution across zoom levels, renders four
-  time-series charts (CPU, Memory, Network I/O, Block I/O) over a
-  user-selectable window (5 m → all).
-
-The CLI walkthrough is in
-[`example/README.md`](example/README.md#dockerstats--notification-based-live-telemetry).
-The full app design — roll-up table, aggregation semantics, the
-"why notifications, not AtCollection" trade-off in detail, and the
-seed-DB workflow that lets you populate a year of synthetic
-cross-tier data for chart-UI development — is in the
-[Flutter dashboard's README](../at_client_flutter/examples/dockerstats/README.md).
+    `todos`, `dockerstats` is the canonical worked example of a pattern the
+    SDK supports but doesn't impose: **deliver via short-lived notifications,
+    store in a relational database**. It demonstrates the trade-off
+    explicitly because mis-applying `AtCollection<T>` to
+    this shape of workload — a high-frequency stream of observations
+    whose query / aggregation / windowing is the dominant design
+    concern — would be wrong.
 
 ## atSign lifecycle (short version)
 

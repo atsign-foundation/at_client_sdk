@@ -1,11 +1,10 @@
 /// Owns the receive-side state for the dockerstats dashboard:
-///   - [SamplesDb] — per-atSign SQLite store, holds every sample
-///     indefinitely under the multi-tier roll-up policy.
-///   - [WindowCache] — in-memory view of just the current display
-///     window, what the chart actually renders.
-///   - [Roller] — periodic background job that rolls older raw
-///     samples into 1-min / 15-min / 1-hour / 8-hour buckets per
-///     the five-tier policy documented on the class.
+///   - [SamplesDb] — per-atSign SQLite store. Tier 0 (raw) is kept
+///     for [tier0Retention]; aggregated tiers 1..4 are kept forever
+///     and updated incrementally on every notification.
+///   - [WindowCache] — in-memory view of the current [VisibleRange]
+///     at the chart's pixel-budget granularity. Live notifications
+///     fold into bucket accumulators directly.
 ///   - A notification subscription that decodes each arriving
 ///     sample into both stores.
 ///
@@ -22,60 +21,65 @@ import 'package:at_client/at_client.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 
 import '../models/stats_models.dart';
-import 'roller.dart';
+import '../models/visible_range.dart';
 import 'samples_db.dart';
 import 'window_cache.dart';
 
 const String applicationNamespace = 'dockerstats.demos';
 
+/// Number of buckets we aim to render per chart series. The chart
+/// is a few hundred pixels wide in a 2x2 grid; rendering more than
+/// a couple of thousand points per series is wasted work.
+const int _targetBucketsPerSeries = 1000;
+
+/// Below this size the publisher's natural cadence is finer than
+/// the chart needs anyway — skip bucket aggregation and read raw.
+const int _minAggregationBucketMs = 5000;
+
 class DockerstatsService {
   final AtClient atClient;
   final SamplesDb db;
   final WindowCache cache;
-  final Roller roller;
   final _log = AtSignLogger('dockerstats');
 
   StreamSubscription<AtNotification>? _notifSub;
   Timer? _pruneTimer;
-  Timer? _rollupTimer;
-  Duration _window;
+  Timer? _retentionTimer;
+  VisibleRange _range;
+  DataExtent _dataExtent = const DataExtent(earliestMs: null, latestMs: null);
   bool _backfilling = false;
   bool get backfilling => _backfilling;
 
-  DockerstatsService._(
-    this.atClient,
-    this.db,
-    this.cache,
-    this.roller,
-    this._window,
-  );
+  DockerstatsService._(this.atClient, this.db, this.cache, this._range);
 
-  /// Display window. Setting a new value triggers a fresh DB query
-  /// for the new range and replaces the cache contents — widening
-  /// from 2m → 24h instantly reveals samples that were in the DB
-  /// but had been pruned from the cache.
-  Duration get window => _window;
-  Future<void> setWindow(Duration value) async {
-    if (value == _window) return;
-    _window = value;
-    await _loadWindow();
+  /// Visible time range. Setting a new value triggers a fresh DB
+  /// query at a recomputed tier + bucket size and replaces the
+  /// cache contents.
+  VisibleRange get range => _range;
+  Future<void> setRange(VisibleRange r) async {
+    if (r == _range) return;
+    _range = r;
+    await _loadRange();
   }
+
+  /// Most recent observed data extent (earliest / latest `millis`
+  /// across all tiers). Refreshed every time the cache is
+  /// repopulated and on each live notification. The dashboard
+  /// reads this to clamp pan / zoom and to drive the "Fit" button.
+  DataExtent get dataExtent => _dataExtent;
 
   static Future<DockerstatsService> create({
     required AtClient atClient,
-    required Duration window,
+    required VisibleRange range,
   }) async {
     final db = await SamplesDb.open(atClient.atSign.toString());
     final cache = WindowCache();
-    final roller = Roller(db.database);
-    final svc = DockerstatsService._(atClient, db, cache, roller, window);
+    final svc = DockerstatsService._(atClient, db, cache, range);
     await svc._init();
     return svc;
   }
 
   Future<void> _init() async {
-    // Force the notification listener up front so the first arrival
-    // doesn't race the lazy startup inside subscribe().
     atClient.notificationService.startListening();
 
     final selfFragment = RegExp.escape(atClient.atSign.toString());
@@ -92,61 +96,91 @@ class DockerstatsService {
           },
         );
 
-    // Periodic prune: drop cached samples that have fallen outside
-    // the current display window. SQLite retains them; only the
-    // in-memory cache is bounded. The "all" window (Duration.zero)
-    // disables pruning — we want everything queryable in memory.
+    // Periodic prune: when the range is live, the left edge moves
+    // forward over time. Drop cache accumulators that have slipped
+    // outside the visible window. Historical ranges are fixed in
+    // time so pruning is a no-op.
     _pruneTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_window == Duration.zero) return;
-      final cutoff =
-          DateTime.now().millisecondsSinceEpoch - _window.inMilliseconds;
-      cache.pruneOlderThan(cutoff);
+      if (!_range.isLive) return;
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      cache.pruneOlderThan(_range.resolveStartMs(nowMs));
     });
 
-    // Initial load — populate the cache from whatever the DB
-    // already holds (any tier).
-    await _loadWindow();
+    // Tier-0 retention. Once at startup (catches up after any
+    // long-offline gap), then daily.
+    unawaited(_pruneTier0());
+    _retentionTimer = Timer.periodic(
+      const Duration(hours: 24),
+      (_) => unawaited(_pruneTier0()),
+    );
 
-    // Roll-up: catch-up pass at startup so any samples that aged
-    // past their tier boundary while the app was closed get
-    // compacted right away. Then every hour thereafter.
-    // Background-unawaited so a slow first pass doesn't delay
-    // dashboard render.
-    unawaited(_rollUp());
-    _rollupTimer = Timer.periodic(const Duration(hours: 1), (_) {
-      unawaited(_rollUp());
-    });
+    await _refreshDataExtent();
+    await _loadRange();
   }
 
-  Future<void> _rollUp() async {
+  Future<void> _pruneTier0() async {
     try {
-      await roller.rollUpAll();
-      // The roll-up may have removed raw rows that the cache still
-      // holds, replacing them with aggregated tier-1 rows. Re-load
-      // the window so the cache reflects the new DB shape.
-      await _loadWindow();
+      final cutoff =
+          DateTime.now().millisecondsSinceEpoch - tier0Retention.inMilliseconds;
+      final removed = await db.pruneTier0OlderThan(cutoff);
+      if (removed > 0) {
+        _log.info(
+          'pruned $removed tier-0 row(s) older than ${tier0Retention.inDays}d',
+        );
+      }
     } catch (e, st) {
-      _log.warning('rollUp failed: $e\n$st');
+      _log.warning('pruneTier0 failed: $e\n$st');
     }
   }
 
-  Future<void> _loadWindow() async {
+  Future<void> _refreshDataExtent() async {
+    try {
+      _dataExtent = await db.dataExtent();
+    } catch (e, st) {
+      _log.warning('dataExtent failed: $e\n$st');
+    }
+  }
+
+  /// Pick the source tier and chart bucket size for the current
+  /// `_range`. Target bucket = span / target-bucket-count; coarsest
+  /// tier whose source bucket ≤ target.
+  ({int tier, int bucketMs}) _computeReadShape() {
+    final spanMs = _range.spanMs;
+    if (spanMs <= 0) return (tier: 0, bucketMs: 0);
+    final raw = spanMs ~/ _targetBucketsPerSeries;
+    final targetBucketMs = raw < _minAggregationBucketMs ? 0 : raw;
+    final tier = SamplesDb.pickTier(
+      targetBucketMs == 0 ? tierBucketsMs[0] : targetBucketMs,
+    );
+    return (tier: tier, bucketMs: targetBucketMs);
+  }
+
+  Future<void> _loadRange() async {
     _backfilling = true;
     try {
-      // [Duration.zero] is the dashboard's "all" sentinel — pass 0
-      // as `sinceMs` so the DB query returns every row in every
-      // tier.
-      final sinceMs = _window == Duration.zero
-          ? 0
-          : DateTime.now().millisecondsSinceEpoch - _window.inMilliseconds;
-      final rows = await db.queryWindow(sinceMs);
-      cache.replaceAll(rows.map((r) => r.sample));
+      final shape = _computeReadShape();
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final sinceMs = _range.resolveStartMs(nowMs);
+      final untilMs = _range.isLive ? null : _range.resolveEndMs(nowMs);
+      final effectiveBucketMs = shape.bucketMs == 0
+          ? tierBucketsMs[shape.tier]
+          : shape.bucketMs;
+      cache.setBucketMsAndClear(shape.bucketMs);
+      final rows = await db.queryWindow(
+        tier: shape.tier,
+        sinceMs: sinceMs,
+        untilMs: untilMs,
+        bucketMs: effectiveBucketMs,
+      );
+      cache.replaceAll(rows);
       _log.info(
-        'loaded ${rows.length} sample(s) from db for window '
-        '${_window == Duration.zero ? "all" : "${_window.inSeconds}s"}',
+        'loaded ${rows.length} bucket(s) from tier ${shape.tier} '
+        'for span=${_range.spanMs}ms '
+        '${_range.isLive ? "(live)" : "(historical end=${_range.endMs})"} '
+        'at bucket=${shape.bucketMs == 0 ? "raw" : "${shape.bucketMs}ms"}',
       );
     } catch (e, st) {
-      _log.warning('loadWindow failed: $e\n$st');
+      _log.warning('loadRange failed: $e\n$st');
     } finally {
       _backfilling = false;
     }
@@ -163,28 +197,33 @@ class DockerstatsService {
       return;
     }
     try {
-      await db.insertRaw(s, senderAtSign: n.from);
+      await db.insertSample(s, senderAtSign: n.from);
     } catch (e, st) {
-      _log.warning('db.insertRaw failed for ${s.millis}: $e\n$st');
+      _log.warning('db.insertSample failed for ${s.millis}: $e\n$st');
     }
-    // Only fold into the cache if it's within the current display
-    // window; older samples sit in the DB and surface on the next
-    // setWindow / re-query. `Duration.zero` means "all" — fold
-    // everything in.
-    if (_window == Duration.zero) {
-      cache.add(s);
-      return;
+    // Keep the data extent fresh — the dashboard's pan / zoom
+    // clamps reference it.
+    if (_dataExtent.latestMs == null || s.millis > _dataExtent.latestMs!) {
+      _dataExtent = DataExtent(
+        earliestMs: _dataExtent.earliestMs ?? s.millis,
+        latestMs: s.millis,
+      );
     }
-    final cutoff =
-        DateTime.now().millisecondsSinceEpoch - _window.inMilliseconds;
-    if (s.millis >= cutoff) {
-      cache.add(s);
+    // Fold into the cache only when the sample falls inside the
+    // current visible range. Historical ranges are frozen — they
+    // don't pick up new samples until the user moves the range
+    // (which triggers a fresh DB query).
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final startMs = _range.resolveStartMs(nowMs);
+    final endMs = _range.resolveEndMs(nowMs);
+    if (s.millis >= startMs && s.millis < endMs) {
+      cache.addRaw(s);
     }
   }
 
   Future<void> dispose() async {
     _pruneTimer?.cancel();
-    _rollupTimer?.cancel();
+    _retentionTimer?.cancel();
     await _notifSub?.cancel();
     await db.close();
   }
