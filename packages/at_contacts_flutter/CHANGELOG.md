@@ -1,3 +1,7 @@
+## 4.1.1
+
+- chore: remove dependency on the deprecated at_client_mobile package.
+
 ## 4.1.0
 
 - chore(deps): at_commons_flutter ^2.1.0
