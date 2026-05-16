@@ -95,11 +95,18 @@ void main() async {
         .atClient
         .put(testByPassCacheAtKey, initialValue);
     expect(putResult, true);
-    // Sync the data to the remote secondary
-    await E2ESyncService.getInstance()
-        .syncData(AtClientManager.getInstance().atClient.syncService);
+    // Per-key gate: do not proceed until the publisher's sync queue
+    // has actually pushed THIS put. Replaces the brittle "syncData
+    // returns success because some prior sync event matched commit
+    // IDs" inference with a direct observation.
+    await E2ESyncService.getInstance().awaitKeyPushed(
+        AtClientManager.getInstance().atClient.syncService,
+        testByPassCacheAtKey);
 
-    // Give it time to propagate from one atServer to the other.
+    // Cross-server propagation: publisher's atServer auto-notifies
+    // the receiver's atServer (autoNotify=true at this point). That
+    // path is separate from the at_client sync queue we just gated,
+    // so still wait for it.
     await Future.delayed(Duration(seconds: 5));
 
     // Switch to sharedWithAtSign
@@ -132,9 +139,16 @@ void main() async {
         .atClient
         .put(testByPassCacheAtKey, updatedValue);
     expect(newPutResult, true);
-    // Sync the data to the remote secondary
-    await E2ESyncService.getInstance()
-        .syncData(AtClientManager.getInstance().atClient.syncService);
+    // Per-key gate: do not switch atSigns until the publisher's sync
+    // queue has actually pushed THIS update. This is the primary fix
+    // for the historical flake — the prior `syncData` gate could
+    // return on an unrelated prior sync event's commit-id match,
+    // leaving N+2 still queued; the receiver-side bypassCache lookup
+    // then polled for 60s against a publisher atServer that still
+    // held `initialValue`.
+    await E2ESyncService.getInstance().awaitKeyPushed(
+        AtClientManager.getInstance().atClient.syncService,
+        testByPassCacheAtKey);
 
     // As atSignTwo
     await AtClientManager.getInstance().setCurrentAtSign(
