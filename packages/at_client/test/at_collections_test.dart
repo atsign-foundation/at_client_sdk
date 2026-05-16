@@ -1239,7 +1239,15 @@ void main() {
           .thenAnswer((invocation) async {
         final regex =
             invocation.namedArguments[const Symbol('regex')] as String;
-        if (regex.startsWith(r'(^|:).+\.')) return descendants;
+        // Descendant scan uses `.+\.<parentId>\.<ns>@` (`.+` matches
+        // any sub-chain) while the direct-item scan uses
+        // `[^.]+\.<ns>@` (single non-dot id). Branch on whichever
+        // substring is present — both are stable across the #1942
+        // regex tightening (added `^(?!local:)` + dot-escaping +
+        // sharedWith prefix).
+        if (regex.contains(r'.+\.') && !regex.contains(r'[^.]+\.')) {
+          return descendants;
+        }
         return itemScanKeys;
       });
     }
@@ -1567,7 +1575,12 @@ void main() {
       final bobKey = AtKey.fromString('idr.$namespace$bobStr');
       // The cache-priming `readBy` scans the entire __rr sub-collection
       // (no owner filter); wasMarkedReadByMe then checks self membership.
-      final rrRegex = '(^|:)[^.]+\\.__rr.idr.$namespace@';
+      // Regex shape mirrors `_getKeysInternal`: `^(?!local:)` rejects
+      // at_client's bookkeeping keys (#1942), `(?:[^:]*:)?` allows an
+      // optional sharedWith prefix, and every `.` in the composed
+      // namespace is escaped.
+      final escapedComposed = '__rr.idr.$namespace'.replaceAll('.', '\\.');
+      final rrRegex = '^(?!local:)(?:[^:]*:)?[^.]+\\.$escapedComposed@';
       // Parent scan returns bob's item; the __rr sub-collection scan
       // returns nothing (no receipts sent yet).
       when(

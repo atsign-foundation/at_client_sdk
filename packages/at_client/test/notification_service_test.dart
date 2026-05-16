@@ -1199,6 +1199,10 @@ void main() {
       when(() => mockAtClientImpl.put(any(), any()))
           .thenAnswer((_) async => true);
 
+      // #1942 — the legacy-key migration may call delete; stub it so
+      // the mock doesn't throw when no legacy keys are present.
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
+
       expect(await notificationServiceImpl.getLastNotificationTime(), null);
     });
 
@@ -1236,6 +1240,9 @@ void main() {
       when(() => mockAtClientImpl.put(any(), any()))
           .thenAnswer((_) async => true);
 
+      // #1942 migration cleanup may call delete on legacy keys.
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
+
       when(() => mockAtClientImpl
           .getLocalSecondary()!
           .keyStore!
@@ -1272,6 +1279,9 @@ void main() {
       when(() => mockAtClientImpl.put(any(), any()))
           .thenAnswer((_) async => true);
 
+      // #1942 migration cleanup may call delete on legacy keys.
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
+
       when(() => mockAtClientImpl
           .getLocalSecondary()!
           .keyStore!
@@ -1302,6 +1312,15 @@ void main() {
           atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
+      // Default: any key NOT explicitly stubbed below is absent.
+      // The #1942 migration also probes the intermediate
+      // `lastreceivednotification.<ns>@<atSign>` form; this fallback
+      // keeps the mock from returning null on that probe.
+      when(() => mockAtClientImpl
+          .getLocalSecondary()!
+          .keyStore!
+          .isKeyExists(any())).thenAnswer((_) => false);
+
       when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.isKeyExists(
               notificationServiceImpl.lastReceivedNotificationAtKey.toString()))
           .thenAnswer((_) => false);
@@ -1318,6 +1337,9 @@ void main() {
 
       when(() => mockAtClientImpl.put(any(), any()))
           .thenAnswer((_) async => true);
+
+      // #1942 migration cleanup may call delete on legacy keys.
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
 
       expect(
           await notificationServiceImpl.getLastNotificationTime(), epochMillis);
@@ -1375,13 +1397,20 @@ void main() {
 class StatsAtKeyMatcher extends Matcher {
   @override
   Description describe(Description description) =>
-      description.add('A custom matcher to match the old statsNotificationKey');
+      description.add('A custom matcher to match a legacy '
+          'lastReceivedNotification key (`_latestNotificationIdv2.*` or '
+          'the intermediate bare `lastreceivednotification.*` form).');
 
   @override
   bool matches(item, Map matchState) {
-    if (item is AtKey && item.key.contains('_latestNotificationIdv2')) {
-      return true;
-    }
+    if (item is! AtKey) return false;
+    if (item.key.contains('_latestNotificationIdv2')) return true;
+    // Intermediate (pre-`local:`) form — added during the #1942 fix
+    // when the migration was widened to also clean up bare
+    // `lastreceivednotification.<ns>@<atSign>` rows. The matcher
+    // accepts only the bare form (rejects the canonical `local:`
+    // prefix, which AtKey.fromString preserves on the parsed key).
+    if (item.key == 'lastreceivednotification' && !item.isLocal) return true;
     return false;
   }
 }

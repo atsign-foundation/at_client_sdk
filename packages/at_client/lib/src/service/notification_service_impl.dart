@@ -96,6 +96,96 @@ class NotificationServiceImpl extends NotificationService {
     atKeyEncryptionManager = AtKeyEncryptionManager(atClient);
   }
 
+  /// Migrate any legacy (non-`local:`) forms of the
+  /// last-received-notification key to the canonical
+  /// `local:lastreceivednotification.<ns>@<atSign>` form, and delete
+  /// every legacy form found so they no longer pollute the local
+  /// keystore.
+  ///
+  /// Fixes the underlying defect behind #1942 — `AtCollection`
+  /// regex scans over the local keystore were matching the bare
+  /// (non-`local:`) `lastreceivednotification.<ns>@<atSign>` key
+  /// because it has the same structural shape as a self-owned
+  /// collection item. The canonical key has been `local:`-prefixed
+  /// since the move to `AtKey.local`, but clients upgraded from
+  /// older builds still carry the bare form on disk.
+  ///
+  /// Three forms have existed:
+  ///   1. `local:lastreceivednotification.<ns>@<atSign>` — canonical
+  ///   2. `      lastreceivednotification.<ns>@<atSign>` — intermediate
+  ///   3. `      _latestNotificationIdv2.<ns>@<atSign>`  — original
+  ///
+  /// If the canonical key is missing its value is seeded from the
+  /// newest legacy form that has one (preferring the intermediate
+  /// over the original — its value is fresher). Every legacy entry
+  /// is then deleted. The migration is idempotent: re-running it
+  /// after a clean DB is a no-op.
+  ///
+  /// Deletes are local-only — both legacy name prefixes are
+  /// excluded by [SyncUtil.shouldSync], so the removals do not
+  /// propagate to the atServer.
+  /// Returns the canonical value after migration. The seeded value
+  /// is returned directly (rather than re-read by the caller) so the
+  /// `put` we just did doesn't have to round-trip back through a
+  /// `get` — useful both for performance and because some mocks /
+  /// fakes aren't stateful across the put-then-get.
+  Future<AtValue?> _migrateLegacyLastReceivedNotificationKeys() async {
+    final keyStore = atClient.getLocalSecondary()!.keyStore!;
+    final ns = atClient.getPreferences()!.namespace;
+    final currentAtSign = atClient.getCurrentAtSign()!;
+    final canonicalStr = lastReceivedNotificationAtKey.toString();
+
+    // The canonical key can exist with a null value (e.g. when an
+    // earlier `put` seeded a placeholder). Check the actual value,
+    // not just existence — otherwise we'd never seed from a legacy
+    // form when the canonical row is present-but-empty.
+    AtValue? canonicalValue;
+    if (keyStore.isKeyExists(canonicalStr)) {
+      try {
+        canonicalValue = await atClient.get(lastReceivedNotificationAtKey);
+        if (canonicalValue.value == null) canonicalValue = null;
+      } on Exception {
+        // Treat read failures as "needs seeding" — the legacy
+        // forms become the source of truth.
+      }
+    }
+
+    // Newest legacy form first so we prefer fresher values when
+    // seeding the canonical key.
+    final legacyForms = <String>[
+      'lastreceivednotification.$ns$currentAtSign',
+      '$notificationIdKey.$ns$currentAtSign',
+    ];
+    for (final legacyStr in legacyForms) {
+      if (!keyStore.isKeyExists(legacyStr)) continue;
+
+      // Seed the canonical key from the first legacy form that has a
+      // value — only when the canonical doesn't already carry one.
+      if (canonicalValue == null) {
+        try {
+          final v = await atClient.get(AtKey.fromString(legacyStr));
+          if (v.value != null) {
+            await atClient.put(lastReceivedNotificationAtKey, v.value);
+            canonicalValue = v;
+          }
+        } on Exception catch (e) {
+          logger.warning(
+              'Migration: failed to seed canonical key from $legacyStr: $e');
+        }
+      }
+
+      // Drop the legacy key regardless of whether we seeded from it
+      // — older forms are no longer load-bearing once the canonical
+      // exists, and pollute the local keystore (#1942).
+      try {
+        await atClient.delete(AtKey.fromString(legacyStr));
+      } on Exception catch (e) {
+        logger.warning('Migration: failed to delete legacy key $legacyStr: $e');
+      }
+    }
+    return canonicalValue;
+  }
+
   /// Return the last received notification DateTime in epochMillis when
   /// [AtClientPreference.fetchOfflineNotifications] is set true.
   ///
@@ -109,36 +199,11 @@ class NotificationServiceImpl extends NotificationService {
       return null;
     }
 
-    // fetchOfflineNotifications == true (the default) means we want all notifications since the last one we received
-    // We keep track of the last notification id in the client-side key store
-    // Check if the new key (local:lastNotificationReceived@alice) is available in the keystore.
-    // If yes, fetch the value;
-    AtValue? atValue;
-    if (atClient
-        .getLocalSecondary()!
-        .keyStore!
-        .isKeyExists(lastReceivedNotificationAtKey.toString())) {
-      atValue = await atClient.get(lastReceivedNotificationAtKey);
-    }
-    // If new key does not exist or value is null, check for the old key (_latestNotificationIdv2@alice)
-    // If old key exist, fetch the value and update the new key with old key's value
-    if (atValue == null || atValue.value == null) {
-      var lastNotificationKeyStr =
-          '$notificationIdKey.${atClient.getPreferences()!.namespace}${atClient.getCurrentAtSign()}';
-      var atKey = AtKey.fromString(lastNotificationKeyStr);
-      if (atClient
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(lastNotificationKeyStr)) {
-        try {
-          atValue = await atClient.get(atKey);
-          await atClient.put(lastReceivedNotificationAtKey, atValue.value);
-        } on Exception catch (e) {
-          logger.severe(
-              'Exception in getting last notification id: ${e.toString}');
-        }
-      }
-    }
+    // Migration runs first and returns the canonical key's value
+    // (either the pre-existing value or one freshly seeded from a
+    // legacy form). Use that directly instead of re-reading the
+    // canonical key — the migration has already done that work.
+    AtValue? atValue = await _migrateLegacyLastReceivedNotificationKeys();
     if (atValue?.value != null) {
       logger.finer('json from hive: ${atValue?.value}');
       return jsonDecode(atValue?.value)['epochMillis'];
