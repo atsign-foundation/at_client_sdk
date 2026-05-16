@@ -718,12 +718,21 @@ class SyncServiceImpl implements SyncService {
         }
       }
       batchesDone++;
+      // Snapshot keyInfoList AT this point so per-batch listeners
+      // see every push as it lands, not only at the terminal
+      // `Sync complete` event in `processSyncRequests`. If anything
+      // between `syncInternal` returning and that terminal emission
+      // throws (network blip on `_getServerCommitId` / `_getLocalCommitId`,
+      // a stop() racing the completion), the push KeyInfos would
+      // otherwise be silently dropped — listeners would never see
+      // a `localToRemote` event for keys that DID land on the server.
       _informSyncProgress(
         SyncProgress()
           ..syncStatus = SyncStatus.inProgress
           ..startedAt = DateTime.now().toUtc()
           ..message = 'Push batch $batchesDone applied; '
-              '${await localSecondary.syncQueueSize} pending',
+              '${await localSecondary.syncQueueSize} pending'
+          ..keyInfoList = List<KeyInfo>.from(keyInfoList),
         localCommitId: _latestKnownServerCommitId,
         serverCommitId: _latestKnownServerCommitId,
       );
