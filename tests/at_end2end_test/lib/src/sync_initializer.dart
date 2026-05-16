@@ -54,13 +54,27 @@ class E2ESyncService {
   /// Wait until a `localToRemote` push for [atKey]'s wire form has
   /// been observed in a [SyncProgress] event, then return.
   ///
-  /// The listener is registered **before** anything that could
-  /// trigger the push (the caller's `put` typically happens right
-  /// after this helper is set up — or, more often, the caller does
-  /// `put` first and immediately calls this; the broadcast stream
-  /// will surface the push event whether registration happens just
-  /// before or just after the `put`, since the push doesn't complete
-  /// until later in the sync cycle).
+  /// **Call this BEFORE the put**, not after. Pattern:
+  ///
+  /// ```dart
+  /// final pushed = E2ESyncService.getInstance()
+  ///     .awaitKeyPushed(syncSvc, atKey);
+  /// final putResult = await atClient.put(atKey, value);
+  /// expect(putResult, true);
+  /// await pushed;
+  /// ```
+  ///
+  /// `AtClient.put` triggers `syncService.sync()` internally after
+  /// enqueueing the local commit. On a fast sync cycle the resulting
+  /// push event can fire (and be missed by listeners that haven't
+  /// registered yet) before any subsequent line of caller code
+  /// executes. Registering the listener after the put loses that
+  /// race and the gate hangs until timeout.
+  ///
+  /// This helper's body runs synchronously up to its first `await`
+  /// — `addProgressListener` is called before the returned Future
+  /// suspends — so capturing the Future before the put is enough to
+  /// guarantee the listener is in place by the time the push fires.
   ///
   /// Throws [TimeoutException] when [timeout] elapses with no
   /// matching push event observed; the exception's message includes
