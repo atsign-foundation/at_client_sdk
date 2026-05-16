@@ -873,7 +873,17 @@ class SyncServiceImpl implements SyncService {
         // overwrite the local copy.
         for (dynamic serverCommitEntry in listOfCommitEntriesFromServer) {
           final serverAtKey = serverCommitEntry['atKey'].toString().trim();
-          final hasLocalConflict = pendingPushAtKeys.contains(serverAtKey);
+          // Conflict iff the atKey is either (a) already in the sync
+          // queue (captured in the per-batch refresh above), or (b)
+          // a [_update]/[_delete] for it is currently executing on
+          // this LocalSecondary — i.e. a user write is mid-flight
+          // between the keystore op and the enqueue. (b) closes the
+          // sub-window in [_update] where the keystore has the new
+          // value but the queue is still empty; applying a server
+          // entry in that window silently overwrites the user's
+          // value.
+          final hasLocalConflict = pendingPushAtKeys.contains(serverAtKey) ||
+              localSecondary.isWriteInProgress(serverAtKey);
           if (hasLocalConflict) {
             lastReceivedServerCommitId =
                 _parseToInteger(serverCommitEntry['commitId']);

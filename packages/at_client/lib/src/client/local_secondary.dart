@@ -67,6 +67,32 @@ class LocalSecondary implements Secondary {
   AtSyncQueue? _syncQueue;
   Future<AtSyncQueue>? _syncQueueOpenInflight;
 
+  /// Tracks atKeys with a currently-executing [_update] / [_delete] —
+  /// i.e. a write that has entered the keystore mutation phase but
+  /// hasn't yet enqueued for sync. The sync service's pull-side
+  /// conflict-detection consults [isWriteInProgress] alongside the
+  /// sync queue, so a pull entry whose atKey matches an in-flight
+  /// local write is treated as a conflict (skip apply, preserve the
+  /// user's value).
+  ///
+  /// Without this, the window between [LocalSecondary]'s keystore op
+  /// (which writes the new value to Hive) and its `_enqueueForSync`
+  /// call (which appends to the sync queue) is unprotected — a pull
+  /// firing in that window finds an empty queue, applies its entry,
+  /// and silently overwrites the user's just-written value. The push
+  /// path then reads the overwritten value and sends *that* to the
+  /// server: the bug observed by `bypasscache_test`'s assertion that
+  /// the updated value reaches the receiver.
+  ///
+  /// In-memory only — no Hive write per op. Per [LocalSecondary]
+  /// instance.
+  final Set<String> _writesInProgress = <String>{};
+
+  /// True if a [_update] or [_delete] for [atKey] is currently
+  /// executing on this LocalSecondary. Synchronous, cheap. Consulted
+  /// by `SyncServiceImpl._syncFromServer` per pull entry.
+  bool isWriteInProgress(String atKey) => _writesInProgress.contains(atKey);
+
   LocalSecondary(
     this._atClient, {
     this.keyStore,
@@ -327,9 +353,15 @@ class LocalSecondary implements Secondary {
 
   Future<String> _update(UpdateVerbBuilder builder,
       {bool cameFromServer = false}) async {
+    final updateKey = builder.buildKey();
+    // Mark this key as having a write in progress so the sync pull's
+    // conflict-detection (in `SyncServiceImpl._syncFromServer`) skips
+    // any server entry for the same atKey that arrives during the
+    // window between keystore op and queue enqueue. cameFromServer
+    // writes are server-applied (no race possible with our own queue).
+    if (!cameFromServer) _writesInProgress.add(updateKey);
     try {
       dynamic updateResult;
-      var updateKey = builder.buildKey();
       if (!await isEnrollmentAuthorizedForOperation(updateKey, builder)) {
         throw UnAuthorizedException(
             'Cannot perform update on $updateKey due to insufficient privilege');
@@ -461,6 +493,8 @@ class LocalSecondary implements Secondary {
     } on DataStoreException catch (e) {
       _logger.severe('exception in local update:${e.toString()}');
       rethrow;
+    } finally {
+      if (!cameFromServer) _writesInProgress.remove(updateKey);
     }
   }
 
@@ -497,6 +531,11 @@ class LocalSecondary implements Secondary {
       throw UnAuthorizedException(
           'Cannot perform delete on $deleteKey due to insufficient privilege');
     }
+    // Same pull-race protection as _update — a server entry for the
+    // same atKey arriving during the keystore-op-to-enqueue window
+    // would otherwise overwrite our pending delete with the prior
+    // server value (then push pushes back the wrong op).
+    if (!cameFromServer && !localOnly) _writesInProgress.add(deleteKey);
     try {
       var deleteResult = await keyStore!.remove(deleteKey);
       // `wasExpired` mirrors `localOnly` here — the only caller that
@@ -543,6 +582,8 @@ class LocalSecondary implements Secondary {
     } on DataStoreException catch (e) {
       _logger.severe('exception in delete:${e.toString()}');
       rethrow;
+    } finally {
+      if (!cameFromServer && !localOnly) _writesInProgress.remove(deleteKey);
     }
   }
 
