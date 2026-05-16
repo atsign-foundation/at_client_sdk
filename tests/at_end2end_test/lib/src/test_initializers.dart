@@ -16,7 +16,7 @@ class TestSuiteInitializer {
   static final AtSignLogger logger = AtSignLogger(' TestSuiteInitialized ');
 
   TestSuiteInitializer._internal() {
-    AtSignLogger.root_level = 'finest';
+    AtSignLogger.root_level = 'info';
     AtSignLogger.defaultLoggingHandler = AtSignLogger.consoleLoggingHandler;
   }
 
