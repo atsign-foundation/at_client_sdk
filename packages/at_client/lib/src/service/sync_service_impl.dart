@@ -810,6 +810,7 @@ class SyncServiceImpl implements SyncService {
     // in certain scenarios e.g server has a commit entry that need not be synced on client side,
     // server has delete commit entry and the key is not present on local keystore
     List<KeyInfo> keyInfoList = [];
+    final localSecondary = _atClient.getLocalSecondary()!;
     try {
       int? skipDeletesUntil = await setAndGetSkipDeletesUntil(
           localCommitIdBeforeSync, serverCommitId);
@@ -824,6 +825,18 @@ class SyncServiceImpl implements SyncService {
                 lastReceivedServerCommitId, serverCommitId,
                 localCommitIdBeforeSync: localCommitIdBeforeSync,
                 skipDeletesUntil: skipDeletesUntil);
+        // Refresh the pending-push snapshot AFTER the network
+        // round-trip but BEFORE applying any server entries. The
+        // original snapshot was taken at sync-round start; a user
+        // put that landed in the queue while we were waiting on the
+        // server's response is invisible there, and without this
+        // refresh a server entry whose atKey matches the just-queued
+        // put would be applied to local — silently overwriting the
+        // user's value before our push has a chance to send it.
+        // Union with the sync-start snapshot so we never lose
+        // pre-sync entries.
+        pendingPushAtKeys = pendingPushAtKeys
+            .union(Set<String>.from(await localSecondary.peekSyncQueue()));
         if (listOfCommitEntriesFromServer.isEmpty) {
           // Server walked the full (lastReceivedServerCommitId,
           // serverCommitId] range and returned no entries for this
