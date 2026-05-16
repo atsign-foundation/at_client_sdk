@@ -78,9 +78,10 @@ class E2ESyncService {
   ///
   /// Throws [TimeoutException] when [timeout] elapses with no
   /// matching push event observed; the exception's message includes
-  /// the last [recentEventCap] KeyInfo entries the listener saw, to
-  /// distinguish "sync never ran" from "sync ran but didn't include
-  /// our key" from "sync ran on a different direction".
+  /// the last [recentEventCap] [SyncProgress] events the listener saw
+  /// (with sync status, commit-id state, and any KeyInfo entries),
+  /// to distinguish "sync never ran" from "sync ran but didn't push
+  /// our key" from "sync ran on a different syncService instance".
   ///
   /// Matches by exact string equality on `atKey.toString()` — the
   /// same wire form `UpdateVerbBuilder.buildKey()` enqueues into the
@@ -89,12 +90,12 @@ class E2ESyncService {
     SyncService syncSvc,
     AtKey atKey, {
     Duration timeout = const Duration(minutes: 2),
-    int recentEventCap = 20,
+    int recentEventCap = 40,
   }) async {
     final target = atKey.toString();
     final completer = Completer<void>();
-    final listener =
-        _KeyPushedListener(target, completer, recentCap: recentEventCap);
+    final listener = _KeyPushedListener(target, completer,
+        recentCap: recentEventCap, syncSvc: syncSvc);
     syncSvc.addProgressListener(listener);
     try {
       // Poke the sync service so the push runs without waiting for
@@ -103,8 +104,9 @@ class E2ESyncService {
       await completer.future.timeout(timeout, onTimeout: () {
         throw TimeoutException(
           'awaitKeyPushed: no localToRemote push observed for $target '
-          'within $timeout. Recent KeyInfo entries (newest last): '
-          '${listener.recentKeyInfos}',
+          'within $timeout on syncSvc#${identityHashCode(syncSvc)}. '
+          'Recent SyncProgress events (newest last, ${listener.recentEvents.length} '
+          'captured):\n  ${listener.recentEvents.join("\n  ")}',
           timeout,
         );
       });
@@ -119,19 +121,34 @@ class _KeyPushedListener extends SyncProgressListener {
   final String target;
   final Completer<void> completer;
   final int recentCap;
-  final List<String> recentKeyInfos = <String>[];
+  final SyncService syncSvc;
+  // Captures EVERY SyncProgress event with full metadata. Per-batch
+  // progress events (line 721/891 in sync_service_impl.dart) have a
+  // null keyInfoList and were previously invisible — those silent
+  // iterations are exactly what we need to see when diagnosing a
+  // timeout where the gate fires but our key isn't in any keyInfoList.
+  final List<String> recentEvents = <String>[];
 
-  _KeyPushedListener(this.target, this.completer, {required this.recentCap});
+  _KeyPushedListener(this.target, this.completer,
+      {required this.recentCap, required this.syncSvc});
 
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
     final keys = syncProgress.keyInfoList;
+    final keyDescs = (keys == null || keys.isEmpty)
+        ? '-'
+        : keys.map((k) => '${k.syncDirection.name}:${k.key}').join(',');
+    final entry = '[svc#${identityHashCode(syncSvc)}] '
+        'status=${syncProgress.syncStatus} '
+        'local=${syncProgress.localCommitId} '
+        'server=${syncProgress.serverCommitId} '
+        'pending=${syncProgress.pendingPushCount} '
+        'msg=${syncProgress.message} '
+        'keys=$keyDescs';
+    if (recentEvents.length >= recentCap) recentEvents.removeAt(0);
+    recentEvents.add(entry);
     if (keys == null || keys.isEmpty) return;
     for (final k in keys) {
-      if (recentKeyInfos.length >= recentCap) {
-        recentKeyInfos.removeAt(0);
-      }
-      recentKeyInfos.add('${k.syncDirection.name}:${k.key}');
       if (k.syncDirection == SyncDirection.localToRemote && k.key == target) {
         if (!completer.isCompleted) completer.complete();
       }
