@@ -259,15 +259,8 @@ class LocalSecondary implements Secondary {
     required bool cameFromServer,
     int? commitLogSeqNum,
   }) async {
-    if (cameFromServer) {
-      _logger.info('ENQUEUE_DIAG: $atKey op=$op skipped (cameFromServer)');
-      return;
-    }
-    if (!shouldEnqueueForSync(atKey, op)) {
-      _logger.info('ENQUEUE_DIAG: $atKey op=$op skipped '
-          '(shouldEnqueueForSync=false)');
-      return;
-    }
+    if (cameFromServer) return;
+    if (!shouldEnqueueForSync(atKey, op)) return;
     try {
       final q = await _ensureSyncQueueOpen();
       final prior = q.readEntry(atKey);
@@ -275,8 +268,6 @@ class LocalSecondary implements Secondary {
         await _removeOrphanedCommitLogEntry(prior.commitLogSeqNum!);
       }
       await q.enqueue(atKey, op, commitLogSeqNum: commitLogSeqNum);
-      _logger.info('ENQUEUE_DIAG: $atKey op=$op enqueued; '
-          'queueSize=${q.size} syncSvc#${identityHashCode(_atClient.syncService)}');
       // Trigger SyncServiceImpl to drain. Today this enqueues a
       // sync request via the existing request-coalescing layer
       // (`_addSyncRequestToQueue` → microtask → `processSyncRequests`).

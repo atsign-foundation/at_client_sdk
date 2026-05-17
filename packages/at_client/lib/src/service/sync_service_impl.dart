@@ -169,13 +169,7 @@ class SyncServiceImpl implements SyncService {
   }
 
   SyncServiceImpl._(this._atClient, this._remoteSecondary) {
-    // Embed identityHashCode in the logger name so concurrent
-    // SyncService instances for the same atSign (created by
-    // consecutive setCurrentAtSign calls) are distinguishable in
-    // logs. Otherwise both log as "SyncService (@xxx)" and CI
-    // diagnosis of "which instance pushed?" is impossible.
-    _logger = AtSignLogger(
-        'SyncService#${identityHashCode(this)} (${_atClient.getCurrentAtSign()})');
+    _logger = AtSignLogger('SyncService (${_atClient.getCurrentAtSign()})');
     // _logger.level = 'info';
     _lastReceivedServerCommitIdAtKey =
         AtKey.local('lastreceivedservercommitid', currentAtSign).build();
