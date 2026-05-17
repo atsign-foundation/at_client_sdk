@@ -13,8 +13,10 @@ import 'at_credentials.dart';
 class TestSuiteInitializer {
   static final TestSuiteInitializer _singleton = TestSuiteInitializer._internal();
 
+  static final AtSignLogger logger = AtSignLogger(' TestSuiteInitialized ');
+
   TestSuiteInitializer._internal() {
-    AtSignLogger.root_level = 'shout';
+    AtSignLogger.root_level = 'info';
     AtSignLogger.defaultLoggingHandler = AtSignLogger.consoleLoggingHandler;
   }
 
@@ -25,6 +27,8 @@ class TestSuiteInitializer {
   Future<void> testInitializer(String atSign, String namespace, String authType,
       {bool enableInitialSync = true, AtClientPreference? atClientPreference}) async {
     try {
+      logger.info(
+          'testInitialized called for $atSign $namespace $authType $enableInitialSync $atClientPreference');
       late AtChops atChops;
       AtAuthResponse? atAuthResponse;
 

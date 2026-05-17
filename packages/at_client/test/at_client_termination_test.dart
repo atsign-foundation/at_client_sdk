@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/listener/at_sign_change_listener.dart';
+import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -236,5 +238,108 @@ void main() {
             false);
       });
     });
+
+    group('setCurrentAtSign idempotency', () {
+      // The same-atSign short-circuit added with the
+      // bypasscache_test flake fix. Forced-reset cases (callers
+      // passing atChops / atLookUp / enrollmentId, or an explicitly
+      // stopped atClient) must still recreate; bare no-arg calls
+      // must reuse.
+
+      test('same-atSign, no override args → identical syncService preserved',
+          () async {
+        final atSign = '@idempotent_no_override';
+
+        final atClient1 = await _initializeAtClient(atSign);
+        final syncService1 = atClient1.syncService;
+
+        // Second call with the exact same atSign / namespace / prefs
+        // and no override args must short-circuit — atClient AND its
+        // syncService both stay identical. Catches regressions where
+        // setCurrentAtSign recreates anyway and leaves two
+        // SyncService instances on the same Hive backing (the original
+        // cause of the bypasscache_test localToRemote race).
+        final atClient2 = await _initializeAtClient(atSign);
+        expect(identical(atClient1, atClient2), true,
+            reason: 'idempotent setCurrentAtSign returns same atClient');
+        expect(identical(syncService1, atClient2.syncService), true,
+            reason: 'syncService is preserved across idempotent calls');
+        expect((atClient2.syncService as SyncServiceImpl).isStopped, false,
+            reason: 'preserved syncService is not stopped');
+      });
+
+      test('same-atSign with atChops override → recreates', () async {
+        final atSign = '@idempotent_with_atchops';
+
+        final atClient1 = await _initializeAtClient(atSign);
+        final syncService1 = atClient1.syncService;
+
+        // Caller passes atChops — the idempotency check must NOT
+        // short-circuit, because the override is a signal the caller
+        // wants a fresh atClient.
+        final mockAtChops = MockAtChops();
+        await AtClientManager.getInstance().setCurrentAtSign(
+          atSign,
+          'test',
+          _createPreference(atSign.replaceAll('@', '')),
+          atChops: mockAtChops,
+        );
+        final atClient2 = AtClientManager.getInstance().atClient;
+        // syncService MUST be a fresh instance.
+        expect(identical(syncService1, atClient2.syncService), false,
+            reason: 'atChops override forces syncService recreate');
+      });
+
+      test('same-atSign with enrollmentId override → recreates', () async {
+        final atSign = '@idempotent_with_enrollment';
+
+        final atClient1 = await _initializeAtClient(atSign);
+        final syncService1 = atClient1.syncService;
+
+        await AtClientManager.getInstance().setCurrentAtSign(
+          atSign,
+          'test',
+          _createPreference(atSign.replaceAll('@', '')),
+          enrollmentId: 'some-enrollment-id',
+        );
+        final atClient2 = AtClientManager.getInstance().atClient;
+        expect(identical(syncService1, atClient2.syncService), false,
+            reason: 'enrollmentId override forces syncService recreate');
+      });
+
+      test('idempotent call does not fire SwitchAtSignEvent', () async {
+        final atSign = '@idempotent_no_event';
+
+        await _initializeAtClient(atSign);
+
+        // Register a change listener AFTER the initial setCurrentAtSign
+        // so we only observe the second (idempotent) call's behaviour.
+        final events = <SwitchAtSignEvent>[];
+        final listener = _CapturingAtSignChangeListener(events.add);
+        AtClientManager.getInstance().listenToAtSignChange(listener);
+
+        await _initializeAtClient(atSign);
+
+        // Existing code path only fires the event when previous and
+        // current atSigns differ; idempotent short-circuit returns
+        // before that branch. Regression guard for accidentally
+        // moving the event emission ahead of the short-circuit.
+        expect(events, isEmpty,
+            reason: 'no SwitchAtSignEvent on idempotent setCurrentAtSign');
+
+        AtClientManager.getInstance().removeChangeListeners(listener);
+      });
+    });
   });
+}
+
+/// Test-only AtSignChangeListener that forwards every event to a
+/// caller-supplied callback. Avoids hand-rolling a mock inside each
+/// test.
+class _CapturingAtSignChangeListener implements AtSignChangeListener {
+  _CapturingAtSignChangeListener(this._onEvent);
+  final void Function(SwitchAtSignEvent) _onEvent;
+
+  @override
+  void listenToAtSignChange(SwitchAtSignEvent event) => _onEvent(event);
 }
