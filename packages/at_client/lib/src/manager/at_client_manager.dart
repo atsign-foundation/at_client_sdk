@@ -87,6 +87,35 @@ class AtClientManager {
     secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
         preference.rootDomain, preference.rootPort);
 
+    // Idempotency: if the caller is asking for the SAME atSign that's
+    // already current (with no caller-supplied override for atChops /
+    // atLookUp / enrollmentId), short-circuit. The stop+recreate path
+    // below is destructive: it stops the existing syncService and
+    // builds a fresh one against the same Hive store, producing a
+    // brief window where TWO syncService instances are alive against
+    // the same on-disk queue. If a user write enqueues during that
+    // window, the push can fire on the about-to-be-stopped sibling
+    // (whose progress-listener list is empty after its `stop()` ran),
+    // making the write invisible to any listener attached to the new
+    // syncService — observed in CI as `bypasscache_test` timing out
+    // with no `localToRemote` event.
+    //
+    // Callers needing a forced reset for a SAME-atSign change of
+    // preferences / atChops / enrollmentId still get one — we only
+    // skip when nothing in the request changed.
+    final currentAtSign = _currentAtClient?.getCurrentAtSign();
+    if (currentAtSign != null &&
+        currentAtSign == atSign &&
+        atChops == null &&
+        atLookUp == null &&
+        enrollmentId == null &&
+        _currentAtClient!.isStopped == false) {
+      _logger
+          .info('setCurrentAtSign: already on $atSign with no override args; '
+              'returning existing atClient (no stop/recreate).');
+      return this;
+    }
+
     _logger.info(
         'Switching atSigns ${_currentAtClient?.getCurrentAtSign()} -> $atSign');
 
