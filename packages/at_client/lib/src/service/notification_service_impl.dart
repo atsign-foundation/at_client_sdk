@@ -129,6 +129,10 @@ class NotificationServiceImpl extends NotificationService {
   /// `put` we just did doesn't have to round-trip back through a
   /// `get` — useful both for performance and because some mocks /
   /// fakes aren't stateful across the put-then-get.
+  @visibleForTesting
+  Future<AtValue?> migrateLegacyLastReceivedNotificationKeysForTest() =>
+      _migrateLegacyLastReceivedNotificationKeys();
+
   Future<AtValue?> _migrateLegacyLastReceivedNotificationKeys() async {
     final keyStore = atClient.getLocalSecondary()!.keyStore!;
     final ns = atClient.getPreferences()!.namespace;

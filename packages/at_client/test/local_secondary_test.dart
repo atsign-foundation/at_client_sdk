@@ -319,6 +319,82 @@ void main() {
     });
   });
 
+  group('writesInProgress tracker', () {
+    setUp(() async => await setupLocalStorage(storageDir, atSign));
+    tearDown(() async => await tearDownLocalStorage(storageDir));
+
+    /// Builds a fresh LocalSecondary against the test Hive store. Each
+    /// test gets its own AtClient instance (atClientInstanceMap is
+    /// cleared in the outer setUp).
+    Future<LocalSecondary> buildLocalSecondary() async {
+      AtClientImpl.atClientInstanceMap.remove(atSign);
+      final atClientManager = AtClientManager(atSign);
+      final preference = AtClientPreference()
+        ..syncRegex = '.wavi'
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/commit';
+      final atClient = await AtClientImpl.create(atSign, 'wavi', preference,
+          atClientManager: atClientManager);
+      return LocalSecondary(atClient);
+    }
+
+    UpdateVerbBuilder updateBuilderFor(String keyName) => UpdateVerbBuilder()
+      ..atKey = (AtKey()
+        ..key = keyName
+        ..sharedBy = atSign
+        ..metadata = (Metadata()..isPublic = true))
+      ..value = 'v';
+
+    test('starts empty', () async {
+      final localSecondary = await buildLocalSecondary();
+      expect(localSecondary.writesInProgressForTest, isEmpty);
+    });
+
+    test('cleared after a successful update', () async {
+      final localSecondary = await buildLocalSecondary();
+      await localSecondary.executeVerb(updateBuilderFor('email'), sync: false);
+      expect(localSecondary.writesInProgressForTest, isEmpty);
+      expect(localSecondary.isWriteInProgress('public:email$atSign'), false);
+    });
+
+    test('cleared after an update that throws (finally branch fires)',
+        () async {
+      // Trigger the max-key-length DataStoreException path inside
+      // _update to exercise the catch-then-rethrow; the in-progress
+      // tracker must still empty out in `finally`.
+      final localSecondary = await buildLocalSecondary();
+      final tooLongKey = TestUtils.createRandomString(250);
+      final builder = UpdateVerbBuilder()
+        ..atKey = (AtKey()
+          ..key = tooLongKey
+          ..sharedBy = atSign
+          ..metadata = (Metadata()..isPublic = true))
+        ..value = 'v';
+      await expectLater(
+          () async => await localSecondary.executeVerb(builder, sync: false),
+          throwsA(isA<DataStoreException>()));
+      expect(localSecondary.writesInProgressForTest, isEmpty);
+    });
+
+    test('cleared after a delete', () async {
+      final localSecondary = await buildLocalSecondary();
+      await localSecondary.executeVerb(updateBuilderFor('email'), sync: false);
+      final deleteBuilder = DeleteVerbBuilder()
+        ..atKey = (AtKey()
+          ..key = 'email'
+          ..sharedBy = atSign
+          ..metadata = (Metadata()..isPublic = true));
+      await localSecondary.executeVerb(deleteBuilder, sync: false);
+      expect(localSecondary.writesInProgressForTest, isEmpty);
+    });
+
+    test('snapshot getter returns an unmodifiable view', () async {
+      final localSecondary = await buildLocalSecondary();
+      final snapshot = localSecondary.writesInProgressForTest;
+      expect(() => snapshot.add('xxx'), throwsUnsupportedError);
+    });
+  });
+
   group('A group of tests to validate getKeys and getAtKeys', () {
     late SecondaryKeyStore mockSecondaryKeyStore;
     late LocalSecondary localSecondary;

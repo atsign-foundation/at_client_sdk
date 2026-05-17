@@ -93,6 +93,12 @@ class LocalSecondary implements Secondary {
   /// by `SyncServiceImpl._syncFromServer` per pull entry.
   bool isWriteInProgress(String atKey) => _writesInProgress.contains(atKey);
 
+  /// Immutable snapshot of the in-progress writes set. Test-only
+  /// seam — production code consults [isWriteInProgress] per key.
+  @visibleForTesting
+  Set<String> get writesInProgressForTest =>
+      Set<String>.unmodifiable(_writesInProgress);
+
   LocalSecondary(
     this._atClient, {
     this.keyStore,
