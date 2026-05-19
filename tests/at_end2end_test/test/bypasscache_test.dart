@@ -91,15 +91,28 @@ void main() async {
     await AtClientManager.getInstance().setCurrentAtSign(sharedByAtSign,
         namespace, TestPreferences.getInstance().getPreference(sharedByAtSign));
 
+    // Per-key gate: register the listener BEFORE the put so the
+    // push event for this key can't fire before the listener is in
+    // place. `put` internally calls `syncService.sync()` after
+    // enqueueing, which can run to completion (and emit its
+    // SyncProgress event) before any subsequent line of test code
+    // runs — registering the listener after the put would miss
+    // that event and the gate would hang until timeout.
+    // `awaitKeyPushed` runs its registration synchronously before
+    // returning its Future, so capturing it here is sufficient.
+    var pushedInitialValue = E2ESyncService.getInstance().awaitKeyPushed(
+        AtClientManager.getInstance().atClient.syncService,
+        testByPassCacheAtKey);
     var putResult = await AtClientManager.getInstance()
         .atClient
         .put(testByPassCacheAtKey, initialValue);
     expect(putResult, true);
-    // Sync the data to the remote secondary
-    await E2ESyncService.getInstance()
-        .syncData(AtClientManager.getInstance().atClient.syncService);
+    await pushedInitialValue;
 
-    // Give it time to propagate from one atServer to the other.
+    // Cross-server propagation: publisher's atServer auto-notifies
+    // the receiver's atServer (autoNotify=true at this point). That
+    // path is separate from the at_client sync queue we just gated,
+    // so still wait for it.
     await Future.delayed(Duration(seconds: 5));
 
     // Switch to sharedWithAtSign
@@ -128,13 +141,25 @@ void main() async {
     // Set autoNotify to false so that the update doesn't propagate to sharedWith AtSign automatically
     await setAtSignOneAutoNotify(false);
 
+    // Per-key gate: register the listener BEFORE the put (see
+    // explanation at the initialValue gate above) — `put` may
+    // trigger sync to completion before any subsequent line runs,
+    // so post-put registration races the very event we're trying
+    // to observe.
+    //
+    // This gate is the primary fix for the historical flake — the
+    // prior `syncData` gate could return on an unrelated prior
+    // sync event's commit-id match, leaving N+2 still queued; the
+    // receiver-side bypassCache lookup then polled for 60s against
+    // a publisher atServer that still held `initialValue`.
+    var pushedUpdatedValue = E2ESyncService.getInstance().awaitKeyPushed(
+        AtClientManager.getInstance().atClient.syncService,
+        testByPassCacheAtKey);
     var newPutResult = await AtClientManager.getInstance()
         .atClient
         .put(testByPassCacheAtKey, updatedValue);
     expect(newPutResult, true);
-    // Sync the data to the remote secondary
-    await E2ESyncService.getInstance()
-        .syncData(AtClientManager.getInstance().atClient.syncService);
+    await pushedUpdatedValue;
 
     // As atSignTwo
     await AtClientManager.getInstance().setCurrentAtSign(

@@ -1136,6 +1136,10 @@ void main() {
       when(() => mockAtClientImpl.put(any(), any()))
           .thenAnswer((_) async => true);
 
+      // #1942 — the legacy-key migration may call delete; stub it so
+      // the mock doesn't throw when no legacy keys are present.
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
+
       expect(await notificationServiceImpl.getLastNotificationTime(), null);
     });
 
@@ -1173,6 +1177,9 @@ void main() {
       when(() => mockAtClientImpl.put(any(), any()))
           .thenAnswer((_) async => true);
 
+      // #1942 migration cleanup may call delete on legacy keys.
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
+
       when(() => mockAtClientImpl
           .getLocalSecondary()!
           .keyStore!
@@ -1209,6 +1216,9 @@ void main() {
       when(() => mockAtClientImpl.put(any(), any()))
           .thenAnswer((_) async => true);
 
+      // #1942 migration cleanup may call delete on legacy keys.
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
+
       when(() => mockAtClientImpl
           .getLocalSecondary()!
           .keyStore!
@@ -1239,6 +1249,15 @@ void main() {
           atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
+      // Default: any key NOT explicitly stubbed below is absent.
+      // The #1942 migration also probes the intermediate
+      // `lastreceivednotification.<ns>@<atSign>` form; this fallback
+      // keeps the mock from returning null on that probe.
+      when(() => mockAtClientImpl
+          .getLocalSecondary()!
+          .keyStore!
+          .isKeyExists(any())).thenAnswer((_) => false);
+
       when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.isKeyExists(
               notificationServiceImpl.lastReceivedNotificationAtKey.toString()))
           .thenAnswer((_) => false);
@@ -1255,6 +1274,9 @@ void main() {
 
       when(() => mockAtClientImpl.put(any(), any()))
           .thenAnswer((_) async => true);
+
+      // #1942 migration cleanup may call delete on legacy keys.
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
 
       expect(
           await notificationServiceImpl.getLastNotificationTime(), epochMillis);
@@ -1289,6 +1311,200 @@ void main() {
     });
   });
 
+  group('legacy lastReceivedNotification migration (#1942)', () {
+    // Verifies the per-startup migration that seeds the canonical
+    // `local:lastreceivednotification.<ns>@<atSign>` from any legacy
+    // form found, then deletes all legacy forms. The bug fixed in
+    // #1942 was that the deletes never happened — bare-form keys
+    // lingered in the keystore and accidentally matched AtCollection
+    // scans.
+
+    const ns = 'wavi';
+    const atSign = '@alice';
+    const canonicalStr = 'local:lastreceivednotification.$ns$atSign';
+    const intermediateStr = 'lastreceivednotification.$ns$atSign';
+    // The original legacy form used by very old releases. The
+    // migration code constructs the key as `_latestNotificationIdv2`
+    // but `AtKey.fromString().toString()` normalises to lowercase —
+    // mock matches must use the post-normalisation form.
+    const legacyV2Str = '_latestnotificationidv2.$ns$atSign';
+
+    /// Configures the shared `mockAtClientImpl` for migration tests:
+    /// keystore presence comes from `presentKeys`; gets come from
+    /// `values` (string → AtValue.value); puts and deletes are
+    /// captured into `putCalls` / `deleteCalls`.
+    Future<NotificationServiceImpl> setupMigrationMocks({
+      required Set<String> presentKeys,
+      required Map<String, String?> values,
+      required List<MapEntry<String, String?>> putCalls,
+      required List<String> deleteCalls,
+    }) async {
+      registerFallbackValue(FakeAtKey());
+
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()..namespace = ns);
+      // `getCurrentAtSign()` and `atSign` are non-stubbable on this
+      // mock — MockAtClientImpl overrides them concretely to return
+      // `@alice`. Our `atSign` constant must match.
+      assert(mockAtClientImpl.getCurrentAtSign() == atSign);
+
+      // AtKey.fromString().toString() lowercases its input; the
+      // migration's `isKeyExists` probe uses the constant-case
+      // string (e.g. `_latestNotificationIdv2.…`) while
+      // `atClient.get`/`atClient.delete` see the normalised
+      // (lowercase) form. Compare case-insensitively so test fixtures
+      // can specify keys in either casing.
+      final presentKeysLower = presentKeys.map((s) => s.toLowerCase()).toSet();
+      final valuesLower = <String, String?>{
+        for (final e in values.entries) e.key.toLowerCase(): e.value,
+      };
+
+      when(() => mockAtClientImpl
+          .getLocalSecondary()!
+          .keyStore!
+          .isKeyExists(any())).thenAnswer((invocation) {
+        final k = invocation.positionalArguments.first as String;
+        return presentKeysLower.contains(k.toLowerCase());
+      });
+      when(() => mockAtClientImpl.get(any())).thenAnswer((invocation) async {
+        final atKey = invocation.positionalArguments.first as AtKey;
+        return AtValue()..value = valuesLower[atKey.toString().toLowerCase()];
+      });
+      when(() => mockAtClientImpl.put(any(), any()))
+          .thenAnswer((invocation) async {
+        final atKey = invocation.positionalArguments[0] as AtKey;
+        final value = invocation.positionalArguments[1] as String?;
+        putCalls.add(MapEntry(atKey.toString(), value));
+        return true;
+      });
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((invocation) async {
+        final atKey = invocation.positionalArguments.first as AtKey;
+        deleteCalls.add(atKey.toString());
+        return true;
+      });
+
+      // The NotificationServiceImpl constructor wires a Monitor with
+      // network behaviour we don't want fired in these tests. Pass a
+      // FakeMonitor to skip all that.
+      return await NotificationServiceImpl.create(
+        mockAtClientImpl,
+        monitor: fakeMonitor,
+      ) as NotificationServiceImpl;
+    }
+
+    test('seeds canonical from bare-form and deletes both legacy forms',
+        () async {
+      final putCalls = <MapEntry<String, String?>>[];
+      final deleteCalls = <String>[];
+      final service = await setupMigrationMocks(
+        // Canonical absent; both legacy forms present with values.
+        presentKeys: {intermediateStr, legacyV2Str},
+        values: {
+          intermediateStr: '{"epochMillis":111}',
+          legacyV2Str: '{"epochMillis":99}',
+        },
+        putCalls: putCalls,
+        deleteCalls: deleteCalls,
+      );
+
+      final result =
+          await service.migrateLegacyLastReceivedNotificationKeysForTest();
+
+      // Bare form wins over _latestNotificationIdv2 (it's the newer
+      // intermediate form).
+      expect(result?.value, '{"epochMillis":111}');
+      // The seed put landed on the canonical local: key.
+      expect(putCalls, hasLength(1));
+      expect(putCalls.single.key, canonicalStr);
+      expect(putCalls.single.value, '{"epochMillis":111}');
+      // Both legacy forms are deleted regardless of which one seeded.
+      expect(deleteCalls, containsAll([intermediateStr, legacyV2Str]));
+    });
+
+    test('seeds canonical from _latestNotificationIdv2 when bare absent',
+        () async {
+      final putCalls = <MapEntry<String, String?>>[];
+      final deleteCalls = <String>[];
+      final service = await setupMigrationMocks(
+        presentKeys: {legacyV2Str},
+        values: {legacyV2Str: '{"epochMillis":42}'},
+        putCalls: putCalls,
+        deleteCalls: deleteCalls,
+      );
+
+      final result =
+          await service.migrateLegacyLastReceivedNotificationKeysForTest();
+
+      expect(result?.value, '{"epochMillis":42}');
+      expect(putCalls, hasLength(1));
+      expect(putCalls.single.key, canonicalStr);
+      expect(deleteCalls, [legacyV2Str]);
+    });
+
+    test('canonical already has value: legacy forms deleted, canonical kept',
+        () async {
+      final putCalls = <MapEntry<String, String?>>[];
+      final deleteCalls = <String>[];
+      final service = await setupMigrationMocks(
+        presentKeys: {canonicalStr, intermediateStr},
+        values: {
+          canonicalStr: '{"epochMillis":555}',
+          intermediateStr: '{"epochMillis":111}',
+        },
+        putCalls: putCalls,
+        deleteCalls: deleteCalls,
+      );
+
+      final result =
+          await service.migrateLegacyLastReceivedNotificationKeysForTest();
+
+      // Canonical wins — no seed put, no overwrite.
+      expect(result?.value, '{"epochMillis":555}');
+      expect(putCalls, isEmpty);
+      // Bare-form still gets cleaned up (the bug from #1942).
+      expect(deleteCalls, [intermediateStr]);
+    });
+
+    test('no-op when neither canonical nor legacy keys exist', () async {
+      final putCalls = <MapEntry<String, String?>>[];
+      final deleteCalls = <String>[];
+      final service = await setupMigrationMocks(
+        presentKeys: <String>{},
+        values: <String, String?>{},
+        putCalls: putCalls,
+        deleteCalls: deleteCalls,
+      );
+
+      final result =
+          await service.migrateLegacyLastReceivedNotificationKeysForTest();
+
+      expect(result, isNull);
+      expect(putCalls, isEmpty);
+      expect(deleteCalls, isEmpty);
+    });
+
+    test('idempotent: a second run after a clean DB does nothing', () async {
+      final putCalls = <MapEntry<String, String?>>[];
+      final deleteCalls = <String>[];
+      // After a successful migration, only the canonical exists
+      // with a real value — both legacy forms are gone.
+      final service = await setupMigrationMocks(
+        presentKeys: {canonicalStr},
+        values: {canonicalStr: '{"epochMillis":42}'},
+        putCalls: putCalls,
+        deleteCalls: deleteCalls,
+      );
+
+      await service.migrateLegacyLastReceivedNotificationKeysForTest();
+      await service.migrateLegacyLastReceivedNotificationKeysForTest();
+
+      expect(putCalls, isEmpty,
+          reason: 'no seeding on a clean DB (canonical present)');
+      expect(deleteCalls, isEmpty,
+          reason: 'no deletes on a clean DB (no legacy forms present)');
+    });
+  });
+
   group('validate stop() behaviour', () {
     test('stop() sets isStopped to true', () async {
       when(() => mockAtClientManager.secondaryAddressFinder)
@@ -1312,13 +1528,20 @@ void main() {
 class StatsAtKeyMatcher extends Matcher {
   @override
   Description describe(Description description) =>
-      description.add('A custom matcher to match the old statsNotificationKey');
+      description.add('A custom matcher to match a legacy '
+          'lastReceivedNotification key (`_latestNotificationIdv2.*` or '
+          'the intermediate bare `lastreceivednotification.*` form).');
 
   @override
   bool matches(item, Map matchState) {
-    if (item is AtKey && item.key.contains('_latestNotificationIdv2')) {
-      return true;
-    }
+    if (item is! AtKey) return false;
+    if (item.key.contains('_latestNotificationIdv2')) return true;
+    // Intermediate (pre-`local:`) form — added during the #1942 fix
+    // when the migration was widened to also clean up bare
+    // `lastreceivednotification.<ns>@<atSign>` rows. The matcher
+    // accepts only the bare form (rejects the canonical `local:`
+    // prefix, which AtKey.fromString preserves on the parsed key).
+    if (item.key == 'lastreceivednotification' && !item.isLocal) return true;
     return false;
   }
 }

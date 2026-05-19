@@ -1,5 +1,11 @@
 // Worked example: publishing live docker stats to other atSigns via
-// AtCollection sub-collections.
+// raw notifications (NotificationService.send). Each sample is sent
+// as one notification, with the StatSample JSON-encoded into the
+// body and the container + host names sanitised into the namespace
+// for receiver-side filtering:
+//
+//   notification key  =  <recipient>:sample.<container>.<host>.dockerstats.demos<publisher>
+//   notification body =  jsonEncode(sample.toJson())
 //
 // Real mode (requires the docker CLI on PATH):
 //   dart run bin/dockerstats_publish.dart \
@@ -9,14 +15,9 @@
 //   dart run bin/dockerstats_publish.dart \
 //       -a @alice -P 2s --other-at-signs @bob \
 //       --simulate --simulate-hosts 3
-//
-// Tree shape (see lib/dockerstats/models.dart for full doc):
-//   nodes  →  <hostId>  →  atsigns  →  <atSignId>  →  samples  →  <millis>
-//
-// Items expire after 10 minutes by default — receivers see a rolling
-// window without any client-side eviction.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/args.dart';
@@ -29,19 +30,11 @@ import 'package:at_client_examples/dockerstats/stats_source.dart';
 
 const String applicationNamespace = 'dockerstats.demos';
 
-/// TTL for the LEAF [StatSample] CItems — high-frequency telemetry,
-/// short TTL so receivers see a rolling window of recent samples
-/// without manual eviction.
-const Duration sampleExpiration = Duration(hours: 1);
-
-/// TTL for the structural CItems — root-level [HostNode]s and the
-/// per-host [AtsignOnHost] sub-collection nodes. These represent
-/// "membership" (which hosts exist, which atSigns run on each
-/// host) rather than per-sample telemetry, so they live longer:
-/// they get refreshed on each cycle's `upsert`, but a publisher that
-/// pauses for ~minutes shouldn't lose its host/atSign skeleton from
-/// the receiver's view.
-const Duration nodeExpiration = Duration(hours: 1);
+/// Notification expiration (`ttln`). atServer drops notifications that
+/// haven't been delivered within this window. High-frequency telemetry,
+/// short window — receivers reconnecting after a longer outage just
+/// resume from the next live sample rather than replaying old ones.
+const Duration sampleExpiration = Duration(minutes: 5);
 
 void main(List<String> args) async {
   final ap = _buildParser();
@@ -70,7 +63,6 @@ void main(List<String> args) async {
     stderr.writeln('--cycles must be a positive integer');
     exit(64);
   }
-  final postSyncDelay = _parseDuration(parsed['post-sync-delay'] as String);
   final traceEnabled = parsed['trace'] as bool;
   final otherAtSigns =
       _splitCsv(
@@ -90,30 +82,6 @@ void main(List<String> args) async {
   stdout.writeln(
     'Connected as ${atClient.atSign} with'
     ' prefs.namespace=${atClient.getPreferences()?.namespace}',
-  );
-
-  // Domain-object factories. Required up front for sub-collection
-  // rehydrate to recognise the wire-format tags.
-  AtCollection.registerFactory<HostNode>(
-    HostNode.fromJson,
-    typeTag: 'HostNode',
-  );
-  AtCollection.registerFactory<AtsignOnHost>(
-    AtsignOnHost.fromJson,
-    typeTag: 'AtsignOnHost',
-  );
-  AtCollection.registerFactory<StatSample>(
-    StatSample.fromJson,
-    typeTag: 'StatSample',
-  );
-
-  // Force the notification listener up front so the first event
-  // doesn't race the lazy startup inside subscribe().
-  atClient.notificationService.startListening();
-  final nodes = await atClient.collection<HostNode>(
-    '$collectionRootName.$applicationNamespace',
-    nodeExpiration,
-    eventSource: EventSource.data,
   );
 
   // Build the source(s).
@@ -136,26 +104,17 @@ void main(List<String> args) async {
   }
 
   log(
-    'sharing dockerstats with ${otherAtSigns.join(", ")} '
+    'publishing dockerstats notifications to ${otherAtSigns.join(", ")} '
     'every ${pollingInterval.inMilliseconds}ms '
-    '(samples TTL ${sampleExpiration.inMinutes}m, '
-    'host/atSign TTL ${nodeExpiration.inMinutes}m)',
-  );
-
-  // Memoised sub-collections so we don't rebuild them per cycle.
-  final publisher = _Publisher(
-    nodes: nodes,
-    otherAtSigns: otherAtSigns,
-    log: log,
-    traceEnabled: traceEnabled,
+    '(ttln ${sampleExpiration.inMinutes}m)',
   );
 
   // Graceful shutdown on SIGINT / SIGTERM. First signal completes
   // the `stop` Completer and the main loop unwinds at the next
   // race-against-stop await. A SECOND SIGINT (or SIGTERM) forces an
-  // immediate process exit — the conventional CLI behaviour for
-  // "user is hitting Ctrl-C twice because the graceful path is
-  // slower than they're willing to wait".
+  // immediate process exit — the conventional CLI shape for "user is
+  // hitting Ctrl-C twice because the graceful path is slower than
+  // they're willing to wait".
   final stop = Completer<void>();
   void onSignal() {
     if (!stop.isCompleted) {
@@ -185,7 +144,13 @@ void main(List<String> args) async {
         final samples = await src.sample();
         for (final s in samples) {
           if (stop.isCompleted) break;
-          await publisher.publishSample(s);
+          await _publishSample(
+            s,
+            atClient: atClient,
+            recipients: otherAtSigns,
+            traceEnabled: traceEnabled,
+            log: log,
+          );
         }
         totalSamples += samples.length;
         log('published ${samples.length} sample(s) from ${src.hostname}');
@@ -200,70 +165,8 @@ void main(List<String> args) async {
     if (cyclesLimit != null && cyclesCompleted >= cyclesLimit) {
       log(
         'reached --cycles=$cyclesLimit ($totalSamples sample(s) total); '
-        'flushing sync before exit',
+        'exiting',
       );
-      // Trigger an immediate sync round and wait until the local
-      // commit-id reaches the atServer's snapshot. With a write-only
-      // publisher, "local caught up to server" means our pushes have
-      // landed and been acknowledged. The closed-loop subscriber
-      // assertion ("subscriber received exactly $totalSamples
-      // samples") is only meaningful once this completes.
-      final waitStart = DateTime.now().microsecondsSinceEpoch;
-      if (traceEnabled) {
-        log('TRACE sync_start t_us=$waitStart');
-      }
-      atClient.syncService.sync();
-      try {
-        // Race against `stop.future` so a Ctrl-C during the catch-
-        // up wait is observed promptly rather than blocking up to
-        // the 60s timeout.
-        await Future.any([
-          atClient.syncService.waitUntilCaughtUp(
-            timeout: const Duration(seconds: 60),
-            onProgress: (p) {
-              if (!traceEnabled) return;
-              final t = DateTime.now().microsecondsSinceEpoch;
-              log(
-                'TRACE sync_progress t_us=$t status=${p.syncStatus} '
-                'localCommitIdBeforeSync=${p.localCommitIdBeforeSync} '
-                'localCommitId=${p.localCommitId} '
-                'serverCommitId=${p.serverCommitId} '
-                'keyInfoListLen=${p.keyInfoList?.length} '
-                'msg=${p.message}',
-              );
-            },
-          ),
-          stop.future,
-        ]);
-        if (!stop.isCompleted) {
-          if (traceEnabled) {
-            final waitEnd = DateTime.now().microsecondsSinceEpoch;
-            log(
-              'TRACE sync_caught_up t_us=$waitEnd dt_us=${waitEnd - waitStart}',
-            );
-          }
-          log('sync caught up; emitted $totalSamples sample(s) total');
-        }
-      } on TimeoutException {
-        log(
-          'sync did not catch up within 60s; '
-          'subscriber-side count may be lower than $totalSamples',
-        );
-      }
-      // Even after waitUntilCaughtUp returns, in-flight push tasks
-      // for the very last batch of writes (specifically the
-      // recipient-copy puts inside [_put]) may still be queued in
-      // the publisher's sync pipeline waiting to be picked up by the
-      // next sync round. waitUntilCaughtUp completes on commitId
-      // equality at the time of the call, but the final cycle's
-      // recipient writes can still be enqueued behind it. Sleep a
-      // beat so they have a chance to flush before we tear the
-      // process down. Bounded by --post-sync-delay (default 5s).
-      // Race against `stop.future` so Ctrl-C cuts the settle short.
-      if (postSyncDelay > Duration.zero && !stop.isCompleted) {
-        log('post-sync settle: waiting ${postSyncDelay.inMilliseconds}ms');
-        await Future.any([Future.delayed(postSyncDelay), stop.future]);
-      }
       break;
     }
 
@@ -274,121 +177,53 @@ void main(List<String> args) async {
 }
 
 // ---------------------------------------------------------------------------
-// Publisher — owns the per-host / per-atSign CItem caches.
+// Publish
 
-class _Publisher {
-  final AtCollection<HostNode> nodes;
-  final Set<Atsign> otherAtSigns;
-  final void Function(String) log;
+/// One [NotificationService.send] per (sample, recipient). The
+/// notification namespace is `sample.<container>.<host>.dockerstats.demos`
+/// so receivers can filter on a regex that combines the topic prefix
+/// (`sample`) and the `dockerstats.demos` suffix without decoding the
+/// body. Container and host names are sanitised to fit a namespace
+/// segment (lowercase + `[a-z0-9_-]`).
+Future<void> _publishSample(
+  StatSample s, {
+  required AtClient atClient,
+  required Set<Atsign> recipients,
+  required bool traceEnabled,
+  required void Function(String) log,
+}) async {
+  final containerSeg = sanitiseSegment(s.containerName);
+  final hostSeg = sanitiseSegment(s.hostname);
+  final ns = 'sample.$containerSeg.$hostSeg.$applicationNamespace';
+  final body = jsonEncode(s.toJson());
 
-  /// When true the per-sample TRACE log lines (pub_pre / pub_post)
-  /// are emitted. Off by default to keep the demo's stdout readable;
-  /// flip on with `--trace` for closed-loop diagnostics.
-  final bool traceEnabled;
-
-  /// hostId → host CItem. Cached after first ensure to skip the
-  /// existence probe on subsequent cycles.
-  final Map<String, CItem<HostNode>> _hostItems = {};
-
-  /// hostId → (atsigns sub-collection, atSignId → atSign CItem).
-  final Map<String, _HostScopedCaches> _hostScoped = {};
-
-  _Publisher({
-    required this.nodes,
-    required this.otherAtSigns,
-    required this.log,
-    required this.traceEnabled,
-  });
-
-  Future<void> publishSample(StatSample s) async {
-    final hostId = sanitiseSegment(s.hostname);
-    final atSignId = sanitiseSegment(s.atSign);
-
-    final hostItem = await _ensureHost(hostId, s.hostname);
-    final scoped = _hostScoped.putIfAbsent(
-      hostId,
-      () => _HostScopedCaches(
-        atsigns: nodes.subCollection<AtsignOnHost>(
-          parent: hostItem,
-          subName: subAtsignsName,
-          defaultExpiration: nodeExpiration,
-        ),
-      ),
-    );
-
-    final atItem = await _ensureAtsign(scoped, atSignId, s);
-
-    final samples = scoped.samples.putIfAbsent(
-      atSignId,
-      () => scoped.atsigns.subCollection<StatSample>(
-        parent: atItem,
-        subName: subSamplesName,
-        defaultExpiration: sampleExpiration,
-      ),
-    );
-
+  for (final to in recipients) {
     final preMs = DateTime.now().microsecondsSinceEpoch;
     if (traceEnabled) {
-      log('TRACE pub_pre id=${s.millis} pair=$hostId/$atSignId t_us=$preMs');
+      log(
+        'TRACE pub_pre id=${s.millis} '
+        'container=$containerSeg host=$hostSeg to=$to t_us=$preMs',
+      );
     }
-    await samples.create(
-      id: s.millis.toString(),
-      obj: s,
-      sharedWith: otherAtSigns,
-    );
+    try {
+      await atClient.notificationService.send(
+        to: to,
+        namespace: ns,
+        body: body,
+        expiration: sampleExpiration,
+      );
+    } catch (e) {
+      log('notify to $to failed: $e');
+    }
     if (traceEnabled) {
       final postMs = DateTime.now().microsecondsSinceEpoch;
       log(
-        'TRACE pub_post id=${s.millis} pair=$hostId/$atSignId '
+        'TRACE pub_post id=${s.millis} '
+        'container=$containerSeg host=$hostSeg to=$to '
         't_us=$postMs dt_us=${postMs - preMs}',
       );
     }
   }
-
-  Future<CItem<HostNode>> _ensureHost(String hostId, String hostname) async {
-    final cached = _hostItems[hostId];
-    if (cached != null) return cached;
-    final item = await nodes.upsert(
-      id: hostId,
-      obj: HostNode(
-        hostname: hostname,
-        firstSeenMs: DateTime.now().millisecondsSinceEpoch,
-      ),
-      sharedWith: otherAtSigns,
-    );
-    _hostItems[hostId] = item;
-    log('registered host "$hostname" (id=$hostId)');
-    return item;
-  }
-
-  Future<CItem<AtsignOnHost>> _ensureAtsign(
-    _HostScopedCaches scoped,
-    String atSignId,
-    StatSample s,
-  ) async {
-    final cached = scoped.atItems[atSignId];
-    if (cached != null) return cached;
-    final item = await scoped.atsigns.upsert(
-      id: atSignId,
-      obj: AtsignOnHost(
-        atSign: s.atSign,
-        hostname: s.hostname,
-        firstSeenMs: DateTime.now().millisecondsSinceEpoch,
-      ),
-      sharedWith: otherAtSigns,
-    );
-    scoped.atItems[atSignId] = item;
-    log('registered atSign "${s.atSign}" on host "${s.hostname}"');
-    return item;
-  }
-}
-
-class _HostScopedCaches {
-  final AtCollection<AtsignOnHost> atsigns;
-  final Map<String, CItem<AtsignOnHost>> atItems = {};
-  final Map<String, AtCollection<StatSample>> samples = {};
-
-  _HostScopedCaches({required this.atsigns});
 }
 
 // ---------------------------------------------------------------------------
@@ -399,7 +234,6 @@ ArgParser _buildParser() {
   final p =
       ArgParser(usageLineLength: cols)
         ..addFlag('help', negatable: false, help: 'Show this help')
-        // Required by CLIBase; long names match what CLIBase reads.
         ..addOption(
           'atsign',
           abbr: 'a',
@@ -411,11 +245,11 @@ ArgParser _buildParser() {
           abbr: 'n',
           defaultsTo: applicationNamespace,
           hide: true,
-          help: 'Namespace',
+          help: 'Application namespace (AtClientPreference.namespace)',
         )
         ..addOption(
           'other-at-signs',
-          help: 'Comma-separated atSign(s) to share docker stats with',
+          help: 'Comma-separated atSign(s) to send sample notifications to',
           mandatory: true,
         )
         ..addOption(
@@ -443,24 +277,16 @@ ArgParser _buildParser() {
         ..addOption(
           'cycles',
           help:
-              'Bounded run: emit exactly this many polling cycles, '
-              'flush sync, and exit. Useful for closed-loop verification '
-              'against a subscriber. Defaults to unbounded.',
-        )
-        ..addOption(
-          'post-sync-delay',
-          defaultsTo: '5s',
-          help:
-              'Settle time after waitUntilCaughtUp before exit, to let '
-              'the last cycle\'s recipient-copy writes flush through '
-              'the sync pipeline. Only relevant with --cycles.',
+              'Bounded run: emit exactly this many polling cycles and '
+              'exit. Useful for closed-loop verification against a '
+              'subscriber. Defaults to unbounded.',
         )
         ..addFlag(
           'trace',
           negatable: false,
           help:
-              'Emit per-event TRACE log lines (pub_pre, pub_post, '
-              'sync_start, sync_progress, sync_caught_up). Off by default.',
+              'Emit per-event TRACE log lines (pub_pre, pub_post). Off by '
+              'default.',
         )
         // Standard at_cli_commons knobs, hidden by default.
         ..addOption('key-file', abbr: 'k', hide: true)

@@ -714,12 +714,21 @@ class SyncServiceImpl implements SyncService {
         }
       }
       batchesDone++;
+      // Snapshot keyInfoList AT this point so per-batch listeners
+      // see every push as it lands, not only at the terminal
+      // `Sync complete` event in `processSyncRequests`. If anything
+      // between `syncInternal` returning and that terminal emission
+      // throws (network blip on `_getServerCommitId` / `_getLocalCommitId`,
+      // a stop() racing the completion), the push KeyInfos would
+      // otherwise be silently dropped — listeners would never see
+      // a `localToRemote` event for keys that DID land on the server.
       _informSyncProgress(
         SyncProgress()
           ..syncStatus = SyncStatus.inProgress
           ..startedAt = DateTime.now().toUtc()
           ..message = 'Push batch $batchesDone applied; '
-              '${await localSecondary.syncQueueSize} pending',
+              '${await localSecondary.syncQueueSize} pending'
+          ..keyInfoList = List<KeyInfo>.from(keyInfoList),
         localCommitId: _latestKnownServerCommitId,
         serverCommitId: _latestKnownServerCommitId,
       );
@@ -806,6 +815,7 @@ class SyncServiceImpl implements SyncService {
     // in certain scenarios e.g server has a commit entry that need not be synced on client side,
     // server has delete commit entry and the key is not present on local keystore
     List<KeyInfo> keyInfoList = [];
+    final localSecondary = _atClient.getLocalSecondary()!;
     try {
       int? skipDeletesUntil = await setAndGetSkipDeletesUntil(
           localCommitIdBeforeSync, serverCommitId);
@@ -820,6 +830,18 @@ class SyncServiceImpl implements SyncService {
                 lastReceivedServerCommitId, serverCommitId,
                 localCommitIdBeforeSync: localCommitIdBeforeSync,
                 skipDeletesUntil: skipDeletesUntil);
+        // Refresh the pending-push snapshot AFTER the network
+        // round-trip but BEFORE applying any server entries. The
+        // original snapshot was taken at sync-round start; a user
+        // put that landed in the queue while we were waiting on the
+        // server's response is invisible there, and without this
+        // refresh a server entry whose atKey matches the just-queued
+        // put would be applied to local — silently overwriting the
+        // user's value before our push has a chance to send it.
+        // Union with the sync-start snapshot so we never lose
+        // pre-sync entries.
+        pendingPushAtKeys = pendingPushAtKeys
+            .union(Set<String>.from(await localSecondary.peekSyncQueue()));
         if (listOfCommitEntriesFromServer.isEmpty) {
           // Server walked the full (lastReceivedServerCommitId,
           // serverCommitId] range and returned no entries for this
@@ -847,7 +869,17 @@ class SyncServiceImpl implements SyncService {
         // overwrite the local copy.
         for (dynamic serverCommitEntry in listOfCommitEntriesFromServer) {
           final serverAtKey = serverCommitEntry['atKey'].toString().trim();
-          final hasLocalConflict = pendingPushAtKeys.contains(serverAtKey);
+          // Conflict iff the atKey is either (a) already in the sync
+          // queue (captured in the per-batch refresh above), or (b)
+          // a [_update]/[_delete] for it is currently executing on
+          // this LocalSecondary — i.e. a user write is mid-flight
+          // between the keystore op and the enqueue. (b) closes the
+          // sub-window in [_update] where the keystore has the new
+          // value but the queue is still empty; applying a server
+          // entry in that window silently overwrites the user's
+          // value.
+          final hasLocalConflict = pendingPushAtKeys.contains(serverAtKey) ||
+              localSecondary.isWriteInProgress(serverAtKey);
           if (hasLocalConflict) {
             lastReceivedServerCommitId =
                 _parseToInteger(serverCommitEntry['commitId']);

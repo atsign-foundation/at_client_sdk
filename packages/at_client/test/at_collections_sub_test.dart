@@ -464,7 +464,8 @@ void main() {
           .thenAnswer((invocation) async {
         final regex =
             invocation.namedArguments[const Symbol('regex')] as String;
-        if (regex.contains('comments.p1.$parentNs')) {
+        if (regex
+            .contains('comments\\.p1\\.${parentNs.replaceAll('.', '\\.')}')) {
           return [subSelfKey];
         }
         return <AtKey>[];
@@ -527,7 +528,8 @@ void main() {
             invocation.namedArguments[const Symbol('regex')] as String;
         // Deep regex `(^|:).+\\.comments.p1.posts.blog.app@alice`
         // matches both the direct comment AND the nested reply.
-        if (regex.contains('comments.p1.$parentNs')) {
+        if (regex
+            .contains('comments\\.p1\\.${parentNs.replaceAll('.', '\\.')}')) {
           return [commentSelfKey, replySelfKey];
         }
         return <AtKey>[];
@@ -617,9 +619,11 @@ void main() {
           .thenAnswer((invocation) async {
         final regex =
             invocation.namedArguments[const Symbol('regex')] as String;
-        // Direct-item scan (getKeys) — returns only p1 (alive roots).
-        if (regex.startsWith(r'(^|:)[^.]+\.')) return [p1];
-        // Descendant scan — returns every descendant key in the subtree.
+        // Direct-item scan uses `[^.]+\.<ns>@` (single non-dot id);
+        // descendant scan uses `.+\.<parentId>\.<ns>@`. Branch on
+        // whichever substring is present — both are stable across
+        // the #1942 regex tightening.
+        if (regex.contains(r'[^.]+\.')) return [p1];
         return [c1OnP1, c2OnP2, r1OnC2OnP2];
       });
       when(() => c.atClient.delete(any())).thenAnswer((_) async => true);
@@ -659,7 +663,8 @@ void main() {
           .thenAnswer((invocation) async {
         final regex =
             invocation.namedArguments[const Symbol('regex')] as String;
-        if (regex.contains('comments.p1.$parentNs')) {
+        if (regex
+            .contains('comments\\.p1\\.${parentNs.replaceAll('.', '\\.')}')) {
           return [myCommentOnMyP1, myCommentOnBobsP1];
         }
         return <AtKey>[];
@@ -718,7 +723,10 @@ void main() {
             invocation.namedArguments[const Symbol('regex')] as String;
         // Both the sub-collection's deep-scan and its narrow scans
         // should find the stale comment.
-        if (regex.contains('comments.p1.$parentNs')) return [commentKey];
+        if (regex
+            .contains('comments\\.p1\\.${parentNs.replaceAll('.', '\\.')}')) {
+          return [commentKey];
+        }
         // Parent lookup in the parent collection.
         return <AtKey>[];
       });
@@ -758,15 +766,17 @@ void main() {
       // getKeys() (root-level scan) returns the root post.
       // descendant scan returns the orphaned reply.
       // alive-at-mid-namespace scan returns no comments.
+      // After the #1942 regex tightening, namespace dots are escaped
+      // and every scan is prefixed with `^(?!local:)(?:[^:]*:)?`.
+      final escapedParentNs = parentNs.replaceAll('.', '\\.');
+      final directRegex = '^(?!local:)(?:[^:]*:)?[^.]+\\.$escapedParentNs@';
+      final descendantRegex =
+          '^(?!local:)(?:[^:]*:)?.+\\.$escapedParentNs$selfAtSignStr';
       when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
           .thenAnswer((inv) async {
         final regex = inv.namedArguments[#regex] as String;
-        // Root-level direct items: pattern `(^|:)[^.]+.posts.blog.app@`
-        if (regex == '(^|:)[^.]+\\.$parentNs@') return [postKey];
-        // Descendant scan: `(^|:).+.posts.blog.app@<self>`
-        if (regex == '(^|:).+\\.$parentNs$selfAtSignStr') {
-          return [replyKey];
-        }
+        if (regex == directRegex) return [postKey];
+        if (regex == descendantRegex) return [replyKey];
         // Alive-at mid-namespace `comments.p1.<parentNs>` (any owner):
         if (regex.contains('comments\\.p1\\.posts\\.blog\\.app')) {
           return <AtKey>[]; // c1 is gone — middleman orphan

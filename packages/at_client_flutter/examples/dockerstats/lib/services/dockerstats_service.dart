@@ -1,195 +1,230 @@
-/// Owns the AtCollections that back the dockerstats dashboard.
+/// Owns the receive-side state for the dockerstats dashboard:
+///   - [SamplesDb] — per-atSign SQLite store. Tier 0 (raw) is kept
+///     for [tier0Retention]; aggregated tiers 1..4 are kept forever
+///     and updated incrementally on every notification.
+///   - [WindowCache] — in-memory view of the current [VisibleRange]
+///     at the chart's pixel-budget granularity. Live notifications
+///     fold into bucket accumulators directly.
+///   - A notification subscription that decodes each arriving
+///     sample into both stores.
 ///
-/// Two listeners on the root `nodes` collection drive the rolling
-/// window:
-///   - `subUpdates`: each `samples`-level update walks the parent
-///     chain via [AtCollection.getDescendant] to fetch the typed
-///     `CItem<StatSample>`, then adds it to the window.
-///   - `subDeletes`: each `samples`-level delete (most often a
-///     keystore-side TTL expiry, dispatched from
-///     `DataDeleted(wasExpired: true)` on the data-event path) maps
-///     `event.id` (= the publisher's `s.millis.toString()`) back to
-///     the matching sample and removes it from the window.
+/// Wire shape (matches `dockerstats_publish.dart`):
+///
+///     key  = @recipient:sample.<sanitised-container>.<sanitised-host>.dockerstats.demos@sender
+///     body = jsonEncode(StatSample.toJson())
 library;
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 
 import '../models/stats_models.dart';
-import 'rolling_window.dart';
+import '../models/visible_range.dart';
+import 'samples_db.dart';
+import 'window_cache.dart';
 
-const String dockerstatsNamespace = 'dockerstats.demos';
-const String collectionRootName = 'nodes';
-const String subAtsignsName = 'atsigns';
-const String subSamplesName = 'samples';
-const Duration sampleExpiration = Duration(minutes: 10);
+const String applicationNamespace = 'dockerstats.demos';
+
+/// Number of buckets we aim to render per chart series. The chart
+/// is a few hundred pixels wide in a 2x2 grid; rendering more than
+/// a couple of thousand points per series is wasted work.
+const int _targetBucketsPerSeries = 1000;
+
+/// Below this size the publisher's natural cadence is finer than
+/// the chart needs anyway — skip bucket aggregation and read raw.
+const int _minAggregationBucketMs = 5000;
 
 class DockerstatsService {
   final AtClient atClient;
-  final RollingWindow window;
+  final SamplesDb db;
+  final WindowCache cache;
   final _log = AtSignLogger('dockerstats');
 
-  late final AtCollection<HostNode> nodes;
-
-  StreamSubscription<CSubItemUpdated>? _subUpdatesSub;
-  StreamSubscription<CSubItemDeleted>? _subDeletesSub;
-
-  /// True while [_backfill] is still walking the local keystore.
-  /// Surfaces to the dashboard so the status bar can show a
-  /// "loading historical samples" indicator without blocking the
-  /// chart render path.
+  StreamSubscription<AtNotification>? _notifSub;
+  Timer? _pruneTimer;
+  Timer? _retentionTimer;
+  VisibleRange _range;
+  DataExtent _dataExtent = const DataExtent(earliestMs: null, latestMs: null);
   bool _backfilling = false;
   bool get backfilling => _backfilling;
 
-  DockerstatsService({required this.atClient, RollingWindow? window})
-    : window = window ?? RollingWindow();
+  DockerstatsService._(this.atClient, this.db, this.cache, this._range);
 
-  Future<void> init() async {
-    AtCollection.registerFactory<HostNode>(
-      HostNode.fromJson,
-      typeTag: 'HostNode',
-    );
-    AtCollection.registerFactory<AtsignOnHost>(
-      AtsignOnHost.fromJson,
-      typeTag: 'AtsignOnHost',
-    );
-    AtCollection.registerFactory<StatSample>(
-      StatSample.fromJson,
-      typeTag: 'StatSample',
-    );
-
-    nodes = await atClient.collection<HostNode>(
-      '$collectionRootName.$dockerstatsNamespace',
-      sampleExpiration,
-      eventSource: EventSource.both,
-    );
-
-    _subUpdatesSub = nodes.subUpdates.listen(
-      _onSubUpdate,
-      onError: (Object e, StackTrace st) =>
-          _log.warning('subUpdates error: $e\n$st'),
-    );
-    _subDeletesSub = nodes.subDeletes.listen(
-      _onSubDelete,
-      onError: (Object e, StackTrace st) =>
-          _log.warning('subDeletes error: $e\n$st'),
-    );
-
-    // Seed the rolling window from anything the previous session
-    // already synced into the local keystore. Subscriptions are
-    // attached first so any concurrent live events are not lost;
-    // [RollingWindow.add] is idempotent on (host, atSign, millis),
-    // so a backfilled sample arriving twice (once via getItems,
-    // once via a live event) is safe.
-    //
-    // Run in the background — backfill of a saturated keystore
-    // (thousands of samples) can take seconds, and the dashboard
-    // should render immediately and populate the charts as samples
-    // come in. The status bar reflects the in-progress state via
-    // [backfilling].
-    _backfilling = true;
-    unawaited(_backfill().whenComplete(() => _backfilling = false));
+  /// Visible time range. Setting a new value triggers a fresh DB
+  /// query at a recomputed tier + bucket size and replaces the
+  /// cache contents.
+  VisibleRange get range => _range;
+  Future<void> setRange(VisibleRange r) async {
+    if (r == _range) return;
+    _range = r;
+    await _loadRange();
   }
 
-  /// Walk the parent chain (nodes → atsigns → samples) and seed the
-  /// rolling window from everything currently in the local keystore.
-  /// Each level's failure is logged and skipped — one bad host or
-  /// atSign chain doesn't abort the rest.
-  Future<void> _backfill() async {
-    var totalSamples = 0;
-    var totalHosts = 0;
-    var totalAtSigns = 0;
-    try {
-      final hosts = await nodes.getItems();
-      totalHosts = hosts.length;
-      for (final hostItem in hosts) {
-        final atsignsColl = nodes.subCollection<AtsignOnHost>(
-          parent: hostItem,
-          subName: subAtsignsName,
-          defaultExpiration: sampleExpiration,
+  /// Most recent observed data extent (earliest / latest `millis`
+  /// across all tiers). Refreshed every time the cache is
+  /// repopulated and on each live notification. The dashboard
+  /// reads this to clamp pan / zoom and to drive the "Fit" button.
+  DataExtent get dataExtent => _dataExtent;
+
+  static Future<DockerstatsService> create({
+    required AtClient atClient,
+    required VisibleRange range,
+  }) async {
+    final db = await SamplesDb.open(atClient.atSign.toString());
+    final cache = WindowCache();
+    final svc = DockerstatsService._(atClient, db, cache, range);
+    await svc._init();
+    return svc;
+  }
+
+  Future<void> _init() async {
+    atClient.notificationService.startListening();
+
+    final selfFragment = RegExp.escape(atClient.atSign.toString());
+    final nsTail = RegExp.escape('.$applicationNamespace');
+    final regex = '^$selfFragment:sample\\.[^.]+\\.[^.]+$nsTail@';
+    _log.info('subscribing with regex $regex');
+
+    _notifSub = atClient.notificationService
+        .subscribe(regex: regex, shouldDecrypt: true)
+        .listen(
+          _onNotification,
+          onError: (Object e, StackTrace st) {
+            _log.warning('subscribe error: $e\n$st');
+          },
         );
-        try {
-          final atsigns = await atsignsColl.getItems();
-          totalAtSigns += atsigns.length;
-          for (final atsignItem in atsigns) {
-            final samplesColl = atsignsColl.subCollection<StatSample>(
-              parent: atsignItem,
-              subName: subSamplesName,
-              defaultExpiration: sampleExpiration,
-            );
-            try {
-              final samples = await samplesColl.getItems();
-              for (final sampleItem in samples) {
-                window.add(sampleItem.obj);
-                totalSamples++;
-              }
-            } catch (e, st) {
-              _log.warning(
-                'backfill samples for atsign=${atsignItem.id} '
-                'host=${hostItem.id}: $e\n$st',
-              );
-            }
-          }
-        } catch (e, st) {
-          _log.warning('backfill atsigns for host=${hostItem.id}: $e\n$st');
-        }
+
+    // Periodic prune: when the range is live, the left edge moves
+    // forward over time. Drop cache accumulators that have slipped
+    // outside the visible window. Historical ranges are fixed in
+    // time so pruning is a no-op.
+    _pruneTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!_range.isLive) return;
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      cache.pruneOlderThan(_range.resolveStartMs(nowMs));
+    });
+
+    // Tier-0 retention. Once at startup (catches up after any
+    // long-offline gap), then daily.
+    unawaited(_pruneTier0());
+    _retentionTimer = Timer.periodic(
+      const Duration(hours: 24),
+      (_) => unawaited(_pruneTier0()),
+    );
+
+    await _refreshDataExtent();
+    await _loadRange();
+  }
+
+  Future<void> _pruneTier0() async {
+    try {
+      final cutoff =
+          DateTime.now().millisecondsSinceEpoch - tier0Retention.inMilliseconds;
+      final removed = await db.pruneTier0OlderThan(cutoff);
+      if (removed > 0) {
+        _log.info(
+          'pruned $removed tier-0 row(s) older than ${tier0Retention.inDays}d',
+        );
       }
     } catch (e, st) {
-      _log.warning('backfill hosts: $e\n$st');
+      _log.warning('pruneTier0 failed: $e\n$st');
     }
-    _log.info(
-      'backfill complete: hosts=$totalHosts atSigns=$totalAtSigns '
-      'samples=$totalSamples (display-window cutoff '
-      '${window.window.inSeconds}s may drop older samples)',
-    );
   }
 
-  Future<void> _onSubUpdate(CSubItemUpdated e) async {
-    if (e.subName != subSamplesName || e.ancestry.length != 2) return;
-    // Skip any defensive null-owner events. With current at_client the
-    // notification path recovers `parents` from the decrypted payload
-    // directly, so this should be unreachable for live events — but
-    // legacy items predating that change can still surface here.
-    if (e.ancestry.any((a) => a.owner == null)) return;
+  Future<void> _refreshDataExtent() async {
     try {
-      final item = await nodes.getDescendant<StatSample>(
-        ancestry: e.ancestry,
-        id: e.id,
-        owner: e.owner,
-        leafExpiration: sampleExpiration,
-        leafFromJson: StatSample.fromJson,
-        leafTypeTag: 'StatSample',
-      );
-      if (item != null) {
-        window.add(item.obj);
-      } else {
-        _log.info(
-          'subUpdate getDescendant returned null for sample id=${e.id} '
-          'owner=${e.owner}',
-        );
-      }
-    } catch (err, st) {
-      _log.warning('failed to fetch sample ${e.id}: $err\n$st');
+      _dataExtent = await db.dataExtent();
+    } catch (e, st) {
+      _log.warning('dataExtent failed: $e\n$st');
     }
   }
 
-  void _onSubDelete(CSubItemDeleted e) {
-    if (e.subName != subSamplesName || e.ancestry.length != 2) return;
-    // ancestry[0]: (sanitised hostId, 'atsigns'); ancestry[1]:
-    // (sanitised atSignOnHostId, 'samples'). The rolling window keys
-    // its buckets by the same sanitised forms, so the lookup is
-    // direct — no scanning across buckets, no over-eviction.
-    window.removeById(
-      hostId: e.ancestry[0].id,
-      atSignId: e.ancestry[1].id,
-      id: e.id,
+  /// Pick the source tier and chart bucket size for the current
+  /// `_range`. Target bucket = span / target-bucket-count; coarsest
+  /// tier whose source bucket ≤ target.
+  ({int tier, int bucketMs}) _computeReadShape() {
+    final spanMs = _range.spanMs;
+    if (spanMs <= 0) return (tier: 0, bucketMs: 0);
+    final raw = spanMs ~/ _targetBucketsPerSeries;
+    final targetBucketMs = raw < _minAggregationBucketMs ? 0 : raw;
+    final tier = SamplesDb.pickTier(
+      targetBucketMs == 0 ? tierBucketsMs[0] : targetBucketMs,
     );
+    return (tier: tier, bucketMs: targetBucketMs);
   }
 
-  void dispose() {
-    _subUpdatesSub?.cancel();
-    _subDeletesSub?.cancel();
+  Future<void> _loadRange() async {
+    _backfilling = true;
+    try {
+      final shape = _computeReadShape();
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final sinceMs = _range.resolveStartMs(nowMs);
+      final untilMs = _range.isLive ? null : _range.resolveEndMs(nowMs);
+      final effectiveBucketMs = shape.bucketMs == 0
+          ? tierBucketsMs[shape.tier]
+          : shape.bucketMs;
+      cache.setBucketMsAndClear(shape.bucketMs);
+      final rows = await db.queryWindow(
+        tier: shape.tier,
+        sinceMs: sinceMs,
+        untilMs: untilMs,
+        bucketMs: effectiveBucketMs,
+      );
+      cache.replaceAll(rows);
+      _log.info(
+        'loaded ${rows.length} bucket(s) from tier ${shape.tier} '
+        'for span=${_range.spanMs}ms '
+        '${_range.isLive ? "(live)" : "(historical end=${_range.endMs})"} '
+        'at bucket=${shape.bucketMs == 0 ? "raw" : "${shape.bucketMs}ms"}',
+      );
+    } catch (e, st) {
+      _log.warning('loadRange failed: $e\n$st');
+    } finally {
+      _backfilling = false;
+    }
+  }
+
+  Future<void> _onNotification(AtNotification n) async {
+    final value = n.value;
+    if (value == null || value.isEmpty) return;
+    StatSample s;
+    try {
+      s = StatSample.fromJson(jsonDecode(value) as Map<String, dynamic>);
+    } catch (e) {
+      _log.warning('decode failed for ${n.key} from ${n.from}: $e');
+      return;
+    }
+    try {
+      await db.insertSample(s, senderAtSign: n.from);
+    } catch (e, st) {
+      _log.warning('db.insertSample failed for ${s.millis}: $e\n$st');
+    }
+    // Keep the data extent fresh — the dashboard's pan / zoom
+    // clamps reference it.
+    if (_dataExtent.latestMs == null || s.millis > _dataExtent.latestMs!) {
+      _dataExtent = DataExtent(
+        earliestMs: _dataExtent.earliestMs ?? s.millis,
+        latestMs: s.millis,
+      );
+    }
+    // Fold into the cache only when the sample falls inside the
+    // current visible range. Historical ranges are frozen — they
+    // don't pick up new samples until the user moves the range
+    // (which triggers a fresh DB query).
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final startMs = _range.resolveStartMs(nowMs);
+    final endMs = _range.resolveEndMs(nowMs);
+    if (s.millis >= startMs && s.millis < endMs) {
+      cache.addRaw(s);
+    }
+  }
+
+  Future<void> dispose() async {
+    _pruneTimer?.cancel();
+    _retentionTimer?.cancel();
+    await _notifSub?.cancel();
+    await db.close();
   }
 }

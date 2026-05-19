@@ -1227,6 +1227,90 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
+  group('namespace scan regex (issue #1942)', () {
+    // These tests intercept the regex string AtCollection passes to
+    // atClient.getAtKeys, then exercise it against curated wire-form
+    // keys. The #1942 fix has two complementary parts: (a) the
+    // migration in NotificationServiceImpl deletes legacy bare-form
+    // bookkeeping keys at startup (the primary defence — exercised
+    // separately in notification_service_test.dart), and (b) the
+    // scan regex here adds a negative lookahead for `local:` so the
+    // canonical (post-migration) form can never be matched, and
+    // dot-escapes the namespace so adjacent characters can't
+    // accidentally satisfy a dot in a multi-segment namespace.
+
+    /// Captures the most recent regex passed to getAtKeys and returns
+    /// keys from [universe] that the regex matches.
+    Future<List<String>> matchUniverse(
+        AtCollection<String> c, List<String> universe) async {
+      late String capturedRegex;
+      when(() => atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((invocation) async {
+        capturedRegex = invocation.namedArguments[#regex] as String;
+        return <AtKey>[];
+      });
+      // Drive a scan so the regex gets emitted; we don't care about
+      // its return value, only the captured regex.
+      await c.getItems();
+      final re = RegExp(capturedRegex);
+      return universe.where((k) => re.hasMatch(k)).toList();
+    }
+
+    test('rejects every `local:` wire form', () async {
+      // The canonical local-only bookkeeping keys live behind the
+      // `local:` prefix. The scan regex's negative lookahead must
+      // exclude all of them so a future migration that leaves the
+      // canonical form behind can't ever pollute a collection scan.
+      final c = buildCollection<String>();
+      final hit = await matchUniverse(c, [
+        'local:lastreceivednotification.$namespace$selfAtSignStr',
+        'local:lastreceivedservercommitid.$namespace$selfAtSignStr',
+        'local:anything-else.$namespace$selfAtSignStr',
+        // Legitimate collection item — should match.
+        'item-abc.$namespace$selfAtSignStr',
+      ]);
+      expect(hit, equals(['item-abc.$namespace$selfAtSignStr']));
+    });
+
+    test('namespace dots are escaped — adjacent chars do not match', () async {
+      // Namespace is "tasks.app_1.my_apps". Without dot-escaping, the
+      // regex would treat each `.` as "any character" and accept e.g.
+      // `tasksXapp_1.my_apps@`. With escaping, those literals are
+      // required.
+      final c = buildCollection<String>();
+      final hit = await matchUniverse(c, [
+        // Legitimate match: exact dot positions.
+        'id.$namespace$selfAtSignStr',
+        // Wrong: first dot replaced by a non-dot character.
+        'id.tasksXapp_1.my_apps$selfAtSignStr',
+        // Wrong: second dot replaced.
+        'id.tasks.app_1Xmy_apps$selfAtSignStr',
+      ]);
+      expect(hit, equals(['id.$namespace$selfAtSignStr']));
+    });
+
+    test('sharedWith prefix keys still match (local: exclusion is anchored)',
+        () async {
+      // The negative lookahead is for `local:` at start-of-string; an
+      // ordinary sharedWith prefix like `@bob:` must still pass.
+      final c = buildCollection<String>();
+      final hit = await matchUniverse(c, [
+        'item-1.$namespace$selfAtSignStr',
+        '$bobStr:item-2.$namespace$selfAtSignStr',
+        '@carol:item-3.$namespace$selfAtSignStr',
+      ]);
+      expect(
+        hit,
+        equals([
+          'item-1.$namespace$selfAtSignStr',
+          '$bobStr:item-2.$namespace$selfAtSignStr',
+          '@carol:item-3.$namespace$selfAtSignStr',
+        ]),
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   group('delete', () {
     // Partition `atClient.getAtKeys` responses by regex shape:
     // - descendant scan uses regex starting `(^|:).+\.`
@@ -1238,7 +1322,15 @@ void main() {
           .thenAnswer((invocation) async {
         final regex =
             invocation.namedArguments[const Symbol('regex')] as String;
-        if (regex.startsWith(r'(^|:).+\.')) return descendants;
+        // Descendant scan uses `.+\.<parentId>\.<ns>@` (`.+` matches
+        // any sub-chain) while the direct-item scan uses
+        // `[^.]+\.<ns>@` (single non-dot id). Branch on whichever
+        // substring is present — both are stable across the #1942
+        // regex tightening (added `^(?!local:)` + dot-escaping +
+        // sharedWith prefix).
+        if (regex.contains(r'.+\.') && !regex.contains(r'[^.]+\.')) {
+          return descendants;
+        }
         return itemScanKeys;
       });
     }
@@ -1566,7 +1658,12 @@ void main() {
       final bobKey = AtKey.fromString('idr.$namespace$bobStr');
       // The cache-priming `readBy` scans the entire __rr sub-collection
       // (no owner filter); wasMarkedReadByMe then checks self membership.
-      final rrRegex = '(^|:)[^.]+\\.__rr.idr.$namespace@';
+      // Regex shape mirrors `_getKeysInternal`: `^(?!local:)` rejects
+      // at_client's bookkeeping keys (#1942), `(?:[^:]*:)?` allows an
+      // optional sharedWith prefix, and every `.` in the composed
+      // namespace is escaped.
+      final escapedComposed = '__rr.idr.$namespace'.replaceAll('.', '\\.');
+      final rrRegex = '^(?!local:)(?:[^:]*:)?[^.]+\\.$escapedComposed@';
       // Parent scan returns bob's item; the __rr sub-collection scan
       // returns nothing (no receipts sent yet).
       when(

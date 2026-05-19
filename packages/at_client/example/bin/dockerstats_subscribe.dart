@@ -15,24 +15,14 @@
 // `packages/at_client_flutter/examples/dockerstats/`.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_cli_commons/at_cli_commons.dart';
-import 'package:at_client/at_client.dart';
 import 'package:at_client_examples/dockerstats/models.dart';
 
 const String applicationNamespace = 'dockerstats.demos';
-
-/// TTL for the LEAF [StatSample] CItems (high-frequency telemetry).
-/// Must match the publisher.
-const Duration sampleExpiration = Duration(minutes: 1);
-
-/// TTL for the structural CItems — the [HostNode] root collection
-/// and the per-host [AtsignOnHost] sub-collection nodes. Longer
-/// than [sampleExpiration] because they represent membership state,
-/// not per-cycle telemetry. Must match the publisher.
-const Duration nodeExpiration = Duration(hours: 1);
 
 void main(List<String> args) async {
   final ap = _buildParser();
@@ -61,43 +51,30 @@ void main(List<String> args) async {
   }
   final expectTimeout = _parseDuration(parsed['expect-timeout'] as String);
   final traceEnabled = parsed['trace'] as bool;
+  final jsonMode = parsed['json'] as bool;
 
   stdout.writeln('Connecting...');
   final cliBase = await CLIBase.fromCommandLineArgs(args, parser: ap);
   final atClient = cliBase.atClient;
   stdout.writeln('Connected as ${atClient.atSign}');
 
-  AtCollection.registerFactory<HostNode>(
-    HostNode.fromJson,
-    typeTag: 'HostNode',
-  );
-  AtCollection.registerFactory<AtsignOnHost>(
-    AtsignOnHost.fromJson,
-    typeTag: 'AtsignOnHost',
-  );
-  AtCollection.registerFactory<StatSample>(
-    StatSample.fromJson,
-    typeTag: 'StatSample',
-  );
-
-  final nodes = await atClient.collection<HostNode>(
-    '$collectionRootName.$applicationNamespace',
-    nodeExpiration,
-    eventSource: EventSource.data,
-  );
-
   // Force the notification listener up front so the first event
   // doesn't race the lazy startup inside subscribe().
   atClient.notificationService.startListening();
 
+  // The publisher's notification key shape is:
+  //   <recipient>:sample.<sanitised-container>.<sanitised-host>.dockerstats.demos<publisher>
+  // Match exactly that — anchored on this subscriber's own atSign so
+  // we don't pick up notifications addressed to anyone else (the
+  // monitor stream returns those too on a non-namespace-scoped
+  // subscribe).
+  final selfFragment = RegExp.escape(atClient.atSign.toString());
+  final nsTail = RegExp.escape('.$applicationNamespace');
+  final regex = '^$selfFragment:sample\\.[^.]+\\.[^.]+$nsTail@';
+
   // ---------------------------------------------------------------------
   // Subscribe.
 
-  // Graceful shutdown plumbing — installed BEFORE the listener so
-  // --expect can complete the same Completer the signal handlers do.
-  // First SIGINT/SIGTERM completes `stop` and lets the main loop
-  // unwind; a SECOND signal forces exit (the conventional CLI shape
-  // for "user pressed Ctrl-C twice because they don't want to wait").
   final stop = Completer<void>();
   void onSignal() {
     if (!stop.isCompleted) {
@@ -118,91 +95,59 @@ void main(List<String> args) async {
   }
 
   var samplesSeen = 0;
-  final sub = nodes.subUpdates.listen((e) async {
-    if (e.subName != subSamplesName || e.ancestry.length != 2) return;
-    // Skip events whose ancestry has any null owner. A non-null
-    // CAncestor.owner is required to fetch the typed parent via
-    // getDescendant — see the dartdoc on CAncestor. Null owners on
-    // a CSubItemUpdated are legacy / stale-envelope artefacts (the
-    // `parents` envelope field wasn't populated for that write); on
-    // a CSubItemDeleted they're populated by design (the sub-item
-    // is gone, so there's no envelope to read), but subUpdates
-    // shouldn't carry deletes anyway. Either way: nothing for this
-    // subscriber to do — quietly skip.
-    if (e.ancestry.any((a) => a.owner == null)) return;
-    if (traceEnabled) {
-      final evtUs = DateTime.now().microsecondsSinceEpoch;
-      stderr.writeln(
-        'TRACE sub_event id=${e.id} owner=${e.owner} '
-        'ancestry=${e.ancestry.map((a) => "${a.id}/${a.subName}").join(",")} '
-        't_us=$evtUs',
+  final sub = atClient.notificationService
+      .subscribe(regex: regex, shouldDecrypt: true)
+      .listen(
+        (n) {
+          final value = n.value;
+          if (value == null || value.isEmpty) {
+            if (traceEnabled) {
+              stderr.writeln(
+                'TRACE sub_event_empty id=${n.id} from=${n.from} key=${n.key}',
+              );
+            }
+            return;
+          }
+          StatSample s;
+          try {
+            s = StatSample.fromJson(jsonDecode(value) as Map<String, dynamic>);
+          } catch (e) {
+            stderr.writeln(
+              '${DateTime.now()} | decode failed for ${n.key} from ${n.from}: $e',
+            );
+            return;
+          }
+          samplesSeen++;
+          if (traceEnabled) {
+            stderr.writeln(
+              'TRACE sub_recv id=${s.millis} from=${n.from} '
+              'pair=${s.hostname}/${s.containerName} '
+              't_us=${DateTime.now().microsecondsSinceEpoch}',
+            );
+          }
+          if (jsonMode) {
+            stdout.writeln(value);
+          } else {
+            stdout.writeln(_formatSample(s, samplesSeen, n.from));
+          }
+          if (expectCount != null) {
+            final hit = samplesSeen >= expectCount;
+            stderr.writeln(
+              '${DateTime.now()} | expect=$expectCount actual=$samplesSeen '
+              '${hit ? "OK" : "MISSING ${expectCount - samplesSeen}"}',
+            );
+            if (hit && !stop.isCompleted) stop.complete();
+          }
+        },
+        onError: (Object e, StackTrace st) {
+          stderr.writeln('${DateTime.now()} | subscribe error: $e');
+        },
       );
-    }
-    try {
-      final item = await nodes.getDescendant<StatSample>(
-        ancestry: e.ancestry,
-        id: e.id,
-        owner: e.owner,
-        // Leaf is the high-frequency StatSample; intermediate is
-        // the per-host atsigns sub-collection node, which we
-        // expect to live longer (matches the publisher's
-        // nodeExpiration). Both are required for the cached
-        // sub-collections that getDescendant constructs to apply
-        // the right TTL on the receiver side too.
-        leafExpiration: sampleExpiration,
-        intermediateExpiration: nodeExpiration,
-        leafFromJson: StatSample.fromJson,
-        leafTypeTag: 'StatSample',
-      );
-      if (item == null) {
-        if (traceEnabled) {
-          final missUs = DateTime.now().microsecondsSinceEpoch;
-          stderr.writeln(
-            'TRACE sub_chain_miss id=${e.id} owner=${e.owner} t_us=$missUs',
-          );
-        }
-        return;
-      }
-      final s = item.obj;
-      samplesSeen++;
-      if (expectCount != null) {
-        final hit = samplesSeen >= expectCount;
-        stdout.writeln(
-          '${DateTime.now()} | expect=$expectCount actual=$samplesSeen '
-          '${hit ? "OK" : "MISSING ${expectCount - samplesSeen}"}',
-        );
-      } else {
-        stdout.writeln('${DateTime.now()} | actual=$samplesSeen ');
-      }
-      if (traceEnabled) {
-        final recvUs = DateTime.now().microsecondsSinceEpoch;
-        stderr.writeln(
-          'TRACE sub_recv id=${s.millis} pair=${s.hostname}/${s.atSign} '
-          't_us=$recvUs',
-        );
-      }
-      stdout.writeln(_formatSample(s, samplesSeen));
-      // Closed-loop early-exit: once we've seen the expected count,
-      // signal the main loop to stop. The publisher and subscriber
-      // can then be treated as a hermetic pair under test.
-      if (expectCount != null &&
-          samplesSeen >= expectCount &&
-          !stop.isCompleted) {
-        stop.complete();
-      }
-    } catch (err) {
-      stderr.writeln('${DateTime.now()} | fetch failed: $err');
-    }
-  });
 
-  stdout.writeln(
-    '${DateTime.now()} | listening for stats on $applicationNamespace',
-  );
+  stdout.writeln('${DateTime.now()} | listening for stats matching $regex');
 
   if (expectCount != null) {
-    // Race the expected-count completion against the timeout.
-    Timer? timeout;
-    timeout = Timer(expectTimeout, () {
+    final timeout = Timer(expectTimeout, () {
       if (!stop.isCompleted) stop.complete();
     });
     await stop.future;
@@ -246,13 +191,13 @@ Duration _parseDuration(String raw) {
   return Duration(seconds: value.round());
 }
 
-String _formatSample(StatSample s, int n) {
+String _formatSample(StatSample s, int n, String from) {
   final ts = DateTime.fromMillisecondsSinceEpoch(s.millis).toIso8601String();
   final memMib = (s.memUsage / (1024 * 1024)).toStringAsFixed(1);
   final memLimMib = (s.memLimit / (1024 * 1024)).toStringAsFixed(0);
   final netMib = ((s.netRx + s.netTx) / (1024 * 1024)).toStringAsFixed(2);
   final blkMib = ((s.blkRead + s.blkWrite) / (1024 * 1024)).toStringAsFixed(2);
-  return '#$n  $ts  '
+  return '#$n  $ts  $from  '
       '${s.hostname}/${s.atSign}  ${s.containerName}  '
       'cpu=${s.cpuPct.toStringAsFixed(1)}%  '
       'mem=$memMib/${memLimMib}MiB (${s.memPct.toStringAsFixed(1)}%)  '
@@ -269,6 +214,11 @@ ArgParser _buildParser() {
       abbr: 'a',
       mandatory: true,
       help: 'The atSign to subscribe as',
+    )
+    ..addFlag(
+      'json',
+      negatable: false,
+      help: 'Print raw decoded JSON instead of the human-readable format',
     )
     ..addOption(
       'expect',
@@ -288,15 +238,15 @@ ArgParser _buildParser() {
       'trace',
       negatable: false,
       help:
-          'Emit per-event TRACE log lines on stderr (sub_event, '
-          'sub_chain_miss, sub_recv). Off by default.',
+          'Emit per-event TRACE log lines on stderr (sub_recv, '
+          'sub_event_empty). Off by default.',
     )
     ..addOption(
       'namespace',
       abbr: 'n',
       defaultsTo: applicationNamespace,
       hide: true,
-      help: 'Namespace',
+      help: 'Application namespace (AtClientPreference.namespace)',
     )
     ..addOption('key-file', abbr: 'k', hide: true)
     ..addOption('home-dir', hide: true)
