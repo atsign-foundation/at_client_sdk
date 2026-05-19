@@ -1,9 +1,0 @@
-include: package:flutter_lints/flutter.yaml
-
-analyzer:
-  exclude: [build/**]
-
-linter:
-  rules:
-    - camel_case_types
-    - unnecessary_statements
