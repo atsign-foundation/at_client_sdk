@@ -43,9 +43,53 @@ example app. Read these rather than copying snippets from here:
   wiring the two flows above into navigation.
 
 For a **full Flutter app** using `at_client_flutter` in anger, see
-[`../at_client_flutter/examples/todos/`](../at_client_flutter/examples/todos)
-— a shared-todos app that combines onboarding, auth, and the
-`AtCollection<T>` API from [`at_client`](../at_client).
+the two flagship examples — deliberately positioned side-by-side
+to make a fundamental SDK trade-off visible:
+
+### todos — the idiomatic `AtCollection<T>` Flutter app
+
+[`examples/todos/`](examples/todos/README.md) is the **first
+place to look** when building a real Flutter application on the
+Atsign Protocol that needs a typed shared **dataset**. It drives
+every common collection-shaped pattern through the mobile /
+desktop widget stack: typed `AtCollection<T>` with `fromJson` /
+`typeTag`, sub-collections (notes per todo), the `Query<T>`
+builder with reactive `watch()` / `watchWithSub` / `watchSingle`,
+`sharedWith` updates, built-in read receipts, scheduled visibility
+via `availableAt`. Wire-compatible with the
+[CLI sibling](../at_client/example/README.md#collections--todos-app)
+so the same data flows live between TUI and Flutter instances.
+
+Full design, source tour, and multi-device demo in
+[`examples/todos/README.md`](examples/todos/README.md).
+
+### dockerstats — live container telemetry
+
+[`examples/dockerstats/`](examples/dockerstats/README.md) is the
+canonical worked example of an SDK pattern the API doesn't
+impose: **deliver via short-lived notifications, store in a
+relational database**. The publisher (a [Dart CLI](../at_client/example/README.md#dockerstats--notification-based-live-telemetry))
+emits one `docker stats` sample per container per cycle as a
+single `notificationService.send(...)` — no AtCollection, no
+keystore writes, no sync queue. The Flutter dashboard subscribes,
+persists every sample as-received to a per-atSign **SQLite**
+database (no roll-up, no compaction at rest), and renders charts
+off that local store with a user-selectable window (5 m → all).
+Each window change runs one SQL `GROUP BY` query sized to the
+chart's pixel budget, so even an "all" view over years of raw
+data stays responsive; live notifications fold into the visible
+buckets incrementally.
+
+It exists to demonstrate the trade-off explicitly: mis-applying
+`AtCollection<T>` to a high-frequency observation stream — where
+query / aggregation / windowing is the dominant design concern —
+would be wrong. `AtCollection<T>` is for typed shared *datasets*
+(the `todos` example above); notifications + local DB is for
+*streams* of observations.
+
+Full design, query-time aggregation semantics, and the seed-DB
+workflow for cross-window chart development are in
+[`examples/dockerstats/README.md`](examples/dockerstats/README.md).
 
 ## Post-authentication initialization
 

@@ -22,6 +22,7 @@ dependencies:
   path: ^1.9.1
   fl_chart: ^1.0.0
   cupertino_icons: ^1.0.8
+  sqflite_common_ffi: ^2.3.0
 
 dependency_overrides:
   at_client:
@@ -39,6 +40,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  # For the developer tools under `tool/` (e.g. seed_db).
+  args: ^2.5.0
 
 flutter:
   uses-material-design: true

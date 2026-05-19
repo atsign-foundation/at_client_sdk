@@ -107,12 +107,12 @@ class _SmokeBootstrapState extends State<_SmokeBootstrap> {
       final acp = AtClientPreference()
         ..rootDomain = request.rootDomain.rootDomain
         ..rootPort = request.rootDomain.rootPort
-        ..namespace = dockerstatsNamespace
+        ..namespace = applicationNamespace
         ..commitLogPath = dir.path
         ..hiveStoragePath = dir.path;
       await AtClientManager.getInstance().setCurrentAtSign(
         response.atSign,
-        dockerstatsNamespace,
+        applicationNamespace,
         acp,
         enrollmentId: response.enrollmentId,
         atChops: response.atChops,

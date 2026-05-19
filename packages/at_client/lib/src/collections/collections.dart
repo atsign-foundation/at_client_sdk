@@ -302,6 +302,19 @@ enum EventSource { data, notifs, both }
 /// `await for` without an `onError` handler will throw on the first
 /// bad key. Apps that want the old silent-skip posture should chain
 /// `.handleError(...)` before consuming the stream.
+/// Leading anchor shared by every AtKey scan AtCollection emits.
+///
+///   - `^(?!local:)` rejects any key whose wire form starts with
+///     `local:` — those are at_client's own bookkeeping keys
+///     (`local:lastreceivednotification@…`, the server-commit-id
+///     cursor, etc.) and must never be confused with collection
+///     items, even when their tail happens to share the namespace
+///     shape (the underlying defect behind #1942).
+///   - `(?:[^:]*:)?` tolerates an optional sharedWith prefix
+///     (`@bob:`, `cached:@bob:`) so the same regex can match an
+///     outgoing-shared or cached-incoming copy of a self-owned key.
+const String _atKeyScanPrefix = r'^(?!local:)(?:[^:]*:)?';
+
 interface class AtCollection<T> {
   static const String _rr = '__rr';
 
@@ -390,6 +403,15 @@ interface class AtCollection<T> {
   // length — not by separate per-depth regexes.
   late final RegExp _regexObjAny;
   late final String _regexAllStr;
+
+  /// `namespace` with every literal `.` escaped — produced once at
+  /// construction and reused at every scan site. Namespaces commonly
+  /// contain periods (e.g. `samples.dockerstats.demos`) and an
+  /// unescaped `.` in a regex matches any character, so the
+  /// non-escaped form would wrongly accept keys like
+  /// `lastreceivednotification.<ns>@<atSign>` whose first `.` lines
+  /// up with the namespace's first `.` (see #1942).
+  late final String _escapedNamespace;
 
   /// Which source(s) this collection consumes events from. Set once
   /// at construction and immutable for the lifetime of the collection.
@@ -567,15 +589,21 @@ interface class AtCollection<T> {
 
     _logger = AtSignLogger(' AtCollection<$T> $namespace ');
 
-    // TODO: namespace may contain periods - the regular expression should
-    // escape those periods
-    _regexAllStr = '.*\\.$namespace@';
-    // Matches the direct-item shape `<id>.<ns>@` AND any deeper
-    // sub-item shape `<id>.<subName>.<parentId>.…<ns>@`. We use this
-    // as a cheap filter to reject notifications that don't belong to
-    // this collection at all; depth-dispatch happens via the parsed
-    // ancestry length, not by regex.
-    _regexObjAny = RegExp('(^|:)[^.]+(\\.[^.]+)*\\.$namespace@');
+    _escapedNamespace = namespace.replaceAll('.', '\\.');
+
+    // Broadest possible match for keys at this namespace — used by
+    // the bulk-read path. `.*` permits any leading wire shape
+    // (sharedWith prefix, cached prefix, plain self) so long as it
+    // doesn't begin with `local:`.
+    _regexAllStr = '^(?!local:).*\\.$_escapedNamespace@';
+    // Same logical shape as `_directKeyRegex` but with multi-segment
+    // ids — matches direct items `<id>.<ns>@` AND any deeper sub-item
+    // `<id>.<subName>.<parentId>.…<ns>@`. Used as a cheap filter to
+    // reject notifications that don't belong to this collection at
+    // all; depth-dispatch happens via the parsed ancestry length, not
+    // by regex.
+    _regexObjAny =
+        RegExp('$_atKeyScanPrefix[^.]+(\\.[^.]+)*\\.$_escapedNamespace@');
 
     _injectedNotifications = notifications;
     _injectedDataEvents = injectedDataEvents;
@@ -1064,13 +1092,53 @@ interface class AtCollection<T> {
   /// [getItems] / [getItemsAsStream] (typed) or the [Query<T>]
   /// builder instead.
   Future<List<AtKey>> _getKeysInternal({String? id, Atsign? owner}) async {
-    // want a regex like (^|:)[^.]+\.collection\.name\.space@
-    // e.g. (^|:)[^.]+\.notes\.todos\.demos@
-    id ??= '[^.]+';
-    final ownerFragment = owner ?? '@';
-    final regex = '(^|:)$id\\.$namespace$ownerFragment';
+    final regex =
+        _directKeyRegex(id: id, ownerSuffix: owner?.toString() ?? '@');
     return (await atClient.getAtKeys(regex: regex))
       ..sort((a, b) => a.fullKeyAndOwner.compareTo(b.fullKeyAndOwner));
+  }
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Regex builders. Three shapes cover every AtKey scan this class
+  // emits; they share the [_atKeyScanPrefix] + [_escapedNamespace]
+  // pieces so the "reject `local:` keys, escape namespace dots"
+  // contract (the fix for #1942) lives in one place.
+
+  /// Regex matching **direct items** at this collection's namespace:
+  /// `<prefix><idPattern>.<ns><ownerSuffix>`.
+  ///
+  /// When [id] is null the item id is a wildcard `[^.]+` — any
+  /// non-dot segment matches. When a concrete [id] is passed it is
+  /// `RegExp.escape`d so a value containing regex metacharacters
+  /// can't widen the match. [ownerSuffix] is appended verbatim; the
+  /// default `'@'` matches keys owned by any atSign while passing
+  /// e.g. `@alice` (an Atsign's `toString()`) restricts to one.
+  String _directKeyRegex({String? id, String ownerSuffix = '@'}) {
+    final idPattern = id != null ? RegExp.escape(id) : '[^.]+';
+    return '$_atKeyScanPrefix$idPattern\\.$_escapedNamespace$ownerSuffix';
+  }
+
+  /// Regex matching **descendants** of this collection at any depth
+  /// `≥ 1`: `<prefix>.+\.<ns><ownerSuffix>`, or — when [parentId] is
+  /// provided — restricted to direct sub-items of that parent:
+  /// `<prefix>.+\.<parentId>\.<ns><ownerSuffix>`.
+  ///
+  /// [ownerSuffix] is required because every site that scans
+  /// descendants today does so against a known owner (`atSign` or
+  /// `self`); leaving the default would invite an accidental
+  /// any-owner scan that's almost never what the caller wants.
+  String _descendantKeyRegex({String? parentId, required String ownerSuffix}) {
+    final mid = parentId != null ? '.+\\.${RegExp.escape(parentId)}' : '.+';
+    return '$_atKeyScanPrefix$mid\\.$_escapedNamespace$ownerSuffix';
+  }
+
+  /// Regex matching direct items at an **arbitrary pre-composed
+  /// namespace** (not this collection's). Used by the orphan-sweep
+  /// chain-walker which probes alive-at-mid-namespace levels above
+  /// the collection's own namespace.
+  String _directKeyRegexForComposed(String composedNs) {
+    final escaped = composedNs.replaceAll('.', '\\.');
+    return '$_atKeyScanPrefix[^.]+\\.$escaped@';
   }
 
   /// True iff an item with the given [id] owned by [owner] exists in
@@ -1763,7 +1831,7 @@ interface class AtCollection<T> {
       // `_getKeysInternal(owner: self)` alone would miss every level
       // deeper than 1.
       final keys = await atClient.getAtKeys(
-        regex: '(^|:).+\\.$namespace$self',
+        regex: _descendantKeyRegex(ownerSuffix: self.toString()),
       );
       // Ancestry filter: we only delete descendants whose persisted
       // `parents` chain starts with this sub-collection's expected
@@ -1847,7 +1915,7 @@ interface class AtCollection<T> {
     final expectedPrefix = _expectedAncestorOwners();
     final results = <OpResult>[];
     final deep = await atClient.getAtKeys(
-      regex: '(^|:).+\\.$namespace$atSign',
+      regex: _descendantKeyRegex(ownerSuffix: atSign.toString()),
     );
     for (final k in deep) {
       try {
@@ -1897,7 +1965,7 @@ interface class AtCollection<T> {
     final legacyAliveCache = <String, Set<String>>{};
 
     final descendantKeys = await atClient.getAtKeys(
-      regex: '(^|:).+\\.$namespace$atSign',
+      regex: _descendantKeyRegex(ownerSuffix: atSign.toString()),
     );
     final results = <OpResult>[];
     for (final k in descendantKeys) {
@@ -2012,8 +2080,9 @@ interface class AtCollection<T> {
   ) async {
     final cached = cache[composedNs];
     if (cached != null) return cached;
-    final escaped = composedNs.replaceAll('.', '\\.');
-    final keys = await atClient.getAtKeys(regex: '(^|:)[^.]+\\.$escaped@');
+    final keys = await atClient.getAtKeys(
+      regex: _directKeyRegexForComposed(composedNs),
+    );
     final levelSegments = composedNs.split('.').length;
     final alive = <String>{};
     for (final key in keys) {
@@ -3086,8 +3155,12 @@ interface class AtCollection<T> {
   }
 
   Future<List<AtKey>> _selfOwnedDescendantKeys(String parentId) async {
-    final regex = '(^|:).+\\.$parentId\\.$namespace$atSign';
-    return atClient.getAtKeys(regex: regex);
+    return atClient.getAtKeys(
+      regex: _descendantKeyRegex(
+        parentId: parentId,
+        ownerSuffix: atSign.toString(),
+      ),
+    );
   }
 
   /// Variant of [_selfOwnedDescendantKeys] that also filters each

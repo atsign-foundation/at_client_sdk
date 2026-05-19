@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.1.2
+
+- docs(examples): improved READMEs, added dockerstats flutter app
+
 ## 1.1.1
 
 - refactor: updated example app deprecated methods.
