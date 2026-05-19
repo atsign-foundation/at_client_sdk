@@ -50,20 +50,32 @@ The authoritative examples of current usage are the worked programs
 under these two directories — start there rather than with older
 tutorials or blog posts:
 
-- **Dart / CLI examples:** [`example/`](example)
-  - [`example/bin/notifications.dart`](example/bin/notifications.dart)
-    — messaging via `NotificationService`
-  - [`example/bin/rpcs.dart`](example/bin/rpcs.dart)
-    — RPC-style method invocation between atSigns
-  - [`example/bin/collections_primitives.dart`](example/bin/collections_primitives.dart)
-    and the other `collections_*.dart` files — typed shareable records
-    via the `AtCollection<T>` API
+- **Dart / CLI examples:** [`example/README.md`](example/README.md)
+  walks through every program in [`example/bin/`](example/bin/) —
+  primitives, domain objects, polymorphic / binary collections, a
+  full interactive TUI todos app, raw notifications, RPCs, and the
+  [dockerstats CLI publisher / subscriber](example/README.md#dockerstats--notification-based-live-telemetry).
 
 - **Flutter examples:**
-  [`../at_client_flutter/example/`](../at_client_flutter/example)
-  (onboarding + auth UI) and
-  [`../at_client_flutter/examples/todos/`](../at_client_flutter/examples/todos)
-  (a full shared-todos app using `AtCollection`).
+  - [`../at_client_flutter/example/`](../at_client_flutter/example) —
+    onboarding + auth UI walkthroughs (CRAM, .atKeys-file, keychain,
+    APKAM).
+  - [`../at_client_flutter/examples/todos/README.md`](../at_client_flutter/examples/todos/README.md)
+    — full shared-todos Flutter app. The **idiomatic** Flutter
+    consumer of `AtCollection<T>` — every common collection pattern
+    (typed `AtCollection`, sub-collections, queries, watches, read
+    receipts, sharing, schedule-via-`availableAt`) wired up the way
+    a real app would. Wire-compatible with the CLI sibling so the
+    two apps can share data live.
+  - [`../at_client_flutter/examples/dockerstats/README.md`](../at_client_flutter/examples/dockerstats/README.md)
+    — live telemetry dashboard. The deliberate counterpart to
+    `todos`, `dockerstats` is the canonical worked example of a pattern the
+    SDK supports but doesn't impose: **deliver via short-lived notifications,
+    store in a relational database**. It demonstrates the trade-off
+    explicitly because mis-applying `AtCollection<T>` to
+    this shape of workload — a high-frequency stream of observations
+    whose query / aggregation / windowing is the dominant design
+    concern — would be wrong.
 
 ## atSign lifecycle (short version)
 
