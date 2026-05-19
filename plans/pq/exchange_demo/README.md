@@ -1,243 +1,301 @@
-# PQ Migration — Mechanisms, Protocols, Algorithms
+# app_2 — Hybrid PQC Key Exchange: X25519 + ML-KEM-768
 
-**Status: Draft.** Nothing in this file is locked. Algorithm choices, suite IDs, package boundaries, and stage assignments are working proposals.
+Demonstrates a hybrid post-quantum key exchange using:
 
-Catalog of moving parts for Track 1 (hybrid X25519 + ML-KEM-768 KEM replacing RSA-OAEP key-wrap). Cross-references `../pq-migration.md`.
+- **X25519** — classical Diffie-Hellman (via the `cryptography` Dart package)
+- **ML-KEM-768** — NIST-standardized post-quantum KEM (via Dart FFI → liboqs)
+- **HKDF-SHA256** — combines both shared secrets into a single 32-byte hybrid key
+- **AES-256-GCM** — encrypts a message with the hybrid key
+- **SHA-256** — produces a session fingerprint
 
-Related drafts: [`component-architecture.md`](component-architecture.md), [`crypto-fundamentals.md`](crypto-fundamentals.md), [`native-dependencies.md`](native-dependencies.md), [`pqxdh-spqr-deep-dive.md`](pqxdh-spqr-deep-dive.md).
-
-> **Two-stage delivery (per issue #1893):** Stage 1 exercises the crypto in-process via an `Actor` harness — no atProtocol. Stage 2 wires the same API into `at_client` / atServer. Diagrams below mark which boxes light up at each stage.
-
----
-
-## Algorithms
-
-| Algorithm | Role | Spec | New / existing |
-|---|---|---|---|
-| ML-KEM-768 | PQ KEM — encaps/decaps 32 B shared secret | FIPS 203 | **new** (via liboqs) |
-| X25519 | Classical ECDH — 32 B shared secret | RFC 7748 | **new** in this path (pointycastle has it) |
-| HKDF-SHA256 | Extract + Expand for combiner | RFC 5869 | existing in `at_chops` |
-| AES-256-GCM | AEAD wrap of the AES shared key | NIST SP 800-38D | existing primitive, new use |
-| RSA-OAEP-2048 | Fallback wrap for non-PQ peers | RFC 8017 | existing — kept |
-| AES-256-CTR | Bulk data symmetric encryption (unchanged) | — | existing |
-| Argon2id | `.atKeys` passphrase KDF (unchanged) | RFC 9106 | existing |
-
-## Mechanisms
-
-| Mechanism | Purpose | Lives in |
-|---|---|---|
-| Hybrid KEM combiner | Bind classical + PQ shared secrets into one wrap key | `at_chops` (new dispatch path) |
-| Capability negotiation | Decide hybrid vs RSA fallback per peer | `at_client` `EncryptionService` |
-| Suite / version registry | Identify wire format + crypto suite per envelope | `at_protocol` (or `at_commons`) |
-| Envelope tag in metadata | Receiver dispatches decrypt path on `enc:<ver><suite>` | shared-key entry metadata |
-| `.atKeys` schema migration | Add hybrid keypair fields, generate on first load | `at_auth` keyfile I/O |
-| FFI bridge to liboqs | Native ML-KEM-768 keypair/encaps/decaps | new `at_chops_pq_native` |
-| Trust-on-first-PQ (TOFP) | Detect/log downgrade after a peer is once seen PQ-capable | `at_client` (new cache) |
-| Fallback path | Reuse RSA-OAEP when peer or self lacks PQ | unchanged code path |
-
-## Protocols (atProtocol-level additions)
-
-| Verb / event | Direction | Purpose |
-|---|---|---|
-| `update:pq_publickey.<atsign>` | self → atServer | Publish hybrid pubkey blob (X25519 ‖ ML-KEM-768) |
-| `lookup:pq_publickey.<atsign>` | client → atServer | Fetch peer's hybrid pubkey |
-| `from:` response field `"pq": [...]` | atServer → client | Advertise supported suites |
-| Shared-key envelope tag `enc:<ver><suite>` | metadata, both sides | Dispatch decrypt path |
+The design follows the hybrid KEM pattern: even if one primitive is broken (classical or post-quantum), the combined key remains secure as long as the other holds.
 
 ---
 
-## Component map
+## Prerequisites
 
-Solid borders = Stage 1 (in-process). Dashed borders = added in Stage 2 (atProtocol wiring).
+### 1. Dart SDK ≥ 3.11
 
-```mermaid
-flowchart LR
-  subgraph App
-    AC[at_client]
-  end
-  subgraph Crypto
-    CH[at_chops]
-    PQ[at_chops_pq_native<br/>NEW]
-  end
-  subgraph Auth
-    AU[at_auth<br/>.atKeys schema bump]
-  end
-  subgraph Server
-    AS[atServer<br/>pq_publickey verbs]
-  end
-  subgraph Native
-    OQS[(mlkem-native<br/>ML-KEM-768)]
-    PC[(pointycastle<br/>X25519)]
-    DC[(dart:typed_data<br/>HKDF, AES-GCM)]
-  end
-
-  AC -->|encryptString hybrid| CH
-  CH -->|encaps/decaps| PQ
-  PQ -->|FFI| OQS
-  CH -->|scalar mult| PC
-  CH -->|KDF, AEAD| DC
-  AU -->|load/save hybrid keys| CH
-  AC -->|lookup:pq_publickey| AS
-  AC -->|update:pq_publickey| AS
-
-  classDef stage2 stroke-dasharray: 5 5,stroke:#888
-  class AC,AU,AS stage2
+```
+dart --version
 ```
 
-## Stage 1 actor harness (in-process validation, no atProtocol)
+### 2. liboqs (Open Quantum Safe)
 
-Lives under `packages/at_chops_pq_native/test/actor_harness.dart`. Pure Dart driver; same crypto API that Stage 2 wires into `at_client`.
+On macOS via Homebrew:
 
-```mermaid
-flowchart LR
-  subgraph Process["Single Dart process — Stage 1 test harness"]
-    A[Actor 'alice'<br/>hybridKeyPair_A]
-    B[Actor 'bob'<br/>hybridKeyPair_B]
-    BUS[("InMemoryBus<br/>alice.send to bob.fetch")]
-    A -->|send wrapped AES_key| BUS
-    BUS -->|fetch| B
-  end
-  A -.->|encryptHybrid| CH[at_chops]
-  B -.->|decryptHybrid| CH
-  CH --> PQ[at_chops_pq_native]
-  PQ --> N[(mlkem-native FFI)]
+```sh
+brew install liboqs
 ```
 
-Exit criterion for Stage 1: actor harness round-trips a wrapped AES key between alice/bob, hybrid KATs pass, mixed-suite (PQ ↔ RSA-fallback) actor pairs interop. No `at_client`, no atServer, no `.atKeys` parsing involved.
+This installs the static archive at `/opt/homebrew/lib/liboqs.a` and headers at `/opt/homebrew/include/oqs/`.
 
-## Wrap flow — sender wraps an AES shared key for a peer
+liboqs depends on OpenSSL, which Homebrew installs as a dependency automatically.
 
-```mermaid
-sequenceDiagram
-  participant App
-  participant atClient as at_client EncryptionService
-  participant atChops as at_chops (hybrid)
-  participant Native as at_chops_pq_native
-  participant Server as atServer
+---
 
-  App->>atClient: encrypt(value) for @bob
-  atClient->>Server: lookup:pq_publickey.@bob
-  Server-->>atClient: X25519_pk ‖ MLKEM_pk  (or absent)
-  alt PQ-capable
-    atClient->>atChops: encryptHybrid(AES_key, peerHybridPk)
-    atChops->>atChops: gen eph_X25519 keypair
-    atChops->>Native: ML-KEM-768.Encaps(MLKEM_pk)
-    Native-->>atChops: pq_ct(1088B), pq_ss(32B)
-    atChops->>atChops: classical_ss = X25519(eph_sk, peer_X25519_pk)
-    atChops->>atChops: prk = HKDF-Extract(salt, classical_ss‖pq_ss)
-    atChops->>atChops: wrap_key = HKDF-Expand(prk, info)
-    atChops->>atChops: AES-256-GCM.Seal(wrap_key, nonce, aad, AES_key)
-    atChops-->>atClient: envelope(ver‖suite‖eph_pk‖pq_ct‖nonce‖ct‖tag)
-    atClient->>Server: update shared_key.@bob with enc:0101
-  else fallback
-    atClient->>atChops: encryptString(AES_key, RSA pk)
-    atClient->>Server: update shared_key.@bob with enc:rsa
-  end
+## Build the shared library
+
+Dart FFI requires a dynamic library (`.dylib` / `.so`). Because Homebrew only ships `liboqs.a`, you must build the dylib yourself once:
+
+```sh
+# from the app_2/ directory
+clang -shared -o liboqs.dylib \
+  -Wl,-force_load,/opt/homebrew/lib/liboqs.a \
+  -L/opt/homebrew/lib \
+  -lcrypto
 ```
 
-## Unwrap flow — recipient decrypts the wrapped shared key
+This produces `app_2/liboqs.dylib`. The app loads it at runtime from the directory adjacent to `bin/`.
 
-```mermaid
-sequenceDiagram
-  participant Server as atServer
-  participant atClient
-  participant atChops
-  participant Native as at_chops_pq_native
+> **Linux equivalent:**
+> ```sh
+> gcc -shared -o liboqs.so \
+>   -Wl,--whole-archive /usr/local/lib/liboqs.a -Wl,--no-whole-archive \
+>   -lcrypto
+> ```
 
-  atClient->>Server: lookup shared_key.@me for @alice
-  Server-->>atClient: envelope + metadata enc:0101
-  atClient->>atChops: decryptHybrid(envelope, selfHybridSk)
-  atChops->>atChops: parse ver, suite, eph_pk, pq_ct, nonce, ct, tag
-  atChops->>Native: ML-KEM-768.Decaps(MLKEM_sk, pq_ct)
-  Native-->>atChops: pq_ss (32B, implicit-rejection on bad ct)
-  atChops->>atChops: classical_ss = X25519(self_X25519_sk, eph_pk)
-  atChops->>atChops: derive wrap_key (HKDF as in wrap)
-  atChops->>atChops: AES-256-GCM.Open(wrap_key, nonce, aad, ct‖tag)
-  alt tag valid
-    atChops-->>atClient: AES_key
-  else tag invalid
-    atChops-->>atClient: error (covers KEM failure too)
-  end
+---
+
+## Install Dart dependencies
+
+```sh
+dart pub get
 ```
 
-## Negotiation / dispatch
+---
 
-```mermaid
-flowchart TD
-  A[Need to wrap for peer P] --> B{peer pq_publickey<br/>cached or fetchable?}
-  B -- no --> C{seen PQ before?<br/>TOFP record}
-  C -- yes --> D[log pq.downgrade.suspected]
-  C -- no  --> E[RSA fallback<br/>tag enc:rsa]
-  D --> E
-  B -- yes --> F{local at_chops<br/>supports suite?}
-  F -- no  --> E
-  F -- yes --> G["Hybrid wrap<br/>tag enc:ver‖suite"]
+## Run
+
+```sh
+dart run bin/app_2.dart
 ```
 
-## `.atKeys` post-upgrade migration
+Expected output:
 
-```mermaid
-sequenceDiagram
-  participant App
-  participant Auth as at_auth keyfile
-  participant Chops as at_chops
-  participant Native as at_chops_pq_native
-  participant Server as atServer
+```
+=== Hybrid PQC Key Exchange: X25519 + ML-KEM-768 ===
 
-  App->>Auth: load .atKeys
-  Auth-->>App: keys (pqVersion absent)
-  App->>Chops: generateHybridKeypair()
-  Chops->>Native: ML-KEM-768.Keypair()
-  Native-->>Chops: MLKEM (pk, sk)
-  Chops->>Chops: X25519 keypair
-  Chops-->>App: HybridKeyPair
-  App->>Auth: persist .atKeys (pqVersion=1)
-  App->>Server: update:pq_publickey.@self = X25519_pk ‖ MLKEM_pk
+--- Step 1: X25519 ---
+Alice X25519 shared: 0b12122d786a17aa...  (32 bytes)
+Bob   X25519 shared: 0b12122d786a17aa...  (32 bytes)
+X25519 match: true
+
+--- Step 2: ML-KEM-768 (via FFI → liboqs) ---
+Bob  ML-KEM-768 pk: 568a4c2671784...  (1184 bytes)
+Ciphertext:          681e45b3a245...  (1088 bytes)
+Alice ML-KEM-768 ss: b9198ce557a3...  (32 bytes)
+Bob   ML-KEM-768 ss: b9198ce557a3...  (32 bytes)
+ML-KEM-768 match:    true
+
+--- Step 3: HKDF-SHA256 (combine X25519 + ML-KEM-768 secrets) ---
+Hybrid key (Alice): 9f310ae95ec2f4aa...
+Hybrid key (Bob):   9f310ae95ec2f4aa...
+Hybrid key match:   true
+
+--- Step 4: AES-256-GCM ---
+Plaintext:  Hello, post-quantum world! ...
+Ciphertext: 2d7a35205f1a773e...  (76 bytes)
+MAC:        0ef42298c2dea72f...
+Decrypted:  Hello, post-quantum world! ...
+Decrypt OK: true
+
+--- Step 5: SHA-256 session fingerprint ---
+Session fingerprint: 75cc3302574d20be...
+
+=== All steps completed successfully ===
 ```
 
-## Dependency / build graph
+---
 
-```mermaid
-flowchart LR
-  subgraph DartPkgs
-    AC[at_client]
-    CH[at_chops]
-    PQDart[at_chops_pq_native<br/>Dart wrapper]
-    AU[at_auth]
-  end
-  subgraph FFI
-    BIND[ffigen bindings.dart]
-    SHIM[oqs_shim.c]
-  end
-  subgraph Native
-    LIBOQS[(mlkem-native<br/>static lib)]
-  end
-  subgraph PlatformBuilds
-    iOS[iOS<br/>CocoaPods]
-    Mac[macOS<br/>CocoaPods]
-    And[Android<br/>CMake/Gradle]
-    Linux[Linux<br/>CMake]
-    Win[Windows<br/>CMake]
-  end
+## Cryptographic primitives
 
-  AC --> CH
-  AU --> CH
-  CH --> PQDart
-  PQDart --> BIND
-  BIND --> SHIM
-  SHIM --> LIBOQS
-  LIBOQS --> iOS
-  LIBOQS --> Mac
-  LIBOQS --> And
-  LIBOQS --> Linux
-  LIBOQS --> Win
+### X25519 — how it works
+
+X25519 is an elliptic-curve Diffie-Hellman (ECDH) key exchange over Curve25519. Both parties generate a keypair and exchange public keys. Each side can independently compute the same shared secret using their own private key and the other party's public key — without ever sending the secret over the wire.
+
+```
+Alice                                        Bob
+─────                                        ───
+Generate keypair:                            Generate keypair:
+  alice_sk (random scalar)                     bob_sk (random scalar)
+  alice_pk = alice_sk × G                      bob_pk = bob_sk × G
+                                               (G = curve base point)
+
+              ──── alice_pk ────►
+              ◄─── bob_pk   ────
+
+shared = alice_sk × bob_pk       shared = bob_sk × alice_pk
+       = alice_sk × bob_sk × G           = bob_sk × alice_sk × G
+                                                    ↑ same point
 ```
 
-## Wire envelope byte layout
+Security relies on the **elliptic curve discrete logarithm problem (ECDLP)**: given `alice_pk` and `G`, finding `alice_sk` is computationally infeasible — on classical computers.
 
-```mermaid
-flowchart LR
-  V[ver<br/>1B] --> S[suite<br/>1B] --> E[eph_X25519_pk<br/>32B] --> CT[pq_ct<br/>1088B] --> N[nonce<br/>12B] --> G[gcm ct+tag<br/>48B]
+#### X25519 weakness: quantum computers
+
+Shor's algorithm running on a sufficiently large quantum computer can solve ECDLP in polynomial time, recovering the private key from the public key. A quantum-capable adversary who recorded your ciphertext today can decrypt it once they have the hardware ("harvest now, decrypt later").
+
+```
+Classical attacker sees:  alice_pk, bob_pk, ciphertext
+                          ✗ cannot reverse ECDLP
+                          ✗ cannot read the message
+
+Quantum attacker sees:    alice_pk, bob_pk, ciphertext
+                          ✓ Shor's algorithm recovers alice_sk or bob_sk
+                          ✓ computes shared secret
+                          ✓ decrypts the message
 ```
 
-Total = 1182 B.
+---
+
+### ML-KEM-768 — how it works
+
+ML-KEM-768 (formerly Kyber-768) is a **Key Encapsulation Mechanism** standardized by NIST (FIPS 203). Unlike ECDH where both sides contribute randomness, a KEM is asymmetric: one side *encapsulates* a secret to the other's public key; only the holder of the secret key can *decapsulate* it.
+
+Security is based on the **Module Learning With Errors (MLWE)** problem: recovering a secret from a noisy linear system over a polynomial ring, which is believed to be hard for both classical and quantum computers.
+
+```
+Bob                                          Alice
+───                                          ─────
+Generate keypair:
+  (bob_pk, bob_sk) = KeyGen()
+
+          ──────── bob_pk (1184 B) ─────────►
+
+                                             (ct, ss) = Encaps(bob_pk)
+                                             # ct  = ciphertext (1088 B)
+                                             # ss  = shared secret (32 B)
+                                             #       known only to Alice (so far)
+
+          ◄──────── ct (1088 B) ────────────
+
+ss = Decaps(ct, bob_sk)
+# Bob recovers the same ss
+# ss is now known to both sides
+```
+
+The ciphertext `ct` is essentially an encryption of `ss` under `bob_pk`, with built-in noise that makes the MLWE problem hard to invert.
+
+#### ML-KEM-768 weakness: implementation maturity
+
+ML-KEM is young (standardized 2024). The concern is not mathematical but practical:
+
+- **Side-channel attacks** — timing or power analysis on flawed implementations can leak the secret key. Classical cryptography has decades of hardened implementations; ML-KEM does not yet.
+- **Unknown unknowns** — a novel cryptanalytic technique could weaken the underlying lattice problem. No such attack is known, but the algorithm hasn't been stress-tested for as long as elliptic curves have.
+- **Not broken by classical computers** — but if a subtle flaw is found in the MLWE construction, a classical attacker could exploit it.
+
+```
+Classical attacker sees:  bob_pk, ct
+                          ✗ MLWE is hard classically
+                          ✗ cannot recover ss
+
+Quantum attacker sees:    bob_pk, ct
+                          ✗ no known quantum speedup for MLWE
+                          ✗ cannot recover ss
+
+Implementation flaw:      timing side-channel in decaps()
+                          ✓ may leak bob_sk
+                          ✓ attacker recovers ss
+```
+
+---
+
+### Why combining them makes it PQ-safe
+
+Neither primitive alone is sufficient:
+
+| Threat | X25519 alone | ML-KEM-768 alone | X25519 + ML-KEM-768 |
+|--------|-------------|-----------------|---------------------|
+| Classical cryptanalysis | Secure | Secure | Secure |
+| Quantum computer (Shor's) | **Broken** | Secure | **Secure** |
+| Lattice cryptanalysis / ML-KEM flaw | Secure | **Broken** | **Secure** |
+| Side-channel on ML-KEM | Secure | **Broken** | **Secure** |
+
+The hybrid works because the two shared secrets are combined through HKDF:
+
+```
+ikm = mlkem_ss || x25519_ss   ← ML-KEM first, per X25519MLKEM768 spec
+key = HKDF-SHA256(ikm, info="hybrid-x25519-mlkem768")
+```
+
+HKDF's security property is: the output `key` is indistinguishable from random **as long as at least one input is secret**. An attacker must break *both* X25519 and ML-KEM-768 simultaneously to recover `key`. Breaking one leaves the other's contribution as an unresolvable unknown.
+
+```
+Quantum attacker:
+  ✓ breaks X25519  →  learns x25519_ss
+  ✗ cannot break ML-KEM-768
+  ✗ ikm = [unknown 32 bytes] || x25519_ss
+  ✗ cannot derive key  →  message stays secret
+
+Classical attacker with ML-KEM flaw:
+  ✓ breaks ML-KEM-768  →  learns mlkem_ss
+  ✗ cannot break X25519 classically
+  ✗ ikm = mlkem_ss || [unknown 32 bytes]
+  ✗ cannot derive key  →  message stays secret
+```
+
+This is the standard **hybrid KEM** construction recommended by NIST and used in TLS 1.3 post-quantum drafts (e.g. `X25519MLKEM768` in Chrome/Cloudflare deployments).
+
+---
+
+## How the exchange works
+
+```
+Alice                                    Bob
+─────                                    ───
+Generate X25519 keypair                  Generate X25519 keypair
+                                         Generate ML-KEM-768 keypair
+                    ← Bob's X25519 pub
+                    ← Bob's ML-KEM-768 pub
+
+x25519_ss = DH(alice_sk, bob_x25519_pk)
+(ct, mlkem_ss) = ML-KEM-768.Encaps(bob_mlkem_pk)
+                    → ciphertext (ct) →
+
+                                         x25519_ss = DH(bob_sk, alice_x25519_pk)
+                                         mlkem_ss  = ML-KEM-768.Decaps(ct, bob_mlkem_sk)
+
+ikm  = mlkem_ss || x25519_ss            ikm  = mlkem_ss || x25519_ss
+key  = HKDF-SHA256(ikm, info=...)       key  = HKDF-SHA256(ikm, info=...)
+(ML-KEM first, per X25519MLKEM768 spec)
+
+         ── both sides now hold the same 32-byte hybrid key ──
+
+Encrypt with AES-256-GCM(key)           Decrypt with AES-256-GCM(key)
+```
+
+### ML-KEM-768 sizes
+
+| Parameter    | Size     |
+|--------------|----------|
+| Public key   | 1184 B   |
+| Secret key   | 2400 B   |
+| Ciphertext   | 1088 B   |
+| Shared secret| 32 B     |
+
+---
+
+## Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| [`cryptography`](https://pub.dev/packages/cryptography) | X25519, HKDF-SHA256, AES-256-GCM, SHA-256 |
+| [`ffi`](https://pub.dev/packages/ffi) | `calloc` allocator for native memory |
+| [`path`](https://pub.dev/packages/path) | Resolve dylib path relative to the script |
+| [liboqs](https://github.com/open-quantum-safe/liboqs) | Native ML-KEM-768 implementation |
+
+---
+
+## Project layout
+
+```
+app_2/
+├── bin/
+│   └── app_2.dart      # entry point — runs the full demo
+├── lib/
+│   └── app_2.dart      # (generated stub, unused)
+├── liboqs.dylib         # built manually (see above) — not committed
+├── pubspec.yaml
+└── README.md
+```
