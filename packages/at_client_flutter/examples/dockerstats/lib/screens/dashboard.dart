@@ -1,20 +1,21 @@
 /// Top dashboard. Two view modes:
 ///   - **Hosts** (default): one chart series per host, summed across the
-///     atSigns reporting on that host.
+///     containers reporting on that host.
 ///   - **Drill-down** (after selecting a host): one chart series per
-///     atSign on that host, with multi-select chips to keep visible.
+///     container on that host, with multi-select chips to keep visible.
 library;
 
 import 'dart:async';
 
 import 'package:at_client_flutter/at_client_flutter.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../models/stats_models.dart';
+import '../models/visible_range.dart';
 import '../onboarding.dart' show logout;
 import '../services/atsign_colors.dart';
 import '../services/dockerstats_service.dart';
-import '../services/rolling_window.dart';
 import '../widgets/stats_chart.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -24,27 +25,36 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-/// Selectable rolling-window sizes for the dashboard. The publisher's
-/// per-sample TTL bounds how much history actually exists in the
-/// network — selecting a window larger than that is harmless, the
-/// chart just shows whatever data is present (clustered to the right).
-const List<({String label, Duration value})> _windowOptions = [
-  (label: '2m', value: Duration(minutes: 2)),
-  (label: '10m', value: Duration(minutes: 10)),
+/// Quick-jump span presets shown in the range control bar.
+/// `'all'` is a sentinel — selecting it computes the span as
+/// `now - dataExtent.earliestMs`.
+const List<({String label, Duration? value})> _spanPresets = [
   (label: '1h', value: Duration(hours: 1)),
-  (label: '24h', value: Duration(hours: 24)),
+  (label: '1d', value: Duration(days: 1)),
+  (label: '1m', value: Duration(days: 30)),
+  (label: '1y', value: Duration(days: 365)),
+  (label: 'all', value: null),
 ];
+
+/// Default initial range: the past hour, pinned to live.
+final VisibleRange _defaultRange = VisibleRange.livePreset(
+  const Duration(hours: 1).inMilliseconds,
+);
 
 class _DashboardScreenState extends State<DashboardScreen> {
   DockerstatsService? _service;
   String? _error;
   Timer? _redrawTimer;
-  SyncProgress? _lastSyncProgress;
-  SyncProgressListener? _progressListener;
-  Duration _windowDuration = _windowOptions.first.value;
+  VisibleRange _range = _defaultRange;
   final StableColors _colors = StableColors();
   String? _drillHostId;
-  final Set<String> _hiddenAtSigns = {};
+  final Set<String> _hiddenContainers = {};
+
+  // Pan-drag state: chart-local pixels / time conversion baseline.
+  // Captured on PointerDown and consumed on PointerMove / PointerUp.
+  int? _dragStartEndMs;
+  Offset? _dragStartLocal;
+  double? _dragChartWidthPx;
 
   @override
   void initState() {
@@ -55,11 +65,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _redrawTimer?.cancel();
-    if (_progressListener != null) {
-      AtClientManager.getInstance().atClient.syncService.removeProgressListener(
-        _progressListener!,
-      );
-    }
     _service?.dispose();
     super.dispose();
   }
@@ -67,27 +72,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _init() async {
     try {
       final atClient = AtClientManager.getInstance().atClient;
-      // Subscribe to all SyncProgress events for the lifetime of the
-      // dashboard so the status bar always reflects current sync state.
-      _progressListener = _ProgressForwarder((p) {
-        if (!mounted) return;
-        setState(() => _lastSyncProgress = p);
-      });
-      atClient.syncService.addProgressListener(_progressListener!);
-      final s = DockerstatsService(
+      final s = await DockerstatsService.create(
         atClient: atClient,
-        window: RollingWindow(window: _windowDuration),
+        range: _range,
       );
-      await s.init();
-      s.window.addListener(_onChange);
-      // Frequent setState so the x-axis scrolls smoothly between
-      // sample arrivals. Storage eviction is event-driven (via
-      // `nodes.subDeletes` in DockerstatsService), so no separate
-      // periodic trim is needed.
-      _redrawTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
-        if (!mounted) return;
-        setState(() {});
-      });
+      s.cache.addListener(_onChange);
+      _startRedrawTimer();
       if (!mounted) return;
       setState(() => _service = s);
     } catch (e) {
@@ -96,9 +86,79 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  void _setWindow(Duration d) {
-    setState(() => _windowDuration = d);
-    _service?.window.window = d;
+  /// Pick a redraw cadence matching the visible span. Short
+  /// windows want 50 ms (smooth axis scroll for live tier-0 5s
+  /// data); wide windows (hours / days / months) move <1 px per
+  /// real second so a 1 Hz tick is plenty and saves us from
+  /// rebuilding 4 charts × 1000 spots 20 times a second for no
+  /// visual gain.
+  void _startRedrawTimer() {
+    _redrawTimer?.cancel();
+    final intervalMs = (_range.spanMs ~/ 14400).clamp(50, 1000);
+    _redrawTimer = Timer.periodic(Duration(milliseconds: intervalMs), (_) {
+      if (!mounted) return;
+      // Only redraw when live — historical ranges are static between
+      // user actions, so no animation is needed.
+      if (_range.isLive) setState(() {});
+    });
+  }
+
+  Future<void> _setRange(VisibleRange r) async {
+    if (r == _range) return;
+    setState(() => _range = r);
+    _startRedrawTimer();
+    await _service?.setRange(r);
+  }
+
+  /// Span limits for clamping zoom. Max is data extent (or current
+  /// span when extent is unknown); min is the model's hard 5-minute
+  /// floor.
+  ({int minMs, int maxMs}) _spanLimits() {
+    final extent = _service?.dataExtent;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final earliest = extent?.earliestMs ?? (nowMs - _range.spanMs);
+    final maxMs = (nowMs - earliest).clamp(_range.spanMs, 1 << 53);
+    return (minMs: minVisibleSpan.inMilliseconds, maxMs: maxMs);
+  }
+
+  void _zoomBy(double factor) {
+    final limits = _spanLimits();
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    _setRange(
+      _range.zoomedAroundCenter(
+        factor,
+        nowMs: nowMs,
+        minSpanMs: limits.minMs,
+        maxSpanMs: limits.maxMs,
+      ),
+    );
+  }
+
+  void _panBy(int deltaMs) {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final extent = _service?.dataExtent;
+    final earliest = extent?.earliestMs ?? nowMs;
+    _setRange(_range.pannedBy(deltaMs, nowMs: nowMs, earliestMs: earliest));
+  }
+
+  void _goLive() => _setRange(_range.goingLive());
+
+  void _fitAll() {
+    final extent = _service?.dataExtent;
+    if (extent?.earliestMs == null) {
+      _setRange(_defaultRange);
+      return;
+    }
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    _setRange(_range.fittingAll(earliestMs: extent!.earliestMs!, nowMs: nowMs));
+  }
+
+  void _setPreset(Duration? d) {
+    if (d != null) {
+      _setRange(VisibleRange.livePreset(d.inMilliseconds));
+      return;
+    }
+    _fitAll();
   }
 
   void _onChange() {
@@ -120,7 +180,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: Text(
           _drillHostId == null
               ? 'Docker stats'
-              : 'Docker stats – ${s?.window.hostnames[_drillHostId] ?? _drillHostId}',
+              : 'Docker stats – ${s?.cache.hostnames[_drillHostId] ?? _drillHostId}',
         ),
         leading: _drillHostId == null
             ? null
@@ -128,7 +188,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () => setState(() {
                   _drillHostId = null;
-                  _hiddenAtSigns.clear();
+                  _hiddenContainers.clear();
                 }),
               ),
         actions: [
@@ -140,10 +200,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       body: SafeArea(child: _buildBody(s)),
-      bottomNavigationBar: _SyncStatusBar(
-        progress: _lastSyncProgress,
+      bottomNavigationBar: _StatusBar(
         backfilling: s?.backfilling ?? false,
-        noData: s != null && !s.backfilling && s.window.hostIds.isEmpty,
+        noData: s != null && !s.backfilling && s.cache.isEmpty,
       ),
     );
   }
@@ -160,7 +219,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (s == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    final hostIds = s.window.hostIds.toList()..sort();
+    final hostIds = s.cache.hostIds.toList()..sort();
     // Always render the chart layout — when there's no data the
     // status bar surfaces a "no data in this time window" alert.
     return _drillHostId == null
@@ -168,67 +227,265 @@ class _DashboardScreenState extends State<DashboardScreen> {
         : _buildDrillView(s, _drillHostId!);
   }
 
-  Widget _windowSelector() {
+  Widget _rangeControlBar() {
+    final theme = Theme.of(context);
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final liveColor = _range.isLive ? Colors.lightBlueAccent.shade400 : null;
+    final liveFg = _range.isLive
+        ? Colors.white
+        : theme.colorScheme.onSurface.withValues(alpha: 0.5);
+    // Two rows: controls on top (stable layout — every button's
+    // screen position is determined only by the button widths to
+    // its left, never by the readout), readout below on its own
+    // line so its width changes don't ripple back into the
+    // controls.
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(right: 8),
-            child: Text('Window:'),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                // Pan 1×, pan ½, zoom out, zoom in, pan ½, pan 1×.
+                IconButton(
+                  tooltip: 'Pan left (1 full span)',
+                  icon: const Icon(Icons.keyboard_double_arrow_left),
+                  onPressed: () => _panBy(-_range.spanMs),
+                ),
+                IconButton(
+                  tooltip: 'Pan left (½ span)',
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: () => _panBy(-_range.spanMs ~/ 2),
+                ),
+                IconButton(
+                  tooltip: 'Zoom out (2×)',
+                  icon: const Icon(Icons.remove),
+                  onPressed: () => _zoomBy(0.5),
+                ),
+                IconButton(
+                  tooltip: 'Zoom in (2×)',
+                  icon: const Icon(Icons.add),
+                  onPressed: () => _zoomBy(2.0),
+                ),
+                IconButton(
+                  tooltip: 'Pan right (½ span)',
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: () => _panBy(_range.spanMs ~/ 2),
+                ),
+                IconButton(
+                  tooltip: 'Pan right (1 full span)',
+                  icon: const Icon(Icons.keyboard_double_arrow_right),
+                  onPressed: () => _panBy(_range.spanMs),
+                ),
+                const SizedBox(width: 16),
+                // Presets — single-tap jumps to a live span.
+                for (final p in _spanPresets)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: TextButton(
+                      onPressed: () => _setPreset(p.value),
+                      child: Text(p.label),
+                    ),
+                  ),
+                const SizedBox(width: 16),
+                // Live indicator + jump-to-live. Bright blue when
+                // live; dimmed when historical so the colour itself
+                // surfaces "you're scrolled away from now".
+                FilledButton.tonalIcon(
+                  onPressed: _goLive,
+                  icon: const Icon(Icons.bolt, size: 18),
+                  label: const Text('LIVE'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: liveColor,
+                    foregroundColor: liveFg,
+                    disabledForegroundColor: liveFg,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                TextButton.icon(
+                  onPressed: _fitAll,
+                  icon: const Icon(Icons.fit_screen, size: 18),
+                  label: const Text('Fit'),
+                ),
+              ],
+            ),
           ),
-          SegmentedButton<Duration>(
-            showSelectedIcon: false,
-            segments: [
-              for (final opt in _windowOptions)
-                ButtonSegment(value: opt.value, label: Text(opt.label)),
-            ],
-            selected: {_windowDuration},
-            onSelectionChanged: (s) => _setWindow(s.first),
+          // Readout — own row, so its width changes don't move the
+          // buttons. Tabular figures keep digit widths stable so the
+          // text itself doesn't twitch tick-to-tick under live
+          // updates.
+          Padding(
+            padding: const EdgeInsets.only(top: 2, left: 8),
+            child: Text(
+              _formatRangeReadout(nowMs),
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
+  String _formatRangeReadout(int nowMs) {
+    if (_range.isLive) {
+      return 'Past ${_humanSpan(_range.spanMs)} (live)';
+    }
+    final startMs = _range.resolveStartMs(nowMs);
+    final endMs = _range.resolveEndMs(nowMs);
+    final agoMs = nowMs - endMs;
+    return '${_fmtAbs(startMs)} → ${_fmtAbs(endMs)} '
+        '(${_humanSpan(_range.spanMs)} ending ${_humanSpan(agoMs)} ago)';
+  }
+
+  static String _humanSpan(int ms) {
+    if (ms < 60 * 1000) return '${ms ~/ 1000}s';
+    if (ms < 60 * 60 * 1000) return '${ms ~/ 60000}m';
+    if (ms < 24 * 60 * 60 * 1000) return '${ms ~/ 3600000}h';
+    if (ms < 30 * 24 * 60 * 60 * 1000) return '${ms ~/ (24 * 3600000)}d';
+    if (ms < 365 * 24 * 60 * 60 * 1000) {
+      return '${ms ~/ (30 * 24 * 3600000)}mo';
+    }
+    return '${(ms / (365.0 * 24 * 3600000)).toStringAsFixed(1)}y';
+  }
+
+  static String _fmtAbs(int ms) {
+    final dt = DateTime.fromMillisecondsSinceEpoch(ms);
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${dt.year}-${two(dt.month)}-${two(dt.day)} '
+        '${two(dt.hour)}:${two(dt.minute)}';
+  }
+
   Widget _chartGrid(List<StatsChart> charts) {
     assert(charts.length == 4);
+    // One gesture-capturing wrapper covers the whole 2x2 grid so a
+    // wheel-zoom or click-drag on any chart panel updates the
+    // shared range — all four charts share the same x-axis.
     return Expanded(
-      child: Column(
-        children: [
-          Expanded(
-            child: Row(
-              children: [
-                Expanded(child: charts[0]),
-                Expanded(child: charts[1]),
-              ],
+      child: _RangeGestureWrapper(
+        onWheelZoom: _onWheelZoom,
+        onDragStart: _onPanDragStart,
+        onDragUpdate: _onPanDragUpdate,
+        onDragEnd: _onPanDragEnd,
+        child: Column(
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(child: charts[0]),
+                  Expanded(child: charts[1]),
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: Row(
-              children: [
-                Expanded(child: charts[2]),
-                Expanded(child: charts[3]),
-              ],
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(child: charts[2]),
+                  Expanded(child: charts[3]),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
+  }
+
+  // -- Gesture handlers (Phase 4) -------------------------------------------
+
+  void _onPanDragStart(Offset local, double widthPx) {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    _dragStartEndMs = _range.resolveEndMs(nowMs);
+    _dragStartLocal = local;
+    _dragChartWidthPx = widthPx;
+  }
+
+  void _onPanDragUpdate(Offset local) {
+    final startEnd = _dragStartEndMs;
+    final startLocal = _dragStartLocal;
+    final widthPx = _dragChartWidthPx;
+    if (startEnd == null || startLocal == null || widthPx == null) return;
+    if (widthPx <= 0) return;
+    final dxPx = local.dx - startLocal.dx;
+    // Pixel → time conversion: dragging the chart to the right
+    // (positive dx) should reveal *older* data, so the proposed
+    // endMs moves backward.
+    final deltaMs = -(dxPx / widthPx) * _range.spanMs;
+    final proposedEnd = startEnd + deltaMs.round();
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final earliest = _service?.dataExtent.earliestMs ?? nowMs;
+    if (proposedEnd >= nowMs) {
+      _setRange(_range.goingLive());
+      return;
+    }
+    final minEnd = earliest + _range.spanMs;
+    final clampedEnd = proposedEnd < minEnd ? minEnd : proposedEnd;
+    _setRange(VisibleRange(spanMs: _range.spanMs, endMs: clampedEnd));
+  }
+
+  void _onPanDragEnd() {
+    _dragStartEndMs = null;
+    _dragStartLocal = null;
+    _dragChartWidthPx = null;
+  }
+
+  /// Cursor-anchored wheel zoom: the time-position under the
+  /// pointer at wheel-start stays fixed under the pointer after the
+  /// span changes, so the user is zooming "into" what they're
+  /// looking at rather than the abstract midpoint.
+  void _onWheelZoom(double factor, double cursorXPx, double widthPx) {
+    if (widthPx <= 0 || factor <= 0) return;
+    final limits = _spanLimits();
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final xMin = _range.resolveStartMs(nowMs);
+    final cursorFrac = (cursorXPx / widthPx).clamp(0.0, 1.0);
+    final timeUnderCursor = xMin + (cursorFrac * _range.spanMs).round();
+    final newSpan = (_range.spanMs / factor).round().clamp(
+      limits.minMs,
+      limits.maxMs,
+    );
+    final newXMin = timeUnderCursor - (cursorFrac * newSpan).round();
+    final proposedEnd = newXMin + newSpan;
+    if (proposedEnd >= nowMs) {
+      _setRange(VisibleRange(spanMs: newSpan, endMs: null));
+      return;
+    }
+    final earliest = _service?.dataExtent.earliestMs ?? nowMs;
+    final minEnd = earliest + newSpan;
+    final clampedEnd = proposedEnd < minEnd ? minEnd : proposedEnd;
+    _setRange(VisibleRange(spanMs: newSpan, endMs: clampedEnd));
   }
 
   // -------------------------------------------------------------------------
   // Top view — one series per host
 
+  ({int xMinMs, int xMaxMs}) _chartAxis() {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    return (
+      xMinMs: _range.resolveStartMs(nowMs),
+      xMaxMs: _range.resolveEndMs(nowMs),
+    );
+  }
+
   Widget _buildHostsView(DockerstatsService s, List<String> hostIds) {
+    final axis = _chartAxis();
     final cpu = <ChartSeries>[];
     final mem = <ChartSeries>[];
     final net = <ChartSeries>[];
     final blk = <ChartSeries>[];
+    // The cache already holds samples bucketed to the chart's
+    // pixel-budget granularity — server-side via SQL `GROUP BY` on
+    // the initial query, then incrementally as live notifications
+    // fold into bucket accumulators. We only need to sum per millis
+    // across containers to produce the host-level series.
     for (final hostId in hostIds) {
-      final hostname = s.window.hostnames[hostId] ?? hostId;
+      final hostname = s.cache.hostnames[hostId] ?? hostId;
       final color = _colors.colorFor('host:$hostId');
-      final samples = s.window.samplesForHost(hostId);
+      final samples = s.cache.samplesForHost(hostId);
       final agg = _aggregateByMillis(samples);
       cpu.add(
         ChartSeries(
@@ -273,36 +530,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     return Column(
       children: [
-        _windowSelector(),
+        _rangeControlBar(),
         _hostChips(s, hostIds),
         _chartGrid([
           StatsChart(
             title: 'CPU',
-            yLabel: 'sum CPU% across atSigns',
-            window: s.window.window,
+            yLabel: 'sum CPU% across containers',
+            xMinMs: axis.xMinMs,
+            xMaxMs: axis.xMaxMs,
             series: cpu,
             yFormatter: (v) => '${v.toStringAsFixed(0)}%',
           ),
           StatsChart(
             title: 'Memory',
             yLabel: 'sum memUsage (MiB)',
-            window: s.window.window,
+            xMinMs: axis.xMinMs,
+            xMaxMs: axis.xMaxMs,
             series: mem,
-            yFormatter: (v) => v.toStringAsFixed(0),
+            yFormatter: _compactNumber,
           ),
           StatsChart(
             title: 'Network I/O (cumulative rx + tx)',
             yLabel: 'MiB',
-            window: s.window.window,
+            xMinMs: axis.xMinMs,
+            xMaxMs: axis.xMaxMs,
             series: net,
-            yFormatter: (v) => v.toStringAsFixed(0),
+            yFormatter: _compactNumber,
           ),
           StatsChart(
             title: 'Block I/O (cumulative read + write)',
             yLabel: 'MiB',
-            window: s.window.window,
+            xMinMs: axis.xMinMs,
+            xMaxMs: axis.xMaxMs,
             series: blk,
-            yFormatter: (v) => v.toStringAsFixed(0),
+            yFormatter: _compactNumber,
           ),
         ]),
       ],
@@ -331,10 +592,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   radius: 6,
                   backgroundColor: _colors.colorFor('host:$hostId'),
                 ),
-                label: Text(s.window.hostnames[hostId] ?? hostId),
+                label: Text(s.cache.hostnames[hostId] ?? hostId),
                 onPressed: () => setState(() {
                   _drillHostId = hostId;
-                  _hiddenAtSigns.clear();
+                  _hiddenContainers.clear();
                 }),
               ),
           ],
@@ -344,82 +605,87 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // -------------------------------------------------------------------------
-  // Drill view — one series per atSign on the selected host
+  // Drill view — one series per container on the selected host
 
   Widget _buildDrillView(DockerstatsService s, String hostId) {
-    final perAtSign = s.window.samplesForHostByAtSign(hostId);
-    final atSignKeys = perAtSign.keys.toList()..sort();
-    final visibleAtSignKeys = atSignKeys
-        .where((k) => !_hiddenAtSigns.contains(k))
+    final axis = _chartAxis();
+    final perContainer = s.cache.samplesForHostByContainer(hostId);
+    final containerIds = perContainer.keys.toList()..sort();
+    final visibleContainerIds = containerIds
+        .where((k) => !_hiddenContainers.contains(k))
         .toList();
 
-    ChartSeries seriesFor(String atKey, double Function(StatSample) extract) {
-      final raw = perAtSign[atKey] ?? const <StatSample>[];
+    ChartSeries seriesFor(String cid, double Function(StatSample) extract) {
+      final raw = perContainer[cid] ?? const <StatSample>[];
       return ChartSeries(
-        label: s.window.atSignsByHost[hostId]?[atKey] ?? atKey,
-        color: _colors.colorFor('atsign:$atKey'),
+        label: s.cache.containerNamesByHost[hostId]?[cid] ?? cid,
+        color: _colors.colorFor('container:$cid'),
         points: [for (final p in raw) (millis: p.millis, value: extract(p))],
       );
     }
 
     final cpu = [
-      for (final k in visibleAtSignKeys) seriesFor(k, (s) => s.cpuPct),
+      for (final cid in visibleContainerIds) seriesFor(cid, (s) => s.cpuPct),
     ];
     final mem = [
-      for (final k in visibleAtSignKeys)
-        seriesFor(k, (s) => s.memUsage / (1024 * 1024)),
+      for (final cid in visibleContainerIds)
+        seriesFor(cid, (s) => s.memUsage / (1024 * 1024)),
     ];
     final net = [
-      for (final k in visibleAtSignKeys)
-        seriesFor(k, (s) => (s.netRx + s.netTx) / (1024 * 1024)),
+      for (final cid in visibleContainerIds)
+        seriesFor(cid, (s) => (s.netRx + s.netTx) / (1024 * 1024)),
     ];
     final blk = [
-      for (final k in visibleAtSignKeys)
-        seriesFor(k, (s) => (s.blkRead + s.blkWrite) / (1024 * 1024)),
+      for (final cid in visibleContainerIds)
+        seriesFor(cid, (s) => (s.blkRead + s.blkWrite) / (1024 * 1024)),
     ];
 
     return Column(
       children: [
-        _windowSelector(),
-        _atSignFilter(s, hostId, atSignKeys),
+        _rangeControlBar(),
+        _containerFilter(s, hostId, containerIds),
         _chartGrid([
           StatsChart(
             title: 'CPU',
-            yLabel: 'CPU% per atSign',
-            window: s.window.window,
+            yLabel: 'CPU% per container',
+            xMinMs: axis.xMinMs,
+            xMaxMs: axis.xMaxMs,
             series: cpu,
             yFormatter: (v) => '${v.toStringAsFixed(0)}%',
           ),
           StatsChart(
             title: 'Memory',
-            yLabel: 'memUsage (MiB) per atSign',
-            window: s.window.window,
+            yLabel: 'memUsage (MiB) per container',
+            xMinMs: axis.xMinMs,
+            xMaxMs: axis.xMaxMs,
             series: mem,
-            yFormatter: (v) => v.toStringAsFixed(0),
+            yFormatter: _compactNumber,
           ),
           StatsChart(
             title: 'Network I/O (cumulative rx + tx)',
-            yLabel: 'MiB per atSign',
-            window: s.window.window,
+            yLabel: 'MiB per container',
+            xMinMs: axis.xMinMs,
+            xMaxMs: axis.xMaxMs,
             series: net,
-            yFormatter: (v) => v.toStringAsFixed(0),
+            yFormatter: _compactNumber,
           ),
           StatsChart(
             title: 'Block I/O (cumulative read + write)',
-            yLabel: 'MiB per atSign',
-            window: s.window.window,
+            yLabel: 'MiB per container',
+            xMinMs: axis.xMinMs,
+            xMaxMs: axis.xMaxMs,
             series: blk,
-            yFormatter: (v) => v.toStringAsFixed(0),
+            yFormatter: _compactNumber,
           ),
         ]),
       ],
     );
   }
 
-  Widget _atSignFilter(
+  Widget _containerFilter(
     DockerstatsService s,
     String hostId,
-    List<String> atSignKeys,
+    List<String> containerIds,
   ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -431,21 +697,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 6),
-              child: Text('atSigns: '),
+              child: Text('containers: '),
             ),
-            for (final atKey in atSignKeys)
+            for (final cid in containerIds)
               FilterChip(
                 avatar: CircleAvatar(
                   radius: 6,
-                  backgroundColor: _colors.colorFor('atsign:$atKey'),
+                  backgroundColor: _colors.colorFor('container:$cid'),
                 ),
-                label: Text(s.window.atSignsByHost[hostId]?[atKey] ?? atKey),
-                selected: !_hiddenAtSigns.contains(atKey),
+                label: Text(s.cache.containerNamesByHost[hostId]?[cid] ?? cid),
+                selected: !_hiddenContainers.contains(cid),
                 onSelected: (selected) => setState(() {
                   if (selected) {
-                    _hiddenAtSigns.remove(atKey);
+                    _hiddenContainers.remove(cid);
                   } else {
-                    _hiddenAtSigns.add(atKey);
+                    _hiddenContainers.add(cid);
                   }
                 }),
               ),
@@ -458,7 +724,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // -------------------------------------------------------------------------
   // Aggregation helper — bucket samples on identical timestamps and sum
   // the relevant fields. Within a single publishing cycle the publisher
-  // writes the same `millis` for every atSign on a host, so a flat
+  // writes the same `millis` for every container on a host, so a flat
   // millis-equality bucketing is enough.
 
   List<_HostAgg> _aggregateByMillis(List<StatSample> samples) {
@@ -489,64 +755,57 @@ class _HostAgg {
   _HostAgg({required this.millis});
 }
 
-/// Trivial adapter so we can register a closure as a SyncProgressListener
-/// without having to define a full subclass at every call site.
-class _ProgressForwarder implements SyncProgressListener {
-  final void Function(SyncProgress) _onEvent;
-  _ProgressForwarder(this._onEvent);
-  @override
-  void onSyncProgressEvent(SyncProgress progress) => _onEvent(progress);
+/// Compact y-axis formatter for byte-quantity-derived numbers. The
+/// chart pre-scales raw bytes to MiB before display, but cumulative
+/// counters (`netRx`/`netTx`/`blkRead`/`blkWrite`) accumulate without
+/// bound — across a year a single container can produce values in
+/// the millions or billions of MiB — and a 9-digit literal will not
+/// fit in a y-tick slot at any reasonable chart width. Use SI-style
+/// suffixes (k/M/G/T) so every tick fits in ~5 characters.
+String _compactNumber(double v) {
+  final abs = v.abs();
+  if (abs >= 1e12) return '${(v / 1e12).toStringAsFixed(1)}T';
+  if (abs >= 1e9) return '${(v / 1e9).toStringAsFixed(1)}G';
+  if (abs >= 1e6) return '${(v / 1e6).toStringAsFixed(1)}M';
+  if (abs >= 1e3) return '${(v / 1e3).toStringAsFixed(1)}k';
+  return v.toStringAsFixed(0);
 }
 
-/// Persistent footer that reflects sync state and any "no data"
-/// alert. Top row: amber spinner + commit-ids when local is behind
-/// server; green tick + "in sync" otherwise. Optional bottom row:
-/// warning triangle + "no data in this time window" hint, only when
-/// the rolling window is empty.
-class _SyncStatusBar extends StatelessWidget {
-  final SyncProgress? progress;
-  final bool noData;
+/// Persistent footer. Two optional rows:
+///   - spinner + "loading historical samples from local store…"
+///     while the SQLite query is running on startup or after a
+///     window-selector change;
+///   - warning triangle + "no data in this time window…" hint
+///     when the cache is empty post-load.
+/// Sync state is no longer surfaced — the dockerstats receiver
+/// doesn't use AtCollection (and hence the sync queue) any more;
+/// every sample arrives as a single notification.
+class _StatusBar extends StatelessWidget {
   final bool backfilling;
-  const _SyncStatusBar({
-    required this.progress,
-    required this.noData,
-    required this.backfilling,
-  });
-
-  bool get _isBehind {
-    final p = progress;
-    if (p == null) return false;
-    final local = p.localCommitId;
-    final server = p.serverCommitId;
-    if (local == null || server == null) return false;
-    return local < server;
-  }
+  final bool noData;
+  const _StatusBar({required this.backfilling, required this.noData});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final p = progress;
-    final local = p?.localCommitId?.toString() ?? '–';
-    final server = p?.serverCommitId?.toString() ?? '–';
-    final pending = p?.pendingPushCount;
-
-    final Widget icon;
-    final String label;
-    final Color color;
-    if (_isBehind) {
-      color = Colors.amber.shade700;
-      icon = SizedBox(
-        width: 14,
-        height: 14,
-        child: CircularProgressIndicator(strokeWidth: 2, color: color),
+    if (!backfilling && !noData) {
+      // Reserve a single thin row so the bottom-nav slot has a
+      // stable height; otherwise toggling the alerts on/off jumps
+      // the chart grid vertically.
+      return Material(
+        color: theme.colorScheme.surfaceContainerHighest,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            children: [
+              Icon(Icons.check_circle, size: 16, color: Colors.green.shade700),
+              const SizedBox(width: 8),
+              Text('ready', style: theme.textTheme.bodySmall),
+            ],
+          ),
+        ),
       );
-      label = 'syncing';
-    } else {
-      color = Colors.green.shade700;
-      icon = Icon(Icons.check_circle, size: 16, color: color);
-      label = 'in sync';
     }
-
     return Material(
       color: theme.colorScheme.surfaceContainerHighest,
       child: Padding(
@@ -555,24 +814,7 @@ class _SyncStatusBar extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              children: [
-                icon,
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: theme.textTheme.bodySmall?.copyWith(color: color),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  'local $local · server $server'
-                  '${pending != null && pending > 0 ? ' · pending push $pending' : ''}',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ],
-            ),
-            if (backfilling) ...[
-              const SizedBox(height: 4),
+            if (backfilling)
               Row(
                 children: [
                   SizedBox(
@@ -590,9 +832,8 @@ class _SyncStatusBar extends StatelessWidget {
                   ),
                 ],
               ),
-            ],
             if (noData) ...[
-              const SizedBox(height: 4),
+              if (backfilling) const SizedBox(height: 4),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -618,6 +859,80 @@ class _SyncStatusBar extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Wraps the chart grid to translate mouse-wheel and click-drag
+/// gestures into range updates. One wrapper covers all four charts
+/// so a gesture anywhere in the grid updates the shared time axis.
+///
+/// Listener handles `PointerSignalEvent`s (wheel scrolls); a sibling
+/// GestureDetector picks up horizontal drag. fl_chart's built-in
+/// touch handling for tooltips / hover keeps working under both
+/// (tap and hover are different gesture types from horizontal drag).
+class _RangeGestureWrapper extends StatelessWidget {
+  final Widget child;
+
+  /// Called on each wheel tick. `factor > 1` zooms in; `factor < 1`
+  /// zooms out. `cursorXPx` is the pointer's x within the wrapper's
+  /// local coordinate space; `widthPx` is the wrapper's pixel width.
+  final void Function(double factor, double cursorXPx, double widthPx)
+  onWheelZoom;
+
+  /// Drag started at [local] (local coordinates) on a wrapper of
+  /// [widthPx] pixels wide. The dashboard captures these for the
+  /// duration of the gesture.
+  final void Function(Offset local, double widthPx) onDragStart;
+
+  /// Pointer moved while the drag is active.
+  final void Function(Offset local) onDragUpdate;
+
+  /// Drag finished (released or cancelled).
+  final VoidCallback onDragEnd;
+
+  const _RangeGestureWrapper({
+    required this.child,
+    required this.onWheelZoom,
+    required this.onDragStart,
+    required this.onDragUpdate,
+    required this.onDragEnd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final widthPx = constraints.maxWidth;
+        return Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerSignal: (event) {
+            if (event is PointerScrollEvent) {
+              // Wheel up (scrollDelta.dy < 0) → zoom in;
+              // wheel down → zoom out. 1.2× per tick feels smooth on
+              // both a discrete mouse wheel and a trackpad's
+              // continuous scroll.
+              final factor = event.scrollDelta.dy < 0 ? 1.2 : 1.0 / 1.2;
+              onWheelZoom(factor, event.localPosition.dx, widthPx);
+            }
+          },
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            // Horizontal drag pans; the chart's own touch handling
+            // (tooltips on hover / tap) sits below this and still
+            // fires for non-drag gestures.
+            onHorizontalDragStart: (details) {
+              onDragStart(details.localPosition, widthPx);
+            },
+            onHorizontalDragUpdate: (details) {
+              onDragUpdate(details.localPosition);
+            },
+            onHorizontalDragEnd: (_) => onDragEnd(),
+            onHorizontalDragCancel: onDragEnd,
+            child: child,
+          ),
+        );
+      },
     );
   }
 }

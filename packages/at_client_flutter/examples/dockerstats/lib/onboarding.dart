@@ -8,7 +8,7 @@ import 'package:path_provider/path_provider.dart'
 
 import 'services/dockerstats_service.dart';
 
-const _namespace = dockerstatsNamespace;
+const _namespace = applicationNamespace;
 final _log = AtSignLogger('dockerstats');
 final KeychainStorage _keychain = KeychainStorage();
 
