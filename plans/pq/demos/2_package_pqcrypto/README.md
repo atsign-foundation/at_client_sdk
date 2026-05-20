@@ -1,4 +1,4 @@
-# app_3 — Hybrid X25519 + ML-KEM-768 (pure Dart)
+# 2_package_pqcrypto — Hybrid X25519 + ML-KEM-768 (pure Dart)
 
 Demonstrates a hybrid post-quantum key exchange using **X25519** and **ML-KEM-768**, implemented entirely in pure Dart with no native libraries or FFI.
 
@@ -10,9 +10,9 @@ Demonstrates a hybrid post-quantum key exchange using **X25519** and **ML-KEM-76
 4. **AES-256-GCM** — encrypts a test message with the hybrid key
 5. **SHA-256** — produces a session fingerprint over the combined secrets
 
-## Difference from app_2
+## Difference from 1_ffi
 
-`app_2` calls into `liboqs.dylib` via FFI for ML-KEM-768. `app_3` replaces that with the pure-Dart `pqcrypto` package — no dynamic library, no platform-specific setup required.
+`1_ffi` calls into `liboqs.dylib` via FFI for ML-KEM-768. `2_package_pqcrypto` replaces that with the pure-Dart `pqcrypto` package — no dynamic library, no platform-specific setup required.
 
 ## Run
 
