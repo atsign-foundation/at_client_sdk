@@ -1,3 +1,10 @@
+## DEPRECATED
+
+This package has been deprecated and has turned into a snippet under
+`at_client_flutter/example/snippets`.
+
+See the examples and README in `at_client_flutter` for the current workflow.
+
 <a href="https://atsign.com#gh-light-mode-only"><img width=250px src="https://atsign.com/wp-content/uploads/2022/05/atsign-logo-horizontal-color2022.svg#gh-light-mode-only" alt="The Atsign Foundation"></a><a href="https://atsign.com#gh-dark-mode-only"><img width=250px src="https://atsign.com/wp-content/uploads/2023/08/atsign-logo-horizontal-reverse2022-Color.svg#gh-dark-mode-only" alt="The Atsign Foundation"></a>
 
 [![pub package](https://img.shields.io/pub/v/at_backupkey_flutter)](https://pub.dev/packages/at_backupkey_flutter) [![](https://img.shields.io/static/v1?label=Backend&message=atPlatform&color=<COLOR>)](https://atsign.dev) [![](https://img.shields.io/static/v1?label=Publisher&message=Atsign&color=F05E3E)](https://atsign.com) [![gitHub license](https://img.shields.io/badge/license-BSD3-blue.svg)](./LICENSE)
