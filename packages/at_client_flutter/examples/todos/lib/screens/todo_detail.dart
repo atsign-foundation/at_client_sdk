@@ -40,14 +40,14 @@ class _TodoDetailScreenState extends State<TodoDetailScreen> {
     _liveSub = widget.service
         .watchSingle(widget.todo.id, widget.todo.owner)
         .listen((t) {
-          if (!mounted) return;
-          if (t == null) {
-            // Underlying todo was deleted — back out.
-            Navigator.of(context).pop();
-            return;
-          }
-          setState(() => _currentTodo = t);
-        });
+      if (!mounted) return;
+      if (t == null) {
+        // Underlying todo was deleted — back out.
+        Navigator.of(context).pop();
+        return;
+      }
+      setState(() => _currentTodo = t);
+    });
   }
 
   @override

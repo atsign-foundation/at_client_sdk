@@ -191,9 +191,8 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
               width: double.infinity,
               height: 44,
               child: ElevatedButton(
-                onPressed: _normalizedAtSignForSubmit() != null
-                    ? _handleSubmit
-                    : null,
+                onPressed:
+                    _normalizedAtSignForSubmit() != null ? _handleSubmit : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: widget.themeData.colorScheme.secondary,
                   foregroundColor: Colors.white,

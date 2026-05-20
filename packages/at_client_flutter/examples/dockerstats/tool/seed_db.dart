@@ -336,17 +336,14 @@ Map<String, Object?> _makeRow(_Container c, {required int sampleMs}) {
   final t1Sec = (sampleMs + 500) / 1000.0;
   final tEndSec = sampleMs / 1000.0;
 
-  final cpu =
-      (c.cpuBaseline +
-              c.cpuAmplitude *
-                  _sineIntegralMean(c.cpuPeriodSeconds, t0Sec, t1Sec))
-          .clamp(0.0, 100.0);
+  final cpu = (c.cpuBaseline +
+          c.cpuAmplitude * _sineIntegralMean(c.cpuPeriodSeconds, t0Sec, t1Sec))
+      .clamp(0.0, 100.0);
 
-  final memMib =
-      (c.memBaselineMib +
-              c.memAmplitudeMib *
-                  _sineIntegralMean(c.memPeriodSeconds, t0Sec, t1Sec))
-          .clamp(0.0, c.memLimitBytes / (1024 * 1024));
+  final memMib = (c.memBaselineMib +
+          c.memAmplitudeMib *
+              _sineIntegralMean(c.memPeriodSeconds, t0Sec, t1Sec))
+      .clamp(0.0, c.memLimitBytes / (1024 * 1024));
   final memUsage = (memMib * 1024 * 1024).round();
   final memPct = (memUsage * 100) / c.memLimitBytes;
 

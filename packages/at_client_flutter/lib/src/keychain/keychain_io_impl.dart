@@ -10,7 +10,7 @@ import 'keychain_storage.dart';
 class KeychainAtKeysIo extends WrittenAtKeysIo {
   KeychainStorage keychainStorage;
   KeychainAtKeysIo({KeychainStorage? keychainStorage})
-    : keychainStorage = keychainStorage ?? KeychainStorage();
+      : keychainStorage = keychainStorage ?? KeychainStorage();
 
   @override
   Future<AtKeys> read(String atSign) async {

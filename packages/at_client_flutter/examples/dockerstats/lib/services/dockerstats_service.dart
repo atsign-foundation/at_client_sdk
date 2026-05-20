@@ -90,11 +90,11 @@ class DockerstatsService {
     _notifSub = atClient.notificationService
         .subscribe(regex: regex, shouldDecrypt: true)
         .listen(
-          _onNotification,
-          onError: (Object e, StackTrace st) {
-            _log.warning('subscribe error: $e\n$st');
-          },
-        );
+      _onNotification,
+      onError: (Object e, StackTrace st) {
+        _log.warning('subscribe error: $e\n$st');
+      },
+    );
 
     // Periodic prune: when the range is live, the left edge moves
     // forward over time. Drop cache accumulators that have slipped
@@ -162,9 +162,8 @@ class DockerstatsService {
       final nowMs = DateTime.now().millisecondsSinceEpoch;
       final sinceMs = _range.resolveStartMs(nowMs);
       final untilMs = _range.isLive ? null : _range.resolveEndMs(nowMs);
-      final effectiveBucketMs = shape.bucketMs == 0
-          ? tierBucketsMs[shape.tier]
-          : shape.bucketMs;
+      final effectiveBucketMs =
+          shape.bucketMs == 0 ? tierBucketsMs[shape.tier] : shape.bucketMs;
       cache.setBucketMsAndClear(shape.bucketMs);
       final rows = await db.queryWindow(
         tier: shape.tier,

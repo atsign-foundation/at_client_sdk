@@ -11,14 +11,14 @@ class HostNode {
   HostNode({required this.hostname, required this.firstSeenMs});
 
   Map<String, dynamic> toJson() => {
-    'hostname': hostname,
-    'firstSeenMs': firstSeenMs,
-  };
+        'hostname': hostname,
+        'firstSeenMs': firstSeenMs,
+      };
 
   factory HostNode.fromJson(Map<String, dynamic> j) => HostNode(
-    hostname: j['hostname'] as String,
-    firstSeenMs: (j['firstSeenMs'] as num).toInt(),
-  );
+        hostname: j['hostname'] as String,
+        firstSeenMs: (j['firstSeenMs'] as num).toInt(),
+      );
 }
 
 class AtsignOnHost {
@@ -33,16 +33,16 @@ class AtsignOnHost {
   });
 
   Map<String, dynamic> toJson() => {
-    'atSign': atSign,
-    'hostname': hostname,
-    'firstSeenMs': firstSeenMs,
-  };
+        'atSign': atSign,
+        'hostname': hostname,
+        'firstSeenMs': firstSeenMs,
+      };
 
   factory AtsignOnHost.fromJson(Map<String, dynamic> j) => AtsignOnHost(
-    atSign: j['atSign'] as String,
-    hostname: j['hostname'] as String,
-    firstSeenMs: (j['firstSeenMs'] as num).toInt(),
-  );
+        atSign: j['atSign'] as String,
+        hostname: j['hostname'] as String,
+        firstSeenMs: (j['firstSeenMs'] as num).toInt(),
+      );
 }
 
 class StatSample {
@@ -83,40 +83,40 @@ class StatSample {
   });
 
   Map<String, dynamic> toJson() => {
-    'atSign': atSign,
-    'hostname': hostname,
-    'containerId': containerId,
-    'containerName': containerName,
-    'image': image,
-    'restartCount': restartCount,
-    'pidsCount': pidsCount,
-    'cpuPct': cpuPct,
-    'memUsage': memUsage,
-    'memLimit': memLimit,
-    'memPct': memPct,
-    'netRx': netRx,
-    'netTx': netTx,
-    'blkRead': blkRead,
-    'blkWrite': blkWrite,
-    'millis': millis,
-  };
+        'atSign': atSign,
+        'hostname': hostname,
+        'containerId': containerId,
+        'containerName': containerName,
+        'image': image,
+        'restartCount': restartCount,
+        'pidsCount': pidsCount,
+        'cpuPct': cpuPct,
+        'memUsage': memUsage,
+        'memLimit': memLimit,
+        'memPct': memPct,
+        'netRx': netRx,
+        'netTx': netTx,
+        'blkRead': blkRead,
+        'blkWrite': blkWrite,
+        'millis': millis,
+      };
 
   factory StatSample.fromJson(Map<String, dynamic> j) => StatSample(
-    atSign: j['atSign'] as String,
-    hostname: j['hostname'] as String,
-    containerId: j['containerId'] as String,
-    containerName: j['containerName'] as String,
-    image: j['image'] as String? ?? '',
-    restartCount: (j['restartCount'] as num?)?.toInt() ?? 0,
-    pidsCount: (j['pidsCount'] as num?)?.toInt() ?? 0,
-    cpuPct: (j['cpuPct'] as num).toDouble(),
-    memUsage: (j['memUsage'] as num).toInt(),
-    memLimit: (j['memLimit'] as num).toInt(),
-    memPct: (j['memPct'] as num).toDouble(),
-    netRx: (j['netRx'] as num).toInt(),
-    netTx: (j['netTx'] as num).toInt(),
-    blkRead: (j['blkRead'] as num).toInt(),
-    blkWrite: (j['blkWrite'] as num).toInt(),
-    millis: (j['millis'] as num).toInt(),
-  );
+        atSign: j['atSign'] as String,
+        hostname: j['hostname'] as String,
+        containerId: j['containerId'] as String,
+        containerName: j['containerName'] as String,
+        image: j['image'] as String? ?? '',
+        restartCount: (j['restartCount'] as num?)?.toInt() ?? 0,
+        pidsCount: (j['pidsCount'] as num?)?.toInt() ?? 0,
+        cpuPct: (j['cpuPct'] as num).toDouble(),
+        memUsage: (j['memUsage'] as num).toInt(),
+        memLimit: (j['memLimit'] as num).toInt(),
+        memPct: (j['memPct'] as num).toDouble(),
+        netRx: (j['netRx'] as num).toInt(),
+        netTx: (j['netTx'] as num).toInt(),
+        blkRead: (j['blkRead'] as num).toInt(),
+        blkWrite: (j['blkWrite'] as num).toInt(),
+        millis: (j['millis'] as num).toInt(),
+      );
 }
