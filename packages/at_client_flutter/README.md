@@ -152,6 +152,5 @@ atKeysIo.write(atSign, atKeys);
 - [`at_commons`](../at_commons) — `AtKey`, `Metadata`, and friends
 
 ## Open source usage and contributions
-
 BSD3-licensed. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) for
 guidance on setting up tools, running tests, and raising a PR.
