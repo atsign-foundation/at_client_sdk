@@ -141,7 +141,8 @@ class StatsChart extends StatelessWidget {
       var segmentStart = 0;
       for (var i = 1; i <= visible.length; i++) {
         final atEnd = i == visible.length;
-        final breakHere = !atEnd &&
+        final breakHere =
+            !atEnd &&
             visible[i].millis - visible[i - 1].millis > gapThresholdMs;
         if (atEnd || breakHere) {
           final segment = visible.sublist(segmentStart, i);
@@ -185,13 +186,13 @@ class StatsChart extends StatelessWidget {
                   // looks empty (≥2 ticks) and never collides on
                   // narrow grid cells (≤6 ticks).
                   final maxXTicks = (constraints.maxWidth / 80).floor().clamp(
-                        2,
-                        6,
-                      );
+                    2,
+                    6,
+                  );
                   final maxYTicks = (constraints.maxHeight / 32).floor().clamp(
-                        2,
-                        6,
-                      );
+                    2,
+                    6,
+                  );
                   final xInterval = effectiveWindowMs / maxXTicks;
                   final yInterval = yMax / maxYTicks;
                   return LineChart(
@@ -220,7 +221,8 @@ class StatsChart extends StatelessWidget {
                           fitInsideHorizontally: true,
                           fitInsideVertically: true,
                           getTooltipColor: (_) => theme
-                              .colorScheme.inverseSurface
+                              .colorScheme
+                              .inverseSurface
                               .withValues(alpha: 0.95),
                           getTooltipItems: (spots) => _buildTooltipItems(
                             spots,
@@ -329,14 +331,15 @@ List<LineTooltipItem?> _buildTooltipItems(
 }) {
   if (spots.isEmpty) return const [];
   final headerColor = theme.colorScheme.onInverseSurface;
-  final headerStyle = theme.textTheme.bodySmall?.copyWith(
+  final headerStyle =
+      theme.textTheme.bodySmall?.copyWith(
         color: headerColor,
         fontWeight: FontWeight.w600,
       ) ??
       TextStyle(color: headerColor, fontWeight: FontWeight.w600, fontSize: 11);
   final lineStyleBase =
       theme.textTheme.bodySmall?.copyWith(color: headerColor) ??
-          TextStyle(color: headerColor, fontSize: 11);
+      TextStyle(color: headerColor, fontSize: 11);
 
   // All hover spots share the same x at fl_chart's vertical sweep,
   // so we read the timestamp from the first one.

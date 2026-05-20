@@ -35,9 +35,9 @@ class TipCard extends StatelessWidget {
               Text(
                 'Tip',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -46,8 +46,8 @@ class TipCard extends StatelessWidget {
                   child: Text(
                     tip,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
                 ),
               ),

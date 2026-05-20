@@ -112,8 +112,9 @@ class WindowCache extends ChangeNotifier {
     final perContainer = _accums
         .putIfAbsent(hostKey, () => {})
         .putIfAbsent(s.containerId, () => SplayTreeMap<int, _Acc>());
-    final bucket =
-        _bucketMs == 0 ? s.millis : (s.millis ~/ _bucketMs) * _bucketMs;
+    final bucket = _bucketMs == 0
+        ? s.millis
+        : (s.millis ~/ _bucketMs) * _bucketMs;
     final existing = perContainer[bucket];
     if (existing == null) {
       perContainer[bucket] = _Acc.fromRaw(bucketStart: bucket, sample: s);

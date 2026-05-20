@@ -19,27 +19,27 @@ void main() {
 
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(
-    MethodChannel('dev.fluttercommunity.plus/package_info'),
-    (MethodCall methodCall) async {
-      if (methodCall.method == 'getAll') {
-        return {
-          'appName': 'test',
-          'packageName': 'test',
-          'version': '1.0.0',
-          'buildNumber': '1',
-        }; // Mock successful authentication
-      }
-      return false;
-    },
-  );
+        MethodChannel('dev.fluttercommunity.plus/package_info'),
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'getAll') {
+            return {
+              'appName': 'test',
+              'packageName': 'test',
+              'version': '1.0.0',
+              'buildNumber': '1',
+            }; // Mock successful authentication
+          }
+          return false;
+        },
+      );
 
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(MethodChannel('biometric_storage'), (
-    MethodCall methodCall,
-  ) async {
-    if (methodCall.method == 'init') {
-      return {
-        '''
+        MethodCall methodCall,
+      ) async {
+        if (methodCall.method == 'init') {
+          return {
+            '''
         {
           'name': "dummy",
           'options': {
@@ -51,10 +51,10 @@ void main() {
           'forceInit': forceInit,
         }
         ''',
-      };
-    }
-    return false;
-  });
+          };
+        }
+        return false;
+      });
   group('AtKeysData Tests', () {
     late KeychainStorage keyChainStorage;
     late MockBiometricStorage mockBiometricStorage;

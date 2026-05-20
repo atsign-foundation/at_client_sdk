@@ -37,12 +37,12 @@ class ApkamActivationDialog extends StatefulWidget {
 
   @override
   State<ApkamActivationDialog> createState() => _ApkamActivationDialogState(
-        atSign,
-        rootDomain,
-        appName,
-        deviceName,
-        namespaces,
-      );
+    atSign,
+    rootDomain,
+    appName,
+    deviceName,
+    namespaces,
+  );
 
   /// Show the ApkamActivationDialog and return the activation result.
   static Future<AtEnrollmentResponse?> show(
@@ -220,7 +220,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
                 const itemGap = 12.0;
                 final idealSize =
                     (constraints.maxWidth - ((otpCount - 1) * itemGap)) /
-                        otpCount;
+                    otpCount;
                 final otpSize = idealSize.clamp(52.0, 56.0).toDouble();
                 final viewportWidth = constraints.maxWidth;
 

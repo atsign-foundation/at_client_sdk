@@ -77,8 +77,8 @@ class AuthorisationFeedbackOverlay extends StatelessWidget {
                     Text.rich(
                       TextSpan(
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                          fontWeight: FontWeight.bold,
+                        ),
                         text: request.appName,
                         children: [
                           TextSpan(

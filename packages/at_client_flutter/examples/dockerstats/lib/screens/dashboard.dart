@@ -445,9 +445,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final cursorFrac = (cursorXPx / widthPx).clamp(0.0, 1.0);
     final timeUnderCursor = xMin + (cursorFrac * _range.spanMs).round();
     final newSpan = (_range.spanMs / factor).round().clamp(
-          limits.minMs,
-          limits.maxMs,
-        );
+      limits.minMs,
+      limits.maxMs,
+    );
     final newXMin = timeUnderCursor - (cursorFrac * newSpan).round();
     final proposedEnd = newXMin + newSpan;
     if (proposedEnd >= nowMs) {
@@ -611,8 +611,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final axis = _chartAxis();
     final perContainer = s.cache.samplesForHostByContainer(hostId);
     final containerIds = perContainer.keys.toList()..sort();
-    final visibleContainerIds =
-        containerIds.where((k) => !_hiddenContainers.contains(k)).toList();
+    final visibleContainerIds = containerIds
+        .where((k) => !_hiddenContainers.contains(k))
+        .toList();
 
     ChartSeries seriesFor(String cid, double Function(StatSample) extract) {
       final raw = perContainer[cid] ?? const <StatSample>[];
@@ -877,7 +878,7 @@ class _RangeGestureWrapper extends StatelessWidget {
   /// zooms out. `cursorXPx` is the pointer's x within the wrapper's
   /// local coordinate space; `widthPx` is the wrapper's pixel width.
   final void Function(double factor, double cursorXPx, double widthPx)
-      onWheelZoom;
+  onWheelZoom;
 
   /// Drag started at [local] (local coordinates) on a wrapper of
   /// [widthPx] pixels wide. The dashboard captures these for the

@@ -244,8 +244,8 @@ class _TodosHomeState extends State<TodosHome> {
           // to nothing.
           _NextDueBanner(
             stream: _openCountQuery!.watch().map(
-                  (l) => l.isEmpty ? null : l.first,
-                ),
+              (l) => l.isEmpty ? null : l.first,
+            ),
             service: service,
           ),
           Padding(
@@ -290,20 +290,20 @@ class _TodosHomeState extends State<TodosHome> {
                         );
                       }
                       Widget buildRow(TodoWithNotes row) => _TodoRow(
-                            todo: row.parent,
-                            noteCount: row.children.length,
-                            service: service,
-                            onToggleDone: () =>
-                                _withBusy(() => service.toggleDone(row.parent)),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => TodoDetailScreen(
-                                  todo: row.parent,
-                                  service: service,
-                                ),
-                              ),
+                        todo: row.parent,
+                        noteCount: row.children.length,
+                        service: service,
+                        onToggleDone: () =>
+                            _withBusy(() => service.toggleDone(row.parent)),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => TodoDetailScreen(
+                              todo: row.parent,
+                              service: service,
                             ),
-                          );
+                          ),
+                        ),
+                      );
                       if (!_groupByOwner) {
                         return ListView.separated(
                           itemCount: rows.length,

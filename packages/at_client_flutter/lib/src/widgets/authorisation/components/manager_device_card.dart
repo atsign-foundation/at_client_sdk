@@ -28,8 +28,8 @@ class ManageDeviceCard extends StatelessWidget {
                   Text(
                     'Manager Device',
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
                 ],
               ),

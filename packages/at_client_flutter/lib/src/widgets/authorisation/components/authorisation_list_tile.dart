@@ -73,9 +73,7 @@ class AuthorisationListTile extends StatelessWidget {
                         child: Text(
                           title,
                           maxLines: 2,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
+                          style: Theme.of(context).textTheme.headlineSmall
                               ?.copyWith(
                                 color: isSelected
                                     ? Theme.of(context).colorScheme.primary

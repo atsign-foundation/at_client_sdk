@@ -13,7 +13,8 @@ class TodoPreset {
     AtCollection<Todo> collection,
     Atsign self,
     bool reverse,
-  ) build;
+  )
+  build;
 
   const TodoPreset(this.name, this.label, this.build);
 }
@@ -55,8 +56,8 @@ final List<TodoPreset> todoPresets = [
     final now = DateTime.now();
     return _sortedByDue(
       c.query().where(
-            (t) => !t.obj.done && (t.obj.dueDate?.isBefore(now) ?? false),
-          ),
+        (t) => !t.obj.done && (t.obj.dueDate?.isBefore(now) ?? false),
+      ),
       rev,
     );
   }),

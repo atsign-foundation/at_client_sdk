@@ -31,8 +31,8 @@ class AuthorisationSectionHeader extends StatelessWidget {
               title,
               maxLines: 2,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         ],

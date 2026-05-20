@@ -291,8 +291,9 @@ class KeychainStorage {
       SppListData sppListData = SppListData.fromJson(jsonDecode(data));
 
       // Filter out expired ones
-      final activeSpps =
-          sppListData.spps.where((spp) => !spp.isExpired).toList();
+      final activeSpps = sppListData.spps
+          .where((spp) => !spp.isExpired)
+          .toList();
 
       // If some were expired, update the store
       if (activeSpps.length != sppListData.spps.length) {

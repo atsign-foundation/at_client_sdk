@@ -100,11 +100,11 @@ class _TodoFormDialogState extends State<TodoFormDialog> {
     final sharedWith = sharedText.isEmpty
         ? <Atsign>{}
         : sharedText
-            .split(',')
-            .map((s) => s.trim())
-            .where((s) => s.isNotEmpty)
-            .map((s) => s.toAtsign())
-            .toSet();
+              .split(',')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .map((s) => s.toAtsign())
+              .toSet();
     Navigator.of(context).pop(
       TodoFormResult(
         title: title,
@@ -117,8 +117,10 @@ class _TodoFormDialogState extends State<TodoFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final formatted =
-        _dueDate.toIso8601String().substring(0, 16).replaceFirst('T', ' ');
+    final formatted = _dueDate
+        .toIso8601String()
+        .substring(0, 16)
+        .replaceFirst('T', ' ');
     return AlertDialog(
       title: Text(widget.existing == null ? 'New todo' : 'Edit todo'),
       content: SingleChildScrollView(
