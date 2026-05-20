@@ -1,7 +1,7 @@
 name: at_backupkey_flutter
 description: |
   A Flutter plugin project for saving the backup key of any atSign that is being onboarded with atPlatform apps. The backup key can be used to authenticate in other atPlatform apps.
-version: 4.1.0
+version: 4.1.1
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_backupkey_flutter
 homepage: https://atsign.com/
 documentation: https://docs.atsign.com/
