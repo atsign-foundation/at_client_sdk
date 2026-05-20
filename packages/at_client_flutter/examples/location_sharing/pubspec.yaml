@@ -1,0 +1,43 @@
+name: location_sharing
+description: Flutter location-sharing example built with AtCollection.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+  at_auth: ^3.0.0
+  at_chops: ^3.0.0
+  at_client: ^3.12.0-rc.2
+  at_client_flutter:
+    path: ../../
+  at_commons: ^5.8.0
+  at_lookup: ^3.5.0
+  at_utils: ^3.4.0
+  cupertino_icons: ^1.0.8
+  file_picker: ^11.0.0
+  path: ^1.9.1
+  path_provider: ^2.1.5
+
+dependency_overrides:
+  at_auth:
+    path: ../../../at_auth/
+  at_chops:
+    path: ../../../at_chops/
+  at_client:
+    path: ../../../at_client/
+  at_commons:
+    path: ../../../at_commons/
+  at_lookup:
+    path: ../../../at_lookup/
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
