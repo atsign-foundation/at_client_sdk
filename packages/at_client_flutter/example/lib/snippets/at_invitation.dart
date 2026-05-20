@@ -7,7 +7,7 @@ import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
-typedef InviteReceived = void Function(String message, String fromAtSign);
+typedef InviteReceived = void Function(String message, Atsign fromAtSign);
 
 class AtInvite {
   const AtInvite({
@@ -57,10 +57,11 @@ class AtInvitationSnippet {
     BuildContext context, {
     required String message,
   }) async {
-    final currentAtSign = atClient.getCurrentAtSign();
-    if (currentAtSign == null || currentAtSign.isEmpty) {
+    final current = atClient.getCurrentAtSign();
+    if (current == null || current.isEmpty) {
       throw StateError('Cannot create an invite without a current atSign.');
     }
+    final currentAtSign = current.toAtsign();
 
     final inviteId = _newInviteId();
     final passcode = _newPasscode();
@@ -92,7 +93,7 @@ class AtInvitationSnippet {
   Future<void> acknowledgeInvite(
     BuildContext context, {
     required String inviteId,
-    required String inviterAtSign,
+    required Atsign inviterAtSign,
   }) async {
     final passcode = await showDialog<String>(
       context: context,
@@ -120,14 +121,14 @@ class AtInvitationSnippet {
     if (value == null || value.isEmpty) return;
 
     if (keyName.startsWith(_inviteAckKey)) {
-      await _processInviteAck(value, notification.from);
+      await _processInviteAck(value, notification.from.toAtsign());
       return;
     }
 
-    onInviteReceived?.call(value, notification.from);
+    onInviteReceived?.call(value, notification.from.toAtsign());
   }
 
-  Future<void> _processInviteAck(String ackJson, String fromAtSign) async {
+  Future<void> _processInviteAck(String ackJson, Atsign fromAtSign) async {
     final ackPayload = _InvitePayload.fromJsonString(ackJson);
     if (ackPayload.identifier.isEmpty) return;
 
@@ -152,14 +153,14 @@ class AtInvitationSnippet {
       ..metadata = (Metadata()..ttr = -1);
   }
 
-  AtKey _sharedKey(String key, String sharedWith) {
+  AtKey _sharedKey(String key, Atsign sharedWith) {
     return AtKey()
       ..key = key
       ..sharedWith = sharedWith
       ..metadata = (Metadata()..ttr = -1);
   }
 
-  Uri _inviteUri(String inviteId, String currentAtSign) {
+  Uri _inviteUri(String inviteId, Atsign currentAtSign) {
     final baseUri = Uri.parse(inviteBaseUrl);
     return baseUri.replace(
       queryParameters: {
