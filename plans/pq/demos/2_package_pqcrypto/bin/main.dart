@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:pqcrypto/pqcrypto.dart';
 import 'package:cryptography/cryptography.dart';
@@ -41,6 +42,8 @@ Future<void> main() async {
   print('Bob   X25519 shared: ${hex(bobX25519Bytes)}');
   print(
       'X25519 match: ${aliceX25519Bytes.toString() == bobX25519Bytes.toString()}\n');
+
+  // "cryptography"
 
   // ── Step 2: ML-KEM-768 KEM (via pqcrypto) ───────────────────────────────
   print('--- Step 2: ML-KEM-768 (via pqcrypto) ---');
@@ -136,5 +139,31 @@ Future<void> main() async {
   print(
       'Session fingerprint: ${hex(Uint8List.fromList(fingerprint.bytes), maxBytes: 32)}');
 
-  print('\n=== All steps completed successfully ===');
+  // ── Step 6: AES-256-CTR encrypt/decrypt ─────────────────────────────────
+  print('\n--- Step 6: AES-256-CTR ---');
+  final aesCtr = AesCtr.with256bits(macAlgorithm: MacAlgorithm.empty);
+
+  final ctrNonce = aesCtr.newNonce();
+  final ctrPlaintext = utf8.encode(
+      'AES-256-CTR: stream cipher mode — no authentication tag, XOR keystream.');
+
+  final ctrEncrypted = await aesCtr.encrypt(
+    ctrPlaintext,
+    secretKey: SecretKey(hybridKeyBytes),
+    nonce: ctrNonce,
+  );
+
+  print('Plaintext:  ${utf8.decode(ctrPlaintext)}');
+  print('Ciphertext: ${hex(Uint8List.fromList(ctrEncrypted.cipherText))}');
+
+  final ctrDecrypted = await aesCtr.decrypt(
+    ctrEncrypted,
+    secretKey: SecretKey(hybridKeyBobBytes),
+  );
+
+  print('Decrypted:  ${utf8.decode(ctrDecrypted)}');
+  print(
+      'Decrypt OK: ${utf8.decode(ctrDecrypted) == utf8.decode(ctrPlaintext)}\n');
+
+  print('=== All steps completed successfully ===');
 }
