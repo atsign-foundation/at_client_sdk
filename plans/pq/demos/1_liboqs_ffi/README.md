@@ -1,4 +1,4 @@
-# 1_ffi — Hybrid PQC Key Exchange: X25519 + ML-KEM-768
+# 1_liboqs_ffi — Hybrid PQC Key Exchange: X25519 + ML-KEM-768
 
 Demonstrates a hybrid post-quantum key exchange using:
 
@@ -39,14 +39,14 @@ liboqs depends on OpenSSL, which Homebrew installs as a dependency automatically
 Dart FFI requires a dynamic library (`.dylib` / `.so`). Because Homebrew only ships `liboqs.a`, you must build the dylib yourself once:
 
 ```sh
-# from the 1_ffi/ directory
+# from the 1_liboqs_ffi/ directory
 clang -shared -o liboqs.dylib \
   -Wl,-force_load,/opt/homebrew/lib/liboqs.a \
   -L/opt/homebrew/lib \
   -lcrypto
 ```
 
-This produces `1_ffi/liboqs.dylib`. The app loads it at runtime from the directory adjacent to `bin/`.
+This produces `1_liboqs_ffi/liboqs.dylib`. The app loads it at runtime from the directory adjacent to `bin/`.
 
 > **Linux equivalent:**
 > ```sh
@@ -290,7 +290,7 @@ Encrypt with AES-256-GCM(key)           Decrypt with AES-256-GCM(key)
 ## Project layout
 
 ```
-1_ffi/
+1_liboqs_ffi/
 ├── bin/
 │   └── main.dart      # entry point — runs the full demo
 ├── liboqs.dylib         # built manually (see above) — not committed
