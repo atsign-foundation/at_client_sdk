@@ -18,11 +18,13 @@ Four tests, two sanity checks and two cross-implementation checks:
 ```
 [PASS] OpenSSL encaps/decaps shared secrets match
 [PASS] pqcrypto encaps/decaps shared secrets match
-[FAIL] OpenSSL keygen + pqcrypto encaps + OpenSSL decaps: shared secrets match
-[FAIL] pqcrypto keygen + OpenSSL encaps + pqcrypto decaps: shared secrets match
+[PASS] OpenSSL keygen + pqcrypto encaps + OpenSSL decaps: shared secrets match
+[PASS] pqcrypto keygen + OpenSSL encaps + pqcrypto decaps: shared secrets match
 ```
 
-Both libraries are internally self-consistent but the shared secrets do not match in the cross-implementation tests. The two implementations are not interoperable.
+All four tests pass: both implementations conform to FIPS 203 ML-KEM-768, ciphertexts produced by one can be decapsulated by the other, and shared secrets are byte-identical across implementations.
+
+This required four FIPS 203 conformance fixes to the upstream `pqcrypto` package — see [AUDIT.md](./AUDIT.md) for the audit findings and the diffs that resolved each one. The fixes live in a local fork at `~/GitHub/pqcrypto`; this demo's `pubspec.yaml` pins that path via a `dependency_overrides` entry.
 
 ## Prerequisites
 
@@ -39,6 +41,18 @@ brew install openssl@3.6
 ```
 
 The demo loads `/opt/homebrew/opt/openssl@3.6/lib/libcrypto.dylib` directly — no build step required.
+
+### Patched pqcrypto fork
+
+`pubspec.yaml` contains:
+
+```yaml
+dependency_overrides:
+  pqcrypto:
+    path: /Users/jeremytubongbanua/GitHub/pqcrypto
+```
+
+The fork has the four FIPS 203 fixes applied. If you remove the override, the four interop tests revert to the original failing state described in `AUDIT.md`.
 
 ## Run
 
@@ -67,7 +81,7 @@ The cross-tests pass public key bytes directly between the two implementations. 
 
 | Package | Purpose |
 |---------|---------|
-| [`pqcrypto`](https://pub.dev/packages/pqcrypto) | Pure-Dart ML-KEM-768 |
+| [`pqcrypto`](https://pub.dev/packages/pqcrypto) | Pure-Dart ML-KEM-768 (patched fork, see above) |
 | [`ffi`](https://pub.dev/packages/ffi) | `calloc` allocator for native memory |
 | [`path`](https://pub.dev/packages/path) | Path resolution |
 | OpenSSL 3.6 (`libcrypto.dylib`) | Reference ML-KEM-768 implementation |
