@@ -1,0 +1,12 @@
+name: pq_demo_5
+description: End-to-end platform-agnostic PQ chat — SQLite-backed transport + JSON keystore on disk.
+publish_to: none
+version: 0.0.1
+environment:
+  sdk: ^3.11.0
+dependencies:
+  cryptography: ^2.7.0
+  pqcrypto: ^0.1.0
+  sqlite3: ^2.4.0
+dev_dependencies:
+  lints: ^6.0.0
