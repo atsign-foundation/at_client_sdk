@@ -30,6 +30,3 @@ export 'src/model/at_encrypted.dart';
 // Class representing the hashing parameters to pass to an hashing algorithm.
 export 'src/model/hash_params.dart' hide HashParams;
 export 'src/util/at_chops_util.dart';
-
-// A registry class for encryption schemes
-export 'src/registry/scheme_registry.dart';

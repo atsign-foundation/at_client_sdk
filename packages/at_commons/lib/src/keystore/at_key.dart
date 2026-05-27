@@ -526,8 +526,12 @@ class Metadata {
   /// when executing the `delete` verb.
   bool immutable = false;
 
-  /// Additional metadata
-  /// contains crypto and keyNames for app-specific encryption schemes
+  /// Provider-owned crypto metadata serialized on the wire as `appMetadata`.
+  ///
+  /// The SDK owns [AppMetadata.providerId] only for routing to the
+  /// provider that can decrypt the value. [AppMetadata.additional] is opaque to
+  /// the SDK and belongs to that provider. It is plaintext metadata, so
+  /// providers must not store record plaintext or other sensitive values here.
   AppMetadata? appMetadata;
 
   @override
@@ -832,14 +836,21 @@ class AtValue {
 }
 
 class AppMetadata {
-  String encryptionScheme;
-  // additional is flat in the json structure
+  /// SDK-owned routing field for the crypto provider which can decrypt the
+  /// associated value.
+  String providerId;
+
+  /// Provider-owned opaque plaintext metadata.
+  ///
+  /// Serialized flat in the appMetadata JSON object.
+  /// The SDK preserves these values but does not interpret them.
   Map<String, dynamic>? additional;
-  AppMetadata(this.encryptionScheme, {this.additional});
+
+  AppMetadata(this.providerId, {this.additional});
 
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{
-      'encryptionScheme': encryptionScheme,
+      'providerId': providerId,
     };
     if (additional != null) {
       map.addAll(additional!);
@@ -848,16 +859,16 @@ class AppMetadata {
   }
 
   static AppMetadata fromJson(Map json) {
-    final scheme = json['encryptionScheme'];
+    final providerId = json['providerId'];
     final additional = <String, dynamic>{};
     json.forEach((key, value) {
-      if (key != 'encryptionScheme') {
+      if (key != 'providerId') {
         additional[key.toString()] = value;
       }
     });
 
     return AppMetadata(
-      scheme,
+      providerId,
       additional: additional.isEmpty ? null : additional,
     );
   }
@@ -867,11 +878,11 @@ class AppMetadata {
       identical(this, other) ||
       other is AppMetadata &&
           runtimeType == other.runtimeType &&
-          encryptionScheme == other.encryptionScheme &&
+          providerId == other.providerId &&
           _mapEquals(additional, other.additional);
 
   @override
-  int get hashCode => encryptionScheme.hashCode ^ _mapHash(additional);
+  int get hashCode => providerId.hashCode ^ _mapHash(additional);
 
   static bool _mapEquals(Map<String, dynamic>? a, Map<String, dynamic>? b) {
     if (a == null || a.isEmpty) {

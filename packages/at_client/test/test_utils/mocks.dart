@@ -1,9 +1,8 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/crypto/aes_crypto_scheme.dart';
 import 'package:at_client/src/crypto/key_lookup.dart';
-import 'package:at_client/src/crypto/legacy/legacy_crypto_scheme.dart';
-import 'package:at_client/src/crypto/rsa_crypto_scheme.dart';
+import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -24,17 +23,19 @@ class MockLocalSecondary extends Mock implements LocalSecondary {}
 
 class MockKeyLookup extends Mock implements KeyLookup {}
 
-class MockSchemeRegistry extends Mock implements SchemeRegistry {
-  MockSchemeRegistry(AtClient atClient) {
-    register('legacy', LegacyCryptoScheme(atClient));
-    register('aes', AESScheme(atClient));
-    register('rsa', RSAScheme(atClient));
+class MockCryptoRegistry extends Mock implements CryptoRegistry {
+  MockCryptoRegistry(AtClient atClient) {
+    register(LegacyCryptoProvider(atClient));
   }
 }
 
-class MockScheme extends Mock implements CryptoScheme {}
+class MockCryptoProvider extends Mock implements CryptoProvider {}
 
-class FakeScheme extends Fake implements CryptoScheme {}
+class FakeCryptoProvider extends Fake implements CryptoProvider {}
+
+class FakeCryptoEncryptRequest extends Fake implements CryptoEncryptRequest {}
+
+class FakeCryptoDecryptRequest extends Fake implements CryptoDecryptRequest {}
 
 class MockAtClientManager extends Mock implements AtClientManager {}
 
@@ -46,3 +47,5 @@ class MockAtClient extends Mock implements AtClient {
 }
 
 class MockAtClientImpl extends Mock implements AtClientImpl {}
+
+class FakeLookupVerbBuilder extends Fake implements LookupVerbBuilder {}

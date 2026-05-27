@@ -6,22 +6,22 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
-import 'test_utils/test_crypto_scheme.dart';
+import 'test_utils/test_crypto_provider.dart';
 
 void main() {
   group('A group of test for GetResponseTransformer', () {
     late MockAtClient mockAtClient;
     late MockAtChops mockAtChops;
-    late MockSchemeRegistry mockSchemeRegistry;
+    late MockCryptoRegistry mockCryptoRegistry;
     late GetResponseTransformer transformer;
     setUp(() {
       mockAtClient = MockAtClient();
       mockAtChops = MockAtChops();
-      mockSchemeRegistry = MockSchemeRegistry(mockAtClient);
+      mockCryptoRegistry = MockCryptoRegistry(mockAtClient);
       transformer = GetResponseTransformer(mockAtClient);
       when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
       when(() => mockAtClient.atChops).thenReturn(mockAtChops);
-      when(() => mockAtChops.schemes).thenReturn(mockSchemeRegistry);
+      when(() => mockAtClient.cryptoRegistry).thenReturn(mockCryptoRegistry);
     });
     test('A test to validate new line character decoding', () async {
       var atKey = AtKey()
@@ -115,8 +115,8 @@ void main() {
         ..two =
             '{"data": "abcshared_phone_number", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": true}}';
 
-      when(() => mockSchemeRegistry.lookup('legacy'))
-          .thenReturn(CipherScheme());
+      when(() => mockCryptoRegistry.lookup('legacy'))
+          .thenReturn(CipherProvider());
 
       var result = await transformer.transform(tuple);
 
@@ -137,8 +137,8 @@ void main() {
         ..two =
             '{"data": "abcdecrypted_data", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": false}}';
 
-      when(() => mockSchemeRegistry.lookup('legacy'))
-          .thenReturn(CipherScheme());
+      when(() => mockCryptoRegistry.lookup('legacy'))
+          .thenReturn(CipherProvider());
 
       var result = await transformer.transform(tuple);
 
@@ -146,7 +146,7 @@ void main() {
     });
 
     test(
-        'A test to verify transform throws AtException on crypto scheme lookup failure',
+        'A test to verify transform throws AtException on crypto provider lookup failure',
         () async {
       final atKey = AtKey()
         ..metadata = Metadata()
@@ -157,8 +157,8 @@ void main() {
         ..one = atKey
         ..two =
             '{"data": "shared_phone_number", "key": "@bob:phone@alice","metaData": {"isEncrypted": true}}';
-      when(() => mockSchemeRegistry.lookup(any()))
-          .thenThrow(CryptoSchemeNotRegistered('error'));
+      when(() => mockCryptoRegistry.lookup(any()))
+          .thenThrow(CryptoProviderNotRegistered('error'));
 
       expect(() async => await transformer.transform(tuple),
           throwsA(isA<AtException>()));
@@ -176,7 +176,7 @@ void main() {
         ..two =
             '{"data": "shared_phone_number", "key": "@bob:phone@alice","metaData": {"isEncrypted": true}}';
 
-      when(() => mockSchemeRegistry.lookup(any())).thenReturn(ErrorScheme());
+      when(() => mockCryptoRegistry.lookup(any())).thenReturn(ErrorProvider());
       expect(() async => await transformer.transform(tuple),
           throwsA(isA<AtException>()));
     });

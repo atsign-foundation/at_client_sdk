@@ -10,11 +10,7 @@ import 'package:at_chops/src/factory/at_hashing_algo_factory.dart';
 /// specific encryption, signing or hashing algorithms. Otherwise default implementation of specific algorithms will be used.
 abstract class AtChops {
   final AtChopsKeys _atChopsKeys;
-  final SchemeRegistry _registry = SchemeRegistry();
   AtChopsKeys get atChopsKeys => _atChopsKeys;
-
-  /// Defaults: aes, rsa, legacy
-  SchemeRegistry get schemes => _registry;
 
   AtChops(this._atChopsKeys);
 

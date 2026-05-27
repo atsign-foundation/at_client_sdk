@@ -6,6 +6,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'package:at_chops/at_chops.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/test_crypto_provider.dart';
 
 class MockPutRequestTransformer extends Mock implements PutRequestTransformer {}
 
@@ -157,6 +158,77 @@ void main() {
               e is AtClientException &&
               e.message ==
                   'The length of value exceeds the buffer size. Maximum buffer size is 1 bytes. Found 14 bytes')));
+    });
+  });
+
+  group('A group of tests to validate crypto provider selection', () {
+    late MockAtClientImpl mockAtClient;
+    late MockAtChops mockAtChops;
+    late CryptoRegistry cryptoRegistry;
+
+    setUp(() {
+      mockAtClient = MockAtClientImpl();
+      mockAtChops = MockAtChops();
+      cryptoRegistry = CryptoRegistry()
+        ..register(CipherProvider('default-provider'))
+        ..register(CipherProvider('override-provider'));
+      when(() => mockAtClient.atChops).thenReturn(mockAtChops);
+      when(() => mockAtClient.cryptoRegistry).thenReturn(cryptoRegistry);
+    });
+
+    test('uses preference default crypto provider when request has no override',
+        () async {
+      when(() => mockAtClient.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..crypto = const CryptoConfig(
+            defaultProviderId: 'default-provider',
+          ),
+      );
+      final transformer = PutRequestTransformer()..atClient = mockAtClient;
+      final atKey =
+          (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
+                ..sharedWith('@bob'))
+              .build();
+
+      final builder = await transformer.transform(
+        Tuple<AtKey, dynamic>()
+          ..one = atKey
+          ..two = 'value',
+      );
+
+      expect(
+        builder.atKey.metadata.appMetadata?.providerId,
+        'default-provider',
+      );
+      expect(builder.value, 'abcvalue');
+    });
+
+    test('uses request crypto provider override when present', () async {
+      when(() => mockAtClient.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..crypto = const CryptoConfig(
+            defaultProviderId: 'default-provider',
+          ),
+      );
+      final transformer = PutRequestTransformer()..atClient = mockAtClient;
+      final atKey =
+          (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
+                ..sharedWith('@bob'))
+              .build();
+
+      final builder = await transformer.transform(
+        Tuple<AtKey, dynamic>()
+          ..one = atKey
+          ..two = 'value',
+        requestOptions: PutRequestOptions()
+          ..cryptoProviderId = 'override-provider',
+      );
+
+      expect(
+        builder.atKey.metadata.appMetadata?.providerId,
+        'override-provider',
+      );
+      expect(builder.value, 'abcvalue');
     });
   });
 }

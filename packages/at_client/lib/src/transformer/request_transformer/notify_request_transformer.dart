@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
@@ -127,28 +128,6 @@ class NotificationRequestTransformer
   }
 
   Future<String> _encryptNotificationValue(AtKey atKey, String value) async {
-    // Fetch encryption scheme
-    CryptoScheme scheme;
-    if (atKey.metadata.appMetadata != null) {
-      try {
-        var schemeName = atKey.metadata.appMetadata!.encryptionScheme;
-        scheme = _atClient.atChops!.schemes.lookup(schemeName);
-      } on AtException catch (e) {
-        e.stack(AtChainedException(
-            Intent.fetchCryptoScheme,
-            ExceptionScenario.decryptionFailed,
-            'Failed to fetch crypto scheme'));
-        rethrow;
-      }
-    } else {
-      scheme = _atClient.atChops!.schemes.lookup('legacy');
-    }
-    try {
-      return await scheme.encrypt(atKey, value);
-    } on AtException catch (e) {
-      e.stack(AtChainedException(
-          Intent.notifyData, ExceptionScenario.encryptionFailed, e.message));
-      rethrow;
-    }
+    return await CryptoRuntime(_atClient).encryptForNotification(atKey, value);
   }
 }

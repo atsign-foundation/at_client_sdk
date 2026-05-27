@@ -140,6 +140,12 @@ class AtClientPreference {
   /// performed locally, we depend on sync to get eventual consistency between
   /// local and remote.
   RemoteLocalPref remoteLocalPref = RemoteLocalPref.localOnly;
+
+  /// Configures the crypto provider used for encrypted puts and reads.
+  ///
+  /// Defaults to the legacy Atsign encryption provider. Custom providers are
+  /// initialized by [AtClientImpl] before sync and notification services start.
+  CryptoConfig crypto = const CryptoConfig.legacy();
 }
 
 /// Default preference on how to handle get, put and delete requests with

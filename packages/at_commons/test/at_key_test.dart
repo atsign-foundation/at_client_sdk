@@ -1033,7 +1033,7 @@ void main() {
         ..ivNonce = '16'
         ..skeEncKeyName = 'dummy_enc_key_name'
         ..skeEncAlgo = 'RSA'
-        ..appMetadata = AppMetadata('test_scheme', additional: {
+        ..appMetadata = AppMetadata('test_provider', additional: {
           'encKeyName': 'key_12345.__shared_keys.wavi',
           'encAlgo': 'test_algo',
         })
@@ -1073,7 +1073,7 @@ void main() {
       expect(metadataMap['skeEncKeyName'], 'dummy_enc_key_name');
       expect(metadataMap['skeEncAlgo'], 'RSA');
       expect(metadataMap['appMetadata'], {
-        'encryptionScheme': 'test_scheme',
+        'providerId': 'test_provider',
         'encKeyName': 'key_12345.__shared_keys.wavi',
         'encAlgo': 'test_algo',
       });

@@ -1,9 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
@@ -18,7 +16,18 @@ void main() {
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    final preference = TestUtils.getPreference(atSign)
+      ..crypto = CryptoConfig(
+        defaultProviderId: 'legacy',
+        providers: [
+          (_) => TestProvider('test'),
+        ],
+      );
+    atClientManager = await TestUtils.initAtClient(
+      atSign,
+      namespace,
+      preference: preference,
+    );
     atClientManager.atClient.syncService.sync();
   });
 
@@ -155,13 +164,12 @@ void main() {
 
   test('put method - using pluggable encryption', () async {
     var phoneKey = AtKey()
-      ..key = 'city'
-      ..metadata = (Metadata()..isPublic = true);
+      ..key = 'city.${DateTime.now().microsecondsSinceEpoch}'
+      ..sharedBy = atSign;
     var value = 'copenhagen';
     PutRequestOptions options = PutRequestOptions()
-      ..encryptionScheme = 'test'
+      ..cryptoProviderId = 'test'
       ..shouldEncrypt = true;
-    atClientManager.atClient.atChops!.schemes.register('test', TestScheme());
     var putResult = await atClientManager.atClient.put(
       phoneKey,
       value,
@@ -170,14 +178,15 @@ void main() {
     expect(putResult, true);
 
     var getResult = await atClientManager.atClient.get(phoneKey);
-    expect(getResult.value, value);
+    expect(getResult.value, 'decrypted');
+    expect(getResult.metadata?.appMetadata?.providerId, 'test');
   });
 
   test('put method - using pluggable encryption: failure', () async {
     var phoneKey = AtKey()..key = 'city';
     var value = 'copenhagen';
     PutRequestOptions options = PutRequestOptions()
-      ..encryptionScheme = 'testfail'
+      ..cryptoProviderId = 'testfail'
       ..shouldEncrypt = true;
 
     expect(
@@ -186,7 +195,7 @@ void main() {
         value,
         putRequestOptions: options,
       ),
-      throwsA(isA<CryptoSchemeNotRegistered>()),
+      throwsA(isA<CryptoProviderNotRegistered>()),
     );
   });
 }
@@ -197,19 +206,22 @@ Uint8List _getBinaryData(dynamic filePath) {
   return File(pathToFile).readAsBytesSync();
 }
 
-class TestScheme extends CryptoScheme {
+class TestProvider extends CryptoProvider {
   @override
-  Future<dynamic> decrypt(AtKey atKey, value) async {
-    return 'decrypted';
+  final String id;
+
+  TestProvider(this.id);
+
+  @override
+  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async {
+    return const CryptoDecryptResult(plaintext: 'decrypted');
   }
 
   @override
-  Future<dynamic> encrypt(AtKey atKey, value) async {
-    return 'encrypted';
-  }
-
-  @override
-  Future<void> register() async {
-    return;
+  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async {
+    return CryptoEncryptResult(
+      ciphertext: 'encrypted',
+      metadata: AppMetadata(id),
+    );
   }
 }

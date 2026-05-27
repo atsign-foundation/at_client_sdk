@@ -2,6 +2,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
+import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -34,16 +35,16 @@ class PutRequestTransformer
     // Append '@' to the atSign if missed.
     AtClientUtil.fixAtSign(updateVerbBuilder.atKey.sharedWith);
     AtClientUtil.fixAtSign(updateVerbBuilder.atKey.sharedBy);
-    // Add metadata for encryption scheme
+    // Add metadata for the crypto provider used to route future decrypts.
     updateVerbBuilder.atKey.metadata.appMetadata =
-        AppMetadata(options.encryptionScheme);
+        AppMetadata(_cryptoProviderIdFor(options));
     // Setting updateVerbBuilder.value
     updateVerbBuilder.value = tuple.two;
     final atKey = updateVerbBuilder.atKey;
     final metadata = atKey.metadata;
     // Check if the data needs to be encrypted for non-public keys
     if (!_isPublicKey(metadata) && options.shouldEncrypt) {
-      await _encryptData(updateVerbBuilder, options);
+      await _encryptData(updateVerbBuilder);
     } else {
       // Sign the data for public keys
       if (_isPublicKey(metadata)) {
@@ -56,40 +57,19 @@ class PutRequestTransformer
     return updateVerbBuilder;
   }
 
-  Future<void> _encryptData(
-      UpdateVerbBuilder updateVerbBuilder, PutRequestOptions options) async {
-    CryptoScheme scheme;
-    if (updateVerbBuilder.atKey.metadata.appMetadata != null) {
-      try {
-        var schemeName =
-            updateVerbBuilder.atKey.metadata.appMetadata!.encryptionScheme;
-        scheme = _atClient.atChops!.schemes.lookup(schemeName);
-      } on AtException catch (e) {
-        e.stack(
-          AtChainedException(
-              Intent.fetchCryptoScheme,
-              ExceptionScenario.decryptionFailed,
-              'Failed to fetch crypto scheme'),
-        );
-        rethrow;
-      }
-    } else {
-      scheme = _atClient.atChops!.schemes.lookup('legacy');
-    }
+  Future<void> _encryptData(UpdateVerbBuilder updateVerbBuilder) async {
+    final result = await CryptoRuntime(_atClient)
+        .encryptForPut(updateVerbBuilder.atKey, updateVerbBuilder.value);
+    updateVerbBuilder.value = result.ciphertext;
+    // using appMetadata from result
+    updateVerbBuilder.atKey.metadata.appMetadata = result.metadata;
+    updateVerbBuilder.atKey.metadata.isEncrypted = result.isEncrypted;
+  }
 
-    try {
-      updateVerbBuilder.value = await scheme.encrypt(
-        updateVerbBuilder.atKey,
-        updateVerbBuilder.value,
-      );
-      updateVerbBuilder.atKey.metadata.isEncrypted = true;
-    } on AtException catch (e) {
-      e.stack(
-        AtChainedException(Intent.shareData, ExceptionScenario.encryptionFailed,
-            'Failed to encrypt the data'),
-      );
-      rethrow;
-    }
+  String _cryptoProviderIdFor(PutRequestOptions options) {
+    return options.cryptoProviderId ??
+        _atClient.getPreferences()?.crypto.defaultProviderId ??
+        CryptoRuntime.legacyProviderId;
   }
 
   void _signPublicData(

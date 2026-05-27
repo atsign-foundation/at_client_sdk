@@ -1,5 +1,5 @@
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/src/crypto/legacy/legacy_crypto_scheme.dart';
+import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -39,7 +39,6 @@ void main() {
           .thenReturn(mockLocalSecondary);
       when(() => mockLocalSecondary.executeVerb(any<LLookupVerbBuilder>()))
           .thenAnswer((_) => Future.value('data:$encryptedSharedSymmetricKey'));
-      atChopsImpl.schemes.register('legacy', LegacyCryptoScheme(mockAtClient));
       var localKey = AtKey()
         ..sharedBy = '@alice'
         ..sharedWith = '@bob'
@@ -47,10 +46,32 @@ void main() {
       var testValue = 'abc!@123';
       var encryptedTestValue =
           EncryptionUtil.encryptValue(testValue, sharedSymmetricKey);
-      var scheme = atChopsImpl.schemes.lookup('legacy');
-      var decryptedTestValue =
-          await scheme.decrypt(localKey, encryptedTestValue);
-      expect(decryptedTestValue, testValue);
+      var provider = LegacyCryptoProvider(mockAtClient);
+      var decryptedTestValue = await provider.decrypt(CryptoDecryptRequest(
+        atKey: localKey,
+        ciphertext: encryptedTestValue,
+        metadata: AppMetadata('legacy'),
+      ));
+      expect(decryptedTestValue.plaintext, testValue);
+    });
+
+    test('test to check AtDecryptionException when encrypted value is null',
+        () async {
+      when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
+      var localKey = AtKey()
+        ..sharedBy = '@alice'
+        ..sharedWith = '@bob'
+        ..key = 'shared_key';
+      var provider = LegacyCryptoProvider(mockAtClient);
+      expect(
+          () async => await provider.decrypt(CryptoDecryptRequest(
+                atKey: localKey,
+                ciphertext: null,
+                metadata: AppMetadata('legacy'),
+              )),
+          throwsA(predicate((e) =>
+              e is AtDecryptionException &&
+              e.message == 'Decryption failed. Encrypted value is null')));
     });
 
     test(
@@ -75,9 +96,13 @@ void main() {
       var testValue = 'abc!@123';
       var encryptedTestValue =
           EncryptionUtil.encryptValue(testValue, sharedSymmetricKey);
-      var scheme = LegacyCryptoScheme(mockAtClient);
+      var provider = LegacyCryptoProvider(mockAtClient);
       expect(
-          () async => await scheme.decrypt(localKey, encryptedTestValue),
+          () async => await provider.decrypt(CryptoDecryptRequest(
+                atKey: localKey,
+                ciphertext: encryptedTestValue,
+                metadata: AppMetadata('legacy'),
+              )),
           throwsA(predicate((e) =>
               e is SharedKeyNotFoundException &&
               e.message == 'Empty or null SharedKey is found')));

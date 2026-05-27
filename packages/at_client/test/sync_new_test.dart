@@ -2773,8 +2773,8 @@ void main() {
   group('A group of test to verify sync conflict resolution', () {
     AtClient mockAtClient = MockAtClient();
     AtChops mockAtChops = MockAtChops();
-    SchemeRegistry mockSchemes = MockSchemeRegistry(mockAtClient);
-    CryptoScheme mockScheme = MockScheme();
+    CryptoRegistry mockCryptoRegistry = MockCryptoRegistry(mockAtClient);
+    CryptoProvider mockProvider = MockCryptoProvider();
     AtClientManager mockAtClientManager = MockAtClientManager();
     NotificationServiceImpl mockNotificationService =
         MockNotificationServiceImpl();
@@ -2797,8 +2797,10 @@ void main() {
       when(() => mockAtClient.notificationService)
           .thenReturn(mockNotificationService);
       when(() => mockAtClient.atChops).thenReturn(mockAtChops);
-      when(() => mockAtChops.schemes).thenReturn(mockSchemes);
-      when(() => mockSchemes.lookup(any())).thenReturn(mockScheme);
+      when(() => mockAtClient.cryptoRegistry).thenReturn(mockCryptoRegistry);
+      when(() => mockCryptoRegistry.lookup(any())).thenReturn(mockProvider);
+      when(() => mockProvider.id).thenReturn('legacy');
+      registerFallbackValue(FakeCryptoDecryptRequest());
     });
 
     group('A group of tests to validate shared key matcher regex', () {
@@ -2940,9 +2942,10 @@ void main() {
               AtKey.fromString('@alice:shared_key${TestResources.atsign}')))
           .thenAnswer((invocation) =>
               Future.value(AtValue()..value = 'shared_key_local_value'));
-      when(() => mockScheme.decrypt(
-              any(that: ConflictKeyMatcher()), 'shared_key_remote_value'))
-          .thenAnswer((_) => Future.value('shared_key_remote_value'));
+      when(() => mockProvider.decrypt(any()))
+          .thenAnswer((_) async => const CryptoDecryptResult(
+                plaintext: 'shared_key_remote_value',
+              ));
 
       // --------------------- preconditions setup -----------------------------
       await localSecondary.putValue(
@@ -3019,9 +3022,8 @@ void main() {
               '@alice:conflict_phone_key.demo${TestResources.atsign}')))
           .thenAnswer((invocation) =>
               Future.value(AtValue()..value = 'phone_key_local_value'));
-      when(() => mockScheme.decrypt(
-              any(that: ConflictKeyMatcher()), 'phone_key_remote_value'))
-          .thenAnswer((_) => throw AtPublicKeyNotFoundException(
+      when(() => mockProvider.decrypt(any())).thenAnswer((_) =>
+          throw AtPublicKeyNotFoundException(
               'Encryption public key not found'));
       when(() =>
               mockAtClient.put(any(that: InitialSyncDoneFlagMatcher()), any()))

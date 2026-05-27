@@ -134,7 +134,6 @@ class AtChopsImpl extends AtChops {
     try {
       final utfEncodedData = utf8.encode(data);
       final encryptionResult = await encryptBytes(
-
           Uint8List.fromList(utfEncodedData), encryptionKeyType,
           keyName: keyName, encryptionAlgorithm: encryptionAlgorithm, iv: iv);
       final atEncryptionResult = AtEncryptionResult()
@@ -213,7 +212,7 @@ class AtChopsImpl extends AtChops {
 
   //TODO: when returning to do the work for open-ended atChopsKeys
   // we should be removing anything related to keyNames from at_chops and allow
-  // at_client to handle all that jazz via `CryptoScheme`s.
+  // at_client to handle provider-level crypto routing.
   AtEncryptionAlgorithm? _getEncryptionAlgorithm(
       EncryptionKeyType encryptionKeyType, String? keyName) {
     switch (encryptionKeyType) {
@@ -234,7 +233,7 @@ class AtChopsImpl extends AtChops {
 
   //TODO: when returning to do the work for open-ended atChopsKeys
   // we should be removing anything related to keyNames from at_chops and allow
-  // at_client to handle all that jazz via `CryptoScheme`s.
+  // at_client to handle provider-level crypto routing.
   AtEncryptionKeyPair? _getEncryptionKeyPair(String? keyName) {
     if (keyName == null) {
       return atChopsKeys.atEncryptionKeyPair!;
@@ -246,7 +245,7 @@ class AtChopsImpl extends AtChops {
 
   //TODO: when returning to do the work for open-ended atChopsKeys
   // we should be removing anything related to keyNames from at_chops and allow
-  // at_client to handle all that jazz via `CryptoScheme`s.
+  // at_client to handle provider-level crypto routing.
   SymmetricKey? _getSymmetricKey(String? keyName) {
     if (keyName == null || keyName == KeyNames.selfEncryptionKey) {
       return atChopsKeys.selfEncryptionKey!;

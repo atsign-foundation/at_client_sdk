@@ -14,8 +14,6 @@ import 'test_utils/mocks.dart';
 
 class MockSyncService extends Mock implements SyncService {}
 
-class FakeLookupVerbBuilder extends Fake implements LookupVerbBuilder {}
-
 void main() {
   String currentAtSign = '@alice';
   String sharedWithAtSign = '@bob';

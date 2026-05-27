@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 
 /// Class is responsible for decrypting the notification value/text-message data
@@ -75,31 +76,8 @@ class NotificationResponseTransformer
   }
 
   Future<String> _getDecryptedValue(AtKey atKey, String? encryptedValue) async {
-    // Fetch encryption scheme, throw exception if fails
-    // fallback to legacy
-    CryptoScheme scheme;
-    if (atKey.metadata.appMetadata != null) {
-      try {
-        var schemeName = atKey.metadata.appMetadata!.encryptionScheme;
-        scheme = _atClient.atChops!.schemes.lookup(schemeName);
-      } on AtException catch (e) {
-        e.stack(AtChainedException(
-            Intent.fetchCryptoScheme,
-            ExceptionScenario.decryptionFailed,
-            'Failed to fetch crypto scheme'));
-        rethrow;
-      }
-    } else {
-      scheme = _atClient.atChops!.schemes.lookup('legacy');
-    }
-    try {
-      final decrypted = await scheme.decrypt(atKey, encryptedValue?.trim());
-      // Return decrypted value
-      return decrypted.toString().trim();
-    } on AtException catch (e) {
-      e.stack(AtChainedException(
-          Intent.notifyData, ExceptionScenario.encryptionFailed, e.message));
-      rethrow;
-    }
+    final decrypted = await CryptoRuntime(_atClient)
+        .decryptForNotification(atKey, encryptedValue?.trim());
+    return decrypted.toString().trim();
   }
 }

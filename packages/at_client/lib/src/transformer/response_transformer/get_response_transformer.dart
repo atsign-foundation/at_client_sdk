@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/src/converters/decoder/at_decoder.dart';
+import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/util/at_client_util.dart';
@@ -38,28 +39,18 @@ class GetResponseTransformer
     if (_isKeyPublic(decodedResponse['key'])) {
       return _handlePublicData(atValue, tuple);
     }
-    // Fetch encryption scheme, throw exception if fails.
-    // Fallback to legacy if appMetdata is null
-    CryptoScheme? scheme;
-    if (tuple.one.metadata.appMetadata != null) {
-      try {
-        var schemeName = tuple.one.metadata.appMetadata!.encryptionScheme;
-        scheme = _atClient.atChops!.schemes.lookup(schemeName);
-      } catch (_) {
-        rethrow;
-      }
-    } else {
-      scheme = _atClient.atChops!.schemes.lookup('legacy');
-    }
+    final cryptoRuntime = CryptoRuntime(_atClient);
     // Decrypt the data, for other keys
     // For new encrypted data after AtClient v3.2.1, isEncrypted will be true(default value for PutRequestOptions.shouldEncrypt) for self and shared keys
     // isEncrypted will be false if client sets PutRequestOptions.shouldEncrypt to false
     if (_shouldDecrypt(atValue.metadata)) {
-      atValue.value = await scheme.decrypt(tuple.one, atValue.value);
+      atValue.value =
+          await cryptoRuntime.decryptForGet(tuple.one, atValue.value);
     } else {
       // for old data, try decrypting the value. if decryption fails, set the original value.
       try {
-        atValue.value = await scheme.decrypt(tuple.one, atValue.value);
+        atValue.value =
+            await cryptoRuntime.decryptForGet(tuple.one, atValue.value);
       } on FormatException {
         // trying to decrypt plain data will result in FormatException.
         if (atValue.metadata!.encoding != null) {

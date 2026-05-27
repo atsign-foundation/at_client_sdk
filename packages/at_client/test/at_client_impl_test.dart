@@ -12,7 +12,6 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-import 'enrollment_service_test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_utils.dart';
 
@@ -406,12 +405,13 @@ void main() {
   });
 
   group(
-      'A group of tests to validate AtClient registers schemes in SchemeRegistry',
+      'A group of tests to validate AtClient registers providers in CryptoRegistry',
       () {
     MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
     MockLocalSecondary mockLocalSecondary = MockLocalSecondary();
     MockAtChopsKeys mockAtChopsKeys = MockAtChopsKeys();
     setUp(() {
+      AtClientImpl.atClientInstanceMap.remove('@alice');
       var key = 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=';
       registerFallbackValue(FakeLookupVerbBuilder());
       when(() => mockLocalSecondary.executeVerb(any()))
@@ -432,9 +432,86 @@ void main() {
         remoteSecondary: mockRemoteSecondary,
         atChops: chops,
       );
-      expect(ac.atChops!.schemes.lookup('legacy'), isA<CryptoScheme>());
-      expect(() => ac.atChops!.schemes.lookup('bubblesort'),
-          throwsA(isA<CryptoSchemeNotRegistered>()));
+      expect(ac.cryptoRegistry.lookup('legacy'), isA<CryptoProvider>());
+      expect(() => ac.cryptoRegistry.lookup('bubblesort'),
+          throwsA(isA<CryptoProviderNotRegistered>()));
+    });
+
+    test('registers configured crypto providers during at_client creation',
+        () async {
+      final provider = _RecordingCryptoProvider('test-provider');
+      AtClientPreference preferences = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path'
+        ..crypto = CryptoConfig(
+          defaultProviderId: 'test-provider',
+          providers: [
+            (context) => provider,
+          ],
+        );
+      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+
+      AtClient ac = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        preferences,
+        remoteSecondary: mockRemoteSecondary,
+        atChops: chops,
+      );
+
+      expect(provider.initialized, true);
+      expect(provider.context?.currentAtSign, '@alice');
+      expect(ac.cryptoRegistry.lookup('test-provider'), isA<CryptoProvider>());
+    });
+
+    test('throws when configured default crypto provider is not registered',
+        () async {
+      AtClientPreference preferences = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path'
+        ..crypto = const CryptoConfig(
+          defaultProviderId: 'missing-provider',
+        );
+      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+
+      await expectLater(
+        () => AtClientImpl.create(
+          '@alice',
+          'buzz',
+          preferences,
+          remoteSecondary: mockRemoteSecondary,
+          atChops: chops,
+        ),
+        throwsA(isA<CryptoProviderNotRegistered>()),
+      );
     });
   });
+}
+
+class _RecordingCryptoProvider extends CryptoProvider {
+  @override
+  final String id;
+  bool initialized = false;
+  CryptoContext? context;
+
+  _RecordingCryptoProvider(this.id);
+
+  @override
+  Future<void> initialize(CryptoContext context) async {
+    initialized = true;
+    this.context = context;
+  }
+
+  @override
+  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async {
+    return CryptoEncryptResult(
+      ciphertext: request.plaintext,
+      metadata: AppMetadata(id),
+    );
+  }
+
+  @override
+  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async {
+    return CryptoDecryptResult(plaintext: request.ciphertext);
+  }
 }

@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart' hide StringBuffer;
+import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
@@ -329,8 +330,12 @@ class NotificationServiceImpl extends NotificationService {
     final String notifPayload;
     body = body.trim();
     if (body.isNotEmpty && shouldEncrypt) {
-      CryptoScheme scheme = atClient.atChops!.schemes.lookup(cryptoAlgorithm);
-      notifPayload = await scheme.encrypt(atKey, body);
+      notifPayload =
+          await CryptoRuntime(atClient).encryptForNotificationService(
+        atKey,
+        body,
+        providerId: cryptoAlgorithm,
+      );
       atKey.metadata.isEncrypted = true;
     } else {
       notifPayload = body;

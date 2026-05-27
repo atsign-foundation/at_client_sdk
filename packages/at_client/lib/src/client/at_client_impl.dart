@@ -8,7 +8,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
-import 'package:at_client/src/crypto/legacy/legacy_crypto_scheme.dart';
+import 'package:at_client/src/crypto/crypto_storage.dart';
+import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/response/response.dart';
@@ -86,6 +87,12 @@ class AtClientImpl implements AtClient {
 
   @override
   AtChops? get atChops => _atChops;
+
+  /// Keeps track of CryptoProviders registered with this AtClient
+  /// Providers are declared during AtClient creation at the Preference level.
+  /// See [AtClientPreference.crypto] and [CryptoConfig] for specific details.
+  @override
+  final CryptoRegistry cryptoRegistry = CryptoRegistry();
 
   // ---------------------------------------------------------------------------
   // DataEvent stream — fires on every successful keystore mutation that
@@ -365,7 +372,7 @@ class AtClientImpl implements AtClient {
         onEvent: emitDataEvent,
       );
       _atChops ??= await _createAtChops(_atSign);
-      _atChops!.schemes.register('legacy', LegacyCryptoScheme(this));
+      await _initializeCryptoProviders();
 
       // Wire the event-driven expiry timer to the data-events stream.
       // Re-arms on every keystore mutation; first arm uses the current
@@ -1085,8 +1092,30 @@ class AtClientImpl implements AtClient {
     }
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
     AtChopsImpl chops = AtChopsImpl(atChopsKeys);
-    chops.schemes.register('legacy', LegacyCryptoScheme(this));
     return chops;
+  }
+
+  Future<void> _initializeCryptoProviders() async {
+    cryptoRegistry.register(LegacyCryptoProvider(this));
+
+    final context = CryptoContext(
+      atClient: this,
+      currentAtSign: _atSign,
+      atChops: _atChops,
+      storage: CryptoSecondaryStorage(this),
+    );
+    for (final createProvider in _preference!.crypto.providers) {
+      final provider = await createProvider(context);
+      await provider.initialize(context);
+      cryptoRegistry.register(provider);
+    }
+
+    if (!cryptoRegistry.contains(_preference!.crypto.defaultProviderId)) {
+      throw CryptoProviderNotRegistered(
+        'Could not find registered crypto provider with id '
+        '${_preference!.crypto.defaultProviderId}',
+      );
+    }
   }
 
   @override

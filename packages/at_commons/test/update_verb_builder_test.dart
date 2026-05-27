@@ -69,7 +69,7 @@ void main() {
     });
 
     test('verify update command with app metadata', () {
-      final appMetadata = AppMetadata('test_scheme', additional: {
+      final appMetadata = AppMetadata('test_provider', additional: {
         'encKeyName': 'key_12345.__shared_keys.wavi',
         'encAlgo': 'test_algo',
       });
@@ -186,7 +186,7 @@ void main() {
     });
 
     test('verify update:meta command with app metadata', () {
-      final appMetadata = AppMetadata('test_scheme');
+      final appMetadata = AppMetadata('test_provider');
       final encodedAppMetadata = Metadata.encodeAppMetadata(appMetadata);
       var updateBuilder = UpdateVerbBuilder()
         ..atKey.key = 'email.wavi'
