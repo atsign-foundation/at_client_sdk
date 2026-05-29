@@ -17,9 +17,9 @@ import 'package:at_client_examples/init_example_context.dart';
 // ---------------------------------------------------------------------------
 class XorCryptoProvider implements CryptoProvider {
   static const _xorKey = 0x5A;
-
+  static const providerId = 'xor-demo';
   @override
-  String get id => 'xor-demo';
+  String get id => providerId;
 
   // initialize() is called once by AtClientImpl after construction.
   // Fetch or derive your long-term key material here.
@@ -66,7 +66,7 @@ class XorCryptoProvider implements CryptoProvider {
 AtOnboardingPreference buildPreference() {
   return AtOnboardingPreference()
     ..crypto = CryptoConfig.singleProvider(
-      defaultProviderId: 'xor-demo',
+      defaultProviderId: XorCryptoProvider.providerId,
       // CryptoProviderFactory = FutureOr<CryptoProvider> Function(CryptoContext)
       provider: (context) => XorCryptoProvider(),
       // CryptoPolicy.onProviderNotFound is called when a stored record
