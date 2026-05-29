@@ -322,7 +322,7 @@ class _ShareTileState extends State<_ShareTile> {
     final coordinates = point == null
         ? 'No location published yet'
         : '${point.latitude.toStringAsFixed(5)}, '
-            '${point.longitude.toStringAsFixed(5)}';
+              '${point.longitude.toStringAsFixed(5)}';
     final updatedAt = share.obj.updatedAt.toLocal();
     final isRecent = DateTime.now().difference(updatedAt).inSeconds < 15;
     final colorScheme = Theme.of(context).colorScheme;
@@ -412,11 +412,11 @@ class _LiveBadge extends StatelessWidget {
         child: Text(
           isRecent ? 'LIVE' : 'IDLE',
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: isRecent
-                    ? colorScheme.onPrimary
-                    : colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
-              ),
+            color: isRecent
+                ? colorScheme.onPrimary
+                : colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );

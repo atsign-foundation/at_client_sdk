@@ -13,18 +13,18 @@ class LocationSharingService {
   }) {
     _sharedWithMeController =
         StreamController<List<CItem<LocationShare>>>.broadcast(
-      onListen: () {
-        final latest = _latestSharedWithMe;
-        if (latest != null) _sharedWithMeController.add(latest);
-      },
-    );
+          onListen: () {
+            final latest = _latestSharedWithMe;
+            if (latest != null) _sharedWithMeController.add(latest);
+          },
+        );
     _ownedByMeController =
         StreamController<List<CItem<LocationShare>>>.broadcast(
-      onListen: () {
-        final latest = _latestOwnedByMe;
-        if (latest != null) _ownedByMeController.add(latest);
-      },
-    );
+          onListen: () {
+            final latest = _latestOwnedByMe;
+            if (latest != null) _ownedByMeController.add(latest);
+          },
+        );
   }
 
   static const namespaceSuffix = 'location_sharing.demos';
@@ -38,7 +38,7 @@ class LocationSharingService {
   final StreamController<bool> _publishStateController =
       StreamController<bool>.broadcast();
   late final StreamController<List<CItem<LocationShare>>>
-      _sharedWithMeController;
+  _sharedWithMeController;
   late final StreamController<List<CItem<LocationShare>>> _ownedByMeController;
 
   List<CItem<LocationShare>>? _latestSharedWithMe;
