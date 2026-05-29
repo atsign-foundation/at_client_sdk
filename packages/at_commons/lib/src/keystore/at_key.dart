@@ -846,7 +846,8 @@ class AppMetadata {
   /// The SDK preserves these values but does not interpret them.
   Map<String, dynamic>? additional;
 
-  AppMetadata(this.providerId, {this.additional});
+  AppMetadata(String providerId, {this.additional})
+      : providerId = _validateProviderId(providerId);
 
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{
@@ -860,6 +861,9 @@ class AppMetadata {
 
   static AppMetadata fromJson(Map json) {
     final providerId = json['providerId'];
+    if (providerId is! String) {
+      throw FormatException('Invalid appMetadata.providerId: $providerId');
+    }
     final additional = <String, dynamic>{};
     json.forEach((key, value) {
       if (key != 'providerId') {
@@ -908,5 +912,12 @@ class AppMetadata {
       hash = hash ^ key.hashCode ^ map[key].hashCode;
     }
     return hash;
+  }
+
+  static String _validateProviderId(String providerId) {
+    if (providerId.trim().isEmpty) {
+      throw FormatException('Invalid appMetadata.providerId: $providerId');
+    }
+    return providerId;
   }
 }

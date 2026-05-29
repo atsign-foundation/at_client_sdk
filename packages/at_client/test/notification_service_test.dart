@@ -92,12 +92,19 @@ void main() {
   AtLookupImpl mockAtLookupImpl = MockAtLookupImpl();
   setUpAll(() {
     when(() => mockCryptoRegistry.lookup(any())).thenReturn(CipherProvider());
+    when(() => mockCryptoRegistry.lookup(any(),
+        operation: any(named: 'operation'))).thenReturn(CipherProvider());
     when(() => mockAtClientImpl.cryptoRegistry).thenReturn(mockCryptoRegistry);
     when(() => mockAtClientImpl.atChops).thenReturn(mockAtChops);
   });
   group('A group of test to validate notification request transformer', () {
     var value = '+91908909933';
     setUp(() {
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'wavi'
+          ..crypto = const CryptoConfig(defaultProviderId: 'legacy'),
+      );
       when(() => mockAtClientImpl.preference!.namespace).thenReturn('wavi');
     });
 
@@ -415,6 +422,56 @@ void main() {
           notificationParams.atKey.metadata.appMetadata);
     });
     test(
+        'A test to validate notification encryption uses preference default crypto provider',
+        () async {
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'wavi'
+          ..crypto = const CryptoConfig(defaultProviderId: 'default-provider'),
+      );
+      when(() => mockCryptoRegistry.lookup(any(),
+              operation: any(named: 'operation')))
+          .thenReturn(CipherProvider('default-provider'));
+      var notificationParams = NotificationParams.forUpdate(
+        (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob')).build(),
+        value: value,
+      );
+      notificationParams.atKey.metadata.isEncrypted = true;
+
+      var notifyVerbBuilder =
+          await NotificationRequestTransformer(mockAtClientImpl)
+              .transform(notificationParams);
+
+      expect(notifyVerbBuilder.value, 'abc$value');
+      expect(notifyVerbBuilder.atKey.metadata.appMetadata?.providerId,
+          'default-provider');
+    });
+    test('A test to validate notification params override crypto provider',
+        () async {
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'wavi'
+          ..crypto = const CryptoConfig(defaultProviderId: 'default-provider'),
+      );
+      when(() => mockCryptoRegistry.lookup(any(),
+              operation: any(named: 'operation')))
+          .thenReturn(CipherProvider('override-provider'));
+      var notificationParams = NotificationParams.forUpdate(
+        (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob')).build(),
+        value: value,
+        cryptoProviderId: 'override-provider',
+      );
+      notificationParams.atKey.metadata.isEncrypted = true;
+
+      var notifyVerbBuilder =
+          await NotificationRequestTransformer(mockAtClientImpl)
+              .transform(notificationParams);
+
+      expect(notifyVerbBuilder.value, 'abc$value');
+      expect(notifyVerbBuilder.atKey.metadata.appMetadata?.providerId,
+          'override-provider');
+    });
+    test(
         'A test to validate unencrypted value is set in verb builder when isEncrypted is set to false in metadata',
         () async {
       var notificationParams = NotificationParams.forUpdate(
@@ -448,6 +505,45 @@ void main() {
           await NotificationRequestTransformer(mockAtClientImpl)
               .transform(notificationParams);
       expect(notifyVerbBuilder.value, value);
+    });
+  });
+
+  group('A group of tests to validate notification send provider selection',
+      () {
+    test('send cryptoProviderId overrides preference default provider',
+        () async {
+      final remoteSecondary = MockRemoteSecondary();
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'wavi'
+          ..crypto = const CryptoConfig(defaultProviderId: 'default-provider'),
+      );
+      when(() => mockCryptoRegistry.lookup('override-provider',
+              operation: any(named: 'operation')))
+          .thenReturn(CipherProvider('override-provider'));
+      when(() => mockAtClientImpl.getRemoteSecondary())
+          .thenReturn(remoteSecondary);
+      when(() => remoteSecondary.executeCommand(any(), auth: true))
+          .thenAnswer((_) async => 'data:ok');
+      clearInteractions(mockCryptoRegistry);
+
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+        mockAtClientImpl,
+        monitor: fakeMonitor,
+        secondaryAddressFinder: mockSecondaryAddressFinder,
+      ) as NotificationServiceImpl;
+
+      await notificationServiceImpl.send(
+        to: '@bob'.toAtsign(),
+        namespace: 'wavi',
+        body: 'hello',
+        cryptoProviderId: 'override-provider',
+      );
+
+      verify(() => mockCryptoRegistry.lookup('override-provider',
+          operation: 'notify')).called(1);
+      verifyNever(() => mockCryptoRegistry.lookup('default-provider',
+          operation: any(named: 'operation')));
     });
   });
 
@@ -640,6 +736,8 @@ void main() {
       when(() => mockAtClientManager.secondaryAddressFinder)
           .thenAnswer((_) => mockSecondaryAddressFinder);
       when(() => mockCryptoRegistry.lookup(any())).thenReturn(ErrorProvider());
+      when(() => mockCryptoRegistry.lookup(any(),
+          operation: any(named: 'operation'))).thenReturn(ErrorProvider());
       when(() => mockAtClientImpl.cryptoRegistry)
           .thenReturn(mockCryptoRegistry);
       when(() => mockAtClientImpl.atChops).thenReturn(mockAtChops);

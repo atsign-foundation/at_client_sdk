@@ -311,7 +311,8 @@ ceiling is **11 levels (root + 10 nested sub-collections)**.
 By default, encrypted writes use the legacy Atsign encryption provider. Apps
 that need their own encryption behavior can configure
 `AtClientPreference.crypto` with a `CryptoConfig` and one or more
-`CryptoProvider`s. The SDK initializes those providers during
+`CryptoProvider`s. For the common one-provider setup, use
+`CryptoConfig.singleProvider`. The SDK initializes those providers during
 `AtClientImpl` startup, before sync and notification services are wired, and
 uses the provider id in existing `appMetadata` to route future decrypts.
 `appMetadata` remains the wire field for this metadata: the SDK owns only the
@@ -327,11 +328,9 @@ A compact way to read the model split is:
 
 ```dart
 final preference = AtClientPreference()
-  ..crypto = CryptoConfig(
+  ..crypto = CryptoConfig.singleProvider(
     defaultProviderId: DemoCryptoProvider.providerId,
-    providers: [
-      (context) => DemoCryptoProvider(context.storage),
-    ],
+    provider: (context) => DemoCryptoProvider(context.storage),
   );
 
 class DemoCryptoProvider extends CryptoProvider {
@@ -379,11 +378,16 @@ class DemoCryptoProvider extends CryptoProvider {
 `CryptoConfig` is app configuration, the provider factory receives
 `CryptoContext`, `CryptoStorage` is for provider-owned state, and
 `AppMetadata.providerId` is the stored routing value used by future decrypts.
+Per-write provider overrides use `PutRequestOptions.cryptoProviderId`; per
+notification overrides use `NotificationParams.cryptoProviderId`.
 For the full model map, see [`CRYPTO_MODELS.md`](CRYPTO_MODELS.md).
 
 For compact examples of provider registration and per-write overrides, see
+[`example/bin/custom_crypto_provider.dart`](example/bin/custom_crypto_provider.dart),
 [`test/at_client_impl_test.dart`](test/at_client_impl_test.dart) and
-[`test/put_request_test.dart`](test/put_request_test.dart).
+[`test/put_request_test.dart`](test/put_request_test.dart). For notification
+provider selection, see
+[`test/notification_service_test.dart`](test/notification_service_test.dart).
 For storage and lazy-provider recovery behavior, see
 [`test/crypto_storage_test.dart`](test/crypto_storage_test.dart)
 and [`test/crypto_runtime_test.dart`](test/crypto_runtime_test.dart).

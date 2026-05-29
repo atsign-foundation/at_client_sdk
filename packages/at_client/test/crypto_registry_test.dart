@@ -36,15 +36,27 @@ void main() {
 
     test('lookup throws CryptoProviderNotRegistered for unknown id', () {
       final registry = CryptoRegistry();
+      registry.register(_FakeCryptoProvider('provider-a'));
 
       expect(
-        () => registry.lookup('missing-provider'),
+        () => registry.lookup('missing-provider', operation: 'put'),
         throwsA(
-          isA<CryptoProviderNotRegistered>().having(
-            (e) => e.message,
-            'message',
-            contains('missing-provider'),
-          ),
+          isA<CryptoProviderNotRegistered>()
+              .having(
+                (e) => e.message,
+                'message',
+                contains('missing-provider'),
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                contains('provider-a'),
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                contains('Operation: put'),
+              ),
         ),
       );
     });
@@ -61,19 +73,47 @@ void main() {
       expect(registry.registeredProviderIds, isEmpty);
     });
 
-    test('registering existing id overwrites prior provider', () async {
+    test('registering existing id throws by default', () async {
       final registry = CryptoRegistry();
       final first = _FakeCryptoProvider('same-id');
       final second = _FakeCryptoProvider('same-id');
 
       registry.register(first);
-      registry.register(second);
+
+      expect(
+        () => registry.register(second),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(registry.lookup('same-id'), same(first));
+    });
+
+    test('registering existing id can replace when explicit', () async {
+      final registry = CryptoRegistry();
+      final first = _FakeCryptoProvider('same-id');
+      final second = _FakeCryptoProvider('same-id');
+
+      registry.register(first);
+      registry.register(second, replace: true);
 
       expect(registry.lookup('same-id'), same(second));
       expect(
         registry.registeredProviderIds.where((e) => e == 'same-id').length,
         1,
       );
+    });
+
+    test('singleProvider creates config with one provider factory', () {
+      Future<CryptoProvider> createProvider(CryptoContext context) async {
+        return _FakeCryptoProvider('provider-a');
+      }
+
+      final config = CryptoConfig.singleProvider(
+        defaultProviderId: 'provider-a',
+        provider: createProvider,
+      );
+
+      expect(config.defaultProviderId, 'provider-a');
+      expect(config.providers, [createProvider]);
     });
 
     test('registeredProviderIds is not growable', () {

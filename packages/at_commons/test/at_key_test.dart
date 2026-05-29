@@ -1119,6 +1119,24 @@ void main() {
       Metadata roundTripped = Metadata.fromJson(metadata.toJson());
       expect(metadata.toJson(), roundTripped.toJson());
     });
+
+    test('throws FormatException for empty appMetadata providerId', () {
+      expect(
+        () => AppMetadata(''),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => Metadata.decodeAppMetadata({'providerId': '  '}),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('throws FormatException for non-string appMetadata providerId', () {
+      expect(
+        () => Metadata.decodeAppMetadata({'providerId': 1}),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
   group('A group of tests to verify key length validation', () {
     test('test to validate key length for a local key', () {

@@ -10,7 +10,9 @@ dependencies:
   at_client: ^3.11.0
   at_cli_commons: ^3.1.0
   at_commons: ^5.8.0
+  at_onboarding_cli: ^2.0.0
   at_utils: ^3.4.0
+  args: ^2.5.0
   nocterm: ^0.6.0
 
 dependency_overrides:
@@ -20,6 +22,8 @@ dependency_overrides:
     path: ../../at_cli_commons
   at_commons:
     path: ../../at_commons
+  at_onboarding_cli:
+    path: ../../at_onboarding_cli
 
 dev_dependencies:
   lints: ^6.1.0

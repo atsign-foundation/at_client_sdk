@@ -15,6 +15,7 @@ class CryptoRuntime {
   Future<CryptoEncryptResult> encryptForPut(AtKey atKey, dynamic value) async {
     final provider = await _lookupProvider(
       atKey,
+      operation: 'put',
       onFailure: (e) => e.stack(
         AtChainedException(
           Intent.fetchCryptoProvider,
@@ -47,12 +48,13 @@ class CryptoRuntime {
   }
 
   Future<dynamic> decryptForGet(AtKey atKey, dynamic value) async {
-    return _decrypt(atKey, value);
+    return _decrypt(atKey, value, operation: 'get');
   }
 
   Future<dynamic> encryptForNotification(AtKey atKey, dynamic value) async {
     final provider = await _lookupProvider(
       atKey,
+      operation: 'notify',
       onFailure: (e) => e.stack(
         AtChainedException(
           Intent.fetchCryptoProvider,
@@ -87,6 +89,7 @@ class CryptoRuntime {
   Future<dynamic> decryptForNotification(AtKey atKey, dynamic value) async {
     final provider = await _lookupProvider(
       atKey,
+      operation: 'notify',
       onFailure: (e) => e.stack(
         AtChainedException(
           Intent.fetchCryptoProvider,
@@ -121,7 +124,11 @@ class CryptoRuntime {
     dynamic value, {
     required String providerId,
   }) async {
-    final provider = await _lookupProviderById(atKey, providerId);
+    final provider = await _lookupProviderById(
+      atKey,
+      providerId,
+      operation: 'notify',
+    );
     final result = await provider.encrypt(
       CryptoEncryptRequest(
         atKey: atKey,
@@ -135,11 +142,15 @@ class CryptoRuntime {
   }
 
   Future<dynamic> decryptForSyncConflict(AtKey atKey, dynamic value) async {
-    return _decrypt(atKey, value);
+    return _decrypt(atKey, value, operation: 'sync conflict');
   }
 
-  Future<dynamic> _decrypt(AtKey atKey, dynamic value) async {
-    final provider = await _lookupProvider(atKey);
+  Future<dynamic> _decrypt(
+    AtKey atKey,
+    dynamic value, {
+    required String operation,
+  }) async {
+    final provider = await _lookupProvider(atKey, operation: operation);
     final result = await provider.decrypt(
       CryptoDecryptRequest(
         atKey: atKey,
@@ -152,25 +163,35 @@ class CryptoRuntime {
 
   Future<CryptoProvider> _lookupProvider(
     AtKey atKey, {
+    String? operation,
     void Function(AtException e)? onFailure,
   }) {
     final providerId =
         atKey.metadata.appMetadata?.providerId ?? legacyProviderId;
-    return _lookupProviderById(atKey, providerId, onFailure: onFailure);
+    return _lookupProviderById(
+      atKey,
+      providerId,
+      operation: operation,
+      onFailure: onFailure,
+    );
   }
 
   Future<CryptoProvider> _lookupProviderById(
     AtKey atKey,
     String providerId, {
+    String? operation,
     void Function(AtException e)? onFailure,
   }) async {
     try {
-      return _atClient.cryptoRegistry.lookup(providerId);
+      return _atClient.cryptoRegistry.lookup(providerId, operation: operation);
     } on CryptoProviderNotRegistered catch (e) {
       final shouldRetry = await _handleProviderNotFound(atKey, providerId, e);
       if (shouldRetry) {
         try {
-          return _atClient.cryptoRegistry.lookup(providerId);
+          return _atClient.cryptoRegistry.lookup(
+            providerId,
+            operation: operation,
+          );
         } on AtException catch (retryError) {
           onFailure?.call(retryError);
           rethrow;

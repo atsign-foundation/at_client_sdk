@@ -317,7 +317,7 @@ class NotificationServiceImpl extends NotificationService {
     bool shouldEncrypt = true,
     Duration expiration = NotificationService.defaultExpiration,
     bool cacheAtRecipient = false,
-    String cryptoAlgorithm = 'legacy',
+    String? cryptoProviderId,
     DateTime? recipientCacheExpiration,
   }) async {
     if (cacheAtRecipient && recipientCacheExpiration == null) {
@@ -334,7 +334,7 @@ class NotificationServiceImpl extends NotificationService {
           await CryptoRuntime(atClient).encryptForNotificationService(
         atKey,
         body,
-        providerId: cryptoAlgorithm,
+        providerId: _cryptoProviderIdFor(cryptoProviderId),
       );
       atKey.metadata.isEncrypted = true;
     } else {
@@ -372,6 +372,12 @@ class NotificationServiceImpl extends NotificationService {
         ?.executeCommand(sb.toString(), auth: true);
 
     return id;
+  }
+
+  String _cryptoProviderIdFor(String? cryptoProviderId) {
+    return cryptoProviderId ??
+        atClient.getPreferences()?.crypto.defaultProviderId ??
+        CryptoRuntime.legacyProviderId;
   }
 
   @override

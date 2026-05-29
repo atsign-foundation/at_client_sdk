@@ -35,15 +35,15 @@ class PutRequestTransformer
     // Append '@' to the atSign if missed.
     AtClientUtil.fixAtSign(updateVerbBuilder.atKey.sharedWith);
     AtClientUtil.fixAtSign(updateVerbBuilder.atKey.sharedBy);
-    // Add metadata for the crypto provider used to route future decrypts.
-    updateVerbBuilder.atKey.metadata.appMetadata =
-        AppMetadata(_cryptoProviderIdFor(options));
     // Setting updateVerbBuilder.value
     updateVerbBuilder.value = tuple.two;
     final atKey = updateVerbBuilder.atKey;
     final metadata = atKey.metadata;
     // Check if the data needs to be encrypted for non-public keys
     if (!_isPublicKey(metadata) && options.shouldEncrypt) {
+      // Add metadata for the crypto provider used to route future decrypts.
+      updateVerbBuilder.atKey.metadata.appMetadata =
+          AppMetadata(_cryptoProviderIdFor(options));
       await _encryptData(updateVerbBuilder);
     } else {
       // Sign the data for public keys

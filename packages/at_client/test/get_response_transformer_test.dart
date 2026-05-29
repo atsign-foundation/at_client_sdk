@@ -115,8 +115,8 @@ void main() {
         ..two =
             '{"data": "abcshared_phone_number", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": true}}';
 
-      when(() => mockCryptoRegistry.lookup('legacy'))
-          .thenReturn(CipherProvider());
+      when(() => mockCryptoRegistry.lookup('legacy',
+          operation: any(named: 'operation'))).thenReturn(CipherProvider());
 
       var result = await transformer.transform(tuple);
 
@@ -137,8 +137,8 @@ void main() {
         ..two =
             '{"data": "abcdecrypted_data", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": false}}';
 
-      when(() => mockCryptoRegistry.lookup('legacy'))
-          .thenReturn(CipherProvider());
+      when(() => mockCryptoRegistry.lookup('legacy',
+          operation: any(named: 'operation'))).thenReturn(CipherProvider());
 
       var result = await transformer.transform(tuple);
 
@@ -157,7 +157,8 @@ void main() {
         ..one = atKey
         ..two =
             '{"data": "shared_phone_number", "key": "@bob:phone@alice","metaData": {"isEncrypted": true}}';
-      when(() => mockCryptoRegistry.lookup(any()))
+      when(() => mockCryptoRegistry.lookup(any(),
+              operation: any(named: 'operation')))
           .thenThrow(CryptoProviderNotRegistered('error'));
 
       expect(() async => await transformer.transform(tuple),
@@ -176,7 +177,8 @@ void main() {
         ..two =
             '{"data": "shared_phone_number", "key": "@bob:phone@alice","metaData": {"isEncrypted": true}}';
 
-      when(() => mockCryptoRegistry.lookup(any())).thenReturn(ErrorProvider());
+      when(() => mockCryptoRegistry.lookup(any(),
+          operation: any(named: 'operation'))).thenReturn(ErrorProvider());
       expect(() async => await transformer.transform(tuple),
           throwsA(isA<AtException>()));
     });

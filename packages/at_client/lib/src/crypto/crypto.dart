@@ -13,17 +13,25 @@ typedef CryptoProviderFactory = FutureOr<CryptoProvider> Function(
 class CryptoRegistry {
   final Map<String, CryptoProvider> _providers = <String, CryptoProvider>{};
 
-  void register(CryptoProvider provider) {
+  void register(CryptoProvider provider, {bool replace = false}) {
+    if (!replace && _providers.containsKey(provider.id)) {
+      throw ArgumentError.value(
+        provider.id,
+        'provider.id',
+        'Crypto provider id is already registered. '
+            'Pass replace: true to replace it intentionally.',
+      );
+    }
     _providers[provider.id] = provider;
   }
 
   /// Lookup if providerId is registered with this client
   /// otherwise, throw [CryptoProviderNotRegistered]
-  CryptoProvider lookup(String id) {
+  CryptoProvider lookup(String id, {String? operation}) {
     final provider = _providers[id];
     if (provider == null) {
       throw CryptoProviderNotRegistered(
-        'Could not find registered crypto provider with id $id',
+        _providerNotRegisteredMessage(id, operation: operation),
       );
     }
     return provider;
@@ -35,6 +43,17 @@ class CryptoRegistry {
 
   List<String> get registeredProviderIds {
     return _providers.keys.toList(growable: false);
+  }
+
+  String _providerNotRegisteredMessage(String id, {String? operation}) {
+    final registeredIds = registeredProviderIds;
+    final operationMessage = operation == null ? '' : ' Operation: $operation.';
+    final registeredMessage =
+        registeredIds.isEmpty ? 'none' : registeredIds.join(', ');
+    return 'Crypto provider "$id" is not registered.'
+        '$operationMessage Registered providers: $registeredMessage. '
+        'Add it to AtClientPreference.crypto.providers or configure '
+        'CryptoPolicy.onProviderNotFound.';
   }
 }
 
@@ -52,6 +71,12 @@ class CryptoConfig {
     this.providers = const [],
     this.policy = const CryptoPolicy(),
   });
+
+  CryptoConfig.singleProvider({
+    required this.defaultProviderId,
+    required CryptoProviderFactory provider,
+    this.policy = const CryptoPolicy(),
+  }) : providers = [provider];
 
   const CryptoConfig.legacy()
       : defaultProviderId = 'legacy',

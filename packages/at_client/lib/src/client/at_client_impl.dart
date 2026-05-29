@@ -1110,12 +1110,10 @@ class AtClientImpl implements AtClient {
       cryptoRegistry.register(provider);
     }
 
-    if (!cryptoRegistry.contains(_preference!.crypto.defaultProviderId)) {
-      throw CryptoProviderNotRegistered(
-        'Could not find registered crypto provider with id '
-        '${_preference!.crypto.defaultProviderId}',
-      );
-    }
+    cryptoRegistry.lookup(
+      _preference!.crypto.defaultProviderId,
+      operation: 'initialize',
+    );
   }
 
   @override

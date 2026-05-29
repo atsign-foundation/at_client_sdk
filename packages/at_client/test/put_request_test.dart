@@ -230,6 +230,33 @@ void main() {
       );
       expect(builder.value, 'abcvalue');
     });
+
+    test('does not write provider metadata when encryption is disabled',
+        () async {
+      when(() => mockAtClient.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..crypto = const CryptoConfig(
+            defaultProviderId: 'default-provider',
+          ),
+      );
+      final transformer = PutRequestTransformer()..atClient = mockAtClient;
+      final atKey =
+          (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
+                ..sharedWith('@bob'))
+              .build();
+
+      final builder = await transformer.transform(
+        Tuple<AtKey, dynamic>()
+          ..one = atKey
+          ..two = 'value',
+        requestOptions: PutRequestOptions()
+          ..shouldEncrypt = false
+          ..cryptoProviderId = 'override-provider',
+      );
+
+      expect(builder.atKey.metadata.appMetadata, isNull);
+      expect(builder.value, 'value');
+    });
   });
 }
 

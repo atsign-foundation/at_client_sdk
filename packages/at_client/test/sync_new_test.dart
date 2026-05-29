@@ -2799,6 +2799,8 @@ void main() {
       when(() => mockAtClient.atChops).thenReturn(mockAtChops);
       when(() => mockAtClient.cryptoRegistry).thenReturn(mockCryptoRegistry);
       when(() => mockCryptoRegistry.lookup(any())).thenReturn(mockProvider);
+      when(() => mockCryptoRegistry.lookup(any(),
+          operation: any(named: 'operation'))).thenReturn(mockProvider);
       when(() => mockProvider.id).thenReturn('legacy');
       registerFallbackValue(FakeCryptoDecryptRequest());
     });

@@ -23,6 +23,11 @@ class NotificationRequestTransformer
   @override
   Future<NotifyVerbBuilder> transform(
       NotificationParams notificationParams) async {
+    if (_shouldRouteThroughProvider(notificationParams)) {
+      notificationParams.atKey.metadata.appMetadata ??= AppMetadata(
+          notificationParams.cryptoProviderId ??
+              atClientPreference.crypto.defaultProviderId);
+    }
     // prepares notification builder
     NotifyVerbBuilder builder = await _prepareNotificationBuilder(
         notificationParams, atClientPreference);
@@ -129,5 +134,16 @@ class NotificationRequestTransformer
 
   Future<String> _encryptNotificationValue(AtKey atKey, String value) async {
     return await CryptoRuntime(_atClient).encryptForNotification(atKey, value);
+  }
+
+  bool _shouldRouteThroughProvider(NotificationParams notificationParams) {
+    if (!notificationParams.atKey.metadata.isEncrypted) {
+      return false;
+    }
+    if (notificationParams.value.isNotNull) {
+      return true;
+    }
+    // ignore: deprecated_member_use
+    return notificationParams.messageType == MessageTypeEnum.text;
   }
 }
