@@ -94,8 +94,9 @@ published on
   management.
 - [at_follows_flutter](./packages/at_follows_flutter): a basic
   social "follows" feature for atSigns.
-- [at_invitation_flutter](./packages/at_invitation_flutter):
-  invite contacts via SMS or email.
+- [at_invitation_flutter](./deprecated/flutter/at_invitation_flutter):
+  deprecated; invite contacts via SMS or email using the
+  [`at_client_flutter` snippet](./packages/at_client_flutter/example/lib/snippets/at_invitation.dart).
 - [at_location_flutter](./packages/at_location_flutter): share
   location between two atSigns and view on
   [OpenStreetMap](https://www.openstreetmap.org/).
