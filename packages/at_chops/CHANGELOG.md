@@ -1,7 +1,6 @@
 ## 3.0.0
 - feat: Faster AES encryption/decryption using better_crypto
-- refactor: keep application crypto provider registry ownership in `at_client`;
-  `at_chops` remains focused on cryptographic primitives.
+- refactor: bring all keys into the same import underneath a unified sealed class
 ## 2.2.0
 - feat: Implement "argon2id" hashing algorithm to generate hash from a given passphrase.
 - feat: Add generics to "AtEncryptionAlgorithm" and "AtHashingAlgorithm" to support multiple data types in their
