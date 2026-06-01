@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
@@ -745,6 +747,29 @@ void main() {
       expect(command, startsWith('update:json:'));
       var verbParams = getVerbParams(VerbSyntax.update, command.trim());
       expect(verbParams['noCommit'], null);
+    });
+
+    test('json form round-trips app metadata through UpdateParams', () {
+      final appMetadata = AppMetadata('test_provider', additional: {
+        'encKeyName': 'key_12345.__shared_keys.wavi',
+        'encAlgo': 'test_algo',
+      });
+      var builder = UpdateVerbBuilder()
+        ..isJson = true
+        ..value = 'alice@atsign.com'
+        ..atKey.key = 'email.wavi'
+        ..atKey.sharedBy = '@alice'
+        ..atKey.sharedWith = '@bob'
+        ..atKey.metadata.appMetadata = appMetadata;
+
+      var command = builder.buildCommand();
+      expect(command, startsWith('update:json:'));
+
+      var verbParams = getVerbParams(VerbSyntax.update, command.trim());
+      var json = jsonDecode(verbParams['json']!);
+      var updateParams = UpdateParams.fromJson(json);
+
+      expect(updateParams.metadata!.appMetadata, appMetadata);
     });
 
     test('getBuilder round-trips noCommit on the metadata-fragment form', () {
