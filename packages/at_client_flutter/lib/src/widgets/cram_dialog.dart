@@ -84,18 +84,18 @@ class CramDialog extends StatelessWidget {
           StreamBuilder(
             stream: _authService.progressStream,
             builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return LoadingDialog(
-                  title: title ?? "Onboarding Atsign via cram",
-                  description: description ?? "Authenticating, please wait...",
-                );
+              // When a custom progressBuilder is provided, render it for each
+              // progress event. Otherwise keep showing the loading indicator
+              // until onboarding completes and the dialog is popped —
+              // returning an empty widget here caused a blank dialog box to
+              // flash on screen during login (issue #1956).
+              if (snapshot.hasData && progressBuilder != null) {
+                return progressBuilder!(snapshot.data as ProgressEvent);
               }
-              final progress = snapshot.data as ProgressEvent;
-              if (progressBuilder == null) {
-                return Container();
-              } else {
-                return progressBuilder!(progress);
-              }
+              return LoadingDialog(
+                title: title ?? "Onboarding Atsign via cram",
+                description: description ?? "Authenticating, please wait...",
+              );
             },
           ),
         ],

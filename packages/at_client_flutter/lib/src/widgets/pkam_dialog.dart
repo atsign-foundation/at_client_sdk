@@ -79,19 +79,19 @@ class PkamDialog extends StatelessWidget {
         child: StreamBuilder(
           stream: auth.progressStream,
           builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return LoadingDialog(
-                title: title ?? "Authenticating via pkam",
-                description: description ?? "Validating your atKeys...",
-                themeData: Theme.of(context),
-              );
+            // When a custom progressBuilder is provided, render it for each
+            // progress event. Otherwise keep showing the loading indicator
+            // until authentication completes and the dialog is popped —
+            // returning an empty widget here caused a blank dialog box to
+            // flash on screen during login (issue #1956).
+            if (snapshot.hasData && progressBuilder != null) {
+              return progressBuilder!(snapshot.data as ProgressEvent);
             }
-            final progress = snapshot.data as ProgressEvent;
-            if (progressBuilder == null) {
-              return Container();
-            } else {
-              return progressBuilder!(progress);
-            }
+            return LoadingDialog(
+              title: title ?? "Authenticating via pkam",
+              description: description ?? "Validating your atKeys...",
+              themeData: Theme.of(context),
+            );
           },
         ),
       ),
