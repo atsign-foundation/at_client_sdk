@@ -2,6 +2,7 @@
 
 ## 1.1.2
 
+- fix: prevent blank dialog box flashing during login
 - docs(examples): improved READMEs, added dockerstats flutter app
 
 ## 1.1.1
