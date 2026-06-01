@@ -185,8 +185,8 @@ class CryptoRuntime {
     try {
       return _atClient.cryptoRegistry.lookup(providerId, operation: operation);
     } on CryptoProviderNotRegistered catch (e) {
-      final shouldRetry = await _handleProviderNotFound(atKey, providerId, e);
-      if (shouldRetry) {
+      final provider = await _handleProviderNotFound(atKey, providerId, e);
+      if (provider == null) {
         try {
           return _atClient.cryptoRegistry.lookup(
             providerId,
@@ -213,16 +213,13 @@ class CryptoRuntime {
     return appMetadata;
   }
 
-  Future<bool> _handleProviderNotFound(
+  Future<CryptoFailureResolution?> _handleProviderNotFound(
     AtKey atKey,
     String providerId,
     AtException error,
   ) async {
     final preferences = _atClient.getPreferences();
-    if (preferences == null) {
-      return false;
-    }
-    final resolution = await preferences.crypto.policy.onProviderNotFound(
+    final resolution = await preferences?.crypto.policy.onProviderNotFound(
       CryptoProviderNotFoundContext(
         cryptoContext: CryptoContext(
           atClient: _atClient,
@@ -235,6 +232,6 @@ class CryptoRuntime {
         error: error,
       ),
     );
-    return resolution is RetryCryptoOperation;
+    return resolution;
   }
 }

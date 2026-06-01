@@ -1,6 +1,5 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/crypto/key_lookup.dart';
 import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -20,8 +19,6 @@ class MockSecondaryAddressFinder extends Mock
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
 class MockLocalSecondary extends Mock implements LocalSecondary {}
-
-class MockKeyLookup extends Mock implements KeyLookup {}
 
 class MockCryptoRegistry extends Mock implements CryptoRegistry {
   MockCryptoRegistry(AtClient atClient) {
