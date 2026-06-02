@@ -81,8 +81,9 @@ class Identity {
   // ML-KEM-768 signed pre-key (medium-lived)
   final Uint8List spkKemSk;
   final Uint8List spkKemPk;
-  // Ed25519 signature over spkDhPk
+  // Ed25519 signatures over each SPK
   final Uint8List spkSignature;
+  final Uint8List spkKemSignature;
 
   Identity({
     required this.name,
@@ -95,6 +96,7 @@ class Identity {
     required this.spkKemSk,
     required this.spkKemPk,
     required this.spkSignature,
+    required this.spkKemSignature,
   });
 }
 
@@ -244,9 +246,13 @@ Future<Identity> genIdentity(String name) async {
   final spkDh = await (await x25519.newKeyPair()).extract();
   final (spkKemPk, spkKemSk) = kem.generateKeyPair();
 
-  // Identity Ed25519 signs the X25519 SPK — proves the SPK binding.
+  // Identity Ed25519 signs both SPKs independently.
   final sig = await ed25519.sign(
     Uint8List.fromList(spkDh.publicKey.bytes),
+    keyPair: ikSig,
+  );
+  final sigKem = await ed25519.sign(
+    Uint8List.fromList(spkKemPk),
     keyPair: ikSig,
   );
 
@@ -261,6 +267,7 @@ Future<Identity> genIdentity(String name) async {
     spkKemSk: Uint8List.fromList(spkKemSk),
     spkKemPk: Uint8List.fromList(spkKemPk),
     spkSignature: Uint8List.fromList(sig.bytes),
+    spkKemSignature: Uint8List.fromList(sigKem.bytes),
   );
 }
 
@@ -574,16 +581,27 @@ Future<void> main() async {
   print('  bob.spkKemPk     : ${hx(bob.spkKemPk)}');
 
   // ── 2. SPK signature check (initiator-side bundle verification) ───────────
-  hr('Alice verifies Bob\'s SPK signature');
-  final sigOk = await Ed25519().verify(
+  hr('Alice verifies Bob\'s SPK signatures');
+  final ed = Ed25519();
+  final sigOk = await ed.verify(
     bob.spkDhPk,
     signature: Signature(
       bob.spkSignature,
       publicKey: SimplePublicKey(bob.ikSigPk, type: KeyPairType.ed25519),
     ),
   );
-  print('  Ed25519.verify(bob.ikSig_pk, bob.spk_pk, sig)  →  '
+  final sigKemOk = await ed.verify(
+    bob.spkKemPk,
+    signature: Signature(
+      bob.spkKemSignature,
+      publicKey: SimplePublicKey(bob.ikSigPk, type: KeyPairType.ed25519),
+    ),
+  );
+  print('  Ed25519.verify(bob.ikSig_pk, bob.spk_pk,    sig)  →  '
       '${sigOk ? _green("VALID") : "INVALID"}');
+  print('  Ed25519.verify(bob.ikSig_pk, bob.spkKem_pk, sig)  →  '
+      '${sigKemOk ? _green("VALID") : "INVALID"}');
+  if (!sigOk || !sigKemOk) throw StateError('Bundle verification failed');
 
   // ── 3. PQXDH handshake (initiator side) ───────────────────────────────────
   hr('PQXDH HANDSHAKE  (alice as initiator)');
