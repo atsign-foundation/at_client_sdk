@@ -16,7 +16,7 @@ import 'openssl_ffi_bindings.dart';
 /// [releaseKeyPair] when a key pair is no longer needed to free native memory.
 ///
 /// Construct via [MlKem768Ffi.fromLib].
-final class MlKem768Ffi implements KemAlgorithm {
+final class MlKem768Ffi implements MlKem768Algorithm {
   final DynamicLibrary _lib;
   final Random _rng = Random.secure();
 
@@ -83,9 +83,6 @@ final class MlKem768Ffi implements KemAlgorithm {
     _cryptoFree = _lib.lookupFunction<CryptoFreeNative, CryptoFreeDart>(
         'CRYPTO_free');
   }
-
-  @override
-  String get name => 'ML-KEM-768';
 
   @override
   Future<PqcKeyPair> generateKeyPair([Uint8List? seed]) async {

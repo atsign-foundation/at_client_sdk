@@ -1,29 +1,32 @@
-/// dart_pqc — Post-quantum cryptography primitives for Dart.
+/// dart_pqc — Post-quantum and modern cryptographic primitives for Dart.
 ///
-/// Public surface:
+/// Each primitive ships with two tiers:
+///   - FFI-accelerated OpenSSL 3 (native platforms where libcrypto is available)
+///   - Pure-Dart fallback (all platforms)
 ///
-/// - [KemAlgorithm]       — common KEM interface
-/// - [PqcKeyPair]         — raw public/secret key pair
-/// - [EncapsulationResult] — ciphertext + shared secret
+/// ML-KEM-768 (FIPS 203 key encapsulation):
+/// - [MlKem768PureDart]  — pure Dart (pqcrypto fork)
+/// - [MlKem768Ffi]       — OpenSSL FFI
+/// - [resolveMlKem768]   — auto-select best available
 ///
-/// Pure-Dart implementations (always available):
-/// - [MlKem768PureDart]   — ML-KEM-768 (pure Dart, pqcrypto fork)
-/// - [X25519PureDart]     — X25519 ECDH-as-KEM (pure Dart, cryptography package)
+/// X25519 (Diffie-Hellman key agreement):
+/// - [X25519PureDart]    — pure Dart (cryptography package)
+/// - [X25519Ffi]         — OpenSSL FFI
+/// - [resolveX25519]     — auto-select best available
 ///
-/// FFI-accelerated OpenSSL implementations (native platforms only):
-/// - [MlKem768Ffi]        — ML-KEM-768 via OpenSSL EVP API
-/// - [X25519Ffi]          — X25519 via OpenSSL EVP API
-///
-/// Auto-selected (FFI when libcrypto available, pure Dart otherwise):
-/// - [resolveMlKem768]    — returns best available ML-KEM-768
-/// - [resolveX25519]      — returns best available X25519
+/// Ed25519 (signing):
+/// - [Ed25519PureDart]   — pure Dart (cryptography package)
+/// - [Ed25519Ffi]        — OpenSSL FFI
+/// - [resolveEd25519]    — auto-select best available
 
 library dart_pqc;
 
 export 'src/dart_pqc_base.dart';
-export 'src/kem_resolver.dart';
 export 'src/openssl_loader.dart';
 export 'src/ml_kem_768.dart';
 export 'src/ml_kem_768_ffi.dart';
 export 'src/x25519.dart';
 export 'src/x25519_ffi.dart';
+export 'src/ed25519.dart';
+export 'src/ed25519_ffi.dart';
+export 'src/resolver.dart';

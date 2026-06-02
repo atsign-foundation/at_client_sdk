@@ -12,7 +12,7 @@ import 'dart_pqc_base.dart';
 ///
 /// This is the fallback path used when the FFI-accelerated OpenSSL shared
 /// object is unavailable (e.g. on Web or when no native library is bundled).
-final class MlKem768PureDart implements KemAlgorithm {
+final class MlKem768PureDart implements MlKem768Algorithm {
   /// Singleton instance — stateless, safe to share.
   static const MlKem768PureDart instance = MlKem768PureDart._();
 

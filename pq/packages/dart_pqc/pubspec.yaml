@@ -1,5 +1,5 @@
 name: dart_pqc
-description: Post-quantum cryptography primitives for Dart. Provides X25519 and ML-KEM-768 with FFI-accelerated OpenSSL as primary path and pure-Dart fallback.
+description: ML-KEM-768, X25519, and Ed25519 for Dart. FFI-accelerated OpenSSL as primary path, pure-Dart fallback.
 version: 0.1.0
 
 environment:

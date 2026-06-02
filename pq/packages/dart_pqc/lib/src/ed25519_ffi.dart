@@ -6,14 +6,14 @@ import 'package:ffi/ffi.dart';
 import 'dart_pqc_base.dart';
 import 'openssl_ffi_bindings.dart';
 
-/// X25519 Diffie-Hellman key agreement — OpenSSL 3 FFI.
+/// Ed25519 signing — OpenSSL 3 FFI.
 ///
-/// Construct via [X25519Ffi.fromLib].
-final class X25519Ffi implements X25519Algorithm {
+/// Uses one-shot EVP_DigestSign / EVP_DigestVerify (OpenSSL 3 API).
+/// Construct via [Ed25519Ffi.fromLib].
+final class Ed25519Ffi implements Ed25519Algorithm {
   final DynamicLibrary _lib;
 
   late final EvpPkeyCtxNewFromNameDart _ctxNewFromName;
-  late final EvpPkeyCtxNewDart _ctxNew;
   late final EvpPkeyCtxFreeDart _ctxFree;
   late final EvpPkeyFreeDart _pkeyFree;
   late final EvpPkeyKeygenInitDart _keygenInit;
@@ -22,15 +22,16 @@ final class X25519Ffi implements X25519Algorithm {
   late final EvpPkeyGetRawKeyDart _getRawPrivateKey;
   late final EvpPkeyNewRawPrivateKeyDart _newRawPrivateKey;
   late final EvpPkeyNewRawPublicKeyDart _newRawPublicKey;
-  late final EvpPkeyDeriveInitDart _deriveInit;
-  late final EvpPkeyDeriveSetPeerDart _deriveSetPeer;
-  late final EvpPkeyDeriveDart _derive;
+  late final EvpMdCtxNewDart _mdCtxNew;
+  late final EvpMdCtxFreeDart _mdCtxFree;
+  late final EvpDigestSignInitDart _digestSignInit;
+  late final EvpDigestSignDart _digestSign;
+  late final EvpDigestVerifyInitDart _digestVerifyInit;
+  late final EvpDigestVerifyDart _digestVerify;
 
-  X25519Ffi.fromLib(this._lib) {
+  Ed25519Ffi.fromLib(this._lib) {
     _ctxNewFromName = _lib.lookupFunction<EvpPkeyCtxNewFromNameNative,
         EvpPkeyCtxNewFromNameDart>('EVP_PKEY_CTX_new_from_name');
-    _ctxNew = _lib.lookupFunction<EvpPkeyCtxNewNative, EvpPkeyCtxNewDart>(
-        'EVP_PKEY_CTX_new');
     _ctxFree = _lib.lookupFunction<EvpPkeyCtxFreeNative, EvpPkeyCtxFreeDart>(
         'EVP_PKEY_CTX_free');
     _pkeyFree = _lib.lookupFunction<EvpPkeyFreeNative, EvpPkeyFreeDart>(
@@ -47,19 +48,26 @@ final class X25519Ffi implements X25519Algorithm {
         EvpPkeyNewRawPrivateKeyDart>('EVP_PKEY_new_raw_private_key');
     _newRawPublicKey = _lib.lookupFunction<EvpPkeyNewRawPublicKeyNative,
         EvpPkeyNewRawPublicKeyDart>('EVP_PKEY_new_raw_public_key');
-    _deriveInit = _lib.lookupFunction<EvpPkeyDeriveInitNative,
-        EvpPkeyDeriveInitDart>('EVP_PKEY_derive_init');
-    _deriveSetPeer = _lib.lookupFunction<EvpPkeyDeriveSetPeerNative,
-        EvpPkeyDeriveSetPeerDart>('EVP_PKEY_derive_set_peer');
-    _derive = _lib.lookupFunction<EvpPkeyDeriveNative, EvpPkeyDeriveDart>(
-        'EVP_PKEY_derive');
+    _mdCtxNew = _lib.lookupFunction<EvpMdCtxNewNative, EvpMdCtxNewDart>(
+        'EVP_MD_CTX_new');
+    _mdCtxFree = _lib.lookupFunction<EvpMdCtxFreeNative, EvpMdCtxFreeDart>(
+        'EVP_MD_CTX_free');
+    _digestSignInit = _lib.lookupFunction<EvpDigestSignInitNative,
+        EvpDigestSignInitDart>('EVP_DigestSignInit');
+    _digestSign = _lib.lookupFunction<EvpDigestSignNative, EvpDigestSignDart>(
+        'EVP_DigestSign');
+    _digestVerifyInit = _lib.lookupFunction<EvpDigestVerifyInitNative,
+        EvpDigestVerifyInitDart>('EVP_DigestVerifyInit');
+    _digestVerify =
+        _lib.lookupFunction<EvpDigestVerifyNative, EvpDigestVerifyDart>(
+            'EVP_DigestVerify');
   }
 
-  /// Generate a fresh X25519 key pair.
+  /// Generate a fresh Ed25519 key pair.
   ///
   /// Returns `(publicKey: 32 bytes, privateKey: 32 bytes)`.
   Future<({Uint8List publicKey, Uint8List privateKey})> generateKeyPair() async {
-    final Pointer<Utf8> algName = 'X25519'.toNativeUtf8();
+    final Pointer<Utf8> algName = 'ED25519'.toNativeUtf8();
     final Pointer<EVP_PKEY_CTX> ctx = _ctxNewFromName(nullptr, algName, nullptr);
     calloc.free(algName);
     if (ctx == nullptr) throw StateError('EVP_PKEY_CTX_new_from_name failed');
@@ -86,32 +94,88 @@ final class X25519Ffi implements X25519Algorithm {
     }
   }
 
-  /// Perform X25519 DH: compute the shared secret from [privateKey] and [peerPublicKey].
+  /// Sign [message] with [privateKey].
   ///
-  /// Returns a 32-byte shared secret.
-  Future<Uint8List> dh(Uint8List privateKey, Uint8List peerPublicKey) async {
+  /// Returns a 64-byte signature.
+  Future<Uint8List> sign(Uint8List privateKey, Uint8List message) async {
     final Pointer<Uint8> privBuf = calloc<Uint8>(privateKey.length);
     privBuf.asTypedList(privateKey.length).setAll(0, privateKey);
-    final Pointer<EVP_PKEY> myKey =
-        _newRawPrivateKey(nidX25519, nullptr, privBuf, privateKey.length);
+    final Pointer<EVP_PKEY> pkey =
+        _newRawPrivateKey(nidEd25519, nullptr, privBuf, privateKey.length);
     calloc.free(privBuf);
-    if (myKey == nullptr) throw StateError('EVP_PKEY_new_raw_private_key failed');
+    if (pkey == nullptr) throw StateError('EVP_PKEY_new_raw_private_key failed');
 
     try {
-      final Pointer<Uint8> peerBuf = calloc<Uint8>(peerPublicKey.length);
-      peerBuf.asTypedList(peerPublicKey.length).setAll(0, peerPublicKey);
-      final Pointer<EVP_PKEY> peerKey =
-          _newRawPublicKey(nidX25519, nullptr, peerBuf, peerPublicKey.length);
-      calloc.free(peerBuf);
-      if (peerKey == nullptr) throw StateError('EVP_PKEY_new_raw_public_key failed');
-
+      final Pointer<Void> mdCtx = _mdCtxNew();
+      if (mdCtx == nullptr) throw StateError('EVP_MD_CTX_new failed');
       try {
-        return _ecdh(myKey, peerKey);
+        if (_digestSignInit(mdCtx, nullptr, nullptr, nullptr, pkey) <= 0) {
+          throw StateError('EVP_DigestSignInit failed');
+        }
+
+        // Ed25519 signatures are always exactly 64 bytes — skip the size query
+        // to avoid calling EVP_DigestSign twice on the same context, which is
+        // not safe across all OpenSSL versions.
+        const int ed25519SigLen = 64;
+        final Pointer<Uint8> msgBuf = calloc<Uint8>(message.length);
+        final Pointer<Uint8> sigBuf = calloc<Uint8>(ed25519SigLen);
+        final Pointer<IntPtr> sigLen = calloc<IntPtr>()..value = ed25519SigLen;
+        msgBuf.asTypedList(message.length).setAll(0, message);
+        try {
+          if (_digestSign(mdCtx, sigBuf, sigLen, msgBuf, message.length) <= 0) {
+            throw StateError('EVP_DigestSign failed');
+          }
+          return Uint8List.fromList(sigBuf.asTypedList(sigLen.value));
+        } finally {
+          calloc.free(msgBuf);
+          calloc.free(sigBuf);
+          calloc.free(sigLen);
+        }
       } finally {
-        _pkeyFree(peerKey);
+        _mdCtxFree(mdCtx);
       }
     } finally {
-      _pkeyFree(myKey);
+      _pkeyFree(pkey);
+    }
+  }
+
+  /// Verify [signature] over [message] with [publicKey].
+  ///
+  /// Returns `true` if the signature is valid.
+  Future<bool> verify(
+      Uint8List publicKey, Uint8List message, Uint8List signature) async {
+    final Pointer<Uint8> pubBuf = calloc<Uint8>(publicKey.length);
+    pubBuf.asTypedList(publicKey.length).setAll(0, publicKey);
+    final Pointer<EVP_PKEY> pkey =
+        _newRawPublicKey(nidEd25519, nullptr, pubBuf, publicKey.length);
+    calloc.free(pubBuf);
+    if (pkey == nullptr) throw StateError('EVP_PKEY_new_raw_public_key failed');
+
+    try {
+      final Pointer<Void> mdCtx = _mdCtxNew();
+      if (mdCtx == nullptr) throw StateError('EVP_MD_CTX_new failed');
+      try {
+        if (_digestVerifyInit(mdCtx, nullptr, nullptr, nullptr, pkey) <= 0) {
+          throw StateError('EVP_DigestVerifyInit failed');
+        }
+
+        final Pointer<Uint8> msgBuf = calloc<Uint8>(message.length);
+        final Pointer<Uint8> sigBuf = calloc<Uint8>(signature.length);
+        msgBuf.asTypedList(message.length).setAll(0, message);
+        sigBuf.asTypedList(signature.length).setAll(0, signature);
+        try {
+          final int result = _digestVerify(
+              mdCtx, sigBuf, signature.length, msgBuf, message.length);
+          return result == 1;
+        } finally {
+          calloc.free(msgBuf);
+          calloc.free(sigBuf);
+        }
+      } finally {
+        _mdCtxFree(mdCtx);
+      }
+    } finally {
+      _pkeyFree(pkey);
     }
   }
 
@@ -154,36 +218,6 @@ final class X25519Ffi implements X25519Algorithm {
       }
     } finally {
       calloc.free(lenPtr);
-    }
-  }
-
-  Uint8List _ecdh(Pointer<EVP_PKEY> myKey, Pointer<EVP_PKEY> peerKey) {
-    final Pointer<EVP_PKEY_CTX> ctx = _ctxNew(myKey, nullptr);
-    if (ctx == nullptr) throw StateError('EVP_PKEY_CTX_new failed');
-    try {
-      if (_deriveInit(ctx) <= 0) throw StateError('EVP_PKEY_derive_init failed');
-      if (_deriveSetPeer(ctx, peerKey) <= 0) {
-        throw StateError('EVP_PKEY_derive_set_peer failed');
-      }
-      final Pointer<IntPtr> lenPtr = calloc<IntPtr>();
-      try {
-        if (_derive(ctx, nullptr, lenPtr) <= 0) {
-          throw StateError('EVP_PKEY_derive (size) failed');
-        }
-        final Pointer<Uint8> ssBuf = calloc<Uint8>(lenPtr.value);
-        try {
-          if (_derive(ctx, ssBuf, lenPtr) <= 0) {
-            throw StateError('EVP_PKEY_derive failed');
-          }
-          return Uint8List.fromList(ssBuf.asTypedList(lenPtr.value));
-        } finally {
-          calloc.free(ssBuf);
-        }
-      } finally {
-        calloc.free(lenPtr);
-      }
-    } finally {
-      _ctxFree(ctx);
     }
   }
 }

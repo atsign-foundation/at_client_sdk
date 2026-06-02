@@ -119,9 +119,43 @@ typedef EvpPkeyNewRawPublicKeyNative = Pointer<EVP_PKEY> Function(
 typedef EvpPkeyNewRawPublicKeyDart = Pointer<EVP_PKEY> Function(
     int, Pointer<Void>, Pointer<Uint8>, int);
 
+// EVP_MD_CTX_new / free — for Ed25519 sign/verify
+typedef EvpMdCtxNewNative = Pointer<Void> Function();
+typedef EvpMdCtxNewDart = Pointer<Void> Function();
+
+typedef EvpMdCtxFreeNative = Void Function(Pointer<Void>);
+typedef EvpMdCtxFreeDart = void Function(Pointer<Void>);
+
+// EVP_DigestSignInit — init sign context (Ed25519: md=null, type from pkey)
+typedef EvpDigestSignInitNative = Int32 Function(Pointer<Void>,
+    Pointer<Pointer<EVP_PKEY_CTX>>, Pointer<Void>, Pointer<Void>, Pointer<EVP_PKEY>);
+typedef EvpDigestSignInitDart = int Function(Pointer<Void>,
+    Pointer<Pointer<EVP_PKEY_CTX>>, Pointer<Void>, Pointer<Void>, Pointer<EVP_PKEY>);
+
+// EVP_DigestSign — one-shot sign (OpenSSL 3)
+typedef EvpDigestSignNative = Int32 Function(
+    Pointer<Void>, Pointer<Uint8>, Pointer<IntPtr>, Pointer<Uint8>, IntPtr);
+typedef EvpDigestSignDart = int Function(
+    Pointer<Void>, Pointer<Uint8>, Pointer<IntPtr>, Pointer<Uint8>, int);
+
+// EVP_DigestVerifyInit
+typedef EvpDigestVerifyInitNative = Int32 Function(Pointer<Void>,
+    Pointer<Pointer<EVP_PKEY_CTX>>, Pointer<Void>, Pointer<Void>, Pointer<EVP_PKEY>);
+typedef EvpDigestVerifyInitDart = int Function(Pointer<Void>,
+    Pointer<Pointer<EVP_PKEY_CTX>>, Pointer<Void>, Pointer<Void>, Pointer<EVP_PKEY>);
+
+// EVP_DigestVerify — one-shot verify (OpenSSL 3)
+typedef EvpDigestVerifyNative = Int32 Function(
+    Pointer<Void>, Pointer<Uint8>, IntPtr, Pointer<Uint8>, IntPtr);
+typedef EvpDigestVerifyDart = int Function(
+    Pointer<Void>, Pointer<Uint8>, int, Pointer<Uint8>, int);
+
 // ── OpenSSL selection constants ───────────────────────────────────────────────
 const int evpPkeyPublicKey = 0x86;
 const int evpPkeyKeypair = 0x87;
 
 // NID_X25519 = 1034
 const int nidX25519 = 1034;
+
+// NID_ED25519 = 1087
+const int nidEd25519 = 1087;
