@@ -185,8 +185,8 @@ class CryptoRuntime {
     try {
       return _atClient.cryptoRegistry.lookup(providerId, operation: operation);
     } on CryptoProviderNotRegistered catch (e) {
-      final provider = await _handleProviderNotFound(atKey, providerId, e);
-      if (provider == null) {
+      final resolution = await _handleProviderNotFound(atKey, providerId, e);
+      if (resolution is RetryCryptoOperation) {
         try {
           return _atClient.cryptoRegistry.lookup(
             providerId,

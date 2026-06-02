@@ -81,11 +81,11 @@ void main() {
       });
     });
 
-    test('policy can register a missing provider and retry once', () async {
+    test('policy registers a missing provider and retry uses it', () async {
       final policy = _RegisteringPolicy(_MetadataProvider());
       final lazyAtClient = MockAtClientImpl();
       final lazyAtChops = MockAtChops();
-      final lazyRegistry = CryptoRegistry();
+      final lazyRegistry = _CountingRegistry();
       when(() => lazyAtClient.atChops).thenReturn(lazyAtChops);
       when(() => lazyAtClient.cryptoRegistry).thenReturn(lazyRegistry);
       when(() => lazyAtClient.getCurrentAtSign()).thenReturn('@alice');
@@ -105,14 +105,20 @@ void main() {
 
       expect(plaintext, 'plaintext');
       expect(policy.calls, 1);
+      expect(lazyRegistry.contains('metadata-provider'), true);
+      expect(lazyRegistry.lookupIds, [
+        'metadata-provider',
+        'metadata-provider',
+      ]);
     });
 
     test('policy retry happens once when provider remains missing', () async {
       final policy = _RetryOnlyPolicy();
       final lazyAtClient = MockAtClientImpl();
       final lazyAtChops = MockAtChops();
+      final lazyRegistry = _CountingRegistry();
       when(() => lazyAtClient.atChops).thenReturn(lazyAtChops);
-      when(() => lazyAtClient.cryptoRegistry).thenReturn(CryptoRegistry());
+      when(() => lazyAtClient.cryptoRegistry).thenReturn(lazyRegistry);
       when(() => lazyAtClient.getCurrentAtSign()).thenReturn('@alice');
       when(() => lazyAtClient.getPreferences()).thenReturn(
         AtClientPreference()
@@ -130,8 +136,22 @@ void main() {
         throwsA(isA<CryptoProviderNotRegistered>()),
       );
       expect(policy.calls, 1);
+      expect(lazyRegistry.lookupIds, [
+        'missing-provider',
+        'missing-provider',
+      ]);
     });
   });
+}
+
+class _CountingRegistry extends CryptoRegistry {
+  final lookupIds = <String>[];
+
+  @override
+  CryptoProvider lookup(String id, {String? operation}) {
+    lookupIds.add(id);
+    return super.lookup(id, operation: operation);
+  }
 }
 
 class _RecordingProvider extends CryptoProvider {
