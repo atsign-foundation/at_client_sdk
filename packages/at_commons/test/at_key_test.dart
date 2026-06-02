@@ -1033,7 +1033,7 @@ void main() {
         ..ivNonce = '16'
         ..skeEncKeyName = 'dummy_enc_key_name'
         ..skeEncAlgo = 'RSA'
-        ..appMetadata = AppMetadata('test_provider', additional: {
+        ..appMetadata = AppMetadata(providerId: 'test_provider', additional: {
           'encKeyName': 'key_12345.__shared_keys.wavi',
           'encAlgo': 'test_algo',
         })
@@ -1122,7 +1122,7 @@ void main() {
 
     test('throws FormatException for empty appMetadata providerId', () {
       expect(
-        () => AppMetadata(''),
+        () => AppMetadata(providerId: ''),
         throwsA(isA<FormatException>()),
       );
       expect(

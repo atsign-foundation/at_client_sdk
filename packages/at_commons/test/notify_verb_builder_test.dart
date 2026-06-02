@@ -192,7 +192,7 @@ void main() {
     });
 
     test('notify command with app metadata', () {
-      final appMetadata = AppMetadata('test_provider', additional: {
+      final appMetadata = AppMetadata(providerId: 'test_provider', additional: {
         'encKeyName': 'key_12345.__shared_keys.wavi',
         'encAlgo': 'test_algo',
       });

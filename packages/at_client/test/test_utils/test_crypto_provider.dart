@@ -20,7 +20,7 @@ class CipherProvider extends CryptoProvider {
     request.atKey.metadata.sharedKeyEnc = 'sharedKeyEnc';
     return CryptoEncryptResult(
       ciphertext: 'abc${request.plaintext}',
-      metadata: AppMetadata(id),
+      metadata: AppMetadata(providerId: id),
     );
   }
 }

@@ -41,7 +41,8 @@ void main() {
 
     test('routes decryption by stored appMetadata providerId', () async {
       final atKey = AtKey()
-        ..metadata = (Metadata()..appMetadata = AppMetadata('custom'));
+        ..metadata =
+            (Metadata()..appMetadata = AppMetadata(providerId: 'custom'));
 
       final decrypted =
           await CryptoRuntime(mockAtClient).decryptForGet(atKey, 'ciphertext');
@@ -55,8 +56,8 @@ void main() {
       final provider = _MetadataProvider();
       registry.register(provider);
       final atKey = AtKey()
-        ..metadata =
-            (Metadata()..appMetadata = AppMetadata('metadata-provider'));
+        ..metadata = (Metadata()
+          ..appMetadata = AppMetadata(providerId: 'metadata-provider'));
 
       final result =
           await CryptoRuntime(mockAtClient).encryptForPut(atKey, 'plaintext');
@@ -97,8 +98,8 @@ void main() {
           ),
       );
       final atKey = AtKey()
-        ..metadata =
-            (Metadata()..appMetadata = AppMetadata('metadata-provider'));
+        ..metadata = (Metadata()
+          ..appMetadata = AppMetadata(providerId: 'metadata-provider'));
 
       final plaintext =
           await CryptoRuntime(lazyAtClient).decryptForGet(atKey, 'ciphertext');
@@ -128,8 +129,8 @@ void main() {
           ),
       );
       final atKey = AtKey()
-        ..metadata =
-            (Metadata()..appMetadata = AppMetadata('missing-provider'));
+        ..metadata = (Metadata()
+          ..appMetadata = AppMetadata(providerId: 'missing-provider'));
 
       await expectLater(
         () => CryptoRuntime(lazyAtClient).decryptForGet(atKey, 'ciphertext'),
@@ -167,7 +168,7 @@ class _RecordingProvider extends CryptoProvider {
     encryptCalls++;
     return CryptoEncryptResult(
       ciphertext: '$id encrypted ${request.plaintext}',
-      metadata: AppMetadata(id),
+      metadata: AppMetadata(providerId: id),
     );
   }
 
@@ -191,7 +192,7 @@ class _MetadataProvider extends CryptoProvider {
     return CryptoEncryptResult(
       ciphertext: 'ciphertext',
       metadata: AppMetadata(
-        'metadata-provider',
+        providerId: 'metadata-provider',
         additional: {
           'sessionId': 'session-1',
           'epoch': 7,

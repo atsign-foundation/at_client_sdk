@@ -119,28 +119,6 @@ class CryptoRuntime {
     }
   }
 
-  Future<dynamic> encryptForNotificationService(
-    AtKey atKey,
-    dynamic value, {
-    required String providerId,
-  }) async {
-    final provider = await _lookupProviderById(
-      atKey,
-      providerId,
-      operation: 'notify',
-    );
-    final result = await provider.encrypt(
-      CryptoEncryptRequest(
-        atKey: atKey,
-        plaintext: value,
-        existingMetadata: _metadataFor(atKey, provider),
-      ),
-    );
-    atKey.metadata.appMetadata = result.metadata;
-    atKey.metadata.isEncrypted = result.isEncrypted;
-    return result.ciphertext;
-  }
-
   Future<dynamic> decryptForSyncConflict(AtKey atKey, dynamic value) async {
     return _decrypt(atKey, value, operation: 'sync conflict');
   }
@@ -208,18 +186,21 @@ class CryptoRuntime {
   AppMetadata _metadataFor(AtKey atKey, CryptoProvider provider) {
     final appMetadata = atKey.metadata.appMetadata;
     if (appMetadata == null) {
-      return AppMetadata(provider.id);
+      return AppMetadata(providerId: provider.id);
     }
     return appMetadata;
   }
 
-  Future<CryptoFailureResolution?> _handleProviderNotFound(
+  Future<CryptoFailureResolution> _handleProviderNotFound(
     AtKey atKey,
     String providerId,
     AtException error,
   ) async {
     final preferences = _atClient.getPreferences();
-    final resolution = await preferences?.crypto.policy.onProviderNotFound(
+    //weird gotcha, this method will technically only break on null-check if:
+    //preferences is null (can you have a preference-less atClient?)
+    //but otherwise will always contain a CryptoPolicy
+    final resolution = await preferences!.crypto.policy.onProviderNotFound(
       CryptoProviderNotFoundContext(
         cryptoContext: CryptoContext(
           atClient: _atClient,

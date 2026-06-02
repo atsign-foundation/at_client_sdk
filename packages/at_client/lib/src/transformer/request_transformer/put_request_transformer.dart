@@ -43,7 +43,7 @@ class PutRequestTransformer
     if (!_isPublicKey(metadata) && options.shouldEncrypt) {
       // Add metadata for the crypto provider used to route future decrypts.
       updateVerbBuilder.atKey.metadata.appMetadata =
-          AppMetadata(_cryptoProviderIdFor(options));
+          AppMetadata(providerId: _cryptoProviderIdFor(options));
       await _encryptData(updateVerbBuilder);
     } else {
       // Sign the data for public keys

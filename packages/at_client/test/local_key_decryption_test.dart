@@ -50,7 +50,7 @@ void main() {
       var decryptedTestValue = await provider.decrypt(CryptoDecryptRequest(
         atKey: localKey,
         ciphertext: encryptedTestValue,
-        metadata: AppMetadata('legacy'),
+        metadata: AppMetadata(providerId: 'legacy'),
       ));
       expect(decryptedTestValue.plaintext, testValue);
     });
@@ -67,7 +67,7 @@ void main() {
           () async => await provider.decrypt(CryptoDecryptRequest(
                 atKey: localKey,
                 ciphertext: null,
-                metadata: AppMetadata('legacy'),
+                metadata: AppMetadata(providerId: 'legacy'),
               )),
           throwsA(predicate((e) =>
               e is AtDecryptionException &&
@@ -101,7 +101,7 @@ void main() {
           () async => await provider.decrypt(CryptoDecryptRequest(
                 atKey: localKey,
                 ciphertext: encryptedTestValue,
-                metadata: AppMetadata('legacy'),
+                metadata: AppMetadata(providerId: 'legacy'),
               )),
           throwsA(predicate((e) =>
               e is SharedKeyNotFoundException &&

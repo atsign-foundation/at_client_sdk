@@ -56,7 +56,7 @@ void main() {
 
   group('A group of prepareMetadata tests', () {
     test('prepareMetadata decodes appMetadata', () {
-      final appMetadata = AppMetadata('test_provider');
+      final appMetadata = AppMetadata(providerId: 'test_provider');
       final metadata = AtClientUtil.prepareMetadata({
         AtConstants.isEncrypted: true,
         AtConstants.appMetadata: Metadata.encodeAppMetadata(appMetadata),

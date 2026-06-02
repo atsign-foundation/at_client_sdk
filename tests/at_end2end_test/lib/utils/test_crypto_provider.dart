@@ -18,7 +18,7 @@ class TestCryptoProvider extends CryptoProvider {
   Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async {
     return CryptoEncryptResult(
       ciphertext: 'hellohello',
-      metadata: AppMetadata(id),
+      metadata: AppMetadata(providerId: id),
     );
   }
 }

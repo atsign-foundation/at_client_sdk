@@ -330,12 +330,13 @@ class NotificationServiceImpl extends NotificationService {
     final String notifPayload;
     body = body.trim();
     if (body.isNotEmpty && shouldEncrypt) {
-      notifPayload =
-          await CryptoRuntime(atClient).encryptForNotificationService(
-        atKey,
-        body,
-        providerId: _cryptoProviderIdFor(cryptoProviderId),
+      atKey.metadata.appMetadata ??= AppMetadata(
+        providerId: cryptoProviderId ??
+            atClient.getPreferences()?.crypto.defaultProviderId ??
+            CryptoRuntime.legacyProviderId,
       );
+      notifPayload =
+          await CryptoRuntime(atClient).encryptForNotification(atKey, body);
       atKey.metadata.isEncrypted = true;
     } else {
       notifPayload = body;
@@ -372,12 +373,6 @@ class NotificationServiceImpl extends NotificationService {
         ?.executeCommand(sb.toString(), auth: true);
 
     return id;
-  }
-
-  String _cryptoProviderIdFor(String? cryptoProviderId) {
-    return cryptoProviderId ??
-        atClient.getPreferences()?.crypto.defaultProviderId ??
-        CryptoRuntime.legacyProviderId;
   }
 
   @override

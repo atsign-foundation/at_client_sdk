@@ -16,7 +16,7 @@ class _FakeCryptoProvider extends CryptoProvider {
   Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async {
     return CryptoEncryptResult(
       ciphertext: request.plaintext,
-      metadata: AppMetadata(id),
+      metadata: AppMetadata(providerId: id),
     );
   }
 }

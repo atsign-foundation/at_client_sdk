@@ -25,7 +25,7 @@ class NotificationRequestTransformer
       NotificationParams notificationParams) async {
     if (_shouldRouteThroughProvider(notificationParams)) {
       notificationParams.atKey.metadata.appMetadata ??= AppMetadata(
-          notificationParams.cryptoProviderId ??
+          providerId: notificationParams.cryptoProviderId ??
               atClientPreference.crypto.defaultProviderId);
     }
     // prepares notification builder

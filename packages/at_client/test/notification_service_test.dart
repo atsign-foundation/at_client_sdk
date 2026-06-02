@@ -412,7 +412,7 @@ void main() {
       );
       notificationParams.atKey.metadata.isEncrypted = true;
       notificationParams.atKey.metadata.appMetadata =
-          AppMetadata('test_provider');
+          AppMetadata(providerId: 'test_provider');
       var notifyVerbBuilder =
           await NotificationRequestTransformer(mockAtClientImpl)
               .transform(notificationParams);
@@ -540,10 +540,65 @@ void main() {
         cryptoProviderId: 'override-provider',
       );
 
+      final command =
+          verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
+              .captured
+              .single as String;
+      expect(
+        command,
+        contains(
+          ':${AtConstants.appMetadata}:'
+          '${Metadata.encodeAppMetadata(AppMetadata(providerId: 'override-provider'))}',
+        ),
+      );
       verify(() => mockCryptoRegistry.lookup('override-provider',
           operation: 'notify')).called(1);
       verifyNever(() => mockCryptoRegistry.lookup('default-provider',
           operation: any(named: 'operation')));
+    });
+
+    test('send without cryptoProviderId uses preference default provider',
+        () async {
+      final remoteSecondary = MockRemoteSecondary();
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'wavi'
+          ..crypto = const CryptoConfig(defaultProviderId: 'default-provider'),
+      );
+      when(() => mockCryptoRegistry.lookup('default-provider',
+              operation: any(named: 'operation')))
+          .thenReturn(CipherProvider('default-provider'));
+      when(() => mockAtClientImpl.getRemoteSecondary())
+          .thenReturn(remoteSecondary);
+      when(() => remoteSecondary.executeCommand(any(), auth: true))
+          .thenAnswer((_) async => 'data:ok');
+      clearInteractions(mockCryptoRegistry);
+
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+        mockAtClientImpl,
+        monitor: fakeMonitor,
+        secondaryAddressFinder: mockSecondaryAddressFinder,
+      ) as NotificationServiceImpl;
+
+      await notificationServiceImpl.send(
+        to: '@bob'.toAtsign(),
+        namespace: 'wavi',
+        body: 'hello',
+      );
+
+      final command =
+          verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
+              .captured
+              .single as String;
+      expect(
+        command,
+        contains(
+          ':${AtConstants.appMetadata}:'
+          '${Metadata.encodeAppMetadata(AppMetadata(providerId: 'default-provider'))}',
+        ),
+      );
+      verify(() => mockCryptoRegistry.lookup('default-provider',
+          operation: 'notify')).called(1);
     });
   });
 
@@ -553,7 +608,7 @@ void main() {
     });
 
     test('AtNotification.fromJson decodes app metadata', () {
-      final appMetadata = AppMetadata('test_provider');
+      final appMetadata = AppMetadata(providerId: 'test_provider');
       final notification = AtNotification.fromJson({
         'id': '124',
         'key': '@bob:key-1.foo@alice',

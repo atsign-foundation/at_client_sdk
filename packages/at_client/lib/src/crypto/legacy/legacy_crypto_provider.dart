@@ -20,7 +20,7 @@ class LegacyCryptoProvider extends CryptoProvider {
     final ciphertext = await legacy.encrypt(request.atKey, request.plaintext);
     return CryptoEncryptResult(
       ciphertext: ciphertext,
-      metadata: AppMetadata(id),
+      metadata: AppMetadata(providerId: id),
     );
   }
 

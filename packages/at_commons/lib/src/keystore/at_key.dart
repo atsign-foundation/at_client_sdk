@@ -846,7 +846,7 @@ class AppMetadata {
   /// The SDK preserves these values but does not interpret them.
   Map<String, dynamic>? additional;
 
-  AppMetadata(String providerId, {this.additional})
+  AppMetadata({required String providerId, this.additional})
       : providerId = _validateProviderId(providerId);
 
   Map<String, dynamic> toJson() {
@@ -872,7 +872,7 @@ class AppMetadata {
     });
 
     return AppMetadata(
-      providerId,
+      providerId: providerId,
       additional: additional.isEmpty ? null : additional,
     );
   }

@@ -43,7 +43,7 @@ class XorCryptoProvider implements CryptoProvider {
       // metadata.providerId is SDK-owned routing; it must match this provider's id.
       // Put any extra per-record info (e.g. IV, key ID) in metadata.additional –
       // it travels with the record as appMetadata and is visible to atServer.
-      metadata: AppMetadata(id, additional: {'v': 1}),
+      metadata: AppMetadata(providerId: id, additional: {'v': 1}),
     );
   }
 

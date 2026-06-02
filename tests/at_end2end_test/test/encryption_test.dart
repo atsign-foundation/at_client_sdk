@@ -254,7 +254,7 @@ void main() {
 
       AtClient ac1 = await getAtClient(atSign_1, testProviderId: providerId);
       final atKey = sharedKey(keyName);
-      atKey.metadata.appMetadata = AppMetadata(providerId);
+      atKey.metadata.appMetadata = AppMetadata(providerId: providerId);
       final notificationResult = await ac1.notificationService
           .notify(NotificationParams.forUpdate(atKey, value: clearText));
 

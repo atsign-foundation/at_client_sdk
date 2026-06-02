@@ -361,7 +361,7 @@ class DemoCryptoProvider extends CryptoProvider {
     final ciphertext = 'demo:${request.plaintext}';
     return CryptoEncryptResult(
       ciphertext: ciphertext,
-      metadata: AppMetadata(id, additional: {'format': 'demo'}),
+      metadata: AppMetadata(providerId: id, additional: {'format': 'demo'}),
     );
   }
 
@@ -378,8 +378,9 @@ class DemoCryptoProvider extends CryptoProvider {
 `CryptoConfig` is app configuration, the provider factory receives
 `CryptoContext`, `CryptoStorage` is for provider-owned state, and
 `AppMetadata.providerId` is the stored routing value used by future decrypts.
-Per-write provider overrides use `PutRequestOptions.cryptoProviderId`; per
-notification overrides use `NotificationParams.cryptoProviderId`.
+Per-write provider overrides use `PutRequestOptions.cryptoProviderId`;
+notification overrides use `NotificationService.send(..., cryptoProviderId:)`
+or `NotificationParams.cryptoProviderId`.
 For the full model map, see [`CRYPTO_MODELS.md`](CRYPTO_MODELS.md).
 
 For compact examples of provider registration and per-write overrides, see
