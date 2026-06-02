@@ -1220,15 +1220,15 @@ interface class AtCollection<T> {
   }
 
   /// Fetches every item in the collection as a `List<CItem<T>>`,
-  /// optionally filtered by [id] / [owner]. Items with the same
-  /// `owner+id` across self and shared copies are deduplicated and their
-  /// `sharedWith` sets are unioned.
+  /// optionally filtered by [id] / [owner].
   ///
-  /// Thin wrapper around [getItemsAsStream]: a per-key decode failure
-  /// aborts the list with that error (via `.toList()` propagating the
-  /// stream error). If you need to continue past decode failures, use
-  /// [getItemsAsStream] directly and chain `.handleError(...)` or
-  /// collect errors yourself.
+  /// **Decode-error policy:** the first per-key decode failure aborts
+  /// the list with that error. If you need to continue past decode
+  /// failures, use [getItemsAsStream] directly and chain
+  /// `.handleError(...)` or collect errors yourself.
+  ///
+  /// Items with the same `owner+id` across self and shared copies are
+  /// deduplicated and their `sharedWith` sets are unioned.
   Future<List<CItem<T>>> getItems({String? id, Atsign? owner}) =>
       getItemsAsStream(id: id, owner: owner).toList();
 
