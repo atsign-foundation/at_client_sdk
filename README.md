@@ -114,6 +114,38 @@ published on
 Each package's own README and pub.dev page have the installation
 details. Click any of the links above.
 
+## AI Agent Skill
+
+The `atsign-dart-sdk` skill gives AI agents accurate, up-to-date knowledge of
+`at_client` and `at_client_flutter` — covering `AtCollection<T>`, auth flows,
+querying, sub-collections, testing patterns, and common pitfalls.
+
+```sh
+# Install for the current project
+npx skills add atsign-foundation/at_client_sdk --skill atsign-dart-sdk
+
+# Install globally (available in all your projects)
+npx skills add atsign-foundation/at_client_sdk --skill atsign-dart-sdk --global
+
+# Keep it up to date
+npx skills update atsign-dart-sdk
+```
+
+Works with Claude Code, Cursor, GitHub Copilot, Gemini CLI, and any agent
+supporting the [agentskills.io](https://agentskills.io) specification.
+
+**Auto-update on every Claude Code session start** (optional):
+
+```json
+{
+  "hooks": {
+    "SessionStart": [{ "type": "command", "command": "npx skills update atsign-dart-sdk -y 2>/dev/null" }]
+  }
+}
+```
+
+Add this to `~/.claude/settings.json`.
+
 ## Maintainers
 
 [Atsign Foundation core devs](https://github.com/orgs/atsign-foundation/teams/atcoredevs)

@@ -1,0 +1,125 @@
+{
+  "skill_name": "atsign-dart-sdk",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm building a Flutter app and want to store todos that can be shared with other users. Which packages do I need and how do I create a todo?",
+      "expected_output": "Recommends at_client and at_client_flutter. Shows atClient.collection<Todo>() with fromJson/typeTag, then collection.create(obj: todo, sharedWith: {'@bob'.toAtsign()}). Does NOT suggest AtCollectionModel.",
+      "should_trigger": true
+    },
+    {
+      "id": 2,
+      "prompt": "How do I use AtCollectionModel to store data in my Dart app?",
+      "expected_output": "Warns that AtCollectionModel is deprecated with @Deprecated annotation. Redirects to the modern AtCollection<T> API via atClient.collection(). Shows the correct pattern.",
+      "should_trigger": true
+    },
+    {
+      "id": 3,
+      "prompt": "My Flutter app needs to let users sign in with their atSign. What's the flow for an existing user who has a .atKeys file?",
+      "expected_output": "Shows Flow 2: AtKeysFileDialog.show() then PkamDialog.show() with request and backupKeys. Includes _setupAtClient() with AtClientManager.getInstance().setCurrentAtSign(). Uses AuthRequest (not AtAuthRequest) as the function parameter type.",
+      "should_trigger": true
+    },
+    {
+      "id": 4,
+      "prompt": "I want to query my todos reactively in a Flutter StreamBuilder — only show items where done=false, sorted by due date.",
+      "expected_output": "Shows todos.query().where((t) => !t.obj.done).orderBy((t) => t.obj.due).watch() inside StreamBuilder. Mentions on-device execution. May mention wherePath as a typed alternative.",
+      "should_trigger": true
+    },
+    {
+      "id": 5,
+      "prompt": "Should I use at_common_flutter in my new Flutter app? I saw it mentioned somewhere.",
+      "expected_output": "Says no — at_common_flutter is deprecated. Recommends at_client_flutter instead.",
+      "should_trigger": true
+    },
+    {
+      "id": 6,
+      "prompt": "I'm building a real-time dashboard that receives Docker container stats from another atSign every 2 seconds. Should I use AtCollection or something else?",
+      "expected_output": "Recommends Notifications + SQLite (not AtCollection) for high-frequency telemetry. Explains AtCollection is for discrete, addressable records. References the dockerstats pattern.",
+      "should_trigger": true
+    },
+    {
+      "id": 7,
+      "prompt": "How do I write unit tests for my AtCollection-backed service without spinning up a real atServer?",
+      "expected_output": "Explains collections_test_hooks.dart — collectionWithInjectedNotifications(), handleNotificationForTest(), clearFactoriesForTest(). Shows the import path package:at_client/src/collections/collections_test_hooks.dart.",
+      "should_trigger": true
+    },
+    {
+      "id": 8,
+      "prompt": "I have a posts collection with comments and each comment has replies. How do I reactively watch the full tree?",
+      "expected_output": "Recommends watchWithTree with SubSpec<Comment> and nested SubSpec<Reply>. Shows the TreeNode<Post> result shape. Explains ancestry ordering (ancestry.last = direct parent).",
+      "should_trigger": true
+    },
+    {
+      "id": 9,
+      "prompt": "I get a CSubItemUpdated event when a comment is added. How do I fetch the actual comment data?",
+      "expected_output": "Shows getDescendant() with ancestry: event.ancestry, id: event.id, owner: event.owner. Notes that ancestry is root-first (ancestry.last is direct parent). Warns that getDescendant throws if CAncestor.owner is null.",
+      "should_trigger": true
+    },
+    {
+      "id": 10,
+      "prompt": "How do I set up APKAM enrollment so a user can add a new device to their existing atSign?",
+      "expected_output": "Shows Flow 4: AtSignSelectionDialog.show() then ApkamActivationDialog.show() with atSign, rootDomain, appName, deviceName, namespaces. Then PkamDialog.show(). Includes _setupAtClient() post-auth.",
+      "should_trigger": true
+    },
+    {
+      "id": 11,
+      "prompt": "How do I write a Fibonacci function in Dart?",
+      "expected_output": "Simple Fibonacci implementation — skill not needed.",
+      "should_trigger": false
+    },
+    {
+      "id": 12,
+      "prompt": "I want to set up Firebase Authentication in my Flutter app",
+      "expected_output": "Firebase Auth setup — unrelated to atProtocol, skill should not activate.",
+      "should_trigger": false
+    },
+    {
+      "id": 13,
+      "prompt": "How do I center a widget in Flutter?",
+      "expected_output": "Basic Flutter layout — Center widget. No atProtocol involvement.",
+      "should_trigger": false
+    },
+    {
+      "id": 14,
+      "prompt": "Can you write a Python script that reads a CSV file and uploads each row to a PostgreSQL database?",
+      "expected_output": "Python CSV + PostgreSQL ETL script — no relation to at_client_sdk.",
+      "should_trigger": false
+    },
+    {
+      "id": 15,
+      "prompt": "I need to update the formulas in my Excel budget spreadsheet",
+      "expected_output": "Excel editing — not related to atProtocol or the Dart SDK.",
+      "should_trigger": false
+    },
+    {
+      "id": 16,
+      "prompt": "How do I parse JSON in Dart?",
+      "expected_output": "General Dart JSON parsing (dart:convert). No at_client involvement — skill not needed.",
+      "should_trigger": false
+    },
+    {
+      "id": 17,
+      "prompt": "I'm using at_client in my app and I already have existing data stored with atClient.put() / atClient.get(). Can I migrate to AtCollection without breaking anything?",
+      "expected_output": "Acknowledges that migration guide is coming in skill v2.0. Explains that AtCollection and raw put/get use the same underlying atServer keystore but with different key naming conventions. Advises caution until migration guide is available.",
+      "should_trigger": true
+    },
+    {
+      "id": 18,
+      "prompt": "my dart app needs to share some sensor readings with @device2 every few seconds, should i add them all to a collection or use notifications",
+      "expected_output": "For high-frequency sensor data, recommends Notifications + SQLite pattern (not AtCollection). Explains the volume/frequency threshold consideration.",
+      "should_trigger": true
+    },
+    {
+      "id": 19,
+      "prompt": "what's the difference between at_client and at_client_flutter",
+      "expected_output": "Explains that at_client is the core Dart SDK (AtCollection, Query, NotificationService). at_client_flutter adds Flutter-specific auth dialogs, KeychainStorage, KeychainAtKeysIo, AtClientPreference, AtClientManager. at_client_flutter re-exports at_client.",
+      "should_trigger": true
+    },
+    {
+      "id": 20,
+      "prompt": "How do I set up routing in my Flutter app using go_router?",
+      "expected_output": "go_router setup — general Flutter navigation, not related to at_client_sdk.",
+      "should_trigger": false
+    }
+  ]
+}
