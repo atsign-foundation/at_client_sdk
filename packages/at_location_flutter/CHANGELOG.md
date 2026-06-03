@@ -1,3 +1,6 @@
+## 3.2.1
+ - deprecation notice
+
 ## 3.2.0
 
 - chore(deps): at_commons ^5.5.0
