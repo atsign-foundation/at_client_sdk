@@ -78,8 +78,16 @@ Android: (android/app/src/main/AndroidManifest.xml)
 <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 ```
 
-at_events_flutter depends on at_location_flutter for the following features:
- - Sending/receiving location, make sure to initialise at_location_flutter inside/outside the at_events_flutter package, if location sharing is needed.
+`at_events_flutter` still depends on the published legacy
+`at_location_flutter` package for its existing event-location integration:
+
+- Sending/receiving location. Initialise `at_location_flutter`
+  inside/outside the `at_events_flutter` package if this legacy event-location
+  flow is needed.
+
+For new app-owned location-sharing code, prefer the official
+`at_client_flutter` example at
+`packages/at_client_flutter/examples/location_sharing`.
  - To render the map, pass [mapKey] to [initializeLocationService], if map is needed.
  - To calculate the ETA, pass [apiKey] to [initializeLocationService], if ETA is needed.
 
@@ -127,5 +135,4 @@ We have a good example with explanation in the [at_events_flutter](https://pub.d
 
 ## Open source usage and contributions
 This is  open source code, so feel free to use it as is, suggest changes or enhancements or create your own version. See [CONTRIBUTING.md](https://github.com/atsign-foundation/at_widgets/blob/trunk/CONTRIBUTING.md) for detailed guidance on how to setup tools, tests and make a pull request.
-
 

@@ -99,6 +99,15 @@ Full design, query-time aggregation semantics, and the seed-DB
 workflow for cross-window chart development are in
 [`examples/dockerstats/README.md`](examples/dockerstats/README.md).
 
+### location_sharing — latest shared location via AtCollection
+
+[`examples/location_sharing/`](examples/location_sharing/README.md)
+is the official app-owned replacement direction for the legacy
+`at_location_flutter` package. It demonstrates time-limited
+`AtCollection<LocationShare>` records, stream-returning service
+methods for `StreamBuilder`, and explicit start / publish / stop
+commands without package-owned map screens, dialogs, or helper UI.
+
 ## Post-authentication initialization
 
 Every auth flow ends the same way: create an `AtClientPreference`, then

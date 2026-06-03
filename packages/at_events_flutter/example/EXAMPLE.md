@@ -35,7 +35,11 @@ As the [at_events_flutter] package has to be initialised, so we initialise it in
 ```
 NOTE: 
 1. Make sure to pass in the [MAP_KEY] and the [API_KEY] in the `.env` file.
-2. The [at_events_flutter] depends on [at_location_flutter] for location sharing, so we use the default value of [initLocation] (true) in [initialiseEventService()].
+2. The [at_events_flutter] package still depends on the published legacy
+   [at_location_flutter] package for this example's location-sharing path, so
+   we use the default value of [initLocation] (true) in
+   [initialiseEventService()]. For new app-owned location-sharing code, see
+   `packages/at_client_flutter/examples/location_sharing`.
 
 We also pass a function [updateEvents] to [initialiseEventService()] in the [streamAlternative] parameter which will give us a list of updated events from the [at_events_flutter] package.
 

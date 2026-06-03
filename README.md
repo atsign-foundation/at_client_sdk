@@ -94,12 +94,14 @@ published on
   management.
 - [at_follows_flutter](./packages/at_follows_flutter): a basic
   social "follows" feature for atSigns.
+- at_location_flutter has been removed. See
+  [location_sharing](./packages/at_client_flutter/examples/location_sharing)
+  for the app-owned `AtCollection<LocationShare>` replacement example, and
+  [deprecated/flutter/at_location_flutter](./deprecated/flutter/at_location_flutter)
+  for the tombstone.
 - [at_invitation_flutter](./deprecated/flutter/at_invitation_flutter):
   deprecated; invite contacts via SMS or email using the
   [`at_client_flutter` snippet](./packages/at_client_flutter/example/lib/snippets/at_invitation.dart).
-- [at_location_flutter](./packages/at_location_flutter): share
-  location between two atSigns and view on
-  [OpenStreetMap](https://www.openstreetmap.org/).
 - [at_login_flutter](./packages/at_login_flutter): zero-trust
   logins using the Atsign Protocol.
 - [at_notify_flutter](./packages/at_notify_flutter): notification
