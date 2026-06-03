@@ -22,7 +22,6 @@ dependencies:
   at_auth: ^3.0.1
   at_client: ^3.11.0
   encrypt: ^5.0.3
-  phosphor_flutter: ^2.1.0
   intl: ^0.20.2
   file_picker: ^11.0.02
   path: ^1.9.1
