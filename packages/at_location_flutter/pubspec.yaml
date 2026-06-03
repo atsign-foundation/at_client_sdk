@@ -1,7 +1,7 @@
 name: at_location_flutter
 description: A Flutter plugin project to share locations between two atSigns and
   track them on OSM (OpenStreetMap).
-version: 3.2.0
+version: 3.2.1
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_location_flutter
 homepage: https://atsign.com/
 documentation: https://docs.atsign.com/
