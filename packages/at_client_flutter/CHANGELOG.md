@@ -2,6 +2,8 @@
 
 ## 1.1.2
 
+- fix: prevent blank dialog box flashing during login
+- fix: remove phosphor_flutter dependency which fails to build on Flutter 3.44+, now using a built-in icon
 - docs(examples): improved READMEs, added dockerstats flutter app
 
 ## 1.1.1
