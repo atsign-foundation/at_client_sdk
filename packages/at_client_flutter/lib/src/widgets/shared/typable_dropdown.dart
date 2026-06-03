@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 class TypableDropdown extends StatelessWidget {
   final List<String> items;
@@ -91,7 +90,7 @@ class TypableDropdown extends StatelessWidget {
                     controller.clear();
                     focusNode.requestFocus();
                   },
-                  child: PhosphorIcon(PhosphorIcons.caretDown()),
+                  child: Icon(Icons.keyboard_arrow_down),
                 ),
               ),
           onChanged: (value) {
