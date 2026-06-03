@@ -2,6 +2,12 @@
 
 [![pub package](https://img.shields.io/pub/v/at_location_flutter)](https://pub.dev/packages/at_location_flutter) [![](https://img.shields.io/static/v1?label=Backend&message=atPlatform&color=<COLOR>)](https://atsign.dev) [![](https://img.shields.io/static/v1?label=Publisher&message=Atsign&color=F05E3E)](https://atsign.com) [![gitHub license](https://img.shields.io/badge/license-BSD3-blue.svg)](./LICENSE)
 
+## DEPRECATION NOTICE
+
+This package is deprecated and is no longer recommended for new Flutter apps.
+For current examples of building Flutter apps with the Atsign SDK, see the location_sharing example
+[`at_client_flutter/examples/location_sharing`](../at_client_flutter/examples/location_sharing).
+
 ## Overview
 
 The at_location_flutter package is for Flutter developers who want to implement location feature in their apps. This package provides the feature to share and receive location between two atsigns.
