@@ -5,7 +5,7 @@ as a maintained Flutter package.
 
 Replacement:
 
-`packages/at_client_flutter/example/lib/snippets/at_backup_key.dart`
+[at_client_flutter/example/lib/snippets](../../../packages/at_client_flutter/example/lib/snippets/at_backup_key.dart)
 
 Last published package:
 
