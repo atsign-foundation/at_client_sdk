@@ -21,7 +21,6 @@ jobs:
       matrix:
         package:
           - at_chat_flutter
-          - at_common_flutter
           - at_contacts_flutter
           - at_contacts_group_flutter
           - at_events_flutter
