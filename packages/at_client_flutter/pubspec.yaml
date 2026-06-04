@@ -1,6 +1,6 @@
 name: at_client_flutter
 description: A Flutter extension to the at_client library which adds support for mobile, desktop and IoT devices.
-version: 1.1.2-rc.1
+version: 1.1.2
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client_flutter
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
@@ -22,7 +22,6 @@ dependencies:
   at_auth: ^3.0.1
   at_client: ^3.11.0
   encrypt: ^5.0.3
-  phosphor_flutter: ^2.1.0
   intl: ^0.20.2
   file_picker: ^11.0.02
   path: ^1.9.1
