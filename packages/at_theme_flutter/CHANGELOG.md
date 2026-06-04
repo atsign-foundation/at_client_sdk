@@ -1,3 +1,6 @@
+## DEPRECATION NOTICE
+- deprecating in favour of using Material3 themes in `at_client_flutter`.
+
 ## 1.1.0
 
 - chore(deps): at_client_mobile ^3.3.0
