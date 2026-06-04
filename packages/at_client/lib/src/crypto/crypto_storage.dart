@@ -11,23 +11,23 @@ class CryptoSecondaryStorage implements CryptoStorage {
 
   CryptoSecondaryStorage(this._atClient);
 
-  @override
   Future<String?> readLocal(CryptoStorageKey key) {
     return _read(_atClient.getLocalSecondary(), key);
   }
 
-  @override
   Future<void> writeLocal(CryptoStorageKey key, String value) {
     return _write(_atClient.getLocalSecondary(), key, value);
   }
 
+  /// Read CryptoStorageKey from remote secondary
   @override
-  Future<String?> readRemote(CryptoStorageKey key) {
+  Future<String?> read(CryptoStorageKey key) {
     return _read(_atClient.getRemoteSecondary(), key);
   }
 
+  /// Write CryptoStorageKey from remote secondary
   @override
-  Future<void> writeRemote(CryptoStorageKey key, String value) {
+  Future<void> write(CryptoStorageKey key, String value) {
     return _write(_atClient.getRemoteSecondary(), key, value);
   }
 

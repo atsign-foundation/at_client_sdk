@@ -151,13 +151,9 @@ class CryptoProviderNotFoundContext {
 
 /// Abstract for persistent crypto keys that live in the at_servers
 abstract interface class CryptoStorage {
-  Future<String?> readLocal(CryptoStorageKey key);
+  Future<String?> read(CryptoStorageKey key);
 
-  Future<void> writeLocal(CryptoStorageKey key, String value);
-
-  Future<String?> readRemote(CryptoStorageKey key);
-
-  Future<void> writeRemote(CryptoStorageKey key, String value);
+  Future<void> write(CryptoStorageKey key, String value);
 }
 
 class CryptoStorageKey {
