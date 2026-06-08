@@ -1,3 +1,13 @@
+## 1.2.0
+
+- **DEPRECATED**: This is the final minor release of
+  `at_sync_ui_flutter`. New Flutter apps should use `AtCollection<T>` and
+  `Query.watch()` from `at_client` instead of foreground sync progress UI.
+- **DOCS**: Added migration guidance pointing to the collection CLI examples
+  in `packages/at_client/example/bin/collections_*.dart` and the Flutter
+  todos reference app in `packages/at_client_flutter/examples/todos`.
+- **CHORE**: Marked the package as deprecated in docs and pubspec metadata while keeping existing APIs available for compatibility.
+
 ## 1.1.0
 
 - chore(deps): at_client ^3.7.0
