@@ -65,6 +65,18 @@ abstract class AtHashingAlgorithm<K, V> {
 /// recipient's public key, the recipient via [decapsulate] using their
 /// secret key and the ciphertext sent by the sender.
 abstract class AtKemAlgorithm {
+  /// Generate a fresh key pair.
+  ///
+  /// Implementations document their key-encoding contract — e.g. the OpenSSL
+  /// FFI backend returns an opaque process-lifetime handle as `secretKey`,
+  /// while pure-Dart implementations return raw bytes.
+  ///
+  /// Optionally accepts a 64-byte deterministic [seed] (d||z) — testing
+  /// only. Implementations that cannot honour a seed (e.g. those backed by
+  /// libraries that do not expose deterministic keygen) should ignore it.
+  FutureOr<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair(
+      [Uint8List? seed]);
+
   /// Encapsulate a fresh shared secret against [publicKey].
   ///
   /// Returns the [ciphertext] to transmit to the holder of the matching
@@ -79,6 +91,9 @@ abstract class AtKemAlgorithm {
 
 /// Interface for a Diffie–Hellman key agreement primitive such as X25519.
 abstract class AtKeyAgreementAlgorithm {
+  /// Generate a fresh key pair.
+  FutureOr<({Uint8List publicKey, Uint8List privateKey})> generateKeyPair();
+
   /// Compute the shared secret from [privateKey] and [peerPublicKey].
   FutureOr<Uint8List> dh(Uint8List privateKey, Uint8List peerPublicKey);
 }
