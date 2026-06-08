@@ -19,7 +19,6 @@ final class X25519PureDartAlgo implements AtKeyAgreementAlgorithm {
   /// Generate a fresh X25519 key pair.
   ///
   /// Returns `(publicKey: 32 bytes, privateKey: 32 bytes)`.
-  @override
   Future<({Uint8List publicKey, Uint8List privateKey})>
       generateKeyPair() async {
     final SimpleKeyPair kp = await _x25519.newKeyPair();

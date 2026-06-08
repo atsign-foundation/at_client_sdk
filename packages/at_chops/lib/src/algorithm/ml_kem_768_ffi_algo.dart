@@ -94,13 +94,7 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
   ///
   /// Returns `(publicKey: 1184 raw bytes, secretKey: 8-byte opaque handle)`.
   /// The handle is **not serializable** — see class docs.
-  ///
-  /// The [seed] parameter from [AtKemAlgorithm] is **ignored**: the OpenSSL
-  /// EVP ML-KEM API does not expose deterministic keygen. Tests requiring a
-  /// fixed seed should use [MlKem768PureDartAlgo] instead.
-  @override
-  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair(
-      [Uint8List? seed]) async {
+  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair() async {
     final Pointer<Utf8> algName = 'ML-KEM-768'.toNativeUtf8();
     final Pointer<EVP_PKEY_CTX> ctx =
         _ctxNewFromName(nullptr, algName, nullptr);
