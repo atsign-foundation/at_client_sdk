@@ -59,6 +59,7 @@ final class X25519FfiAlgo implements AtKeyAgreementAlgorithm {
   /// Generate a fresh X25519 key pair via OpenSSL.
   ///
   /// Returns `(publicKey: 32 bytes, privateKey: 32 bytes)`.
+  @override
   Future<({Uint8List publicKey, Uint8List privateKey})>
       generateKeyPair() async {
     final Pointer<Utf8> algName = 'X25519'.toNativeUtf8();
