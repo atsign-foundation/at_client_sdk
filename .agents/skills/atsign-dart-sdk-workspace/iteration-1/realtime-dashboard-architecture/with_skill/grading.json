@@ -1,0 +1,25 @@
+{
+  "assertion_results": [
+    {
+      "text": "Recommends Notifications + SQLite (not AtCollection) for this use case",
+      "passed": true,
+      "evidence": "\"Do not use `AtCollection<T>` for this use case. Use the **Notifications + SQLite** pattern instead.\" and \"Verdict: Notifications + SQLite. `AtCollection<T>` is not the right tool here\""
+    },
+    {
+      "text": "Explains why AtCollection is unsuitable for high-frequency data",
+      "passed": true,
+      "evidence": "Dedicated 'Why Not AtCollection?' section with comparison table: \"Medium-high volume; collections are optimized for hundreds to thousands of items, not high-frequency streams\" and \"`AtCollection` syncs items to atServer and across devices — not what you want for ephemeral telemetry\""
+    },
+    {
+      "text": "Mentions the dockerstats pattern or NotificationService.send()",
+      "passed": true,
+      "evidence": "\"The dockerstats example (`packages/at_client_flutter/examples/dockerstats/`) demonstrates it end-to-end.\" and code snippet showing `await atClient.notificationService.send(...)`"
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "failed": 0,
+    "total": 3,
+    "pass_rate": 1.0
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "assertion_results": [
+    {
+      "text": "Mentions AtKeysFileDialog.show()",
+      "passed": true,
+      "evidence": "final atKeysIo = await AtKeysFileDialog.show(context);"
+    },
+    {
+      "text": "Mentions PkamDialog.show()",
+      "passed": true,
+      "evidence": "final response = await PkamDialog.show(\n  context,\n  request: authRequest,\n  backupKeys: [KeychainAtKeysIo()],\n);"
+    },
+    {
+      "text": "Includes AtClientManager.getInstance().setCurrentAtSign() or equivalent setup",
+      "passed": true,
+      "evidence": "await AtClientManager.getInstance().setCurrentAtSign(\n    response.atSign,\n    'my_namespace',\n    acp,\n    enrollmentId: response.enrollmentId,\n    atChops:  response.atChops,\n    atLookUp: response.atLookUp,\n  );"
+    },
+    {
+      "text": "Does NOT use AtAuthRequest as the _setupAtClient parameter type (should be AuthRequest)",
+      "passed": true,
+      "evidence": "Future<void> _setupAtClient(\n  AuthRequest authRequest,\n  AuthResponse response,\n) async {"
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1.0
+  }
+}

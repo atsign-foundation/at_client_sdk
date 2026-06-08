@@ -1,0 +1,30 @@
+{
+  "assertion_results": [
+    {
+      "text": "Recommends watchWithTree (not just watchWithSub)",
+      "passed": true,
+      "evidence": "\"Use `watchWithTree` with nested `SubSpec` declarations. This is the correct tool whenever you have three or more levels — `watchWithSub` only handles two levels (parent + one child type).\""
+    },
+    {
+      "text": "Shows SubSpec<Comment> and SubSpec<Reply> nested configuration",
+      "passed": true,
+      "evidence": "SubSpec<Comment>(subName: 'comments', ..., children: [SubSpec<Reply>(subName: 'replies', ...)]) shown in Step 4 and again in Flutter Integration section"
+    },
+    {
+      "text": "Mentions TreeNode result shape",
+      "passed": true,
+      "evidence": "\"watchWithTree returns Stream<List<TreeNode<Post>>>. Each TreeNode<T> has: node.parent — the CItem<T> for this level; node.branches — a Map<String, List<TreeNode<dynamic>>> keyed by subName\""
+    },
+    {
+      "text": "Explains ancestry ordering: ancestry.last is the direct parent",
+      "passed": false,
+      "evidence": "not found — the response uses node.parent and node.branches to describe TreeNode structure but never mentions an ancestry property or the rule that ancestry.last is the direct parent"
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "failed": 1,
+    "total": 4,
+    "pass_rate": 0.75
+  }
+}

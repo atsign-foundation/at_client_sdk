@@ -1,0 +1,30 @@
+{
+  "assertion_results": [
+    {
+      "text": "Shows .query().watch() for reactive results",
+      "passed": true,
+      "evidence": "todos.query().where((item) => !item.obj.done).orderBy((item) => item.obj.due).watch();"
+    },
+    {
+      "text": "Includes .where() clause for filtering done=false",
+      "passed": true,
+      "evidence": ".where((item) => !item.obj.done)      // filter: done == false"
+    },
+    {
+      "text": "Includes .orderBy() for sorting by due date",
+      "passed": true,
+      "evidence": ".orderBy((item) => item.obj.due)      // sort ascending by due date"
+    },
+    {
+      "text": "Mentions that queries run on-device (not server-side)",
+      "passed": true,
+      "evidence": "No server-side filtering | Queries run on-device against the local synced keystore (E2E encryption means the atServer cannot filter plaintext)"
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1.0
+  }
+}

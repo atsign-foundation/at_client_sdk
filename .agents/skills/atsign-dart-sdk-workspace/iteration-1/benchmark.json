@@ -1,0 +1,106 @@
+{
+  "metadata": {
+    "skill_name": "atsign-dart-sdk",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "<model-name>",
+    "analyzer_model": "<model-name>",
+    "timestamp": "2026-06-04T16:02:38Z",
+    "evals_run": [
+      "apkam-enrollment",
+      "at-client-vs-flutter",
+      "at-common-flutter-deprecated",
+      "deprecated-atcollectionmodel",
+      "fetch-on-subitem-updated",
+      "flutter-auth-atkeys-file",
+      "migrate-from-put-get",
+      "reactive-query-streambuilder",
+      "realtime-dashboard-architecture",
+      "sensor-data-sharing",
+      "store-share-todos",
+      "unit-tests-without-atserver",
+      "watch-with-tree-hierarchy"
+    ],
+    "runs_per_configuration": 1
+  },
+  "runs": [
+    {
+      "eval": "apkam-enrollment",
+      "with_skill": { "pass_rate": 1.0 },
+      "without_skill": { "pass_rate": 0.25 }
+    },
+    {
+      "eval": "at-client-vs-flutter",
+      "with_skill": { "pass_rate": 0.75 },
+      "without_skill": { "pass_rate": 0.75 }
+    },
+    {
+      "eval": "at-common-flutter-deprecated",
+      "with_skill": { "pass_rate": 1.0 },
+      "without_skill": { "pass_rate": 0.6667 }
+    },
+    {
+      "eval": "deprecated-atcollectionmodel",
+      "with_skill": { "pass_rate": 1.0 },
+      "without_skill": { "pass_rate": 0.0 }
+    },
+    {
+      "eval": "fetch-on-subitem-updated",
+      "with_skill": { "pass_rate": 0.75 },
+      "without_skill": { "pass_rate": 0.0 }
+    },
+    {
+      "eval": "flutter-auth-atkeys-file",
+      "with_skill": { "pass_rate": 1.0 },
+      "without_skill": { "pass_rate": 0.5 }
+    },
+    {
+      "eval": "migrate-from-put-get",
+      "with_skill": { "pass_rate": 0.6667 },
+      "without_skill": { "pass_rate": 1.0 }
+    },
+    {
+      "eval": "reactive-query-streambuilder",
+      "with_skill": { "pass_rate": 1.0 },
+      "without_skill": { "pass_rate": 0.5 }
+    },
+    {
+      "eval": "realtime-dashboard-architecture",
+      "with_skill": { "pass_rate": 1.0 },
+      "without_skill": { "pass_rate": 0.6667 }
+    },
+    {
+      "eval": "sensor-data-sharing",
+      "with_skill": { "pass_rate": 1.0 },
+      "without_skill": { "pass_rate": 1.0 }
+    },
+    {
+      "eval": "store-share-todos",
+      "with_skill": { "pass_rate": 1.0 },
+      "without_skill": { "pass_rate": 0.0 }
+    },
+    {
+      "eval": "unit-tests-without-atserver",
+      "with_skill": { "pass_rate": 1.0 },
+      "without_skill": { "pass_rate": 0.0 }
+    },
+    {
+      "eval": "watch-with-tree-hierarchy",
+      "with_skill": { "pass_rate": 0.75 },
+      "without_skill": { "pass_rate": 0.0 }
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": 0.9167
+    },
+    "without_skill": {
+      "pass_rate": 0.4103
+    },
+    "delta": {
+      "pass_rate": "+0.5064",
+      "time_seconds": "+0.0",
+      "tokens": "+0"
+    }
+  },
+  "notes": []
+}

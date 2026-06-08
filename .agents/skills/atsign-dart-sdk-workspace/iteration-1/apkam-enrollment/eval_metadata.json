@@ -1,0 +1,7 @@
+{
+  "eval_id": 10,
+  "eval_name": "apkam-enrollment",
+  "prompt": "How do I set up APKAM enrollment so a user can add a new device to their existing atSign?",
+  "expected_output": "Shows Flow 4: AtSignSelectionDialog.show() then ApkamActivationDialog.show() with atSign, rootDomain, appName, deviceName, namespaces. Then PkamDialog.show(). Includes _setupAtClient() post-auth.",
+  "assertions": ["Mentions ApkamActivationDialog.show()","Mentions PkamDialog.show() after enrollment","Includes atSign, rootDomain, appName, deviceName, namespaces parameters","Includes _setupAtClient() or AtClientManager post-auth setup"]
+}

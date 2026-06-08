@@ -1,0 +1,7 @@
+{
+  "eval_id": 6,
+  "eval_name": "realtime-dashboard-architecture",
+  "prompt": "I'm building a real-time dashboard that receives Docker container stats from another atSign every 2 seconds. Should I use AtCollection or something else?",
+  "expected_output": "Recommends Notifications + SQLite (not AtCollection) for high-frequency telemetry. Explains AtCollection is for discrete, addressable records. References the dockerstats pattern.",
+  "assertions": ["Recommends Notifications + SQLite (not AtCollection) for this use case","Explains why AtCollection is unsuitable for high-frequency data","Mentions the dockerstats pattern or NotificationService.send()"]
+}

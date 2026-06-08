@@ -1,0 +1,30 @@
+{
+  "assertion_results": [
+    {
+      "text": "Correctly explains at_client as the core Dart SDK",
+      "passed": true,
+      "evidence": "at_client is the **core, platform-agnostic Dart library** for interacting with the atProtocol. It is designed to work in any Dart environment, including Pure Dart command-line applications, Server-side Dart programs..."
+    },
+    {
+      "text": "Correctly explains at_client_flutter adds Flutter-specific features (auth dialogs, keychain)",
+      "passed": false,
+      "evidence": "Response mentions 'utilities for handling platform-specific secure storage, biometric authentication prompts' with hedged language ('May include') but does not specifically mention keychain. The disclaimer note at the end also flags that 'The exact API surface...may differ from what is described above', undermining confidence in these specifics."
+    },
+    {
+      "text": "Mentions that at_client_flutter re-exports at_client",
+      "passed": true,
+      "evidence": "Depends on `at_client` (re-exports its API)"
+    },
+    {
+      "text": "Does NOT confuse the two or say they are interchangeable",
+      "passed": true,
+      "evidence": "The response clearly distinguishes the packages via a summary table and a 'When to Use Which' section. It states 'Use at_client_flutter when building a Flutter application...It provides the same core functionality as at_client plus the Flutter-specific plumbing' — treating them as complementary but distinct."
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "failed": 1,
+    "total": 4,
+    "pass_rate": 0.75
+  }
+}

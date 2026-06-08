@@ -1,0 +1,30 @@
+{
+  "assertion_results": [
+    {
+      "text": "Mentions AtKeysFileDialog.show()",
+      "passed": false,
+      "evidence": "not found — the response uses OnboardingService.authenticate(), OnboardingWidget, and FilePicker.platform.pickFiles() instead; AtKeysFileDialog is never referenced"
+    },
+    {
+      "text": "Mentions PkamDialog.show()",
+      "passed": false,
+      "evidence": "not found — PKAM is discussed conceptually but PkamDialog.show() is never referenced"
+    },
+    {
+      "text": "Includes AtClientManager.getInstance().setCurrentAtSign() or equivalent setup",
+      "passed": true,
+      "evidence": "\"final atClientManager = await AtClientManager.getInstance().setCurrentAtSign(atSign, 'my_app', preference);\" (line 119-120) and also referenced in the Important Notes section"
+    },
+    {
+      "text": "Does NOT use AtAuthRequest as the _setupAtClient parameter type (should be AuthRequest)",
+      "passed": true,
+      "evidence": "neither AtAuthRequest nor AuthRequest appears anywhere in the response; no incorrect parameter type was used"
+    }
+  ],
+  "summary": {
+    "passed": 2,
+    "failed": 2,
+    "total": 4,
+    "pass_rate": 0.5
+  }
+}

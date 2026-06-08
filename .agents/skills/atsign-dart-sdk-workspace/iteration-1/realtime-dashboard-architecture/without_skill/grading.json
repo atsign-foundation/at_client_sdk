@@ -1,0 +1,25 @@
+{
+  "assertion_results": [
+    {
+      "text": "Recommends Notifications + SQLite (not AtCollection) for this use case",
+      "passed": false,
+      "evidence": "Response recommends notifications via notificationService.subscribe() and advises against AtCollection, but SQLite is never mentioned. The response recommends atClient.put() with ttr=-1 caching instead."
+    },
+    {
+      "text": "Explains why AtCollection is unsuitable for high-frequency data",
+      "passed": true,
+      "evidence": "\"Each update involves a full object lifecycle (serialize, put, notify). It is optimized for correctness and persistence, not throughput. At 2-second intervals across multiple containers, you are dealing with a stream of ephemeral telemetry values — not a growing collection of records.\""
+    },
+    {
+      "text": "Mentions the dockerstats pattern or NotificationService.send()",
+      "passed": true,
+      "evidence": "Uses 'dockerstats.your_app' as the namespace throughout: '..namespace = \\'dockerstats.your_app\\'' and 'container\\\\..*\\\\.stats\\\\.dockerstats\\\\.your_app@' in the subscribe regex. The dockerstats pattern is referenced explicitly."
+    }
+  ],
+  "summary": {
+    "passed": 2,
+    "failed": 1,
+    "total": 3,
+    "pass_rate": 0.6667
+  }
+}

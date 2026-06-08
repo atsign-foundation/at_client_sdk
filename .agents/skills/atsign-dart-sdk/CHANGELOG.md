@@ -2,11 +2,10 @@
 
 All notable changes to this skill are documented here.
 
-## [1.0.0] — 2026-06-02
+## 1.0.0 — 2026-06-02
 
 Initial release.
 
-### Coverage
 - `AtCollection<T>` — full CRUD, `CItem<T>`, `Query<T>`, sub-collections, read receipts, event streams
 - `wherePath` / `PathField<T>` typed predicates
 - `watchWithTree` / `watchWithSub` for deep multi-level hierarchies

@@ -1,0 +1,7 @@
+{
+  "eval_id": 2,
+  "eval_name": "deprecated-atcollectionmodel",
+  "prompt": "How do I use AtCollectionModel to store data in my Dart app?",
+  "expected_output": "Warns that AtCollectionModel is deprecated with @Deprecated annotation. Redirects to the modern AtCollection<T> API via atClient.collection(). Shows the correct pattern.",
+  "assertions": ["Warns that AtCollectionModel is deprecated","Mentions the @Deprecated annotation or deprecation message","Redirects to AtCollection<T> via atClient.collection()","Does NOT provide AtCollectionModel usage instructions"]
+}

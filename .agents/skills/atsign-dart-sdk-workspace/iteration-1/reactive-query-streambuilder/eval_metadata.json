@@ -1,0 +1,7 @@
+{
+  "eval_id": 4,
+  "eval_name": "reactive-query-streambuilder",
+  "prompt": "I want to query my todos reactively in a Flutter StreamBuilder — only show items where done=false, sorted by due date.",
+  "expected_output": "Shows todos.query().where((t) => !t.obj.done).orderBy((t) => t.obj.due).watch() inside StreamBuilder. Mentions on-device execution. May mention wherePath as a typed alternative.",
+  "assertions": ["Shows .query().watch() for reactive results","Includes .where() clause for filtering done=false","Includes .orderBy() for sorting by due date","Mentions that queries run on-device (not server-side)"]
+}

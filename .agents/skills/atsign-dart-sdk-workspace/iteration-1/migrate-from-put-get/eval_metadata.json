@@ -1,0 +1,7 @@
+{
+  "eval_id": 11,
+  "eval_name": "migrate-from-put-get",
+  "prompt": "I'm using at_client in my app and I already have existing data stored with atClient.put() / atClient.get(). Can I migrate to AtCollection without breaking anything?",
+  "expected_output": "Acknowledges that migration guide is coming in skill v2.0. Explains that AtCollection and raw put/get use the same underlying atServer keystore but with different key naming conventions. Advises caution until migration guide is available.",
+  "assertions": ["Acknowledges the migration is possible but non-trivial","Mentions that a migration guide is planned (v2.0) or advises caution","Does NOT give incorrect advice that migration is seamless/automatic"]
+}

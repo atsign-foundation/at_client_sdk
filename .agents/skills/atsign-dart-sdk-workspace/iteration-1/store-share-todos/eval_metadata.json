@@ -1,0 +1,7 @@
+{
+  "eval_id": 1,
+  "eval_name": "store-share-todos",
+  "prompt": "I'm building a Flutter app and want to store todos that can be shared with other users. Which packages do I need and how do I create a todo?",
+  "expected_output": "Recommends at_client and at_client_flutter. Shows atClient.collection<Todo>() with fromJson/typeTag, then collection.create(obj: todo, sharedWith: {'@bob'.toAtsign()}). Does NOT suggest AtCollectionModel.",
+  "assertions": ["Recommends at_client and/or at_client_flutter packages","Shows atClient.collection<T>() call (not AtCollectionModel)","Includes fromJson and typeTag parameters","Demonstrates collection.create() with sharedWith parameter","Uses .toAtsign() or Atsign type for the recipient"]
+}

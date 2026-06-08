@@ -1,0 +1,7 @@
+{
+  "eval_id": 5,
+  "eval_name": "at-common-flutter-deprecated",
+  "prompt": "Should I use at_common_flutter in my new Flutter app? I saw it mentioned somewhere.",
+  "expected_output": "Says no — at_common_flutter is deprecated. Recommends at_client_flutter instead.",
+  "assertions": ["Clearly says NOT to use at_common_flutter","States it is deprecated","Recommends at_client_flutter instead"]
+}

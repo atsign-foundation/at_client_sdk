@@ -1,0 +1,7 @@
+{
+  "eval_id": 3,
+  "eval_name": "flutter-auth-atkeys-file",
+  "prompt": "My Flutter app needs to let users sign in with their atSign. What's the flow for an existing user who has a .atKeys file?",
+  "expected_output": "Shows Flow 2: AtKeysFileDialog.show() then PkamDialog.show() with request and backupKeys. Includes _setupAtClient() with AtClientManager.getInstance().setCurrentAtSign(). Uses AuthRequest (not AtAuthRequest) as the function parameter type.",
+  "assertions": ["Mentions AtKeysFileDialog.show()","Mentions PkamDialog.show()","Includes AtClientManager.getInstance().setCurrentAtSign() or equivalent setup","Does NOT use AtAuthRequest as the _setupAtClient parameter type (should be AuthRequest)"]
+}

@@ -1,0 +1,8 @@
+{
+  "assertion_results": [
+    { "text": "Clearly says NOT to use at_common_flutter", "passed": true, "evidence": "\"No, you should not use `at_common_flutter` in your new Flutter app.\" and \"`at_common_flutter` is a hard \"never add\" — not just discouraged. Do not add it to `pubspec.yaml` in any new or existing project.\"" },
+    { "text": "States it is deprecated", "passed": true, "evidence": "\"The package is officially deprecated. Its own README states it is *\"Deprecated in favour of `at_client_flutter`.\"*\"" },
+    { "text": "Recommends at_client_flutter instead", "passed": true, "evidence": "\"`at_client_flutter` is the direct replacement for `at_common_flutter`. It provides everything you need for a Flutter app\"" }
+  ],
+  "summary": { "passed": 3, "failed": 0, "total": 3, "pass_rate": 1.0 }
+}

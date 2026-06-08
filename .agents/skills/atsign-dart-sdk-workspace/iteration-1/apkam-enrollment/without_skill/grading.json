@@ -1,0 +1,30 @@
+{
+  "assertion_results": [
+    {
+      "text": "Mentions ApkamActivationDialog.show()",
+      "passed": false,
+      "evidence": "not found"
+    },
+    {
+      "text": "Mentions PkamDialog.show() after enrollment",
+      "passed": false,
+      "evidence": "not found"
+    },
+    {
+      "text": "Includes atSign, rootDomain, appName, deviceName, namespaces parameters",
+      "passed": true,
+      "evidence": "atSign: '@example', ..rootDomain = 'root.atsign.org', appName: 'MyNewApp', deviceName: 'MyNewPhone', namespaces: { 'myapp': 'rw' }"
+    },
+    {
+      "text": "Includes _setupAtClient() or AtClientManager post-auth setup",
+      "passed": false,
+      "evidence": "AtClientManager.getInstance() appears at line 90 but only in the owning-device approval context, not as post-auth setup for the new device after enrollment. No _setupAtClient() call exists anywhere. The new-device post-auth section uses atAuth.authenticate() with no AtClientManager initialization."
+    }
+  ],
+  "summary": {
+    "passed": 1,
+    "failed": 3,
+    "total": 4,
+    "pass_rate": 0.25
+  }
+}
