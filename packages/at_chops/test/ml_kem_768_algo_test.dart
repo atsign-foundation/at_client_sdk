@@ -7,16 +7,14 @@ import 'package:test/test.dart';
 
 void main() {
   group('ML-KEM-768 pure-Dart', () {
-    final algo = MlKem768PureDartAlgo.instance;
-
     test('encapsulate/decapsulate round-trip yields matching shared secrets',
         () async {
-      final raw = await algo.generateKeyPair();
       final AtMlKem768KeyPair kp =
-          AtMlKem768KeyPair.fromBytes(raw.publicKey, raw.secretKey);
+          await AtChopsUtil.generateMlKem768KeyPair();
       final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
       final Uint8List priv = base64Decode(kp.atPrivateKey.privateKey);
 
+      final algo = MlKem768PureDartAlgo.instance;
       final enc = await algo.encapsulate(pub);
       final Uint8List recovered = await algo.decapsulate(priv, enc.ciphertext);
 
@@ -25,9 +23,8 @@ void main() {
     });
 
     test('Generated key pair has FIPS 203 key sizes', () async {
-      final raw = await algo.generateKeyPair();
       final AtMlKem768KeyPair kp =
-          AtMlKem768KeyPair.fromBytes(raw.publicKey, raw.secretKey);
+          await AtChopsUtil.generateMlKem768KeyPair();
       expect(base64Decode(kp.atPublicKey.publicKey).length, equals(1184));
       expect(base64Decode(kp.atPrivateKey.privateKey).length, equals(2400));
     });
@@ -35,12 +32,12 @@ void main() {
     test('Decapsulating tampered ciphertext does not throw and (per FIPS 203)'
         ' returns an implicit-rejection secret different from the real one',
         () async {
-      final raw = await algo.generateKeyPair();
       final AtMlKem768KeyPair kp =
-          AtMlKem768KeyPair.fromBytes(raw.publicKey, raw.secretKey);
+          await AtChopsUtil.generateMlKem768KeyPair();
       final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
       final Uint8List priv = base64Decode(kp.atPrivateKey.privateKey);
 
+      final algo = MlKem768PureDartAlgo.instance;
       final enc = await algo.encapsulate(pub);
 
       final Uint8List tampered = Uint8List.fromList(enc.ciphertext);
@@ -76,9 +73,8 @@ void main() {
     test(
       'FFI sender can encapsulate against a pure-Dart-generated public key',
       () async {
-        final raw = await MlKem768PureDartAlgo.instance.generateKeyPair();
         final AtMlKem768KeyPair kp =
-            AtMlKem768KeyPair.fromBytes(raw.publicKey, raw.secretKey);
+            await AtChopsUtil.generateMlKem768KeyPair();
         final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
         final Uint8List priv = base64Decode(kp.atPrivateKey.privateKey);
 
