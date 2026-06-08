@@ -3,9 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/src/exception/at_auth_exceptions.dart';
-import 'package:at_auth/src/keys/at_keys.dart';
-import 'package:at_auth/src/keys/at_keys_io_impl.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -15,7 +12,7 @@ void main() {
   String writeFilePath = 'test/data/@bober_key.atKeys';
   late String homeDirKeys;
 
-  group('FileAtKeysIo tests', () {
+  group('FileAtKeysIo legacy-format compatibility tests', () {
     setUp(() {
       var homeDir = getHomeDirectory();
       homeDirKeys = '$homeDir/.atsign/keys/@alice🛠_key.atKeys';
