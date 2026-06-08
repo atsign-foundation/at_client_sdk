@@ -7,17 +7,22 @@ import 'package:test/test.dart';
 
 void main() {
   group('X25519 pure-Dart', () {
+    final algo = X25519PureDartAlgo.instance;
+
     test('DH round-trip: Alice and Bob derive the same shared secret',
         () async {
-      final AtX25519KeyPair alice = await AtChopsUtil.generateX25519KeyPair();
-      final AtX25519KeyPair bob = await AtChopsUtil.generateX25519KeyPair();
+      final aliceRaw = await algo.generateKeyPair();
+      final bobRaw = await algo.generateKeyPair();
+      final AtX25519KeyPair alice =
+          AtX25519KeyPair.fromBytes(aliceRaw.publicKey, aliceRaw.privateKey);
+      final AtX25519KeyPair bob =
+          AtX25519KeyPair.fromBytes(bobRaw.publicKey, bobRaw.privateKey);
 
       final Uint8List alicePub = base64Decode(alice.atPublicKey.publicKey);
       final Uint8List alicePriv = base64Decode(alice.atPrivateKey.privateKey);
       final Uint8List bobPub = base64Decode(bob.atPublicKey.publicKey);
       final Uint8List bobPriv = base64Decode(bob.atPrivateKey.privateKey);
 
-      final algo = X25519PureDartAlgo.instance;
       final Uint8List ss1 = await algo.dh(alicePriv, bobPub);
       final Uint8List ss2 = await algo.dh(bobPriv, alicePub);
 
@@ -26,7 +31,9 @@ void main() {
     });
 
     test('Generated key pair has 32-byte public and private keys', () async {
-      final AtX25519KeyPair kp = await AtChopsUtil.generateX25519KeyPair();
+      final raw = await algo.generateKeyPair();
+      final AtX25519KeyPair kp =
+          AtX25519KeyPair.fromBytes(raw.publicKey, raw.privateKey);
       expect(base64Decode(kp.atPublicKey.publicKey).length, equals(32));
       expect(base64Decode(kp.atPrivateKey.privateKey).length, equals(32));
     });
@@ -60,16 +67,13 @@ void main() {
         final pureAlgo = X25519PureDartAlgo.instance;
         final ffiAlgo = X25519FfiAlgo.fromLib(lib!);
 
-        final AtX25519KeyPair alice =
-            await AtChopsUtil.generateX25519KeyPair();
-        final AtX25519KeyPair bob = await AtChopsUtil.generateX25519KeyPair();
+        final aliceRaw = await pureAlgo.generateKeyPair();
+        final bobRaw = await pureAlgo.generateKeyPair();
 
-        final Uint8List alicePriv =
-            base64Decode(alice.atPrivateKey.privateKey);
-        final Uint8List bobPub = base64Decode(bob.atPublicKey.publicKey);
-
-        final Uint8List ssPure = await pureAlgo.dh(alicePriv, bobPub);
-        final Uint8List ssFfi = await ffiAlgo.dh(alicePriv, bobPub);
+        final Uint8List ssPure =
+            await pureAlgo.dh(aliceRaw.privateKey, bobRaw.publicKey);
+        final Uint8List ssFfi =
+            await ffiAlgo.dh(aliceRaw.privateKey, bobRaw.publicKey);
 
         expect(ssPure, equals(ssFfi));
       },
