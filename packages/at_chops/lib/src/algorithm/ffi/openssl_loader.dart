@@ -1,6 +1,8 @@
 import 'dart:ffi';
 import 'dart:io';
 
+import 'package:ffi/ffi.dart';
+
 /// Candidate libcrypto paths tried in order when [_envVar] is unset or fails.
 const List<String> _candidates = [
   // macOS — Homebrew Apple Silicon
@@ -34,6 +36,37 @@ DynamicLibrary? tryLoadLibCrypto() {
     if (lib != null) return lib;
   }
   return null;
+}
+
+/// Returns `true` when [lib] supports the ML-KEM-768 algorithm.
+///
+/// ML-KEM-768 was added to the OpenSSL default provider in OpenSSL 3.3.
+/// Older 3.x builds (e.g. the 3.0.x shipped with Ubuntu 22.04/24.04) load
+/// fine but reject `EVP_PKEY_CTX_new_from_name("ML-KEM-768", ...)`.
+/// Call this before constructing [MlKem768FfiAlgo] to gate FFI tests or
+/// runtime fallback decisions.
+bool libCryptoSupportsMlKem768(DynamicLibrary lib) {
+  try {
+    final ctxNewFromName = lib.lookupFunction<
+        Pointer<Void> Function(Pointer<Void>, Pointer<Utf8>, Pointer<Void>),
+        Pointer<Void> Function(Pointer<Void>, Pointer<Utf8>, Pointer<Void>)>(
+      'EVP_PKEY_CTX_new_from_name',
+    );
+    final ctxFree = lib.lookupFunction<Void Function(Pointer<Void>),
+        void Function(Pointer<Void>)>('EVP_PKEY_CTX_free');
+
+    final Pointer<Utf8> algName = 'ML-KEM-768'.toNativeUtf8();
+    try {
+      final Pointer<Void> ctx = ctxNewFromName(nullptr, algName, nullptr);
+      if (ctx == nullptr) return false;
+      ctxFree(ctx);
+      return true;
+    } finally {
+      calloc.free(algName);
+    }
+  } catch (_) {
+    return false;
+  }
 }
 
 DynamicLibrary? _tryOpen(String path) {

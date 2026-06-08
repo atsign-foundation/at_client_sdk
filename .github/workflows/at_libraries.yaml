@@ -76,13 +76,32 @@ jobs:
 
   build_and_test_ffi:
     runs-on: ubuntu-latest
+    env:
+      OPENSSL_VERSION: "3.5.0"
+      OPENSSL_INSTALL_DIR: ${{ github.workspace }}/.openssl
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - uses: ./actions/setup-flutter-and-dart
 
-      - name: Install OpenSSL (libcrypto)
-        run: sudo apt-get update && sudo apt-get install -y libssl-dev
+      - name: Cache OpenSSL build
+        id: cache-openssl
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.OPENSSL_INSTALL_DIR }}
+          key: openssl-${{ env.OPENSSL_VERSION }}-ubuntu-latest
+
+      - name: Build OpenSSL ${{ env.OPENSSL_VERSION }} from source
+        if: steps.cache-openssl.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y build-essential
+          curl -fsSL "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz" \
+            | tar xz -C /tmp
+          cd "/tmp/openssl-${OPENSSL_VERSION}"
+          ./Configure --prefix="${OPENSSL_INSTALL_DIR}" --openssldir="${OPENSSL_INSTALL_DIR}/ssl" \
+            shared no-tests
+          make -j$(nproc)
+          make install_sw
 
       - name: Install dependencies in at_chops
         working-directory: packages/at_chops
@@ -94,6 +113,9 @@ jobs:
 
       - name: run FFI tests
         working-directory: packages/at_chops
+        env:
+          AT_CHOPS_LIBCRYPTO_PATH: ${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so.3
+          LD_LIBRARY_PATH: ${{ env.OPENSSL_INSTALL_DIR }}/lib
         run: dart test --concurrency=1 --tags ffi
 
   functional_tests_at_onboarding_cli:

@@ -11,6 +11,13 @@ import 'package:test/test.dart';
 void main() {
   group('ML-KEM-768 FFI', () {
     final DynamicLibrary? lib = tryLoadLibCrypto();
+    final bool mlKemSupported =
+        lib != null && libCryptoSupportsMlKem768(lib);
+    final String? skipReason = lib == null
+        ? 'libcrypto not available on this host'
+        : !mlKemSupported
+            ? 'libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.3)'
+            : null;
 
     test(
       'encapsulate/decapsulate round-trip within the FFI instance',
@@ -27,7 +34,7 @@ void main() {
           algo.releaseKeyPair(kp);
         }
       },
-      skip: lib == null ? 'libcrypto not available on this host' : null,
+      skip: skipReason,
     );
 
     test(
@@ -46,7 +53,7 @@ void main() {
             .decapsulate(priv, enc.ciphertext);
         expect(recovered, equals(enc.sharedSecret));
       },
-      skip: lib == null ? 'libcrypto not available on this host' : null,
+      skip: skipReason,
     );
   });
 }
