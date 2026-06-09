@@ -1,8 +1,0 @@
-{
-  "assertion_results": [
-    { "text": "Clearly says NOT to use at_common_flutter", "passed": true, "evidence": "\"Generally, no.\" and \"Avoid pulling in `at_common_flutter` unless you have a specific, documented reason and have verified it is compatible with your current Flutter/Dart SDK version.\"" },
-    { "text": "States it is deprecated", "passed": true, "evidence": "\"is largely considered legacy/deprecated\" and section heading \"Deprecated/Legacy Status: The package has not been actively maintained in step with the broader atPlatform SDK evolution.\"" },
-    { "text": "Recommends at_client_flutter instead", "passed": false, "evidence": "not found — the output recommends `at_client_mobile` and `at_onboarding_flutter` but never mentions `at_client_flutter`" }
-  ],
-  "summary": { "passed": 2, "failed": 1, "total": 3, "pass_rate": 0.6667 }
-}

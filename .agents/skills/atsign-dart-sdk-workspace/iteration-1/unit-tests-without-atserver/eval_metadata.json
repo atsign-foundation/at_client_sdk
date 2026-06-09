@@ -1,7 +1,0 @@
-{
-  "eval_id": 7,
-  "eval_name": "unit-tests-without-atserver",
-  "prompt": "How do I write unit tests for my AtCollection-backed service without spinning up a real atServer?",
-  "expected_output": "Explains collections_test_hooks.dart — collectionWithInjectedNotifications(), handleNotificationForTest(), clearFactoriesForTest(). Shows the import path package:at_client/src/collections/collections_test_hooks.dart.",
-  "assertions": ["Mentions collections_test_hooks.dart","Shows collectionWithInjectedNotifications() or similar injection function","Includes the correct import path: package:at_client/src/collections/collections_test_hooks.dart","Mentions clearFactoriesForTest() for test isolation"]
-}

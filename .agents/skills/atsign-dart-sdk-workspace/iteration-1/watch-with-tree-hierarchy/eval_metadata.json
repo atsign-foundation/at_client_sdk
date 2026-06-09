@@ -1,7 +1,0 @@
-{
-  "eval_id": 8,
-  "eval_name": "watch-with-tree-hierarchy",
-  "prompt": "I have a posts collection with comments and each comment has replies. How do I reactively watch the full tree?",
-  "expected_output": "Recommends watchWithTree with SubSpec<Comment> and nested SubSpec<Reply>. Shows the TreeNode<Post> result shape. Explains ancestry ordering (ancestry.last = direct parent).",
-  "assertions": ["Recommends watchWithTree (not just watchWithSub)","Shows SubSpec<Comment> and SubSpec<Reply> nested configuration","Mentions TreeNode result shape","Explains ancestry ordering: ancestry.last is the direct parent"]
-}

@@ -1,7 +1,0 @@
-{
-  "eval_id": 13,
-  "eval_name": "at-client-vs-flutter",
-  "prompt": "what's the difference between at_client and at_client_flutter",
-  "expected_output": "Explains that at_client is the core Dart SDK (AtCollection, Query, NotificationService). at_client_flutter adds Flutter-specific auth dialogs, KeychainStorage, KeychainAtKeysIo, AtClientPreference, AtClientManager. at_client_flutter re-exports at_client.",
-  "assertions": ["Correctly explains at_client as the core Dart SDK","Correctly explains at_client_flutter adds Flutter-specific features (auth dialogs, keychain)","Mentions that at_client_flutter re-exports at_client","Does NOT confuse the two or say they are interchangeable"]
-}

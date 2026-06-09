@@ -16,11 +16,7 @@
 ## Skills impact
 
 If this PR changes a public API in `at_client`, `at_client_flutter`, or `at_auth`,
-update the agent skill at `.agents/skills/atsign-dart-sdk/` in the same PR.
+consider whether `packages/at_client_skills/` needs a follow-up release.
 
-- [ ] I have updated `.agents/skills/atsign-dart-sdk/` to reflect this change
-- [ ] **or** I am adding the `skill-ok` label — this change does not affect
-  documented API behaviour (refactor, test, internal fix, etc.)
-
-> The `skill-staleness-check` CI job enforces this. It passes automatically
-> when public API paths are not touched.
+- [ ] No public API change — skill unaffected
+- [ ] Public API changed — I have opened or will open an `at_client_skills` PR to reflect this

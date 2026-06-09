@@ -1,7 +1,0 @@
-{
-  "eval_id": 9,
-  "eval_name": "fetch-on-subitem-updated",
-  "prompt": "I get a CSubItemUpdated event when a comment is added. How do I fetch the actual comment data?",
-  "expected_output": "Shows getDescendant() with ancestry: event.ancestry, id: event.id, owner: event.owner. Notes that ancestry is root-first (ancestry.last is direct parent). Warns that getDescendant throws if CAncestor.owner is null.",
-  "assertions": ["Shows getDescendant() call","Uses ancestry: event.ancestry and id: event.id from the event","Mentions that ancestry.last is the direct parent (root-first ordering)","Warns that getDescendant throws if CAncestor.owner is null"]
-}

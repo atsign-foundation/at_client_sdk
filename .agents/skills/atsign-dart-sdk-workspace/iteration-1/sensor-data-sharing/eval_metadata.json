@@ -1,7 +1,0 @@
-{
-  "eval_id": 12,
-  "eval_name": "sensor-data-sharing",
-  "prompt": "my dart app needs to share some sensor readings with @device2 every few seconds, should i add them all to a collection or use notifications",
-  "expected_output": "For high-frequency sensor data, recommends Notifications + SQLite pattern (not AtCollection). Explains the volume/frequency threshold consideration.",
-  "assertions": ["Recommends notifications (not AtCollection) for high-frequency sensor data","Provides reasoning based on frequency/volume threshold","Does NOT recommend AtCollection as the primary approach"]
-}
