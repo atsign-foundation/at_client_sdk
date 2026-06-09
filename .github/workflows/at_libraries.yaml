@@ -77,13 +77,14 @@ jobs:
   build_and_test_ffi:
     runs-on: ubuntu-latest
     env:
-      OPENSSL_VERSION: "3.5.0"
+      OPENSSL_VERSION: "3.5.0" # minimum version that OpenSSL supports MLKEM
       OPENSSL_INSTALL_DIR: ${{ github.workspace }}/.openssl
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - uses: ./actions/setup-flutter-and-dart
 
+      # checks GHA cache for pre-built OpenSSL install directory (
       - name: Cache OpenSSL build
         id: cache-openssl
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
@@ -92,7 +93,7 @@ jobs:
           key: openssl-${{ env.OPENSSL_VERSION }}-ubuntu-latest
 
       - name: Build OpenSSL ${{ env.OPENSSL_VERSION }} from source
-        if: steps.cache-openssl.outputs.cache-hit != 'true'
+        if: steps.cache-openssl.outputs.cache-hit != 'true' # if the previos action was a cache miss
         run: |
           sudo apt-get update && sudo apt-get install -y build-essential
           curl -fsSL "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz" \
