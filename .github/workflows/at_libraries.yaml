@@ -94,7 +94,10 @@ jobs:
 
       - name: Restore shared-library permissions after cache restore
         if: steps.cache-openssl.outputs.cache-hit == 'true'
-        run: chmod -R u+x "${{ env.OPENSSL_INSTALL_DIR }}/lib"
+        run: |
+          if [ -d "${{ env.OPENSSL_INSTALL_DIR }}/lib" ]; then
+            chmod -R u+x "${{ env.OPENSSL_INSTALL_DIR }}/lib"
+          fi
 
       - name: Build OpenSSL ${{ env.OPENSSL_VERSION }} from source
         if: steps.cache-openssl.outputs.cache-hit != 'true' # if the previos action was a cache miss
