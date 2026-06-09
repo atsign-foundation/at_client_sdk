@@ -119,6 +119,3 @@ dev_dependencies:
   plugin_platform_interface: ^2.1.6
   test: ^1.25.0
   test_process: ^2.1.0
-
-dependency_overrides:
-  pointycastle: ^4.0.0
