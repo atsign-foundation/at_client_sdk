@@ -94,8 +94,19 @@ dependencies:
 
 ### `at_backupkey_flutter` ⛔
 
-**Deprecated.** Do not add this package. Instead, look at its source code for the
-backup-key implementation pattern and copy the relevant code directly into your own app.
+**Deleted.** The package has been removed from the repository. Copy the backup-key
+snippet from `packages/at_client_flutter/example/lib/snippets/at_backup_key.dart`
+directly into your own app.
+
+### `at_invitation_flutter` ⛔
+
+**Deprecated.** Copy the invitation snippet from
+`packages/at_client_flutter/example/lib/snippets/at_invitation.dart`
+directly into your own app.
+
+### `at_sync_ui_flutter` / `at_theme_flutter` ⛔
+
+**Deprecated.** Both packages are being removed. Do not use in new projects.
 
 ---
 
@@ -111,11 +122,8 @@ Their functionality will eventually move into example application code.
 | `at_contacts_group_flutter` | Migration in progress |
 | `at_events_flutter` | Migration in progress |
 | `at_follows_flutter` | Migration in progress |
-| `at_invitation_flutter` | Migration in progress |
 | `at_location_flutter` | Migration in progress |
 | `at_notify_flutter` | Migration in progress |
-| `at_sync_ui_flutter` | Migration in progress |
-| `at_theme_flutter` | Migration in progress |
 | `at_login_flutter` | Minimal / not fully published |
 
 **Recommendation:** Browse the source of these packages for implementation ideas,

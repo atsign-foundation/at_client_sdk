@@ -8,7 +8,8 @@ description: >
   read receipts, wherePath typed predicates, or watchWithTree deep hierarchies. Also use
   when the developer asks which pub.dev packages to add, how to unit-test without a live
   atServer, or whether to use AtCollection vs notifications+SQLite. Warns against
-  deprecated AtCollectionModel, at_common_flutter, and at_backupkey_flutter.
+  deprecated AtCollectionModel, at_common_flutter, at_backupkey_flutter,
+  at_invitation_flutter, at_sync_ui_flutter, and at_theme_flutter.
 license: BSD-3-Clause
 compatibility: Designed for Claude Code and any agent supporting the agentskills.io specification.
 metadata:
@@ -61,7 +62,7 @@ migration table from old to new API.
 | Raw cryptographic operations | above + `at_chops: ^3.0.0` |
 | CLI / headless Dart | above + `at_cli_commons: ^3.1.0` |
 
-**Never add:** `at_common_flutter`, `at_backupkey_flutter`
+**Never add:** `at_common_flutter`, `at_backupkey_flutter`, `at_invitation_flutter`, `at_sync_ui_flutter`, `at_theme_flutter`
 
 Read [references/06-package-map.md](references/06-package-map.md) for per-use-case
 checklists and the full list of in-migration packages to avoid.
@@ -368,8 +369,10 @@ test template including the correct `AtNotification` constructor and MockAtClien
 |-------|-------------|
 | `AtCollectionModel` / `AtJsonCollectionModel` | `AtCollection<T>` via `atClient.collection(...)` |
 | `at_common_flutter` package | `at_client_flutter` |
-| `at_backupkey_flutter` package | Implement backup-key flow directly in your app |
-| `at_chat_flutter`, `at_contacts_flutter`, `at_contacts_group_flutter`, `at_events_flutter`, `at_follows_flutter`, `at_invitation_flutter`, `at_location_flutter`, `at_notify_flutter` | In migration — copy example code rather than depending on these in new projects |
+| `at_backupkey_flutter` package | Copy `at_client_flutter` backup-key snippet into your app |
+| `at_invitation_flutter` package | Copy `at_client_flutter` invitation snippet into your app |
+| `at_sync_ui_flutter`, `at_theme_flutter` | Deprecated — do not use |
+| `at_chat_flutter`, `at_contacts_flutter`, `at_contacts_group_flutter`, `at_events_flutter`, `at_follows_flutter`, `at_location_flutter`, `at_notify_flutter` | In migration — copy example code rather than depending on these in new projects |
 
 Read [references/01-deprecation-guide.md](references/01-deprecation-guide.md) for the full
 migration table from old `AtCollectionModel` patterns to `AtCollection<T>`.

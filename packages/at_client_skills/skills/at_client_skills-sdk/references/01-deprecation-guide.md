@@ -103,7 +103,10 @@ await collection.delete(item);
 | Package | Status | Use instead |
 |---------|--------|-------------|
 | `at_common_flutter` | ⛔ DEPRECATED | `at_client_flutter` |
-| `at_backupkey_flutter` | ⛔ DEPRECATED | Implement backup-key flow directly in your app |
+| `at_backupkey_flutter` | ⛔ DEPRECATED | Copy `at_client_flutter` backup-key snippet into your app |
+| `at_invitation_flutter` | ⛔ DEPRECATED | Copy `at_client_flutter` invitation snippet into your app |
+| `at_sync_ui_flutter` | ⛔ DEPRECATED | Avoid; being removed |
+| `at_theme_flutter` | ⛔ DEPRECATED | Avoid; being removed |
 
 ### at_common_flutter
 The `at_common_flutter` package's own README states: *"Deprecated in favour of
@@ -111,9 +114,18 @@ The `at_common_flutter` package's own README states: *"Deprecated in favour of
 using it should migrate to `at_client_flutter` equivalents.
 
 ### at_backupkey_flutter
-This package is deprecated. Implement backup-key functionality directly in your app —
-look at the `at_backupkey_flutter` package source for the reference implementation pattern,
-then copy the relevant code into your own app rather than taking a dependency on it.
+This package has been deleted from the repository. Implement backup-key functionality
+by copying the snippet from
+`packages/at_client_flutter/example/lib/snippets/at_backup_key.dart`
+directly into your own app. Do not take a dependency on `at_backupkey_flutter`.
+
+### at_invitation_flutter
+This package is deprecated. Implement invitation functionality by copying the snippet
+from `packages/at_client_flutter/example/lib/snippets/at_invitation.dart`
+directly into your own app. Do not take a dependency on `at_invitation_flutter`.
+
+### at_sync_ui_flutter / at_theme_flutter
+Both packages are being deprecated and removed. Do not use them in new projects.
 
 ---
 
@@ -130,11 +142,8 @@ don't depend on the package).
 | `at_contacts_group_flutter` | In migration |
 | `at_events_flutter` | In migration |
 | `at_follows_flutter` | In migration |
-| `at_invitation_flutter` | In migration |
 | `at_location_flutter` | In migration |
 | `at_notify_flutter` | In migration |
-| `at_sync_ui_flutter` | In migration |
-| `at_theme_flutter` | In migration |
 
 For new projects: look at the source of these packages for inspiration, then implement
 the pattern directly in your app rather than adding them as dependencies.
