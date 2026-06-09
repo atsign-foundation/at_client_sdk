@@ -25,15 +25,25 @@ const String _envVar = 'AT_CHOPS_LIBCRYPTO_PATH';
 /// at_chops does not call this automatically — consumers decide their own
 /// fallback strategy. Pass the returned library to [MlKem768FfiAlgo.fromLib]
 /// or [X25519FfiAlgo.fromLib] when constructing FFI-backed algorithms.
-DynamicLibrary? tryLoadLibCrypto() {
+///
+/// If [loadedPath] is provided it will be set to the path that was
+/// successfully opened, which callers can use to verify whether the env-var
+/// path or a fallback candidate was used.
+DynamicLibrary? tryLoadLibCrypto({StringBuffer? loadedPath}) {
   final envPath = Platform.environment[_envVar];
   if (envPath != null) {
     final lib = _tryOpen(envPath);
-    if (lib != null) return lib;
+    if (lib != null) {
+      loadedPath?.write(envPath);
+      return lib;
+    }
   }
   for (final path in _candidates) {
     final lib = _tryOpen(path);
-    if (lib != null) return lib;
+    if (lib != null) {
+      loadedPath?.write(path);
+      return lib;
+    }
   }
   return null;
 }
