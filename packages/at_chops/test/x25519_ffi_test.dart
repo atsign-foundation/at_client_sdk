@@ -3,6 +3,7 @@ library;
 
 import 'dart:convert';
 import 'dart:ffi';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
@@ -10,7 +11,19 @@ import 'package:test/test.dart';
 
 void main() {
   group('X25519 FFI', () {
-    final DynamicLibrary? lib = tryLoadLibCrypto();
+    final StringBuffer loadedPath = StringBuffer();
+    final DynamicLibrary? lib = tryLoadLibCrypto(loadedPath: loadedPath);
+    final String? envPath = Platform.environment['AT_CHOPS_LIBCRYPTO_PATH'];
+
+    test('loads from AT_CHOPS_LIBCRYPTO_PATH when set', () {
+      if (envPath == null) {
+        markTestSkipped('AT_CHOPS_LIBCRYPTO_PATH not set');
+        return;
+      }
+      expect(lib, isNotNull, reason: 'env var path must load successfully');
+      expect(loadedPath.toString(), equals(envPath),
+          reason: 'must use env var path, not a fallback candidate');
+    });
 
     test(
       'DH round-trip via OpenSSL FFI',
