@@ -2,7 +2,7 @@ name: at_client_sdk
 publish_to: none
 
 environment:
-  sdk: ^3.10.0
+  sdk: ^3.6.0
   flutter: ^3.29.2 # Ships with Dart 3.7.2, ensuring pub workspace support
 
 workspace:
