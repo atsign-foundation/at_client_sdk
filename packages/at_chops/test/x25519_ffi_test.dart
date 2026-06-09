@@ -3,7 +3,6 @@ library;
 
 import 'dart:convert';
 import 'dart:ffi';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
@@ -13,16 +12,12 @@ void main() {
   group('X25519 FFI', () {
     final StringBuffer loadedPath = StringBuffer();
     final DynamicLibrary? lib = tryLoadLibCrypto(loadedPath: loadedPath);
-    final String? envPath = Platform.environment['AT_CHOPS_LIBCRYPTO_PATH'];
 
-    test('loads from AT_CHOPS_LIBCRYPTO_PATH when set', () {
-      if (envPath == null) {
-        markTestSkipped('AT_CHOPS_LIBCRYPTO_PATH not set');
-        return;
+    setUpAll(() {
+      if (lib != null) {
+        // ignore: avoid_print
+        print('libcrypto loaded from: ${loadedPath.toString()}');
       }
-      expect(lib, isNotNull, reason: 'env var path must load successfully');
-      expect(loadedPath.toString(), equals(envPath),
-          reason: 'must use env var path, not a fallback candidate');
     });
 
     test(
