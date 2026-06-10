@@ -2,6 +2,11 @@
 
 [![pub package](https://img.shields.io/pub/v/at_theme_flutter)](https://pub.dev/packages/at_theme_flutter) [![](https://img.shields.io/static/v1?label=Backend&message=atPlatform&color=<COLOR>)](https://atsign.dev) [![](https://img.shields.io/static/v1?label=Publisher&message=Atsign&color=F05E3E)](https://atsign.com) [![gitHub license](https://img.shields.io/badge/license-BSD3-blue.svg)](./LICENSE)
 
+## DEPRECATION NOTICE
+
+This package is deprecated and is no longer recommended for new Flutter apps.
+Use [`at_client_flutter`](../at_client_flutter) instead.
+
 ## Overview
 
 The at_theme_flutter package is for Flutter developers who want to add ability to switch theme in their atPlatform apps.

@@ -835,7 +835,34 @@ interface class AtCollection<T> {
       expiresAt: expiresAt,
       availableAt: availableAt,
     );
-    final results = await _put(item);
+    // `create` has already established (via the `_selfKeyExists` guard
+    // above) that no self-key exists for `(owner=atSign, id=useId)`.
+    // Self and recipient copies are written under one metadata in `_put`
+    // (same TTL), so absence of the self-key implies absence of any
+    // legitimate sibling `cached:<recipient>:<id>.<ns>@<self>` copies —
+    // the diff scan in `_put` step 2 would only ever return an empty
+    // list. Passing `unshareWithOthers: false` skips that round-trip,
+    // which is otherwise the only verb a clean `create` issues between
+    // the self-update and the recipient-updates.
+    //
+    // Edge cases this leaves uncovered (deliberately):
+    //   1. Caller deleted the self-key directly via `atClient.delete`,
+    //      bypassing `AtCollection.delete`'s cascade, then called
+    //      `create` again with a different `sharedWith`. The old
+    //      recipient `cached:` copies persist until TTL.
+    //   2. A prior process crashed mid-`_put`, after the self-key was
+    //      written and reaped but before all recipient copies were
+    //      written, then a new process calls `create` with the same
+    //      manual id and a different `sharedWith`.
+    //   3. Two processes on the same atSign race on the same manual id
+    //      (the `_selfKeyExists` check is not atomic with `_put`).
+    // All three require deliberately questionable application
+    // implementation choices (bypassing the collection's own delete
+    // path, reusing manual ids across process boundaries without
+    // coordinating, or operating two unsynchronised writers on one
+    // atSign). They are judged rare enough that the per-`create`
+    // round-trip saved is the right trade.
+    final results = await _put(item, unshareWithOthers: false);
     if (results.any((r) => r is OpFailure)) {
       throw CollectionOpException(results);
     }
@@ -1193,15 +1220,15 @@ interface class AtCollection<T> {
   }
 
   /// Fetches every item in the collection as a `List<CItem<T>>`,
-  /// optionally filtered by [id] / [owner]. Items with the same
-  /// `owner+id` across self and shared copies are deduplicated and their
-  /// `sharedWith` sets are unioned.
+  /// optionally filtered by [id] / [owner].
   ///
-  /// Thin wrapper around [getItemsAsStream]: a per-key decode failure
-  /// aborts the list with that error (via `.toList()` propagating the
-  /// stream error). If you need to continue past decode failures, use
-  /// [getItemsAsStream] directly and chain `.handleError(...)` or
-  /// collect errors yourself.
+  /// **Decode-error policy:** the first per-key decode failure aborts
+  /// the list with that error. If you need to continue past decode
+  /// failures, use [getItemsAsStream] directly and chain
+  /// `.handleError(...)` or collect errors yourself.
+  ///
+  /// Items with the same `owner+id` across self and shared copies are
+  /// deduplicated and their `sharedWith` sets are unioned.
   Future<List<CItem<T>>> getItems({String? id, Atsign? owner}) =>
       getItemsAsStream(id: id, owner: owner).toList();
 

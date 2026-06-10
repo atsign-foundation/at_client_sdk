@@ -1,7 +1,7 @@
 name: at_sync_ui_flutter
-description: A Flutter plugin project to provide UI widgets for displaying
-  status of sync process in atProtocol apps.
-version: 1.1.0
+description: Deprecated Flutter sync status widgets for Atsign Protocol apps.
+  Use AtCollection streams in at_client for new apps.
+version: 1.2.0
 homepage: https://atsign.com/
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_sync_ui_flutter
 documentation: https://docs.atsign.com/
