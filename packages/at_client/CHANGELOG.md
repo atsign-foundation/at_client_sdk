@@ -1,4 +1,4 @@
-## 3.12.0-rc.2
+## 3.12.0
 
 Several significant enhancements to the API to make it much easier to use.
 - feat: New feature - Collections - a clean API for storing, sharing, 
