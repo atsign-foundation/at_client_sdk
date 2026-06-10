@@ -7,11 +7,11 @@
 `AtCollection<T>` surfaces all state changes as typed events on broadcast-style streams.
 There are two sources of events (controlled by `EventSource` at collection creation):
 
-| `EventSource` | What fires events |
-|---------------|------------------|
-| `EventSource.data` | All local keystore mutations via `AtClient.dataEvents` — locally-driven writes AND TTL expiry deletions AND sync-applied cross-atSign writes |
-| `EventSource.notifs` | Cross-atSign writes received via `NotificationService` — locally-driven writes are NOT visible |
-| `EventSource.both` | Both sources; the same cross-atSign write can fire **twice** (no dedup); default |
+| `EventSource`        | What fires events                                                                                                                            |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EventSource.data`   | All local keystore mutations via `AtClient.dataEvents` — locally-driven writes AND TTL expiry deletions AND sync-applied cross-atSign writes |
+| `EventSource.notifs` | Cross-atSign writes received via `NotificationService` — locally-driven writes are NOT visible                                               |
+| `EventSource.both`   | Both sources; the same cross-atSign write can fire **twice** (no dedup); default                                                             |
 
 ---
 
@@ -19,7 +19,7 @@ There are two sources of events (controlled by `EventSource` at collection creat
 
 All events extend `CEvent` (abstract). All event classes are `final`.
 
-```
+```text
 CEvent
 ├── CItemUpdated         — item created or updated (L0)
 ├── CItemDeleted         — item deleted (L0, includes TTL expiry)
@@ -35,6 +35,7 @@ CEvent
 ## Event Classes: Fields
 
 ### `CItemUpdated`
+
 ```dart
 final class CItemUpdated extends CEvent {
   final Atsign owner;   // atSign that owns the item
@@ -43,6 +44,7 @@ final class CItemUpdated extends CEvent {
 ```
 
 ### `CItemDeleted`
+
 ```dart
 final class CItemDeleted extends CEvent {
   final Atsign owner;
@@ -52,6 +54,7 @@ final class CItemDeleted extends CEvent {
 ```
 
 ### `CItemAvailable`
+
 ```dart
 final class CItemAvailable extends CEvent {
   final Atsign owner;
@@ -59,10 +62,12 @@ final class CItemAvailable extends CEvent {
   final DateTime availableAt;   // the scheduled timestamp that just passed
 }
 ```
+
 Fires when an item's `availableAt` timestamp passes. Subscribe to `availableEvents` then
 call `collection.getOrNull(event.id, event.owner)` to fetch the now-visible item.
 
 ### `CItemExpiringSoon`
+
 ```dart
 final class CItemExpiringSoon extends CEvent {
   final Atsign owner;
@@ -73,6 +78,7 @@ final class CItemExpiringSoon extends CEvent {
 ```
 
 ### `CReadReceipt`
+
 ```dart
 final class CReadReceipt extends CEvent {
   final Atsign owner;   // owner of the item that was read
@@ -83,6 +89,7 @@ final class CReadReceipt extends CEvent {
 ```
 
 ### `CSubItemUpdated`
+
 ```dart
 final class CSubItemUpdated extends CEvent {
   final Atsign owner;               // owner of the leaf sub-item
@@ -103,6 +110,7 @@ final class CAncestor {
 `ancestry[0]` is the **root ancestor**; `ancestry.last` is the **direct parent** of the leaf.
 
 Example: for a reply on a comment on a post:
+
 - `ancestry[0]` = the post (root)
 - `ancestry[1]` = the comment (direct parent of the reply)
 - `event.id` = the reply id
@@ -110,6 +118,7 @@ Example: for a reply on a comment on a post:
 To fetch the leaf, use `collection.getDescendant(ancestry: event.ancestry, id: event.id, ...)`.
 
 ### `CSubItemDeleted`
+
 ```dart
 final class CSubItemDeleted extends CEvent {
   final Atsign owner;                // the leaf sub-item's owner (non-nullable)
@@ -131,29 +140,32 @@ final class CSubItemDeleted extends CEvent {
 ## Streams on AtCollection\<T>
 
 ### `Stream<CEvent> watch()`
+
 All events. Useful for debugging or aggregate reacting.
 
 ### Typed streams (prefer these in production code)
 
-| Getter / Method | Stream type | Fires when |
-|-----------------|-------------|-----------|
-| `updates` | `Stream<CItemUpdated>` | Any L0 item created or updated |
-| `deletes` | `Stream<CItemDeleted>` | Any L0 item deleted (TTL or explicit) |
-| `readReceipts` | `Stream<CReadReceipt>` | A recipient marks my item as read |
-| `subUpdates` | `Stream<CSubItemUpdated>` | Any descendant item created or updated |
-| `subDeletes` | `Stream<CSubItemDeleted>` | Any descendant item deleted |
-| `availableEvents` | `Stream<CItemAvailable>` | Lazy-started scheduler; `availableAt` passed |
-| `expiringSoonEvents(leadTime:)` | `Stream<CItemExpiringSoon>` | Item expiring within `leadTime` |
+| Getter / Method                 | Stream type                 | Fires when                                   |
+| ------------------------------- | --------------------------- | -------------------------------------------- |
+| `updates`                       | `Stream<CItemUpdated>`      | Any L0 item created or updated               |
+| `deletes`                       | `Stream<CItemDeleted>`      | Any L0 item deleted (TTL or explicit)        |
+| `readReceipts`                  | `Stream<CReadReceipt>`      | A recipient marks my item as read            |
+| `subUpdates`                    | `Stream<CSubItemUpdated>`   | Any descendant item created or updated       |
+| `subDeletes`                    | `Stream<CSubItemDeleted>`   | Any descendant item deleted                  |
+| `availableEvents`               | `Stream<CItemAvailable>`    | Lazy-started scheduler; `availableAt` passed |
+| `expiringSoonEvents(leadTime:)` | `Stream<CItemExpiringSoon>` | Item expiring within `leadTime`              |
 
 **Getters vs methods:**  
 Parameterless event surfaces are **getters** (`updates`, `deletes`, etc.).  
 Parameterised surfaces are **methods** (`watch()` — filter by event type; `expiringSoonEvents(leadTime:)` — per-call lead time).
 
 ### `availableEvents` scheduler
+
 Lazy-starts a single per-collection scheduler on first access. Runs for the lifetime of the collection.
 Enrolls existing items with future `availableAt` at startup. Re-enrolls items on every `CItemUpdated`.
 
 ### `expiringSoonEvents({required Duration leadTime})`
+
 Starts an **independent** scheduler per call — each caller can have a different `leadTime`.
 
 ---
@@ -177,6 +189,7 @@ void dispose() {
 ```
 
 For `watch()` in `StreamBuilder`:
+
 ```dart
 StreamBuilder<List<CItem<Todo>>>(
   stream: todos.query().where((t) => !t.obj.done).watch(),
@@ -188,7 +201,7 @@ StreamBuilder<List<CItem<Todo>>>(
 
 ## EventSource Decision Guide
 
-```
+```text
 Does your app write items locally (not just receive from others)?
 ├─ YES → Does it run SyncService?
 │  ├─ YES → EventSource.data  (tightest write→event; no duplicate events)

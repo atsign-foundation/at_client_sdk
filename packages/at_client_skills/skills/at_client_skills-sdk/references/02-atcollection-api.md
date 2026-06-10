@@ -46,6 +46,7 @@ final pets = await atClient.collection<Pet>('pets.my_app', ttl);
 ```
 
 **Re-registration rules:**
+
 - Same `(Type, typeTag)` → idempotent, last write wins
 - Same `Type`, different tag → throws `StateError` (wire-format contract)
 - Same tag, different `Type` → throws `StateError` (tag uniqueness)
@@ -55,7 +56,7 @@ final pets = await atClient.collection<Pet>('pets.my_app', ttl);
 ## Basic Getters
 
 | Getter | Type | Description |
-|--------|------|-------------|
+| -------- | ------ | ------------- |
 | `atSign` | `Atsign` | The atSign this `atClient` is acting as |
 | `self` | `Atsign` | Alias for `atSign` — use for ownership tests |
 | `namespace` | `String` | The fully-qualified namespace |
@@ -125,19 +126,24 @@ Deletes the item and all recipient copies.
 ## Read Methods
 
 ### `Future<CItem<T>> get(String id, Atsign owner)`
+
 Throws `AtKeyNotFoundException` if not found.
 
 ### `Future<CItem<T>?> getOrNull(String id, Atsign owner)`
+
 Returns `null` if not found. Same error-propagation semantics for decode failures.
 
 ### `Future<List<CItem<T>>> getItems({String? id, Atsign? owner})`
+
 Returns all matching items as a list. A per-key decode failure aborts the list.
 
 ### `Stream<CItem<T>> getItemsAsStream({String? id, Atsign? owner})`
+
 Yields each item as it is fetched. **Per-key decode failures are yielded as stream errors**
 (not swallowed). Chain `.handleError(...)` to restore silent-skip behaviour.
 
 ### `Future<bool> exists(String id, Atsign owner)`
+
 Cheap presence check. Prefers the `_seenSelfIds` cache for self-owned items.
 
 ---
@@ -150,6 +156,7 @@ Opens a typed sub-collection scoped to `parent`. Sub-collections inherit the par
 `eventSource`.
 
 **Constraints:**
+
 - `subName` must NOT contain `.`
 - `parent.id` must NOT contain `.`
 - `ArgumentError` thrown if composed namespace would exceed 255-char atServer key limit (max ~11 levels)
@@ -186,7 +193,7 @@ Returns an immutable `Query<T>` builder. See [03-query-api.md](03-query-api.md).
 ## Event Streams
 
 | Stream | Type | Description |
-|--------|------|-------------|
+| -------- | ------ | ------------- |
 | `watch()` | `Stream<CEvent>` | All events below |
 | `updates` | `Stream<CItemUpdated>` | Item created or updated |
 | `deletes` | `Stream<CItemDeleted>` | Item deleted (has `wasExpired` flag) |
@@ -214,7 +221,7 @@ ceiling is **11 levels (root + 10 nested sub-collections)**.
 ## Key Naming (Internal, for debugging)
 
 | Item type | Key format |
-|-----------|-----------|
+| ----------- | ----------- |
 | Self copy | `<id>.<namespace>@<atSign>` |
 | Recipient copy | `<recipient>:<id>.<namespace>@<atSign>` |
 | Cached incoming copy | `cached:<id>.<namespace>@<sender>` |
@@ -233,6 +240,7 @@ enum EventSource {
 ```
 
 **Which to pick:**
+
 - `EventSource.data` — requires SyncService running; tightest write→event guarantee; locally-driven writes visible immediately
 - `EventSource.notifs` — if app is primarily a notification receiver; locally-driven writes invisible to watch streams
 - `EventSource.both` — default; works without SyncService; watch streams see everything but may fire twice for cross-atSign writes

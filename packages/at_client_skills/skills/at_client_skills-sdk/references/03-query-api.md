@@ -5,6 +5,7 @@
 `Query<T>` is a composable, immutable, value-typed query builder over an `AtCollection<T>`.
 
 **Key properties:**
+
 - **Immutable** — every modifier returns a new `Query<T>`. Store, pass around, and reuse safely
 - **On-device execution** — queries run against the local synced keystore. Under E2E encryption the atServer cannot filter plaintext on your behalf; on-device is the only correct model
 - Obtain via `collection.query()`
@@ -108,6 +109,7 @@ True if at least one item matches. Short-circuits on first match.
 Does **not** apply `orderBy`, `skip`, or `limit`.
 
 An optional predicate is AND'd with accumulated `.where()` clauses:
+
 ```dart
 final hasDone = await todos.query().any((t) => t.obj.done);
 ```
@@ -201,6 +203,7 @@ stream.listen((tree) {
 ```
 
 **When to use `watchWithSub` vs `watchWithTree`:**
+
 - 2 levels (parent + one child type) → `watchWithSub<U>` — strongly typed, simpler
 - 3+ levels or mixed child types → `watchWithTree` — arbitrary depth, `TreeNode<dynamic>` branches
 
@@ -237,7 +240,7 @@ abstract class $Todo {
 ### PathField operators
 
 | Operator | Available on | Returns |
-|----------|-------------|---------|
+| ---------- | ------------- | --------- |
 | `.eq(value)` | All `PathField<V>` | `Predicate` |
 | `.neq(value)` | All `PathField<V>` | `Predicate` |
 | `.lt(value)` | `PathField<V extends Comparable>` | `Predicate` |

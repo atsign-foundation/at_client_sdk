@@ -12,6 +12,7 @@ abstract class AtCollectionModel<T> implements AtCollectionModelOperations { ...
 ```
 
 All classes in `packages/at_client/lib/src/at_collection/` carry this annotation:
+
 - `AtCollectionModel<T>`
 - `AtJsonCollectionModel`
 - `AtCollectionModelFactory`
@@ -27,7 +28,7 @@ become uncompilable in a future major release. Start all new code with `AtCollec
 ## Migration Table: Old → New
 
 | Old API | New API |
-|---------|---------|
+| --------- | --------- |
 | `class MyModel extends AtCollectionModel<MyModel>` | Implement `toJson`/`fromJson` + register factory |
 | `AtCollection.registerFactories([...])` | `AtCollection.registerFactory<T>(T.fromJson, typeTag: 'T')` |
 | `await model.save()` | `await collection.create(obj: model)` or `collection.upsert(id: id, obj: model)` |
@@ -101,7 +102,7 @@ await collection.delete(item);
 ## Deprecated Packages
 
 | Package | Status | Use instead |
-|---------|--------|-------------|
+| --------- | -------- | ------------- |
 | `at_common_flutter` | ⛔ DEPRECATED | `at_client_flutter` |
 | `at_backupkey_flutter` | ⛔ DEPRECATED | Copy `at_client_flutter` backup-key snippet into your app |
 | `at_invitation_flutter` | ⛔ DEPRECATED | Copy `at_client_flutter` invitation snippet into your app |
@@ -109,22 +110,26 @@ await collection.delete(item);
 | `at_theme_flutter` | ⛔ DEPRECATED | Avoid; being removed |
 
 ### at_common_flutter
+
 The `at_common_flutter` package's own README states: *"Deprecated in favour of
 `at_client_flutter`."* Do not add `at_common_flutter` to `pubspec.yaml`. Existing code
 using it should migrate to `at_client_flutter` equivalents.
 
 ### at_backupkey_flutter
+
 This package has been deleted from the repository. Implement backup-key functionality
 by copying the snippet from
 `packages/at_client_flutter/example/lib/snippets/at_backup_key.dart`
 directly into your own app. Do not take a dependency on `at_backupkey_flutter`.
 
 ### at_invitation_flutter
+
 This package is deprecated. Implement invitation functionality by copying the snippet
 from `packages/at_client_flutter/example/lib/snippets/at_invitation.dart`
 directly into your own app. Do not take a dependency on `at_invitation_flutter`.
 
 ### at_sync_ui_flutter / at_theme_flutter
+
 Both packages are being deprecated and removed. Do not use them in new projects.
 
 ---
@@ -136,7 +141,7 @@ Their functionality will be replaced by example application code (copy the patte
 don't depend on the package).
 
 | Package | Status |
-|---------|--------|
+| --------- | -------- |
 | `at_chat_flutter` | In migration |
 | `at_contacts_flutter` | In migration |
 | `at_contacts_group_flutter` | In migration |

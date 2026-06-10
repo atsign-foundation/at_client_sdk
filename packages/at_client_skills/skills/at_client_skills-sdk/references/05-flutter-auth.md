@@ -207,7 +207,7 @@ Future<void> _setupAtClient(
 **AtClientPreference required fields:**
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ------- | ------ | ------------- |
 | `namespace` | `String` | App namespace — must match `AtCollection` namespace suffix |
 | `commitLogPath` | `String` | Path to local commit log directory |
 | `hiveStoragePath` | `String` | Path to Hive storage directory |

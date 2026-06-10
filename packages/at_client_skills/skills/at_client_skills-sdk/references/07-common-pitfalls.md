@@ -178,6 +178,7 @@ the `data` path (via SyncService) and the `notifs` path (via NotificationService
 change fires two `CItemUpdated` events — no automatic deduplication.
 
 **Fix options:**
+
 - **Accept it** if your handler is idempotent (e.g., just calls `setState(() {})`)
 - **Debounce** with a short timer if processing is expensive
 - **Switch source** — use `EventSource.data` (requires SyncService) or `EventSource.notifs`

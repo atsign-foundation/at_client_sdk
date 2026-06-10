@@ -55,7 +55,7 @@ migration table from old to new API.
 ## 2. Package Map
 
 | Use case | pubspec.yaml dependencies |
-|----------|--------------------------|
+| ---------- | -------------------------- |
 | Dart CLI / server / IoT | `at_client: ^3.12.0` |
 | Flutter app | `at_client_flutter: ^1.1.2` (`at_client_flutter` re-exports `at_client` — one dep is enough) |
 | APKAM / custom auth flows | above + `at_auth: ^3.1.0` |
@@ -90,8 +90,9 @@ final todos = await atClient.collection<Todo>(
   derived from `T.toString()` (minifier renames types in release builds)
 
 **EventSource:**
+
 | Value | Events seen |
-|-------|-------------|
+| ------- | ------------- |
 | `EventSource.data` | All local keystore mutations (requires `SyncService` running) |
 | `EventSource.notifs` | Cross-atSign writes via notification pipeline only |
 | `EventSource.both` | Both sources; same change may fire twice (no dedup); default |
@@ -223,6 +224,7 @@ collection.expiringSoonEvents(leadTime: const Duration(hours: 1))
 ```
 
 **Flutter subscribe/dispose:**
+
 ```dart
 late StreamSubscription<CItemUpdated> _sub;
 @override void initState() { super.initState(); _sub = collection.updates.listen((_) => setState(() {})); }
@@ -252,6 +254,7 @@ collection.readReceipts.listen((r) => print('${r.from} read ${r.id} at ${r.readA
 Four auth flows — all end with the same `_setupAtClient()` call.
 
 **Flow 2 (existing `.atKeys` file) — most common for returning developers:**
+
 ```dart
 final atKeysIo    = await AtKeysFileDialog.show(context);
 final authRequest = AtAuthRequest(atKeysIo!.getAtsign(),
@@ -262,6 +265,7 @@ if (response?.isSuccessful == true) await _setupAtClient(authRequest, response!)
 ```
 
 **Flow 3 (device keychain — returning user on same device):**
+
 ```dart
 final atSigns     = await KeychainStorage().getAllAtsigns();
 final request     = await AtSignSelectionDialog.show(context, existingAtSigns: atSigns);
@@ -273,6 +277,7 @@ if (response?.isSuccessful == true) await _setupAtClient(authRequest, response!)
 ```
 
 **Post-auth setup (all flows — `AuthRequest` is the sealed base, works for all 4 flows):**
+
 ```dart
 Future<void> _setupAtClient(AuthRequest authRequest, AuthResponse response) async {
   final dir = await getApplicationSupportDirectory();
@@ -327,16 +332,16 @@ polymorphic types, schema evolution, and the full re-registration rules.
 ## 12. Architecture Decision: AtCollection vs Notifications+SQLite
 
 | | `AtCollection<T>` | Notifications + SQLite |
-|---|---|---|
+| --- | --- | --- |
 | **Data shape** | Typed records, discrete items | High-frequency events / telemetry |
-| **Persistence** | Synced across devices via atServer | Local-only, accumulated from notifications |
-| **Volume** | Low–medium (hundreds–thousands) | High (per-second metrics, logs) |
-| **Example** | Todos, notes, contacts, documents | Live dashboard, analytics, telemetry |
+| **Persistence** | Synced via atServer | Local-only, from notifications |
+| **Volume** | Low-medium (hundreds-thousands) | High (per-second metrics, logs) |
+| **Example** | Todos, notes, contacts | Live dashboard, analytics |
 
 These patterns are complementary and can coexist in the same app.
 
-Read [references/10-architecture-guide.md](references/10-architecture-guide.md) for the full
-decision guide and the dockerstats Notifications+SQLite pattern example.
+Read [references/10-architecture-guide.md](references/10-architecture-guide.md)
+for the full decision guide and the dockerstats Notifications+SQLite example.
 
 ---
 
@@ -358,34 +363,39 @@ Available helpers: `collectionWithInjectedNotifications`, `collectionWithInjecte
 `collectionWithInjectedBoth`, `handleNotificationForTest`, `handleDataEventForTest`,
 `clearFactoriesForTest`, `clearMissingFactoryWarningsForTest`
 
-Read [references/09-testing-patterns.md](references/09-testing-patterns.md) for the complete
-test template including the correct `AtNotification` constructor and MockAtClient stubs.
+Read [references/09-testing-patterns.md](references/09-testing-patterns.md) for the
+complete test template including the correct `AtNotification` constructor and
+MockAtClient stubs.
 
 ---
 
 ## 14. Deprecated — Do Not Use
 
 | Avoid | Use instead |
-|-------|-------------|
+| ------- | ------------- |
 | `AtCollectionModel` / `AtJsonCollectionModel` | `AtCollection<T>` via `atClient.collection(...)` |
-| `at_common_flutter` package | `at_client_flutter` |
-| `at_backupkey_flutter` package | Copy `at_client_flutter` backup-key snippet into your app |
-| `at_invitation_flutter` package | Copy `at_client_flutter` invitation snippet into your app |
+| `at_common_flutter` | `at_client_flutter` |
+| `at_backupkey_flutter` | Copy `at_client_flutter` backup-key snippet |
+| `at_invitation_flutter` | Copy `at_client_flutter` invitation snippet |
 | `at_sync_ui_flutter`, `at_theme_flutter` | Deprecated — do not use |
-| `at_chat_flutter`, `at_contacts_flutter`, `at_contacts_group_flutter`, `at_events_flutter`, `at_follows_flutter`, `at_location_flutter`, `at_notify_flutter` | In migration — copy example code rather than depending on these in new projects |
+| `at_chat_flutter`, `at_contacts_flutter`, `at_contacts_group_flutter`, `at_events_flutter`, `at_follows_flutter`, `at_location_flutter`, `at_notify_flutter` | In migration — copy example code instead |
 
-Read [references/01-deprecation-guide.md](references/01-deprecation-guide.md) for the full
-migration table from old `AtCollectionModel` patterns to `AtCollection<T>`.
+Read [references/01-deprecation-guide.md](references/01-deprecation-guide.md) for
+the full migration table from old `AtCollectionModel` patterns to `AtCollection<T>`.
 
 ---
 
 ## 15. Canonical Examples & Future Scope
 
-- `packages/at_client/example/bin/collections_domain_objects.dart` — polymorphic types
-- `packages/at_client/example/bin/collections_subcollections.dart` — sub-collections + cascade
+- `packages/at_client/example/bin/collections_domain_objects.dart`
+- `packages/at_client/example/bin/collections_subcollections.dart`
 - `packages/at_client_flutter/examples/todos/` — canonical Flutter reference app
-- `packages/at_client_flutter/examples/dockerstats/` — notifications + SQLite pattern
+- `packages/at_client_flutter/examples/dockerstats/` — notifications + SQLite
 
-**If asked about migrating from `atClient.put()` / `atClient.get()` to `AtCollection<T>`:**
-Both APIs share the same underlying atServer keystore, but use different key-naming conventions — `AtCollection` data will not appear in raw `get()` queries and vice versa. Migration is non-trivial: you must read existing data with the raw API and re-write it through `AtCollection<T>`. Always test in a staging environment before touching production data.
-A formal migration guide (with backward-compatibility analysis) is **coming in skill v2.0**.
+**If asked about migrating from `atClient.put()` / `atClient.get()` to
+`AtCollection<T>`:** Both APIs share the same underlying atServer keystore but use
+different key-naming conventions — `AtCollection` data will not appear in raw
+`get()` queries and vice versa. Migration is non-trivial: read existing data with
+the raw API and re-write it through `AtCollection<T>`. Always test in a staging
+environment before touching production data.
+A formal migration guide is **coming in skill v2.0**.

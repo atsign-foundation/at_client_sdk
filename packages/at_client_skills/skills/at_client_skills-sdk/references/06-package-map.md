@@ -3,7 +3,7 @@
 # Package Map: Which Packages to Add
 
 All packages are published on pub.dev under the `atsign.org` publisher:
-https://pub.dev/publishers/atsign.org/packages
+<https://pub.dev/publishers/atsign.org/packages>
 
 ---
 
@@ -33,6 +33,7 @@ dependencies:
 so a Flutter app only needs this one entry. You do not need to add `at_client` separately.
 
 `at_client_flutter` adds:
+
 - Auth dialogs: `AtSignSelectionDialog`, `PkamDialog`, `CramDialog`, `RegistrarCramDialog`,
   `AtKeysFileDialog`, `ApkamActivationDialog`, `ApkamDialog`
 - `KeychainStorage` — device keychain (iOS Keychain, Android Keystore)
@@ -116,7 +117,7 @@ These packages are still published but are in the process of being deprecated.
 Their functionality will eventually move into example application code.
 
 | Package | In-migration status |
-|---------|-------------------|
+| --------- | ------------------- |
 | `at_chat_flutter` | Migration in progress |
 | `at_contacts_flutter` | Migration in progress |
 | `at_contacts_group_flutter` | Migration in progress |
@@ -138,7 +139,7 @@ These are typically pulled in as transitive dependencies. You only need to pin t
 directly if you're using their types directly in your own API.
 
 | Package | Version | When to pin explicitly |
-|---------|---------|----------------------|
+| --------- | --------- | ---------------------- |
 | `at_commons` | `^5.10.0` | If you use `AtKey`, `AtMetadata`, `Atsign` directly |
 | `at_utils` | `^3.4.0` | If you use `AtSignLogger` directly |
 | `at_lookup` | `^3.5.0` | Rarely needed; low-level verb implementation |

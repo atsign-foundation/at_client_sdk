@@ -11,14 +11,14 @@ Both patterns are valid and complementary — a single app can use both at once.
 
 ## Decision Table
 
-| Criterion | Use `AtCollection<T>` | Use Notifications + SQLite |
-|-----------|----------------------|---------------------------|
-| **Data shape** | Discrete typed records | High-frequency telemetry / event streams |
-| **Persistence** | Synced to atServer; available across devices | Local only; accumulated from notifications |
-| **Sharing model** | Per-item, shared with named atSigns | One publisher → many subscribers |
-| **Query needs** | Rich queries, reactive watches, sub-collections | Time-window aggregates, GROUP BY, charting |
-| **Volume** | Low–medium (hundreds to thousands of items) | High (per-second metrics, logs, traces) |
-| **Sync requirement** | Yes — SyncService keeps devices consistent | No — notifications are fire-and-forget |
+| Criterion            | Use `AtCollection<T>`                            | Use Notifications + SQLite                   |
+| -------------------- | ------------------------------------------------ | -------------------------------------------- |
+| **Data shape**       | Discrete typed records                           | High-frequency telemetry / event streams     |
+| **Persistence**      | Synced to atServer; available across devices     | Local only; accumulated from notifications   |
+| **Sharing model**    | Per-item, shared with named atSigns              | One publisher → many subscribers             |
+| **Query needs**      | Rich queries, reactive watches, sub-collections  | Time-window aggregates, GROUP BY, charting   |
+| **Volume**           | Low–medium (hundreds to thousands of items)      | High (per-second metrics, logs, traces)      |
+| **Sync requirement** | Yes — SyncService keeps devices consistent       | No — notifications are fire-and-forget       |
 | **Primary examples** | Todos, contacts, notes, documents, chat messages | Docker stats dashboard, analytics, telemetry |
 
 ---
@@ -50,6 +50,7 @@ StreamBuilder<List<CItem<Todo>>>(
 ```
 
 **Choose this when:**
+
 - Records have identity (can be retrieved, updated, or deleted by id)
 - Data must persist when the publisher is offline
 - Sharing is per-item and addressable (specific recipients)
@@ -97,6 +98,7 @@ final rows = await db.rawQuery(
 ```
 
 **Choose this when:**
+
 - Data is time-series: each sample is meaningful only in context of others
 - Volume is high (multiple samples per second)
 - Recipients accumulate their own local view (not shared with others)
@@ -153,7 +155,7 @@ atClient.notificationService
 
 ## Quick Decision Checklist
 
-```
+```text
 Is each data record addressable and independently retrievable?
 ├─ YES → AtCollection<T>
 └─ NO (stream of samples) → Notifications + SQLite
