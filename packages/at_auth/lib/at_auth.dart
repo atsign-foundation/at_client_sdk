@@ -28,7 +28,8 @@ export 'src/enroll/models/enrollment_request_decision.dart';
 export 'src/exception/at_auth_exceptions.dart';
 export 'src/keys/at_keys.dart';
 export 'src/keys/at_keys_io.dart';
-export 'src/keys/file_at_keys_io.dart';
+export 'src/keys/legacy/legacy_at_keys_util.dart';
+export 'src/keys/versioned_file_at_keys_io.dart';
 
 /// Classes for registrar services
 export 'src/registrar/registrar.dart';

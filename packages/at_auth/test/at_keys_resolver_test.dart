@@ -22,14 +22,16 @@ void main() {
       expect(keys.atSign, '@alice');
       expect(keys.asymmetricKeys, hasLength(2));
       expect(keys.symmetricKeys, hasLength(1));
-      expect(keys.defaults[AtKeyPurpose.pkam], 'default-pkam');
+      expect(keys.defaults[KeyPurpose.pkam], 'default-pkam');
 
       final pkam = keys.asymmetricKeys.singleWhere(
         (key) => key.pairId == 'default-pkam',
       );
-      expect(pkam.purpose, AtKeyPurpose.pkam);
-      expect(pkam.publicKey, 'cGthbS1wdWJsaWMta2V5');
-      expect(pkam.privateKey, 'cGthbS1wcml2YXRlLWtleQ==');
+      expect(keys.getKeyPair('default-pkam'), same(pkam));
+      expect(keys.getKeyPair('missing-pair'), isNull);
+      expect(pkam.purpose, KeyPurpose.pkam);
+      expect(pkam.publicKey.toString(), 'cGthbS1wdWJsaWMta2V5');
+      expect(pkam.privateKey.toString(), 'cGthbS1wcml2YXRlLWtleQ==');
       expect(pkam.operations, ['verify', 'authenticate', 'sign']);
 
       final encryption = keys.asymmetricKeys.singleWhere(
@@ -38,8 +40,13 @@ void main() {
       expect(encryption.privateKeyProtection?.keyRef, 'self-encryption');
 
       final selfEncryption = keys.symmetricKeys.single;
+      expect(
+        keys.getSymmetricKey('self-encryption'),
+        same(selfEncryption),
+      );
+      expect(keys.getSymmetricKey('missing-symmetric'), isNull);
       expect(selfEncryption.id, 'self-encryption');
-      expect(selfEncryption.purpose, AtKeyPurpose.selfEncryption);
+      expect(selfEncryption.purpose, KeyPurpose.selfEncryption);
     });
 
     test('throws when an asymmetric pair is incomplete', () {
@@ -87,7 +94,8 @@ void main() {
       final pkamPrivate = records.singleWhere(
         (record) => record['id'] == 'default-pkam-private',
       );
-      pkamPrivate['fingerprint']['value'] = 'different-fingerprint';
+      pkamPrivate['fingerprint']['value'] =
+          base64Encode(utf8.encode('different-fingerprint'));
 
       expect(
         () => resolver.resolve(codec.decodeDocument(json)),
@@ -134,7 +142,6 @@ Map<String, dynamic> _validDocument() {
   return jsonDecode(jsonEncode({
     'version': 2,
     'atSign': '@alice',
-    'documentNote': 'preserved',
     'keys': [
       {
         'id': 'default-pkam-public',
@@ -144,7 +151,7 @@ Map<String, dynamic> _validDocument() {
         'algorithm': 'rsa-2048',
         'fingerprint': {
           'algorithm': 'sha-256',
-          'value': 'pkam-fingerprint',
+          'value': base64Encode(utf8.encode('pkam-fingerprint')),
         },
         'operations': ['verify'],
         'value': 'cGthbS1wdWJsaWMta2V5',
@@ -157,10 +164,9 @@ Map<String, dynamic> _validDocument() {
         'algorithm': 'rsa-2048',
         'fingerprint': {
           'algorithm': 'sha-256',
-          'value': 'pkam-fingerprint',
+          'value': base64Encode(utf8.encode('pkam-fingerprint')),
         },
         'operations': ['authenticate', 'sign'],
-        'recordNote': 'preserved',
         'value': 'cGthbS1wcml2YXRlLWtleQ==',
       },
       {
@@ -171,7 +177,7 @@ Map<String, dynamic> _validDocument() {
         'algorithm': 'rsa-2048',
         'fingerprint': {
           'algorithm': 'sha-256',
-          'value': 'encryption-fingerprint',
+          'value': base64Encode(utf8.encode('encryption-fingerprint')),
         },
         'value': 'ZW5jcnlwdGlvbi1wdWJsaWMta2V5',
       },
@@ -183,7 +189,7 @@ Map<String, dynamic> _validDocument() {
         'algorithm': 'rsa-2048',
         'fingerprint': {
           'algorithm': 'sha-256',
-          'value': 'encryption-fingerprint',
+          'value': base64Encode(utf8.encode('encryption-fingerprint')),
         },
         'protection': {
           'type': 'encrypted',

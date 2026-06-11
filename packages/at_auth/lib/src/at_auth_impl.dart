@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:at_auth/src/keys/at_keys_creation.dart';
+import 'package:at_auth/src/keys/at_keys_io.dart';
 import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
@@ -12,8 +14,7 @@ import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
-import 'package:at_auth/src/keys/at_keys_io.dart';
-import 'package:at_auth/src/keys/file_at_keys_io.dart';
+import 'package:at_auth/src/keys/legacy/legacy_at_keys_util.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
@@ -21,6 +22,9 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
+
+import 'keys/at_keys_models.dart';
+import 'keys/legacy/legacy_file_at_keys_io.dart';
 
 class AtAuthImpl implements AtAuth {
   final AtSignLogger _logger = AtSignLogger('AtAuthServiceImpl');
@@ -69,7 +73,7 @@ class AtAuthImpl implements AtAuth {
 
   /// Authenticate using PKAM
   /// The AtAuthRequest must contain either:
-  /// - 1. atAuthRequest.atKeysIo - An implementation of AtKeysIo to read the keys
+  /// - 1. atAuthRequest.atKeysIo - An implementation of LegacyAtKeysIo to read the keys
   /// - 2. atAuthRequest.atAuthKeys - An instance of AtKeys containing the keys
   ///
   /// If both are provided, atAuthRequest.atAuthKeys will be used.
@@ -82,10 +86,10 @@ class AtAuthImpl implements AtAuth {
   ///
   /// returns an `AtAuthResponse` indicating success or failure of authentication
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
-    AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
+    AtKeysSet? atKeysSet;
     await validateAtServer(atAuthRequest);
     try {
-      atAuthKeys ??= await atAuthRequest.atKeysIo!.read(atAuthRequest.atSign);
+      atKeysSet = await atAuthRequest.atKeysIo.read(atAuthRequest.atSign);
     } on AtKeyException catch (e) {
       _addProgress(
         "authentication",
@@ -97,27 +101,26 @@ class AtAuthImpl implements AtAuth {
       );
     }
 
-    atAuthRequest.enrollmentId ??= atAuthKeys.enrollmentId;
     atLookUp ??= AtLookupImpl(
       atAuthRequest.atSign,
       atAuthRequest.rootDomain.rootDomain,
       atAuthRequest.rootDomain.rootPort,
     );
     // ??= to support mocking
-    atChops ??= atAuthKeys.toAtChops();
     atLookUp!.atChops = atChops;
 
     _logger.finer('Authenticating using PKAM');
     pkamAuthenticator ??= PkamAuthenticator();
-    var pkamResponse = AtAuthResponse(atAuthRequest.atSign);
+    var pkamResponse = AtAuthResponse(
+      atAuthRequest.atSign,
+      atAuthRequest.rootDomain,
+      atKeysSet,
+    );
     try {
-      pkamResponse
-        ..isSuccessful = (await pkamAuthenticator!.authenticate(
-            atAuthRequest.atSign, atLookUp!,
-            enrollmentId: atAuthRequest.enrollmentId))
-        ..atAuthKeys = atAuthKeys
-        ..atLookUp = atLookUp
-        ..atChops = atChops;
+      pkamResponse.isSuccessful = await pkamAuthenticator!.authenticate(
+        atAuthRequest.atSign,
+        atLookUp!,
+      );
 
       if (!pkamResponse.isSuccessful) {
         _addProgress(
@@ -146,7 +149,7 @@ class AtAuthImpl implements AtAuth {
   }
 
   /// Keep some state so callers can call [completeActivation] later
-  late AtKeys _atAuthKeys;
+  late AtKeysSet _atKeysSet;
   late AtOnboardingRequest _atOnboardingRequest;
 
   /// Onboard a new atSign using CRAM
@@ -160,16 +163,11 @@ class AtAuthImpl implements AtAuth {
     bool autoCompleteActivation = true,
     String? publicKeyId,
   }) async {
-    var atOnboardingResponse = AtOnboardingResponse(atOnboardingRequest.atSign);
-    atLookUp ??= AtLookupImpl(
-      atOnboardingRequest.atSign,
-      atOnboardingRequest.rootDomain.rootDomain,
-      atOnboardingRequest.rootDomain.rootPort,
-    );
-
     //If the user is providing atKeysIo, they might be onboarding again or with a specific key implementation.
+    AtKeysSet? atKeysSet;
     try {
-      atOnboardingRequest.atKeys = await atOnboardingRequest.atKeysIo?.read(
+      atOnboardingRequest.atKeysIo ??= LegacyFileAtKeysIo();
+      atKeysSet = await atOnboardingRequest.atKeysIo!.read(
         atOnboardingRequest.atSign,
       );
     } catch (e, _) {
@@ -178,12 +176,17 @@ class AtAuthImpl implements AtAuth {
       ); //swallow the error, we just want to know if keys exist or not
     }
 
-    if (atOnboardingRequest.atKeys != null) {
-      throw AtAuthenticationException(
-        'atSign: ${atOnboardingRequest.atSign} is already onboarded. Cannot perform onboarding again.',
-      );
-    }
+    var atOnboardingResponse = AtOnboardingResponse(
+      atOnboardingRequest.atSign,
+      atOnboardingRequest.rootDomain,
+      atKeysSet!,
+    );
 
+    atLookUp ??= AtLookupImpl(
+      atOnboardingRequest.atSign,
+      atOnboardingRequest.rootDomain.rootDomain,
+      atOnboardingRequest.rootDomain.rootPort,
+    );
     await validateAtServer(atOnboardingRequest);
     //1. cram auth
     cramAuthenticator ??= CramAuthenticator();
@@ -203,22 +206,22 @@ class AtAuthImpl implements AtAuth {
         ' and try again (or) contact support@atsign.com',
       );
     }
+
     //2. generate key pairs
-    if (atOnboardingRequest.atKeys != null) {
-      _atAuthKeys = atOnboardingRequest.atKeys!;
-    } else {
-      //2a. if there is no specified implementation we're defaulting to FileAtKeysIo with a default file path
-      atOnboardingRequest.atKeysIo ??= FileAtKeysIo();
-      switch (atOnboardingRequest.atKeysIo) {
-        case WrittenAtKeysIo writtenKeys:
-          _atAuthKeys =
-              writtenKeys.generateKeyPairs(atSign: atOnboardingRequest.atSign);
-        default:
-          throw AtAuthenticationException(
-              'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');
-      }
+    switch (atOnboardingRequest.atKeysIo) {
+      case LegacyFileAtKeysIo _:
+        var legacyKeys = LegacyKeyIOUtil.generateKeyPairs(
+            atSign: atOnboardingRequest.atSign);
+        var document = _atOnboardingRequest.atKeysIo!.legacyAtKeysAdapter
+            .toDocument(_atOnboardingRequest.atSign, legacyKeys);
+        _atKeysSet = _atOnboardingRequest.atKeysIo!.resolver.resolve(document);
+        break;
+      case WrittenAtKeysIo _:
+        _atKeysSet = await AtKeysCreation().generateAtKeysSet();
+      default:
+        throw AtAuthenticationException(
+            'LegacyAtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');
     }
-    atChops ??= _atAuthKeys.toAtChops();
     atLookUp!.atChops = atChops;
 
     //3. send onboarding enrollment
@@ -227,10 +230,10 @@ class AtAuthImpl implements AtAuth {
     // So don't have to manually update apkam public key in this scenario.
     enrollmentIdFromServer = await _sendOnboardingEnrollment(
       atOnboardingRequest,
-      _atAuthKeys,
+      _atKeysSet,
       atLookUp!,
     );
-    _atAuthKeys.enrollmentId = enrollmentIdFromServer;
+    _atKeysSet.enrollmentId = enrollmentIdFromServer;
 
     //4. Close connection to server
     try {
@@ -265,7 +268,7 @@ class AtAuthImpl implements AtAuth {
       try {
         await (atOnboardingRequest.atKeysIo as WrittenAtKeysIo).write(
           atOnboardingRequest.atSign,
-          _atAuthKeys,
+          _atKeysSet,
         );
         _logger.info(
           'Successfully stored keys for atSign: ${atOnboardingRequest.atSign}',
@@ -301,9 +304,8 @@ class AtAuthImpl implements AtAuth {
 
     atOnboardingResponse
       ..isSuccessful = true
-      ..atAuthKeys = _atAuthKeys
-      ..atLookUp = atLookUp
-      ..atChops = atChops;
+      ..rootDomain = _atOnboardingRequest.rootDomain
+      ..atKeysSet = _atKeysSet;
 
     _addProgress(
         "onboarding",
@@ -314,7 +316,7 @@ class AtAuthImpl implements AtAuth {
 
   @override
   Future<void> completeActivation() async {
-    final encryptionPublicKey = _atAuthKeys.defaultEncryptionPublicKey;
+    final encryptionPublicKey = _atKeysSet.getKeyPair()!.publicKey.toString();
     UpdateVerbBuilder updateBuilder = UpdateVerbBuilder()
       ..atKey = (AtKey()
         ..key = 'publickey'
@@ -334,15 +336,16 @@ class AtAuthImpl implements AtAuth {
 
   Future<String> _sendOnboardingEnrollment(
       AtOnboardingRequest atOnboardingRequest,
-      AtKeys atAuthKeys,
+      AtKeysSet atKeysSet,
       AtLookUp atLookup) async {
-    _logger.finer('apkamPublicKey: ${atAuthKeys.apkamPublicKey}');
+    var apkamPublicKey = atKeysSet.getKeyPair()!.publicKey.toString();
+    _logger.finer('apkamPublicKey: ${atKeysSet.getKeyPair('apkam')}');
 
     FirstEnrollmentRequest firstEnrollmentRequest = FirstEnrollmentRequest(
         atSign: atOnboardingRequest.atSign,
         appName: atOnboardingRequest.appName,
         deviceName: atOnboardingRequest.deviceName,
-        apkamPublicKey: atAuthKeys.apkamPublicKey!.toString());
+        apkamPublicKey: apkamPublicKey);
 
     AtEnrollmentResponse? atEnrollmentResponse;
     try {

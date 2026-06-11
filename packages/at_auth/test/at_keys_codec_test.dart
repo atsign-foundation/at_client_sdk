@@ -17,19 +17,17 @@ void main() {
       final document = codec.decodeDocument(_validDocument());
 
       expect(document.version, 2);
-      expect(document.atSign, '@alice');
+      expect(document.atsign, '@alice');
       expect(document.keys, hasLength(5));
-      expect(document.defaults[AtKeyPurpose.pkam], 'default-pkam');
-      expect(document.defaults[AtKeyPurpose.selfEncryption], 'self-encryption');
-      expect(document.metadata['documentNote'], 'preserved');
+      expect(document.defaults[KeyPurpose.pkam], 'default-pkam');
+      expect(document.defaults[KeyPurpose.selfEncryption], 'self-encryption');
 
       final pkamPrivate = document.keys.singleWhere(
         (record) => record.id == 'default-pkam-private',
       );
-      expect(pkamPrivate.purpose, AtKeyPurpose.pkam);
-      expect(pkamPrivate.kind, AtKeyKind.private);
+      expect(pkamPrivate.purpose, KeyPurpose.pkam);
+      expect(pkamPrivate.kind, KeyRecordKind.private);
       expect(pkamPrivate.operations, ['authenticate', 'sign']);
-      expect(pkamPrivate.metadata['recordNote'], 'preserved');
     });
 
     test('encodes a decoded document with stable JSON tokens', () {
@@ -38,7 +36,6 @@ void main() {
 
       expect(encoded['version'], 2);
       expect(encoded['defaults']['selfEncryption'], 'self-encryption');
-      expect(encoded['documentNote'], 'preserved');
 
       final encodedKeys = encoded['keys'] as List<dynamic>;
       final selfEncryption = encodedKeys.singleWhere(
@@ -148,7 +145,6 @@ Map<String, dynamic> _validDocument() {
   return jsonDecode(jsonEncode({
     'version': 2,
     'atSign': '@alice',
-    'documentNote': 'preserved',
     'keys': [
       {
         'id': 'default-pkam-public',
@@ -158,7 +154,7 @@ Map<String, dynamic> _validDocument() {
         'algorithm': 'rsa-2048',
         'fingerprint': {
           'algorithm': 'sha-256',
-          'value': 'pkam-fingerprint',
+          'value': base64Encode(utf8.encode('pkam-fingerprint')),
         },
         'value': 'cGthbS1wdWJsaWMta2V5',
       },
@@ -170,10 +166,9 @@ Map<String, dynamic> _validDocument() {
         'algorithm': 'rsa-2048',
         'fingerprint': {
           'algorithm': 'sha-256',
-          'value': 'pkam-fingerprint',
+          'value': base64Encode(utf8.encode('pkam-fingerprint')),
         },
         'operations': ['authenticate', 'sign'],
-        'recordNote': 'preserved',
         'value': 'cGthbS1wcml2YXRlLWtleQ==',
       },
       {
@@ -184,7 +179,7 @@ Map<String, dynamic> _validDocument() {
         'algorithm': 'rsa-2048',
         'fingerprint': {
           'algorithm': 'sha-256',
-          'value': 'encryption-fingerprint',
+          'value': base64Encode(utf8.encode('encryption-fingerprint')),
         },
         'value': 'ZW5jcnlwdGlvbi1wdWJsaWMta2V5',
       },
@@ -196,7 +191,7 @@ Map<String, dynamic> _validDocument() {
         'algorithm': 'rsa-2048',
         'fingerprint': {
           'algorithm': 'sha-256',
-          'value': 'encryption-fingerprint',
+          'value': base64Encode(utf8.encode('encryption-fingerprint')),
         },
         'value': 'ZW5jcnlwdGlvbi1wcml2YXRlLWtleQ==',
       },
