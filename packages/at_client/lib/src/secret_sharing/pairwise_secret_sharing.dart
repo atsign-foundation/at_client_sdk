@@ -13,6 +13,7 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/secret_sharing/client_key_bundle.dart';
 import 'package:at_client/src/secret_sharing/pairwise_client_registration.dart';
 import 'package:at_client/src/secret_sharing/secret_envelope.dart';
+import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:uuid/uuid.dart' show Uuid;
 
@@ -33,6 +34,19 @@ class ReceivedEnvelope {
     required this.fromEnrollmentId,
     required this.appNamespace,
     required this.payload,
+  });
+}
+
+/// A [Secret] another client of this atSign shared with this client.
+class ReceivedSecret {
+  final Secret secret;
+  final String fromClientId;
+  final String fromEnrollmentId;
+
+  ReceivedSecret({
+    required this.secret,
+    required this.fromClientId,
+    required this.fromEnrollmentId,
   });
 }
 
@@ -65,6 +79,8 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
 
   final StreamController<ReceivedEnvelope> _receivedController =
       StreamController<ReceivedEnvelope>.broadcast();
+  final StreamController<ReceivedSecret> _receivedSecretsController =
+      StreamController<ReceivedSecret>.broadcast();
   Timer? _sweepTimer;
   _EnvelopeSyncListener? _syncListener;
 
@@ -72,9 +88,20 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
   /// races a slow delete cannot emit a payload twice.
   final Set<String> _consumedEnvelopeKeys = {};
 
+  /// The secrets this client holds: what it created via
+  /// [SecretStore.putSecret], plus what other clients shared with it
+  /// (received secrets are stored automatically, newest-createdAt wins).
+  final SecretStore secretStore = SecretStore();
+
   /// Decrypted, verified payloads addressed to this client.
   /// Listen, then call [startListening].
   Stream<ReceivedEnvelope> get receivedEnvelopes => _receivedController.stream;
+
+  /// Secrets shared with this client by other clients (already verified,
+  /// decrypted, and stored in [secretStore]).
+  /// Listen, then call [startListening].
+  Stream<ReceivedSecret> get receivedSecrets =>
+      _receivedSecretsController.stream;
 
   /// Encrypts [payload] to [to]'s published bundle and stores it for
   /// delivery, addressed through [appNamespace].
@@ -189,6 +216,7 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
         }
         _consumedEnvelopeKeys.add(keyString);
         _receivedController.add(received);
+        await _handleSecretPayload(received);
         consumed++;
       } catch (e) {
         // Includes transient failures (e.g. fetching the signer's _apsk key)
@@ -254,6 +282,112 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
       appNamespace: envelopeKey.namespace ?? '',
       payload: jsonDecode(plaintext) as Map<String, dynamic>,
     );
+  }
+
+  /// Payload `kind` marker for envelopes that carry a [Secret].
+  static const String secretPayloadKind = 'secret';
+
+  /// If [received] carries a secret, stores it in [secretStore]
+  /// (newest-createdAt wins) and emits it on [receivedSecrets].
+  Future<void> _handleSecretPayload(ReceivedEnvelope received) async {
+    if (received.payload['kind'] != secretPayloadKind) {
+      return;
+    }
+    final Secret secret;
+    try {
+      secret = Secret.fromJson({
+        ...received.payload,
+        // the namespace is taken from the (server-authorized) envelope key,
+        // not from the payload
+        'namespace': received.appNamespace,
+      });
+    } on FormatException catch (e) {
+      logger.warning('Discarding malformed secret payload from '
+          '${received.fromClientId}: $e');
+      return;
+    }
+    final stored = await secretStore.putIfNewer(secret);
+    if (!stored) {
+      logger.info('Ignoring secret ${secret.namespace}:${secret.name} from '
+          '${received.fromClientId}: already hold a same-or-newer one');
+      return;
+    }
+    _receivedSecretsController.add(ReceivedSecret(
+      secret: secret,
+      fromClientId: received.fromClientId,
+      fromEnrollmentId: received.fromEnrollmentId,
+    ));
+  }
+
+  /// Shares one secret with one client.
+  Future<void> shareSecretWith(ClientKeyBundle to, Secret secret) =>
+      sendEnvelope(to, secret.namespace, {
+        'kind': secretPayloadKind,
+        'name': secret.name,
+        'value': secret.value,
+        'createdAt': secret.createdAt.toIso8601String(),
+      });
+
+  /// Shares every secret in [secretStore] with [to], filtered — when
+  /// [approvedNamespaces] is given — to secrets whose namespace that
+  /// enrollment is authorized for ([SecretStore.namespaceAuthorizes]).
+  ///
+  /// The filter is a courtesy, not the enforcement: even without it the
+  /// atServer would refuse to deliver an envelope to an enrollment that
+  /// lacks the namespace. With it, the material never leaves this client.
+  ///
+  /// Returns the number of secrets shared.
+  Future<int> shareAllSecretsWith(
+    ClientKeyBundle to, {
+    Map<String, dynamic>? approvedNamespaces,
+  }) async {
+    int shared = 0;
+    for (final secret in secretStore.listSecrets()) {
+      if (approvedNamespaces != null &&
+          !SecretStore.namespaceAuthorizes(
+              approvedNamespaces, secret.namespace)) {
+        continue;
+      }
+      await shareSecretWith(to, secret);
+      shared++;
+    }
+    return shared;
+  }
+
+  /// For use by an enrollment approver, after approving [enrollmentId] with
+  /// [approvedNamespaces] (both available from the enrollment request):
+  /// waits for the newly-approved enrollment's client(s) to publish their
+  /// key bundles, then shares with each of them every held secret the
+  /// enrollment's namespaces authorize.
+  ///
+  /// Polls every [pollInterval] until at least one bundle is found or
+  /// [timeout] elapses (a freshly approved client must authenticate and
+  /// register before it is discoverable). Returns the total number of
+  /// secrets shared (0 on timeout).
+  Future<int> shareAllSecretsWithEnrollment(
+    String enrollmentId,
+    Map<String, dynamic> approvedNamespaces, {
+    Duration timeout = const Duration(minutes: 5),
+    Duration pollInterval = const Duration(seconds: 10),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (true) {
+      final bundles = await discoverClients(enrollmentId: enrollmentId);
+      if (bundles.isNotEmpty) {
+        int shared = 0;
+        for (final bundle in bundles) {
+          shared += await shareAllSecretsWith(bundle,
+              approvedNamespaces: approvedNamespaces);
+        }
+        return shared;
+      }
+      if (DateTime.now().isAfter(deadline)) {
+        logger.warning('No client of enrollment $enrollmentId published a '
+            'key bundle within $timeout; no secrets shared');
+        return 0;
+      }
+      await Future.delayed(pollInterval);
+    }
   }
 }
 
