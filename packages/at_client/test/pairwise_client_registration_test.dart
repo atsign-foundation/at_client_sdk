@@ -79,11 +79,14 @@ void main() {
     });
     when(() => atClient.getAtKeys(
         regex: any(named: 'regex'),
-        showHiddenKeys: true,
-        useRemoteAtServer: true)).thenAnswer((inv) {
+        showHiddenKeys: any(named: 'showHiddenKeys'),
+        useRemoteAtServer: any(named: 'useRemoteAtServer'))).thenAnswer((inv) {
       final regex = RegExp(inv.namedArguments[#regex] as String);
+      final showHidden = inv.namedArguments[#showHiddenKeys] == true;
       return Future.value(remoteData.keys
           .where((k) => regex.hasMatch(k))
+          // model the server: hidden public keys need showhidden:true
+          .where((k) => showHidden || !k.startsWith('public:_'))
           .map(AtKey.fromString)
           .toList());
     });
@@ -291,6 +294,116 @@ void main() {
           throwsA(isA<FormatException>()));
       expect(() => ClientKeyBundle.fromJson('a string'),
           throwsA(isA<FormatException>()));
+    });
+
+    test('a bundle without a namespaces field (older writer) parses as []', () {
+      final bundle = ClientKeyBundle.fromJson({
+        'v': 1,
+        'clientId': 'cid-x',
+        'enrollmentId': 'enroll-x',
+        'createdAt': '2026-06-11T00:00:00.000Z',
+        'keys': [],
+      });
+      expect(bundle.namespaces, isEmpty);
+    });
+  });
+
+  group('namespace-scoped registration and discovery', () {
+    test(
+        'registerClient publishes a cleartext self-key copy per namespace, '
+        'carrying the signed namespace list; deregister removes them',
+        () async {
+      final registrant = buildRegistrant('enroll-a', stableClientId: 'cid-a');
+      final bundle = await registrant
+          .registerClient(namespaces: ['myapp', 'examples.demos']);
+
+      expect(bundle.namespaces, ['examples.demos', 'myapp']); // sorted
+
+      final copyMyapp = 'pqkb-cid-a.enroll-a.__pqkbns.myapp$atSign';
+      final copyDemos = 'pqkb-cid-a.enroll-a.__pqkbns.examples.demos$atSign';
+      expect(remoteData.containsKey(copyMyapp), isTrue);
+      expect(remoteData.containsKey(copyDemos), isTrue);
+      // copies carry the same signed envelope as the canonical bundle
+      expect(remoteData[copyMyapp],
+          remoteData['public:__pqkb-cid-a.enroll-a.a.__e$atSign']);
+      // raw JSON (never whole-value base64)
+      expect(remoteData[copyMyapp]!.startsWith('{'), isTrue);
+
+      await registrant.deregisterClient();
+      expect(remoteData.containsKey(copyMyapp), isFalse);
+      expect(remoteData.containsKey(copyDemos), isFalse);
+    });
+
+    test(
+        'discoverClients(namespace:) returns only clients registered for '
+        'that namespace, excluding self', () async {
+      final registrantA = buildRegistrant('enroll-a', stableClientId: 'cid-a');
+      await registrantA.registerClient(namespaces: ['myapp']);
+
+      final registrantB = buildRegistrant('enroll-b', stableClientId: 'cid-b');
+      await registrantB.registerClient(namespaces: ['myapp', 'mychat']);
+
+      final registrantC = buildRegistrant('enroll-c', stableClientId: 'cid-c');
+      await registrantC.registerClient(); // no namespaces
+
+      final seenByA = await registrantA.discoverClients(namespace: 'myapp');
+      expect(seenByA.map((b) => b.clientId), ['cid-b']); // not self, not C
+
+      final chatOnly = await registrantA.discoverClients(namespace: 'mychat');
+      expect(chatOnly.map((b) => b.clientId), ['cid-b']);
+
+      // global discovery still sees everyone
+      final global = await registrantA.discoverClients();
+      expect(global.map((b) => b.clientId).toSet(), {'cid-b', 'cid-c'});
+
+      await registrantA.deregisterClient();
+      await registrantB.deregisterClient();
+      await registrantC.deregisterClient();
+    });
+
+    test(
+        'a genuine signed bundle planted under a namespace outside its '
+        'signed namespace list is rejected', () async {
+      final registrantA = buildRegistrant('enroll-a', stableClientId: 'cid-a');
+      await registrantA.registerClient(namespaces: ['myapp']);
+
+      // an owner-class actor copies A's genuine bundle copy into a
+      // namespace A did not register for (on a real atServer only a
+      // wildcard/legacy connection could do this write)
+      remoteData['pqkb-cid-a.enroll-a.__pqkbns.banking$atSign'] =
+          remoteData['pqkb-cid-a.enroll-a.__pqkbns.myapp$atSign']!;
+
+      final registrantB = buildRegistrant('enroll-b', stableClientId: 'cid-b');
+      await registrantB.registerClient();
+
+      expect(await registrantB.discoverClients(namespace: 'banking'), isEmpty);
+      // the legitimate copy still discovers fine
+      expect(
+          (await registrantB.discoverClients(namespace: 'myapp'))
+              .map((b) => b.clientId),
+          ['cid-a']);
+
+      await registrantA.deregisterClient();
+      await registrantB.deregisterClient();
+    });
+
+    test('discoverClients(namespace:, enrollmentId:) combines both filters',
+        () async {
+      final registrantA = buildRegistrant('enroll-a', stableClientId: 'cid-a');
+      await registrantA.registerClient(namespaces: ['myapp']);
+      final registrantB = buildRegistrant('enroll-b', stableClientId: 'cid-b');
+      await registrantB.registerClient(namespaces: ['myapp']);
+
+      final registrantC = buildRegistrant('enroll-c', stableClientId: 'cid-c');
+      await registrantC.registerClient();
+
+      final found = await registrantC.discoverClients(
+          namespace: 'myapp', enrollmentId: 'enroll-b');
+      expect(found.map((b) => b.clientId), ['cid-b']);
+
+      await registrantA.deregisterClient();
+      await registrantB.deregisterClient();
+      await registrantC.deregisterClient();
     });
   });
 }

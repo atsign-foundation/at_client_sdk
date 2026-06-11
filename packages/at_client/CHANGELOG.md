@@ -19,6 +19,15 @@
 - feat: New `EnvelopeSigning` mixin: wrap payloads in JSON envelopes signed
   with the APKAM keypair, verifiable by other clients against the signer
   enrollment's published `_apsk` public signing key.
+- feat: Namespace-scoped registration and discovery for secret sharing:
+  `registerClient(namespaces: [...])` additionally publishes the signed
+  bundle as a cleartext self key per application namespace, and
+  `discoverClients(namespace: ...)` scans those copies — returning only
+  clients whose enrollments provably hold `rw` on that namespace (the
+  atServer refuses the copy's write otherwise) and revealing them only to
+  scanners authorized for it. The signed bundle carries its namespace list,
+  so a genuine bundle planted under a foreign namespace is rejected at
+  discovery time.
 - fix: `get` now respects an explicit `isEncrypted=false` in metadata and
   returns the raw value without attempting decryption. Previously plaintext
   values that happened to be valid base64 were "decrypted" into garbage.

@@ -47,10 +47,16 @@ void main(List<String> args) async {
 
   final sharing = AtClientSecretSharing(atClient);
   stdout.writeln('Registering this client (generates a keypair; ~a second)…');
-  final myBundle = await sharing.registerClient();
+  // Registering with namespaces publishes a namespace-scoped copy of the
+  // bundle per namespace, so senders can discover "clients participating in
+  // this namespace" without fetching everyone's bundle.
+  final myBundle = await sharing.registerClient(
+    namespaces: [applicationNamespace],
+  );
   stdout.writeln(
     'Registered as clientId ${myBundle.clientId} '
-    '(enrollment ${myBundle.enrollmentId})',
+    '(enrollment ${myBundle.enrollmentId}, '
+    'namespaces ${myBundle.namespaces})',
   );
 
   switch (role) {
@@ -77,8 +83,11 @@ Future<void> sender(AtClientSecretSharing sharing) async {
     ),
   );
 
-  stdout.writeln('-> Discovering other clients of this atSign…');
-  final others = await sharing.discoverClients();
+  stdout.writeln(
+    '-> Discovering clients of this atSign participating in '
+    '$applicationNamespace…',
+  );
+  final others = await sharing.discoverClients(namespace: applicationNamespace);
   if (others.isEmpty) {
     stdout.writeln(
       'No other registered clients found. Start the receiver '

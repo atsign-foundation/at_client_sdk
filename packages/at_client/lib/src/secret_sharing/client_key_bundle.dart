@@ -69,11 +69,19 @@ class ClientKeyBundle {
   final DateTime createdAt;
   final List<BundleKey> keys;
 
+  /// The application namespaces this client participates in — the namespaces
+  /// it has published namespace-scoped copies of this bundle under (see
+  /// PairwiseClientRegistration). Because this list is inside the signed
+  /// payload, a copy of the bundle planted under a namespace the client did
+  /// not register for is detectable: the copy's location won't appear here.
+  final List<String> namespaces;
+
   ClientKeyBundle({
     required this.clientId,
     required this.enrollmentId,
     required this.createdAt,
     required this.keys,
+    this.namespaces = const [],
     this.v = currentVersion,
   });
 
@@ -98,6 +106,7 @@ class ClientKeyBundle {
         'enrollmentId': enrollmentId,
         'createdAt': createdAt.toUtc().toIso8601String(),
         'keys': keys.map((k) => k.toJson()).toList(),
+        'namespaces': namespaces,
       };
 
   /// Parses a bundle, skipping malformed entries in `keys` rather than
@@ -115,6 +124,7 @@ class ClientKeyBundle {
     final enrollmentId = json['enrollmentId'];
     final createdAt = json['createdAt'];
     final keys = json['keys'];
+    final namespaces = json['namespaces'];
     if (v is! int ||
         clientId is! String ||
         enrollmentId is! String ||
@@ -128,6 +138,10 @@ class ClientKeyBundle {
       enrollmentId: enrollmentId,
       createdAt: DateTime.parse(createdAt),
       keys: keys.map(BundleKey.fromJson).whereType<BundleKey>().toList(),
+      // tolerate absence (bundles from older writers) and non-string entries
+      namespaces: namespaces is List
+          ? namespaces.whereType<String>().toList()
+          : const [],
     );
   }
 }
