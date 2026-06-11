@@ -142,8 +142,9 @@ AtChops _createApkamChops(AtKeys atKeys) {
     atKeys.apkamPrivateKey!.toString(),
   );
 
-  final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
-    ..apkamSymmetricKey = AESKey(atKeys.apkamSymmetricKey!.toString());
+  final atChopsKeys =
+      LegacyAtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
+        ..apkamSymmetricKey = AESKey(atKeys.apkamSymmetricKey!.toString());
 
   if (atKeys.defaultSelfEncryptionKey != null) {
     atChopsKeys.selfEncryptionKey =
@@ -173,7 +174,8 @@ AtChops _createPkamChops(AtKeys atKeys) {
     atKeys.apkamPrivateKey!.toString(),
   );
 
-  final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
+  final atChopsKeys = LegacyAtChopsKeys.create(
+      atEncryptionKeyPair, atPkamKeyPair)
     ..selfEncryptionKey = AESKey(atKeys.defaultSelfEncryptionKey!.toString());
 
   return AtChopsImpl(atChopsKeys);
