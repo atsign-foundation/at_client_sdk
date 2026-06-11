@@ -279,9 +279,24 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
     return ReceivedEnvelope(
       fromClientId: envelope.fromClientId,
       fromEnrollmentId: envelope.fromEnrollmentId,
-      appNamespace: envelopeKey.namespace ?? '',
+      appNamespace: _appNamespaceOf(envelopeKey),
       payload: jsonDecode(plaintext) as Map<String, dynamic>,
     );
+  }
+
+  /// The full application namespace of an envelope key: everything between
+  /// the `.__ssenv.` marker and the atSign. `AtKey.namespace` only carries
+  /// the last dot segment, which would truncate dotted app namespaces
+  /// (`examples.demos` would arrive as `demos`).
+  String _appNamespaceOf(AtKey envelopeKey) {
+    final String keyString = envelopeKey.toString();
+    final int markerIndex = keyString.indexOf('.$envelopeKeyMarker.');
+    final int atIndex = keyString.lastIndexOf('@');
+    if (markerIndex < 0 || atIndex <= markerIndex) {
+      return envelopeKey.namespace ?? '';
+    }
+    return keyString.substring(
+        markerIndex + envelopeKeyMarker.length + 2, atIndex);
   }
 
   /// Payload `kind` marker for envelopes that carry a [Secret].

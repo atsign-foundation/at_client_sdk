@@ -3,10 +3,6 @@ import 'dart:convert';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_client/src/secret_sharing/client_key_bundle.dart';
-import 'package:at_client/src/secret_sharing/pairwise_client_registration.dart';
-import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
-import 'package:at_client/src/secret_sharing/secret_envelope.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show CommitOp;
@@ -224,6 +220,25 @@ void main() {
       // consumed envelope was deleted
       expect(remoteData.keys.where((k) => k.contains('.__ssenv.')), isEmpty);
       expect(await sharerB.sweepOnce(), 0);
+      await sub.cancel();
+    });
+
+    test('a dotted application namespace survives the round trip intact',
+        () async {
+      // regression: AtKey.namespace is only the LAST dot segment, so the
+      // received namespace used to arrive truncated ('demos' instead of
+      // 'examples.demos')
+      await sharerA.sendEnvelope(sharerB.myBundle!, 'examples.demos', {'a': 1});
+      expect(
+          remoteData.keys
+              .where((k) => k.endsWith('.__ssenv.examples.demos@alice')),
+          hasLength(1));
+
+      final received = <ReceivedEnvelope>[];
+      final sub = sharerB.receivedEnvelopes.listen(received.add);
+      expect(await sharerB.sweepOnce(), 1);
+      await Future.delayed(Duration.zero);
+      expect(received.single.appNamespace, 'examples.demos');
       await sub.cancel();
     });
 
