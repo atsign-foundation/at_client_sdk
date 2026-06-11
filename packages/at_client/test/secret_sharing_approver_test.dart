@@ -1,9 +1,6 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_client/src/secret_sharing/pairwise_client_registration.dart';
-import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
-import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:crypton/crypton.dart';
