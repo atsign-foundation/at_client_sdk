@@ -1,7 +1,8 @@
 import 'dart:convert';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
-import 'package:at_auth/src/keys/at_keys_models.dart';
+import 'package:at_auth/src/keys/at_keys_document.dart';
+import 'package:at_commons/at_commons.dart';
 
 abstract class AtKeysCodec {
   AtKeysDocument decodeDocument(Map<String, dynamic> json);
@@ -29,36 +30,6 @@ class AtKeysJsonCodec implements AtKeysCodec {
     'aes-128-ctr',
     'aes-192-ctr',
     'aes-256-ctr',
-  };
-
-  static const Set<String> _topLevelFields = {
-    'version',
-    'atSign',
-    'enrollmentId',
-    'keys',
-    'defaults',
-  };
-
-  static const Set<String> _recordFields = {
-    'id',
-    'pairId',
-    'purpose',
-    'kind',
-    'algorithm',
-    'fingerprint',
-    'status',
-    'createdAt',
-    'notAfter',
-    'operations',
-    'protection',
-    'value',
-  };
-
-  static const Set<String> _protectionFields = {
-    'type',
-    'keyRef',
-    'algorithm',
-    'iv',
   };
 
   @override
@@ -89,11 +60,10 @@ class AtKeysJsonCodec implements AtKeysCodec {
 
     return AtKeysDocument(
       version: version,
-      atSign: atSign,
+      atsign: atSign,
       enrollmentId: _optionalString(json['enrollmentId'], 'enrollmentId'),
       keys: keys,
       defaults: defaults,
-      metadata: _metadataFrom(json, _topLevelFields),
     );
   }
 
@@ -101,27 +71,26 @@ class AtKeysJsonCodec implements AtKeysCodec {
   Map<String, dynamic> encodeDocument(AtKeysDocument document) {
     return {
       'version': document.version,
-      'atSign': document.atSign,
+      'atSign': document.atsign,
       if (document.enrollmentId != null) 'enrollmentId': document.enrollmentId,
       'keys': document.keys.map(_encodeRecord).toList(),
       'defaults': _encodeDefaults(document.defaults),
-      ...document.metadata,
     };
   }
 
-  AtKeyRecord _decodeRecord(Map<String, dynamic> json, int index) {
+  KeyRecord _decodeRecord(Map<String, dynamic> json, int index) {
     final fieldPrefix = 'keys[$index]';
     final id = _expectNonEmptyString(json['id'], '$fieldPrefix.id');
     final purposeToken =
         _expectNonEmptyString(json['purpose'], '$fieldPrefix.purpose');
-    final purpose = atKeyPurposeFromJsonToken(purposeToken);
+    final purpose = keyPurposeFromJsonToken(purposeToken);
     if (purpose == null) {
       throw AtKeysValidationException(
           'Unsupported atKeys purpose "$purposeToken" at $fieldPrefix');
     }
 
     final kindToken = _expectNonEmptyString(json['kind'], '$fieldPrefix.kind');
-    final kind = atKeyKindFromJsonToken(kindToken);
+    final kind = keyKindFromJsonToken(kindToken);
     if (kind == null) {
       throw AtKeysValidationException(
           'Unsupported atKeys kind "$kindToken" at $fieldPrefix');
@@ -142,7 +111,7 @@ class AtKeysJsonCodec implements AtKeysCodec {
           )
         : null;
 
-    if (kind == AtKeyKind.symmetric) {
+    if (kind == KeyRecordKind.symmetric) {
       if (pairId != null) {
         throw AtKeysValidationException(
             'Symmetric key "$id" must not have pairId');
@@ -155,7 +124,7 @@ class AtKeysJsonCodec implements AtKeysCodec {
       throw AtKeysValidationException('Asymmetric key "$id" must have pairId');
     }
 
-    return AtKeyRecord(
+    return KeyRecord(
       id: id,
       pairId: pairId,
       purpose: purpose,
@@ -173,12 +142,11 @@ class AtKeysJsonCodec implements AtKeysCodec {
               '$fieldPrefix.protection',
             )
           : null,
-      value: value,
-      metadata: _metadataFrom(json, _recordFields),
+      bytes: AtBytes.fromString(value),
     );
   }
 
-  Map<String, dynamic> _encodeRecord(AtKeyRecord record) {
+  Map<String, dynamic> _encodeRecord(KeyRecord record) {
     return {
       'id': record.id,
       if (record.pairId != null) 'pairId': record.pairId,
@@ -195,37 +163,33 @@ class AtKeysJsonCodec implements AtKeysCodec {
       if (record.operations.isNotEmpty) 'operations': record.operations,
       if (record.protection != null)
         'protection': _encodeProtection(record.protection!),
-      'value': record.value,
-      ...record.metadata,
+      'value': record.bytes.toString,
     };
   }
 
-  AtKeyDefaults _decodeDefaults(Map<String, dynamic> json) {
-    final values = <AtKeyPurpose, String>{};
-    final metadata = <String, dynamic>{};
+  AtKeysDefaults _decodeDefaults(Map<String, dynamic> json) {
+    final values = <KeyPurpose, String>{};
 
     for (final entry in json.entries) {
-      final purpose = atKeyPurposeFromDefaultsKey(entry.key);
+      final purpose = keyPurposeFromDefaultsKey(entry.key);
       if (purpose == null) {
-        metadata[entry.key] = entry.value;
         continue;
       }
       values[purpose] =
           _expectNonEmptyString(entry.value, 'defaults.${entry.key}');
     }
 
-    return AtKeyDefaults(values: values, metadata: metadata);
+    return AtKeysDefaults(values: values);
   }
 
-  Map<String, dynamic> _encodeDefaults(AtKeyDefaults defaults) {
+  Map<String, dynamic> _encodeDefaults(AtKeysDefaults defaults) {
     return {
       for (final entry in defaults.values.entries)
         entry.key.defaultsKey: entry.value,
-      ...defaults.metadata,
     };
   }
 
-  AtKeyFingerprint _decodeFingerprint(
+  KeyFingerprint _decodeFingerprint(
     Map<String, dynamic> json,
     String fieldPrefix,
   ) {
@@ -236,20 +200,22 @@ class AtKeysJsonCodec implements AtKeysCodec {
           'Unsupported fingerprint algorithm "$algorithm" at $fieldPrefix');
     }
 
-    return AtKeyFingerprint(
+    return KeyFingerprint(
       algorithm: algorithm,
-      value: _expectNonEmptyString(json['value'], '$fieldPrefix.value'),
+      value: AtBytes.fromString(
+        _expectNonEmptyString(json['value'], '$fieldPrefix.value'),
+      ),
     );
   }
 
-  Map<String, dynamic> _encodeFingerprint(AtKeyFingerprint fingerprint) {
+  Map<String, dynamic> _encodeFingerprint(KeyFingerprint fingerprint) {
     return {
       'algorithm': fingerprint.algorithm,
       'value': fingerprint.value,
     };
   }
 
-  AtKeyProtection _decodeProtection(
+  KeyProtection _decodeProtection(
     Map<String, dynamic> json,
     String fieldPrefix,
   ) {
@@ -260,26 +226,22 @@ class AtKeysJsonCodec implements AtKeysCodec {
           'Unsupported protection algorithm "$algorithm" at $fieldPrefix');
     }
 
-    return AtKeyProtection(
-      type: _expectNonEmptyString(json['type'], '$fieldPrefix.type'),
+    return KeyProtection(
       keyRef: _expectNonEmptyString(json['keyRef'], '$fieldPrefix.keyRef'),
       algorithm: algorithm,
       iv: _expectNonEmptyString(json['iv'], '$fieldPrefix.iv'),
-      metadata: _metadataFrom(json, _protectionFields),
     );
   }
 
-  Map<String, dynamic> _encodeProtection(AtKeyProtection protection) {
+  Map<String, dynamic> _encodeProtection(KeyProtection protection) {
     return {
-      'type': protection.type,
       'keyRef': protection.keyRef,
       'algorithm': protection.algorithm,
       'iv': protection.iv,
-      ...protection.metadata,
     };
   }
 
-  void _validateDuplicateIds(List<AtKeyRecord> records) {
+  void _validateDuplicateIds(List<KeyRecord> records) {
     final ids = <String>{};
     for (final record in records) {
       if (!ids.add(record.id)) {
@@ -289,7 +251,7 @@ class AtKeysJsonCodec implements AtKeysCodec {
     }
   }
 
-  void _validateProtectionReferences(List<AtKeyRecord> records) {
+  void _validateProtectionReferences(List<KeyRecord> records) {
     final ids = records.map((record) => record.id).toSet();
     for (final record in records) {
       final protection = record.protection;
@@ -378,15 +340,5 @@ class AtKeysJsonCodec implements AtKeysCodec {
     } on FormatException catch (e) {
       throw AtKeysValidationException('Malformed base64 at $fieldName: $e');
     }
-  }
-
-  Map<String, dynamic> _metadataFrom(
-    Map<String, dynamic> json,
-    Set<String> knownFields,
-  ) {
-    return {
-      for (final entry in json.entries)
-        if (!knownFields.contains(entry.key)) entry.key: entry.value,
-    };
   }
 }
