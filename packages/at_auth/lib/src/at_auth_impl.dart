@@ -23,7 +23,6 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
-import 'keys/at_keys_models.dart';
 import 'keys/legacy/legacy_file_at_keys_io.dart';
 
 class AtAuthImpl implements AtAuth {
