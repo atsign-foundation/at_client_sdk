@@ -1,4 +1,3 @@
-import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
@@ -34,61 +33,40 @@ class AtOnboardingRequest extends AuthRequest {
   /// [appName] is the name of the app
   /// [deviceName] is the name of the device
   /// [atKeysIo] controls how AtKeys are loaded and saved (e.g. file system, keychain, secure element)
-  /// [atKeys] are the keys for authentication of an atSign
 
   AtOnboardingRequest(
     super.atSign, {
+    this.atKeysIo,
     super.rootDomain,
     super.retryOptions,
-    this.atKeysIo,
-    this.atKeys,
   });
 
-  // Default root domain and port
+  // Default appName and deviceName
   String appName = "firstApp";
   String deviceName = "firstDevice";
+
+  // Controls how the authentication is performed
   AtKeysIo? atKeysIo;
-  AtKeys? atKeys;
 }
 
 class AtAuthRequest extends AuthRequest {
   /// Constructor for [AtAuthRequest]
   /// [atSign] is the atSign for authentication
   ///
-  /// Must provide one of the following!
-  /// atKeysIo - method of authentication
-  ///    or
-  /// atAuthKeys - the actual keys themselves
-  ///
-  /// [atKeysIo] controls how AtKeys are loaded and saved (e.g. file system, keychain, secure element)
-  /// [atAuthKeys] are the keys for authentication of an atSign
+  /// [atKeysIo] controls how legacy fixed-field AtKeys are loaded and saved
+  /// (e.g. file system, keychain, secure element)
   ///
   /// optional:
   /// [rootDomain] is the default domain of the root server (e.g. root.atsign.org, 64)
   AtAuthRequest(
-    super.atSign, {
+    super.atSign,
+    this.atKeysIo, {
     super.rootDomain,
     super.retryOptions,
-    this.atKeysIo,
-    this.atAuthKeys,
-  }) {
-    if (atKeysIo == null && atAuthKeys == null) {
-      throw Exception(
-          "Either method of authentication(atKeysIo) or atAuthKeys need to be provided");
-    }
-  }
+  });
 
   // Controls how the authentication is performed
-  AtKeysIo? atKeysIo;
-
-  /// The enrollmentId for APKAM authentication
-  String? enrollmentId;
-
-  /// The keys for authentication of an atSign.
-  AtKeys? atAuthKeys;
-
-  /// The contents of .atKeys file which contains the encrypted atKeys.
-  Map<String, dynamic>? encryptedKeysMap;
+  AtKeysIo atKeysIo;
 }
 
 class RetryOptions {

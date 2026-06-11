@@ -1,23 +1,22 @@
-import 'package:at_auth/src/keys/at_keys.dart';
-import 'package:at_chops/at_chops.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_commons/at_commons.dart';
 
+/// Generic response class for all types of authentication methods
+/// Suggest you use this type for methods where all types of Responses are available.
 sealed class AuthResponse {
   String atSign;
+  AtRootDomain rootDomain;
   bool isSuccessful = false;
-  AtKeys? atAuthKeys;
-  AtLookUp? atLookUp;
-  AtChops? atChops;
-  String? get enrollmentId => atAuthKeys?.enrollmentId;
+  AtKeysSet atKeysSet;
+  String? get enrollmentId => atKeysSet.enrollmentId;
 
-  AuthResponse(this.atSign);
+  AuthResponse(this.atSign, this.rootDomain, this.atKeysSet);
 }
 
 /// Represents an onboarding response of an atSign.
 class AtOnboardingResponse extends AuthResponse {
   /// Constructor for [AtOnboardingResponse]
   /// [atSign] is the atSign for onboarding
-  AtOnboardingResponse(super.atSign);
+  AtOnboardingResponse(super.atSign, super.rootDomain, super.atKeysSet);
 
   @override
   String toString() {
@@ -27,7 +26,7 @@ class AtOnboardingResponse extends AuthResponse {
 
 class AtAuthResponse extends AuthResponse {
   /// Constructor that takes an @sign as a parameter
-  AtAuthResponse(super.atSign);
+  AtAuthResponse(super.atSign, super.rootDomain, super.atKeysSet);
 
   @override
   String toString() {
