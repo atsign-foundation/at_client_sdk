@@ -40,7 +40,7 @@ class PersistedClientKeys {
 ///
 ///     public:__pqkb-<clientId>.<enrollmentId>.a.__e@atsign
 ///
-/// Placement gives the bundle its properties:
+/// Placement gives the canonical bundle its properties:
 /// - only the owning enrollment can write into `<enrollmentId>.a.__e`, and
 ///   the bundle is additionally APKAM-signed (see [EnvelopeSigning]);
 /// - hidden public keys (`public:__` prefix) are not enumerable by
@@ -48,11 +48,37 @@ class PersistedClientKeys {
 ///   client of this atSign can discover them with `showHiddenKeys`,
 ///   regardless of its enrollment namespaces.
 ///
+/// Additionally, for each application namespace passed to [registerClient],
+/// the same signed bundle is published as a *namespace-scoped copy* — a
+/// cleartext self key:
+///
+///     pqkb-<clientId>.<enrollmentId>.__pqkbns.<namespace>@atsign
+///
+/// The atServer's enrollment namespace authorization then enforces, with no
+/// server changes:
+/// - **write side**: only a connection with `rw` on `<namespace>` (or an
+///   owner-class connection) can create the copy — so its presence proves
+///   the publishing client can participate in that namespace;
+/// - **read side**: only clients authorized for `<namespace>` can discover
+///   it, so unrelated apps don't learn the roster.
+///
+/// The bundle's signed payload lists the namespaces it was registered under
+/// ([ClientKeyBundle.namespaces]), so a genuine bundle *planted* by an
+/// owner-class client under some other namespace is detected at discovery
+/// time (location not in the signed list). [discoverClients] with a
+/// `namespace` argument uses these copies, avoiding fetching and verifying
+/// bundles of clients that could never receive an envelope in that
+/// namespace anyway; copies are self keys, so they also sync to authorized
+/// clients' local storage.
+///
 /// By default the identity is ephemeral: held in memory, published with
 /// [bundleTtl], republished while this client runs, and gone when the
 /// process ends. Apps that want a stable clientId across restarts supply
 /// [loadClientKeys] / [saveClientKeys].
 mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
+  /// Marker segment in namespace-scoped bundle copy key names.
+  static const String namespaceScopedMarker = '__pqkbns';
+
   /// How long a published bundle lives on the atServer. While registered,
   /// the bundle is republished at half this interval.
   Duration bundleTtl = Duration(hours: 24);
@@ -70,6 +96,7 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
   RSAKeypair? _keyPair;
   ClientKeyBundle? _myBundle;
   Timer? _republishTimer;
+  List<String> _registeredNamespaces = const [];
 
   /// This client's random per-client id. Throws [StateError] until
   /// [registerClient] has completed.
@@ -101,13 +128,19 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
   /// publishes its signed [ClientKeyBundle], and keeps republishing it at
   /// [bundleTtl] / 2 until [deregisterClient] is called.
   ///
+  /// [namespaces], when given, are the application namespaces this client
+  /// participates in: a namespace-scoped copy of the bundle is published
+  /// under each (see the mixin doc), and the list is included in the signed
+  /// bundle payload. This client's enrollment must have `rw` access to each
+  /// of them — the atServer refuses the copy otherwise.
+  ///
   /// Also ensures this enrollment's APKAM public signing key is published
   /// ([ApkamSigning.publishPublicSigningKey]) so that other clients can
   /// verify the bundle's signature.
   ///
   /// Note: generating an RSA keypair in pure Dart takes on the order of a
   /// second; it happens at most once per [registerClient] call.
-  Future<ClientKeyBundle> registerClient() async {
+  Future<ClientKeyBundle> registerClient({Iterable<String>? namespaces}) async {
     if (_clientId == null) {
       final loaded = await loadClientKeys?.call();
       if (loaded != null) {
@@ -123,6 +156,8 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
         ));
       }
     }
+    _registeredNamespaces =
+        namespaces == null ? const [] : (namespaces.toSet().toList()..sort());
 
     await publishPublicSigningKey();
     await _publishBundle();
@@ -138,9 +173,10 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
     return _myBundle!;
   }
 
-  /// Cancels republishing and deletes this client's bundle from the
-  /// atServer. The in-memory identity is retained, so a subsequent
-  /// [registerClient] republishes under the same clientId.
+  /// Cancels republishing and deletes this client's bundle — canonical and
+  /// any namespace-scoped copies — from the atServer. The in-memory identity
+  /// is retained, so a subsequent [registerClient] republishes under the
+  /// same clientId.
   Future<void> deregisterClient() async {
     _republishTimer?.cancel();
     _republishTimer = null;
@@ -152,8 +188,25 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
       AtKey.fromString(_bundleKeyUri),
       deleteRequestOptions: DeleteRequestOptions()..useRemoteAtServer = true,
     );
+    for (final ns in _registeredNamespaces) {
+      try {
+        await atClient.delete(
+          _namespaceCopyKey(ns),
+          deleteRequestOptions: DeleteRequestOptions()
+            ..useRemoteAtServer = true,
+        );
+      } catch (e) {
+        logger.warning('Failed to delete bundle copy in namespace $ns: $e');
+      }
+    }
   }
 
+  AtKey _namespaceCopyKey(String ns) => AtKey()
+    ..key = 'pqkb-$clientId.$enrollmentId.$namespaceScopedMarker'
+    ..namespace = ns
+    ..sharedBy = atClient.getCurrentAtSign();
+
+  /// Publishes the canonical bundle and a copy per registered namespace.
   Future<void> _publishBundle() async {
     final bundle = ClientKeyBundle(
       clientId: clientId,
@@ -166,8 +219,10 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
           pub: _keyPair!.publicKey.toString(),
         ),
       ],
+      namespaces: _registeredNamespaces,
     );
     final String signedJson = await wrapAndSignAndJsonEncode(bundle.toJson());
+
     final atKey = AtKey.fromString(_bundleKeyUri)
       ..metadata.ttl = bundleTtl.inMilliseconds;
     await atClient.put(
@@ -175,61 +230,130 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
       signedJson,
       putRequestOptions: PutRequestOptions()..useRemoteAtServer = true,
     );
-    _myBundle = bundle;
     logger.info('Published client key bundle at $_bundleKeyUri');
+
+    for (final ns in _registeredNamespaces) {
+      final copyKey = _namespaceCopyKey(ns)
+        ..metadata.ttl = bundleTtl.inMilliseconds;
+      // Cleartext self key (the bundle is public material, already inside a
+      // signed envelope); raw JSON so pre-isEncrypted-fix readers fall back
+      // to the raw value.
+      await atClient.put(
+        copyKey,
+        signedJson,
+        putRequestOptions: PutRequestOptions()
+          ..useRemoteAtServer = true
+          ..shouldEncrypt = false,
+      );
+      logger.info('Published bundle copy in namespace $ns');
+    }
+    _myBundle = bundle;
   }
 
   /// Discovers the key bundles other clients of this atSign have published.
   ///
-  /// Scans the atServer for hidden `__pqkb-` public keys (optionally
-  /// restricted to [enrollmentId]), fetches each bundle, verifies its APKAM
-  /// signature against the publishing enrollment's `_apsk` key, and checks
-  /// that the enrollment named by the key's location matches the enrollment
-  /// the bundle claims and was signed by. Bundles that fail any of these
-  /// checks are logged and skipped. This client's own bundle is excluded.
-  Future<List<ClientKeyBundle>> discoverClients({String? enrollmentId}) async {
-    final atSign = atClient.getCurrentAtSign()!;
-    final String regex = enrollmentId == null
-        ? '__pqkb-.*\\.${EnrollmentConstants.perEnrollmentApproved}@'
-        : '__pqkb-.*\\.$enrollmentId'
-            '\\.${EnrollmentConstants.perEnrollmentApproved}@';
+  /// With no [namespace]: scans the atServer for hidden `__pqkb-` public
+  /// keys (optionally restricted to [enrollmentId]) — every registered
+  /// client of the atSign, regardless of namespaces.
+  ///
+  /// With a [namespace]: scans for the namespace-scoped bundle copies
+  /// instead. This is the efficient form when you intend to share into a
+  /// specific application namespace: only clients that registered for that
+  /// namespace are returned (their enrollments provably hold `rw` on it —
+  /// the atServer refuses the copy's write otherwise), and the server only
+  /// reveals the copies to scanners authorized for that namespace.
+  ///
+  /// Every returned bundle has had its APKAM signature verified against the
+  /// publishing enrollment's `_apsk` key, and its key location checked
+  /// against the bundle's signed claims: clientId and enrollmentId must
+  /// match the key name, and for namespace-scoped copies the location
+  /// namespace must appear in the bundle's signed
+  /// [ClientKeyBundle.namespaces] (so a genuine bundle planted under a
+  /// foreign namespace by an owner-class client is rejected). Bundles that
+  /// fail any check are logged and skipped. This client's own bundle is
+  /// excluded.
+  Future<List<ClientKeyBundle>> discoverClients(
+      {String? enrollmentId, String? namespace}) async {
+    final String eidPattern = enrollmentId ?? '[^.]+';
+    final String regex = namespace == null
+        ? '__pqkb-.*\\.$eidPattern'
+            '\\.${EnrollmentConstants.perEnrollmentApproved}@'
+        : 'pqkb-[^.]+\\.$eidPattern\\.$namespaceScopedMarker\\.$namespace@';
     final List<AtKey> bundleKeys = await atClient.getAtKeys(
       regex: regex,
-      showHiddenKeys: true,
+      showHiddenKeys: namespace == null,
       useRemoteAtServer: true,
     );
 
     final bundles = <ClientKeyBundle>[];
     for (final bundleKey in bundleKeys) {
-      try {
-        final AtValue av = await atClient.get(
-          bundleKey,
-          getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
-        );
-        final envelope = jsonDecode(av.value as String) as Map;
-        await verifyEnvelopeSignature(envelope, signerAtSign: atSign);
-        final bundle = ClientKeyBundle.fromJson(envelope['payload']);
-
-        if (bundle.clientId == _clientId) {
-          continue; // our own bundle
-        }
-        // The enrollment that signed the envelope must be the enrollment the
-        // bundle claims, and must own the namespace the bundle was found in:
-        // key shape __pqkb-<clientId>.<enrollmentId>.a.__e
-        final expectedKeyPart = '__pqkb-${bundle.clientId}'
-            '.${bundle.enrollmentId}'
-            '.${EnrollmentConstants.perEnrollmentApproved}';
-        if (envelope['enrollmentId'] != bundle.enrollmentId ||
-            '${bundleKey.key}.${bundleKey.namespace}' != expectedKeyPart) {
-          logger.warning('Skipping bundle at $bundleKey: enrollment binding '
-              'mismatch (bundle claims ${bundle.enrollmentId})');
-          continue;
-        }
+      final bundle = await _verifiedBundleAt(bundleKey, namespace: namespace);
+      if (bundle != null && bundle.clientId != _clientId) {
         bundles.add(bundle);
-      } catch (e) {
-        logger.warning('Skipping bundle at $bundleKey: $e');
       }
     }
     return bundles;
+  }
+
+  /// Fetches, signature-verifies and location-validates one bundle.
+  /// Returns null (after logging) if any check fails.
+  Future<ClientKeyBundle?> _verifiedBundleAt(AtKey bundleKey,
+      {String? namespace}) async {
+    try {
+      final AtValue av = await atClient.get(
+        bundleKey,
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
+      );
+      final envelope = jsonDecode(av.value as String) as Map;
+      await verifyEnvelopeSignature(envelope,
+          signerAtSign: atClient.getCurrentAtSign()!);
+      final bundle = ClientKeyBundle.fromJson(envelope['payload']);
+
+      // The enrollment that signed the envelope must be the enrollment the
+      // bundle claims...
+      if (envelope['enrollmentId'] != bundle.enrollmentId) {
+        logger.warning('Skipping bundle at $bundleKey: signer enrollment '
+            'does not match bundle claim ${bundle.enrollmentId}');
+        return null;
+      }
+      // ...and the key location must match the bundle's signed claims.
+      final String keyString = bundleKey.toString();
+      if (namespace == null) {
+        // canonical: public:__pqkb-<clientId>.<enrollmentId>.a.__e@atsign
+        final expected = 'public:__pqkb-${bundle.clientId}'
+            '.${bundle.enrollmentId}'
+            '.${EnrollmentConstants.perEnrollmentApproved}'
+            '${atClient.getCurrentAtSign()}';
+        if (keyString != expected) {
+          logger.warning('Skipping bundle at $bundleKey: location does not '
+              'match bundle claims (${bundle.clientId}, '
+              '${bundle.enrollmentId})');
+          return null;
+        }
+      } else {
+        // copy: pqkb-<clientId>.<enrollmentId>.__pqkbns.<namespace>@atsign
+        final expected = 'pqkb-${bundle.clientId}.${bundle.enrollmentId}'
+            '.$namespaceScopedMarker.$namespace'
+            '${atClient.getCurrentAtSign()}';
+        if (keyString != expected) {
+          logger.warning('Skipping bundle copy at $bundleKey: location does '
+              'not match bundle claims (${bundle.clientId}, '
+              '${bundle.enrollmentId})');
+          return null;
+        }
+        // Planting protection: the signed payload must say the client
+        // registered for the namespace this copy was found under.
+        if (!bundle.namespaces.contains(namespace)) {
+          logger.warning('Skipping bundle copy at $bundleKey: namespace '
+              '$namespace is not in the bundle\'s signed namespace list '
+              '${bundle.namespaces}');
+          return null;
+        }
+      }
+      return bundle;
+    } catch (e) {
+      logger.warning('Skipping bundle at $bundleKey: $e');
+      return null;
+    }
   }
 }

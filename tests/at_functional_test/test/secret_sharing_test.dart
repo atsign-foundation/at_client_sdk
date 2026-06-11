@@ -83,8 +83,9 @@ void main() {
     var atClientB = await initClient('clientB');
     var sharerB = TestSharer(atClientB);
     sharerB.saveClientKeys = (keys) async => clientBKeys = keys;
-    final bundleB = await sharerB.registerClient();
+    final bundleB = await sharerB.registerClient(namespaces: [namespace]);
     expect(clientBKeys, isNotNull);
+    expect(bundleB.namespaces, [namespace]);
 
     // ------- phase 2: client A discovers B and shares a secret
     final atClientA = await initClient('clientA');
@@ -100,6 +101,14 @@ void main() {
     expect(discoveredB, hasLength(1),
         reason: 'A must discover B\'s bundle (and not its own)');
     expect(discovered.any((b) => b.clientId == sharerA.clientId), isFalse);
+
+    // namespace-scoped discovery: B registered a bundle copy under the app
+    // namespace (a real server-authorized self-key write); A finds exactly B
+    // there, and finds nobody under a namespace no client registered for
+    final inNamespace = await sharerA.discoverClients(namespace: namespace);
+    expect(inNamespace.map((b) => b.clientId), [bundleB.clientId],
+        reason: 'namespace-scoped discovery must return B');
+    expect(await sharerA.discoverClients(namespace: 'nosuchns'), isEmpty);
 
     await sharerA.secretStore.putSecret(
         Secret(namespace: namespace, name: 'ft-secret', value: secretValue));
