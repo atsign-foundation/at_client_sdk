@@ -164,6 +164,17 @@ dart run bin/rpcs.dart -R sender   -O @receiver
 dart run bin/rpcs.dart -R receiver -O @sender
 ```
 
+### Secret sharing (same atSign)
+Pairwise secret sharing between two clients of the **same** atSign
+("alice to alice"): each client registers a key bundle, and secrets are
+end-to-end encrypted to the specific receiving client. Run both roles
+as the same atSign (different terminals; different enrollments are fine
+as long as both are authorized for the example namespace).
+```bash
+dart run bin/secret_sharing.dart -a @alice -R receiver
+dart run bin/secret_sharing.dart -a @alice -R sender
+```
+
 ## Key concepts
 
 - **`AtClient`** — authenticates with an atServer and provides encrypted key-value get/put/notify operations.

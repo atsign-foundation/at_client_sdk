@@ -42,6 +42,11 @@ is the main entry point once authentication is complete.
 - `put(AtKey, value)` / `get(AtKey)` / `delete(AtKey)` — low level CRUD against
   the keystore. You should almost never need to do this if you are using 
   AtCollections.
+- `AtClientSecretSharing` (via `package:at_client/at_client_mixins.dart`) —
+  pairwise secret sharing between clients of the **same** atSign: each
+  client publishes a signed key bundle, and secrets are end-to-end
+  encrypted to one specific receiving client, scoped by application
+  namespace. See [`example/bin/secret_sharing.dart`](example/bin/secret_sharing.dart).
 
 
 
@@ -55,7 +60,8 @@ tutorials or blog posts:
 - **Dart / CLI examples:** [`example/README.md`](example/README.md)
   walks through every program in [`example/bin/`](example/bin/) —
   primitives, domain objects, polymorphic / binary collections, a
-  full interactive TUI todos app, raw notifications, RPCs, and the
+  full interactive TUI todos app, raw notifications, RPCs, same-atSign
+  secret sharing, and the
   [dockerstats CLI publisher / subscriber](example/README.md#dockerstats--notification-based-live-telemetry).
 
 - **Flutter examples:**
