@@ -20,6 +20,9 @@ class MockAtKeyDecryptionManager extends Mock
 class MockAtKeyDecryption extends Mock implements AtKeyDecryption {}
 
 void main() {
+  setUpAll(() {
+    registerFallbackValue(AtKey());
+  });
   group('A group of test for GetResponseTransformer', () {
     late MockAtClient mockAtClient;
     late MockAtKeyDecryptionManager mockDecryptionManager;
@@ -136,7 +139,7 @@ void main() {
     });
 
     test(
-        'A test to verify response transformer for encrypted data with isEncrypted set to false(for old data)',
+        'A test to verify explicit isEncrypted=false returns the raw value without attempting decryption',
         () async {
       final keyName = 'phone';
       final atKey = AtKey()
@@ -150,12 +153,85 @@ void main() {
             '{"data": "shared_phone_number", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": false}}';
       when(() => mockDecryptionManager.get(atKey))
           .thenReturn(mockDecryptionService);
+      // Even if decryption WOULD succeed (e.g. plaintext that happens to be
+      // valid base64), explicit isEncrypted=false means the value was
+      // deliberately stored unencrypted and must be returned as-is.
+      when(() => mockDecryptionService.decrypt(atKey, "shared_phone_number"))
+          .thenAnswer((_) async => 'mangled_by_decrypting_plaintext');
+
+      var result = await transformer.transform(tuple);
+
+      expect(result.value, equals('shared_phone_number'));
+      verifyNever(() => mockDecryptionService.decrypt(any(), any()));
+    });
+
+    test(
+        'A test to verify explicit isEncrypted=false applies encoding to the raw value',
+        () async {
+      final keyName = 'phone';
+      final atKey = AtKey()
+        ..metadata = Metadata()
+        ..key = keyName
+        ..sharedBy = '@alice'
+        ..sharedWith = '@bob';
+      var base64EncodedString =
+          AtEncoderImpl().encodeData('value\n1', EncodingType.base64);
+      final tuple = Tuple<AtKey, String>()
+        ..one = atKey
+        ..two =
+            '{"data": "$base64EncodedString", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": false, "encoding": "base64"}}';
+      when(() => mockDecryptionManager.get(atKey))
+          .thenReturn(mockDecryptionService);
+
+      var result = await transformer.transform(tuple);
+
+      expect(result.value, equals('value\n1'));
+    });
+
+    test(
+        'A test to verify isEncrypted absent still decrypts via the legacy fallback (for old data)',
+        () async {
+      final keyName = 'phone';
+      final atKey = AtKey()
+        ..metadata = Metadata()
+        ..key = keyName
+        ..sharedBy = '@alice'
+        ..sharedWith = '@bob';
+      final tuple = Tuple<AtKey, String>()
+        ..one = atKey
+        ..two =
+            '{"data": "shared_phone_number", "key": "@bob:$keyName@alice","metaData": {"ttl": 0}}';
+      when(() => mockDecryptionManager.get(atKey))
+          .thenReturn(mockDecryptionService);
       when(() => mockDecryptionService.decrypt(atKey, "shared_phone_number"))
           .thenAnswer((_) async => 'decrypted_data');
 
       var result = await transformer.transform(tuple);
 
       expect(result.value, equals('decrypted_data'));
+    });
+
+    test(
+        'A test to verify isEncrypted absent with plain data falls back to the raw value (for old data)',
+        () async {
+      final keyName = 'phone';
+      final atKey = AtKey()
+        ..metadata = Metadata()
+        ..key = keyName
+        ..sharedBy = '@alice'
+        ..sharedWith = '@bob';
+      final tuple = Tuple<AtKey, String>()
+        ..one = atKey
+        ..two =
+            '{"data": "plain_phone_number", "key": "@bob:$keyName@alice","metaData": {"ttl": 0}}';
+      when(() => mockDecryptionManager.get(atKey))
+          .thenReturn(mockDecryptionService);
+      when(() => mockDecryptionService.decrypt(atKey, "plain_phone_number"))
+          .thenThrow(FormatException('not base64'));
+
+      var result = await transformer.transform(tuple);
+
+      expect(result.value, equals('plain_phone_number'));
     });
 
     test('A test to verify transform throws AtException on decryption failure',
