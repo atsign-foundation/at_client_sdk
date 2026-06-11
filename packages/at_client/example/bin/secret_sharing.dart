@@ -94,6 +94,15 @@ Future<void> sender(AtClientSecretSharing sharing) async {
     final n = await sharing.shareAllSecretsWith(bundle);
     stdout.writeln('-> Shared $n secret(s)');
   }
+
+  // Envelopes are ordinary self keys: they reach the atServer via sync, so
+  // don't exit until sync has pushed them.
+  stdout.writeln('-> Waiting for sync to push the envelope(s)…');
+  sharing.atClient.syncService.sync();
+  await sharing.atClient.syncService.waitUntilCaughtUp(
+    timeout: Duration(minutes: 2),
+  );
+  stdout.writeln('-> Envelope(s) on the atServer');
 }
 
 Future<void> receiver(AtClientSecretSharing sharing) async {
