@@ -1,3 +1,30 @@
+## 3.13.0
+
+- feat: Same-atSign pairwise secret sharing ("alice to alice"): clients of
+  one atSign can now share secrets such that only the target *client* can
+  read them. Each client publishes a signed, TTL'd key bundle in its
+  enrollment's reserved namespace; secrets travel in APKAM-signed,
+  per-client-encrypted envelopes whose key names end with the secret's
+  application namespace, so the atServer's existing enrollment authorization
+  scopes delivery — no server changes. Includes an in-memory `SecretStore`
+  with app-pluggable persistence, and an approver-side helper
+  (`shareAllSecretsWithEnrollment`) that shares held secrets with a newly
+  approved enrollment's clients, filtered by its approved namespaces.
+  Bundle and envelope formats carry explicit algorithm ids for crypto
+  agility (this release: `rsa-2048` key transport + `aes-256-ctr`; a
+  post-quantum X-Wing suite will be added by id, with no schema change).
+  Entry point: `AtClientSecretSharing` (or the mixins) via
+  `package:at_client/at_client_mixins.dart`; see
+  `example/bin/secret_sharing.dart`.
+- feat: New `EnvelopeSigning` mixin: wrap payloads in JSON envelopes signed
+  with the APKAM keypair, verifiable by other clients against the signer
+  enrollment's published `_apsk` public signing key.
+- fix: `get` now respects an explicit `isEncrypted=false` in metadata and
+  returns the raw value without attempting decryption. Previously plaintext
+  values that happened to be valid base64 were "decrypted" into garbage.
+  Legacy data written before the flag was emitted (absent on the wire) still
+  takes the try-decrypt fallback, so old encrypted data remains readable.
+
 ## 3.12.0
 
 Several significant enhancements to the API to make it much easier to use.
