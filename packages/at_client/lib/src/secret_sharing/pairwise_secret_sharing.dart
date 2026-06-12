@@ -1,6 +1,15 @@
 import 'dart:async';
-import 'dart:convert' show jsonDecode, jsonEncode;
+import 'dart:convert'
+    show base64Decode, base64Encode, jsonDecode, jsonEncode, utf8;
+import 'dart:typed_data' show Uint8List;
 
+import 'package:at_chops/at_chops.dart'
+    show
+        AESKey,
+        AesGcm256EncryptionAlgo,
+        AtChopsUtil,
+        InitialisationVector,
+        XWingPureDartAlgo;
 import 'package:at_client/at_client.dart'
     show
         AtKey,
@@ -14,7 +23,6 @@ import 'package:at_client/src/secret_sharing/client_key_bundle.dart';
 import 'package:at_client/src/secret_sharing/pairwise_client_registration.dart';
 import 'package:at_client/src/secret_sharing/secret_envelope.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart';
-import 'package:at_client/src/util/encryption_util.dart';
 import 'package:uuid/uuid.dart' show Uuid;
 
 /// A decrypted, signature-verified payload received from another client of
@@ -131,13 +139,17 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
           'algorithm (supported: ${SecretSharingAlgos.keyAlgos})');
     }
 
-    final String contentKey = EncryptionUtil.generateAESKey();
-    final String iv = EncryptionUtil.generateIV();
-    final String ciphertext = EncryptionUtil.encryptValue(
-        jsonEncode(payload), contentKey,
-        ivBase64: iv);
-    final String encryptedKey =
-        EncryptionUtil.encryptKey(contentKey, recipientKey.pub);
+    // X-Wing KEM: the encapsulated 32-byte shared secret IS the content
+    // key — nothing secret travels except the KEM ciphertext.
+    final (ciphertext: kemCiphertext, sharedSecret: contentKey) =
+        await XWingPureDartAlgo.instance
+            .encapsulate(base64Decode(recipientKey.pub));
+    final InitialisationVector nonce =
+        AtChopsUtil.generateRandomIV(AesGcm256EncryptionAlgo.nonceLength);
+    final Uint8List ciphertext =
+        await AesGcm256EncryptionAlgo(AESKey(base64Encode(contentKey))).encrypt(
+            Uint8List.fromList(utf8.encode(jsonEncode(payload))),
+            iv: nonce);
 
     final envelope = SecretEnvelope(
       fromClientId: clientId,
@@ -145,13 +157,14 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
       to: to.clientId,
       keyAlg: recipientKey.alg,
       kid: recipientKey.kid,
-      encryptedKey: encryptedKey,
-      encAlg: SecretSharingAlgos.aes256Ctr,
-      iv: iv,
-      ciphertext: ciphertext,
+      encryptedKey: base64Encode(kemCiphertext),
+      encAlg: SecretSharingAlgos.aes256Gcm,
+      iv: base64Encode(nonce.ivBytes),
+      ciphertext: base64Encode(ciphertext),
     );
-    // The signature covers the ciphertext; AES-CTR alone is malleable, so
-    // receivers verify before decrypting.
+    // GCM authenticates the payload; the APKAM signature over the whole
+    // envelope additionally authenticates the SENDER (receivers still
+    // verify before decrypting).
     final String signedJson = await wrapAndSignAndJsonEncode(envelope.toJson());
 
     final atKey = AtKey()
@@ -245,8 +258,8 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
   Future<ReceivedEnvelope?> _consume(AtKey envelopeKey) async {
     final AtValue av = await atClient.get(envelopeKey);
     final signedEnvelope = jsonDecode(av.value as String) as Map;
-    // Verify FIRST: the signature covers the ciphertext and AES-CTR is
-    // malleable.
+    // Verify FIRST: GCM authenticates the payload bytes, but only the
+    // APKAM signature authenticates WHO sent the envelope.
     await verifyEnvelopeSignature(signedEnvelope,
         signerAtSign: atClient.getCurrentAtSign()!);
     final envelope = SecretEnvelope.fromJson(signedEnvelope['payload']);
@@ -262,32 +275,34 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
           'enrollment ${envelope.fromEnrollmentId}; skipping');
       return null;
     }
-    if (envelope.keyAlg != SecretSharingAlgos.rsa2048 ||
-        envelope.encAlg != SecretSharingAlgos.aes256Ctr) {
+    if (envelope.keyAlg != SecretSharingAlgos.xWing ||
+        envelope.encAlg != SecretSharingAlgos.aes256Gcm) {
       logger.warning('Envelope $envelopeKey uses unsupported algorithms '
           '(keyAlg: ${envelope.keyAlg}, encAlg: ${envelope.encAlg}); '
           'skipping');
       return null;
     }
-    final String myKid =
-        BundleKey.computeKid(clientKeyPair.publicKey.toString());
+    final String myKid = BundleKey.computeKid(base64Encode(xWingPublicKey));
     if (envelope.kid != myKid) {
       logger.warning('Envelope $envelopeKey was encrypted to key '
           '${envelope.kid} which this client does not hold; skipping');
       return null;
     }
 
-    final String contentKey =
-        clientKeyPair.privateKey.decrypt(envelope.encryptedKey);
-    final String plaintext = EncryptionUtil.decryptValue(
-        envelope.ciphertext, contentKey,
-        ivBase64: envelope.iv);
+    final Uint8List contentKey = await XWingPureDartAlgo.instance
+        .decapsulate(xWingSeed, base64Decode(envelope.encryptedKey));
+    // GCM decryption authenticates: tampering (or a wrong-recipient
+    // decapsulation, which yields a different key) throws here.
+    final Uint8List plaintext =
+        await AesGcm256EncryptionAlgo(AESKey(base64Encode(contentKey))).decrypt(
+            base64Decode(envelope.ciphertext),
+            iv: InitialisationVector(base64Decode(envelope.iv)));
 
     return ReceivedEnvelope(
       fromClientId: envelope.fromClientId,
       fromEnrollmentId: envelope.fromEnrollmentId,
       appNamespace: _appNamespaceOf(envelopeKey),
-      payload: jsonDecode(plaintext) as Map<String, dynamic>,
+      payload: jsonDecode(utf8.decode(plaintext)) as Map<String, dynamic>,
     );
   }
 

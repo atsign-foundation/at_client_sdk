@@ -6,9 +6,10 @@ import 'package:at_client/src/secret_sharing/client_key_bundle.dart';
 /// (see EnvelopeSigning) which receivers verify before decrypting.
 ///
 /// Algorithm ids ([keyAlg], [encAlg]) and the recipient key id ([kid]) are
-/// explicit for crypto agility: [encryptedKey] holds an RSA-wrapped content
-/// key today and a KEM encapsulation ciphertext when a post-quantum suite is
-/// added later — same field, new [keyAlg].
+/// explicit for crypto agility: today [encryptedKey] holds an X-Wing KEM
+/// encapsulation ciphertext (the encapsulated shared secret is the content
+/// key) and [encAlg] is AES-256-GCM; a future suite changes the ids, not
+/// the schema.
 class SecretEnvelope {
   static const int currentVersion = 1;
 

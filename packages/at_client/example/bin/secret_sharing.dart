@@ -46,7 +46,9 @@ void main(List<String> args) async {
   }
 
   final sharing = AtClientSecretSharing(atClient);
-  stdout.writeln('Registering this client (generates a keypair; ~a second)…');
+  stdout.writeln(
+    'Registering this client (generates an X-Wing post-quantum keypair)…',
+  );
   // Registering with namespaces publishes a namespace-scoped copy of the
   // bundle per namespace, so senders can discover "clients participating in
   // this namespace" without fetching everyone's bundle.

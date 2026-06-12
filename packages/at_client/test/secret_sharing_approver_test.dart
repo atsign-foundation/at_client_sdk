@@ -1,9 +1,11 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:crypton/crypton.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -39,13 +41,12 @@ void main() {
   /// clients): full key string -> value.
   late Map<String, String> remoteData;
 
-  late RSAKeypair keyPairA;
-  late RSAKeypair keyPairB;
+  final Uint8List seedA = Uint8List.fromList(List<int>.generate(32, (i) => i));
+  final Uint8List seedB =
+      Uint8List.fromList(List<int>.generate(32, (i) => 32 + i));
 
   setUpAll(() {
     registerFallbackValue(AtKey());
-    keyPairA = RSAKeypair.fromRandom();
-    keyPairB = RSAKeypair.fromRandom();
   });
 
   MockAtClient buildMockClient(String enrollmentId) {
@@ -102,13 +103,11 @@ void main() {
     return atClient;
   }
 
-  TestSharer buildSharer(
-      String enrollmentId, String clientId, RSAKeypair keyPair) {
+  TestSharer buildSharer(String enrollmentId, String clientId, Uint8List seed) {
     final sharer = TestSharer(buildMockClient(enrollmentId));
     sharer.loadClientKeys = () async => PersistedClientKeys(
           clientId: clientId,
-          rsaPublicKey: keyPair.publicKey.toString(),
-          rsaPrivateKey: keyPair.privateKey.toString(),
+          xWingSeed: base64Encode(seed),
         );
     return sharer;
   }
@@ -117,7 +116,7 @@ void main() {
 
   setUp(() async {
     remoteData = {};
-    approverA = buildSharer('enroll-a', 'cid-a', keyPairA);
+    approverA = buildSharer('enroll-a', 'cid-a', seedA);
     await approverA.registerClient();
     await approverA.secretStore.putSecret(Secret(
         namespace: 'myapp',
@@ -139,7 +138,7 @@ void main() {
     test(
         'only secrets whose namespace the recipient enrollment is '
         'authorized for are shared', () async {
-      final clientB = buildSharer('enroll-b', 'cid-b', keyPairB);
+      final clientB = buildSharer('enroll-b', 'cid-b', seedB);
       await clientB.registerClient();
 
       final shared = await approverA.shareAllSecretsWith(clientB.myBundle!,
@@ -154,7 +153,7 @@ void main() {
     });
 
     test('without a namespace filter, all secrets are shared', () async {
-      final clientB = buildSharer('enroll-b', 'cid-b', keyPairB);
+      final clientB = buildSharer('enroll-b', 'cid-b', seedB);
       await clientB.registerClient();
 
       expect(await approverA.shareAllSecretsWith(clientB.myBundle!), 2);
@@ -166,7 +165,7 @@ void main() {
     test(
         'a shared secret is stored in the recipient\'s store and emitted '
         'on receivedSecrets', () async {
-      final clientB = buildSharer('enroll-b', 'cid-b', keyPairB);
+      final clientB = buildSharer('enroll-b', 'cid-b', seedB);
       await clientB.registerClient();
       await approverA.shareAllSecretsWith(clientB.myBundle!,
           approvedNamespaces: {'myapp': 'rw'});
@@ -193,7 +192,7 @@ void main() {
     test(
         'an incoming secret older than the held one is consumed but '
         'neither stored nor emitted', () async {
-      final clientB = buildSharer('enroll-b', 'cid-b', keyPairB);
+      final clientB = buildSharer('enroll-b', 'cid-b', seedB);
       await clientB.registerClient();
       await clientB.secretStore.putSecret(Secret(
           namespace: 'myapp',
@@ -226,7 +225,7 @@ void main() {
         'waits for the new enrollment\'s client to register, then shares '
         'namespace-authorized secrets', () async {
       // B is not registered yet when the approver starts waiting
-      final clientB = buildSharer('enroll-b', 'cid-b', keyPairB);
+      final clientB = buildSharer('enroll-b', 'cid-b', seedB);
       final sharedFuture = approverA.shareAllSecretsWithEnrollment(
         'enroll-b',
         {'myapp': 'rw'},

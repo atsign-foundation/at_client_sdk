@@ -11,8 +11,10 @@
   (`shareAllSecretsWithEnrollment`) that shares held secrets with a newly
   approved enrollment's clients, filtered by its approved namespaces.
   Bundle and envelope formats carry explicit algorithm ids for crypto
-  agility (this release: `rsa-2048` key transport + `aes-256-ctr`; a
-  post-quantum X-Wing suite will be added by id, with no schema change).
+  agility — and the suite is **post-quantum from day one**: per-client
+  X-Wing hybrid KEM keys (`x-wing`; X25519 + ML-KEM-768,
+  harvest-now-decrypt-later resistant) with payloads sealed by
+  `aes-256-gcm` under the encapsulated shared secret.
   Entry point: `AtClientSecretSharing` (or the mixins) via
   `package:at_client/at_client_mixins.dart`; see
   `example/bin/secret_sharing.dart`.
