@@ -6,13 +6,13 @@ capability (encrypt/decrypt for other clients of the same atSign,
 encrypt/decrypt for other atSigns), strengthened with two-lever key
 rotation, and giving applications a bootstrap path to pq-mls groups.
 
-Starting point: `trunk`, incorporating and extending three branches:
+Starting point: `trunk`, incorporating and extending three lines of work:
 
-| Branch               | Contributes                                                          |
-|----------------------|----------------------------------------------------------------------|
-| `xl-pluggable`       | Pluggable `CryptoProvider` model + wire routing (`AppMetadata`)      |
-| `jt-pq`              | Post-quantum primitives in at_chops (ML-KEM-768, X25519)             |
-| `gkc-alice-to-alice` | Per-client identity, discovery, and same-atSign delivery (PR #1976)  |
+| Work                 | Contributes                                                         | Status              |
+|----------------------|---------------------------------------------------------------------|---------------------|
+| `xl-pluggable`       | Pluggable `CryptoProvider` model + wire routing (`AppMetadata`)     | Branch              |
+| `jt-pq`              | Post-quantum primitives in at_chops (ML-KEM-768, X25519)            | **Merged to trunk** |
+| `gkc-alice-to-alice` | Per-client identity, discovery, and same-atSign delivery (PR #1976) | PR open             |
 
 ## The end state
 
@@ -109,6 +109,7 @@ path):
 
 Merge, in any order subject to the checklist above: PR #1976,
 `xl-pluggable`, `jt-pq`. No interdependencies otherwise.
+(`jt-pq` merged to trunk 2026-06-12, so phase 1 is unblocked.)
 
 ### Phase 1 — complete the PQ primitives (at_chops)
 
@@ -298,10 +299,10 @@ daemon's ping response carries `supportedFeatures: {name: bool}`
 an old daemon), and features gate behavior per session — exactly how
 `twinKeys` rolled out. Two new `DaemonFeature`s:
 
-| Feature           | Daemon advertises that it…                                                  |
-|-------------------|------------------------------------------------------------------------------|
-| `groupCrypto`     | can decrypt notifications encrypted by the SDK's `group` provider             |
-| `pqSessionKeys`   | supports deriving session keys from a pair-group `export()` (none in flight)  |
+| Feature         | Daemon advertises that it...                                                  |
+|-----------------|-------------------------------------------------------------------------------|
+| `groupCrypto`   | can decrypt notifications encrypted by the SDK's `group` provider              |
+| `pqSessionKeys` | supports deriving session keys from a pair-group `export()` (none in flight)   |
 
 The crucial subtlety: a client must NOT flip its default provider for
 traffic to a daemon that can't decrypt it. `PutRequestOptions.
