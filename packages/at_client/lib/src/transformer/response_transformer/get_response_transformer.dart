@@ -40,14 +40,33 @@ class GetResponseTransformer
       return _handlePublicData(atValue, tuple);
     }
     final cryptoRuntime = CryptoRuntime(_atClient);
-    // Decrypt the data, for other keys
-    // For new encrypted data after AtClient v3.2.1, isEncrypted will be true(default value for PutRequestOptions.shouldEncrypt) for self and shared keys
-    // isEncrypted will be false if client sets PutRequestOptions.shouldEncrypt to false
+    // The wire-level isEncrypted is tri-state, but Metadata.isEncrypted is a
+    // non-nullable bool and AtClientUtil.prepareMetadata collapses absent to
+    // false. Capture the wire value before that collapse:
+    //  - true  : encrypted by the SDK (at_client >= 3.2.1 sets it on put)
+    //  - false : deliberately stored unencrypted
+    //            (PutRequestOptions.shouldEncrypt = false); only emitted by
+    //            at_commons >= 5.0.0, by which time puts set the flag
+    //            truthfully - so explicit false is trustworthy
+    //  - absent: legacy data written before the flag was emitted; may or may
+    //            not be encrypted - see the try-decrypt fallback below
+    final Object? wireIsEncrypted = (decodedResponse['metaData']
+        as Map<String, dynamic>?)?[AtConstants.isEncrypted];
     if (_shouldDecrypt(atValue.metadata)) {
       atValue.value =
           await cryptoRuntime.decryptForGet(tuple.one, atValue.value);
+    } else if (wireIsEncrypted == false || wireIsEncrypted == 'false') {
+      // isEncrypted was explicitly false: the value was deliberately stored
+      // unencrypted; return it as-is (decoding if required). Skipping
+      // decryption here is also what keeps PutRequestOptions.shouldEncrypt =
+      // false a true no-crypto path on the read side.
+      if (atValue.metadata?.encoding != null) {
+        atValue.value = AtDecoderImpl()
+            .decodeData(atValue.value, atValue.metadata!.encoding!);
+      }
     } else {
-      // for old data, try decrypting the value. if decryption fails, set the original value.
+      // for old data (isEncrypted absent), try decrypting the value.
+      // if decryption fails, set the original value.
       try {
         atValue.value =
             await cryptoRuntime.decryptForGet(tuple.one, atValue.value);

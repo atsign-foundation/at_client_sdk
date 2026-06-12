@@ -124,7 +124,7 @@ void main() {
     });
 
     test(
-        'A test to verify response transformer for encrypted data with isEncrypted set to false(for old data)',
+        'A test to verify explicit isEncrypted=false returns the raw value without attempting decryption',
         () async {
       final keyName = 'phone';
       final atKey = AtKey()
@@ -137,12 +137,59 @@ void main() {
         ..two =
             '{"data": "abcdecrypted_data", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": false}}';
 
+      // Even if a provider WOULD strip the value, explicit isEncrypted=false
+      // means the value was deliberately stored unencrypted: return it as-is.
+      when(() => mockCryptoRegistry.lookup('legacy',
+          operation: any(named: 'operation'))).thenReturn(CipherProvider());
+
+      var result = await transformer.transform(tuple);
+
+      expect(result.value, equals('abcdecrypted_data'));
+    });
+
+    test(
+        'A test to verify isEncrypted absent still decrypts via the legacy fallback (for old data)',
+        () async {
+      final keyName = 'phone';
+      final atKey = AtKey()
+        ..metadata = Metadata()
+        ..key = keyName
+        ..sharedBy = '@alice'
+        ..sharedWith = '@bob';
+      final tuple = Tuple<AtKey, String>()
+        ..one = atKey
+        ..two =
+            '{"data": "abcdecrypted_data", "key": "@bob:$keyName@alice","metaData": {"ttl": 0}}';
+
       when(() => mockCryptoRegistry.lookup('legacy',
           operation: any(named: 'operation'))).thenReturn(CipherProvider());
 
       var result = await transformer.transform(tuple);
 
       expect(result.value, equals('decrypted_data'));
+    });
+
+    test(
+        'A test to verify isEncrypted absent with plain data falls back to the raw value (for old data)',
+        () async {
+      final keyName = 'phone';
+      final atKey = AtKey()
+        ..metadata = Metadata()
+        ..key = keyName
+        ..sharedBy = '@alice'
+        ..sharedWith = '@bob';
+      final tuple = Tuple<AtKey, String>()
+        ..one = atKey
+        ..two =
+            '{"data": "plain_phone_number", "key": "@bob:$keyName@alice","metaData": {"ttl": 0}}';
+
+      when(() => mockCryptoRegistry.lookup('legacy',
+              operation: any(named: 'operation')))
+          .thenReturn(FormatExceptionProvider());
+
+      var result = await transformer.transform(tuple);
+
+      expect(result.value, equals('plain_phone_number'));
     });
 
     test(

@@ -256,6 +256,10 @@ void main() {
 
       expect(builder.atKey.metadata.appMetadata, isNull);
       expect(builder.value, 'value');
+      // shouldEncrypt=false leaves isEncrypted false on the wire; the get
+      // path keys off exactly this to skip decryption and return the raw
+      // value (see GetResponseTransformer).
+      expect(builder.atKey.metadata.isEncrypted, isFalse);
     });
   });
 }

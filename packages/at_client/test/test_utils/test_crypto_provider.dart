@@ -25,6 +25,26 @@ class CipherProvider extends CryptoProvider {
   }
 }
 
+/// Decrypt always throws [FormatException] — models a provider handed
+/// plaintext (not valid base64), so the get path's legacy try-decrypt
+/// fallback can be exercised.
+class FormatExceptionProvider extends CryptoProvider {
+  @override
+  final String id;
+
+  FormatExceptionProvider([this.id = 'format-exception-provider']);
+
+  @override
+  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) {
+    throw const FormatException('not base64');
+  }
+
+  @override
+  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) {
+    throw AtEncryptionException('error');
+  }
+}
+
 class ErrorProvider extends CryptoProvider {
   @override
   final String id;
