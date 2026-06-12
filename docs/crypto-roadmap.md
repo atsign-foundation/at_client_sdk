@@ -113,19 +113,21 @@ Merge, in any order subject to the checklist above: PR #1976,
 
 ### Phase 1 — complete the PQ primitives (at_chops)
 
-- **X-Wing hybrid KEM** (draft-connolly-cfrg-xwing-kem): X25519 +
+- **X-Wing hybrid KEM** (draft-connolly-cfrg-xwing-kem-10): X25519 +
   ML-KEM-768 with the SHA3-256 combiner; 32-byte seed secret keys expanded
-  via SHAKE-256 (pointycastle, already a dependency); tests against the
-  draft's vectors. This is the only genuinely new primitive code in the
-  whole roadmap (~150 lines composing existing pieces). **Preferred home:
+  via SHAKE-256 (pointycastle, already a dependency). **Done on
+  `gkc-alice-to-alice`** (`XWingPureDartAlgo`), verified byte-exact against
+  the draft's Appendix C vectors including derandomized encapsulation.
+  ~150 lines composing existing pieces. **Preferred long-term home:
   upstream in `pqcrypto`** (which already provides ML-KEM and experimental
-  ML-DSA) — offer the implementation as a contribution; but do not gate on
-  it: the `AtKemAlgorithm` seam makes the location reversible, so land it
-  in at_chops if upstreaming stalls and swap the internals later. ML-DSA
+  ML-DSA) — offer the implementation as a contribution; the
+  `AtKemAlgorithm` seam makes the swap invisible to callers. ML-DSA
   (needed around phase 5 for PQ signatures) is likewise pqcrypto's domain;
   register interest, adopt when it stabilizes against FIPS 204 vectors.
-- **AES-256-GCM AEAD** and **HKDF** (via `cryptography`, already a
-  dependency) — adapters only, nothing to implement.
+- **AES-256-GCM AEAD** — **done on `gkc-alice-to-alice`**
+  (`AesGcm256EncryptionAlgo`, NIST-vector verified). **HKDF** (via
+  `cryptography`) — adapter only, when its first consumer (the rotating
+  provider's `export()`) arrives in phase 3.
 - **PQ public key for enrollment conveyance.** The enrollment flow is the
   last harvest-now-decrypt-later hole: `encryptedAPKAMSymmetricKey` is
   RSA-wrapped to `public:publickey@alice`, and everything the approval
@@ -135,13 +137,15 @@ Merge, in any order subject to the checklist above: PR #1976,
 
 ### Phase 2 — identity layer: KeyPackages and per-client AtKeys
 
-- **Frame bundles as KeyPackages.** `ClientKeyBundle` is already
-  KeyPackage-shaped (init keys + credential `(atSign, enrollmentId,
-  clientId)` + APKAM signature). Commit to that correspondence in naming
-  and docs so the phase-5 MLS join is mechanical. Add X-Wing entries to the
-  published key lists (`keyAlgos += x-wing-*`, `encAlgos += aes-256-gcm`);
-  envelopes' `encryptedKey` carries the KEM ciphertext — no schema change.
-  From here the identity layer is PQ-native.
+- **Frame bundles as KeyPackages.** **Done on `gkc-alice-to-alice`**, and
+  more strongly than originally planned: since `jt-pq` merged before PR
+  #1976 shipped, the classical interim was deleted outright — the identity
+  layer is **PQ-native from day one** (`ClientKeyPackage` carries a single
+  `x-wing` key; envelopes carry the KEM encapsulation ciphertext and seal
+  payloads with `aes-256-gcm` under the encapsulated secret; nothing
+  rsa-2048 ever shipped). The Dart types use the KeyPackage naming so the
+  phase-5 MLS join is mechanical; the API surface is marked
+  `@experimental` pending the `SecureGroup` reshaping in phase 3.
 - **Evolve AtKeys for per-client persistence.** Today's `.atKeys` file is
   per-credential and routinely copied across devices; leaf keys must not be
   (copying would clone the client identity). Split:

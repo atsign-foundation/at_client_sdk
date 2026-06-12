@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart' show experimental;
+
 /// Registry of the algorithm identifiers used in client key bundles and
 /// secret envelopes.
 ///
@@ -6,6 +8,7 @@
 /// used to protect a payload, and readers ignore entries whose ids they do
 /// not recognise. Adding a new suite later is just a matter of appending
 /// new ids to the supported lists — no schema or protocol change.
+@experimental
 class SecretSharingAlgos {
   SecretSharingAlgos._();
 

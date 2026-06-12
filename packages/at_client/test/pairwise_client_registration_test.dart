@@ -147,7 +147,7 @@ void main() {
       await registrant.registerClient();
       await registrant.deregisterClient();
       // re-publish without the timer to inspect the stored value
-      registrant.bundleTtl = Duration(hours: 12);
+      registrant.keyPackageTtl = Duration(hours: 12);
       await registrant.registerClient();
       await registrant.deregisterClient();
 
@@ -169,14 +169,14 @@ void main() {
 
       final envelope = jsonDecode(value) as Map;
       expect(envelope['enrollmentId'], 'enroll-a');
-      final parsed = ClientKeyBundle.fromJson(envelope['payload']);
-      expect(parsed.v, ClientKeyBundle.currentVersion);
+      final parsed = ClientKeyPackage.fromJson(envelope['payload']);
+      expect(parsed.v, ClientKeyPackage.currentVersion);
       final key = parsed.bestKeyFor(SecretSharingAlgos.keyAlgos);
       expect(key, isNotNull);
       expect(key!.alg, SecretSharingAlgos.xWing);
       expect(key.use, SecretSharingAlgos.useEnc);
       expect(key.pub, base64Encode(clientPublicKeyA));
-      expect(key.kid, BundleKey.computeKid(key.pub));
+      expect(key.kid, PackageKey.computeKid(key.pub));
     });
 
     test('generates and saves a fresh identity when no loader is supplied',
@@ -267,7 +267,7 @@ void main() {
     });
   });
 
-  group('ClientKeyBundle parsing', () {
+  group('ClientKeyPackage parsing', () {
     test(
         'unknown-alg entries are kept, malformed entries are skipped, '
         'bestKeyFor honours preference order', () {
@@ -283,7 +283,7 @@ void main() {
           'not even a map',
         ],
       };
-      final bundle = ClientKeyBundle.fromJson(json);
+      final bundle = ClientKeyPackage.fromJson(json);
       expect(bundle.keys, hasLength(2));
 
       // this client doesn't know x-wing-99: rsa is chosen
@@ -295,14 +295,14 @@ void main() {
     });
 
     test('malformed bundle throws FormatException', () {
-      expect(() => ClientKeyBundle.fromJson({'v': 'one'}),
+      expect(() => ClientKeyPackage.fromJson({'v': 'one'}),
           throwsA(isA<FormatException>()));
-      expect(() => ClientKeyBundle.fromJson('a string'),
+      expect(() => ClientKeyPackage.fromJson('a string'),
           throwsA(isA<FormatException>()));
     });
 
     test('a bundle without a namespaces field (older writer) parses as []', () {
-      final bundle = ClientKeyBundle.fromJson({
+      final bundle = ClientKeyPackage.fromJson({
         'v': 1,
         'clientId': 'cid-x',
         'enrollmentId': 'enroll-x',

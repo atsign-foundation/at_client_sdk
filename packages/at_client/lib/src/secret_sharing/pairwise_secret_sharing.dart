@@ -19,14 +19,16 @@ import 'package:at_client/at_client.dart'
         SyncProgress,
         SyncProgressListener;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
-import 'package:at_client/src/secret_sharing/client_key_bundle.dart';
+import 'package:at_client/src/secret_sharing/client_key_package.dart';
 import 'package:at_client/src/secret_sharing/pairwise_client_registration.dart';
 import 'package:at_client/src/secret_sharing/secret_envelope.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:uuid/uuid.dart' show Uuid;
+import 'package:meta/meta.dart' show experimental;
 
 /// A decrypted, signature-verified payload received from another client of
 /// the same atSign.
+@experimental
 class ReceivedEnvelope {
   final String fromClientId;
   final String fromEnrollmentId;
@@ -46,6 +48,7 @@ class ReceivedEnvelope {
 }
 
 /// A [Secret] another client of this atSign shared with this client.
+@experimental
 class ReceivedSecret {
   final Secret secret;
   final String fromClientId;
@@ -61,7 +64,7 @@ class ReceivedSecret {
 /// Pairwise encrypted payload exchange between clients of the same atSign.
 ///
 /// To send, a client encrypts a payload to one of the recipient's published
-/// [ClientKeyBundle] keys (content key wrapped per the bundle key's alg,
+/// [ClientKeyPackage] keys (content key wrapped per the bundle key's alg,
 /// payload encrypted per [SecretSharingAlgos.encAlgos]), signs the envelope
 /// with its APKAM key, and puts it — as a raw-JSON, deliberately
 /// un-self-encrypted self key — at
@@ -74,6 +77,7 @@ class ReceivedSecret {
 /// clients like any self key, but only the addressed client can decrypt it.
 /// The recipient deletes the envelope after consuming it; unconsumed
 /// envelopes expire via [envelopeTtl].
+@experimental
 mixin PairwiseSecretSharing on PairwiseClientRegistration {
   /// Marker segment in envelope key names.
   static const String envelopeKeyMarker = '__ssenv';
@@ -128,11 +132,11 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
   /// Throws [StateError] if [to] advertises no key with a mutually-supported
   /// algorithm.
   Future<void> sendEnvelope(
-    ClientKeyBundle to,
+    ClientKeyPackage to,
     String appNamespace,
     Map<String, dynamic> payload,
   ) async {
-    final BundleKey? recipientKey = to.bestKeyFor(SecretSharingAlgos.keyAlgos);
+    final PackageKey? recipientKey = to.bestKeyFor(SecretSharingAlgos.keyAlgos);
     if (recipientKey == null) {
       throw StateError(
           'Client ${to.clientId} advertises no key with a supported '
@@ -282,7 +286,7 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
           'skipping');
       return null;
     }
-    final String myKid = BundleKey.computeKid(base64Encode(xWingPublicKey));
+    final String myKid = PackageKey.computeKid(base64Encode(xWingPublicKey));
     if (envelope.kid != myKid) {
       logger.warning('Envelope $envelopeKey was encrypted to key '
           '${envelope.kid} which this client does not hold; skipping');
@@ -396,7 +400,7 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
   }
 
   /// Shares one secret with one client.
-  Future<void> shareSecretWith(ClientKeyBundle to, Secret secret) =>
+  Future<void> shareSecretWith(ClientKeyPackage to, Secret secret) =>
       sendEnvelope(to, secret.namespace, {
         'kind': secretPayloadKind,
         'name': secret.name,
@@ -414,7 +418,7 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
   ///
   /// Returns the number of secrets shared.
   Future<int> shareAllSecretsWith(
-    ClientKeyBundle to, {
+    ClientKeyPackage to, {
     Map<String, dynamic>? approvedNamespaces,
   }) async {
     int shared = 0;

@@ -52,13 +52,13 @@ void main(List<String> args) async {
   // Registering with namespaces publishes a namespace-scoped copy of the
   // bundle per namespace, so senders can discover "clients participating in
   // this namespace" without fetching everyone's bundle.
-  final myBundle = await sharing.registerClient(
+  final myKeyPackage = await sharing.registerClient(
     namespaces: [applicationNamespace],
   );
   stdout.writeln(
-    'Registered as clientId ${myBundle.clientId} '
-    '(enrollment ${myBundle.enrollmentId}, '
-    'namespaces ${myBundle.namespaces})',
+    'Registered as clientId ${myKeyPackage.clientId} '
+    '(enrollment ${myKeyPackage.enrollmentId}, '
+    'namespaces ${myKeyPackage.namespaces})',
   );
 
   switch (role) {

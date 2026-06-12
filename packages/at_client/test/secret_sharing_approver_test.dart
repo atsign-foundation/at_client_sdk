@@ -141,7 +141,7 @@ void main() {
       final clientB = buildSharer('enroll-b', 'cid-b', seedB);
       await clientB.registerClient();
 
-      final shared = await approverA.shareAllSecretsWith(clientB.myBundle!,
+      final shared = await approverA.shareAllSecretsWith(clientB.myKeyPackage!,
           approvedNamespaces: {'myapp': 'rw'});
 
       expect(shared, 1);
@@ -156,7 +156,7 @@ void main() {
       final clientB = buildSharer('enroll-b', 'cid-b', seedB);
       await clientB.registerClient();
 
-      expect(await approverA.shareAllSecretsWith(clientB.myBundle!), 2);
+      expect(await approverA.shareAllSecretsWith(clientB.myKeyPackage!), 2);
       await clientB.deregisterClient();
     });
   });
@@ -167,7 +167,7 @@ void main() {
         'on receivedSecrets', () async {
       final clientB = buildSharer('enroll-b', 'cid-b', seedB);
       await clientB.registerClient();
-      await approverA.shareAllSecretsWith(clientB.myBundle!,
+      await approverA.shareAllSecretsWith(clientB.myKeyPackage!,
           approvedNamespaces: {'myapp': 'rw'});
 
       final received = <ReceivedSecret>[];
@@ -201,7 +201,7 @@ void main() {
           createdAt: DateTime.utc(2026, 6, 10)));
 
       // approver's copy is older (2026-06-01)
-      await approverA.shareAllSecretsWith(clientB.myBundle!,
+      await approverA.shareAllSecretsWith(clientB.myKeyPackage!,
           approvedNamespaces: {'myapp': 'rw'});
 
       final received = <ReceivedSecret>[];

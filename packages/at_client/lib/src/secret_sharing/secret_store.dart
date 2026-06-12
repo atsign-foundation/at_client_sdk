@@ -1,9 +1,12 @@
+import 'package:meta/meta.dart' show experimental;
+
 /// A named secret, scoped to an application namespace.
 ///
 /// The namespace is the unit of authorization: a secret tagged `myapp` is
 /// only ever shared with (and only ever deliverable to) enrollments
 /// authorized for `myapp` — see SecretStore.namespaceAuthorizes and the
 /// envelope key shape in PairwiseSecretSharing.
+@experimental
 class Secret {
   final String namespace;
   final String name;
@@ -44,6 +47,7 @@ class Secret {
 /// Supplied by the app to persist the [SecretStore] beyond the process
 /// lifetime (platform keystore, biometric storage, etc. — the app's
 /// concern). Without one, the store is in-memory only.
+@experimental
 abstract class SecretStorePersistence {
   Future<List<Secret>> load();
 
@@ -52,6 +56,7 @@ abstract class SecretStorePersistence {
 
 /// In-memory store of the secrets this client holds, keyed by
 /// (namespace, name).
+@experimental
 class SecretStore {
   final Map<String, Secret> _secrets = {};
 

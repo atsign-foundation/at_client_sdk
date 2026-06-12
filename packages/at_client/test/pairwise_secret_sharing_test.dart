@@ -161,7 +161,8 @@ void main() {
         'stores a raw-JSON, ttl\'d, unencrypted self key addressed to the '
         'recipient through the app namespace', () async {
       sharerA.envelopeTtl = Duration(hours: 1);
-      await sharerA.sendEnvelope(sharerB.myBundle!, 'myapp', {'hello': 'bob'});
+      await sharerA
+          .sendEnvelope(sharerB.myKeyPackage!, 'myapp', {'hello': 'bob'});
 
       final envelopeKeys = remoteData.keys
           .where((k) => k.contains('.cid-b.__ssenv.myapp@alice'))
@@ -183,12 +184,12 @@ void main() {
 
     test('throws StateError when the recipient bundle has no supported key',
         () async {
-      final futureOnlyBundle = ClientKeyBundle(
+      final futureOnlyBundle = ClientKeyPackage(
         clientId: 'cid-x',
         enrollmentId: 'enroll-x',
         createdAt: DateTime.now().toUtc(),
         keys: [
-          BundleKey(use: 'enc', alg: 'x-wing-99', pub: 'future-pub'),
+          PackageKey(use: 'enc', alg: 'x-wing-99', pub: 'future-pub'),
         ],
       );
       await expectLater(
@@ -202,7 +203,7 @@ void main() {
         'A to B round trip: B receives, envelope is deleted, second sweep '
         'is empty', () async {
       await sharerA.sendEnvelope(
-          sharerB.myBundle!, 'myapp', {'token': 'abc123', 'n': 7});
+          sharerB.myKeyPackage!, 'myapp', {'token': 'abc123', 'n': 7});
 
       final received = <ReceivedEnvelope>[];
       final sub = sharerB.receivedEnvelopes.listen(received.add);
@@ -226,7 +227,8 @@ void main() {
       // regression: AtKey.namespace is only the LAST dot segment, so the
       // received namespace used to arrive truncated ('demos' instead of
       // 'examples.demos')
-      await sharerA.sendEnvelope(sharerB.myBundle!, 'examples.demos', {'a': 1});
+      await sharerA
+          .sendEnvelope(sharerB.myKeyPackage!, 'examples.demos', {'a': 1});
       expect(
           remoteData.keys
               .where((k) => k.endsWith('.__ssenv.examples.demos@alice')),
@@ -243,7 +245,7 @@ void main() {
     test(
         'the sender itself cannot decrypt what it sent (kid mismatch); '
         'envelope is retained for the recipient', () async {
-      await sharerA.sendEnvelope(sharerB.myBundle!, 'myapp', {'a': 1});
+      await sharerA.sendEnvelope(sharerB.myKeyPackage!, 'myapp', {'a': 1});
 
       // A client that is NOT the addressee but matches the regex would not
       // normally occur (the clientId is in the key name); simulate a client
@@ -262,7 +264,7 @@ void main() {
     test(
         'a tampered envelope fails signature verification, is not emitted, '
         'and is retained', () async {
-      await sharerA.sendEnvelope(sharerB.myBundle!, 'myapp', {'a': 1});
+      await sharerA.sendEnvelope(sharerB.myKeyPackage!, 'myapp', {'a': 1});
       final envelopeKeyString =
           remoteData.keys.firstWhere((k) => k.contains('.__ssenv.'));
       final signedEnvelope = jsonDecode(remoteData[envelopeKeyString]!) as Map;
@@ -308,7 +310,7 @@ void main() {
         fromEnrollmentId: 'enroll-a',
         to: 'cid-x', // payload disagrees with the key name below
         keyAlg: 'x-wing',
-        kid: BundleKey.computeKid(base64Encode(sharerB.xWingPublicKey)),
+        kid: PackageKey.computeKid(base64Encode(sharerB.xWingPublicKey)),
         encryptedKey: 'xx',
         encAlg: 'aes-256-gcm',
         iv: 'xx',
@@ -342,7 +344,7 @@ void main() {
       expect(received, isEmpty);
 
       // an envelope arrives "via sync"
-      await sharerA.sendEnvelope(listeningB.myBundle!, 'myapp', {'x': 1});
+      await sharerA.sendEnvelope(listeningB.myKeyPackage!, 'myapp', {'x': 1});
       final envelopeKeyString =
           remoteData.keys.firstWhere((k) => k.contains('.__ssenv.'));
       registeredListener!.onSyncProgressEvent(SyncProgress()
@@ -381,7 +383,7 @@ void main() {
       await sharerA.secretStore.putSecret(
           Secret(namespace: 'myapp', name: '__rk.current', value: 'epoch-7'),
           allowReservedName: true);
-      await sharerA.shareAllSecretsWith(sharerB.myBundle!);
+      await sharerA.shareAllSecretsWith(sharerB.myKeyPackage!);
       expect(await sharerB.sweepOnce(), 1);
 
       final secret = await wait;

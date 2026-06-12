@@ -31,6 +31,11 @@
 - feat: New `EnvelopeSigning` mixin: wrap payloads in JSON envelopes signed
   with the APKAM keypair, verifiable by other clients against the signer
   enrollment's published `_apsk` public signing key.
+- The secret-sharing API surface is marked `@experimental`: it is the
+  substrate for the group-based encryption direction in
+  `docs/crypto-roadmap.md`, and the durable app-facing surface will be
+  `SecureGroup`. Types use the MLS-correspondent KeyPackage naming
+  (`ClientKeyPackage` / `PackageKey`).
 - feat: `AtClientSecretSharing.forClient(atClient)` returns the shared
   per-AtClient secret-sharing instance (one client identity per AtClient,
   shared by the app and SDK-internal consumers); `registerClient` namespaces

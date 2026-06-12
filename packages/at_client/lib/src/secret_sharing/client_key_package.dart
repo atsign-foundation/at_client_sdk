@@ -2,21 +2,23 @@ import 'dart:convert' show utf8;
 
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:crypto/crypto.dart' show sha256;
+import 'package:meta/meta.dart' show experimental;
 
-/// One public key advertised in a [ClientKeyBundle].
+/// One public key advertised in a [ClientKeyPackage].
 ///
 /// [kid] is a short identifier for the key (a SHA-256 prefix of [pub]) which
 /// envelopes use to say which of the recipient's keys was used. [alg] is an
 /// algorithm id from [SecretSharingAlgos]; readers skip entries whose [alg]
 /// or [use] they do not recognise, which is what lets bundles advertise new
 /// suites without breaking old readers.
-class BundleKey {
+@experimental
+class PackageKey {
   final String kid;
   final String use;
   final String alg;
   final String pub;
 
-  BundleKey({
+  PackageKey({
     required this.use,
     required this.alg,
     required this.pub,
@@ -39,7 +41,7 @@ class BundleKey {
         'pub': pub,
       };
 
-  static BundleKey? fromJson(Object? json) {
+  static PackageKey? fromJson(Object? json) {
     if (json is! Map) return null;
     final kid = json['kid'];
     final use = json['use'];
@@ -48,7 +50,7 @@ class BundleKey {
     if (kid is! String || use is! String || alg is! String || pub is! String) {
       return null;
     }
-    return BundleKey(kid: kid, use: use, alg: alg, pub: pub);
+    return PackageKey(kid: kid, use: use, alg: alg, pub: pub);
   }
 }
 
@@ -60,14 +62,15 @@ class BundleKey {
 /// same enrollment. Bundles are signed (see EnvelopeSigning) with the
 /// enrollment's APKAM key, and published in the enrollment's reserved
 /// namespace, which only that enrollment may write to.
-class ClientKeyBundle {
+@experimental
+class ClientKeyPackage {
   static const int currentVersion = 1;
 
   final int v;
   final String clientId;
   final String enrollmentId;
   final DateTime createdAt;
-  final List<BundleKey> keys;
+  final List<PackageKey> keys;
 
   /// The application namespaces this client participates in — the namespaces
   /// it has published namespace-scoped copies of this bundle under (see
@@ -76,7 +79,7 @@ class ClientKeyBundle {
   /// not register for is detectable: the copy's location won't appear here.
   final List<String> namespaces;
 
-  ClientKeyBundle({
+  ClientKeyPackage({
     required this.clientId,
     required this.enrollmentId,
     required this.createdAt,
@@ -88,7 +91,7 @@ class ClientKeyBundle {
   /// The first key in [supportedAlgos] order (strongest first) that this
   /// bundle advertises for [use]. Returns null if the bundle and
   /// [supportedAlgos] have no algorithm in common.
-  BundleKey? bestKeyFor(List<String> supportedAlgos,
+  PackageKey? bestKeyFor(List<String> supportedAlgos,
       {String use = SecretSharingAlgos.useEnc}) {
     for (final alg in supportedAlgos) {
       for (final key in keys) {
@@ -115,9 +118,9 @@ class ClientKeyBundle {
   ///
   /// Throws [FormatException] if the fields this version does require are
   /// missing or of the wrong type.
-  static ClientKeyBundle fromJson(Object? json) {
+  static ClientKeyPackage fromJson(Object? json) {
     if (json is! Map) {
-      throw FormatException('ClientKeyBundle: expected a Map, got $json');
+      throw FormatException('ClientKeyPackage: expected a Map, got $json');
     }
     final v = json['v'];
     final clientId = json['clientId'];
@@ -130,14 +133,14 @@ class ClientKeyBundle {
         enrollmentId is! String ||
         createdAt is! String ||
         keys is! List) {
-      throw FormatException('ClientKeyBundle: malformed bundle $json');
+      throw FormatException('ClientKeyPackage: malformed bundle $json');
     }
-    return ClientKeyBundle(
+    return ClientKeyPackage(
       v: v,
       clientId: clientId,
       enrollmentId: enrollmentId,
       createdAt: DateTime.parse(createdAt),
-      keys: keys.map(BundleKey.fromJson).whereType<BundleKey>().toList(),
+      keys: keys.map(PackageKey.fromJson).whereType<PackageKey>().toList(),
       // tolerate absence (bundles from older writers) and non-string entries
       namespaces: namespaces is List
           ? namespaces.whereType<String>().toList()
