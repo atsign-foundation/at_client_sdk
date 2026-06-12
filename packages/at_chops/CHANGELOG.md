@@ -1,3 +1,11 @@
+## 3.1.0
+- feat: Add X25519 key agreement algorithm (pure-Dart via `cryptography` package and OpenSSL FFI backends)
+- feat: Add ML-KEM-768 key encapsulation algorithm (pure-Dart via `pqcrypto` package and OpenSSL FFI backends)
+- feat: Introduce `AtKemAlgorithm` and `AtKeyAgreementAlgorithm` interfaces for post-quantum cryptography
+- feat: Add `AtX25519KeyPair` and `AtMlKem768KeyPair` key types with `fromBytes` constructors
+- feat: Add OpenSSL capability probe (`libCryptoSupportsMlKem768`) to skip ML-KEM-768 FFI tests on OpenSSL < 3.3
+- build[deps]: Add `pqcrypto` and `cryptography` dependencies for PQC algorithm support
+
 ## 3.0.0
 - feat: Faster AES encryption/decryption using better_crypto
 ## 2.2.0

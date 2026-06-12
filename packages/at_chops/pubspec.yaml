@@ -1,6 +1,6 @@
 name: at_chops
 description: Package for at_protocol cryptographic and hashing operations
-version: 3.0.0
+version: 3.1.0
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_chops
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
@@ -22,6 +22,8 @@ dependencies:
   at_utils: ^3.0.19
   cryptography: ^2.7.0
   better_cryptography: ^1.0.0+1
+  ffi: ^2.1.0
+  pqcrypto: 0.3.0
 
 dev_dependencies:
   lints: ^6.0.0

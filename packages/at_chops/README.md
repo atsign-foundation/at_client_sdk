@@ -23,3 +23,19 @@ final data = 'Hello World';
 final encryptedString = atChops.encryptString(data, EncryptionKeyType.rsa_2048);
 final decryptedString = atChops.decryptString(encryptedString, EncryptionKeyType.rsa_2048);
 ```
+
+## Running Tests
+
+We have at_chops tests that require `libcrypto.so` installed for them to pass. Therefore, running `dart test` will not pass on all systems.
+
+To run all tests EXCEPT the FFI tests:
+
+```bash
+dart test --exclude-tags ffi
+```
+
+To run ONLY the FFI tests:
+
+```bash
+dart test --tags ffi
+```
