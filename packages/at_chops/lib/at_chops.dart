@@ -1,6 +1,7 @@
 library;
 
 export 'src/algorithm/aes_encryption_algo.dart';
+export 'src/algorithm/aes_gcm_encryption_algo.dart';
 export 'src/algorithm/algo_type.dart';
 export 'src/algorithm/at_iv.dart';
 export 'src/algorithm/default_signing_algo.dart';

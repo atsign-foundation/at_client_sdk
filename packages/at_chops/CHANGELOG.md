@@ -1,4 +1,7 @@
 ## 3.1.0
+- feat: Add `AesGcm256EncryptionAlgo` — AES-256-GCM authenticated encryption
+  (pure-Dart via `cryptography`); output `ciphertext || tag`, explicit
+  12-byte nonce, tamper detection via `AtDecryptionException`
 - feat: Add X25519 key agreement algorithm (pure-Dart via `cryptography` package and OpenSSL FFI backends)
 - feat: Add ML-KEM-768 key encapsulation algorithm (pure-Dart via `pqcrypto` package and OpenSSL FFI backends)
 - feat: Introduce `AtKemAlgorithm` and `AtKeyAgreementAlgorithm` interfaces for post-quantum cryptography
