@@ -96,7 +96,13 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
   RSAKeypair? _keyPair;
   ClientKeyBundle? _myBundle;
   Timer? _republishTimer;
-  List<String> _registeredNamespaces = const [];
+  final Set<String> _registeredNamespaces = {};
+
+  /// The application namespaces this client is currently registered under
+  /// (the union of every [registerClient] call since the last
+  /// [deregisterClient]).
+  Set<String> get registeredNamespaces =>
+      Set.unmodifiable(_registeredNamespaces);
 
   /// This client's random per-client id. Throws [StateError] until
   /// [registerClient] has completed.
@@ -128,11 +134,17 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
   /// publishes its signed [ClientKeyBundle], and keeps republishing it at
   /// [bundleTtl] / 2 until [deregisterClient] is called.
   ///
-  /// [namespaces], when given, are the application namespaces this client
+  /// [namespaces], when given, are application namespaces this client
   /// participates in: a namespace-scoped copy of the bundle is published
   /// under each (see the mixin doc), and the list is included in the signed
   /// bundle payload. This client's enrollment must have `rw` access to each
   /// of them — the atServer refuses the copy otherwise.
+  ///
+  /// Namespaces are **additive across calls**: they union into
+  /// [registeredNamespaces] (cleared by [deregisterClient]). This lets
+  /// independent consumers of a shared instance — the app and SDK-internal
+  /// users such as crypto providers — each declare their namespaces without
+  /// clobbering the other's registrations.
   ///
   /// Also ensures this enrollment's APKAM public signing key is published
   /// ([ApkamSigning.publishPublicSigningKey]) so that other clients can
@@ -156,8 +168,9 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
         ));
       }
     }
-    _registeredNamespaces =
-        namespaces == null ? const [] : (namespaces.toSet().toList()..sort());
+    if (namespaces != null) {
+      _registeredNamespaces.addAll(namespaces);
+    }
 
     await publishPublicSigningKey();
     await _publishBundle();
@@ -174,9 +187,9 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
   }
 
   /// Cancels republishing and deletes this client's bundle — canonical and
-  /// any namespace-scoped copies — from the atServer. The in-memory identity
-  /// is retained, so a subsequent [registerClient] republishes under the
-  /// same clientId.
+  /// any namespace-scoped copies — from the atServer, clearing
+  /// [registeredNamespaces]. The in-memory identity is retained, so a
+  /// subsequent [registerClient] republishes under the same clientId.
   Future<void> deregisterClient() async {
     _republishTimer?.cancel();
     _republishTimer = null;
@@ -199,6 +212,7 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
         logger.warning('Failed to delete bundle copy in namespace $ns: $e');
       }
     }
+    _registeredNamespaces.clear();
   }
 
   AtKey _namespaceCopyKey(String ns) => AtKey()
@@ -219,7 +233,7 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
           pub: _keyPair!.publicKey.toString(),
         ),
       ],
-      namespaces: _registeredNamespaces,
+      namespaces: _registeredNamespaces.toList()..sort(),
     );
     final String signedJson = await wrapAndSignAndJsonEncode(bundle.toJson());
 

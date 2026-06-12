@@ -405,5 +405,28 @@ void main() {
       await registrantB.deregisterClient();
       await registrantC.deregisterClient();
     });
+
+    test(
+        'registerClient namespaces are additive across calls; deregister '
+        'clears them', () async {
+      final registrant = buildRegistrant('enroll-a', stableClientId: 'cid-a');
+      await registrant.registerClient(namespaces: ['myapp']);
+      // a second consumer of the same instance declares its own namespace
+      final bundle = await registrant.registerClient(namespaces: ['mychat']);
+
+      expect(registrant.registeredNamespaces, {'myapp', 'mychat'});
+      expect(bundle.namespaces, ['myapp', 'mychat']); // union, sorted
+      expect(
+          remoteData.containsKey('sskb-cid-a.enroll-a.__sskbns.myapp$atSign'),
+          isTrue,
+          reason: 'first consumer\'s copy must survive the second call');
+      expect(
+          remoteData.containsKey('sskb-cid-a.enroll-a.__sskbns.mychat$atSign'),
+          isTrue);
+
+      await registrant.deregisterClient();
+      expect(registrant.registeredNamespaces, isEmpty);
+      expect(remoteData.keys.where((k) => k.contains('.__sskbns.')), isEmpty);
+    });
   });
 }
