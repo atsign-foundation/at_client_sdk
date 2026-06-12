@@ -135,7 +135,7 @@ void main() {
 
       // bundle was published at the hidden-public per-enrollment key, then
       // removed again by deregisterClient
-      final bundleKeyUri = 'public:__pqkb-cid-a.enroll-a.a.__e$atSign';
+      final bundleKeyUri = 'public:__sskb-cid-a.enroll-a.a.__e$atSign';
       expect(remoteData.containsKey(bundleKeyUri), isFalse);
     });
 
@@ -156,7 +156,7 @@ void main() {
       final bundlePuts = <(AtKey, String)>[];
       for (var i = 0; i < captured.length; i += 2) {
         final key = captured[i] as AtKey;
-        if (key.toString().contains('__pqkb-')) {
+        if (key.toString().contains('__sskb-')) {
           bundlePuts.add((key, captured[i + 1] as String));
         }
       }
@@ -226,7 +226,7 @@ void main() {
       final registrantA = buildRegistrant('enroll-a', stableClientId: 'cid-a');
       await registrantA.registerClient();
 
-      final bundleKeyUri = 'public:__pqkb-cid-a.enroll-a.a.__e$atSign';
+      final bundleKeyUri = 'public:__sskb-cid-a.enroll-a.a.__e$atSign';
       final envelope = jsonDecode(remoteData[bundleKeyUri]!) as Map;
       (envelope['payload'] as Map)['clientId'] = 'cid-evil';
       remoteData[bundleKeyUri] = jsonEncode(envelope);
@@ -249,8 +249,8 @@ void main() {
       // Move A's (validly signed) bundle to a key location claiming
       // enrollment enroll-x. On a real atServer enroll-a could not write
       // there, but defence in depth: the location/claim binding check.
-      final bundleKeyUri = 'public:__pqkb-cid-a.enroll-a.a.__e$atSign';
-      final plantedUri = 'public:__pqkb-cid-a.enroll-x.a.__e$atSign';
+      final bundleKeyUri = 'public:__sskb-cid-a.enroll-a.a.__e$atSign';
+      final plantedUri = 'public:__sskb-cid-a.enroll-x.a.__e$atSign';
       remoteData[plantedUri] = remoteData.remove(bundleKeyUri)!;
 
       final registrantB = buildRegistrant('enroll-b', stableClientId: 'cid-b');
@@ -319,13 +319,13 @@ void main() {
 
       expect(bundle.namespaces, ['examples.demos', 'myapp']); // sorted
 
-      final copyMyapp = 'pqkb-cid-a.enroll-a.__pqkbns.myapp$atSign';
-      final copyDemos = 'pqkb-cid-a.enroll-a.__pqkbns.examples.demos$atSign';
+      final copyMyapp = 'sskb-cid-a.enroll-a.__sskbns.myapp$atSign';
+      final copyDemos = 'sskb-cid-a.enroll-a.__sskbns.examples.demos$atSign';
       expect(remoteData.containsKey(copyMyapp), isTrue);
       expect(remoteData.containsKey(copyDemos), isTrue);
       // copies carry the same signed envelope as the canonical bundle
       expect(remoteData[copyMyapp],
-          remoteData['public:__pqkb-cid-a.enroll-a.a.__e$atSign']);
+          remoteData['public:__sskb-cid-a.enroll-a.a.__e$atSign']);
       // raw JSON (never whole-value base64)
       expect(remoteData[copyMyapp]!.startsWith('{'), isTrue);
 
@@ -370,8 +370,8 @@ void main() {
       // an owner-class actor copies A's genuine bundle copy into a
       // namespace A did not register for (on a real atServer only a
       // wildcard/legacy connection could do this write)
-      remoteData['pqkb-cid-a.enroll-a.__pqkbns.banking$atSign'] =
-          remoteData['pqkb-cid-a.enroll-a.__pqkbns.myapp$atSign']!;
+      remoteData['sskb-cid-a.enroll-a.__sskbns.banking$atSign'] =
+          remoteData['sskb-cid-a.enroll-a.__sskbns.myapp$atSign']!;
 
       final registrantB = buildRegistrant('enroll-b', stableClientId: 'cid-b');
       await registrantB.registerClient();

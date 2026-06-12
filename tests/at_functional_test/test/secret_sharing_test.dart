@@ -93,7 +93,7 @@ void main() {
     await sharerA.registerClient();
 
     // discovery runs a real authenticated scan with showhidden:true; B's
-    // bundle is a hidden public key (public:__pqkb-...) so this asserts the
+    // bundle is a hidden public key (public:__sskb-...) so this asserts the
     // server-side visibility design as well as signature verification
     final discovered = await sharerA.discoverClients();
     final discoveredB =
