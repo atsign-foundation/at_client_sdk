@@ -1,5 +1,6 @@
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
-import 'package:at_client/src/secret_sharing/client_key_bundle.dart';
+import 'package:at_client/src/secret_sharing/client_key_package.dart';
+import 'package:meta/meta.dart' show experimental;
 
 /// The encrypted payload one client sends to another client of the same
 /// atSign. The whole envelope is additionally wrapped in an APKAM signature
@@ -10,6 +11,7 @@ import 'package:at_client/src/secret_sharing/client_key_bundle.dart';
 /// encapsulation ciphertext (the encapsulated shared secret is the content
 /// key) and [encAlg] is AES-256-GCM; a future suite changes the ids, not
 /// the schema.
+@experimental
 class SecretEnvelope {
   static const int currentVersion = 1;
 
@@ -24,7 +26,7 @@ class SecretEnvelope {
   /// [SecretSharingAlgos.keyAlgos].
   final String keyAlg;
 
-  /// Which of the recipient's published [BundleKey]s was used.
+  /// Which of the recipient's published [PackageKey]s was used.
   final String kid;
 
   /// The content key, protected per [keyAlg].

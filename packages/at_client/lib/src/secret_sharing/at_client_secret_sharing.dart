@@ -5,6 +5,7 @@ import 'package:at_client/src/secret_sharing/pairwise_client_registration.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
+import 'package:meta/meta.dart' show experimental;
 
 /// Ready-made composition of the same-atSign secret-sharing mixins, for
 /// apps that don't want to mix them into their own classes.
@@ -23,6 +24,7 @@ import 'package:at_utils/at_utils.dart' show AtSignLogger;
 /// CryptoProvider that distributes its keys as secrets) each constructed
 /// their own, the atSign's roster would show two clients per process and
 /// every secret would be shared twice.
+@experimental
 class AtClientSecretSharing
     with
         ApkamSigning,

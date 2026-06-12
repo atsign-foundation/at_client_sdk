@@ -42,11 +42,15 @@ is the main entry point once authentication is complete.
 - `put(AtKey, value)` / `get(AtKey)` / `delete(AtKey)` — low level CRUD against
   the keystore. You should almost never need to do this if you are using 
   AtCollections.
-- `AtClientSecretSharing` (via `package:at_client/at_client_mixins.dart`) —
-  pairwise secret sharing between clients of the **same** atSign: each
-  client publishes a signed key bundle, and secrets are end-to-end
-  encrypted to one specific receiving client, scoped by application
-  namespace. See [`example/bin/secret_sharing.dart`](example/bin/secret_sharing.dart).
+- `AtClientSecretSharing` (via `package:at_client/at_client_mixins.dart`,
+  **experimental**) — pairwise secret sharing between clients of the
+  **same** atSign: each client publishes a signed, post-quantum key package
+  (X-Wing hybrid KEM), and secrets are end-to-end encrypted to one specific
+  receiving client, scoped by application namespace. This is the substrate
+  for the group-based encryption direction in
+  [`docs/crypto-roadmap.md`](../../docs/crypto-roadmap.md); the durable
+  app-facing surface will be `SecureGroup`. See
+  [`example/bin/secret_sharing.dart`](example/bin/secret_sharing.dart).
 
 ## Examples
 

@@ -19,7 +19,7 @@ import 'package:at_client/at_client.dart'
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:at_commons/atsign.dart' show AtsignString;
-import 'package:meta/meta.dart' show visibleForTesting;
+import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
 /// Wraps payloads in signed JSON envelopes, and verifies envelopes created by
 /// other clients of the same or another atSign.
@@ -28,6 +28,7 @@ import 'package:meta/meta.dart' show visibleForTesting;
 /// whose public half [ApkamSigning] publishes at
 /// `public:_apsk.<enrollmentId>.a.__e@atsign` — and carry the signer's
 /// [ApkamSigning.enrollmentId] so that verifiers can fetch that key.
+@experimental
 mixin EnvelopeSigning on ApkamSigning {
   /// How to handle caching of public keys used for verification
   ///

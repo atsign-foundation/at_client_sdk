@@ -15,8 +15,8 @@ import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/mixins/envelope_signing.dart'
     show EnvelopeSigning;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
-import 'package:at_client/src/secret_sharing/client_key_bundle.dart';
-import 'package:meta/meta.dart' show protected;
+import 'package:at_client/src/secret_sharing/client_key_package.dart';
+import 'package:meta/meta.dart' show experimental, protected;
 import 'package:uuid/uuid.dart' show Uuid;
 
 /// A client identity that an app chose to persist via
@@ -27,6 +27,7 @@ import 'package:uuid/uuid.dart' show Uuid;
 /// key is re-derived from it deterministically. Treat this as
 /// device-local material — copying it to another device clones the client
 /// identity.
+@experimental
 class PersistedClientKeys {
   final String clientId;
   final String xWingSeed;
@@ -40,7 +41,7 @@ class PersistedClientKeys {
 /// Per-client registration for same-atSign secret sharing.
 ///
 /// Each client generates a random [clientId] and a keypair, and publishes a
-/// signed [ClientKeyBundle] as a *hidden public key* in its enrollment's
+/// signed [ClientKeyPackage] as a *hidden public key* in its enrollment's
 /// reserved namespace:
 ///
 ///     public:__sskb-<clientId>.<enrollmentId>.a.__e@atsign
@@ -68,7 +69,7 @@ class PersistedClientKeys {
 ///   it, so unrelated apps don't learn the roster.
 ///
 /// The bundle's signed payload lists the namespaces it was registered under
-/// ([ClientKeyBundle.namespaces]), so a genuine bundle *planted* by an
+/// ([ClientKeyPackage.namespaces]), so a genuine bundle *planted* by an
 /// owner-class client under some other namespace is detected at discovery
 /// time (location not in the signed list). [discoverClients] with a
 /// `namespace` argument uses these copies, avoiding fetching and verifying
@@ -77,16 +78,17 @@ class PersistedClientKeys {
 /// clients' local storage.
 ///
 /// By default the identity is ephemeral: held in memory, published with
-/// [bundleTtl], republished while this client runs, and gone when the
+/// [keyPackageTtl], republished while this client runs, and gone when the
 /// process ends. Apps that want a stable clientId across restarts supply
 /// [loadClientKeys] / [saveClientKeys].
+@experimental
 mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
   /// Marker segment in namespace-scoped bundle copy key names.
   static const String namespaceScopedMarker = '__sskbns';
 
   /// How long a published bundle lives on the atServer. While registered,
   /// the bundle is republished at half this interval.
-  Duration bundleTtl = Duration(hours: 24);
+  Duration keyPackageTtl = Duration(hours: 24);
 
   /// Supply to give this client a stable identity across restarts.
   /// Called once, before generating a fresh identity; return null to
@@ -100,7 +102,7 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
   String? _clientId;
   Uint8List? _xWingSeed;
   Uint8List? _xWingPublicKey;
-  ClientKeyBundle? _myBundle;
+  ClientKeyPackage? _myKeyPackage;
   Timer? _republishTimer;
   final Set<String> _registeredNamespaces = {};
 
@@ -119,10 +121,10 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
     return _clientId!;
   }
 
-  bool get isRegistered => _myBundle != null;
+  bool get isRegistered => _myKeyPackage != null;
 
   /// The bundle this client most recently published.
-  ClientKeyBundle? get myBundle => _myBundle;
+  ClientKeyPackage? get myKeyPackage => _myKeyPackage;
 
   /// This client's X-Wing public key (1216 raw bytes), as published in its
   /// bundle. Throws [StateError] until [registerClient] has completed.
@@ -143,13 +145,13 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
     return _xWingSeed!;
   }
 
-  String get _bundleKeyUri => 'public:__sskb-$clientId.$enrollmentId'
+  String get _keyPackageKeyUri => 'public:__sskb-$clientId.$enrollmentId'
       '.${EnrollmentConstants.perEnrollmentApproved}'
       '${atClient.getCurrentAtSign()}';
 
   /// Generates (or loads, via [loadClientKeys]) this client's identity,
-  /// publishes its signed [ClientKeyBundle], and keeps republishing it at
-  /// [bundleTtl] / 2 until [deregisterClient] is called.
+  /// publishes its signed [ClientKeyPackage], and keeps republishing it at
+  /// [keyPackageTtl] / 2 until [deregisterClient] is called.
   ///
   /// [namespaces], when given, are application namespaces this client
   /// participates in: a namespace-scoped copy of the bundle is published
@@ -166,7 +168,8 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
   /// Also ensures this enrollment's APKAM public signing key is published
   /// ([ApkamSigning.publishPublicSigningKey]) so that other clients can
   /// verify the bundle's signature.
-  Future<ClientKeyBundle> registerClient({Iterable<String>? namespaces}) async {
+  Future<ClientKeyPackage> registerClient(
+      {Iterable<String>? namespaces}) async {
     if (_clientId == null) {
       final loaded = await loadClientKeys?.call();
       if (loaded != null) {
@@ -191,17 +194,17 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
     }
 
     await publishPublicSigningKey();
-    await _publishBundle();
+    await _publishKeyPackage();
 
     _republishTimer?.cancel();
-    _republishTimer = Timer.periodic(bundleTtl ~/ 2, (_) async {
+    _republishTimer = Timer.periodic(keyPackageTtl ~/ 2, (_) async {
       try {
-        await _publishBundle();
+        await _publishKeyPackage();
       } catch (e) {
         logger.warning('Failed to republish client key bundle: $e');
       }
     });
-    return _myBundle!;
+    return _myKeyPackage!;
   }
 
   /// Cancels republishing and deletes this client's bundle — canonical and
@@ -211,12 +214,12 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
   Future<void> deregisterClient() async {
     _republishTimer?.cancel();
     _republishTimer = null;
-    if (_myBundle == null) {
+    if (_myKeyPackage == null) {
       return;
     }
-    _myBundle = null;
+    _myKeyPackage = null;
     await atClient.delete(
-      AtKey.fromString(_bundleKeyUri),
+      AtKey.fromString(_keyPackageKeyUri),
       deleteRequestOptions: DeleteRequestOptions()..useRemoteAtServer = true,
     );
     for (final ns in _registeredNamespaces) {
@@ -239,13 +242,13 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
     ..sharedBy = atClient.getCurrentAtSign();
 
   /// Publishes the canonical bundle and a copy per registered namespace.
-  Future<void> _publishBundle() async {
-    final bundle = ClientKeyBundle(
+  Future<void> _publishKeyPackage() async {
+    final bundle = ClientKeyPackage(
       clientId: clientId,
       enrollmentId: enrollmentId,
       createdAt: DateTime.now().toUtc(),
       keys: [
-        BundleKey(
+        PackageKey(
           use: SecretSharingAlgos.useEnc,
           alg: SecretSharingAlgos.xWing,
           pub: base64Encode(_xWingPublicKey!),
@@ -255,18 +258,18 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
     );
     final String signedJson = await wrapAndSignAndJsonEncode(bundle.toJson());
 
-    final atKey = AtKey.fromString(_bundleKeyUri)
-      ..metadata.ttl = bundleTtl.inMilliseconds;
+    final atKey = AtKey.fromString(_keyPackageKeyUri)
+      ..metadata.ttl = keyPackageTtl.inMilliseconds;
     await atClient.put(
       atKey,
       signedJson,
       putRequestOptions: PutRequestOptions()..useRemoteAtServer = true,
     );
-    logger.info('Published client key bundle at $_bundleKeyUri');
+    logger.info('Published client key bundle at $_keyPackageKeyUri');
 
     for (final ns in _registeredNamespaces) {
       final copyKey = _namespaceCopyKey(ns)
-        ..metadata.ttl = bundleTtl.inMilliseconds;
+        ..metadata.ttl = keyPackageTtl.inMilliseconds;
       // Cleartext self key (the bundle is public material, already inside a
       // signed envelope); raw JSON so pre-isEncrypted-fix readers fall back
       // to the raw value.
@@ -279,7 +282,7 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
       );
       logger.info('Published bundle copy in namespace $ns');
     }
-    _myBundle = bundle;
+    _myKeyPackage = bundle;
   }
 
   /// Discovers the key bundles other clients of this atSign have published.
@@ -300,11 +303,11 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
   /// against the bundle's signed claims: clientId and enrollmentId must
   /// match the key name, and for namespace-scoped copies the location
   /// namespace must appear in the bundle's signed
-  /// [ClientKeyBundle.namespaces] (so a genuine bundle planted under a
+  /// [ClientKeyPackage.namespaces] (so a genuine bundle planted under a
   /// foreign namespace by an owner-class client is rejected). Bundles that
   /// fail any check are logged and skipped. This client's own bundle is
   /// excluded.
-  Future<List<ClientKeyBundle>> discoverClients(
+  Future<List<ClientKeyPackage>> discoverClients(
       {String? enrollmentId, String? namespace}) async {
     final String eidPattern = enrollmentId ?? '[^.]+';
     final String regex = namespace == null
@@ -317,9 +320,10 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
       useRemoteAtServer: true,
     );
 
-    final bundles = <ClientKeyBundle>[];
+    final bundles = <ClientKeyPackage>[];
     for (final bundleKey in bundleKeys) {
-      final bundle = await _verifiedBundleAt(bundleKey, namespace: namespace);
+      final bundle =
+          await _verifiedKeyPackageAt(bundleKey, namespace: namespace);
       if (bundle != null && bundle.clientId != _clientId) {
         bundles.add(bundle);
       }
@@ -329,7 +333,7 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
 
   /// Fetches, signature-verifies and location-validates one bundle.
   /// Returns null (after logging) if any check fails.
-  Future<ClientKeyBundle?> _verifiedBundleAt(AtKey bundleKey,
+  Future<ClientKeyPackage?> _verifiedKeyPackageAt(AtKey bundleKey,
       {String? namespace}) async {
     try {
       final AtValue av = await atClient.get(
@@ -339,7 +343,7 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
       final envelope = jsonDecode(av.value as String) as Map;
       await verifyEnvelopeSignature(envelope,
           signerAtSign: atClient.getCurrentAtSign()!);
-      final bundle = ClientKeyBundle.fromJson(envelope['payload']);
+      final bundle = ClientKeyPackage.fromJson(envelope['payload']);
 
       // The enrollment that signed the envelope must be the enrollment the
       // bundle claims...
