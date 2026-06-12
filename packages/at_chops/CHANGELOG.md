@@ -1,4 +1,10 @@
 ## 3.1.0
+- feat: Add `XWingPureDartAlgo` — the X-Wing hybrid post-quantum/traditional
+  KEM (draft-connolly-cfrg-xwing-kem-10; X25519 + ML-KEM-768), with
+  `AtXWingKeyPair` and `AtChopsUtil.generateXWingKeyPair()`; verified
+  against the draft's test vectors byte-exact
+- feat: `MlKem768PureDartAlgo.encapsulate` accepts optional deterministic
+  randomness (FIPS 203 `m`) for test-vector verification
 - feat: Add `AesGcm256EncryptionAlgo` — AES-256-GCM authenticated encryption
   (pure-Dart via `cryptography`); output `ciphertext || tag`, explicit
   12-byte nonce, tamper detection via `AtDecryptionException`
