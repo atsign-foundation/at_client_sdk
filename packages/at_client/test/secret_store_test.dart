@@ -67,6 +67,31 @@ void main() {
     });
   });
 
+  group('reserved names', () {
+    test('putSecret rejects __ names unless allowReservedName', () async {
+      final store = SecretStore();
+      expect(
+          () => store.putSecret(
+              Secret(namespace: 'myapp', name: '__rk.current', value: 'x')),
+          throwsA(isA<ArgumentError>()));
+      expect(store.getSecret('myapp', '__rk.current'), isNull);
+
+      await store.putSecret(
+          Secret(namespace: 'myapp', name: '__rk.current', value: 'x'),
+          allowReservedName: true);
+      expect(store.getSecret('myapp', '__rk.current')!.value, 'x');
+    });
+
+    test('putIfNewer (the arrival path) accepts reserved names', () async {
+      final store = SecretStore();
+      expect(
+          await store.putIfNewer(
+              Secret(namespace: 'myapp', name: '__rk.current', value: 'x')),
+          isTrue);
+      expect(store.getSecret('myapp', '__rk.current')!.value, 'x');
+    });
+  });
+
   group('persistence delegate', () {
     test('mutations save, init loads', () async {
       final persistence = InMemoryPersistence();

@@ -19,6 +19,12 @@
 - feat: New `EnvelopeSigning` mixin: wrap payloads in JSON envelopes signed
   with the APKAM keypair, verifiable by other clients against the signer
   enrollment's published `_apsk` public signing key.
+- feat: `AtClientSecretSharing.forClient(atClient)` returns the shared
+  per-AtClient secret-sharing instance (one client identity per AtClient,
+  shared by the app and SDK-internal consumers); `registerClient` namespaces
+  are additive across calls; `waitForSecret(namespace, name)` awaits a
+  secret's arrival race-free; secret names beginning `__` are reserved for
+  system use. See `docs/crypto-roadmap.md` for where this is headed.
 - feat: Namespace-scoped registration and discovery for secret sharing:
   `registerClient(namespaces: [...])` additionally publishes the signed
   bundle as a cleartext self key per application namespace, and

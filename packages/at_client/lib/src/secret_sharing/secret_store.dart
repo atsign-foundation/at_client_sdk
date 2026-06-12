@@ -72,7 +72,19 @@ class SecretStore {
     }
   }
 
-  Future<void> putSecret(Secret secret) async {
+  /// Stores [secret], overwriting any existing `(namespace, name)` entry.
+  ///
+  /// Names beginning `__` are **reserved for system use** (e.g. a crypto
+  /// provider's key material such as `__rk.<epoch>.<kid>`) and are rejected
+  /// with [ArgumentError] unless [allowReservedName] is set — which only
+  /// system-level callers should do. This keeps app secrets and system
+  /// secrets collision-free within a namespace.
+  Future<void> putSecret(Secret secret,
+      {bool allowReservedName = false}) async {
+    if (!allowReservedName && secret.name.startsWith('__')) {
+      throw ArgumentError.value(secret.name, 'secret.name',
+          'Secret names beginning "__" are reserved for system use');
+    }
     _secrets[_key(secret.namespace, secret.name)] = secret;
     await persistence?.save(listSecrets());
   }
@@ -80,13 +92,14 @@ class SecretStore {
   /// Stores [secret] only if no secret with the same (namespace, name)
   /// exists with the same or newer [Secret.createdAt]. Returns whether it
   /// was stored. This is the conflict rule for secrets arriving from other
-  /// clients.
+  /// clients — and as the arrival/merge path it accepts reserved (`__`)
+  /// names: system secrets must flow between clients.
   Future<bool> putIfNewer(Secret secret) async {
     final existing = _secrets[_key(secret.namespace, secret.name)];
     if (existing != null && !secret.createdAt.isAfter(existing.createdAt)) {
       return false;
     }
-    await putSecret(secret);
+    await putSecret(secret, allowReservedName: true);
     return true;
   }
 

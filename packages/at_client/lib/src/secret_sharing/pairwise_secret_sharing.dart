@@ -307,7 +307,46 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
   }
 
   /// Payload `kind` marker for envelopes that carry a [Secret].
+  ///
+  /// `kind` values `secret`, `request` and `response` are reserved for this
+  /// library (`request`/`response` for the planned pull flow — see
+  /// docs/crypto-roadmap.md step 3). Apps embedding their own payloads via
+  /// [sendEnvelope] should use other `kind` values; unknown kinds are
+  /// delivered on [receivedEnvelopes] and otherwise ignored.
   static const String secretPayloadKind = 'secret';
+
+  /// Returns the secret `(namespace, name)` as soon as this client holds
+  /// it: immediately from [secretStore] when already present, otherwise the
+  /// first matching arrival on [receivedSecrets] — subscription is set up
+  /// *before* the store check, so an arrival between the two cannot be
+  /// missed. [startListening] must be active for arrivals to be observed.
+  ///
+  /// Throws [TimeoutException] when [timeout] elapses first. Intended for
+  /// decrypt-style paths that race key distribution (e.g. a crypto provider
+  /// waiting for an epoch key another client is sharing).
+  Future<Secret> waitForSecret(
+    String namespace,
+    String name, {
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final completer = Completer<Secret>();
+    final subscription = receivedSecrets.listen((received) {
+      if (received.secret.namespace == namespace &&
+          received.secret.name == name &&
+          !completer.isCompleted) {
+        completer.complete(received.secret);
+      }
+    });
+    try {
+      final existing = secretStore.getSecret(namespace, name);
+      if (existing != null) {
+        return existing;
+      }
+      return await completer.future.timeout(timeout);
+    } finally {
+      await subscription.cancel();
+    }
+  }
 
   /// If [received] carries a secret, stores it in [secretStore]
   /// (newest-createdAt wins) and emits it on [receivedSecrets].

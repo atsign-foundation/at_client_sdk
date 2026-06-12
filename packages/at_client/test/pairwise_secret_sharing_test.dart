@@ -1,3 +1,4 @@
+import 'dart:async' show TimeoutException;
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
@@ -362,6 +363,42 @@ void main() {
       verify(() => syncService.removeProgressListener(any())).called(1);
       await sub.cancel();
       await listeningB.deregisterClient();
+    });
+  });
+
+  group('waitForSecret', () {
+    test('returns immediately when the secret is already held', () async {
+      await sharerB.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v1'));
+      final secret = await sharerB.waitForSecret('myapp', 'token',
+          timeout: Duration(milliseconds: 100));
+      expect(secret.value, 'v1');
+    });
+
+    test('completes when the secret arrives after the wait starts', () async {
+      final wait = sharerB.waitForSecret('myapp', '__rk.current',
+          timeout: Duration(seconds: 5));
+
+      // arrival happens after the wait is already pending: A shares a
+      // (reserved-name, system) secret and B's sweep consumes it
+      await sharerA.secretStore.putSecret(
+          Secret(namespace: 'myapp', name: '__rk.current', value: 'epoch-7'),
+          allowReservedName: true);
+      await sharerA.shareAllSecretsWith(sharerB.myBundle!);
+      expect(await sharerB.sweepOnce(), 1);
+
+      final secret = await wait;
+      expect(secret.value, 'epoch-7');
+      // the reserved-name secret was accepted by the arrival path and stored
+      expect(sharerB.secretStore.getSecret('myapp', '__rk.current')!.value,
+          'epoch-7');
+    });
+
+    test('throws TimeoutException when nothing arrives', () async {
+      await expectLater(
+          sharerB.waitForSecret('myapp', 'never',
+              timeout: Duration(milliseconds: 100)),
+          throwsA(isA<TimeoutException>()));
     });
   });
 }
