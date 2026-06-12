@@ -91,6 +91,13 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
   /// The secrets this client holds: what it created via
   /// [SecretStore.putSecret], plus what other clients shared with it
   /// (received secrets are stored automatically, newest-createdAt wins).
+  ///
+  /// One store — and at most one [SecretStore.persistence] — per client
+  /// identity: all consumers of a shared instance (the app, SDK-internal
+  /// users such as crypto providers) read and write the same store. Wire
+  /// persistence once, when the instance is created (e.g. via
+  /// `AtClientSecretSharing.forClient(persistence: ...)`); consumers must
+  /// not re-assign it.
   final SecretStore secretStore = SecretStore();
 
   /// Decrypted, verified payloads addressed to this client.
