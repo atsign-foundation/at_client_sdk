@@ -116,9 +116,16 @@ Merge, in any order subject to the checklist above: PR #1976,
 - **X-Wing hybrid KEM** (draft-connolly-cfrg-xwing-kem): X25519 +
   ML-KEM-768 with the SHA3-256 combiner; 32-byte seed secret keys expanded
   via SHAKE-256 (pointycastle, already a dependency); tests against the
-  draft's vectors.
+  draft's vectors. This is the only genuinely new primitive code in the
+  whole roadmap (~150 lines composing existing pieces). **Preferred home:
+  upstream in `pqcrypto`** (which already provides ML-KEM and experimental
+  ML-DSA) — offer the implementation as a contribution; but do not gate on
+  it: the `AtKemAlgorithm` seam makes the location reversible, so land it
+  in at_chops if upstreaming stalls and swap the internals later. ML-DSA
+  (needed around phase 5 for PQ signatures) is likewise pqcrypto's domain;
+  register interest, adopt when it stabilizes against FIPS 204 vectors.
 - **AES-256-GCM AEAD** and **HKDF** (via `cryptography`, already a
-  dependency).
+  dependency) — adapters only, nothing to implement.
 - **PQ public key for enrollment conveyance.** The enrollment flow is the
   last harvest-now-decrypt-later hole: `encryptedAPKAMSymmetricKey` is
   RSA-wrapped to `public:publickey@alice`, and everything the approval
@@ -301,8 +308,8 @@ an old daemon), and features gate behavior per session — exactly how
 
 | Feature         | Daemon advertises that it...                                                  |
 |-----------------|-------------------------------------------------------------------------------|
-| `groupCrypto`   | can decrypt notifications encrypted by the SDK's `group` provider              |
-| `pqSessionKeys` | supports deriving session keys from a pair-group `export()` (none in flight)   |
+| `groupCrypto`   | can decrypt notifications encrypted by the SDK's `group` provider             |
+| `pqSessionKeys` | supports deriving session keys from a pair-group `export()` (none in flight)  |
 
 The crucial subtlety: a client must NOT flip its default provider for
 traffic to a daemon that can't decrypt it. `PutRequestOptions.
