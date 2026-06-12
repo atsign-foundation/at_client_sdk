@@ -38,7 +38,7 @@ class PersistedClientKeys {
 /// signed [ClientKeyBundle] as a *hidden public key* in its enrollment's
 /// reserved namespace:
 ///
-///     public:__pqkb-<clientId>.<enrollmentId>.a.__e@atsign
+///     public:__sskb-<clientId>.<enrollmentId>.a.__e@atsign
 ///
 /// Placement gives the canonical bundle its properties:
 /// - only the owning enrollment can write into `<enrollmentId>.a.__e`, and
@@ -52,7 +52,7 @@ class PersistedClientKeys {
 /// the same signed bundle is published as a *namespace-scoped copy* — a
 /// cleartext self key:
 ///
-///     pqkb-<clientId>.<enrollmentId>.__pqkbns.<namespace>@atsign
+///     sskb-<clientId>.<enrollmentId>.__sskbns.<namespace>@atsign
 ///
 /// The atServer's enrollment namespace authorization then enforces, with no
 /// server changes:
@@ -77,7 +77,7 @@ class PersistedClientKeys {
 /// [loadClientKeys] / [saveClientKeys].
 mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
   /// Marker segment in namespace-scoped bundle copy key names.
-  static const String namespaceScopedMarker = '__pqkbns';
+  static const String namespaceScopedMarker = '__sskbns';
 
   /// How long a published bundle lives on the atServer. While registered,
   /// the bundle is republished at half this interval.
@@ -120,7 +120,7 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
     return _keyPair!;
   }
 
-  String get _bundleKeyUri => 'public:__pqkb-$clientId.$enrollmentId'
+  String get _bundleKeyUri => 'public:__sskb-$clientId.$enrollmentId'
       '.${EnrollmentConstants.perEnrollmentApproved}'
       '${atClient.getCurrentAtSign()}';
 
@@ -202,7 +202,7 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
   }
 
   AtKey _namespaceCopyKey(String ns) => AtKey()
-    ..key = 'pqkb-$clientId.$enrollmentId.$namespaceScopedMarker'
+    ..key = 'sskb-$clientId.$enrollmentId.$namespaceScopedMarker'
     ..namespace = ns
     ..sharedBy = atClient.getCurrentAtSign();
 
@@ -252,7 +252,7 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
 
   /// Discovers the key bundles other clients of this atSign have published.
   ///
-  /// With no [namespace]: scans the atServer for hidden `__pqkb-` public
+  /// With no [namespace]: scans the atServer for hidden `__sskb-` public
   /// keys (optionally restricted to [enrollmentId]) — every registered
   /// client of the atSign, regardless of namespaces.
   ///
@@ -276,9 +276,9 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
       {String? enrollmentId, String? namespace}) async {
     final String eidPattern = enrollmentId ?? '[^.]+';
     final String regex = namespace == null
-        ? '__pqkb-.*\\.$eidPattern'
+        ? '__sskb-.*\\.$eidPattern'
             '\\.${EnrollmentConstants.perEnrollmentApproved}@'
-        : 'pqkb-[^.]+\\.$eidPattern\\.$namespaceScopedMarker\\.$namespace@';
+        : 'sskb-[^.]+\\.$eidPattern\\.$namespaceScopedMarker\\.$namespace@';
     final List<AtKey> bundleKeys = await atClient.getAtKeys(
       regex: regex,
       showHiddenKeys: namespace == null,
@@ -319,8 +319,8 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
       // ...and the key location must match the bundle's signed claims.
       final String keyString = bundleKey.toString();
       if (namespace == null) {
-        // canonical: public:__pqkb-<clientId>.<enrollmentId>.a.__e@atsign
-        final expected = 'public:__pqkb-${bundle.clientId}'
+        // canonical: public:__sskb-<clientId>.<enrollmentId>.a.__e@atsign
+        final expected = 'public:__sskb-${bundle.clientId}'
             '.${bundle.enrollmentId}'
             '.${EnrollmentConstants.perEnrollmentApproved}'
             '${atClient.getCurrentAtSign()}';
@@ -331,8 +331,8 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
           return null;
         }
       } else {
-        // copy: pqkb-<clientId>.<enrollmentId>.__pqkbns.<namespace>@atsign
-        final expected = 'pqkb-${bundle.clientId}.${bundle.enrollmentId}'
+        // copy: sskb-<clientId>.<enrollmentId>.__sskbns.<namespace>@atsign
+        final expected = 'sskb-${bundle.clientId}.${bundle.enrollmentId}'
             '.$namespaceScopedMarker.$namespace'
             '${atClient.getCurrentAtSign()}';
         if (keyString != expected) {
