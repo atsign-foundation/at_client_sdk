@@ -8,11 +8,24 @@ rotation, and giving applications a bootstrap path to pq-mls groups.
 
 Starting point: `trunk`, incorporating and extending three lines of work:
 
-| Work                 | Contributes                                                         | Status              |
-|----------------------|---------------------------------------------------------------------|---------------------|
-| `xl-pluggable`       | Pluggable `CryptoProvider` model + wire routing (`AppMetadata`)     | Branch              |
-| `jt-pq`              | Post-quantum primitives in at_chops (ML-KEM-768, X25519)            | **Merged to trunk** |
-| `gkc-alice-to-alice` | Per-client identity, discovery, and same-atSign delivery (PR #1976) | PR open             |
+| Work                 | Contributes                                                         | Status                  |
+|----------------------|---------------------------------------------------------------------|-------------------------|
+| `jt-pq`              | Post-quantum primitives in at_chops (ML-KEM-768, X25519)            | Merged to trunk         |
+| `xl-pluggable`       | Pluggable `CryptoProvider` model + wire routing (`AppMetadata`)     | Merged to working branch |
+| `gkc-alice-to-alice` | Per-client identity, discovery, and same-atSign delivery + the above | Integration branch    |
+
+### Delivery model
+
+All of this is built and verified **locally first**, end-to-end across the
+`at_client_sdk`, `at_server` and `sshnoports` repos, then staged as a
+**sequence of independently-reviewable per-package PRs** in dependency order.
+`gkc-alice-to-alice` is the at_client_sdk integration branch holding every
+package change here; the per-package PR branches are reconstructed from it.
+The dependency-ordered sequence: `at_commons` (the `appMetadata` wire field) →
+`at_chops` (X-Wing / AES-GCM / key consolidation) → `at_client` (pluggable
+crypto + secret sharing). `at_server` must round-trip `appMetadata` before the
+at_client crypto path verifies end-to-end, so it lands ahead of or paired with
+the at_client PR; `sshnoports` consumes the released SDK and comes last.
 
 ## The end state
 
@@ -80,36 +93,36 @@ old data stays readable forever, re-encryption can be lazy.
 **`jt-pq` — PQ primitives.** ML-KEM-768 and X25519 (pure-Dart and
 OpenSSL-FFI), the `AtKemAlgorithm` interface, in at_chops.
 
-**`gkc-alice-to-alice` (PR #1976) — identity + same-atSign delivery.**
-Per-client identity (clientId + keypair) published as an APKAM-signed
-`ClientKeyBundle`: canonical hidden public key in the enrollment's reserved
-namespace (location exclusivity = identity anchor) plus namespace-scoped
-copies whose *presence* proves the enrollment holds `rw` on that namespace
-(server-enforced, verified empirically). Store-and-forward encrypted
-envelopes scoped by application namespace; `SecretStore` with
-newest-wins merge; enrollment-approval sharing; shared per-AtClient
-instance (`AtClientSecretSharing.forClient`); race-free `waitForSecret`;
-crypto-agile formats (`{kid, use, alg}` key lists, `{keyAlg, kid, encAlg}`
-envelopes) so algorithms upgrade by id with no schema change.
+**Secret sharing — identity + same-atSign delivery.** Per-client identity
+(clientId + X-Wing keypair) published as an APKAM-signed `ClientKeyPackage`:
+canonical hidden public key in the enrollment's reserved namespace (location
+exclusivity = identity anchor) plus namespace-scoped copies whose *presence*
+proves the enrollment holds `rw` on that namespace (server-enforced, verified
+empirically). Store-and-forward encrypted envelopes scoped by application
+namespace; `SecretStore` with newest-wins merge; enrollment-approval sharing;
+shared per-AtClient instance (`AtClientSecretSharing.forClient`); race-free
+`waitForSecret`; crypto-agile formats (`{kid, use, alg}` key lists,
+`{keyAlg, kid, encAlg}` envelopes) so algorithms upgrade by id with no schema
+change. PQ-native: `x-wing` key transport + `aes-256-gcm` payloads. API
+`@experimental` (durable surface will be `SecureGroup`).
 
-**Merge coordination** (both PR #1976 and `xl-pluggable` touch the get
-path):
+**Get-path invariants** (the secret-sharing and pluggable-crypto work both
+touch the get path; both are satisfied on the integration branch):
 
-- Preserve the `isEncrypted` tri-state semantics (PR #1976 commit
-  `a6f3a013d`) when `get_response_transformer.dart` is rewritten to route
-  through `CryptoRuntime`: explicit `false` on the wire skips decryption
-  entirely; absent (legacy data) takes the try-decrypt fallback, which
-  moves inside `LegacyCryptoProvider`.
-- `PutRequestOptions.shouldEncrypt = false` must remain a no-crypto path:
-  secret-sharing envelopes and bundle copies are stored that way.
+- `get` respects the `isEncrypted` tri-state: explicit `false` skips
+  decryption and returns the raw value; absent (legacy data) takes the
+  try-decrypt fallback; `true` decrypts via the routed provider.
+- `PutRequestOptions.shouldEncrypt = false` is a true no-crypto path on both
+  write and read — secret-sharing envelopes and key-package copies are stored
+  that way.
 
 ## Phases
 
-### Phase 0 — land the foundations
+### Phase 0 — land the foundations — **done on the integration branch**
 
-Merge, in any order subject to the checklist above: PR #1976,
-`xl-pluggable`, `jt-pq`. No interdependencies otherwise.
-(`jt-pq` merged to trunk 2026-06-12, so phase 1 is unblocked.)
+`jt-pq` merged to trunk; `xl-pluggable` merged into `gkc-alice-to-alice`; the
+secret-sharing substrate is in place. The get-path invariants above hold
+post-merge (at_client 711 / at_chops 99 / at_commons 486 tests green).
 
 ### Phase 1 — complete the PQ primitives (at_chops)
 
@@ -185,7 +198,7 @@ abstract class SecureGroup {
 
 - **v1 `PairwiseGroup`**: the committer generates the new epoch key and
   encapsulates it pairwise (X-Wing) to every member's KeyPackage, delivered
-  over the PR #1976 channel as `__`-reserved system secrets
+  over the secret-sharing channel as `__`-reserved system secrets
   (`__rk.<epoch>.<kid>` immutable entries + a `__rk.current` pointer that
   converges by newest-wins). **`kid` is the truth, `epoch` an ordering
   hint** — concurrent rotations both survive and every ciphertext stays
@@ -213,7 +226,7 @@ abstract class SecureGroup {
   - *Revocation*: remove leaf + rotate (`excludeEnrollmentIds` so the
     revoked enrollment's still-published bundles are skipped). Protects
     future writes; old epochs the revoked client held are not retroactive.
-- **Substrate additions** (deferred from PR #1976 by design):
+- **Substrate additions** (deferred from the secret-sharing work by design):
   `kind:'request'`/`'response'` envelope flow with an answer policy (pull
   recovery: "send me `__rk.current`", then specific epochs on decrypt
   miss); `onNewClientDiscovered` roster watch; `excludeEnrollmentIds`
