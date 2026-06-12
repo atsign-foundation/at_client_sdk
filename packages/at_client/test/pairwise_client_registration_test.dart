@@ -1,11 +1,11 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:crypton/crypton.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -38,13 +38,17 @@ void main() {
   /// publishes another can discover.
   late Map<String, String> remoteData;
 
-  // Generated once: RSA keygen is slow. Tests that don't care about identity
-  // generation inject these via loadClientKeys.
-  late RSAKeypair clientKeyPairA;
+  // A deterministic X-Wing seed for tests that want a stable identity,
+  // injected via loadClientKeys.
+  final Uint8List clientSeedA =
+      Uint8List.fromList(List<int>.generate(32, (i) => i));
+  late Uint8List clientPublicKeyA;
 
-  setUpAll(() {
+  setUpAll(() async {
     registerFallbackValue(AtKey());
-    clientKeyPairA = RSAKeypair.fromRandom();
+    clientPublicKeyA =
+        (await XWingPureDartAlgo.instance.generateKeyPair(clientSeedA))
+            .publicKey;
   });
 
   /// Wires up a mock AtClient whose put/get/getAtKeys/delete operate on
@@ -100,16 +104,14 @@ void main() {
     return atClient;
   }
 
-  /// A registrant whose identity is stable (injected) rather than generated,
-  /// to keep tests fast.
+  /// A registrant whose identity is stable (injected) rather than generated.
   TestRegistrant buildRegistrant(String enrollmentId,
       {String? stableClientId}) {
     final registrant = TestRegistrant(buildMockClient(enrollmentId));
     if (stableClientId != null) {
       registrant.loadClientKeys = () async => PersistedClientKeys(
             clientId: stableClientId,
-            rsaPublicKey: clientKeyPairA.publicKey.toString(),
-            rsaPrivateKey: clientKeyPairA.privateKey.toString(),
+            xWingSeed: base64Encode(clientSeedA),
           );
     }
     return registrant;
@@ -139,7 +141,7 @@ void main() {
       expect(remoteData.containsKey(bundleKeyUri), isFalse);
     });
 
-    test('published bundle is a verifiable envelope with an rsa-2048 enc key',
+    test('published bundle is a verifiable envelope with an x-wing enc key',
         () async {
       final registrant = buildRegistrant('enroll-a', stableClientId: 'cid-a');
       await registrant.registerClient();
@@ -171,9 +173,9 @@ void main() {
       expect(parsed.v, ClientKeyBundle.currentVersion);
       final key = parsed.bestKeyFor(SecretSharingAlgos.keyAlgos);
       expect(key, isNotNull);
-      expect(key!.alg, SecretSharingAlgos.rsa2048);
+      expect(key!.alg, SecretSharingAlgos.xWing);
       expect(key.use, SecretSharingAlgos.useEnc);
-      expect(key.pub, clientKeyPairA.publicKey.toString());
+      expect(key.pub, base64Encode(clientPublicKeyA));
       expect(key.kid, BundleKey.computeKid(key.pub));
     });
 
@@ -188,8 +190,11 @@ void main() {
 
       expect(saved, isNotNull);
       expect(saved!.clientId, bundle.clientId);
-      expect(
-          saved!.rsaPublicKey, registrant.clientKeyPair.publicKey.toString());
+      // the persisted seed deterministically re-derives the published key
+      final rederived = await XWingPureDartAlgo.instance
+          .generateKeyPair(base64Decode(saved!.xWingSeed));
+      expect(base64Encode(rederived.publicKey),
+          bundle.bestKeyFor(SecretSharingAlgos.keyAlgos)!.pub);
     });
   });
 

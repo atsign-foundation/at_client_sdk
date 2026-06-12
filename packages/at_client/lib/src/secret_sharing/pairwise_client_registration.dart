@@ -1,6 +1,8 @@
 import 'dart:async' show Timer;
-import 'dart:convert' show jsonDecode;
+import 'dart:convert' show base64Decode, base64Encode, jsonDecode;
+import 'dart:typed_data' show Uint8List;
 
+import 'package:at_chops/at_chops.dart' show XWingPureDartAlgo;
 import 'package:at_client/at_client.dart'
     show
         AtKey,
@@ -14,21 +16,24 @@ import 'package:at_client/src/mixins/envelope_signing.dart'
     show EnvelopeSigning;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/secret_sharing/client_key_bundle.dart';
-import 'package:crypton/crypton.dart' show RSAKeypair, RSAPrivateKey;
+import 'package:meta/meta.dart' show protected;
 import 'package:uuid/uuid.dart' show Uuid;
 
-/// A client identity (clientId + keypair) that an app chose to persist via
+/// A client identity that an app chose to persist via
 /// [PairwiseClientRegistration.saveClientKeys] /
 /// [PairwiseClientRegistration.loadClientKeys].
+///
+/// [xWingSeed] is the base64 of the 32-byte X-Wing secret seed; the public
+/// key is re-derived from it deterministically. Treat this as
+/// device-local material — copying it to another device clones the client
+/// identity.
 class PersistedClientKeys {
   final String clientId;
-  final String rsaPublicKey;
-  final String rsaPrivateKey;
+  final String xWingSeed;
 
   PersistedClientKeys({
     required this.clientId,
-    required this.rsaPublicKey,
-    required this.rsaPrivateKey,
+    required this.xWingSeed,
   });
 }
 
@@ -93,7 +98,8 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
   Future<void> Function(PersistedClientKeys keys)? saveClientKeys;
 
   String? _clientId;
-  RSAKeypair? _keyPair;
+  Uint8List? _xWingSeed;
+  Uint8List? _xWingPublicKey;
   ClientKeyBundle? _myBundle;
   Timer? _republishTimer;
   final Set<String> _registeredNamespaces = {};
@@ -118,12 +124,23 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
   /// The bundle this client most recently published.
   ClientKeyBundle? get myBundle => _myBundle;
 
-  /// The keypair backing this client's published bundle.
-  RSAKeypair get clientKeyPair {
-    if (_keyPair == null) {
+  /// This client's X-Wing public key (1216 raw bytes), as published in its
+  /// bundle. Throws [StateError] until [registerClient] has completed.
+  Uint8List get xWingPublicKey {
+    if (_xWingPublicKey == null) {
       throw StateError('registerClient() has not been called');
     }
-    return _keyPair!;
+    return _xWingPublicKey!;
+  }
+
+  /// This client's X-Wing secret seed (32 bytes) — for decapsulation by
+  /// composing mixins, not for application use.
+  @protected
+  Uint8List get xWingSeed {
+    if (_xWingSeed == null) {
+      throw StateError('registerClient() has not been called');
+    }
+    return _xWingSeed!;
   }
 
   String get _bundleKeyUri => 'public:__sskb-$clientId.$enrollmentId'
@@ -149,22 +166,23 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
   /// Also ensures this enrollment's APKAM public signing key is published
   /// ([ApkamSigning.publishPublicSigningKey]) so that other clients can
   /// verify the bundle's signature.
-  ///
-  /// Note: generating an RSA keypair in pure Dart takes on the order of a
-  /// second; it happens at most once per [registerClient] call.
   Future<ClientKeyBundle> registerClient({Iterable<String>? namespaces}) async {
     if (_clientId == null) {
       final loaded = await loadClientKeys?.call();
       if (loaded != null) {
         _clientId = loaded.clientId;
-        _keyPair = RSAKeypair(RSAPrivateKey.fromString(loaded.rsaPrivateKey));
+        _xWingSeed = base64Decode(loaded.xWingSeed);
+        // the public key derives deterministically from the seed
+        final kp = await XWingPureDartAlgo.instance.generateKeyPair(_xWingSeed);
+        _xWingPublicKey = kp.publicKey;
       } else {
         _clientId = Uuid().v4();
-        _keyPair = RSAKeypair.fromRandom();
+        final kp = await XWingPureDartAlgo.instance.generateKeyPair();
+        _xWingSeed = kp.secretKey;
+        _xWingPublicKey = kp.publicKey;
         await saveClientKeys?.call(PersistedClientKeys(
           clientId: _clientId!,
-          rsaPublicKey: _keyPair!.publicKey.toString(),
-          rsaPrivateKey: _keyPair!.privateKey.toString(),
+          xWingSeed: base64Encode(_xWingSeed!),
         ));
       }
     }
@@ -229,8 +247,8 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
       keys: [
         BundleKey(
           use: SecretSharingAlgos.useEnc,
-          alg: SecretSharingAlgos.rsa2048,
-          pub: _keyPair!.publicKey.toString(),
+          alg: SecretSharingAlgos.xWing,
+          pub: base64Encode(_xWingPublicKey!),
         ),
       ],
       namespaces: _registeredNamespaces.toList()..sort(),

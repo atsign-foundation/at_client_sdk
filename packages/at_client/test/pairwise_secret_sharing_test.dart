@@ -1,5 +1,6 @@
 import 'dart:async' show TimeoutException;
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
@@ -8,7 +9,6 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show CommitOp;
 import 'package:at_utils/at_utils.dart';
-import 'package:crypton/crypton.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -49,17 +49,16 @@ void main() {
   /// post-sync state in which sender writes are visible to recipients.
   late Map<String, String> remoteData;
 
-  // RSA keygen is slow; generate once and inject as stable identities.
-  late RSAKeypair keyPairA;
-  late RSAKeypair keyPairB;
-  late RSAKeypair keyPairC;
+  // Deterministic X-Wing seeds injected as stable identities.
+  final Uint8List seedA = Uint8List.fromList(List<int>.generate(32, (i) => i));
+  final Uint8List seedB =
+      Uint8List.fromList(List<int>.generate(32, (i) => 32 + i));
+  final Uint8List seedC =
+      Uint8List.fromList(List<int>.generate(32, (i) => 64 + i));
 
   setUpAll(() {
     registerFallbackValue(AtKey());
     registerFallbackValue(FakeSyncProgressListener());
-    keyPairA = RSAKeypair.fromRandom();
-    keyPairB = RSAKeypair.fromRandom();
-    keyPairC = RSAKeypair.fromRandom();
   });
 
   MockAtClient buildMockClient(String enrollmentId,
@@ -128,15 +127,13 @@ void main() {
     return atClient;
   }
 
-  TestSharer buildSharer(
-      String enrollmentId, String clientId, RSAKeypair keyPair,
+  TestSharer buildSharer(String enrollmentId, String clientId, Uint8List seed,
       {MockSyncService? syncService}) {
     final sharer =
         TestSharer(buildMockClient(enrollmentId, syncService: syncService));
     sharer.loadClientKeys = () async => PersistedClientKeys(
           clientId: clientId,
-          rsaPublicKey: keyPair.publicKey.toString(),
-          rsaPrivateKey: keyPair.privateKey.toString(),
+          xWingSeed: base64Encode(seed),
         );
     return sharer;
   }
@@ -146,8 +143,8 @@ void main() {
 
   setUp(() async {
     remoteData = {};
-    sharerA = buildSharer('enroll-a', 'cid-a', keyPairA);
-    sharerB = buildSharer('enroll-b', 'cid-b', keyPairB);
+    sharerA = buildSharer('enroll-a', 'cid-a', seedA);
+    sharerB = buildSharer('enroll-b', 'cid-b', seedB);
     await sharerA.registerClient();
     await sharerB.registerClient();
   });
@@ -252,7 +249,7 @@ void main() {
       // normally occur (the clientId is in the key name); simulate a client
       // that restarted with new keys but kept its clientId: same clientId
       // 'cid-b', different keypair.
-      final restartedB = buildSharer('enroll-b', 'cid-b', keyPairC);
+      final restartedB = buildSharer('enroll-b', 'cid-b', seedC);
       await restartedB.registerClient();
 
       expect(await restartedB.sweepOnce(), 0);
@@ -310,10 +307,10 @@ void main() {
         fromClientId: 'cid-a',
         fromEnrollmentId: 'enroll-a',
         to: 'cid-x', // payload disagrees with the key name below
-        keyAlg: 'rsa-2048',
-        kid: BundleKey.computeKid(keyPairB.publicKey.toString()),
+        keyAlg: 'x-wing',
+        kid: BundleKey.computeKid(base64Encode(sharerB.xWingPublicKey)),
         encryptedKey: 'xx',
-        encAlg: 'aes-256-ctr',
+        encAlg: 'aes-256-gcm',
         iv: 'xx',
         ciphertext: 'xx',
       );
@@ -335,7 +332,7 @@ void main() {
       when(() => syncService.removeProgressListener(any())).thenAnswer((_) {});
 
       final listeningB =
-          buildSharer('enroll-b', 'cid-b', keyPairB, syncService: syncService);
+          buildSharer('enroll-b', 'cid-b', seedB, syncService: syncService);
       await listeningB.registerClient();
 
       final received = <ReceivedEnvelope>[];
