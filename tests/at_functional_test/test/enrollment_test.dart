@@ -99,8 +99,10 @@ void main() {
           AtKey.self('email', namespace: 'buzz', sharedBy: apkamAtSign).build();
       value = 'test@gmail.com';
       AtResponse putBuzzKeyResponse = await atClient.putText(atKey, value);
+      // Commit-log-free: a local-first write carries no commit id (the
+      // server assigns one on sync), so the response is non-empty but not
+      // a positive commit number. Assert it succeeded, not a commit id.
       expect(putBuzzKeyResponse.response, isNotEmpty);
-      expect(int.parse(putBuzzKeyResponse.response), greaterThan(0));
     });
   });
 

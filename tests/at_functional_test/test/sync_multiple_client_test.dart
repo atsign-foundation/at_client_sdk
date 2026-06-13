@@ -8,7 +8,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_functional_test/src/sync_service.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 import 'package:at_client/at_client.dart';
@@ -100,8 +99,8 @@ void main() async {
   };
 
   test(
-      'A test to verify the commit log entries when keys are synced from multiple clients',
-      () async {
+      'A test to verify keys synced from multiple clients converge to the '
+      'same value', () async {
     // Add listener for main isolate to receive messages from child isolates
     mainIsolateReceivePort.listen(mainIsolateMessageListener);
 
@@ -153,26 +152,31 @@ void main() async {
     await clientOneAck.future;
     await clientTwoAck.future;
 
-    // NOTE: Do not fetch local commit until all the client have finished sync process
-    // Fetch client-1 commit log
-    _logger.info('Fetching Client one commitLog...');
-    childIsolateSendPortMap[ClientId.client1]?.send('localCommitLog');
-    var clientOneCommitLog = await readFromIsolateQueue();
-    _logger.finer('Client one commitLog: $clientOneCommitLog');
+    // NOTE: Do not fetch local state until all the clients have finished
+    // their sync process.
+    // Commit-log-free clients carry no local commit log, so multi-client
+    // convergence is proven by VALUE: each client's local (decrypted)
+    // value per key, cross-checked against the server's per-key presence
+    // from its commit log.
+    _logger.info('Fetching Client one local values...');
+    childIsolateSendPortMap[ClientId.client1]?.send('localValues');
+    final clientOneValues =
+        Map<String, String?>.from(await readFromIsolateQueue() as Map);
+    _logger.finer('Client one values: $clientOneValues');
 
-    // Fetch client-2 commit log
-    _logger.info('Fetching Client two commitLog...');
-    childIsolateSendPortMap[ClientId.client2]?.send('localCommitLog');
-    var clientTwoCommitLog = await readFromIsolateQueue();
-    _logger.finer('Client two commitLog: $clientTwoCommitLog');
+    _logger.info('Fetching Client two local values...');
+    childIsolateSendPortMap[ClientId.client2]?.send('localValues');
+    final clientTwoValues =
+        Map<String, String?>.from(await readFromIsolateQueue() as Map);
+    _logger.finer('Client two values: $clientTwoValues');
 
-    // Fetch the server commit log.
+    // Fetch the server commit log (per-key [commitId, opSymbol]).
     _logger.info('Fetching Server commitLog...');
     var serverCommitLog = await _getServerCommitEntries(uniqueId);
     _logger.finer('Server commit log: $serverCommitLog');
 
-    var testResult = assertCommitEntries(atKeyEntityList, serverCommitLog,
-        clientOneCommitLog, clientTwoCommitLog);
+    var testResult = assertConvergence(
+        atKeyEntityList, serverCommitLog, clientOneValues, clientTwoValues);
     expect(testResult, true);
   });
 
@@ -249,14 +253,14 @@ Future<void> childIsolate(ChildIsolatePreferences clientParameters) async {
         .info('${clientParameters.clientId}: RCVD from MainIsolate: $message');
     if (message is String) {
       switch (message) {
-        case 'localCommitLog':
-          Map<String, Map<String, dynamic>> localCommitLogMap =
-              await _getLocalCommitEntries(clientParameters.localKeysList,
-                  clientId: clientParameters.clientId.name);
+        case 'localValues':
+          Map<String, String?> localValues = await _getLocalValues(
+              clientParameters.localKeysList,
+              clientId: clientParameters.clientId.name);
           _childIsolateLogger.finer(
-              '${clientParameters.clientId}: SENT: LocalCommitLog: $localCommitLogMap');
+              '${clientParameters.clientId}: SENT: LocalValues: $localValues');
           clientParameters.sendPort.send(IsolateAtClientResponse(
-              clientParameters.clientId, 'LocalCommitLog', localCommitLogMap));
+              clientParameters.clientId, 'LocalValues', localValues));
           break;
 
         case 'doOpsAndSync':
@@ -373,70 +377,75 @@ Future<dynamic> _getServerCommitEntries(String regex) async {
   }
 }
 
-Future<Map<String, Map<String, dynamic>>> _getLocalCommitEntries(
-    List<String> atKeyList,
+// Commit-log-free convergence: read each test key's DECRYPTED value from
+// the client's local store (the raw keystore holds ciphertext that
+// differs per write because every put generates a fresh IV, so it can't
+// be compared across clients — `atClient.get` decrypts with the shared
+// self key). Keyed by the short key-name (the [atKeyList] entry); `null`
+// means the key is absent / deleted locally.
+Future<Map<String, String?>> _getLocalValues(List<String> atKeyList,
     {String clientId = ''}) async {
-  var commitLog =
-      await AtCommitLogManagerImpl.getInstance().getCommitLog(currentAtSign);
-  var commitLogEntriesMap = <String, Map<String, dynamic>>{};
-
-  for (MapEntry<int, CommitEntry> mapEntry
-      in (await commitLog?.commitLogKeyStore.toMap())!.entries) {
-    if (mapEntry.value.commitId == null) {
-      continue;
-    }
-    if (atKeyList.contains(AtKey.fromString(mapEntry.value.atKey!).key)) {
-      _logger.finest(
-          '($clientId) Commit-Entry from local: Key: ${mapEntry.value.atKey!}, CommitId: ${mapEntry.value.commitId!}, CommitOp. ${mapEntry.value.operation.toString()}');
-      if (commitLogEntriesMap.containsKey(mapEntry.value.atKey) &&
-          (commitLogEntriesMap[mapEntry.value.atKey]!['commitId'] >
-              mapEntry.value.commitId!)) {
-        _logger.finest(
-            '($clientId) Key: ${mapEntry.value.atKey} Existing CommitId ${commitLogEntriesMap[mapEntry.value.atKey]!['commitId']} is greater than new commitId: ${mapEntry.value.commitId!}. Not updating the localCommitId Map');
-        continue;
-      }
-      commitLogEntriesMap[mapEntry.value.atKey!] = {
-        'commitId': mapEntry.value.commitId!,
-        'commitOp': mapEntry.value.operation.toString()
-      };
+  final values = <String, String?>{};
+  for (final keyName in atKeyList) {
+    final atKey =
+        AtKey.self(keyName, namespace: namespace, sharedBy: currentAtSign)
+            .build();
+    try {
+      final atValue = await atClientManager.atClient.get(atKey);
+      values[keyName] = atValue.value;
+    } on Exception {
+      // KeyNotFoundException / AtKeyNotFoundException → absent / deleted.
+      values[keyName] = null;
     }
   }
-  _logger.finer('($clientId) Client CommitEntries: $commitLogEntriesMap');
-  return commitLogEntriesMap;
+  _logger.finer('($clientId) Client values: $values');
+  return values;
 }
 
-bool assertCommitEntries(
+/// Convergence proof for the commit-log-free clients:
+///
+/// 1. **Value convergence** — both clients ended with the same value for
+///    every test key (or both have it absent). Since each client pulls its
+///    final state from the same server, identical local state means they
+///    converged. The update value is opaque (a deterministic
+///    `clientId-atKey` string); only equality matters.
+/// 2. **Server agreement** — the presence/absence of each key on the
+///    clients matches the server's final state, derived from its commit
+///    log (`serverCommitLogMap[fullKey] == [commitId, opSymbol]`; a `-`
+///    op means the key's last write was a delete, so it's absent).
+bool assertConvergence(
     List<String> atKeyList,
     serverCommitLogMap,
-    Map<String, Map<String, dynamic>> clientOneCommitLog,
-    Map<String, Map<String, dynamic>> clientTwoCommitLog) {
-  assert(clientOneCommitLog.length > 1);
-  for (MapEntry<String, Map<String, dynamic>> mapEntry
-      in clientOneCommitLog.entries) {
-    // ignore keys NOT created by this test
-    if (!(atKeyList.contains(AtKey.fromString(mapEntry.key).key))) {
+    Map<String, String?> clientOneValues,
+    Map<String, String?> clientTwoValues) {
+  // Short key-names the server reports as present (final op is not delete).
+  final serverPresent = <String>{};
+  (serverCommitLogMap as Map).forEach((fullKey, entry) {
+    final shortKey = AtKey.fromString(fullKey as String).key;
+    if (!atKeyList.contains(shortKey)) return;
+    final opSymbol = (entry as List)[1];
+    if (opSymbol != '-') serverPresent.add(shortKey);
+  });
+
+  var converged = true;
+  for (final keyName in atKeyList) {
+    final c1 = clientOneValues[keyName];
+    final c2 = clientTwoValues[keyName];
+    if (c1 != c2) {
+      _logger.severe('Value divergence for $keyName: client1=$c1 client2=$c2');
+      converged = false;
       continue;
     }
-    _logger.finer('mapEntry: $mapEntry');
-
-    if (serverCommitLogMap[mapEntry.key] == null) {
-      _logger.shout(
-          'Server commit log missing ${mapEntry.key} from clientOneCommitLog');
-      continue;
-    }
-
-    // Compare server commit id with both client's commit log
-    if ((serverCommitLogMap[mapEntry.key][0] != mapEntry.value['commitId']) ||
-        (serverCommitLogMap[mapEntry.key][0] !=
-            clientTwoCommitLog[mapEntry.key]!['commitId'])) {
-      _logger.severe('Assertion failed: Key: ${mapEntry.key} '
-          'Server CommitId: ${serverCommitLogMap[mapEntry.key][0]} '
-          'Client-One CommitId: ${mapEntry.value['commitId']} '
-          'Client-Two CommitId: ${clientTwoCommitLog[mapEntry.key]!['commitId']}');
-      return false;
+    final clientHas = c1 != null;
+    final serverHas = serverPresent.contains(keyName);
+    if (clientHas != serverHas) {
+      _logger.severe('Presence mismatch for $keyName: '
+          'clients=${clientHas ? "present" : "absent"} '
+          'server=${serverHas ? "present" : "absent"}');
+      converged = false;
     }
   }
-  return true;
+  return converged;
 }
 
 AtClientPreference _getAtClientPreference(String currentAtSign, String clientId,
