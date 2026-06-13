@@ -23,6 +23,8 @@ export 'package:at_client/src/secret_sharing/algo_ids.dart';
 export 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
 export 'package:at_client/src/secret_sharing/client_key_package.dart';
 export 'package:at_client/src/secret_sharing/pairwise_client_registration.dart';
+export 'package:at_client/src/secret_sharing/pairwise_group.dart';
 export 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
 export 'package:at_client/src/secret_sharing/secret_envelope.dart';
 export 'package:at_client/src/secret_sharing/secret_store.dart';
+export 'package:at_client/src/secret_sharing/secure_group.dart';
