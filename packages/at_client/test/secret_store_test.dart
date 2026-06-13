@@ -40,6 +40,39 @@ void main() {
       expect(store.listSecrets(), hasLength(2));
     });
 
+    test('listSecrets filters by namePrefix, alone and with namespace',
+        () async {
+      final store = SecretStore();
+      await store.putSecret(
+          Secret(namespace: 'myapp', name: '__rk.1.aaaa', value: 'k1'),
+          allowReservedName: true);
+      await store.putSecret(
+          Secret(namespace: 'myapp', name: '__rk.2.bbbb', value: 'k2'),
+          allowReservedName: true);
+      await store.putSecret(
+          Secret(namespace: 'myapp', name: '__rk.current', value: 'ptr'),
+          allowReservedName: true);
+      await store
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 't'));
+      // Same reserved prefix in a different namespace must not leak in.
+      await store.putSecret(
+          Secret(namespace: 'mychat', name: '__rk.1.cccc', value: 'k3'),
+          allowReservedName: true);
+
+      // Prefix alone spans namespaces.
+      expect(store.listSecrets(namePrefix: '__rk.'), hasLength(4));
+      // Prefix + namespace scopes to one (atSign,namespace) family.
+      final myappRk =
+          store.listSecrets(namespace: 'myapp', namePrefix: '__rk.');
+      expect(myappRk, hasLength(3));
+      expect(myappRk.every((s) => s.namespace == 'myapp'), isTrue);
+      // Tighter prefix selects the epoch keys, not the pointer.
+      expect(store.listSecrets(namespace: 'myapp', namePrefix: '__rk.1.'),
+          hasLength(1));
+      // Non-matching prefix → empty.
+      expect(store.listSecrets(namePrefix: 'nope'), isEmpty);
+    });
+
     test('putSecret overwrites; putIfNewer only stores strictly newer',
         () async {
       final store = SecretStore();

@@ -119,10 +119,17 @@ class SecretStore {
     return removed;
   }
 
-  /// All secrets, optionally restricted to one [namespace].
-  List<Secret> listSecrets({String? namespace}) => _secrets.values
-      .where((s) => namespace == null || s.namespace == namespace)
-      .toList();
+  /// All secrets, optionally restricted to one [namespace] and/or to names
+  /// beginning with [namePrefix]. The prefix filter lets a system caller
+  /// enumerate a family of reserved secrets within a scope — e.g. the group
+  /// provider listing `__rk.*` epoch keys for one (atSign, namespace) to
+  /// resolve the current key or prune old epochs.
+  List<Secret> listSecrets({String? namespace, String? namePrefix}) =>
+      _secrets.values
+          .where((s) =>
+              (namespace == null || s.namespace == namespace) &&
+              (namePrefix == null || s.name.startsWith(namePrefix)))
+          .toList();
 
   /// Whether an enrollment approved for [approvedNamespaces] (a map of
   /// namespace -> access, as carried by an enrollment record) is authorized
