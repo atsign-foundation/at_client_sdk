@@ -307,8 +307,16 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
   /// foreign namespace by an owner-class client is rejected). Bundles that
   /// fail any check are logged and skipped. This client's own bundle is
   /// excluded.
+  /// [excludeEnrollmentIds] drops any package published by one of those
+  /// enrollments. Primary use is revocation: a revoked enrollment's key
+  /// packages stay published until their TTL expires, so a key holder
+  /// rotating after a revocation must explicitly skip them — otherwise the
+  /// new epoch key would be encapsulated straight back to the evicted
+  /// client.
   Future<List<ClientKeyPackage>> discoverClients(
-      {String? enrollmentId, String? namespace}) async {
+      {String? enrollmentId,
+      String? namespace,
+      Set<String>? excludeEnrollmentIds}) async {
     final String eidPattern = enrollmentId ?? '[^.]+';
     final String regex = namespace == null
         ? '__sskb-.*\\.$eidPattern'
@@ -324,7 +332,9 @@ mixin PairwiseClientRegistration on ApkamSigning, EnvelopeSigning {
     for (final bundleKey in bundleKeys) {
       final bundle =
           await _verifiedKeyPackageAt(bundleKey, namespace: namespace);
-      if (bundle != null && bundle.clientId != _clientId) {
+      if (bundle != null &&
+          bundle.clientId != _clientId &&
+          !(excludeEnrollmentIds?.contains(bundle.enrollmentId) ?? false)) {
         bundles.add(bundle);
       }
     }

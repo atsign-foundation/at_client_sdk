@@ -227,6 +227,34 @@ void main() {
       await registrantB.deregisterClient();
     });
 
+    test('excludeEnrollmentIds drops packages from those enrollments',
+        () async {
+      final registrantA = buildRegistrant('enroll-a', stableClientId: 'cid-a');
+      await registrantA.registerClient();
+      final registrantB = buildRegistrant('enroll-b', stableClientId: 'cid-b');
+      await registrantB.registerClient();
+      final registrantC = buildRegistrant('enroll-c', stableClientId: 'cid-c');
+      await registrantC.registerClient();
+
+      // A sees both B and C with no exclusion.
+      final all = await registrantA.discoverClients();
+      expect(all.map((p) => p.enrollmentId).toSet(), {'enroll-b', 'enroll-c'});
+
+      // Excluding enroll-b (a revocation) leaves only C.
+      final excludingB =
+          await registrantA.discoverClients(excludeEnrollmentIds: {'enroll-b'});
+      expect(excludingB.map((p) => p.enrollmentId).toSet(), {'enroll-c'});
+
+      // Excluding both leaves nothing to distribute to.
+      final excludingBoth = await registrantA
+          .discoverClients(excludeEnrollmentIds: {'enroll-b', 'enroll-c'});
+      expect(excludingBoth, isEmpty);
+
+      await registrantA.deregisterClient();
+      await registrantB.deregisterClient();
+      await registrantC.deregisterClient();
+    });
+
     test('a bundle with a tampered payload is skipped', () async {
       final registrantA = buildRegistrant('enroll-a', stableClientId: 'cid-a');
       await registrantA.registerClient();

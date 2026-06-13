@@ -416,11 +416,20 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
   /// atServer would refuse to deliver an envelope to an enrollment that
   /// lacks the namespace. With it, the material never leaves this client.
   ///
+  /// [excludeEnrollmentIds] is a revocation guard: if [to] belongs to an
+  /// excluded enrollment, nothing is shared (returns 0). The roster-level
+  /// filter ([discoverClients]) is the primary defence; this is the
+  /// belt-and-braces check on the single-recipient path.
+  ///
   /// Returns the number of secrets shared.
   Future<int> shareAllSecretsWith(
     ClientKeyPackage to, {
     Map<String, dynamic>? approvedNamespaces,
+    Set<String>? excludeEnrollmentIds,
   }) async {
+    if (excludeEnrollmentIds?.contains(to.enrollmentId) ?? false) {
+      return 0;
+    }
     int shared = 0;
     for (final secret in secretStore.listSecrets()) {
       if (approvedNamespaces != null &&
