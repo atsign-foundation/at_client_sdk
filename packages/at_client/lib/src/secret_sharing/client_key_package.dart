@@ -1,7 +1,7 @@
 import 'dart:convert' show utf8;
 
+import 'package:at_chops/at_chops.dart' show SHA256HashingAlgo;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
-import 'package:crypto/crypto.dart' show sha256;
 import 'package:meta/meta.dart' show experimental;
 
 /// One public key advertised in a [ClientKeyPackage].
@@ -27,11 +27,9 @@ class PackageKey {
 
   /// First 8 bytes, hex-encoded, of the SHA-256 of the public key material.
   static String computeKid(String pub) {
-    final digest = sha256.convert(utf8.encode(pub));
-    return digest.bytes
-        .take(8)
-        .map((b) => b.toRadixString(16).padLeft(2, '0'))
-        .join();
+    // SHA256HashingAlgo.hash returns the full digest as lowercase hex; the
+    // first 16 hex chars are the first 8 bytes.
+    return SHA256HashingAlgo().hash(utf8.encode(pub)).substring(0, 16);
   }
 
   Map<String, Object?> toJson() => {

@@ -3,11 +3,16 @@ import 'dart:convert'
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_chops/at_chops.dart'
-    show AESKey, AesGcm256EncryptionAlgo, AtChopsUtil, InitialisationVector;
+    show
+        AESKey,
+        AesGcm256EncryptionAlgo,
+        AtChopsUtil,
+        HkdfSha256,
+        InitialisationVector,
+        SHA256HashingAlgo;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:at_client/src/secret_sharing/secure_group.dart';
-import 'package:crypto/crypto.dart' show Hmac, sha256;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
 /// Self-encryption [SecureGroup] v1, scoped to **(atSign, namespace)**.
@@ -67,12 +72,10 @@ class PairwiseGroup implements SecureGroup {
 
   /// `kid = sha256(keyBytes)[:8 bytes]` as lowercase hex (16 chars).
   @visibleForTesting
-  static String kidOf(Uint8List keyBytes) => sha256
-      .convert(keyBytes)
-      .bytes
-      .sublist(0, 8)
-      .map((b) => b.toRadixString(16).padLeft(2, '0'))
-      .join();
+  static String kidOf(Uint8List keyBytes) =>
+      // SHA256HashingAlgo.hash returns the full digest as lowercase hex; the
+      // first 16 hex chars are the first 8 bytes.
+      SHA256HashingAlgo().hash(keyBytes).substring(0, 16);
 
   ({int epoch, String kid, DateTime createdAt})? _readPointer() {
     final s = _sharing.secretStore.getSecret(namespace, _pointerName);
@@ -196,40 +199,11 @@ class PairwiseGroup implements SecureGroup {
     // Export must NOT rotate-on-age — two members deriving at different times
     // must land on the same epoch. It only mints epoch 1 if none exists yet.
     final cur = await _currentKey(rotateOnAge: false);
-    return _hkdfSha256(
-      ikm: cur.key,
+    return HkdfSha256.deriveKey(
+      cur.key,
       salt: Uint8List.fromList(utf8.encode(groupId)),
       info: Uint8List.fromList(utf8.encode(label)),
       length: length,
     );
-  }
-
-  /// RFC 5869 HKDF-SHA256 over `package:crypto`'s HMAC (no extra dependency).
-  /// Deterministic: same (ikm, salt, info, length) → same bytes.
-  @visibleForTesting
-  static Uint8List hkdfSha256({
-    required Uint8List ikm,
-    required Uint8List salt,
-    required Uint8List info,
-    required int length,
-  }) =>
-      _hkdfSha256(ikm: ikm, salt: salt, info: info, length: length);
-
-  static Uint8List _hkdfSha256({
-    required Uint8List ikm,
-    required Uint8List salt,
-    required Uint8List info,
-    required int length,
-  }) {
-    final prk = Hmac(sha256, salt).convert(ikm).bytes; // extract
-    final out = <int>[];
-    var t = <int>[];
-    var counter = 1;
-    while (out.length < length) {
-      t = Hmac(sha256, prk).convert(<int>[...t, ...info, counter]).bytes;
-      out.addAll(t);
-      counter++;
-    }
-    return Uint8List.fromList(out.sublist(0, length));
   }
 }

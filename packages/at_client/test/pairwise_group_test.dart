@@ -176,25 +176,6 @@ void main() {
       expect(PairwiseGroup.kidOf(k1), isNot(PairwiseGroup.kidOf(k2)));
       expect(PairwiseGroup.kidOf(k1), hasLength(16)); // 8 bytes hex
     });
-
-    test('hkdfSha256 is deterministic and length-correct', () {
-      final ikm = Uint8List.fromList(List.generate(32, (i) => i));
-      final salt = Uint8List.fromList(utf8.encode('self:@alice:myapp'));
-      final info = Uint8List.fromList(utf8.encode('c2d'));
-      final a = PairwiseGroup.hkdfSha256(
-          ikm: ikm, salt: salt, info: info, length: 48);
-      final b = PairwiseGroup.hkdfSha256(
-          ikm: ikm, salt: salt, info: info, length: 48);
-      expect(a, hasLength(48));
-      expect(a, equals(b));
-      // Different info → different output.
-      final c = PairwiseGroup.hkdfSha256(
-          ikm: ikm,
-          salt: salt,
-          info: Uint8List.fromList(utf8.encode('d2c')),
-          length: 48);
-      expect(c, isNot(equals(a)));
-    });
   });
 
   group('two clients', () {
