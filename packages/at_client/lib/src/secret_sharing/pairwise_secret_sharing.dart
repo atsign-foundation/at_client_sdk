@@ -61,6 +61,16 @@ class ReceivedSecret {
   });
 }
 
+/// Decides whether to answer an inbound `kind:'request'` secret pull from
+/// [requester] (already resolved + verified as an authorized client of the
+/// request's namespace). Return `true` to share the requested held secrets,
+/// `false` to ignore. Set [PairwiseSecretSharing.answerSecretRequests] to
+/// override the default (answer any authorized same-atSign requester — the
+/// atServer already gates deliverability by namespace).
+@experimental
+typedef SecretRequestPolicy = FutureOr<bool> Function(
+    ReceivedEnvelope request, ClientKeyPackage requester);
+
 /// Pairwise encrypted payload exchange between clients of the same atSign.
 ///
 /// To send, a client encrypts a payload to one of the recipient's published
@@ -99,6 +109,20 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
   /// Envelope keys already emitted on [receivedEnvelopes], so a sweep that
   /// races a slow delete cannot emit a payload twice.
   final Set<String> _consumedEnvelopeKeys = {};
+
+  /// Optional app override for the `kind:'request'` answer decision. Null =
+  /// the default policy (answer any requester that resolves to an authorized
+  /// client of the request's namespace).
+  SecretRequestPolicy? answerSecretRequests;
+
+  /// Anti-storm floor: the same (requester, secret-name) is answered at most
+  /// once per this interval. A burst of duplicate requests collapses to one
+  /// share.
+  Duration requestAnswerMinInterval = const Duration(seconds: 5);
+
+  /// `'<requesterClientId>:<secretName>' → last answered at`. In-memory; the
+  /// cap is best-effort anti-storm, not a security control.
+  final Map<String, DateTime> _lastAnsweredRequest = {};
 
   /// The secrets this client holds: what it created via
   /// [SecretStore.putSecret], plus what other clients shared with it
@@ -240,7 +264,8 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
         }
         _consumedEnvelopeKeys.add(keyString);
         _receivedController.add(received);
-        await _handleSecretPayload(received);
+        await _handleSecretPayload(received); // no-op unless kind=='secret'
+        await _handleRequestPayload(received); // no-op unless kind=='request'
         consumed++;
       } catch (e) {
         // Includes transient failures (e.g. fetching the signer's _apsk key)
@@ -333,6 +358,87 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
   /// [sendEnvelope] should use other `kind` values; unknown kinds are
   /// delivered on [receivedEnvelopes] and otherwise ignored.
   static const String secretPayloadKind = 'secret';
+
+  /// Payload `kind` for a pull request: `{kind:'request', want:[name…]}` or
+  /// `{kind:'request', namePrefix:'__rk.'}`. The answer is delivered as an
+  /// ordinary `secret` envelope (no separate `response` kind is needed — a
+  /// shared secret already converges via [SecretStore.putIfNewer] and
+  /// resolves any racing [waitForSecret]).
+  static const String secretRequestKind = 'request';
+
+  /// Broadcasts a pull request for held secrets to every client registered
+  /// for [namespace] (minus this one). Holders that pass the answer policy
+  /// reply by sharing the matching secrets; the caller typically then
+  /// [waitForSecret]s. Filter the request by exact [names] and/or a
+  /// [namePrefix] (e.g. `__rk.` for epoch keys). Returns the number of
+  /// clients the request was sent to.
+  Future<int> requestSecretsFromNamespace(
+    String namespace, {
+    List<String>? names,
+    String? namePrefix,
+  }) async {
+    final clients = await discoverClients(namespace: namespace);
+    int sent = 0;
+    for (final to in clients) {
+      await sendEnvelope(to, namespace, {
+        'kind': secretRequestKind,
+        if (names != null) 'want': names,
+        if (namePrefix != null) 'namePrefix': namePrefix,
+      });
+      sent++;
+    }
+    return sent;
+  }
+
+  /// Answers an inbound `kind:'request'`: resolves + authorizes the
+  /// requester within the request's namespace (so a requester that isn't an
+  /// approved client of it is ignored — defence in depth over the server's
+  /// own delivery gate), consults [answerSecretRequests], then shares each
+  /// requested secret this client holds. Never answers its own request, and
+  /// rate-caps per (requester, name) via [requestAnswerMinInterval].
+  Future<void> _handleRequestPayload(ReceivedEnvelope received) async {
+    if (received.payload['kind'] != secretRequestKind) {
+      return;
+    }
+    if (received.fromClientId == clientId) {
+      return; // never answer our own request
+    }
+    // Resolving within the namespace also enforces authorization: a client
+    // only appears here if its enrollment is approved for the namespace.
+    ClientKeyPackage? requester;
+    for (final c in await discoverClients(namespace: received.appNamespace)) {
+      if (c.clientId == received.fromClientId) {
+        requester = c;
+        break;
+      }
+    }
+    if (requester == null) {
+      logger.info('Ignoring request from ${received.fromClientId}: not an '
+          'authorized client of ${received.appNamespace}');
+      return;
+    }
+    final policy = answerSecretRequests;
+    if (policy != null && !(await policy(received, requester))) {
+      return;
+    }
+
+    final want = (received.payload['want'] as List?)?.cast<String>().toSet();
+    final namePrefix = received.payload['namePrefix'] as String?;
+    final now = DateTime.now();
+    for (final secret in secretStore.listSecrets(
+        namespace: received.appNamespace, namePrefix: namePrefix)) {
+      if (want != null && !want.contains(secret.name)) {
+        continue;
+      }
+      final rateKey = '${received.fromClientId}:${secret.name}';
+      final last = _lastAnsweredRequest[rateKey];
+      if (last != null && now.difference(last) < requestAnswerMinInterval) {
+        continue;
+      }
+      _lastAnsweredRequest[rateKey] = now;
+      await shareSecretWith(requester, secret);
+    }
+  }
 
   /// Returns the secret `(namespace, name)` as soon as this client holds
   /// it: immediately from [secretStore] when already present, otherwise the

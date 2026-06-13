@@ -400,4 +400,70 @@ void main() {
           throwsA(isA<TimeoutException>()));
     });
   });
+
+  group('request/response pull flow', () {
+    setUp(() async {
+      // Both clients authorized for the namespace so they discover each other.
+      await sharerA.registerClient(namespaces: ['myapp']);
+      await sharerB.registerClient(namespaces: ['myapp']);
+    });
+
+    test('a holder answers a request and the requester receives the secret',
+        () async {
+      await sharerB.secretStore.putSecret(
+          Secret(
+              namespace: 'myapp', name: '__rk.1.deadbeef', value: 'KEYBYTES'),
+          allowReservedName: true);
+
+      // A asks the namespace for the epoch key it lacks.
+      expect(
+          await sharerA
+              .requestSecretsFromNamespace('myapp', names: ['__rk.1.deadbeef']),
+          1); // one holder (B) to ask
+
+      // B consumes the request and shares the held secret back.
+      expect(await sharerB.sweepOnce(), 1);
+      // A consumes the answer and now holds the secret.
+      expect(await sharerA.sweepOnce(), 1);
+      expect(sharerA.secretStore.getSecret('myapp', '__rk.1.deadbeef')!.value,
+          'KEYBYTES');
+    });
+
+    test('namePrefix request pulls every matching held secret', () async {
+      await sharerB.secretStore.putSecret(
+          Secret(namespace: 'myapp', name: '__rk.1.aaaa', value: 'k1'),
+          allowReservedName: true);
+      await sharerB.secretStore.putSecret(
+          Secret(namespace: 'myapp', name: '__rk.2.bbbb', value: 'k2'),
+          allowReservedName: true);
+      await sharerB.secretStore.putSecret(
+          Secret(namespace: 'myapp', name: 'token', value: 'not-an-rk'),
+          allowReservedName: true);
+
+      await sharerA.requestSecretsFromNamespace('myapp', namePrefix: '__rk.');
+      expect(await sharerB.sweepOnce(), 1); // request
+      // Two epoch keys shared back (the non-__rk token is excluded).
+      expect(await sharerA.sweepOnce(), 2);
+      expect(
+          sharerA.secretStore.getSecret('myapp', '__rk.1.aaaa')!.value, 'k1');
+      expect(
+          sharerA.secretStore.getSecret('myapp', '__rk.2.bbbb')!.value, 'k2');
+      expect(sharerA.secretStore.getSecret('myapp', 'token'), isNull);
+    });
+
+    test('answerSecretRequests=false suppresses the answer', () async {
+      sharerB.answerSecretRequests = (request, requester) => false;
+      await sharerB.secretStore.putSecret(
+          Secret(
+              namespace: 'myapp', name: '__rk.1.deadbeef', value: 'KEYBYTES'),
+          allowReservedName: true);
+
+      await sharerA
+          .requestSecretsFromNamespace('myapp', names: ['__rk.1.deadbeef']);
+      expect(await sharerB.sweepOnce(), 1); // request consumed
+      // Policy declined → nothing shared back → A's sweep finds nothing.
+      expect(await sharerA.sweepOnce(), 0);
+      expect(sharerA.secretStore.getSecret('myapp', '__rk.1.deadbeef'), isNull);
+    });
+  });
 }
