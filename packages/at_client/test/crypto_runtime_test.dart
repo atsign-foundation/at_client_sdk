@@ -142,6 +142,52 @@ void main() {
         'missing-provider',
       ]);
     });
+
+    test('onDecryptFailed retry re-attempts decrypt once and succeeds',
+        () async {
+      final policy = _RetryDecryptPolicy();
+      final flaky = _FlakyDecryptProvider();
+      final atClient = MockAtClientImpl();
+      final atChops = MockAtChops();
+      when(() => atClient.atChops).thenReturn(atChops);
+      when(() => atClient.cryptoRegistry)
+          .thenReturn(CryptoRegistry()..register(flaky));
+      when(() => atClient.getCurrentAtSign()).thenReturn('@alice');
+      when(() => atClient.getPreferences()).thenReturn(AtClientPreference()
+        ..crypto = CryptoConfig(defaultProviderId: 'legacy', policy: policy));
+      final atKey = AtKey()
+        ..metadata =
+            (Metadata()..appMetadata = AppMetadata(providerId: 'flaky'));
+
+      final plaintext =
+          await CryptoRuntime(atClient).decryptForGet(atKey, 'ct');
+
+      expect(plaintext, 'recovered');
+      expect(policy.calls, 1);
+      expect(flaky.decryptCalls, 2); // initial + one retry
+    });
+
+    test('onDecryptFailed default policy rethrows the provider error',
+        () async {
+      final flaky = _FlakyDecryptProvider();
+      final atClient = MockAtClientImpl();
+      final atChops = MockAtChops();
+      when(() => atClient.atChops).thenReturn(atChops);
+      when(() => atClient.cryptoRegistry)
+          .thenReturn(CryptoRegistry()..register(flaky));
+      when(() => atClient.getCurrentAtSign()).thenReturn('@alice');
+      when(() => atClient.getPreferences()).thenReturn(AtClientPreference()
+        ..crypto = CryptoConfig(defaultProviderId: 'legacy')); // default policy
+      final atKey = AtKey()
+        ..metadata =
+            (Metadata()..appMetadata = AppMetadata(providerId: 'flaky'));
+
+      await expectLater(
+        () => CryptoRuntime(atClient).decryptForGet(atKey, 'ct'),
+        throwsA(isA<StateError>()),
+      );
+      expect(flaky.decryptCalls, 1); // no retry under the default policy
+    });
   });
 }
 
@@ -230,6 +276,39 @@ class _RetryOnlyPolicy extends CryptoPolicy {
   @override
   CryptoFailureResolution onProviderNotFound(
     CryptoProviderNotFoundContext context,
+  ) {
+    calls++;
+    return const CryptoFailureResolution.retry();
+  }
+}
+
+/// Throws on the first decrypt (models an epoch key not yet delivered) and
+/// succeeds on the second — to exercise the onDecryptFailed retry path.
+class _FlakyDecryptProvider extends CryptoProvider {
+  @override
+  String get id => 'flaky';
+  int decryptCalls = 0;
+
+  @override
+  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async {
+    decryptCalls++;
+    if (decryptCalls == 1) {
+      throw StateError('key not available yet');
+    }
+    return const CryptoDecryptResult(plaintext: 'recovered');
+  }
+
+  @override
+  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async =>
+      throw UnimplementedError();
+}
+
+class _RetryDecryptPolicy extends CryptoPolicy {
+  int calls = 0;
+
+  @override
+  CryptoFailureResolution onDecryptFailed(
+    CryptoDecryptFailedContext context,
   ) {
     calls++;
     return const CryptoFailureResolution.retry();

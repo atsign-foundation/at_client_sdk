@@ -112,6 +112,18 @@ class CryptoPolicy {
   ) {
     return const CryptoFailureResolution.throwError();
   }
+
+  /// Called when a provider's [CryptoProvider.decrypt] throws. The default
+  /// rethrows. A provider whose key material may still be in flight — e.g.
+  /// the `group` provider when a peer hasn't yet shared the epoch key a
+  /// ciphertext names — lets the app return [CryptoFailureResolution.retry]
+  /// to re-attempt decryption once (typically after triggering a sync);
+  /// any other resolution surfaces the failure unchanged.
+  FutureOr<CryptoFailureResolution> onDecryptFailed(
+    CryptoDecryptFailedContext context,
+  ) {
+    return const CryptoFailureResolution.throwError();
+  }
 }
 
 abstract class CryptoFailureResolution {
@@ -147,6 +159,24 @@ class CryptoProviderNotFoundContext {
     await provider.initialize(cryptoContext);
     cryptoContext.atClient.cryptoRegistry.register(provider);
   }
+}
+
+/// Passed to [CryptoPolicy.onDecryptFailed] when a provider's decrypt throws.
+/// [error] is whatever the provider raised (commonly a
+/// `CryptoKeyUnavailableException` from the `group` provider when an epoch
+/// key has not yet arrived) — not necessarily an [AtException].
+class CryptoDecryptFailedContext {
+  final CryptoContext cryptoContext;
+  final AtKey atKey;
+  final String providerId;
+  final Object error;
+
+  const CryptoDecryptFailedContext({
+    required this.cryptoContext,
+    required this.atKey,
+    required this.providerId,
+    required this.error,
+  });
 }
 
 /// Abstract for persistent crypto keys that live in the at_servers

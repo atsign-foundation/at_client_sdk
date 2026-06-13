@@ -129,14 +129,45 @@ class CryptoRuntime {
     required String operation,
   }) async {
     final provider = await _lookupProvider(atKey, operation: operation);
-    final result = await provider.decrypt(
-      CryptoDecryptRequest(
+    final request = CryptoDecryptRequest(
+      atKey: atKey,
+      ciphertext: value,
+      metadata: _metadataFor(atKey, provider),
+    );
+    try {
+      final result = await provider.decrypt(request);
+      return result.plaintext;
+    } catch (e) {
+      final resolution = await _handleDecryptFailed(atKey, provider.id, e);
+      if (resolution is RetryCryptoOperation) {
+        // Single retry — the policy is expected to have remediated (e.g.
+        // triggered a sync that delivers a missing key). No loop.
+        final result = await provider.decrypt(request);
+        return result.plaintext;
+      }
+      rethrow;
+    }
+  }
+
+  Future<CryptoFailureResolution> _handleDecryptFailed(
+    AtKey atKey,
+    String providerId,
+    Object error,
+  ) async {
+    final preferences = _atClient.getPreferences();
+    return preferences!.crypto.policy.onDecryptFailed(
+      CryptoDecryptFailedContext(
+        cryptoContext: CryptoContext(
+          atClient: _atClient,
+          currentAtSign: (_atClient.getCurrentAtSign() ?? '').toAtsign(),
+          atChops: _atClient.atChops,
+          storage: CryptoSecondaryStorage(_atClient),
+        ),
         atKey: atKey,
-        ciphertext: value,
-        metadata: _metadataFor(atKey, provider),
+        providerId: providerId,
+        error: error,
       ),
     );
-    return result.plaintext;
   }
 
   Future<CryptoProvider> _lookupProvider(
