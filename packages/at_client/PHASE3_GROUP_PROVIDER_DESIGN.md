@@ -296,24 +296,26 @@ code can't collide.
   via `AppMetadata` — zero breakage. Phases 3–4 (stop conveying it; stop
   generating it) are later and touch at_auth — out of scope here.
 
-## 8. Open decisions (resolve before / during build)
+## 8. Decisions (accepted 2026-06-13)
 
-1. **Provider id** — `'group'` (chosen) vs `'rotating'` (older roadmap text).
-   `'group'` matches the Phase-3 heading and leaves room for `'mls'` in
-   Phase 5. *Recommend `'group'`.*
-2. **`export()` salt/info binding** — proposal: `info=label`,
-   `salt=groupId`. Confirm this matches what NoPorts tier-1 needs (both sides
-   derive `c2d:<sessionId>` / `d2c:<sessionId>`).
-3. **Answer-policy default for `kind:'request'`** — proposal: answer only
-   same-atSign requesters whose enrollment is approved for the namespace
-   (server already enforces deliverability; this is defense-in-depth +
-   anti-storm). Confirm before building #3.
-4. **Pull vs push for late joiners in v1** — pull (request `__rk.current` on
-   first miss) is sufficient and simplest; the roster watch (#4) is a
-   proactive complement. *Recommend pull-primary for v1, roster-watch
-   optional.*
-5. **`CryptoKeyUnavailableException`** — new typed exception in at_client (or
-   reuse an at_commons one?). *Recommend new, under the crypto package.*
+1. **Provider id = `'group'`.** Matches the Phase-3 heading; leaves `'mls'`
+   free for Phase 5.
+2. **`export()` binding: `info = utf8(label)`, `salt = utf8(groupId)`**, HKDF-
+   SHA256 over the current epoch key. Deterministic across members at the same
+   epoch. (Re-confirm against the sshnoports tier-1 derivation when that
+   branch is built — both sides must derive identical `c2d:<sessionId>` /
+   `d2c:<sessionId>` bytes — but no change to this design is expected.)
+3. **`kind:'request'` answer policy default: answer only same-atSign
+   requesters whose enrollment is approved for the namespace.** The server
+   already gates deliverability; this is defense-in-depth + anti-storm. App-
+   overridable.
+4. **Late joiners: pull-primary.** A client requests `__rk.current` (then
+   specific epochs on decrypt-miss) on first miss; the `onNewClientDiscovered`
+   roster watch (addition #4) is an *optional* proactive complement and may be
+   deferred past v1.
+5. **`CryptoKeyUnavailableException`** — proposed: a new typed exception under
+   the at_client crypto package (trivial implementation detail, not part of
+   the four ratified decisions; finalize at build time).
 
 ## 9. Implementation plan (commit sequence)
 
