@@ -14,8 +14,6 @@ import 'package:at_server_status/at_server_status.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:chalkdart/chalk.dart';
-import 'package:crypton/crypton.dart';
-import 'package:encrypt/encrypt.dart';
 import 'package:image/image.dart';
 import 'package:meta/meta.dart';
 import 'package:zxing2/qrcode.dart';
@@ -747,14 +745,14 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     return jsonData;
   }
 
-  /// Generates a random RSA keypair
-  RSAKeypair generateRsaKeypair() {
-    return RSAKeypair.fromRandom();
+  /// Generates a random RSA encryption keypair (RSA-2048) via at_chops.
+  AtEncryptionKeyPair generateRsaKeypair() {
+    return AtChopsUtil.generateAtEncryptionKeyPair();
   }
 
   /// Generate a random AES key
   String generateAESKey() {
-    return AES(Key.fromSecureRandom(32)).key.base64;
+    return AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
   }
 
   /// Returns secondary server status
