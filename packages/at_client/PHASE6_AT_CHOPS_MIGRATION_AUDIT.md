@@ -40,28 +40,43 @@ Pre-existing and relied on for the deeper sites:
 
 **`package:crypto` and `package:crypton` are now entirely absent from
 `at_client/lib/`.** The only remaining direct crypto import is `package:encrypt`
-(AES) in two files: `encryption_util.dart` (sync AES methods) and
-`aes_converter.dart` (streaming) — both blocked on the same gap (below).
+(AES) in two files: `encryption_util.dart` and `aes_converter.dart`.
 
-### The AES blocker (the one thing left)
+### The AES sites: deprecated-only / test-only — DECISION: defer to v4
 
-at_chops's byte-oriented `AESEncryptionAlgo.encrypt/decrypt` are **async**
-(they `await` `better_cryptography`'s AES-CTR). `EncryptionUtil`'s
-`encryptValue/decryptValue/encryptBytes/decryptBytes` and the `aes_converter`
-sinks are **synchronous** with sync callers, so routing them through
-`AESEncryptionAlgo` is an async breaking change that ripples to callers.
+A call-graph trace (2026-06-14) shows the AES **cipher** is not reachable from
+any live production path:
 
-Options to close it (a real design decision, not a drop-in):
-- at_chops exposes a **sync** AES surface. It already has a sync, String-only
-  `StringAESEncryptor` (uses `package:encrypt` internally → byte-identical to
-  `EncryptionUtil.encryptValue`), but **nothing sync for bytes** and nothing
-  for chunked streaming. A sync bytes/streaming AES in at_chops would unblock
-  both files without touching caller signatures.
-- OR make the at_client AES methods async + sweep callers + run the full
-  functional suite.
+| AES site | Reachable from |
+|----------|----------------|
+| `EncryptionUtil.encryptBytes`/`decryptBytes` | `EncryptionService.encrypt/decryptStream` → only `@Deprecated` `AtClientImpl.stream()` ("removed in v4") + the deprecated file methods |
+| `EncryptionUtil.encryptValue`/`decryptValue` (String) | **zero production callers**; used only as legacy-ciphertext helpers in ~7 test files |
+| `aes_converter.dart` (`AESEncrypter`/`AESDecrypter`/`AESCodec`/sinks) | only `encrypt/decryptFileInChunks` → `@Deprecated` `uploadFile`/`shareFiles`/`downloadFile`/`reuploadFiles` ("moved to app layer") |
+| `EncryptionService`, `StreamNotificationHandler` | only the deprecated `stream()`/file methods |
 
-Either path is wire-sensitive (must stay byte-exact on already-stored
-ciphertext) → its own commit, functional suite green at the boundary.
+The single live `package:encrypt` use was `EncryptionUtil.generateIV()` (random
+`ivNonce`), now routed to `AtChopsUtil.generateRandomIV` (non-breaking — random
+output). `generateAESKey()` is reachable only from the deprecated
+`EncryptionService`.
+
+**Decision (option 2):** at_client is **3.13.x**; the deprecations are tagged
+for **v4** removal, so deleting them now would be a semver-major break. We do
+**not** migrate the deprecated AES cipher onto at_chops (that would be polishing
+code slated for deletion, and at_chops's byte AES is async anyway while these
+are sync). Instead:
+
+- The live path is at_chops-clean (`generateIV` routed).
+- The AES cipher stays on `package:encrypt` in `encryption_util.dart` +
+  `aes_converter.dart` **until the v4 removal** of the deprecated stream/file
+  methods, at which point this code is deleted (or `EncryptionUtil` moves to a
+  test helper, per its own TODO) rather than migrated.
+- The Phase 6 import gate (step 6) **carves out these two files** until v4.
+
+When v4 is cut: delete the deprecated `AtClientImpl` stream/file methods +
+their spec decls, `EncryptionService`, `StreamNotificationHandler`,
+`aes_converter.dart`; move `EncryptionUtil`'s remaining cipher helpers to a
+test-only helper. That removes `package:encrypt` from `at_client/lib`
+entirely — no at_chops AES work required.
 
 ---
 
@@ -91,7 +106,7 @@ Phase-3 "rides `package:crypto`" note in the roadmap is **closed**.
 
 ---
 
-## 3. `encryption_util.dart` — RSA + md5 MIGRATED; AES remains
+## 3. `encryption_util.dart` — RSA + md5 + generateIV MIGRATED; AES quarantined
 
 Central legacy AES/RSA util; output is **at-rest/on-wire compatible with
 already-stored data and the atServer**.
@@ -100,11 +115,11 @@ already-stored data and the atServer**.
 |--------|--------|
 | `encryptKey` / `decryptKey` (RSA) | **MIGRATED** → `RsaEncryptionAlgo` (settable `atPublicKey`/`atPrivateKey`). Framing verified byte-exact against crypton: `encrypt(String)=base64(encryptData(utf8(msg)))`, `decrypt(String)=utf8.decode(decryptData(base64(msg)))`. Compat test round-trips both directions (RSA PKCS1v15 is non-deterministic, so round-trip not byte-equality). |
 | `md5CheckSum(data)` | **MIGRATED** → `DefaultHash().hash(utf8.encode(data))` (= `md5.convert(data).toString()`, identical). md5 also now wired in the factory. |
-| `generateAESKey()` | remains on `encrypt` — random output, no wire risk; can move to `AtChopsUtil.generateSymmetricKey` when the AES block is tackled. |
-| `generateIV()` / `getIV()` | remains on `encrypt` (`IV`). |
-| `encryptValue`/`decryptValue`, `encryptBytes`/`decryptBytes` (AES) | **remains on `encrypt`** — blocked on the AES async/sync wall (see "The AES blocker" above). |
+| `generateIV()` | **MIGRATED** → `base64Encode(AtChopsUtil.generateRandomIV(length).ivBytes)`. The one live `package:encrypt` use; random output → non-breaking. |
+| `generateAESKey()`, `getIV()` | stay on `encrypt` — reachable only from the deprecated/quarantined AES cipher below. |
+| `encryptValue`/`decryptValue`, `encryptBytes`/`decryptBytes` (AES) | **QUARANTINED on `encrypt`** until the v4 removal (deprecated-only / test-only — see "The AES sites" above). |
 
-The `crypton` and `crypto` imports are gone; only `encrypt` (AES) is left.
+`crypton` and `crypto` imports gone; `encrypt` remains for the quarantined AES.
 
 ## 4. `at_client_util.dart` — MIGRATED ✅
 
@@ -117,41 +132,36 @@ A round-trip + byte-equality test (`at_client_util_test.dart`) verifies the
 signature is valid under the public key and equals the legacy crypton output.
 crypton import removed from this file.
 
-## 5. `aes_converter.dart` — DEFERRED (MISSING streaming API)
+## 5. `aes_converter.dart` — QUARANTINED until v4
 
 `AESEncrypter`/`AESDecrypter` are `Converter<List<int>,List<int>>` with
-`ChunkedConversionSink` support, AES with **`padding: null`** (raw CTR, no
-PKCS7) — used by the streaming value codec.
-
-- **MISSING** in at_chops: no streaming/chunked AES converter, and no
-  no-padding AES-CTR one-shot (its `AESEncryptionAlgo` always PKCS7-pads).
-- Options: (a) add a no-padding streaming AES surface to at_chops; or (b) keep
-  this converter as a thin internal that calls an at_chops no-padding one-shot
-  per buffer. Either way this is the largest of the three and needs its own
-  design step. Defer until 3–4 are settled.
+`ChunkedConversionSink` support, AES `padding: null` (raw CTR) — used **only**
+by the deprecated `encrypt/decryptFileInChunks` → `@Deprecated`
+`uploadFile`/`shareFiles`/`downloadFile`/`reuploadFiles`. Stays on
+`package:encrypt` until those methods are removed in v4, then deleted.
 
 ---
 
 ## Remaining work (what's left)
 
-Done: #1, #2, #4, and #3's RSA + md5. `crypto` and `crypton` are gone from
-`lib/`. What's left is **only the AES sites**, both blocked on the same gap:
+at_client `lib/` is **crypto-clean on all live paths**. `crypto` and `crypton`
+are gone; `encrypt` remains only in the two quarantined files
+(`encryption_util.dart` AES cipher, `aes_converter.dart`), both reachable in
+production only from `@Deprecated` stream/file methods slated for v4 removal.
 
-1. **Unblock AES in at_chops** — add a sync bytes AES (and ideally a chunked
-   one) so `encryption_util`'s AES methods and `aes_converter` can route
-   through at_chops without changing their sync caller signatures. This is the
-   real prerequisite; do it before touching either consumer.
-2. `encryption_util` AES (#3) — once (1) lands; gated by a byte-exact compat
-   test against ciphertext produced by the current code, then the full
-   functional suite (pluggable-encryption + legacy round-trip).
-3. `aes_converter` (#5) — once (1) lands (streaming/no-padding variant).
-
-Each lands as its own at_client commit, functional suite green at each
-boundary (the refactor touches resource/wire lifecycle).
+- **No further at_client AES migration** (decision: option 2 — defer to v4).
+  When v4 is cut, delete the deprecated stream/file methods + `EncryptionService`
+  + `StreamNotificationHandler` + `aes_converter.dart`, and move
+  `EncryptionUtil`'s cipher helpers to a test helper — `package:encrypt` then
+  leaves `lib/` with no at_chops AES work needed.
+- Phase 6 then continues with the **other consumer packages** (at_lookup,
+  at_utils, at_auth, at_onboarding_cli, flutter) — steps 4–5.
 
 ## Enforcement (Phase 6 step 6)
 
-After the two AES sites land, add a grep/CI gate that fails if any
-`package:crypton|crypto|encrypt|pointycastle|cryptography` import reappears in
-`at_client/lib/`. Until the AES sites land, the gate would false-positive, so
-it is sequenced last.
+The grep/CI gate (fails on any `crypton|crypto|encrypt|pointycastle|
+cryptography` import in a consumer's `lib/`) is sequenced after steps 4–5.
+For at_client it must **carve out** the two quarantined files
+(`util/encryption_util.dart`, `converters/encryption/aes_converter.dart`) until
+the v4 removal deletes them — a documented, time-boxed exception, not an open
+hole.

@@ -2,17 +2,19 @@ import 'dart:typed_data';
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart'
-    show AtPrivateKey, AtPublicKey, DefaultHash, RsaEncryptionAlgo;
+    show AtChopsUtil, AtPrivateKey, AtPublicKey, DefaultHash, RsaEncryptionAlgo;
 import 'package:at_client/at_client.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:encrypt/encrypt.dart';
 
-//#TODO Migrate the remaining AES methods (encryptValue/decryptValue/
-// encryptBytes/decryptBytes/generate*/getIV) off package:encrypt onto
-// at_chops and move this class to the test folder in the next major release.
-// They are blocked on at_chops's AES being async (AESEncryptionAlgo) while
-// these are sync — see PHASE6_AT_CHOPS_MIGRATION_AUDIT.md. RSA + md5 already
-// route through at_chops.
+// RSA + md5 + generateIV route through at_chops. The remaining package:encrypt
+// uses here are the AES cipher methods (encryptValue/decryptValue/encryptBytes/
+// decryptBytes + their getIV/generateAESKey helpers), which are reachable in
+// production only via @Deprecated AtClientImpl stream/file methods ("removed in
+// v4") and otherwise serve as legacy-ciphertext helpers in tests. By decision
+// (Phase 6, option 2) they stay on package:encrypt until the v4 removal of
+// those methods; the Phase 6 import gate carves this file out until then.
+// See PHASE6_AT_CHOPS_MIGRATION_AUDIT.md.
 class EncryptionUtil {
   static final _logger = AtSignLogger('EncryptionUtil');
 
@@ -30,7 +32,8 @@ class EncryptionUtil {
   }
 
   static String generateIV({int length = 16}) {
-    return IV.fromSecureRandom(length).base64;
+    // Live path (ivNonce generation) — random IV via at_chops; base64-encoded.
+    return base64Encode(AtChopsUtil.generateRandomIV(length).ivBytes);
   }
 
   static String encryptValue(String value, String encryptionKey,
