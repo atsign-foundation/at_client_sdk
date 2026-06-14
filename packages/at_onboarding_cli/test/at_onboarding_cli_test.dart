@@ -14,7 +14,6 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 // ignore: depend_on_referenced_packages
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:crypton/crypton.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/expect.dart';
 import 'package:test/scaffolding.dart';
@@ -207,15 +206,22 @@ void main() {
       AtEnrollmentResponse atEnrollmentResponse =
           AtEnrollmentResponse('123', EnrollmentStatus.approved);
 
-      RSAKeypair encryptionRsaKeyPair = onboardingService.generateRsaKeypair();
+      AtEncryptionKeyPair encryptionRsaKeyPair =
+          onboardingService.generateRsaKeypair();
       atEnrollmentResponse.atAuthKeys = AtKeys()
         ..enrollmentId = '123'
-        ..defaultSelfEncryptionKey = AtBytes.fromString(onboardingService.generateAESKey())
-        ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionRsaKeyPair.publicKey.toString())
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(encryptionRsaKeyPair.privateKey.toString())
-        ..apkamPrivateKey = AtBytes.fromString(encryptionRsaKeyPair.privateKey.toString())
-        ..apkamPublicKey = AtBytes.fromString(encryptionRsaKeyPair.publicKey.toString())
-        ..apkamSymmetricKey = AtBytes.fromString(onboardingService.generateAESKey());
+        ..defaultSelfEncryptionKey =
+            AtBytes.fromString(onboardingService.generateAESKey())
+        ..defaultEncryptionPublicKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPublicKey.publicKey)
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPrivateKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPublicKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPublicKey.publicKey)
+        ..apkamSymmetricKey =
+            AtBytes.fromString(onboardingService.generateAESKey());
 
       var f = await onboardingService.createAtKeysFile(atEnrollmentResponse);
       expect(f.path.endsWith('$atsign.atKeys'), true);
@@ -239,15 +245,22 @@ void main() {
       AtEnrollmentResponse atEnrollmentResponse =
           AtEnrollmentResponse('123', EnrollmentStatus.approved);
 
-      RSAKeypair encryptionRsaKeyPair = onboardingService.generateRsaKeypair();
+      AtEncryptionKeyPair encryptionRsaKeyPair =
+          onboardingService.generateRsaKeypair();
       atEnrollmentResponse.atAuthKeys = AtKeys()
         ..enrollmentId = '123'
-        ..defaultSelfEncryptionKey = AtBytes.fromString(onboardingService.generateAESKey())
-        ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionRsaKeyPair.publicKey.toString())
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(encryptionRsaKeyPair.privateKey.toString())
-        ..apkamPrivateKey = AtBytes.fromString(encryptionRsaKeyPair.privateKey.toString())
-        ..apkamPublicKey = AtBytes.fromString(encryptionRsaKeyPair.publicKey.toString())
-        ..apkamSymmetricKey = AtBytes.fromString(onboardingService.generateAESKey());
+        ..defaultSelfEncryptionKey =
+            AtBytes.fromString(onboardingService.generateAESKey())
+        ..defaultEncryptionPublicKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPublicKey.publicKey)
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPrivateKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPublicKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPublicKey.publicKey)
+        ..apkamSymmetricKey =
+            AtBytes.fromString(onboardingService.generateAESKey());
 
       var f = await onboardingService.createAtKeysFile(atEnrollmentResponse);
       expect(f.path.endsWith('$atsign.me.atKeys'), true);
@@ -271,15 +284,22 @@ void main() {
       AtEnrollmentResponse atEnrollmentResponse =
           AtEnrollmentResponse('123', EnrollmentStatus.approved);
 
-      RSAKeypair encryptionRsaKeyPair = onboardingService.generateRsaKeypair();
+      AtEncryptionKeyPair encryptionRsaKeyPair =
+          onboardingService.generateRsaKeypair();
       atEnrollmentResponse.atAuthKeys = AtKeys()
         ..enrollmentId = '123'
-        ..defaultSelfEncryptionKey = AtBytes.fromString(onboardingService.generateAESKey())
-        ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionRsaKeyPair.publicKey.toString())
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(encryptionRsaKeyPair.privateKey.toString())
-        ..apkamPrivateKey = AtBytes.fromString(encryptionRsaKeyPair.privateKey.toString())
-        ..apkamPublicKey = AtBytes.fromString(encryptionRsaKeyPair.publicKey.toString())
-        ..apkamSymmetricKey = AtBytes.fromString(onboardingService.generateAESKey());
+        ..defaultSelfEncryptionKey =
+            AtBytes.fromString(onboardingService.generateAESKey())
+        ..defaultEncryptionPublicKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPublicKey.publicKey)
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPrivateKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPublicKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPublicKey.publicKey)
+        ..apkamSymmetricKey =
+            AtBytes.fromString(onboardingService.generateAESKey());
 
       var f = await onboardingService.createAtKeysFile(atEnrollmentResponse);
       expect(f.path.endsWith('$atsign-me.atKeys'), true);
@@ -303,15 +323,22 @@ void main() {
       AtEnrollmentResponse atEnrollmentResponse =
           AtEnrollmentResponse('123', EnrollmentStatus.approved);
 
-      RSAKeypair encryptionRsaKeyPair = onboardingService.generateRsaKeypair();
+      AtEncryptionKeyPair encryptionRsaKeyPair =
+          onboardingService.generateRsaKeypair();
       atEnrollmentResponse.atAuthKeys = AtKeys()
         ..enrollmentId = '123'
-        ..defaultSelfEncryptionKey = AtBytes.fromString(onboardingService.generateAESKey())
-        ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionRsaKeyPair.publicKey.toString())
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(encryptionRsaKeyPair.privateKey.toString())
-        ..apkamPrivateKey = AtBytes.fromString(encryptionRsaKeyPair.privateKey.toString())
-        ..apkamPublicKey = AtBytes.fromString(encryptionRsaKeyPair.publicKey.toString())
-        ..apkamSymmetricKey = AtBytes.fromString(onboardingService.generateAESKey());
+        ..defaultSelfEncryptionKey =
+            AtBytes.fromString(onboardingService.generateAESKey())
+        ..defaultEncryptionPublicKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPublicKey.publicKey)
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPrivateKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPublicKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPublicKey.publicKey)
+        ..apkamSymmetricKey =
+            AtBytes.fromString(onboardingService.generateAESKey());
 
       var f = await onboardingService.createAtKeysFile(atEnrollmentResponse);
       expect(f.path.endsWith('$atsign-me.atKeys'), true);
@@ -755,21 +782,27 @@ AtKeys getAtAuthKeysFromAtChopsKeys(AtChopsKeys atChopsKeys) {
   AtKeys atAuthKeys = AtKeys();
 
   if (atChopsKeys.atPkamKeyPair?.atPublicKey.publicKey != null) {
-    atAuthKeys.apkamPublicKey = AtBytes.fromString(atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey);
+    atAuthKeys.apkamPublicKey =
+        AtBytes.fromString(atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey);
   }
   if (atChopsKeys.atPkamKeyPair?.atPrivateKey.privateKey != null) {
-    atAuthKeys.apkamPrivateKey = AtBytes.fromString(atChopsKeys.atPkamKeyPair!.atPrivateKey.privateKey);
+    atAuthKeys.apkamPrivateKey =
+        AtBytes.fromString(atChopsKeys.atPkamKeyPair!.atPrivateKey.privateKey);
   }
   if (atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey != null) {
-    atAuthKeys.defaultEncryptionPublicKey = AtBytes.fromString(atChopsKeys.atEncryptionKeyPair!.atPublicKey.publicKey);
+    atAuthKeys.defaultEncryptionPublicKey = AtBytes.fromString(
+        atChopsKeys.atEncryptionKeyPair!.atPublicKey.publicKey);
   }
   if (atChopsKeys.atEncryptionKeyPair?.atPrivateKey.privateKey != null) {
-    atAuthKeys.defaultEncryptionPrivateKey = AtBytes.fromString(atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey);
+    atAuthKeys.defaultEncryptionPrivateKey = AtBytes.fromString(
+        atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey);
   }
   if (atChopsKeys.selfEncryptionKey?.key != null) {
-    atAuthKeys.defaultSelfEncryptionKey = AtBytes.fromString(atChopsKeys.selfEncryptionKey!.key);
+    atAuthKeys.defaultSelfEncryptionKey =
+        AtBytes.fromString(atChopsKeys.selfEncryptionKey!.key);
   }
-  atAuthKeys.apkamSymmetricKey = AtBytes.fromString(atChopsKeys.apkamSymmetricKey!.key);
+  atAuthKeys.apkamSymmetricKey =
+      AtBytes.fromString(atChopsKeys.apkamSymmetricKey!.key);
 
   return atAuthKeys;
 }
