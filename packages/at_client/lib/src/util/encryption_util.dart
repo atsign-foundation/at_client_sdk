@@ -1,14 +1,18 @@
 import 'dart:typed_data';
 import 'dart:convert';
 
+import 'package:at_chops/at_chops.dart'
+    show AtPrivateKey, AtPublicKey, DefaultHash, RsaEncryptionAlgo;
 import 'package:at_client/at_client.dart';
-import 'package:crypton/crypton.dart';
-import 'package:encrypt/encrypt.dart';
-import 'package:crypto/crypto.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:encrypt/encrypt.dart';
 
-//#TODO Replace calls to methods in this class with at_chops methods and
-// move this class to test folder in next major release
+//#TODO Migrate the remaining AES methods (encryptValue/decryptValue/
+// encryptBytes/decryptBytes/generate*/getIV) off package:encrypt onto
+// at_chops and move this class to the test folder in the next major release.
+// They are blocked on at_chops's AES being async (AESEncryptionAlgo) while
+// these are sync — see PHASE6_AT_CHOPS_MIGRATION_AUDIT.md. RSA + md5 already
+// route through at_chops.
 class EncryptionUtil {
   static final _logger = AtSignLogger('EncryptionUtil');
 
@@ -56,14 +60,21 @@ class EncryptionUtil {
   }
 
   static String encryptKey(String aesKey, String publicKey) {
-    var rsaPublicKey = RSAPublicKey.fromString(publicKey);
-    return rsaPublicKey.encrypt(aesKey);
+    // Mirrors crypton's RSAPublicKey.encrypt(String):
+    // base64(encryptData(utf8(msg))). RsaEncryptionAlgo.encrypt wraps the
+    // same encryptData, so the output is interchangeable with the old path.
+    final algo = RsaEncryptionAlgo()
+      ..atPublicKey = AtPublicKey.fromString(publicKey);
+    return base64Encode(algo.encrypt(Uint8List.fromList(utf8.encode(aesKey))));
   }
 
   @Deprecated('Use AtChops package')
   static String decryptKey(String aesKey, String privateKey) {
-    var rsaPrivateKey = RSAPrivateKey.fromString(privateKey);
-    return rsaPrivateKey.decrypt(aesKey);
+    // Mirrors crypton's RSAPrivateKey.decrypt(String):
+    // utf8.decode(decryptData(base64.decode(msg))).
+    final algo = RsaEncryptionAlgo()
+      ..atPrivateKey = AtPrivateKey.fromString(privateKey);
+    return utf8.decode(algo.decrypt(base64Decode(aesKey)));
   }
 
   static List<int> encryptBytes(List<int> value, String encryptionKey,
@@ -82,6 +93,7 @@ class EncryptionUtil {
   }
 
   static String md5CheckSum(String data) {
-    return md5.convert(utf8.encode(data)).toString();
+    // DefaultHash.hash = md5.convert(data).toString() — identical output.
+    return DefaultHash().hash(utf8.encode(data));
   }
 }

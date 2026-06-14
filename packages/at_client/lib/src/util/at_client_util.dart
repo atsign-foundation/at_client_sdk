@@ -4,9 +4,10 @@ import 'dart:typed_data';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_chops/at_chops.dart'
+    show AtPkamKeyPair, HashingAlgoType, PkamSigningAlgo;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
-import 'package:crypton/crypton.dart';
 
 class AtClientUtil {
   @Deprecated('use RemoteSecondary.findSecondaryUrl')
@@ -32,11 +33,14 @@ class AtClientUtil {
   }
 
   static String signChallenge(String challenge, String privateKey) {
-    var key = RSAPrivateKey.fromString(privateKey);
     challenge = challenge.trim();
-    var signature =
-        // ignore: unnecessary_cast
-        key.createSHA256Signature(utf8.encode(challenge) as Uint8List);
+    // PkamSigningAlgo(sha256) wraps the same RSA SHA-256 PKCS1v15 signature
+    // crypton produced (RSAPrivateKey.createSHA256Signature) — byte-identical.
+    // Signing reads only the private key, so the public-key slot is empty.
+    final Uint8List signature = PkamSigningAlgo(
+      AtPkamKeyPair.create('', privateKey),
+      HashingAlgoType.sha256,
+    ).sign(Uint8List.fromList(utf8.encode(challenge)));
     return base64Encode(signature);
   }
 

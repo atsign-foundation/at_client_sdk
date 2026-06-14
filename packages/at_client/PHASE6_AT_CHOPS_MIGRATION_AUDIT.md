@@ -34,9 +34,34 @@ Pre-existing and relied on for the deeper sites:
 |---|------|--------|--------|
 | 1 | `secret_sharing/client_key_package.dart` | `crypto` (sha256) | **MIGRATED** |
 | 2 | `secret_sharing/pairwise_group.dart` | `crypto` (sha256, Hmac/HKDF) | **MIGRATED** |
-| 3 | `util/encryption_util.dart` | `crypton`, `encrypt`, `crypto` | **DEFERRED** (core wire path) |
-| 4 | `util/at_client_util.dart` | `crypton` (RSA sign) | **DEFERRED** (signature bytes) |
+| 3 | `util/encryption_util.dart` | ~~`crypton`~~, ~~`crypto`~~, `encrypt` | **RSA + md5 MIGRATED; AES remains** (async wall) |
+| 4 | `util/at_client_util.dart` | `crypton` (RSA sign) | **MIGRATED** |
 | 5 | `converters/encryption/aes_converter.dart` | `encrypt` (AES-CTR, streaming) | **DEFERRED** (MISSING streaming API) |
+
+**`package:crypto` and `package:crypton` are now entirely absent from
+`at_client/lib/`.** The only remaining direct crypto import is `package:encrypt`
+(AES) in two files: `encryption_util.dart` (sync AES methods) and
+`aes_converter.dart` (streaming) — both blocked on the same gap (below).
+
+### The AES blocker (the one thing left)
+
+at_chops's byte-oriented `AESEncryptionAlgo.encrypt/decrypt` are **async**
+(they `await` `better_cryptography`'s AES-CTR). `EncryptionUtil`'s
+`encryptValue/decryptValue/encryptBytes/decryptBytes` and the `aes_converter`
+sinks are **synchronous** with sync callers, so routing them through
+`AESEncryptionAlgo` is an async breaking change that ripples to callers.
+
+Options to close it (a real design decision, not a drop-in):
+- at_chops exposes a **sync** AES surface. It already has a sync, String-only
+  `StringAESEncryptor` (uses `package:encrypt` internally → byte-identical to
+  `EncryptionUtil.encryptValue`), but **nothing sync for bytes** and nothing
+  for chunked streaming. A sync bytes/streaming AES in at_chops would unblock
+  both files without touching caller signatures.
+- OR make the at_client AES methods async + sweep callers + run the full
+  functional suite.
+
+Either path is wire-sensitive (must stay byte-exact on already-stored
+ciphertext) → its own commit, functional suite green at the boundary.
 
 ---
 
@@ -66,31 +91,31 @@ Phase-3 "rides `package:crypto`" note in the roadmap is **closed**.
 
 ---
 
-## 3. `encryption_util.dart` — DEFERRED (core wire path)
+## 3. `encryption_util.dart` — RSA + md5 MIGRATED; AES remains
 
-Already carries `//#TODO Replace calls … with at_chops methods and move this
-class to test folder in next major release`. This is the central legacy AES/RSA
-util; output is **at-rest and on-wire compatible with already-stored data and
-the atServer**, so each swap needs a byte-exact compat test, not just a green
-unit run.
+Central legacy AES/RSA util; output is **at-rest/on-wire compatible with
+already-stored data and the atServer**.
 
-| Method | at_chops replacement | Class |
-|--------|----------------------|-------|
-| `generateAESKey()` | `AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key` | MATCHED |
-| `generateIV()` / `getIV()` | `AtChopsUtil.generateRandomIV(len)` / `InitialisationVector` | MATCHED |
-| `md5CheckSum(data)` | `AtChops.hashWith(HashingAlgoType.md5).hash(utf8.encode(data))` | MATCHED (md5 now wired in the factory) |
-| `encryptKey` / `decryptKey` (RSA) | `RsaEncryptionAlgo` — wraps the same `crypton` RSA under the hood, so byte-compatible | DIVERGED — verify PKCS1v15 framing matches |
-| `encryptValue`/`decryptValue`, `encryptBytes`/`decryptBytes` (AES) | `AESEncryptionAlgo` | **DIVERGED** — `encrypt`'s default AES (SIC/CTR **with PKCS7**) vs at_chops `AESEncryptionAlgo` (AES-CTR + PKCS7 via `cryptography`); modes look equivalent but must be proven byte-exact on existing ciphertext before swapping |
+| Method | Status |
+|--------|--------|
+| `encryptKey` / `decryptKey` (RSA) | **MIGRATED** → `RsaEncryptionAlgo` (settable `atPublicKey`/`atPrivateKey`). Framing verified byte-exact against crypton: `encrypt(String)=base64(encryptData(utf8(msg)))`, `decrypt(String)=utf8.decode(decryptData(base64(msg)))`. Compat test round-trips both directions (RSA PKCS1v15 is non-deterministic, so round-trip not byte-equality). |
+| `md5CheckSum(data)` | **MIGRATED** → `DefaultHash().hash(utf8.encode(data))` (= `md5.convert(data).toString()`, identical). md5 also now wired in the factory. |
+| `generateAESKey()` | remains on `encrypt` — random output, no wire risk; can move to `AtChopsUtil.generateSymmetricKey` when the AES block is tackled. |
+| `generateIV()` / `getIV()` | remains on `encrypt` (`IV`). |
+| `encryptValue`/`decryptValue`, `encryptBytes`/`decryptBytes` (AES) | **remains on `encrypt`** — blocked on the AES async/sync wall (see "The AES blocker" above). |
 
-## 4. `at_client_util.dart` — DEFERRED (signature bytes)
+The `crypton` and `crypto` imports are gone; only `encrypt` (AES) is left.
 
-`signChallenge(challenge, privateKey)` = `RSAPrivateKey.createSHA256Signature`
-(crypton), base64-encoded. Used in the PKAM auth path.
+## 4. `at_client_util.dart` — MIGRATED ✅
 
-- at_chops replacement: `PkamSigningAlgo` / `DefaultSigningAlgo` (RSA-SHA256).
-- **DIVERGED** — the produced signature bytes must be **byte-identical** so the
-  atServer's existing verify accepts them. Needs a round-trip vector
-  (sign here, verify with the legacy path) before swapping.
+`signChallenge(challenge, privateKey)` (PKAM auth path) → `PkamSigningAlgo(
+AtPkamKeyPair.create('', privateKey), HashingAlgoType.sha256).sign(...)`.
+`PkamSigningAlgo` with sha256 calls the **identical** crypton
+`RSAPrivateKey.createSHA256Signature` — byte-identical by construction
+(signing reads only the private key, so the public-key slot is left empty).
+A round-trip + byte-equality test (`at_client_util_test.dart`) verifies the
+signature is valid under the public key and equals the legacy crypton output.
+crypton import removed from this file.
 
 ## 5. `aes_converter.dart` — DEFERRED (MISSING streaming API)
 
@@ -107,23 +132,26 @@ PKCS7) — used by the streaming value codec.
 
 ---
 
-## Recommended order for the deferred sites
+## Remaining work (what's left)
 
-1. `at_client_util.signChallenge` (#4) — smallest, single method; gated by a
-   sign-here/verify-legacy round-trip test.
-2. `encryption_util` MATCHED rows (#3: key/IV gen, md5) — zero wire risk.
-3. `encryption_util` AES + RSA (#3 DIVERGED) — gated by a byte-exact compat
-   test against ciphertext produced by the current code; then run the full
+Done: #1, #2, #4, and #3's RSA + md5. `crypto` and `crypton` are gone from
+`lib/`. What's left is **only the AES sites**, both blocked on the same gap:
+
+1. **Unblock AES in at_chops** — add a sync bytes AES (and ideally a chunked
+   one) so `encryption_util`'s AES methods and `aes_converter` can route
+   through at_chops without changing their sync caller signatures. This is the
+   real prerequisite; do it before touching either consumer.
+2. `encryption_util` AES (#3) — once (1) lands; gated by a byte-exact compat
+   test against ciphertext produced by the current code, then the full
    functional suite (pluggable-encryption + legacy round-trip).
-4. `aes_converter` (#5) — needs the at_chops streaming/no-padding decision
-   first.
+3. `aes_converter` (#5) — once (1) lands (streaming/no-padding variant).
 
 Each lands as its own at_client commit, functional suite green at each
 boundary (the refactor touches resource/wire lifecycle).
 
 ## Enforcement (Phase 6 step 6)
 
-After all five sites are migrated, add a grep/CI gate that fails if any
+After the two AES sites land, add a grep/CI gate that fails if any
 `package:crypton|crypto|encrypt|pointycastle|cryptography` import reappears in
-`at_client/lib/`. Until #3–#5 land, the gate would false-positive, so it is
-sequenced last.
+`at_client/lib/`. Until the AES sites land, the gate would false-positive, so
+it is sequenced last.
