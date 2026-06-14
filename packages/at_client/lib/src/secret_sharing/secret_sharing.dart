@@ -11,11 +11,10 @@
 /// [AtClientSecretSharing] is the ready-made entry point; the mixins are
 /// exported for apps that prefer composing them into their own classes.
 ///
-/// **Experimental.** This pairwise API is the substrate for the group-based
-/// encryption direction described in `docs/crypto-roadmap.md`: client key
-/// packages become MLS-style KeyPackages, and the durable app-facing surface
-/// will be `SecureGroup` (per-namespace groups with rotating epoch keys).
-/// Expect this surface to be reshaped as that lands; the wire formats are
+/// **Experimental.** This pairwise API underpins group-based encryption:
+/// client key packages are MLS-style KeyPackages, and the durable app-facing
+/// surface is `SecureGroup` (per-namespace groups with rotating epoch keys).
+/// Expect this surface to be reshaped as that matures; the wire formats are
 /// crypto-agile and already post-quantum (X-Wing + AES-256-GCM).
 library;
 

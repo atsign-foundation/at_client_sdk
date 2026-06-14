@@ -60,9 +60,9 @@ class CryptoKeyUnavailableException implements Exception {
 ///
 /// v1 ([PairwiseGroup]) is **self-encryption**: the members are the clients
 /// of one atSign authorized for one namespace, and epoch keys ride the
-/// secret-sharing substrate. v2 (Phase 5) will be an MLS-backed group with
-/// explicit add/remove. The contract is kept minimal and engine-agnostic so
-/// the v1→v2 swap is an engine change, not a redesign.
+/// secret-sharing channel. A future MLS-backed group with explicit add/remove
+/// is the intended v2. The contract is kept minimal and engine-agnostic so the
+/// v1→v2 swap is an engine change, not a redesign.
 @experimental
 abstract class SecureGroup {
   /// Deterministic id, e.g. `self:<atSign>:<namespace>`, so concurrent

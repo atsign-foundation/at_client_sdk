@@ -10,15 +10,15 @@ import 'package:at_commons/at_commons.dart' show AppMetadata, AtKey;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
 /// `id = 'group'`. Encrypts **self** keys under per-(atSign, namespace)
-/// rotating epoch keys via a [PairwiseGroup] over the secret-sharing
-/// substrate (Phase 3). A thin adapter from the [CryptoProvider] contract to
-/// a per-scope group, materialised lazily on first use.
+/// rotating epoch keys via a [PairwiseGroup] over the secret-sharing channel.
+/// A thin adapter from the [CryptoProvider] contract to a per-scope group,
+/// materialised lazily on first use.
 ///
 /// Self-encryption only in v1: [encrypt] rejects a key shared with another
-/// atSign (cross-atSign pair groups are Phase 4; the future pq-mls provider
-/// is a separate id, e.g. `'mls'`, so the two coexist). Apps that set
-/// `defaultProviderId: 'group'` govern their self keys with it and route
-/// shared keys to another provider.
+/// atSign (cross-atSign pair groups are not yet supported; a future pq-mls
+/// provider would be a separate id, e.g. `'mls'`, so the two coexist). Apps
+/// that set `defaultProviderId: 'group'` govern their self keys with it and
+/// route shared keys to another provider.
 @experimental
 class GroupCryptoProvider extends CryptoProvider {
   static const String providerId = 'group';

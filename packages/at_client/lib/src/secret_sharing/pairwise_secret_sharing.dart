@@ -353,10 +353,9 @@ mixin PairwiseSecretSharing on PairwiseClientRegistration {
   /// Payload `kind` marker for envelopes that carry a [Secret].
   ///
   /// `kind` values `secret`, `request` and `response` are reserved for this
-  /// library (`request`/`response` for the planned pull flow — see
-  /// docs/crypto-roadmap.md step 3). Apps embedding their own payloads via
-  /// [sendEnvelope] should use other `kind` values; unknown kinds are
-  /// delivered on [receivedEnvelopes] and otherwise ignored.
+  /// library (`request`/`response` drive the secret pull flow). Apps embedding
+  /// their own payloads via [sendEnvelope] should use other `kind` values;
+  /// unknown kinds are delivered on [receivedEnvelopes] and otherwise ignored.
   static const String secretPayloadKind = 'secret';
 
   /// Payload `kind` for a pull request: `{kind:'request', want:[name…]}` or

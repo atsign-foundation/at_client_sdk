@@ -7,14 +7,12 @@ import 'package:at_client/at_client.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:encrypt/encrypt.dart';
 
-// RSA + md5 + generateIV route through at_chops. The remaining package:encrypt
-// uses here are the AES cipher methods (encryptValue/decryptValue/encryptBytes/
-// decryptBytes + their getIV/generateAESKey helpers), which are reachable in
-// production only via @Deprecated AtClientImpl stream/file methods ("removed in
-// v4") and otherwise serve as legacy-ciphertext helpers in tests. By decision
-// (Phase 6, option 2) they stay on package:encrypt until the v4 removal of
-// those methods; the Phase 6 import gate carves this file out until then.
-// See PHASE6_AT_CHOPS_MIGRATION_AUDIT.md.
+// RSA, md5 and generateIV route through at_chops. The remaining package:encrypt
+// uses are the AES cipher methods (encryptValue/decryptValue/encryptBytes/
+// decryptBytes and their getIV/generateAESKey helpers), which in production are
+// reachable only via @Deprecated AtClientImpl stream/file methods (slated for
+// removal in v4) and otherwise serve as legacy-ciphertext helpers in tests.
+// They stay on package:encrypt until those deprecated methods are removed.
 class EncryptionUtil {
   static final _logger = AtSignLogger('EncryptionUtil');
 
