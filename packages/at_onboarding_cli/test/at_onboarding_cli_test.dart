@@ -11,6 +11,8 @@ import 'package:at_onboarding_cli/src/onboard/helpers/enrollment_checkpoint.dart
 
 // ignore: depend_on_referenced_packages
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+// ignore: depend_on_referenced_packages
+import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 import 'package:mocktail/mocktail.dart';
@@ -88,9 +90,10 @@ void main() {
 
   group('validate enrollment related operations', () {
     String atsign = '@alice_test';
+    late AtPersistenceBundle persistenceBundle;
 
     setUp(() async {
-      await setupLocalStorage(atsign);
+      persistenceBundle = await setupLocalStorage(atsign);
       reset(mockAtLookup);
       reset(mockAtAuth);
       when(() => mockAtAuth.progressStream).thenAnswer((_) => Stream.empty());
@@ -117,11 +120,8 @@ void main() {
       // setup dependencies for mocking
       MockAtClient mockAtClient = MockAtClient();
       MockEnrollmentBase mockEnrollmentBase = MockEnrollmentBase();
-      var keyStore = SecondaryPersistenceStoreFactory.getInstance()
-          .getSecondaryPersistenceStore(atsign)
-          ?.getSecondaryKeyStore();
-      LocalSecondary localSecondary =
-          LocalSecondary(mockAtClient, keyStore: keyStore);
+      LocalSecondary localSecondary = LocalSecondary(mockAtClient,
+          keyStore: persistenceBundle.keyValueStore);
 
       // mocking OnboardingServiceImpl
       AtOnboardingPreference atOnboardingPreference = getOnboardingPreference()
@@ -183,9 +183,9 @@ void main() {
       await onboardingService.enroll(appName, deviceName, otp, namespaces);
 
       // verify stored data in LocalSecondary
-      AtData response =
-          await localSecondary.keyStore?.get('local:$dummyEnrollmentId$atsign');
-      Map<String, dynamic> jsonDecodedResponse = jsonDecode(response.data!);
+      final response =
+          await localSecondary.keyStore!.get('local:$dummyEnrollmentId$atsign');
+      Map<String, dynamic> jsonDecodedResponse = jsonDecode(response!.data!);
       expect(jsonDecodedResponse['namespace'], namespaces);
     });
 
@@ -345,14 +345,11 @@ void main() {
       final atsign = '@syrax';
       final dummyEnrollmentId = '1234';
 
-      await setupLocalStorage(atsign);
+      final bundle = await setupLocalStorage(atsign);
 
       MockAtClient mockAtClient = MockAtClient();
-      var keyStore = SecondaryPersistenceStoreFactory.getInstance()
-          .getSecondaryPersistenceStore(atsign)
-          ?.getSecondaryKeyStore();
       LocalSecondary localSecondary =
-          LocalSecondary(mockAtClient, keyStore: keyStore);
+          LocalSecondary(mockAtClient, keyStore: bundle.keyValueStore);
 
       AtOnboardingPreference pref = getOnboardingPreference()
         ..atKeysFilePath = 'test/storage/keys/${atsign}_key.atKeys';
@@ -723,7 +720,15 @@ void main() {
   });
 }
 
+/// at_persistence 5.0.0 factories opened by [setupLocalStorage]; closed in
+/// [tearDownFunc] so Hive boxes are released before the storage dir is deleted.
+final List<HiveAtPersistenceFactory> _testPersistenceFactories = [];
+
 Future<void> tearDownFunc() async {
+  for (final factory in _testPersistenceFactories) {
+    await factory.close();
+  }
+  _testPersistenceFactories.clear();
   var isExists = await Directory('test/storage').exists();
   if (isExists) {
     Directory('test/storage').deleteSync(recursive: true);
@@ -782,11 +787,16 @@ AtChopsKeys getRandomAtChopsKeys() {
   return atChopsKeys;
 }
 
-Future<void> setupLocalStorage(String atSign) async {
-  String storageDir = 'test/storage/hive';
-  var persistenceManager = SecondaryPersistenceStoreFactory.getInstance()
-      .getSecondaryPersistenceStore(atSign)!;
-  await persistenceManager.getHivePersistenceManager()!.init(storageDir);
+/// Bootstraps a client keystore for [atSign] via the at_persistence 5.0.0
+/// factory/bundle API and returns the bundle (use [AtPersistenceBundle.keyValueStore]
+/// as the LocalSecondary keystore). The factory is tracked for teardown.
+Future<AtPersistenceBundle> setupLocalStorage(String atSign) async {
+  const storageDir = 'test/storage/hive';
+  final factory = HiveAtPersistenceFactory();
+  final bundle = await factory.initialize(
+      atSign, HivePersistenceConfig.clientDefaults(storagePath: storageDir));
+  _testPersistenceFactories.add(factory);
+  return bundle;
 }
 
 /// Asserts that [file] has secure (owner-only) permissions.
