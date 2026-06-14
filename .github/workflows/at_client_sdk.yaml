@@ -18,6 +18,16 @@ permissions: # added using https://github.com/step-security/secure-workflows
   contents: read
 
 jobs:
+  # Consumer packages must route encryption/signing/KDF through at_chops and
+  # not import a crypto primitive library directly.
+  crypto_import_gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Enforce at_chops as the sole crypto boundary
+        run: ./tools/check_crypto_imports.sh
+
   unit_at_client:
     runs-on: ubuntu-latest
     strategy:
