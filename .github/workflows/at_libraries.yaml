@@ -113,9 +113,11 @@ jobs:
 
       - name: Verify OpenSSL build supports ML-KEM and ML-DSA
         run: |
-          LIB="${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so"
-          echo "Checking: ${LIB}"
-          test -f "${LIB}" || (echo "ERROR: ${LIB} not found" && exit 1)
+          echo "Contents of ${{ env.OPENSSL_INSTALL_DIR }}/lib:"
+          ls -la "${{ env.OPENSSL_INSTALL_DIR }}/lib/"
+          LIB=$(ls "${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so"* 2>/dev/null | grep -v '\.a$' | head -1)
+          echo "Using: ${LIB}"
+          test -f "${LIB}" || (echo "ERROR: no libcrypto.so* found" && exit 1)
           strings "${LIB}" | grep -q "ML-DSA-65" || \
             (echo "ERROR: ML-DSA-65 not found in libcrypto symbols" && exit 1)
           strings "${LIB}" | grep -q "ML-KEM-768" || \
