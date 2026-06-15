@@ -121,6 +121,46 @@ typedef EvpPkeyNewRawPublicKeyNative = Pointer<EVP_PKEY> Function(
 typedef EvpPkeyNewRawPublicKeyDart = Pointer<EVP_PKEY> Function(
     int, Pointer<Void>, Pointer<Uint8>, int);
 
+// EVP_MD_CTX — for digest sign/verify (ML-DSA-65, Ed25519)
+final class EVP_MD_CTX extends Opaque {}
+
+typedef EvpMdCtxNewNative = Pointer<EVP_MD_CTX> Function();
+typedef EvpMdCtxNewDart = Pointer<EVP_MD_CTX> Function();
+
+typedef EvpMdCtxFreeNative = Void Function(Pointer<EVP_MD_CTX>);
+typedef EvpMdCtxFreeDart = void Function(Pointer<EVP_MD_CTX>);
+
+typedef EvpDigestSignInitNative = Int32 Function(Pointer<EVP_MD_CTX>,
+    Pointer<Pointer<EVP_PKEY_CTX>>, Pointer<Void>, Pointer<Void>, Pointer<EVP_PKEY>);
+typedef EvpDigestSignInitDart = int Function(Pointer<EVP_MD_CTX>,
+    Pointer<Pointer<EVP_PKEY_CTX>>, Pointer<Void>, Pointer<Void>, Pointer<EVP_PKEY>);
+
+typedef EvpDigestSignNative = Int32 Function(Pointer<EVP_MD_CTX>,
+    Pointer<Uint8>, Pointer<IntPtr>, Pointer<Uint8>, IntPtr);
+typedef EvpDigestSignDart = int Function(Pointer<EVP_MD_CTX>,
+    Pointer<Uint8>, Pointer<IntPtr>, Pointer<Uint8>, int);
+
+typedef EvpDigestVerifyInitNative = Int32 Function(Pointer<EVP_MD_CTX>,
+    Pointer<Pointer<EVP_PKEY_CTX>>, Pointer<Void>, Pointer<Void>, Pointer<EVP_PKEY>);
+typedef EvpDigestVerifyInitDart = int Function(Pointer<EVP_MD_CTX>,
+    Pointer<Pointer<EVP_PKEY_CTX>>, Pointer<Void>, Pointer<Void>, Pointer<EVP_PKEY>);
+
+typedef EvpDigestVerifyNative = Int32 Function(
+    Pointer<EVP_MD_CTX>, Pointer<Uint8>, IntPtr, Pointer<Uint8>, IntPtr);
+typedef EvpDigestVerifyDart = int Function(
+    Pointer<EVP_MD_CTX>, Pointer<Uint8>, int, Pointer<Uint8>, int);
+
+// EVP_PKEY_new_raw_*_key_ex — name-based construction (required for ML-DSA)
+typedef EvpPkeyNewRawPrivateKeyExNative = Pointer<EVP_PKEY> Function(
+    Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>, Pointer<Uint8>, IntPtr);
+typedef EvpPkeyNewRawPrivateKeyExDart = Pointer<EVP_PKEY> Function(
+    Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>, Pointer<Uint8>, int);
+
+typedef EvpPkeyNewRawPublicKeyExNative = Pointer<EVP_PKEY> Function(
+    Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>, Pointer<Uint8>, IntPtr);
+typedef EvpPkeyNewRawPublicKeyExDart = Pointer<EVP_PKEY> Function(
+    Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>, Pointer<Uint8>, int);
+
 // ── OpenSSL selection constants ──────────────────────────────────────────────
 const int evpPkeyPublicKey = 0x86;
 const int evpPkeyKeypair = 0x87;

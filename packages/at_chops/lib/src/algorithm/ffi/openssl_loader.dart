@@ -56,6 +56,19 @@ DynamicLibrary? tryLoadLibCrypto({StringBuffer? loadedPath}) {
 /// Call this before constructing [MlKem768FfiAlgo] to gate FFI tests or
 /// runtime fallback decisions.
 bool libCryptoSupportsMlKem768(DynamicLibrary lib) {
+  return _libCryptoSupportsAlgorithm(lib, 'ML-KEM-768');
+}
+
+/// Returns `true` when [lib] supports the ML-DSA-65 algorithm.
+///
+/// ML-DSA-65 was added to the OpenSSL default provider in OpenSSL 3.3.
+/// Call this before constructing [MlDsa65FfiAlgo] to gate FFI tests or
+/// runtime fallback decisions.
+bool libCryptoSupportsMlDsa65(DynamicLibrary lib) {
+  return _libCryptoSupportsAlgorithm(lib, 'ML-DSA-65');
+}
+
+bool _libCryptoSupportsAlgorithm(DynamicLibrary lib, String algorithmName) {
   try {
     final ctxNewFromName = lib.lookupFunction<
         Pointer<Void> Function(Pointer<Void>, Pointer<Utf8>, Pointer<Void>),
@@ -65,7 +78,7 @@ bool libCryptoSupportsMlKem768(DynamicLibrary lib) {
     final ctxFree = lib.lookupFunction<Void Function(Pointer<Void>),
         void Function(Pointer<Void>)>('EVP_PKEY_CTX_free');
 
-    final Pointer<Utf8> algName = 'ML-KEM-768'.toNativeUtf8();
+    final Pointer<Utf8> algName = algorithmName.toNativeUtf8();
     try {
       final Pointer<Void> ctx = ctxNewFromName(nullptr, algName, nullptr);
       if (ctx == nullptr) return false;
