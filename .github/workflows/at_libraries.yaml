@@ -111,6 +111,15 @@ jobs:
           make -j$(nproc)
           make install_sw
 
+      - name: Verify OpenSSL build supports ML-KEM and ML-DSA
+        run: |
+          OPENSSL="${{ env.OPENSSL_INSTALL_DIR }}/bin/openssl"
+          echo "OpenSSL version: $("${OPENSSL}" version)"
+          "${OPENSSL}" list -signature-algorithms | grep -i "ml-dsa" || \
+            (echo "ERROR: ML-DSA not found in built OpenSSL" && exit 1)
+          "${OPENSSL}" list -kem-algorithms | grep -i "ml-kem" || \
+            (echo "ERROR: ML-KEM not found in built OpenSSL" && exit 1)
+
       - name: Install dependencies in at_chops
         working-directory: packages/at_chops
         run: dart pub get
@@ -122,7 +131,7 @@ jobs:
       - name: run FFI tests
         working-directory: packages/at_chops
         env:
-          AT_CHOPS_LIBCRYPTO_PATH: ${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so.3
+          AT_CHOPS_LIBCRYPTO_PATH: ${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so
           LD_LIBRARY_PATH: ${{ env.OPENSSL_INSTALL_DIR }}/lib
         run: dart test --concurrency=1 --tags ffi
 
