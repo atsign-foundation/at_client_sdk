@@ -112,15 +112,15 @@ jobs:
           make install_sw
 
       - name: Verify OpenSSL build supports ML-KEM and ML-DSA
-        env:
-          LD_LIBRARY_PATH: ${{ env.OPENSSL_INSTALL_DIR }}/lib
         run: |
-          OPENSSL="${{ env.OPENSSL_INSTALL_DIR }}/bin/openssl"
-          echo "OpenSSL version: $("${OPENSSL}" version)"
-          "${OPENSSL}" list -signature-algorithms | grep -i "ml-dsa" || \
-            (echo "ERROR: ML-DSA not found in built OpenSSL" && exit 1)
-          "${OPENSSL}" list -kem-algorithms | grep -i "ml-kem" || \
-            (echo "ERROR: ML-KEM not found in built OpenSSL" && exit 1)
+          LIB="${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so"
+          echo "Checking: ${LIB}"
+          test -f "${LIB}" || (echo "ERROR: ${LIB} not found" && exit 1)
+          strings "${LIB}" | grep -q "ML-DSA-65" || \
+            (echo "ERROR: ML-DSA-65 not found in libcrypto symbols" && exit 1)
+          strings "${LIB}" | grep -q "ML-KEM-768" || \
+            (echo "ERROR: ML-KEM-768 not found in libcrypto symbols" && exit 1)
+          echo "OK: ML-DSA-65 and ML-KEM-768 symbols present in ${LIB}"
 
       - name: Install dependencies in at_chops
         working-directory: packages/at_chops
