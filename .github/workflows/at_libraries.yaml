@@ -89,7 +89,7 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ env.OPENSSL_INSTALL_DIR }}
-          key: openssl-${{ env.OPENSSL_VERSION }}-ubuntu-latest-v2
+          key: openssl-${{ env.OPENSSL_VERSION }}-ubuntu-latest
 
       - name: Build OpenSSL ${{ env.OPENSSL_VERSION }} from source
         # Guard on the actual library file, not the cache-hit flag — a corrupt
@@ -110,6 +110,14 @@ jobs:
             shared no-tests
           make -j$(nproc)
           make install_sw
+
+      - name: Verify OpenSSL build
+        run: |
+          LIBCRYPTO="${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so.3"
+          test -f "${LIBCRYPTO}" || (echo "ERROR: ${LIBCRYPTO} not found" && exit 1)
+          strings "${LIBCRYPTO}" | grep -q "ML-DSA-65"  || (echo "ERROR: ML-DSA-65 not found in ${LIBCRYPTO}"  && exit 1)
+          strings "${LIBCRYPTO}" | grep -q "ML-KEM-768" || (echo "ERROR: ML-KEM-768 not found in ${LIBCRYPTO}" && exit 1)
+          echo "OK: ${LIBCRYPTO} exists and contains ML-DSA-65 and ML-KEM-768"
 
       - name: Install dependencies in at_chops
         working-directory: packages/at_chops
