@@ -94,6 +94,8 @@ jobs:
       - name: Build OpenSSL ${{ env.OPENSSL_VERSION }} from source
         # Guard on the actual library file, not the cache-hit flag — a corrupt
         # or partial cache restore would otherwise skip the build and fail later.
+        # Use --libdir=lib to force installation into lib/ regardless of whether
+        # the host is 32 or 64-bit (otherwise OpenSSL 3.x defaults to lib64/).
         run: |
           LIBCRYPTO="${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so.3"
           if [ -f "${LIBCRYPTO}" ]; then
@@ -107,6 +109,7 @@ jobs:
           cd "/tmp/openssl-${OPENSSL_VERSION}"
           ./Configure --prefix="${{ env.OPENSSL_INSTALL_DIR }}" \
             --openssldir="${{ env.OPENSSL_INSTALL_DIR }}/ssl" \
+            --libdir=lib \
             shared no-tests
           make -j$(nproc)
           make install_sw
