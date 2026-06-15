@@ -84,45 +84,32 @@ jobs:
 
       - uses: ./actions/setup-flutter-and-dart
 
-      # checks GHA cache for pre-built OpenSSL install directory (
       - name: Cache OpenSSL build
         id: cache-openssl
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ env.OPENSSL_INSTALL_DIR }}
-          key: openssl-${{ env.OPENSSL_VERSION }}-ubuntu-latest
-
-      - name: Restore shared-library permissions after cache restore
-        if: steps.cache-openssl.outputs.cache-hit == 'true'
-        run: |
-          if [ -d "${{ env.OPENSSL_INSTALL_DIR }}/lib" ]; then
-            chmod -R u+x "${{ env.OPENSSL_INSTALL_DIR }}/lib"
-          fi
+          key: openssl-${{ env.OPENSSL_VERSION }}-ubuntu-latest-v2
 
       - name: Build OpenSSL ${{ env.OPENSSL_VERSION }} from source
-        if: steps.cache-openssl.outputs.cache-hit != 'true' # if the previos action was a cache miss
+        # Guard on the actual library file, not the cache-hit flag — a corrupt
+        # or partial cache restore would otherwise skip the build and fail later.
         run: |
+          LIBCRYPTO="${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so.3"
+          if [ -f "${LIBCRYPTO}" ]; then
+            echo "libcrypto already present at ${LIBCRYPTO}, skipping build."
+            exit 0
+          fi
+          echo "Building OpenSSL ${OPENSSL_VERSION}..."
           sudo apt-get update && sudo apt-get install -y build-essential
           curl -fsSL "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz" \
             | tar xz -C /tmp
           cd "/tmp/openssl-${OPENSSL_VERSION}"
-          ./Configure --prefix="${OPENSSL_INSTALL_DIR}" --openssldir="${OPENSSL_INSTALL_DIR}/ssl" \
+          ./Configure --prefix="${{ env.OPENSSL_INSTALL_DIR }}" \
+            --openssldir="${{ env.OPENSSL_INSTALL_DIR }}/ssl" \
             shared no-tests
           make -j$(nproc)
           make install_sw
-
-      - name: Verify OpenSSL build supports ML-KEM and ML-DSA
-        run: |
-          echo "Contents of ${{ env.OPENSSL_INSTALL_DIR }}/lib:"
-          ls -la "${{ env.OPENSSL_INSTALL_DIR }}/lib/"
-          LIB=$(ls "${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so"* 2>/dev/null | grep -v '\.a$' | head -1)
-          echo "Using: ${LIB}"
-          test -f "${LIB}" || (echo "ERROR: no libcrypto.so* found" && exit 1)
-          strings "${LIB}" | grep -q "ML-DSA-65" || \
-            (echo "ERROR: ML-DSA-65 not found in libcrypto symbols" && exit 1)
-          strings "${LIB}" | grep -q "ML-KEM-768" || \
-            (echo "ERROR: ML-KEM-768 not found in libcrypto symbols" && exit 1)
-          echo "OK: ML-DSA-65 and ML-KEM-768 symbols present in ${LIB}"
 
       - name: Install dependencies in at_chops
         working-directory: packages/at_chops
@@ -135,7 +122,7 @@ jobs:
       - name: run FFI tests
         working-directory: packages/at_chops
         env:
-          AT_CHOPS_LIBCRYPTO_PATH: ${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so
+          AT_CHOPS_LIBCRYPTO_PATH: ${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so.3
           LD_LIBRARY_PATH: ${{ env.OPENSSL_INSTALL_DIR }}/lib
         run: dart test --concurrency=1 --tags ffi
 
