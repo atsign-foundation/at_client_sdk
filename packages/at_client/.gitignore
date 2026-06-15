@@ -35,3 +35,4 @@ doc/api/
 # Working notes, drafts, audits — not part of the published package.
 local/
 full_stack_tests/
+PHASE6_AT_CHOPS_MIGRATION_AUDIT.md

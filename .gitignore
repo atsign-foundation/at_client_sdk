@@ -105,3 +105,6 @@ poetry.lock
 # Claude/AI coding stuff
 .serena
 .claude
+
+# Working notes / audits — not part of the published packages
+packages/PHASE6_CONSUMERS_MIGRATION_AUDIT.md
