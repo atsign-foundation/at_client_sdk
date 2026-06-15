@@ -1,4 +1,4 @@
-import 'package:at_chops/src/key/at_key_pair.dart';
+import 'package:at_chops/src/key/keys.dart';
 
 /// ML-KEM-768 (FIPS 203) key pair used for post-quantum key encapsulation.
 ///
@@ -9,6 +9,5 @@ import 'package:at_chops/src/key/at_key_pair.dart';
 /// handles, so persisted ML-KEM secret keys must always be used with the
 /// pure-Dart algorithm.
 class AtMlKem768KeyPair extends AsymmetricKeyPair {
-  AtMlKem768KeyPair.create(super.publicKey, super.privateKey)
-      : super.create();
+  AtMlKem768KeyPair.create(super.publicKey, super.privateKey) : super.create();
 }
