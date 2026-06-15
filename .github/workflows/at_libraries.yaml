@@ -113,11 +113,17 @@ jobs:
 
       - name: Verify OpenSSL build
         run: |
-          LIBCRYPTO="${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so.3"
+          # Resolve the real .so file (not a symlink) to avoid SONAME lookup
+          # issues when Dart's DynamicLibrary.open follows the versioned symlink
+          # and the dynamic linker resolves the SONAME against the system lib.
+          LIBCRYPTO=$(realpath "${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so.3")
+          echo "Resolved libcrypto: ${LIBCRYPTO}"
           test -f "${LIBCRYPTO}" || (echo "ERROR: ${LIBCRYPTO} not found" && exit 1)
           strings "${LIBCRYPTO}" | grep -q "ML-DSA-65"  || (echo "ERROR: ML-DSA-65 not found in ${LIBCRYPTO}"  && exit 1)
           strings "${LIBCRYPTO}" | grep -q "ML-KEM-768" || (echo "ERROR: ML-KEM-768 not found in ${LIBCRYPTO}" && exit 1)
           echo "OK: ${LIBCRYPTO} exists and contains ML-DSA-65 and ML-KEM-768"
+          # Export for the FFI test step — opening the real file bypasses SONAME resolution
+          echo "LIBCRYPTO_REAL_PATH=${LIBCRYPTO}" >> "$GITHUB_ENV"
 
       - name: Install dependencies in at_chops
         working-directory: packages/at_chops
@@ -130,7 +136,7 @@ jobs:
       - name: run FFI tests
         working-directory: packages/at_chops
         env:
-          AT_CHOPS_LIBCRYPTO_PATH: ${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so.3
+          AT_CHOPS_LIBCRYPTO_PATH: ${{ env.LIBCRYPTO_REAL_PATH }}
           LD_LIBRARY_PATH: ${{ env.OPENSSL_INSTALL_DIR }}/lib
         run: dart test --concurrency=1 --tags ffi
 
