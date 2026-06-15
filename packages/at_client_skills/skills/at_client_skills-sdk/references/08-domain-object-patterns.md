@@ -2,9 +2,10 @@
 
 # Domain-Object Patterns
 
-`AtCollection<T>` stores your domain objects as JSON. Any Dart class with `toJson()` and
-a `fromJson` factory works. This guide covers the required contract, polymorphic types,
-factory registration, and primitive/binary payloads.
+`AtCollection<T>` stores your domain objects as JSON. Any Dart class with
+`toJson()` and a `fromJson` factory works. This guide covers the required
+contract, polymorphic types, factory registration, and primitive/binary
+payloads.
 
 ---
 
@@ -64,7 +65,8 @@ final todos = await atClient.collection<Todo>(
 
 ## Sub-collection Domain Objects
 
-Sub-collection items follow the exact same pattern — they just live in a child collection:
+Sub-collection items follow the exact same pattern — they just live in a
+child collection:
 
 ```dart
 class TodoNote {
@@ -92,8 +94,8 @@ final notes = todos.subCollection<TodoNote>(
 
 ## Polymorphic Types
 
-When multiple concrete types share a base type, register each concrete type separately and
-create the collection typed as the abstract base:
+When multiple concrete types share a base type, register each concrete type
+separately and create the collection typed as the abstract base:
 
 ```dart
 // Abstract base — no fromJson (cannot be instantiated directly)
@@ -127,7 +129,8 @@ class Cat extends Pet {
 }
 ```
 
-Register concrete factories **before** creating the collection (typically in `main()`):
+Register concrete factories **before** creating the collection (typically in
+`main()`):
 
 ```dart
 void main() async {
@@ -162,18 +165,23 @@ void main() async {
 AtCollection.registerFactory<T>(T.fromJson, typeTag: 'MyTag');
 ```
 
-- Call once at app startup, before any `atClient.collection(...)` that uses that type
-- **Same `(Type, typeTag)` pair** → idempotent; last write wins (safe to call multiple times)
-- **Same `Type`, different `typeTag`** → throws `StateError` — tag is part of the wire format
-- **Same `typeTag`, different `Type`** → throws `StateError` — tags must be globally unique
-- Registration is **process-global** across all `AtCollection` instances in the Dart isolate
+- Call once at app startup, before any `atClient.collection(...)` that uses that
+  type
+- **Same `(Type, typeTag)` pair** → idempotent; last write wins (safe to call
+  multiple times)
+- **Same `Type`, different `typeTag`** → throws `StateError` — tag is part of
+  the wire format
+- **Same `typeTag`, different `Type`** → throws `StateError` — tags must be
+  globally unique
+- Registration is **process-global** across all `AtCollection` instances in
+  the Dart isolate
 
 ---
 
 ## `typeTag` Must Be a String Literal
 
-The `typeTag` is stored in the atServer keystore alongside your data. It must be stable
-across app versions and build modes (debug, profile, release).
+The `typeTag` is stored in the atServer keystore alongside your data. It must
+be stable across app versions and build modes (debug, profile, release).
 
 ```dart
 // ✓ Correct — stable string literal
@@ -184,14 +192,16 @@ AtCollection.registerFactory<Dog>(Dog.fromJson, typeTag: 'Dog');
 // typeTag: '$T'
 ```
 
-If you ever change a `typeTag` in a published app, existing stored items become
-undeserializable. Treat `typeTag` values as part of your public API once deployed.
+If you ever change a `typeTag` in a published app, existing stored items
+become undeserializable. Treat `typeTag` values as part of your public API
+once deployed.
 
 ---
 
 ## Primitive and Map Collections
 
-For simple payloads — plain strings, raw JSON maps, or lists — you don't need `fromJson`:
+For simple payloads — plain strings, raw JSON maps, or lists — you don't
+need `fromJson`:
 
 ```dart
 // String collection
@@ -224,17 +234,22 @@ final bytes = await File('photo.jpg').readAsBytes();
 await images.create(obj: bytes);
 ```
 
-`typeTag: 'binary'` is the reserved tag for `Uint8List` — use it exactly as shown.
+`typeTag: 'binary'` is the reserved tag for `Uint8List` — use it exactly as
+shown.
 
 ---
 
 ## Schema Evolution
 
-`AtCollection<T>` stores raw JSON, so you can evolve your schema across app versions:
+`AtCollection<T>` stores raw JSON, so you can evolve your schema across app
+versions:
 
-- **Adding a field** → give it a default in `fromJson`; old items deserialize without it
-- **Removing a field** → ignore it in `fromJson`; old JSON fields are silently skipped
-- **Renaming a field** → read both old and new keys in `fromJson` during a transition period
+- **Adding a field** → give it a default in `fromJson`; old items
+  deserialize without it
+- **Removing a field** → ignore it in `fromJson`; old JSON fields are
+  silently skipped
+- **Renaming a field** → read both old and new keys in `fromJson`
+  during a transition period
 - **Changing a field type** → handle both shapes in `fromJson`
 
 ```dart

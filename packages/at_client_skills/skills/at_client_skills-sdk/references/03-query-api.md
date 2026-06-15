@@ -2,12 +2,16 @@
 
 # Query\<T> API Reference
 
-`Query<T>` is a composable, immutable, value-typed query builder over an `AtCollection<T>`.
+`Query<T>` is a composable, immutable, value-typed query builder over an
+`AtCollection<T>`.
 
 **Key properties:**
 
-- **Immutable** — every modifier returns a new `Query<T>`. Store, pass around, and reuse safely
-- **On-device execution** — queries run against the local synced keystore. Under E2E encryption the atServer cannot filter plaintext on your behalf; on-device is the only correct model
+- **Immutable** — every modifier returns a new `Query<T>`. Store, pass around,
+  and reuse safely
+- **On-device execution** — queries run against the local synced keystore.
+  Under E2E encryption the atServer cannot filter plaintext on your behalf;
+  on-device is the only correct model
 - Obtain via `collection.query()`
 
 ---
@@ -45,7 +49,8 @@ call `thenBy` to add tiebreakers without resetting.
 
 ### `thenBy(Comparable<dynamic> Function(CItem<T>) keyFn, {bool descending = false})`
 
-Adds a tiebreaker sort key. Requires a prior `orderBy` — throws `StateError` otherwise.
+Adds a tiebreaker sort key. Requires a prior `orderBy` — throws `StateError`
+otherwise.
 
 ```dart
 todos.query()
@@ -56,11 +61,13 @@ todos.query()
 
 ### `limit(int n)`
 
-Keeps at most `n` items after filter + sort + skip. Throws `ArgumentError` if `n < 0`.
+Keeps at most `n` items after filter + sort + skip. Throws `ArgumentError` if
+`n < 0`.
 
 ### `skip(int n)`
 
-Skips the first `n` items after filter + sort, before limit. Throws `ArgumentError` if `n < 0`.
+Skips the first `n` items after filter + sort, before limit. Throws
+`ArgumentError` if `n < 0`.
 
 ---
 
@@ -79,11 +86,13 @@ Deprecated alias for `get()`. Migrating: replace `.fetch()` with `.get()`.
 Live reactive terminal. Emits an initial snapshot on subscribe, then re-emits a
 fresh snapshot on every update or delete that could affect the result set.
 
-**Delta path (no `limit`/`skip`):** maintains a cached list; per-event single-item
-delta — fast even for large collections.  
-**Paginated path (with `limit`/`skip`):** falls back to full `get()` on each event.
+**Delta path (no `limit`/`skip`):** maintains a cached list; per-event
+single-item delta — fast even for large collections.  
+**Paginated path (with `limit`/`skip`):** falls back to full `get()` on
+each event.
 
-Returns a **single-subscription** stream. Use `.asBroadcastStream()` for multi-listener UIs.
+Returns a **single-subscription** stream. Use `.asBroadcastStream()` for
+multi-listener UIs.
 
 ```dart
 // Flutter pattern
@@ -116,8 +125,8 @@ final hasDone = await todos.query().any((t) => t.obj.done);
 
 ### `Future<CItem<T>?> firstOrNull()`
 
-First item matching the spec. Without `orderBy`: stream short-circuits on first match.
-With `orderBy`: fetches and sorts full result set, returns first.
+First item matching the spec. Without `orderBy`: stream short-circuits on
+first match. With `orderBy`: fetches and sorts full result set, returns first.
 
 ### `Future<CItem<T>> first()`
 
@@ -143,8 +152,9 @@ final byOwner = await todos.query().groupBy((t) => t.owner);
 
 ### `Stream<List<WithChildren<T, U>>> watchWithSub<U>({required String subName, required Duration subDefaultExpiration, U Function(Map<String,dynamic>)? subFromJson, String? subTypeTag})`
 
-Joins each parent matching this query with its children from a named sub-collection.
-Re-emits on any parent update/delete AND any child update/delete within any current parent.
+Joins each parent matching this query with its children from a named
+sub-collection. Re-emits on any parent update/delete AND any child
+update/delete within any current parent.
 
 ```dart
 final stream = todos.query()
@@ -165,12 +175,13 @@ stream.listen((rows) {
 });
 ```
 
-Child subscriptions are cancelled when a parent leaves the result set or the outer stream
-is cancelled.
+Child subscriptions are cancelled when a parent leaves the result set or the
+outer stream is cancelled.
 
 ### `Stream<List<TreeNode<T>>> watchWithTree(List<SubSpec<dynamic>> subSpecs)`
 
-Multi-level generalisation of `watchWithSub`. Declare the tree shape with `SubSpec<U>`.
+Multi-level generalisation of `watchWithSub`. Declare the tree shape with
+`SubSpec<U>`.
 
 ```dart
 final stream = posts.query().watchWithTree([
@@ -204,8 +215,10 @@ stream.listen((tree) {
 
 **When to use `watchWithSub` vs `watchWithTree`:**
 
-- 2 levels (parent + one child type) → `watchWithSub<U>` — strongly typed, simpler
-- 3+ levels or mixed child types → `watchWithTree` — arbitrary depth, `TreeNode<dynamic>` branches
+- 2 levels (parent + one child type) → `watchWithSub<U>` —
+  strongly typed, simpler
+- 3+ levels or mixed child types → `watchWithTree` — arbitrary depth,
+  `TreeNode<dynamic>` branches
 
 ---
 
@@ -251,8 +264,8 @@ abstract class $Todo {
 | `.isNotNull` | `PathField<V?>` (nullable) | `Predicate` |
 
 > **Note:** `like`, `inSet`, `between`, `contains`, `startsWith` are declared in
-> `PredicateOp` but throw `UnimplementedError` at runtime. Use `.where()` closures for
-> those cases until they are implemented.
+> `PredicateOp` but throw `UnimplementedError` at runtime. Use `.where()`
+> closures for those cases until they are implemented.
 
 ### Predicate combinators
 

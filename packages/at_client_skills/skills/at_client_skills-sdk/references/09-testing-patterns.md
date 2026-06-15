@@ -2,9 +2,10 @@
 
 # Testing Patterns
 
-`at_client` ships a test-only library that lets you unit-test collection-backed services
-without a running atServer or network connection. Import it directly — it is intentionally
-**not** re-exported from `at_client.dart`.
+`at_client` ships a test-only library that lets you unit-test
+collection-backed services without a running atServer or network connection.
+Import it directly — it is intentionally **not** re-exported from
+`at_client.dart`.
 
 ---
 
@@ -31,8 +32,9 @@ import 'package:test/test.dart';
 
 ## The Three Injection Functions
 
-Each function builds an `AtCollection<T>` wired to injected streams instead of live
-server connections. You own the `StreamController` and push events when you want them.
+Each function builds an `AtCollection<T>` wired to injected streams instead
+of live server connections. You own the `StreamController` and push events
+when you want them.
 
 ### `collectionWithInjectedNotifications` — `EventSource.notifs` path
 
@@ -62,7 +64,8 @@ final collection = collectionWithInjectedDataEvents<T>(
 );
 ```
 
-Use this to test local write → event → UI update semantics (e.g., after a `create()`).
+Use this to test local write → event → UI update semantics (e.g., after
+a `create()`).
 
 ### `collectionWithInjectedBoth` — `EventSource.both` path
 
@@ -194,8 +197,9 @@ void main() {
 
 ### `clearFactoriesForTest()`
 
-Resets the process-global factory registry to an empty state. Call in `setUp()` or
-`tearDown()` to prevent cross-test pollution when different tests register different types:
+Resets the process-global factory registry to an empty state. Call in
+`setUp()` or `tearDown()` to prevent cross-test pollution when different
+tests register different types:
 
 ```dart
 setUp(() {
@@ -206,8 +210,8 @@ setUp(() {
 
 ### `handleNotificationForTest(collection, notification)`
 
-Directly routes a single `AtNotification` into the collection's notification handler.
-Use when you want finer control than pushing to the broadcast stream:
+Directly routes a single `AtNotification` into the collection's notification
+handler. Use when you want finer control than pushing to the broadcast stream:
 
 ```dart
 await handleNotificationForTest(todos, myNotification);
@@ -224,15 +228,16 @@ await handleDataEventForTest(todos, myDataEvent);
 
 ### `clearMissingFactoryWarningsForTest()`
 
-Clears the set of already-warned missing-factory type tags. Prevents log spam when a test
-intentionally exercises the "unknown typeTag" path multiple times.
+Clears the set of already-warned missing-factory type tags. Prevents log
+spam when a test intentionally exercises the "unknown typeTag" path multiple
+times.
 
 ---
 
 ## Mocking `AtClient` for Read Operations
 
-Collection read methods (`getItems`, `getOrNull`, etc.) call through to `atClient.get()`
-and `atClient.getAtKeys()`. Stub these with `mocktail`:
+Collection read methods (`getItems`, `getOrNull`, etc.) call through to
+`atClient.get()` and `atClient.getAtKeys()`. Stub these with `mocktail`:
 
 ```dart
 // Return specific keys from getAtKeys
@@ -272,10 +277,12 @@ The SDK's own test suite demonstrates every pattern in detail:
 
 ## Important Notes
 
-- The test hooks file (`collections_test_hooks.dart`) is **NOT** exported from
-  `at_client.dart` — you must import it by path. The `@visibleForTesting` annotation
-  means production code that accidentally imports it gets an analyzer warning.
-- `collectionWithInjectedNotifications` bypasses the cached-per-namespace instance
-  management. Each call returns a fresh instance — safe for test isolation.
-- Always call `clearFactoriesForTest()` in `setUp()` when your tests register factories,
-  to prevent one test's registrations from bleeding into the next.
+- The test hooks file (`collections_test_hooks.dart`) is **NOT** exported
+  from `at_client.dart` — you must import it by path. The `@visibleForTesting`
+  annotation means production code that accidentally imports it gets an
+  analyzer warning.
+- `collectionWithInjectedNotifications` bypasses the cached-per-namespace
+  instance management. Each call returns a fresh instance — safe for test
+  isolation.
+- Always call `clearFactoriesForTest()` in `setUp()` when your tests register
+  factories, to prevent one test's registrations from bleeding into the next.

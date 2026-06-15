@@ -1,4 +1,4 @@
-<!-- verified: at_client ^3.12.0, at_client_flutter ^1.1.2 — update on next minor release -->
+<!-- verified: at_client X.X.X / at_client_flutter X.X.X -->
 
 # Package Map: Which Packages to Add
 
@@ -16,9 +16,9 @@ dependencies:
   at_client: ^3.12.0
 ```
 
-`at_client` is the core Dart SDK. It provides `AtClient`, `AtCollection<T>`, `CItem<T>`,
-`Query<T>`, `NotificationService`, `SyncService`, and all collection-related APIs.
-Required for every app that uses the atProtocol.
+`at_client` is the core Dart SDK. It provides `AtClient`, `AtCollection<T>`,
+`CItem<T>`, `Query<T>`, `NotificationService`, `SyncService`, and all
+collection-related APIs. Required for every app that uses the atProtocol.
 
 ---
 
@@ -29,17 +29,20 @@ dependencies:
   at_client_flutter: ^1.1.2   # re-exports at_client — one dep is enough
 ```
 
-`at_client_flutter` re-exports `at_client` in full (`export 'package:at_client/at_client.dart'`),
-so a Flutter app only needs this one entry. You do not need to add `at_client` separately.
+`at_client_flutter` re-exports `at_client` in full
+(`export 'package:at_client/at_client.dart'`), so a Flutter app only needs this
+one entry. You do not need to add `at_client` separately.
 
 `at_client_flutter` adds:
 
-- Auth dialogs: `AtSignSelectionDialog`, `PkamDialog`, `CramDialog`, `RegistrarCramDialog`,
-  `AtKeysFileDialog`, `ApkamActivationDialog`, `ApkamDialog`
+- Auth dialogs: `AtSignSelectionDialog`, `PkamDialog`, `CramDialog`,
+  `RegistrarCramDialog`, `AtKeysFileDialog`, `ApkamActivationDialog`,
+  `ApkamDialog`
 - `KeychainStorage` — device keychain (iOS Keychain, Android Keystore)
 - `KeychainAtKeysIo` — read/write keys from the device keychain
 - `AtClientPreference`, `AtClientManager` — Flutter-aware client lifecycle
-- Flutter extensions on core types (`import 'package:at_client_flutter/extensions.dart'`)
+- Flutter extensions on core types
+  (`import 'package:at_client_flutter/extensions.dart'`)
 
 ---
 
@@ -51,8 +54,9 @@ dependencies:
 ```
 
 `at_auth` provides `AtAuthRequest`, `AuthResponse`, `AtOnboardingRequest`,
-`AtEnrollmentResponse`, `RegistrarService`, and `AtRootDomain`. Required if you are
-building custom auth flows or using APKAM enrollment outside the dialog helpers.
+`AtEnrollmentResponse`, `RegistrarService`, and `AtRootDomain`. Required if you
+are building custom auth flows or using APKAM enrollment outside the dialog
+helpers.
 
 For standard Flutter apps using the `at_client_flutter` dialogs, `at_auth` is a
 transitive dependency — you may not need to add it explicitly.
@@ -66,9 +70,10 @@ dependencies:
   at_chops: ^3.0.0
 ```
 
-Add `at_chops` only if your app performs direct cryptographic operations (encrypt,
-decrypt, sign, verify, hash). Most apps never need this — `AtCollection<T>` and the
-auth dialogs handle all necessary cryptography internally.
+Add `at_chops` only if your app performs direct cryptographic operations
+(encrypt, decrypt, sign, verify, hash). Most apps never need this —
+`AtCollection<T>` and the auth dialogs handle all necessary cryptography
+internally.
 
 ---
 
@@ -80,8 +85,8 @@ dependencies:
   at_cli_commons: ^3.1.0
 ```
 
-`at_cli_commons` provides helpers for Dart CLI/server apps: flag parsing, key loading,
-`AtClient` setup for headless environments. Not needed in Flutter apps.
+`at_cli_commons` provides helpers for Dart CLI/server apps: flag parsing, key
+loading, `AtClient` setup for headless environments. Not needed in Flutter apps.
 
 ---
 
@@ -95,8 +100,9 @@ dependencies:
 
 ### `at_backupkey_flutter` ⛔
 
-**Deleted.** The package has been removed from the repository. Copy the backup-key
-snippet from `packages/at_client_flutter/example/lib/snippets/at_backup_key.dart`
+**Deleted.** The package has been removed from the repository. Copy the
+backup-key snippet from
+`packages/at_client_flutter/example/lib/snippets/at_backup_key.dart`
 directly into your own app.
 
 ### `at_invitation_flutter` ⛔
@@ -127,16 +133,16 @@ Their functionality will eventually move into example application code.
 | `at_notify_flutter` | Migration in progress |
 | `at_login_flutter` | Minimal / not fully published |
 
-**Recommendation:** Browse the source of these packages for implementation ideas,
-then implement the functionality directly in your app rather than taking a dependency
-on packages mid-migration.
+**Recommendation:** Browse the source of these packages for implementation
+ideas, then implement the functionality directly in your app rather than taking
+a dependency on packages mid-migration.
 
 ---
 
 ## Supporting / Utility Packages (usually transitive)
 
-These are typically pulled in as transitive dependencies. You only need to pin them
-directly if you're using their types directly in your own API.
+These are typically pulled in as transitive dependencies. You only need to pin
+them directly if you're using their types directly in your own API.
 
 | Package | Version | When to pin explicitly |
 | --------- | --------- | ---------------------- |

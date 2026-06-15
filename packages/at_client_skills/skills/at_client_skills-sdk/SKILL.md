@@ -1,17 +1,18 @@
 ---
 name: at_client_skills-sdk
 description: >
-  Use this skill when a developer is building a Dart or Flutter app that depends on
-  at_client or at_client_flutter from pub.dev, stores or shares data via the atProtocol,
-  needs onboarding (CRAM new-atSign, atKeys file, keychain, APKAM) or APKAM enrollment,
-  or asks about AtCollection<T>, CItem<T>, Query<T>, sub-collections, event streams,
-  read receipts, wherePath typed predicates, or watchWithTree deep hierarchies. Also use
-  when the developer asks which pub.dev packages to add, how to unit-test without a live
-  atServer, or whether to use AtCollection vs notifications+SQLite. Warns against
-  deprecated AtCollectionModel, at_common_flutter, at_backupkey_flutter,
+  Use this skill when a developer is building a Dart or Flutter app that
+  depends on at_client or at_client_flutter from pub.dev, stores or shares
+  data via the Atsign Protocol, needs onboarding (CRAM new-atSign, atKeys
+  file, keychain, APKAM) or APKAM enrollment, or asks about AtCollection<T>,
+  CItem<T>, Query<T>, sub-collections, event streams, read receipts, wherePath
+  typed predicates, or watchWithTree deep hierarchies. Also use when the
+  developer asks which pub.dev packages to add, how to unit-test without a
+  live atServer, or whether to use AtCollection vs notifications+SQLite. Warns
+  against deprecated AtCollectionModel, at_common_flutter, at_backupkey_flutter,
   at_invitation_flutter, at_sync_ui_flutter, and at_theme_flutter.
 license: BSD-3-Clause
-compatibility: Designed for Claude Code and any agent supporting the agentskills.io specification.
+compatibility: Claude Code and any agentskills.io-compatible agent.
 metadata:
   version: "1.0.0"
   last_modified: "Mon, 02 Jun 2026 00:00:00 GMT"
@@ -45,27 +46,31 @@ class MyModel extends AtCollectionModel { ... }  // @Deprecated("Use AtClient.co
 The entire `AtCollectionModel` hierarchy is annotated
 `@Deprecated("Use AtClient.collection for collection-style operations")`.
 
-> **If asked how to use `AtCollectionModel`:** do NOT show any `AtCollectionModel` code, even in a "before/deprecated" comparison. Show ONLY the `AtCollection<T>` pattern above, state it is deprecated, and quote the `@Deprecated` message.
+> **If asked how to use `AtCollectionModel`:** do NOT show any
+> `AtCollectionModel` code, even in a "before/deprecated" comparison. Show ONLY
+> the `AtCollection<T>` pattern above, state it is deprecated, and quote the
+> `@Deprecated` message.
 
-Read [references/01-deprecation-guide.md](references/01-deprecation-guide.md) for the full
-migration table from old to new API.
+Read [references/01-deprecation-guide.md](references/01-deprecation-guide.md)
+for the full migration table from old to new API.
 
 ---
 
 ## 2. Package Map
 
-| Use case | pubspec.yaml dependencies |
-| ---------- | -------------------------- |
-| Dart CLI / server / IoT | `at_client: ^3.12.0` |
-| Flutter app | `at_client_flutter: ^1.1.2` (`at_client_flutter` re-exports `at_client` — one dep is enough) |
-| APKAM / custom auth flows | above + `at_auth: ^3.1.0` |
-| Raw cryptographic operations | above + `at_chops: ^3.0.0` |
-| CLI / headless Dart | above + `at_cli_commons: ^3.1.0` |
+| Use case                     | pubspec.yaml dependencies                                                                    |
+| ---------------------------- | -------------------------------------------------------------------------------------------- |
+| Dart CLI / server / IoT      | `at_client: ^3.12.0`                                                                         |
+| Flutter app                  | `at_client_flutter: ^1.1.2` (`at_client_flutter` re-exports `at_client` — one dep is enough) |
+| APKAM / custom auth flows    | above + `at_auth: ^3.1.0`                                                                    |
+| Raw cryptographic operations | above + `at_chops: ^3.0.0`                                                                   |
+| CLI / headless Dart          | above + `at_cli_commons: ^3.1.0`                                                             |
 
-**Never add:** `at_common_flutter`, `at_backupkey_flutter`, `at_invitation_flutter`, `at_sync_ui_flutter`, `at_theme_flutter`
+**Never add:** `at_common_flutter`, `at_backupkey_flutter`,
+`at_invitation_flutter`, `at_sync_ui_flutter`, `at_theme_flutter`
 
-Read [references/06-package-map.md](references/06-package-map.md) for per-use-case
-checklists and the full list of in-migration packages to avoid.
+Read [references/06-package-map.md](references/06-package-map.md) for
+per-use-case checklists and the full list of in-migration packages to avoid.
 
 ---
 
@@ -84,21 +89,25 @@ final todos = await atClient.collection<Todo>(
 );
 ```
 
-- **Cached per `(namespace, eventSource)` pair** — same namespace + different eventSource = separate instances
-- **`namespace` must contain `.`** (e.g. `'todos.my_app'`) — throws `ArgumentError` otherwise
-- **`typeTag` is mandatory when `fromJson` is supplied** — always a string literal, never
-  derived from `T.toString()` (minifier renames types in release builds)
+- **Cached per `(namespace, eventSource)` pair** — same namespace + different
+  eventSource = separate instances
+- **`namespace` must contain `.`** (e.g. `'todos.my_app'`) — throws
+  `ArgumentError` otherwise
+- **`typeTag` is mandatory when `fromJson` is supplied** — always a string
+  literal, never derived from `T.toString()` (minifier renames types in
+  release builds)
 
 **EventSource:**
 
-| Value | Events seen |
-| ------- | ------------- |
-| `EventSource.data` | All local keystore mutations (requires `SyncService` running) |
-| `EventSource.notifs` | Cross-atSign writes via notification pipeline only |
-| `EventSource.both` | Both sources; same change may fire twice (no dedup); default |
+| Value                | Events seen                                                   |
+| -------------------- | ------------------------------------------------------------- |
+| `EventSource.data`   | All local keystore mutations (requires `SyncService` running) |
+| `EventSource.notifs` | Cross-atSign writes via notification pipeline only            |
+| `EventSource.both`   | Both sources; same change may fire twice (no dedup); default  |
 
-Read [references/02-atcollection-api.md](references/02-atcollection-api.md) for the complete
-API surface including `getDescendant`, `cleanupOrphans`, and `registerFactory`.
+Read [references/02-atcollection-api.md](references/02-atcollection-api.md) for
+the complete API surface including `getDescendant`, `cleanupOrphans`, and
+`registerFactory`.
 
 ---
 
@@ -147,8 +156,9 @@ todos.getItemsAsStream()
 
 ## 6. Query Builder
 
-Queries are **immutable** — each modifier returns a new `Query<T>`. Execution is always
-**on-device** (E2E encryption means the atServer cannot filter plaintext).
+Queries are **immutable** — each modifier returns a new `Query<T>`. Execution
+is always **on-device** (E2E encryption means the atServer cannot filter
+plaintext).
 
 ```dart
 final q = todos.query()
@@ -164,8 +174,8 @@ final any   = await q.any();
 final first = await q.firstOrNull();
 ```
 
-**Typed predicates (`wherePath`):** prefer over `.where()` when you want future push-down
-optimisation on indexed fields.
+**Typed predicates (`wherePath`):** prefer over `.where()` when you want future
+push-down optimisation on indexed fields.
 
 ```dart
 abstract class $Todo {
@@ -178,8 +188,9 @@ todos.query()
     .watch();
 ```
 
-Read [references/03-query-api.md](references/03-query-api.md) for all terminals (`distinct`,
-`groupBy`, `watchWithSub`, `watchWithTree`) and the full `PathField` operator list.
+Read [references/03-query-api.md](references/03-query-api.md) for all terminals
+(`distinct`, `groupBy`, `watchWithSub`, `watchWithTree`) and the full
+`PathField` operator list.
 
 ---
 
@@ -207,7 +218,12 @@ final leaf = await todos.getDescendant<Reply>(
 //    Cache the ancestry from the preceding CSubItemUpdated if you need it on delete.
 ```
 
-For 3+ levels use `watchWithTree` with `SubSpec<U>`. Each `TreeNode<T>` has a `parent` (`CItem<T>`) and `branches` (`Map<String, List<TreeNode<dynamic>>>`). When handling sub-collection events, `ancestry` is always **root-first**: `ancestry[0]` is the root ancestor, `ancestry.last` is the direct parent. Read [references/03-query-api.md](references/03-query-api.md) when working with deep hierarchies.
+For 3+ levels use `watchWithTree` with `SubSpec<U>`. Each `TreeNode<T>` has a
+`parent` (`CItem<T>`) and `branches` (`Map<String, List<TreeNode<dynamic>>>`).
+When handling sub-collection events, `ancestry` is always **root-first**:
+`ancestry[0]` is the root ancestor, `ancestry.last` is the direct parent.
+Read [references/03-query-api.md](references/03-query-api.md) when working with
+deep hierarchies.
 
 ---
 
@@ -231,9 +247,9 @@ late StreamSubscription<CItemUpdated> _sub;
 @override void dispose() { _sub.cancel(); super.dispose(); }
 ```
 
-Read [references/04-events-api.md](references/04-events-api.md) for all event class fields,
-the EventSource decision guide, and the ancestry ordering (root-first: `ancestry[0]` = root,
-`ancestry.last` = direct parent of the leaf).
+Read [references/04-events-api.md](references/04-events-api.md) for all event
+class fields, the EventSource decision guide, and the ancestry ordering
+(root-first: `ancestry[0]` = root, `ancestry.last` = direct parent of the leaf).
 
 ---
 
@@ -276,7 +292,8 @@ final response    = await PkamDialog.show(context,
 if (response?.isSuccessful == true) await _setupAtClient(authRequest, response!);
 ```
 
-**Post-auth setup (all flows — `AuthRequest` is the sealed base, works for all 4 flows):**
+**Post-auth setup (all flows — `AuthRequest` is the sealed base, works for
+all 4 flows):**
 
 ```dart
 Future<void> _setupAtClient(AuthRequest authRequest, AuthResponse response) async {
@@ -299,8 +316,9 @@ Future<void> _setupAtClient(AuthRequest authRequest, AuthResponse response) asyn
 AtClientManager.getInstance().reset();  // logout
 ```
 
-Read [references/05-flutter-auth.md](references/05-flutter-auth.md) for all 4 flows
-(including Flow 1: CRAM new-atSign and Flow 4: APKAM enrollment) with complete code.
+Read [references/05-flutter-auth.md](references/05-flutter-auth.md) for all 4
+flows (including Flow 1: CRAM new-atSign and Flow 4: APKAM enrollment) with
+complete code.
 
 ---
 
@@ -320,23 +338,26 @@ class Todo {
 AtCollection.registerFactory<Todo>(Todo.fromJson, typeTag: 'Todo');
 ```
 
-- `typeTag` must be a string literal — never `T.toString()` (breaks in release builds)
-- Primitives (`String`, `Map<String,dynamic>`, `List`, `Uint8List`) need no registration
+- `typeTag` must be a string literal — never `T.toString()` (breaks in release
+builds)
+- Primitives (`String`, `Map<String,dynamic>`, `List`, `Uint8List`) need no
+registration
 - Use `typeTag: 'binary'` for `Uint8List`
 
-Read [references/08-domain-object-patterns.md](references/08-domain-object-patterns.md) for
-polymorphic types, schema evolution, and the full re-registration rules.
+<!-- pyml disable-next-line md013-->
+Read [references/08-domain-object-patterns.md](references/08-domain-object-patterns.md)
+for polymorphic types, schema evolution, and the full re-registration rules.
 
 ---
 
 ## 12. Architecture Decision: AtCollection vs Notifications+SQLite
 
-| | `AtCollection<T>` | Notifications + SQLite |
-| --- | --- | --- |
-| **Data shape** | Typed records, discrete items | High-frequency events / telemetry |
-| **Persistence** | Synced via atServer | Local-only, from notifications |
-| **Volume** | Low-medium (hundreds-thousands) | High (per-second metrics, logs) |
-| **Example** | Todos, notes, contacts | Live dashboard, analytics |
+|                 | `AtCollection<T>`               | Notifications + SQLite            |
+| --------------- | ------------------------------- | --------------------------------- |
+| **Data shape**  | Typed records, discrete items   | High-frequency events / telemetry |
+| **Persistence** | Synced via atServer             | Local-only, from notifications    |
+| **Volume**      | Low-medium (hundreds-thousands) | High (per-second metrics, logs)   |
+| **Example**     | Todos, notes, contacts          | Live dashboard, analytics         |
 
 These patterns are complementary and can coexist in the same app.
 
@@ -359,29 +380,32 @@ final coll = collectionWithInjectedNotifications<Todo>(
 clearFactoriesForTest();  // call in setUp() to prevent cross-test pollution
 ```
 
-Available helpers: `collectionWithInjectedNotifications`, `collectionWithInjectedDataEvents`,
-`collectionWithInjectedBoth`, `handleNotificationForTest`, `handleDataEventForTest`,
-`clearFactoriesForTest`, `clearMissingFactoryWarningsForTest`
+Available helpers: `collectionWithInjectedNotifications`,
+`collectionWithInjectedDataEvents`,
+`collectionWithInjectedBoth`, `handleNotificationForTest`,
+`handleDataEventForTest`,`clearFactoriesForTest`,
+`clearMissingFactoryWarningsForTest`
 
-Read [references/09-testing-patterns.md](references/09-testing-patterns.md) for the
-complete test template including the correct `AtNotification` constructor and
-MockAtClient stubs.
+Read [references/09-testing-patterns.md](references/09-testing-patterns.md) for
+the complete test template including the correct `AtNotification` constructor
+and MockAtClient stubs.
 
 ---
 
 ## 14. Deprecated — Do Not Use
 
-| Avoid | Use instead |
-| ------- | ------------- |
-| `AtCollectionModel` / `AtJsonCollectionModel` | `AtCollection<T>` via `atClient.collection(...)` |
-| `at_common_flutter` | `at_client_flutter` |
-| `at_backupkey_flutter` | Copy `at_client_flutter` backup-key snippet |
-| `at_invitation_flutter` | Copy `at_client_flutter` invitation snippet |
-| `at_sync_ui_flutter`, `at_theme_flutter` | Deprecated — do not use |
-| `at_chat_flutter`, `at_contacts_flutter`, `at_contacts_group_flutter`, `at_events_flutter`, `at_follows_flutter`, `at_location_flutter`, `at_notify_flutter` | In migration — copy example code instead |
+| Avoid                                                                                                                                                        | Use instead                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| `AtCollectionModel` / `AtJsonCollectionModel`                                                                                                                | `AtCollection<T>` via `atClient.collection(...)` |
+| `at_common_flutter`                                                                                                                                          | `at_client_flutter`                              |
+| `at_backupkey_flutter`                                                                                                                                       | Copy `at_client_flutter` backup-key snippet      |
+| `at_invitation_flutter`                                                                                                                                      | Copy `at_client_flutter` invitation snippet      |
+| `at_sync_ui_flutter`, `at_theme_flutter`                                                                                                                     | Deprecated — do not use                          |
+| `at_chat_flutter`, `at_contacts_flutter`, `at_contacts_group_flutter`, `at_events_flutter`, `at_follows_flutter`, `at_location_flutter`, `at_notify_flutter` | In migration — copy example code instead         |
 
-Read [references/01-deprecation-guide.md](references/01-deprecation-guide.md) for
-the full migration table from old `AtCollectionModel` patterns to `AtCollection<T>`.
+Read [references/01-deprecation-guide.md](references/01-deprecation-guide.md)
+for the full migration table from old `AtCollectionModel` patterns to
+`AtCollection<T>`.
 
 ---
 
@@ -393,9 +417,9 @@ the full migration table from old `AtCollectionModel` patterns to `AtCollection<
 - `packages/at_client_flutter/examples/dockerstats/` — notifications + SQLite
 
 **If asked about migrating from `atClient.put()` / `atClient.get()` to
-`AtCollection<T>`:** Both APIs share the same underlying atServer keystore but use
-different key-naming conventions — `AtCollection` data will not appear in raw
-`get()` queries and vice versa. Migration is non-trivial: read existing data with
-the raw API and re-write it through `AtCollection<T>`. Always test in a staging
-environment before touching production data.
-A formal migration guide is **coming in skill v2.0**.
+`AtCollection<T>`:** Both APIs share the same underlying atServer keystore but
+use different key-naming conventions — `AtCollection` data will not appear in
+raw `get()` queries and vice versa. Migration is non-trivial: read existing
+data with the raw API and re-write it through `AtCollection<T>`. Always test
+in a staging environment before touching production data. A formal migration
+guide is **coming in skill v2.0**.

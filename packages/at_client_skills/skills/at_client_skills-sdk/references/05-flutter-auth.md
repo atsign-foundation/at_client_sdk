@@ -91,7 +91,8 @@ Future<void> loginWithFile(BuildContext context) async {
 ## Flow 3: Device Keychain (Returning User)
 
 Use for fast re-login on a device that has already onboarded an atSign.
-Reads existing atSigns from the device keychain (iOS Keychain / Android Keystore).
+Reads existing atSigns from the device keychain (iOS Keychain /
+Android Keystore).
 
 ```dart
 Future<void> loginWithKeychain(BuildContext context) async {
@@ -132,7 +133,8 @@ Future<void> loginWithKeychain(BuildContext context) async {
 ## Flow 4: APKAM — New Device Enrollment
 
 Use when a user wants to add a new device to an existing atSign.
-The manager device (another phone already authenticated) must approve the enrollment.
+The manager device (another phone already authenticated) must approve
+the enrollment.
 
 ```dart
 Future<void> loginWithApkam(BuildContext context) async {
@@ -214,8 +216,8 @@ Future<void> _setupAtClient(
 | `rootDomain` | `String` | atServer root domain (from `authRequest.rootDomain.rootDomain`) |
 | `rootPort` | `int` | atServer root port (from `authRequest.rootDomain.rootPort`) |
 
-**Important:** Use `atChops` and `atLookUp` from the `response` (not freshly created) —
-these are already authenticated instances.
+**Important:** Use `atChops` and `atLookUp` from the `response` (not freshly
+created) — these are already authenticated instances.
 
 ---
 
@@ -238,6 +240,7 @@ final atClient = AtClientManager.getInstance().atClient;
 
 ## Canonical Examples
 
+<!-- pyml disable-num-lines 2 md013-->
 - [packages/at_client_flutter/examples/todos/lib/onboarding.dart](../../packages/at_client_flutter/examples/todos/lib/onboarding.dart) — Flows 2, 3, 4 with `_setupAtClient`
 - [packages/at_client_flutter/example/lib/walkthrough.dart](../../packages/at_client_flutter/example/lib/walkthrough.dart) — All 4 flows in one file
 

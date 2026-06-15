@@ -25,8 +25,8 @@ Both patterns are valid and complementary — a single app can use both at once.
 
 ## Pattern 1: AtCollection\<T>
 
-Best for **discrete, addressable records** that need to be created, updated, deleted, and
-shared with specific people.
+Best for **discrete, addressable records** that need to be created, updated,
+deleted, and shared with specific people.
 
 ```dart
 // Publisher: create a todo and share it with @bob
@@ -60,8 +60,9 @@ StreamBuilder<List<CItem<Todo>>>(
 
 ## Pattern 2: Notifications + SQLite (the Dockerstats Pattern)
 
-Best for **high-frequency streaming data** where individual samples have no persistent
-identity and the value comes from aggregate views across many samples.
+Best for **high-frequency streaming data** where individual samples have no
+persistent identity and the value comes from aggregate views across many
+samples.
 
 ### Publisher side
 
@@ -109,7 +110,8 @@ final rows = await db.rawQuery(
 
 ## Canonical Example
 
-The dockerstats example in the SDK demonstrates the full Notifications + SQLite pattern:
+The dockerstats example in the SDK demonstrates the full Notifications +
+SQLite pattern:
 
 - **Publisher**: `packages/at_client/example/bin/dockerstats_publish.dart`  
   Uses `atClient.notificationService.send()` in a polling loop.  
@@ -122,7 +124,8 @@ The dockerstats example in the SDK demonstrates the full Notifications + SQLite 
 
 ## Hybrid: Both in One App
 
-The two patterns coexist naturally. For example, a monitoring dashboard might use:
+The two patterns coexist naturally. For example, a monitoring dashboard
+might use:
 
 - `AtCollection<AlertRule>` for user-configured alert thresholds  
   (discrete, shared, editable, synced across devices)

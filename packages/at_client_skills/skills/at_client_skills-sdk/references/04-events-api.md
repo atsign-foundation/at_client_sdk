@@ -4,8 +4,9 @@
 
 ## Event Source Overview
 
-`AtCollection<T>` surfaces all state changes as typed events on broadcast-style streams.
-There are two sources of events (controlled by `EventSource` at collection creation):
+`AtCollection<T>` surfaces all state changes as typed events on
+broadcast-style streams. There are two sources of events (controlled by
+`EventSource` at collection creation):
 
 | `EventSource`        | What fires events                                                                                                                            |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -63,8 +64,9 @@ final class CItemAvailable extends CEvent {
 }
 ```
 
-Fires when an item's `availableAt` timestamp passes. Subscribe to `availableEvents` then
-call `collection.getOrNull(event.id, event.owner)` to fetch the now-visible item.
+Fires when an item's `availableAt` timestamp passes. Subscribe to
+`availableEvents` then call `collection.getOrNull(event.id, event.owner)` to
+fetch the now-visible item.
 
 ### `CItemExpiringSoon`
 
@@ -107,7 +109,8 @@ final class CAncestor {
 ```
 
 **Ancestry ordering:** `ancestry` is a **root-to-direct-parent** chain.
-`ancestry[0]` is the **root ancestor**; `ancestry.last` is the **direct parent** of the leaf.
+`ancestry[0]` is the **root ancestor**; `ancestry.last` is the
+**direct parent** of the leaf.
 
 Example: for a reply on a comment on a post:
 
@@ -115,7 +118,8 @@ Example: for a reply on a comment on a post:
 - `ancestry[1]` = the comment (direct parent of the reply)
 - `event.id` = the reply id
 
-To fetch the leaf, use `collection.getDescendant(ancestry: event.ancestry, id: event.id, ...)`.
+To fetch the leaf, use
+`collection.getDescendant(ancestry: event.ancestry, id: event.id, ...)`.
 
 ### `CSubItemDeleted`
 
@@ -127,13 +131,15 @@ final class CSubItemDeleted extends CEvent {
 }
 ```
 
-> **Pitfall:** `CAncestor.owner` inside `ancestry` is **always `null`** on `CSubItemDeleted`
-> events — the sub-item is gone by the time the notification arrives, so there is no envelope
-> to recover parent owners from. This means `getDescendant()` cannot be called on a delete
-> event because it requires non-null ancestor owners.
+> **Pitfall:** `CAncestor.owner` inside `ancestry` is **always `null`** on
+> `CSubItemDeleted` events — the sub-item is gone by the time the notification
+> arrives, so there is no envelope to recover parent owners from. This means
+> `getDescendant()` cannot be called on a delete event because it requires
+> non-null ancestor owners.
 >
-> **Fix:** Cache the last `CSubItemUpdated` for each `(id, subName)` pair so you can reuse
-> the populated `ancestry` (with non-null owners) when the corresponding delete fires.
+> **Fix:** Cache the last `CSubItemUpdated` for each `(id, subName)` pair so
+> you can reuse the populated `ancestry` (with non-null owners) when the
+> corresponding delete fires.
 
 ---
 
@@ -157,16 +163,19 @@ All events. Useful for debugging or aggregate reacting.
 
 **Getters vs methods:**  
 Parameterless event surfaces are **getters** (`updates`, `deletes`, etc.).  
-Parameterised surfaces are **methods** (`watch()` — filter by event type; `expiringSoonEvents(leadTime:)` — per-call lead time).
+Parameterised surfaces are **methods** (`watch()` — filter by event type;
+`expiringSoonEvents(leadTime:)` — per-call lead time).
 
 ### `availableEvents` scheduler
 
-Lazy-starts a single per-collection scheduler on first access. Runs for the lifetime of the collection.
-Enrolls existing items with future `availableAt` at startup. Re-enrolls items on every `CItemUpdated`.
+Lazy-starts a single per-collection scheduler on first access. Runs for the
+lifetime of the collection. Enrolls existing items with future `availableAt`
+at startup. Re-enrolls items on every `CItemUpdated`.
 
 ### `expiringSoonEvents({required Duration leadTime})`
 
-Starts an **independent** scheduler per call — each caller can have a different `leadTime`.
+Starts an **independent** scheduler per call — each caller can have a
+different `leadTime`.
 
 ---
 
@@ -221,7 +230,8 @@ Are duplicate events acceptable?
 
 ## Reading After a CSubItemUpdated
 
-When you receive a `CSubItemUpdated` event, use `getDescendant` to fetch the leaf:
+When you receive a `CSubItemUpdated` event, use `getDescendant` to fetch
+the leaf:
 
 ```dart
 collection.subUpdates.listen((event) async {
@@ -241,6 +251,7 @@ collection.subUpdates.listen((event) async {
 Do NOT construct a flat collection at the composed namespace to read sub-items —
 reads will return null even though notifications match.
 
-> **Note on ancestry ordering:** `ancestry` is root-first. `ancestry[0]` is the outermost
-> ancestor; `ancestry.last` is the direct parent of the leaf. To filter events to a specific
-> parent, check `event.ancestry.last.id == myParentItem.id`.
+> **Note on ancestry ordering:** `ancestry` is root-first. `ancestry[0]` is the
+> outermost ancestor; `ancestry.last` is the direct parent of the leaf. To
+> filter events to a specific parent, check
+> `event.ancestry.last.id == myParentItem.id`.
