@@ -106,5 +106,5 @@ poetry.lock
 .serena
 .claude
 
-# Working notes / audits — not part of the published packages
-packages/PHASE6_CONSUMERS_MIGRATION_AUDIT.md
+# Temporary working docs (audits, plans, drafts) — not part of any package
+/untracked/
