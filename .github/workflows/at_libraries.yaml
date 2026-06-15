@@ -112,6 +112,8 @@ jobs:
           make install_sw
 
       - name: Verify OpenSSL build supports ML-KEM and ML-DSA
+        env:
+          LD_LIBRARY_PATH: ${{ env.OPENSSL_INSTALL_DIR }}/lib
         run: |
           OPENSSL="${{ env.OPENSSL_INSTALL_DIR }}/bin/openssl"
           echo "OpenSSL version: $("${OPENSSL}" version)"
