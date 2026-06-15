@@ -56,7 +56,8 @@ class VerbSyntax {
       r'(:ivNonce:(?<ivNonce>[^:@\s]+))?'
       r'(:skeEncKeyName:(?<skeEncKeyName>[^:@\s]+))?'
       r'(:skeEncAlgo:(?<skeEncAlgo>[^:@\s]+))?'
-      r'(:immutable:(?<immutable>true|false))?';
+      r'(:immutable:(?<immutable>true|false))?'
+      r'(:appMetadata:(?<appMetadata>[^:@\s]+))?';
 
   static const update = r'^update'
       r'(:nc(?<noCommit>))?'

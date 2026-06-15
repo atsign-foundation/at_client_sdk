@@ -190,6 +190,30 @@ void main() {
           params[AtConstants.sharedKeyEncryptedEncryptingKeyName], 'ske_ekn');
       expect(params[AtConstants.sharedKeyEncryptedEncryptingAlgo], 'ske_ea');
     });
+
+    test('notify command with app metadata', () {
+      final appMetadata = AppMetadata(providerId: 'test_provider', additional: {
+        'encKeyName': 'key_12345.__shared_keys.wavi',
+        'encAlgo': 'test_algo',
+      });
+      final encodedAppMetadata = Metadata.encodeAppMetadata(appMetadata);
+
+      var notifyVerbBuilder = NotifyVerbBuilder()
+        ..id = '123'
+        ..value = 'alice@atsign.com'
+        ..atKey.key = 'email.wavi'
+        ..atKey.sharedBy = '@alice'
+        ..atKey.sharedWith = '@bob'
+        ..atKey.metadata.appMetadata = appMetadata;
+
+      var command = notifyVerbBuilder.buildCommand();
+      expect(command, contains(':appMetadata:$encodedAppMetadata'));
+
+      var params = VerbUtil.getVerbParam(VerbSyntax.notify, command.trim())!;
+      expect(params[AtConstants.appMetadata], encodedAppMetadata);
+      expect(Metadata.decodeAppMetadata(params[AtConstants.appMetadata]),
+          appMetadata);
+    });
   });
 
   try {
