@@ -37,6 +37,18 @@ DynamicLibrary? tryLoadLibCrypto({StringBuffer? loadedPath}) {
       loadedPath?.write(envPath);
       return lib;
     }
+    // The env var was set but the path failed to open. The most common cause
+    // is pointing at a versioned symlink (e.g. libcrypto.so.3): the dynamic
+    // linker resolves its baked-in SONAME against system paths and may find an
+    // older system OpenSSL instead of the intended one.
+    // Fix: set $_envVar to the real .so file — resolve symlinks first:
+    //   export $_envVar=$(realpath /your/openssl/lib/libcrypto.so.3)
+    stderr.writeln(
+      'at_chops warning: $_envVar="$envPath" is set but could not be opened. '
+      'Falling back to system candidates. '
+      'Tip: if the path is a versioned symlink, point to the real file instead: '
+      'export $_envVar=\$(realpath "$envPath")',
+    );
   }
   for (final path in _candidates) {
     final lib = _tryOpen(path);
@@ -56,6 +68,19 @@ DynamicLibrary? tryLoadLibCrypto({StringBuffer? loadedPath}) {
 /// Call this before constructing [MlKem768FfiAlgo] to gate FFI tests or
 /// runtime fallback decisions.
 bool libCryptoSupportsMlKem768(DynamicLibrary lib) {
+  return _libCryptoSupportsAlgorithm(lib, 'ML-KEM-768');
+}
+
+/// Returns `true` when [lib] supports the ML-DSA-65 algorithm.
+///
+/// ML-DSA-65 was added to the OpenSSL default provider in OpenSSL 3.3.
+/// Call this before constructing [MlDsa65FfiAlgo] to gate FFI tests or
+/// runtime fallback decisions.
+bool libCryptoSupportsMlDsa65(DynamicLibrary lib) {
+  return _libCryptoSupportsAlgorithm(lib, 'ML-DSA-65');
+}
+
+bool _libCryptoSupportsAlgorithm(DynamicLibrary lib, String algorithmName) {
   try {
     final ctxNewFromName = lib.lookupFunction<
         Pointer<Void> Function(Pointer<Void>, Pointer<Utf8>, Pointer<Void>),
@@ -65,7 +90,7 @@ bool libCryptoSupportsMlKem768(DynamicLibrary lib) {
     final ctxFree = lib.lookupFunction<Void Function(Pointer<Void>),
         void Function(Pointer<Void>)>('EVP_PKEY_CTX_free');
 
-    final Pointer<Utf8> algName = 'ML-KEM-768'.toNativeUtf8();
+    final Pointer<Utf8> algName = algorithmName.toNativeUtf8();
     try {
       final Pointer<Void> ctx = ctxNewFromName(nullptr, algName, nullptr);
       if (ctx == nullptr) return false;

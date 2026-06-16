@@ -2,11 +2,13 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_iv.dart';
+import 'package:at_chops/src/algorithm/ml_dsa_65_pure_dart_algo.dart';
 import 'package:at_chops/src/algorithm/ml_kem_768_pure_dart_algo.dart';
 import 'package:at_chops/src/algorithm/x25519_pure_dart_algo.dart';
 import 'package:at_chops/src/algorithm/x_wing_pure_dart_algo.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
 import 'package:at_chops/src/key/impl/at_encryption_key_pair.dart';
+import 'package:at_chops/src/key/impl/at_ml_dsa_65_key_pair.dart';
 import 'package:at_chops/src/key/impl/at_ml_kem_768_key_pair.dart';
 import 'package:at_chops/src/key/impl/at_pkam_key_pair.dart';
 import 'package:at_chops/src/key/impl/at_x25519_key_pair.dart';
@@ -96,6 +98,17 @@ class AtChopsUtil {
     final (publicKey: Uint8List pub, secretKey: Uint8List sk) =
         await XWingPureDartAlgo.instance.generateKeyPair();
     return AtXWingKeyPair.create(base64Encode(pub), base64Encode(sk));
+  }
+  
+  /// Generates an ML-DSA-65 key pair for post-quantum digital signatures.
+  ///
+  /// Backed by the pure-Dart ML-DSA-65 implementation (via `package:pqcrypto`).
+  /// Raw 1952-byte public key and 4032-byte secret key are base64-encoded.
+  /// Both keys are serializable and interoperable with the FFI backend.
+  static Future<AtMlDsa65KeyPair> generateMlDsa65KeyPair() async {
+    final (publicKey: Uint8List pub, secretKey: Uint8List sk) =
+        await MlDsa65PureDartAlgo.generateKeyPair();
+    return AtMlDsa65KeyPair.create(base64Encode(pub), base64Encode(sk));
   }
 
   /// Generates symmetric AES key based on [keyType]
