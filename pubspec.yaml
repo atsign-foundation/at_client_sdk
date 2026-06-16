@@ -37,7 +37,7 @@ dependencies:
   async: ^2.9.0
   at_base2e15: ^1.0.0
   at_file_saver: ^0.1.2
-  at_persistence_secondary_server: ^4.3.5
+  at_persistence_secondary_server: ^5.0.0
   at_persistence_spec: ^3.0.0
   at_utf7: ^1.0.0
   basic_utils: ^5.6.1
@@ -119,15 +119,3 @@ dev_dependencies:
   plugin_platform_interface: ^2.1.6
   test: ^1.25.0
   test_process: ^2.1.0
-
-# Temporary override: at_persistence_secondary_server 5.x is not yet published
-# to pub.dev. Resolve it from the at_server branch that introduces it
-# (atsign-foundation/at_server#2673, branch gkc-app-metadata). Remove this
-# override once at_persistence_secondary_server 5.x is published, so the
-# ^5.0.0 constraint resolves from pub.dev.
-dependency_overrides:
-  at_persistence_secondary_server:
-    git:
-      url: https://github.com/atsign-foundation/at_server.git
-      ref: gkc-app-metadata
-      path: packages/at_persistence_secondary_server
