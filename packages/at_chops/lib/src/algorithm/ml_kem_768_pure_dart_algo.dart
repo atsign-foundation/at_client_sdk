@@ -31,10 +31,15 @@ final class MlKem768PureDartAlgo implements AtKemAlgorithm {
     return (publicKey: pk, secretKey: sk);
   }
 
+  /// Encapsulate a fresh shared secret against [publicKey].
+  ///
+  /// Optionally accepts the 32-byte randomness [seed] (FIPS 203 `m`) for
+  /// deterministic encapsulation — testing only.
   @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
-      Uint8List publicKey) async {
-    final (Uint8List ct, Uint8List ss) = _kem.encapsulate(publicKey);
+      Uint8List publicKey,
+      [Uint8List? seed]) async {
+    final (Uint8List ct, Uint8List ss) = _kem.encapsulate(publicKey, seed);
     return (ciphertext: ct, sharedSecret: ss);
   }
 

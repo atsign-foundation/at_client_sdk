@@ -20,44 +20,41 @@ void main() {
       }
     });
 
-    test(
-      'DH round-trip via OpenSSL FFI',
-      () async {
-        final algo = X25519FfiAlgo.fromLib(lib!);
-        final aliceKp = await X25519FfiAlgo.fromLib(lib).generateKeyPair();
-        final bobKp = await X25519FfiAlgo.fromLib(lib).generateKeyPair();
+    test('DH round-trip via OpenSSL FFI', () async {
+      if (lib == null) {
+        fail('libcrypto not available on this host');
+      }
 
-        final Uint8List ss1 =
-            await algo.dh(aliceKp.privateKey, bobKp.publicKey);
-        final Uint8List ss2 =
-            await algo.dh(bobKp.privateKey, aliceKp.publicKey);
+      final algo = X25519FfiAlgo.fromLib(lib);
+      final aliceKp = await X25519FfiAlgo.fromLib(lib).generateKeyPair();
+      final bobKp = await X25519FfiAlgo.fromLib(lib).generateKeyPair();
 
-        expect(ss1, equals(ss2));
-        expect(ss1.length, equals(32));
-      },
-      skip: lib == null ? 'libcrypto not available on this host' : null,
-    );
+      final Uint8List ss1 = await algo.dh(aliceKp.privateKey, bobKp.publicKey);
+      final Uint8List ss2 = await algo.dh(bobKp.privateKey, aliceKp.publicKey);
 
-    test(
-      'Pure-Dart and FFI interop: same keys yield the same shared secret',
-      () async {
-        final pureAlgo = X25519PureDartAlgo.instance;
-        final ffiAlgo = X25519FfiAlgo.fromLib(lib!);
+      expect(ss1, equals(ss2));
+      expect(ss1.length, equals(32));
+    });
 
-        final AtX25519KeyPair alice =
-            await AtChopsUtil.generateX25519KeyPair();
-        final AtX25519KeyPair bob = await AtChopsUtil.generateX25519KeyPair();
+    test('Pure-Dart and FFI interop: same keys yield the same shared secret',
+        () async {
+      if (lib == null) {
+        fail('libcrypto not available on this host');
+      }
 
-        final Uint8List alicePriv =
-            base64Decode(alice.atPrivateKey.privateKey);
-        final Uint8List bobPub = base64Decode(bob.atPublicKey.publicKey);
+      final pureAlgo = X25519PureDartAlgo.instance;
+      final ffiAlgo = X25519FfiAlgo.fromLib(lib);
 
-        final Uint8List ssPure = await pureAlgo.dh(alicePriv, bobPub);
-        final Uint8List ssFfi = await ffiAlgo.dh(alicePriv, bobPub);
+      final AtX25519KeyPair alice = await AtChopsUtil.generateX25519KeyPair();
+      final AtX25519KeyPair bob = await AtChopsUtil.generateX25519KeyPair();
 
-        expect(ssPure, equals(ssFfi));
-      },
-      skip: lib == null ? 'libcrypto not available on this host' : null,
-    );
+      final Uint8List alicePriv = base64Decode(alice.atPrivateKey.privateKey);
+      final Uint8List bobPub = base64Decode(bob.atPublicKey.publicKey);
+
+      final Uint8List ssPure = await pureAlgo.dh(alicePriv, bobPub);
+      final Uint8List ssFfi = await ffiAlgo.dh(alicePriv, bobPub);
+
+      expect(ssPure, equals(ssFfi));
+    });
   });
 }

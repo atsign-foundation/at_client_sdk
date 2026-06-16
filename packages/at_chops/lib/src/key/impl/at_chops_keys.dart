@@ -1,7 +1,7 @@
-import 'package:at_chops/src/key/at_key_pair.dart';
 import 'package:at_chops/src/key/impl/at_encryption_key_pair.dart';
 import 'package:at_chops/src/key/impl/at_pkam_key_pair.dart';
 import 'package:at_chops/src/key/impl/at_signing_key_pair.dart';
+import 'package:at_chops/src/key/keys.dart';
 
 class AtChopsKeys {
   /// Default encryption key pair

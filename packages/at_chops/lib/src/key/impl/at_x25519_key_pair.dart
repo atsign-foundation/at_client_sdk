@@ -1,4 +1,4 @@
-import 'package:at_chops/src/key/at_key_pair.dart';
+import 'package:at_chops/src/key/keys.dart';
 
 /// X25519 key pair used for Diffie–Hellman key agreement.
 ///

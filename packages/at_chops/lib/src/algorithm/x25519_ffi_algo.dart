@@ -34,22 +34,26 @@ final class X25519FfiAlgo implements AtKeyAgreementAlgorithm {
         'EVP_PKEY_CTX_new');
     _ctxFree = _lib.lookupFunction<EvpPkeyCtxFreeNative, EvpPkeyCtxFreeDart>(
         'EVP_PKEY_CTX_free');
-    _pkeyFree = _lib.lookupFunction<EvpPkeyFreeNative, EvpPkeyFreeDart>(
-        'EVP_PKEY_free');
-    _keygenInit = _lib.lookupFunction<EvpPkeyKeygenInitNative,
-        EvpPkeyKeygenInitDart>('EVP_PKEY_keygen_init');
+    _pkeyFree = _lib
+        .lookupFunction<EvpPkeyFreeNative, EvpPkeyFreeDart>('EVP_PKEY_free');
+    _keygenInit =
+        _lib.lookupFunction<EvpPkeyKeygenInitNative, EvpPkeyKeygenInitDart>(
+            'EVP_PKEY_keygen_init');
     _keygen = _lib.lookupFunction<EvpPkeyKeygenNative, EvpPkeyKeygenDart>(
         'EVP_PKEY_keygen');
-    _getRawPublicKey = _lib.lookupFunction<EvpPkeyGetRawKeyNative,
-        EvpPkeyGetRawKeyDart>('EVP_PKEY_get_raw_public_key');
-    _getRawPrivateKey = _lib.lookupFunction<EvpPkeyGetRawKeyNative,
-        EvpPkeyGetRawKeyDart>('EVP_PKEY_get_raw_private_key');
+    _getRawPublicKey =
+        _lib.lookupFunction<EvpPkeyGetRawKeyNative, EvpPkeyGetRawKeyDart>(
+            'EVP_PKEY_get_raw_public_key');
+    _getRawPrivateKey =
+        _lib.lookupFunction<EvpPkeyGetRawKeyNative, EvpPkeyGetRawKeyDart>(
+            'EVP_PKEY_get_raw_private_key');
     _newRawPrivateKey = _lib.lookupFunction<EvpPkeyNewRawPrivateKeyNative,
         EvpPkeyNewRawPrivateKeyDart>('EVP_PKEY_new_raw_private_key');
     _newRawPublicKey = _lib.lookupFunction<EvpPkeyNewRawPublicKeyNative,
         EvpPkeyNewRawPublicKeyDart>('EVP_PKEY_new_raw_public_key');
-    _deriveInit = _lib.lookupFunction<EvpPkeyDeriveInitNative,
-        EvpPkeyDeriveInitDart>('EVP_PKEY_derive_init');
+    _deriveInit =
+        _lib.lookupFunction<EvpPkeyDeriveInitNative, EvpPkeyDeriveInitDart>(
+            'EVP_PKEY_derive_init');
     _deriveSetPeer = _lib.lookupFunction<EvpPkeyDeriveSetPeerNative,
         EvpPkeyDeriveSetPeerDart>('EVP_PKEY_derive_set_peer');
     _derive = _lib.lookupFunction<EvpPkeyDeriveNative, EvpPkeyDeriveDart>(
@@ -107,8 +111,8 @@ final class X25519FfiAlgo implements AtKeyAgreementAlgorithm {
     try {
       final Pointer<Uint8> peerBuf = calloc<Uint8>(peerPublicKey.length);
       peerBuf.asTypedList(peerPublicKey.length).setAll(0, peerPublicKey);
-      final Pointer<EVP_PKEY> peerKey = _newRawPublicKey(
-          nidX25519, nullptr, peerBuf, peerPublicKey.length);
+      final Pointer<EVP_PKEY> peerKey =
+          _newRawPublicKey(nidX25519, nullptr, peerBuf, peerPublicKey.length);
       calloc.free(peerBuf);
       if (peerKey == nullptr) {
         throw StateError('EVP_PKEY_new_raw_public_key failed');
@@ -121,6 +125,26 @@ final class X25519FfiAlgo implements AtKeyAgreementAlgorithm {
       }
     } finally {
       _pkeyFree(myKey);
+    }
+  }
+
+  /// Derive the X25519 public key for a given 32-byte [privateKey], via OpenSSL.
+  ///
+  /// Used by the X-Wing FFI backend to recover `pk_X` from the seed-expanded
+  /// X25519 secret during decapsulation.
+  Uint8List publicKeyFromPrivate(Uint8List privateKey) {
+    final Pointer<Uint8> privBuf = calloc<Uint8>(privateKey.length);
+    privBuf.asTypedList(privateKey.length).setAll(0, privateKey);
+    final Pointer<EVP_PKEY> key =
+        _newRawPrivateKey(nidX25519, nullptr, privBuf, privateKey.length);
+    calloc.free(privBuf);
+    if (key == nullptr) {
+      throw StateError('EVP_PKEY_new_raw_private_key failed');
+    }
+    try {
+      return _extractRawPublicKey(key);
+    } finally {
+      _pkeyFree(key);
     }
   }
 
