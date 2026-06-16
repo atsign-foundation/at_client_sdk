@@ -1,3 +1,6 @@
+## 3.2.1
+- docs: update README to document PQC algorithms (ML-DSA-65, ML-KEM-768, X-Wing, X25519), FFI vs pure-Dart backends, and usage examples
+
 ## 3.2.0
 - feat: Add `XWingPureDartAlgo` — the X-Wing hybrid post-quantum/traditional
   KEM (draft-connolly-cfrg-xwing-kem-10; X25519 + ML-KEM-768), with
