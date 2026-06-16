@@ -1,3 +1,11 @@
+## 3.13.0
+- refactor: migrate the local keystore to `at_persistence_secondary_server`
+  5.0.0 — the client is now commit-log-free. The client no longer maintains a
+  local commit log or runs commit-log compaction; sync tracks its progress
+  with a persisted pull cursor, and key-expiry processing is driven by the
+  keystore's `nextExpiresAt` / `peekNewlyAvailable` surface. Requires
+  `at_persistence_secondary_server ^5.0.0`.
+
 ## 3.12.0
 
 Several significant enhancements to the API to make it much easier to use.

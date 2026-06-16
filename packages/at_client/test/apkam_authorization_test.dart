@@ -4,10 +4,8 @@ import 'dart:io';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
-import 'package:mocktail/mocktail.dart';
+import 'package:hive/hive.dart';
 import 'package:test/test.dart';
-
-class MockLocalKeyStore extends Mock implements SecondaryKeyStore {}
 
 void main() {
   var storageDir = '${Directory.current.path}/test/hive';
@@ -681,23 +679,24 @@ void main() {
   });
 }
 
+// The AtClient owns its commit-log-free persistence bundle (created
+// by `AtClientImpl.create` since `isLocalStoreRequired` defaults to
+// true). Each test builds its own client, so all setup needs to do is
+// evict any cached instance so storage is reopened fresh.
 Future<void> setupLocalStorage(String storageDir, String atSign) async {
-  var commitLogInstance = await AtCommitLogManagerImpl.getInstance()
-      .getCommitLog(atSign, commitLogPath: storageDir);
-  var persistenceManager = SecondaryPersistenceStoreFactory.getInstance()
-      .getSecondaryPersistenceStore(atSign)!;
-  await persistenceManager.getHivePersistenceManager()!.init(storageDir);
-  persistenceManager.getSecondaryKeyStore()!.commitLog = commitLogInstance;
+  AtClientImpl.atClientInstanceMap.remove(atSign);
 }
 
 Future<void> tearDownLocalStorage(String storageDir) async {
   try {
+    await Hive.close();
+    AtClientImpl.atClientInstanceMap.clear();
     var isExists = await Directory(storageDir).exists();
     if (isExists) {
       Directory(storageDir).deleteSync(recursive: true);
     }
-    AtClientImpl.atClientInstanceMap.clear();
   } catch (e, st) {
-    print('local_secondary_test.dart: exception / error in tearDown: $e, $st');
+    print(
+        'apkam_authorization_test.dart: exception / error in tearDown: $e, $st');
   }
 }

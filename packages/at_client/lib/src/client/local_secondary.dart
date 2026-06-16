@@ -1,11 +1,3 @@
-// HiveKeystore.getExpiryKeysCache() is @visibleForTesting in the
-// at_persistence package, but is the canonical access point we read
-// here to surface nextExpiryAt / nextAvailableAt without duplicating
-// the cache in this layer. The parallel persistence project will
-// promote it to a public method on SecondaryKeyStore — at that point
-// this file-level ignore goes away.
-// ignore_for_file: invalid_use_of_visible_for_testing_member
-
 import 'dart:async';
 import 'dart:convert';
 
@@ -16,14 +8,6 @@ import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
-
-// Private path: HiveKeystore isn't exported from the package barrel, but
-// this file's `deleteExpiredKeys` needs the concrete class for the
-// `is HiveKeystore` guard and the `getExpiredKeys()` call. The parallel
-// persistence project will eventually expose these via a public method on
-// SecondaryKeyStore at which point this private import goes away.
-// ignore: implementation_imports
-import 'package:at_persistence_secondary_server/src/keystore/hive_keystore.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 
@@ -36,7 +20,10 @@ class LocalSecondary implements Secondary {
   late final AtSignLogger _logger;
 
   /// Local keystore used to store data for the current atSign.
-  SecondaryKeyStore? keyStore;
+  /// Commit-log-free (`keyStore.commitLog == null`): client bundles
+  /// track sync via [AtSyncQueue] + the synced-commit-id watermark,
+  /// not the commit log.
+  AtKeyValueStore<String, AtData, AtMetaData?>? keyStore;
 
   /// Sink for keystore-mutation events. Wired by [AtClientImpl] at
   /// construction to its [AtClientImpl.emitDataEvent]; left null by
@@ -57,6 +44,16 @@ class LocalSecondary implements Secondary {
   /// In-memory only — does NOT survive process restart. Restart-side
   /// re-fire is acceptable: subscribers come up fresh and a single
   /// `DataUpdated` per restart is the consistent answer.
+  ///
+  /// **Why a per-key fired map rather than a single `(since, asOf]`
+  /// watermark** (the alternative the keystore's
+  /// [AtKeyValueStore.peekNewlyAvailable] is built around): the two
+  /// agree for forward-moving `availableAt`, but differ when a record's
+  /// TTB is re-written to an instant at-or-before the current
+  /// watermark — the fired map re-fires it on the next sweep (the value
+  /// changed), a watermark window never would. at_client keeps the map
+  /// to preserve that re-write semantic; [keysWithAvailableAtAtOrBefore]
+  /// applies it as a filter on top of `peekNewlyAvailable`.
   final Map<String, DateTime> _firedAvailableAt = {};
 
   /// Pending client→server writes: a per-key dedup'd queue of atKey
@@ -105,9 +102,7 @@ class LocalSecondary implements Secondary {
     void Function(DataEvent)? onEvent,
   }) : _onEvent = onEvent {
     _logger = AtSignLogger('LocalSecondary (${_atClient.getCurrentAtSign()})');
-    keyStore ??= SecondaryPersistenceStoreFactory.getInstance()
-        .getSecondaryPersistenceStore(_atClient.getCurrentAtSign())!
-        .getSecondaryKeyStore();
+    keyStore ??= _atClient.persistenceBundle?.keyValueStore;
   }
 
   /// Idempotent lazy-open of the sync queue. The first caller wins
@@ -115,11 +110,11 @@ class LocalSecondary implements Secondary {
   /// we never call `Hive.openBox` twice for the same atSign.
   ///
   /// Must run AFTER the at_persistence_secondary_server's
-  /// `HivePersistenceManager.init(storagePath)` has called
+  /// `HiveAtPersistenceFactory.initialize(...)` has called
   /// `Hive.init(...)`, which is guaranteed by the
-  /// [StorageManager._initStorage] call ordering during AtClient
-  /// init. We intentionally do not call `Hive.init` here — rerunning
-  /// it with a different path would silently misroute the box.
+  /// [StorageManager] init ordering during AtClient init. We
+  /// intentionally do not call `Hive.init` here — rerunning it with a
+  /// different path would silently misroute the box.
   Future<AtSyncQueue> _ensureSyncQueueOpen() {
     final existing = _syncQueue;
     if (existing != null) return Future.value(existing);
@@ -250,30 +245,21 @@ class LocalSecondary implements Secondary {
   /// ([cameFromServer] true) or when the key isn't sync-eligible
   /// per [shouldEnqueueForSync].
   ///
-  /// **Orphaned commit-log entry handling:** when a queue entry for
-  /// the same [atKey] already exists (UPDATE→UPDATE, UPDATE→DELETE,
-  /// etc.), the prior keystore op's commit-log entry will never be
-  /// pushed — queue dedup means only the newer op makes it to the
-  /// server. We delete that prior commit-log entry by its seqNum
-  /// here so it doesn't sit forever with a null commitId, which
-  /// would skip the back-write, fail commit-log compaction's
-  /// `removeWhere(commitId == null)` filter, and leak in the log
-  /// indefinitely.
+  /// Per-key dedup is by construction: a second [AtSyncQueue.enqueue]
+  /// for the same [atKey] overwrites the first (UPDATE→DELETE
+  /// collapses to DELETE). The commit-log-free keystore produces no
+  /// sequence numbers, so there is nothing to reconcile between the
+  /// superseded and current op.
   Future<void> _enqueueForSync(
     String atKey,
     SyncQueueOp op, {
     required bool cameFromServer,
-    int? commitLogSeqNum,
   }) async {
     if (cameFromServer) return;
     if (!shouldEnqueueForSync(atKey, op)) return;
     try {
       final q = await _ensureSyncQueueOpen();
-      final prior = q.readEntry(atKey);
-      if (prior != null && prior.commitLogSeqNum != null) {
-        await _removeOrphanedCommitLogEntry(prior.commitLogSeqNum!);
-      }
-      await q.enqueue(atKey, op, commitLogSeqNum: commitLogSeqNum);
+      await q.enqueue(atKey, op);
       // Trigger SyncServiceImpl to drain. Today this enqueues a
       // sync request via the existing request-coalescing layer
       // (`_addSyncRequestToQueue` → microtask → `processSyncRequests`).
@@ -285,24 +271,6 @@ class LocalSecondary implements Secondary {
       // safety-net timer if the queue's box becomes accessible
       // again, but the immediate sync trigger is gone). Log loudly.
       _logger.shout('failed to enqueue $atKey for sync: $e\n$st');
-    }
-  }
-
-  /// Removes the commit-log entry at [seqNum]. Called when a queue
-  /// re-enqueue supersedes an earlier op for the same atKey, leaving
-  /// the earlier op's commit-log entry orphaned. Best-effort —
-  /// failures here would just leave a null-commitId entry behind,
-  /// which is undesirable (compaction skips it) but not corrupting.
-  Future<void> _removeOrphanedCommitLogEntry(int seqNum) async {
-    try {
-      final atSign = _atClient.getCurrentAtSign();
-      if (atSign == null) return;
-      final atCommitLog =
-          await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
-      if (atCommitLog == null) return;
-      await atCommitLog.commitLogKeyStore.remove(seqNum);
-    } on Exception catch (e) {
-      _logger.warning('failed to remove orphaned commit-log entry $seqNum: $e');
     }
   }
 
@@ -429,14 +397,14 @@ class LocalSecondary implements Secondary {
           updateResult = await keyStore!.putAll(updateKey, atData, atMetadata);
 
           if (_logger.isLoggable('finest')) {
-            final AtData fetchedBack = await keyStore!.get(updateKey);
+            final AtData? fetchedBack = await keyStore!.get(updateKey);
             _logger.finest('After keyStore.get fetched back'
                 ' $updateKey'
                 ' cameFromServer: $cameFromServer'
-                ' ttl ${fetchedBack.metaData?.ttl}'
-                ' expiresAt ${fetchedBack.metaData?.expiresAt}'
-                ' ttb ${fetchedBack.metaData?.ttb}'
-                ' availableAt ${fetchedBack.metaData?.availableAt}'
+                ' ttl ${fetchedBack?.metaData?.ttl}'
+                ' expiresAt ${fetchedBack?.metaData?.expiresAt}'
+                ' ttb ${fetchedBack?.metaData?.ttb}'
+                ' availableAt ${fetchedBack?.metaData?.availableAt}'
                 '');
           }
 
@@ -448,15 +416,10 @@ class LocalSecondary implements Secondary {
       // succeeded (so the queue never points at a missing record
       // for normal writes). `_enqueueForSync` is a no-op when
       // [cameFromServer] is true or the key isn't sync-eligible.
-      // The keystore op's return value IS the commit-log sequence
-      // number (`Future<int?>` from putAll/putMeta); thread it
-      // through so the push path can do an O(1) commit-log lookup
-      // for the back-write of the server-assigned commitId.
       await _enqueueForSync(
         updateKey,
         syncQueueOp,
         cameFromServer: cameFromServer,
-        commitLogSeqNum: updateResult is int ? updateResult : null,
       );
 
       final newVisible = _visibleAt(emittedMetadata.availableAt, now);
@@ -558,21 +521,15 @@ class LocalSecondary implements Secondary {
       //   client→server tell needed.
       //
       // For caller-initiated deletes (the default both-flags-false
-      // case) we DO enqueue, even if the key never existed locally
-      // (`deleteResult` may be whatever `remove` returns for a
-      // missing key) — the user's intent is "make sure it's gone
-      // everywhere", and a delete for a never-synced record costs
-      // only a commitId++ server-side.
-      //
-      // `keyStore.remove` returns `Future<int?>` — the commit-log
-      // sequence number; thread it through so the push path can do
-      // an O(1) commit-log lookup for the back-write.
+      // case) we DO enqueue, even if the key never existed locally —
+      // the user's intent is "make sure it's gone everywhere", and a
+      // delete for a never-synced record costs only a commitId++
+      // server-side.
       if (!localOnly) {
         await _enqueueForSync(
           deleteKey,
           SyncQueueOp.delete,
           cameFromServer: cameFromServer,
-          commitLogSeqNum: deleteResult,
         );
       }
       return 'data:$deleteResult';
@@ -585,7 +542,7 @@ class LocalSecondary implements Secondary {
   }
 
   /// Deletes every key currently flagged expired by the underlying
-  /// [HiveKeystore]'s in-memory cache. Each deletion goes through
+  /// keystore's TTL bookkeeping. Each deletion goes through
   /// [_delete], which fires a [DataDeleted] on [AtClient.dataEvents]
   /// — so subscribers see expirations the same way they see any other
   /// delete. Returns the number of keys removed.
@@ -596,16 +553,14 @@ class LocalSecondary implements Secondary {
   /// [AtClientImpl._onExpiryFire] does this via a `_sweepInFlight`
   /// flag.
   ///
-  /// Returns 0 (no-op) when the underlying keystore is not a
-  /// [HiveKeystore]; non-Hive keystores are responsible for their own
-  /// expiry mechanism if any.
+  /// Returns 0 (no-op) when there is no local keystore.
   Future<int> deleteExpiredKeys() async {
     final ks = keyStore;
-    if (ks is! HiveKeystore) {
-      _logger.shout('Underlying keyStore is not HiveKeystore');
+    if (ks == null) {
+      _logger.shout('deleteExpiredKeys called with no local keyStore');
       return 0;
     }
-    final expired = await ks.getExpiredKeys();
+    final expired = await (await ks.getExpiredKeys()).toList();
     if (expired.isEmpty) return 0;
     var deleted = 0;
     for (final keyString in expired) {
@@ -638,8 +593,8 @@ class LocalSecondary implements Secondary {
             .getRemoteSecondary()!
             .executeCommand(command, auth: true);
       }
-      List<String?> keys;
-      keys = keyStore!.getKeys(regex: builder.regex) as List<String?>;
+      List<String?> keys =
+          await (await keyStore!.getKeys(regex: builder.regex)).toList();
       // Gets keys shared to sharedWith atSign.
       if (builder.sharedWith != null) {
         keys.retainWhere(
@@ -715,66 +670,51 @@ class LocalSecondary implements Secondary {
         at.toUtc().millisecondsSinceEpoch;
   }
 
-  /// Earliest pending `expiresAt` across keys with TTL, or `null`
-  /// if none. Reads from the underlying [HiveKeystore]'s
-  /// `_expiryKeysCache` — which is rebuilt on keystore open and
-  /// maintained on every put. O(n) over the cache size; n is the
-  /// count of keys with TTL or TTB set, NOT the total record count.
-  ///
-  /// Returns `null` when the keystore isn't a [HiveKeystore]
-  /// (non-Hive backends are responsible for their own timer
-  /// surfaces).
-  DateTime? nextExpiryAt() {
-    final ks = keyStore;
-    if (ks is! HiveKeystore) return null;
-    DateTime? earliest;
-    for (final entry in ks.getExpiryKeysCache().values) {
-      final exp = entry['expiresAt'];
-      if (exp == null) continue;
-      if (earliest == null || exp.isBefore(earliest)) earliest = exp;
-    }
-    return earliest;
-  }
+  /// The epoch-zero (UTC) watermark — the "look at the whole history"
+  /// lower bound for [AtKeyValueStore.peekNewlyAvailable]'s exclusive
+  /// `since`. Every real `availableAt` is strictly after it.
+  static final DateTime _epoch =
+      DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
 
-  /// Earliest pending `availableAt` across keys with TTB, excluding
-  /// keys whose current `availableAt` matches a previously fired
-  /// timestamp ([_firedAvailableAt]). Returns `null` if none.
-  DateTime? nextAvailableAt() {
-    final ks = keyStore;
-    if (ks is! HiveKeystore) return null;
-    DateTime? earliest;
-    for (final entry in ks.getExpiryKeysCache().entries) {
-      final avail = entry.value['availableAt'];
-      if (avail == null) continue;
-      final fired = _firedAvailableAt[entry.key];
-      if (fired != null && fired.isAtSameMomentAs(avail)) continue;
-      if (earliest == null || avail.isBefore(earliest)) earliest = avail;
-    }
-    return earliest;
-  }
-
-  /// Yields every key with `availableAt <= cutoff` whose current
-  /// `availableAt` doesn't match a previously fired timestamp. Used
-  /// by [AtClientImpl._onAvailableFire] to drive the visibility-
-  /// onset sweep.
+  /// Earliest pending `expiresAt` across keys with TTL, or `null` if
+  /// none. Delegates to [KeyValueStore.nextExpiresAt], answered from
+  /// the backend's expiry index (not a full-store scan).
   ///
-  /// Iteration order is unspecified — the underlying cache is a
-  /// `HashMap`. Snapshots before yielding so concurrent writes
-  /// during the sweep don't perturb the walk.
-  Iterable<String> keysWithAvailableAtAtOrBefore(DateTime cutoff) sync* {
+  /// Returns `null` when there is no local keystore.
+  Future<DateTime?> nextExpiryAt() async => await keyStore?.nextExpiresAt();
+
+  /// Earliest pending future `availableAt` across keys with TTB, or
+  /// `null` if none. Delegates to [AtKeyValueStore.nextAvailableAt],
+  /// which only considers not-yet-born keys (`availableAt > now`) — so
+  /// already-fired past crossings are excluded by construction, with
+  /// no need to consult [_firedAvailableAt].
+  Future<DateTime?> nextAvailableAt() async =>
+      await keyStore?.nextAvailableAt();
+
+  /// Keys whose `availableAt` is at-or-before [cutoff] and that
+  /// haven't already been fired for the same crossing
+  /// ([_firedAvailableAt]). Drives [AtClientImpl._onAvailableFire]'s
+  /// visibility-onset sweep.
+  ///
+  /// Sources the born-key set from [AtKeyValueStore.peekNewlyAvailable]
+  /// over the whole-history window `(epoch, cutoff]`, then applies the
+  /// fired-map suppression on top (see the class-level note on why the
+  /// per-key fired map is kept rather than a single watermark).
+  Future<List<String>> keysWithAvailableAtAtOrBefore(DateTime cutoff) async {
     final ks = keyStore;
-    if (ks is! HiveKeystore) return;
-    final cutoffMs = cutoff.toUtc().millisecondsSinceEpoch;
-    final snapshot = List<MapEntry<String, Map<String, DateTime?>>>.from(
-        ks.getExpiryKeysCache().entries);
-    for (final entry in snapshot) {
-      final avail = entry.value['availableAt'];
+    if (ks == null) return const [];
+    final born =
+        await (await ks.peekNewlyAvailable(since: _epoch, asOf: cutoff))
+            .toList();
+    final result = <String>[];
+    for (final key in born) {
+      final avail = (await ks.getMeta(key))?.availableAt;
       if (avail == null) continue;
-      if (avail.toUtc().millisecondsSinceEpoch > cutoffMs) continue;
-      final fired = _firedAvailableAt[entry.key];
+      final fired = _firedAvailableAt[key];
       if (fired != null && fired.isAtSameMomentAs(avail)) continue;
-      yield entry.key;
+      result.add(key);
     }
+    return result;
   }
 
   /// Records that the available-timer sweep just emitted
@@ -782,11 +722,8 @@ class LocalSecondary implements Secondary {
   /// for the same `availableAt` crossing. A subsequent `_update`
   /// that rewrites the record with a new future `availableAt`
   /// (different from the recorded one) re-enables firing.
-  void dropAvailabilityCacheEntry(String key) {
-    final ks = keyStore;
-    if (ks is! HiveKeystore) return;
-    final entry = ks.getExpiryKeysCache()[key];
-    final avail = entry?['availableAt'];
+  Future<void> dropAvailabilityCacheEntry(String key) async {
+    final avail = (await keyStore?.getMeta(key))?.availableAt;
     if (avail != null) {
       _firedAvailableAt[key] = avail;
     }
@@ -813,15 +750,14 @@ class LocalSecondary implements Secondary {
   /// AFTER seeding go through `_update`, which fires DataUpdated
   /// itself (and records its own `_firedAvailableAt` entry) — so this
   /// only suppresses HISTORICAL replay, not fresh emissions.
-  void seedAvailabilityFiredAsOf(DateTime now) {
+  Future<void> seedAvailabilityFiredAsOf(DateTime now) async {
     final ks = keyStore;
-    if (ks is! HiveKeystore) return;
-    final cutoffMs = now.toUtc().millisecondsSinceEpoch;
-    for (final entry in ks.getExpiryKeysCache().entries) {
-      final avail = entry.value['availableAt'];
-      if (avail == null) continue;
-      if (avail.toUtc().millisecondsSinceEpoch > cutoffMs) continue;
-      _firedAvailableAt[entry.key] = avail;
+    if (ks == null) return;
+    final born =
+        await (await ks.peekNewlyAvailable(since: _epoch, asOf: now)).toList();
+    for (final key in born) {
+      final avail = (await ks.getMeta(key))?.availableAt;
+      if (avail != null) _firedAvailableAt[key] = avail;
     }
   }
 
@@ -892,10 +828,12 @@ class LocalSecondary implements Secondary {
 
   /// Returns `true` on successfully storing the values into local secondary.
   Future<bool> putValue(String key, String value) async {
-    dynamic isStored;
+    // Commit-log-free: `put` returns `null` (no sequence number) on
+    // success and throws on failure. Reaching the return means the
+    // write landed.
     var atData = AtData()..data = value;
-    isStored = await keyStore!.put(key, atData);
-    return isStored != null ? true : false;
+    await keyStore!.put(key, atData);
+    return true;
   }
 
   Future<bool> isEnrollmentAuthorizedForOperation(

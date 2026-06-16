@@ -8,7 +8,6 @@ import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -20,12 +19,6 @@ class MockSecondaryAddressFinder extends Mock
     implements SecondaryAddressFinder {}
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
-class MockSecondaryPersistenceStore extends Mock
-    implements SecondaryPersistenceStore {}
-
-class MockHivePersistenceManager extends Mock
-    implements HivePersistenceManager {}
 
 AtClientPreference _createPreference(String storagePath) => AtClientPreference()
   ..hiveStoragePath = 'test/hive/$storagePath'
@@ -172,37 +165,6 @@ void main() {
         // Verify switching back returns the same cached instance
         final reusedAtClient = await _initializeAtClient(firstAtSign);
         expect(identical(atClient1, reusedAtClient), true);
-      });
-
-      test('should handle Hive storage correctly on switch', () async {
-        final atSign1 = '@hive_soft';
-        final atSign2 = '@hive_soft2';
-
-        await _initializeAtClient(atSign1);
-
-        // Get persistence store for first atSign
-        final persistenceStore1 = SecondaryPersistenceStoreFactory.getInstance()
-            .getSecondaryPersistenceStore(atSign1);
-        final hiveManager1 = persistenceStore1?.getHivePersistenceManager();
-
-        // Switch to second atSign
-        await _initializeAtClient(atSign2);
-
-        // Hive should remain accessible
-        expect(AtClientImpl.atClientInstanceMap.containsKey(atSign1), true,
-            reason: 'First client should remain in cache');
-
-        final persistenceStoreAfter =
-            SecondaryPersistenceStoreFactory.getInstance()
-                .getSecondaryPersistenceStore(atSign1);
-        expect(persistenceStoreAfter, isNotNull,
-            reason: 'Hive storage should still be accessible');
-
-        final hiveManagerAfter =
-            persistenceStoreAfter?.getHivePersistenceManager();
-        expect(hiveManagerAfter, isNotNull);
-        expect(identical(hiveManager1, hiveManagerAfter), true);
-        expect(AtClientImpl.atClientInstanceMap.containsKey(atSign1), true);
       });
 
       test('switching to same atSign should handle correctly', () async {

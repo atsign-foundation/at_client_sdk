@@ -650,7 +650,6 @@ class SyncServiceImpl implements SyncService {
         batchSources.add(_BatchSource(
           atKey: atKey,
           op: entry.op,
-          commitLogSeqNum: entry.commitLogSeqNum,
         ));
       }
       if (batchRequests.isEmpty) {
@@ -690,21 +689,14 @@ class SyncServiceImpl implements SyncService {
           // Track the high-water mark of OUR successful pushes
           // separately from the broader server cursor so
           // [_getLocalCommitId] reflects "our writes the server has
-          // acked" alongside the pull-side cursor.
+          // acked" alongside the pull-side cursor. Commit-log-free:
+          // there is no local commit-log entry to back-write the
+          // server-assigned commitId onto — the durable watermark is
+          // the persisted pull cursor (`_lastReceivedServerCommitIdAtKey`).
           if (_highestPushedCommitId == null ||
               commitId > _highestPushedCommitId!) {
             _highestPushedCommitId = commitId;
           }
-          // Back-write the server-assigned commitId onto the
-          // commit-log entry that the originating local write
-          // produced. Required by the commit-log compaction job
-          // (which only compacts entries with non-null commitId) and
-          // by `SyncUtil.getLastSyncedEntry`. The seqNum threaded
-          // through the sync queue gives O(1) lookup; missing seqNum
-          // (older queue entries / skipCommit writes) falls back to
-          // a commit-log scan.
-          await _backWriteCommitIdForPushedEntry(
-              source.atKey, commitId, source.commitLogSeqNum);
           await localSecondary.removeFromSyncQueue(source.atKey);
           keyInfoList.add(KeyInfo(
             source.atKey,
@@ -781,7 +773,14 @@ class SyncServiceImpl implements SyncService {
             metaData != null ? '$atKey${_metadataToString(metaData)}' : atKey;
         return 'update:meta:$keyWithMeta';
       case SyncQueueOp.updateAll:
-        final AtData value = await keyStore.get(atKey);
+        final value = await keyStore.get(atKey);
+        if (value == null) {
+          // Race-tolerated: the keystore value vanished between
+          // enqueue and push (e.g. a delete landed). Signal the
+          // caller to drop the phantom queue entry — `_pushFromSyncQueue`
+          // catches [KeyNotFoundException] and removes it.
+          throw KeyNotFoundException('$atKey not found in keystore');
+        }
         final keyGen = '${_metadataToString(value.metaData)}:$atKey';
         return 'update$keyGen ${value.data}';
     }
@@ -1086,99 +1085,6 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
-  @visibleForTesting
-  Future<List<BatchRequest>> getBatchRequests(
-      List<CommitEntry> uncommittedEntries) async {
-    var batchRequests = <BatchRequest>[];
-    var batchId = 1;
-    List<CommitEntry> removeUncommittedEntriesList = [];
-    for (var entry in uncommittedEntries) {
-      String command;
-      // The update on a cached key is prevented. The logic in "validatePutRequest"
-      // throws exception if a user tries to update a cached key.
-      // The below check is for the older data. The cached keys that are updated
-      // before the "validatePutRequest" is in-place.
-      // However if they want to delete a cached key, they should be allowed to
-      if (entry.atKey!.startsWith('cached:') &&
-          entry.operation != CommitOp.DELETE) {
-        _logger.finer(
-            '${entry.atKey} is skipped. cached keys will not be synced to cloud secondary');
-        removeUncommittedEntriesList.add(entry);
-        continue;
-      }
-      // For CommitOp.Update, _getCommand fetches the data from the local keystore to sync to the server.
-      // When getCommand is called for an entry where key is created/updated and then deleted,
-      // a KeyNotFoundException will be thrown because the data does not exist in the keystore.
-      try {
-        command = await _getCommand(entry);
-      } on KeyNotFoundException {
-        _logger.info(
-            '${entry.atKey} is no longer in keystore. Skipping sync for it.');
-        removeUncommittedEntriesList.add(entry);
-        continue;
-      }
-      command = VerbUtil.replaceNewline(command);
-      var batchRequest = BatchRequest(batchId, command);
-      _logger.finer('batchId:$batchId key:${entry.atKey}');
-      batchRequests.add(batchRequest);
-      batchId++;
-    }
-    // The commit-id's in the batch response are updated to the appropriate commit-entry
-    // in the uncommitted entries by iterating the uncommitted entries list.
-    // If an entry is skipped in the batch request, then size of batch response
-    // will be less than the size of uncommitted entries and so the commit-id gets
-    // updated against the wrong uncommitted entry.
-    // So, remove the commit entry from the uncommitted entries list.
-    for (CommitEntry commitEntry in removeUncommittedEntriesList) {
-      uncommittedEntries.remove(commitEntry);
-      // Removing the entry from the commit log keystore to prevent stale entries
-      try {
-        await syncUtil.removeCommitEntry(commitEntry.key, currentAtSign);
-      } catch (e) {
-        _logger.shout('Exception $e - commitEntry is $commitEntry');
-      }
-    }
-    removeUncommittedEntriesList.clear();
-    return batchRequests;
-  }
-
-  Future<String> _getCommand(CommitEntry entry) async {
-    if (entry.operation == null) {
-      throw StateError('CommitEntry operation is null : $entry');
-    }
-    late String command;
-    // ignore: missing_enum_constant_in_switch
-    switch (entry.operation!) {
-      case CommitOp.UPDATE:
-        var key = entry.atKey;
-        var value = await _atClient.getLocalSecondary()!.keyStore!.get(key);
-        command = 'update:$key ${value?.data}';
-        break;
-      case CommitOp.DELETE:
-        var key = entry.atKey;
-        command = 'delete:$key';
-        break;
-      case CommitOp.UPDATE_META:
-        var key = entry.atKey;
-        var metaData =
-            await _atClient.getLocalSecondary()!.keyStore!.getMeta(key);
-        if (metaData != null) {
-          key = '$key${_metadataToString(metaData)}';
-        }
-        command = 'update:meta:$key';
-        break;
-      case CommitOp.UPDATE_ALL:
-        var key = entry.atKey;
-        AtData value = await _atClient.getLocalSecondary()!.keyStore!.get(key);
-        var keyGen = '';
-        keyGen = _metadataToString(value.metaData);
-        keyGen += ':$key';
-        command = 'update$keyGen ${value.data}';
-        break;
-    }
-    return command;
-  }
-
   String _metadataToString(AtMetaData? metadata) {
     if (metadata == null) {
       return '';
@@ -1413,37 +1319,15 @@ class SyncServiceImpl implements SyncService {
           ..value = serverCommitEntry['value'];
         builder.operation = AtConstants.updateAll;
         _setMetadataFromCommitEntry(builder.atKey.metadata, serverCommitEntry);
-        await _pullToLocal(builder, serverCommitEntry, CommitOp.UPDATE_ALL);
+        await _pullToLocal(builder);
         break;
       case '-':
         _logger.info('Pulling to local: DELETE: ${serverCommitEntry['atKey']}');
         var builder = DeleteVerbBuilder()
           ..atKey = AtKey.fromString(serverCommitEntry['atKey']);
-        await _pullToLocal(builder, serverCommitEntry, CommitOp.DELETE);
+        await _pullToLocal(builder);
         break;
     }
-  }
-
-  @visibleForTesting
-  List<dynamic> getUnCommittedEntryBatch(
-      List<CommitEntry?> uncommittedEntries) {
-    var unCommittedEntryBatch = [];
-    var batchSize = _atClient.getPreferences()!.syncBatchSize, i = 0;
-    var totalEntries = uncommittedEntries.length;
-    var totalBatch = (totalEntries % batchSize == 0)
-        ? totalEntries / batchSize
-        : (totalEntries / batchSize).floor() + 1;
-    var startIndex = i;
-    while (i < totalBatch) {
-      var endIndex = startIndex + batchSize < totalEntries
-          ? startIndex + batchSize
-          : totalEntries;
-      var currentBatch = uncommittedEntries.sublist(startIndex, endIndex);
-      unCommittedEntryBatch.add(currentBatch);
-      startIndex += batchSize;
-      i++;
-    }
-    return unCommittedEntryBatch;
   }
 
   void _setMetadataFromCommitEntry(Metadata md, Map serverCommitEntry) {
@@ -1517,16 +1401,19 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
-  Future<void> _pullToLocal(
-      VerbBuilder builder, serverCommitEntry, CommitOp operation) async {
-    String? verbResult;
+  /// Applies a server-originated change to the local keystore.
+  ///
+  /// `cameFromServer: true` flags this write as a server-replay so
+  /// `LocalSecondary` skips enqueuing it for client→server sync —
+  /// the server is where this entry just came from. `sync: false`
+  /// expresses the same intent on the legacy interface and is
+  /// retained for back-compat. Commit-log-free: there is no local
+  /// commit-log entry to stamp the server commitId onto — the pull
+  /// watermark advances via `_lastReceivedServerCommitIdAtKey` in
+  /// `_syncFromServer`.
+  Future<void> _pullToLocal(VerbBuilder builder) async {
     try {
-      // `cameFromServer: true` flags this write as a server-replay so
-      // `LocalSecondary` skips enqueuing it for client→server sync —
-      // the server is where this entry just came from. `sync: false`
-      // expresses the same intent on the legacy interface and is
-      // retained for back-compat.
-      verbResult = await _atClient.getLocalSecondary()!.executeVerb(
+      await _atClient.getLocalSecondary()!.executeVerb(
             builder,
             sync: false,
             cameFromServer: true,
@@ -1534,89 +1421,6 @@ class SyncServiceImpl implements SyncService {
     } on UnAuthorizedException catch (e) {
       _logger.finer(
           'Failed to sync ${(builder as UpdateVerbBuilder).atKey.toString()} caused by ${e.toString()}');
-    }
-    if (verbResult == null) {
-      return;
-    }
-    // Back-write the server-side commitId into the local commit-log
-    // entry that `executeVerb` just appended. The push path tracks
-    // its cursor in `_highestPushedCommitId` and
-    // `lastReceivedServerCommitId` rather than reading commit-log
-    // commitIds — but commit-log compaction still needs every
-    // synced entry to carry a commitId (its `removeWhere(value.commitId
-    // == null)` step would otherwise skip every server-pulled entry,
-    // leaving the log to grow unboundedly). `SyncUtil.getLastSyncedEntry`
-    // also depends on this for downstream functional tests and any
-    // external consumers.
-    final sequenceNumber = int.parse(verbResult.split(':')[1]);
-    final commitEntry = await syncUtil.getCommitEntry(
-        sequenceNumber, _atClient.getCurrentAtSign()!);
-    if (commitEntry == null) {
-      return;
-    }
-    commitEntry.operation = operation;
-    final serverCommitId = serverCommitEntry['commitId'];
-    if (serverCommitId == null) {
-      return;
-    }
-    await syncUtil.updateCommitEntry(
-        commitEntry, serverCommitId, _atClient.getCurrentAtSign()!);
-  }
-
-  /// Stamps the server-assigned [commitId] onto the commit-log entry
-  /// that the local keystore op for [atKey] produced. Used by
-  /// [_pushFromSyncQueue] after each successful per-entry batch
-  /// response.
-  ///
-  /// **Fast path**: when [seqNum] is supplied (the keystore op's
-  /// `Future<int?>` return value, threaded through the sync queue),
-  /// the entry is fetched directly via [SyncUtil.getCommitEntry] —
-  /// O(1).
-  ///
-  /// **Slow path**: when [seqNum] is null (older queue entries
-  /// persisted before the field was added; or a `skipCommit` write
-  /// whose op didn't append a commit-log entry — though those don't
-  /// reach the sync queue), fall back to scanning the commit log for
-  /// the latest entry matching [atKey] — O(N log N).
-  ///
-  /// The back-write is required by:
-  /// - the commit-log compaction job (only compacts entries with
-  ///   non-null commitId);
-  /// - `SyncUtil.getLastSyncedEntry`, used by downstream functional
-  ///   tests and external consumers.
-  ///
-  /// Best-effort: failures are logged at warning, not surfaced to
-  /// the caller. Sync correctness doesn't depend on the back-write
-  /// succeeding (the actual write reached the server; only the
-  /// commit-log metadata is at stake).
-  Future<void> _backWriteCommitIdForPushedEntry(
-      String atKey, int commitId, int? seqNum) async {
-    try {
-      final atSign = _atClient.getCurrentAtSign()!;
-      if (seqNum != null) {
-        final entry = await syncUtil.getCommitEntry(seqNum, atSign);
-        if (entry == null) {
-          return;
-        }
-        await syncUtil.updateCommitEntry(entry, commitId, atSign);
-        return;
-      }
-      final atCommitLog =
-          await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
-      if (atCommitLog == null) {
-        return;
-      }
-      final entry = await syncUtil.getLatestCommitEntry(atCommitLog, atKey);
-      if (entry is NullCommitEntry) {
-        return;
-      }
-      await syncUtil.updateCommitEntry(entry, commitId, atSign);
-    } on Exception catch (e) {
-      // Best-effort metadata update; sync correctness doesn't depend
-      // on this back-write succeeding. Log and continue.
-      final cause = (e is AtException) ? e.getTraceMessage() : e.toString();
-      _logger.warning(
-          'back-write of commitId $commitId for $atKey failed: $cause');
     }
   }
 
@@ -1748,21 +1552,13 @@ class SyncServiceImpl implements SyncService {
 /// [_pushFromSyncQueue]. The wire response only carries the batch
 /// `id`, but we need to know which atKey + op corresponds to that
 /// id when handling per-entry success/failure (`removeFromSyncQueue`
-/// / `KeyInfo` build). The [commitLogSeqNum] field lets the success
-/// handler back-write the server-assigned commitId onto the
-/// originating commit-log entry in O(1) (`getCommitEntry(seqNum)`)
-/// instead of O(N log N) (full-log scan for the latest entry by
-/// atKey). Nullable because tests + edge cases (skipCommit writes,
-/// older queue entries persisted before the field was added) won't
-/// have one — the slow path is the fallback in those cases.
+/// / `KeyInfo` build).
 class _BatchSource {
   final String atKey;
   final SyncQueueOp op;
-  final int? commitLogSeqNum;
 
   const _BatchSource({
     required this.atKey,
     required this.op,
-    this.commitLogSeqNum,
   });
 }
