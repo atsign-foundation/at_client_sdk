@@ -7,8 +7,9 @@ description: >
   file, keychain, APKAM) or APKAM enrollment, or asks about AtCollection<T>,
   CItem<T>, Query<T>, sub-collections, event streams, read receipts, wherePath
   typed predicates, or watchWithTree deep hierarchies. Also use when the
-  developer asks which pub.dev packages to add, how to unit-test without a
-  live atServer, or whether to use AtCollection vs notifications+SQLite. Warns
+  developer asks how to send or receive notifications via NotificationService,
+  which pub.dev packages to add, how to unit-test without a live atServer, or
+  whether to use AtCollection vs notifications+SQLite. Warns
   against deprecated AtCollectionModel, at_common_flutter, at_backupkey_flutter,
   at_invitation_flutter, at_sync_ui_flutter, and at_theme_flutter.
 license: BSD-3-Clause
@@ -363,8 +364,27 @@ for polymorphic types, schema evolution, and the full re-registration rules.
 
 These patterns are complementary and can coexist in the same app.
 
+**Sending / receiving notifications** (the fire-and-forget side):
+
+```dart
+// Send — returns the notification id; body is usually JSON
+await atClient.notificationService.send(
+  to: '@bob'.toAtsign(),
+  namespace: 'sample.my_app',
+  body: jsonEncode(payload),
+  expiration: const Duration(minutes: 5),   // short TTL for telemetry
+);
+
+// Receive — subscribe to a namespace regex; decrypt encrypted payloads
+atClient.notificationService
+    .subscribe(regex: r'sample\..*\.my_app', shouldDecrypt: true)
+    .listen((n) => handle(n.value));
+```
+
 Read [references/10-architecture-guide.md](references/10-architecture-guide.md)
 for the full decision guide and the dockerstats Notifications+SQLite example.
+See `packages/at_client/example/bin/notifications.dart` for a minimal
+send/subscribe walkthrough.
 
 ---
 
@@ -415,6 +435,10 @@ for the full migration table from old `AtCollectionModel` patterns to
 
 - `packages/at_client/example/bin/collections_domain_objects.dart`
 - `packages/at_client/example/bin/collections_subcollections.dart`
+- `packages/at_client/example/bin/collections_todos.dart` — terminal-UI (TUI)
+  todos app using `AtCollection` + `query().watch()` (Dart/CLI reference)
+- `packages/at_client/example/bin/notifications.dart` — minimal
+  `NotificationService` send/subscribe
 - `packages/at_client_flutter/examples/todos/` — canonical Flutter reference app
 - `packages/at_client_flutter/examples/dockerstats/` — notifications + SQLite
 

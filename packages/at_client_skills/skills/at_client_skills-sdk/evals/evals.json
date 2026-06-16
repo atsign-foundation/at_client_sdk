@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "I'm building a Flutter app and want to store todos that can be shared with other users. Which packages do I need and how do I create a todo?",
-      "expected_output": "Recommends at_client and at_client_flutter. Shows atClient.collection<Todo>() with fromJson/typeTag, then collection.create(obj: todo, sharedWith: {'@bob'.toAtsign()}). Does NOT suggest AtCollectionModel."
+      "expected_output": "Recommends at_client and at_client_flutter. Shows atClient.collection<Todo>() with fromJson/typeTag, then collection.create(obj: todo, sharedWith: {'@bob'.toAtsign()}). Does NOT suggest AtCollectionModel. Ideally also points to the canonical Flutter todos example app (packages/at_client_flutter/examples/todos/)."
     },
     {
       "id": 2,
@@ -58,8 +58,8 @@
     },
     {
       "id": 12,
-      "prompt": "my dart app needs to share some sensor readings with @device2 every few seconds, should i add them all to a collection or use notifications",
-      "expected_output": "For high-frequency sensor data, recommends Notifications + SQLite pattern (not AtCollection). Explains the volume/frequency threshold consideration."
+      "prompt": "How do I send a notification to another atSign from my Dart app?",
+      "expected_output": "Shows atClient.notificationService.send(to:, namespace:, body:, expiration:); body is typically JSON-encoded and send returns the notification id. Mentions the recipient subscribes via notificationService.subscribe(regex:, shouldDecrypt:). May point to the packages/at_client/example/bin/notifications.dart example. Does NOT use raw atClient.put/get for messaging."
     },
     {
       "id": 13,
