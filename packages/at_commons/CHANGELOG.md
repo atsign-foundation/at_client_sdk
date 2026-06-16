@@ -1,3 +1,12 @@
+## 5.11.0
+
+- feat: add `Metadata.appMetadata` (`AppMetadata{providerId, additional}`),
+  emitted on the wire as `:appMetadata:` (base64-encoded JSON) on the
+  `update`, `update:meta` and `notify` verbs and parsed back by the verb
+  builders. `providerId` routes pluggable-crypto decryption; `additional`
+  is provider-owned opaque metadata. `providerId` must be a non-empty
+  string (a `FormatException` is thrown otherwise).
+
 ## 5.10.0
 
 - feat: add `:cl` flag to the `scan` verb syntax, plus
