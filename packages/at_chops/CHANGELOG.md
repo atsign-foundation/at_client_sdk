@@ -3,6 +3,11 @@
   KEM (draft-connolly-cfrg-xwing-kem-10; X25519 + ML-KEM-768), with
   `AtXWingKeyPair` and `AtChopsUtil.generateXWingKeyPair()`; verified
   against the draft's test vectors byte-exact
+- feat: Add `XWingFfiAlgo` — the OpenSSL/FFI X-Wing backend, composing
+  `MlKem768FfiAlgo` and `X25519FfiAlgo` (X-Wing has no native OpenSSL
+  primitive). Fully interoperable with `XWingPureDartAlgo` and verified against
+  the draft vector. Supporting additions: `MlKem768FfiAlgo.generateKeyPairFromSeed`
+  (FIPS 203 `d || z` seed import) and `X25519FfiAlgo.publicKeyFromPrivate`
 - feat: `MlKem768PureDartAlgo.encapsulate` accepts optional deterministic
   randomness (FIPS 203 `m`) for test-vector verification
 - feat: Add `AesGcm256EncryptionAlgo` — AES-256-GCM authenticated encryption

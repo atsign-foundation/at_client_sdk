@@ -15,6 +15,7 @@ export 'src/algorithm/pkam_signing_algo.dart';
 export 'src/algorithm/rsa_encryption_algo.dart';
 export 'src/algorithm/x25519_ffi_algo.dart';
 export 'src/algorithm/x25519_pure_dart_algo.dart';
+export 'src/algorithm/x_wing_ffi_algo.dart';
 export 'src/algorithm/x_wing_pure_dart_algo.dart';
 export 'src/at_chops_base.dart';
 export 'src/at_chops_impl.dart';

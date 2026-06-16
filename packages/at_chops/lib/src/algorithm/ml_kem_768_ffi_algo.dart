@@ -55,39 +55,44 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
         'EVP_PKEY_CTX_new');
     _ctxFree = _lib.lookupFunction<EvpPkeyCtxFreeNative, EvpPkeyCtxFreeDart>(
         'EVP_PKEY_CTX_free');
-    _pkeyFree = _lib.lookupFunction<EvpPkeyFreeNative, EvpPkeyFreeDart>(
-        'EVP_PKEY_free');
-    _keygenInit = _lib.lookupFunction<EvpPkeyKeygenInitNative,
-        EvpPkeyKeygenInitDart>('EVP_PKEY_keygen_init');
+    _pkeyFree = _lib
+        .lookupFunction<EvpPkeyFreeNative, EvpPkeyFreeDart>('EVP_PKEY_free');
+    _keygenInit =
+        _lib.lookupFunction<EvpPkeyKeygenInitNative, EvpPkeyKeygenInitDart>(
+            'EVP_PKEY_keygen_init');
     _keygen = _lib.lookupFunction<EvpPkeyKeygenNative, EvpPkeyKeygenDart>(
         'EVP_PKEY_keygen');
     _get1EncodedPubKey = _lib.lookupFunction<EvpPkeyGet1EncodedPublicKeyNative,
         EvpPkeyGet1EncodedPublicKeyDart>('EVP_PKEY_get1_encoded_public_key');
     _encapsInit = _lib.lookupFunction<EvpPkeyKemInitNative, EvpPkeyKemInitDart>(
         'EVP_PKEY_encapsulate_init');
-    _encapsulate = _lib.lookupFunction<EvpPkeyEncapsulateNative,
-        EvpPkeyEncapsulateDart>('EVP_PKEY_encapsulate');
+    _encapsulate =
+        _lib.lookupFunction<EvpPkeyEncapsulateNative, EvpPkeyEncapsulateDart>(
+            'EVP_PKEY_encapsulate');
     _decapsInit = _lib.lookupFunction<EvpPkeyKemInitNative, EvpPkeyKemInitDart>(
         'EVP_PKEY_decapsulate_init');
-    _decapsulate = _lib.lookupFunction<EvpPkeyDecapsulateNative,
-        EvpPkeyDecapsulateDart>('EVP_PKEY_decapsulate');
+    _decapsulate =
+        _lib.lookupFunction<EvpPkeyDecapsulateNative, EvpPkeyDecapsulateDart>(
+            'EVP_PKEY_decapsulate');
     _bldNew = _lib.lookupFunction<OsslParamBldNewNative, OsslParamBldNewDart>(
         'OSSL_PARAM_BLD_new');
     _bldFree =
         _lib.lookupFunction<OsslParamBldFreeNative, OsslParamBldFreeDart>(
             'OSSL_PARAM_BLD_free');
-    _bldToParam = _lib.lookupFunction<OsslParamBldToParamNative,
-        OsslParamBldToParamDart>('OSSL_PARAM_BLD_to_param');
+    _bldToParam =
+        _lib.lookupFunction<OsslParamBldToParamNative, OsslParamBldToParamDart>(
+            'OSSL_PARAM_BLD_to_param');
     _bldPushOctet = _lib.lookupFunction<OsslParamBldPushOctetStringNative,
         OsslParamBldPushOctetStringDart>('OSSL_PARAM_BLD_push_octet_string');
     _paramFree = _lib.lookupFunction<OsslParamFreeNative, OsslParamFreeDart>(
         'OSSL_PARAM_free');
-    _fromdataInit = _lib.lookupFunction<EvpPkeyFromdataInitNative,
-        EvpPkeyFromdataInitDart>('EVP_PKEY_fromdata_init');
+    _fromdataInit =
+        _lib.lookupFunction<EvpPkeyFromdataInitNative, EvpPkeyFromdataInitDart>(
+            'EVP_PKEY_fromdata_init');
     _fromdata = _lib.lookupFunction<EvpPkeyFromdataNative, EvpPkeyFromdataDart>(
         'EVP_PKEY_fromdata');
-    _cryptoFree = _lib.lookupFunction<CryptoFreeNative, CryptoFreeDart>(
-        'CRYPTO_free');
+    _cryptoFree =
+        _lib.lookupFunction<CryptoFreeNative, CryptoFreeDart>('CRYPTO_free');
   }
 
   /// Generate a fresh ML-KEM-768 key pair via OpenSSL.
@@ -119,6 +124,62 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
       }
     } finally {
       _ctxFree(ctx);
+    }
+  }
+
+  /// Generate an ML-KEM-768 key pair deterministically from a 64-byte FIPS 203
+  /// seed (`d || z`), via OpenSSL.
+  ///
+  /// Returns `(publicKey: 1184 raw bytes, secretKey: 8-byte opaque handle)`.
+  /// The handle decapsulates within this instance/process only (see class
+  /// docs). Used by the X-Wing FFI backend, whose ML-KEM secret key is derived
+  /// deterministically from the X-Wing seed.
+  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPairFromSeed(
+      Uint8List seed) async {
+    if (seed.length != 64) {
+      throw ArgumentError.value(
+          seed.length, 'seed', 'ML-KEM-768 seed must be 64 bytes (d || z)');
+    }
+    final Pointer<Utf8> algName = 'ML-KEM-768'.toNativeUtf8();
+    final Pointer<Utf8> paramName = 'seed'.toNativeUtf8();
+    final Pointer<Uint8> seedBuf = calloc<Uint8>(seed.length);
+    seedBuf.asTypedList(seed.length).setAll(0, seed);
+
+    final Pointer<Pointer<EVP_PKEY>> pkeyPtr = calloc<Pointer<EVP_PKEY>>();
+    Pointer<OSSL_PARAM>? params;
+    Pointer<EVP_PKEY_CTX>? ctx;
+    try {
+      final Pointer<OSSL_PARAM_BLD> bld = _bldNew();
+      if (bld == nullptr) throw StateError('OSSL_PARAM_BLD_new failed');
+      if (_bldPushOctet(bld, paramName, seedBuf, seed.length) <= 0) {
+        _bldFree(bld);
+        throw StateError('OSSL_PARAM_BLD_push_octet_string failed');
+      }
+      params = _bldToParam(bld);
+      _bldFree(bld);
+      if (params == nullptr) throw StateError('OSSL_PARAM_BLD_to_param failed');
+
+      ctx = _ctxNewFromName(nullptr, algName, nullptr);
+      if (ctx == nullptr) {
+        throw StateError('EVP_PKEY_CTX_new_from_name failed');
+      }
+      if (_fromdataInit(ctx) <= 0) {
+        throw StateError('EVP_PKEY_fromdata_init failed');
+      }
+      if (_fromdata(ctx, pkeyPtr, evpPkeyKeypair, params) <= 0) {
+        throw StateError('EVP_PKEY_fromdata (seed) failed');
+      }
+      final Pointer<EVP_PKEY> pkey = pkeyPtr.value;
+      final Uint8List pubKeyBytes = _extractPublicKeyBytes(pkey);
+      final int handle = _registerKey(pkey);
+      return (publicKey: pubKeyBytes, secretKey: _encodeHandle(handle));
+    } finally {
+      if (ctx != null) _ctxFree(ctx);
+      if (params != null) _paramFree(params);
+      calloc.free(seedBuf);
+      calloc.free(paramName);
+      calloc.free(algName);
+      calloc.free(pkeyPtr);
     }
   }
 
