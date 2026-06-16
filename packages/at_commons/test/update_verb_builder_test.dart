@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
@@ -66,6 +68,30 @@ void main() {
           skeEncKeyName);
       expect(updateVerbParams[AtConstants.sharedKeyEncryptedEncryptingAlgo],
           skeEncAlgo);
+    });
+
+    test('verify update command with app metadata', () {
+      final appMetadata = AppMetadata(providerId: 'test_provider', additional: {
+        'encKeyName': 'key_12345.__shared_keys.wavi',
+        'encAlgo': 'test_algo',
+      });
+      final encodedAppMetadata = Metadata.encodeAppMetadata(appMetadata);
+      var updateBuilder = UpdateVerbBuilder()
+        ..value = 'alice@atsign.com'
+        ..atKey.key = 'email.wavi'
+        ..atKey.sharedBy = '@alice'
+        ..atKey.sharedWith = '@bob'
+        ..atKey.metadata.appMetadata = appMetadata;
+      var updateCommand = updateBuilder.buildCommand();
+      expect(
+          updateCommand,
+          'update:isEncrypted:false'
+          ':appMetadata:$encodedAppMetadata'
+          ':@bob:email.wavi@alice alice@atsign.com'
+          '\n');
+      var roundTrippedBuilder =
+          UpdateVerbBuilder.getBuilder(updateCommand.trim())!;
+      expect(roundTrippedBuilder.atKey.metadata.appMetadata, appMetadata);
     });
 
     test('verify local key command', () {
@@ -159,6 +185,25 @@ void main() {
           skeEncKeyName);
       expect(updateMetaVerbParams[AtConstants.sharedKeyEncryptedEncryptingAlgo],
           skeEncAlgo);
+    });
+
+    test('verify update:meta command with app metadata', () {
+      final appMetadata = AppMetadata(providerId: 'test_provider');
+      final encodedAppMetadata = Metadata.encodeAppMetadata(appMetadata);
+      var updateBuilder = UpdateVerbBuilder()
+        ..atKey.key = 'email.wavi'
+        ..atKey.sharedBy = '@alice'
+        ..atKey.sharedWith = '@bob'
+        ..atKey.metadata.appMetadata = appMetadata;
+      var updateMetaCommand = updateBuilder.buildCommandForMeta();
+      expect(
+          updateMetaCommand,
+          'update:meta:@bob:email.wavi@alice:isEncrypted:false'
+          ':appMetadata:$encodedAppMetadata'
+          '\n');
+      var roundTrippedBuilder =
+          UpdateVerbBuilder.getBuilder(updateMetaCommand.trim())!;
+      expect(roundTrippedBuilder.atKey.metadata.appMetadata, appMetadata);
     });
   });
 
@@ -702,6 +747,29 @@ void main() {
       expect(command, startsWith('update:json:'));
       var verbParams = getVerbParams(VerbSyntax.update, command.trim());
       expect(verbParams['noCommit'], null);
+    });
+
+    test('json form round-trips app metadata through UpdateParams', () {
+      final appMetadata = AppMetadata(providerId: 'test_provider', additional: {
+        'encKeyName': 'key_12345.__shared_keys.wavi',
+        'encAlgo': 'test_algo',
+      });
+      var builder = UpdateVerbBuilder()
+        ..isJson = true
+        ..value = 'alice@atsign.com'
+        ..atKey.key = 'email.wavi'
+        ..atKey.sharedBy = '@alice'
+        ..atKey.sharedWith = '@bob'
+        ..atKey.metadata.appMetadata = appMetadata;
+
+      var command = builder.buildCommand();
+      expect(command, startsWith('update:json:'));
+
+      var verbParams = getVerbParams(VerbSyntax.update, command.trim());
+      var json = jsonDecode(verbParams['json']!);
+      var updateParams = UpdateParams.fromJson(json);
+
+      expect(updateParams.metadata!.appMetadata, appMetadata);
     });
 
     test('getBuilder round-trips noCommit on the metadata-fragment form', () {
