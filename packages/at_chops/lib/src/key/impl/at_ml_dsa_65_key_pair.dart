@@ -1,4 +1,4 @@
-import 'package:at_chops/src/key/at_key_pair.dart';
+import 'package:at_chops/src/key/keys.dart';
 
 /// ML-DSA-65 (FIPS 204) signing key pair.
 ///
