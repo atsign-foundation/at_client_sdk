@@ -29,6 +29,8 @@
 - fix: Refactor `libCryptoSupportsMlKem768` to share implementation with new `libCryptoSupportsMlDsa65`
 - fix: Emit warning to stderr when `AT_CHOPS_LIBCRYPTO_PATH` is set but fails to open
 - chore: Rename example files to follow `lower_case_with_underscores` convention
+- fix: correct `AtMlDsa65KeyPair` import path from removed `at_key_pair.dart` to `keys.dart`
+- fix(test): FFI tests now call `fail()` instead of `skip()` when `libcrypto` is unavailable or does not support the required algorithm
 
 ## 3.1.0
 - feat: Add X25519 key agreement algorithm (pure-Dart via `cryptography` package and OpenSSL FFI backends)
