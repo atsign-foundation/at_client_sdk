@@ -1,5 +1,3 @@
-<!-- verified: at_client ^3.12.0 — update on next minor release -->
-
 # Architecture Decision Guide
 
 ## AtCollection\<T> vs Notifications + SQLite

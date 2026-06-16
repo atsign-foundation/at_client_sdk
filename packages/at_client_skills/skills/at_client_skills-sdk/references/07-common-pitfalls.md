@@ -1,5 +1,3 @@
-<!-- verified: at_client ^3.12.0 — update on next minor release -->
-
 # Common Pitfalls
 
 ## 1. Using `create()` in a Re-runnable Publisher

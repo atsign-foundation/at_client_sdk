@@ -58,13 +58,15 @@ for the full migration table from old to new API.
 
 ## 2. Package Map
 
-| Use case                     | pubspec.yaml dependencies                                                                    |
-| ---------------------------- | -------------------------------------------------------------------------------------------- |
-| Dart CLI / server / IoT      | `at_client: ^3.12.0`                                                                         |
-| Flutter app                  | `at_client_flutter: ^1.1.2` (`at_client_flutter` re-exports `at_client` — one dep is enough) |
-| APKAM / custom auth flows    | above + `at_auth: ^3.1.0`                                                                    |
-| Raw cryptographic operations | above + `at_chops: ^3.0.0`                                                                   |
-| CLI / headless Dart          | above + `at_cli_commons: ^3.1.0`                                                             |
+Install with `dart pub add` — it pins the latest compatible version for you:
+
+| Use case                     | packages to add                                            |
+| ---------------------------- | ---------------------------------------------------------- |
+| Dart CLI / server / IoT      | `at_client`                                                |
+| Flutter app                  | `at_client_flutter` (re-exports `at_client` — one dep)     |
+| CLI / headless Dart          | `at_client`, `at_cli_commons`                              |
+| APKAM / custom auth flows    | `at_client` or `at_client_flutter`, plus `at_auth`         |
+| Raw cryptographic operations | `at_client` or `at_client_flutter`, plus `at_chops`        |
 
 **Never add:** `at_common_flutter`, `at_backupkey_flutter`,
 `at_invitation_flutter`, `at_sync_ui_flutter`, `at_theme_flutter`
@@ -277,7 +279,7 @@ final authRequest = AtAuthRequest(atKeysIo!.getAtsign(),
   atKeysIo: atKeysIo, rootDomain: AtRootDomain.atsignDomain);
 final response    = await PkamDialog.show(context,
   request: authRequest, backupKeys: [KeychainAtKeysIo()]);
-if (response?.isSuccessful == true) await _setupAtClient(authRequest, response!);
+if (response?.isSuccessful == true) await _setupAtClient(authRequest.rootDomain, response!);
 ```
 
 **Flow 3 (device keychain — returning user on same device):**
@@ -289,18 +291,18 @@ final authRequest = AtAuthRequest(request!.atSign,
   atKeysIo: KeychainAtKeysIo(), rootDomain: request.rootDomain);
 final response    = await PkamDialog.show(context,
   request: authRequest, backupKeys: [KeychainAtKeysIo()]);
-if (response?.isSuccessful == true) await _setupAtClient(authRequest, response!);
+if (response?.isSuccessful == true) await _setupAtClient(authRequest.rootDomain, response!);
 ```
 
-**Post-auth setup (all flows — `AuthRequest` is the sealed base, works for
+**Post-auth setup (all flows — takes just the root domain, so it works for
 all 4 flows):**
 
 ```dart
-Future<void> _setupAtClient(AuthRequest authRequest, AuthResponse response) async {
+Future<void> _setupAtClient(AtRootDomain atRootDomain, AuthResponse response) async {
   final dir = await getApplicationSupportDirectory();
   final acp = AtClientPreference()
-    ..rootDomain      = authRequest.rootDomain.rootDomain
-    ..rootPort        = authRequest.rootDomain.rootPort
+    ..rootDomain      = atRootDomain.rootDomain
+    ..rootPort        = atRootDomain.rootPort
     ..namespace       = 'my_namespace'
     ..commitLogPath   = dir.path
     ..hiveStoragePath = dir.path;

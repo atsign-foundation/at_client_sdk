@@ -1,5 +1,3 @@
-<!-- verified: at_client X.X.X / at_client_flutter X.X.X -->
-
 # Package Map: Which Packages to Add
 
 All packages are published on pub.dev under the `atsign.org` publisher:
@@ -11,22 +9,20 @@ All packages are published on pub.dev under the `atsign.org` publisher:
 
 ### Core — always needed
 
-```yaml
-dependencies:
-  at_client: ^3.12.0
+```sh
+dart pub add at_client
 ```
 
 `at_client` is the core Dart SDK. It provides `AtClient`, `AtCollection<T>`,
 `CItem<T>`, `Query<T>`, `NotificationService`, `SyncService`, and all
-collection-related APIs. Required for every app that uses the atProtocol.
+collection-related APIs. Required for every app that uses the Atsign Protocol.
 
 ---
 
 ### Flutter apps
 
-```yaml
-dependencies:
-  at_client_flutter: ^1.1.2   # re-exports at_client — one dep is enough
+```sh
+dart pub add at_client_flutter   # re-exports at_client — one dep is enough
 ```
 
 `at_client_flutter` re-exports `at_client` in full
@@ -48,15 +44,17 @@ one entry. You do not need to add `at_client` separately.
 
 ### APKAM enrollment / custom auth
 
-```yaml
-dependencies:
-  at_auth: ^3.1.0
+```sh
+dart pub add at_auth
 ```
 
 `at_auth` provides `AtAuthRequest`, `AuthResponse`, `AtOnboardingRequest`,
-`AtEnrollmentResponse`, `RegistrarService`, and `AtRootDomain`. Required if you
-are building custom auth flows or using APKAM enrollment outside the dialog
-helpers.
+`AtEnrollmentResponse`, and `RegistrarService`. Required if you are building
+custom auth flows or using APKAM enrollment outside the dialog helpers.
+
+`AtRootDomain` (the `_setupAtClient` parameter type) is still required, but it
+comes from `at_commons` — surfaced via `at_client` / `at_client_flutter`, not
+`at_auth`.
 
 For standard Flutter apps using the `at_client_flutter` dialogs, `at_auth` is a
 transitive dependency — you may not need to add it explicitly.
@@ -65,9 +63,8 @@ transitive dependency — you may not need to add it explicitly.
 
 ### Raw cryptographic operations
 
-```yaml
-dependencies:
-  at_chops: ^3.0.0
+```sh
+dart pub add at_chops
 ```
 
 Add `at_chops` only if your app performs direct cryptographic operations
@@ -79,10 +76,8 @@ internally.
 
 ### CLI / headless Dart apps (no Flutter)
 
-```yaml
-dependencies:
-  at_client: ^3.12.0
-  at_cli_commons: ^3.1.0
+```sh
+dart pub add at_client at_cli_commons
 ```
 
 `at_cli_commons` provides helpers for Dart CLI/server apps: flag parsing, key
@@ -144,11 +139,11 @@ a dependency on packages mid-migration.
 These are typically pulled in as transitive dependencies. You only need to pin
 them directly if you're using their types directly in your own API.
 
-| Package | Version | When to pin explicitly |
-| --------- | --------- | ---------------------- |
-| `at_commons` | `^5.10.0` | If you use `AtKey`, `AtMetadata`, `Atsign` directly |
-| `at_utils` | `^3.4.0` | If you use `AtSignLogger` directly |
-| `at_lookup` | `^3.5.0` | Rarely needed; low-level verb implementation |
+| Package | When to add it explicitly |
+| --------- | ---------------------- |
+| `at_commons` | If you use `AtKey`, `AtMetadata`, `Atsign` directly |
+| `at_utils` | If you use `AtSignLogger` directly |
+| `at_lookup` | Rarely needed; low-level verb implementation |
 
 ---
 
@@ -156,20 +151,18 @@ them directly if you're using their types directly in your own API.
 
 ### Dart CLI / server app
 
-```yaml
-dependencies:
-  at_client: ^3.12.0
-  at_cli_commons: ^3.1.0
-  at_auth: ^3.1.0         # for AtAuthRequest if needed
+```sh
+dart pub add at_client at_cli_commons at_auth
+# at_auth only if you need AtAuthRequest / custom auth flows
 ```
 
 ### Flutter mobile / desktop app
 
-```yaml
-dependencies:
-  at_client_flutter: ^1.1.2   # re-exports at_client — one dep is enough
-  at_auth: ^3.1.0              # if using RegistrarService or custom APKAM flows
-  path_provider: ^2.0.0        # for getApplicationSupportDirectory()
+```sh
+dart pub add at_client_flutter at_auth path_provider
+# at_client_flutter re-exports at_client — one dep is enough
+# at_auth only if using RegistrarService or custom APKAM flows
+# path_provider for getApplicationSupportDirectory()
 ```
 
 ### Full imports for a Flutter app

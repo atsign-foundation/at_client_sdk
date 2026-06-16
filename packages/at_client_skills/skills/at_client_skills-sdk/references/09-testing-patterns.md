@@ -1,5 +1,3 @@
-<!-- verified: at_client ^3.12.0 — update on next minor release -->
-
 # Testing Patterns
 
 `at_client` ships a test-only library that lets you unit-test
@@ -13,10 +11,8 @@ Import it directly — it is intentionally **not** re-exported from
 
 Add `test` and `mocktail` as dev dependencies:
 
-```yaml
-dev_dependencies:
-  test: ^1.24.0
-  mocktail: ^1.0.0
+```sh
+dart pub add --dev test mocktail
 ```
 
 Import the test hooks library in your test file:

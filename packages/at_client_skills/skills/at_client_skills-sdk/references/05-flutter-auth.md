@@ -1,18 +1,16 @@
-<!-- verified: at_client_flutter ^1.1.2 — update on next minor release -->
-
 # Flutter Auth Guide
 
 `at_client_flutter` provides four authentication flows as dialog-based helpers.
 All flows end with the same `_setupAtClient(...)` call.
 
-## pubspec.yaml
+## Dependencies
 
-```yaml
-dependencies:
-  at_client: ^3.12.0
-  at_client_flutter: ^1.1.2
-  at_auth: ^3.1.0
-  path_provider: ^2.0.0  # for getApplicationSupportDirectory()
+Add the packages with `dart pub add` (pins the latest compatible versions):
+
+```sh
+dart pub add at_client_flutter at_auth path_provider
+# at_client_flutter re-exports at_client; path_provider is for
+# getApplicationSupportDirectory()
 ```
 
 ---
@@ -53,7 +51,7 @@ Future<void> activateNewAtSign(BuildContext context) async {
   );
   if (response == null || !response.isSuccessful) return;
 
-  await _setupAtClient(authRequest, response);
+  await _setupAtClient(authRequest.rootDomain, response);
 }
 ```
 
@@ -82,7 +80,7 @@ Future<void> loginWithFile(BuildContext context) async {
   );
   if (response == null || !response.isSuccessful) return;
 
-  await _setupAtClient(authRequest, response);
+  await _setupAtClient(authRequest.rootDomain, response);
 }
 ```
 
@@ -124,7 +122,7 @@ Future<void> loginWithKeychain(BuildContext context) async {
   );
   if (response == null || !response.isSuccessful) return;
 
-  await _setupAtClient(authRequest, response);
+  await _setupAtClient(authRequest.rootDomain, response);
 }
 ```
 
@@ -166,7 +164,7 @@ Future<void> loginWithApkam(BuildContext context) async {
   );
   if (response == null || !response.isSuccessful) return;
 
-  await _setupAtClient(authRequest, response);
+  await _setupAtClient(authRequest.rootDomain, response);
 }
 ```
 
@@ -179,18 +177,17 @@ After any successful authentication, initialize `AtClient`:
 ```dart
 import 'package:path_provider/path_provider.dart' show getApplicationSupportDirectory;
 
-// authRequest is typed as the sealed base AuthRequest so this helper works for
-// all four flows. (AtAuthRequest and AtOnboardingRequest are sibling subtypes —
-// neither is a subtype of the other.)
+// Takes just the root domain (from authRequest.rootDomain), so this helper is
+// independent of which auth flow produced the request — it works for all four.
 Future<void> _setupAtClient(
-  AuthRequest authRequest,
+  AtRootDomain atRootDomain,
   AuthResponse response,
 ) async {
   final dir = await getApplicationSupportDirectory();
 
   final acp = AtClientPreference()
-    ..rootDomain    = authRequest.rootDomain.rootDomain
-    ..rootPort      = authRequest.rootDomain.rootPort
+    ..rootDomain    = atRootDomain.rootDomain
+    ..rootPort      = atRootDomain.rootPort
     ..namespace     = 'my_namespace'
     ..commitLogPath  = dir.path
     ..hiveStoragePath = dir.path;
@@ -260,5 +257,7 @@ import 'package:at_client_flutter/extensions.dart';
 
 import 'package:at_auth/at_auth.dart';
 // AtAuthRequest, AuthResponse, AtAuthenticationException, AtOnboardingRequest,
-// AtEnrollmentResponse, AtRootDomain, RegistrarService
+// AtEnrollmentResponse, RegistrarService
+// Note: AtRootDomain comes from at_commons (surfaced via at_client_flutter),
+// not at_auth.
 ```

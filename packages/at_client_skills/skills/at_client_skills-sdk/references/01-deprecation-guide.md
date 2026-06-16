@@ -1,5 +1,3 @@
-<!-- verified: at_client X.X.X / at_client_flutter X.X.X -->
-
 # Deprecation Guide: What NOT to Use
 
 ## The Deprecated `AtCollectionModel` API

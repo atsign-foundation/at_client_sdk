@@ -1,5 +1,3 @@
-<!-- verified: at_client ^3.12.0 — update on next minor release -->
-
 # Query\<T> API Reference
 
 `Query<T>` is a composable, immutable, value-typed query builder over an

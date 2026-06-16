@@ -1,5 +1,3 @@
-<!-- verified: at_client ^3.12.0 — update on next minor release -->
-
 # Domain-Object Patterns
 
 `AtCollection<T>` stores your domain objects as JSON. Any Dart class with
