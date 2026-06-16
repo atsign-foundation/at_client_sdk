@@ -7,9 +7,7 @@ library;
 export 'src/algorithm/at_algorithm.dart';
 export 'src/algorithm/at_iv.dart';
 // Key interfaces
-export 'src/key/at_key_pair.dart';
-export 'src/key/at_private_key.dart';
-export 'src/key/at_public_key.dart';
+export 'src/key/keys.dart';
 export 'src/key/key_names.dart';
 export 'src/key/key_type.dart';
 // Metadata Interfaces

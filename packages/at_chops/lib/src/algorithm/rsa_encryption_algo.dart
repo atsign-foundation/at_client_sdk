@@ -1,8 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
-import 'package:at_chops/src/key/at_private_key.dart';
-import 'package:at_chops/src/key/at_public_key.dart';
+import 'package:at_chops/src/key/keys.dart';
 import 'package:at_chops/src/key/impl/at_encryption_key_pair.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:crypton/crypton.dart';

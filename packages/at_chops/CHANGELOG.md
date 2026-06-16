@@ -1,3 +1,32 @@
+## 3.2.0
+- feat: Add `XWingPureDartAlgo` — the X-Wing hybrid post-quantum/traditional
+  KEM (draft-connolly-cfrg-xwing-kem-10; X25519 + ML-KEM-768), with
+  `AtXWingKeyPair` and `AtChopsUtil.generateXWingKeyPair()`; verified
+  against the draft's test vectors byte-exact
+- feat: Add `XWingFfiAlgo` — the OpenSSL/FFI X-Wing backend, composing
+  `MlKem768FfiAlgo` and `X25519FfiAlgo` (X-Wing has no native OpenSSL
+  primitive). Fully interoperable with `XWingPureDartAlgo` and verified against
+  the draft vector. Supporting additions: `MlKem768FfiAlgo.generateKeyPairFromSeed`
+  (FIPS 203 `d || z` seed import) and `X25519FfiAlgo.publicKeyFromPrivate`
+- feat: `MlKem768PureDartAlgo.encapsulate` accepts optional deterministic
+  randomness (FIPS 203 `m`) for test-vector verification
+- feat: Add `AesGcm256EncryptionAlgo` — AES-256-GCM authenticated encryption
+  (pure-Dart via `cryptography`); output `ciphertext || tag`, explicit
+  12-byte nonce, tamper detection via `AtDecryptionException`
+- refactor: consolidate the key classes (`AtPublicKey`, `AtPrivateKey`,
+  `SymmetricKey`, `AsymmetricKeyPair`) under a single sealed hierarchy in
+  `src/key/keys.dart`, replacing `at_key_pair.dart` / `at_private_key.dart` /
+  `at_public_key.dart`. The public class names and constructors are unchanged
+  and remain exported from `package:at_chops/at_chops.dart`; only direct
+  `src/`-path imports of the removed files are affected.
+- feat: Add ML-DSA-65 digital signature algorithm (pure-Dart via `pqcrypto` package and OpenSSL FFI backends)
+- feat: Add `AtMlDsa65KeyPair` key type (public key: 1952 bytes, secret key: 4032 bytes)
+- feat: Add `AtChopsUtil.generateMlDsa65KeyPair()` utility method
+- feat: Add OpenSSL capability probe (`libCryptoSupportsMlDsa65`) to skip ML-DSA-65 FFI tests on OpenSSL < 3.3
+- fix: Refactor `libCryptoSupportsMlKem768` to share implementation with new `libCryptoSupportsMlDsa65`
+- fix: Emit warning to stderr when `AT_CHOPS_LIBCRYPTO_PATH` is set but fails to open
+- chore: Rename example files to follow `lower_case_with_underscores` convention
+
 ## 3.1.0
 - feat: Add X25519 key agreement algorithm (pure-Dart via `cryptography` package and OpenSSL FFI backends)
 - feat: Add ML-KEM-768 key encapsulation algorithm (pure-Dart via `pqcrypto` package and OpenSSL FFI backends)
@@ -8,6 +37,7 @@
 
 ## 3.0.0
 - feat: Faster AES encryption/decryption using better_crypto
+- refactor: bring all keys into the same import underneath a unified sealed class
 ## 2.2.0
 - feat: Implement "argon2id" hashing algorithm to generate hash from a given passphrase.
 - feat: Add generics to "AtEncryptionAlgorithm" and "AtHashingAlgorithm" to support multiple data types in their
