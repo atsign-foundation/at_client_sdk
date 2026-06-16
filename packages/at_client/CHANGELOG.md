@@ -5,6 +5,10 @@
   with a persisted pull cursor, and key-expiry processing is driven by the
   keystore's `nextExpiresAt` / `peekNewlyAvailable` surface. Requires
   `at_persistence_secondary_server ^5.0.0`.
+- deprecated: `AtClient.startCompactionJob` and `AtClient.stopCompactionJob`
+  are retained for source compatibility but are now no-ops (a commit-log-free
+  client has no commit log to compact); they will be removed in a future
+  major release.
 
 ## 3.12.0
 

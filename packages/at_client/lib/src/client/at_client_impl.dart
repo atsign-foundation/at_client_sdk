@@ -563,6 +563,23 @@ class AtClientImpl implements AtClient {
   }
 
   /// Does nothing unless a telemetry service has been injected
+  @Deprecated(
+      'Commit-log compaction was removed with the commit-log-free keystore; '
+      'this is now a no-op and will be removed in a future major release')
+  @override
+  Future<void> startCompactionJob(
+      {Duration? commitLogCompactionDuration}) async {
+    // No-op: the commit-log-free client has no commit log to compact.
+  }
+
+  @Deprecated(
+      'Commit-log compaction was removed with the commit-log-free keystore; '
+      'this is now a no-op and will be removed in a future major release')
+  @override
+  Future<void> stopCompactionJob() async {
+    // No-op: the commit-log-free client has no commit log compaction job.
+  }
+
   void _cascadeSetTelemetryService() {
     // if (telemetry != null) {
     //   _encryptionService?.telemetry = telemetry;

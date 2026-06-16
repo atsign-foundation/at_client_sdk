@@ -620,6 +620,25 @@ abstract class AtClient {
   ///
   Future<AtResponse> getOTP();
 
+  /// No longer does anything; retained for source compatibility.
+  ///
+  /// The client is commit-log-free, so there is no commit log to compact.
+  /// This is now a no-op and will be removed in a future major release.
+  @Deprecated(
+      'Commit-log compaction was removed with the commit-log-free keystore; '
+      'this is now a no-op and will be removed in a future major release')
+  Future<void> startCompactionJob({Duration? commitLogCompactionDuration});
+
+  /// No longer does anything; retained for source compatibility.
+  ///
+  /// The client is commit-log-free, so there is no commit log compaction job
+  /// to stop. This is now a no-op and will be removed in a future major
+  /// release.
+  @Deprecated(
+      'Commit-log compaction was removed with the commit-log-free keystore; '
+      'this is now a no-op and will be removed in a future major release')
+  Future<void> stopCompactionJob();
+
   /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
   /// returns map containing key of each sharedWithAtSign and value of [FileTransferObject]
   @Deprecated(
