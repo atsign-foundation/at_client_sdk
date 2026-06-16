@@ -69,6 +69,7 @@ class AtConstants {
   static const String sharedWithPublicKeyHashingAlgo = 'hashingAlgo';
   static const String sharedKeyEncryptedEncryptingKeyName = 'skeEncKeyName';
   static const String sharedKeyEncryptedEncryptingAlgo = 'skeEncAlgo';
+  static const String appMetadata = 'appMetadata';
   static const String immutable = 'immutable';
   static const String force = 'force';
   static const String firstByte = '#';

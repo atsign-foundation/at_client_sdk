@@ -191,6 +191,8 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
       builder.atKey.metadata.immutable =
           _getBoolVerbParams(verbParams[AtConstants.immutable]!);
     }
+    builder.atKey.metadata.appMetadata =
+        Metadata.decodeAppMetadata(verbParams[AtConstants.appMetadata]);
     builder.value = verbParams[AtConstants.value];
 
     return builder;
@@ -248,7 +250,8 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
           atKey.metadata.encAlgo == other.atKey.metadata.encAlgo &&
           atKey.metadata.ivNonce == other.atKey.metadata.ivNonce &&
           atKey.metadata.skeEncKeyName == other.atKey.metadata.skeEncKeyName &&
-          atKey.metadata.skeEncAlgo == other.atKey.metadata.skeEncAlgo;
+          atKey.metadata.skeEncAlgo == other.atKey.metadata.skeEncAlgo &&
+          atKey.metadata.appMetadata == other.atKey.metadata.appMetadata;
 
   @override
   int get hashCode =>
@@ -281,5 +284,6 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
       atKey.metadata.encAlgo.hashCode ^
       atKey.metadata.ivNonce.hashCode ^
       atKey.metadata.skeEncKeyName.hashCode ^
-      atKey.metadata.skeEncAlgo.hashCode;
+      atKey.metadata.skeEncAlgo.hashCode ^
+      atKey.metadata.appMetadata.hashCode;
 }
