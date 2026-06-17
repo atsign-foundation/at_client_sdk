@@ -571,6 +571,57 @@ each `sshnp` run forms its own session. A long-running **daemon** should
 instead **refuse-to-start (or use a distinct persistent label)** — an
 ephemeral daemon leaf has no stable self-group membership.
 
+### User-visible delta — target: none
+
+Once the NoPorts programs are updated, **nothing a user types, runs, or
+authorises changes.** This holds even with many client programs (sshnp, npt,
+the desktop app) and many service instances all under one atSign:
+
+- **Many client programs as `@client`:** each program gets its own stable
+  leaf by **label** (`sshnp`, `npt`, `noports-desktop`), resumed across
+  launches; concurrent instances of the same program fork to ephemeral
+  leaves. All run simultaneously, no clones, zero args — as they coexist
+  today. Five concurrent `sshnp` tunnels → five working tunnels, same as now.
+- **`@daemon` (N):** each daemon is a distinct fleet leaf, transparent because
+  the daemon derives its label from the **device name it already has**.
+- **`@relay` / srvd:** essentially untouched (relay-auth stays transmitted,
+  protected by Tier 0; relays are transit for opaque blobs, not group
+  members).
+- **`@policy` / `@events`:** unchanged so long as their interactions stay
+  pairwise or self-group (derived membership), not explicit cross-atSign
+  groups.
+- **Shared self-data across a user's client programs** still works — all
+  `@client` leaves are co-members of `@client`'s self-group (derived
+  membership); a brand-new leaf may do a one-time epoch-key fetch on first
+  access (invisible in practice).
+
+**The load-bearing condition: admission stays per-atSign, not per-leaf.** A
+daemon admits any *validly-credentialed leaf of an authorised atSign* — the
+allow-list still lists `@client`, and any of its leaves (sshnp/npt/desktop/
+ephemeral forks) is accepted by verifying its KeyPackage chains to `@client`'s
+enrollment. Per-leaf granularity is only an *optional* refinement for
+revocation and audit. If admission ever became per-leaf (allow-list each
+instance), that is a severe regression.
+
+**Genuinely new, but additive (not a workflow change):** optional per-leaf /
+per-device revocation (revoke the lost laptop's `noports-desktop` leaf without
+nuking all of `@client`); finer `@events` audit (attribute activity to a
+leaf/device).
+
+**Residuals (the honest "any difference at all"):** more SDK-managed key files
+(one persistent leaf keyset per client program + transient, non-persisted
+ephemerals); transient short-TTL KeyPackage churn on `@client`'s atServer
+(self-cleaning); deterministic behaviour on a duplicate same-identity launch
+(fork/refuse instead of silent coexistence — visible only at the misuse
+boundary); and invisible wins (faster session setup, harvest-now-decrypt-later
+closed, stronger revocation).
+
+**Acceptance criteria for the port** (meet these → user-invisible): device
+name → resolver **label**; daemon **allow-list** → **per-atSign** session
+admission; **enrollment approval** → self-group admission. Failing any of
+these leaks as a new `--client-id`/label arg or a manual "add to group" step —
+the exact usability fails being designed out.
+
 ## Known shape risks & corrective actions (assessment 2026-06-17)
 
 A review of the secret-sharing + group work against the MLS end state,
