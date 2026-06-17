@@ -7,3 +7,7 @@ class AtAuthenticationException extends AtException {
 class AtKeysFileOverwriteException extends AtException {
   AtKeysFileOverwriteException(super.message);
 }
+
+class RegistrarException extends AtException {
+  RegistrarException(super.message);
+}

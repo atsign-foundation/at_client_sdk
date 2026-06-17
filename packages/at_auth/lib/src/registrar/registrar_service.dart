@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/src/registrar/registrar.dart';
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/at_auth.dart';
+import 'package:at_commons/atsign.dart';
 import 'package:at_utils/at_logger.dart';
 
 import 'package:http/http.dart' as http;
@@ -64,8 +66,9 @@ class RegistrarService implements Registrar {
 
   // AtSign Activation Methods
   @override
-  //TODO: this should return void, throw if fails
-  Future<bool> sendActivationOtp(String atsign) async {
+  @Deprecated('Use requestActivationOtp instead')
+  Future<bool> sendActivationOtp(String atSign) async {
+    Atsign atsign = atSign.toAtsign();
     var res = await registrarApiRequest(
       RegistrarApiEndpoint.requestOtp,
       {'atsign': atsign},
@@ -81,14 +84,31 @@ class RegistrarService implements Registrar {
   }
 
   @override
+  Future<void> requestActivationOtp(String atSign) async {
+    Atsign atsign = atSign.toAtsign();
+    var res = await registrarApiRequest(
+      RegistrarApiEndpoint.requestOtp,
+      {'atsign': atsign},
+    );
+    if (res.statusCode != 200) {
+      throw RegistrarException(res.body);
+    }
+    var payload = jsonDecode(res.body);
+    if (payload["message"] != "Sent Successfully") {
+      throw RegistrarException(res.body);
+    }
+  }
+
+  @override
   //TODO: this really should be Future<String>
   Future<String?> verifyActivation({
     required String atSign,
     required String otp,
   }) async {
+    Atsign atsign = atSign.toAtsign();
     var res = await registrarApiRequest(
       RegistrarApiEndpoint.validateOtp,
-      {'atsign': atSign, 'otp': otp},
+      {'atsign': atsign, 'otp': otp},
     );
     if (res.statusCode != 200) {
       _logger.warning('Failed to verify activation: ${res.body}');
@@ -166,8 +186,9 @@ class RegistrarService implements Registrar {
     required String email,
     String? oldEmail,
   }) async {
+    Atsign atsign = atSign.toAtsign();
     Map<String, String?> data = {
-      'atsign': atSign,
+      'atsign': atsign,
       'email': email,
     };
     if (oldEmail != null) {
@@ -208,10 +229,11 @@ class RegistrarService implements Registrar {
     required String otp,
     bool confirmation = false,
   }) async {
+    Atsign atsign = atSign.toAtsign();
     var res = await registrarApiRequest(
       RegistrarApiEndpoint.validatePerson,
       {
-        'atsign': atSign,
+        'atsign': atsign,
         'email': email,
         'otp': otp,
         'confirmation': confirmation.toString(),

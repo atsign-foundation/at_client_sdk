@@ -1,3 +1,4 @@
+import 'package:at_commons/atsign.dart';
 import 'package:http/http.dart';
 
 enum HttpMethod { get, post }
@@ -55,7 +56,12 @@ abstract interface class Registrar {
   // ===========================================================================
 
   /// Sends an activation OTP to the email/phone associated with the atSign
+  @Deprecated('Use requestActivationOtp instead')
   Future<bool> sendActivationOtp(String atSign);
+
+  Future<void> requestActivationOtp(Atsign atsign);
+
+  //TODO: change signatures to Atsign atsign
 
   /// Verifies the activation OTP and returns the CRAM key
   Future<String?> verifyActivation({

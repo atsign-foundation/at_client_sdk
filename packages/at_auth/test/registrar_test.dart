@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/registrar/registrar_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -34,6 +35,32 @@ void main() {
     test('returns false when message is not "Sent Successfully"', () async {
       final service = _makeService(_mockResponse({'message': 'Already sent'}));
       expect(await service.sendActivationOtp('@alice'), isFalse);
+    });
+  });
+
+  group('requestActivationOtp', () {
+    test('completes on success', () async {
+      final service =
+          _makeService(_mockResponse({'message': 'Sent Successfully'}));
+      await expectLater(service.requestActivationOtp('@alice'), completes);
+    });
+
+    test('throws AtAuthenticationException on non-200 status', () async {
+      final service =
+          _makeService(_mockResponse({'message': 'Server Error'}, status: 500));
+      expect(
+        () => service.requestActivationOtp('@alice'),
+        throwsA(isA<RegistrarException>()),
+      );
+    });
+
+    test('throws AtAuthenticationException when message is not success',
+        () async {
+      final service = _makeService(_mockResponse({'message': 'Already sent'}));
+      expect(
+        () => service.requestActivationOtp('@alice'),
+        throwsA(isA<RegistrarException>()),
+      );
     });
   });
 
