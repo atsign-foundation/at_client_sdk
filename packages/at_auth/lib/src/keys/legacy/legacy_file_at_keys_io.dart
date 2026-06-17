@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/keys/at_keys_document.dart';
+import 'package:at_auth/src/keys/legacy/at_keys.dart';
 import 'package:at_commons/at_commons.dart';
 
 class LegacyFileAtKeysIo extends WrittenAtKeysIo {
@@ -29,7 +30,7 @@ class LegacyFileAtKeysIo extends WrittenAtKeysIo {
     decodedAtKeysData = jsonDecode(atAuthData);
     decodedAtKeysData = await LegacyKeyIOUtil.decodeAtKeys(decodedAtKeysData,
         passPhrase: passPhrase);
-    AtKeys atKeys = await LegacyKeyIOUtil.decryptAtKeysWithSelfEncKey(
+    LegacyAtKeys atKeys = await LegacyKeyIOUtil.decryptAtKeysWithSelfEncKey(
         decodedAtKeysData, PkamAuthMode.keysFile);
     AtKeysDocument document = legacyAtKeysAdapter.toDocument(atsign, atKeys);
     return resolver.resolve(document);
@@ -37,11 +38,10 @@ class LegacyFileAtKeysIo extends WrittenAtKeysIo {
 
   @override
   Future<void> write(
-    String atsign,
     AtKeysSet atKeysSet, {
     AtKeysWriteOptions? options,
   }) async {
-    String path = filePath!(atsign);
+    String path = filePath!(atKeysSet.atsign);
     if (!Directory(path).parent.existsSync()) {
       await Directory(path).parent.create(recursive: true);
     }
@@ -56,8 +56,8 @@ class LegacyFileAtKeysIo extends WrittenAtKeysIo {
   }
 
   @override
-  Future<void> update(String atsign, AtKeysSet atKeysSet) async {
-    String path = filePath!(atsign);
+  Future<void> update(AtKeysSet atKeysSet) async {
+    String path = filePath!(atKeysSet.atsign);
     if (!File(path).existsSync()) {
       throw AtException(
           'provided keys file does not exist. Please check whether the file path $path is valid');

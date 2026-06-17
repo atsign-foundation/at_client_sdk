@@ -2,7 +2,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 
-class AtKeys {
+class LegacyAtKeys {
   AtBytes? apkamPublicKey;
   AtBytes? apkamPrivateKey;
   AtBytes? defaultEncryptionPublicKey;
@@ -12,12 +12,12 @@ class AtKeys {
   String? enrollmentId;
   Map<String, dynamic> metadata = {};
 
-  AtKeys();
+  LegacyAtKeys();
 
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    if (other is! AtKeys) return false;
+    if (other is! LegacyAtKeys) return false;
     return enrollmentId == other.enrollmentId &&
         apkamPublicKey == other.apkamPublicKey &&
         apkamPrivateKey == other.apkamPrivateKey &&
@@ -48,8 +48,8 @@ class AtKeys {
     };
   }
 
-  factory AtKeys.fromJson(Map<String, dynamic> json) {
-    var keys = AtKeys()
+  factory LegacyAtKeys.fromJson(Map<String, dynamic> json) {
+    var keys = LegacyAtKeys()
       ..apkamPublicKey = _existsAndNotNull(json, auth_constants.apkamPublicKey)
           ? AtBytes.fromString(json[auth_constants.apkamPublicKey])
           : null
@@ -83,8 +83,8 @@ class AtKeys {
     return keys;
   }
 
-  AtKeys copyWith(AtKeys other) {
-    var keys = AtKeys()
+  LegacyAtKeys copyWith(LegacyAtKeys other) {
+    var keys = LegacyAtKeys()
       ..apkamPublicKey = other.apkamPublicKey ?? apkamPublicKey
       ..apkamPrivateKey = other.apkamPrivateKey ?? apkamPrivateKey
       ..defaultEncryptionPublicKey =
@@ -121,7 +121,7 @@ class AtKeys {
 ///   - post approval
 /// During approval: the enroll will wait to confirm via PKAM
 /// post approval: we fetch the defaultEncryptionPrivateKey & defaultSelfEncryptionKey
-AtChops _createApkamChops(AtKeys atKeys) {
+AtChops _createApkamChops(LegacyAtKeys atKeys) {
   if (atKeys.apkamPublicKey == null) {
     AtKeyNotFoundException(
         "apkamPublicKey not found in AtKeys, unable to make atChops instance");
@@ -142,9 +142,8 @@ AtChops _createApkamChops(AtKeys atKeys) {
     atKeys.apkamPrivateKey!.toString(),
   );
 
-  final atChopsKeys =
-      LegacyAtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
-        ..apkamSymmetricKey = AESKey(atKeys.apkamSymmetricKey!.toString());
+  final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
+    ..apkamSymmetricKey = AESKey(atKeys.apkamSymmetricKey!.toString());
 
   if (atKeys.defaultSelfEncryptionKey != null) {
     atChopsKeys.selfEncryptionKey =
@@ -154,7 +153,7 @@ AtChops _createApkamChops(AtKeys atKeys) {
   return AtChopsImpl(atChopsKeys);
 }
 
-AtChops _createPkamChops(AtKeys atKeys) {
+AtChops _createPkamChops(LegacyAtKeys atKeys) {
   if (atKeys.defaultEncryptionPrivateKey == null) {
     throw AtPrivateKeyNotFoundException(
         'PKAM mode requires defaultEncryptionPrivateKey');
@@ -174,8 +173,7 @@ AtChops _createPkamChops(AtKeys atKeys) {
     atKeys.apkamPrivateKey!.toString(),
   );
 
-  final atChopsKeys = LegacyAtChopsKeys.create(
-      atEncryptionKeyPair, atPkamKeyPair)
+  final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
     ..selfEncryptionKey = AESKey(atKeys.defaultSelfEncryptionKey!.toString());
 
   return AtChopsImpl(atChopsKeys);

@@ -22,7 +22,7 @@ class AtKeysDocumentResolver implements AtKeysResolver {
     );
 
     return AtKeysSet(
-      atSign: document.atsign.toAtsign(),
+      atsign: document.atsign.toAtsign(),
       enrollmentId: document.enrollmentId,
       asymmetricKeys: asymmetricKeys,
       symmetricKeys: symmetricKeys,
@@ -97,7 +97,7 @@ class AtKeysDocumentResolver implements AtKeysResolver {
   AtKeysDocument resolveToDocument(AtKeysSet keys) {
     return AtKeysDocument(
       version: version,
-      atsign: keys.atSign,
+      atsign: keys.atsign,
       enrollmentId: keys.enrollmentId,
       keys: [
         for (final key in keys.asymmetricKeys) ...[
@@ -210,23 +210,29 @@ class AtKeysDocumentResolver implements AtKeysResolver {
     for (final entry in defaults.values.entries) {
       final purpose = entry.key;
       final reference = entry.value;
-      if (purpose.usesAsymmetricPair) {
+      final usesAsymmetricPair = keyPurposeUsesAsymmetricPair(purpose);
+      if (usesAsymmetricPair == true) {
         if (!asymmetricKeysByPairId.containsKey(reference)) {
           throw AtKeysValidationException(
-              'Default ${purpose.defaultsKey} references missing pairId "$reference"');
+              'Default $purpose references missing pairId "$reference"');
         }
+        continue;
+      }
+
+      if (usesAsymmetricPair == null &&
+          asymmetricKeysByPairId.containsKey(reference)) {
         continue;
       }
 
       final record = recordsById[reference];
       if (record == null) {
         throw AtKeysValidationException(
-            'Default ${purpose.defaultsKey} references missing id "$reference"');
+            'Default $purpose references missing id "$reference"');
       }
       if (record.kind != KeyRecordKind.symmetric ||
           !symmetricKeysById.containsKey(reference)) {
         throw AtKeysValidationException(
-            'Default ${purpose.defaultsKey} must reference a symmetric key');
+            'Default $purpose must reference a symmetric key');
       }
     }
   }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/src/keys/legacy/legacy_file_at_keys_io.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -24,7 +25,7 @@ void main() {
     });
 
     test('Test read() with valid atKeys file path', () async {
-      final fileAtKeysIo = FileAtKeysIo(filePath: (_) => keyFilePath);
+      final fileAtKeysIo = LegacyFileAtKeysIo(filePath: (_) => keyFilePath);
       final atKeys = await fileAtKeysIo.read(atSign);
 
       expect(atKeys.apkamPrivateKey, isNotNull);

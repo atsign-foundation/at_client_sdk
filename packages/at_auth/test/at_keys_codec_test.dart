@@ -2,7 +2,8 @@ import 'dart:convert';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys_codec.dart';
-import 'package:at_auth/src/keys/at_keys_models.dart';
+import 'package:at_auth/src/keys/at_keys_document.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -19,13 +20,13 @@ void main() {
       expect(document.version, 2);
       expect(document.atsign, '@alice');
       expect(document.keys, hasLength(5));
-      expect(document.defaults[KeyPurpose.pkam], 'default-pkam');
-      expect(document.defaults[KeyPurpose.selfEncryption], 'self-encryption');
+      expect(document.defaults[KeyPurposes.pkam], 'default-pkam');
+      expect(document.defaults[KeyPurposes.selfEncryption], 'self-encryption');
 
       final pkamPrivate = document.keys.singleWhere(
         (record) => record.id == 'default-pkam-private',
       );
-      expect(pkamPrivate.purpose, KeyPurpose.pkam);
+      expect(pkamPrivate.purpose, KeyPurposes.pkam);
       expect(pkamPrivate.kind, KeyRecordKind.private);
       expect(pkamPrivate.operations, ['authenticate', 'sign']);
     });
@@ -35,7 +36,7 @@ void main() {
       final encoded = codec.encodeDocument(document);
 
       expect(encoded['version'], 2);
-      expect(encoded['defaults']['selfEncryption'], 'self-encryption');
+      expect(encoded['defaults']['self-encryption'], 'self-encryption');
 
       final encodedKeys = encoded['keys'] as List<dynamic>;
       final selfEncryption = encodedKeys.singleWhere(
@@ -206,7 +207,7 @@ Map<String, dynamic> _validDocument() {
     'defaults': {
       'pkam': 'default-pkam',
       'encryption': 'default-encryption',
-      'selfEncryption': 'self-encryption',
+      'self-encryption': 'self-encryption',
     },
   })) as Map<String, dynamic>;
 }

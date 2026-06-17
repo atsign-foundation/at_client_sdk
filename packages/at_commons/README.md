@@ -47,6 +47,56 @@ Useful getters:
 | `fullKeyAndOwner` | `phone.myapp@alice`      |
 | `toString()`      | `@bob:phone.myapp@alice` |
 
+## atKeys runtime models
+
+`AtKeysSet` is the runtime container for authentication key material. It is
+separate from `AtKey`, which models an atServer keystore key name.
+
+To create a new asymmetric key pair and add it to an `AtKeysSet`, construct an
+`AtAsymmetricKey` and call `addKey`:
+
+```dart
+AtKeysSet atKeysSet = AtKeysSet(
+  atsign: '@alice'.toAtsign(),
+  asymmetricKeys: [],
+  symmetricKeys: [],
+  defaults: AtKeysDefaults(values: {
+    KeyPurposes.pkam: 'device-pkam',
+  }),
+);
+
+AtAsymmetricKey pkamKeyPair = AtAsymmetricKey(
+  pairId: 'device-pkam',
+  purpose: KeyPurposes.pkam,
+  algorithm: 'rsa-2048',
+  publicKey: AtBytes.fromString('cGthbS1wdWJsaWMta2V5'),
+  privateKey: AtBytes.fromString('cGthbS1wcml2YXRlLWtleQ=='),
+  operations: ['authenticate', 'sign', 'verify'],
+);
+
+atKeysSet.addKey(pkamKeyPair);
+```
+
+Use `addKeys` when adding multiple runtime key models:
+
+```dart
+AtSymmetricKey selfEncryptionKey = AtSymmetricKey(
+  id: 'self-encryption',
+  purpose: KeyPurposes.selfEncryption,
+  algorithm: 'aes-256',
+  bytes: AtBytes.fromString('c2VsZi1lbmNyeXB0aW9uLWtleQ=='),
+  operations: ['encrypt', 'decrypt'],
+);
+
+atKeysSet.addKeys(<AtKeysMaterial>[
+  pkamKeyPair,
+  selfEncryptionKey,
+]);
+```
+
+`AtKeysSet.addKey` rejects duplicate asymmetric `pairId` values and duplicate
+symmetric `id` values.
+
 ## Metadata
 
 `Metadata` carries per-key settings. The fields most app code actually

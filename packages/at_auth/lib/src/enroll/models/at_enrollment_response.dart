@@ -129,13 +129,13 @@ class AtEnrollmentResponse extends AtEnrollmentRecord {
   EnrollmentStatus get enrollmentStatus => enrollStatus;
 
   /// Optional atSign associated with the enrollment.
-  String? atSign;
+  Atsign? atSign;
 
   /// Optional root domain associated with the enrollment.
   AtRootDomain? rootDomain;
 
   /// The authentication keys associated with the enrollment.
-  AtKeys? atAuthKeys;
+  AtKeysSet? atKeysSet;
 
   /// Creates an instance of [AtEnrollmentResponse].
   ///
@@ -143,7 +143,7 @@ class AtEnrollmentResponse extends AtEnrollmentRecord {
   /// The [enrollStatus] represents the status of the enrollment operation.
   /// The [atAuthKeys] are  authentication keys associated with the enrollment.
   AtEnrollmentResponse(this.enrollmentId, this.enrollStatus,
-      {this.atSign, this.rootDomain, this.atAuthKeys});
+      {this.atSign, this.rootDomain, this.atKeysSet});
 
   @override
   String toString() {
@@ -162,7 +162,7 @@ class AtEnrollmentResponse extends AtEnrollmentRecord {
     String enrollmentId = json['enrollmentId'];
     EnrollmentStatus enrollmentStatus = EnrollmentStatus.values
         .firstWhere((es) => es.name == json['enrollStatus']);
-    String? atSign = json['atSign'];
+    Atsign? atSign = (json['atSign'] as String).toAtsign();
 
     return AtEnrollmentResponse(enrollmentId, enrollmentStatus, atSign: atSign);
   }

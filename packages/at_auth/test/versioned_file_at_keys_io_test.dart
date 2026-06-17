@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
-import 'package:at_auth/src/keys/at_keys_models.dart';
 import 'package:at_auth/src/keys/legacy/legacy_at_keys_util.dart';
 import 'package:at_auth/src/keys/versioned_file_at_keys_io.dart';
 import 'package:at_chops/at_chops.dart';
@@ -33,9 +32,9 @@ void main() {
 
       final keys = await reader.read('@alice');
 
-      expect(keys.atSign, '@alice');
+      expect(keys.atsign, '@alice');
       expect(keys.asymmetricKeys, hasLength(2));
-      expect(keys.symmetricKeys.single.purpose, KeyPurpose.selfEncryption);
+      expect(keys.symmetricKeys.single.purpose, KeyPurposes.selfEncryption);
     });
 
     test('throws when requested atSign differs from document atSign', () async {
@@ -55,7 +54,7 @@ void main() {
       final keys = await reader.read('@alice');
 
       expect(keys.enrollmentId, 'legacy-enrollment');
-      expect(keys.defaults[KeyPurpose.pkam], 'legacy-pkam');
+      expect(keys.defaults[KeyPurposes.pkam], 'legacy-pkam');
       expect(
         keys.asymmetricKeys
             .singleWhere(
@@ -92,8 +91,8 @@ void main() {
 
       final keys = await reader.read('@alice');
 
-      expect(keys.atSign, '@alice');
-      expect(keys.defaults[KeyPurpose.encryption], 'default-encryption');
+      expect(keys.atsign, '@alice');
+      expect(keys.defaults[KeyPurposes.encryption], 'default-encryption');
     });
 
     test('routes passphrase-protected legacy files into AtKeysSet', () async {
@@ -108,7 +107,7 @@ void main() {
       final keys = await reader.read('@alice');
 
       expect(keys.enrollmentId, 'legacy-enrollment');
-      expect(keys.defaults[KeyPurpose.pkam], 'legacy-pkam');
+      expect(keys.defaults[KeyPurposes.pkam], 'legacy-pkam');
       expect(keys.symmetricKeys, hasLength(2));
     });
 
@@ -266,7 +265,7 @@ Map<String, dynamic> _validDocument(String atSign) {
     'defaults': {
       'pkam': 'default-pkam',
       'encryption': 'default-encryption',
-      'selfEncryption': 'self-encryption',
+      'self-encryption': 'self-encryption',
     },
   };
 }

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:at_auth/src/keys/at_keys_creation.dart';
 import 'package:at_auth/src/keys/at_keys_io.dart';
 import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
@@ -13,7 +12,6 @@ import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
-import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/legacy/legacy_at_keys_util.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';

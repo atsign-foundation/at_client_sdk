@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'at_keys.dart' show AtKeys;
+import 'at_keys.dart' show LegacyAtKeys;
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/keys/at_keys_passphrase_envelope.dart';
 import 'package:at_chops/at_chops.dart';
@@ -13,12 +13,12 @@ class LegacyKeyIOUtil {
   static final AtKeysPassphraseEnvelopeCodec _passphraseEnvelopeCodec =
       AtKeysPassphraseEnvelopeCodec();
 
-  static FutureOr<AtKeys> decryptAtKeysWithSelfEncKey(
+  static FutureOr<LegacyAtKeys> decryptAtKeysWithSelfEncKey(
       Map<String, dynamic> jsonData, PkamAuthMode authMode) async {
-    var securityKeys = AtKeys();
+    var securityKeys = LegacyAtKeys();
     String decryptionKey = jsonData[auth_constants.defaultSelfEncryptionKey];
-    var atChops = AtChopsImpl(
-        LegacyAtChopsKeys()..selfEncryptionKey = AESKey(decryptionKey));
+    var atChops =
+        AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(decryptionKey));
     securityKeys.defaultSelfEncryptionKey = AtBytes.fromString(decryptionKey);
     securityKeys.defaultEncryptionPublicKey = AtBytes.fromString(
         (await atChops.decryptString(
@@ -56,12 +56,12 @@ class LegacyKeyIOUtil {
   }
 
   static FutureOr<String> encryptAtKeysWithSelfEncKey(
-      AtKeys atKeys, PkamAuthMode authMode, String atsign) async {
+      LegacyAtKeys atKeys, PkamAuthMode authMode, String atsign) async {
     Map<String, dynamic> atKeysMap = {};
     if (atKeys.defaultSelfEncryptionKey == null) {
       throw AtException('selfEncryptionKey is required to encrypt the atKeys');
     }
-    var atChops = AtChopsImpl(LegacyAtChopsKeys()
+    var atChops = AtChopsImpl(AtChopsKeys()
       ..selfEncryptionKey =
           AESKey(atKeys.defaultSelfEncryptionKey!.toString()));
     atKeysMap[auth_constants.defaultEncryptionPublicKey] =
@@ -101,8 +101,8 @@ class LegacyKeyIOUtil {
     return jsonEncode(atKeysMap);
   }
 
-  static AtKeys generateKeyPairs({String? atSign}) {
-    var atKeysFile = AtKeys();
+  static LegacyAtKeys generateKeyPairs({String? atSign}) {
+    var atKeysFile = LegacyAtKeys();
     var logger = AtSignLogger("BaseAtKeysIo");
     // generate user encryption keypair
     logger.info('Generating encryption keypair');

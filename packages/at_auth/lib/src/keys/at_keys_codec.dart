@@ -40,7 +40,7 @@ class AtKeysJsonCodec implements AtKeysCodec {
           'Unsupported atKeys version: $version');
     }
 
-    final atSign = _expectNonEmptyString(json['atSign'], 'atSign');
+    final atsign = _expectNonEmptyString(json['atSign'], 'atSign');
     final keysJson = _expectList(json['keys'], 'keys');
     final defaultsJson = _expectMap(json['defaults'], 'defaults');
 
@@ -60,7 +60,7 @@ class AtKeysJsonCodec implements AtKeysCodec {
 
     return AtKeysDocument(
       version: version,
-      atsign: atSign,
+      atsign: atsign,
       enrollmentId: _optionalString(json['enrollmentId'], 'enrollmentId'),
       keys: keys,
       defaults: defaults,
@@ -81,13 +81,10 @@ class AtKeysJsonCodec implements AtKeysCodec {
   KeyRecord _decodeRecord(Map<String, dynamic> json, int index) {
     final fieldPrefix = 'keys[$index]';
     final id = _expectNonEmptyString(json['id'], '$fieldPrefix.id');
-    final purposeToken =
-        _expectNonEmptyString(json['purpose'], '$fieldPrefix.purpose');
-    final purpose = keyPurposeFromJsonToken(purposeToken);
-    if (purpose == null) {
-      throw AtKeysValidationException(
-          'Unsupported atKeys purpose "$purposeToken" at $fieldPrefix');
-    }
+    final purpose = _expectNonEmptyString(
+      json['purpose'],
+      '$fieldPrefix.purpose',
+    );
 
     final kindToken = _expectNonEmptyString(json['kind'], '$fieldPrefix.kind');
     final kind = keyKindFromJsonToken(kindToken);
@@ -150,7 +147,7 @@ class AtKeysJsonCodec implements AtKeysCodec {
     return {
       'id': record.id,
       if (record.pairId != null) 'pairId': record.pairId,
-      'purpose': record.purpose.jsonToken,
+      'purpose': record.purpose,
       'kind': record.kind.jsonToken,
       'algorithm': record.algorithm,
       if (record.fingerprint != null)
@@ -168,24 +165,20 @@ class AtKeysJsonCodec implements AtKeysCodec {
   }
 
   AtKeysDefaults _decodeDefaults(Map<String, dynamic> json) {
-    final values = <KeyPurpose, String>{};
-
-    for (final entry in json.entries) {
-      final purpose = keyPurposeFromDefaultsKey(entry.key);
-      if (purpose == null) {
-        continue;
-      }
-      values[purpose] =
-          _expectNonEmptyString(entry.value, 'defaults.${entry.key}');
-    }
+    final values = <KeyPurpose, String>{
+      for (final entry in json.entries)
+        entry.key: _expectNonEmptyString(
+          entry.value,
+          'defaults.${entry.key}',
+        ),
+    };
 
     return AtKeysDefaults(values: values);
   }
 
   Map<String, dynamic> _encodeDefaults(AtKeysDefaults defaults) {
     return {
-      for (final entry in defaults.values.entries)
-        entry.key.defaultsKey: entry.value,
+      for (final entry in defaults.values.entries) entry.key: entry.value,
     };
   }
 

@@ -2,8 +2,8 @@ import 'dart:convert';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys_codec.dart';
-import 'package:at_auth/src/keys/at_keys_models.dart';
 import 'package:at_auth/src/keys/at_keys_resolver.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -19,17 +19,17 @@ void main() {
     test('resolves a valid document into paired and symmetric keys', () {
       final keys = resolver.resolve(codec.decodeDocument(_validDocument()));
 
-      expect(keys.atSign, '@alice');
+      expect(keys.atsign, '@alice');
       expect(keys.asymmetricKeys, hasLength(2));
       expect(keys.symmetricKeys, hasLength(1));
-      expect(keys.defaults[KeyPurpose.pkam], 'default-pkam');
+      expect(keys.defaults[KeyPurposes.pkam], 'default-pkam');
 
       final pkam = keys.asymmetricKeys.singleWhere(
         (key) => key.pairId == 'default-pkam',
       );
       expect(keys.getKeyPair('default-pkam'), same(pkam));
       expect(keys.getKeyPair('missing-pair'), isNull);
-      expect(pkam.purpose, KeyPurpose.pkam);
+      expect(pkam.purpose, KeyPurposes.pkam);
       expect(pkam.publicKey.toString(), 'cGthbS1wdWJsaWMta2V5');
       expect(pkam.privateKey.toString(), 'cGthbS1wcml2YXRlLWtleQ==');
       expect(pkam.operations, ['verify', 'authenticate', 'sign']);
@@ -46,7 +46,7 @@ void main() {
       );
       expect(keys.getSymmetricKey('missing-symmetric'), isNull);
       expect(selfEncryption.id, 'self-encryption');
-      expect(selfEncryption.purpose, KeyPurpose.selfEncryption);
+      expect(selfEncryption.purpose, KeyPurposes.selfEncryption);
     });
 
     test('throws when an asymmetric pair is incomplete', () {
@@ -117,7 +117,7 @@ void main() {
     test('throws when a symmetric default references a missing id', () {
       final json = _validDocument();
       final defaults = json['defaults'] as Map<String, dynamic>;
-      defaults['selfEncryption'] = 'missing-self-encryption';
+      defaults['self-encryption'] = 'missing-self-encryption';
 
       expect(
         () => resolver.resolve(codec.decodeDocument(json)),
@@ -128,7 +128,7 @@ void main() {
     test('throws when a symmetric default references an asymmetric key', () {
       final json = _validDocument();
       final defaults = json['defaults'] as Map<String, dynamic>;
-      defaults['selfEncryption'] = 'default-pkam-public';
+      defaults['self-encryption'] = 'default-pkam-public';
 
       expect(
         () => resolver.resolve(codec.decodeDocument(json)),
@@ -210,7 +210,7 @@ Map<String, dynamic> _validDocument() {
     'defaults': {
       'pkam': 'default-pkam',
       'encryption': 'default-encryption',
-      'selfEncryption': 'self-encryption',
+      'self-encryption': 'self-encryption',
     },
   })) as Map<String, dynamic>;
 }

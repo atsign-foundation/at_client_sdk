@@ -1,14 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:at_auth/src/auth_constants.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
 import 'package:at_auth/src/enroll/models/otp.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
-import 'package:at_auth/src/keys/at_keys.dart';
+import 'package:at_auth/src/keys/legacy/at_keys.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:at_chops/types.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -115,7 +117,14 @@ class AtEnrollmentImpl implements AtEnrollment {
     var enrollmentIdFromServer = enrollJson[AtConstants.enrollmentId];
     var enrollStatus = getEnrollStatusFromString(enrollJson['status']);
 
-    AtKeys atAuthKeys = AtKeys()
+    List<AtSymmetricKey> symmetricKeys = [
+      AtBytes.fromString(apkamSymmetricKey.key),
+    ];
+    AtKeysSet atKeysSet = AtKeysSet(
+        atsign: atEnrollmentRequest.atSign,
+        asymmetricKeys: asymmetricKeys,
+        symmetricKeys: symmetricKeys,
+        defaults: defaults)
       ..apkamPrivateKey =
           AtBytes.fromString(apkamKeyPair.atPrivateKey.privateKey)
       ..apkamPublicKey = AtBytes.fromString(apkamKeyPair.atPublicKey.publicKey)
@@ -544,4 +553,44 @@ class AtEnrollmentImpl implements AtEnrollment {
   Future<void> waitBriefly({int millis = 500}) async {
     await Future.delayed(Duration(milliseconds: millis));
   }
+}
+
+AtKeysSet _createAuthKeysFromEnrollment({
+  required Atsign atsign,
+  required AtPkamKeyPair apkamKeyPair,
+  required SymmetricKey apkamKey,
+  required String encryptionPublicKey,
+}) {
+  AtAsymmetricKey apkamKP = AtAsymmetricKey(
+    pairId: apkamPairId,
+    purpose: KeyPurposes.pkam,
+    algorithm: 'aes',
+    publicKey: AtBytes.fromString(apkamKeyPair.atPublicKey.publicKey),
+    privateKey: AtBytes.fromString(apkamKeyPair.atPrivateKey.privateKey),
+  );
+
+  AtSymmetricKey apkamSK = AtSymmetricKey(
+    id: apkamSymmetricKey,
+    purpose: KeyPurposes.apkamSymmetric,
+    algorithm: 'aes',
+    bytes: AtBytes.fromString(apkamKey.key),
+  );
+
+  AtSymmetricKey jjjjjjjjjjjjjjjjj = AtSymmetricKey(
+    id: apkamSymmetricKey,
+    purpose: KeyPurposes.apkamSymmetric,
+    algorithm: 'aes',
+    bytes: AtBytes.fromString(apkamKey.key),
+  );
+  AtKeysSet atKeysSet = AtKeysSet(
+      atsign: atsign,
+      asymmetricKeys: asymmetricKeys,
+      symmetricKeys: symmetricKeys,
+      defaults: defaults)
+    ..apkamPrivateKey = AtBytes.fromString(apkamKeyPair.atPrivateKey.privateKey)
+    ..apkamPublicKey = AtBytes.fromString(apkamKeyPair.atPublicKey.publicKey)
+    ..apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey.key)
+    ..enrollmentId = enrollJson[AtConstants.enrollmentId]
+    ..defaultEncryptionPublicKey =
+        AtBytes.fromString(defaultEncryptionPublicKey);
 }

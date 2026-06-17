@@ -5,13 +5,13 @@ import 'package:at_commons/at_commons.dart';
 class LegacyAtKeysAdapter {
   static const int version = 2;
 
-  AtKeysDocument toDocument(String atSign, AtKeys atKeys) {
+  AtKeysDocument toDocument(String atSign, LegacyAtKeys atKeys) {
     final records = <KeyRecord>[
       if (atKeys.apkamPublicKey != null)
         _asymmetricRecord(
           id: 'legacy-pkam-public',
           pairId: 'legacy-pkam',
-          purpose: KeyPurpose.pkam,
+          purpose: KeyPurposes.pkam,
           kind: KeyRecordKind.public,
           value: atKeys.apkamPublicKey!.toString(),
         ),
@@ -19,7 +19,7 @@ class LegacyAtKeysAdapter {
         _asymmetricRecord(
           id: 'legacy-pkam-private',
           pairId: 'legacy-pkam',
-          purpose: KeyPurpose.pkam,
+          purpose: KeyPurposes.pkam,
           kind: KeyRecordKind.private,
           value: atKeys.apkamPrivateKey!.toString(),
         ),
@@ -27,7 +27,7 @@ class LegacyAtKeysAdapter {
         _asymmetricRecord(
           id: 'legacy-encryption-public',
           pairId: 'legacy-encryption',
-          purpose: KeyPurpose.encryption,
+          purpose: KeyPurposes.encryption,
           kind: KeyRecordKind.public,
           value: atKeys.defaultEncryptionPublicKey!.toString(),
         ),
@@ -35,20 +35,20 @@ class LegacyAtKeysAdapter {
         _asymmetricRecord(
           id: 'legacy-encryption-private',
           pairId: 'legacy-encryption',
-          purpose: KeyPurpose.encryption,
+          purpose: KeyPurposes.encryption,
           kind: KeyRecordKind.private,
           value: atKeys.defaultEncryptionPrivateKey!.toString(),
         ),
       if (atKeys.defaultSelfEncryptionKey != null)
         _symmetricRecord(
           id: 'legacy-self-encryption',
-          purpose: KeyPurpose.selfEncryption,
+          purpose: KeyPurposes.selfEncryption,
           value: atKeys.defaultSelfEncryptionKey!.toString(),
         ),
       if (atKeys.apkamSymmetricKey != null)
         _symmetricRecord(
           id: 'legacy-apkam-symmetric',
-          purpose: KeyPurpose.apkamSymmetric,
+          purpose: KeyPurposes.apkamSymmetric,
           value: atKeys.apkamSymmetricKey!.toString(),
         ),
     ];
@@ -96,16 +96,16 @@ class LegacyAtKeysAdapter {
   AtKeysDefaults _defaultsFor(List<KeyRecord> records) {
     final values = <KeyPurpose, String>{};
     if (_hasPair(records, 'legacy-pkam')) {
-      values[KeyPurpose.pkam] = 'legacy-pkam';
+      values[KeyPurposes.pkam] = 'legacy-pkam';
     }
     if (_hasPair(records, 'legacy-encryption')) {
-      values[KeyPurpose.encryption] = 'legacy-encryption';
+      values[KeyPurposes.encryption] = 'legacy-encryption';
     }
     if (_hasRecord(records, 'legacy-self-encryption')) {
-      values[KeyPurpose.selfEncryption] = 'legacy-self-encryption';
+      values[KeyPurposes.selfEncryption] = 'legacy-self-encryption';
     }
     if (_hasRecord(records, 'legacy-apkam-symmetric')) {
-      values[KeyPurpose.apkamSymmetric] = 'legacy-apkam-symmetric';
+      values[KeyPurposes.apkamSymmetric] = 'legacy-apkam-symmetric';
     }
     return AtKeysDefaults(values: values);
   }

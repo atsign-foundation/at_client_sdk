@@ -10,7 +10,7 @@ import 'package:at_commons/at_commons.dart';
 /// authorization to access the specified namespaces in the request. Conversely, if the request is disapproved, the requesting
 /// app is denied login access.
 abstract class EnrollmentRequest {
-  String atSign;
+  Atsign atSign;
   String appName;
   String deviceName;
   final EnrollOperationEnum enrollOperation = EnrollOperationEnum.request;

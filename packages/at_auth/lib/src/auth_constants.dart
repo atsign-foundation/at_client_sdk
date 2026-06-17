@@ -6,6 +6,9 @@ const String defaultSelfEncryptionKey = 'selfEncryptionKey';
 const String apkamSymmetricKey = 'apkamSymmetricKey';
 const String apkamEnrollmentId = 'enrollmentId';
 
+const String apkamPairId = 'aes-pkam';
+const String encryptionPairId = 'aes-encrypt';
+
 const keySchemaList = [
   apkamPublicKey,
   apkamPrivateKey,

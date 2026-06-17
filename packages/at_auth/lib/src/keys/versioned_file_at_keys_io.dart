@@ -89,7 +89,6 @@ class VersionedFileAtKeysIo extends WrittenAtKeysIo {
 
   @override
   Future<void> write(
-    String atSign,
     AtKeysSet keys, {
     AtKeysWriteOptions? options,
   }) async {
@@ -97,7 +96,7 @@ class VersionedFileAtKeysIo extends WrittenAtKeysIo {
   }
 
   @override
-  Future<void> update(String atsign, AtKeysSet keys) {
+  Future<void> update(AtKeysSet keys) {
     // TODO: implement update
     throw UnimplementedError();
   }

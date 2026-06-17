@@ -74,12 +74,11 @@ abstract class WrittenAtKeysIo extends AtKeysIo {
   });
 
   Future<void> write(
-    String atsign,
     AtKeysSet keys, {
     AtKeysWriteOptions? options,
   });
 
-  Future<void> update(String atsign, AtKeysSet keys);
+  Future<void> update(AtKeysSet keys);
 }
 
 abstract class GeneratedAtKeysIo extends AtKeysIo {
