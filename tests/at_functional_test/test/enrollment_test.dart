@@ -4,8 +4,8 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/response/response.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -340,7 +340,7 @@ void main() {
       AtClientImpl.atClientInstanceMap.clear();
 
       // Get AtChops from the AtAuthKeys
-      AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
+      RsaKeyPair atEncryptionKeyPair = RsaKeyPair.create(
           encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
       AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
           atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
@@ -438,7 +438,7 @@ void main() {
       AtClientImpl.atClientInstanceMap.clear();
 
       // Get AtChops from the AtAuthKeys
-      AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
+      RsaKeyPair atEncryptionKeyPair = RsaKeyPair.create(
           encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
       AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
           atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
@@ -537,7 +537,7 @@ void main() {
       AtClientImpl.atClientInstanceMap.clear();
 
       // Get AtChops from the AtAuthKeys
-      AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
+      RsaKeyPair atEncryptionKeyPair = RsaKeyPair.create(
           encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
       AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
           atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),

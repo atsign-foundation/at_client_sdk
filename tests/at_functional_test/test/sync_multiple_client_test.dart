@@ -4,18 +4,19 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
+
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/at_client.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_functional_test/src/at_demo_credentials.dart'
+    as demo_credentials;
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
-import 'package:at_client/at_client.dart';
-import 'package:version/version.dart';
 import 'package:uuid/uuid.dart';
-import 'package:at_functional_test/src/at_demo_credentials.dart'
-    as demo_credentials;
+import 'package:version/version.dart';
 
 import 'test_utils.dart';
 
@@ -342,8 +343,7 @@ Future<void> updateOrDeleteKey(AtKey atKey, int randomValueForOperation,
 
 Future<dynamic> _getServerCommitEntries(String regex) async {
   AtChopsKeys atChopsKeys = AtChopsKeys.create(
-      AtEncryptionKeyPair.create(
-          demo_credentials.encryptionPublicKeyMap[currentAtSign]!,
+      RsaKeyPair.create(demo_credentials.encryptionPublicKeyMap[currentAtSign]!,
           demo_credentials.encryptionPrivateKeyMap[currentAtSign]!),
       AtPkamKeyPair.create(demo_credentials.pkamPublicKeyMap[currentAtSign]!,
           demo_credentials.pkamPrivateKeyMap[currentAtSign]!));

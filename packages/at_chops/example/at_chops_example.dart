@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
@@ -56,7 +56,7 @@ void main(List<String> args) async {
   signingInput.signingAlgoType = SigningAlgoType.rsa2048;
   signingInput.hashingAlgoType = HashingAlgoType.sha512;
   AtSigningAlgorithm signingAlgorithm =
-      DefaultSigningAlgo(atEncryptionKeyPair, signingInput.hashingAlgoType);
+      RsaSigningAlgo(atEncryptionKeyPair, signingInput.hashingAlgoType);
   signingInput.signingAlgorithm = signingAlgorithm;
   // 2.2 sign the data
   final dataSigningResult = atChops.sign(signingInput);
@@ -68,8 +68,8 @@ void main(List<String> args) async {
       atEncryptionKeyPair!.atPublicKey.publicKey);
   verificationInput.signingAlgoType = SigningAlgoType.rsa2048;
   verificationInput.hashingAlgoType = HashingAlgoType.sha512;
-  AtSigningAlgorithm verifyAlgorithm = DefaultSigningAlgo(
-      atEncryptionKeyPair, verificationInput.hashingAlgoType);
+  AtSigningAlgorithm verifyAlgorithm =
+      RsaSigningAlgo(atEncryptionKeyPair, verificationInput.hashingAlgoType);
   verificationInput.signingAlgorithm = verifyAlgorithm;
   // 2.4 verify the signature
   AtSigningResult dataVerificationResult = atChops.verify(verificationInput);
@@ -78,7 +78,7 @@ void main(List<String> args) async {
 }
 
 AtChops _createAtChops(Map<String, String> atKeysDataMap) {
-  final atEncryptionKeyPair = AtEncryptionKeyPair.create(
+  final atEncryptionKeyPair = RsaKeyPair.create(
       _decryptValue(atKeysDataMap[AuthKeyType.encryptionPublicKey]!,
           atKeysDataMap[AuthKeyType.selfEncryptionKey]!)!,
       _decryptValue(atKeysDataMap[AuthKeyType.encryptionPrivateKey]!,
