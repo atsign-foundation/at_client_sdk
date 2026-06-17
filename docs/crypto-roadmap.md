@@ -78,6 +78,71 @@ keys. Both are replaced by groups and retire on the four-phase path in
 | selfEncryptionKey          | per atSign     | Legacy self data only                                                         | **Retired** — see below                                                                  |
 | shared_key.\<atSign\>      | per pair       | Legacy shared data only                                                       | **Retired** — same path                                                                  |
 
+## Milestones and capabilities
+
+The path to the end state, framed by capability. Each milestone is usable on
+its own; later ones build on earlier. (Phase numbers cross-reference the
+[Phases](#phases) section.)
+
+| Milestone | Capability added | Why it matters |
+|-----------|------------------|----------------|
+| **M0 · Pluggable crypto seam** (Phase 0) | Per-value `CryptoProvider` routing via `AppMetadata`; legacy + new schemes coexist | The migration machinery — old data stays readable forever, new schemes drop in as providers, no flag-day. Everything rides this seam. |
+| **M1 · PQ primitives** (Phase 1) | X-Wing hybrid KEM, AES-256-GCM, HKDF in at_chops; PQ enrollment-conveyance pubkey | Post-quantum/hybrid building blocks; closes the last harvest-now-decrypt-later hole (enrollment); the crypto-agile base. |
+| **M2 · Per-client identity / KeyPackages** (Phase 2) | Each client = a leaf (clientId + X-Wing leaf keys + signing) as an APKAM-signed KeyPackage; AtKeys device-local split | The MLS identity layer; per-device granularity + revocability; the one-leaf-per-instance correctness precondition. |
+| **M3 · SecureGroup v1 + `group` provider** (Phase 3) | `seal/open/rotate/export` + a v1 epoch engine; self data encrypted as group messages; two-lever rotation; retires `selfEncryptionKey` | First real (intra-atSign) group encryption with rotating keys + revocation; the stable interface MLS later swaps under. |
+| **M4 · Cross-atSign groups** (Phase 4) | Pair/multi-atSign groups; explicit membership + consent; `group` serves shared keys; retires static `shared_key.*` | First cross-atSign group encryption; per-client granularity/revocability for shared data; the precursor to NoPorts sessions. |
+| **M5 · Group Delivery Service** (atServer groups) | Ciphertext-only DS atSign + group object/verbs (`seq`, log, ack, fetch); wake-then-pull; ordering + catch-up + retention | Makes group-addressed delivery scale on the pairwise substrate; solves fan-out + ordering + retention; operable as infrastructure. This is what makes *large* groups work. |
+| **M6 · pq-mls engine** (Phase 5) | Swap the v1 engine for MLS (TreeKEM, RFC 9420 FS/PCS, PQ ciphersuites) behind the same interface + DS | O(log n) commits, standardized + audited group security — the actual end state. |
+| **NoPorts adoption** (finish line) | Session keys via `SecureGroup.export`; daemon-feature-gated tiers 0–2 | The production payoff: PQ-safe NoPorts, derived (not transmitted) session keys, fleet management. |
+
+Status: M0, M1 (X-Wing/GCM/HKDF), M2 (KeyPackage framing), M3 (self) and the
+cross-cutting "at_chops is the sole security-crypto dependency" (Phase 6) are
+done or in flight; **M4, M5, M6 are the substantive build ahead.**
+
+## How it works — NoPorts (summary)
+
+A NoPorts session is a *small* group — @client↔@daemon (plus @srvd for relay)
+— so the member-atSign count is 1–2 and there is **no Delivery Service**:
+delivery stays pairwise, as today. Backwards compatibility rides the daemon
+ping's `supportedFeatures`; three feature-gated tiers:
+
+- **Tier 0 — transport PQ-safe:** daemons advertise `groupCrypto`; the client
+  routes per-destination through the `group` provider (PQ-safe) or falls back
+  to `legacy`. The still-RSA-wrapped session key now travels *inside* a
+  group-encrypted payload, so a recorded exchange can't be peeled open later —
+  harvest-now-decrypt-later closed, no protocol change.
+- **Tier 1 — derive, don't transmit:** gated on `pqSessionKeys`; both sides
+  form the @client↔@daemon pair group and `export()` the session keys
+  independently — no key material in flight; deletes the per-session RSA
+  keypair.
+- **Tier 2 — fleet self-group:** many sshnpd on one device atSign + a policy
+  client are a self group; config secrets are shared once and read by all
+  daemons; revoke → leaf removed + rotate → a stolen daemon reads nothing
+  after.
+
+Full walk-through: [Appendix A](#appendix-a--noports-end-to-end-detailed).
+
+## How it works — a large group (summary)
+
+A large group runs against a dedicated, **ciphertext-only Delivery Service
+atSign** (e.g. `@my_org_groups`) operated as infrastructure. Members are
+leaves (per-client); one or more admins drive membership. The DS atServer
+holds the group object (roster + monotonic `seq` + TTL'd ciphertext log) and
+does the work the pairwise model can't:
+
+- **sequencing** — the atomic per-group `seq` is the MLS commit order;
+- **fan-out** — wake-then-pull, **O(member-atSigns), not O(member-clients)**;
+- **catch-up / retention** — `fetch:since` is the single delivery primitive;
+  app messages may expire (tombstoned), commits are retained until
+  applied-by-all or a straggler rejoins.
+
+The DS never decrypts and cannot forge membership (members validate commits
+cryptographically; reorder/withhold is detectable via the transcript hash).
+The crypto is MLS (v2) — TreeKEM gives O(log n) commits and real FS/PCS —
+behind the same `SecureGroup` interface.
+
+Full walk-through: [Appendix B](#appendix-b--a-large-group-end-to-end-detailed).
+
 ## Foundations (what exists today)
 
 **`xl-pluggable` — the provider seam.** `CryptoProvider { id;
@@ -693,3 +758,109 @@ policy, tombstones, and ack-truncation.
 (A simpler inline-payload, client-supplied-recipient-list `notify:list` is a
 possible transitional form, but the target is the group object + wake/pull
 + membership-gated log above.)
+
+## Appendix A — NoPorts, end to end (detailed)
+
+Actors: **@client** (sshnp), **@daemon** (sshnpd; a device may run many),
+**@srvd** (relay; a third atSign). Each client is a leaf with a published
+KeyPackage. Tier/rollout detail lives in
+[Upgrading NoPorts](#upgrading-noports-with-daemon-ping-feature-discovery);
+this is one session's trace.
+
+1. **Discovery.** sshnp pings @daemon (existing flow); the ping response
+   carries `supportedFeatures`, read null-tolerantly (a missing map = old
+   daemon). The client learns `groupCrypto` and `pqSessionKeys`.
+2. **Session request (Tier 0 — transport).** The client picks a provider per
+   the ping — `provider = features['groupCrypto'] ? 'group' : 'legacy'`, set
+   via `PutRequestOptions.cryptoProviderId`. With `group`, the request
+   notification is a PQ-safe group message of the @client↔@daemon pair group;
+   with `legacy`, byte-identical to today. Because the (still RSA-wrapped)
+   session key rides *inside* this payload, a recorded exchange can no longer
+   be peeled open later — the harvest-now hole is closed even before Tier 1.
+3. **Session keys (Tier 1 — derive, don't transmit).** If `pqSessionKeys`,
+   both sides resolve the same pair group and derive
+   `aesC2D = pair.export('c2d:'+sessionId)` and
+   `aesD2C = pair.export('d2c:'+sessionId)`. Same `(label, epoch)` → identical
+   bytes on both sides; the response carries only `sessionId`, no key material
+   in flight, and the per-session RSA keypair generation is deleted. Without
+   `pqSessionKeys`, fall back to today's ephemeral-RSA exchange (already
+   protected by Tier 0).
+4. **srvd relay.** The relay-auth key involves a third atSign; a per-session
+   3-party group is overkill, so it stays transmitted, protected by Tier 0.
+5. **Delivery.** The group is 2 atSigns (or a self group within one atSign for
+   Tier 2). The member-atSign count is tiny, so there is **no DS host** —
+   pairwise notify + the recipient atServer's sync to its own clients.
+   (Appendix B's Delivery Service is only for large groups.)
+6. **Fleet management (Tier 2 — self group).** Many sshnpd on one device atSign
+   plus a policy/management client are a self `SecureGroup`. Management writes
+   a config secret once; every daemon reads it, joined automatically at
+   enrollment. A stolen device → `enroll:revoke` → the daemon's leaf is
+   removed and the group rotates → everything shared after that instant is
+   unreadable by it.
+7. **Rollout.** (1) ship dual-stack daemons that advertise the features — safe,
+   nothing changes on the wire; (2) ship clients that prefer the features when
+   advertised; (3) once the deployed-daemon floor includes `groupCrypto`, flip
+   the client default; (4) `pqSessionKeys` retires `genBundle`/ephemeral-keypair
+   code when the floor allows.
+
+Net: every request/response/heartbeat becomes PQ-safe (Tier 0), session keys
+stop travelling at all (Tier 1), and fleet secrets get rotating-key
+distribution with instant revocation (Tier 2) — with old peers always
+negotiating cleanly via feature discovery.
+
+## Appendix B — a large group, end to end (detailed)
+
+Actors: a dedicated DS atSign **`@my_org_groups`** running the
+[group Delivery Service](#atserver-group-delivery-service-target-design);
+admins **@alice**, **@bob**; members across many atSigns, each a leaf with a
+published KeyPackage.
+
+1. **Provision the DS.** `@my_org_groups` is operated as infrastructure (HA,
+   monitored, backed up). It is ciphertext-only — never a group member, never
+   holds group keys.
+2. **Create.** `@alice` → `group:create{groupId, ownerAcl:[@alice,@bob]}`. The
+   DS provisions the group object: roster, `seq=0`, empty TTL'd log.
+3. **Add a member (@frank).** An admin: fetches + verifies @frank's published
+   KeyPackage; commits an Add locally (advances the epoch), producing a Commit
+   + a Welcome; sends the **Welcome pairwise** to @frank (1:1); then
+   `group:append{kind:commit, value:<commit ct>, msgId}` + `group:add @frank`
+   to the DS. The DS assigns `seq=N`, logs it, adds @frank to the roster, and
+   fans out `{group, N}` **wakes** to every member atSign. Members
+   `group:fetch:since` the commit, apply it, advance to epoch N; @frank pulls
+   current state and joins.
+4. **Application message (any member → group).** The sender seals once under
+   the epoch key, then one `group:append{kind:app, value:<ct>, expiresAt,...}`
+   to the DS. The DS assigns the next `seq`, logs (with the app TTL), fans out
+   wakes. Each member atServer pulls the delta into local storage; that
+   atSign's many clients then read it via ordinary sync — including the
+   sender's *own* other clients (the DS fans out to the sender's atSign too).
+   Cost: one append + O(member-atSigns) wakes/pulls — never O(member-clients).
+5. **Concurrent admins.** @alice and @bob both commit at epoch N. Both
+   `group:append`; the DS's atomic `seq` orders them — one lands at N, the
+   other gets a conflict, rebases to N+1, resubmits. No fork.
+6. **Catch-up.** A member offline for a while returns and
+   `group:fetch:since:<lastSeq>`. Commits replay in `seq` order; expired app
+   messages appear as tombstones (skippable). If a commit it still needs has
+   aged out (offline past the retention deadline), it is a straggler → an
+   admin **re-adds it at the current epoch** (fresh Welcome), not a
+   full-history replay.
+7. **Remove / revoke (@grace).** An admin commits a Remove + rotates the epoch
+   (`excludeEnrollmentIds`), then `group:append{kind:commit}` +
+   `group:remove @grace`. The DS sequences, fans out, drops @grace from the
+   roster. Everything from the new epoch on is unreadable by @grace.
+8. **Retention & GC.** Members periodically `group:ack{seq}`; the DS truncates
+   the log below the min high-water mark (everyone has those) or a deadline.
+   App messages expire per their `expiresAt`; commits are retained until
+   applied-by-all or the deadline (then straggler-rejoin).
+9. **Trust boundary.** The DS only ever sees ciphertext + the plaintext atSign
+   roster: it orders, routes, and retains, but never decrypts and cannot forge
+   membership — members reject any commit not signed by an authorised owner
+   leaf, and reorder/withhold is detectable via the MLS transcript hash.
+10. **Engine (v2).** The crypto is MLS: TreeKEM makes each commit O(log n)
+    instead of O(n), with RFC 9420 forward secrecy and post-compromise
+    security — all behind the same `SecureGroup` interface and the same DS.
+
+Net: members send/admin once to the DS; the DS sequences and fans out
+ciphertext it can't read; catch-up, retention, ordering, and revocation are
+handled at the group object — and the per-message cost scales with the number
+of member *atSigns*, not member *clients*.
