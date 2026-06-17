@@ -73,7 +73,7 @@ class AtEncryptionKeysLoader {
   }
 
   AtChops createAtChopsFromDemoKeys(String atSign) {
-    var atEncryptionKeyPair = AtEncryptionKeyPair.create(
+    var atEncryptionKeyPair = RsaKeyPair.create(
         encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
     var atPkamKeyPair = AtPkamKeyPair.create(
         pkamPublicKeyMap[atSign]!, pkamPrivateKeyMap[atSign]!);

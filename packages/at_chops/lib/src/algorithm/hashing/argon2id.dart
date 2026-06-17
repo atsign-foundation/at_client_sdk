@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
-import 'package:at_chops/src/model/hash_params.dart';
+import 'package:at_chops/src/algorithm/hashing/types.dart';
 import 'package:cryptography/cryptography.dart';
 
 /// A class that implements the Argon2id hashing algorithm for password hashing.

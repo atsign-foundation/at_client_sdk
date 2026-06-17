@@ -4,8 +4,8 @@ import 'dart:math' show Random;
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
-import 'package:at_chops/src/algorithm/ml_kem_768_ffi_algo.dart';
-import 'package:at_chops/src/algorithm/x25519_ffi_algo.dart';
+import 'package:at_chops/src/algorithm/encryption/ml_kem_768_ffi_algo.dart';
+import 'package:at_chops/src/algorithm/encryption/x25519_ffi_algo.dart';
 import 'package:pointycastle/digests/sha3.dart';
 import 'package:pointycastle/digests/shake.dart';
 
