@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 1.1.3
+
+- fix: force uppercase on OTP/CRAM input fields so lowercase or pasted alphanumeric codes no longer fail validation
+- fix: switch APKAM dialog keyboard to visible-password so letters can be typed
+
 ## 1.1.2
 
 - fix: prevent blank dialog box flashing during login
