@@ -622,8 +622,37 @@ plaintext routing metadata + an opaque ciphertext log it can order but not
 read — so E2E and the MLS leaf model are untouched. It can order, route,
 and (mis)deliver, all detectable via the MLS transcript hash; it cannot
 read content or forge membership (members reject any commit not signed by
-an authorised owner leaf). Small/pair groups (incl. NoPorts @a↔@b sessions)
-need none of this; it is for large / multi-party / fleet groups.
+an authorised owner leaf).
+
+### One design, two placements (host = member, or dedicated)
+
+This is **one** design; "small self-hosted group" and "large dedicated-DS
+group" are the same group object + verbs + wake-then-pull below, differing
+only in *where the DS role is hosted and whether that host also
+participates*:
+
+- **Dedicated (large groups):** the DS-hosting atSign (e.g.
+  `@my_org_groups`) is *neither* an admin nor a member — a pure service.
+- **Self-hosted (small groups):** the DS role runs on an atSign (e.g.
+  `@alice`) that *also* is an admin and *also* contributes member leaves.
+  Same verbs, same log, same sequencing — just co-located with a
+  participant. A sole-admin group never produces a `seq` conflict, but the
+  sequencer is present either way. (Tiny groups — a NoPorts @a↔@b session —
+  *may* skip the group object and peer-fan-out, but they don't have to.)
+
+The DS **atServer holds only ciphertext in both placements** — invariant.
+The DS role never needs plaintext: sequencing is an arrival-order counter,
+fan-out targets the plaintext roster, retention keys off `expiresAt`/`msgId`,
+read-auth off roster membership. The member *clients* hold the group keys
+and decrypt on-device — that is the member role, not the DS role, and not
+the atServer.
+
+So the only substantive consequence of the placement is **whether the DS
+operator can read group content**: self-hosted, the operator (Alice) can,
+because its atSign contributes member leaves; dedicated, it cannot, because
+`@my_org_groups` has none. That follows entirely from membership, not from
+the DS role. (Plus the orthogonal operational point: a dedicated DS can run
+as HA infrastructure; a member-hosted DS rides that member's availability.)
 
 ### The group object (server-side, on the DS atSign)
 
