@@ -355,6 +355,30 @@ post-merge (at_client 711 / at_chops 99 / at_commons 486 tests green).
   implementation, so apps supply nothing; zero-argument for the normal
   multi-program case, never clones, asks for an id only when genuinely
   ambiguous.
+- **Cross-machine single-owner (atServer lease).** The device-local lock above
+  only catches duplicates on *one* machine. To stop the same logical identity
+  coming live on *two* machines — e.g. an `sshnpd` labelled `device1` deployed
+  on host A and then, by accident, on host B — adopting a persistent leaf for a
+  label also takes an **atServer-resident lease keyed on `(atSign, label)`**: a
+  reserved key (`__leaflock.<label>`) holding a random **fencing token** under
+  a short **server-evaluated TTL** (server clock → no skew), refreshed by
+  heartbeat. If a *fresh* lease with a different token already exists, another
+  instance is live → **the second instance throws at runtime** (a daemon
+  refuses to start; a short-lived client may fork ephemeral). The TTL
+  self-heals a crashed holder (a genuine failover/standby takes over after
+  expiry), while an accidental duplicate against a *live* holder fails
+  immediately; the token fences a paused-then-resumed holder (on heartbeat it
+  sees a foreign token and yields). Keying on **label** (not clientId) catches
+  the duplicate whether host B copied A's keyset or fresh-installed — both are
+  trying to be the one logical `device1`; active/standby HA falls out (the
+  standby waits for the lease to lapse). This needs **no atServer code change**
+  — an ordinary TTL'd key used as a lease, honoured by the SDK (rule of thumb:
+  client-side coordination via an existing primitive). A fully-authoritative
+  variant — the atServer asserts `(enrollment, clientId)` on connect and
+  rejects/evicts a duplicate session — closes the TTL window and covers
+  non-SDK clients, but it is a real server change, so it is an *optional*
+  escalation. (Local file lock + atServer lease compose: same-machine vs
+  cross-machine.)
 - **Cross-atSign KeyPackage publication**: each atSign exposes its clients'
   KeyPackages as public keys so other atSigns can fetch and verify them
   (signature chain to the publishing enrollment's `_apsk` / the atSign's
@@ -768,8 +792,11 @@ three obligations:
   clientId + leaf seed to two *concurrent* instances (two apps, app + daemon,
   overlapping restart, HA pair) is the clone bug regardless of socket count.
   Rule: a persisted leaf identity has exactly one live owner at a time —
-  mint-fresh by default (today's behavior) or persist-with-an-exclusive-
-  runtime-lock.
+  mint-fresh by default (today's behavior) or persist-with-an-exclusive
+  runtime lock. That lock is two layers: a device-local file lock
+  (same-machine) and an **atServer lease keyed on `(atSign, label)`**
+  (cross-machine) — see Phase 2's "Cross-machine single-owner (atServer
+  lease)". A second machine claiming a live identity throws at runtime.
 
 What it is **not**: never "one connection per leaf"; connection count never
 forks or merges a leaf. The only thing that forks a leaf is more than one
