@@ -184,6 +184,37 @@ post-merge (at_client 711 / at_chops 99 / at_commons 486 tests green).
   storage master key. The existing `loadClientKeys`/`saveClientKeys` and
   `SecretStorePersistence` hooks get default SDK implementations over the
   existing keychain/biometric/file plumbing, so apps supply nothing.
+
+  **Rejected alternative — per-clientId secrets on the atServer.** Storing
+  the leaf private keys + storage master key server-side (instead of
+  device-local) was considered and rejected. To be usable they must be
+  wrapped under a *locally-held* key, and the only local material here is the
+  *portable* enrollment credential — so the leaf becomes reconstructable by
+  any enrollment-holder. That (1) makes **cloning the default** rather than a
+  rare misuse (every device sharing the enrollment pulls the same leaf →
+  concurrent clones → the MLS send/commit breakage above), forcing the
+  single-owner lock/lease just to make the *normal* case safe; (2) opens a
+  **harvest-now-decrypt-later hole on the PQ leaf KEM key** — wrapping it
+  under today's RSA-2048 enrollment key leaves a recorded ciphertext a future
+  quantum adversary can open; (3) **couples the data and key blast radii**
+  through the most-copied credential (server breach alone reveals nothing
+  today; this makes the enrollment key the single secret that unlocks
+  server-resident data); and (4) if dynamic state's unwrapping root is also
+  centralized, **breaks forward secrecy / PCS** (deletion is no longer final)
+  and the **linear send-ratchet** (server newest-wins ≠ a monotonic counter),
+  and adds an online dependency that breaks local-first seal/open. Note the
+  design *already* keeps dynamic state server-side — but wrapped under the
+  *device-local* storage master key, which is exactly why it's safe; moving
+  that root to the server is the qualitative regression. The convenience it
+  buys (recoverable/stable leaf) is already provided more cheaply by
+  fork-to-new-leaf + cheap lever-B rotation; server-mediated single-ownership
+  needs only a lease *token*, not the secrets. If a leaf-recovery feature is
+  ever wanted, the only defensible shape is narrow and opt-in: back up the
+  **static leaf keypair only** (never dynamic state), **PQ-wrapped** (not
+  RSA-2048), as a **recovery operation gated by the single-owner
+  acquisition** — eyes open that it still leaves a server-resident PQ-key
+  ciphertext and complicates lever-B (superseded leaf keys linger
+  server-side until actively deleted).
 - **Cross-atSign KeyPackage publication**: each atSign exposes its clients'
   KeyPackages as public keys so other atSigns can fetch and verify them
   (signature chain to the publishing enrollment's `_apsk` / the atSign's
