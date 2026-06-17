@@ -168,6 +168,17 @@ post-merge (at_client 711 / at_chops 99 / at_commons 486 tests green).
     clientId, leaf KEM private keys, leaf signing key, storage master key.
     Never copied; importing a credential file without one mints a fresh
     client identity.
+    **This is an MLS correctness precondition, not just key hygiene.** MLS
+    gives each member one ratchet-tree leaf with exclusive, linearly-evolving
+    send/commit state, so two instances sharing one clientId + leaf keys
+    cannot both act as that leaf: concurrent sends collide on the per-leaf
+    generation counter (receivers drop the duplicate as a replay, or lose the
+    key to forward secrecy) and concurrent commits race on the epoch. v1's
+    stateless `seal()` (epoch key + random IV, no per-sender ratchet) masks
+    this — same-clientId clones "work" on v1 and break on the MLS swap. The
+    rule: **one clientId per running instance, leaf keys never copied → one
+    leaf per instance.** Two machines that should share an identity join as
+    two leaves of the same group, not one shared leaf.
   Dynamic state (epoch tables, ratchet state) stays out — it churns per
   commit and lives in `CryptoStorage`/provider storage encrypted under the
   storage master key. The existing `loadClientKeys`/`saveClientKeys` and
@@ -399,3 +410,107 @@ Consolidation bonus at any point: NoPorts can replace `validation_utils`
 signing with the SDK's `EnvelopeSigning` (its descendant), moving
 verification onto the per-enrollment `_apsk` trust chain — strictly better
 for multi-daemon deployments.
+
+## Known shape risks & corrective actions (assessment 2026-06-17)
+
+A review of the secret-sharing + group work against the MLS end state,
+taken after the all-in-MLS decision. The early classical interim
+(RSA-2048 key transport + AES-256-CTR) is gone — the substrate is
+PQ-native (X-Wing + AES-256-GCM), so the "legacy-plus" secret-sharing
+mechanisms that predated this decision have already been superseded.
+
+The load-bearing decisions hold and carry forward to MLS as an engine
+swap: the provider seam, PQ-native KeyPackages, the `SecureGroup`
+`seal/open/rotate/export` interface, `(atSign, namespace)` scoping that
+mirrors server authorization, and lazy `AppMetadata`-routed migration.
+What carries forward is the **interface + identity (KeyPackage) + delivery
+layers**; what does **not** is the v1 `PairwiseGroup` epoch engine and its
+leaderless convergence model (`kid`-is-truth, concurrent epochs coexist) —
+TreeKEM replaces it wholesale. So do not over-invest in hardening v1
+concurrency; invest in the interface/identity/ordering decisions that
+survive the swap.
+
+Risks, ordered by how much cheaper they are to fix now than later:
+
+1. **Membership is implicit — a Phase-3-only shape.** The implemented
+   `SecureGroup` is `groupId / currentEpoch / seal / open / rotate /
+   export`; it dropped the `members` / `add` / `remove` that the Phase 3
+   sketch above lists. v1 self-groups *derive* membership (`rotate()`
+   re-runs `discoverClients(namespace)`), which works only because one
+   server is the authority on authorization. Cross-atSign groups (Phase 4)
+   and MLS are explicit-roster, so the interface must grow membership ops
+   there — and adding methods to a published abstract is a breaking change.
+   **Action: lift `members` / `add` / `remove` into the durable
+   `SecureGroup` interface now, with v1 implementing them by derivation, so
+   the app surface is stable across Phases 3→4→5.** (Cheap now.)
+
+2. **The delivery channel is a KeyPackage directory + best-effort secret
+   channel, not an ordered MLS Delivery Service.** Epoch keys and envelopes
+   converge newest-`createdAt`-wins, with no ordering guarantee; the v1
+   model embraces forks. MLS requires agreement on commit *order*.
+   **Action: before Phase 5, decide where commit ordering comes from —
+   atServer sequencing, a designated per-group committer, or per-epoch
+   compare-and-set — and record it in the Phase 5 plan.** The v1 "forks are
+   fine" assumption must not leak into MLS expectations.
+
+3. **Phase 3 → Phase 4 is the real discontinuity.** The code is solidly
+   Phase 3 (`GroupCryptoProvider.encrypt` hard-rejects shared keys).
+   Cross-atSign pair groups — what NoPorts actually needs — require
+   cross-atSign KeyPackage fetch+verify, a consent hook, explicit
+   membership, and group state not derivable from one server. That is
+   mostly greenfield; the substrate covers identity + transport only.
+   **Action: scope Phase 4 as the major build it is — treat
+   membership/consent/group-state as new, not as an extension of the
+   self-group path.**
+
+4. **`GroupCryptoProvider` corrupts binary values.** It does
+   `utf8.encode(plaintext.toString())` / `utf8.decode(...)`; the legacy
+   path honours `isBinary` but the group provider does not.
+   **Action: make the `group` provider seal/open bytes (binary-safe)
+   before any binary value relies on it.**
+
+5. **Naming collision.** The v1 self engine is `PairwiseGroup` ("pairwise"
+   = the X-Wing encapsulation method), but Phase 4's cross-atSign groups
+   are also called "pair groups" above. **Action: rename the v1 engine
+   (e.g. `SelfGroup`) to free "pair group" for the cross-atSign meaning.**
+
+### Connection model & the MLS leaf
+
+at_client uses several physical connections to the atServer (monitor /
+request-response / sync) that collectively act as one logical client. This
+is **not** the cloning hazard: the MLS leaf binds to the logical client
+that exclusively owns the mutable crypto state — the `AtClientImpl` instance
+(it owns `atChops`, `cryptoRegistry`, and the group provider via
+`CryptoRuntime`) — **not** to a connection. MLS rides above transport, so N
+connections under one instance = one leaf, by construction. The default
+makes this safe out of the box: `clientId` is per-process and ephemeral
+(`Uuid().v4()`, lives until the process ends), so each instance is a fresh
+leaf regardless of socket count. If anything, the model is a *positive* — it
+hands MLS a single logical-client object to anchor leaf identity and group
+state on; multiplexing connections (fewer or more) is orthogonal.
+
+The model is safe *because* one instance owns the state, which turns into
+three obligations:
+
+- **Serialize crypto-state mutation within the instance** (engine, Phase 5).
+  Connections drive concurrent async work — the monitor can deliver a Commit
+  (epoch change) while a request connection is mid-`seal()`. MLS generation
+  /ratchet/epoch transitions are not reentrancy-safe; a mutex/sequencer must
+  guard seal/open/apply-commit. Intra-instance lock, cheap — not distributed.
+- **Apply inbound handshake before sealing under the new epoch** (engine,
+  Phase 5). Commits/Welcomes arrive on the notification connection; data on
+  get/notify; sync on its own — all converge on one epoch/ratchet that must
+  advance in order. Handshake and data are one state machine, not independent
+  streams.
+- **One live owner per persisted `clientId`** (identity, Phase 2). The sharp
+  edge is `loadClientKeys`, not connections: handing the same stored
+  clientId + leaf seed to two *concurrent* instances (two apps, app + daemon,
+  overlapping restart, HA pair) is the clone bug regardless of socket count.
+  Rule: a persisted leaf identity has exactly one live owner at a time —
+  mint-fresh by default (today's behavior) or persist-with-an-exclusive-
+  runtime-lock.
+
+What it is **not**: never "one connection per leaf"; connection count never
+forks or merges a leaf. The only thing that forks a leaf is more than one
+runtime owner of the same crypto state — a process/instance/identity-
+persistence decision, never a socket decision.
