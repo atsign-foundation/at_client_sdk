@@ -1001,6 +1001,7 @@ void main() {
       expect(metadataMap['skeEncAlgo'], null);
       expect(metadataMap['immutable'], false);
       expect(metadataMap['pubKeyHash'], null);
+      expect(metadataMap['appMetadata'], null);
     });
 
     Metadata createMetadata({
@@ -1032,6 +1033,10 @@ void main() {
         ..ivNonce = '16'
         ..skeEncKeyName = 'dummy_enc_key_name'
         ..skeEncAlgo = 'RSA'
+        ..appMetadata = AppMetadata(providerId: 'test_provider', additional: {
+          'encKeyName': 'key_12345.__shared_keys.wavi',
+          'encAlgo': 'test_algo',
+        })
         ..immutable = immutable;
     }
 
@@ -1067,6 +1072,11 @@ void main() {
       expect(metadataMap['ivNonce'], '16');
       expect(metadataMap['skeEncKeyName'], 'dummy_enc_key_name');
       expect(metadataMap['skeEncAlgo'], 'RSA');
+      expect(metadataMap['appMetadata'], {
+        'providerId': 'test_provider',
+        'encKeyName': 'key_12345.__shared_keys.wavi',
+        'encAlgo': 'test_algo',
+      });
       expect(metadataMap['immutable'], immutable);
     }
 
@@ -1108,6 +1118,24 @@ void main() {
       );
       Metadata roundTripped = Metadata.fromJson(metadata.toJson());
       expect(metadata.toJson(), roundTripped.toJson());
+    });
+
+    test('throws FormatException for empty appMetadata providerId', () {
+      expect(
+        () => AppMetadata(providerId: ''),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => Metadata.decodeAppMetadata({'providerId': '  '}),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('throws FormatException for non-string appMetadata providerId', () {
+      expect(
+        () => Metadata.decodeAppMetadata({'providerId': 1}),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
   group('A group of tests to verify key length validation', () {

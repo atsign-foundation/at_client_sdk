@@ -3,8 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_iv.dart';
-import 'package:at_chops/src/key/at_private_key.dart';
-import 'package:at_chops/src/key/at_public_key.dart';
+import 'package:at_chops/src/key/keys.dart';
 import 'package:at_chops/src/model/hash_params.dart';
 
 /// Interface for encrypting and decrypting data. Check [DefaultEncryptionAlgo] for sample implementation.
@@ -56,4 +55,29 @@ abstract class AtSigningAlgorithm {
 abstract class AtHashingAlgorithm<K, V> {
   /// Hashes the passed data
   FutureOr<V> hash(K data, {covariant HashParams? hashParams});
+}
+
+/// Interface for a Key Encapsulation Mechanism (KEM) such as ML-KEM-768.
+///
+/// A KEM does not encrypt arbitrary data. It produces a shared secret that
+/// both parties can derive — the sender via [encapsulate] against the
+/// recipient's public key, the recipient via [decapsulate] using their
+/// secret key and the ciphertext sent by the sender.
+abstract class AtKemAlgorithm {
+  /// Encapsulate a fresh shared secret against [publicKey].
+  ///
+  /// Returns the [ciphertext] to transmit to the holder of the matching
+  /// secret key, together with the [sharedSecret] that both parties will
+  /// derive.
+  FutureOr<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
+      Uint8List publicKey);
+
+  /// Recover the shared secret from [ciphertext] using [secretKey].
+  FutureOr<Uint8List> decapsulate(Uint8List secretKey, Uint8List ciphertext);
+}
+
+/// Interface for a Diffie–Hellman key agreement primitive such as X25519.
+abstract class AtKeyAgreementAlgorithm {
+  /// Compute the shared secret from [privateKey] and [peerPublicKey].
+  FutureOr<Uint8List> dh(Uint8List privateKey, Uint8List peerPublicKey);
 }

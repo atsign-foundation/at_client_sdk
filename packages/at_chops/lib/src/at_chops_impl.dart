@@ -13,7 +13,7 @@ import 'package:at_chops/src/algorithm/ecc_signing_algo.dart';
 import 'package:at_chops/src/algorithm/pkam_signing_algo.dart';
 import 'package:at_chops/src/algorithm/rsa_encryption_algo.dart';
 import 'package:at_chops/src/at_chops_base.dart';
-import 'package:at_chops/src/key/at_key_pair.dart';
+import 'package:at_chops/src/key/keys.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
 import 'package:at_chops/src/key/impl/at_encryption_key_pair.dart';
 import 'package:at_chops/src/key/key_names.dart';
@@ -134,7 +134,6 @@ class AtChopsImpl extends AtChops {
     try {
       final utfEncodedData = utf8.encode(data);
       final encryptionResult = await encryptBytes(
-
           Uint8List.fromList(utfEncodedData), encryptionKeyType,
           keyName: keyName, encryptionAlgorithm: encryptionAlgorithm, iv: iv);
       final atEncryptionResult = AtEncryptionResult()
@@ -211,6 +210,9 @@ class AtChopsImpl extends AtChops {
     return atSigningResult;
   }
 
+  //TODO: when returning to do the work for open-ended atChopsKeys
+  // we should be removing anything related to keyNames from at_chops and allow
+  // at_client to handle provider-level crypto routing.
   AtEncryptionAlgorithm? _getEncryptionAlgorithm(
       EncryptionKeyType encryptionKeyType, String? keyName) {
     switch (encryptionKeyType) {
@@ -229,6 +231,9 @@ class AtChopsImpl extends AtChops {
     }
   }
 
+  //TODO: when returning to do the work for open-ended atChopsKeys
+  // we should be removing anything related to keyNames from at_chops and allow
+  // at_client to handle provider-level crypto routing.
   AtEncryptionKeyPair? _getEncryptionKeyPair(String? keyName) {
     if (keyName == null) {
       return atChopsKeys.atEncryptionKeyPair!;
@@ -238,6 +243,9 @@ class AtChopsImpl extends AtChops {
     return null;
   }
 
+  //TODO: when returning to do the work for open-ended atChopsKeys
+  // we should be removing anything related to keyNames from at_chops and allow
+  // at_client to handle provider-level crypto routing.
   SymmetricKey? _getSymmetricKey(String? keyName) {
     if (keyName == null || keyName == KeyNames.selfEncryptionKey) {
       return atChopsKeys.selfEncryptionKey!;
@@ -259,7 +267,7 @@ class AtChopsImpl extends AtChops {
           atChopsKeys.atPkamKeyPair!, signingInput.hashingAlgoType);
     } else if (signingInput.signingMode != null &&
         signingInput.signingMode == AtSigningMode.data) {
-      if (atChopsKeys.atEncryptionKeyPair == null){
+      if (atChopsKeys.atEncryptionKeyPair == null) {
         throw AtSigningException('Encryption keypair required for signing');
       }
       return DefaultSigningAlgo(
