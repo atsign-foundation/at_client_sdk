@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pinput/pinput.dart';
 
 /// A dialog widget that facilitates obtaining a CRAM key via Registrar OTP verification.
@@ -265,6 +266,14 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
                     separatorBuilder: (_) => const SizedBox(width: itemGap),
                     keyboardType: TextInputType.visiblePassword,
                     textCapitalization: TextCapitalization.characters,
+                    inputFormatters: [
+                      TextInputFormatter.withFunction((oldValue, newValue) {
+                        newValue = newValue.copyWith(
+                          text: newValue.text.toUpperCase(),
+                        );
+                        return newValue;
+                      }),
+                    ],
                     defaultPinTheme: defaultPinTheme,
                     focusedPinTheme: defaultPinTheme.copyWith(
                       decoration: BoxDecoration(

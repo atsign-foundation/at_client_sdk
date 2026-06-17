@@ -4,6 +4,7 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:pinput/pinput.dart';
+import 'package:flutter/services.dart';
 
 /// A dialog widget that facilitates APKAM activation via OTP verification.
 ///
@@ -179,7 +180,8 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
               text: TextSpan(
                 children: [
                   TextSpan(
-                    text: 'A 6-digit verification code needs to generated for ',
+                    text:
+                        'A 6-digit verification code needs to be generated for ',
                     style: TextStyle(
                       fontSize: 14,
                       color: widget.themeData.colorScheme.secondary,
@@ -251,7 +253,16 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
                     length: otpCount,
                     closeKeyboardWhenCompleted: false,
                     separatorBuilder: (_) => const SizedBox(width: itemGap),
-                    keyboardType: TextInputType.number,
+                    keyboardType: TextInputType.visiblePassword,
+                    textCapitalization: TextCapitalization.characters,
+                    inputFormatters: [
+                      TextInputFormatter.withFunction((oldValue, newValue) {
+                        newValue = newValue.copyWith(
+                          text: newValue.text.toUpperCase(),
+                        );
+                        return newValue;
+                      }),
+                    ],
                     defaultPinTheme: defaultPinTheme,
                     focusedPinTheme: defaultPinTheme.copyWith(
                       decoration: BoxDecoration(
