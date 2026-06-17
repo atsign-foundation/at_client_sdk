@@ -280,6 +280,31 @@ post-merge (at_client 711 / at_chops 99 / at_commons 486 tests green).
   acquisition** — eyes open that it still leaves a server-resident PQ-key
   ciphertext and complicates lever-B (superseded leaf keys linger
   server-side until actively deleted).
+- **Client identity resolution (multi-program UX).** Requiring every CLI
+  invocation to pass `--client-id` is a usability fail; the SDK should
+  *determine* the leaf. Each device-local keyset is
+  `{clientId (random), label (local selection metadata), leafKeys, lockfile}`,
+  stored per-atSign. Default `label` = program-set, falling back to the
+  executable basename. Resolution at startup:
+  - explicit `--client-id` → claim it (lock; error if already live);
+  - else scan keysets, filter to **claimable** (not locked by a live owner):
+    a claimable label-match → **resume** it (the common case); a label-match
+    that is **locked** (another instance of me) → **fork** to an *ephemeral*
+    leaf (not persisted, so no keyset proliferation); no label-match → **mint**
+    a persistent keyset for the label; keysets exist but none is mine and no
+    label to go on → an **actionable error** listing the leaves and how to
+    pick.
+  The owner lockfile (the single-owner advisory lock) doubles as the
+  resolver's liveness check — it both prevents clones and drives
+  resume-vs-fork. *Prefer resume* (fork/mint leaves are brand-new and must
+  join groups first — see Phase 4). Intentional multi-instance (a daemon
+  fleet of stable members) uses **distinct labels / keyset dirs** (persistent
+  leaves), not forks. Per-workspace identity, if wanted, comes from a
+  discoverable `.atsign-client` file (cwd/ancestor, like `.git`/`.env`), not
+  raw cwd. Ships as the default `loadClientKeys`/`saveClientKeys`
+  implementation, so apps supply nothing; zero-argument for the normal
+  multi-program case, never clones, asks for an id only when genuinely
+  ambiguous.
 - **Cross-atSign KeyPackage publication**: each atSign exposes its clients'
   KeyPackages as public keys so other atSigns can fetch and verify them
   (signature chain to the publishing enrollment's `_apsk` / the atSign's
@@ -506,6 +531,45 @@ Consolidation bonus at any point: NoPorts can replace `validation_utils`
 signing with the SDK's `EnvelopeSigning` (its descendant), moving
 verification onto the per-enrollment `_apsk` trust chain — strictly better
 for multi-daemon deployments.
+
+### Admission UX — a new leaf never blocks on a manual step
+
+A freshly-minted or forked leaf must publish its KeyPackage and be admitted
+before it can do group work. For *shared cross-atSign collaboration* groups
+that admission is an explicit admin Add + consent — real friction, and
+appropriate there. **NoPorts escapes it**, because its "groups" are only ever
+two shapes, both with automatic / policy-driven admission:
+
+- **Fleet = a self group (derived membership).** A new sshnpd leaf is a member
+  the moment its enrollment is authorized for the namespace — existing members
+  add its validly-credentialed KeyPackage (the late-appearing-clients flow),
+  no human "add to group" action. Admission is **bound to the enrollment
+  approval NoPorts already requires**, and a reinstalled daemon (new
+  device → new leaf, since leaf keys never copy) **auto-rejoins** under its
+  still-authorized enrollment.
+- **Session = a pair group, admitted by the daemon's accept policy.** The
+  "admin admitting" is just the daemon's existing connect-accept decision
+  (its allow-list). The session *request* and the *join* are the **same
+  event**: a fresh client leaf publishes its KeyPackage and requests, and the
+  accept forms the pair group on the spot — so a new leaf is never stuck
+  before "doing group work"; its first request *is* the join.
+
+So "admitted by an admin" reduces to authorizations NoPorts already performs
+(enrollment approval; the daemon allow-list) — no new manual step. **Three
+design requirements keep it that way:** (1) enrollment approval auto-admits
+the leaf to the self-groups for the namespaces it grants (one approval, not
+two steps); (2) self-group membership stays *derived* (authorized
+enrollment → auto-member), so installs/reinstalls auto-(re)join; (3) session
+admission stays the daemon's accept policy, evaluated at request time. If
+"add a leaf to a group" ever became a separate manual action, the friction
+returns — so admission must be a *consequence* of decisions NoPorts already
+makes.
+
+**Role-aware concurrency** (from the client-identity resolver): a short-lived
+client may **fork to an ephemeral leaf** under accidental concurrency — fine,
+each `sshnp` run forms its own session. A long-running **daemon** should
+instead **refuse-to-start (or use a distinct persistent label)** — an
+ephemeral daemon leaf has no stable self-group membership.
 
 ## Known shape risks & corrective actions (assessment 2026-06-17)
 
