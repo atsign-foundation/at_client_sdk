@@ -122,7 +122,7 @@ class NotificationServiceImpl extends NotificationService {
   /// after a clean DB is a no-op.
   ///
   /// Deletes are local-only — both legacy name prefixes are
-  /// excluded by [SyncUtil.shouldSync], so the removals do not
+  /// excluded by `SyncUtil.shouldSync`, so the removals do not
   /// propagate to the atServer.
   /// Returns the canonical value after migration. The seeded value
   /// is returned directly (rather than re-read by the caller) so the

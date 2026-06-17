@@ -86,14 +86,14 @@ abstract class AtClient {
   /// and the instance has been removed from the internal cache.
   bool get isStopped;
 
-  /// Stops all background services (sync, notifications, monitor) and closes
-  /// local storage for this atSign.
+  /// Stops all background services for this atSign: cancels the
+  /// keystore-event timers, closes the data-event stream, and stops the sync
+  /// and notification services and the remote secondary connection.
   ///
-  /// After calling [stop], the instance remains in the internal cache and can
-  /// be resumed by calling [AtClientManager.setCurrentAtSign] for the same
-  /// atSign, which will reopen storage and wire up fresh services.
-  ///
-  /// To permanently discard this instance, call [dispose] instead.
+  /// Local storage is NOT closed. The instance remains in the internal cache
+  /// and reuses its still-open local keystore when resumed by calling
+  /// [AtClientManager.setCurrentAtSign] for the same atSign, which wires up
+  /// fresh services against the same store.
   Future<void> stop();
 
   /// Updates value of [AtKey.key] is if it is already present. Otherwise creates a new key. Set [AtKey.sharedWith] if the key

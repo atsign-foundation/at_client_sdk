@@ -52,11 +52,4 @@ class StorageManager {
     );
     isStorageInitialized = true;
   }
-
-  /// Tears down the bundle and its boxes.
-  Future<void> close() async {
-    await _factory.close();
-    _bundle = null;
-    isStorageInitialized = false;
-  }
 }
