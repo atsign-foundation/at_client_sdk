@@ -545,3 +545,151 @@ What it is **not**: never "one connection per leaf"; connection count never
 forks or merges a leaf. The only thing that forks a leaf is more than one
 runtime owner of the same crypto state — a process/instance/identity-
 persistence decision, never a socket decision.
+
+## atServer group Delivery Service (target design)
+
+Group-addressed delivery on the pairwise substrate — taken straight to the
+end state, not via incremental half-measures. A group's Delivery Service
+(DS) is operated as a dedicated, **ciphertext-only** service atSign (e.g.
+`@my_org_groups`), run as critical infrastructure, whose atServer gains a
+first-class **group** object. The DS never holds group secrets — it stores
+plaintext routing metadata + an opaque ciphertext log it can order but not
+read — so E2E and the MLS leaf model are untouched. It can order, route,
+and (mis)deliver, all detectable via the MLS transcript hash; it cannot
+read content or forge membership (members reject any commit not signed by
+an authorised owner leaf). Small/pair groups (incl. NoPorts @a↔@b sessions)
+need none of this; it is for large / multi-party / fleet groups.
+
+### The group object (server-side, on the DS atSign)
+
+A named object in the DS atSign's reserved namespace (`__group.<groupId>`):
+- `ownerAcl` — atSigns permitted to administer/sequence. Coarse anti-spam
+  gate only; the real membership authority stays the cryptographic in-group
+  owner policy that member clients validate.
+- `members` — the plaintext **delivery roster** (fan-out + read-auth set). A
+  soft projection of the encrypted ratchet tree; transient divergence from
+  it is benign.
+- `seq` — monotonic per-group counter; the commit-ordering authority.
+- `log` — a TTL'd append-only **ciphertext** log keyed by `seq`, doubling as
+  the delivery payload store **and** the catch-up store.
+
+### Verbs
+
+- `group:create:{group, ownerAcl}` — provision the object.
+- `group:add:{group, atSign}` / `group:remove:{group, atSign}` — mutate the
+  roster (owner-ACL gated; carried as a delta alongside the membership
+  commit).
+- `group:members:<group>` — read the roster.
+- `group:append:{group, value:"<b64 ciphertext>", msgId, ttl}` — **write
+  path.** The atServer atomically assigns the next `seq`, appends ciphertext
+  to the log, dedupes on `msgId` (idempotent resubmit), and fans out a
+  **minimal wake** to each member atSign carrying only `{group, seq}` —
+  never the payload. Returns the assigned `seq` (a concurrent admin that
+  lost the race rebases and resubmits). One small fixed-size request from
+  the DS client regardless of group size.
+- `group:fetch:{group, since:<seq>}` — **read path, and the single delivery
+  primitive.** Returns log entries with `seq > since` (ciphertext).
+  Steady-state delivery, catch-up, missed-wake, and late-join are all the
+  same call — pull the delta from your last `seq`. Authorised by **group
+  membership** (the atServer checks the caller is in `members`) — the new
+  capability beyond pairwise `sharedWith`: a log readable by a *set* of
+  atSigns. The server returns ciphertext it cannot read.
+
+### Delivery model — wake, then pull
+
+Notifications are minimal wake-ups, not payload carriers:
+1. `group:append` → server logs ciphertext + fans out `{group, seq}` wakes,
+   one per **member atSign** (that atSign's atServer/clients pull) — so
+   delivery is O(member-atSigns), never O(member-clients).
+2. The member pulls via `group:fetch:since:<lastSeq>` into its **own** local
+   store; its many clients then see it through ordinary local sync. One
+   fetch drains multiple pending seqs, and wakes may be coalesced ("group
+   advanced to seq M"), so a burst costs one wake + one pull per member.
+3. Catch-up / late-join / missed-wake are not special paths — they are the
+   same `group:fetch:since`. Once pulled, group messages behave like
+   ordinary local-first data.
+
+### Properties / invariants
+
+- **No new trust.** Ciphertext + plaintext rosters only; orders and routes,
+  never decrypts, cannot forge membership.
+- **Sequencing IS the commit-ordering answer.** `group:append`'s atomic
+  `seq` is the MLS DS total order — this **resolves** the standalone
+  "decide commit-ordering" question (decision: atServer per-group
+  sequencing).
+- **Idempotent + best-effort + retry.** `msgId` dedupe; wakes ride the
+  existing notification queue + retry; the authoritative state is the log,
+  so a lost wake is harmless (the next fetch closes the gap).
+- **Bounded fan-out.** Per message: one `group:append` from the sender, then
+  O(member-atSigns) wakes + pulls — never O(member-clients).
+- **Reuses existing machinery.** Wakes are ordinary notifications; the log
+  is ordinary TTL'd keystore entries; genuinely new are only the group
+  object, the membership-gated read, and the atomic `seq`.
+
+### expiresAt / availableAt and catch-up
+
+TTL punches gaps in the `seq` log, and a gap is ambiguous (expired-and-
+skippable vs missing-and-fatal). The resolution splits on message **kind**,
+so the log carries plaintext per-entry metadata — `kind` (commit|app),
+absolute `expiresAt`, absolute `availableAt`, `msgId` — which the DS reads
+but never the content.
+
+**Two retention classes:**
+- *Application messages* — sender-set `expiresAt`/`availableAt`; **may
+  expire/disappear**. MLS app messages are independent (per-epoch secret-tree
+  ratchet), so a lost one is benign. A gap here is fine.
+- *Commits / handshake* — **never short-TTL'd**; retained until applied-by-all
+  (or a deadline). A member that misses a commit cannot advance past that
+  epoch — fatal-but-detectable (the transcript hash catches it; the member is
+  stuck, not corrupted), so commits must not vanish under a current member.
+
+**Catch-up** (`group:fetch:since`):
+- App messages: returns survivors; misses are the intended ephemeral
+  semantics. Expired entries leave a **tombstone** `{seq, expired:true}` with
+  *longer retention than the payload*, so a puller distinguishes expired from
+  a hole.
+- Commits: replay survivors in `seq` order; if a needed commit has aged out,
+  the member is a **straggler and rejoins at the current epoch** (fresh
+  Welcome / external commit), never a full-history replay.
+
+**Bounded commit retention:** members send `group:ack:{group, seq}` (a seq,
+not content); the DS truncates the log below `min(member high-water marks)` —
+everyone has those — or below a **max-retention deadline**. A member past the
+deadline (e.g. its atServer down for weeks) becomes a straggler → rejoin.
+This also pressures admins to remove dead members (good for PCS).
+
+**"Expires before ever delivered" (recipient atServer down):**
+- App message → the recipient misses it permanently; correct (disappearing-
+  message semantics), marked by a tombstone.
+- Commit → forbidden for current members (no short TTL + applied-by-all
+  retention); a recipient down past the deadline falls off → re-added. Never
+  silent corruption.
+
+**`expiresAt` must be absolute, sender-set UTC** — not a per-hop duration. A
+per-hop TTL gains a fresh lifetime at each hop (DS log, then each recipient's
+local store) and outlives its intended window.
+
+**`availableAt` is application-message-only and enforced recipient-locally.**
+A commit can't defer a state transition without stalling the epoch chain. For
+app messages the DS delivers in `seq` order **immediately** (ciphertext is
+opaque to it); the recipient pulls and **embargoes locally** via the existing
+`nextAvailableAt`/`peekNewlyAvailable` machinery. So `group:fetch:since` must
+**return** future-`availableAt` entries (with metadata), never withhold them
+— else a member offline at maturity never gets them. (The DS may defer the
+*wake*, never the log entry.) Keeps `seq` monotonic and leaks no timing.
+
+**`availableAt` vs forward secrecy (the subtle bound):** an app message is
+sealed under the epoch-N secret, but FS deletes old epoch keys — so a
+long-deferred message can mature *after* its decryption key is gone.
+Deferred availability is therefore **bounded by epoch-key retention**; longer
+embargoes need the sender to re-key under a deliberately-retained
+`export()`-derived secret. "Schedule for next month" and forward secrecy are
+in tension; the bound must be explicit.
+
+These are policy + metadata over the atServer's existing expiry/availability
+timers; the only genuinely new server behavior is the commit-retention
+policy, tombstones, and ack-truncation.
+
+(A simpler inline-payload, client-supplied-recipient-list `notify:list` is a
+possible transitional form, but the target is the group object + wake/pull
++ membership-gated log above.)
