@@ -143,6 +143,56 @@ behind the same `SecureGroup` interface.
 
 Full walk-through: [Appendix B](#appendix-b--a-large-group-end-to-end-detailed).
 
+## Usability — a first-class constraint
+
+`AtCollection` / `at_client` exists so application authors — **human and AI**
+— can build on the Atsign Platform with minimal footguns. The group/PQ
+migration must not erode that: the guiding constraint is that **the user sees
+no new task and the app author writes no new code in the common case.** Every
+milestone is held to that bar; the UX mechanisms elsewhere in this doc all
+exist to keep it true. The promises, each linking to where it's realised:
+
+- **No per-invocation identity tax.** A program is never told *which* client
+  it is. The SDK resolves the leaf by label (resume / fork-ephemeral / mint),
+  so many CLI programs (sshnp, npt) and the desktop app run under one atSign
+  with **zero `--client-id` args and no clones**. →
+  [Phase 2 · Client identity resolution](#phase-2--identity-layer-keypackages-and-per-client-atkeys)
+- **No manual "add to group" step.** Admission is a *consequence* of decisions
+  already made — self-group membership is derived from enrollment
+  authorisation; session/cross-atSign admission rides the existing accept
+  policy (a request *is* the join). →
+  [NoPorts admission UX](#admission-ux--a-new-leaf-never-blocks-on-a-manual-step)
+- **Apps supply nothing.** The identity resolver, `SecretStorePersistence`,
+  and `loadClientKeys` / `saveClientKeys` ship default implementations over
+  the existing keychain / biometric / file plumbing.
+- **Old data stays readable forever; migration is lazy.** The `CryptoProvider`
+  seam routes per value by `AppMetadata`, so legacy and new schemes coexist,
+  re-encryption is on-touch, and there is never a flag-day. →
+  [Foundations](#foundations-what-exists-today)
+- **Backwards-compatible, per-destination rollout.** Feature discovery
+  (daemon-ping `supportedFeatures`) gates new behaviour per peer; an old peer
+  silently keeps the legacy path. →
+  [Upgrading NoPorts](#upgrading-noports-with-daemon-ping-feature-discovery)
+- **Safety is automatic.** The single-owner lock prevents leaf cloning without
+  the user knowing it exists; a duplicate same-identity launch forks or
+  refuses deterministically rather than corrupting state.
+- **For NoPorts the target is _zero_ user-visible delta** — same commands,
+  args, setup and authorisation — contingent on the port mapping existing
+  identifiers onto the new machinery. →
+  [NoPorts user-visible delta](#user-visible-delta--target-none)
+
+**Usability acceptance test for any milestone:** does it add a flag a user
+must pass, a file a user must manage, a step an operator must perform, or a
+peer-by-peer break? If yes, it isn't done. Two standing requirements carry
+most of the weight: **identity is derived from identifiers the program already
+has** (program/device name, an `.atsign-client` context file — never a forced
+arg), and **admission stays per-atSign** (any validly-credentialed leaf of an
+authorised atSign is accepted; per-leaf is only an *optional* refinement for
+revocation and audit). The corresponding builder-facing surface is the
+`SecureGroup` interface plus sensible `CryptoConfig` defaults — the same
+"LLM-friendly verbs, explicit semantics, no hidden invariants" goal as the
+rest of `AtCollection`.
+
 ## Foundations (what exists today)
 
 **`xl-pluggable` — the provider seam.** `CryptoProvider { id;
