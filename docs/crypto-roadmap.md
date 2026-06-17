@@ -12,14 +12,14 @@ Starting point: `trunk`, incorporating and extending three lines of work:
 |----------------------|---------------------------------------------------------------------|-------------------------|
 | `jt-pq`              | Post-quantum primitives in at_chops (ML-KEM-768, X25519)            | Merged to trunk         |
 | `xl-pluggable`       | Pluggable `CryptoProvider` model + wire routing (`AppMetadata`)     | Merged to working branch |
-| `gkc-alice-to-alice` | Per-client identity, discovery, and same-atSign delivery + the above | Integration branch    |
+| `gkc-pqmls-spike`    | Per-client identity, discovery, and same-atSign delivery + the above | Integration branch    |
 
 ### Delivery model
 
 All of this is built and verified **locally first**, end-to-end across the
 `at_client_sdk`, `at_server` and `sshnoports` repos, then staged as a
 **sequence of independently-reviewable per-package PRs** in dependency order.
-`gkc-alice-to-alice` is the at_client_sdk integration branch holding every
+`gkc-pqmls-spike` is the at_client_sdk integration branch holding every
 package change here; the per-package PR branches are reconstructed from it.
 The dependency-ordered sequence: `at_commons` (the `appMetadata` wire field) →
 `at_chops` (X-Wing / AES-GCM / key consolidation) → `at_client` (pluggable
@@ -120,7 +120,7 @@ touch the get path; both are satisfied on the integration branch):
 
 ### Phase 0 — land the foundations — **done on the integration branch**
 
-`jt-pq` merged to trunk; `xl-pluggable` merged into `gkc-alice-to-alice`; the
+`jt-pq` merged to trunk; `xl-pluggable` merged into `gkc-pqmls-spike`; the
 secret-sharing substrate is in place. The get-path invariants above hold
 post-merge (at_client 711 / at_chops 99 / at_commons 486 tests green).
 
@@ -129,7 +129,7 @@ post-merge (at_client 711 / at_chops 99 / at_commons 486 tests green).
 - **X-Wing hybrid KEM** (draft-connolly-cfrg-xwing-kem-10): X25519 +
   ML-KEM-768 with the SHA3-256 combiner; 32-byte seed secret keys expanded
   via SHAKE-256 (pointycastle, already a dependency). **Done on
-  `gkc-alice-to-alice`** (`XWingPureDartAlgo`), verified byte-exact against
+  `gkc-pqmls-spike`** (`XWingPureDartAlgo`), verified byte-exact against
   the draft's Appendix C vectors including derandomized encapsulation.
   ~150 lines composing existing pieces. **Preferred long-term home:
   upstream in `pqcrypto`** (which already provides ML-KEM and experimental
@@ -137,7 +137,7 @@ post-merge (at_client 711 / at_chops 99 / at_commons 486 tests green).
   `AtKemAlgorithm` seam makes the swap invisible to callers. ML-DSA
   (needed around phase 5 for PQ signatures) is likewise pqcrypto's domain;
   register interest, adopt when it stabilizes against FIPS 204 vectors.
-- **AES-256-GCM AEAD** — **done on `gkc-alice-to-alice`**
+- **AES-256-GCM AEAD** — **done on `gkc-pqmls-spike`**
   (`AesGcm256EncryptionAlgo`, NIST-vector verified). **HKDF** (via
   `cryptography`) — adapter only, when its first consumer (the rotating
   provider's `export()`) arrives in phase 3.
@@ -150,7 +150,7 @@ post-merge (at_client 711 / at_chops 99 / at_commons 486 tests green).
 
 ### Phase 2 — identity layer: KeyPackages and per-client AtKeys
 
-- **Frame bundles as KeyPackages.** **Done on `gkc-alice-to-alice`**, and
+- **Frame bundles as KeyPackages.** **Done on `gkc-pqmls-spike`**, and
   more strongly than originally planned: since `jt-pq` merged before PR
   #1976 shipped, the classical interim was deleted outright — the identity
   layer is **PQ-native from day one** (`ClientKeyPackage` carries a single
