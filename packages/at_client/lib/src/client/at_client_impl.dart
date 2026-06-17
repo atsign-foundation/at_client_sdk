@@ -149,6 +149,12 @@ class AtClientImpl implements AtClient {
   StreamSubscription<DataEvent>? _expirySub;
   bool _expirySweepInFlight = false;
 
+  // Monotonic guard for the async `_armExpiryTimer`. Each arm claims a
+  // generation; after its `await` it bails if a newer arm has started (or the
+  // client has stopped), so concurrent listener-driven arms can't orphan each
+  // other's one-shot timer and an in-flight arm can't re-arm after stop().
+  int _expiryArmGen = 0;
+
   // ---------------------------------------------------------------------------
   // Event-driven availability timer. Symmetric counterpart to the
   // expiry timer above — arms at LocalSecondary.nextAvailableAt(); on
@@ -160,6 +166,9 @@ class AtClientImpl implements AtClient {
   Timer? _availableTimer;
   StreamSubscription<DataEvent>? _availableSub;
   bool _availableSweepInFlight = false;
+
+  // Monotonic guard for the async `_armAvailableTimer` — see `_expiryArmGen`.
+  int _availableArmGen = 0;
 
   SyncService? _syncService;
 
@@ -408,11 +417,14 @@ class AtClientImpl implements AtClient {
   /// A timestamp in the past arms a `Duration.zero` timer that fires
   /// on the next microtask — effectively immediate.
   Future<void> _armExpiryTimer() async {
+    final gen = ++_expiryArmGen;
     _expiryTimer?.cancel();
     _expiryTimer = null;
     final ls = localSecondary;
     if (ls == null) return;
     final when = await ls.nextExpiryAt();
+    // Bail if a newer arm superseded us across the await, or we stopped.
+    if (gen != _expiryArmGen || _isStopped) return;
     if (when == null) return;
     final wait = when.difference(DateTime.timestamp());
     _expiryTimer = Timer(
@@ -448,11 +460,14 @@ class AtClientImpl implements AtClient {
   /// availableAt slid into the past between the previous re-arm and
   /// this one.
   Future<void> _armAvailableTimer() async {
+    final gen = ++_availableArmGen;
     _availableTimer?.cancel();
     _availableTimer = null;
     final ls = localSecondary;
     if (ls == null) return;
     final when = await ls.nextAvailableAt();
+    // Bail if a newer arm superseded us across the await, or we stopped.
+    if (gen != _availableArmGen || _isStopped) return;
     if (when == null) return;
     final wait = when.difference(DateTime.timestamp());
     _availableTimer = Timer(
@@ -562,7 +577,6 @@ class AtClientImpl implements AtClient {
     _enrollmentService = null;
   }
 
-  /// Does nothing unless a telemetry service has been injected
   @Deprecated(
       'Commit-log compaction was removed with the commit-log-free keystore; '
       'this is now a no-op and will be removed in a future major release')
