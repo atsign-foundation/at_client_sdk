@@ -1,73 +1,19 @@
 import 'package:at_commons/at_commons.dart';
 
-enum KeyPurpose {
-  pkam,
-  encryption,
-  signing,
-  selfEncryption,
-  apkamSymmetric,
+abstract final class KeyPurposes {
+  static const pkam = 'pkam';
+  static const encryption = 'encryption';
+  static const signing = 'signing';
+  static const selfEncryption = 'self-encryption';
+  static const apkamSymmetric = 'apkam-symmetric';
 }
 
-KeyPurpose? keyPurposeFromJsonToken(String token) {
-  return switch (token) {
-    'pkam' => KeyPurpose.pkam,
-    'encryption' => KeyPurpose.encryption,
-    'signing' => KeyPurpose.signing,
-    'self-encryption' => KeyPurpose.selfEncryption,
-    'apkam-symmetric' => KeyPurpose.apkamSymmetric,
+bool? keyPurposeUsesAsymmetricPair(String purpose) {
+  return switch (purpose) {
+    KeyPurposes.pkam || KeyPurposes.encryption || KeyPurposes.signing => true,
+    KeyPurposes.selfEncryption || KeyPurposes.apkamSymmetric => false,
     _ => null,
   };
-}
-
-KeyPurpose? keyPurposeFromDefaultsKey(String key) {
-  return switch (key) {
-    'pkam' => KeyPurpose.pkam,
-    'encryption' => KeyPurpose.encryption,
-    'signing' => KeyPurpose.signing,
-    'selfEncryption' => KeyPurpose.selfEncryption,
-    'apkamSymmetric' => KeyPurpose.apkamSymmetric,
-    _ => null,
-  };
-}
-
-extension keyPurposeJson on KeyPurpose {
-  String get jsonToken {
-    return switch (this) {
-      KeyPurpose.pkam => 'pkam',
-      KeyPurpose.encryption => 'encryption',
-      KeyPurpose.signing => 'signing',
-      KeyPurpose.selfEncryption => 'self-encryption',
-      KeyPurpose.apkamSymmetric => 'apkam-symmetric',
-    };
-  }
-
-  String get defaultsKey {
-    return switch (this) {
-      KeyPurpose.pkam => 'pkam',
-      KeyPurpose.encryption => 'encryption',
-      KeyPurpose.signing => 'signing',
-      KeyPurpose.selfEncryption => 'selfEncryption',
-      KeyPurpose.apkamSymmetric => 'apkamSymmetric',
-    };
-  }
-
-  bool get usesAsymmetricPair {
-    return switch (this) {
-      KeyPurpose.pkam || KeyPurpose.encryption || KeyPurpose.signing => true,
-      KeyPurpose.selfEncryption || KeyPurpose.apkamSymmetric => false,
-    };
-  }
-}
-
-
-class AtKeysDefaults {
-  final Map<KeyPurpose, String> values;
-
-  const AtKeysDefaults({
-    required this.values,
-  });
-
-  String? operator [](KeyPurpose purpose) => values[purpose];
 }
 
 class KeyFingerprint {
@@ -93,19 +39,46 @@ class KeyProtection {
 }
 
 class AtKeysSet {
-  final Atsign atSign;
+  final Atsign atsign;
   String? enrollmentId;
   final List<AtAsymmetricKey> asymmetricKeys;
   final List<AtSymmetricKey> symmetricKeys;
-  final AtKeysDefaults defaults;
 
   AtKeysSet({
-    required this.atSign,
+    required this.atsign,
     required this.asymmetricKeys,
     required this.symmetricKeys,
-    required this.defaults,
     this.enrollmentId,
   });
+
+  void addKey(AtKeysMaterial key) {
+    switch (key) {
+      case AtAsymmetricKey():
+        _addAsymmetricKey(key);
+      case AtSymmetricKey():
+        _addSymmetricKey(key);
+    }
+  }
+
+  void addKeys(Iterable<AtKeysMaterial> keys) {
+    for (final key in keys) {
+      addKey(key);
+    }
+  }
+
+  void _addAsymmetricKey(AtAsymmetricKey key) {
+    if (getKeyPair(key.pairId) != null) {
+      throw ArgumentError.value(key.pairId, 'pairId', 'Duplicate key pair');
+    }
+    asymmetricKeys.add(key);
+  }
+
+  void _addSymmetricKey(AtSymmetricKey key) {
+    if (getSymmetricKey(key.id) != null) {
+      throw ArgumentError.value(key.id, 'id', 'Duplicate symmetric key');
+    }
+    symmetricKeys.add(key);
+  }
 
   AtAsymmetricKey? getKeyPair(String pairId) {
     for (final key in asymmetricKeys) {
@@ -126,9 +99,18 @@ class AtKeysSet {
   }
 }
 
-class AtAsymmetricKey {
+sealed class AtKeysMaterial {
+  const AtKeysMaterial();
+
+  String get purpose;
+  String get algorithm;
+}
+
+class AtAsymmetricKey implements AtKeysMaterial {
   final String pairId;
-  final KeyPurpose purpose;
+  @override
+  final String purpose;
+  @override
   final String algorithm;
   final KeyFingerprint? fingerprint;
   final AtBytes publicKey;
@@ -156,9 +138,11 @@ class AtAsymmetricKey {
   });
 }
 
-class AtSymmetricKey {
+class AtSymmetricKey implements AtKeysMaterial {
   final String id;
-  final KeyPurpose purpose;
+  @override
+  final String purpose;
+  @override
   final String algorithm;
   final AtBytes bytes;
   final KeyProtection? protection;
