@@ -789,6 +789,18 @@ and (mis)deliver, all detectable via the MLS transcript hash; it cannot
 read content or forge membership (members reject any commit not signed by
 an authorised owner leaf).
 
+**This section is the one place we deliberately extend the atServer.** The
+standing rule of thumb is: *anything that can be done in a client application
+is done there; the atServer is extended only when essential.* The group
+object, its verbs, per-group sequencing, the ciphertext log, the
+membership-gated read, and the redact-on-expiry tombstones below are the
+accepted MLS-specific exception — at scale the atServer is unavoidably central
+to group delivery (cross-atSign ordering, fan-out, and membership-gated
+retention/catch-up are not achievable in the client), and every addition stays
+**ciphertext-only**, so they buy delivery without buying trust. Everything that
+*can* live in the client — the crypto, the `SecureGroup` engine, identity
+resolution — stays there.
+
 ### One design, two placements (host = member, or dedicated)
 
 This is **one** design; "small self-hosted group" and "large dedicated-DS
@@ -910,6 +922,20 @@ but never the content.
 - Commits: replay survivors in `seq` order; if a needed commit has aged out,
   the member is a **straggler and rejoins at the current epoch** (fresh
   Welcome / external commit), never a full-history replay.
+
+**Tombstones — who/when.** A tombstone is never written by a client; it is the
+**DS atServer's redact-not-delete action at `expiresAt`.** An app-message
+entry carries a *tombstone-on-expiry* disposition (set at `group:append`); when
+its existing `nextExpiresAt` timer fires, the atServer — instead of deleting —
+drops the ciphertext and keeps `{seq, kind, expired:true}` under a longer
+secondary TTL, reaped at that TTL or once `group:ack` truncation passes the
+seq. Commits never tombstone (GC'd only after universal ack → full removal).
+This redact-on-expiry behaviour is **MLS-specific atServer functionality** (the
+deliberate extension noted at the top of this section). It is a
+*catch-up-determinism* convenience, **not a correctness requirement**: the MLS
+transcript hash is the real backstop that prevents a member ever silently
+skipping a missing commit; tombstones merely let a puller classify a gap
+(expired-app → skip vs unexpected → investigate) and keep logs honest.
 
 **Bounded commit retention:** members send `group:ack:{group, seq}` (a seq,
 not content); the DS truncates the log below `min(member high-water marks)` —
