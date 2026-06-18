@@ -15,7 +15,7 @@ import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -28,31 +28,33 @@ void main() {
   late LocalSecondary local;
   late List<DataEvent> events;
   late _MockAtClient atClient;
+  late HiveAtPersistenceFactory factory;
 
   setUp(() async {
     AtClientImpl.atClientInstanceMap.remove(atSignStr);
-    final commitLogInstance = await AtCommitLogManagerImpl.getInstance()
-        .getCommitLog(atSignStr, commitLogPath: storageDir);
-    final persistenceManager = SecondaryPersistenceStoreFactory.getInstance()
-        .getSecondaryPersistenceStore(atSignStr)!;
-    await persistenceManager.getHivePersistenceManager()!.init(storageDir);
-    persistenceManager.getSecondaryKeyStore()!.commitLog = commitLogInstance;
+    factory = HiveAtPersistenceFactory();
+    final bundle = await factory.initialize(atSignStr,
+        HivePersistenceConfig.clientDefaults(storagePath: storageDir));
 
     atClient = _MockAtClient();
     when(() => atClient.getCurrentAtSign()).thenReturn(atSignStr);
     when(() => atClient.atSign).thenReturn(atSignStr.toAtsign());
     when(() => atClient.enrollmentId).thenReturn(null);
+    // A LocalSecondary built without an explicit keyStore resolves it
+    // from the client's persistence bundle — the 'keystore-cache reuse'
+    // test relies on a fresh LocalSecondary sharing this keystore.
+    when(() => atClient.persistenceBundle).thenReturn(bundle);
 
     events = <DataEvent>[];
     local = LocalSecondary(
       atClient,
+      keyStore: bundle.keyValueStore,
       onEvent: events.add,
     );
   });
 
   tearDown(() async {
-    await SecondaryPersistenceStoreFactory.getInstance().close();
-    await AtCommitLogManagerImpl.getInstance().close();
+    await factory.close();
     final dir = Directory(storageDir);
     if (await dir.exists()) {
       dir.deleteSync(recursive: true);
@@ -150,7 +152,7 @@ void main() {
       final t0 = DateTime.timestamp();
       await local.executeVerb(put('b1', 'v', ttbMs: 7200 * 1000)); // +2h
       await local.executeVerb(put('b2', 'v', ttbMs: 3600 * 1000)); // +1h
-      final next = local.nextAvailableAt();
+      final next = await local.nextAvailableAt();
       expect(next, isNotNull);
       // Should be ~+1h; tolerate a few seconds of clock skew between the
       // builder's now and the test's t0.
@@ -160,14 +162,14 @@ void main() {
 
     test('nextAvailableAt is null when no future ttb is pending', () async {
       await local.executeVerb(put('b3', 'v'));
-      expect(local.nextAvailableAt(), isNull);
+      expect(await local.nextAvailableAt(), isNull);
     });
 
     test('past ttb (negative) does not enter the cache', () async {
       // Negative ttb produces an availableAt in the past — visible
       // immediately, no future fire to schedule.
       await local.executeVerb(put('b4', 'v', ttbMs: -3600 * 1000));
-      expect(local.nextAvailableAt(), isNull);
+      expect(await local.nextAvailableAt(), isNull);
     });
 
     test('keysWithAvailableAtAtOrBefore yields keys at-or-before cutoff',
@@ -178,7 +180,8 @@ void main() {
       await local.executeVerb(put('c3', 'v', ttbMs: 60 * 60 * 1000)); // +1h
 
       final cutoff = t0.add(const Duration(minutes: 10));
-      final picked = local.keysWithAvailableAtAtOrBefore(cutoff).toSet();
+      final picked =
+          (await local.keysWithAvailableAtAtOrBefore(cutoff)).toSet();
       expect(picked, hasLength(2));
       expect(picked.any((k) => k.contains('c1')), isTrue);
       expect(picked.any((k) => k.contains('c2')), isTrue);
@@ -189,16 +192,14 @@ void main() {
       await local.executeVerb(put('d1', 'v', ttbMs: 3600 * 1000));
       await local.executeVerb(put('d2', 'v', ttbMs: 3600 * 1000));
 
-      final keys = local
-          .keysWithAvailableAtAtOrBefore(
-              DateTime.timestamp().add(const Duration(days: 365)))
+      final keys = (await local.keysWithAvailableAtAtOrBefore(
+              DateTime.timestamp().add(const Duration(days: 365))))
           .toList();
       expect(keys, hasLength(2));
-      local.dropAvailabilityCacheEntry(keys.first);
+      await local.dropAvailabilityCacheEntry(keys.first);
 
-      final remaining = local
-          .keysWithAvailableAtAtOrBefore(
-              DateTime.timestamp().add(const Duration(days: 365)))
+      final remaining = (await local.keysWithAvailableAtAtOrBefore(
+              DateTime.timestamp().add(const Duration(days: 365))))
           .toList();
       expect(remaining, hasLength(1));
       expect(remaining.single, isNot(equals(keys.first)));
@@ -207,27 +208,27 @@ void main() {
     test('_delete drops both cache entries', () async {
       await local
           .executeVerb(put('e1', 'v', ttbMs: 3600 * 1000, ttlMs: 7200 * 1000));
-      expect(local.nextAvailableAt(), isNotNull);
-      expect(local.nextExpiryAt(), isNotNull);
+      expect(await local.nextAvailableAt(), isNotNull);
+      expect(await local.nextExpiryAt(), isNotNull);
 
       await local.executeVerb(DeleteVerbBuilder()..atKey = atKey('e1'));
-      expect(local.nextAvailableAt(), isNull);
-      expect(local.nextExpiryAt(), isNull);
+      expect(await local.nextAvailableAt(), isNull);
+      expect(await local.nextExpiryAt(), isNull);
     });
   });
 
   group('keystore-cache reuse', () {
     test('fresh LocalSecondary sees existing keystore TTB entries', () async {
-      // The HiveKeystore's TTL/TTB cache is rebuilt by HiveKeystore
-      // itself on box open; a freshly-constructed LocalSecondary
-      // sharing the same keystore sees pending entries without an
-      // explicit pre-warm walk.
+      // The keystore's TTL/TTB index is rebuilt by the keystore itself
+      // on box open; a freshly-constructed LocalSecondary sharing the
+      // same keystore sees pending entries without an explicit pre-warm
+      // walk.
       await local.executeVerb(put('p1', 'v', ttbMs: 3600 * 1000));
 
       final fresh = LocalSecondary(atClient, onEvent: events.add);
-      expect(fresh.nextAvailableAt(), isNotNull);
+      expect(await fresh.nextAvailableAt(), isNotNull);
       expect(
-        approximate(fresh.nextAvailableAt()!,
+        approximate((await fresh.nextAvailableAt())!,
                 DateTime.timestamp().add(const Duration(hours: 1)))
             .inSeconds,
         lessThan(5),
@@ -238,33 +239,34 @@ void main() {
   group('fired-availability suppression', () {
     test('dropAvailabilityCacheEntry suppresses re-fire from sweep', () async {
       await local.executeVerb(put('s1', 'v', ttbMs: 3600 * 1000));
-      final keys = local
-          .keysWithAvailableAtAtOrBefore(
-              DateTime.timestamp().add(const Duration(days: 365)))
+      final keys = (await local.keysWithAvailableAtAtOrBefore(
+              DateTime.timestamp().add(const Duration(days: 365))))
           .toList();
       expect(keys, hasLength(1));
 
       // Simulate the timer fire: emit + drop.
-      local.dropAvailabilityCacheEntry(keys.single);
+      await local.dropAvailabilityCacheEntry(keys.single);
 
-      // Subsequent sweeps must skip the same key.
-      final after = local
-          .keysWithAvailableAtAtOrBefore(
-              DateTime.timestamp().add(const Duration(days: 365)))
+      // Subsequent sweeps must skip the same key — the fired-map filters
+      // it out of the visibility-onset sweep.
+      final after = (await local.keysWithAvailableAtAtOrBefore(
+              DateTime.timestamp().add(const Duration(days: 365))))
           .toList();
       expect(after, isEmpty);
-      // And nextAvailableAt skips it too.
-      expect(local.nextAvailableAt(), isNull);
+      // nextAvailableAt is NOT fired-filtered (it reflects the keystore's
+      // future-availableAt index directly): the key's +1h crossing is
+      // still pending, so the timer may re-arm for it — a harmless wake,
+      // since the sweep above filters the fired key out.
+      expect(await local.nextAvailableAt(), isNotNull);
     });
 
     test('rewriting a fired key with a new future ttb re-enables firing',
         () async {
       await local.executeVerb(put('s2', 'v', ttbMs: 3600 * 1000));
-      final keys = local
-          .keysWithAvailableAtAtOrBefore(
-              DateTime.timestamp().add(const Duration(days: 365)))
+      final keys = (await local.keysWithAvailableAtAtOrBefore(
+              DateTime.timestamp().add(const Duration(days: 365))))
           .toList();
-      local.dropAvailabilityCacheEntry(keys.single);
+      await local.dropAvailabilityCacheEntry(keys.single);
       // Force a non-trivial sleep so the rewrite produces a strictly-later
       // availableAt — we need the new time to differ from the recorded one.
       await Future<void>.delayed(const Duration(milliseconds: 5));
@@ -272,8 +274,13 @@ void main() {
       await local.executeVerb(put('s2', 'v2', ttbMs: 7200 * 1000));
       // No event from the write itself (future→future re-write).
       expect(events, isEmpty);
-      // But the sweep should now see s2 again.
-      final next = local.nextAvailableAt();
+      // The rewrite moved availableAt to +2h; the sweep sees s2 again
+      // (its availableAt no longer matches the fired entry).
+      final reSwept = (await local.keysWithAvailableAtAtOrBefore(
+              DateTime.timestamp().add(const Duration(days: 365))))
+          .toList();
+      expect(reSwept.any((k) => k.contains('s2')), isTrue);
+      final next = await local.nextAvailableAt();
       expect(next, isNotNull);
       expect(
         approximate(next!, DateTime.timestamp().add(const Duration(hours: 2)))

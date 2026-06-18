@@ -21,11 +21,13 @@ import 'package:uuid/uuid.dart';
 
 String? lastNotificationJson;
 
-class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {}
+class MockSecondaryKeyStore extends Mock
+    implements AtKeyValueStore<String, AtData, AtMetaData?> {}
 
 class MockLocalSecondary extends Mock implements LocalSecondary {
   @override
-  SecondaryKeyStore? keyStore = MockSecondaryKeyStore();
+  AtKeyValueStore<String, AtData, AtMetaData?>? keyStore =
+      MockSecondaryKeyStore();
 }
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
@@ -1157,10 +1159,8 @@ void main() {
             ..namespace = 'wavi'
             ..fetchOfflineNotifications = false);
 
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(any())).thenAnswer((_) => true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
@@ -1181,10 +1181,8 @@ void main() {
             ..namespace = 'wavi'
             ..fetchOfflineNotifications = true);
 
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(any())).thenAnswer((_) => true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
@@ -1243,10 +1241,8 @@ void main() {
       // #1942 migration cleanup may call delete on legacy keys.
       when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
 
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(any())).thenAnswer((_) => true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
 
       notificationServiceImpl.stopAllSubscriptions();
 
@@ -1282,10 +1278,8 @@ void main() {
       // #1942 migration cleanup may call delete on legacy keys.
       when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
 
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(any())).thenAnswer((_) => true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
 
       notificationServiceImpl.stopAllSubscriptions();
 
@@ -1316,19 +1310,17 @@ void main() {
       // The #1942 migration also probes the intermediate
       // `lastreceivednotification.<ns>@<atSign>` form; this fallback
       // keeps the mock from returning null on that probe.
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(any())).thenAnswer((_) => false);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => false);
 
-      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.isKeyExists(
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(
               notificationServiceImpl.lastReceivedNotificationAtKey.toString()))
-          .thenAnswer((_) => false);
+          .thenAnswer((_) async => false);
 
       when(() => mockAtClientImpl
           .getLocalSecondary()!
           .keyStore!
-          .isKeyExists(lastNotificationKey)).thenAnswer((_) => true);
+          .exists(lastNotificationKey)).thenAnswer((_) async => true);
 
       when(() => mockAtClientImpl.get(lastNotificationAtKey))
           .thenAnswer((_) async => Future.value(AtValue()
@@ -1422,10 +1414,8 @@ void main() {
         for (final e in values.entries) e.key.toLowerCase(): e.value,
       };
 
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(any())).thenAnswer((invocation) {
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((invocation) async {
         final k = invocation.positionalArguments.first as String;
         return presentKeysLower.contains(k.toLowerCase());
       });

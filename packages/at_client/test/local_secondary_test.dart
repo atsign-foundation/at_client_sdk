@@ -5,12 +5,14 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:crypton/crypton.dart';
+import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'test_utils/test_utils.dart';
 
-class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {
+class MockSecondaryKeyStore extends Mock
+    implements AtKeyValueStore<String, AtData, AtMetaData?> {
   static const String hiddenKey1 = 'public:__location.wavi@alice';
   static const String hiddenKey2 = '_profilePic.wavi@alice';
   static const String nonHiddenKey1 = 'public:nickname.wavi@alice';
@@ -39,16 +41,35 @@ class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {
   ];
 
   @override
-  List<String> getKeys({String? regex}) {
+  Future<Stream<String>> getKeys({String? regex}) async {
     if (regex != null) {
       RegExp re = RegExp(regex);
-      return keysInKeyStore.where((key) {
-        return key.contains(re);
-      }).toList();
-    } else {
-      return keysInKeyStore.toList();
+      return Stream.fromIterable(
+          keysInKeyStore.where((key) => key.contains(re)));
     }
+    return Stream.fromIterable(keysInKeyStore);
   }
+
+  // The scan tests only exercise getKeys; reads (used incidentally by
+  // AtChops bootstrap during AtClientImpl.create) resolve to null.
+  @override
+  Future<AtData?> get(String key) async => null;
+
+  @override
+  Future<AtMetaData?> getMeta(String key) async => null;
+
+  // No TTL/TTB entries — the expiry/availability timer surfaces the
+  // AtClient bootstrap consults are all no-ops.
+  @override
+  Future<DateTime?> nextExpiresAt() async => null;
+
+  @override
+  Future<DateTime?> nextAvailableAt({DateTime? asOf}) async => null;
+
+  @override
+  Future<Stream<String>> peekNewlyAvailable(
+          {required DateTime since, DateTime? asOf, int? limit}) async =>
+      const Stream.empty();
 }
 
 class MockAtClientImpl extends Mock implements AtClientImpl {}
@@ -396,7 +417,7 @@ void main() {
   });
 
   group('A group of tests to validate getKeys and getAtKeys', () {
-    late SecondaryKeyStore mockSecondaryKeyStore;
+    late AtKeyValueStore<String, AtData, AtMetaData?> mockSecondaryKeyStore;
     late LocalSecondary localSecondary;
     late AtClient atClient;
     final String namespace = 'validate_get_keys';
@@ -860,20 +881,18 @@ void main() {
   });
 }
 
+// The AtClient owns its commit-log-free persistence bundle (created
+// by `AtClientImpl.create`, since `isLocalStoreRequired` defaults to
+// true). Tests build their own client, so setup only needs to evict
+// any cached instance so storage is reopened fresh.
 Future<void> setupLocalStorage(String storageDir, String atSign) async {
-  var commitLogInstance = await AtCommitLogManagerImpl.getInstance()
-      .getCommitLog(atSign, commitLogPath: storageDir);
-  var persistenceManager = SecondaryPersistenceStoreFactory.getInstance()
-      .getSecondaryPersistenceStore(atSign)!;
-  await persistenceManager.getHivePersistenceManager()!.init(storageDir);
-  persistenceManager.getSecondaryKeyStore()!.commitLog = commitLogInstance;
+  AtClientImpl.atClientInstanceMap.remove(atSign);
 }
 
 Future<void> tearDownLocalStorage(String storageDir) async {
   try {
-    // Close factories BEFORE deleting storage (prevents open file handles)
-    await SecondaryPersistenceStoreFactory.getInstance().close();
-    await AtCommitLogManagerImpl.getInstance().close();
+    // Close every Hive box BEFORE deleting storage (open file handles).
+    await Hive.close();
 
     var isExists = await Directory(storageDir).exists();
     if (isExists) {

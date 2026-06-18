@@ -36,7 +36,7 @@ Future<bool> _pollUntilCachedExistsMatches(
   while (true) {
     await E2ESyncService.getInstance().syncData(client.syncService);
     final exists =
-        client.getLocalSecondary()?.keyStore?.isKeyExists(cachedAtKeyStr) ??
+        (await client.getLocalSecondary()?.keyStore?.exists(cachedAtKeyStr)) ??
             false;
     if (exists == wantedExists) return true;
     if (!DateTime.now().isBefore(deadline)) return false;
