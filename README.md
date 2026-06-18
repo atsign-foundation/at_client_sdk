@@ -114,6 +114,23 @@ published on
 Each package's own README and pub.dev page have the installation
 details. Click any of the links above.
 
+## AI Agent Skill
+
+The `at_client_skills` package gives AI agents accurate, up-to-date knowledge of
+`at_client` and `at_client_flutter` — covering `AtCollection<T>`, auth flows,
+querying, sub-collections, testing patterns, and common pitfalls.
+
+```sh
+# Add to your project
+dart pub add --dev at_client_skills skills
+
+# Install the skill into your IDE
+dart run skills get
+```
+
+Works with Claude Code, Cursor, GitHub Copilot, Cline, and any agent
+supporting the [agentskills.io](https://agentskills.io) specification.
+
 ## Maintainers
 
 [Atsign Foundation core devs](https://github.com/orgs/atsign-foundation/teams/atcoredevs)
