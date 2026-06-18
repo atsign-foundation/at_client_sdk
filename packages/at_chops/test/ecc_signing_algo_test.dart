@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 
-import 'package:at_chops/src/algorithm/ecc_signing_algo.dart';
+import 'package:at_chops/src/algorithm/signing/ecc.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:elliptic/elliptic';
+import 'package:elliptic/elliptic.dart';
 import 'package:test/test.dart';
 
 void main() {
