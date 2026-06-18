@@ -79,7 +79,7 @@ void main() {
         return 'data:ok';
       });
 
-      await storage.writeRemote(storageKey, 'remote-value');
+      await storage.write(storageKey, 'remote-value');
 
       expect(capturedBuilder, isA<UpdateVerbBuilder>());
       final builder = capturedBuilder as UpdateVerbBuilder;
