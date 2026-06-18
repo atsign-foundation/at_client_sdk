@@ -2,14 +2,14 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_chops/src/algorithm/ed25519_signing_algo.dart';
+import 'package:better_cryptography/better_cryptography.dart';
 import 'package:test/test.dart';
 
 void main() {
   group('A group of tests for ed25519 signing and verification', () {
     test('Test data signing and verification using generated keypair',
         () async {
-      final ed25519KeyPair = await AtChopsUtil.generateEd25519KeyPair();
+      final ed25519KeyPair = await Ed25519().newKeyPair();
       final dataToSign = 'Hello World@123!';
       final signingAlgo = Ed25519SigningAlgo();
       signingAlgo.ed25519KeyPair = ed25519KeyPair;
@@ -24,7 +24,7 @@ void main() {
     });
     test('Test data signing and verification - pass incorrect public key',
         () async {
-      final ed25519KeyPair = await AtChopsUtil.generateEd25519KeyPair();
+      final ed25519KeyPair = await Ed25519().newKeyPair();
       final dataToSign = 'Hello World@123!';
       final signingAlgo = Ed25519SigningAlgo();
       signingAlgo.ed25519KeyPair = ed25519KeyPair;

@@ -10,7 +10,7 @@ void main() {
       () {
     test('Test asymmetric encryption/decryption using rsa 2048', () {
       var defaultEncryptionAlgo = RsaEncryptionAlgo();
-      var rsa2048KeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
+      var rsa2048KeyPair = RsaKeyPair.generate();
       var rsaPublicKey = rsa2048KeyPair.atPublicKey;
       var dataToEncrypt = 'Hello World12!@';
       defaultEncryptionAlgo.atPublicKey = rsaPublicKey;
@@ -23,8 +23,7 @@ void main() {
     });
     test('Test asymmetric encryption/decryption using rsa 4096', () {
       var defaultEncryptionAlgo = RsaEncryptionAlgo();
-      var rsa2048KeyPair =
-          AtChopsUtil.generateAtEncryptionKeyPair(keySize: 4096);
+      var rsa2048KeyPair = RsaKeyPair.generate(keySize: 4096);
       var rsaPublicKey = rsa2048KeyPair.atPublicKey;
       var dataToEncrypt = 'Hello World12!@';
       defaultEncryptionAlgo.atPublicKey = rsaPublicKey;
@@ -63,7 +62,7 @@ void main() {
       'A group of tests for encryption/decryption by setting encryption key pair',
       () {
     test('Test asymmetric encryption/decryption using rsa 2048 key pair', () {
-      var rsa2048KeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
+      var rsa2048KeyPair = RsaKeyPair.generate();
       var defaultEncryptionAlgo = RsaEncryptionAlgo.fromKeyPair(rsa2048KeyPair);
       var dataToEncrypt = 'Hello World12!@';
       var encryptedData =
@@ -72,8 +71,7 @@ void main() {
       expect(utf8.decode(decryptedData), dataToEncrypt);
     });
     test('Test asymmetric encryption/decryption using rsa 4096 key pair', () {
-      var rsa2048KeyPair =
-          AtChopsUtil.generateAtEncryptionKeyPair(keySize: 4096);
+      var rsa2048KeyPair = RsaKeyPair.generate(keySize: 4096);
       var defaultEncryptionAlgo = RsaEncryptionAlgo.fromKeyPair(rsa2048KeyPair);
       var dataToEncrypt = 'Hello World12!@';
       var encryptedData =
