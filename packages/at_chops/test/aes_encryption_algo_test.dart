@@ -10,7 +10,7 @@ void main() {
     test('Encrypt with old algo and decrypt with better crypto', () async {
       var data = 'Hello World';
       var aesKey = AESKey.generate(32);
-      var iv = AtChopsUtil.generateRandomIV(16);
+      var iv = InitialisationVector.random(16);
       final encryptionAlgo = AESEncryptionAlgoV1(aesKey);
       var encryptedBytes = encryptionAlgo.encrypt(utf8.encode(data), iv: iv);
       var betterCryptoAESAlgo = AESEncryptionAlgo(aesKey);
@@ -22,7 +22,7 @@ void main() {
         () async {
       var data = 'Hello World12345';
       var aesKey = AESKey.generate(32);
-      var iv = AtChopsUtil.generateRandomIV(16);
+      var iv = InitialisationVector.random(16);
       final betterCryptoAESAlgo = AESEncryptionAlgo(aesKey);
       var encryptedBytes =
           await betterCryptoAESAlgo.encrypt(utf8.encode(data), iv: iv);
@@ -37,7 +37,7 @@ void main() {
     test('Test encryption and decryption for 128 bit AES key', () async {
       var data = 'Hello World🛠';
       var aesKey = AESKey.generate(16);
-      var iv = AtChopsUtil.generateRandomIV(16);
+      var iv = InitialisationVector.random(16);
       final betterCryptoAESAlgo = AESEncryptionAlgo(aesKey);
       var encryptedBytes =
           await betterCryptoAESAlgo.encrypt(utf8.encode(data), iv: iv);
@@ -48,7 +48,7 @@ void main() {
     test('Test encryption and decryption for 192 bit AES key', () async {
       var data = 'Hello\nWorld🛠\n123asdasd!@&^';
       var aesKey = AESKey.generate(24);
-      var iv = AtChopsUtil.generateRandomIV(16);
+      var iv = InitialisationVector.random(16);
       final betterCryptoAESAlgo = AESEncryptionAlgo(aesKey);
       var encryptedBytes =
           await betterCryptoAESAlgo.encrypt(utf8.encode(data), iv: iv);
@@ -59,7 +59,7 @@ void main() {
     test('Test encryption and decryption for 256 bit AES key', () async {
       var data = '🛠Hello\nWorld🛠\n123asdasd!@&^\'🛠';
       var aesKey = AESKey.generate(32);
-      var iv = AtChopsUtil.generateRandomIV(16);
+      var iv = InitialisationVector.random(16);
       final betterCryptoAESAlgo = AESEncryptionAlgo(aesKey);
       var encryptedBytes =
           await betterCryptoAESAlgo.encrypt(utf8.encode(data), iv: iv);

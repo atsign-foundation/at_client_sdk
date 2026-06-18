@@ -19,7 +19,7 @@ void main() {
     final algo = AesGcm256EncryptionAlgo(aesKey);
 
     test('encrypt then decrypt returns the plaintext', () async {
-      final iv = AtChopsUtil.generateRandomIV(12);
+      final iv = InitialisationVector.random(12);
       final plain = Uint8List.fromList(utf8.encode('hello, alice'));
 
       final encrypted = await algo.encrypt(plain, iv: iv);
@@ -32,7 +32,7 @@ void main() {
 
     test('tampered ciphertext, tag or nonce throws AtDecryptionException',
         () async {
-      final iv = AtChopsUtil.generateRandomIV(12);
+      final iv = InitialisationVector.random(12);
       final plain = Uint8List.fromList(utf8.encode('attack at dawn'));
       final encrypted = await algo.encrypt(plain, iv: iv);
 
@@ -46,7 +46,7 @@ void main() {
       expect(() => algo.decrypt(tamperedTag, iv: iv),
           throwsA(isA<AtDecryptionException>()));
 
-      final otherIv = AtChopsUtil.generateRandomIV(12);
+      final otherIv = InitialisationVector.random(12);
       expect(() => algo.decrypt(encrypted, iv: otherIv),
           throwsA(isA<AtDecryptionException>()));
     });
@@ -54,7 +54,7 @@ void main() {
     test('a nonce of the wrong length is rejected', () async {
       final plain = Uint8List.fromList([1, 2, 3]);
       expect(() => algo.encrypt(plain), throwsA(isA<AtEncryptionException>()));
-      expect(() => algo.encrypt(plain, iv: AtChopsUtil.generateRandomIV(16)),
+      expect(() => algo.encrypt(plain, iv: InitialisationVector.random(16)),
           throwsA(isA<AtEncryptionException>()));
     });
 
@@ -62,7 +62,7 @@ void main() {
       final algo128 = AesGcm256EncryptionAlgo(AESKey.generate(16));
       expect(
           () => algo128.encrypt(Uint8List.fromList([1]),
-              iv: AtChopsUtil.generateRandomIV(12)),
+              iv: InitialisationVector.random(12)),
           throwsA(isA<AtEncryptionException>()));
     });
   });
