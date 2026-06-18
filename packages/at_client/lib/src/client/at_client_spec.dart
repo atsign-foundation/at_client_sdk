@@ -6,6 +6,7 @@ import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:meta/meta.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
@@ -20,6 +21,13 @@ abstract class AtClient {
   RemoteSecondary? getRemoteSecondary();
 
   LocalSecondary? getLocalSecondary();
+
+  /// The local persistence bundle backing this client, or `null`
+  /// when local storage is not required or has not yet been
+  /// initialised. Commit-log-free: `persistenceBundle.keyValueStore.commitLog`
+  /// is always `null` on the client. Owned and torn down by the
+  /// client; callers must not close it.
+  AtPersistenceBundle? get persistenceBundle;
 
   /// Stream of [DataEvent]s — `DataUpdated` for every successful local
   /// keystore mutation that passes through the update path,
@@ -81,14 +89,14 @@ abstract class AtClient {
   /// and the instance has been removed from the internal cache.
   bool get isStopped;
 
-  /// Stops all background services (sync, notifications, monitor) and closes
-  /// local storage for this atSign.
+  /// Stops all background services for this atSign: cancels the
+  /// keystore-event timers, closes the data-event stream, and stops the sync
+  /// and notification services and the remote secondary connection.
   ///
-  /// After calling [stop], the instance remains in the internal cache and can
-  /// be resumed by calling [AtClientManager.setCurrentAtSign] for the same
-  /// atSign, which will reopen storage and wire up fresh services.
-  ///
-  /// To permanently discard this instance, call [dispose] instead.
+  /// Local storage is NOT closed. The instance remains in the internal cache
+  /// and reuses its still-open local keystore when resumed by calling
+  /// [AtClientManager.setCurrentAtSign] for the same atSign, which wires up
+  /// fresh services against the same store.
   Future<void> stop();
 
   /// Updates value of [AtKey.key] is if it is already present. Otherwise creates a new key. Set [AtKey.sharedWith] if the key
@@ -615,19 +623,23 @@ abstract class AtClient {
   ///
   Future<AtResponse> getOTP();
 
-  /// Initiates a compaction job for the commit log.
+  /// No longer does anything; retained for source compatibility.
   ///
-  /// [commitLogCompactionDuration] specifies the interval between
-  /// compaction runs. Defaults to 11 minutes when omitted (from
-  /// `AtClientConfig.commitLogCompactionTimeIntervalInMins`).
-  ///
-  /// The compaction job removes duplicate entries of a key from the
-  /// commit log that are already synced to the remote secondary —
-  /// only the latest commit entry per key is retained. Uncommitted
-  /// duplicates are not removed.
+  /// The client is commit-log-free, so there is no commit log to compact.
+  /// This is now a no-op and will be removed in a future major release.
+  @Deprecated(
+      'Commit-log compaction was removed with the commit-log-free keystore; '
+      'this is now a no-op and will be removed in a future major release')
   Future<void> startCompactionJob({Duration? commitLogCompactionDuration});
 
-  /// Stops the commit log compaction job
+  /// No longer does anything; retained for source compatibility.
+  ///
+  /// The client is commit-log-free, so there is no commit log compaction job
+  /// to stop. This is now a no-op and will be removed in a future major
+  /// release.
+  @Deprecated(
+      'Commit-log compaction was removed with the commit-log-free keystore; '
+      'this is now a no-op and will be removed in a future major release')
   Future<void> stopCompactionJob();
 
   /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]

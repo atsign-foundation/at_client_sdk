@@ -1,0 +1,70 @@
+{
+  "skill_name": "at_client_skills-sdk",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm building a Flutter app and want to store todos that can be shared with other users. Which packages do I need and how do I create a todo?",
+      "expected_output": "Recommends at_client and at_client_flutter. Shows atClient.collection<Todo>() with fromJson/typeTag, then collection.create(obj: todo, sharedWith: {'@bob'.toAtsign()}). Does NOT suggest AtCollectionModel. Ideally also points to the canonical Flutter todos example app (packages/at_client_flutter/examples/todos/)."
+    },
+    {
+      "id": 2,
+      "prompt": "How do I use AtCollectionModel to store data in my Dart app?",
+      "expected_output": "Warns that AtCollectionModel is deprecated with @Deprecated annotation. Redirects to the modern AtCollection<T> API via atClient.collection(). Shows the correct pattern."
+    },
+    {
+      "id": 3,
+      "prompt": "My Flutter app needs to let users sign in with their atSign. What's the flow for an existing user who has a .atKeys file?",
+      "expected_output": "Shows Flow 2: AtKeysFileDialog.show() then PkamDialog.show() with request and backupKeys. Includes _setupAtClient(AtRootDomain, AuthResponse) which calls AtClientManager.getInstance().setCurrentAtSign()."
+    },
+    {
+      "id": 4,
+      "prompt": "I want to query my todos reactively in a Flutter StreamBuilder — only show items where done=false, sorted by due date.",
+      "expected_output": "Shows todos.query().where((t) => !t.obj.done).orderBy((t) => t.obj.due).watch() inside StreamBuilder. Mentions on-device execution. May mention wherePath as a typed alternative."
+    },
+    {
+      "id": 5,
+      "prompt": "Should I use at_common_flutter in my new Flutter app? I saw it mentioned somewhere.",
+      "expected_output": "Says no — at_common_flutter is deprecated. Recommends at_client_flutter instead."
+    },
+    {
+      "id": 6,
+      "prompt": "I'm building a real-time dashboard that receives Docker container stats from another atSign every 2 seconds. Should I use AtCollection or something else?",
+      "expected_output": "Recommends Notifications + SQLite (not AtCollection) for high-frequency telemetry. Explains AtCollection is for discrete, addressable records. References the dockerstats pattern."
+    },
+    {
+      "id": 7,
+      "prompt": "How do I write unit tests for my AtCollection-backed service without spinning up a real atServer?",
+      "expected_output": "Explains collections_test_hooks.dart — collectionWithInjectedNotifications(), handleNotificationForTest(), clearFactoriesForTest(). Shows the import path package:at_client/src/collections/collections_test_hooks.dart."
+    },
+    {
+      "id": 8,
+      "prompt": "I have a posts collection with comments and each comment has replies. How do I reactively watch the full tree?",
+      "expected_output": "Recommends watchWithTree with SubSpec<Comment> and nested SubSpec<Reply>. Shows the TreeNode<Post> result shape with node.parent (CItem<Post>) and node.branches (Map keyed by subName)."
+    },
+    {
+      "id": 9,
+      "prompt": "I get a CSubItemUpdated event when a comment is added. How do I fetch the actual comment data?",
+      "expected_output": "Shows getDescendant() with ancestry: event.ancestry, id: event.id, owner: event.owner. Notes that ancestry is root-first (ancestry.last is direct parent). Warns that getDescendant throws if CAncestor.owner is null."
+    },
+    {
+      "id": 10,
+      "prompt": "How do I set up APKAM enrollment so a user can add a new device to their existing atSign?",
+      "expected_output": "Shows Flow 4: AtSignSelectionDialog.show() then ApkamActivationDialog.show() with atSign, rootDomain, appName, deviceName, namespaces. Then PkamDialog.show(). Includes _setupAtClient() post-auth."
+    },
+    {
+      "id": 11,
+      "prompt": "I'm using at_client in my app and I already have existing data stored with atClient.put() / atClient.get(). Can I migrate to AtCollection without breaking anything?",
+      "expected_output": "Acknowledges that migration guide is coming in skill v2.0. Explains that AtCollection and raw put/get use the same underlying atServer keystore but with different key naming conventions. Advises caution until migration guide is available."
+    },
+    {
+      "id": 12,
+      "prompt": "How do I send a notification to another atSign from my Dart app?",
+      "expected_output": "Shows atClient.notificationService.send(to:, namespace:, body:, expiration:); body is typically JSON-encoded and send returns the notification id. Mentions the recipient subscribes via notificationService.subscribe(regex:, shouldDecrypt:). May point to the packages/at_client/example/bin/notifications.dart example. Does NOT use raw atClient.put/get for messaging."
+    },
+    {
+      "id": 13,
+      "prompt": "what's the difference between at_client and at_client_flutter",
+      "expected_output": "Explains that at_client is the core Dart SDK (AtCollection, Query, NotificationService). at_client_flutter adds Flutter-specific auth dialogs, KeychainStorage, KeychainAtKeysIo, AtClientPreference, AtClientManager. at_client_flutter re-exports at_client."
+    }
+  ]
+}

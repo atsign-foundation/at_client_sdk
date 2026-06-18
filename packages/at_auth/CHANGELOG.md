@@ -1,3 +1,6 @@
+## 3.1.1
+- fix: `decodeAtKeys()` now reliably throws `AtDecryptionException` on an incorrect passphrase. The `jsonDecode` of the decrypted bytes now runs inside the decrypt try/catch, so wrong-passphrase garbage no longer escapes as an uncaught `FormatException` (an intermittent failure in `at_keys_io_test`).
+
 ## 3.1.0
 - feat: `validateAtServer()` now emits progress events and probes atSign connectivity before returning
 - fix: `decodeAtKeys()` now throws when an invalid passphrase is provided

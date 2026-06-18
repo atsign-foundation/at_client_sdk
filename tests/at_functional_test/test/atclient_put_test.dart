@@ -69,7 +69,7 @@ void main() {
         .getLocalSecondary()!
         .keyStore!
         .get(phoneKey.toString());
-    expect(getKeyStoreResult.data, value);
+    expect(getKeyStoreResult!.data, value);
     var getResult = await atClientManager.atClient.get(phoneKey);
     expect(getResult.value, value);
     expect(getResult.metadata?.isEncrypted, false);

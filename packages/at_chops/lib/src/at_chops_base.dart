@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
-import 'package:at_chops/src/algorithm/default_hashing_algo.dart';
 import 'package:at_chops/src/factory/at_hashing_algo_factory.dart';
 
 /// Base class for all Cryptographic and Hashing Operations. Callers have to either implement
