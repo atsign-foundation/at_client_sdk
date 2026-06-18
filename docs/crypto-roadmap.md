@@ -6,7 +6,50 @@ capability (encrypt/decrypt for other clients of the same atSign,
 encrypt/decrypt for other atSigns), strengthened with two-lever key
 rotation, and giving applications a bootstrap path to pq-mls groups.
 
-Starting point: `trunk`, incorporating and extending three lines of work:
+## The two major deliverables
+
+This roadmap delivers two distinct things. The second builds on the first and
+they ship in sequence — but they deliver different security properties and have
+different urgency, so they are worth naming separately.
+
+### Deliverable 1 — make Atsign Protocol messaging post-quantum safe
+
+Every message the SDK encrypts — self data, data shared with other atSigns, and
+the enrollment-approval key conveyance — is protected with post-quantum / hybrid
+primitives, so an adversary who records today's ciphertext cannot read it once a
+cryptographically-relevant quantum computer exists. This is the **urgent**
+deliverable: harvest-now-decrypt-later capture is a present-day threat, and PQ
+confidentiality is the defense.
+
+It does **not** require MLS. It is reached by routing every encryption path
+through pluggable PQ providers — X-Wing hybrid KEM (ML-KEM-768 + X25519) for key
+transport, AES-256-GCM for data — publishing a PQ enrollment-conveyance key,
+then making those providers the default for self and shared data and retiring
+the classical-only `selfEncryptionKey` and `shared_key.*`. Milestones **M0–M4**
+carry it; the v1 group engine is already PQ-native, so PQ-safe messaging does
+not wait on the MLS work.
+
+### Deliverable 2 — implement pq-mls
+
+Replace the interim v1 group engine with a real MLS engine (RFC 9420 — TreeKEM,
+forward secrecy, post-compromise security) on post-quantum ciphersuites, behind
+the same `SecureGroup` interface and served by the atServer group Delivery
+Service. This adds what D1 does not: **forward secrecy** (a compromised key
+does not expose past traffic), **post-compromise security** (a group self-heals
+after a member is compromised, once that member rotates), standardized and
+audited group semantics, and **O(log n)** membership changes that make large
+groups practical. This is the **end-state architecture**. Milestones **M5–M6**
+carry it.
+
+D1 makes the bytes quantum-safe; D2 makes the *group* quantum-safe,
+forward-secret, and scalable. The roadmap is deliberately shaped so D2 is an
+engine swap under D1's stable interface — not a second migration. NoPorts
+adoption (the production payoff) is reachable as soon as D1 lands, and is
+strengthened — not gated — by D2.
+
+## Starting point
+
+`trunk`, incorporating and extending three lines of work:
 
 | Work                 | Contributes                                                         | Status                  |
 |----------------------|---------------------------------------------------------------------|-------------------------|
@@ -97,7 +140,10 @@ its own; later ones build on earlier. (Phase numbers cross-reference the
 
 Status: M0, M1 (X-Wing/GCM/HKDF), M2 (KeyPackage framing), M3 (self) and the
 cross-cutting "at_chops is the sole security-crypto dependency" (Phase 6) are
-done or in flight; **M4, M5, M6 are the substantive build ahead.**
+done or in flight; **M4, M5, M6 are the substantive build ahead.** In
+deliverable terms (see [The two major deliverables](#the-two-major-deliverables)):
+**M0–M4 are Deliverable 1** (PQ-safe messaging) — largely done, with M4 the main
+remaining piece — and **M5–M6 are Deliverable 2** (pq-mls).
 
 ## How it works — NoPorts (summary)
 
