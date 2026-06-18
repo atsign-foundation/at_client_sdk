@@ -1,3 +1,8 @@
+## 4.0.0
+- fix!: remove all runtime logic from the `at_chops` package, AtChops & AtChopsKeys
+- feat!: remove AtChopsUtil in favour of key having a static generation method
+- chore!: remove all related helpers for the AtChops class
+
 ## 3.2.1
 - docs: update README to document PQC algorithms (ML-DSA-65, ML-KEM-768, X-Wing, X25519), FFI vs pure-Dart backends, and usage examples
 
