@@ -276,19 +276,17 @@ class AtClientImpl implements AtClient {
       );
     }
     final cacheKey = (namespace, eventSource);
-    final c =
-        _collections.putIfAbsent(
-              cacheKey,
-              () => AtCollection<T>(
-                this,
-                namespace,
-                defaultExpiration,
-                eventSource: eventSource,
-                fromJson: fromJson,
-                typeTag: typeTag,
-              ),
-            )
-            as AtCollection<T>;
+    final c = _collections.putIfAbsent(
+      cacheKey,
+      () => AtCollection<T>(
+        this,
+        namespace,
+        defaultExpiration,
+        eventSource: eventSource,
+        fromJson: fromJson,
+        typeTag: typeTag,
+      ),
+    ) as AtCollection<T>;
     if (cleanupOrphansOnCreation && !_collectionsSwept.contains(cacheKey)) {
       _collectionsSwept.add(cacheKey);
       try {
@@ -653,16 +651,16 @@ class AtClientImpl implements AtClient {
     var atData = AtData();
     atData.data = publicKey.toString();
     await getLocalSecondary()!.keyStore!.put(
-      AtConstants.atPkamPublicKey,
-      atData,
-    );
+          AtConstants.atPkamPublicKey,
+          atData,
+        );
     return true;
   }
 
   Future<String?> getPrivateKey(String atSign) async {
     var privateKeyData = await getLocalSecondary()!.keyStore!.get(
-      AtConstants.atPkamPrivateKey,
-    );
+          AtConstants.atPkamPrivateKey,
+        );
     var privateKey = privateKeyData?.data;
     return privateKey;
   }
@@ -1129,8 +1127,8 @@ class AtClientImpl implements AtClient {
       var encryptionPublicKey = await localSecondary!.getEncryptionPublicKey(
         atSign,
       );
-      var encryptionPrivateKey = await localSecondary!
-          .getEncryptionPrivateKey();
+      var encryptionPrivateKey =
+          await localSecondary!.getEncryptionPrivateKey();
       if (encryptionPublicKey != null && encryptionPrivateKey != null) {
         atEncryptionKeyPair = AtEncryptionKeyPair.create(
           encryptionPublicKey,
@@ -1348,12 +1346,12 @@ class AtClientImpl implements AtClient {
           encryptionKey,
           _preference!.fileEncryptionChunkSize,
         );
-        var response = await FileTransferService()
-            .uploadToFileBinWithStreamedRequest(
-              encryptedFile,
-              transferId,
-              fileStatus.fileName!,
-            );
+        var response =
+            await FileTransferService().uploadToFileBinWithStreamedRequest(
+          encryptedFile,
+          transferId,
+          fileStatus.fileName!,
+        );
         encryptedFile.deleteSync();
         if (response != null && response.statusCode == 201) {
           final responseStr = await response.stream.bytesToString();
@@ -1584,8 +1582,7 @@ class AtClientImpl implements AtClient {
       final notifyResult = await notificationService.notify(notificationParams);
       returnMap.putIfAbsent(
         sharedWith,
-        () =>
-            (notifyResult.notificationStatusEnum ==
+        () => (notifyResult.notificationStatusEnum ==
             NotificationStatusEnum.delivered),
       );
     }
@@ -1593,6 +1590,7 @@ class AtClientImpl implements AtClient {
   }
 
   @override
+
   ///[Deprecated] Use [NotificationService.notify]
   @Deprecated("Use [NotificationService.notify]")
   Future<String?> notifyChange(NotificationParams notificationParams) async {

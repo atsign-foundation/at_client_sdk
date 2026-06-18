@@ -42,13 +42,11 @@ void main() {
         'close() should be idempotent and remove client from instance map',
         () async {
           final atSign = '@stop_integration';
-          final atClient =
-              await AtClientImpl.create(
-                    atSign,
-                    'test',
-                    _createPreference('stop_integration'),
-                  )
-                  as AtClientImpl;
+          final atClient = await AtClientImpl.create(
+            atSign,
+            'test',
+            _createPreference('stop_integration'),
+          ) as AtClientImpl;
 
           expect(AtClientImpl.atClientInstanceMap.containsKey(atSign), true);
 
@@ -72,14 +70,12 @@ void main() {
             () => mockRemoteSecondary.closeConnection(),
           ).thenThrow(Exception('Connection close error'));
 
-          final atClient =
-              await AtClientImpl.create(
-                    atSign,
-                    'test',
-                    _createPreference('stop_errors'),
-                    remoteSecondary: mockRemoteSecondary,
-                  )
-                  as AtClientImpl;
+          final atClient = await AtClientImpl.create(
+            atSign,
+            'test',
+            _createPreference('stop_errors'),
+            remoteSecondary: mockRemoteSecondary,
+          ) as AtClientImpl;
 
           await atClient.stop();
           expect(AtClientImpl.atClientInstanceMap.containsKey(atSign), true);
