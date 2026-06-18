@@ -16,3 +16,11 @@ class SHA512HashingAlgo implements AtHashingAlgorithm<List<int>, String> {
     return digest.toString();
   }
 }
+
+class SHA256HashingAlgo implements AtHashingAlgorithm<List<int>, String> {
+  @override
+  String hash(List<int> data, {covariant HashParams? hashParams}) {
+    Digest digest = sha256.convert(data);
+    return digest.toString();
+  }
+}

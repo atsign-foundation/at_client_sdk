@@ -195,16 +195,23 @@ mixin KeyIOMixin on AtKeysIo {
             'Hashing algo type is required for decryption of password protected atKeys file');
       }
 
-      String decryptedAtKeysData;
       try {
-        decryptedAtKeysData = await AtKeysCrypto.fromHashingAlgorithm(
+        final decryptedAtKeysData = await AtKeysCrypto.fromHashingAlgorithm(
                 atEncrypted.hashingAlgoType!)
             .decrypt(atEncrypted, passPhrase!);
+        // jsonDecode must stay inside the try: the cipher is unauthenticated,
+        // so an incorrect passphrase does not fail decrypt() -- it yields
+        // arbitrary bytes. Whether those bytes parse as a JSON object is
+        // effectively random per file (the IV varies per write), so a wrong
+        // passphrase otherwise escapes as an uncaught FormatException (invalid
+        // JSON) or a cast error (valid non-object JSON) instead of the
+        // documented AtDecryptionException.
+        decodedAtKeysData =
+            jsonDecode(decryptedAtKeysData) as Map<String, dynamic>;
       } catch (e) {
         throw AtDecryptionException(
             'Failed to decrypt atKeys file - passphrase may be incorrect: $e');
       }
-      decodedAtKeysData = jsonDecode(decryptedAtKeysData);
     }
 
     return decodedAtKeysData;

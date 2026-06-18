@@ -1,1 +1,10 @@
-enum EncryptionKeyType { rsa2048, rsa4096, ecc, aes128, aes192, aes256 }
+enum EncryptionKeyType { 
+  rsa2048,
+  rsa4096,
+  ecc,
+  aes128,
+  aes192,
+  aes256,
+  x25519,
+  mlKem768,
+}
