@@ -1,0 +1,8 @@
+*_keys.json
+*_ratchet_*.json
+*.jsonl
+*_pubkeys.json
+*_bundle.json
+.dart_tool/
+.packages
+build/

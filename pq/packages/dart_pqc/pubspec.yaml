@@ -1,0 +1,19 @@
+name: dart_pqc
+description: ML-KEM-768, X25519, and Ed25519 for Dart. FFI-accelerated OpenSSL as primary path, pure-Dart fallback.
+version: 0.1.0
+
+environment:
+  sdk: ^3.0.0
+
+dependencies:
+  ffi: ^2.1.0
+  cryptography: ^2.7.0
+  pointycastle: '>=3.9.1 <5.0.0'
+  pqcrypto:
+    git:
+      url: git@github.com:JeremyTubongbanua/pqcrypto.git
+      ref: main
+
+dev_dependencies:
+  lints: ^3.0.0
+  test: ^1.24.0

@@ -1,0 +1,7 @@
+# runtime scratch state from demo runs
+*.db
+*.db-shm
+*.db-wal
+*_keystore.json
+alice_keystore.json
+bob_keystore.json
