@@ -49,7 +49,7 @@ void main() {
       final onBoardingRequest = AtOnboardingRequest(apkamAtSign)
         ..appName = 'wavi'
         ..deviceName = 'pixel1'
-        ..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64)
+        ..rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort)
         ..atKeysIo =
             FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys');
       // onboard with enable enrollment set
@@ -65,7 +65,7 @@ void main() {
         apkamAtSign,
         atKeysIo:
             FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
-      )..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64));
+      )..rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort));
       expect(atAuthResponse.isSuccessful, true);
       expect(atAuthResponse.atAuthKeys, isNotNull);
 
@@ -73,7 +73,8 @@ void main() {
       var atClientPreference = AtClientPreference()
         ..commitLogPath = 'test/hive/commit/'
         ..hiveStoragePath = 'test/hive/client'
-        ..rootDomain = 'vip.ve.atsign.zone';
+        ..rootDomain = 'vip.ve.atsign.zone'
+        ..rootPort = TestUtils.rootServerPort;
 
       final atClientManager = await AtClientManager(apkamAtSign)
           .setCurrentAtSign(apkamAtSign, namespace, atClientPreference,
@@ -180,7 +181,7 @@ void main() {
           namespaces: {'buzz': 'rw'},
           otp: 'a1b2c3'); //random invalid OTP
       var atEnrollment = AtEnrollment.create();
-      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
+      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       expect(
           () async => atEnrollment.submit(enrollmentRequest, newAtLookup),
           throwsA(predicate((dynamic e) =>
@@ -202,7 +203,7 @@ void main() {
           namespaces: {'buzz': 'rw'},
           otp: otp);
       var atEnrollment = AtEnrollment.create();
-      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
+      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       var enrollmentResponse =
           await atEnrollment.submit(enrollmentRequest, newAtLookup);
       expect(enrollmentResponse.enrollmentId, isNotEmpty);
@@ -365,7 +366,7 @@ void main() {
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
           AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', 64);
+      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);
@@ -462,7 +463,7 @@ void main() {
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
           AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', 64);
+      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       expect(
           () async => await atAuth.authenticate(atAuthRequest),
@@ -559,7 +560,7 @@ void main() {
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
           AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', 64);
+      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);
@@ -613,7 +614,7 @@ void main() {
         () async {
       String random = Uuid().v4().hashCode.toString();
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
-      AtLookUp atLookUp = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
+      AtLookUp atLookUp = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       AtClientManager atClientManager =
           await TestUtils.initAtClient(atSign, namespace);
@@ -673,5 +674,6 @@ AtClientPreference getClient2Preferences() {
   return AtClientPreference()
     ..commitLogPath = 'test/hive/client_2/commit'
     ..hiveStoragePath = 'test/hive/client_2'
-    ..rootDomain = 'vip.ve.atsign.zone';
+    ..rootDomain = 'vip.ve.atsign.zone'
+    ..rootPort = TestUtils.rootServerPort;
 }

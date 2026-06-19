@@ -359,7 +359,8 @@ Future<dynamic> _getServerCommitEntries(String regex) async {
       AtClientPreference()
         ..privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign]
         ..isLocalStoreRequired = false
-        ..rootDomain = 'vip.ve.atsign.zone',
+        ..rootDomain = 'vip.ve.atsign.zone'
+        ..rootPort = TestUtils.rootServerPort,
       atChops: atChops);
   var infoResponse = await atClientManager.atClient
       .getRemoteSecondary()
@@ -456,6 +457,7 @@ AtClientPreference _getAtClientPreference(String currentAtSign, String clientId,
   preference.isLocalStoreRequired = true;
   preference.privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign];
   preference.rootDomain = 'vip.ve.atsign.zone';
+  preference.rootPort = TestUtils.rootServerPort;
   preference.atClientParticulars = AtClientParticulars()
     ..appName = 'wavi_$clientId'
     ..appVersion = '3.0.2'
