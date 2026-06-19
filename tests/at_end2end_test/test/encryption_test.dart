@@ -50,14 +50,21 @@ void main() {
 
     if (testProviderId != null &&
         !atClient.cryptoRegistry.contains(testProviderId)) {
-      // setCurrentAtSign is intentionally idempotent for the current atSign.
-      // Force a rebuild so provider factories from the updated preference run.
+      // setCurrentAtSign is intentionally idempotent for the current atSign, so
+      // the updated preference (with this test's provider) is ignored on the
+      // first call. Passing atChops bypasses that idempotency, but it is not
+      // enough alone: AtClientImpl.create() re-hands the cached instance via
+      // start() without re-running crypto-provider registration (that happens
+      // only in _init on a fresh build). Evict the cached instance so the
+      // rebuild below is real and registers the test provider.
       final atChops = atClient.atChops;
       if (atChops == null) {
         throw StateError(
             'Cannot initialize test crypto provider $testProviderId'
             ' because the current AtClient has no AtChops');
       }
+      AtClientImpl.atClientInstanceMap
+          .removeWhere((_, instance) => identical(instance, atClient));
       atClientManager = await atClientManager.setCurrentAtSign(
         atSign,
         namespace,
