@@ -110,6 +110,17 @@ class AtClientManager {
         atLookUp == null &&
         enrollmentId == null &&
         _currentAtClient!.isStopped == false) {
+      // The full stop/recreate path below recreates via AtClientImpl.create(),
+      // which reconciles crypto providers from `preference` onto a re-used
+      // cached client (so providers added after first creation aren't dropped).
+      // The short-circuit skips create(), so reconcile here too — otherwise a
+      // same-atSign call carrying a new crypto-provider config silently drops
+      // it, surfacing as CryptoProviderNotRegistered on the next put.
+      // reconcile is idempotent: already-registered providers are skipped.
+      final existing = _currentAtClient;
+      if (existing is AtClientImpl) {
+        await existing.reconcileCryptoProviders(preference);
+      }
       _logger
           .info('setCurrentAtSign: already on $atSign with no override args; '
               'returning existing atClient (no stop/recreate).');

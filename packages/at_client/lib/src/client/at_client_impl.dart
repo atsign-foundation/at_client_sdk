@@ -1191,7 +1191,6 @@ class AtClientImpl implements AtClient {
   /// dropped. Reuses the live client's [AtChops] and storage — no rebuild and
   /// no re-authentication. Existing providers and `defaultProviderId` are left
   /// untouched.
-  @visibleForTesting
   Future<void> reconcileCryptoProviders(AtClientPreference preferences) async {
     final context = CryptoContext(
       atClient: this,
