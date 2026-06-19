@@ -318,6 +318,11 @@ class AtClientImpl implements AtClient {
     if (atClientInstanceMap.containsKey(currentAtSign)) {
       atClientImpl = atClientInstanceMap[currentAtSign];
       await atClientImpl!.start();
+      // Re-using a cached AtClient skips _init (and its crypto-provider
+      // registration). Register any providers from the supplied preference that
+      // aren't already present, so providers added after first creation aren't
+      // silently dropped when setCurrentAtSign re-uses this instance.
+      await atClientImpl.reconcileCryptoProviders(preferences);
     } else {
       atClientImpl = AtClientImpl._(
         currentAtSign,
@@ -1176,6 +1181,30 @@ class AtClientImpl implements AtClient {
       _preference!.crypto.defaultProviderId,
       operation: 'initialize',
     );
+  }
+
+  /// Registers any [CryptoProvider]s declared in [preferences] that are not
+  /// already in [cryptoRegistry]. Called when [create] re-uses a cached
+  /// AtClient (which skips [_init] and its provider registration), so providers
+  /// added to the preference after the client was first created take effect on
+  /// the next [AtClientManager.setCurrentAtSign] instead of being silently
+  /// dropped. Reuses the live client's [AtChops] and storage — no rebuild and
+  /// no re-authentication. Existing providers and `defaultProviderId` are left
+  /// untouched.
+  @visibleForTesting
+  Future<void> reconcileCryptoProviders(AtClientPreference preferences) async {
+    final context = CryptoContext(
+      atClient: this,
+      currentAtSign: _atSign,
+      atChops: _atChops,
+      storage: CryptoSecondaryStorage(this),
+    );
+    for (final createProvider in preferences.crypto.providers) {
+      final provider = await createProvider(context);
+      if (cryptoRegistry.contains(provider.id)) continue;
+      await provider.initialize(context);
+      cryptoRegistry.register(provider);
+    }
   }
 
   @override

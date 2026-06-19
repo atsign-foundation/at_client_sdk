@@ -456,6 +456,46 @@ void main() {
         throwsA(isA<CryptoProviderNotRegistered>()),
       );
     });
+
+    test(
+        'reconciles crypto providers when a cached AtClient is re-used with an '
+        'updated preference', () async {
+      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+
+      // First creation registers only the legacy provider.
+      AtClient ac1 = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        AtClientPreference()
+          ..hiveStoragePath = 'test/hive'
+          ..commitLogPath = 'test/hive/path'
+          ..crypto = const CryptoConfig(defaultProviderId: 'legacy'),
+        remoteSecondary: mockRemoteSecondary,
+        atChops: chops,
+      );
+      expect(ac1.cryptoRegistry.contains('late-provider'), false);
+
+      // Re-creating the same atSign re-uses the cached instance; a provider
+      // newly added to the preference must be reconciled onto it (no rebuild).
+      final provider = _RecordingCryptoProvider('late-provider');
+      AtClient ac2 = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        AtClientPreference()
+          ..hiveStoragePath = 'test/hive'
+          ..commitLogPath = 'test/hive/path'
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'legacy',
+            providers: [(_) => provider],
+          ),
+        remoteSecondary: mockRemoteSecondary,
+        atChops: chops,
+      );
+
+      expect(identical(ac1, ac2), true);
+      expect(provider.initialized, true);
+      expect(ac2.cryptoRegistry.lookup('late-provider'), isA<CryptoProvider>());
+    });
   });
 }
 
