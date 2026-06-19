@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:at_functional_test/src/at_keys_initializer.dart';
 import 'package:at_utils/at_logger.dart';
@@ -14,11 +15,18 @@ class TestUtils {
 
   static AtSignLogger logger = AtSignLogger(' TestUtils ');
 
+  /// Root server port for the virtualenv under test. Defaults to 64; a
+  /// base-port virtualenv (set VIRTUALENV_BASE_PORT, e.g. via runLocal.sh)
+  /// puts the root server at the base port itself.
+  static int get rootServerPort =>
+      int.tryParse(Platform.environment['VIRTUALENV_BASE_PORT'] ?? '') ?? 64;
+
   static AtClientPreference getPreference(String atsign) {
     var preference = AtClientPreference();
     preference.hiveStoragePath = 'test/hive/client/$atsign';
     preference.commitLogPath = 'test/hive/client/$atsign';
     preference.rootDomain = 'vip.ve.atsign.zone';
+    preference.rootPort = rootServerPort;
     preference.decryptPackets = false;
     preference.tlsKeysSavePath = 'test/tlsKeysFile';
     preference.fetchOfflineNotifications = true;

@@ -79,5 +79,6 @@ AtClientPreference getAtClientPreferences(String atSign) {
   atClientPreference.hiveStoragePath = 'test/hive/$atSign';
   atClientPreference.commitLogPath = 'test/hive/$atSign/commit/';
   atClientPreference.rootDomain = ConfigUtil.getYaml()['root_server']['url'];
+  atClientPreference.rootPort = ConfigUtil.getYaml()['root_server']['port'] ?? 64;
   return atClientPreference;
 }
