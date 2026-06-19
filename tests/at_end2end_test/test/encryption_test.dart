@@ -252,13 +252,14 @@ void main() {
 
     test('notification delivery preserves custom provider', () async {
       final providerId = uniqueProviderId('testprovider');
-      AtClient ac2 = await getAtClient(atSign_2, testProviderId: providerId);
       final keyName = uniqueKeyName('test_share.provider.notify');
-      final notificationFuture = ac2.notificationService
-          .subscribe(regex: keyName, shouldDecrypt: true)
-          .firstWhere((notification) => notification.key.contains(keyName))
-          .timeout(Duration(seconds: 30));
 
+      // Notify first, THEN switch to the receiver and subscribe. A live
+      // listener on atSign_2 cannot survive the getAtClient(atSign_1) switch:
+      // AtClientManager is a singleton and setCurrentAtSign stops the previous
+      // current AtClient, tearing down its monitor. Subscribing after the
+      // notify lets the receiver's catch-up replay the stored notification
+      // through the provider's decrypt path (decrypt() -> 'twin').
       AtClient ac1 = await getAtClient(atSign_1, testProviderId: providerId);
       final atKey = sharedKey(keyName);
       atKey.metadata.appMetadata = AppMetadata(providerId: providerId);
@@ -268,7 +269,11 @@ void main() {
       expect(notificationResult.notificationStatusEnum,
           NotificationStatusEnum.delivered);
 
-      final notification = await notificationFuture;
+      AtClient ac2 = await getAtClient(atSign_2, testProviderId: providerId);
+      final notification = await ac2.notificationService
+          .subscribe(regex: keyName, shouldDecrypt: true)
+          .firstWhere((notification) => notification.key.contains(keyName))
+          .timeout(Duration(seconds: 30));
       expect(notification.value, 'twin');
     }, timeout: Timeout(Duration(minutes: 1)));
   });
