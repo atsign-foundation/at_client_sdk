@@ -54,8 +54,8 @@ strengthened — not gated — by D2.
 | Work                 | Contributes                                                         | Status                  |
 |----------------------|---------------------------------------------------------------------|-------------------------|
 | `jt-pq`              | Post-quantum primitives in at_chops (ML-KEM-768, X25519)            | Merged to trunk         |
-| `xl-pluggable`       | Pluggable `CryptoProvider` model + wire routing (`AppMetadata`)     | Merged to working branch |
-| `gkc-pqmls-spike`    | Per-client identity, discovery, and same-atSign delivery + the above | Integration branch    |
+| `xl-pluggable`       | Pluggable `CryptoProvider` model + wire routing (`AppMetadata`)     | PR #1930 (open, green)  |
+| `gkc-pqmls-spike`    | Per-client identity, discovery, and same-atSign delivery + the above | Rebuilt on `xl-pluggable` |
 
 ### Delivery model
 
@@ -63,12 +63,19 @@ All of this is built and verified **locally first**, end-to-end across the
 `at_client_sdk`, `at_server` and `sshnoports` repos, then staged as a
 **sequence of independently-reviewable per-package PRs** in dependency order.
 `gkc-pqmls-spike` is the at_client_sdk integration branch holding every
-package change here; the per-package PR branches are reconstructed from it.
-The dependency-ordered sequence: `at_commons` (the `appMetadata` wire field) →
-`at_chops` (X-Wing / AES-GCM / key consolidation) → `at_client` (pluggable
-crypto + secret sharing). `at_server` must round-trip `appMetadata` before the
-at_client crypto path verifies end-to-end, so it lands ahead of or paired with
-the at_client PR; `sshnoports` consumes the released SDK and comes last.
+package change here; the per-package PR branches are reconstructed from it. As
+of 2026-06-19 it is **rebuilt on top of `origin/xl-pluggable`** (the 4b
+pluggable-crypto carve-out, PR #1930), carrying the remaining spike-unique work
+(secret sharing, group providers, the Phase-6 at_chops migration) cleanly on
+top. The dependency-ordered sequence and its status: `at_commons` (the
+`appMetadata` wire field — **published 5.11.0**) → `at_chops` (X-Wing / AES-GCM
+/ key consolidation — **published 3.2.1**) → `at_persistence_secondary_server`
+(commit-log-free keystore + `appMetadata` — **published 5.0.0 / 5.1.0**) →
+`at_client` (4a migration **merged to trunk**; 4b pluggable crypto = **PR
+#1930**; 4c secret sharing to follow). `at_server` must round-trip
+`appMetadata` before the at_client crypto path verifies end-to-end, so it
+landed ahead (released to the fleet); `sshnoports` consumes the released SDK
+and comes last.
 
 ## The end state
 
