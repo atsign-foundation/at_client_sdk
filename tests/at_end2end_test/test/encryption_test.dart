@@ -48,30 +48,17 @@ void main() {
     );
     AtClient atClient = atClientManager.atClient;
 
+    // setCurrentAtSign is intentionally idempotent for the current atSign, so
+    // the provider in the updated preference is NOT registered on an
+    // already-created (cached) client. Register it directly on the existing,
+    // already-authenticated client rather than rebuilding it: a rebuild would
+    // re-authenticate, and under enrollment/APKAM auth that fails PKAM
+    // (AT0401) because the enrollmentId is not carried into the rebuild. The
+    // base CryptoProvider.initialize is a no-op for TestCryptoProvider, so a
+    // bare register suffices.
     if (testProviderId != null &&
         !atClient.cryptoRegistry.contains(testProviderId)) {
-      // setCurrentAtSign is intentionally idempotent for the current atSign, so
-      // the updated preference (with this test's provider) is ignored on the
-      // first call. Passing atChops bypasses that idempotency, but it is not
-      // enough alone: AtClientImpl.create() re-hands the cached instance via
-      // start() without re-running crypto-provider registration (that happens
-      // only in _init on a fresh build). Evict the cached instance so the
-      // rebuild below is real and registers the test provider.
-      final atChops = atClient.atChops;
-      if (atChops == null) {
-        throw StateError(
-            'Cannot initialize test crypto provider $testProviderId'
-            ' because the current AtClient has no AtChops');
-      }
-      AtClientImpl.atClientInstanceMap
-          .removeWhere((_, instance) => identical(instance, atClient));
-      atClientManager = await atClientManager.setCurrentAtSign(
-        atSign,
-        namespace,
-        preference,
-        atChops: atChops,
-      );
-      atClient = atClientManager.atClient;
+      atClient.cryptoRegistry.register(TestCryptoProvider(testProviderId));
     }
 
     return atClient;
