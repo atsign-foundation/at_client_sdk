@@ -41,27 +41,18 @@ void main() {
       );
     }
 
-    var atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
+    // The provider is registered by the SDK, not by this test: switching to
+    // this atSign re-uses the cached AtClient and AtClientImpl.create()
+    // reconciles the crypto providers from this preference onto it (see
+    // AtClientImpl.reconcileCryptoProviders). This test depends on that
+    // production behaviour.
+    final atClientManager =
+        await AtClientManager.getInstance().setCurrentAtSign(
       atSign,
       namespace,
       preference,
     );
-    AtClient atClient = atClientManager.atClient;
-
-    // setCurrentAtSign is intentionally idempotent for the current atSign, so
-    // the provider in the updated preference is NOT registered on an
-    // already-created (cached) client. Register it directly on the existing,
-    // already-authenticated client rather than rebuilding it: a rebuild would
-    // re-authenticate, and under enrollment/APKAM auth that fails PKAM
-    // (AT0401) because the enrollmentId is not carried into the rebuild. The
-    // base CryptoProvider.initialize is a no-op for TestCryptoProvider, so a
-    // bare register suffices.
-    if (testProviderId != null &&
-        !atClient.cryptoRegistry.contains(testProviderId)) {
-      atClient.cryptoRegistry.register(TestCryptoProvider(testProviderId));
-    }
-
-    return atClient;
+    return atClientManager.atClient;
   }
 
   String uniqueKeyName(String prefix) {
