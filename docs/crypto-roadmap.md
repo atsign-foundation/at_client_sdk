@@ -47,6 +47,152 @@ engine swap under D1's stable interface — not a second migration. NoPorts
 adoption (the production payoff) is reachable as soon as D1 lands, and is
 strengthened — not gated — by D2.
 
+## D1 — preserving legacy simplicity (two tiers)
+
+D1's design objective is to keep the **legacy developer experience** — *Alice
+shares with `@bob`; every bob client with namespace access, present and future,
+decrypts it instantly, offline, with no ceremony* — while making it
+post-quantum-safe and closing the cheap legacy weaknesses.
+
+The tension is real and worth stating plainly. Legacy's simplicity comes from
+**one static, shared, copyable key** (the atSign-level encryption keypair in
+every `.atKeys`), which is exactly what gives per-device security its problems.
+Per-device non-copyable rotating keys are the opposite. **You cannot have both
+"a future device just works, instantly and offline" and "non-copyable per-device
+keys"** — instant offline access for a new device fundamentally requires a
+copyable shared key (otherwise someone must re-encrypt to the new device,
+online). Legacy chose copyable; full MLS chooses re-encrypt. D1 resolves this by
+**tiering**: the default keeps legacy's shape (hardened), and per-device
+security is opt-in.
+
+### Tier S — the `nskey` provider (D1 default)
+
+Replace the one atSign-wide RSA default keypair (and `selfEncryptionKey`, and
+`shared_key.*`) with a **per-`(atSign, namespace)` X-Wing keypair**:
+
+- **Self data** → encapsulate the value's data key to *your own* namespace
+  public key. **Shared data** → encapsulate it to the *recipient's* namespace
+  public key. One mechanism, both directions; `selfEncryptionKey` and
+  `shared_key.*` both retire into "encrypt to the namespace keypair".
+- **Enrollment-granular, copyable** (the legacy bargain, kept): every client of
+  an `at_talk`-authorized enrollment holds the `at_talk` private key. A new
+  client receives it at **enrollment approval** (the approver hands it over) or
+  derives it (below). Future clients therefore read everything **instantly,
+  offline, full history** — byte-for-byte legacy semantics.
+- **Developer API unchanged**: `put`/`get`/AtCollection. No `SecureGroup`,
+  `KeyPackage`, `members`, `clientId`, or single-owner lock anywhere in the
+  app's face. Identity stays the *enrollment*, exactly as legacy.
+
+What Tier S closes vs legacy, at **zero developer-visible change**:
+
+| Legacy weakness | Tier S (`nskey`) |
+|---|---|
+| Not PQ-safe (RSA-2048) | **Closed** — X-Wing hybrid KEM |
+| Crypto broader than transport (one key spans all namespaces) | **Closed** — per-namespace keypair mirrors enrollment authorization |
+| `selfEncryptionKey` sits still forever, conveyed to every enrollment | **Closed** — per-namespace, **rotatable**; per-namespace blast radius, not atSign-wide |
+| No per-device revocation granularity | **Partial** — enrollment revocation cuts future access for free (below); per-device is Tier H |
+| No rotation / forward secrecy | **Partial** — rotatable on demand (post-compromise security); no per-message FS — Tier H |
+
+### Cold-start — bob has never run an at_talk app
+
+If no bob client has ever run `at_talk`, there is no `at_talk` public key for
+alice to encrypt to (legacy never had this problem — its key is atSign-level and
+exists from activation). Resolution: **alice uses the most specific key bob has
+published, falling back to the atSign-level PQ key.**
+
+1. Bob always has an atSign-level keypair; Phase 1 publishes a PQ sibling
+   (`public:publickey.pq@bob`). With no `at_talk` key, alice encapsulates to
+   **that** — every bob client can decrypt, instantly, like legacy.
+2. The first bob `at_talk` client mints/derives and publishes the `at_talk`
+   public key; subsequent messages **upgrade** to namespace-scoped automatically.
+
+Honest residual: during the cold-start window the crypto is namespace-*broad*
+(any bob client holds the atSign-level key), though the data key
+`@bob:<key>.at_talk@alice` is still **server-gated** to `at_talk` readers, so in
+normal operation a non-`at_talk` client holds a key it cannot fetch ciphertext
+for. This is strictly ≤ legacy exposure and self-heals on first `at_talk` run.
+The tight alternative — **seal-and-hold** (don't send until bob publishes an
+`at_talk` key) — sacrifices instant send for a namespace bob may never open, so
+it is the **opt-in** choice for high-security namespaces; the default is
+send-now with the atSign fallback. *Optional optimisation:* derive bob's
+namespace keypair deterministically (HKDF(master-seed, namespace) → X-Wing
+seed), so any bob client derives the private key with **no distribution** — this
+removes bob-side distribution but not alice's need for a published public key,
+so the atSign fallback still covers true cold-start.
+
+### Opt-in key rotation (Tier S)
+
+Rotation is the same channel the self group already uses, at enrollment
+granularity. **bob1 mints a new namespace keypair, publishes the new public key,
+and writes the new private key into the `__`-secret self-group channel** as a
+reserved secret (`__nsk.<epoch>`), PQ-wrapped per-enrollment to each `at_talk`
+enrollment's conveyance key. Other clients receive it (push); a client that
+missed it pulls (`requestSecretsFromNamespace`); a *new* client gets the current
+key at enrollment approval. This reuses the **already-built** secret-sharing
+substrate (`__`-secrets, `excludeEnrollmentIds`) verbatim — the namespace key is
+just another secret on the channel.
+
+- **Buys:** *post-compromise security at namespace granularity* — after a
+  rotation, a key captured *before* it reads nothing written *after*. Legacy's
+  `selfEncryptionKey` could never rotate; this is a real, cheap, opt-in upgrade.
+- **Does not buy:** forward secrecy or history re-encryption — clients **retain
+  old private keys** to read old messages (history-on), so rotation changes the
+  key for *new* data only.
+- **Rotation is also the revocation primitive:** distribute the new key
+  **excluding** the revoked enrollment(s).
+
+### Revocation, end to end
+
+Three composable moves, increasing cost:
+
+1. **Revoke the enrollment (APKAM) — free, immediate.** The atServer stops
+   authenticating that device → no new data, no new keys. Cuts *future access*
+   with zero crypto work.
+2. **Rotate the namespace key excluding that enrollment — cheap, opt-in.** Even
+   a device with cached access gets no post-rotation key.
+3. **Re-encrypt history — expensive, rarely needed.** The only way to revoke
+   access to data the device *already pulled* — and the boundary where Tier H /
+   D2 (per-device leaves + FS) actually earns its complexity.
+
+Tier S gives "stop future access" cheaply and partly for free; "scrub the past"
+is the opt-in tier's job.
+
+### Tier H — opt-in per-device (the D2 substrate)
+
+The per-client `group` provider (KeyPackages + epoch keys + per-device
+membership) becomes an **opt-in** tier a namespace declares when it needs
+per-device revocation or forward secrecy. Most apps never touch it. Crucially
+the **secret-sharing substrate is shared** between tiers: Tier S uses it as
+*per-enrollment distribution plumbing* for rotation; Tier H uses it
+*per-client*. So the group work already built is not discarded — it is the
+plumbing under Tier S and the data path of Tier H. D2/MLS swaps Tier H's engine.
+
+### Mixed-tier `@alice` ↔ `@bob`
+
+The M0 provider seam lets schemes coexist per value, so the **sender encrypts in
+the scheme the recipient can decrypt**, discovered from what the recipient
+publishes (namespace key → `nskey`; KeyPackages+group advertised → `group`; only
+an RSA pubkey → `legacy`); `appMetadata.providerId` tells the recipient which
+provider to open with. The developer writes the same `put`; the SDK negotiates
+per-destination, downgrading to the recipient's best supported tier. Tier S
+clients **retain legacy capability** for un-upgraded peers.
+
+### What this reframes (M0–M4)
+
+The milestones stand; the *delivery* shifts from "per-client groups are the
+path" to "per-client groups are the opt-in tier and the D2 substrate":
+
+- **M0 / M1** unchanged — Tier S *is* a pluggable PQ provider; it uses X-Wing +
+  the Phase-1 enrollment-conveyance PQ key.
+- **M2** (per-client identity / KeyPackages) → the **substrate + Tier H**, not a
+  prerequisite for the Tier S data path; the single-owner lock is Tier H only.
+- **M3** (self encryption) → Tier S ships `nskey` self-encryption (default);
+  the per-client `group` self-encryption is Tier H.
+- **M4** (cross-atSign) → Tier S ships `nskey` shared-encryption (legacy-shaped,
+  the `(atSign, namespace)` keypair used toward another atSign); the per-client
+  `(pair, namespace)` group is Tier H.
+- **D2 (M5–M6)** is Tier H's MLS engine — unchanged.
+
 ## Starting point
 
 `trunk`, incorporating and extending three lines of work:
@@ -150,7 +296,11 @@ cross-cutting "at_chops is the sole security-crypto dependency" (Phase 6) are
 done or in flight; **M4, M5, M6 are the substantive build ahead.** In
 deliverable terms (see [The two major deliverables](#the-two-major-deliverables)):
 **M0–M4 are Deliverable 1** (PQ-safe messaging) — largely done, with M4 the main
-remaining piece — and **M5–M6 are Deliverable 2** (pq-mls).
+remaining piece — and **M5–M6 are Deliverable 2** (pq-mls). The M2–M4 rows below
+describe the **per-client group** capability; per
+[D1 — preserving legacy simplicity](#d1--preserving-legacy-simplicity-two-tiers)
+that is the **opt-in Tier H** and the D2 substrate — D1's *default* path is the
+simpler `nskey` shared-namespace-key tier, with the same milestones reframed.
 
 ## How it works — NoPorts (summary)
 
