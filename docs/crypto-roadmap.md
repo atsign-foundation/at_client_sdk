@@ -722,45 +722,61 @@ selects `InMemory` or an injected IndexedDB store and never reaches `dart:io`.
 
 ### Component & dependency sketch
 
+Two views: **package dependencies** (what imports what; the WASM split) and
+**runtime composition** (who constructs/uses what when the client runs).
+
+**View 1 — package dependencies.** Solid = compile dependency. `at_auth 4.0`
+ships two library entries: the WASM-safe `at_auth.dart` core and the
+`dart:io`-carrying `at_auth_io.dart`; only CLI/Flutter import the latter, so a
+web build of `at_client`/`at_auth` never reaches `dart:io`.
+
 ```mermaid
 graph TD
-  subgraph chops["at_chops 3.3 — stateless"]
-    P["primitives: sign / verify / encrypt /<br/>decrypt / HKDF — keys passed per call"]
-    SH["AtChopsImpl shim — @Deprecated"]
-  end
-  subgraph auth["at_auth 4.0 — main barrel (WASM-safe)"]
-    W["WritableAtKeys — add / remove / write"]
-    II["AtKeysIo / WrittenAtKeysIo interfaces"]
-    MEM["InMemoryAtKeysIo"]
-    REG["registrar — package:http"]
-  end
-  subgraph authio["at_auth_io.dart — non-wasm barrel"]
-    FILE["FileAtKeysIo — dart:io"]
-    PROBE["socket probe — dart:io"]
-  end
-  subgraph client["at_client 3.14"]
-    RT["AtClient + CryptoRuntime —<br/>selects provider by providerId"]
-    CTX["CryptoContext { WritableAtKeys }"]
-    PV["providers: legacy / nskey / group"]
-    LKS["LocalKeystoreAtKeysIo"]
-  end
-  FL["at_client_flutter — KeychainAtKeysIo"]
-  OB["at_onboarding_cli — injects FileAtKeysIo"]
+  chops["at_chops 3.3<br/>stateless primitives + @Deprecated shim"]
+  authcore["at_auth 4.0 · at_auth.dart (WASM-safe)<br/>AtKeys · WritableAtKeys · AtKeysIo/WrittenAtKeysIo<br/>InMemoryAtKeysIo · auth core · registrar (package:http)"]
+  authio["at_auth 4.0 · at_auth_io.dart (non-wasm)<br/>FileAtKeysIo + socket probe (dart:io)"]
+  client["at_client 3.14<br/>AtClient · CryptoRuntime · providers · CryptoContext<br/>LocalKeystoreAtKeysIo"]
+  flutter["at_client_flutter 1.2<br/>KeychainAtKeysIo"]
+  onb["at_onboarding_cli 1.17"]
+  cli["at_cli_commons"]
 
-  auth --> chops
-  client --> auth
+  authcore --> chops
+  authio --> authcore
+  client --> authcore
   client --> chops
-  FL --> auth
-  FL -.imports.-> authio
-  OB --> authio
-  RT --> PV
+  flutter --> client
+  flutter -.imports.-> authio
+  onb --> client
+  onb -.imports.-> authio
+  cli --> onb
+  cli --> client
+```
+
+**View 2 — runtime composition.** Solid = constructs/uses; dotted = "composed
+at AtClient construction" / lifecycle. The stores are dumb; the secret-sharing
+substrate owns epoch/nskey convergence and persists *through* `WritableAtKeys`.
+
+```mermaid
+graph TD
+  RT["AtClient · CryptoRuntime<br/>picks provider by appMetadata.providerId"]
+  PV["CryptoProvider<br/>legacy / nskey / group"]
+  CTX["CryptoContext { WritableAtKeys }"]
+  W["WritableAtKeys<br/>holder: add / remove / write"]
+  AC["at_chops stateless fns<br/>seal/open · sign · HKDF (keys per call)"]
+  SUB["secret-sharing substrate<br/>convergence (newest-wins) + pull"]
+  MEM["InMemoryAtKeysIo<br/>ephemeral leaf"]
+  BOOT["File / Keychain AtKeysIo<br/>enrollment bootstrap (updatable)"]
+  LKS["LocalKeystoreAtKeysIo<br/>nskey keypairs · epoch keys · persistent leaf"]
+
+  RT -->|read & write| PV
   PV --> CTX
   CTX --> W
-  PV -.calls.-> P
+  PV -->|primitives| AC
+  PV -.->|epoch/nskey lifecycle| SUB
+  SUB -->|persists keys| W
   W -.composed at AtClient ctor.-> MEM
+  W -.-> BOOT
   W -.-> LKS
-  W -.-> FILE
-  W -.-> FL
 ```
 
 ### Package versions & release sequencing
