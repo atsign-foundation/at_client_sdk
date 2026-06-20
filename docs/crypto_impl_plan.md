@@ -16,16 +16,20 @@ required**. See the roadmap's
 
 ## 1. Current state (2026-06-20)
 
-### Branches
-- **`gkc-pqmls-spike` is the at_client_sdk integration branch** for all package
-  changes here — not tied to any single PR. As of 2026-06-19 it is **rebuilt on
-  top of `origin/xl-pluggable`** (`5493f6504` = `origin/xl-pluggable`
-  `391f55f67`, the 4b pluggable-crypto carve-out / PR #1930, **+ 51
-  cherry-picked spike-unique commits**: secret sharing, the `group` provider,
-  `onDecryptFailed`, the Phase-6 at_chops consumer migration, the roadmap docs,
-  the CRAM functional test). The old criss-cross `404b02d8a` merge is retired.
-  Verified: at_client analyze + format clean, 651 unit tests; at_lookup /
-  at_auth / at_onboarding_cli analyze clean; crypto-import gate passes.
+### Branches & delivery model (trunk-based)
+- **Trunk is the single integration point.** Each work package is a short-lived
+  branch **merged to `trunk` when complete**, and **published to pub.dev as
+  needed** in dependency order (§7). No long-lived shared integration branch.
+- **When the full stack needs proving before a batch lands**, spin up an
+  *ephemeral* integration branch on demand (merge the in-flight WP branches, run
+  the e2e rigs, discard) or rely on CI — not a standing branch.
+- **`gkc-pqmls-spike`** is now just a **personal working branch + historical
+  context** (it holds the pre-trunk-based integration of the in-flight work:
+  `5493f6504` = `origin/xl-pluggable` `391f55f67` (the 4b base / PR #1930) **+
+  51 cherry-picked commits**: secret sharing, the `group` provider,
+  `onDecryptFailed`, the Phase-6 at_chops migration, the CRAM test). That work
+  flows to trunk as its WPs complete.
+- These **docs live on `trunk`** (canonical, shared, edited via small PRs).
 - Sibling repos: `at_server` and `sshnoports` carry their changes on their own
   working branches.
 - **PR #1976 is a frozen checkpoint**, not a merge target.
@@ -43,8 +47,9 @@ required**. See the roadmap's
    - **(4a)** commit-log-free persistence migration — **MERGED to trunk (#1984).**
    - **(4b)** pluggable crypto — **PR #1930, OPEN + green** (`origin/xl-pluggable
      @ 391f55f67`, on `^5.1.0`, incl. the Mode-B reconcile fix).
-   - **(4c)** secret sharing + the `nskey`/D1 Tier1 work below — **to carve out**
-     from `gkc-pqmls-spike` (now sits directly on the 4b branch).
+   - **(4c)** secret sharing + the `nskey`/D1 Tier1 work below — **lands on
+     trunk as its work packages complete** (§7); currently integrated on
+     `gkc-pqmls-spike` for early verification.
 
 ### What is already built on the integration branch (the D1 foundation)
 - **M0 pluggable crypto seam:** `CryptoProvider{id, initialize, encrypt,
@@ -327,11 +332,12 @@ the self→shared and MLS transitions; do them while touching the area.
   messages). Run concurrently via the base-port `runLocal.sh` rigs (PR #1992).
 - Usability acceptance test (§5) at each milestone.
 
-### D1 · PR carving / publish
-Reconstruct clean per-package branches from `gkc-pqmls-spike` in dependency
-order; carve 4c (secret sharing) and the `nskey`/migration work as reviewable
-chunks. Overall publish order in §5 of the roadmap
-[Dependencies](crypto-roadmap.md#dependencies) and §D below.
+### D1 · PR delivery / publish
+Each work package is its own short-lived branch **merged to trunk when
+complete**, with pub.dev **published as needed** in dependency order (§7) — 4c
+(secret sharing) and the `nskey`/migration work land the same way, not carved
+from an integration branch at the end. Overall publish order: roadmap
+[Dependencies](crypto-roadmap.md#dependencies) + the version table.
 
 ---
 
@@ -399,7 +405,8 @@ Nothing reaches NoPorts until the SDK ships in dependency order. Roadmap
 1. `at_commons 5.11.0` — **done** (#1981) → 2. `at_chops 3.2.x` — **done**
    (#1982, 3.2.1) → 3. `at_persistence_secondary_server` + `at_secondary_server`
    — **done** (#2673; 5.0.0 + 5.1.0) → 4. `at_client 3.x` — **in progress**
-   (4a merged #1984; 4b PR #1930; 4c + `nskey`/migration to carve) → eventual
+   (4a merged #1984; 4b PR #1930; 4c + `nskey`/migration land on trunk as WPs
+   complete) → eventual
    **`at_client 4.0`** (`disallowLegacyEncryption` default → `true` + dead-code
    removal) once the floor allows → 5. **`sshnoports`** consumes the released
    SDK (last).
@@ -531,10 +538,13 @@ files — low collision by construction.
 | WP10 | B | PQ enrollment-conveyance public key |
 | WP11 | C | migration machinery (readiness-marker lifecycle, strict-mode toggles); 4c secret-sharing carve-out |
 
-### Phase 4 — integrate + publish
-Verify the full stack on `gkc-pqmls-spike` (unit + functional + e2e via the
-base-port `runLocal.sh` rigs), then cut per-package PRs and publish in
-dependency order per the roadmap version table.
+### Phase 4 — integration is continuous, not a final step
+Each WP **merges to trunk when complete** and is **published to pub.dev as
+needed** in dependency order (roadmap version table). To prove the full stack
+before a batch lands, **spin up an ephemeral integration branch on demand**
+(merge the in-flight WP branches, run unit + functional + e2e via the base-port
+`runLocal.sh` rigs, discard) or rely on CI — so cross-package issues surface
+early, with no standing integration branch to drift.
 
 ### Critical path & merge discipline
 - **Critical path:** #1930 → `at_auth 4.0` (WP5) → at_client seam (WP7) +
@@ -548,5 +558,5 @@ dependency order per the roadmap version table.
 - **Rules:** per-package PRs to **trunk** in dependency order (no mega-PRs);
   rebase on trunk daily; keep PRs small + additive so trunk stays releasable;
   path `dependency_overrides` for local cross-package dev (don't commit lock
-  churn); `gkc-pqmls-spike` is the end-to-end verification branch, trunk the
-  merge target.
+  churn); **trunk is the integration point** — prove cross-package combinations
+  with an *ephemeral* integration branch (or CI), not a standing one.

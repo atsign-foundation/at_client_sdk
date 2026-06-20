@@ -376,15 +376,15 @@ rotation, or opt into per-device (D1 Tier2) security.
 
 ### Delivery model
 
-All of this is built and verified **locally first**, end-to-end across the
-`at_client_sdk`, `at_server` and `sshnoports` repos, then staged as a
-**sequence of independently-reviewable per-package PRs** in dependency order.
-`gkc-pqmls-spike` is the at_client_sdk integration branch holding every
-package change here; the per-package PR branches are reconstructed from it. As
-of 2026-06-19 it is **rebuilt on top of `origin/xl-pluggable`** (the 4b
-pluggable-crypto carve-out, PR #1930), carrying the remaining spike-unique work
-(secret sharing, group providers, the Phase-6 at_chops migration) cleanly on
-top. The dependency-ordered sequence and its status: `at_commons` (the
+Delivery is **trunk-based**: each work package is a short-lived branch
+**merged to `trunk` when complete** and **published to pub.dev as needed** in
+dependency order — **trunk is the single integration point**. See the
+[delivery plan & work packages](crypto_impl_plan.md#7-delivery-plan--work-packages)
+in the implementation plan. There is **no long-lived shared integration
+branch**; when the full stack needs proving before a batch lands, spin up an
+*ephemeral* integration branch on demand (merge the in-flight WP branches, run
+the e2e rigs, discard) or rely on CI. (`gkc-pqmls-spike` is now just a personal
+working branch + historical context.) The dependency-ordered sequence and its status: `at_commons` (the
 `appMetadata` wire field — **published 5.11.0**) → `at_chops` (X-Wing / AES-GCM
 / key consolidation — **published 3.2.1**) → `at_persistence_secondary_server`
 (commit-log-free keystore + `appMetadata` — **published 5.0.0 / 5.1.0**) →
