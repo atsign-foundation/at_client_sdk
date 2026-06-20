@@ -499,7 +499,7 @@ abstract class SecureGroup {
   `pair:@alice:@bob:at_talk` — not merely per atSign pair. The namespace
   component is mandatory, for the same reason self groups carry it (Phase 3):
   the group key topology must mirror the server's enrollment authorization
-  topology. A shared key `@bob:…​.at_talk@alice` is gated on *both* sides by
+  topology. A shared key `@bob:<key>.at_talk@alice` is gated on *both* sides by
   `at_talk` enrollment access, so its group must be (a) **distinct from either
   side's self group** — sharing under `self:@alice:at_talk` would hand bob
   alice's *private* self data — and (b) **per-namespace per-pair** — a single
@@ -1200,3 +1200,146 @@ Net: members send/admin once to the DS; the DS sequences and fans out
 ciphertext it can't read; catch-up, retention, ordering, and revocation are
 handled at the group object — and the per-message cost scales with the number
 of member *atSigns*, not member *clients*.
+
+## Appendix C — a two-atSign chat with client churn (`at_talk`, detailed)
+
+A worked example of the Phase 4 `(pair, namespace)` shared group: two atSigns,
+multiple clients each, bidirectional messaging, and late-joining clients. It
+shows exactly how decryption stays scoped to namespace-authorized clients on
+both sides, and how a freshly-created client reads new *and* past messages.
+
+**Setup.** `alice1`, `alice2`, `bob1`, `bob2` exist, each has `rw` on the
+`at_talk` namespace and has published a KeyPackage (X-Wing leaf KEM key +
+APKAM-certified signing key). The group is **`pair:@alice:@bob:at_talk`** —
+canonical atSign ordering so both sides compute the same `groupId`; one
+symmetric group, both directions sealing under the same epoch key. Members =
+`{alice1, alice2, bob1, bob2}`. Epoch key `E1` is the AES-256-GCM key the group
+encrypts under, minted lazily on first use.
+
+**Why scope = `(pair, namespace)`.** The group is *not* `pair:@alice:@bob`
+(would leak alice→bob `banking` to an at_talk-only bob client) and *not*
+`self:@alice:at_talk` (would hand bob alice's private self data). It is the
+unique group whose membership equals "both sides' `at_talk` clients", mirroring
+the atServer's enrollment-authorization topology for the `at_talk` keys it
+carries.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant a1 as alice1
+    participant a2 as alice2
+    participant a3 as alice3
+    participant S as atServers
+    participant b1 as bob1
+    participant b2 as bob2
+    participant b3 as bob3
+
+    Note over a1,b2: Step 0 — a1,a2,b1,b2 published KeyPackages, rw on at_talk. Group pair:@alice:@bob:at_talk, members {a1,a2,b1,b2}
+    Note over S: atServers gate every at_talk key (data AND epoch-key envelopes) by enrollment access
+
+    rect rgb(232,242,255)
+    Note over a1: Step 1 — alice1 sends to @bob
+    a1->>a1: lazily create group; mint epoch E1; seal M1 under E1
+    a1->>S: put @bob:msg1.at_talk@alice {group, epoch 1, kid k1}
+    a1->>S: push E1 to a2,b1,b2 — X-Wing per leaf, via __ssenv.at_talk envelopes
+    end
+
+    rect rgb(232,255,236)
+    Note over b1,b2: Step 2 — bob1 and bob2 decrypt M1
+    S-->>b1: @bob:msg1... + E1 envelope (allowed: at_talk)
+    S-->>b2: @bob:msg1... + E1 envelope (allowed: at_talk)
+    b1->>b1: decapsulate E1 with leaf key; open M1
+    b2->>b2: decapsulate E1; open M1
+    Note over b1,b2: a client missed at push-time pulls E1 (requestSecretsFromNamespace at_talk)
+    end
+
+    rect rgb(255,250,232)
+    Note over b2: Step 3 — bob2 replies to @alice (same group, same E1)
+    b2->>b2: seal M2 under E1
+    b2->>S: put @alice:msg2.at_talk@bob {group, epoch 1, kid k1}
+    end
+
+    rect rgb(232,255,236)
+    Note over a1,a2: Step 4 — alice1 and alice2 decrypt M2
+    S-->>a1: @alice:msg2...
+    S-->>a2: @alice:msg2...
+    a1->>a1: open M2 with E1 (already a member)
+    a2->>a2: open M2 with E1
+    end
+
+    rect rgb(255,232,244)
+    Note over b3: Step 5 — bob3 created, publishes KeyPackage (at_talk)
+    b3->>S: publish KeyPackage; register for at_talk
+    b1->>b1: roster-watch sees b3 → Add b3 + Commit → epoch E2 (mandatory rotation)
+    b1->>S: push E2 to {a1,a2,b1,b2,b3} (fans out cross-atSign)
+    Note over b3: NEW: holds E2 → opens every message from epoch 2 on
+    b3->>S: PAST: pull __rk.1 (request in at_talk)
+    S-->>b3: E1 (allowed: b3 is at_talk-authorized)
+    Note over b3: history-ON → opens M1,M2 · history-OFF (strict FS) → M1,M2 stay opaque
+    end
+
+    rect rgb(244,232,255)
+    Note over a3: Step 6 — alice3 created, publishes KeyPackage (at_talk)
+    a3->>S: publish KeyPackage; register for at_talk
+    a1->>a1: roster-watch sees a3 → Add a3 + Commit → epoch E3
+    a1->>S: push E3 to {a1,a2,a3,b1,b2,b3}
+    Note over a3: NEW: holds E3 → opens every message from epoch 3 on
+    a3->>S: PAST: pull __rk.1, __rk.2
+    S-->>a3: E1, E2 (allowed: a3 is at_talk-authorized)
+    Note over a3: history-ON → opens M1,M2 · also joins self:@alice:at_talk for alice's self data
+    end
+```
+
+### How a new client obtains the epoch key
+
+The epoch key is never sent in the clear and never wrapped under a static
+per-atSign key. For each member leaf, the committer **X-Wing-encapsulates** the
+epoch key to *that leaf's* published KEM public key and writes the result as a
+secret-sharing envelope keyed `<msgId>.<clientId>.__ssenv.at_talk@<atsign>`.
+Two independent gates
+therefore protect every copy of the key:
+
+1. **Transport gate (atServer, by namespace).** The envelope key carries the
+   `at_talk` suffix, so the atServer only lets a client *read* the envelope if
+   its enrollment is authorized for `at_talk` — identical to the gate on the
+   message itself. A client without `at_talk` can't even fetch the envelope.
+2. **Crypto gate (the leaf KEM key).** The envelope body is encapsulated to one
+   specific leaf's KEM public key, so only the holder of that leaf's private
+   key can **decapsulate** it. Possessing a different member's envelope is
+   useless.
+
+So for **bob3** (Step 5): bob3 generates its leaf keypair locally and publishes
+the *public* KeyPackage. A current member (bob1, via same-atSign roster watch)
+Adds bob3 and Commits a new epoch `E2`, encapsulating `E2` to bob3's published
+KEM public key and writing the `__ssenv.at_talk` envelope addressed to bob3.
+bob3's atServer delivers it (bob3 is at_talk-authorized → gate 1 passes); bob3
+decapsulates with its leaf KEM **private** key, which never left the device →
+recovers `E2` (gate 2 passes). For past messages, bob3 issues a pull for
+`__rk.1`; a member re-encapsulates `E1` to bob3's leaf and delivers it through
+the same two gates. Nothing about bob3's identity is special — it succeeds iff
+(a) its enrollment authorizes `at_talk` and (b) it holds its own leaf private
+key. That is exactly "all bob clients with `at_talk` access, and only those."
+
+### New clients: new vs. past messages
+
+| Client | New messages | Past messages |
+|--------|--------------|---------------|
+| **bob3** | A same-atSign member Adds+Commits → mandatory rotation to `E2`, pushed to all members; bob3 decapsulates `E2` and reads from epoch 2 on. (If not proactively added, bob3 pulls `__rk.current`.) | Pulls retained `__rk.1`; server allows (at_talk-authorized). **history-ON** → opens M1, M2. **history-OFF** (strict FS) → pre-join epochs stay opaque. |
+| **alice3** | Symmetric: alice1/alice2 Add+Commit → `E3`, fanned out cross-atSign to all six clients; alice3 reads from epoch 3 on. Also joins `self:@alice:at_talk` for alice's self data. | Pulls `__rk.1`, `__rk.2`; server-allowed. Same history-ON/OFF fork. |
+
+### Caveats this example surfaces
+
+- **History is a policy fork, not a mechanism gap.** v1 retains old epoch keys
+  and lets any namespace-authorized client pull them, so chat history works —
+  but that is in tension with forward secrecy. The MLS swap (D2) gives true FS,
+  under which a joiner cannot read pre-join traffic by design; "new member reads
+  history" then needs an explicit history-sharing mechanism (re-encrypt to the
+  new member, or a separate history key). Decide the `at_talk` policy
+  deliberately.
+- **Every join rotates the epoch** (lever A, mandatory). Churny fleets rotate
+  often; fine at pair scale, and a motivation for the Delivery Service (M5) at
+  large scale.
+- **M4, not yet built.** Today shared keys still route to `legacy` (the `group`
+  provider refuses shared keys), so currently *all* bob clients decrypt via
+  bob's shared keypair — the loose superset, not the namespace-scoped flow
+  above. This appendix is the target the Phase 4 design specifies.
