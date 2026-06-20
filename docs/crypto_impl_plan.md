@@ -56,9 +56,11 @@ required**. See the roadmap's
 - **Secret-sharing substrate (PQ-native):** per-client X-Wing `ClientKeyPackage`
   / `PackageKey`; namespace-scoped registration + discovery
   (`registerClient` / `discoverClients(namespace:)`, server-gated);
-  AES-256-GCM `__ssenv.<ns>` envelopes; in-memory `SecretStore` (app-pluggable
-  persistence); `requestSecretsFromNamespace` pull flow; `waitForSecret`;
-  `excludeEnrollmentIds`; reserved `__` system-secret names.
+  AES-256-GCM `__ssenv.<ns>` envelopes (open-coded encapsulate+GCM today —
+  **consolidate onto `pqSeal`/`pqOpen`** once #1993 lands, D1-A); in-memory
+  `SecretStore` (app-pluggable persistence); `requestSecretsFromNamespace` pull
+  flow; `waitForSecret`; `excludeEnrollmentIds`; reserved `__` system-secret
+  names.
 - **`group` provider (D1 Tier2 self):** `SecureGroup`/`PairwiseGroup` v1 + the
   `group` `GroupCryptoProvider`; `__rk.<epoch>.<kid>` epoch keys; scope
   `self:<atSign>:<namespace>`. Self-encryption only today (refuses shared keys).
@@ -162,6 +164,20 @@ version/sequencing table).
   version table is authoritative.
 
 ### D1-A · Finish the PQ primitives (small)
+- [ ] **HPKE seal/open over X-Wing** (`at_chops`, from **PR #1993** once the
+  requested changes land). `pqSeal(recipientPubKey, plaintext, {info, aad})` /
+  `pqOpen(recipientSecretKey, envelope, …)` — KEM = X-Wing, KDF = HKDF-SHA256,
+  AEAD = AES-256-GCM; **stateless**, KEM injected, single-shot derived nonce.
+  The one audited PQ public-key-encryption primitive. **Merge conditions** (the
+  #1993 review): add tests (round-trip · tamper→`authFailure` · `info`/`aad`
+  mismatch · version/malformed); **reuse at_chops's existing
+  `AesGcm256EncryptionAlgo` / `HkdfSha256` / `HmacSha256`** rather than
+  re-importing `package:cryptography`; keep the primitive **protocol-agnostic**
+  (make the NoPorts `pqDerive*` helpers label-generic or hoist them up);
+  dartdoc as HPKE-*style* (custom envelope, not RFC-9180 wire). Lands
+  **additively in the `at_chops 3.3.0` minor** — a down-payment on D1-S/S1's
+  stateless surface. *Consumers:* B2 (`nskey`) and the `__ssenv` substrate
+  seal/open **through this** (no open-coded encapsulate+GCM).
 - [ ] **PQ enrollment-conveyance public key.** Publish an X-Wing pubkey
   alongside `public:publickey@alice` (e.g. `public:publickey.pq@alice` or a
   key-list); new enrollees prefer it for wrapping `apkamSymmetricKey`; approvers
@@ -193,12 +209,15 @@ on the M0 seam; legacy-shaped (copyable, enrollment-granular), PQ + namespace
   - *Acceptance:* a second client of the same atSign, authorized for the
     namespace, can obtain the private key (at approval or by derivation) and
     decrypt data sealed to the public key.
-- [ ] **B2 · `nskey` `CryptoProvider`.** Encrypt/decrypt over the seam.
-  - **Self** → encapsulate the value's data key to *your own* namespace public
-    key. **Shared** → encapsulate to the *recipient's* namespace public key. One
+- [ ] **B2 · `nskey` `CryptoProvider`.** Encrypt/decrypt over the seam, sealing
+  via **`pqSeal`/`pqOpen`** (D1-A) — do not open-code encapsulate+GCM.
+  - **Self** → `pqSeal` the value's data key to *your own* namespace public
+    key. **Shared** → `pqSeal` to the *recipient's* namespace public key. One
     code path, both directions. `selfEncryptionKey` and `shared_key.*` both
-    collapse into "encrypt to the namespace keypair."
-  - `appMetadata(providerId: 'nskey', additional: {ns, kid, enc, iv, kemCt})`.
+    collapse into "encrypt to the namespace keypair." Bind the scope via HPKE
+    `info` (e.g. `groupId`/namespace) so an envelope can't be replayed cross-scope.
+  - `appMetadata(providerId: 'nskey', additional: {ns, kid, env})` — `env` is the
+    `pqSeal` envelope (carries the KEM ct + AEAD body); no separate `iv`/`kemCt`.
   - *Acceptance:* unit round-trips (self + shared); byte-exact decrypt; binary
     -safe (seal/open bytes, honour `isBinary` — do **not** repeat the
     `utf8.encode(toString())` bug, see §3 D1 Tier2 shape tasks).
