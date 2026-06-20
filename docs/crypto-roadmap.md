@@ -221,7 +221,35 @@ risk is writing too *new*, never reading too *old*.** Everything below is just
 These are independent — which is what lets each client, and each direction,
 upgrade on its own.
 
-### Steps (any client may sit at any step)
+### Versioning contract — 3.x coexists, 4.x is PQ-only
+
+The rollout below is the **`at_client` 3.x** story: every change is **additive
+and backwards-compatible** (minor/patch), so a 3.x client is PQ-*capable* but
+remains legacy-*compatible* — it **may write legacy** when a reader isn't yet
+PQ-ready, and that is how it stays compatible with un-upgraded peers. All five
+steps, and the whole capability table, describe 3.x.
+
+**`at_client` 4.0 is the hard cut-over: a v4 client MUST NOT write legacy
+(non-PQ) ciphertext — ever.** The breaking change in v4 is the **removal of the
+legacy *write* path** (the quarantined `package:encrypt` AES + RSA `shared_key`
+/ `selfEncryptionKey` production code). Precisely:
+
+- **Legacy *read* is retained** (defensively) so pre-PQ data stays decryptable;
+  removing the *write* path is what's security-critical, not the read path.
+- **Every value a v4 client writes is PQ** (`nskey`, `group`, or the
+  atSign-level PQ fallback) — there is no code path that emits non-PQ ciphertext.
+- Under the invariant above, "write a scheme every reader supports" combined
+  with "never legacy" means **a v4 client can only write to PQ-capable readers**.
+  A legacy-only reader must upgrade first; a v4 sender cannot down-grade to reach
+  it. So **v4 is gated on the ecosystem floor** having moved (all relevant
+  readers PQ-capable) — it is retirement phase 4 (legacy "stops existing"),
+  expressed as a semver major. Cold-start to a never-ran-at_talk recipient still
+  uses the atSign-level **PQ** fallback, never legacy.
+
+In short: **3.x = PQ-safe when it can, legacy when it must; 4.x = PQ-safe,
+full stop.** The migration lives in 3.x; v4 is cut once the floor allows.
+
+### Steps (any client may sit at any step, within 3.x)
 
 0. **Baseline.** All legacy; every value legacy-encrypted (`providerId`
    absent / `legacy`).
@@ -245,9 +273,11 @@ upgrade on its own.
 4. **Both ends ready ⇒ end-to-end D1.** Once alice *and* bob are marked ready,
    alice↔bob at_talk runs `nskey` (PQ + namespace-scoped) both directions. A
    mixed pair stays legacy *in that direction only*, automatically.
-5. **Retire legacy (gradual, optional).** Lazy re-encrypt old values on touch;
-   stop conveying `selfEncryptionKey` for at_talk; drop the legacy provider once
-   the ecosystem floor allows (the four-phase retirement below).
+5. **Retire legacy (gradual, then the v4 cut).** Lazy re-encrypt old values on
+   touch; stop conveying `selfEncryptionKey` for at_talk — all within 3.x. The
+   final phase (legacy *write* path removed) is the **`at_client` 4.0** major
+   bump, gated on the ecosystem floor; v4 still **reads** legacy. (See the
+   versioning contract above and the four-phase retirement below.)
 
 The Step-3 marker flip is the only operator judgement call: flipping it while a
 legacy client of that atSign still runs is the one way to break a reader, so it
@@ -264,13 +294,16 @@ bob marks ready → shared flips to `nskey`. At no step does anyone lose access.
 ### Capabilities by application code-change level
 
 Mental model: **rebuild makes you a universal reader; the flag makes you a PQ
-writer/recipient; simple code lets you override the safety defaults.**
+writer/recipient; simple code lets you override the safety defaults.** This
+table is the **3.x** library (legacy-write-capable); under **4.x** the
+"auto-downgrade to legacy" capability is *gone* — a v4 client downgrades only
+among PQ schemes and never emits legacy (see the versioning contract).
 
 | Capability | Rebuild only (no code) | Flag flip (minimal config) | Simple code changes |
 |---|---|---|---|
-| Read all legacy / pre-existing data | ✓ | ✓ | ✓ |
+| Read all legacy / pre-existing data | ✓ | ✓ | ✓ (incl. v4) |
 | Read PQ (`nskey`) data from upgraded peers | ✓ | ✓ | ✓ |
-| Stay compatible with un-upgraded peers (auto-downgrade writes) | ✓ | ✓ | ✓ |
+| Stay compatible with un-upgraded **legacy** peers (auto-downgrade writes) | ✓ | ✓ | ✓ — 3.x only; **v4 never writes legacy** |
 | Per-destination auto-negotiation of scheme | ✓ | ✓ | ✓ |
 | Your new writes are PQ + namespace-scoped | ◐ off by default¹ | ✓ (prefer-best + publish readiness) | ✓ |
 | Be a PQ recipient (peers send you `nskey`); self-data PQ | ✗ (still legacy-advertised) | ✓ (readiness marker) | ✓ |
