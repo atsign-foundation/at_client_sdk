@@ -112,7 +112,54 @@ The substantive *new* D1 build is the **`nskey` provider (D1 Tier1)** and the
 ## 3. D1 — detailed implementation plan
 
 Workstreams are roughly ordered; B is the centrepiece. Each task notes its
-artifact and acceptance. Design references point at the roadmap.
+artifact and acceptance. Design references point at the roadmap. **D1-S
+(structural enablers) lands first** — the `nskey` provider (D1-B) is built on
+`WritableAtKeys` + stateless AtChops.
+
+### D1-S · Structural enablers (prerequisite — lands first)
+Design: roadmap
+[Component responsibilities & WASM-readiness](crypto-roadmap.md#component-responsibilities--wasm-readiness).
+The responsibilities reshape + the `at_auth` WASM split. Sequenced **before**
+the feature workstreams; only `at_auth` takes a major bump (see the roadmap's
+version/sequencing table).
+
+- [ ] **S1 · AtChops stateless core + `@Deprecated` shim** (`at_chops` minor
+  `3.3.0`). Add a stateless functional surface (keys passed per call; the
+  primitive algos already pure or trivially made so); keep `AtChopsImpl(keys)`
+  as a `@Deprecated` shim over it so the ~65 construction sites compile
+  unchanged and migrate gradually. *Acceptance:* all at_chops vectors green via
+  both surfaces; consumers unbroken.
+- [ ] **S2 · `WritableAtKeys` holder + explicit dumb stores** (`at_auth`). The
+  unified in-memory holder (`add`/`remove`/`write`); composed at AtClient
+  construction; convergence stays in the secret-sharing substrate. Stores:
+  `InMemoryAtKeysIo` (at_auth main), `FileAtKeysIo` (at_auth_io — updatable, see
+  S4), `LocalKeystoreAtKeysIo` (at_client, injected), `KeychainAtKeysIo`
+  (at_client_flutter). *Acceptance:* a provider can mint→add→write a key and
+  read it back next run for a persistent client; ephemeral keys stay in-memory.
+- [ ] **S3 · Make `.atKeys` / keychain *updatable*** (`at_auth` / flutter).
+  `WrittenAtKeysIo` gains an update path (today write-once: `FileAtKeysIo`
+  throws if the file exists); re-do the self-enc-key wrapping on rewrite; atomic
+  write + backup. Keychain already appends. *Acceptance:* a post-onboarding key
+  add persists to `.atKeys` and survives restart; migration test on a v(N-1)
+  fixture.
+- [ ] **S4 · `at_auth` WASM barrel split → core compiles under `dart2wasm`**
+  (`at_auth` **major `4.0.0`**). Move `FileAtKeysIo` + the `dart:io` probe to a
+  new **`at_auth_io.dart`** non-wasm barrel; drop the `atKeysIo ??=
+  FileAtKeysIo()` default (require injection); extract `_defaultProbeSocket`;
+  migrate the registrar to **`package:http`**. *Acceptance:* `dart compile wasm`
+  succeeds against the `at_auth.dart` core; CLI + flutter (importing
+  `at_auth_io.dart`) unbroken; auth/onboard functional tests green.
+- [ ] **S5 · Providers onto `WritableAtKeys`** (`at_client` minor `3.14.0`).
+  `CryptoContext` gains a `WritableAtKeys` field (additive; `atChops`
+  `@Deprecated`); `LegacyCryptoProvider` reads keys from it; `LocalKeystoreAtKeysIo`
+  lands here and is injected into `WritableAtKeys` at AtClient construction.
+  *Acceptance:* legacy + group providers operate via `WritableAtKeys`; existing
+  unit/functional suites green.
+- [ ] **S6 · Consumer constraint bumps + sequencing.** `at_client` /
+  `at_onboarding_cli` (`1.17.0`) / `at_client_flutter` (`1.2.0`) /
+  `at_cli_commons` adopt `at_auth ^4.0.0`; publish in dependency order
+  (at_chops → at_auth → at_client/onboarding/flutter → at_cli_commons). Roadmap
+  version table is authoritative.
 
 ### D1-A · Finish the PQ primitives (small)
 - [ ] **PQ enrollment-conveyance public key.** Publish an X-Wing pubkey

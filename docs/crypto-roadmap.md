@@ -658,6 +658,130 @@ metadata, or public keys:
   material at activation. That is server auth config, not a client data value,
   and its at-rest form is an `at_server`-repo concern.
 
+## Component responsibilities & WASM-readiness
+
+The structural target for the crypto layer (settled 2026-06-20), and the package
+moves it implies — including making `at_auth`'s core compile under `dart2wasm`.
+
+### Responsibilities
+
+- **AtClient chooses the provider.** `CryptoRuntime` already selects a
+  `CryptoProvider` for each read/write by `appMetadata.providerId` — unchanged.
+- **CryptoProviders encrypt/decrypt via stateless AtChops primitives**, and are
+  **constructed with a `WritableAtKeys`** — the single in-memory holder of every
+  key the client knows (per-enrollment *and* per-client-id). Providers read keys
+  from it and **mint/add (and occasionally remove) keys through it and have them
+  *written*** — "written" meaning the backing store (`.atKeys` file, keychain
+  entry, or local keystore) is updated.
+- **AtChops is fully stateless** — a grab-bag of primitive functions
+  (sign/verify/encrypt/decrypt/HKDF/HMAC/…) that take keys as arguments and hold
+  no key material. A `@Deprecated` stateful `AtChopsImpl` shim ships for one
+  release so the ~65 existing construction sites migrate gradually.
+
+### Key taxonomy → store routing
+
+`WritableAtKeys` is the unified access surface; persistence is **explicit named
+stores**, routed by key-class (no magic router). The stores are *dumb*
+key-value backends — all convergence (newest-wins / pull recovery) stays in the
+secret-sharing substrate.
+
+| Key class | Store | Persistence |
+|---|---|---|
+| Enrollment bootstrap (encryption/PKAM/APKAM keypair, selfEnc, apkamSym) | `.atKeys` file **or** keychain | persisted, now **updatable** (today write-once) |
+| Distributed / rotating (nskey namespace keypairs, epoch `__rk`, persistent leaf) | local keystore (Hive) | persisted, per-key |
+| Ephemeral client-id leaf | in-memory | write-only; regenerated each run |
+
+`WritableAtKeys` is **born at AtClient construction**, composed with the stores
+then available (the auth-loaded bootstrap bundle as seed + the local keystore +
+in-memory), and immutable after.
+
+### WASM-readiness — the `at_auth` barrel split
+
+`at_auth`'s core must compile under `dart2wasm` (the running client, incl. web,
+authenticates via at_auth; only onboarding/setup is desktop/CLI). `dart2wasm`
+errors on any `dart:io` *reachable from the entry point*, so the three `dart:io`
+sources move behind an injection seam or a non-wasm barrel:
+
+- **`at_auth.dart`** (main barrel, WASM-safe): `AtKeys` / `WritableAtKeys`, the
+  `AtKeysIo` / `WrittenAtKeysIo` interfaces, `InMemoryAtKeysIo`, the auth core,
+  and the registrar **migrated to `package:http`** (was `dart:io HttpClient`).
+- **`at_auth_io.dart`** (new non-wasm barrel): `FileAtKeysIo` + the `dart:io`
+  socket-probe default. The CLI imports it; `at_client_flutter`'s `file_picker`
+  imports it too (it already uses `dart:io`) — so **`FileAtKeysIo` never leaves
+  `at_auth`**: no relocation, no new package, no UI→CLI arrow.
+- Two *inline*-`dart:io` bits in `at_auth_impl.dart` are **extracted** (a
+  non-wasm barrel can only hide whole files): the `atKeysIo ??= FileAtKeysIo()`
+  default is dropped (require explicit injection), and `_defaultProbeSocket`
+  (`SecureSocket`) moves to the io barrel, leaving only the injected
+  `probeSocket` hook in the core.
+
+Store homes: interfaces + `InMemory` in `at_auth` (main barrel); `FileAtKeys` +
+io-probe in `at_auth_io.dart`; `LocalKeystore…` in `at_client` (needs
+at_persistence, injected down); `Keychain…` in `at_client_flutter`. A web build
+selects `InMemory` or an injected IndexedDB store and never reaches `dart:io`.
+
+### Component & dependency sketch
+
+```mermaid
+graph TD
+  subgraph chops["at_chops 3.3 — stateless"]
+    P["primitives: sign / verify / encrypt /<br/>decrypt / HKDF — keys passed per call"]
+    SH["AtChopsImpl shim — @Deprecated"]
+  end
+  subgraph auth["at_auth 4.0 — main barrel (WASM-safe)"]
+    W["WritableAtKeys — add / remove / write"]
+    II["AtKeysIo / WrittenAtKeysIo interfaces"]
+    MEM["InMemoryAtKeysIo"]
+    REG["registrar — package:http"]
+  end
+  subgraph authio["at_auth_io.dart — non-wasm barrel"]
+    FILE["FileAtKeysIo — dart:io"]
+    PROBE["socket probe — dart:io"]
+  end
+  subgraph client["at_client 3.14"]
+    RT["AtClient + CryptoRuntime —<br/>selects provider by providerId"]
+    CTX["CryptoContext { WritableAtKeys }"]
+    PV["providers: legacy / nskey / group"]
+    LKS["LocalKeystoreAtKeysIo"]
+  end
+  FL["at_client_flutter — KeychainAtKeysIo"]
+  OB["at_onboarding_cli — injects FileAtKeysIo"]
+
+  auth --> chops
+  client --> auth
+  client --> chops
+  FL --> auth
+  FL -.imports.-> authio
+  OB --> authio
+  RT --> PV
+  PV --> CTX
+  CTX --> W
+  PV -.calls.-> P
+  W -.composed at AtClient ctor.-> MEM
+  W -.-> LKS
+  W -.-> FILE
+  W -.-> FL
+```
+
+### Package versions & release sequencing
+
+Only **`at_auth` takes a major** (breaking barrel / default / interface
+changes); everyone else stays minor — additive features behind the AtChops shim
+plus the `at_auth ^4.0.0` constraint bump. Publish in dependency order:
+
+| # | Package | Bump | Why |
+|---|---|---|---|
+| 1 | `at_chops` | minor `3.2.1 → 3.3.0` | stateless functional core **added**; stateful `AtChopsImpl` kept as `@Deprecated` shim (additive) |
+| 2 | `at_auth` | **major `3.1.1 → 4.0.0`** | `FileAtKeysIo` out of the main barrel (→ `at_auth_io.dart`); `FileAtKeysIo()` default removed; `AtKeysIo` widened (add/remove/update); `WritableAtKeys` added; registrar → `package:http`; core compiles under `dart2wasm` |
+| 3 | `at_client` | minor `3.13.0 → 3.14.0` | `at_auth ^4.0.0`; `CryptoContext` gains `WritableAtKeys` (additive; `atChops` field `@Deprecated`); `LocalKeystoreAtKeysIo`; `nskey` provider scaffold |
+| 4 | `at_onboarding_cli` | minor `1.16.0 → 1.17.0` | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; injects it explicitly (default gone) |
+| 5 | `at_client_flutter` | minor `1.1.3 → 1.2.0` | `at_auth ^4.0.0`; `file_picker` imports `at_auth_io.dart` |
+| 6 | `at_cli_commons` | minor (constraint bump) | consumes the new `at_onboarding_cli` / `at_client` |
+
+This **`at_auth 4.0`** (structural / WASM) is **independent of the eventual
+`at_client 4.0`** (the `disallowLegacyEncryption` default flip + dead-code
+removal, gated on the ecosystem floor) — different majors, different times.
+
 ## Phases
 
 ### Phase 0 — land the foundations — **done on the integration branch**
