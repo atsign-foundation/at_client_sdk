@@ -284,6 +284,59 @@ touch the get path; both are satisfied on the integration branch):
   write and read — secret-sharing envelopes and key-package copies are stored
   that way.
 
+## What the atServer can and cannot see
+
+The confidentiality invariant the whole design rests on: **every secret *value*
+the SDK writes to an atServer is encrypted on the device before transmission,
+and the atServer holds no key to decrypt any of it.** Private key material is
+never stored server-side at all. This is a security property, not a
+performance one — it is *why* value-level server-side filtering is
+architecturally impossible, and why a self-hosted or breached atServer leaks no
+plaintext.
+
+Precisely scoped — it is a guarantee about *secret values*, not about names,
+metadata, or public keys:
+
+**Encrypted before it reaches the atServer (server holds no key):**
+
+| What | How |
+|------|-----|
+| Application data — self keys, shared keys | Encrypted by the active `CryptoProvider`; `isEncrypted` metadata tracks it. End-to-end: the server never holds the data key. |
+| Secret-sharing envelopes — epoch keys (`__rk`), pairwise payloads | X-Wing-encapsulated + AES-256-GCM sealed *before* the put; written `shouldEncrypt=false` *because* the value is already ciphertext, never to store plaintext. |
+| Enrollment conveyance — `apkamSymmetricKey`, `selfEncryptionKey` hand-off | RSA / X-Wing-wrapped to the recipient's encryption public key. |
+
+**Never on the atServer at all:**
+
+| What | Where it lives |
+|------|----------------|
+| Raw epoch keys (`__rk.<epoch>.<kid>` plaintext) | Local `SecretStore` (in-memory / app-pluggable persistence). Reaches the server *only* as a sealed envelope. |
+| Private keys — PKAM / encryption private, leaf KEM seed | Device-local (`.atKeys` / device-local section). The roadmap explicitly *rejects* server-side leaf secrets (Phase 2). |
+
+**Plaintext on the atServer — by design, and not secret values:**
+
+- **Key names and metadata** — the atKey structure (`@bob:<key>.at_talk@alice`),
+  TTL, timestamps, `isEncrypted`. Visible because regex sync + notification
+  routing depend on it; the server can filter by plaintext key *structure*,
+  never by *value*. This leaks structure (who shares which namespace with
+  whom), not content.
+- **Public keys / KeyPackages** — published as `public:` keys (e.g.
+  `public:__sskb-…@atsign`): a client's X-Wing/encryption/signing *public* key
+  plus a signature. The secret is the private half, which stays on the device.
+
+**Two honest edges:**
+
+- **`shouldEncrypt=false` is an app-accessible escape hatch.** The SDK uses it
+  only for already-sealed envelopes and public KeyPackages, but it is a real
+  no-crypto path on the public API — so the guarantee is "the SDK's own
+  secret-handling paths always encrypt," not "the atServer can never hold a
+  plaintext an *application* forced in by calling `put(…, shouldEncrypt:false)`
+  with its own cleartext."
+- **CRAM onboarding (legacy activation) is the one server-held shared secret.**
+  Modern PKAM/APKAM store only the server-verifiable *public* key — no client
+  secret server-side — but CRAM is a challenge-response that needs shared auth
+  material at activation. That is server auth config, not a client data value,
+  and its at-rest form is an `at_server`-repo concern.
+
 ## Phases
 
 ### Phase 0 — land the foundations — **done on the integration branch**
