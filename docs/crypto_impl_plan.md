@@ -97,9 +97,10 @@ D1 is done when, per the roadmap
    instantly, offline, with full history* — now PQ + namespace-scoped, with **no
    `SecureGroup` / `KeyPackage` / `clientId` / lock in the app's face**.
 4. `selfEncryptionKey` and `shared_key.*` are on the retirement path; the
-   **`at_client` 4.0 `pqOnly`** hard flag can guarantee a client is PQ-safe on
-   every write path
-   ([versioning](crypto-roadmap.md#versioning-contract--3x-coexists-4x-is-pq-only)).
+   **`disallowLegacyEncryption`** construction-time flag (default `false` in
+   3.x, `true` in 4.0) lets a client forbid legacy-provider encryption, with a
+   `SHOUT` log at creation whenever it is `false`
+   ([versioning](crypto-roadmap.md#versioning-contract--the-legacy-encryption-flag-3x-default-off-4x-default-on)).
 5. The **usability acceptance test** holds at each milestone (§5): no new flag a
    user must pass, file a user must manage, operator step, or peer-by-peer break.
 
@@ -206,31 +207,35 @@ Design: roadmap
   possible but off by default; see the capability table footnote.)
 - [ ] **C3 · Strict-mode toggles (simple-code tier).** `CryptoPolicy` options:
   refuse legacy fallback / require PQ in cold-start (seal-and-hold vs error vs
-  notify); custom rotation triggers. These are **app-overridable** in 3.x —
-  contrast the non-overridable v4 flag (D1-D).
+  notify); custom rotation triggers. These are app-facing in 3.x — alongside
+  `disallowLegacyEncryption` (D1-D), which is the dedicated legacy-write switch.
 - [ ] **C4 · Capability conformance.** Implement so the
   [capabilities table](crypto-roadmap.md#capabilities-by-application-code-change-level)
   holds: no-code = universal reader + back-compat; flag = PQ writer/recipient;
   code = override defaults / D1 Tier2.
 
-### D1-D · Versioning (the v4 `pqOnly` flag)
+### D1-D · Versioning (the `disallowLegacyEncryption` flag)
 Design: roadmap
-[Versioning contract](crypto-roadmap.md#versioning-contract--3x-coexists-4x-is-pq-only).
+[Versioning contract](crypto-roadmap.md#versioning-contract--the-legacy-encryption-flag-3x-default-off-4x-default-on).
 - [ ] **D1 · All D1 lands in 3.x** — additive, backwards-compatible; a 3.x
   client may write legacy when a reader isn't PQ-ready.
-- [ ] **D2 · The `pqOnly` internal hard flag.** Library-level, **non
-  -overridable**; gates encryption-scheme selection on **every** write path so
-  the negotiator can never pick `legacy`. The only boundary is the
-  `shouldEncrypt=false` *no-encryption* path (already-sealed envelopes / public
-  keys), which is orthogonal — see
-  [What the atServer can and cannot see](crypto-roadmap.md#what-the-atserver-can-and-cannot-see).
-  *Acceptance:* with `pqOnly` set, **no** code path emits non-PQ ciphertext
-  (test: assert every write's `appMetadata.providerId ∈ {nskey, group}` or the
-  PQ fallback; assert a legacy-only recipient causes refuse, never a legacy
-  write); legacy **read** still works.
-- [ ] **D3 · `at_client 4.0` = final 3.x + flag flip + general dead-code
-  removal** (the latter is housekeeping, orthogonal to the PQ guarantee). Gated
-  on the ecosystem floor (a v4 client can only write to PQ-capable readers).
+- [ ] **D2 · The `disallowLegacyEncryption` flag** on `AtClientPreference`.
+  Means literally "never write new data using the legacy provider for
+  encryption." **Final at AtClient construction** (immutable for the client's
+  lifetime). **Defaults `false` in 3.x, `true` in 4.0.** When `false`, the SDK
+  **emits a `SHOUT` log at AtClient creation**. Scope is literal — it governs
+  only legacy-provider *encryption*; legacy **read** and the
+  `shouldEncrypt=false` *no-encryption* path are unaffected
+  ([confidentiality](crypto-roadmap.md#what-the-atserver-can-and-cannot-see)).
+  *Acceptance:* with the flag `true`, no write uses the legacy provider (test:
+  every write's `appMetadata.providerId ∈ {nskey, group}` or the PQ fallback; a
+  legacy-only recipient causes a refused write, never a legacy write; legacy
+  **read** still works; the flag cannot be mutated after construction). With the
+  flag `false`, a single `SHOUT` is logged at creation.
+- [ ] **D3 · `at_client 4.0` = final 3.x + flip the flag's *default* to `true`
+  + general dead-code removal** (deprecated stream/file methods etc.; the legacy
+  provider itself **stays** — needed for reads always and for writes when the
+  flag is `false`). Gated on the ecosystem floor.
 
 ### D1-E · D1 Tier2 shape-corrections (cheap-now, carry into D2)
 The `group` provider exists (D1 Tier2 self). These keep its shape honest before
@@ -244,7 +249,9 @@ the self→shared and MLS transitions; do them while touching the area.
 
 ### D1 · Test & acceptance plan
 - Unit: `nskey` round-trips (self/shared/binary), negotiation matrix, rotation
-  convergence, `pqOnly` enforcement, cold-start fallback, the regression test
+  convergence, `disallowLegacyEncryption` enforcement (+ the creation-time
+  `SHOUT` when `false`, + immutability after construction), cold-start fallback,
+  the regression test
   pattern (a test that fails without the fix).
 - Functional (live virtualenv): nskey self + shared, rotation, mixed-tier
   (nskey↔legacy), cold-start, enrollment-revoke + rotate-exclude.
@@ -327,8 +334,9 @@ Nothing reaches NoPorts until the SDK ships in dependency order. Roadmap
    (#1982, 3.2.1) → 3. `at_persistence_secondary_server` + `at_secondary_server`
    — **done** (#2673; 5.0.0 + 5.1.0) → 4. `at_client 3.x` — **in progress**
    (4a merged #1984; 4b PR #1930; 4c + `nskey`/migration to carve) → eventual
-   **`at_client 4.0`** (the `pqOnly` flag + dead-code removal) once the floor
-   allows → 5. **`sshnoports`** consumes the released SDK (last).
+   **`at_client 4.0`** (`disallowLegacyEncryption` default → `true` + dead-code
+   removal) once the floor allows → 5. **`sshnoports`** consumes the released
+   SDK (last).
 
 **NoPorts adoption (finish line, mostly D2-gated).** Route session keys through
 the group abstraction, daemon-feature-gated tiers 0–2; **target: zero

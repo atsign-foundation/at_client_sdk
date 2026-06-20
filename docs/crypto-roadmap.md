@@ -230,7 +230,7 @@ risk is writing too *new*, never reading too *old*.** Everything below is just
 These are independent — which is what lets each client, and each direction,
 upgrade on its own.
 
-### Versioning contract — 3.x coexists, 4.x is PQ-only
+### Versioning contract — the legacy-encryption flag (3.x default off, 4.x default on)
 
 The rollout below is the **`at_client` 3.x** story: every change is **additive
 and backwards-compatible** (minor/patch), so a 3.x client is PQ-*capable* but
@@ -239,41 +239,49 @@ PQ-ready, and that is how it stays compatible with un-upgraded peers. All of D1
 lands within 3.x (say it all ships by `3.15.x`); all five steps and the whole
 capability table describe 3.x.
 
-**With respect to PQ-safety (this roadmap's concern), `at_client` 4.0 differs
-from the final 3.x by exactly one thing: an internal, library-level `pqOnly`
-*hard flag* is flipped, making the client always PQ-safe.** v4 *as a release* is
-a normal major bump that also removes all deprecations and obsolete/dead code —
-but that cleanup is orthogonal housekeeping; **the PQ-safety guarantee comes
-solely from the flag**, so the behavioural delta from `3.15.x` *for this
-roadmap* is the flag and nothing else. Precisely:
+The 3.x → 4.0 difference is **one construction-time flag**, not a hard internal
+behaviour change:
 
-- The `pqOnly` flag is **internal and non-overridable** — unlike the 3.x
-  app-facing strict-mode toggles (which are opt-in and can be turned off), v4's
-  guarantee holds **regardless of app configuration**. "This is a 4.x client"
-  is therefore a *provable* claim — PQ-safe **by construction**, not by app
-  discipline.
-- **Read legacy: yes. Emit non-PQ: never — on *every* write path.** Legacy
-  *read* stays untouched (pre-PQ data remains decryptable); the `pqOnly` flag
-  gates encryption-scheme selection on **every** write path, not just the common
-  `put`, so the negotiator can never pick `legacy` and **every value a v4 client
-  encrypts is PQ** (`nskey`, `group`, or the atSign-level PQ fallback). Deleting
-  the now-dead legacy-write code rides the same major bump but is housekeeping —
-  the guarantee is the **flag**, not the deletion. The one boundary is the
-  `shouldEncrypt=false` *no-encryption* path: that is not a *non-PQ* path (the
-  SDK uses it only for already-PQ-sealed envelopes and public keys), and an app
-  that forces its own plaintext through it is unchanged from 3.x and orthogonal
-  to the PQ-write guarantee (see
+- **`disallowLegacyEncryption`** (working name) — a flag on `AtClientPreference`
+  meaning literally *"never write new data using the legacy provider for
+  encryption."* When `true`, the SDK will not use the `legacy` `CryptoProvider`
+  to encrypt; it uses a PQ provider (`nskey`, `group`, or the atSign-level PQ
+  fallback), or — if a reader can only be reached via legacy — **refuses the
+  write** rather than fall back.
+- **Defaults: `false` in 3.x, `true` in 4.0.** A 3.x app is legacy-compatible by
+  default and may opt into PQ-only writes early; a 4.0 app is PQ-only by default
+  and may opt back out (e.g. during a long migration tail).
+- **Final at construction.** The value is fixed when the `AtClient` is created
+  and **cannot be changed during the app's lifetime** — no mid-run flipping, so
+  a client's write-safety posture is stable and inspectable.
+- **Loud when off.** The SDK **always emits a `SHOUT`-level log at AtClient
+  creation when the flag is `false`**, announcing that new data may be written
+  with the non-PQ legacy provider — so a client permitting legacy writes is
+  never silent about it.
+- **Scope is literal.** The flag governs *only* use of the legacy provider for
+  **encryption**. It does **not** touch legacy **read** (pre-PQ data stays
+  decryptable in both 3.x and 4.x), nor the `shouldEncrypt=false`
+  *no-encryption* path (already-sealed envelopes / public keys — see
   [What the atServer can and cannot see](#what-the-atserver-can-and-cannot-see)).
-- Under the invariant above, "write a scheme every reader supports" combined
-  with "never legacy" means **a v4 client can only write to PQ-capable readers**.
-  A legacy-only reader must upgrade first; a v4 sender cannot down-grade to reach
-  it. So **v4 is gated on the ecosystem floor** having moved (all relevant
-  readers PQ-capable) — it is retirement phase 4 (legacy "stops existing"),
-  expressed as a semver major. Cold-start to a never-ran-at_talk recipient still
-  uses the atSign-level **PQ** fallback, never legacy.
 
-In short: **3.x = PQ-safe when it can, legacy when it must; 4.x = PQ-safe,
-full stop.** The migration lives in 3.x; v4 is cut once the floor allows.
+Consequences:
+
+- Under the migration invariant ("write a scheme every reader supports"),
+  `disallowLegacyEncryption=true` means **such a client can only write to
+  PQ-capable readers** — a legacy-only reader must upgrade first. So flipping the
+  *default* to `true` (i.e. cutting v4) is **gated on the ecosystem floor**
+  having moved; it is retirement phase 4 expressed as a semver major. Cold-start
+  to a never-ran-`at_talk` recipient still uses the atSign-level **PQ** fallback,
+  never legacy.
+- **v4 as a release** is a normal major bump that also removes deprecations and
+  obsolete/dead code (e.g. the deprecated stream/file methods + their quarantined
+  AES) — orthogonal housekeeping. The **legacy provider itself stays** (needed
+  for reads always, and for writes when the flag is `false`); what changes at v4
+  is only this flag's *default*.
+
+In short: **3.x defaults to "PQ when it can, legacy when it must"; 4.x defaults
+to "PQ — refuse rather than write legacy" — overridable either way, but never
+silently (a `false` flag SHOUTs at startup).**
 
 ### Steps (any client may sit at any step, within 3.x)
 
@@ -299,13 +307,14 @@ full stop.** The migration lives in 3.x; v4 is cut once the floor allows.
 4. **Both ends ready ⇒ end-to-end D1.** Once alice *and* bob are marked ready,
    alice↔bob at_talk runs `nskey` (PQ + namespace-scoped) both directions. A
    mixed pair stays legacy *in that direction only*, automatically.
-5. **Retire legacy (gradual, then the v4 flag flip).** Lazy re-encrypt old
+5. **Retire legacy (gradual, then the v4 default flip).** Lazy re-encrypt old
    values on touch; stop conveying `selfEncryptionKey` for at_talk — all within
-   3.x. The final phase is **`at_client` 4.0**, whose only PQ-safety-relevant
-   change from the final 3.x is the internal `pqOnly` hard flag flip (legacy
-   *writes* disabled, non-overridable; v4 also does general dead-code removal),
-   gated on the ecosystem floor; v4 still **reads** legacy. (See the versioning
-   contract above and the four-phase retirement below.)
+   3.x. The final phase is **`at_client` 4.0**, which flips the **default** of
+   `disallowLegacyEncryption` to `true` (legacy writes off by default — a
+   `SHOUT` fires if an app re-enables them) and removes deprecated/dead code;
+   gated on the ecosystem floor. v4 still **reads** legacy and the legacy
+   provider remains. (See the versioning contract above and the four-phase
+   retirement below.)
 
 The Step-3 marker flip is the only operator judgement call: flipping it while a
 legacy client of that atSign still runs is the one way to break a reader, so it
@@ -323,15 +332,16 @@ bob marks ready → shared flips to `nskey`. At no step does anyone lose access.
 
 Mental model: **rebuild makes you a universal reader; the flag makes you a PQ
 writer/recipient; simple code lets you override the safety defaults.** This
-table is the **3.x** library (legacy-write-capable); under **4.x** the
-"auto-downgrade to legacy" capability is *gone* — a v4 client downgrades only
-among PQ schemes and never emits legacy (see the versioning contract).
+table is the **3.x default** (`disallowLegacyEncryption=false`, legacy-write
+-capable). With the flag `true` (the **4.x default**) the "auto-downgrade to
+legacy" capability is off — the client downgrades only among PQ schemes and
+refuses rather than write legacy (see the versioning contract).
 
 | Capability | Rebuild only (no code) | Flag flip (minimal config) | Simple code changes |
 |---|---|---|---|
 | Read all legacy / pre-existing data | ✓ | ✓ | ✓ (incl. v4) |
 | Read PQ (`nskey`) data from upgraded peers | ✓ | ✓ | ✓ |
-| Stay compatible with un-upgraded **legacy** peers (auto-downgrade writes) | ✓ | ✓ | ✓ — 3.x only; **v4 never writes legacy** |
+| Stay compatible with un-upgraded **legacy** peers (auto-downgrade writes) | ✓ | ✓ | ✓ when `disallowLegacyEncryption=false` (3.x default); **off when `true`** (4.x default) |
 | Per-destination auto-negotiation of scheme | ✓ | ✓ | ✓ |
 | Your new writes are PQ + namespace-scoped | ◐ off by default¹ | ✓ (prefer-best + publish readiness) | ✓ |
 | Be a PQ recipient (peers send you `nskey`); self-data PQ | ✗ (still legacy-advertised) | ✓ (readiness marker) | ✓ |
