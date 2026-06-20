@@ -43,7 +43,7 @@ required**. See the roadmap's
    - **(4a)** commit-log-free persistence migration — **MERGED to trunk (#1984).**
    - **(4b)** pluggable crypto — **PR #1930, OPEN + green** (`origin/xl-pluggable
      @ 391f55f67`, on `^5.1.0`, incl. the Mode-B reconcile fix).
-   - **(4c)** secret sharing + the `nskey`/Tier-S work below — **to carve out**
+   - **(4c)** secret sharing + the `nskey`/D1 Tier1 work below — **to carve out**
      from `gkc-pqmls-spike` (now sits directly on the 4b branch).
 
 ### What is already built on the integration branch (the D1 foundation)
@@ -59,7 +59,7 @@ required**. See the roadmap's
   AES-256-GCM `__ssenv.<ns>` envelopes; in-memory `SecretStore` (app-pluggable
   persistence); `requestSecretsFromNamespace` pull flow; `waitForSecret`;
   `excludeEnrollmentIds`; reserved `__` system-secret names.
-- **`group` provider (Tier H self):** `SecureGroup`/`PairwiseGroup` v1 + the
+- **`group` provider (D1 Tier2 self):** `SecureGroup`/`PairwiseGroup` v1 + the
   `group` `GroupCryptoProvider`; `__rk.<epoch>.<kid>` epoch keys; scope
   `self:<atSign>:<namespace>`. Self-encryption only today (refuses shared keys).
 - **at_chops PQ primitives:** X-Wing (ML-KEM-768 + X25519), AES-256-GCM,
@@ -73,10 +73,10 @@ required**. See the roadmap's
 |---|---|
 | 0 — foundations (secret sharing, pluggable crypto, jt-pq) | **Done** (rebuilt on xl-pluggable) |
 | 1 — PQ primitives in at_chops (X-Wing, GCM, HKDF, HMAC) | **Done**; remaining: PQ enrollment-conveyance pubkey |
-| 2 — identity layer (KeyPackages + per-client AtKeys) | KeyPackage framing **done**; AtKeys device-local split + identity resolution: not started (mostly D2 / Tier H) |
+| 2 — identity layer (KeyPackages + per-client AtKeys) | KeyPackage framing **done**; AtKeys device-local split + identity resolution: not started (mostly D2 / D1 Tier2) |
 | 2.5 — at_persistence 5.x migration | **Done & verified** |
-| 3 — `SecureGroup` v1 + `group` provider (self) | **Built (Tier H self)**; Tier-S `nskey` self is **new D1 work** (§3) |
-| 4 — cross-atSign shared | Tier-S `nskey` shared is **new D1 work** (§3); per-client pair group is Tier H / D2 |
+| 3 — `SecureGroup` v1 + `group` provider (self) | **Built (D1 Tier2 self)**; D1 Tier1 `nskey` self is **new D1 work** (§3) |
+| 4 — cross-atSign shared | D1 Tier1 `nskey` shared is **new D1 work** (§3); per-client pair group is D1 Tier2 / D2 |
 | 5 — pq-mls engine | **D2 placeholder** (§4) |
 | 6 — at_chops sole security-crypto dependency | **Complete** (in-scope) |
 
@@ -103,7 +103,7 @@ D1 is done when, per the roadmap
 5. The **usability acceptance test** holds at each milestone (§5): no new flag a
    user must pass, file a user must manage, operator step, or peer-by-peer break.
 
-The substantive *new* D1 build is the **`nskey` provider (Tier S)** and the
+The substantive *new* D1 build is the **`nskey` provider (D1 Tier1)** and the
 **migration/versioning machinery** — the foundation (§1) already exists.
 
 ---
@@ -125,9 +125,9 @@ artifact and acceptance. Design references point at the roadmap.
   *Note:* this same atSign-level PQ key is the **cold-start fallback** for
   `nskey` (D1-B4) — build it first.
 
-### D1-B · The `nskey` provider (Tier S — the default)
+### D1-B · The `nskey` provider (D1 Tier1 — the default)
 Design: roadmap
-[Tier S](crypto-roadmap.md#tier-s--the-nskey-provider-d1-default). New provider
+[D1 Tier1](crypto-roadmap.md#d1-tier-1--baseline-the-nskey-provider-default). New provider
 on the M0 seam; legacy-shaped (copyable, enrollment-granular), PQ + namespace
 -scoped. Build order:
 
@@ -153,7 +153,7 @@ on the M0 seam; legacy-shaped (copyable, enrollment-granular), PQ + namespace
   - `appMetadata(providerId: 'nskey', additional: {ns, kid, enc, iv, kemCt})`.
   - *Acceptance:* unit round-trips (self + shared); byte-exact decrypt; binary
     -safe (seal/open bytes, honour `isBinary` — do **not** repeat the
-    `utf8.encode(toString())` bug, see §3 Tier-H shape tasks).
+    `utf8.encode(toString())` bug, see §3 D1 Tier2 shape tasks).
 - [ ] **B3 · Capability marker + per-destination negotiation.** Per-`(atSign,
   namespace)` published marker `{nskey: true, nskeyPubKid, …}`, **initially
   not-ready**; the sender reads the recipient's marker (+ its own, for self
@@ -174,7 +174,7 @@ on the M0 seam; legacy-shaped (copyable, enrollment-granular), PQ + namespace
   **per-enrollment** self-group secret channel (PQ-wrapped to each at_talk
   enrollment's conveyance key); reuse the built `__`-secret substrate +
   `requestSecretsFromNamespace` (push) + pull. Design: roadmap
-  [Opt-in rotation](crypto-roadmap.md#opt-in-key-rotation-tier-s).
+  [Opt-in rotation](crypto-roadmap.md#opt-in-key-rotation-d1-tier1).
   *Buys:* namespace-granular **post-compromise security**; **not** FS / history
   re-encryption (old private keys retained → history-on).
   *Acceptance:* after rotation, new writes use epoch N+1; all current at_talk
@@ -182,7 +182,7 @@ on the M0 seam; legacy-shaped (copyable, enrollment-granular), PQ + namespace
 - [ ] **B6 · Revocation wiring.** Compose: (1) enrollment revocation (APKAM —
   free, cuts future server access); (2) rotation **excluding** the revoked
   enrollment (`excludeEnrollmentIds`); (3) optional re-encrypt of history
-  (expensive — Tier H/D2). Design: roadmap
+  (expensive — D1 Tier2/D2). Design: roadmap
   [Revocation](crypto-roadmap.md#revocation-end-to-end).
   *Acceptance:* a revoked enrollment, excluded from a rotation, cannot read
   post-rotation data.
@@ -211,7 +211,7 @@ Design: roadmap
 - [ ] **C4 · Capability conformance.** Implement so the
   [capabilities table](crypto-roadmap.md#capabilities-by-application-code-change-level)
   holds: no-code = universal reader + back-compat; flag = PQ writer/recipient;
-  code = override defaults / Tier H.
+  code = override defaults / D1 Tier2.
 
 ### D1-D · Versioning (the v4 `pqOnly` flag)
 Design: roadmap
@@ -232,8 +232,8 @@ Design: roadmap
   removal** (the latter is housekeeping, orthogonal to the PQ guarantee). Gated
   on the ecosystem floor (a v4 client can only write to PQ-capable readers).
 
-### D1-E · Tier H shape-corrections (cheap-now, carry into D2)
-The `group` provider exists (Tier H self). These keep its shape honest before
+### D1-E · D1 Tier2 shape-corrections (cheap-now, carry into D2)
+The `group` provider exists (D1 Tier2 self). These keep its shape honest before
 the self→shared and MLS transitions; do them while touching the area.
 - [ ] **Lift membership into `SecureGroup`** (`members`/`add`/`remove`); v1
   derives them. Avoids a later breaking change to a published abstract.
@@ -264,7 +264,7 @@ chunks. Overall publish order in §5 of the roadmap
 
 ## 4. D2 — pq-mls (placeholders; detailed planning deferred)
 
-D2 swaps Tier H's engine for MLS and adds the scaling/ordering infrastructure.
+D2 swaps D1 Tier2's engine for MLS and adds the scaling/ordering infrastructure.
 The **design** is in the roadmap; the **detailed build plan is intentionally
 deferred** — each item below is a placeholder that **requires its own planning
 pass** before implementation. Design refs:
@@ -275,12 +275,12 @@ pass** before implementation. Design refs:
 > **⚠ DETAILED PLANNING REQUIRED** for every item in this section. Treat the
 > bullets as scope markers, not a task breakdown.
 
-- [ ] **Phase 4 (cross-atSign per-client pair groups) as Tier H.** *Note:* D1's
+- [ ] **Phase 4 (cross-atSign per-client pair groups) as D1 Tier2.** *Note:* D1's
   `nskey` covers cross-atSign **shared** data at enrollment granularity; the
   **per-client** `(pair, namespace)` group (per-device revocation/FS) is the
-  Tier-H/D2 form. Greenfield: cross-atSign KeyPackage fetch+verify, consent
+  D1 Tier2/D2 form. Greenfield: cross-atSign KeyPackage fetch+verify, consent
   hook, explicit membership, group state not derivable from one server. *Plan
-  when starting Tier H cross-atSign.*
+  when starting D1 Tier2 cross-atSign.*
 - [ ] **Phase 5 — MLS engine (`SecureGroup` v2).** Engine choice still open
   (openmls / mls-rs / pure-Dart); native bindings as a separate package so
   `at_client` stays pure Dart. Bootstrap from the same published KeyPackages;
@@ -302,12 +302,12 @@ pass** before implementation. Design refs:
   apply inbound handshake before sealing under the new epoch. Roadmap
   [Connection model & the MLS leaf](crypto-roadmap.md#connection-model--the-mls-leaf).
   *Plan with the engine integration.*
-- [ ] **Per-client identity hardening (Phase 2 / Tier H).** AtKeys device-local
+- [ ] **Per-client identity hardening (Phase 2 / D1 Tier2).** AtKeys device-local
   split (leaf keys never copied); client-identity resolution
   (label-keyed keysets, resume/fork/mint); **two-layer single-owner lock**
   (device-local file lock + atServer `(atSign, label)` lease w/ fencing token +
   TTL + heartbeat). MLS correctness precondition (one leaf per instance), not
-  needed by Tier S. Roadmap
+  needed by D1 Tier1. Roadmap
   [Phase 2](crypto-roadmap.md#phase-2--identity-layer-keypackages-and-per-client-atkeys).
   *Plan with Phase 5.*
 
@@ -334,7 +334,7 @@ Nothing reaches NoPorts until the SDK ships in dependency order. Roadmap
 the group abstraction, daemon-feature-gated tiers 0–2; **target: zero
 user-visible delta**. Tier 0 (transport PQ-safe) is reachable with the `nskey`
 / `group` path; tiers 1–2 (derive-don't-transmit, fleet self-group) lean on
-Tier H / D2. Roadmap
+D1 Tier2 / D2. Roadmap
 [Upgrading NoPorts](crypto-roadmap.md#upgrading-noports-with-daemon-ping-feature-discovery)
 + Admission UX / User-visible-delta. *Detailed sshnoports plan: deferred.*
 

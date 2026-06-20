@@ -30,7 +30,7 @@ per-device security most namespaces never ask for.
 
 Deliver D1 in **two tiers** over the M0 pluggable `CryptoProvider` seam:
 
-- **Tier S — `nskey` (default).** A per-`(atSign, namespace)` X-Wing keypair
+- **D1 Tier1 — `nskey` (default).** A per-`(atSign, namespace)` X-Wing keypair
   replacing the atSign-wide RSA key, `selfEncryptionKey`, and `shared_key.*`.
   **Enrollment-granular and copyable**, distributed at enrollment approval, so
   future clients read instantly/offline with full history — byte-for-byte legacy
@@ -39,18 +39,18 @@ Deliver D1 in **two tiers** over the M0 pluggable `CryptoProvider` seam:
   **opt-in** (post-compromise security at namespace granularity), distributed
   over the self-group secret channel and doubling as the revocation primitive.
 
-- **Tier H — `group` (opt-in).** The per-client group provider, declared by a
+- **D1 Tier2 — `group` (opt-in).** The per-client group provider, declared by a
   namespace that needs **per-device** revocation or forward secrecy. It is also
   the **substrate D2/MLS swaps its engine into.**
 
 The already-built per-client secret-sharing substrate is **not discarded**: in
-Tier S it is the per-enrollment rotation/distribution plumbing; in Tier H it is
-the per-client data path. Senders **negotiate per-destination** (provider seam +
+D1 Tier1 it is the per-enrollment rotation/distribution plumbing; in D1 Tier2 it
+is the per-client data path. Senders **negotiate per-destination** (provider seam +
 `appMetadata.providerId`), downgrading to the recipient's best supported tier,
 so mixed-tier and legacy peers interoperate automatically.
 
 This reframes the *delivery* of milestones M2–M4 (per-client group → opt-in
-Tier H + substrate); the milestones themselves and D2 (M5–M6) are unchanged.
+D1 Tier2 + substrate); the milestones themselves and D2 (M5–M6) are unchanged.
 
 ## Consequences
 
@@ -63,13 +63,13 @@ Tier H + substrate); the milestones themselves and D2 (M5–M6) are unchanged.
   scoping (crypto mirrors transport), per-namespace blast radius, and a
   rotatable replacement for the never-rotating `selfEncryptionKey`.
 - Heavy machinery (per-device leaves, single-owner lock/lease, membership
-  commits) is confined to opt-in Tier H; most apps never touch it.
+  commits) is confined to the opt-in D1 Tier2; most apps never touch it.
 
 **Negative / accepted trade-offs**
-- Tier S does **not** provide per-device revocation granularity or forward
+- D1 Tier1 does **not** provide per-device revocation granularity or forward
   secrecy. Enrollment revocation cuts *future* access for free and opt-in
   rotation gives namespace-granular PCS, but scrubbing access to
-  already-pulled data needs re-encryption — that is Tier H / D2's job.
+  already-pulled data needs re-encryption — that is D1 Tier2 / D2's job.
 - Two data-path providers (`nskey`, `group`) plus `legacy` coexist during the
   ecosystem's lifetime, carried on the provider seam (the seam was built for
   exactly this).

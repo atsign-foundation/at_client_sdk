@@ -70,7 +70,11 @@ online). Legacy chose copyable; full MLS chooses re-encrypt. D1 resolves this by
 **tiering**: the default keeps legacy's shape (hardened), and per-device
 security is opt-in.
 
-### Tier S — the `nskey` provider (D1 default)
+The two tiers are **D1 Tier 1 — Baseline** (the simple, legacy-shaped default)
+and **D1 Tier 2 — Hardened** (opt-in per-device security). They are abbreviated
+**D1 Tier1** and **D1 Tier2** below and throughout these docs.
+
+### D1 Tier 1 — Baseline (the `nskey` provider, default)
 
 Replace the one atSign-wide RSA default keypair (and `selfEncryptionKey`, and
 `shared_key.*`) with a **per-`(atSign, namespace)` X-Wing keypair**:
@@ -88,15 +92,15 @@ Replace the one atSign-wide RSA default keypair (and `selfEncryptionKey`, and
   `KeyPackage`, `members`, `clientId`, or single-owner lock anywhere in the
   app's face. Identity stays the *enrollment*, exactly as legacy.
 
-What Tier S closes vs legacy, at **zero developer-visible change**:
+What D1 Tier1 closes vs legacy, at **zero developer-visible change**:
 
-| Legacy weakness | Tier S (`nskey`) |
+| Legacy weakness | D1 Tier1 (`nskey`) |
 |---|---|
 | Not PQ-safe (RSA-2048) | **Closed** — X-Wing hybrid KEM |
 | Crypto broader than transport (one key spans all namespaces) | **Closed** — per-namespace keypair mirrors enrollment authorization |
 | `selfEncryptionKey` sits still forever, conveyed to every enrollment | **Closed** — per-namespace, **rotatable**; per-namespace blast radius, not atSign-wide |
-| No per-device revocation granularity | **Partial** — enrollment revocation cuts future access for free (below); per-device is Tier H |
-| No rotation / forward secrecy | **Partial** — rotatable on demand (post-compromise security); no per-message FS — Tier H |
+| No per-device revocation granularity | **Partial** — enrollment revocation cuts future access for free (below); per-device is D1 Tier2 |
+| No rotation / forward secrecy | **Partial** — rotatable on demand (post-compromise security); no per-message FS — D1 Tier2 |
 
 ### Cold-start — bob has never run an at_talk app
 
@@ -125,7 +129,7 @@ seed), so any bob client derives the private key with **no distribution** — th
 removes bob-side distribution but not alice's need for a published public key,
 so the atSign fallback still covers true cold-start.
 
-### Opt-in key rotation (Tier S)
+### Opt-in key rotation (D1 Tier1)
 
 Rotation is the same channel the self group already uses, at enrollment
 granularity. **bob1 mints a new namespace keypair, publishes the new public key,
@@ -156,21 +160,21 @@ Three composable moves, increasing cost:
 2. **Rotate the namespace key excluding that enrollment — cheap, opt-in.** Even
    a device with cached access gets no post-rotation key.
 3. **Re-encrypt history — expensive, rarely needed.** The only way to revoke
-   access to data the device *already pulled* — and the boundary where Tier H /
+   access to data the device *already pulled* — and the boundary where D1 Tier2 /
    D2 (per-device leaves + FS) actually earns its complexity.
 
-Tier S gives "stop future access" cheaply and partly for free; "scrub the past"
+D1 Tier1 gives "stop future access" cheaply and partly for free; "scrub the past"
 is the opt-in tier's job.
 
-### Tier H — opt-in per-device (the D2 substrate)
+### D1 Tier 2 — Hardened (opt-in per-device, the D2 substrate)
 
 The per-client `group` provider (KeyPackages + epoch keys + per-device
 membership) becomes an **opt-in** tier a namespace declares when it needs
 per-device revocation or forward secrecy. Most apps never touch it. Crucially
-the **secret-sharing substrate is shared** between tiers: Tier S uses it as
-*per-enrollment distribution plumbing* for rotation; Tier H uses it
+the **secret-sharing substrate is shared** between tiers: D1 Tier1 uses it as
+*per-enrollment distribution plumbing* for rotation; D1 Tier2 uses it
 *per-client*. So the group work already built is not discarded — it is the
-plumbing under Tier S and the data path of Tier H. D2/MLS swaps Tier H's engine.
+plumbing under D1 Tier1 and the data path of D1 Tier2. D2/MLS swaps D1 Tier2's engine.
 
 ### Mixed-tier `@alice` ↔ `@bob`
 
@@ -179,7 +183,7 @@ the scheme the recipient can decrypt**, discovered from what the recipient
 publishes (namespace key → `nskey`; KeyPackages+group advertised → `group`; only
 an RSA pubkey → `legacy`); `appMetadata.providerId` tells the recipient which
 provider to open with. The developer writes the same `put`; the SDK negotiates
-per-destination, downgrading to the recipient's best supported tier. Tier S
+per-destination, downgrading to the recipient's best supported tier. D1 Tier1
 clients **retain legacy capability** for un-upgraded peers.
 
 ### What this reframes (M0–M4)
@@ -187,16 +191,16 @@ clients **retain legacy capability** for un-upgraded peers.
 The milestones stand; the *delivery* shifts from "per-client groups are the
 path" to "per-client groups are the opt-in tier and the D2 substrate":
 
-- **M0 / M1** unchanged — Tier S *is* a pluggable PQ provider; it uses X-Wing +
+- **M0 / M1** unchanged — D1 Tier1 *is* a pluggable PQ provider; it uses X-Wing +
   the Phase-1 enrollment-conveyance PQ key.
-- **M2** (per-client identity / KeyPackages) → the **substrate + Tier H**, not a
-  prerequisite for the Tier S data path; the single-owner lock is Tier H only.
-- **M3** (self encryption) → Tier S ships `nskey` self-encryption (default);
-  the per-client `group` self-encryption is Tier H.
-- **M4** (cross-atSign) → Tier S ships `nskey` shared-encryption (legacy-shaped,
+- **M2** (per-client identity / KeyPackages) → the **substrate + D1 Tier2**, not a
+  prerequisite for the D1 Tier1 data path; the single-owner lock is D1 Tier2 only.
+- **M3** (self encryption) → D1 Tier1 ships `nskey` self-encryption (default);
+  the per-client `group` self-encryption is D1 Tier2.
+- **M4** (cross-atSign) → D1 Tier1 ships `nskey` shared-encryption (legacy-shaped,
   the `(atSign, namespace)` keypair used toward another atSign); the per-client
-  `(pair, namespace)` group is Tier H.
-- **D2 (M5–M6)** is Tier H's MLS engine — unchanged.
+  `(pair, namespace)` group is D1 Tier2.
+- **D2 (M5–M6)** is D1 Tier2's MLS engine — unchanged.
 
 ## Application migration & rollout
 
@@ -334,7 +338,7 @@ among PQ schemes and never emits legacy (see the versioning contract).
 | `selfEncryptionKey` retired for the namespace | lazy/auto as data migrates | ✓ (accelerated) | ✓ |
 | Opt-in key rotation (namespace-granular PCS) | ✗ | ✓ (enable in `CryptoConfig`) | ✓ (+ own rotation/revocation triggers) |
 | Strict cold-start: refuse legacy fallback, require PQ | ✗ (defaults to fallback) | ◐ (policy toggle: hold vs send) | ✓ (custom seal-and-hold / error / notify) |
-| Per-device revocation — Tier H (`group` provider) | ✗ | ✗ | ✓ (opt-in per namespace) |
+| Per-device revocation — D1 Tier2 (`group` provider) | ✗ | ✗ | ✓ (opt-in per namespace) |
 | Forward secrecy / MLS — D2 | ✗ | ✗ | ✗ (future; opt-in when shipped) |
 | Consent hooks / custom membership policy | ✗ | ✗ | ✓ |
 
@@ -348,7 +352,7 @@ everything, stay fully compatible, and become PQ-ready. *Flip one readiness
 flag* when your fleet is upgraded and your data becomes post-quantum-safe and
 namespace-scoped, negotiated down automatically for anyone still on the old
 build. Reach for *code* only to refuse legacy (strict PQ), drive your own
-rotation, or opt into per-device (Tier H) security.
+rotation, or opt into per-device (D1 Tier2) security.
 
 ## Starting point
 
@@ -456,7 +460,7 @@ deliverable terms (see [The two major deliverables](#the-two-major-deliverables)
 remaining piece — and **M5–M6 are Deliverable 2** (pq-mls). The M2–M4 rows below
 describe the **per-client group** capability; per
 [D1 — preserving legacy simplicity](#d1--preserving-legacy-simplicity-two-tiers)
-that is the **opt-in Tier H** and the D2 substrate — D1's *default* path is the
+that is the **opt-in D1 Tier2** and the D2 substrate — D1's *default* path is the
 simpler `nskey` shared-namespace-key tier, with the same milestones reframed.
 
 ## How it works — NoPorts (summary)
