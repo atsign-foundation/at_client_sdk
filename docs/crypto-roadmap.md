@@ -6,6 +6,11 @@ capability (encrypt/decrypt for other clients of the same atSign,
 encrypt/decrypt for other atSigns), strengthened with two-lever key
 rotation, and giving applications a bootstrap path to pq-mls groups.
 
+> **This document is the design source of truth** — goals, architecture,
+> phasing, and the *why*. The detailed build plan, status, task breakdown, and
+> PR carving live in its companion, the
+> [crypto implementation plan](crypto_impl_plan.md).
+
 ## The two major deliverables
 
 This roadmap delivers two distinct things. The second builds on the first and
