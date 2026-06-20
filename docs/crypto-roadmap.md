@@ -140,7 +140,7 @@ its own; later ones build on earlier. (Phase numbers cross-reference the
 | **M1 · PQ primitives** (Phase 1) | X-Wing hybrid KEM, AES-256-GCM, HKDF in at_chops; PQ enrollment-conveyance pubkey | Post-quantum/hybrid building blocks; closes the last harvest-now-decrypt-later hole (enrollment); the crypto-agile base. |
 | **M2 · Per-client identity / KeyPackages** (Phase 2) | Each client = a leaf (clientId + X-Wing leaf keys + signing) as an APKAM-signed KeyPackage; AtKeys device-local split | The MLS identity layer; per-device granularity + revocability; the one-leaf-per-instance correctness precondition. |
 | **M3 · SecureGroup v1 + `group` provider** (Phase 3) | `seal/open/rotate/export` + a v1 epoch engine; self data encrypted as group messages; two-lever rotation; retires `selfEncryptionKey` | First real (intra-atSign) group encryption with rotating keys + revocation; the stable interface MLS later swaps under. |
-| **M4 · Cross-atSign groups** (Phase 4) | Pair/multi-atSign groups; explicit membership + consent; `group` serves shared keys; retires static `shared_key.*` | First cross-atSign group encryption; per-client granularity/revocability for shared data; the precursor to NoPorts sessions. |
+| **M4 · Cross-atSign groups** (Phase 4) | `(pair, namespace)`-scoped groups (distinct from either self group); recipient self-joins by own enrollment; seal-and-hold first-share bootstrap; `group` serves shared keys; retires static `shared_key.*` | First cross-atSign group encryption; per-client granularity/revocability for shared data; the precursor to NoPorts sessions. |
 | **M5 · Group Delivery Service** (atServer groups) | Ciphertext-only DS atSign + group object/verbs (`seq`, log, ack, fetch); wake-then-pull; ordering + catch-up + retention | Makes group-addressed delivery scale on the pairwise substrate; solves fan-out + ordering + retention; operable as infrastructure. This is what makes *large* groups work. |
 | **M6 · pq-mls engine** (Phase 5) | Swap the v1 engine for MLS (TreeKEM, RFC 9420 FS/PCS, PQ ciphersuites) behind the same interface + DS | O(log n) commits, standardized + audited group security — the actual end state. |
 | **NoPorts adoption** (finish line) | Session keys via `SecureGroup.export`; daemon-feature-gated tiers 0–2 | The production payoff: PQ-safe NoPorts, derived (not transmitted) session keys, fleet management. |
@@ -495,11 +495,21 @@ abstract class SecureGroup {
 
 ### Phase 4 — cross-atSign groups (shared encryption)
 
-- **Pair groups** per atSign pair (or app-defined member sets): members are
-  *both sides' clients*, which fixes a quiet legacy weakness — today
-  `shared_key.bob@alice` is one static key decryptable by every bob client
-  forever; per-client leaves give cross-atSign data the same per-device
-  granularity and revocability as self data.
+- **Pair groups** scoped to **`(pair, namespace)`** — `groupId` e.g.
+  `pair:@alice:@bob:at_talk` — not merely per atSign pair. The namespace
+  component is mandatory, for the same reason self groups carry it (Phase 3):
+  the group key topology must mirror the server's enrollment authorization
+  topology. A shared key `@bob:…​.at_talk@alice` is gated on *both* sides by
+  `at_talk` enrollment access, so its group must be (a) **distinct from either
+  side's self group** — sharing under `self:@alice:at_talk` would hand bob
+  alice's *private* self data — and (b) **per-namespace per-pair** — a single
+  `pair:@alice:@bob` group spanning all namespaces would hand a bob client
+  authorized only for `at_talk` the keys to alice→bob `banking` shared data,
+  re-introducing the crypto-more-permissive-than-transport bug at the pair
+  level. Members = alice's `at_talk` clients + bob's `at_talk` clients;
+  per-client leaves give cross-atSign data the same per-device granularity and
+  revocability as self data (vs. legacy `shared_key.bob@alice` — one static key
+  decryptable by every bob client, any namespace, forever).
 - **Add flow for another atSign's client**: fetch + verify their published
   KeyPackages → consent hook on the invitee's side (apps may auto-accept
   for namespaces they manage) → Add + Commit by any current member →
@@ -508,8 +518,28 @@ abstract class SecureGroup {
   only) → invitee joins at the current epoch. Commits fan out to every
   member atSign; the invitee's own enrollments gate which of *its* clients
   can see the traffic — symmetric with self groups.
-- The `group` provider now serves both self and shared keys: one code path
-  for both directions, for the first time.
+- **Recipient-side membership is the invitee's decision, not the sender's.**
+  The sender (alice) **cannot** see bob's per-client namespace authorization —
+  that is bob's internal enrollment state — so alice does **not** pick which
+  bob clients join. Instead a bob client self-joins the `(pair, namespace)`
+  group gated by **its own** `at_talk` enrollment, exactly as self-group
+  late-clients do: it discovers the group from alice's published membership
+  invitation / the shared key's `appMetadata`, then runs the pull flow to
+  obtain the current epoch key from an existing member (alice-side or
+  bob-side). Encapsulating to *all* of bob's published KeyPackages instead
+  (sender-driven) is rejected: it makes the crypto layer more permissive than
+  transport and leaks no less than bob publishing per-client scopes would.
+  - **First-share bootstrap.** On the very first alice→bob share, no bob leaf
+    is in the group yet. Alice **seals-and-holds**: she writes the shared key
+    under the current epoch and emits the membership invitation; bob's
+    `at_talk` clients join asynchronously (Welcome-then-pull) and read the
+    item once joined. Delivery is therefore eventually-consistent on first
+    contact (bounded by bob coming online + the join round-trip), not
+    synchronous — the sender never blocks on a recipient join, and no bob
+    client outside `at_talk` can join to read it.
+- The `group` provider now serves both self and shared keys: one code path,
+  the scope key widening from `(atSign, namespace)` to `(memberSet, namespace)`
+  (self = `{atSign}`, shared = `{alice, bob}`), for the first time.
 - Static `shared_key.*` retirement follows the same four-phase path as
   selfEncryptionKey.
 
