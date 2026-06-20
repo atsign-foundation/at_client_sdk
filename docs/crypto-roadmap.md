@@ -193,6 +193,106 @@ path" to "per-client groups are the opt-in tier and the D2 substrate":
   `(pair, namespace)` group is Tier H.
 - **D2 (M5–M6)** is Tier H's MLS engine — unchanged.
 
+## Application migration & rollout
+
+Existing apps are all on legacy. The migration must let **each client upgrade
+independently** (rebuild on its own schedule) while staying compatible with
+peers — and other clients of its own atSign — that have not yet upgraded. The
+M0 provider seam is what makes this work; the whole plan is one invariant plus a
+gated rollout.
+
+### The invariant that makes independent upgrade safe
+
+> **A value is only ever *written* in a scheme every client that must *read* it
+> supports. Reads are universal** — each value carries `appMetadata.providerId`,
+> and an upgraded client keeps *all* older providers, so it decrypts anything
+> ever written. A legacy client hard-fails on a scheme it lacks
+> (`onProviderNotFound`).
+
+So compatibility is asymmetric: **upgrading only ever adds read-capability; the
+risk is writing too *new*, never reading too *old*.** Everything below is just
+"gate the write scheme on the readers' published readiness." Readers, per value:
+
+- **Shared** `@bob:<key>.at_talk@alice` → bob's at_talk clients (plus alice's
+  own, for the self-copy). Write scheme gated by **bob's** readiness.
+- **Self** `<key>.at_talk@alice` → alice's at_talk clients. Gated by **alice's**
+  readiness.
+
+These are independent — which is what lets each client, and each direction,
+upgrade on its own.
+
+### Steps (any client may sit at any step)
+
+0. **Baseline.** All legacy; every value legacy-encrypted (`providerId`
+   absent / `legacy`).
+1. **Rebuild, behaviour-neutral (the soak).** Rebuild any subset against the new
+   AtClient. Rebuild *alone* adds the `nskey`/`group` providers and
+   provider-routing on **read** (decrypts any future PQ data) but keeps
+   **writing legacy**. Nothing observable changes; deploy client-by-client at
+   will — a zero-risk soak.
+2. **Publish the namespace key + capability marker (still writing legacy).** The
+   first upgraded client of an atSign mints/derives the `at_talk` `nskey` public
+   key and distributes the private key to that atSign's at_talk enrollments over
+   the self-group secret channel; each atSign publishes a per-`(atSign,
+   namespace)` capability marker, **initially not-ready**. Reads can consume
+   `nskey` if any appears; writes stay legacy.
+3. **Flip readiness (per atSign, per namespace).** When an atSign's at_talk
+   fleet is fully upgraded — operator-declared, or auto-detected by "no legacy
+   client has checked in" — mark it ready. Then, per-destination and
+   automatically: senders writing **to** that atSign's at_talk switch new writes
+   to `nskey`; that atSign's **self** data switches to `nskey`; peers still
+   legacy elsewhere keep getting legacy.
+4. **Both ends ready ⇒ end-to-end D1.** Once alice *and* bob are marked ready,
+   alice↔bob at_talk runs `nskey` (PQ + namespace-scoped) both directions. A
+   mixed pair stays legacy *in that direction only*, automatically.
+5. **Retire legacy (gradual, optional).** Lazy re-encrypt old values on touch;
+   stop conveying `selfEncryptionKey` for at_talk; drop the legacy provider once
+   the ecosystem floor allows (the four-phase retirement below).
+
+The Step-3 marker flip is the only operator judgement call: flipping it while a
+legacy client of that atSign still runs is the one way to break a reader, so it
+defaults off and the SDK can warn on a recent legacy check-in. Everywhere else,
+a write only goes `nskey` when the readers' marker says all of them can read it,
+so no client ever receives a value it cannot decrypt.
+
+*Independence example.* alice1 upgrades alone → reads everything, writes legacy
+to bob and legacy self (alice2 legacy) → nothing changes. alice2 upgrades →
+alice marks at_talk ready → alice's *self* data goes `nskey` (both alice clients
+read it) while *shared* to bob stays legacy (bob not ready). bob1+bob2 upgrade,
+bob marks ready → shared flips to `nskey`. At no step does anyone lose access.
+
+### Capabilities by application code-change level
+
+Mental model: **rebuild makes you a universal reader; the flag makes you a PQ
+writer/recipient; simple code lets you override the safety defaults.**
+
+| Capability | Rebuild only (no code) | Flag flip (minimal config) | Simple code changes |
+|---|---|---|---|
+| Read all legacy / pre-existing data | ✓ | ✓ | ✓ |
+| Read PQ (`nskey`) data from upgraded peers | ✓ | ✓ | ✓ |
+| Stay compatible with un-upgraded peers (auto-downgrade writes) | ✓ | ✓ | ✓ |
+| Per-destination auto-negotiation of scheme | ✓ | ✓ | ✓ |
+| Your new writes are PQ + namespace-scoped | ◐ off by default¹ | ✓ (prefer-best + publish readiness) | ✓ |
+| Be a PQ recipient (peers send you `nskey`); self-data PQ | ✗ (still legacy-advertised) | ✓ (readiness marker) | ✓ |
+| `selfEncryptionKey` retired for the namespace | lazy/auto as data migrates | ✓ (accelerated) | ✓ |
+| Opt-in key rotation (namespace-granular PCS) | ✗ | ✓ (enable in `CryptoConfig`) | ✓ (+ own rotation/revocation triggers) |
+| Strict cold-start: refuse legacy fallback, require PQ | ✗ (defaults to fallback) | ◐ (policy toggle: hold vs send) | ✓ (custom seal-and-hold / error / notify) |
+| Per-device revocation — Tier H (`group` provider) | ✗ | ✗ | ✓ (opt-in per namespace) |
+| Forward secrecy / MLS — D2 | ✗ | ✗ | ✗ (future; opt-in when shipped) |
+| Consent hooks / custom membership policy | ✗ | ✗ | ✓ |
+
+¹ ◐ = available but recommended off so rebuild stays behaviour-neutral; an
+aggressive deployment *can* default to "prefer the best scheme the recipient
+advertises," moving this to ✓ at rebuild — at the cost of rebuild no longer
+being observably a no-op.
+
+**Headline for an app author:** *rebuild and ship* — you instantly read
+everything, stay fully compatible, and become PQ-ready. *Flip one readiness
+flag* when your fleet is upgraded and your data becomes post-quantum-safe and
+namespace-scoped, negotiated down automatically for anyone still on the old
+build. Reach for *code* only to refuse legacy (strict PQ), drive your own
+rotation, or opt into per-device (Tier H) security.
+
 ## Starting point
 
 `trunk`, incorporating and extending three lines of work:
