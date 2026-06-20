@@ -474,3 +474,79 @@ tests. Plan archived at `untracked/AT_PERSISTENCE_5_MIGRATION_PLAN.md`.
 
 ### ADRs
 - [ADR 0001 — D1 delivers as two tiers](adr/0001-d1-simplicity-tiers.md).
+
+## 7. Delivery plan & work packages
+
+How the D1 work lands across **parallel tracks** with minimal merge friction.
+Principle: **partition by package** (two tracks rarely edit the same file),
+**land contracts first** (others build against stable shapes), keep merges
+**additive / flag-gated** so trunk stays releasable. The work packages below map
+onto the §3 workstreams (D1-S / D1-A…E); this is the parallelisation/sequencing
+view.
+
+### Tracks (package domains, not people)
+
+- **Track A — crypto primitives + provider:** `at_chops` (stateless core +
+  HPKE) → the `nskey` provider, `secret_sharing/`, `crypto/group/`.
+- **Track B — key management:** `at_auth` (`WritableAtKeys`, `AtKeysIo`
+  widening, the WASM barrel split) → PQ enrollment-conveyance key.
+- **Track C — at_client crypto seam + migration:** `crypto.dart` /
+  `crypto_runtime.dart` / `legacy/`, `AtClientPreference`; integration on
+  `gkc-pqmls-spike`; the publish ladder.
+- **Track D — storage + platform + consumers:** `LocalKeystoreAtKeysIo`, the
+  updatable `.atKeys` file path, `at_onboarding_cli` / `at_client_flutter` /
+  `at_cli_commons`.
+
+Within `at_client/crypto/`, the file partition keeps A and C apart: **C** owns
+`crypto.dart`, `crypto_runtime.dart`, `legacy/`; **A** owns `crypto/group/`,
+`crypto/nskey/` (new), `secret_sharing/`. The `nskey` provider is mostly new
+files — low collision by construction.
+
+### Phase 0 — unblock (blocks everything)
+- Land **PR #1930** (4b pluggable crypto) → trunk: the M0 seam in published
+  at_client. **The single biggest unblock** — until it lands, the integration
+  branch stays ahead of trunk.
+- Revise + land **PR #1993** (HPKE) → trunk (`at_chops`).
+
+### Phase 1 — contracts (small, fast-review PRs; all parallel, all additive)
+| WP | Track | What | Bump |
+|----|-------|------|------|
+| WP1 | A | `at_chops` stateless core + `@Deprecated` shim; fold HPKE onto existing GCM/HKDF | `at_chops 3.3.0` |
+| WP2 | B | `WritableAtKeys` + widen `AtKeysIo`/`WrittenAtKeysIo` (add/remove/update, default impls) + `InMemoryAtKeysIo` — **API only** | `at_auth 3.2.0` |
+| WP3 | C | `CryptoContext` gains a `WritableAtKeys` field (additive; `atChops` `@Deprecated`) | at_client |
+| WP4 | D | `LocalKeystoreAtKeysIo` + the updatable `.atKeys` file path | at_client / at_auth |
+
+### Phase 2 — build on contracts (parallel)
+| WP | Track | What | Bump |
+|----|-------|------|------|
+| WP5 | B | **`at_auth` WASM barrel split** — `at_auth_io.dart`, FileAtKeysIo move, default removal, probe extraction, registrar → `package:http` | **`at_auth 4.0.0`** (the one breaking cut) |
+| WP6 | A | `nskey` provider on `pqSeal` + `WritableAtKeys` (new files) | at_client |
+| WP7 | C | legacy provider reads `WritableAtKeys`; per-destination negotiation; `disallowLegacyEncryption` flag (default `false`) | at_client |
+| WP8 | D | consumer bumps to `at_auth ^4.0.0` (onboarding / flutter / cli_commons) | minors — **gated on WP5** |
+
+### Phase 3 — feature completion (parallel)
+| WP | Track | What |
+|----|-------|------|
+| WP9 | A | nskey rotation / cold-start / revocation; `__ssenv` consolidation onto `pqSeal`; group shape fixes (binary-safe, lift membership, rename) |
+| WP10 | B | PQ enrollment-conveyance public key |
+| WP11 | C | migration machinery (readiness-marker lifecycle, strict-mode toggles); 4c secret-sharing carve-out |
+
+### Phase 4 — integrate + publish
+Verify the full stack on `gkc-pqmls-spike` (unit + functional + e2e via the
+base-port `runLocal.sh` rigs), then cut per-package PRs and publish in
+dependency order per the roadmap version table.
+
+### Critical path & merge discipline
+- **Critical path:** #1930 → `at_auth 4.0` (WP5) → at_client seam (WP7) +
+  `nskey` (WP6).
+- **Interface-first:** the `pqSeal` signature (WP1), `WritableAtKeys` API (WP2),
+  and `CryptoContext` field (WP3) are tiny PRs — merge them first (stubs OK) so
+  every track compiles against stable shapes and never blocks on another.
+- **Split the `at_auth` bump:** additive `3.2.0` (WP2) lands the `WritableAtKeys`
+  API early; the breaking barrel split is a separate, telegraphed `4.0.0` (WP5)
+  with consumer bumps (WP8) batched right behind it.
+- **Rules:** per-package PRs to **trunk** in dependency order (no mega-PRs);
+  rebase on trunk daily; keep PRs small + additive so trunk stays releasable;
+  path `dependency_overrides` for local cross-package dev (don't commit lock
+  churn); `gkc-pqmls-spike` is the end-to-end verification branch, trunk the
+  merge target.
