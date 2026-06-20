@@ -243,12 +243,18 @@ roadmap* is the flag and nothing else. Precisely:
   guarantee holds **regardless of app configuration**. "This is a 4.x client"
   is therefore a *provable* claim — PQ-safe **by construction**, not by app
   discipline.
-- **Legacy *read* is untouched**, so pre-PQ data stays decryptable. Only the
-  *write* selection is forced: the negotiator may never pick `legacy`, so
-  **every value a v4 client writes is PQ** (`nskey`, `group`, or the atSign-level
-  PQ fallback). v4 *does* also delete the now-dead legacy-write code, but the
-  guarantee is the **flag** (the negotiator can never select legacy), not the
-  deletion — the deletion is housekeeping that rides the same major bump.
+- **Read legacy: yes. Emit non-PQ: never — on *every* write path.** Legacy
+  *read* stays untouched (pre-PQ data remains decryptable); the `pqOnly` flag
+  gates encryption-scheme selection on **every** write path, not just the common
+  `put`, so the negotiator can never pick `legacy` and **every value a v4 client
+  encrypts is PQ** (`nskey`, `group`, or the atSign-level PQ fallback). Deleting
+  the now-dead legacy-write code rides the same major bump but is housekeeping —
+  the guarantee is the **flag**, not the deletion. The one boundary is the
+  `shouldEncrypt=false` *no-encryption* path: that is not a *non-PQ* path (the
+  SDK uses it only for already-PQ-sealed envelopes and public keys), and an app
+  that forces its own plaintext through it is unchanged from 3.x and orthogonal
+  to the PQ-write guarantee (see
+  [What the atServer can and cannot see](#what-the-atserver-can-and-cannot-see)).
 - Under the invariant above, "write a scheme every reader supports" combined
   with "never legacy" means **a v4 client can only write to PQ-capable readers**.
   A legacy-only reader must upgrade first; a v4 sender cannot down-grade to reach
