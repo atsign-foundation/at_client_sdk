@@ -230,13 +230,15 @@ PQ-ready, and that is how it stays compatible with un-upgraded peers. All of D1
 lands within 3.x (say it all ships by `3.15.x`); all five steps and the whole
 capability table describe 3.x.
 
-**`at_client` 4.0 is *byte-identical* to the final 3.x — with one difference: an
-internal, library-level *hard flag* is flipped that makes the client always
-PQ-safe.** v4 is not a code-removal refactor; it is the same code as `3.15.x`
-with legacy *writes* hard-disabled, so the change is a one-line, auditable
-boundary rather than a risky deletion. Precisely:
+**With respect to PQ-safety (this roadmap's concern), `at_client` 4.0 differs
+from the final 3.x by exactly one thing: an internal, library-level `pqOnly`
+*hard flag* is flipped, making the client always PQ-safe.** v4 *as a release* is
+a normal major bump that also removes all deprecations and obsolete/dead code —
+but that cleanup is orthogonal housekeeping; **the PQ-safety guarantee comes
+solely from the flag**, so the behavioural delta from `3.15.x` *for this
+roadmap* is the flag and nothing else. Precisely:
 
-- The flag (e.g. `pqOnly`) is **internal and non-overridable** — unlike the 3.x
+- The `pqOnly` flag is **internal and non-overridable** — unlike the 3.x
   app-facing strict-mode toggles (which are opt-in and can be turned off), v4's
   guarantee holds **regardless of app configuration**. "This is a 4.x client"
   is therefore a *provable* claim — PQ-safe **by construction**, not by app
@@ -244,8 +246,9 @@ boundary rather than a risky deletion. Precisely:
 - **Legacy *read* is untouched**, so pre-PQ data stays decryptable. Only the
   *write* selection is forced: the negotiator may never pick `legacy`, so
   **every value a v4 client writes is PQ** (`nskey`, `group`, or the atSign-level
-  PQ fallback). The dormant legacy-write code may be deleted later (a 4.x/5.0
-  cleanup), but that is not what *makes* a client v4 — the flag is.
+  PQ fallback). v4 *does* also delete the now-dead legacy-write code, but the
+  guarantee is the **flag** (the negotiator can never select legacy), not the
+  deletion — the deletion is housekeeping that rides the same major bump.
 - Under the invariant above, "write a scheme every reader supports" combined
   with "never legacy" means **a v4 client can only write to PQ-capable readers**.
   A legacy-only reader must upgrade first; a v4 sender cannot down-grade to reach
@@ -283,10 +286,11 @@ full stop.** The migration lives in 3.x; v4 is cut once the floor allows.
    mixed pair stays legacy *in that direction only*, automatically.
 5. **Retire legacy (gradual, then the v4 flag flip).** Lazy re-encrypt old
    values on touch; stop conveying `selfEncryptionKey` for at_talk — all within
-   3.x. The final phase is **`at_client` 4.0**: byte-identical to the final 3.x
-   with the internal `pqOnly` hard flag flipped (legacy *writes* disabled,
-   non-overridable), gated on the ecosystem floor; v4 still **reads** legacy.
-   (See the versioning contract above and the four-phase retirement below.)
+   3.x. The final phase is **`at_client` 4.0**, whose only PQ-safety-relevant
+   change from the final 3.x is the internal `pqOnly` hard flag flip (legacy
+   *writes* disabled, non-overridable; v4 also does general dead-code removal),
+   gated on the ecosystem floor; v4 still **reads** legacy. (See the versioning
+   contract above and the four-phase retirement below.)
 
 The Step-3 marker flip is the only operator judgement call: flipping it while a
 legacy client of that atSign still runs is the one way to break a reader, so it
