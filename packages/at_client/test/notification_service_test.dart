@@ -86,17 +86,12 @@ class FakeAtKey extends Fake implements AtKey {}
 void main() {
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
   AtChops mockAtChops = MockAtChops();
-  CryptoRegistry mockCryptoRegistry = MockCryptoRegistry();
   AtClientManager mockAtClientManager = MockAtClientManager();
   FakeMonitor fakeMonitor = FakeMonitor();
   SecondaryAddressFinder mockSecondaryAddressFinder =
       MockSecondaryAddressFinder();
   AtLookupImpl mockAtLookupImpl = MockAtLookupImpl();
   setUpAll(() {
-    when(() => mockCryptoRegistry.lookup(any())).thenReturn(CipherProvider());
-    when(() => mockCryptoRegistry.lookup(any(),
-        lookupReason: any(named: 'lookupReason'))).thenReturn(CipherProvider());
-    when(() => mockAtClientImpl.cryptoRegistry).thenReturn(mockCryptoRegistry);
     when(() => mockAtClientImpl.atChops).thenReturn(mockAtChops);
   });
   group('A group of test to validate notification request transformer', () {
@@ -105,7 +100,13 @@ void main() {
       when(() => mockAtClientImpl.getPreferences()).thenReturn(
         AtClientPreference()
           ..namespace = 'wavi'
-          ..crypto = const CryptoConfig(defaultProviderId: 'legacy'),
+          // Notifications with no override route to the 'legacy' provider;
+          // register a CipherProvider under that id so the runtime resolves it
+          // and produces the expected 'abc...' ciphertext.
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'legacy',
+            providers: [CipherProvider('legacy')],
+          ),
       );
       when(() => mockAtClientImpl.preference!.namespace).thenReturn('wavi');
     });
@@ -415,6 +416,16 @@ void main() {
       notificationParams.atKey.metadata.isEncrypted = true;
       notificationParams.atKey.metadata.appMetadata =
           AppMetadata(providerId: 'test_provider');
+      // The key pins providerId 'test_provider'; register a CipherProvider
+      // under that id so the runtime routes encryption to it.
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'wavi'
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'legacy',
+            providers: [CipherProvider('test_provider')],
+          ),
+      );
       var notifyVerbBuilder =
           await NotificationRequestTransformer(mockAtClientImpl)
               .transform(notificationParams);
@@ -429,11 +440,11 @@ void main() {
       when(() => mockAtClientImpl.getPreferences()).thenReturn(
         AtClientPreference()
           ..namespace = 'wavi'
-          ..crypto = const CryptoConfig(defaultProviderId: 'default-provider'),
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'default-provider',
+            providers: [CipherProvider('default-provider')],
+          ),
       );
-      when(() => mockCryptoRegistry.lookup(any(),
-              lookupReason: any(named: 'lookupReason')))
-          .thenReturn(CipherProvider('default-provider'));
       var notificationParams = NotificationParams.forUpdate(
         (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob')).build(),
         value: value,
@@ -453,11 +464,14 @@ void main() {
       when(() => mockAtClientImpl.getPreferences()).thenReturn(
         AtClientPreference()
           ..namespace = 'wavi'
-          ..crypto = const CryptoConfig(defaultProviderId: 'default-provider'),
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'default-provider',
+            providers: [
+              CipherProvider('default-provider'),
+              CipherProvider('override-provider'),
+            ],
+          ),
       );
-      when(() => mockCryptoRegistry.lookup(any(),
-              lookupReason: any(named: 'lookupReason')))
-          .thenReturn(CipherProvider('override-provider'));
       var notificationParams = NotificationParams.forUpdate(
         (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob')).build(),
         value: value,
@@ -518,16 +532,18 @@ void main() {
       when(() => mockAtClientImpl.getPreferences()).thenReturn(
         AtClientPreference()
           ..namespace = 'wavi'
-          ..crypto = const CryptoConfig(defaultProviderId: 'default-provider'),
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'default-provider',
+            providers: [
+              CipherProvider('default-provider'),
+              CipherProvider('override-provider'),
+            ],
+          ),
       );
-      when(() => mockCryptoRegistry.lookup('override-provider',
-              lookupReason: any(named: 'lookupReason')))
-          .thenReturn(CipherProvider('override-provider'));
       when(() => mockAtClientImpl.getRemoteSecondary())
           .thenReturn(remoteSecondary);
       when(() => remoteSecondary.executeCommand(any(), auth: true))
           .thenAnswer((_) async => 'data:ok');
-      clearInteractions(mockCryptoRegistry);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
         mockAtClientImpl,
@@ -546,6 +562,8 @@ void main() {
           verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
               .captured
               .single as String;
+      // The send routed encryption to the override provider, so the wire
+      // appMetadata carries that providerId (not the preference default).
       expect(
         command,
         contains(
@@ -553,10 +571,11 @@ void main() {
           '${Metadata.encodeAppMetadata(AppMetadata(providerId: 'override-provider'))}',
         ),
       );
-      verify(() => mockCryptoRegistry.lookup('override-provider',
-          lookupReason: 'notify')).called(1);
-      verifyNever(() => mockCryptoRegistry.lookup('default-provider',
-          lookupReason: any(named: 'lookupReason')));
+      expect(
+        command,
+        isNot(contains(Metadata.encodeAppMetadata(
+            AppMetadata(providerId: 'default-provider')))),
+      );
     });
 
     test('send without cryptoProviderId uses preference default provider',
@@ -565,16 +584,15 @@ void main() {
       when(() => mockAtClientImpl.getPreferences()).thenReturn(
         AtClientPreference()
           ..namespace = 'wavi'
-          ..crypto = const CryptoConfig(defaultProviderId: 'default-provider'),
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'default-provider',
+            providers: [CipherProvider('default-provider')],
+          ),
       );
-      when(() => mockCryptoRegistry.lookup('default-provider',
-              lookupReason: any(named: 'lookupReason')))
-          .thenReturn(CipherProvider('default-provider'));
       when(() => mockAtClientImpl.getRemoteSecondary())
           .thenReturn(remoteSecondary);
       when(() => remoteSecondary.executeCommand(any(), auth: true))
           .thenAnswer((_) async => 'data:ok');
-      clearInteractions(mockCryptoRegistry);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
         mockAtClientImpl,
@@ -592,6 +610,8 @@ void main() {
           verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
               .captured
               .single as String;
+      // With no override, the send routed encryption to the preference default
+      // provider, so the wire appMetadata carries that providerId.
       expect(
         command,
         contains(
@@ -599,14 +619,23 @@ void main() {
           '${Metadata.encodeAppMetadata(AppMetadata(providerId: 'default-provider'))}',
         ),
       );
-      verify(() => mockCryptoRegistry.lookup('default-provider',
-          lookupReason: 'notify')).called(1);
     });
   });
 
   group('A group of test to validate notification response transformer', () {
     setUp(() {
       registerFallbackValue(FakeAtKey());
+      // Notifications here carry no appMetadata.providerId, so decryption
+      // routes to the 'legacy' provider; register a CipherProvider under that
+      // id so the runtime decrypts via it (substring(3)).
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'wavi'
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'legacy',
+            providers: [CipherProvider('legacy')],
+          ),
+      );
     });
 
     test('AtNotification.fromJson decodes app metadata', () {
@@ -775,8 +804,16 @@ void main() {
 
   group('A group of tests to validate notification exception chaining', () {
     setUp(() {
+      // The notifications here route to the 'legacy' provider (the default).
+      // Register an ErrorProvider under that id so encryption throws 'error',
+      // exercising the exception-chaining paths.
       when(() => mockAtClientImpl.getPreferences())
-          .thenAnswer((_) => AtClientPreference()..namespace = 'wavi');
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..crypto = CryptoConfig(
+              defaultProviderId: 'legacy',
+              providers: [ErrorProvider('legacy')],
+            ));
     });
     test('A test to validate exception chaining on encryption failure',
         () async {
@@ -792,12 +829,6 @@ void main() {
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
       when(() => mockAtClientManager.secondaryAddressFinder)
           .thenAnswer((_) => mockSecondaryAddressFinder);
-      when(() => mockCryptoRegistry.lookup(any())).thenReturn(ErrorProvider());
-      when(() => mockCryptoRegistry.lookup(any(),
-              lookupReason: any(named: 'lookupReason')))
-          .thenReturn(ErrorProvider());
-      when(() => mockAtClientImpl.cryptoRegistry)
-          .thenReturn(mockCryptoRegistry);
       when(() => mockAtClientImpl.atChops).thenReturn(mockAtChops);
       when(() => mockAtClientManager.atClient)
           .thenAnswer((_) => mockAtClientImpl);

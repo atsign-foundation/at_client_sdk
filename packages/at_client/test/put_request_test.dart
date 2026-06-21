@@ -164,25 +164,25 @@ void main() {
   group('A group of tests to validate crypto provider selection', () {
     late MockAtClientImpl mockAtClient;
     late MockAtChops mockAtChops;
-    late CryptoRegistry cryptoRegistry;
+    late CryptoConfig cryptoConfig;
 
     setUp(() {
       mockAtClient = MockAtClientImpl();
       mockAtChops = MockAtChops();
-      cryptoRegistry = CryptoRegistry()
-        ..register(CipherProvider('default-provider'))
-        ..register(CipherProvider('override-provider'));
+      cryptoConfig = CryptoConfig(
+        defaultProviderId: 'default-provider',
+        providers: [
+          CipherProvider('default-provider'),
+          CipherProvider('override-provider'),
+        ],
+      );
       when(() => mockAtClient.atChops).thenReturn(mockAtChops);
-      when(() => mockAtClient.cryptoRegistry).thenReturn(cryptoRegistry);
     });
 
     test('uses preference default crypto provider when request has no override',
         () async {
       when(() => mockAtClient.getPreferences()).thenReturn(
-        AtClientPreference()
-          ..crypto = const CryptoConfig(
-            defaultProviderId: 'default-provider',
-          ),
+        AtClientPreference()..crypto = cryptoConfig,
       );
       final transformer = PutRequestTransformer()..atClient = mockAtClient;
       final atKey =
@@ -205,10 +205,7 @@ void main() {
 
     test('uses request crypto provider override when present', () async {
       when(() => mockAtClient.getPreferences()).thenReturn(
-        AtClientPreference()
-          ..crypto = const CryptoConfig(
-            defaultProviderId: 'default-provider',
-          ),
+        AtClientPreference()..crypto = cryptoConfig,
       );
       final transformer = PutRequestTransformer()..atClient = mockAtClient;
       final atKey =
@@ -234,10 +231,7 @@ void main() {
     test('does not write provider metadata when encryption is disabled',
         () async {
       when(() => mockAtClient.getPreferences()).thenReturn(
-        AtClientPreference()
-          ..crypto = const CryptoConfig(
-            defaultProviderId: 'default-provider',
-          ),
+        AtClientPreference()..crypto = cryptoConfig,
       );
       final transformer = PutRequestTransformer()..atClient = mockAtClient;
       final atKey =

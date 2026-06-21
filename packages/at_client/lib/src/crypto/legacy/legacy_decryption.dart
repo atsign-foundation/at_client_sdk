@@ -1,7 +1,6 @@
 import 'package:at_commons/at_builders.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_utils/at_logger.dart';
 import 'legacy_encryption.dart';
@@ -10,11 +9,10 @@ class LegacyDecryption {
   static AtKeyDecryption build(AtKey key, AtClient atClient) {
     AppMetadata? meta = key.metadata.appMetadata;
     // Legacy values carry either no appMetadata (old data / old clients) or
-    // appMetadata{providerId:'legacy'} (LegacyCryptoProvider stamps the
-    // default provider id on encrypt). Both route here via CryptoRuntime and
-    // must use the legacy strategy. Only a NON-legacy providerId reaching
-    // this builder is a routing bug.
-    if (meta == null || meta.providerId == CryptoRuntime.legacyProviderId) {
+    // appMetadata{providerId:'legacy'} (the runtime stamps the default provider
+    // id on encrypt). Both route here and must use the legacy strategy. Only a
+    // NON-legacy providerId reaching this builder is a routing bug.
+    if (meta == null || meta.providerId == legacyCryptoProviderId) {
       //legacy implementation
       Atsign myAtsign = atClient.getCurrentAtSign()!.toAtsign();
       if (key.sharedBy != myAtsign) {

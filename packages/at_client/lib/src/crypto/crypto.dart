@@ -10,12 +10,12 @@ class CryptoConfig {
   /// Provider used when an [AtKey] carries no `appMetadata.providerId`.
   final String defaultProviderId;
 
-  /// Provider instances registered with the client at construction.
+  /// The provider instances the SDK resolves against, in addition to the
+  /// built-in legacy provider.
   ///
   /// Providers are stateless, so an instance is normally safe to share. Supply
   /// a fresh instance per atSign only if your provider holds per-atSign state —
-  /// the same instance is registered against each client that reuses this
-  /// preference.
+  /// the same config can back any client that reuses this preference.
   final List<CryptoProvider> providers;
 
   const CryptoConfig({
@@ -27,6 +27,18 @@ class CryptoConfig {
   const CryptoConfig.legacy()
       : defaultProviderId = legacyCryptoProviderId,
         providers = const [];
+
+  /// The configured provider with [id], or null if none matches.
+  ///
+  /// The built-in legacy provider is not in [providers]; the SDK supplies it as
+  /// a fallback for [legacyCryptoProviderId], so a null result for that id
+  /// still resolves.
+  CryptoProvider? lookup(String id) {
+    for (final provider in providers) {
+      if (provider.id == id) return provider;
+    }
+    return null;
+  }
 }
 
 /// What a [CryptoProvider] is handed per operation.
@@ -79,53 +91,4 @@ abstract class CryptoProvider {
   /// (a `Base2e15`-encoded string for binary records). Throw an [AtException]
   /// subclass (e.g. [AtDecryptionException]) on failure.
   Future<String> decrypt(CryptoContext context, AtKey atKey, String ciphertext);
-}
-
-/// Per-[AtClient] registry of [CryptoProvider]s, keyed by [CryptoProvider.id].
-class CryptoRegistry {
-  final Map<String, CryptoProvider> _providers = <String, CryptoProvider>{};
-
-  /// Registers [provider] under its [CryptoProvider.id]. Throws [ArgumentError]
-  /// if that id is already registered, unless [replace] is true.
-  void register(CryptoProvider provider, {bool replace = false}) {
-    if (!replace && _providers.containsKey(provider.id)) {
-      throw ArgumentError.value(
-        provider.id,
-        'provider.id',
-        'Crypto provider id is already registered. '
-            'Pass replace: true to replace it intentionally.',
-      );
-    }
-    _providers[provider.id] = provider;
-  }
-
-  /// Look up [id], or throw [CryptoProviderNotRegistered] if absent.
-  ///
-  /// [lookupReason] is woven into the not-registered error to aid diagnosis —
-  /// typically the operation that triggered the lookup (e.g. `'put'`).
-  CryptoProvider lookup(String id, {String lookupReason = 'none'}) {
-    final provider = _providers[id];
-    if (provider == null) {
-      throw CryptoProviderNotRegistered(
-        _notRegisteredMessage(id, lookupReason: lookupReason),
-      );
-    }
-    return provider;
-  }
-
-  /// Whether a provider with [id] is registered.
-  bool contains(String id) => _providers.containsKey(id);
-
-  /// The ids of all currently registered providers.
-  List<String> get registeredProviderIds =>
-      _providers.keys.toList(growable: false);
-
-  String _notRegisteredMessage(String id, {String lookupReason = 'none'}) {
-    final ids = registeredProviderIds;
-    final registered = ids.isEmpty ? 'none' : ids.join(', ');
-    return 'Crypto provider "$id" is not registered. '
-        'Lookup reason: $lookupReason. '
-        'Registered providers: $registered. '
-        'Add it to AtClientPreference.crypto.providers.';
-  }
 }

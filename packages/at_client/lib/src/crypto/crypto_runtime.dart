@@ -1,5 +1,6 @@
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
 import 'package:at_commons/at_commons.dart';
 
 /// Routes encryption/decryption to the [CryptoProvider] named by an [AtKey]'s
@@ -76,10 +77,33 @@ class CryptoRuntime {
         .decrypt(_context(), atKey, (value as String?) ?? '');
   }
 
+  // The built-in fallback, always available for [legacyProviderId] without the
+  // app having to list it in CryptoConfig.providers.
+  static final LegacyCryptoProvider _legacy = LegacyCryptoProvider();
+
   CryptoProvider _provider(AtKey atKey, String operation) {
     final providerId =
         atKey.metadata.appMetadata?.providerId ?? legacyProviderId;
-    return _atClient.cryptoRegistry.lookup(providerId, lookupReason: operation);
+    final config =
+        _atClient.getPreferences()?.crypto ?? const CryptoConfig.legacy();
+    final provider = config.lookup(providerId);
+    if (provider != null) return provider;
+    if (providerId == legacyProviderId) return _legacy;
+    throw CryptoProviderNotRegistered(
+      _notRegisteredMessage(config, providerId, operation),
+    );
+  }
+
+  String _notRegisteredMessage(
+    CryptoConfig config,
+    String id,
+    String lookupReason,
+  ) {
+    final ids = [legacyProviderId, ...config.providers.map((p) => p.id)];
+    return 'Crypto provider "$id" is not registered. '
+        'Lookup reason: $lookupReason. '
+        'Registered providers: ${ids.join(', ')}. '
+        'Add it to AtClientPreference.crypto.providers.';
   }
 
   CryptoContext _context() => CryptoContext(atClient: _atClient);

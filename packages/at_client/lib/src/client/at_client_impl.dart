@@ -7,7 +7,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
-import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
@@ -85,11 +84,6 @@ class AtClientImpl implements AtClient {
   AtChops? get atChops => _atChops;
 
   /// Keeps track of CryptoProviders registered with this AtClient
-  /// Providers are declared during AtClient creation at the Preference level.
-  /// See [AtClientPreference.crypto] and [CryptoConfig] for specific details.
-  @override
-  final CryptoRegistry cryptoRegistry = CryptoRegistry();
-
   // ---------------------------------------------------------------------------
   // DataEvent stream — fires on every successful keystore mutation that
   // passes through `LocalSecondary._update` or `LocalSecondary._delete`,
@@ -317,11 +311,11 @@ class AtClientImpl implements AtClient {
     if (atClientInstanceMap.containsKey(currentAtSign)) {
       atClientImpl = atClientInstanceMap[currentAtSign];
       await atClientImpl!.start();
-      // Re-using a cached AtClient skips _init (and its crypto-provider
-      // registration). Register any providers from the supplied preference that
-      // aren't already present, so providers added after first creation aren't
-      // silently dropped when setCurrentAtSign re-uses this instance.
-      atClientImpl.reconcileCryptoProviders(preferences);
+      // Re-using a cached AtClient skips _init. Adopt the supplied preference's
+      // crypto config so providers (and a changed defaultProviderId) added
+      // after first creation take effect; CryptoRuntime resolves against the
+      // live preference.crypto, so there is nothing else to reconcile.
+      atClientImpl.getPreferences()?.crypto = preferences.crypto;
     } else {
       atClientImpl = AtClientImpl._(
         currentAtSign,
@@ -383,7 +377,7 @@ class AtClientImpl implements AtClient {
         onEvent: emitDataEvent,
       );
       _atChops ??= await _createAtChops(_atSign);
-      _initializeCryptoProviders();
+      _validateDefaultCryptoProvider();
 
       // Wire the event-driven expiry timer to the data-events stream.
       // Re-arms on every keystore mutation; first arm uses the current
@@ -1161,27 +1155,19 @@ class AtClientImpl implements AtClient {
     return chops;
   }
 
-  void _initializeCryptoProviders() {
-    cryptoRegistry.register(LegacyCryptoProvider());
-    for (final provider in _preference!.crypto.providers) {
-      cryptoRegistry.register(provider);
-    }
-    cryptoRegistry.lookup(
-      _preference!.crypto.defaultProviderId,
-      lookupReason: 'initialize',
-    );
-  }
-
-  /// Registers any [CryptoProvider]s declared in [preferences] that are not
-  /// already in [cryptoRegistry]. Called when [create] re-uses a cached
-  /// AtClient (which skips [_init] and its provider registration), so providers
-  /// added to the preference after the client was first created take effect on
-  /// the next [AtClientManager.setCurrentAtSign] instead of being silently
-  /// dropped. Existing providers and `defaultProviderId` are left untouched.
-  void reconcileCryptoProviders(AtClientPreference preferences) {
-    for (final provider in preferences.crypto.providers) {
-      if (cryptoRegistry.contains(provider.id)) continue;
-      cryptoRegistry.register(provider);
+  /// Fails fast at construction if the configured default provider id can't be
+  /// resolved — neither among `AtClientPreference.crypto.providers` nor the
+  /// built-in legacy provider. Crypto resolution itself is done by
+  /// [CryptoRuntime] against the live `preference.crypto`, so there is no
+  /// per-client registry to populate.
+  void _validateDefaultCryptoProvider() {
+    final config = _preference!.crypto;
+    final id = config.defaultProviderId;
+    if (config.lookup(id) == null && id != legacyCryptoProviderId) {
+      throw CryptoProviderNotRegistered(
+        'Default crypto provider "$id" is not registered. '
+        'Add it to AtClientPreference.crypto.providers.',
+      );
     }
   }
 

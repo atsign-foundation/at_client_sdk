@@ -9,21 +9,24 @@ void main() {
   group('CryptoRuntime', () {
     late MockAtClient mockAtClient;
     late MockAtChops mockAtChops;
-    late CryptoRegistry registry;
     late _RecordingProvider legacyProvider;
     late _RecordingProvider customProvider;
+
+    // Point the client's preference at a CryptoConfig holding [providers];
+    // CryptoRuntime resolves against preference.crypto (no separate registry).
+    void configure(List<CryptoProvider> providers,
+        {String defaultId = 'legacy'}) {
+      mockAtClient.getPreferences().crypto =
+          CryptoConfig(defaultProviderId: defaultId, providers: providers);
+    }
 
     setUp(() {
       mockAtClient = MockAtClient();
       mockAtChops = MockAtChops();
-      registry = CryptoRegistry();
       legacyProvider = _RecordingProvider('legacy');
       customProvider = _RecordingProvider('custom');
-
-      registry.register(legacyProvider);
-      registry.register(customProvider);
       when(() => mockAtClient.atChops).thenReturn(mockAtChops);
-      when(() => mockAtClient.cryptoRegistry).thenReturn(registry);
+      configure([legacyProvider, customProvider]);
     });
 
     test('uses legacy provider when appMetadata is absent', () async {
@@ -55,7 +58,7 @@ void main() {
 
     test('preserves provider-owned additional metadata', () async {
       final provider = _MetadataProvider();
-      registry.register(provider);
+      configure([provider]);
       final atKey = AtKey()
         ..metadata = (Metadata()
           ..appMetadata = AppMetadata(providerId: 'metadata-provider'));
@@ -87,7 +90,15 @@ void main() {
 
       await expectLater(
         () => CryptoRuntime(mockAtClient).decryptForGet(atKey, 'ciphertext'),
-        throwsA(isA<CryptoProviderNotRegistered>()),
+        throwsA(isA<CryptoProviderNotRegistered>().having(
+          (e) => e.message,
+          'message',
+          allOf(
+            contains('missing-provider'),
+            contains('Lookup reason: get'),
+            contains('custom'),
+          ),
+        )),
       );
       expect(legacyProvider.decryptCalls, 0);
       expect(customProvider.decryptCalls, 0);
@@ -123,7 +134,7 @@ void main() {
 
     test('stamps providerId and isEncrypted even when the provider does not',
         () async {
-      registry.register(_BareProvider());
+      configure([_BareProvider()]);
       final atKey = AtKey()
         ..metadata =
             (Metadata()..appMetadata = AppMetadata(providerId: 'bare'));

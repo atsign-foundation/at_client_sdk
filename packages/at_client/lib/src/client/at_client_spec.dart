@@ -58,9 +58,6 @@ abstract class AtClient {
 
   AtChops? get atChops;
 
-  /// Registry for client-level crypto providers.
-  CryptoRegistry get cryptoRegistry;
-
   /// Enrollment id for apkam enrolled clients
   set enrollmentId(String? enrollmentId);
 

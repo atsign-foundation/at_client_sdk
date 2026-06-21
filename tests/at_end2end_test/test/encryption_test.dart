@@ -41,11 +41,11 @@ void main() {
       );
     }
 
-    // The provider is registered by the SDK, not by this test: switching to
-    // this atSign re-uses the cached AtClient and AtClientImpl.create()
-    // reconciles the crypto providers from this preference onto it (see
-    // AtClientImpl.reconcileCryptoProviders). This test depends on that
-    // production behaviour.
+    // The provider is configured via the preference, not registered by this
+    // test: switching to this atSign re-uses the cached AtClient, and
+    // AtClientImpl.create() adopts this preference's crypto config onto it
+    // (CryptoRuntime resolves against the live preference.crypto). This test
+    // depends on that production behaviour.
     final atClientManager =
         await AtClientManager.getInstance().setCurrentAtSign(
       atSign,

@@ -12,16 +12,20 @@ void main() {
   group('A group of test for GetResponseTransformer', () {
     late MockAtClient mockAtClient;
     late MockAtChops mockAtChops;
-    late MockCryptoRegistry mockCryptoRegistry;
     late GetResponseTransformer transformer;
     setUp(() {
       mockAtClient = MockAtClient();
       mockAtChops = MockAtChops();
-      mockCryptoRegistry = MockCryptoRegistry();
       transformer = GetResponseTransformer(mockAtClient);
       when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
       when(() => mockAtClient.atChops).thenReturn(mockAtChops);
-      when(() => mockAtClient.cryptoRegistry).thenReturn(mockCryptoRegistry);
+      // Data in these tests carries no appMetadata.providerId, so the get path
+      // looks up the 'legacy' provider; register a CipherProvider under that id
+      // so the runtime resolves it.
+      mockAtClient.getPreferences().crypto = CryptoConfig(
+        defaultProviderId: 'legacy',
+        providers: [CipherProvider('legacy')],
+      );
     });
     test('A test to validate new line character decoding', () async {
       var atKey = AtKey()
@@ -115,10 +119,6 @@ void main() {
         ..two =
             '{"data": "abcshared_phone_number", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": true}}';
 
-      when(() => mockCryptoRegistry.lookup('legacy',
-              lookupReason: any(named: 'lookupReason')))
-          .thenReturn(CipherProvider());
-
       var result = await transformer.transform(tuple);
 
       expect(result.value, equals('shared_phone_number'));
@@ -140,10 +140,6 @@ void main() {
 
       // Even if a provider WOULD strip the value, explicit isEncrypted=false
       // means the value was deliberately stored unencrypted: return it as-is.
-      when(() => mockCryptoRegistry.lookup('legacy',
-              lookupReason: any(named: 'lookupReason')))
-          .thenReturn(CipherProvider());
-
       var result = await transformer.transform(tuple);
 
       expect(result.value, equals('abcdecrypted_data'));
@@ -162,10 +158,6 @@ void main() {
         ..one = atKey
         ..two =
             '{"data": "abcdecrypted_data", "key": "@bob:$keyName@alice","metaData": {"ttl": 0}}';
-
-      when(() => mockCryptoRegistry.lookup('legacy',
-              lookupReason: any(named: 'lookupReason')))
-          .thenReturn(CipherProvider());
 
       var result = await transformer.transform(tuple);
 
@@ -186,9 +178,13 @@ void main() {
         ..two =
             '{"data": "plain_phone_number", "key": "@bob:$keyName@alice","metaData": {"ttl": 0}}';
 
-      when(() => mockCryptoRegistry.lookup('legacy',
-              lookupReason: any(named: 'lookupReason')))
-          .thenReturn(FormatExceptionProvider());
+      // A FormatExceptionProvider models a provider handed plaintext (not valid
+      // ciphertext); the get path's legacy try-decrypt fallback returns the raw
+      // value. Register it under the looked-up 'legacy' id.
+      mockAtClient.getPreferences().crypto = CryptoConfig(
+        defaultProviderId: 'legacy',
+        providers: [FormatExceptionProvider('legacy')],
+      );
 
       var result = await transformer.transform(tuple);
 
@@ -203,13 +199,20 @@ void main() {
         ..key = 'phone'
         ..sharedBy = '@alice'
         ..sharedWith = '@bob';
+      // The decoded metaData carries a non-'legacy' providerId that is absent
+      // from the config, so resolution throws CryptoProviderNotRegistered (the
+      // 'legacy' id always falls back and never throws). The transformer
+      // overwrites tuple.one.metadata from this JSON, so the routing providerId
+      // must be encoded here.
+      final encodedAppMetadata = Metadata.encodeAppMetadata(
+          AppMetadata(providerId: 'absent-provider'));
       final tuple = Tuple<AtKey, String>()
         ..one = atKey
         ..two =
-            '{"data": "shared_phone_number", "key": "@bob:phone@alice","metaData": {"isEncrypted": true}}';
-      when(() => mockCryptoRegistry.lookup(any(),
-              lookupReason: any(named: 'lookupReason')))
-          .thenThrow(CryptoProviderNotRegistered('error'));
+            '{"data": "shared_phone_number", "key": "@bob:phone@alice","metaData": {"isEncrypted": true, "${AtConstants.appMetadata}": "$encodedAppMetadata"}}';
+      mockAtClient.getPreferences().crypto = const CryptoConfig(
+        defaultProviderId: 'legacy',
+      );
 
       expect(() async => await transformer.transform(tuple),
           throwsA(isA<AtException>()));
@@ -227,9 +230,12 @@ void main() {
         ..two =
             '{"data": "shared_phone_number", "key": "@bob:phone@alice","metaData": {"isEncrypted": true}}';
 
-      when(() => mockCryptoRegistry.lookup(any(),
-              lookupReason: any(named: 'lookupReason')))
-          .thenReturn(ErrorProvider());
+      // The data routes to 'legacy'; make that provider one whose decrypt
+      // throws, so the transformer surfaces an AtException.
+      mockAtClient.getPreferences().crypto = CryptoConfig(
+        defaultProviderId: 'legacy',
+        providers: [ErrorProvider('legacy')],
+      );
       expect(() async => await transformer.transform(tuple),
           throwsA(isA<AtException>()));
     });
