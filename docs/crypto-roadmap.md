@@ -801,7 +801,7 @@ breaking barrel cut, removing the lockstep crunch. Publish in dependency order:
 | 1 | `at_chops` | minor `3.2.1 → 3.3.0` | stateless functional core + HPKE `pqSeal`/`pqOpen` **added**; stateful `AtChopsImpl` kept as `@Deprecated` shim (additive) |
 | 2 | `at_auth` | minor `3.1.1 → 3.2.0` | **additive API:** `WritableAtKeys` added; `AtKeysIo`/`WrittenAtKeysIo` widened (add/remove/update, default impls); `InMemoryAtKeysIo`. No barrel change yet — downstream can adopt `WritableAtKeys` immediately |
 | 3 | `at_auth` | **major `3.2.0 → 4.0.0`** | **breaking WASM cut:** `FileAtKeysIo` out of the main barrel (→ `at_auth_io.dart`); `FileAtKeysIo()` default removed; registrar → `package:http`; probe extracted; core compiles under `dart2wasm` |
-| 4 | `at_client` | minor `3.13.0 → 3.14.0` | `at_auth ^4.0.0`; `CryptoContext` gains `WritableAtKeys` (additive; `atChops` field `@Deprecated`); `LocalKeystoreAtKeysIo`; `nskey` provider scaffold |
+| 4 | `at_client` | minor `3.13.0 → 3.14.0` | `at_auth ^4.0.0`; `CryptoContext` gains a `WritableAtKeys keys` field (additive; context is `{atClient}` today — nothing to deprecate); `LocalKeystoreAtKeysIo`; `nskey` provider scaffold |
 | 5 | `at_onboarding_cli` | minor `1.16.0 → 1.17.0` | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; injects it explicitly (default gone) |
 | 6 | `at_client_flutter` | minor `1.1.3 → 1.2.0` | `at_auth ^4.0.0`; `file_picker` imports `at_auth_io.dart` |
 | 7 | `at_cli_commons` | minor (constraint bump) | consumes the new `at_onboarding_cli` / `at_client` |

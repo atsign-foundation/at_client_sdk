@@ -142,9 +142,12 @@ version/sequencing table).
   as a `@Deprecated` shim over it so the ~65 construction sites compile
   unchanged and migrate gradually. *Acceptance:* all at_chops vectors green via
   both surfaces; consumers unbroken.
-- [ ] **S2 · `WritableAtKeys` holder + explicit dumb stores** (`at_auth`). The
-  unified in-memory holder (`add`/`remove`/`write`); composed at AtClient
-  construction; convergence stays in the secret-sharing substrate. Stores:
+- [ ] **S2 · `WritableAtKeys` holder + explicit dumb stores** (`at_auth`). A
+  **subclass of at_auth's `AtKeys`** (the key-material holder) adding
+  `add`/`remove`/`write`; composed at AtClient construction; convergence stays
+  in the secret-sharing substrate. *(NOT a wrapper around `AtChops` — `AtKeys`
+  already produces one via `toAtChops()` and carries a `metadata` stash.)*
+  Stores:
   `InMemoryAtKeysIo` (at_auth main), `FileAtKeysIo` (at_auth_io — updatable, see
   S4), `LocalKeystoreAtKeysIo` (at_client, injected), `KeychainAtKeysIo`
   (at_client_flutter). *Acceptance:* a provider can mint→add→write a key and
@@ -163,10 +166,12 @@ version/sequencing table).
   succeeds against the `at_auth.dart` core; CLI + flutter (importing
   `at_auth_io.dart`) unbroken; auth/onboard functional tests green.
 - [ ] **S5 · Providers onto `WritableAtKeys`** (`at_client` minor `3.14.0`).
-  `CryptoContext` gains a `WritableAtKeys` field (additive; `atChops`
-  `@Deprecated`); `LegacyCryptoProvider` reads keys from it; `LocalKeystoreAtKeysIo`
-  lands here and is injected into `WritableAtKeys` at AtClient construction.
-  *Acceptance:* legacy + group providers operate via `WritableAtKeys`; existing
+  `CryptoContext` gains a `WritableAtKeys keys` field (additive — after the slim
+  refactor `CryptoContext` is `{atClient}`, so there is **no `atChops` field to
+  deprecate**); the (stateless) `LegacyCryptoProvider` reads keys from
+  `context.keys` instead of `context.atClient`; `LocalKeystoreAtKeysIo` is
+  injected into `WritableAtKeys` at AtClient construction.
+  *Acceptance:* legacy + group providers operate via `context.keys`; existing
   unit/functional suites green.
 - [ ] **S6 · Consumer constraint bumps + sequencing.** `at_client` /
   `at_onboarding_cli` (`1.17.0`) / `at_client_flutter` (`1.2.0`) /
@@ -520,6 +525,20 @@ Within `at_client/crypto/`, the file partition keeps A and C apart: **C** owns
 `crypto/nskey/` (new), `secret_sharing/`. The `nskey` provider is mostly new
 files — low collision by construction.
 
+### Reconciliations since the slim refactor (`xl-pluggable`)
+The slim-API + registry-fold landed on `xl-pluggable` (PR #1930) after this §7
+was first written; three assumptions shifted:
+1. **`CryptoContext` is `{atClient}`** — no `atChops` field. WP3 just *adds*
+   `WritableAtKeys keys`; nothing to deprecate.
+2. **`WritableAtKeys` subclasses at_auth's `AtKeys`** (the material holder),
+   not a wrapper over `AtChops` (WP2).
+3. **No `CryptoRegistry`** — `CryptoRuntime` resolves against the live
+   `AtClientPreference.crypto` (`CryptoConfig.lookup` + a built-in legacy
+   fallback), and cached-client reuse adopts the new config. WP6/WP7 add a
+   provider to `CryptoConfig.providers` and read `context`; there is no registry
+   to register against. The SDK stamps `appMetadata.providerId` + `isEncrypted`,
+   so providers only contribute `additional`.
+
 ### Phase 0 — unblock (blocks everything)
 - Land **PR #1930** (4b pluggable crypto) → trunk: the M0 seam in published
   at_client. **The single biggest unblock** — until it lands, the integration
@@ -530,8 +549,8 @@ files — low collision by construction.
 | WP | Track | What | Bump |
 |----|-------|------|------|
 | WP1 | A | `at_chops` stateless core + `@Deprecated` shim; fold HPKE onto existing GCM/HKDF | `at_chops 3.3.0` |
-| WP2 | B | `WritableAtKeys` + widen `AtKeysIo`/`WrittenAtKeysIo` (add/remove/update, default impls) + `InMemoryAtKeysIo` — **API only** | `at_auth 3.2.0` |
-| WP3 | C | `CryptoContext` gains a `WritableAtKeys` field (additive; `atChops` `@Deprecated`) | at_client |
+| WP2 | B | `WritableAtKeys extends AtKeys` + widen `AtKeysIo`/`WrittenAtKeysIo` (add/remove/update, default impls) + `InMemoryAtKeysIo` — **API only** | `at_auth 3.2.0` |
+| WP3 | C | `CryptoContext` gains a `WritableAtKeys keys` field (additive) | at_client |
 | WP4 | D | `LocalKeystoreAtKeysIo` + the updatable `.atKeys` file path | at_client / at_auth |
 
 ### Phase 2 — build on contracts (parallel)
@@ -571,3 +590,41 @@ early, with no standing integration branch to drift.
   path `dependency_overrides` for local cross-package dev (don't commit lock
   churn); **trunk is the integration point** — prove cross-package combinations
   with an *ephemeral* integration branch (or CI), not a standing one.
+
+### Phase-1 PR stubs (ready to assign once Phase 0 is on trunk)
+
+Four small, additive, single-package PRs — one per track, started in parallel.
+Land the three interface-defining ones (WP1/WP2/WP3 signatures) first, stubs OK,
+so every track compiles against stable shapes. Full acceptance detail is in §3
+(D1-S S1/S2/S5, D1-A). **Prereqs on trunk:** PR #1930 (M0 seam), PR #1993 (HPKE),
+the four at_chops-routing PRs (#1995–1998).
+
+- **WP1 · `feat(at_chops): stateless core + HPKE`** (Track A).
+  Add a stateless functional surface (keys passed per call) beside `AtChopsImpl`;
+  keep `AtChopsImpl(keys)` as a `@Deprecated` shim. Fold `pqSeal`/`pqOpen` (from
+  the revised #1993) onto the existing `AesGcm256EncryptionAlgo`/`HkdfSha256`/
+  `HmacSha256`. *Files:* `at_chops/lib/src/` + `pq_hpke.dart`. *Bump:* `at_chops
+  3.2.1 → 3.3.0`. *Depends:* #1993 revised. *Done:* all vectors green via both
+  surfaces; pqSeal round-trip / tamper→`authFailure` / info-aad-mismatch tests.
+
+- **WP2 · `feat(at_auth): WritableAtKeys + AtKeysIo widening (API only)`** (Track B).
+  `WritableAtKeys extends AtKeys` (`add`/`remove`/`write`); widen
+  `AtKeysIo`/`WrittenAtKeysIo` (add/remove/update with default impls);
+  `InMemoryAtKeysIo`. No behaviour change to onboard/auth. *Files:*
+  `at_auth/lib/src/keys/`. *Bump:* `at_auth 3.2.0`. *Depends:* #1996 merged.
+  *Done:* existing at_auth suites green; new API unit-tested.
+
+- **WP3 · `feat(at_client): CryptoContext.keys`** (Track C).
+  `CryptoContext` gains a `WritableAtKeys keys` field (additive), built at
+  AtClient construction from auth's `AtKeys`. Providers may read it; legacy
+  unchanged for now. *Files:* `crypto.dart`, `at_client_impl.dart` (`_context()`),
+  `crypto_runtime.dart`. *Bump:* at_client (fold into the in-progress version).
+  *Depends:* #1930; WP2's `WritableAtKeys` type (interface-first). *Done:*
+  context carries `keys`; crypto suites green.
+
+- **WP4 · `feat: LocalKeystoreAtKeysIo + updatable .atKeys`** (Track D).
+  `LocalKeystoreAtKeysIo` (at_client) + make the `.atKeys` path updatable
+  (`WrittenAtKeysIo` update path; re-wrap self-enc key; atomic write + backup).
+  *Files:* at_client storage + at_auth `FileAtKeysIo`. *Bump:* at_client /
+  at_auth. *Depends:* WP2 (`AtKeysIo` API). *Done:* a post-onboarding key add
+  persists + survives restart; migration test on a v(N-1) fixture.
