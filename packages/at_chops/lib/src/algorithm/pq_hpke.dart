@@ -1,32 +1,36 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algorithm/aes_gcm_encryption_algo.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
-import 'package:cryptography/cryptography.dart';
+import 'package:at_chops/src/algorithm/at_iv.dart';
+import 'package:at_chops/src/algorithm/hkdf_algo.dart';
+import 'package:at_chops/src/key/impl/aes_key.dart';
+import 'package:at_commons/at_commons.dart';
 
-/// HPKE-base-style authenticated public-key encryption over an X-Wing KEM.
+/// HPKE-*style* authenticated public-key encryption over an X-Wing KEM.
 ///
-/// Mirrors RFC 9180 HPKE SealBase/OpenBase with:
+/// Reuses the RFC 9180 HPKE construction shape:
 ///   - KEM      = caller-supplied [AtKemAlgorithm] (intended: X-Wing)
-///   - KDF      = HKDF-SHA256
-///   - AEAD     = AES-256-GCM
+///   - KDF      = HKDF-SHA256 ([HkdfSha256])
+///   - AEAD     = AES-256-GCM ([AesGcm256EncryptionAlgo])
+///
+/// NOT wire-compatible with RFC 9180 HPKE. This uses a custom, internal
+/// envelope (`ver || ctLen || kemCt || ct || tag`) and a custom key schedule,
+/// so do NOT expect interop with off-the-shelf HPKE implementations — it is an
+/// at_protocol-internal envelope only.
 ///
 /// The KEM's 32-byte shared secret is already uniformly random, so the HKDF
-/// step provides HPKE-style context binding ([info]) and AEAD key/nonce
-/// derivation — not randomness extraction.
+/// step provides context binding ([info]) and AEAD key/nonce derivation —
+/// not randomness extraction.
 
 /// Envelope format version. `v1` = single-shot seal with a derived nonce.
 const int _envelopeVersion = 0x01;
 
-const int _gcmNonceLen = 12;
-const int _gcmTagLen = 16;
+const int _gcmNonceLen = AesGcm256EncryptionAlgo.nonceLength;
+const int _gcmTagLen = AesGcm256EncryptionAlgo.tagLength;
 
 final Uint8List _suiteLabel = Uint8List.fromList('atPQv1-base'.codeUnits);
-final Uint8List _polConfirmLabel =
-    Uint8List.fromList('atPQv1-polconfirm'.codeUnits);
-final Uint8List _sessionLabel =
-    Uint8List.fromList('atPQv1-session'.codeUnits);
-
-final AesGcm _aesGcm = AesGcm.with256bits();
 
 /// Why a [pqOpen] call failed.
 ///
@@ -54,8 +58,8 @@ class PqOpenException implements Exception {
 
 /// Seal [plaintext] to the holder of [recipientPublicKey].
 ///
-/// [xwing] is the KEM instance to use (e.g. [XWingFfiAlgo] or
-/// [XWingPureDartAlgo]). [info] binds the key schedule to a usage context;
+/// [xwing] is the KEM instance to use (e.g. `XWingFfiAlgo` or
+/// `XWingPureDartAlgo`). [info] binds the key schedule to a usage context;
 /// [aad] is authenticated-but-not-encrypted associated data. Both must be
 /// supplied identically to [pqOpen] or opening fails.
 ///
@@ -68,12 +72,12 @@ Future<Uint8List> pqSeal(
   Uint8List? aad,
 }) async {
   final enc = await xwing.encapsulate(recipientPublicKey);
-  final _DerivedKey dk = await _deriveKeyAndNonce(enc.sharedSecret, info);
+  final _DerivedKey dk = _deriveKeyAndNonce(enc.sharedSecret, info);
 
-  final SecretBox box = await _aesGcm.encrypt(
+  // body = gcmCipherText || tag(16), per AesGcm256EncryptionAlgo's wire format.
+  final Uint8List body = await AesGcm256EncryptionAlgo(_aesKey(dk.key)).encrypt(
     plaintext,
-    secretKey: SecretKey(dk.key),
-    nonce: dk.nonce,
+    iv: InitialisationVector(dk.nonce),
     aad: aad ?? const <int>[],
   );
 
@@ -83,8 +87,7 @@ Future<Uint8List> pqSeal(
   out.addByte((enc.ciphertext.length >> 8) & 0xff);
   out.addByte(enc.ciphertext.length & 0xff);
   out.add(enc.ciphertext);
-  out.add(box.cipherText);
-  out.add(box.mac.bytes);
+  out.add(body);
   return out.toBytes();
 }
 
@@ -115,47 +118,22 @@ Future<Uint8List> pqOpen(
         'declared ciphertext length overruns envelope');
   }
   final Uint8List kemCt = Uint8List.sublistView(envelope, 3, 3 + ctLen);
+  // gcmBody = gcmCipherText || tag(16); AesGcm256EncryptionAlgo splits the tag.
   final Uint8List gcmBody = Uint8List.sublistView(envelope, 3 + ctLen);
-  final Uint8List cipherText =
-      Uint8List.sublistView(gcmBody, 0, gcmBody.length - _gcmTagLen);
-  final Uint8List tag =
-      Uint8List.sublistView(gcmBody, gcmBody.length - _gcmTagLen);
 
   final Uint8List ss = await xwing.decapsulate(recipientSecretKey, kemCt);
-  final _DerivedKey dk = await _deriveKeyAndNonce(ss, info);
+  final _DerivedKey dk = _deriveKeyAndNonce(ss, info);
 
   try {
-    final List<int> clear = await _aesGcm.decrypt(
-      SecretBox(cipherText, nonce: dk.nonce, mac: Mac(tag)),
-      secretKey: SecretKey(dk.key),
+    return await AesGcm256EncryptionAlgo(_aesKey(dk.key)).decrypt(
+      gcmBody,
+      iv: InitialisationVector(dk.nonce),
       aad: aad ?? const <int>[],
     );
-    return Uint8List.fromList(clear);
-  } on SecretBoxAuthenticationError {
+  } on AtDecryptionException {
     throw PqOpenException(
         PqOpenFailure.authFailure, 'AEAD authentication failed');
   }
-}
-
-/// Derive a 32-byte key-confirmation tag from [sharedSecret].
-///
-/// Used by the inter-server from/pol handshake so the raw shared secret never
-/// traverses the wire. [info] should bind the tag to its context (e.g.
-/// sessionID || fromAtSign).
-Future<Uint8List> pqDeriveConfirmationTag(
-    Uint8List sharedSecret, Uint8List info) {
-  return _hkdf(sharedSecret, _concat([_polConfirmLabel, info]), 32);
-}
-
-/// Derive a 32-byte session key from [sharedSecret].
-///
-/// Called on both sides after a successful from/pol PQ handshake. [info]
-/// should bind the key to its context (e.g. sessionID || fromAtSign). Uses
-/// a distinct HKDF label so the session key is independent from the
-/// confirmation tag.
-Future<Uint8List> pqDeriveSessionKey(
-    Uint8List sharedSecret, Uint8List info) {
-  return _hkdf(sharedSecret, _concat([_sessionLabel, info]), 32);
 }
 
 // ── internals ───────────────────────────────────────────────────────────────
@@ -166,23 +144,21 @@ class _DerivedKey {
   _DerivedKey(this.key, this.nonce);
 }
 
-Future<_DerivedKey> _deriveKeyAndNonce(Uint8List ss, Uint8List? info) async {
+/// Derives the AEAD key and nonce from the KEM [ss], bound to the suite label
+/// and the caller's [info]. Two HKDF labels (`0x01`/`0x02`) keep key and nonce
+/// independent.
+_DerivedKey _deriveKeyAndNonce(Uint8List ss, Uint8List? info) {
   final Uint8List suiteInfo = _concat([_suiteLabel, info ?? Uint8List(0)]);
-  final Uint8List key = await _hkdf(ss, _concat([suiteInfo, _u8(0x01)]), 32);
-  final Uint8List nonce =
-      await _hkdf(ss, _concat([suiteInfo, _u8(0x02)]), _gcmNonceLen);
+  final Uint8List key =
+      HkdfSha256.deriveKey(ss, info: _concat([suiteInfo, _u8(0x01)]), length: 32);
+  final Uint8List nonce = HkdfSha256.deriveKey(ss,
+      info: _concat([suiteInfo, _u8(0x02)]), length: _gcmNonceLen);
   return _DerivedKey(key, nonce);
 }
 
-Future<Uint8List> _hkdf(Uint8List ikm, Uint8List info, int length) async {
-  final hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: length);
-  final SecretKey derived = await hkdf.deriveKey(
-    secretKey: SecretKey(ikm),
-    nonce: const <int>[],
-    info: info,
-  );
-  return Uint8List.fromList(await derived.extractBytes());
-}
+/// Wraps a raw 32-byte key as an [AESKey] (which carries it base64-encoded,
+/// per the at_chops contract).
+AESKey _aesKey(Uint8List rawKey) => AESKey(base64Encode(rawKey));
 
 Uint8List _u8(int b) => Uint8List.fromList([b]);
 
