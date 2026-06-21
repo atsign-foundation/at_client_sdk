@@ -4,10 +4,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:crypton/crypton.dart';
 
 /// Utility class to execute monitor verb.
 class MonitorClient {
@@ -73,10 +73,11 @@ class MonitorClient {
     logger.info('from result:$fromResponse');
     fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
     logger.info('fromResponse $fromResponse');
-    var key = RSAPrivateKey.fromString(_privateKey);
-    var sha256signature =
-        // ignore: unnecessary_cast
-        key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
+    // RSA SHA-256 sign via at_chops (wraps the same crypton
+    // RSAPrivateKey.createSHA256Signature; only the private key is used).
+    var sha256signature = PkamSigningAlgo(
+            AtPkamKeyPair.create('', _privateKey), HashingAlgoType.sha256)
+        .sign(Uint8List.fromList(utf8.encode(fromResponse)));
     var signature = base64Encode(sha256signature);
     logger.info('Sending command pkam:$signature');
     await monitorConnection.write('pkam:$signature\n');
