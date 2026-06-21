@@ -17,7 +17,7 @@ void main() {
     setUp(() {
       mockAtClient = MockAtClient();
       mockAtChops = MockAtChops();
-      mockCryptoRegistry = MockCryptoRegistry(mockAtClient);
+      mockCryptoRegistry = MockCryptoRegistry();
       transformer = GetResponseTransformer(mockAtClient);
       when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
       when(() => mockAtClient.atChops).thenReturn(mockAtChops);
@@ -116,7 +116,8 @@ void main() {
             '{"data": "abcshared_phone_number", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": true}}';
 
       when(() => mockCryptoRegistry.lookup('legacy',
-          operation: any(named: 'operation'))).thenReturn(CipherProvider());
+              lookupReason: any(named: 'lookupReason')))
+          .thenReturn(CipherProvider());
 
       var result = await transformer.transform(tuple);
 
@@ -140,7 +141,8 @@ void main() {
       // Even if a provider WOULD strip the value, explicit isEncrypted=false
       // means the value was deliberately stored unencrypted: return it as-is.
       when(() => mockCryptoRegistry.lookup('legacy',
-          operation: any(named: 'operation'))).thenReturn(CipherProvider());
+              lookupReason: any(named: 'lookupReason')))
+          .thenReturn(CipherProvider());
 
       var result = await transformer.transform(tuple);
 
@@ -162,7 +164,8 @@ void main() {
             '{"data": "abcdecrypted_data", "key": "@bob:$keyName@alice","metaData": {"ttl": 0}}';
 
       when(() => mockCryptoRegistry.lookup('legacy',
-          operation: any(named: 'operation'))).thenReturn(CipherProvider());
+              lookupReason: any(named: 'lookupReason')))
+          .thenReturn(CipherProvider());
 
       var result = await transformer.transform(tuple);
 
@@ -184,7 +187,7 @@ void main() {
             '{"data": "plain_phone_number", "key": "@bob:$keyName@alice","metaData": {"ttl": 0}}';
 
       when(() => mockCryptoRegistry.lookup('legacy',
-              operation: any(named: 'operation')))
+              lookupReason: any(named: 'lookupReason')))
           .thenReturn(FormatExceptionProvider());
 
       var result = await transformer.transform(tuple);
@@ -205,7 +208,7 @@ void main() {
         ..two =
             '{"data": "shared_phone_number", "key": "@bob:phone@alice","metaData": {"isEncrypted": true}}';
       when(() => mockCryptoRegistry.lookup(any(),
-              operation: any(named: 'operation')))
+              lookupReason: any(named: 'lookupReason')))
           .thenThrow(CryptoProviderNotRegistered('error'));
 
       expect(() async => await transformer.transform(tuple),
@@ -225,7 +228,8 @@ void main() {
             '{"data": "shared_phone_number", "key": "@bob:phone@alice","metaData": {"isEncrypted": true}}';
 
       when(() => mockCryptoRegistry.lookup(any(),
-          operation: any(named: 'operation'))).thenReturn(ErrorProvider());
+              lookupReason: any(named: 'lookupReason')))
+          .thenReturn(ErrorProvider());
       expect(() async => await transformer.transform(tuple),
           throwsA(isA<AtException>()));
     });

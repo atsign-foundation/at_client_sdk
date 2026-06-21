@@ -1,18 +1,74 @@
-import 'dart:async';
-
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_commons/at_commons.dart';
 
-// Typedef to help cleanup types related to this factory
-typedef CryptoProviderFactory = FutureOr<CryptoProvider> Function(
-    CryptoContext context);
+/// Selects and configures the crypto providers for an [AtClient].
+class CryptoConfig {
+  /// Provider used when an [AtKey] carries no `appMetadata.providerId`.
+  final String defaultProviderId;
 
-/// Per Client instance object, which keeps track of registered
-/// [CryptoProvider]s, with basic registry methods.
+  /// Provider instances registered with the client at construction.
+  ///
+  /// Providers are stateless, so an instance is normally safe to share. Supply
+  /// a fresh instance per atSign only if your provider holds per-atSign state —
+  /// the same instance is registered against each client that reuses this
+  /// preference.
+  final List<CryptoProvider> providers;
+
+  const CryptoConfig({
+    required this.defaultProviderId,
+    this.providers = const [],
+  });
+
+  /// Legacy-only — the default for un-migrated apps.
+  const CryptoConfig.legacy()
+      : defaultProviderId = 'legacy',
+        providers = const [];
+}
+
+/// What a [CryptoProvider] is handed per operation.
+class CryptoContext {
+  /// The fully-wired client. A provider uses it to fetch whatever it needs to
+  /// complete an operation — a recipient's public key, a shared key, a
+  /// namespace key from the secondary, etc. The current atSign is
+  /// `atClient.getCurrentAtSign()`.
+  ///
+  /// This is the only field today. The planned `WritableAtKeys` holder — an
+  /// `AtKeys` subclass letting providers read/stash/persist key material — is
+  /// added here alongside its first consumer in the key-management workstream,
+  /// at which point providers move off the client for keys.
+  final AtClient atClient;
+
+  const CryptoContext({required this.atClient});
+}
+
+/// The contract every encryption scheme implements. The SDK routes each
+/// [AtKey] to a provider by its `appMetadata.providerId`.
+///
+/// Providers are **stateless**: everything they need is handed in per call via
+/// [context] (the client) and [atKey] (the record and its metadata), so a
+/// single instance is safely shared across atSigns.
+abstract class CryptoProvider {
+  /// Stable wire id, stamped into `appMetadata.providerId`.
+  String get id;
+
+  /// Encrypt plaintext [value] for [atKey], returning the wire ciphertext.
+  ///
+  /// The provider sets `atKey.metadata.appMetadata` (at least its own [id]) and
+  /// `atKey.metadata.isEncrypted` as part of encrypting. [context] gives access
+  /// to the client and key material needed to complete the operation.
+  Future<String> encrypt(CryptoContext context, AtKey atKey, String value);
+
+  /// Decrypt wire ciphertext [value] for [atKey], returning the plaintext.
+  /// Routing hints are read from `atKey.metadata.appMetadata`.
+  Future<String> decrypt(CryptoContext context, AtKey atKey, String value);
+}
+
+/// Per-[AtClient] registry of [CryptoProvider]s, keyed by [CryptoProvider.id].
 class CryptoRegistry {
   final Map<String, CryptoProvider> _providers = <String, CryptoProvider>{};
 
+  /// Registers [provider] under its [CryptoProvider.id]. Throws [ArgumentError]
+  /// if that id is already registered, unless [replace] is true.
   void register(CryptoProvider provider, {bool replace = false}) {
     if (!replace && _providers.containsKey(provider.id)) {
       throw ArgumentError.value(
@@ -25,204 +81,33 @@ class CryptoRegistry {
     _providers[provider.id] = provider;
   }
 
-  /// Lookup if providerId is registered with this client
-  /// otherwise, throw [CryptoProviderNotRegistered]
-  CryptoProvider lookup(String id, {String? operation}) {
+  /// Look up [id], or throw [CryptoProviderNotRegistered] if absent.
+  ///
+  /// [lookupReason] is woven into the not-registered error to aid diagnosis —
+  /// typically the operation that triggered the lookup (e.g. `'put'`).
+  CryptoProvider lookup(String id, {String lookupReason = 'none'}) {
     final provider = _providers[id];
     if (provider == null) {
       throw CryptoProviderNotRegistered(
-        _providerNotRegisteredMessage(id, operation: operation),
+        _notRegisteredMessage(id, lookupReason: lookupReason),
       );
     }
     return provider;
   }
 
-  bool contains(String id) {
-    return _providers.containsKey(id);
+  /// Whether a provider with [id] is registered.
+  bool contains(String id) => _providers.containsKey(id);
+
+  /// The ids of all currently registered providers.
+  List<String> get registeredProviderIds =>
+      _providers.keys.toList(growable: false);
+
+  String _notRegisteredMessage(String id, {String lookupReason = 'none'}) {
+    final ids = registeredProviderIds;
+    final registered = ids.isEmpty ? 'none' : ids.join(', ');
+    return 'Crypto provider "$id" is not registered. '
+        'Lookup reason: $lookupReason. '
+        'Registered providers: $registered. '
+        'Add it to AtClientPreference.crypto.providers.';
   }
-
-  List<String> get registeredProviderIds {
-    return _providers.keys.toList(growable: false);
-  }
-
-  String _providerNotRegisteredMessage(String id, {String? operation}) {
-    final registeredIds = registeredProviderIds;
-    final operationMessage = operation == null ? '' : ' Operation: $operation.';
-    final registeredMessage =
-        registeredIds.isEmpty ? 'none' : registeredIds.join(', ');
-    return 'Crypto provider "$id" is not registered.'
-        '$operationMessage Registered providers: $registeredMessage. '
-        'Add it to AtClientPreference.crypto.providers or configure '
-        'CryptoPolicy.onProviderNotFound.';
-  }
-}
-
-/// Config which defines:
-/// 1. CryptoProviders
-/// 2. CryptoPolicy
-/// 3. DefaultProviderId (what scheme?) ie: 'legacy'
-class CryptoConfig {
-  final String defaultProviderId;
-  final List<CryptoProviderFactory> providers;
-  final CryptoPolicy policy;
-
-  const CryptoConfig({
-    required this.defaultProviderId,
-    this.providers = const [],
-    this.policy = const CryptoPolicy(),
-  });
-
-  CryptoConfig.singleProvider({
-    required this.defaultProviderId,
-    required CryptoProviderFactory provider,
-    this.policy = const CryptoPolicy(),
-  }) : providers = [provider];
-
-  const CryptoConfig.legacy()
-      : defaultProviderId = 'legacy',
-        providers = const [],
-        policy = const CryptoPolicy();
-}
-
-/// Context which is injected into the provider factories for creation.
-/// Opens up extensibility for specific types of Contexts.
-class CryptoContext {
-  final AtClient atClient;
-  final Atsign currentAtSign;
-  final AtChops? atChops;
-  final CryptoStorage storage;
-
-  const CryptoContext({
-    required this.atClient,
-    required this.currentAtSign,
-    required this.atChops,
-    required this.storage,
-  });
-}
-
-/// Defines hooks which allow the user to have a reaction during specific
-/// events / failure points.
-///
-/// ie: defining a policy for cryptography
-class CryptoPolicy {
-  const CryptoPolicy();
-
-  FutureOr<CryptoFailureResolution> onProviderNotFound(
-    CryptoProviderNotFoundContext context,
-  ) {
-    return const CryptoFailureResolution.throwError();
-  }
-}
-
-abstract class CryptoFailureResolution {
-  const CryptoFailureResolution();
-
-  const factory CryptoFailureResolution.throwError() = ThrowCryptoError;
-
-  const factory CryptoFailureResolution.retry() = RetryCryptoOperation;
-}
-
-class ThrowCryptoError extends CryptoFailureResolution {
-  const ThrowCryptoError();
-}
-
-class RetryCryptoOperation extends CryptoFailureResolution {
-  const RetryCryptoOperation();
-}
-
-class CryptoProviderNotFoundContext {
-  final CryptoContext cryptoContext;
-  final AtKey atKey;
-  final String providerId;
-  final AtException error;
-
-  const CryptoProviderNotFoundContext({
-    required this.cryptoContext,
-    required this.atKey,
-    required this.providerId,
-    required this.error,
-  });
-
-  Future<void> registerProvider(CryptoProvider provider) async {
-    await provider.initialize(cryptoContext);
-    cryptoContext.atClient.cryptoRegistry.register(provider);
-  }
-}
-
-/// Abstract for persistent crypto keys that live in the at_servers
-abstract interface class CryptoStorage {
-  Future<String?> read(CryptoStorageKey key);
-
-  Future<void> write(CryptoStorageKey key, String value);
-}
-
-class CryptoStorageKey {
-  final Atsign owner;
-  final Atsign recipient;
-  final String namespace;
-  final String name;
-
-  const CryptoStorageKey({
-    required this.owner,
-    required this.recipient,
-    required this.namespace,
-    required this.name,
-  });
-}
-
-/// Main implementation and contact point for pluggable encryption
-/// this is the contract which all CryptoProvider implementations must follow.
-abstract class CryptoProvider {
-  String get id;
-
-  Future<void> initialize(CryptoContext context) async {}
-
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request);
-
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request);
-}
-
-// Request & Response models used during runtime routing
-// main consumers: [CryptoRuntime] and [CryptoProvider]
-
-class CryptoEncryptRequest {
-  final AtKey atKey;
-  final dynamic plaintext;
-  final AppMetadata? existingMetadata;
-
-  const CryptoEncryptRequest({
-    required this.atKey,
-    required this.plaintext,
-    this.existingMetadata,
-  });
-}
-
-class CryptoEncryptResult {
-  final dynamic ciphertext;
-  final AppMetadata metadata;
-  final bool isEncrypted;
-
-  const CryptoEncryptResult({
-    required this.ciphertext,
-    required this.metadata,
-    this.isEncrypted = true,
-  });
-}
-
-class CryptoDecryptRequest {
-  final AtKey atKey;
-  final dynamic ciphertext;
-  final AppMetadata metadata;
-
-  const CryptoDecryptRequest({
-    required this.atKey,
-    required this.ciphertext,
-    required this.metadata,
-  });
-}
-
-class CryptoDecryptResult {
-  final dynamic plaintext;
-
-  const CryptoDecryptResult({required this.plaintext});
 }

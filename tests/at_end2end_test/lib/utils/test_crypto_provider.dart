@@ -10,15 +10,16 @@ class TestCryptoProvider extends CryptoProvider {
   TestCryptoProvider(this.id);
 
   @override
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async {
-    return const CryptoDecryptResult(plaintext: 'twin');
+  Future<String> decrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    return 'twin';
   }
 
   @override
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async {
-    return CryptoEncryptResult(
-      ciphertext: 'hellohello',
-      metadata: AppMetadata(providerId: id),
-    );
+  Future<String> encrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    atKey.metadata.appMetadata = AppMetadata(providerId: id);
+    atKey.metadata.isEncrypted = true;
+    return 'hellohello';
   }
 }

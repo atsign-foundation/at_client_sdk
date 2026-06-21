@@ -8,16 +8,16 @@ class _FakeCryptoProvider extends CryptoProvider {
   _FakeCryptoProvider(this.id);
 
   @override
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async {
-    return CryptoDecryptResult(plaintext: request.ciphertext);
+  Future<String> decrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    return value;
   }
 
   @override
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async {
-    return CryptoEncryptResult(
-      ciphertext: request.plaintext,
-      metadata: AppMetadata(providerId: id),
-    );
+  Future<String> encrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    atKey.metadata.appMetadata = AppMetadata(providerId: id);
+    return value;
   }
 }
 
@@ -39,7 +39,7 @@ void main() {
       registry.register(_FakeCryptoProvider('provider-a'));
 
       expect(
-        () => registry.lookup('missing-provider', operation: 'put'),
+        () => registry.lookup('missing-provider', lookupReason: 'put'),
         throwsA(
           isA<CryptoProviderNotRegistered>()
               .having(
@@ -55,7 +55,7 @@ void main() {
               .having(
                 (e) => e.message,
                 'message',
-                contains('Operation: put'),
+                contains('Lookup reason: put'),
               ),
         ),
       );
@@ -102,18 +102,16 @@ void main() {
       );
     });
 
-    test('singleProvider creates config with one provider factory', () {
-      Future<CryptoProvider> createProvider(CryptoContext context) async {
-        return _FakeCryptoProvider('provider-a');
-      }
+    test('config stores its default provider id and provider instances', () {
+      final provider = _FakeCryptoProvider('provider-a');
 
-      final config = CryptoConfig.singleProvider(
+      final config = CryptoConfig(
         defaultProviderId: 'provider-a',
-        provider: createProvider,
+        providers: [provider],
       );
 
       expect(config.defaultProviderId, 'provider-a');
-      expect(config.providers, [createProvider]);
+      expect(config.providers, [provider]);
     });
 
     test('registeredProviderIds is not growable', () {

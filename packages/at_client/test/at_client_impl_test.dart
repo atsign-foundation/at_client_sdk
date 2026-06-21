@@ -416,9 +416,7 @@ void main() {
         ..commitLogPath = 'test/hive/path'
         ..crypto = CryptoConfig(
           defaultProviderId: 'test-provider',
-          providers: [
-            (context) => provider,
-          ],
+          providers: [provider],
         );
       AtChops chops = AtChopsImpl(mockAtChopsKeys);
 
@@ -430,8 +428,6 @@ void main() {
         atChops: chops,
       );
 
-      expect(provider.initialized, true);
-      expect(provider.context?.currentAtSign, '@alice');
       expect(ac.cryptoRegistry.lookup('test-provider'), isA<CryptoProvider>());
     });
 
@@ -486,14 +482,13 @@ void main() {
           ..commitLogPath = 'test/hive/path'
           ..crypto = CryptoConfig(
             defaultProviderId: 'legacy',
-            providers: [(_) => provider],
+            providers: [provider],
           ),
         remoteSecondary: mockRemoteSecondary,
         atChops: chops,
       );
 
       expect(identical(ac1, ac2), true);
-      expect(provider.initialized, true);
       expect(ac2.cryptoRegistry.lookup('late-provider'), isA<CryptoProvider>());
     });
   });
@@ -502,27 +497,20 @@ void main() {
 class _RecordingCryptoProvider extends CryptoProvider {
   @override
   final String id;
-  bool initialized = false;
-  CryptoContext? context;
 
   _RecordingCryptoProvider(this.id);
 
   @override
-  Future<void> initialize(CryptoContext context) async {
-    initialized = true;
-    this.context = context;
+  Future<String> encrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    atKey.metadata.appMetadata = AppMetadata(providerId: id);
+    atKey.metadata.isEncrypted = true;
+    return value;
   }
 
   @override
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async {
-    return CryptoEncryptResult(
-      ciphertext: request.plaintext,
-      metadata: AppMetadata(providerId: id),
-    );
-  }
-
-  @override
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async {
-    return CryptoDecryptResult(plaintext: request.ciphertext);
+  Future<String> decrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    return value;
   }
 }

@@ -119,7 +119,7 @@ class AtClientManager {
       // reconcile is idempotent: already-registered providers are skipped.
       final existing = _currentAtClient;
       if (existing is AtClientImpl) {
-        await existing.reconcileCryptoProviders(preference);
+        existing.reconcileCryptoProviders(preference);
       }
       _logger
           .info('setCurrentAtSign: already on $atSign with no override args; '

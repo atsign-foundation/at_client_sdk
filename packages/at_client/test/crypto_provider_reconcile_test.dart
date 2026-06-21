@@ -10,13 +10,16 @@ class _StubProvider extends CryptoProvider {
   _StubProvider(this.id);
 
   @override
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async =>
-      CryptoEncryptResult(
-          ciphertext: 'x', metadata: AppMetadata(providerId: id));
+  Future<String> encrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    atKey.metadata.appMetadata = AppMetadata(providerId: id);
+    return 'x';
+  }
 
   @override
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async =>
-      const CryptoDecryptResult(plaintext: 'x');
+  Future<String> decrypt(
+          CryptoContext context, AtKey atKey, String value) async =>
+      'x';
 }
 
 void main() {
@@ -32,9 +35,8 @@ void main() {
     AtClientPreference prefWith(String providerId) => AtClientPreference()
       ..hiveStoragePath = 'test/hive'
       ..commitLogPath = 'test/hive/path'
-      ..crypto = CryptoConfig.singleProvider(
-          defaultProviderId: 'legacy',
-          provider: (_) => _StubProvider(providerId));
+      ..crypto = CryptoConfig(
+          defaultProviderId: 'legacy', providers: [_StubProvider(providerId)]);
 
     test(
         're-setting the same atSign with a new provider registers it via the '

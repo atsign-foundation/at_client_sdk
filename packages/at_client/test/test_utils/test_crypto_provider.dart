@@ -7,21 +7,21 @@ class CipherProvider extends CryptoProvider {
   CipherProvider([this.id = 'cipher-provider']);
 
   @override
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async {
-    return CryptoDecryptResult(
-      plaintext: request.ciphertext.toString().substring(3),
-    );
+  Future<String> decrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    return value.substring(3);
   }
 
   @override
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async {
-    // Mirrors the contract real providers follow: populate sharedKeyEnc on
-    // encrypt so notification tests can assert metadata was forwarded.
-    request.atKey.metadata.sharedKeyEnc = 'sharedKeyEnc';
-    return CryptoEncryptResult(
-      ciphertext: 'abc${request.plaintext}',
-      metadata: AppMetadata(providerId: id),
-    );
+  Future<String> encrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    // Mirrors the contract real providers follow: stamp routing metadata on
+    // encrypt so notification tests can assert metadata was forwarded, and set
+    // sharedKeyEnc so the metadata-forwarding assertions still hold.
+    atKey.metadata.appMetadata = AppMetadata(providerId: id);
+    atKey.metadata.isEncrypted = true;
+    atKey.metadata.sharedKeyEnc = 'sharedKeyEnc';
+    return 'abc$value';
   }
 }
 
@@ -35,12 +35,12 @@ class FormatExceptionProvider extends CryptoProvider {
   FormatExceptionProvider([this.id = 'format-exception-provider']);
 
   @override
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) {
+  Future<String> decrypt(CryptoContext context, AtKey atKey, String value) {
     throw const FormatException('not base64');
   }
 
   @override
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) {
+  Future<String> encrypt(CryptoContext context, AtKey atKey, String value) {
     throw AtEncryptionException('error');
   }
 }
@@ -52,12 +52,12 @@ class ErrorProvider extends CryptoProvider {
   ErrorProvider([this.id = 'error-provider']);
 
   @override
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) {
+  Future<String> decrypt(CryptoContext context, AtKey atKey, String value) {
     throw AtDecryptionException('error');
   }
 
   @override
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) {
+  Future<String> encrypt(CryptoContext context, AtKey atKey, String value) {
     throw AtEncryptionException('error');
   }
 }

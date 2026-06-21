@@ -21,18 +21,14 @@ class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 class MockLocalSecondary extends Mock implements LocalSecondary {}
 
 class MockCryptoRegistry extends Mock implements CryptoRegistry {
-  MockCryptoRegistry(AtClient atClient) {
-    register(LegacyCryptoProvider(atClient));
+  MockCryptoRegistry() {
+    register(LegacyCryptoProvider());
   }
 }
 
 class MockCryptoProvider extends Mock implements CryptoProvider {}
 
 class FakeCryptoProvider extends Fake implements CryptoProvider {}
-
-class FakeCryptoEncryptRequest extends Fake implements CryptoEncryptRequest {}
-
-class FakeCryptoDecryptRequest extends Fake implements CryptoDecryptRequest {}
 
 class MockAtClientManager extends Mock implements AtClientManager {}
 

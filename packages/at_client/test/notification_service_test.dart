@@ -86,7 +86,7 @@ class FakeAtKey extends Fake implements AtKey {}
 void main() {
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
   AtChops mockAtChops = MockAtChops();
-  CryptoRegistry mockCryptoRegistry = MockCryptoRegistry(mockAtClientImpl);
+  CryptoRegistry mockCryptoRegistry = MockCryptoRegistry();
   AtClientManager mockAtClientManager = MockAtClientManager();
   FakeMonitor fakeMonitor = FakeMonitor();
   SecondaryAddressFinder mockSecondaryAddressFinder =
@@ -95,7 +95,7 @@ void main() {
   setUpAll(() {
     when(() => mockCryptoRegistry.lookup(any())).thenReturn(CipherProvider());
     when(() => mockCryptoRegistry.lookup(any(),
-        operation: any(named: 'operation'))).thenReturn(CipherProvider());
+        lookupReason: any(named: 'lookupReason'))).thenReturn(CipherProvider());
     when(() => mockAtClientImpl.cryptoRegistry).thenReturn(mockCryptoRegistry);
     when(() => mockAtClientImpl.atChops).thenReturn(mockAtChops);
   });
@@ -432,7 +432,7 @@ void main() {
           ..crypto = const CryptoConfig(defaultProviderId: 'default-provider'),
       );
       when(() => mockCryptoRegistry.lookup(any(),
-              operation: any(named: 'operation')))
+              lookupReason: any(named: 'lookupReason')))
           .thenReturn(CipherProvider('default-provider'));
       var notificationParams = NotificationParams.forUpdate(
         (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob')).build(),
@@ -456,7 +456,7 @@ void main() {
           ..crypto = const CryptoConfig(defaultProviderId: 'default-provider'),
       );
       when(() => mockCryptoRegistry.lookup(any(),
-              operation: any(named: 'operation')))
+              lookupReason: any(named: 'lookupReason')))
           .thenReturn(CipherProvider('override-provider'));
       var notificationParams = NotificationParams.forUpdate(
         (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob')).build(),
@@ -521,7 +521,7 @@ void main() {
           ..crypto = const CryptoConfig(defaultProviderId: 'default-provider'),
       );
       when(() => mockCryptoRegistry.lookup('override-provider',
-              operation: any(named: 'operation')))
+              lookupReason: any(named: 'lookupReason')))
           .thenReturn(CipherProvider('override-provider'));
       when(() => mockAtClientImpl.getRemoteSecondary())
           .thenReturn(remoteSecondary);
@@ -554,9 +554,9 @@ void main() {
         ),
       );
       verify(() => mockCryptoRegistry.lookup('override-provider',
-          operation: 'notify')).called(1);
+          lookupReason: 'notify')).called(1);
       verifyNever(() => mockCryptoRegistry.lookup('default-provider',
-          operation: any(named: 'operation')));
+          lookupReason: any(named: 'lookupReason')));
     });
 
     test('send without cryptoProviderId uses preference default provider',
@@ -568,7 +568,7 @@ void main() {
           ..crypto = const CryptoConfig(defaultProviderId: 'default-provider'),
       );
       when(() => mockCryptoRegistry.lookup('default-provider',
-              operation: any(named: 'operation')))
+              lookupReason: any(named: 'lookupReason')))
           .thenReturn(CipherProvider('default-provider'));
       when(() => mockAtClientImpl.getRemoteSecondary())
           .thenReturn(remoteSecondary);
@@ -600,7 +600,7 @@ void main() {
         ),
       );
       verify(() => mockCryptoRegistry.lookup('default-provider',
-          operation: 'notify')).called(1);
+          lookupReason: 'notify')).called(1);
     });
   });
 
@@ -794,7 +794,8 @@ void main() {
           .thenAnswer((_) => mockSecondaryAddressFinder);
       when(() => mockCryptoRegistry.lookup(any())).thenReturn(ErrorProvider());
       when(() => mockCryptoRegistry.lookup(any(),
-          operation: any(named: 'operation'))).thenReturn(ErrorProvider());
+              lookupReason: any(named: 'lookupReason')))
+          .thenReturn(ErrorProvider());
       when(() => mockAtClientImpl.cryptoRegistry)
           .thenReturn(mockCryptoRegistry);
       when(() => mockAtClientImpl.atChops).thenReturn(mockAtChops);

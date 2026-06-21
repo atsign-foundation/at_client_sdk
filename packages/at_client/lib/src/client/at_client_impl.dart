@@ -7,7 +7,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
-import 'package:at_client/src/crypto/crypto_storage.dart';
 import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/response/response.dart';
@@ -322,7 +321,7 @@ class AtClientImpl implements AtClient {
       // registration). Register any providers from the supplied preference that
       // aren't already present, so providers added after first creation aren't
       // silently dropped when setCurrentAtSign re-uses this instance.
-      await atClientImpl.reconcileCryptoProviders(preferences);
+      atClientImpl.reconcileCryptoProviders(preferences);
     } else {
       atClientImpl = AtClientImpl._(
         currentAtSign,
@@ -384,7 +383,7 @@ class AtClientImpl implements AtClient {
         onEvent: emitDataEvent,
       );
       _atChops ??= await _createAtChops(_atSign);
-      await _initializeCryptoProviders();
+      _initializeCryptoProviders();
 
       // Wire the event-driven expiry timer to the data-events stream.
       // Re-arms on every keystore mutation; first arm uses the current
@@ -1162,24 +1161,14 @@ class AtClientImpl implements AtClient {
     return chops;
   }
 
-  Future<void> _initializeCryptoProviders() async {
-    cryptoRegistry.register(LegacyCryptoProvider(this));
-
-    final context = CryptoContext(
-      atClient: this,
-      currentAtSign: _atSign,
-      atChops: _atChops,
-      storage: CryptoSecondaryStorage(this),
-    );
-    for (final createProvider in _preference!.crypto.providers) {
-      final provider = await createProvider(context);
-      await provider.initialize(context);
+  void _initializeCryptoProviders() {
+    cryptoRegistry.register(LegacyCryptoProvider());
+    for (final provider in _preference!.crypto.providers) {
       cryptoRegistry.register(provider);
     }
-
     cryptoRegistry.lookup(
       _preference!.crypto.defaultProviderId,
-      operation: 'initialize',
+      lookupReason: 'initialize',
     );
   }
 
@@ -1188,20 +1177,10 @@ class AtClientImpl implements AtClient {
   /// AtClient (which skips [_init] and its provider registration), so providers
   /// added to the preference after the client was first created take effect on
   /// the next [AtClientManager.setCurrentAtSign] instead of being silently
-  /// dropped. Reuses the live client's [AtChops] and storage — no rebuild and
-  /// no re-authentication. Existing providers and `defaultProviderId` are left
-  /// untouched.
-  Future<void> reconcileCryptoProviders(AtClientPreference preferences) async {
-    final context = CryptoContext(
-      atClient: this,
-      currentAtSign: _atSign,
-      atChops: _atChops,
-      storage: CryptoSecondaryStorage(this),
-    );
-    for (final createProvider in preferences.crypto.providers) {
-      final provider = await createProvider(context);
+  /// dropped. Existing providers and `defaultProviderId` are left untouched.
+  void reconcileCryptoProviders(AtClientPreference preferences) {
+    for (final provider in preferences.crypto.providers) {
       if (cryptoRegistry.contains(provider.id)) continue;
-      await provider.initialize(context);
       cryptoRegistry.register(provider);
     }
   }

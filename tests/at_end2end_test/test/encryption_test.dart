@@ -36,7 +36,7 @@ void main() {
       preference.crypto = CryptoConfig(
         defaultProviderId: 'legacy',
         providers: [
-          (_) => TestCryptoProvider(testProviderId),
+          TestCryptoProvider(testProviderId),
         ],
       );
     }
