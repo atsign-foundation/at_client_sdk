@@ -23,37 +23,40 @@ class XorCryptoProvider implements CryptoProvider {
   @override
   String get id => providerId;
 
-  // encrypt receives the plaintext and returns the wire ciphertext. It is also
-  // responsible for stamping the AtKey's routing metadata. Use context.atClient
-  // for anything you need to fetch to complete the operation — e.g. a
-  // recipient's public key.
+  // encrypt receives the plaintext and returns the wire ciphertext. The SDK
+  // stamps appMetadata.providerId + isEncrypted for you — a provider only needs
+  // to carry, in appMetadata.additional, anything its decrypt will need back
+  // (here a format version). Use context.atClient to fetch what you need (e.g.
+  // a recipient's public key). plaintext is opaque: for binary records it's a
+  // Base2e15-encoded string, so treat it as bytes, not text.
   @override
   Future<String> encrypt(
     CryptoContext context,
     AtKey atKey,
-    String value,
+    String plaintext,
   ) async {
-    final cipher = utf8.encode(value).map((b) => b ^ _xorKey).toList();
-    // appMetadata.providerId is SDK-owned routing; it must be this provider's
-    // id so future reads route back here. Put any extra per-record info (e.g.
-    // IV, key id) in appMetadata.additional – it travels with the record and
-    // is visible to the atServer. isEncrypted marks the value as ciphertext.
+    final cipher = utf8.encode(plaintext).map((b) => b ^ _xorKey).toList();
     atKey.metadata.appMetadata = AppMetadata(
       providerId: id,
       additional: {'v': 1},
     );
-    atKey.metadata.isEncrypted = true;
     return base64.encode(cipher);
   }
 
-  // decrypt receives the wire ciphertext and returns the plaintext.
+  // decrypt receives the wire ciphertext and returns the plaintext. Read back
+  // the per-record data stored on encrypt from appMetadata.additional, and
+  // throw an AtException subclass on failure so the SDK can chain diagnostics.
   @override
   Future<String> decrypt(
     CryptoContext context,
     AtKey atKey,
-    String value,
+    String ciphertext,
   ) async {
-    final plain = base64.decode(value).map((b) => b ^ _xorKey).toList();
+    final version = atKey.metadata.appMetadata?.additional?['v'];
+    if (version != 1) {
+      throw AtDecryptionException('Unsupported xor-demo format: v$version');
+    }
+    final plain = base64.decode(ciphertext).map((b) => b ^ _xorKey).toList();
     return utf8.decode(plain);
   }
 }
@@ -64,10 +67,10 @@ class XorCryptoProvider implements CryptoProvider {
 // Pass a CryptoConfig with:
 //   - defaultProviderId : the id of the provider used for new puts
 //   - providers         : the provider instances to register on this client.
-//                         The SDK calls initialize(context) on each before use.
-//                         Supply a fresh instance per atSign if your provider
-//                         holds per-atSign state. A read whose record names an
-//                         unregistered provider throws CryptoProviderNotRegistered.
+//                         Supply a fresh instance per atSign only if your
+//                         provider holds per-atSign state. A read whose record
+//                         names an unregistered provider throws
+//                         CryptoProviderNotRegistered.
 // ---------------------------------------------------------------------------
 AtOnboardingPreference buildPreference() {
   return AtOnboardingPreference()

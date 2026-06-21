@@ -33,7 +33,7 @@ void main() {
           await CryptoRuntime(mockAtClient).encryptForPut(atKey, 'data');
 
       expect(ciphertext, 'legacy encrypted data');
-      // The provider — not the runtime — stamps routing metadata on the key.
+      // The runtime stamps providerId + isEncrypted after the provider returns.
       expect(atKey.metadata.appMetadata?.providerId, 'legacy');
       expect(atKey.metadata.isEncrypted, true);
       expect(legacyProvider.encryptCalls, 1);
@@ -64,7 +64,7 @@ void main() {
           await CryptoRuntime(mockAtClient).encryptForPut(atKey, 'plaintext');
 
       expect(ciphertext, 'ciphertext');
-      // The provider mutates the key's appMetadata directly on encrypt.
+      // The provider's appMetadata.additional survives the runtime's re-stamp.
       expect(atKey.metadata.appMetadata?.additional, {
         'sessionId': 'session-1',
         'epoch': 7,
@@ -120,6 +120,23 @@ void main() {
       expect(decrypted, 'legacy decrypted ');
       expect(legacyProvider.decryptCalls, 1);
     });
+
+    test('stamps providerId and isEncrypted even when the provider does not',
+        () async {
+      registry.register(_BareProvider());
+      final atKey = AtKey()
+        ..metadata =
+            (Metadata()..appMetadata = AppMetadata(providerId: 'bare'));
+
+      final ciphertext =
+          await CryptoRuntime(mockAtClient).encryptForPut(atKey, 'data');
+
+      expect(ciphertext, 'bare:data');
+      // _BareProvider touches no metadata; the runtime stamps it so a forgetful
+      // provider can't silently leave isEncrypted false (= undecrypted reads).
+      expect(atKey.metadata.appMetadata?.providerId, 'bare');
+      expect(atKey.metadata.isEncrypted, true);
+    });
   });
 }
 
@@ -174,4 +191,21 @@ class _MetadataProvider extends CryptoProvider {
     decryptMetadata = atKey.metadata.appMetadata;
     return 'plaintext';
   }
+}
+
+/// Returns ciphertext but deliberately touches no metadata, to prove the
+/// runtime stamps providerId + isEncrypted on the provider's behalf.
+class _BareProvider extends CryptoProvider {
+  @override
+  String get id => 'bare';
+
+  @override
+  Future<String> encrypt(
+          CryptoContext context, AtKey atKey, String value) async =>
+      'bare:$value';
+
+  @override
+  Future<String> decrypt(
+          CryptoContext context, AtKey atKey, String value) async =>
+      value;
 }

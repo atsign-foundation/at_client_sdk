@@ -1,6 +1,10 @@
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_commons/at_commons.dart';
 
+/// The id of the built-in legacy (pre-pluggable) encryption scheme — the
+/// default provider and the fallback for records with no `appMetadata`.
+const String legacyCryptoProviderId = 'legacy';
+
 /// Selects and configures the crypto providers for an [AtClient].
 class CryptoConfig {
   /// Provider used when an [AtKey] carries no `appMetadata.providerId`.
@@ -21,7 +25,7 @@ class CryptoConfig {
 
   /// Legacy-only — the default for un-migrated apps.
   const CryptoConfig.legacy()
-      : defaultProviderId = 'legacy',
+      : defaultProviderId = legacyCryptoProviderId,
         providers = const [];
 }
 
@@ -51,16 +55,30 @@ abstract class CryptoProvider {
   /// Stable wire id, stamped into `appMetadata.providerId`.
   String get id;
 
-  /// Encrypt plaintext [value] for [atKey], returning the wire ciphertext.
+  /// Encrypt [plaintext] for [atKey], returning the wire ciphertext.
   ///
-  /// The provider sets `atKey.metadata.appMetadata` (at least its own [id]) and
-  /// `atKey.metadata.isEncrypted` as part of encrypting. [context] gives access
-  /// to the client and key material needed to complete the operation.
-  Future<String> encrypt(CryptoContext context, AtKey atKey, String value);
+  /// The SDK owns routing metadata: after this returns it stamps
+  /// `atKey.metadata.appMetadata.providerId` (to this provider's [id]) and sets
+  /// `isEncrypted`, so you can't accidentally break read-routing. To carry
+  /// per-record data you'll need on [decrypt] (an IV, a key id, a format
+  /// version, …), set `atKey.metadata.appMetadata` with those entries in
+  /// [AppMetadata.additional]; they travel with the record (as atServer-visible
+  /// plaintext metadata) and are readable on [decrypt].
+  ///
+  /// [plaintext] is opaque: for binary records it is a `Base2e15`-encoded
+  /// string, not human-readable text — treat it as bytes, don't assume UTF-8.
+  /// [context] gives access to the client (and, later, key material). Throw an
+  /// [AtException] subclass (e.g. [AtEncryptionException]) on failure so the SDK
+  /// can chain diagnostics.
+  Future<String> encrypt(CryptoContext context, AtKey atKey, String plaintext);
 
-  /// Decrypt wire ciphertext [value] for [atKey], returning the plaintext.
-  /// Routing hints are read from `atKey.metadata.appMetadata`.
-  Future<String> decrypt(CryptoContext context, AtKey atKey, String value);
+  /// Decrypt wire [ciphertext] for [atKey], returning the plaintext.
+  ///
+  /// Read any per-record data you stored on [encrypt] from
+  /// `atKey.metadata.appMetadata.additional`. The returned plaintext is opaque
+  /// (a `Base2e15`-encoded string for binary records). Throw an [AtException]
+  /// subclass (e.g. [AtDecryptionException]) on failure.
+  Future<String> decrypt(CryptoContext context, AtKey atKey, String ciphertext);
 }
 
 /// Per-[AtClient] registry of [CryptoProvider]s, keyed by [CryptoProvider.id].

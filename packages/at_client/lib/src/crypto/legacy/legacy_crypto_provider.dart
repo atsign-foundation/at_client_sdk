@@ -5,7 +5,7 @@ import 'package:at_commons/at_commons.dart';
 
 /// The pre-pluggable encryption scheme, wrapped as a [CryptoProvider].
 class LegacyCryptoProvider extends CryptoProvider {
-  static const String providerId = 'legacy';
+  static const String providerId = legacyCryptoProviderId;
 
   @override
   String get id => providerId;
@@ -14,12 +14,11 @@ class LegacyCryptoProvider extends CryptoProvider {
   Future<String> encrypt(
     CryptoContext context,
     AtKey atKey,
-    String value,
+    String plaintext,
   ) async {
     final legacy = LegacyEncryption.build(atKey, context.atClient);
-    final ciphertext = await legacy.encrypt(atKey, value);
-    atKey.metadata.appMetadata = AppMetadata(providerId: id);
-    atKey.metadata.isEncrypted = true;
+    // The runtime stamps appMetadata.providerId + isEncrypted on return.
+    final ciphertext = await legacy.encrypt(atKey, plaintext);
     return ciphertext as String;
   }
 
@@ -27,10 +26,10 @@ class LegacyCryptoProvider extends CryptoProvider {
   Future<String> decrypt(
     CryptoContext context,
     AtKey atKey,
-    String value,
+    String ciphertext,
   ) async {
     final legacy = LegacyDecryption.build(atKey, context.atClient);
-    final plaintext = await legacy.decrypt(atKey, value);
+    final plaintext = await legacy.decrypt(atKey, ciphertext);
     return plaintext as String;
   }
 }

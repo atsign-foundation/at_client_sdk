@@ -5,7 +5,7 @@ import 'package:at_commons/at_commons.dart';
 /// Routes encryption/decryption to the [CryptoProvider] named by an [AtKey]'s
 /// `appMetadata.providerId`.
 class CryptoRuntime {
-  static const String legacyProviderId = 'legacy';
+  static const String legacyProviderId = legacyCryptoProviderId;
 
   final AtClient _atClient;
 
@@ -13,8 +13,10 @@ class CryptoRuntime {
 
   Future<String> encryptForPut(AtKey atKey, dynamic value) async {
     try {
-      return await _provider(atKey, 'put')
-          .encrypt(_context(), atKey, _requireString(value));
+      final provider = _provider(atKey, 'put');
+      final ciphertext =
+          await provider.encrypt(_context(), atKey, _requireString(value));
+      return _stampEncrypted(atKey, provider, ciphertext);
     } on AtException catch (e) {
       e.stack(
         AtChainedException(
@@ -29,8 +31,10 @@ class CryptoRuntime {
 
   Future<String> encryptForNotification(AtKey atKey, dynamic value) async {
     try {
-      return await _provider(atKey, 'notify')
-          .encrypt(_context(), atKey, _requireString(value));
+      final provider = _provider(atKey, 'notify');
+      final ciphertext =
+          await provider.encrypt(_context(), atKey, _requireString(value));
+      return _stampEncrypted(atKey, provider, ciphertext);
     } on AtException catch (e) {
       e.stack(
         AtChainedException(
@@ -79,6 +83,23 @@ class CryptoRuntime {
   }
 
   CryptoContext _context() => CryptoContext(atClient: _atClient);
+
+  // The SDK owns routing metadata: a provider contributes only
+  // appMetadata.additional; the runtime stamps the provider id and marks the
+  // value encrypted, so neither can be silently forgotten and break the read
+  // path (a missing isEncrypted would return ciphertext undecrypted).
+  String _stampEncrypted(
+    AtKey atKey,
+    CryptoProvider provider,
+    String ciphertext,
+  ) {
+    atKey.metadata.appMetadata = AppMetadata(
+      providerId: provider.id,
+      additional: atKey.metadata.appMetadata?.additional,
+    );
+    atKey.metadata.isEncrypted = true;
+    return ciphertext;
+  }
 
   // The provider contract is String-typed; reject a non-String plaintext at
   // the boundary with the same error the value pipeline gave before, rather
