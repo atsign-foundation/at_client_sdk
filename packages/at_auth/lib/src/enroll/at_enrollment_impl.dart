@@ -14,7 +14,6 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
-import 'package:crypton/crypton.dart';
 
 /// A concrete implementation of [AtEnrollment] for managing enrollments.
 ///
@@ -96,9 +95,11 @@ class AtEnrollmentImpl implements AtEnrollment {
 
     // encrypting the following APKAM keys:
     // apkamSymmetricKey for the enroll verb
-    String encryptedAPKAMSymmetricKey =
-        RSAPublicKey.fromString(defaultEncryptionPublicKey)
-            .encrypt(apkamSymmetricKey.key);
+    // RSA encrypt via at_chops (wraps crypton's RSAPublicKey.encrypt:
+    // base64(encryptData(utf8(msg)))).
+    String encryptedAPKAMSymmetricKey = base64Encode((RsaEncryptionAlgo()
+          ..atPublicKey = AtPublicKey.fromString(defaultEncryptionPublicKey))
+        .encrypt(utf8.encode(apkamSymmetricKey.key)));
 
     EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
       ..appName = atEnrollmentRequest.appName
@@ -138,14 +139,14 @@ class AtEnrollmentImpl implements AtEnrollment {
       throw AtAuthenticationException(
           'The authentication keys are not initialized');
     }
-    // Fetch the encryptionPrivateKey from atChops instance.
-    RSAPrivateKey defaultEncryptionPrivateKey = RSAPrivateKey.fromString(
-        atLookUp
-            .atChops!.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey);
-
-    // Decrypt the encrypted APKAM Symmetric key to get the original APKAM symmetric key
-    String apkamSymmetricKey = defaultEncryptionPrivateKey
-        .decrypt(enrollmentRequestDecision.encryptedAPKAMSymmetricKey);
+    // Decrypt the encrypted APKAM symmetric key with the encryption private key
+    // from the atChops instance, via at_chops (wraps crypton's
+    // RSAPrivateKey.decrypt: utf8.decode(decryptData(base64(msg)))).
+    String apkamSymmetricKey = utf8.decode((RsaEncryptionAlgo()
+          ..atPrivateKey = AtPrivateKey.fromString(atLookUp.atChops!.atChopsKeys
+              .atEncryptionKeyPair!.atPrivateKey.privateKey))
+        .decrypt(base64Decode(
+            enrollmentRequestDecision.encryptedAPKAMSymmetricKey)));
 
     // Set the APKAM Symmetric key to the AtChops Instance.
     atLookUp.atChops?.atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
