@@ -1,4 +1,11 @@
-## 3.5.0 (unreleased tech-debt-removal branch changes)
+## 3.6.0
+
+- refactor: route PKAM/CRAM signing + hashing through at_chops
+  (`PkamSigningAlgo` / `SHA512HashingAlgo`); `crypton` and `crypto` are no
+  longer imported anywhere in the package and have been dropped from
+  `dependencies`. Byte-identical by construction.
+
+## 3.5.0
 
 - chore(deps): at_chops ^3.0.0
 
