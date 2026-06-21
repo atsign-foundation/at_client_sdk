@@ -52,12 +52,18 @@ required**. See the roadmap's
      `gkc-pqmls-spike` for early verification.
 
 ### What is already built on the integration branch (the D1 foundation)
-- **M0 pluggable crypto seam:** `CryptoProvider{id, initialize, encrypt,
-  decrypt}`; `CryptoRuntime` dispatches put/get/notify/sync by
-  `appMetadata.providerId`; `CryptoConfig` in `AtClientPreference`;
-  `CryptoStorage`; `LegacyCryptoProvider`; `CryptoPolicy.onProviderNotFound` /
-  `onDecryptFailed`. Wire field `Metadata.appMetadata`. **This is the migration
-  machinery** the whole rollout rides.
+- **M0 pluggable crypto seam (slimmed on `xl-pluggable`):** stateless
+  `CryptoProvider{id, encrypt(ctx, atKey, plaintext)→String, decrypt(ctx, atKey,
+  ciphertext)→String}`. `CryptoRuntime` resolves put/get/notify/sync against the
+  **live** `AtClientPreference.crypto` (`CryptoConfig{defaultProviderId,
+  providers, lookup}`) by `appMetadata.providerId`, with `LegacyCryptoProvider`
+  as the built-in fallback; the SDK stamps `providerId`+`isEncrypted` and an
+  unknown scheme throws `CryptoProviderNotRegistered`. Cached-client reuse adopts
+  the new `preference.crypto`. Wire field `Metadata.appMetadata`. **This is the
+  migration machinery** the whole rollout rides. *(The original
+  `CryptoRegistry` / `CryptoPolicy` / `CryptoStorage` / `initialize` / Request-
+  Result wrappers were removed; the `cryptoRegistry` getter is off the
+  `AtClient` spec.)*
 - **Secret-sharing substrate (PQ-native):** per-client X-Wing `ClientKeyPackage`
   / `PackageKey`; namespace-scoped registration + discovery
   (`registerClient` / `discoverClients(namespace:)`, server-gated);
@@ -276,10 +282,12 @@ Design: roadmap
   all schemes, keeps writing legacy) until the readiness flag flips — so a bare
   rebuild is a zero-risk soak. (An aggressive "prefer-best on rebuild" default is
   possible but off by default; see the capability table footnote.)
-- [ ] **C3 · Strict-mode toggles (simple-code tier).** `CryptoPolicy` options:
-  refuse legacy fallback / require PQ in cold-start (seal-and-hold vs error vs
-  notify); custom rotation triggers. These are app-facing in 3.x — alongside
-  `disallowLegacyEncryption` (D1-D), which is the dedicated legacy-write switch.
+- [ ] **C3 · Strict-mode toggles (simple-code tier).** Policy options (a
+  strict-mode mechanism to be designed — the early `CryptoPolicy` was removed in
+  the slim-API refactor): refuse legacy fallback / require PQ in cold-start
+  (seal-and-hold vs error vs notify); custom rotation triggers. These are
+  app-facing in 3.x — alongside `disallowLegacyEncryption` (D1-D), which is the
+  dedicated legacy-write switch.
 - [ ] **C4 · Capability conformance.** Implement so the
   [capabilities table](crypto-roadmap.md#capabilities-by-application-code-change-level)
   holds: no-code = universal reader + back-compat; flag = PQ writer/recipient;
@@ -464,10 +472,13 @@ tests. Plan archived at `untracked/AT_PERSISTENCE_5_MIGRATION_PLAN.md`.
   moving any older pluggable-crypto branch onto the 5.x keystore needs this
   adaptation; the cherry-pick alone is not enough. Verified 80/80 functional.
 - **Mode-B flake fix** (`391f55f67` on xl-pluggable + spike): `setCurrentAtSign`'s
-  idempotency short-circuit returned the cached `AtClient` without
-  `reconcileCryptoProviders`, so a same-atSign re-set with a new provider config
-  dropped it → intermittent `CryptoProviderNotRegistered`. Reconcile in the
-  short-circuit + a deterministic regression test. **PR #1930 CI all green.**
+  idempotency short-circuit returned the cached `AtClient` without re-applying
+  the new preference's providers, so a same-atSign re-set with a new provider
+  config dropped it → intermittent `CryptoProviderNotRegistered`. *(Later, when
+  `CryptoRegistry` was folded into `CryptoConfig`, the `reconcileCryptoProviders`
+  fix was replaced by adopting the new `preference.crypto` on reuse — same Mode-B
+  guarantee, no registry; deterministic regression test retained.)* **PR #1930
+  CI all green.**
 - **e2e flake diagnosis:** three modes — A `@ce2e1` PKAM AT0401 (remote cicd
   infra, not an SDK bug; CI e2e runs against `@ce2e*`, not the local vip),
   B = the reconcile bug (fixed), C = notification-delivery timing. Lesson:

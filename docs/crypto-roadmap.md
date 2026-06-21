@@ -215,8 +215,8 @@ gated rollout.
 > **A value is only ever *written* in a scheme every client that must *read* it
 > supports. Reads are universal** — each value carries `appMetadata.providerId`,
 > and an upgraded client keeps *all* older providers, so it decrypts anything
-> ever written. A legacy client hard-fails on a scheme it lacks
-> (`onProviderNotFound`).
+> ever written. A client hard-fails on a scheme it lacks
+> (`CryptoProviderNotRegistered`).
 
 So compatibility is asymmetric: **upgrading only ever adds read-capability; the
 risk is writing too *new*, never reading too *old*.** Everything below is just
@@ -570,14 +570,20 @@ rest of `AtCollection`.
 ## Foundations (what exists today)
 
 **`xl-pluggable` — the provider seam.** `CryptoProvider { id;
-initialize(CryptoContext); encrypt; decrypt }`, registered per AtClient via
-`CryptoConfig`, routed by `CryptoRuntime` on the put/get/notify/sync paths.
-The wire carries `Metadata.appMetadata = AppMetadata{providerId,
-additional}`; `LegacyCryptoProvider` preserves today's behavior;
-`CryptoStorage` gives providers secondary-backed persistence;
-`PutRequestOptions.cryptoProviderId` overrides per operation. This seam is
-the migration machinery itself: legacy and new schemes coexist per-value,
-old data stays readable forever, re-encryption can be lazy.
+encrypt(CryptoContext, AtKey, String) → String; decrypt(CryptoContext, AtKey,
+String) → String }` — **stateless**, with the per-operation `CryptoContext`
+(the client) handed in per call. Providers are declared in
+`AtClientPreference.crypto` (`CryptoConfig { defaultProviderId, providers }`);
+`CryptoRuntime` resolves each put/get/notify/sync against the live config by
+`appMetadata.providerId`, falling back to the built-in `LegacyCryptoProvider`.
+The wire carries `Metadata.appMetadata = AppMetadata{providerId, additional}`;
+the SDK stamps `providerId` + `isEncrypted` after a successful encrypt, so a
+provider only contributes `additional`. `PutRequestOptions.cryptoProviderId`
+overrides per operation. This seam is the migration machinery itself: legacy
+and new schemes coexist per-value, old data stays readable forever,
+re-encryption can be lazy. (Slimmed on this branch: the registry,
+`CryptoPolicy`, `CryptoStorage`, `initialize`, and the request/result wrappers
+were removed; resolution reads the live `preference.crypto`.)
 
 **`jt-pq` — PQ primitives.** ML-KEM-768 and X25519 (pure-Dart and
 OpenSSL-FFI), the `AtKemAlgorithm` interface, in at_chops.
@@ -667,12 +673,15 @@ moves it implies — including making `at_auth`'s core compile under `dart2wasm`
 
 - **AtClient chooses the provider.** `CryptoRuntime` already selects a
   `CryptoProvider` for each read/write by `appMetadata.providerId` — unchanged.
-- **CryptoProviders encrypt/decrypt via stateless AtChops primitives**, and are
-  **constructed with a `WritableAtKeys`** — the single in-memory holder of every
-  key the client knows (per-enrollment *and* per-client-id). Providers read keys
-  from it and **mint/add (and occasionally remove) keys through it and have them
-  *written*** — "written" meaning the backing store (`.atKeys` file, keychain
-  entry, or local keystore) is updated.
+- **CryptoProviders are stateless** and encrypt/decrypt via stateless AtChops
+  primitives; everything they need arrives in the per-operation `CryptoContext`.
+  A **`WritableAtKeys`** holder — the single in-memory holder of every key the
+  client knows (per-enrollment *and* per-client-id), which providers read keys
+  from and **mint/add (and occasionally remove) keys through and have them
+  *written*** (the backing `.atKeys` file, keychain entry, or local keystore
+  updated) — is added as a `CryptoContext` field alongside its first consumer
+  (D1-S). Today the context carries the client. *(`WritableAtKeys` should
+  subclass at_auth's `AtKeys`, not wrap an `AtChops`.)*
 - **AtChops is fully stateless** — a grab-bag of primitive functions
   (sign/verify/encrypt/decrypt/HKDF/HMAC/…) that take keys as arguments and hold
   no key material. A `@Deprecated` stateful `AtChopsImpl` shim ships for one
@@ -865,8 +874,9 @@ post-merge (at_client 711 / at_chops 99 / at_commons 486 tests green).
     leaf per instance.** Two machines that should share an identity join as
     two leaves of the same group, not one shared leaf.
   Dynamic state (epoch tables, ratchet state) stays out — it churns per
-  commit and lives in `CryptoStorage`/provider storage encrypted under the
-  storage master key. The existing `loadClientKeys`/`saveClientKeys` and
+  commit and lives in provider-owned storage encrypted under the
+  storage master key. *(The early `CryptoStorage` seam was removed; a
+  provider-storage mechanism is re-introduced when D2 needs it.)* The existing `loadClientKeys`/`saveClientKeys` and
   `SecretStorePersistence` hooks get default SDK implementations over the
   existing keychain/biometric/file plumbing, so apps supply nothing.
 
@@ -1006,8 +1016,10 @@ abstract class SecureGroup {
   `kind:'request'`/`'response'` envelope flow with an answer policy (pull
   recovery: "send me `__rk.current`", then specific epochs on decrypt
   miss); `onNewClientDiscovered` roster watch; `excludeEnrollmentIds`
-  filters; `SecretStore.listSecrets(namePrefix:)`; and on the provider side
-  `CryptoPolicy.onDecryptFailed` so apps choose throw/skip/retry-after-sync.
+  filters; `SecretStore.listSecrets(namePrefix:)`; and a provider-side
+  decrypt-failure hook (apps choose throw/skip/retry-after-sync) — a
+  policy mechanism to be re-introduced when needed (the early `CryptoPolicy`
+  hook was removed in the slim-API refactor).
 - **selfEncryptionKey retirement phases 1–2** begin here (below).
 
 ### Phase 4 — cross-atSign groups (shared encryption)
