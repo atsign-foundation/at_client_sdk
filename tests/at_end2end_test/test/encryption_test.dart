@@ -55,6 +55,23 @@ void main() {
     return atClientManager.atClient;
   }
 
+  // Like getAtClient, but configures an explicit list of providers (for the
+  // multi-provider / config-adoption machinery tests below).
+  Future<AtClient> getAtClientWith(
+    String atSign,
+    List<CryptoProvider> providers, {
+    String defaultProviderId = 'legacy',
+  }) async {
+    final preference = TestPreferences.getInstance().getPreference(atSign)
+      ..crypto = CryptoConfig(
+        defaultProviderId: defaultProviderId,
+        providers: providers,
+      );
+    final atClientManager = await AtClientManager.getInstance()
+        .setCurrentAtSign(atSign, namespace, preference);
+    return atClientManager.atClient;
+  }
+
   String uniqueKeyName(String prefix) {
     return '$prefix.${DateTime.now().microsecondsSinceEpoch}';
   }
@@ -255,4 +272,112 @@ void main() {
       expect(notification.value, 'twin');
     }, timeout: Timeout(Duration(minutes: 1)));
   });
+
+  group('Pluggable encryption / decryption — provider machinery', () {
+    final getOptions = GetRequestOptions()
+      ..bypassCache = true
+      ..useRemoteAtServer = true;
+    PutRequestOptions putWith(String providerId) => PutRequestOptions()
+      ..useRemoteAtServer = true
+      ..cryptoProviderId = providerId;
+
+    test('SDK stamps providerId + isEncrypted when the provider does not',
+        () async {
+      final providerId = uniqueProviderId('bareprov');
+      final keyName = uniqueKeyName('test_share.bare');
+      // _MarkerProvider with stamp:false deliberately touches no metadata.
+      AtClient ac1 = await getAtClientWith(
+          atSign_1, [_MarkerProvider(providerId, plaintext: 'bare-plain')]);
+      final atKey = sharedKey(keyName);
+      await ac1.put(atKey, clearText, putRequestOptions: putWith(providerId));
+
+      // The runtime stamped routing metadata on the provider's behalf.
+      expect(atKey.metadata.appMetadata?.providerId, providerId);
+      expect(atKey.metadata.isEncrypted, true);
+
+      // The receiver decrypts — only possible because isEncrypted was stamped
+      // (otherwise the value would come back undecrypted).
+      AtClient ac2 = await getAtClientWith(
+          atSign_2, [_MarkerProvider(providerId, plaintext: 'bare-plain')]);
+      final getResult =
+          await ac2.get(sharedKey(keyName), getRequestOptions: getOptions);
+      expect(getResult.metadata?.appMetadata?.providerId, providerId);
+      expect(getResult.value, 'bare-plain');
+    });
+
+    test(
+        're-setting an atSign adopts the new crypto config (replacing the old)',
+        () async {
+      final idA = uniqueProviderId('padoptA');
+      final idB = uniqueProviderId('padoptB');
+
+      // Configure atSign_1 with provider A, then RE-SET it with provider B.
+      await getAtClientWith(atSign_1, [_MarkerProvider(idA)]);
+      AtClient ac = await getAtClientWith(atSign_1, [_MarkerProvider(idB)]);
+
+      // A put routed to B works — the new config was adopted onto the re-used
+      // client.
+      final keyB = sharedKey(uniqueKeyName('test_share.adoptB'));
+      await ac.put(keyB, clearText, putRequestOptions: putWith(idB));
+      expect(keyB.metadata.appMetadata?.providerId, idB);
+
+      // ...but a put routed to A now fails: adoption replaced the config, so A
+      // is gone (and A is not the built-in legacy fallback).
+      final keyA = sharedKey(uniqueKeyName('test_share.adoptA'));
+      expect(
+        () async =>
+            await ac.put(keyA, clearText, putRequestOptions: putWith(idA)),
+        throwsA(isA<CryptoProviderNotRegistered>()),
+      );
+    });
+
+    test('routes by providerId among multiple configured providers', () async {
+      final idA = uniqueProviderId('prouteA');
+      final idB = uniqueProviderId('prouteB');
+      List<CryptoProvider> providers() => [
+            _MarkerProvider(idA, plaintext: 'alpha'),
+            _MarkerProvider(idB, plaintext: 'beta'),
+          ];
+      final keyNameA = uniqueKeyName('test_share.routeA');
+      final keyNameB = uniqueKeyName('test_share.routeB');
+
+      AtClient ac1 = await getAtClientWith(atSign_1, providers());
+      final keyA = sharedKey(keyNameA);
+      final keyB = sharedKey(keyNameB);
+      await ac1.put(keyA, clearText, putRequestOptions: putWith(idA));
+      await ac1.put(keyB, clearText, putRequestOptions: putWith(idB));
+      expect(keyA.metadata.appMetadata?.providerId, idA);
+      expect(keyB.metadata.appMetadata?.providerId, idB);
+
+      AtClient ac2 = await getAtClientWith(atSign_2, providers());
+      expect(
+          (await ac2.get(sharedKey(keyNameA), getRequestOptions: getOptions))
+              .value,
+          'alpha');
+      expect(
+          (await ac2.get(sharedKey(keyNameB), getRequestOptions: getOptions))
+              .value,
+          'beta');
+    });
+  });
+}
+
+/// Test provider whose decrypt yields a fixed [plaintext]. It deliberately
+/// touches no metadata on encrypt, so the SDK's own stamping is observable.
+class _MarkerProvider extends CryptoProvider {
+  @override
+  final String id;
+  final String plaintext;
+
+  _MarkerProvider(this.id, {this.plaintext = 'decrypted'});
+
+  @override
+  Future<String> encrypt(
+          CryptoContext context, AtKey atKey, String value) async =>
+      'cipher';
+
+  @override
+  Future<String> decrypt(
+          CryptoContext context, AtKey atKey, String value) async =>
+      plaintext;
 }
