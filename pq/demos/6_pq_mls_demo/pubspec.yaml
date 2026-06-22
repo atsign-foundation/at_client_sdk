@@ -1,0 +1,13 @@
+name: pq_demo_6
+description: N-actor PQ chat with MLS-shaped group ratchet over OpenSSL FFI.
+publish_to: none
+version: 0.0.1
+environment:
+  sdk: ^3.11.0
+dependencies:
+  ffi: ^2.1.0
+  sqlite3: ^2.4.0
+  demo_3:
+    path: ../3_openssl_ffi_and_pqcrypto_package_comparison
+dev_dependencies:
+  lints: ^6.0.0
