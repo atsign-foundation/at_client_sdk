@@ -1,16 +1,42 @@
 # Crypto implementation plan
 
 The detailed, living implementation plan for the post-quantum / group-first
-encryption work. Its companion is [`crypto-roadmap.md`](crypto-roadmap.md) —
-**the roadmap is the design source of truth** (goals, architecture, phasing,
-and the *why*); **this file is the build plan** (task breakdown, ordering,
-dependencies, PR carving, and acceptance — the *how* and *when*).
+encryption work.
+
+> **This is the build plan** — task breakdown, ordering, dependencies, PR
+> carving, and acceptance (the *how* and *when*). It has two companions, and the
+> three docs share one shape (design → build → worked example):
+>
+> - **[crypto-roadmap.md](crypto-roadmap.md)** — the design source of truth
+>   (goals, architecture, phasing, the *why*). On a design question, it wins.
+> - **[crypto-walkthroughs.md](crypto-walkthroughs.md)** — worked end-to-end
+>   examples (NoPorts, a large group, an `at_talk` chat).
+>
+> See the [document map](#document-map) for how the sections pair up.
 
 By intent this plan is **much more detailed for Deliverable 1 (D1 — PQ-safe
 messaging)**, which is the near-term build; **Deliverable 2 (D2 — pq-mls)** is
 left as **sparser placeholders that call out where detailed planning is still
 required**. See the roadmap's
 [two deliverables](crypto-roadmap.md#the-two-major-deliverables).
+
+## Document map
+
+How the three docs line up — **design** (the roadmap, the source of truth) ↔
+**build** (this doc) ↔ **worked example** (the walkthroughs). Find your row and
+jump.
+
+| Topic | Design (roadmap) | Build (plan) | Worked example |
+|---|---|---|---|
+| The two deliverables (D1 / D2) | [The two major deliverables](crypto-roadmap.md#the-two-major-deliverables) | [Current state (1)](crypto_impl_plan.md#1-current-state-2026-06-22) · [D1 acceptance (2)](crypto_impl_plan.md#2-d1-acceptance--what-done-means) | — |
+| D1 Tier1 — the `nskey` default | [D1 — preserving legacy simplicity](crypto-roadmap.md#d1--preserving-legacy-simplicity-two-tiers) | [D1-B (3)](crypto_impl_plan.md#d1-b--the-nskey-provider-d1-tier1--the-default) | — |
+| Migration, rollout & versioning | [Application migration & rollout](crypto-roadmap.md#application-migration--rollout) | [D1-C / D1-D (3)](crypto_impl_plan.md#d1-c--migration--rollout-machinery) | — |
+| Identity, KeyPackages, self groups | [Phases 2–3](crypto-roadmap.md#phase-2--identity-layer-keypackages-and-per-client-atkeys) | [D1-E (3)](crypto_impl_plan.md#d1-e--d1-tier2-shape-corrections-fold-into-wp-gp) · [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | — |
+| Cross-atSign shared groups | [Phase 4](crypto-roadmap.md#phase-4--cross-atsign-groups-shared-encryption) | [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | [C — `at_talk` chat](crypto-walkthroughs.md#walkthrough-c--a-two-atsign-chat-with-client-churn-at_talk) |
+| pq-mls engine + Delivery Service | [atServer group Delivery Service](crypto-roadmap.md#atserver-group-delivery-service-target-design) | [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | [B — a large group](crypto-walkthroughs.md#walkthrough-b--a-large-group-end-to-end) |
+| NoPorts adoption | [Upgrading NoPorts](crypto-roadmap.md#upgrading-noports-with-daemon-ping-feature-discovery) | [Cross-repo & NoPorts (5)](crypto_impl_plan.md#5-cross-repo-pr--publish-sequence--noports) | [A — NoPorts](crypto-walkthroughs.md#walkthrough-a--noports-end-to-end) |
+| Structural enablers / WASM split | [Component responsibilities & WASM-readiness](crypto-roadmap.md#component-responsibilities--wasm-readiness) | [D1-S (3)](crypto_impl_plan.md#d1-s--structural-enablers-prerequisite--lands-first) | — |
+| Release order & work packages | [Starting point](crypto-roadmap.md#starting-point) | [Work packages (7)](crypto_impl_plan.md#7-delivery-plan--work-packages) | — |
 
 ---
 
@@ -19,7 +45,7 @@ required**. See the roadmap's
 ### Branches & delivery model (trunk-based)
 - **Trunk is the single integration point.** Each work package is a short-lived
   branch **merged to `trunk` when complete**, and **published to pub.dev as
-  needed** in dependency order (§7). No long-lived shared integration branch.
+  needed** in dependency order ([section 7](#7-delivery-plan--work-packages)). No long-lived shared integration branch.
 - **When the full stack needs proving before a batch lands**, spin up an
   *ephemeral* integration branch on demand (merge the in-flight WP branches, run
   the e2e rigs, discard) or rely on CI — not a standing branch.
@@ -47,7 +73,7 @@ required**. See the roadmap's
    - **(4a)** commit-log-free persistence migration — **MERGED to trunk (#1984).**
    - **(4b)** pluggable crypto seam (slim) — **PR #1930, OPEN + green.**
    - **(4c)** the secret-sharing substrate, `nskey` / D1 Tier1, and the `group`
-     provider — **land on trunk as the §7 work packages complete** (WP-SS /
+     provider — **land on trunk as the [section 7](#7-delivery-plan--work-packages) work packages complete** (WP-SS /
      WP6 / WP-GP …); the spike (`gkc-pqmls-spike`) holds working prototypes.
 
 ### What is built vs prototyped — re-baselined: assume only trunk + #1930 + #1993
@@ -59,7 +85,7 @@ required**. See the roadmap's
 - **Phase 6 — at_chops is the sole security-crypto dependency**: at_client /
   at_lookup / at_auth / at_onboarding_cli route all security crypto through
   at_chops; a CI gate enforces it (the four small PRs #1995–1998, **merged**).
-  (Record in §6.)
+  (Record in [section 6](#6-standing-verification--implementation-record).)
 
 **In flight (open PRs — the rest of the foundation):**
 - **M0 pluggable crypto seam** — **PR #1930** (at_client). Stateless
@@ -73,7 +99,7 @@ required**. See the roadmap's
   machinery** the whole rollout rides.
 - **HPKE `pqSeal`/`pqOpen`** — **PR #1993** (at_chops).
 
-**Prototyped on `gkc-pqmls-spike` but NOT landed — first-class WPs (§7), not
+**Prototyped on `gkc-pqmls-spike` but NOT landed — first-class WPs ([section 7](#7-delivery-plan--work-packages)), not
 foundation.** The spike has working code for these; treat re-landing it on trunk
 as real work (carve-out + alignment to the slim seam + `pqSeal`):
 - **Secret-sharing substrate (PQ-native)** → **WP-SS**: per-client X-Wing
@@ -91,16 +117,21 @@ as real work (carve-out + alignment to the slim seam + `pqSeal`):
 / Request-Result wrappers were removed in #1930's slim refactor; the
 `cryptoRegistry` getter is off the `AtClient` spec.)*
 
-### Phase status (cross-ref roadmap [Milestones](crypto-roadmap.md#milestones-and-capabilities))
+### Phase status
+Cross-ref roadmap [Milestones](crypto-roadmap.md#milestones-and-capabilities).
+"Prototyped on spike" means working code on `gkc-pqmls-spike` that is **not in
+trunk** — first-class work to land (a WP), not "done". "In flight" is reserved
+for the open PRs **#1930 / #1993**.
+
 | Phase / Milestone | Status |
 |---|---|
-| 0 — foundations (secret sharing, pluggable crypto, jt-pq) | **Partial**: jt-pq + Phase-6 in trunk; pluggable crypto **in flight** (#1930); secret sharing **not landed** (spike → WP-SS) |
-| 1 — PQ primitives in at_chops (X-Wing, GCM, HKDF, HMAC) | **Done**; remaining: PQ enrollment-conveyance pubkey |
-| 2 — identity layer (KeyPackages + per-client AtKeys) | KeyPackage framing **done**; AtKeys device-local split + identity resolution: not started (mostly D2 / D1 Tier2) |
+| 0 — foundations (secret sharing, pluggable crypto, jt-pq) | **Partial**: jt-pq + Phase-6 in trunk; pluggable crypto **in flight** (#1930); secret sharing **prototyped on spike, not landed** (→ WP-SS) |
+| 1 — PQ primitives in at_chops (X-Wing, GCM, HKDF, HMAC) | **Done** (trunk); remaining: PQ enrollment-conveyance pubkey |
+| 2 — identity layer (KeyPackages + per-client AtKeys) | KeyPackage framing **prototyped on spike, not landed** (→ WP-SS); AtKeys device-local split + identity resolution: not started (mostly D2 / D1 Tier2) |
 | 2.5 — at_persistence 5.x migration | **Done & verified** |
-| 3 — `SecureGroup` v1 + `group` provider (self) | **Prototyped on spike, not landed** (→ WP-GP); D1 Tier1 `nskey` self is **new D1 work** (§3) |
-| 4 — cross-atSign shared | D1 Tier1 `nskey` shared is **new D1 work** (§3); per-client pair group is D1 Tier2 / D2 |
-| 5 — pq-mls engine | **D2 placeholder** (§4) |
+| 3 — `SecureGroup` v1 + `group` provider (self) | **Prototyped on spike, not landed** (→ WP-GP); D1 Tier1 `nskey` self is **new D1 work** ([section 3](#3-d1--detailed-implementation-plan)) |
+| 4 — cross-atSign shared | D1 Tier1 `nskey` shared is **new D1 work** ([section 3](#3-d1--detailed-implementation-plan)); per-client pair group is D1 Tier2 / D2 |
+| 5 — pq-mls engine | **D2 placeholder** ([section 4](#4-d2--pq-mls-placeholders-detailed-planning-deferred)) |
 | 6 — at_chops sole security-crypto dependency | **Complete** (in-scope) |
 
 ---
@@ -124,14 +155,14 @@ D1 is done when, per the roadmap
    3.x, `true` in 4.0) lets a client forbid legacy-provider encryption, with a
    `SHOUT` log at creation whenever it is `false`
    ([versioning](crypto-roadmap.md#versioning-contract--the-legacy-encryption-flag-3x-default-off-4x-default-on)).
-5. The **usability acceptance test** holds at each milestone (§5): no new flag a
+5. The **usability acceptance test** holds at each milestone ([section 5](#5-cross-repo-pr--publish-sequence--noports)): no new flag a
    user must pass, file a user must manage, operator step, or peer-by-peer break.
 
 The substantive D1 build is the **`nskey` provider (D1 Tier1)** and the
 **migration/versioning machinery**, on top of the foundation that lands first:
 the M0 seam (#1930), HPKE (#1993), and the carved-out **secret-sharing
 substrate** (WP-SS). Only the at_chops primitives, the commit-log-free keystore,
-and the Phase-6 routing (§1) are already in trunk.
+and the Phase-6 routing ([section 1](#1-current-state-2026-06-22)) are already in trunk.
 
 ---
 
@@ -143,11 +174,12 @@ artifact and acceptance. Design references point at the roadmap. **D1-S
 `WritableAtKeys` + stateless AtChops.
 
 ### D1-S · Structural enablers (prerequisite — lands first)
-Design: roadmap
+*Lands as [WP1–WP5 + WP8](#the-work-package-sequence--single-source-for-ordering)
+across waves 1–3.* Design: roadmap
 [Component responsibilities & WASM-readiness](crypto-roadmap.md#component-responsibilities--wasm-readiness).
 The responsibilities reshape + the `at_auth` WASM split. Sequenced **before**
-the feature workstreams; only `at_auth` takes a major bump (see the roadmap's
-version/sequencing table).
+the feature workstreams; only `at_auth` takes a major bump (see
+[package versions & release sequencing](#package-versions--release-sequencing)).
 
 - [ ] **S1 · AtChops stateless core + `@Deprecated` shim** (`at_chops` minor
   `3.3.0`). Add a stateless functional surface (keys passed per call; the
@@ -189,10 +221,13 @@ version/sequencing table).
 - [ ] **S6 · Consumer constraint bumps + sequencing.** `at_client` /
   `at_onboarding_cli` (`1.17.0`) / `at_client_flutter` (`1.2.0`) /
   `at_cli_commons` adopt `at_auth ^4.0.0`; publish in dependency order
-  (at_chops → at_auth → at_client/onboarding/flutter → at_cli_commons). Roadmap
-  version table is authoritative.
+  (at_chops → at_auth → at_client/onboarding/flutter → at_cli_commons). The
+  [package-versions table (section 7)](#package-versions--release-sequencing) is
+  authoritative.
 
 ### D1-A · Finish the PQ primitives (small)
+*Lands as [WP1 (HPKE) + WP10 (enrollment-conveyance key)](#the-work-package-sequence--single-source-for-ordering),
+waves 1–2.*
 - [ ] **HPKE seal/open over X-Wing** (`at_chops`, from **PR #1993** once the
   requested changes land). `pqSeal(recipientPubKey, plaintext, {info, aad})` /
   `pqOpen(recipientSecretKey, envelope, …)` — KEM = X-Wing, KDF = HKDF-SHA256,
@@ -219,7 +254,8 @@ version/sequencing table).
   `nskey` (D1-B4) — build it first.
 
 ### D1-B · The `nskey` provider (D1 Tier1 — the default)
-Design: roadmap
+*Lands as [WP6 (B1–B4) + WP9 (B5/B6)](#the-work-package-sequence--single-source-for-ordering),
+waves 3–4.* Design: roadmap
 [D1 Tier1](crypto-roadmap.md#d1-tier-1--baseline-the-nskey-provider-default). New provider
 on the M0 seam; legacy-shaped (copyable, enrollment-granular), PQ + namespace
 -scoped. Build order:
@@ -249,12 +285,13 @@ on the M0 seam; legacy-shaped (copyable, enrollment-granular), PQ + namespace
     `pqSeal` envelope (carries the KEM ct + AEAD body); no separate `iv`/`kemCt`.
   - *Acceptance:* unit round-trips (self + shared); byte-exact decrypt; binary
     -safe (seal/open bytes, honour `isBinary` — do **not** repeat the
-    `utf8.encode(toString())` bug, see §3 D1 Tier2 shape tasks).
+    `utf8.encode(toString())` bug, see [section 3](#3-d1--detailed-implementation-plan) D1 Tier2 shape tasks).
 - [ ] **B3 · Capability marker + per-destination negotiation.** Per-`(atSign,
   namespace)` published marker `{nskey: true, nskeyPubKid, …}`, **initially
   not-ready**; the sender reads the recipient's marker (+ its own, for self
   copies) and selects the scheme. Design: roadmap
-  [Mixed-tier](crypto-roadmap.md#mixed-tier-alice--bob) + migration §.
+  [Mixed-tier](crypto-roadmap.md#mixed-tier-alice--bob) +
+  [Application migration & rollout](crypto-roadmap.md#application-migration--rollout).
   *Acceptance:* sender writes `nskey` only when the readers' marker is ready,
   legacy otherwise; mixed-fleet test (one legacy reader ⇒ legacy write).
 - [ ] **B4 · Cold-start fallback + lazy upgrade.** When the recipient has no
@@ -289,6 +326,7 @@ on the M0 seam; legacy-shaped (copyable, enrollment-granular), PQ + namespace
   All but the last phase live in 3.x; the last is the v4 flag (D1-D).
 
 ### D1-C · Migration & rollout machinery
+*Lands as [WP7](#the-work-package-sequence--single-source-for-ordering), wave 4.*
 Design: roadmap
 [Application migration & rollout](crypto-roadmap.md#application-migration--rollout).
 - [ ] **C1 · Readiness-marker lifecycle.** Publish (not-ready) on upgrade; flip
@@ -312,7 +350,8 @@ Design: roadmap
   code = override defaults / D1 Tier2.
 
 ### D1-D · Versioning (the `disallowLegacyEncryption` flag)
-Design: roadmap
+*Lands as [WP7 (flag, default off) + WP-D3 (v4 default flip)](#the-work-package-sequence--single-source-for-ordering),
+waves 4 & 6.* Design: roadmap
 [Versioning contract](crypto-roadmap.md#versioning-contract--the-legacy-encryption-flag-3x-default-off-4x-default-on).
 - [ ] **D1 · All D1 lands in 3.x** — additive, backwards-compatible; a 3.x
   client may write legacy when a reader isn't PQ-ready.
@@ -335,8 +374,9 @@ Design: roadmap
   flag is `false`). Gated on the ecosystem floor.
 
 ### D1-E · D1 Tier2 shape-corrections (fold into WP-GP)
+*Lands as [WP-GP](#the-work-package-sequence--single-source-for-ordering), wave 5.*
 The `group` provider is prototyped on the spike (D1 Tier2 self) and lands as
-WP-GP. These keep its shape honest before the self→shared and MLS transitions;
+WP-GP. These preserve its shape before the self→shared and MLS transitions;
 apply them as part of that carve-out, while touching the area.
 - [ ] **Lift membership into `SecureGroup`** (`members`/`add`/`remove`); v1
   derives them. Avoids a later breaking change to a published abstract.
@@ -353,18 +393,19 @@ apply them as part of that carve-out, while touching the area.
   pattern (a test that fails without the fix).
 - Functional (live virtualenv): nskey self + shared, rotation, mixed-tier
   (nskey↔legacy), cold-start, enrollment-revoke + rotate-exclude.
-- e2e (cross-atSign, `@ce2e*`): the `at_talk` chat scenario from roadmap
-  [Appendix C](crypto-roadmap.md#appendix-c--a-two-atsign-chat-with-client-churn-at_talk-detailed)
+- e2e (cross-atSign, `@ce2e*`): the `at_talk` chat scenario from
+  [Walkthrough C](crypto-walkthroughs.md#walkthrough-c--a-two-atsign-chat-with-client-churn-at_talk)
   — alice1/2 ↔ bob1/2 bidirectional, then bob3/alice3 join (new + past
   messages). Run concurrently via the base-port `runLocal.sh` rigs (PR #1992).
-- Usability acceptance test (§5) at each milestone.
+- Usability acceptance test ([section 5](#5-cross-repo-pr--publish-sequence--noports)) at each milestone.
 
 ### D1 · PR delivery / publish
 Each work package is its own short-lived branch **merged to trunk when
-complete**, with pub.dev **published as needed** in dependency order (§7) — 4c
+complete**, with pub.dev **published as needed** in dependency order ([section 7](#7-delivery-plan--work-packages)) — 4c
 (secret sharing) and the `nskey`/migration work land the same way, not carved
 from an integration branch at the end. Overall publish order: roadmap
-[Dependencies](crypto-roadmap.md#dependencies) + the version table.
+[Dependencies](crypto-roadmap.md#dependencies) + the
+[package-versions table (section 7)](#package-versions--release-sequencing).
 
 ---
 
@@ -518,7 +559,7 @@ How the D1 work lands across **parallel tracks** with minimal merge friction.
 Principle: **partition by package** (two tracks rarely edit the same file),
 **land contracts first** (others build against stable shapes), keep merges
 **additive / flag-gated** so trunk stays releasable. The work packages below map
-onto the §3 workstreams (D1-S / D1-A…E); this is the parallelisation/sequencing
+onto the [section 3](#3-d1--detailed-implementation-plan) workstreams (D1-S / D1-A…E); this is the parallelisation/sequencing
 view.
 
 ### Tracks (package domains, not people)
@@ -540,7 +581,7 @@ Within `at_client/crypto/`, the file partition keeps A and C apart: **C** owns
 files — low collision by construction.
 
 ### Reconciliations since the slim refactor (`xl-pluggable`)
-The slim-API + registry-fold landed on `xl-pluggable` (PR #1930) after this §7
+The slim-API + registry-fold landed on `xl-pluggable` (PR #1930) after this [section 7](#7-delivery-plan--work-packages)
 was first written; three assumptions shifted:
 1. **`CryptoContext` is `{atClient}`** — no `atChops` field. WP3 just *adds*
    `WritableAtKeys keys`; nothing to deprecate.
@@ -570,6 +611,27 @@ Order is top-to-bottom; items in one **wave** run in parallel (different
 package/track — A crypto-primitives, B key-management, C at_client seam,
 D storage/consumers). **▶** marks a pub.dev release shipping user-visible
 capability.
+
+**WP ↔ workstream map.** Each work package realises one or more of the
+[section 3](#3-d1--detailed-implementation-plan) workstreams; this table is the
+two-way lookup (a WP row here links to its workstream, and each workstream
+header links back to this section):
+
+| WP | Workstream ([section 3](#3-d1--detailed-implementation-plan)) | Wave |
+|---|---|---|
+| #1993 / WP1 | [D1-A](#d1-a--finish-the-pq-primitives-small) (HPKE) + [D1-S](#d1-s--structural-enablers-prerequisite--lands-first) S1 | 0 / 1 |
+| WP2 | [D1-S](#d1-s--structural-enablers-prerequisite--lands-first) S2 | 1 |
+| WP3 | [D1-S](#d1-s--structural-enablers-prerequisite--lands-first) S5 | 1 |
+| WP4 | [D1-S](#d1-s--structural-enablers-prerequisite--lands-first) S2/S3 (+ storage) | 1 |
+| WP-SS | [Foundations — secret sharing](crypto-roadmap.md#foundations) | 2 |
+| WP10 | [D1-A](#d1-a--finish-the-pq-primitives-small) (enrollment-conveyance key) | 2 |
+| WP6 | [D1-B](#d1-b--the-nskey-provider-d1-tier1--the-default) B1–B4 | 3 |
+| WP5 | [D1-S](#d1-s--structural-enablers-prerequisite--lands-first) S4 (WASM cut) | 3 |
+| WP8 | [D1-S](#d1-s--structural-enablers-prerequisite--lands-first) S6 (consumer bumps) | 3 |
+| WP7 | [D1-C](#d1-c--migration--rollout-machinery) + [D1-D](#d1-d--versioning-the-disallowlegacyencryption-flag) D2 | 4 |
+| WP9 | [D1-B](#d1-b--the-nskey-provider-d1-tier1--the-default) B5/B6 | 4 |
+| WP-GP | [D1-E](#d1-e--d1-tier2-shape-corrections-fold-into-wp-gp) | 5 |
+| WP-D3 | [D1-D](#d1-d--versioning-the-disallowlegacyencryption-flag) D3 | 6 |
 
 **Wave 0 — land the in-flight foundation (gates everything).** #1930 is the
 single biggest unblock; #1993 can be reviewed alongside it.
@@ -621,11 +683,31 @@ single biggest unblock; #1993 can be reviewed alongside it.
   to `true` + dead-code removal (the legacy provider itself stays — needed for
   reads). **▶ at_client 4.0.0: PQ-safe on every write path by default.**
 
-D2 (pq-mls) is a separate deliverable — see §4.
+D2 (pq-mls) is a separate deliverable — see [section 4](#4-d2--pq-mls-placeholders-detailed-planning-deferred).
+
+### Package versions & release sequencing
+
+Publish in dependency order. Only `at_auth` takes a major (the breaking WASM
+barrel split); everyone else stays minor. The `at_auth` work is split into an
+additive minor (`3.2.0`, WP2) then a breaking major (`4.0.0`, WP5) so
+`WritableAtKeys` bakes before the barrel cut. Design rationale: roadmap
+[package versions & release sequencing](crypto-roadmap.md#package-versions--release-sequencing).
+
+| # | Package | Bump | WP | Why |
+|---|---|---|---|---|
+| 1 | `at_chops` | minor `3.2.1 → 3.3.0` | WP1 | stateless functional core + HPKE `pqSeal`/`pqOpen` **added**; stateful `AtChopsImpl` kept as `@Deprecated` shim (additive) |
+| 2 | `at_auth` | minor `3.1.1 → 3.2.0` | WP2 | **additive API:** `WritableAtKeys` added; `AtKeysIo`/`WrittenAtKeysIo` widened (add/remove/update, default impls); `InMemoryAtKeysIo`. No barrel change yet — downstream can adopt `WritableAtKeys` immediately |
+| 3 | `at_auth` | **major `3.2.0 → 4.0.0`** | WP5 | **breaking WASM cut:** `FileAtKeysIo` out of the main barrel (→ `at_auth_io.dart`); `FileAtKeysIo()` default removed; registrar → `package:http`; probe extracted; core compiles under `dart2wasm` |
+| 4 | `at_client` | minor `3.13.0 → 3.14.0` | WP3 / WP6 | `at_auth ^4.0.0`; `CryptoContext` gains a `WritableAtKeys keys` field (additive; context is `{atClient}` today — nothing to deprecate); `LocalKeystoreAtKeysIo`; `nskey` provider scaffold |
+| 5 | `at_onboarding_cli` | minor `1.16.0 → 1.17.0` | WP8 | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; injects it explicitly (default gone) |
+| 6 | `at_client_flutter` | minor `1.1.3 → 1.2.0` | WP8 | `at_auth ^4.0.0`; `file_picker` imports `at_auth_io.dart` |
+| 7 | `at_cli_commons` | minor (constraint bump) | WP8 | consumes the new `at_onboarding_cli` / `at_client` |
 
 ### Integration is continuous, not a final step
 Each WP **merges to trunk when complete** and is **published to pub.dev as
-needed** in dependency order (roadmap version table). To prove the full stack
+needed** in dependency order (the
+[package-versions table](#package-versions--release-sequencing) above). To prove
+the full stack
 before a batch lands, **spin up an ephemeral integration branch on demand**
 (merge the in-flight WP branches, run unit + functional + e2e via the base-port
 `runLocal.sh` rigs, discard) or rely on CI — so cross-package issues surface
@@ -652,7 +734,7 @@ early, with no standing integration branch to drift.
 
 Four small, additive, single-package PRs — one per track, started in parallel.
 Land the three interface-defining ones (WP1/WP2/WP3 signatures) first, stubs OK,
-so every track compiles against stable shapes. Full acceptance detail is in §3
+so every track compiles against stable shapes. Full acceptance detail is in [section 3](#3-d1--detailed-implementation-plan)
 (D1-S S1/S2/S5, D1-A). **Prereqs on trunk:** PR #1930 (M0 seam), PR #1993 (HPKE),
 the four at_chops-routing PRs (#1995–1998).
 
