@@ -6,10 +6,37 @@ capability (encrypt/decrypt for other clients of the same atSign,
 encrypt/decrypt for other atSigns), strengthened with two-lever key
 rotation, and giving applications a bootstrap path to pq-mls groups.
 
-> **This document is the design source of truth** — goals, architecture,
-> phasing, and the *why*. The detailed build plan, status, task breakdown, and
-> PR carving live in its companion, the
-> [crypto implementation plan](crypto_impl_plan.md).
+> **This is the design source of truth** — goals, architecture, phasing, and
+> the *why*. It has two companions, and the three docs share one shape (design →
+> build → worked example):
+>
+> - **[crypto_impl_plan.md](crypto_impl_plan.md)** — the build plan: task
+>   breakdown, ordering, dependencies, PR carving, acceptance (the *how* and
+>   *when*).
+> - **[crypto-walkthroughs.md](crypto-walkthroughs.md)** — worked end-to-end
+>   examples (NoPorts, a large group, an `at_talk` chat) that exercise this
+>   design.
+>
+> When a companion disagrees with this document on design intent, this document
+> wins. See the [document map](#document-map) for how the sections pair up.
+
+## Document map
+
+How the three docs line up — **design** (this doc, the source of truth) ↔
+**build** (the plan) ↔ **worked example** (the walkthroughs). Find your row and
+jump.
+
+| Topic | Design (roadmap) | Build (plan) | Worked example |
+|---|---|---|---|
+| The two deliverables (D1 / D2) | [The two major deliverables](crypto-roadmap.md#the-two-major-deliverables) | [Current state (1)](crypto_impl_plan.md#1-current-state-2026-06-22) · [D1 acceptance (2)](crypto_impl_plan.md#2-d1-acceptance--what-done-means) | — |
+| D1 Tier1 — the `nskey` default | [D1 — preserving legacy simplicity](crypto-roadmap.md#d1--preserving-legacy-simplicity-two-tiers) | [D1-B (3)](crypto_impl_plan.md#d1-b--the-nskey-provider-d1-tier1--the-default) | — |
+| Migration, rollout & versioning | [Application migration & rollout](crypto-roadmap.md#application-migration--rollout) | [D1-C / D1-D (3)](crypto_impl_plan.md#d1-c--migration--rollout-machinery) | — |
+| Identity, KeyPackages, self groups | [Phases 2–3](crypto-roadmap.md#phase-2--identity-layer-keypackages-and-per-client-atkeys) | [D1-E (3)](crypto_impl_plan.md#d1-e--d1-tier2-shape-corrections-fold-into-wp-gp) · [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | — |
+| Cross-atSign shared groups | [Phase 4](crypto-roadmap.md#phase-4--cross-atsign-groups-shared-encryption) | [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | [C — `at_talk` chat](crypto-walkthroughs.md#walkthrough-c--a-two-atsign-chat-with-client-churn-at_talk) |
+| pq-mls engine + Delivery Service | [atServer group Delivery Service](crypto-roadmap.md#atserver-group-delivery-service-target-design) | [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | [B — a large group](crypto-walkthroughs.md#walkthrough-b--a-large-group-end-to-end) |
+| NoPorts adoption | [Upgrading NoPorts](crypto-roadmap.md#upgrading-noports-with-daemon-ping-feature-discovery) | [Cross-repo & NoPorts (5)](crypto_impl_plan.md#5-cross-repo-pr--publish-sequence--noports) | [A — NoPorts](crypto-walkthroughs.md#walkthrough-a--noports-end-to-end) |
+| Structural enablers / WASM split | [Component responsibilities & WASM-readiness](crypto-roadmap.md#component-responsibilities--wasm-readiness) | [D1-S (3)](crypto_impl_plan.md#d1-s--structural-enablers-prerequisite--lands-first) | — |
+| Release order & work packages | [Starting point](crypto-roadmap.md#starting-point) | [Work packages (7)](crypto_impl_plan.md#7-delivery-plan--work-packages) | — |
 
 ## The two major deliverables
 
@@ -366,33 +393,13 @@ rotation, or opt into per-device (D1 Tier2) security.
 
 ## Starting point
 
-`trunk`, incorporating and extending three lines of work:
-
-| Work                 | Contributes                                                         | Status                  |
-|----------------------|---------------------------------------------------------------------|-------------------------|
-| `jt-pq`              | Post-quantum primitives in at_chops (ML-KEM-768, X25519)            | Merged to trunk         |
-| `xl-pluggable`       | Pluggable `CryptoProvider` model + wire routing (`AppMetadata`)     | PR #1930 (open, green)  |
-| `gkc-pqmls-spike`    | Per-client identity, discovery, and same-atSign delivery + the above | Rebuilt on `xl-pluggable` |
-
-### Delivery model
-
-Delivery is **trunk-based**: each work package is a short-lived branch
-**merged to `trunk` when complete** and **published to pub.dev as needed** in
-dependency order — **trunk is the single integration point**. See the
-[delivery plan & work packages](crypto_impl_plan.md#7-delivery-plan--work-packages)
-in the implementation plan. There is **no long-lived shared integration
-branch**; when the full stack needs proving before a batch lands, spin up an
-*ephemeral* integration branch on demand (merge the in-flight WP branches, run
-the e2e rigs, discard) or rely on CI. (`gkc-pqmls-spike` is now just a personal
-working branch + historical context.) The dependency-ordered sequence and its status: `at_commons` (the
-`appMetadata` wire field — **published 5.11.0**) → `at_chops` (X-Wing / AES-GCM
-/ key consolidation — **published 3.2.1**) → `at_persistence_secondary_server`
-(commit-log-free keystore + `appMetadata` — **published 5.0.0 / 5.1.0**) →
-`at_client` (4a migration **merged to trunk**; 4b pluggable crypto = **PR
-#1930**; 4c secret sharing to follow). `at_server` must round-trip
-`appMetadata` before the at_client crypto path verifies end-to-end, so it
-landed ahead (released to the fleet); `sshnoports` consumes the released SDK
-and comes last.
+This design builds on `trunk`. Delivery is **trunk-based** — each work package
+is a short-lived branch merged to `trunk` when complete and published to pub.dev
+as needed in dependency order. The current build status, branch model, and the
+dependency-ordered publish sequence are the build plan's responsibility: see the
+implementation plan's
+[current state (section 1)](crypto_impl_plan.md#1-current-state-2026-06-22) and
+[delivery plan & work packages (section 7)](crypto_impl_plan.md#7-delivery-plan--work-packages).
 
 ## The end state
 
@@ -462,60 +469,39 @@ its own; later ones build on earlier. (Phase numbers cross-reference the
 | **M6 · pq-mls engine** (Phase 5) | Swap the v1 engine for MLS (TreeKEM, RFC 9420 FS/PCS, PQ ciphersuites) behind the same interface + DS | O(log n) commits, standardized + audited group security — the actual end state. |
 | **NoPorts adoption** (finish line) | Session keys via `SecureGroup.export`; daemon-feature-gated tiers 0–2 | The production payoff: PQ-safe NoPorts, derived (not transmitted) session keys, fleet management. |
 
-Status: M0, M1 (X-Wing/GCM/HKDF), M2 (KeyPackage framing), M3 (self) and the
-cross-cutting "at_chops is the sole security-crypto dependency" (Phase 6) are
-done or in flight; **M4, M5, M6 are the substantive build ahead.** In
-deliverable terms (see [The two major deliverables](#the-two-major-deliverables)):
-**M0–M4 are Deliverable 1** (PQ-safe messaging) — largely done, with M4 the main
-remaining piece — and **M5–M6 are Deliverable 2** (pq-mls). The M2–M4 rows below
+In deliverable terms (see
+[The two major deliverables](#the-two-major-deliverables)): **M0–M4 are
+Deliverable 1** (PQ-safe messaging) and **M5–M6 are Deliverable 2** (pq-mls).
+The authoritative build status is the plan's
+[phase status](crypto_impl_plan.md#phase-status); in brief — M1 (X-Wing/GCM/HKDF)
+and Phase 6 (at_chops as the sole security-crypto dependency) are in trunk; the
+M0 seam is in flight (#1930); the per-client KeyPackage framing (M2) and `group`
+provider (M3) are **prototyped on the spike, not yet landed**; M4 is the main
+remaining D1 piece and M5–M6 are the D2 build ahead. The M2–M4 rows above
 describe the **per-client group** capability; per
 [D1 — preserving legacy simplicity](#d1--preserving-legacy-simplicity-two-tiers)
 that is the **opt-in D1 Tier2** and the D2 substrate — D1's *default* path is the
 simpler `nskey` shared-namespace-key tier, with the same milestones reframed.
 
-## How it works — NoPorts (summary)
+## How it works — in brief
 
-A NoPorts session is a *small* group — @client↔@daemon (plus @srvd for relay)
-— so the member-atSign count is 1–2 and there is **no Delivery Service**:
-delivery stays pairwise, as today. Backwards compatibility rides the daemon
-ping's `supportedFeatures`; three feature-gated tiers:
+Two shapes, one `SecureGroup` interface — each with a design section and a
+worked trace:
 
-- **Tier 0 — transport PQ-safe:** daemons advertise `groupCrypto`; the client
-  routes per-destination through the `group` provider (PQ-safe) or falls back
-  to `legacy`. The still-RSA-wrapped session key now travels *inside* a
-  group-encrypted payload, so a recorded exchange can't be peeled open later —
-  harvest-now-decrypt-later closed, no protocol change.
-- **Tier 1 — derive, don't transmit:** gated on `pqSessionKeys`; both sides
-  form the @client↔@daemon pair group and `export()` the session keys
-  independently — no key material in flight; deletes the per-session RSA
-  keypair.
-- **Tier 2 — fleet self-group:** many sshnpd on one device atSign + a policy
-  client are a self group; config secrets are shared once and read by all
-  daemons; revoke → leaf removed + rotate → a stolen daemon reads nothing
-  after.
-
-Full walk-through: [Appendix A](#appendix-a--noports-end-to-end-detailed).
-
-## How it works — a large group (summary)
-
-A large group runs against a dedicated, **ciphertext-only Delivery Service
-atSign** (e.g. `@my_org_groups`) operated as infrastructure. Members are
-leaves (per-client); one or more admins drive membership. The DS atServer
-holds the group object (roster + monotonic `seq` + TTL'd ciphertext log) and
-does the work the pairwise model can't:
-
-- **sequencing** — the atomic per-group `seq` is the MLS commit order;
-- **fan-out** — wake-then-pull, **O(member-atSigns), not O(member-clients)**;
-- **catch-up / retention** — `fetch:since` is the single delivery primitive;
-  app messages may expire (tombstoned), commits are retained until
-  applied-by-all or a straggler rejoins.
-
-The DS never decrypts and cannot forge membership (members validate commits
-cryptographically; reorder/withhold is detectable via the transcript hash).
-The crypto is MLS (v2) — TreeKEM gives O(log n) commits and real FS/PCS —
-behind the same `SecureGroup` interface.
-
-Full walk-through: [Appendix B](#appendix-b--a-large-group-end-to-end-detailed).
+- **Small groups (NoPorts: @client↔@daemon, ±@srvd for relay).** Member-atSign
+  count is 1–2, so there is **no Delivery Service** — delivery stays pairwise, as
+  today. Daemon-ping `supportedFeatures` gates three tiers (transport-PQ-safe →
+  derive-don't-transmit → fleet self-group), each backwards-compatible with old
+  peers. Design:
+  [Upgrading NoPorts](#upgrading-noports-with-daemon-ping-feature-discovery);
+  trace: [Walkthrough A](crypto-walkthroughs.md#walkthrough-a--noports-end-to-end).
+- **Large groups.** Run against a dedicated **ciphertext-only Delivery Service
+  atSign**: it holds the group object (roster + monotonic `seq` + TTL'd
+  ciphertext log), sequences commits as the MLS total order, and fans out
+  **wake-then-pull, O(member-atSigns) not O(member-clients)** — it orders and
+  routes but never decrypts and cannot forge membership. Design:
+  [atServer group Delivery Service](#atserver-group-delivery-service-target-design);
+  trace: [Walkthrough B](crypto-walkthroughs.md#walkthrough-b--a-large-group-end-to-end).
 
 ## Usability — a first-class constraint
 
@@ -542,7 +528,7 @@ exist to keep it true. The promises, each linking to where it's realised:
 - **Old data stays readable forever; migration is lazy.** The `CryptoProvider`
   seam routes per value by `AppMetadata`, so legacy and new schemes coexist,
   re-encryption is on-touch, and there is never a flag-day. →
-  [Foundations](#foundations-what-exists-today)
+  [Foundations](#foundations)
 - **Backwards-compatible, per-destination rollout.** Feature discovery
   (daemon-ping `supportedFeatures`) gates new behaviour per peer; an old peer
   silently keeps the legacy path. →
@@ -567,50 +553,45 @@ revocation and audit). The corresponding builder-facing surface is the
 "LLM-friendly verbs, explicit semantics, no hidden invariants" goal as the
 rest of `AtCollection`.
 
-## Foundations (landed, in flight, and prototyped)
+## Foundations
 
-Status as of 2026-06-22 — only the first two below are at_chops/at_client code
-you can build against; the provider seam is in review; secret sharing and the
-`group` provider are spike prototypes still to be landed (see the build plan's
-[work-package sequence](crypto_impl_plan.md#the-work-package-sequence--single-source-for-ordering)).
+Three building blocks the rest of this design composes. For which are landed, in
+flight, or still prototyped, see the build plan's
+[current state](crypto_impl_plan.md#1-current-state-2026-06-22).
 
-**`xl-pluggable` — the provider seam** *(at_client; PR #1930, in flight).*
-`CryptoProvider { id;
-encrypt(CryptoContext, AtKey, String) → String; decrypt(CryptoContext, AtKey,
-String) → String }` — **stateless**, with the per-operation `CryptoContext`
-(the client) handed in per call. Providers are declared in
-`AtClientPreference.crypto` (`CryptoConfig { defaultProviderId, providers }`);
-`CryptoRuntime` resolves each put/get/notify/sync against the live config by
-`appMetadata.providerId`, falling back to the built-in `LegacyCryptoProvider`.
-The wire carries `Metadata.appMetadata = AppMetadata{providerId, additional}`;
-the SDK stamps `providerId` + `isEncrypted` after a successful encrypt, so a
-provider only contributes `additional`. `PutRequestOptions.cryptoProviderId`
-overrides per operation. This seam is the migration machinery itself: legacy
-and new schemes coexist per-value, old data stays readable forever,
-re-encryption can be lazy. (Slimmed on this branch: the registry,
-`CryptoPolicy`, `CryptoStorage`, `initialize`, and the request/result wrappers
-were removed; resolution reads the live `preference.crypto`.)
+**The provider seam.** `CryptoProvider { id; encrypt(CryptoContext, AtKey,
+String) → String; decrypt(CryptoContext, AtKey, String) → String }` —
+**stateless**, with the per-operation `CryptoContext` (the client) handed in per
+call. Providers are declared in `AtClientPreference.crypto`
+(`CryptoConfig { defaultProviderId, providers }`); `CryptoRuntime` resolves each
+put/get/notify/sync against the live config by `appMetadata.providerId`, falling
+back to the built-in `LegacyCryptoProvider`. The wire carries
+`Metadata.appMetadata = AppMetadata{providerId, additional}`; the SDK stamps
+`providerId` + `isEncrypted` after a successful encrypt, so a provider only
+contributes `additional`. `PutRequestOptions.cryptoProviderId` overrides per
+operation. **This seam is the migration machinery itself**: legacy and new
+schemes coexist per-value, old data stays readable forever, re-encryption can be
+lazy.
 
-**`jt-pq` — PQ primitives** *(at_chops 3.2.1, in trunk).* ML-KEM-768 and X25519
-(pure-Dart and OpenSSL-FFI), the `AtKemAlgorithm` interface, in at_chops.
-HPKE `pqSeal`/`pqOpen` is in flight (PR #1993).
+**PQ primitives.** ML-KEM-768 and X25519 (pure-Dart and OpenSSL-FFI), the
+`AtKemAlgorithm` interface, AES-256-GCM, and HKDF/HMAC — in at_chops. HPKE
+`pqSeal`/`pqOpen` is the one audited public-key-encryption primitive the
+providers seal through.
 
-**Secret sharing — identity + same-atSign delivery** *(prototyped on
-`gkc-pqmls-spike`, NOT yet landed — carve-out WP-SS).* Per-client identity
+**Secret sharing — identity + same-atSign delivery.** Per-client identity
 (clientId + X-Wing keypair) published as an APKAM-signed `ClientKeyPackage`:
 canonical hidden public key in the enrollment's reserved namespace (location
 exclusivity = identity anchor) plus namespace-scoped copies whose *presence*
-proves the enrollment holds `rw` on that namespace (server-enforced, verified
-empirically). Store-and-forward encrypted envelopes scoped by application
-namespace; `SecretStore` with newest-wins merge; enrollment-approval sharing;
-shared per-AtClient instance (`AtClientSecretSharing.forClient`); race-free
+proves the enrollment holds `rw` on that namespace (server-enforced).
+Store-and-forward encrypted envelopes scoped by application namespace;
+`SecretStore` with newest-wins merge; enrollment-approval sharing; race-free
 `waitForSecret`; crypto-agile formats (`{kid, use, alg}` key lists,
 `{keyAlg, kid, encAlg}` envelopes) so algorithms upgrade by id with no schema
-change. PQ-native: `x-wing` key transport + `aes-256-gcm` payloads. API
-`@experimental` (durable surface will be `SecureGroup`).
+change. PQ-native: `x-wing` key transport + `aes-256-gcm` payloads. The durable
+app-facing surface will be `SecureGroup`.
 
-**Get-path invariants** (the secret-sharing and pluggable-crypto work both
-touch the get path; both are satisfied on the integration branch):
+**Get-path invariants** (both the secret-sharing and pluggable-crypto paths
+touch get):
 
 - `get` respects the `isEncrypted` tri-state: explicit `false` skips
   decryption and returns the raw value; absent (legacy data) takes the
@@ -658,7 +639,7 @@ metadata, or public keys:
   `public:__sskb-…@atsign`): a client's X-Wing/encryption/signing *public* key
   plus a signature. The secret is the private half, which stays on the device.
 
-**Two honest edges:**
+**Two exceptions, by design:**
 
 - **`shouldEncrypt=false` is an app-accessible escape hatch.** The SDK uses it
   only for already-sealed envelopes and public KeyPackages, but it is a real
@@ -802,29 +783,23 @@ Only **`at_auth` takes a major** (the breaking WASM barrel split); everyone else
 stays minor — additive features behind the AtChops shim plus the `at_auth`
 constraint bumps. The `at_auth` work is **split into an additive minor then a
 breaking major** so the `WritableAtKeys` API lands and bakes *before* the
-breaking barrel cut, removing the lockstep crunch. Publish in dependency order:
-
-| # | Package | Bump | Why |
-|---|---|---|---|
-| 1 | `at_chops` | minor `3.2.1 → 3.3.0` | stateless functional core + HPKE `pqSeal`/`pqOpen` **added**; stateful `AtChopsImpl` kept as `@Deprecated` shim (additive) |
-| 2 | `at_auth` | minor `3.1.1 → 3.2.0` | **additive API:** `WritableAtKeys` added; `AtKeysIo`/`WrittenAtKeysIo` widened (add/remove/update, default impls); `InMemoryAtKeysIo`. No barrel change yet — downstream can adopt `WritableAtKeys` immediately |
-| 3 | `at_auth` | **major `3.2.0 → 4.0.0`** | **breaking WASM cut:** `FileAtKeysIo` out of the main barrel (→ `at_auth_io.dart`); `FileAtKeysIo()` default removed; registrar → `package:http`; probe extracted; core compiles under `dart2wasm` |
-| 4 | `at_client` | minor `3.13.0 → 3.14.0` | `at_auth ^4.0.0`; `CryptoContext` gains a `WritableAtKeys keys` field (additive; context is `{atClient}` today — nothing to deprecate); `LocalKeystoreAtKeysIo`; `nskey` provider scaffold |
-| 5 | `at_onboarding_cli` | minor `1.16.0 → 1.17.0` | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; injects it explicitly (default gone) |
-| 6 | `at_client_flutter` | minor `1.1.3 → 1.2.0` | `at_auth ^4.0.0`; `file_picker` imports `at_auth_io.dart` |
-| 7 | `at_cli_commons` | minor (constraint bump) | consumes the new `at_onboarding_cli` / `at_client` |
+breaking barrel cut, removing the lockstep crunch.
 
 This **`at_auth 4.0`** (structural / WASM) is **independent of the eventual
 `at_client 4.0`** (the `disallowLegacyEncryption` default flip + dead-code
 removal, gated on the ecosystem floor) — different majors, different times.
 
+The per-package bump table and dependency-ordered publish steps are the build
+plan's job: see
+[package versions & release sequencing (section 7)](crypto_impl_plan.md#package-versions--release-sequencing).
+
 ## Phases
 
-### Phase 0 — land the foundations — **done on the integration branch**
+### Phase 0 — land the foundations
 
-`jt-pq` merged to trunk; `xl-pluggable` merged into `gkc-pqmls-spike`; the
-secret-sharing substrate is in place. The get-path invariants above hold
-post-merge (at_client 711 / at_chops 99 / at_commons 486 tests green).
+The pluggable-crypto seam, the PQ primitives, and the secret-sharing substrate —
+see [Foundations](#foundations). Build status is the plan's
+[phase status](crypto_impl_plan.md#phase-status).
 
 ### Phase 1 — complete the PQ primitives (at_chops)
 
@@ -1132,7 +1107,7 @@ that actually encrypts data is epochal and rotates as a matter of course.
 ## Dependencies
 
 ```
-0 (merge 1976 + xl-pluggable + jt-pq)
+0 (foundations: provider seam + PQ primitives + secret-sharing substrate)
 └─► 1 (X-Wing, GCM, HKDF, PQ enrollment pubkey)
     └─► 2 (KeyPackages PQ-native, AtKeys split, cross-atSign publication)
         └─► 3 (SecureGroup v1 + group provider, self)  ─► retire sEK 1–2
@@ -1161,76 +1136,41 @@ an old daemon), and features gate behavior per session — exactly how
 | `pqSessionKeys` | supports deriving session keys from a pair-group `export()` (none in flight)  |
 
 The crucial subtlety: a client must NOT flip its default provider for
-traffic to a daemon that can't decrypt it. `PutRequestOptions.
-cryptoProviderId` (per-operation override, from `xl-pluggable`) is the
-gate: choose the provider per destination based on the ping response.
+traffic to a daemon that can't decrypt it. `PutRequestOptions.cryptoProviderId`
+(per-operation override, from the M0 seam) is the gate: choose the provider per
+destination based on the ping response.
 
-**Tier 0 — transport becomes PQ-safe (no protocol change).** Daemons
-upgrade first (the new SDK decrypts both legacy- and group-encrypted
-values automatically via `AppMetadata` routing) and advertise
-`groupCrypto`. Clients then send per-destination:
+Three feature-gated tiers, each strictly compatible with un-upgraded peers:
 
-```dart
-final features = await pingDaemon(device);            // existing flow
-final provider = features['groupCrypto'] == true ? 'group' : 'legacy';
-await notify(req, ..., putRequestOptions: PutRequestOptions()
-  ..cryptoProviderId = provider);
-```
+- **Tier 0 — transport becomes PQ-safe (no protocol change).** Daemons upgrade
+  first (the new SDK decrypts both legacy- and group-encrypted values via
+  `AppMetadata` routing) and advertise `groupCrypto`; clients then route
+  per-destination through `group` or fall back to `legacy`. The RSA-wrapped
+  session keys travel *inside* these payloads, so tier 0 alone closes the
+  harvest-now hole — a recorded exchange can no longer be peeled open later.
+- **Tier 1 — derive session keys, never transmit them.** Gated on
+  `pqSessionKeys`: both sides resolve the same pair group and `export()` the
+  session keys independently — no key material in flight; deletes the
+  per-session RSA-2048 keypair (a startup win on small devices). The srvd
+  relay-auth key involves a third atSign, so it stays transmitted, protected by
+  tier 0.
+- **Tier 2 — fleet management via the self group.** Many daemons on one device
+  atSign plus the policy service are a self group; config secrets are shared
+  once and read by all daemons (joined automatically at enrollment); revoke →
+  leaf removed + rotate → a stolen daemon reads nothing after.
 
-Old daemon → legacy path, byte-identical to today. New daemon → every
-request/response/heartbeat is group-encrypted and PQ-safe. Note the
-compounding effect: the RSA-wrapped session keys travel *inside* these
-payloads, so tier 0 alone closes the harvest-now hole — a recorded
-exchange can no longer be peeled open later to recover the inner RSA
-ciphertext.
+**Rollout order**: (1) ship dual-stack daemons that advertise the features —
+safe, nothing changes on the wire; (2) ship clients that prefer the features
+when advertised; (3) once the deployed-daemon floor includes `groupCrypto`, flip
+the client default, keeping the legacy fallback for stragglers; (4) the
+`pqSessionKeys` path retires `genBundle`/ephemeral-keypair code when the floor
+allows. Consolidation bonus: NoPorts can replace `validation_utils` signing with
+the SDK's `EnvelopeSigning` (its descendant), moving verification onto the
+per-enrollment `_apsk` trust chain — strictly better for multi-daemon
+deployments.
 
-**Tier 1 — derive session keys, never transmit them.** Gated on
-`pqSessionKeys`:
-
-```dart
-// sshnpd, replacing genBundle():
-final pair = await atClient.groups
-    .withAtSigns([requestingAtsign], namespace: '$device.sshnp');
-final aesKeyC2D = await pair.export('c2d:$sessionId');
-final aesKeyD2C = await pair.export('d2c:$sessionId');
-// response carries only sessionId — no key material in flight
-
-// sshnp: the same two export() calls; both sides derive independently
-```
-
-When the daemon doesn't advertise `pqSessionKeys`, the client falls back
-to today's ephemeral-RSA exchange (which tier 0 already protects in
-flight). Side benefit: deletes the per-session RSA-2048 keypair
-generation — a measurable startup win on small devices. The srvd
-relay-auth key involves a third atSign; a per-session 3-party group is
-overkill, so it stays transmitted, protected by tier 0.
-
-**Tier 2 — fleet management via the self group.** Many daemons on one
-device atSign plus the policy service is the self-group use case:
-
-```dart
-// management client, once:
-await atClient.groups.self('policy_v2.sshnp')
-    .putSecret('webhook-token', token);
-
-// every sshnpd, joined automatically at enrollment:
-final token = await atClient.groups.self('policy_v2.sshnp')
-    .getSecret('webhook-token');
-
-// stolen device: enroll:revoke → leaf removed + group rotates;
-// everything shared after that moment is unreadable by it
-```
-
-**Rollout order**: (1) ship daemons that are dual-stack readers and
-advertise the features — safe immediately, changes nothing on the wire;
-(2) ship clients that prefer the new features when advertised; (3) once
-the deployed-daemon floor includes `groupCrypto`, flip the client default
-and keep the legacy fallback for stragglers; (4) the `pqSessionKeys` path
-retires `genBundle`/ephemeral-keypair code when the floor allows.
-Consolidation bonus at any point: NoPorts can replace `validation_utils`
-signing with the SDK's `EnvelopeSigning` (its descendant), moving
-verification onto the per-enrollment `_apsk` trust chain — strictly better
-for multi-daemon deployments.
+The session trace and the Dart for each tier are in
+[Walkthrough A](crypto-walkthroughs.md#walkthrough-a--noports-end-to-end).
 
 ### Admission UX — a new leaf never blocks on a manual step
 
@@ -1295,7 +1235,7 @@ the desktop app) and many service instances all under one atSign:
   membership); a brand-new leaf may do a one-time epoch-key fetch on first
   access (invisible in practice).
 
-**The load-bearing condition: admission stays per-atSign, not per-leaf.** A
+**The critical condition: admission stays per-atSign, not per-leaf.** A
 daemon admits any *validly-credentialed leaf of an authorised atSign* — the
 allow-list still lists `@client`, and any of its leaves (sshnp/npt/desktop/
 ephemeral forks) is accepted by verifying its KeyPackage chains to `@client`'s
@@ -1308,7 +1248,7 @@ per-device revocation (revoke the lost laptop's `noports-desktop` leaf without
 nuking all of `@client`); finer `@events` audit (attribute activity to a
 leaf/device).
 
-**Residuals (the honest "any difference at all"):** more SDK-managed key files
+**Residuals (the under-the-hood changes):** more SDK-managed key files
 (one persistent leaf keyset per client program + transient, non-persisted
 ephemerals); transient short-TTL KeyPackage churn on `@client`'s atServer
 (self-cleaning); deterministic behaviour on a duplicate same-identity launch
@@ -1330,7 +1270,7 @@ taken after the all-in-MLS decision. The early classical interim
 PQ-native (X-Wing + AES-256-GCM), so the "legacy-plus" secret-sharing
 mechanisms that predated this decision have already been superseded.
 
-The load-bearing decisions hold and carry forward to MLS as an engine
+The primary decisions hold and carry forward to MLS as an engine
 swap: the provider seam, PQ-native KeyPackages, the `SecureGroup`
 `seal/open/rotate/export` interface, `(atSign, namespace)` scoping that
 mirrors server authorization, and lazy `AppMetadata`-routed migration.
@@ -1588,7 +1528,7 @@ deliberate extension noted at the top of this section). It is a
 *catch-up-determinism* convenience, **not a correctness requirement**: the MLS
 transcript hash is the real backstop that prevents a member ever silently
 skipping a missing commit; tombstones merely let a puller classify a gap
-(expired-app → skip vs unexpected → investigate) and keep logs honest.
+(expired-app → skip vs unexpected → investigate) and keep the mls logs accurate.
 
 **Bounded commit retention:** members send `group:ack:{group, seq}` (a seq,
 not content); the DS truncates the log below `min(member high-water marks)` —
@@ -1632,251 +1572,18 @@ policy, tombstones, and ack-truncation.
 possible transitional form, but the target is the group object + wake/pull
 + membership-gated log above.)
 
-## Appendix A — NoPorts, end to end (detailed)
+## Worked walkthroughs
 
-Actors: **@client** (sshnp), **@daemon** (sshnpd; a device may run many),
-**@srvd** (relay; a third atSign). Each client is a leaf with a published
-KeyPackage. Tier/rollout detail lives in
-[Upgrading NoPorts](#upgrading-noports-with-daemon-ping-feature-discovery);
-this is one session's trace.
+The end-to-end traces that exercise this design live in their own companion,
+[crypto-walkthroughs.md](crypto-walkthroughs.md):
 
-1. **Discovery.** sshnp pings @daemon (existing flow); the ping response
-   carries `supportedFeatures`, read null-tolerantly (a missing map = old
-   daemon). The client learns `groupCrypto` and `pqSessionKeys`.
-2. **Session request (Tier 0 — transport).** The client picks a provider per
-   the ping — `provider = features['groupCrypto'] ? 'group' : 'legacy'`, set
-   via `PutRequestOptions.cryptoProviderId`. With `group`, the request
-   notification is a PQ-safe group message of the @client↔@daemon pair group;
-   with `legacy`, byte-identical to today. Because the (still RSA-wrapped)
-   session key rides *inside* this payload, a recorded exchange can no longer
-   be peeled open later — the harvest-now hole is closed even before Tier 1.
-3. **Session keys (Tier 1 — derive, don't transmit).** If `pqSessionKeys`,
-   both sides resolve the same pair group and derive
-   `aesC2D = pair.export('c2d:'+sessionId)` and
-   `aesD2C = pair.export('d2c:'+sessionId)`. Same `(label, epoch)` → identical
-   bytes on both sides; the response carries only `sessionId`, no key material
-   in flight, and the per-session RSA keypair generation is deleted. Without
-   `pqSessionKeys`, fall back to today's ephemeral-RSA exchange (already
-   protected by Tier 0).
-4. **srvd relay.** The relay-auth key involves a third atSign; a per-session
-   3-party group is overkill, so it stays transmitted, protected by Tier 0.
-5. **Delivery.** The group is 2 atSigns (or a self group within one atSign for
-   Tier 2). The member-atSign count is tiny, so there is **no DS host** —
-   pairwise notify + the recipient atServer's sync to its own clients.
-   (Appendix B's Delivery Service is only for large groups.)
-6. **Fleet management (Tier 2 — self group).** Many sshnpd on one device atSign
-   plus a policy/management client are a self `SecureGroup`. Management writes
-   a config secret once; every daemon reads it, joined automatically at
-   enrollment. A stolen device → `enroll:revoke` → the daemon's leaf is
-   removed and the group rotates → everything shared after that instant is
-   unreadable by it.
-7. **Rollout.** (1) ship dual-stack daemons that advertise the features — safe,
-   nothing changes on the wire; (2) ship clients that prefer the features when
-   advertised; (3) once the deployed-daemon floor includes `groupCrypto`, flip
-   the client default; (4) `pqSessionKeys` retires `genBundle`/ephemeral-keypair
-   code when the floor allows.
-
-Net: every request/response/heartbeat becomes PQ-safe (Tier 0), session keys
-stop travelling at all (Tier 1), and fleet secrets get rotating-key
-distribution with instant revocation (Tier 2) — with old peers always
-negotiating cleanly via feature discovery.
-
-## Appendix B — a large group, end to end (detailed)
-
-Actors: a dedicated DS atSign **`@my_org_groups`** running the
-[group Delivery Service](#atserver-group-delivery-service-target-design);
-admins **@alice**, **@bob**; members across many atSigns, each a leaf with a
-published KeyPackage.
-
-1. **Provision the DS.** `@my_org_groups` is operated as infrastructure (HA,
-   monitored, backed up). It is ciphertext-only — never a group member, never
-   holds group keys.
-2. **Create.** `@alice` → `group:create{groupId, ownerAcl:[@alice,@bob]}`. The
-   DS provisions the group object: roster, `seq=0`, empty TTL'd log.
-3. **Add a member (@frank).** An admin: fetches + verifies @frank's published
-   KeyPackage; commits an Add locally (advances the epoch), producing a Commit
-   + a Welcome; sends the **Welcome pairwise** to @frank (1:1); then
-   `group:append{kind:commit, value:<commit ct>, msgId}` + `group:add @frank`
-   to the DS. The DS assigns `seq=N`, logs it, adds @frank to the roster, and
-   fans out `{group, N}` **wakes** to every member atSign. Members
-   `group:fetch:since` the commit, apply it, advance to epoch N; @frank pulls
-   current state and joins.
-4. **Application message (any member → group).** The sender seals once under
-   the epoch key, then one `group:append{kind:app, value:<ct>, expiresAt,...}`
-   to the DS. The DS assigns the next `seq`, logs (with the app TTL), fans out
-   wakes. Each member atServer pulls the delta into local storage; that
-   atSign's many clients then read it via ordinary sync — including the
-   sender's *own* other clients (the DS fans out to the sender's atSign too).
-   Cost: one append + O(member-atSigns) wakes/pulls — never O(member-clients).
-5. **Concurrent admins.** @alice and @bob both commit at epoch N. Both
-   `group:append`; the DS's atomic `seq` orders them — one lands at N, the
-   other gets a conflict, rebases to N+1, resubmits. No fork.
-6. **Catch-up.** A member offline for a while returns and
-   `group:fetch:since:<lastSeq>`. Commits replay in `seq` order; expired app
-   messages appear as tombstones (skippable). If a commit it still needs has
-   aged out (offline past the retention deadline), it is a straggler → an
-   admin **re-adds it at the current epoch** (fresh Welcome), not a
-   full-history replay.
-7. **Remove / revoke (@grace).** An admin commits a Remove + rotates the epoch
-   (`excludeEnrollmentIds`), then `group:append{kind:commit}` +
-   `group:remove @grace`. The DS sequences, fans out, drops @grace from the
-   roster. Everything from the new epoch on is unreadable by @grace.
-8. **Retention & GC.** Members periodically `group:ack{seq}`; the DS truncates
-   the log below the min high-water mark (everyone has those) or a deadline.
-   App messages expire per their `expiresAt`; commits are retained until
-   applied-by-all or the deadline (then straggler-rejoin).
-9. **Trust boundary.** The DS only ever sees ciphertext + the plaintext atSign
-   roster: it orders, routes, and retains, but never decrypts and cannot forge
-   membership — members reject any commit not signed by an authorised owner
-   leaf, and reorder/withhold is detectable via the MLS transcript hash.
-10. **Engine (v2).** The crypto is MLS: TreeKEM makes each commit O(log n)
-    instead of O(n), with RFC 9420 forward secrecy and post-compromise
-    security — all behind the same `SecureGroup` interface and the same DS.
-
-Net: members send/admin once to the DS; the DS sequences and fans out
-ciphertext it can't read; catch-up, retention, ordering, and revocation are
-handled at the group object — and the per-message cost scales with the number
-of member *atSigns*, not member *clients*.
-
-## Appendix C — a two-atSign chat with client churn (`at_talk`, detailed)
-
-A worked example of the Phase 4 `(pair, namespace)` shared group: two atSigns,
-multiple clients each, bidirectional messaging, and late-joining clients. It
-shows exactly how decryption stays scoped to namespace-authorized clients on
-both sides, and how a freshly-created client reads new *and* past messages.
-
-**Setup.** `alice1`, `alice2`, `bob1`, `bob2` exist, each has `rw` on the
-`at_talk` namespace and has published a KeyPackage (X-Wing leaf KEM key +
-APKAM-certified signing key). The group is **`pair:@alice:@bob:at_talk`** —
-canonical atSign ordering so both sides compute the same `groupId`; one
-symmetric group, both directions sealing under the same epoch key. Members =
-`{alice1, alice2, bob1, bob2}`. Epoch key `E1` is the AES-256-GCM key the group
-encrypts under, minted lazily on first use.
-
-**Why scope = `(pair, namespace)`.** The group is *not* `pair:@alice:@bob`
-(would leak alice→bob `banking` to an at_talk-only bob client) and *not*
-`self:@alice:at_talk` (would hand bob alice's private self data). It is the
-unique group whose membership equals "both sides' `at_talk` clients", mirroring
-the atServer's enrollment-authorization topology for the `at_talk` keys it
-carries.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant a1 as alice1
-    participant a2 as alice2
-    participant a3 as alice3
-    participant S as atServers
-    participant b1 as bob1
-    participant b2 as bob2
-    participant b3 as bob3
-
-    Note over a1,b2: Step 0 — a1,a2,b1,b2 published KeyPackages, rw on at_talk. Group pair:@alice:@bob:at_talk, members {a1,a2,b1,b2}
-    Note over S: atServers gate every at_talk key (data AND epoch-key envelopes) by enrollment access
-
-    rect rgb(232,242,255)
-    Note over a1: Step 1 — alice1 sends to @bob
-    a1->>a1: lazily create group; mint epoch E1; seal M1 under E1
-    a1->>S: put @bob:msg1.at_talk@alice {group, epoch 1, kid k1}
-    a1->>S: push E1 to a2,b1,b2 — X-Wing per leaf, via __ssenv.at_talk envelopes
-    end
-
-    rect rgb(232,255,236)
-    Note over b1,b2: Step 2 — bob1 and bob2 decrypt M1
-    S-->>b1: @bob:msg1... + E1 envelope (allowed: at_talk)
-    S-->>b2: @bob:msg1... + E1 envelope (allowed: at_talk)
-    b1->>b1: decapsulate E1 with leaf key; open M1
-    b2->>b2: decapsulate E1; open M1
-    Note over b1,b2: a client missed at push-time pulls E1 (requestSecretsFromNamespace at_talk)
-    end
-
-    rect rgb(255,250,232)
-    Note over b2: Step 3 — bob2 replies to @alice (same group, same E1)
-    b2->>b2: seal M2 under E1
-    b2->>S: put @alice:msg2.at_talk@bob {group, epoch 1, kid k1}
-    end
-
-    rect rgb(232,255,236)
-    Note over a1,a2: Step 4 — alice1 and alice2 decrypt M2
-    S-->>a1: @alice:msg2...
-    S-->>a2: @alice:msg2...
-    a1->>a1: open M2 with E1 (already a member)
-    a2->>a2: open M2 with E1
-    end
-
-    rect rgb(255,232,244)
-    Note over b3: Step 5 — bob3 created, publishes KeyPackage (at_talk)
-    b3->>S: publish KeyPackage; register for at_talk
-    b1->>b1: roster-watch sees b3 → Add b3 + Commit → epoch E2 (mandatory rotation)
-    b1->>S: push E2 to {a1,a2,b1,b2,b3} (fans out cross-atSign)
-    Note over b3: NEW: holds E2 → opens every message from epoch 2 on
-    b3->>S: PAST: pull __rk.1 (request in at_talk)
-    S-->>b3: E1 (allowed: b3 is at_talk-authorized)
-    Note over b3: history-ON → opens M1,M2 · history-OFF (strict FS) → M1,M2 stay opaque
-    end
-
-    rect rgb(244,232,255)
-    Note over a3: Step 6 — alice3 created, publishes KeyPackage (at_talk)
-    a3->>S: publish KeyPackage; register for at_talk
-    a1->>a1: roster-watch sees a3 → Add a3 + Commit → epoch E3
-    a1->>S: push E3 to {a1,a2,a3,b1,b2,b3}
-    Note over a3: NEW: holds E3 → opens every message from epoch 3 on
-    a3->>S: PAST: pull __rk.1, __rk.2
-    S-->>a3: E1, E2 (allowed: a3 is at_talk-authorized)
-    Note over a3: history-ON → opens M1,M2 · also joins self:@alice:at_talk for alice's self data
-    end
-```
-
-### How a new client obtains the epoch key
-
-The epoch key is never sent in the clear and never wrapped under a static
-per-atSign key. For each member leaf, the committer **X-Wing-encapsulates** the
-epoch key to *that leaf's* published KEM public key and writes the result as a
-secret-sharing envelope keyed `<msgId>.<clientId>.__ssenv.at_talk@<atsign>`.
-Two independent gates
-therefore protect every copy of the key:
-
-1. **Transport gate (atServer, by namespace).** The envelope key carries the
-   `at_talk` suffix, so the atServer only lets a client *read* the envelope if
-   its enrollment is authorized for `at_talk` — identical to the gate on the
-   message itself. A client without `at_talk` can't even fetch the envelope.
-2. **Crypto gate (the leaf KEM key).** The envelope body is encapsulated to one
-   specific leaf's KEM public key, so only the holder of that leaf's private
-   key can **decapsulate** it. Possessing a different member's envelope is
-   useless.
-
-So for **bob3** (Step 5): bob3 generates its leaf keypair locally and publishes
-the *public* KeyPackage. A current member (bob1, via same-atSign roster watch)
-Adds bob3 and Commits a new epoch `E2`, encapsulating `E2` to bob3's published
-KEM public key and writing the `__ssenv.at_talk` envelope addressed to bob3.
-bob3's atServer delivers it (bob3 is at_talk-authorized → gate 1 passes); bob3
-decapsulates with its leaf KEM **private** key, which never left the device →
-recovers `E2` (gate 2 passes). For past messages, bob3 issues a pull for
-`__rk.1`; a member re-encapsulates `E1` to bob3's leaf and delivers it through
-the same two gates. Nothing about bob3's identity is special — it succeeds iff
-(a) its enrollment authorizes `at_talk` and (b) it holds its own leaf private
-key. That is exactly "all bob clients with `at_talk` access, and only those."
-
-### New clients: new vs. past messages
-
-| Client | New messages | Past messages |
-|--------|--------------|---------------|
-| **bob3** | A same-atSign member Adds+Commits → mandatory rotation to `E2`, pushed to all members; bob3 decapsulates `E2` and reads from epoch 2 on. (If not proactively added, bob3 pulls `__rk.current`.) | Pulls retained `__rk.1`; server allows (at_talk-authorized). **history-ON** → opens M1, M2. **history-OFF** (strict FS) → pre-join epochs stay opaque. |
-| **alice3** | Symmetric: alice1/alice2 Add+Commit → `E3`, fanned out cross-atSign to all six clients; alice3 reads from epoch 3 on. Also joins `self:@alice:at_talk` for alice's self data. | Pulls `__rk.1`, `__rk.2`; server-allowed. Same history-ON/OFF fork. |
-
-### Caveats this example surfaces
-
-- **History is a policy fork, not a mechanism gap.** v1 retains old epoch keys
-  and lets any namespace-authorized client pull them, so chat history works —
-  but that is in tension with forward secrecy. The MLS swap (D2) gives true FS,
-  under which a joiner cannot read pre-join traffic by design; "new member reads
-  history" then needs an explicit history-sharing mechanism (re-encrypt to the
-  new member, or a separate history key). Decide the `at_talk` policy
-  deliberately.
-- **Every join rotates the epoch** (lever A, mandatory). Churny fleets rotate
-  often; fine at pair scale, and a motivation for the Delivery Service (M5) at
-  large scale.
-- **M4, not yet built.** Today shared keys still route to `legacy` (the `group`
-  provider refuses shared keys), so currently *all* bob clients decrypt via
-  bob's shared keypair — the loose superset, not the namespace-scoped flow
-  above. This appendix is the target the Phase 4 design specifies.
+- **[NoPorts, end to end](crypto-walkthroughs.md#walkthrough-a--noports-end-to-end)**
+  — the canonical Deliverable 1 consumer: per-destination feature-gated tiers
+  0–2, one session traced step by step.
+- **[A large group, end to end](crypto-walkthroughs.md#walkthrough-b--a-large-group-end-to-end)**
+  — Deliverable 2 at scale against the
+  [group Delivery Service](#atserver-group-delivery-service-target-design):
+  create, add, append, catch-up, revoke, GC.
+- **[A two-atSign chat with client churn (`at_talk`)](crypto-walkthroughs.md#walkthrough-c--a-two-atsign-chat-with-client-churn-at_talk)**
+  — the Phase 4 `(pair, namespace)` shared group with late-joining clients
+  reading new *and* past messages.
