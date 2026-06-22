@@ -4,14 +4,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_chops/src/algorithm/aes_encryption_algo.dart';
 import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/at_iv.dart';
 import 'package:at_chops/src/algorithm/default_signing_algo.dart';
-import 'package:at_chops/src/algorithm/ecc_signing_algo.dart';
+import 'package:at_chops/src/algorithm/encryption/aes.dart';
+import 'package:at_chops/src/algorithm/encryption/rsa.dart';
+import 'package:at_chops/src/algorithm/signing/ecc.dart';
 import 'package:at_chops/src/algorithm/pkam_signing_algo.dart';
-import 'package:at_chops/src/algorithm/rsa_encryption_algo.dart';
 import 'package:at_chops/src/at_chops_base.dart';
 import 'package:at_chops/src/key/keys.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
@@ -28,6 +28,9 @@ import 'package:at_utils/at_logger.dart';
 
 import 'algorithm/default_hashing_algo.dart';
 
+@Deprecated(
+    'Use the algorithm classes directly instead. This compatibility API will '
+    'be removed in the next major release.')
 class AtChopsImpl extends AtChops {
   AtChopsImpl(super.atChopsKeys);
 

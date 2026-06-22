@@ -1,10 +1,8 @@
-import 'package:at_chops/src/key/keys.dart';
+import 'package:at_chops/src/key/impl/ml_dsa_65_key_pair.dart';
 
-/// ML-DSA-65 (FIPS 204) signing key pair.
-///
-/// Both keys are stored as base64-encoded raw bytes:
-/// - Public key: 1952 bytes
-/// - Secret key: 4032 bytes
-class AtMlDsa65KeyPair extends AsymmetricKeyPair {
+@Deprecated(
+    'Use MlDsa65KeyPair instead. This compatibility wrapper will be removed '
+    'in the next major release.')
+class AtMlDsa65KeyPair extends MlDsa65KeyPair {
   AtMlDsa65KeyPair.create(super.publicKey, super.privateKey) : super.create();
 }

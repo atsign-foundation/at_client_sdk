@@ -111,11 +111,11 @@ void main() {
     });
   });
 
-  group('SHA-256 hashing via AtChops', () {
-    test('hashWith(sha256) matches a known digest', () {
+  group('SHA-256 hashing', () {
+    test('SHA256HashingAlgo matches a known digest', () {
       // sha256("abc")
       expect(
-        AtChops.hashWith(HashingAlgoType.sha256).hash('abc'.codeUnits),
+        SHA256HashingAlgo().hash('abc'.codeUnits),
         'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
       );
     });

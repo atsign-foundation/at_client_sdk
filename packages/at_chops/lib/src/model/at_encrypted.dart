@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:at_chops/at_chops.dart';
+import 'package:at_chops/src/algorithm/algo_type.dart';
 
 /// A class that represents encrypted content, along with metadata such as
 /// initialization vector (IV) and the hashing algorithm used.
@@ -8,6 +8,8 @@ import 'package:at_chops/at_chops.dart';
 /// This class is used to serialize and deserialize encrypted data for
 /// transmission or storage. It provides methods to convert the object
 /// to JSON format and parse it back from JSON.
+@Deprecated('Use an application-specific encrypted payload model instead. This '
+    'compatibility API will be removed in the next major release.')
 class AtEncrypted {
   /// The encrypted content, typically represented as a Base64 string.
   String? content;

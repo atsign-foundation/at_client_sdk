@@ -8,8 +8,8 @@ void main() {
   group('X25519 pure-Dart', () {
     test('DH round-trip: Alice and Bob derive the same shared secret',
         () async {
-      final AtX25519KeyPair alice = await AtChopsUtil.generateX25519KeyPair();
-      final AtX25519KeyPair bob = await AtChopsUtil.generateX25519KeyPair();
+      final X25519KeyPair alice = await X25519KeyPair.generate();
+      final X25519KeyPair bob = await X25519KeyPair.generate();
 
       final Uint8List alicePub = base64Decode(alice.atPublicKey.publicKey);
       final Uint8List alicePriv = base64Decode(alice.atPrivateKey.privateKey);
@@ -25,7 +25,7 @@ void main() {
     });
 
     test('Generated key pair has 32-byte public and private keys', () async {
-      final AtX25519KeyPair kp = await AtChopsUtil.generateX25519KeyPair();
+      final X25519KeyPair kp = await X25519KeyPair.generate();
       expect(base64Decode(kp.atPublicKey.publicKey).length, equals(32));
       expect(base64Decode(kp.atPrivateKey.privateKey).length, equals(32));
     });
