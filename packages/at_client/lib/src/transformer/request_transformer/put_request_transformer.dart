@@ -2,7 +2,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
-import 'package:at_client/src/encryption_service/encryption_manager.dart';
+import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -41,7 +41,10 @@ class PutRequestTransformer
     final metadata = atKey.metadata;
     // Check if the data needs to be encrypted for non-public keys
     if (!_isPublicKey(metadata) && options.shouldEncrypt) {
-      await _encryptData(updateVerbBuilder, options);
+      // Add metadata for the crypto provider used to route future decrypts.
+      updateVerbBuilder.atKey.metadata.appMetadata =
+          AppMetadata(providerId: _cryptoProviderIdFor(options));
+      await _encryptData(updateVerbBuilder);
     } else {
       // Sign the data for public keys
       if (_isPublicKey(metadata)) {
@@ -54,19 +57,17 @@ class PutRequestTransformer
     return updateVerbBuilder;
   }
 
-  Future<void> _encryptData(
-      UpdateVerbBuilder updateVerbBuilder, PutRequestOptions options) async {
-    var encryptionService = AtKeyEncryptionManager(_atClient)
-        .get(updateVerbBuilder.atKey, _atClient.getCurrentAtSign()!);
-    try {
-      updateVerbBuilder.value = await encryptionService.encrypt(
-          updateVerbBuilder.atKey, updateVerbBuilder.value);
-      updateVerbBuilder.atKey.metadata.isEncrypted = true;
-    } on AtException catch (e) {
-      e.stack(AtChainedException(Intent.shareData,
-          ExceptionScenario.encryptionFailed, 'Failed to encrypt the data'));
-      rethrow;
-    }
+  Future<void> _encryptData(UpdateVerbBuilder updateVerbBuilder) async {
+    // The provider returns the wire ciphertext and mutates the AtKey's
+    // appMetadata + isEncrypted in place.
+    updateVerbBuilder.value = await CryptoRuntime(_atClient)
+        .encryptForPut(updateVerbBuilder.atKey, updateVerbBuilder.value);
+  }
+
+  String _cryptoProviderIdFor(PutRequestOptions options) {
+    return options.cryptoProviderId ??
+        _atClient.getPreferences()?.crypto.defaultProviderId ??
+        CryptoRuntime.legacyProviderId;
   }
 
   void _signPublicData(

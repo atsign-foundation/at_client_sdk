@@ -3,10 +3,7 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart' hide StringBuffer;
-import 'package:at_client/src/encryption_service/encryption.dart';
-import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_client/src/encryption_service/self_key_encryption.dart';
-import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
+import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
@@ -37,9 +34,6 @@ class NotificationServiceImpl extends NotificationService {
   late final Monitor monitor;
   late final AtSignLogger logger;
   DateTime? _lastReceipt;
-
-  @visibleForTesting
-  late AtKeyEncryptionManager atKeyEncryptionManager;
 
   @visibleForTesting
   AtClientValidation atClientValidation = AtClientValidation();
@@ -93,7 +87,6 @@ class NotificationServiceImpl extends NotificationService {
             lastReceivedNotificationKey, atClient.getCurrentAtSign()!,
             namespace: atClient.getPreferences()!.namespace)
         .build();
-    atKeyEncryptionManager = AtKeyEncryptionManager(atClient);
   }
 
   /// Migrate any legacy (non-`local:`) forms of the
@@ -324,6 +317,7 @@ class NotificationServiceImpl extends NotificationService {
     bool shouldEncrypt = true,
     Duration expiration = NotificationService.defaultExpiration,
     bool cacheAtRecipient = false,
+    String? cryptoProviderId,
     DateTime? recipientCacheExpiration,
   }) async {
     if (cacheAtRecipient && recipientCacheExpiration == null) {
@@ -336,10 +330,13 @@ class NotificationServiceImpl extends NotificationService {
     final String notifPayload;
     body = body.trim();
     if (body.isNotEmpty && shouldEncrypt) {
-      AtKeyEncryption encrypter = atSign == to
-          ? SelfKeyEncryption(atClient)
-          : SharedKeyEncryption(atClient);
-      notifPayload = await encrypter.encrypt(atKey, body);
+      atKey.metadata.appMetadata ??= AppMetadata(
+        providerId: cryptoProviderId ??
+            atClient.getPreferences()?.crypto.defaultProviderId ??
+            CryptoRuntime.legacyProviderId,
+      );
+      notifPayload =
+          await CryptoRuntime(atClient).encryptForNotification(atKey, body);
       atKey.metadata.isEncrypted = true;
     } else {
       notifPayload = body;
@@ -444,14 +441,8 @@ class NotificationServiceImpl extends NotificationService {
           notificationParams,
           atClient.getPreferences()!,
           atClient.getCurrentAtSign()!);
-      // Get the EncryptionInstance to encrypt the data.
-      var atKeyEncryption = atKeyEncryptionManager.get(
-          notificationParams.atKey, atClient.getCurrentAtSign()!);
       // Get the NotifyVerbBuilder from NotificationParams
-      var builder = await NotificationRequestTransformer(
-              atClient.getCurrentAtSign()!,
-              atClient.getPreferences()!,
-              atKeyEncryption)
+      var builder = await NotificationRequestTransformer(atClient)
           .transform(notificationParams);
 
       notificationValueValidation(notificationParams, builder);

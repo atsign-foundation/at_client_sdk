@@ -1,25 +1,13 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
-import 'package:at_client/src/decryption_service/shared_with_me_decryption.dart';
+import 'package:at_client/src/crypto/legacy/legacy_decryption.dart';
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
-import 'package:at_client/src/decryption_service/decryption_manager.dart';
-import 'package:at_client/src/decryption_service/shared_by_me_decryption.dart';
-import 'package:at_client/src/decryption_service/self_key_decryption.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:at_chops/at_chops.dart';
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
-class MockAtLookup extends Mock implements AtLookupImpl {}
-
-class MockLocalSecondary extends Mock implements LocalSecondary {}
-
-class MockAtChops extends Mock implements AtChops {}
-
-class MockAtClientImpl extends Mock implements AtClientImpl {}
+import 'test_utils/mocks.dart';
 
 class MockGetRequestTransformer extends Mock implements GetRequestTransformer {}
 
@@ -30,7 +18,7 @@ class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
 void main() {
   Atsign theseTestsMyAtsign = '@charlie'.toAtsign();
   Atsign theseTestsOtherAtsign = '@delta'.toAtsign();
-  AtLookupImpl mockAtLookup = MockAtLookup();
+  AtLookupImpl mockAtLookup = MockAtLookUpImpl();
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
   AtChops mockAtChops = MockAtChops();
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
@@ -161,7 +149,7 @@ void main() {
         ..key = 'phone.wavi'
         ..sharedBy = theseTestsOtherAtsign;
 
-      var decrypter = AtKeyDecryptionManager(mockAtClientImpl).get(atKey);
+      var decrypter = LegacyDecryption.build(atKey, mockAtClientImpl);
       expect(decrypter, isA<SharedWithMeDecryption>());
     });
 
@@ -172,7 +160,7 @@ void main() {
         ..sharedBy = theseTestsMyAtsign
         ..metadata = Metadata();
 
-      var decrypter = AtKeyDecryptionManager(mockAtClientImpl).get(atKey);
+      var decrypter = LegacyDecryption.build(atKey, mockAtClientImpl);
       expect(decrypter, isA<SharedByMeDecryption>());
     });
 
@@ -185,7 +173,7 @@ void main() {
         ..sharedBy = theseTestsMyAtsign
         ..metadata = Metadata();
 
-      var decrypter = AtKeyDecryptionManager(mockAtClientImpl).get(atKey);
+      var decrypter = LegacyDecryption.build(atKey, mockAtClientImpl);
       expect(decrypter, isA<SelfKeyDecryption>());
     });
 
@@ -197,7 +185,7 @@ void main() {
         ..sharedBy = theseTestsMyAtsign
         ..metadata = Metadata();
 
-      var decrypter = AtKeyDecryptionManager(mockAtClientImpl).get(atKey);
+      var decrypter = LegacyDecryption.build(atKey, mockAtClientImpl);
       expect(decrypter, isA<SelfKeyDecryption>());
     });
   });

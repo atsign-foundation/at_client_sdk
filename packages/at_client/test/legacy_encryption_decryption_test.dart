@@ -2,13 +2,12 @@ import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/decryption_service/shared_with_me_decryption.dart';
-import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
+import 'package:at_client/src/crypto/legacy/legacy_decryption.dart';
+import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
+import 'test_utils/mocks.dart';
 
 void main() {
   String currentAtSign = '@alice';

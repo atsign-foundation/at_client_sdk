@@ -1,18 +1,11 @@
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/src/decryption_service/self_key_decryption.dart';
+import 'package:at_client/src/crypto/legacy/legacy_decryption.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
-
-class MockAtClientImpl extends Mock implements AtClient {}
-
-class MockLocalSecondary extends Mock implements LocalSecondary {}
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
-class MockAtLookupImpl extends Mock implements AtLookUp {}
+import 'test_utils/mocks.dart';
 
 class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
 
@@ -20,7 +13,7 @@ class FakeDeleteVerbBuilder extends Fake implements DeleteVerbBuilder {}
 
 void main() {
   AtClient mockAtClient = MockAtClientImpl();
-  AtLookUp mockAtLookUp = MockAtLookupImpl();
+  AtLookUp mockAtLookUp = MockAtLookUpImpl();
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
   setUp(() {
     reset(mockAtLookUp);

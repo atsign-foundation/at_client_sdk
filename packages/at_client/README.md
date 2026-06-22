@@ -43,6 +43,8 @@ is the main entry point once authentication is complete.
   the keystore. You should almost never need to do this if you are using 
   AtCollections.
 
+
+
 ## Examples
 
 The API in `at_client` has evolved substantially over several years.
@@ -303,6 +305,75 @@ with a hard `ArgumentError`, so oversized keys never reach the
 wire. Plenty of room: with 1-char collection / sub-collection
 names and a 15-char application namespace, the theoretical
 ceiling is **11 levels (root + 10 nested sub-collections)**.
+
+## Crypto providers
+
+By default, encrypted writes use the built-in legacy Atsign encryption
+provider. Apps that need their own encryption configure
+`AtClientPreference.crypto` with a `CryptoConfig` listing one or more
+`CryptoProvider` instances. The SDK records the provider's id in the record's
+`appMetadata.providerId` and uses it to route future decrypts back to the same
+provider. `appMetadata` is the wire field for this: the SDK owns `providerId`
+(routing) and `isEncrypted`; any entries a provider adds to
+`appMetadata.additional` are provider-owned, opaque to the SDK, and visible to
+the atServer as plaintext metadata.
+
+A `CryptoProvider` is stateless and implements three members — everything it
+needs arrives per call via `CryptoContext` (the client) and the `AtKey`:
+
+```dart
+class DemoCryptoProvider extends CryptoProvider {
+  static const providerId = 'demo-v1';
+
+  @override
+  String get id => providerId;
+
+  @override
+  Future<String> encrypt(
+      CryptoContext context, AtKey atKey, String plaintext) async {
+    // The SDK stamps providerId + isEncrypted for you. Carry anything decrypt
+    // needs (an IV, a key id, a format version) in appMetadata.additional.
+    atKey.metadata.appMetadata =
+        AppMetadata(providerId: id, additional: {'format': 'demo'});
+    return 'demo:$plaintext';
+  }
+
+  @override
+  Future<String> decrypt(
+      CryptoContext context, AtKey atKey, String ciphertext) async {
+    // Read back what encrypt stored, if you need it.
+    final _ = atKey.metadata.appMetadata?.additional?['format'];
+    return ciphertext.replaceFirst('demo:', '');
+  }
+}
+
+final preference = AtClientPreference()
+  ..crypto = CryptoConfig(
+    defaultProviderId: DemoCryptoProvider.providerId,
+    providers: [DemoCryptoProvider()],
+  );
+```
+
+`plaintext`/`ciphertext` are opaque strings — for binary records (`putBinary`)
+a `Base2e15`-encoded string, so treat them as bytes, not text. Throw an
+`AtException` subclass (`AtEncryptionException` / `AtDecryptionException`) on
+failure. Supply a fresh provider instance per atSign only if your provider
+holds per-atSign state.
+
+Per-write provider overrides use `PutRequestOptions.cryptoProviderId`;
+notification overrides use `NotificationService.send(..., cryptoProviderId:)`
+or `NotificationParams.cryptoProviderId`. For a runnable end-to-end example,
+see [`example/bin/custom_crypto_provider.dart`](example/bin/custom_crypto_provider.dart).
+
+For compact examples of provider registration and per-write overrides, see
+[`example/bin/custom_crypto_provider.dart`](example/bin/custom_crypto_provider.dart),
+[`test/at_client_impl_test.dart`](test/at_client_impl_test.dart) and
+[`test/put_request_test.dart`](test/put_request_test.dart). For notification
+provider selection, see
+[`test/notification_service_test.dart`](test/notification_service_test.dart).
+For storage and lazy-provider recovery behavior, see
+[`test/crypto_storage_test.dart`](test/crypto_storage_test.dart)
+and [`test/crypto_runtime_test.dart`](test/crypto_runtime_test.dart).
 
 ## Further reading
 

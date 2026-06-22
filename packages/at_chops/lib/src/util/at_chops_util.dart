@@ -49,14 +49,18 @@ class AtChopsUtil {
   static AtEncryptionKeyPair generateAtEncryptionKeyPair({int keySize = 2048}) {
     final rsaKeyPair = RSAKeypair.fromRandom(keySize: keySize);
     return AtEncryptionKeyPair.create(
-        rsaKeyPair.publicKey.toString(), rsaKeyPair.privateKey.toString());
+      rsaKeyPair.publicKey.toString(),
+      rsaKeyPair.privateKey.toString(),
+    );
   }
 
   /// Generates AtEncryption asymmetric keypair with default size 2048 bits
   static AtPkamKeyPair generateAtPkamKeyPair({int keySize = 2048}) {
     final rsaKeyPair = RSAKeypair.fromRandom(keySize: keySize);
     return AtPkamKeyPair.create(
-        rsaKeyPair.publicKey.toString(), rsaKeyPair.privateKey.toString());
+      rsaKeyPair.publicKey.toString(),
+      rsaKeyPair.privateKey.toString(),
+    );
   }
 
   /// Generates EC keypair

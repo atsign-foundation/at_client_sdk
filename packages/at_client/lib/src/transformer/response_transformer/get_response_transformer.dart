@@ -3,8 +3,7 @@ import 'dart:async';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_client/src/converters/decoder/at_decoder.dart';
-import 'package:at_client/src/decryption_service/decryption.dart';
-import 'package:at_client/src/decryption_service/decryption_manager.dart';
+import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/util/at_client_util.dart';
@@ -18,12 +17,8 @@ import 'package:at_commons/at_commons.dart';
 class GetResponseTransformer
     implements Transformer<Tuple<AtKey, String>, AtValue> {
   late final AtClient _atClient;
-  late final AtKeyDecryptionManager _decryptionManager;
 
-  GetResponseTransformer(this._atClient,
-      {AtKeyDecryptionManager? decrypterManager}) {
-    _decryptionManager = decrypterManager ?? AtKeyDecryptionManager(_atClient);
-  }
+  GetResponseTransformer(this._atClient);
 
   @override
   FutureOr<AtValue> transform(Tuple<AtKey, String> tuple) async {
@@ -44,16 +39,37 @@ class GetResponseTransformer
     if (_isKeyPublic(decodedResponse['key'])) {
       return _handlePublicData(atValue, tuple);
     }
-    final decrypter = _decryptionManager.get(tuple.one);
-    // Decrypt the data, for other keys
-    // For new encrypted data after AtClient v3.2.1, isEncrypted will be true(default value for PutRequestOptions.shouldEncrypt) for self and shared keys
-    // isEncrypted will be false if client sets PutRequestOptions.shouldEncrypt to false
+    final cryptoRuntime = CryptoRuntime(_atClient);
+    // The wire-level isEncrypted is tri-state, but Metadata.isEncrypted is a
+    // non-nullable bool and AtClientUtil.prepareMetadata collapses absent to
+    // false. Capture the wire value before that collapse:
+    //  - true  : encrypted by the SDK (at_client >= 3.2.1 sets it on put)
+    //  - false : deliberately stored unencrypted
+    //            (PutRequestOptions.shouldEncrypt = false); only emitted by
+    //            at_commons >= 5.0.0, by which time puts set the flag
+    //            truthfully - so explicit false is trustworthy
+    //  - absent: legacy data written before the flag was emitted; may or may
+    //            not be encrypted - see the try-decrypt fallback below
+    final Object? wireIsEncrypted = (decodedResponse['metaData']
+        as Map<String, dynamic>?)?[AtConstants.isEncrypted];
     if (_shouldDecrypt(atValue.metadata)) {
-      atValue.value = await _decrypt(atValue, decrypter, tuple.one);
+      atValue.value =
+          await cryptoRuntime.decryptForGet(tuple.one, atValue.value);
+    } else if (wireIsEncrypted == false || wireIsEncrypted == 'false') {
+      // isEncrypted was explicitly false: the value was deliberately stored
+      // unencrypted; return it as-is (decoding if required). Skipping
+      // decryption here is also what keeps PutRequestOptions.shouldEncrypt =
+      // false a true no-crypto path on the read side.
+      if (atValue.metadata?.encoding != null) {
+        atValue.value = AtDecoderImpl()
+            .decodeData(atValue.value, atValue.metadata!.encoding!);
+      }
     } else {
-      // for old data, try decrypting the value. if decryption fails, set the original value.
+      // for old data (isEncrypted absent), try decrypting the value.
+      // if decryption fails, set the original value.
       try {
-        atValue.value = await _decrypt(atValue, decrypter, tuple.one);
+        atValue.value =
+            await cryptoRuntime.decryptForGet(tuple.one, atValue.value);
       } on FormatException {
         // trying to decrypt plain data will result in FormatException.
         if (atValue.metadata!.encoding != null) {
@@ -82,17 +98,6 @@ class GetResponseTransformer
     }
 
     return atValue;
-  }
-
-  Future<String> _decrypt(
-      AtValue atValue, AtKeyDecryption decryptionService, AtKey atKey) async {
-    try {
-      return await decryptionService.decrypt(atKey, atValue.value) as String;
-    } on AtException catch (e) {
-      e.stack(AtChainedException(Intent.fetchData,
-          ExceptionScenario.decryptionFailed, 'Failed to decrypt the data'));
-      rethrow;
-    }
   }
 
   bool _shouldDecrypt(Metadata? metadata) {
