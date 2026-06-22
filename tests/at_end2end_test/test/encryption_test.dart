@@ -34,7 +34,7 @@ void main() {
     final preference = TestPreferences.getInstance().getPreference(atSign);
     if (testProviderId != null) {
       preference.crypto = CryptoConfig(
-        defaultProviderId: 'legacy',
+        defaultProviderId: legacyCryptoProviderId,
         providers: [
           TestCryptoProvider(testProviderId),
         ],
@@ -60,7 +60,7 @@ void main() {
   Future<AtClient> getAtClientWith(
     String atSign,
     List<CryptoProvider> providers, {
-    String defaultProviderId = 'legacy',
+    String defaultProviderId = legacyCryptoProviderId,
   }) async {
     final preference = TestPreferences.getInstance().getPreference(atSign)
       ..crypto = CryptoConfig(
