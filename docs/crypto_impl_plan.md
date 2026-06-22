@@ -14,7 +14,7 @@ required**. See the roadmap's
 
 ---
 
-## 1. Current state (2026-06-20)
+## 1. Current state (2026-06-22)
 
 ### Branches & delivery model (trunk-based)
 - **Trunk is the single integration point.** Each work package is a short-lived
@@ -45,44 +45,60 @@ required**. See the roadmap's
    atSigns, canary).
 4. **`at_client 3.x`** — in progress:
    - **(4a)** commit-log-free persistence migration — **MERGED to trunk (#1984).**
-   - **(4b)** pluggable crypto — **PR #1930, OPEN + green** (`origin/xl-pluggable
-     @ 391f55f67`, on `^5.1.0`, incl. the Mode-B reconcile fix).
-   - **(4c)** secret sharing + the `nskey`/D1 Tier1 work below — **lands on
-     trunk as its work packages complete** (§7); currently integrated on
-     `gkc-pqmls-spike` for early verification.
+   - **(4b)** pluggable crypto seam (slim) — **PR #1930, OPEN + green.**
+   - **(4c)** the secret-sharing substrate, `nskey` / D1 Tier1, and the `group`
+     provider — **land on trunk as the §7 work packages complete** (WP-SS /
+     WP6 / WP-GP …); the spike (`gkc-pqmls-spike`) holds working prototypes.
 
-### What is already built on the integration branch (the D1 foundation)
-- **M0 pluggable crypto seam:** `CryptoProvider{id, initialize, encrypt,
-  decrypt}`; `CryptoRuntime` dispatches put/get/notify/sync by
-  `appMetadata.providerId`; `CryptoConfig` in `AtClientPreference`;
-  `CryptoStorage`; `LegacyCryptoProvider`; `CryptoPolicy.onProviderNotFound` /
-  `onDecryptFailed`. Wire field `Metadata.appMetadata`. **This is the migration
+### What is built vs prototyped — re-baselined: assume only trunk + #1930 + #1993
+
+**In trunk (the real baseline):**
+- **at_chops PQ primitives** — X-Wing (ML-KEM-768 + X25519), AES-256-GCM,
+  HKDF-SHA256, HMAC — vector-verified (3.2.1).
+- **Commit-log-free 5.x keystore** (at_client 4a; at_persistence 5.x).
+- **Phase 6 — at_chops is the sole security-crypto dependency**: at_client /
+  at_lookup / at_auth / at_onboarding_cli route all security crypto through
+  at_chops; a CI gate enforces it (the four small PRs #1995–1998, **merged**).
+  (Record in §6.)
+
+**In flight (open PRs — the rest of the foundation):**
+- **M0 pluggable crypto seam** — **PR #1930** (at_client). Stateless
+  `CryptoProvider{id, encrypt(ctx, atKey, plaintext)→String, decrypt(ctx, atKey,
+  ciphertext)→String}`; `CryptoRuntime` resolves put/get/notify/sync against the
+  **live** `AtClientPreference.crypto` (`CryptoConfig{defaultProviderId,
+  providers, lookup}`) by `appMetadata.providerId`, with `LegacyCryptoProvider`
+  as the built-in fallback; the SDK stamps `providerId`+`isEncrypted`; an unknown
+  scheme throws `CryptoProviderNotRegistered`; cached-client reuse adopts the new
+  `preference.crypto`. Wire field `Metadata.appMetadata`. **This is the migration
   machinery** the whole rollout rides.
-- **Secret-sharing substrate (PQ-native):** per-client X-Wing `ClientKeyPackage`
-  / `PackageKey`; namespace-scoped registration + discovery
-  (`registerClient` / `discoverClients(namespace:)`, server-gated);
-  AES-256-GCM `__ssenv.<ns>` envelopes (open-coded encapsulate+GCM today —
-  **consolidate onto `pqSeal`/`pqOpen`** once #1993 lands, D1-A); in-memory
-  `SecretStore` (app-pluggable persistence); `requestSecretsFromNamespace` pull
-  flow; `waitForSecret`; `excludeEnrollmentIds`; reserved `__` system-secret
-  names.
-- **`group` provider (D1 Tier2 self):** `SecureGroup`/`PairwiseGroup` v1 + the
-  `group` `GroupCryptoProvider`; `__rk.<epoch>.<kid>` epoch keys; scope
-  `self:<atSign>:<namespace>`. Self-encryption only today (refuses shared keys).
-- **at_chops PQ primitives:** X-Wing (ML-KEM-768 + X25519), AES-256-GCM,
-  HKDF-SHA256, HMAC — vector-verified.
-- **Persistence:** commit-log-free 5.x keystore.
-- **Phase 6:** at_client / at_lookup / at_auth / at_onboarding_cli route all
-  security crypto through at_chops; CI gate enforces it. (Record in §6.)
+- **HPKE `pqSeal`/`pqOpen`** — **PR #1993** (at_chops).
+
+**Prototyped on `gkc-pqmls-spike` but NOT landed — first-class WPs (§7), not
+foundation.** The spike has working code for these; treat re-landing it on trunk
+as real work (carve-out + alignment to the slim seam + `pqSeal`):
+- **Secret-sharing substrate (PQ-native)** → **WP-SS**: per-client X-Wing
+  `ClientKeyPackage`/`PackageKey`; namespace-scoped registration + discovery
+  (`registerClient` / `discoverClients(namespace:)`, server-gated); AES-256-GCM
+  `__ssenv.<ns>` envelopes (open-coded encapsulate+GCM on the spike — **to
+  consolidate onto `pqSeal`/`pqOpen`**); in-memory `SecretStore`;
+  `requestSecretsFromNamespace`; `waitForSecret`; `excludeEnrollmentIds`;
+  reserved `__` system-secret names.
+- **`group` provider (D1 Tier2 self)** → **WP-GP**: `SecureGroup`/`PairwiseGroup`
+  v1 + the `group` `GroupCryptoProvider`; `__rk.<epoch>.<kid>` epoch keys; scope
+  `self:<atSign>:<namespace>`; self-encryption only (refuses shared keys).
+
+*(The original `CryptoRegistry` / `CryptoPolicy` / `CryptoStorage` / `initialize`
+/ Request-Result wrappers were removed in #1930's slim refactor; the
+`cryptoRegistry` getter is off the `AtClient` spec.)*
 
 ### Phase status (cross-ref roadmap [Milestones](crypto-roadmap.md#milestones-and-capabilities))
 | Phase / Milestone | Status |
 |---|---|
-| 0 — foundations (secret sharing, pluggable crypto, jt-pq) | **Done** (rebuilt on xl-pluggable) |
+| 0 — foundations (secret sharing, pluggable crypto, jt-pq) | **Partial**: jt-pq + Phase-6 in trunk; pluggable crypto **in flight** (#1930); secret sharing **not landed** (spike → WP-SS) |
 | 1 — PQ primitives in at_chops (X-Wing, GCM, HKDF, HMAC) | **Done**; remaining: PQ enrollment-conveyance pubkey |
 | 2 — identity layer (KeyPackages + per-client AtKeys) | KeyPackage framing **done**; AtKeys device-local split + identity resolution: not started (mostly D2 / D1 Tier2) |
 | 2.5 — at_persistence 5.x migration | **Done & verified** |
-| 3 — `SecureGroup` v1 + `group` provider (self) | **Built (D1 Tier2 self)**; D1 Tier1 `nskey` self is **new D1 work** (§3) |
+| 3 — `SecureGroup` v1 + `group` provider (self) | **Prototyped on spike, not landed** (→ WP-GP); D1 Tier1 `nskey` self is **new D1 work** (§3) |
 | 4 — cross-atSign shared | D1 Tier1 `nskey` shared is **new D1 work** (§3); per-client pair group is D1 Tier2 / D2 |
 | 5 — pq-mls engine | **D2 placeholder** (§4) |
 | 6 — at_chops sole security-crypto dependency | **Complete** (in-scope) |
@@ -111,8 +127,11 @@ D1 is done when, per the roadmap
 5. The **usability acceptance test** holds at each milestone (§5): no new flag a
    user must pass, file a user must manage, operator step, or peer-by-peer break.
 
-The substantive *new* D1 build is the **`nskey` provider (D1 Tier1)** and the
-**migration/versioning machinery** — the foundation (§1) already exists.
+The substantive D1 build is the **`nskey` provider (D1 Tier1)** and the
+**migration/versioning machinery**, on top of the foundation that lands first:
+the M0 seam (#1930), HPKE (#1993), and the carved-out **secret-sharing
+substrate** (WP-SS). Only the at_chops primitives, the commit-log-free keystore,
+and the Phase-6 routing (§1) are already in trunk.
 
 ---
 
@@ -136,9 +155,12 @@ version/sequencing table).
   as a `@Deprecated` shim over it so the ~65 construction sites compile
   unchanged and migrate gradually. *Acceptance:* all at_chops vectors green via
   both surfaces; consumers unbroken.
-- [ ] **S2 · `WritableAtKeys` holder + explicit dumb stores** (`at_auth`). The
-  unified in-memory holder (`add`/`remove`/`write`); composed at AtClient
-  construction; convergence stays in the secret-sharing substrate. Stores:
+- [ ] **S2 · `WritableAtKeys` holder + explicit dumb stores** (`at_auth`). A
+  **subclass of at_auth's `AtKeys`** (the key-material holder) adding
+  `add`/`remove`/`write`; composed at AtClient construction; convergence stays
+  in the secret-sharing substrate. *(NOT a wrapper around `AtChops` — `AtKeys`
+  already produces one via `toAtChops()` and carries a `metadata` stash.)*
+  Stores:
   `InMemoryAtKeysIo` (at_auth main), `FileAtKeysIo` (at_auth_io — updatable, see
   S4), `LocalKeystoreAtKeysIo` (at_client, injected), `KeychainAtKeysIo`
   (at_client_flutter). *Acceptance:* a provider can mint→add→write a key and
@@ -157,10 +179,12 @@ version/sequencing table).
   succeeds against the `at_auth.dart` core; CLI + flutter (importing
   `at_auth_io.dart`) unbroken; auth/onboard functional tests green.
 - [ ] **S5 · Providers onto `WritableAtKeys`** (`at_client` minor `3.14.0`).
-  `CryptoContext` gains a `WritableAtKeys` field (additive; `atChops`
-  `@Deprecated`); `LegacyCryptoProvider` reads keys from it; `LocalKeystoreAtKeysIo`
-  lands here and is injected into `WritableAtKeys` at AtClient construction.
-  *Acceptance:* legacy + group providers operate via `WritableAtKeys`; existing
+  `CryptoContext` gains a `WritableAtKeys keys` field (additive — after the slim
+  refactor `CryptoContext` is `{atClient}`, so there is **no `atChops` field to
+  deprecate**); the (stateless) `LegacyCryptoProvider` reads keys from
+  `context.keys` instead of `context.atClient`; `LocalKeystoreAtKeysIo` is
+  injected into `WritableAtKeys` at AtClient construction.
+  *Acceptance:* legacy + group providers operate via `context.keys`; existing
   unit/functional suites green.
 - [ ] **S6 · Consumer constraint bumps + sequencing.** `at_client` /
   `at_onboarding_cli` (`1.17.0`) / `at_client_flutter` (`1.2.0`) /
@@ -244,7 +268,7 @@ on the M0 seam; legacy-shaped (copyable, enrollment-granular), PQ + namespace
 - [ ] **B5 · Opt-in rotation.** Mint a new namespace keypair → publish new
   public key → write the new private key as `__nsk.<epoch>` over the
   **per-enrollment** self-group secret channel (PQ-wrapped to each at_talk
-  enrollment's conveyance key); reuse the built `__`-secret substrate +
+  enrollment's conveyance key); reuse the **WP-SS** `__`-secret substrate +
   `requestSecretsFromNamespace` (push) + pull. Design: roadmap
   [Opt-in rotation](crypto-roadmap.md#opt-in-key-rotation-d1-tier1).
   *Buys:* namespace-granular **post-compromise security**; **not** FS / history
@@ -276,10 +300,12 @@ Design: roadmap
   all schemes, keeps writing legacy) until the readiness flag flips — so a bare
   rebuild is a zero-risk soak. (An aggressive "prefer-best on rebuild" default is
   possible but off by default; see the capability table footnote.)
-- [ ] **C3 · Strict-mode toggles (simple-code tier).** `CryptoPolicy` options:
-  refuse legacy fallback / require PQ in cold-start (seal-and-hold vs error vs
-  notify); custom rotation triggers. These are app-facing in 3.x — alongside
-  `disallowLegacyEncryption` (D1-D), which is the dedicated legacy-write switch.
+- [ ] **C3 · Strict-mode toggles (simple-code tier).** Policy options (a
+  strict-mode mechanism to be designed — the early `CryptoPolicy` was removed in
+  the slim-API refactor): refuse legacy fallback / require PQ in cold-start
+  (seal-and-hold vs error vs notify); custom rotation triggers. These are
+  app-facing in 3.x — alongside `disallowLegacyEncryption` (D1-D), which is the
+  dedicated legacy-write switch.
 - [ ] **C4 · Capability conformance.** Implement so the
   [capabilities table](crypto-roadmap.md#capabilities-by-application-code-change-level)
   holds: no-code = universal reader + back-compat; flag = PQ writer/recipient;
@@ -308,9 +334,10 @@ Design: roadmap
   provider itself **stays** — needed for reads always and for writes when the
   flag is `false`). Gated on the ecosystem floor.
 
-### D1-E · D1 Tier2 shape-corrections (cheap-now, carry into D2)
-The `group` provider exists (D1 Tier2 self). These keep its shape honest before
-the self→shared and MLS transitions; do them while touching the area.
+### D1-E · D1 Tier2 shape-corrections (fold into WP-GP)
+The `group` provider is prototyped on the spike (D1 Tier2 self) and lands as
+WP-GP. These keep its shape honest before the self→shared and MLS transitions;
+apply them as part of that carve-out, while touching the area.
 - [ ] **Lift membership into `SecureGroup`** (`members`/`add`/`remove`); v1
   derives them. Avoids a later breaking change to a published abstract.
 - [ ] **Binary-safe `group` provider** — seal/open bytes, honour `isBinary`
@@ -464,10 +491,13 @@ tests. Plan archived at `untracked/AT_PERSISTENCE_5_MIGRATION_PLAN.md`.
   moving any older pluggable-crypto branch onto the 5.x keystore needs this
   adaptation; the cherry-pick alone is not enough. Verified 80/80 functional.
 - **Mode-B flake fix** (`391f55f67` on xl-pluggable + spike): `setCurrentAtSign`'s
-  idempotency short-circuit returned the cached `AtClient` without
-  `reconcileCryptoProviders`, so a same-atSign re-set with a new provider config
-  dropped it → intermittent `CryptoProviderNotRegistered`. Reconcile in the
-  short-circuit + a deterministic regression test. **PR #1930 CI all green.**
+  idempotency short-circuit returned the cached `AtClient` without re-applying
+  the new preference's providers, so a same-atSign re-set with a new provider
+  config dropped it → intermittent `CryptoProviderNotRegistered`. *(Later, when
+  `CryptoRegistry` was folded into `CryptoConfig`, the `reconcileCryptoProviders`
+  fix was replaced by adopting the new `preference.crypto` on reuse — same Mode-B
+  guarantee, no registry; deterministic regression test retained.)* **PR #1930
+  CI all green.**
 - **e2e flake diagnosis:** three modes — A `@ce2e1` PKAM AT0401 (remote cicd
   infra, not an SDK bug; CI e2e runs against `@ce2e*`, not the local vip),
   B = the reconcile bug (fixed), C = notification-delivery timing. Lesson:
@@ -509,36 +539,91 @@ Within `at_client/crypto/`, the file partition keeps A and C apart: **C** owns
 `crypto/nskey/` (new), `secret_sharing/`. The `nskey` provider is mostly new
 files — low collision by construction.
 
-### Phase 0 — unblock (blocks everything)
-- Land **PR #1930** (4b pluggable crypto) → trunk: the M0 seam in published
-  at_client. **The single biggest unblock** — until it lands, the integration
-  branch stays ahead of trunk.
-- Revise + land **PR #1993** (HPKE) → trunk (`at_chops`).
+### Reconciliations since the slim refactor (`xl-pluggable`)
+The slim-API + registry-fold landed on `xl-pluggable` (PR #1930) after this §7
+was first written; three assumptions shifted:
+1. **`CryptoContext` is `{atClient}`** — no `atChops` field. WP3 just *adds*
+   `WritableAtKeys keys`; nothing to deprecate.
+2. **`WritableAtKeys` subclasses at_auth's `AtKeys`** (the material holder),
+   not a wrapper over `AtChops` (WP2).
+3. **No `CryptoRegistry`** — `CryptoRuntime` resolves against the live
+   `AtClientPreference.crypto` (`CryptoConfig.lookup` + a built-in legacy
+   fallback), and cached-client reuse adopts the new config. WP6/WP7 add a
+   provider to `CryptoConfig.providers` and read `context`; there is no registry
+   to register against. The SDK stamps `appMetadata.providerId` + `isEncrypted`,
+   so providers only contribute `additional`.
 
-### Phase 1 — contracts (small, fast-review PRs; all parallel, all additive)
-| WP | Track | What | Bump |
-|----|-------|------|------|
-| WP1 | A | `at_chops` stateless core + `@Deprecated` shim; fold HPKE onto existing GCM/HKDF | `at_chops 3.3.0` |
-| WP2 | B | `WritableAtKeys` + widen `AtKeysIo`/`WrittenAtKeysIo` (add/remove/update, default impls) + `InMemoryAtKeysIo` — **API only** | `at_auth 3.2.0` |
-| WP3 | C | `CryptoContext` gains a `WritableAtKeys` field (additive; `atChops` `@Deprecated`) | at_client |
-| WP4 | D | `LocalKeystoreAtKeysIo` + the updatable `.atKeys` file path | at_client / at_auth |
+### The work-package sequence — single source for ordering
 
-### Phase 2 — build on contracts (parallel)
-| WP | Track | What | Bump |
-|----|-------|------|------|
-| WP5 | B | **`at_auth` WASM barrel split** — `at_auth_io.dart`, FileAtKeysIo move, default removal, probe extraction, registrar → `package:http` | **`at_auth 4.0.0`** (the one breaking cut) |
-| WP6 | A | `nskey` provider on `pqSeal` + `WritableAtKeys` (new files) | at_client |
-| WP7 | C | legacy provider reads `WritableAtKeys`; per-destination negotiation; `disallowLegacyEncryption` flag (default `false`) | at_client |
-| WP8 | D | consumer bumps to `at_auth ^4.0.0` (onboarding / flutter / cli_commons) | minors — **gated on WP5** |
+**Baseline (built / in trunk):** at_commons 5.11.0 (`appMetadata` wire), at_chops
+3.2.1 (X-Wing, AES-256-GCM, HKDF, HMAC), at_persistence 5.x (commit-log-free),
+at_client commit-log-free migration (4a), Phase-6 at_chops routing in
+at_lookup / at_auth / at_onboarding_cli (#1995–1998, **merged**). **In flight:**
+#1993 (at_chops HPKE), #1930 (at_client M0 seam).
 
-### Phase 3 — feature completion (parallel)
-| WP | Track | What |
-|----|-------|------|
-| WP9 | A | nskey rotation / cold-start / revocation; `__ssenv` consolidation onto `pqSeal`; group shape fixes (binary-safe, lift membership, rename) |
-| WP10 | B | PQ enrollment-conveyance public key |
-| WP11 | C | migration machinery (readiness-marker lifecycle, strict-mode toggles); 4c secret-sharing carve-out |
+**Prototyped on `gkc-pqmls-spike` but NOT landed — first-class work to do, not
+foundation:** the **secret-sharing substrate** (WP-SS) and the **`group`
+provider** (WP-GP). They were previously folded into WP11/WP9 as "assumed
+built"; they are now their own carve-out WPs.
 
-### Phase 4 — integration is continuous, not a final step
+Order is top-to-bottom; items in one **wave** run in parallel (different
+package/track — A crypto-primitives, B key-management, C at_client seam,
+D storage/consumers). **▶** marks a pub.dev release shipping user-visible
+capability.
+
+**Wave 0 — land the in-flight foundation (gates everything).** #1930 is the
+single biggest unblock; #1993 can be reviewed alongside it.
+- **#1993** (A) — fold HPKE `pqSeal`/`pqOpen` into at_chops (D1-A).
+- **#1930** (C) — at_client M0 pluggable crypto seam.
+  **▶ at_client (minor): the pluggable-crypto seam ships** — apps can register
+  custom `CryptoProvider`s; legacy stays the default. (First capability release.)
+
+**Wave 1 — contracts (WP1–WP4, parallel; merge the three interface PRs first).**
+- **WP1** (A) at_chops stateless core + `@Deprecated` shim, HPKE folded in. **▶ at_chops 3.3.0.**
+- **WP2** (B) `WritableAtKeys extends AtKeys` + `AtKeysIo` widening — API only. **▶ at_auth 3.2.0.**
+- **WP3** (C) `CryptoContext.keys` field (additive). *(interface-first)*
+- **WP4** (D) `LocalKeystoreAtKeysIo` + updatable `.atKeys`.
+
+**Wave 2 — substrate + enrollment key (parallel; on at_chops 3.3.0).**
+- **WP-SS** (A/C) carve the **secret-sharing substrate** spike → trunk:
+  `ClientKeyPackage`, `SecretStore`, namespace registration/discovery, `__ssenv`
+  envelopes **via `pqSeal`**, `requestSecretsFromNamespace`, `waitForSecret`,
+  `excludeEnrollmentIds`.
+- **WP10** (B) PQ enrollment-conveyance public key (also the nskey cold-start
+  fallback) — land before WP6.
+
+**Wave 3 — `nskey` core + the at_auth 4.0 cut (parallel).**
+- **WP6** (C/A, D1-B B1–B4) the **`nskey` provider** — namespace keypair
+  (derive/publish), seal/open via `pqSeal`, capability marker + negotiation,
+  cold-start fallback. Needs WP1, WP3, WP10 (+ WP-SS for the non-derivable
+  distribution path).
+  **▶ at_client (minor): PQ-safe writes available** — a rebuilt app is a
+  universal reader; one readiness-flag flip makes its new writes `nskey`.
+- **WP5** (B) **`at_auth 4.0.0`** WASM barrel split (the one breaking cut). Needs WP2.
+  **▶ at_auth 4.0.0** with **WP8** (D, consumer bumps onboarding/flutter/
+  cli_commons) **▶** their minors right behind it.
+
+**Wave 4 — D1 Tier1 completion (migration, rotation, versioning).**
+- **WP7** (C, D1-C + D1-D flag) migration machinery (readiness-marker lifecycle,
+  negotiation default, strict-mode toggles) + `disallowLegacyEncryption`
+  (default `false`); legacy provider reads `WritableAtKeys`. Needs WP6.
+- **WP9** (A/C, D1-B B5/B6) nskey **rotation + revocation**; `__ssenv`
+  consolidated on `pqSeal`. Needs WP-SS, WP6.
+  **▶ at_client `3.14.x`: D1 Tier1 GA — PQ-safe namespace messaging** (the
+  headline: rebuild = universal reader, one flag = PQ writer, opt-in rotation).
+
+**Wave 5 — D1 Tier2 (opt-in hardened) — parallel, off the Tier1 critical path.**
+- **WP-GP** (A/C) carve the **`group` provider** (`SecureGroup` / `SelfGroup`)
+  spike → trunk + the D1-E shape fixes (binary-safe, lift membership, rename).
+
+**Wave 6 — the v4 cut (gated on the ecosystem floor).**
+- **WP-D3** (D1-D) at_client **4.0.0** — flip `disallowLegacyEncryption` default
+  to `true` + dead-code removal (the legacy provider itself stays — needed for
+  reads). **▶ at_client 4.0.0: PQ-safe on every write path by default.**
+
+D2 (pq-mls) is a separate deliverable — see §4.
+
+### Integration is continuous, not a final step
 Each WP **merges to trunk when complete** and is **published to pub.dev as
 needed** in dependency order (roadmap version table). To prove the full stack
 before a batch lands, **spin up an ephemeral integration branch on demand**
@@ -547,8 +632,10 @@ before a batch lands, **spin up an ephemeral integration branch on demand**
 early, with no standing integration branch to drift.
 
 ### Critical path & merge discipline
-- **Critical path:** #1930 → `at_auth 4.0` (WP5) → at_client seam (WP7) +
-  `nskey` (WP6).
+- **Critical path to D1 Tier1 GA:** #1930 → WP1 (`pqSeal`) + WP3
+  (`CryptoContext`) + WP-SS (substrate) + WP10 (enrollment key) → WP6 (`nskey`)
+  → WP7 (migration/flag) → WP9 (rotation). `at_auth 4.0` (WP5, WASM-readiness)
+  and WP-GP (the `group` provider) run **in parallel, off this path**.
 - **Interface-first:** the `pqSeal` signature (WP1), `WritableAtKeys` API (WP2),
   and `CryptoContext` field (WP3) are tiny PRs — merge them first (stubs OK) so
   every track compiles against stable shapes and never blocks on another.
@@ -560,3 +647,41 @@ early, with no standing integration branch to drift.
   path `dependency_overrides` for local cross-package dev (don't commit lock
   churn); **trunk is the integration point** — prove cross-package combinations
   with an *ephemeral* integration branch (or CI), not a standing one.
+
+### Wave-1 PR stubs (ready to assign once Wave 0 is on trunk)
+
+Four small, additive, single-package PRs — one per track, started in parallel.
+Land the three interface-defining ones (WP1/WP2/WP3 signatures) first, stubs OK,
+so every track compiles against stable shapes. Full acceptance detail is in §3
+(D1-S S1/S2/S5, D1-A). **Prereqs on trunk:** PR #1930 (M0 seam), PR #1993 (HPKE),
+the four at_chops-routing PRs (#1995–1998).
+
+- **WP1 · `feat(at_chops): stateless core + HPKE`** (Track A).
+  Add a stateless functional surface (keys passed per call) beside `AtChopsImpl`;
+  keep `AtChopsImpl(keys)` as a `@Deprecated` shim. Fold `pqSeal`/`pqOpen` (from
+  the revised #1993) onto the existing `AesGcm256EncryptionAlgo`/`HkdfSha256`/
+  `HmacSha256`. *Files:* `at_chops/lib/src/` + `pq_hpke.dart`. *Bump:* `at_chops
+  3.2.1 → 3.3.0`. *Depends:* #1993 revised. *Done:* all vectors green via both
+  surfaces; pqSeal round-trip / tamper→`authFailure` / info-aad-mismatch tests.
+
+- **WP2 · `feat(at_auth): WritableAtKeys + AtKeysIo widening (API only)`** (Track B).
+  `WritableAtKeys extends AtKeys` (`add`/`remove`/`write`); widen
+  `AtKeysIo`/`WrittenAtKeysIo` (add/remove/update with default impls);
+  `InMemoryAtKeysIo`. No behaviour change to onboard/auth. *Files:*
+  `at_auth/lib/src/keys/`. *Bump:* `at_auth 3.2.0`. *Depends:* #1996 merged.
+  *Done:* existing at_auth suites green; new API unit-tested.
+
+- **WP3 · `feat(at_client): CryptoContext.keys`** (Track C).
+  `CryptoContext` gains a `WritableAtKeys keys` field (additive), built at
+  AtClient construction from auth's `AtKeys`. Providers may read it; legacy
+  unchanged for now. *Files:* `crypto.dart`, `at_client_impl.dart` (`_context()`),
+  `crypto_runtime.dart`. *Bump:* at_client (fold into the in-progress version).
+  *Depends:* #1930; WP2's `WritableAtKeys` type (interface-first). *Done:*
+  context carries `keys`; crypto suites green.
+
+- **WP4 · `feat: LocalKeystoreAtKeysIo + updatable .atKeys`** (Track D).
+  `LocalKeystoreAtKeysIo` (at_client) + make the `.atKeys` path updatable
+  (`WrittenAtKeysIo` update path; re-wrap self-enc key; atomic write + backup).
+  *Files:* at_client storage + at_auth `FileAtKeysIo`. *Bump:* at_client /
+  at_auth. *Depends:* WP2 (`AtKeysIo` API). *Done:* a post-onboarding key add
+  persists + survives restart; migration test on a v(N-1) fixture.
