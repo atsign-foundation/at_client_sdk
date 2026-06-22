@@ -92,7 +92,7 @@ void main() {
     });
 
     test('AtChopsUtil.generateXWingKeyPair round-trips via base64', () async {
-      final atKp = await AtChopsUtil.generateXWingKeyPair();
+      final atKp = await XWingKeyPair.generate();
       final pub = base64Decode(atKp.atPublicKey.publicKey);
       final seed = base64Decode(atKp.atPrivateKey.privateKey);
       final enc = await algo.encapsulate(pub);

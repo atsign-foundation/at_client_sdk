@@ -21,7 +21,8 @@ void main() {
       }
     });
 
-    test('encapsulate/decapsulate round-trip within the FFI instance', () async {
+    test('encapsulate/decapsulate round-trip within the FFI instance',
+        () async {
       if (lib == null) {
         fail('libcrypto not available on this host');
       }
@@ -51,7 +52,7 @@ void main() {
         fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.3)');
       }
 
-      final AtMlKem768KeyPair kp = await AtChopsUtil.generateMlKem768KeyPair();
+      final MlKem768KeyPair kp = await MlKem768KeyPair.generate();
       final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
       final Uint8List priv = base64Decode(kp.atPrivateKey.privateKey);
 

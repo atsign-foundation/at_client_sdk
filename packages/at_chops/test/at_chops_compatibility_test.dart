@@ -535,7 +535,7 @@ void main() {
       } catch (e, _) {
         assert(e is AtSigningException);
         expect(e.toString(),
-            'Exception: encryption key pair not set for default signing algo');
+            'Exception: encryption key pair not set for rsa signing algo');
       }
     });
 
