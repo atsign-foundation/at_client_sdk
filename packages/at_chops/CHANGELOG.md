@@ -1,3 +1,6 @@
+## 3.3.0
+- feat: Add `pqSeal`/`pqOpen` — HPKE-style PQ encryption over X-Wing KEM with AES-256-GCM and forward-compatible versioning
+
 ## 3.2.1
 - docs: update README to document PQC algorithms (ML-DSA-65, ML-KEM-768, X-Wing, X25519), FFI vs pure-Dart backends, and usage examples
 

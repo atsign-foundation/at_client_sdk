@@ -1,0 +1,20 @@
+# Local-only virtualenv for the end-to-end suite. Driven by ../runLocal.sh,
+# which exports VIRTUALENV_BASE_PORT (+ VE_TOP_PORT = base+99). A distinct
+# project name + container name let this run alongside the functional suite's
+# virtualenv on a different base port.
+name: at_end2end_test
+services:
+  virtualenv:
+    container_name: e2e_virtualenv
+    image: atsigncompany/virtualenv:vip
+    # The published image's default CMD runs supervisord directly and ignores
+    # VIRTUALENV_BASE_PORT. Run the base-port entrypoint explicitly so the
+    # port-shift happens (it execs supervisord; no-op for an unset base port).
+    entrypoint: ["/atsign/entrypoint.sh"]
+    ports:
+      # The whole base..base+99 range (root=base, secondaries=base+1.., redis=base+99).
+      - "127.0.0.1:${VIRTUALENV_BASE_PORT:-26000}-${VE_TOP_PORT:-26099}:${VIRTUALENV_BASE_PORT:-26000}-${VE_TOP_PORT:-26099}"
+    extra_hosts:
+      - "vip.ve.atsign.zone:127.0.0.1"
+    environment:
+      - VIRTUALENV_BASE_PORT=${VIRTUALENV_BASE_PORT:-26000}

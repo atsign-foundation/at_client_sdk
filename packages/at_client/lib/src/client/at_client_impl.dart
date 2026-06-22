@@ -7,9 +7,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
-import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
-import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
@@ -42,18 +40,17 @@ class AtClientImpl implements AtClient {
 
   @override
   Atsign get atSign => _atSign;
-  SecondaryKeyStore? _localSecondaryKeyStore;
+  AtKeyValueStore<String, AtData, AtMetaData?>? _localSecondaryKeyStore;
+
+  /// Owns the local persistence bundle's lifecycle (commit-log-free); null
+  /// when an external keystore was injected or storage is not required.
+  StorageManager? _storageManager;
   @visibleForTesting
   LocalSecondary? localSecondary;
   RemoteSecondary? _remoteSecondary;
-  AtClientCommitLogCompaction? _atClientCommitLogCompaction;
-  AtClientConfig? _atClientConfig;
   static final upperCaseRegex = RegExp(r'[A-Z]');
 
   PutRequestTransformer putRequestTransformer = PutRequestTransformer();
-
-  AtClientCommitLogCompaction? get atClientCommitLogCompaction =>
-      _atClientCommitLogCompaction;
 
   @override
   // ignore: override_on_non_overriding_member
@@ -152,6 +149,12 @@ class AtClientImpl implements AtClient {
   StreamSubscription<DataEvent>? _expirySub;
   bool _expirySweepInFlight = false;
 
+  // Monotonic guard for the async `_armExpiryTimer`. Each arm claims a
+  // generation; after its `await` it bails if a newer arm has started (or the
+  // client has stopped), so concurrent listener-driven arms can't orphan each
+  // other's one-shot timer and an in-flight arm can't re-arm after stop().
+  int _expiryArmGen = 0;
+
   // ---------------------------------------------------------------------------
   // Event-driven availability timer. Symmetric counterpart to the
   // expiry timer above — arms at LocalSecondary.nextAvailableAt(); on
@@ -163,6 +166,9 @@ class AtClientImpl implements AtClient {
   Timer? _availableTimer;
   StreamSubscription<DataEvent>? _availableSub;
   bool _availableSweepInFlight = false;
+
+  // Monotonic guard for the async `_armAvailableTimer` — see `_expiryArmGen`.
+  int _availableArmGen = 0;
 
   SyncService? _syncService;
 
@@ -290,11 +296,9 @@ class AtClientImpl implements AtClient {
       AtClientManager? atClientManager,
       RemoteSecondary? remoteSecondary,
       EncryptionService? encryptionService,
-      SecondaryKeyStore? localSecondaryKeyStore,
+      AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
       AtChops? atChops,
       AtLookUp? atLookUp,
-      AtClientCommitLogCompaction? atClientCommitLogCompaction,
-      AtClientConfig? atClientConfig,
       String? enrollmentId}) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
@@ -310,8 +314,6 @@ class AtClientImpl implements AtClient {
           localSecondaryKeyStore: localSecondaryKeyStore,
           atChops: atChops,
           atLookUp: atLookUp,
-          atClientCommitLogCompaction: atClientCommitLogCompaction,
-          atClientConfig: atClientConfig,
           enrollmentId: enrollmentId);
 
       await atClientImpl._init(atLookUp: atLookUp);
@@ -327,11 +329,9 @@ class AtClientImpl implements AtClient {
     AtClientPreference preference, {
     RemoteSecondary? remoteSecondary,
     EncryptionService? encryptionService,
-    SecondaryKeyStore? localSecondaryKeyStore,
+    AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
     AtChops? atChops,
     AtLookUp? atLookUp,
-    AtClientCommitLogCompaction? atClientCommitLogCompaction,
-    AtClientConfig? atClientConfig,
     this.enrollmentId,
   }) {
     _atSign = theAtSign.toAtsign();
@@ -342,25 +342,24 @@ class AtClientImpl implements AtClient {
 
     if (_localSecondaryKeyStore != null && !_preference!.isLocalStoreRequired) {
       throw IllegalArgumentException(
-          'A SecondaryKeyStore was injected, but preference.isLocalStoreRequired is false');
+          'An AtKeyValueStore was injected, but preference.isLocalStoreRequired is false');
     }
 
     _remoteSecondary = remoteSecondary;
     _encryptionService = encryptionService;
     _atChops = atChops;
-    _atClientCommitLogCompaction = atClientCommitLogCompaction;
   }
 
   Future<void> _init({AtLookUp? atLookUp}) async {
     if (_preference!.isLocalStoreRequired) {
       if (_localSecondaryKeyStore == null) {
-        var storageManager = StorageManager(preference);
-        await storageManager.init(_atSign, preference!.keyStoreSecret);
+        _storageManager = StorageManager(preference);
+        await _storageManager!.init(_atSign, preference!.keyStoreSecret);
       }
 
       localSecondary = LocalSecondary(
         this,
-        keyStore: _localSecondaryKeyStore,
+        keyStore: _localSecondaryKeyStore ?? _storageManager?.keyValueStore,
         onEvent: emitDataEvent,
       );
       _atChops ??= await _createAtChops(_atSign);
@@ -370,9 +369,9 @@ class AtClientImpl implements AtClient {
       // cache state (no-op when nothing has TTL).
       _expirySub = dataEvents.listen((_) {
         if (_expirySweepInFlight) return;
-        _armExpiryTimer();
+        unawaited(_armExpiryTimer());
       });
-      _armExpiryTimer();
+      await _armExpiryTimer();
 
       // Symmetric wire-up for the availability timer. SEED the
       // already-fired set BEFORE arming the timer: every cached
@@ -386,12 +385,12 @@ class AtClientImpl implements AtClient {
       // arrived. The semantic of `_onAvailableFire` is "fire when
       // availableAt JUST CROSSED" — past crossings observed by an
       // earlier process run shouldn't replay on a later one.
-      localSecondary?.seedAvailabilityFiredAsOf(DateTime.timestamp());
+      await localSecondary?.seedAvailabilityFiredAsOf(DateTime.timestamp());
       _availableSub = dataEvents.listen((_) {
         if (_availableSweepInFlight) return;
-        _armAvailableTimer();
+        unawaited(_armAvailableTimer());
       });
-      _armAvailableTimer();
+      await _armAvailableTimer();
     }
 
     // Using ??= because we may be injecting a RemoteSecondary
@@ -417,12 +416,15 @@ class AtClientImpl implements AtClient {
   ///
   /// A timestamp in the past arms a `Duration.zero` timer that fires
   /// on the next microtask — effectively immediate.
-  void _armExpiryTimer() {
+  Future<void> _armExpiryTimer() async {
+    final gen = ++_expiryArmGen;
     _expiryTimer?.cancel();
     _expiryTimer = null;
     final ls = localSecondary;
     if (ls == null) return;
-    final when = ls.nextExpiryAt();
+    final when = await ls.nextExpiryAt();
+    // Bail if a newer arm superseded us across the await, or we stopped.
+    if (gen != _expiryArmGen || _isStopped) return;
     if (when == null) return;
     final wait = when.difference(DateTime.timestamp());
     _expiryTimer = Timer(
@@ -445,7 +447,7 @@ class AtClientImpl implements AtClient {
       _logger.warning('Expiry sweep failed: $e\n$st');
     } finally {
       _expirySweepInFlight = false;
-      _armExpiryTimer();
+      await _armExpiryTimer();
     }
   }
 
@@ -457,12 +459,15 @@ class AtClientImpl implements AtClient {
   /// on the next microtask — covers the rare race where a record's
   /// availableAt slid into the past between the previous re-arm and
   /// this one.
-  void _armAvailableTimer() {
+  Future<void> _armAvailableTimer() async {
+    final gen = ++_availableArmGen;
     _availableTimer?.cancel();
     _availableTimer = null;
     final ls = localSecondary;
     if (ls == null) return;
-    final when = ls.nextAvailableAt();
+    final when = await ls.nextAvailableAt();
+    // Bail if a newer arm superseded us across the await, or we stopped.
+    if (gen != _availableArmGen || _isStopped) return;
     if (when == null) return;
     final wait = when.difference(DateTime.timestamp());
     _availableTimer = Timer(
@@ -481,7 +486,7 @@ class AtClientImpl implements AtClient {
       final ls = localSecondary;
       if (ls == null) return;
       final now = DateTime.timestamp();
-      for (final keyStr in ls.keysWithAvailableAtAtOrBefore(now)) {
+      for (final keyStr in await ls.keysWithAvailableAtAtOrBefore(now)) {
         try {
           final atKey = AtKey.fromString(keyStr);
           AtMetaData? meta;
@@ -493,7 +498,7 @@ class AtClientImpl implements AtClient {
           if (meta == null) continue;
           emitDataEvent(DataUpdated(atKey, metadata: meta));
           // Drop from the availability cache so it won't fire again.
-          ls.dropAvailabilityCacheEntry(keyStr);
+          await ls.dropAvailabilityCacheEntry(keyStr);
         } on Exception catch (e) {
           _logger.warning('availability sweep failed for $keyStr: $e');
         }
@@ -502,7 +507,7 @@ class AtClientImpl implements AtClient {
       _logger.warning('Availability sweep failed: $e\n$st');
     } finally {
       _availableSweepInFlight = false;
-      _armAvailableTimer();
+      await _armAvailableTimer();
     }
   }
 
@@ -517,7 +522,6 @@ class AtClientImpl implements AtClient {
       return;
     }
     _isStopped = false;
-    await startCompactionJob();
   }
 
   @override
@@ -549,12 +553,6 @@ class AtClientImpl implements AtClient {
     }
 
     try {
-      await stopCompactionJob();
-    } catch (e) {
-      _logger.warning('Error while stopping compaction job: $e');
-    }
-
-    try {
       await (_syncService as SyncServiceImpl).stop();
     } catch (e) {
       _logger.warning('Error while closing sync service: $e');
@@ -579,35 +577,23 @@ class AtClientImpl implements AtClient {
     _enrollmentService = null;
   }
 
+  @Deprecated(
+      'Commit-log compaction was removed with the commit-log-free keystore; '
+      'this is now a no-op and will be removed in a future major release')
   @override
   Future<void> startCompactionJob(
       {Duration? commitLogCompactionDuration}) async {
-    commitLogCompactionDuration ??= Duration(
-        minutes:
-            AtClientConfig.getInstance().commitLogCompactionTimeIntervalInMins);
-    AtCompactionJob atCompactionJob = AtCompactionJob(
-        (await AtCommitLogManagerImpl.getInstance().getCommitLog(_atSign))!,
-        SecondaryPersistenceStoreFactory.getInstance()
-            .getSecondaryPersistenceStore(_atSign)!);
-
-    _atClientCommitLogCompaction ??=
-        AtClientCommitLogCompaction.create(_atSign, atCompactionJob);
-
-    _atClientConfig ??= AtClientConfig.getInstance();
-
-    if (!_atClientCommitLogCompaction!.isCompactionJobRunning()) {
-      _atClientCommitLogCompaction!
-          .scheduleCompaction(commitLogCompactionDuration.inMinutes);
-    }
+    // No-op: the commit-log-free client has no commit log to compact.
   }
 
+  @Deprecated(
+      'Commit-log compaction was removed with the commit-log-free keystore; '
+      'this is now a no-op and will be removed in a future major release')
   @override
   Future<void> stopCompactionJob() async {
-    _logger.info('Stopping the commit log compaction job');
-    await _atClientCommitLogCompaction?.stopCompactionJob();
+    // No-op: the commit-log-free client has no commit log compaction job.
   }
 
-  /// Does nothing unless a telemetry service has been injected
   void _cascadeSetTelemetryService() {
     // if (telemetry != null) {
     //   _encryptionService?.telemetry = telemetry;
@@ -620,6 +606,9 @@ class AtClientImpl implements AtClient {
   LocalSecondary? getLocalSecondary() {
     return localSecondary;
   }
+
+  @override
+  AtPersistenceBundle? get persistenceBundle => _storageManager?.bundleOrNull;
 
   @override
   RemoteSecondary? getRemoteSecondary() {

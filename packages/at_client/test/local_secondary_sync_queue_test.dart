@@ -11,7 +11,6 @@ import 'dart:io';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 
@@ -21,15 +20,9 @@ void main() {
 
   Future<LocalSecondary> setUpLocalSecondary() async {
     AtClientImpl.atClientInstanceMap.remove(atSign);
-    var commitLogInstance = await AtCommitLogManagerImpl.getInstance()
-        .getCommitLog(atSign, commitLogPath: storageDir);
-    var persistenceManager = SecondaryPersistenceStoreFactory.getInstance()
-        .getSecondaryPersistenceStore(atSign)!;
-    await persistenceManager.getHivePersistenceManager()!.init(storageDir);
-    persistenceManager.getSecondaryKeyStore()!.commitLog = commitLogInstance;
-
     final atClientManager = AtClientManager(atSign);
     final preference = AtClientPreference()
+      ..isLocalStoreRequired = true
       ..syncRegex = ''
       ..hiveStoragePath = storageDir
       ..commitLogPath = '$storageDir/commit';
@@ -44,11 +37,8 @@ void main() {
 
   Future<void> tearDownLocalSecondary() async {
     try {
-      await SecondaryPersistenceStoreFactory.getInstance().close();
-      await AtCommitLogManagerImpl.getInstance().close();
-      // Close every Hive box (including the sync-queue box, which the
-      // factory closures above don't know about) so the next setUp
-      // doesn't reattach to leftover in-memory state.
+      // Close every Hive box (including the sync-queue box) so the next
+      // setUp doesn't reattach to leftover in-memory state.
       await Hive.close();
       AtClientImpl.atClientInstanceMap.remove(atSign);
       final dir = Directory(storageDir);

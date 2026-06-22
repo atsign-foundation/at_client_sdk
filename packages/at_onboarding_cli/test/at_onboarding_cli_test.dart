@@ -11,8 +11,9 @@ import 'package:at_onboarding_cli/src/onboard/helpers/enrollment_checkpoint.dart
 
 // ignore: depend_on_referenced_packages
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+// ignore: depend_on_referenced_packages
+import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:crypton/crypton.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/expect.dart';
 import 'package:test/scaffolding.dart';
@@ -88,9 +89,10 @@ void main() {
 
   group('validate enrollment related operations', () {
     String atsign = '@alice_test';
+    late AtPersistenceBundle persistenceBundle;
 
     setUp(() async {
-      await setupLocalStorage(atsign);
+      persistenceBundle = await setupLocalStorage(atsign);
       reset(mockAtLookup);
       reset(mockAtAuth);
       when(() => mockAtAuth.progressStream).thenAnswer((_) => Stream.empty());
@@ -117,11 +119,8 @@ void main() {
       // setup dependencies for mocking
       MockAtClient mockAtClient = MockAtClient();
       MockEnrollmentBase mockEnrollmentBase = MockEnrollmentBase();
-      var keyStore = SecondaryPersistenceStoreFactory.getInstance()
-          .getSecondaryPersistenceStore(atsign)
-          ?.getSecondaryKeyStore();
-      LocalSecondary localSecondary =
-          LocalSecondary(mockAtClient, keyStore: keyStore);
+      LocalSecondary localSecondary = LocalSecondary(mockAtClient,
+          keyStore: persistenceBundle.keyValueStore);
 
       // mocking OnboardingServiceImpl
       AtOnboardingPreference atOnboardingPreference = getOnboardingPreference()
@@ -183,9 +182,9 @@ void main() {
       await onboardingService.enroll(appName, deviceName, otp, namespaces);
 
       // verify stored data in LocalSecondary
-      AtData response =
-          await localSecondary.keyStore?.get('local:$dummyEnrollmentId$atsign');
-      Map<String, dynamic> jsonDecodedResponse = jsonDecode(response.data!);
+      final response =
+          await localSecondary.keyStore!.get('local:$dummyEnrollmentId$atsign');
+      Map<String, dynamic> jsonDecodedResponse = jsonDecode(response!.data!);
       expect(jsonDecodedResponse['namespace'], namespaces);
     });
 
@@ -207,15 +206,22 @@ void main() {
       AtEnrollmentResponse atEnrollmentResponse =
           AtEnrollmentResponse('123', EnrollmentStatus.approved);
 
-      RSAKeypair encryptionRsaKeyPair = onboardingService.generateRsaKeypair();
+      AtEncryptionKeyPair encryptionRsaKeyPair =
+          onboardingService.generateRsaKeypair();
       atEnrollmentResponse.atAuthKeys = AtKeys()
         ..enrollmentId = '123'
-        ..defaultSelfEncryptionKey = AtBytes.fromString(onboardingService.generateAESKey())
-        ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionRsaKeyPair.publicKey.toString())
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(encryptionRsaKeyPair.privateKey.toString())
-        ..apkamPrivateKey = AtBytes.fromString(encryptionRsaKeyPair.privateKey.toString())
-        ..apkamPublicKey = AtBytes.fromString(encryptionRsaKeyPair.publicKey.toString())
-        ..apkamSymmetricKey = AtBytes.fromString(onboardingService.generateAESKey());
+        ..defaultSelfEncryptionKey =
+            AtBytes.fromString(onboardingService.generateAESKey())
+        ..defaultEncryptionPublicKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPublicKey.publicKey)
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPrivateKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPublicKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPublicKey.publicKey)
+        ..apkamSymmetricKey =
+            AtBytes.fromString(onboardingService.generateAESKey());
 
       var f = await onboardingService.createAtKeysFile(atEnrollmentResponse);
       expect(f.path.endsWith('$atsign.atKeys'), true);
@@ -239,15 +245,22 @@ void main() {
       AtEnrollmentResponse atEnrollmentResponse =
           AtEnrollmentResponse('123', EnrollmentStatus.approved);
 
-      RSAKeypair encryptionRsaKeyPair = onboardingService.generateRsaKeypair();
+      AtEncryptionKeyPair encryptionRsaKeyPair =
+          onboardingService.generateRsaKeypair();
       atEnrollmentResponse.atAuthKeys = AtKeys()
         ..enrollmentId = '123'
-        ..defaultSelfEncryptionKey = AtBytes.fromString(onboardingService.generateAESKey())
-        ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionRsaKeyPair.publicKey.toString())
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(encryptionRsaKeyPair.privateKey.toString())
-        ..apkamPrivateKey = AtBytes.fromString(encryptionRsaKeyPair.privateKey.toString())
-        ..apkamPublicKey = AtBytes.fromString(encryptionRsaKeyPair.publicKey.toString())
-        ..apkamSymmetricKey = AtBytes.fromString(onboardingService.generateAESKey());
+        ..defaultSelfEncryptionKey =
+            AtBytes.fromString(onboardingService.generateAESKey())
+        ..defaultEncryptionPublicKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPublicKey.publicKey)
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPrivateKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPublicKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPublicKey.publicKey)
+        ..apkamSymmetricKey =
+            AtBytes.fromString(onboardingService.generateAESKey());
 
       var f = await onboardingService.createAtKeysFile(atEnrollmentResponse);
       expect(f.path.endsWith('$atsign.me.atKeys'), true);
@@ -271,15 +284,22 @@ void main() {
       AtEnrollmentResponse atEnrollmentResponse =
           AtEnrollmentResponse('123', EnrollmentStatus.approved);
 
-      RSAKeypair encryptionRsaKeyPair = onboardingService.generateRsaKeypair();
+      AtEncryptionKeyPair encryptionRsaKeyPair =
+          onboardingService.generateRsaKeypair();
       atEnrollmentResponse.atAuthKeys = AtKeys()
         ..enrollmentId = '123'
-        ..defaultSelfEncryptionKey = AtBytes.fromString(onboardingService.generateAESKey())
-        ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionRsaKeyPair.publicKey.toString())
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(encryptionRsaKeyPair.privateKey.toString())
-        ..apkamPrivateKey = AtBytes.fromString(encryptionRsaKeyPair.privateKey.toString())
-        ..apkamPublicKey = AtBytes.fromString(encryptionRsaKeyPair.publicKey.toString())
-        ..apkamSymmetricKey = AtBytes.fromString(onboardingService.generateAESKey());
+        ..defaultSelfEncryptionKey =
+            AtBytes.fromString(onboardingService.generateAESKey())
+        ..defaultEncryptionPublicKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPublicKey.publicKey)
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPrivateKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPublicKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPublicKey.publicKey)
+        ..apkamSymmetricKey =
+            AtBytes.fromString(onboardingService.generateAESKey());
 
       var f = await onboardingService.createAtKeysFile(atEnrollmentResponse);
       expect(f.path.endsWith('$atsign-me.atKeys'), true);
@@ -303,15 +323,22 @@ void main() {
       AtEnrollmentResponse atEnrollmentResponse =
           AtEnrollmentResponse('123', EnrollmentStatus.approved);
 
-      RSAKeypair encryptionRsaKeyPair = onboardingService.generateRsaKeypair();
+      AtEncryptionKeyPair encryptionRsaKeyPair =
+          onboardingService.generateRsaKeypair();
       atEnrollmentResponse.atAuthKeys = AtKeys()
         ..enrollmentId = '123'
-        ..defaultSelfEncryptionKey = AtBytes.fromString(onboardingService.generateAESKey())
-        ..defaultEncryptionPublicKey = AtBytes.fromString(encryptionRsaKeyPair.publicKey.toString())
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(encryptionRsaKeyPair.privateKey.toString())
-        ..apkamPrivateKey = AtBytes.fromString(encryptionRsaKeyPair.privateKey.toString())
-        ..apkamPublicKey = AtBytes.fromString(encryptionRsaKeyPair.publicKey.toString())
-        ..apkamSymmetricKey = AtBytes.fromString(onboardingService.generateAESKey());
+        ..defaultSelfEncryptionKey =
+            AtBytes.fromString(onboardingService.generateAESKey())
+        ..defaultEncryptionPublicKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPublicKey.publicKey)
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPrivateKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPublicKey =
+            AtBytes.fromString(encryptionRsaKeyPair.atPublicKey.publicKey)
+        ..apkamSymmetricKey =
+            AtBytes.fromString(onboardingService.generateAESKey());
 
       var f = await onboardingService.createAtKeysFile(atEnrollmentResponse);
       expect(f.path.endsWith('$atsign-me.atKeys'), true);
@@ -345,14 +372,11 @@ void main() {
       final atsign = '@syrax';
       final dummyEnrollmentId = '1234';
 
-      await setupLocalStorage(atsign);
+      final bundle = await setupLocalStorage(atsign);
 
       MockAtClient mockAtClient = MockAtClient();
-      var keyStore = SecondaryPersistenceStoreFactory.getInstance()
-          .getSecondaryPersistenceStore(atsign)
-          ?.getSecondaryKeyStore();
       LocalSecondary localSecondary =
-          LocalSecondary(mockAtClient, keyStore: keyStore);
+          LocalSecondary(mockAtClient, keyStore: bundle.keyValueStore);
 
       AtOnboardingPreference pref = getOnboardingPreference()
         ..atKeysFilePath = 'test/storage/keys/${atsign}_key.atKeys';
@@ -723,7 +747,15 @@ void main() {
   });
 }
 
+/// at_persistence 5.0.0 factories opened by [setupLocalStorage]; closed in
+/// [tearDownFunc] so Hive boxes are released before the storage dir is deleted.
+final List<HiveAtPersistenceFactory> _testPersistenceFactories = [];
+
 Future<void> tearDownFunc() async {
+  for (final factory in _testPersistenceFactories) {
+    await factory.close();
+  }
+  _testPersistenceFactories.clear();
   var isExists = await Directory('test/storage').exists();
   if (isExists) {
     Directory('test/storage').deleteSync(recursive: true);
@@ -750,21 +782,27 @@ AtKeys getAtAuthKeysFromAtChopsKeys(AtChopsKeys atChopsKeys) {
   AtKeys atAuthKeys = AtKeys();
 
   if (atChopsKeys.atPkamKeyPair?.atPublicKey.publicKey != null) {
-    atAuthKeys.apkamPublicKey = AtBytes.fromString(atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey);
+    atAuthKeys.apkamPublicKey =
+        AtBytes.fromString(atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey);
   }
   if (atChopsKeys.atPkamKeyPair?.atPrivateKey.privateKey != null) {
-    atAuthKeys.apkamPrivateKey = AtBytes.fromString(atChopsKeys.atPkamKeyPair!.atPrivateKey.privateKey);
+    atAuthKeys.apkamPrivateKey =
+        AtBytes.fromString(atChopsKeys.atPkamKeyPair!.atPrivateKey.privateKey);
   }
   if (atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey != null) {
-    atAuthKeys.defaultEncryptionPublicKey = AtBytes.fromString(atChopsKeys.atEncryptionKeyPair!.atPublicKey.publicKey);
+    atAuthKeys.defaultEncryptionPublicKey = AtBytes.fromString(
+        atChopsKeys.atEncryptionKeyPair!.atPublicKey.publicKey);
   }
   if (atChopsKeys.atEncryptionKeyPair?.atPrivateKey.privateKey != null) {
-    atAuthKeys.defaultEncryptionPrivateKey = AtBytes.fromString(atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey);
+    atAuthKeys.defaultEncryptionPrivateKey = AtBytes.fromString(
+        atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey);
   }
   if (atChopsKeys.selfEncryptionKey?.key != null) {
-    atAuthKeys.defaultSelfEncryptionKey = AtBytes.fromString(atChopsKeys.selfEncryptionKey!.key);
+    atAuthKeys.defaultSelfEncryptionKey =
+        AtBytes.fromString(atChopsKeys.selfEncryptionKey!.key);
   }
-  atAuthKeys.apkamSymmetricKey = AtBytes.fromString(atChopsKeys.apkamSymmetricKey!.key);
+  atAuthKeys.apkamSymmetricKey =
+      AtBytes.fromString(atChopsKeys.apkamSymmetricKey!.key);
 
   return atAuthKeys;
 }
@@ -782,11 +820,16 @@ AtChopsKeys getRandomAtChopsKeys() {
   return atChopsKeys;
 }
 
-Future<void> setupLocalStorage(String atSign) async {
-  String storageDir = 'test/storage/hive';
-  var persistenceManager = SecondaryPersistenceStoreFactory.getInstance()
-      .getSecondaryPersistenceStore(atSign)!;
-  await persistenceManager.getHivePersistenceManager()!.init(storageDir);
+/// Bootstraps a client keystore for [atSign] via the at_persistence 5.0.0
+/// factory/bundle API and returns the bundle (use [AtPersistenceBundle.keyValueStore]
+/// as the LocalSecondary keystore). The factory is tracked for teardown.
+Future<AtPersistenceBundle> setupLocalStorage(String atSign) async {
+  const storageDir = 'test/storage/hive';
+  final factory = HiveAtPersistenceFactory();
+  final bundle = await factory.initialize(
+      atSign, HivePersistenceConfig.clientDefaults(storagePath: storageDir));
+  _testPersistenceFactories.add(factory);
+  return bundle;
 }
 
 /// Asserts that [file] has secure (owner-only) permissions.

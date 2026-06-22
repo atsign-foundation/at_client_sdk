@@ -18,6 +18,11 @@ import 'package:cryptography/cryptography.dart' as crypto;
 /// callers convey it alongside (e.g. in metadata), exactly as with the
 /// existing CTR IVs. Generate one per encryption with
 /// `AtChopsUtil.generateRandomIV(12)` — never reuse a (key, nonce) pair.
+///
+/// An optional [aad] (associated data) may be supplied: it is authenticated
+/// but NOT encrypted, and must be byte-identical at [encrypt] and [decrypt]
+/// or authentication fails. It defaults to empty, so callers that don't use
+/// AAD are unaffected.
 final class AesGcm256EncryptionAlgo
     implements SymmetricEncryptionAlgorithm<Uint8List, Uint8List> {
   static const int nonceLength = 12;
@@ -31,18 +36,19 @@ final class AesGcm256EncryptionAlgo
 
   @override
   Future<Uint8List> encrypt(Uint8List plainData,
-      {InitialisationVector? iv}) async {
+      {InitialisationVector? iv, List<int> aad = const []}) async {
     final crypto.SecretBox box = await _aesGcm.encrypt(
       plainData,
       secretKey: crypto.SecretKey(_keyBytes()),
       nonce: _nonceBytes(iv),
+      aad: aad,
     );
     return Uint8List.fromList(box.cipherText + box.mac.bytes);
   }
 
   @override
   Future<Uint8List> decrypt(Uint8List encryptedData,
-      {InitialisationVector? iv}) async {
+      {InitialisationVector? iv, List<int> aad = const []}) async {
     if (encryptedData.length < tagLength) {
       throw AtDecryptionException(
           'AES-256-GCM input shorter than the $tagLength-byte tag');
@@ -56,6 +62,7 @@ final class AesGcm256EncryptionAlgo
         crypto.SecretBox(cipherText,
             nonce: _nonceBytes(iv), mac: crypto.Mac(tag)),
         secretKey: crypto.SecretKey(_keyBytes()),
+        aad: aad,
       );
       return Uint8List.fromList(plain);
     } on crypto.SecretBoxAuthenticationError {

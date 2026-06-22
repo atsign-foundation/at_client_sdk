@@ -1,33 +1,54 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "***********************************"
+# Run the functional suite locally.
+#
+#   ./runLocal.sh            # legacy fixed ports (64 / 25000-25999 / 6379) — same as CI
+#   ./runLocal.sh 27000      # base port: root 27000, secondaries 27001-27080, redis 27099
+#
+# Pass a BASE_PORT to shift the virtualenv into a [BASE, BASE+99] range so it
+# can run alongside another virtualenv (e.g. the e2e suite via its own
+# runLocal.sh) on a different base port. The docker-compose.yaml reads the VE_*
+# vars exported here; with none set it uses the legacy fixed ports.
+
+cd "$(dirname "$0")"
+
+if [[ -n "${1:-}" ]]; then
+  BASE_PORT="$1"
+  export VIRTUALENV_BASE_PORT="$BASE_PORT"
+  export VE_ROOT_PORT="$BASE_PORT"
+  export VE_REDIS_PORT=$((BASE_PORT + 99))
+  export VE_SECONDARY_LOW=$((BASE_PORT + 1))
+  export VE_SECONDARY_HIGH=$((BASE_PORT + 98))
+  echo "*** Using base port ${BASE_PORT} (range ${BASE_PORT}-$((BASE_PORT + 99)))"
+else
+  echo "*** Using legacy fixed ports (64 / 25000-25999 / 6379)"
+fi
+
 echo "*** Getting dependencies" && dart pub get
 
 cd test
-
-echo "***"
-echo "*** Running docker compose down" && docker compose down
-echo "*** Running docker compose pull" && docker compose pull
-echo "*** Running docker compose up" && docker compose up -d
-
+echo "*** docker compose down" && docker compose down
+echo "*** docker compose pull" && docker compose pull
+echo "*** docker compose up" && docker compose up -d
 cd ..
 
-echo "***"
 echo "*** Checking docker readiness" && dart run test/check_docker_readiness.dart
 
-echo "***"
 echo "*** Executing pkamLoad" && docker exec test-virtualenv-1 supervisorctl start pkamLoad
 
-echo "***"
 echo "*** Checking test environment" && dart run test/check_test_env.dart
 
-echo "***"
 echo "*** Clearing client test storage" && rm -rf test/hive && rm -f test/testData/@srie.atKeys
 
-echo "***"
-echo "*** Running tests" && dart test --concurrency=1 -r expanded
+echo "*** Running tests"
+# Let the test run fail through to cleanup (so a flake doesn't leave the
+# container up), then propagate its exit code.
+set +e
+dart test --concurrency=1 -r expanded
+TEST_EXIT=$?
+set -e
 
-echo "***"
-echo "***"
-echo "*** Running docker compose down" && docker compose -f test/docker-compose.yaml down
-echo "***********************************"
+echo "*** docker compose down" && (cd test && docker compose down)
+
+exit "$TEST_EXIT"

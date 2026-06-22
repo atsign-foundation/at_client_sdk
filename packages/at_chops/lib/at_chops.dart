@@ -14,6 +14,7 @@ export 'src/algorithm/ml_dsa_65_pure_dart_algo.dart';
 export 'src/algorithm/ml_kem_768_ffi_algo.dart';
 export 'src/algorithm/ml_kem_768_pure_dart_algo.dart';
 export 'src/algorithm/pkam_signing_algo.dart';
+export 'src/algorithm/pq_hpke.dart';
 export 'src/algorithm/rsa_encryption_algo.dart';
 export 'src/algorithm/x25519_ffi_algo.dart';
 export 'src/algorithm/x25519_pure_dart_algo.dart';
