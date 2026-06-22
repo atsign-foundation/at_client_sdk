@@ -24,7 +24,7 @@ final class _FixedKem implements AtKemAlgorithm {
       _ss;
 }
 
-Uint8List _b(String s) => Uint8List.fromList(utf8.encode(s));
+Uint8List _utf8(String s) => Uint8List.fromList(utf8.encode(s));
 
 Matcher _opensWith(PqOpenFailure reason) => throwsA(isA<PqOpenException>()
     .having((e) => e.reason, 'reason', reason));
@@ -35,72 +35,73 @@ void main() {
   group('pqSeal/pqOpen round-trip', () {
     test('random keypair, with info + aad', () async {
       final kp = await xwing.generateKeyPair();
-      final pt = _b('the quick brown fox 🦊');
-      final info = _b('context-A');
-      final aad = _b('header-bytes');
+      final pt = _utf8('the quick brown fox 🦊');
+      final info = _utf8('context-A');
+      final aad = _utf8('header-bytes');
 
-      final env =
+      final envelope =
           await pqSeal(xwing, kp.publicKey, pt, info: info, aad: aad);
       final opened =
-          await pqOpen(xwing, kp.secretKey, env, info: info, aad: aad);
+          await pqOpen(xwing, kp.secretKey, envelope, info: info, aad: aad);
 
       expect(opened, equals(pt));
     });
 
     test('random keypair, no info/aad', () async {
       final kp = await xwing.generateKeyPair();
-      final pt = _b('no-context payload');
+      final pt = _utf8('no-context payload');
 
-      final env = await pqSeal(xwing, kp.publicKey, pt);
-      final opened = await pqOpen(xwing, kp.secretKey, env);
+      final envelope = await pqSeal(xwing, kp.publicKey, pt);
+      final opened = await pqOpen(xwing, kp.secretKey, envelope);
 
       expect(opened, equals(pt));
     });
 
-    test('deterministic (vector-seeded) keypair', () async {
+    test('vector-seeded keypair round-trips', () async {
       final kp = await xwing.generateKeyPair(XWingVector1.seed);
-      final pt = _b('sealed to a fixed keypair');
+      final pt = _utf8('sealed to a spec-vector keypair');
+      final info = _utf8('context-A');
 
-      final env = await pqSeal(xwing, kp.publicKey, pt, info: _b('i'));
-      final opened = await pqOpen(xwing, kp.secretKey, env, info: _b('i'));
+      final envelope = await pqSeal(xwing, kp.publicKey, pt, info: info);
+      final opened = await pqOpen(xwing, kp.secretKey, envelope, info: info);
 
       expect(opened, equals(pt));
     });
 
     test('empty plaintext round-trips', () async {
       final kp = await xwing.generateKeyPair();
-      final env = await pqSeal(xwing, kp.publicKey, Uint8List(0));
-      expect(await pqOpen(xwing, kp.secretKey, env), isEmpty);
+      final envelope = await pqSeal(xwing, kp.publicKey, Uint8List(0));
+      expect(await pqOpen(xwing, kp.secretKey, envelope), isEmpty);
     });
   });
 
   group('pqOpen rejects tampering', () {
-    late Uint8List goodEnv;
+    late Uint8List goodEnvelope;
     late ({Uint8List publicKey, Uint8List secretKey}) kp;
-    final pt = _b('tamper target');
+    final pt = _utf8('tamper target');
 
     setUp(() async {
       kp = await xwing.generateKeyPair();
-      goodEnv = await pqSeal(xwing, kp.publicKey, pt);
+      goodEnvelope = await pqSeal(xwing, kp.publicKey, pt);
     });
 
     test('flipped AEAD ciphertext byte → authFailure', () async {
-      final ctLen = (goodEnv[1] << 8) | goodEnv[2];
-      final bad = Uint8List.fromList(goodEnv);
-      bad[3 + ctLen] ^= 0x01; // first byte of the GCM ciphertext
+      final bad = Uint8List.fromList(goodEnvelope);
+      // 3 = header (ver + ctLen), then skip KEM ciphertext to reach the GCM body.
+      bad[3 + XWingPureDartAlgo.ciphertextLength] ^= 0x01;
       expect(() => pqOpen(xwing, kp.secretKey, bad),
           _opensWith(PqOpenFailure.authFailure));
     });
 
     test('flipped tag byte → authFailure', () async {
-      final bad = Uint8List.fromList(goodEnv);
+      final bad = Uint8List.fromList(goodEnvelope);
       bad[bad.length - 1] ^= 0x01; // last byte of the 16-byte tag
       expect(() => pqOpen(xwing, kp.secretKey, bad),
           _opensWith(PqOpenFailure.authFailure));
     });
 
     test('flipped KEM ciphertext byte → authFailure', () async {
-      final bad = Uint8List.fromList(goodEnv);
+      final bad = Uint8List.fromList(goodEnvelope);
       bad[3] ^= 0x01; // implicit-rejection KEM → different ss → AEAD fails
       expect(() => pqOpen(xwing, kp.secretKey, bad),
           _opensWith(PqOpenFailure.authFailure));
@@ -110,15 +111,17 @@ void main() {
   group('pqOpen rejects context mismatch', () {
     test('info mismatch → authFailure', () async {
       final kp = await xwing.generateKeyPair();
-      final env = await pqSeal(xwing, kp.publicKey, _b('x'), info: _b('A'));
-      expect(() => pqOpen(xwing, kp.secretKey, env, info: _b('B')),
+      final envelope = await pqSeal(xwing, kp.publicKey, _utf8('payload'),
+          info: _utf8('context-seal'));
+      expect(() => pqOpen(xwing, kp.secretKey, envelope, info: _utf8('context-open')),
           _opensWith(PqOpenFailure.authFailure));
     });
 
     test('aad mismatch → authFailure', () async {
       final kp = await xwing.generateKeyPair();
-      final env = await pqSeal(xwing, kp.publicKey, _b('x'), aad: _b('A'));
-      expect(() => pqOpen(xwing, kp.secretKey, env, aad: _b('B')),
+      final envelope = await pqSeal(xwing, kp.publicKey, _utf8('payload'),
+          aad: _utf8('aad-seal'));
+      expect(() => pqOpen(xwing, kp.secretKey, envelope, aad: _utf8('aad-open')),
           _opensWith(PqOpenFailure.authFailure));
     });
   });
@@ -126,8 +129,8 @@ void main() {
   group('pqOpen rejects malformed envelopes', () {
     test('unsupported version → versionMismatch', () async {
       final kp = await xwing.generateKeyPair();
-      final env = await pqSeal(xwing, kp.publicKey, _b('x'));
-      final bad = Uint8List.fromList(env)..[0] = 0x02;
+      final envelope = await pqSeal(xwing, kp.publicKey, _utf8('payload'));
+      final bad = Uint8List.fromList(envelope)..[0] = 0x02;
       expect(() => pqOpen(xwing, kp.secretKey, bad),
           _opensWith(PqOpenFailure.versionMismatch));
     });
@@ -153,21 +156,22 @@ void main() {
     // construction ever changes intentionally.
 
     test('fixed-KEM construction KAT: seal is deterministic + opens', () async {
-      final ss = Uint8List.fromList(List<int>.generate(32, (i) => i));
+      final ss = Uint8List.fromList(List<int>.generate(32, (i) => i)); // [0x00..0x1f]
       final ct = fromHex('aabbccddeeff0011');
-      final pt = _b('hpke-style seal KAT v1');
-      final info = _b('kat-info');
-      final aad = _b('kat-aad');
+      final pt = _utf8('hpke-style seal KAT v1');
+      final info = _utf8('kat-info');
+      final aad = _utf8('kat-aad');
 
       const goldenHex =
           '010008aabbccddeeff0011bc05df489e9772f4f4afd413e0a05318e3b5b989d2'
           '29f909f3607bf9731afb4988c8bd5608bc';
 
-      final env = await pqSeal(_FixedKem(ss, ct), _b('pk'), pt,
+      // _FixedKem ignores both keys — any value is valid here.
+      final envelope = await pqSeal(_FixedKem(ss, ct), Uint8List(0), pt,
           info: info, aad: aad);
-      expect(toHex(env), equals(goldenHex));
+      expect(toHex(envelope), equals(goldenHex));
 
-      final opened = await pqOpen(_FixedKem(ss, ct), _b('sk'), env,
+      final opened = await pqOpen(_FixedKem(ss, ct), Uint8List(0), envelope,
           info: info, aad: aad);
       expect(opened, equals(pt));
     });
@@ -215,14 +219,14 @@ void main() {
           'e98b9f949b3fd7ac46409929b534041096d59e43504fcccebc3648f104308a21'
           '283ef973b7';
 
-      final env = fromHex(goldenHex);
+      final envelope = fromHex(goldenHex);
       // sanity: kemCt slice equals the published X-Wing vector ciphertext.
-      expect(toHex(Uint8List.sublistView(env, 3, 3 + XWingVector1.ct.length)),
+      expect(toHex(Uint8List.sublistView(envelope, 3, 3 + XWingVector1.ct.length)),
           equals(toHex(XWingVector1.ct)));
 
-      final opened = await pqOpen(xwing, XWingVector1.seed, env,
-          info: _b('xwing-kat-info'), aad: _b('xwing-kat-aad'));
-      expect(opened, equals(_b('x-wing end-to-end KAT')));
+      final opened = await pqOpen(xwing, XWingVector1.seed, envelope,
+          info: _utf8('xwing-kat-info'), aad: _utf8('xwing-kat-aad'));
+      expect(opened, equals(_utf8('x-wing end-to-end KAT')));
     });
   });
 }

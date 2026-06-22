@@ -24,13 +24,23 @@ import 'package:at_commons/at_commons.dart';
 /// step provides context binding ([info]) and AEAD key/nonce derivation —
 /// not randomness extraction.
 
-/// Envelope format version. `v1` = single-shot seal with a derived nonce.
+/// Version emitted by [pqSeal]. Bump this when introducing a new construction.
 const int _envelopeVersion = 0x01;
+
+/// All versions [pqOpen] can decrypt. Add new versions here alongside their
+/// suite label in [_suiteLabelFor]; do not remove old ones until all peers
+/// have upgraded past them.
+const Set<int> _supportedVersions = {0x01};
 
 const int _gcmNonceLen = AesGcm256EncryptionAlgo.nonceLength;
 const int _gcmTagLen = AesGcm256EncryptionAlgo.tagLength;
 
-final Uint8List _suiteLabel = Uint8List.fromList('atPQv1-base'.codeUnits);
+/// Returns the suite label for [version]. Each version must have a distinct
+/// label so its HKDF-derived keys are domain-separated from every other version.
+Uint8List _suiteLabelFor(int version) => switch (version) {
+      0x01 => Uint8List.fromList('atPQv1-base'.codeUnits),
+      _ => throw ArgumentError('no suite label for version 0x${version.toRadixString(16)}'),
+    };
 
 /// Why a [pqOpen] call failed.
 ///
@@ -56,7 +66,8 @@ class PqOpenException implements Exception {
   String toString() => 'PqOpenException($reason): $message';
 }
 
-/// Seal [plaintext] to the holder of [recipientPublicKey].
+/// Seal [plaintext] so only the holder of the secret key paired with
+/// [recipientPublicKey] can open it.
 ///
 /// [xwing] is the KEM instance to use (e.g. `XWingFfiAlgo` or
 /// `XWingPureDartAlgo`). [info] binds the key schedule to a usage context;
@@ -72,7 +83,7 @@ Future<Uint8List> pqSeal(
   Uint8List? aad,
 }) async {
   final enc = await xwing.encapsulate(recipientPublicKey);
-  final _DerivedKey dk = _deriveKeyAndNonce(enc.sharedSecret, info);
+  final _DerivedKey dk = _deriveKeyAndNonce(enc.sharedSecret, _envelopeVersion, info);
 
   // body = gcmCipherText || tag(16), per AesGcm256EncryptionAlgo's wire format.
   final Uint8List body = await AesGcm256EncryptionAlgo(_aesKey(dk.key)).encrypt(
@@ -108,9 +119,10 @@ Future<Uint8List> pqOpen(
     throw PqOpenException(
         PqOpenFailure.malformedEnvelope, 'envelope shorter than header');
   }
-  if (envelope[0] != _envelopeVersion) {
+  final int ver = envelope[0];
+  if (!_supportedVersions.contains(ver)) {
     throw PqOpenException(PqOpenFailure.versionMismatch,
-        'unsupported envelope version 0x${envelope[0].toRadixString(16)}');
+        'unsupported envelope version 0x${ver.toRadixString(16)}');
   }
   final int ctLen = (envelope[1] << 8) | envelope[2];
   if (envelope.length < 3 + ctLen + _gcmTagLen) {
@@ -122,7 +134,7 @@ Future<Uint8List> pqOpen(
   final Uint8List gcmBody = Uint8List.sublistView(envelope, 3 + ctLen);
 
   final Uint8List ss = await xwing.decapsulate(recipientSecretKey, kemCt);
-  final _DerivedKey dk = _deriveKeyAndNonce(ss, info);
+  final _DerivedKey dk = _deriveKeyAndNonce(ss, ver, info);
 
   try {
     return await AesGcm256EncryptionAlgo(_aesKey(dk.key)).decrypt(
@@ -145,10 +157,10 @@ class _DerivedKey {
 }
 
 /// Derives the AEAD key and nonce from the KEM [ss], bound to the suite label
-/// and the caller's [info]. Two HKDF labels (`0x01`/`0x02`) keep key and nonce
-/// independent.
-_DerivedKey _deriveKeyAndNonce(Uint8List ss, Uint8List? info) {
-  final Uint8List suiteInfo = _concat([_suiteLabel, info ?? Uint8List(0)]);
+/// for [version] and the caller's [info]. Two HKDF labels (`0x01`/`0x02`) keep
+/// key and nonce independent.
+_DerivedKey _deriveKeyAndNonce(Uint8List ss, int version, Uint8List? info) {
+  final Uint8List suiteInfo = _concat([_suiteLabelFor(version), info ?? Uint8List(0)]);
   final Uint8List key =
       HkdfSha256.deriveKey(ss, info: _concat([suiteInfo, _u8(0x01)]), length: 32);
   final Uint8List nonce = HkdfSha256.deriveKey(ss,
