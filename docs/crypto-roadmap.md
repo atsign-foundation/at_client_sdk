@@ -215,8 +215,8 @@ gated rollout.
 > **A value is only ever *written* in a scheme every client that must *read* it
 > supports. Reads are universal** — each value carries `appMetadata.providerId`,
 > and an upgraded client keeps *all* older providers, so it decrypts anything
-> ever written. A legacy client hard-fails on a scheme it lacks
-> (`onProviderNotFound`).
+> ever written. A client hard-fails on a scheme it lacks
+> (`CryptoProviderNotRegistered`).
 
 So compatibility is asymmetric: **upgrading only ever adds read-capability; the
 risk is writing too *new*, never reading too *old*.** Everything below is just
@@ -567,22 +567,36 @@ revocation and audit). The corresponding builder-facing surface is the
 "LLM-friendly verbs, explicit semantics, no hidden invariants" goal as the
 rest of `AtCollection`.
 
-## Foundations (what exists today)
+## Foundations (landed, in flight, and prototyped)
 
-**`xl-pluggable` — the provider seam.** `CryptoProvider { id;
-initialize(CryptoContext); encrypt; decrypt }`, registered per AtClient via
-`CryptoConfig`, routed by `CryptoRuntime` on the put/get/notify/sync paths.
-The wire carries `Metadata.appMetadata = AppMetadata{providerId,
-additional}`; `LegacyCryptoProvider` preserves today's behavior;
-`CryptoStorage` gives providers secondary-backed persistence;
-`PutRequestOptions.cryptoProviderId` overrides per operation. This seam is
-the migration machinery itself: legacy and new schemes coexist per-value,
-old data stays readable forever, re-encryption can be lazy.
+Status as of 2026-06-22 — only the first two below are at_chops/at_client code
+you can build against; the provider seam is in review; secret sharing and the
+`group` provider are spike prototypes still to be landed (see the build plan's
+[work-package sequence](crypto_impl_plan.md#the-work-package-sequence--single-source-for-ordering)).
 
-**`jt-pq` — PQ primitives.** ML-KEM-768 and X25519 (pure-Dart and
-OpenSSL-FFI), the `AtKemAlgorithm` interface, in at_chops.
+**`xl-pluggable` — the provider seam** *(at_client; PR #1930, in flight).*
+`CryptoProvider { id;
+encrypt(CryptoContext, AtKey, String) → String; decrypt(CryptoContext, AtKey,
+String) → String }` — **stateless**, with the per-operation `CryptoContext`
+(the client) handed in per call. Providers are declared in
+`AtClientPreference.crypto` (`CryptoConfig { defaultProviderId, providers }`);
+`CryptoRuntime` resolves each put/get/notify/sync against the live config by
+`appMetadata.providerId`, falling back to the built-in `LegacyCryptoProvider`.
+The wire carries `Metadata.appMetadata = AppMetadata{providerId, additional}`;
+the SDK stamps `providerId` + `isEncrypted` after a successful encrypt, so a
+provider only contributes `additional`. `PutRequestOptions.cryptoProviderId`
+overrides per operation. This seam is the migration machinery itself: legacy
+and new schemes coexist per-value, old data stays readable forever,
+re-encryption can be lazy. (Slimmed on this branch: the registry,
+`CryptoPolicy`, `CryptoStorage`, `initialize`, and the request/result wrappers
+were removed; resolution reads the live `preference.crypto`.)
 
-**Secret sharing — identity + same-atSign delivery.** Per-client identity
+**`jt-pq` — PQ primitives** *(at_chops 3.2.1, in trunk).* ML-KEM-768 and X25519
+(pure-Dart and OpenSSL-FFI), the `AtKemAlgorithm` interface, in at_chops.
+HPKE `pqSeal`/`pqOpen` is in flight (PR #1993).
+
+**Secret sharing — identity + same-atSign delivery** *(prototyped on
+`gkc-pqmls-spike`, NOT yet landed — carve-out WP-SS).* Per-client identity
 (clientId + X-Wing keypair) published as an APKAM-signed `ClientKeyPackage`:
 canonical hidden public key in the enrollment's reserved namespace (location
 exclusivity = identity anchor) plus namespace-scoped copies whose *presence*
@@ -667,12 +681,15 @@ moves it implies — including making `at_auth`'s core compile under `dart2wasm`
 
 - **AtClient chooses the provider.** `CryptoRuntime` already selects a
   `CryptoProvider` for each read/write by `appMetadata.providerId` — unchanged.
-- **CryptoProviders encrypt/decrypt via stateless AtChops primitives**, and are
-  **constructed with a `WritableAtKeys`** — the single in-memory holder of every
-  key the client knows (per-enrollment *and* per-client-id). Providers read keys
-  from it and **mint/add (and occasionally remove) keys through it and have them
-  *written*** — "written" meaning the backing store (`.atKeys` file, keychain
-  entry, or local keystore) is updated.
+- **CryptoProviders are stateless** and encrypt/decrypt via stateless AtChops
+  primitives; everything they need arrives in the per-operation `CryptoContext`.
+  A **`WritableAtKeys`** holder — the single in-memory holder of every key the
+  client knows (per-enrollment *and* per-client-id), which providers read keys
+  from and **mint/add (and occasionally remove) keys through and have them
+  *written*** (the backing `.atKeys` file, keychain entry, or local keystore
+  updated) — is added as a `CryptoContext` field alongside its first consumer
+  (D1-S). Today the context carries the client. *(`WritableAtKeys` should
+  subclass at_auth's `AtKeys`, not wrap an `AtChops`.)*
 - **AtChops is fully stateless** — a grab-bag of primitive functions
   (sign/verify/encrypt/decrypt/HKDF/HMAC/…) that take keys as arguments and hold
   no key material. A `@Deprecated` stateful `AtChopsImpl` shim ships for one
@@ -792,7 +809,7 @@ breaking barrel cut, removing the lockstep crunch. Publish in dependency order:
 | 1 | `at_chops` | minor `3.2.1 → 3.3.0` | stateless functional core + HPKE `pqSeal`/`pqOpen` **added**; stateful `AtChopsImpl` kept as `@Deprecated` shim (additive) |
 | 2 | `at_auth` | minor `3.1.1 → 3.2.0` | **additive API:** `WritableAtKeys` added; `AtKeysIo`/`WrittenAtKeysIo` widened (add/remove/update, default impls); `InMemoryAtKeysIo`. No barrel change yet — downstream can adopt `WritableAtKeys` immediately |
 | 3 | `at_auth` | **major `3.2.0 → 4.0.0`** | **breaking WASM cut:** `FileAtKeysIo` out of the main barrel (→ `at_auth_io.dart`); `FileAtKeysIo()` default removed; registrar → `package:http`; probe extracted; core compiles under `dart2wasm` |
-| 4 | `at_client` | minor `3.13.0 → 3.14.0` | `at_auth ^4.0.0`; `CryptoContext` gains `WritableAtKeys` (additive; `atChops` field `@Deprecated`); `LocalKeystoreAtKeysIo`; `nskey` provider scaffold |
+| 4 | `at_client` | minor `3.13.0 → 3.14.0` | `at_auth ^4.0.0`; `CryptoContext` gains a `WritableAtKeys keys` field (additive; context is `{atClient}` today — nothing to deprecate); `LocalKeystoreAtKeysIo`; `nskey` provider scaffold |
 | 5 | `at_onboarding_cli` | minor `1.16.0 → 1.17.0` | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; injects it explicitly (default gone) |
 | 6 | `at_client_flutter` | minor `1.1.3 → 1.2.0` | `at_auth ^4.0.0`; `file_picker` imports `at_auth_io.dart` |
 | 7 | `at_cli_commons` | minor (constraint bump) | consumes the new `at_onboarding_cli` / `at_client` |
@@ -865,8 +882,9 @@ post-merge (at_client 711 / at_chops 99 / at_commons 486 tests green).
     leaf per instance.** Two machines that should share an identity join as
     two leaves of the same group, not one shared leaf.
   Dynamic state (epoch tables, ratchet state) stays out — it churns per
-  commit and lives in `CryptoStorage`/provider storage encrypted under the
-  storage master key. The existing `loadClientKeys`/`saveClientKeys` and
+  commit and lives in provider-owned storage encrypted under the
+  storage master key. *(The early `CryptoStorage` seam was removed; a
+  provider-storage mechanism is re-introduced when D2 needs it.)* The existing `loadClientKeys`/`saveClientKeys` and
   `SecretStorePersistence` hooks get default SDK implementations over the
   existing keychain/biometric/file plumbing, so apps supply nothing.
 
@@ -1006,8 +1024,10 @@ abstract class SecureGroup {
   `kind:'request'`/`'response'` envelope flow with an answer policy (pull
   recovery: "send me `__rk.current`", then specific epochs on decrypt
   miss); `onNewClientDiscovered` roster watch; `excludeEnrollmentIds`
-  filters; `SecretStore.listSecrets(namePrefix:)`; and on the provider side
-  `CryptoPolicy.onDecryptFailed` so apps choose throw/skip/retry-after-sync.
+  filters; `SecretStore.listSecrets(namePrefix:)`; and a provider-side
+  decrypt-failure hook (apps choose throw/skip/retry-after-sync) — a
+  policy mechanism to be re-introduced when needed (the early `CryptoPolicy`
+  hook was removed in the slim-API refactor).
 - **selfEncryptionKey retirement phases 1–2** begin here (below).
 
 ### Phase 4 — cross-atSign groups (shared encryption)
