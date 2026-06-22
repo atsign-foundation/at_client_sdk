@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_client/src/crypto/crypto_storage.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -85,12 +84,7 @@ void main() {
 
   tearDown(() => AtClientSecretSharing.forClient(atClient).stopListening());
 
-  CryptoContext ctx() => CryptoContext(
-        atClient: atClient,
-        currentAtSign: atSign.toAtsign(),
-        atChops: atClient.atChops,
-        storage: CryptoSecondaryStorage(atClient),
-      );
+  CryptoContext ctx() => CryptoContext(atClient: atClient);
 
   AtKey selfKey(String key, {String namespace = 'myapp'}) => AtKey()
     ..key = key
@@ -106,70 +100,62 @@ void main() {
         'encrypt → decrypt round-trips a self key; AppMetadata carries the '
         'group coordinates', () async {
       final provider = GroupCryptoProvider();
-      await provider.initialize(ctx());
       final atKey = selfKey('phone');
 
-      final enc = await provider
-          .encrypt(CryptoEncryptRequest(atKey: atKey, plaintext: 'hello'));
-      expect(enc.isEncrypted, isTrue);
-      expect(enc.metadata.providerId, 'group');
-      final a = enc.metadata.additional!;
+      final ciphertext = await provider.encrypt(ctx(), atKey, 'hello');
+      // The provider stamps appMetadata.additional; the runtime adds
+      // providerId + isEncrypted after this returns.
+      final meta = atKey.metadata.appMetadata!;
+      expect(meta.providerId, 'group');
+      final a = meta.additional!;
       expect(a['scope'], 'myapp');
       expect(a['epoch'], 1);
       expect(a['enc'], 'aes-256-gcm');
       expect(a['kid'], isA<String>());
       expect(a['iv'], isA<String>());
       // ciphertext is not the plaintext
-      expect(enc.ciphertext, isNot('hello'));
+      expect(ciphertext, isNot('hello'));
 
-      final dec = await provider.decrypt(CryptoDecryptRequest(
-        atKey: atKey,
-        ciphertext: enc.ciphertext,
-        metadata: enc.metadata,
-      ));
-      expect(dec.plaintext, 'hello');
+      final plaintext = await provider.decrypt(ctx(), atKey, ciphertext);
+      expect(plaintext, 'hello');
     });
 
     test('decrypt tolerates a string epoch (wire round-trip)', () async {
       final provider = GroupCryptoProvider();
-      await provider.initialize(ctx());
       final atKey = selfKey('phone');
-      final enc = await provider
-          .encrypt(CryptoEncryptRequest(atKey: atKey, plaintext: 'wire'));
-      final a = enc.metadata.additional!;
+      final ciphertext = await provider.encrypt(ctx(), atKey, 'wire');
+      final a = atKey.metadata.appMetadata!.additional!;
       // Simulate the wire turning the int epoch into a string.
-      final wireMeta = AppMetadata(providerId: 'group', additional: {
+      atKey.metadata.appMetadata =
+          AppMetadata(providerId: 'group', additional: {
         ...a,
         'epoch': a['epoch'].toString(),
       });
-      final dec = await provider.decrypt(CryptoDecryptRequest(
-          atKey: atKey, ciphertext: enc.ciphertext, metadata: wireMeta));
-      expect(dec.plaintext, 'wire');
+      final plaintext = await provider.decrypt(ctx(), atKey, ciphertext);
+      expect(plaintext, 'wire');
     });
 
     test('encrypt rejects a key shared with another atSign (v1 self-only)',
         () async {
       final provider = GroupCryptoProvider();
-      await provider.initialize(ctx());
       final shared = AtKey()
         ..key = 'phone'
         ..namespace = 'myapp'
         ..sharedBy = atSign
         ..sharedWith = '@bob';
       await expectLater(
-        provider.encrypt(CryptoEncryptRequest(atKey: shared, plaintext: 'x')),
+        provider.encrypt(ctx(), shared, 'x'),
         throwsA(isA<StateError>()),
       );
     });
 
     test('encrypt requires a namespace', () async {
       final provider = GroupCryptoProvider();
-      await provider.initialize(ctx());
       final noNs = AtKey()
         ..key = 'phone'
         ..sharedBy = atSign;
       await expectLater(
-        provider.encrypt(CryptoEncryptRequest(atKey: noNs, plaintext: 'x')),
+        provider.encrypt(ctx(), noNs, 'x'),
         throwsA(isA<ArgumentError>()),
       );
     });

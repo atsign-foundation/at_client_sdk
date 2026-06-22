@@ -36,10 +36,18 @@ class GroupCryptoProvider extends CryptoProvider {
   @override
   String get id => providerId;
 
-  @override
-  Future<void> initialize(CryptoContext context) async {
+  // The slim CryptoProvider contract has no lifecycle hook, so one-time setup
+  // (substrate wiring + listener) runs lazily on first encrypt/decrypt. Cached
+  // as a Future so concurrent first calls share a single run rather than racing
+  // two client registrations / two listeners.
+  Future<void>? _initialization;
+
+  Future<void> _ensureInitialized(CryptoContext context) =>
+      _initialization ??= _initialize(context);
+
+  Future<void> _initialize(CryptoContext context) async {
     _atClient = context.atClient;
-    _currentAtSign = context.currentAtSign.toString();
+    _currentAtSign = _atClient.getCurrentAtSign() ?? '';
     // Obtain the substrate through the shared instance — never construct our
     // own, which would mint a second client identity for this AtClient.
     _sharing = AtClientSecretSharing.forClient(_atClient);
@@ -89,27 +97,30 @@ class GroupCryptoProvider extends CryptoProvider {
   }
 
   @override
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async {
-    final scope = _scopeOf(request.atKey);
+  Future<String> encrypt(
+      CryptoContext context, AtKey atKey, String plaintext) async {
+    await _ensureInitialized(context);
+    final scope = _scopeOf(atKey);
     await _ensureRegistered(scope);
-    final sealed = await _groupFor(scope)
-        .seal(Uint8List.fromList(utf8.encode(request.plaintext.toString())));
-    return CryptoEncryptResult(
-      ciphertext: base64Encode(sealed.ciphertext),
-      metadata: AppMetadata(providerId: id, additional: {
-        'scope': scope,
-        'epoch': sealed.epoch,
-        'kid': sealed.kid,
-        'enc': 'aes-256-gcm',
-        'iv': base64Encode(sealed.iv),
-      }),
-      isEncrypted: true,
-    );
+    final sealed =
+        await _groupFor(scope).seal(Uint8List.fromList(utf8.encode(plaintext)));
+    // The provider contributes only appMetadata.additional; the runtime stamps
+    // providerId + isEncrypted after this returns.
+    atKey.metadata.appMetadata = AppMetadata(providerId: id, additional: {
+      'scope': scope,
+      'epoch': sealed.epoch,
+      'kid': sealed.kid,
+      'enc': 'aes-256-gcm',
+      'iv': base64Encode(sealed.iv),
+    });
+    return base64Encode(sealed.ciphertext);
   }
 
   @override
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async {
-    final a = request.metadata.additional;
+  Future<String> decrypt(
+      CryptoContext context, AtKey atKey, String ciphertext) async {
+    await _ensureInitialized(context);
+    final a = atKey.metadata.appMetadata?.additional;
     if (a == null || a['scope'] == null) {
       throw ArgumentError(
           'group provider decrypt: missing appMetadata.additional scope/kid');
@@ -119,8 +130,8 @@ class GroupCryptoProvider extends CryptoProvider {
       epoch: a['epoch'] is int ? a['epoch'] as int : int.parse('${a['epoch']}'),
       kid: a['kid'].toString(),
       iv: base64Decode(a['iv'].toString()),
-      ciphertext: base64Decode(request.ciphertext.toString()),
+      ciphertext: base64Decode(ciphertext),
     ));
-    return CryptoDecryptResult(plaintext: utf8.decode(plaintext));
+    return utf8.decode(plaintext);
   }
 }

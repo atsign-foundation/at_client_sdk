@@ -9,32 +9,36 @@ void main() {
   group('CryptoRuntime', () {
     late MockAtClient mockAtClient;
     late MockAtChops mockAtChops;
-    late CryptoRegistry registry;
     late _RecordingProvider legacyProvider;
     late _RecordingProvider customProvider;
+
+    // Point the client's preference at a CryptoConfig holding [providers];
+    // CryptoRuntime resolves against preference.crypto (no separate registry).
+    void configure(List<CryptoProvider> providers,
+        {String defaultId = 'legacy'}) {
+      mockAtClient.getPreferences().crypto =
+          CryptoConfig(defaultProviderId: defaultId, providers: providers);
+    }
 
     setUp(() {
       mockAtClient = MockAtClient();
       mockAtChops = MockAtChops();
-      registry = CryptoRegistry();
       legacyProvider = _RecordingProvider('legacy');
       customProvider = _RecordingProvider('custom');
-
-      registry.register(legacyProvider);
-      registry.register(customProvider);
       when(() => mockAtClient.atChops).thenReturn(mockAtChops);
-      when(() => mockAtClient.cryptoRegistry).thenReturn(registry);
+      configure([legacyProvider, customProvider]);
     });
 
     test('uses legacy provider when appMetadata is absent', () async {
       final atKey = AtKey()..metadata = Metadata();
 
-      final result =
+      final ciphertext =
           await CryptoRuntime(mockAtClient).encryptForPut(atKey, 'data');
 
-      expect(result.ciphertext, 'legacy encrypted data');
-      expect(result.metadata.providerId, 'legacy');
-      expect(result.isEncrypted, true);
+      expect(ciphertext, 'legacy encrypted data');
+      // The runtime stamps providerId + isEncrypted after the provider returns.
+      expect(atKey.metadata.appMetadata?.providerId, 'legacy');
+      expect(atKey.metadata.isEncrypted, true);
       expect(legacyProvider.encryptCalls, 1);
       expect(customProvider.encryptCalls, 0);
     });
@@ -54,26 +58,23 @@ void main() {
 
     test('preserves provider-owned additional metadata', () async {
       final provider = _MetadataProvider();
-      registry.register(provider);
+      configure([provider]);
       final atKey = AtKey()
         ..metadata = (Metadata()
           ..appMetadata = AppMetadata(providerId: 'metadata-provider'));
 
-      final result =
+      final ciphertext =
           await CryptoRuntime(mockAtClient).encryptForPut(atKey, 'plaintext');
 
-      expect(result.ciphertext, 'ciphertext');
-      expect(result.metadata.additional, {
-        'sessionId': 'session-1',
-        'epoch': 7,
-      });
+      expect(ciphertext, 'ciphertext');
+      // The provider's appMetadata.additional survives the runtime's re-stamp.
       expect(atKey.metadata.appMetadata?.additional, {
         'sessionId': 'session-1',
         'epoch': 7,
       });
 
-      final plaintext = await CryptoRuntime(mockAtClient)
-          .decryptForGet(atKey, result.ciphertext);
+      final plaintext =
+          await CryptoRuntime(mockAtClient).decryptForGet(atKey, ciphertext);
 
       expect(plaintext, 'plaintext');
       expect(provider.decryptMetadata?.additional, {
@@ -82,123 +83,72 @@ void main() {
       });
     });
 
-    test('policy registers a missing provider and retry uses it', () async {
-      final policy = _RegisteringPolicy(_MetadataProvider());
-      final lazyAtClient = MockAtClientImpl();
-      final lazyAtChops = MockAtChops();
-      final lazyRegistry = _CountingRegistry();
-      when(() => lazyAtClient.atChops).thenReturn(lazyAtChops);
-      when(() => lazyAtClient.cryptoRegistry).thenReturn(lazyRegistry);
-      when(() => lazyAtClient.getCurrentAtSign()).thenReturn('@alice');
-      when(() => lazyAtClient.getPreferences()).thenReturn(
-        AtClientPreference()
-          ..crypto = CryptoConfig(
-            defaultProviderId: 'legacy',
-            policy: policy,
-          ),
-      );
-      final atKey = AtKey()
-        ..metadata = (Metadata()
-          ..appMetadata = AppMetadata(providerId: 'metadata-provider'));
-
-      final plaintext =
-          await CryptoRuntime(lazyAtClient).decryptForGet(atKey, 'ciphertext');
-
-      expect(plaintext, 'plaintext');
-      expect(policy.calls, 1);
-      expect(lazyRegistry.contains('metadata-provider'), true);
-      expect(lazyRegistry.lookupIds, [
-        'metadata-provider',
-        'metadata-provider',
-      ]);
-    });
-
-    test('policy retry happens once when provider remains missing', () async {
-      final policy = _RetryOnlyPolicy();
-      final lazyAtClient = MockAtClientImpl();
-      final lazyAtChops = MockAtChops();
-      final lazyRegistry = _CountingRegistry();
-      when(() => lazyAtClient.atChops).thenReturn(lazyAtChops);
-      when(() => lazyAtClient.cryptoRegistry).thenReturn(lazyRegistry);
-      when(() => lazyAtClient.getCurrentAtSign()).thenReturn('@alice');
-      when(() => lazyAtClient.getPreferences()).thenReturn(
-        AtClientPreference()
-          ..crypto = CryptoConfig(
-            defaultProviderId: 'legacy',
-            policy: policy,
-          ),
-      );
+    test('throws when the routed provider is not registered', () async {
       final atKey = AtKey()
         ..metadata = (Metadata()
           ..appMetadata = AppMetadata(providerId: 'missing-provider'));
 
       await expectLater(
-        () => CryptoRuntime(lazyAtClient).decryptForGet(atKey, 'ciphertext'),
-        throwsA(isA<CryptoProviderNotRegistered>()),
+        () => CryptoRuntime(mockAtClient).decryptForGet(atKey, 'ciphertext'),
+        throwsA(isA<CryptoProviderNotRegistered>().having(
+          (e) => e.message,
+          'message',
+          allOf(
+            contains('missing-provider'),
+            contains('Lookup reason: get'),
+            contains('custom'),
+          ),
+        )),
       );
-      expect(policy.calls, 1);
-      expect(lazyRegistry.lookupIds, [
-        'missing-provider',
-        'missing-provider',
-      ]);
+      expect(legacyProvider.decryptCalls, 0);
+      expect(customProvider.decryptCalls, 0);
     });
 
-    test('onDecryptFailed retry re-attempts decrypt once and succeeds',
+    test('rejects a non-String plaintext before reaching the provider',
         () async {
-      final policy = _RetryDecryptPolicy();
-      final flaky = _FlakyDecryptProvider();
-      final atClient = MockAtClientImpl();
-      final atChops = MockAtChops();
-      when(() => atClient.atChops).thenReturn(atChops);
-      when(() => atClient.cryptoRegistry)
-          .thenReturn(CryptoRegistry()..register(flaky));
-      when(() => atClient.getCurrentAtSign()).thenReturn('@alice');
-      when(() => atClient.getPreferences()).thenReturn(AtClientPreference()
-        ..crypto = CryptoConfig(defaultProviderId: 'legacy', policy: policy));
-      final atKey = AtKey()
-        ..metadata =
-            (Metadata()..appMetadata = AppMetadata(providerId: 'flaky'));
-
-      final plaintext =
-          await CryptoRuntime(atClient).decryptForGet(atKey, 'ct');
-
-      expect(plaintext, 'recovered');
-      expect(policy.calls, 1);
-      expect(flaky.decryptCalls, 2); // initial + one retry
-    });
-
-    test('onDecryptFailed default policy rethrows the provider error',
-        () async {
-      final flaky = _FlakyDecryptProvider();
-      final atClient = MockAtClientImpl();
-      final atChops = MockAtChops();
-      when(() => atClient.atChops).thenReturn(atChops);
-      when(() => atClient.cryptoRegistry)
-          .thenReturn(CryptoRegistry()..register(flaky));
-      when(() => atClient.getCurrentAtSign()).thenReturn('@alice');
-      when(() => atClient.getPreferences()).thenReturn(AtClientPreference()
-        ..crypto = CryptoConfig(defaultProviderId: 'legacy')); // default policy
-      final atKey = AtKey()
-        ..metadata =
-            (Metadata()..appMetadata = AppMetadata(providerId: 'flaky'));
+      final atKey = AtKey()..metadata = Metadata();
 
       await expectLater(
-        () => CryptoRuntime(atClient).decryptForGet(atKey, 'ct'),
-        throwsA(isA<StateError>()),
+        () => CryptoRuntime(mockAtClient).encryptForPut(atKey, 918078908676),
+        throwsA(isA<AtEncryptionException>().having(
+          (e) => e.message,
+          'message',
+          'Invalid value type found: int. Valid value type is String',
+        )),
       );
-      expect(flaky.decryptCalls, 1); // no retry under the default policy
+      // The guard fires at the runtime boundary; no provider runs.
+      expect(legacyProvider.encryptCalls, 0);
+    });
+
+    test('passes a null ciphertext to the provider as empty string', () async {
+      final atKey = AtKey()..metadata = Metadata();
+
+      // A null ciphertext must not blow up with a cast TypeError; it reaches
+      // the provider as '' so the provider surfaces its own null-value error.
+      final decrypted =
+          await CryptoRuntime(mockAtClient).decryptForGet(atKey, null);
+
+      expect(decrypted, 'legacy decrypted ');
+      expect(legacyProvider.decryptCalls, 1);
+    });
+
+    test('stamps providerId and isEncrypted even when the provider does not',
+        () async {
+      configure([_BareProvider()]);
+      final atKey = AtKey()
+        ..metadata =
+            (Metadata()..appMetadata = AppMetadata(providerId: 'bare'));
+
+      final ciphertext =
+          await CryptoRuntime(mockAtClient).encryptForPut(atKey, 'data');
+
+      expect(ciphertext, 'bare:data');
+      // _BareProvider touches no metadata; the runtime stamps it so a forgetful
+      // provider can't silently leave isEncrypted false (= undecrypted reads).
+      expect(atKey.metadata.appMetadata?.providerId, 'bare');
+      expect(atKey.metadata.isEncrypted, true);
     });
   });
-}
-
-class _CountingRegistry extends CryptoRegistry {
-  final lookupIds = <String>[];
-
-  @override
-  CryptoProvider lookup(String id, {String? operation}) {
-    lookupIds.add(id);
-    return super.lookup(id, operation: operation);
-  }
 }
 
 class _RecordingProvider extends CryptoProvider {
@@ -210,20 +160,19 @@ class _RecordingProvider extends CryptoProvider {
   _RecordingProvider(this.id);
 
   @override
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async {
+  Future<String> encrypt(
+      CryptoContext context, AtKey atKey, String value) async {
     encryptCalls++;
-    return CryptoEncryptResult(
-      ciphertext: '$id encrypted ${request.plaintext}',
-      metadata: AppMetadata(providerId: id),
-    );
+    atKey.metadata.appMetadata = AppMetadata(providerId: id);
+    atKey.metadata.isEncrypted = true;
+    return '$id encrypted $value';
   }
 
   @override
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async {
+  Future<String> decrypt(
+      CryptoContext context, AtKey atKey, String value) async {
     decryptCalls++;
-    return CryptoDecryptResult(
-      plaintext: '$id decrypted ${request.ciphertext}',
-    );
+    return '$id decrypted $value';
   }
 }
 
@@ -234,83 +183,40 @@ class _MetadataProvider extends CryptoProvider {
   String get id => 'metadata-provider';
 
   @override
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async {
-    return CryptoEncryptResult(
-      ciphertext: 'ciphertext',
-      metadata: AppMetadata(
-        providerId: 'metadata-provider',
-        additional: {
-          'sessionId': 'session-1',
-          'epoch': 7,
-        },
-      ),
+  Future<String> encrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    atKey.metadata.appMetadata = AppMetadata(
+      providerId: 'metadata-provider',
+      additional: {
+        'sessionId': 'session-1',
+        'epoch': 7,
+      },
     );
+    atKey.metadata.isEncrypted = true;
+    return 'ciphertext';
   }
 
   @override
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async {
-    decryptMetadata = request.metadata;
-    return const CryptoDecryptResult(plaintext: 'plaintext');
-  }
-}
-
-class _RegisteringPolicy extends CryptoPolicy {
-  final CryptoProvider provider;
-  int calls = 0;
-
-  _RegisteringPolicy(this.provider);
-
-  @override
-  Future<CryptoFailureResolution> onProviderNotFound(
-    CryptoProviderNotFoundContext context,
-  ) async {
-    calls++;
-    await context.registerProvider(provider);
-    return const CryptoFailureResolution.retry();
+  Future<String> decrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    decryptMetadata = atKey.metadata.appMetadata;
+    return 'plaintext';
   }
 }
 
-class _RetryOnlyPolicy extends CryptoPolicy {
-  int calls = 0;
+/// Returns ciphertext but deliberately touches no metadata, to prove the
+/// runtime stamps providerId + isEncrypted on the provider's behalf.
+class _BareProvider extends CryptoProvider {
+  @override
+  String get id => 'bare';
 
   @override
-  CryptoFailureResolution onProviderNotFound(
-    CryptoProviderNotFoundContext context,
-  ) {
-    calls++;
-    return const CryptoFailureResolution.retry();
-  }
-}
-
-/// Throws on the first decrypt (models an epoch key not yet delivered) and
-/// succeeds on the second — to exercise the onDecryptFailed retry path.
-class _FlakyDecryptProvider extends CryptoProvider {
-  @override
-  String get id => 'flaky';
-  int decryptCalls = 0;
+  Future<String> encrypt(
+          CryptoContext context, AtKey atKey, String value) async =>
+      'bare:$value';
 
   @override
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async {
-    decryptCalls++;
-    if (decryptCalls == 1) {
-      throw StateError('key not available yet');
-    }
-    return const CryptoDecryptResult(plaintext: 'recovered');
-  }
-
-  @override
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async =>
-      throw UnimplementedError();
-}
-
-class _RetryDecryptPolicy extends CryptoPolicy {
-  int calls = 0;
-
-  @override
-  CryptoFailureResolution onDecryptFailed(
-    CryptoDecryptFailedContext context,
-  ) {
-    calls++;
-    return const CryptoFailureResolution.retry();
-  }
+  Future<String> decrypt(
+          CryptoContext context, AtKey atKey, String value) async =>
+      value;
 }

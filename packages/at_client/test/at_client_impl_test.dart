@@ -391,7 +391,8 @@ void main() {
           .thenAnswer((_) => Future.value('yuh'));
       when(() => mockAtChopsKeys.selfEncryptionKey).thenReturn(AESKey(key));
     });
-    test('preregistered during at_client creation', () async {
+    test('defaults to the legacy crypto config when none is configured',
+        () async {
       AtClientPreference preferences = AtClientPreference()
         ..hiveStoragePath = 'test/hive'
         ..commitLogPath = 'test/hive/path';
@@ -403,9 +404,13 @@ void main() {
         remoteSecondary: mockRemoteSecondary,
         atChops: chops,
       );
-      expect(ac.cryptoRegistry.lookup('legacy'), isA<CryptoProvider>());
-      expect(() => ac.cryptoRegistry.lookup('bubblesort'),
-          throwsA(isA<CryptoProviderNotRegistered>()));
+      // No crypto config => the legacy default. The built-in legacy provider is
+      // the runtime's fallback (resolution itself is covered in
+      // crypto_runtime_test), so it is intentionally not in the config list.
+      final config = ac.getPreferences()?.crypto;
+      expect(config?.defaultProviderId, 'legacy');
+      expect(config?.lookup('legacy'), isNull);
+      expect(config?.lookup('bubblesort'), isNull);
     });
 
     test('registers configured crypto providers during at_client creation',
@@ -416,9 +421,7 @@ void main() {
         ..commitLogPath = 'test/hive/path'
         ..crypto = CryptoConfig(
           defaultProviderId: 'test-provider',
-          providers: [
-            (context) => provider,
-          ],
+          providers: [provider],
         );
       AtChops chops = AtChopsImpl(mockAtChopsKeys);
 
@@ -430,9 +433,8 @@ void main() {
         atChops: chops,
       );
 
-      expect(provider.initialized, true);
-      expect(provider.context?.currentAtSign, '@alice');
-      expect(ac.cryptoRegistry.lookup('test-provider'), isA<CryptoProvider>());
+      expect(ac.getPreferences()?.crypto.lookup('test-provider'),
+          isA<CryptoProvider>());
     });
 
     test('throws when configured default crypto provider is not registered',
@@ -458,8 +460,8 @@ void main() {
     });
 
     test(
-        'reconciles crypto providers when a cached AtClient is re-used with an '
-        'updated preference', () async {
+        'adopts the new crypto config when a cached AtClient is re-used with '
+        'an updated preference', () async {
       AtChops chops = AtChopsImpl(mockAtChopsKeys);
 
       // First creation registers only the legacy provider.
@@ -473,10 +475,10 @@ void main() {
         remoteSecondary: mockRemoteSecondary,
         atChops: chops,
       );
-      expect(ac1.cryptoRegistry.contains('late-provider'), false);
+      expect(ac1.getPreferences()?.crypto.lookup('late-provider'), isNull);
 
-      // Re-creating the same atSign re-uses the cached instance; a provider
-      // newly added to the preference must be reconciled onto it (no rebuild).
+      // Re-creating the same atSign re-uses the cached instance; the new
+      // preference's crypto config is adopted onto it (no rebuild).
       final provider = _RecordingCryptoProvider('late-provider');
       AtClient ac2 = await AtClientImpl.create(
         '@alice',
@@ -486,15 +488,15 @@ void main() {
           ..commitLogPath = 'test/hive/path'
           ..crypto = CryptoConfig(
             defaultProviderId: 'legacy',
-            providers: [(_) => provider],
+            providers: [provider],
           ),
         remoteSecondary: mockRemoteSecondary,
         atChops: chops,
       );
 
       expect(identical(ac1, ac2), true);
-      expect(provider.initialized, true);
-      expect(ac2.cryptoRegistry.lookup('late-provider'), isA<CryptoProvider>());
+      expect(ac2.getPreferences()?.crypto.lookup('late-provider'),
+          isA<CryptoProvider>());
     });
   });
 }
@@ -502,27 +504,20 @@ void main() {
 class _RecordingCryptoProvider extends CryptoProvider {
   @override
   final String id;
-  bool initialized = false;
-  CryptoContext? context;
 
   _RecordingCryptoProvider(this.id);
 
   @override
-  Future<void> initialize(CryptoContext context) async {
-    initialized = true;
-    this.context = context;
+  Future<String> encrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    atKey.metadata.appMetadata = AppMetadata(providerId: id);
+    atKey.metadata.isEncrypted = true;
+    return value;
   }
 
   @override
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async {
-    return CryptoEncryptResult(
-      ciphertext: request.plaintext,
-      metadata: AppMetadata(providerId: id),
-    );
-  }
-
-  @override
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async {
-    return CryptoDecryptResult(plaintext: request.ciphertext);
+  Future<String> decrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    return value;
   }
 }

@@ -1,40 +1,23 @@
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
-import 'package:at_client/src/crypto/crypto_storage.dart';
+import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
 import 'package:at_commons/at_commons.dart';
 
-/// Centralizes crypto provider routing without changing the metadata wire
-/// shape.
+/// Routes encryption/decryption to the [CryptoProvider] named by an [AtKey]'s
+/// `appMetadata.providerId`.
 class CryptoRuntime {
-  static const String legacyProviderId = 'legacy';
+  static const String legacyProviderId = legacyCryptoProviderId;
 
   final AtClient _atClient;
 
   CryptoRuntime(this._atClient);
 
-  Future<CryptoEncryptResult> encryptForPut(AtKey atKey, dynamic value) async {
-    final provider = await _lookupProvider(
-      atKey,
-      operation: 'put',
-      onFailure: (e) => e.stack(
-        AtChainedException(
-          Intent.fetchCryptoProvider,
-          ExceptionScenario.decryptionFailed,
-          'Failed to fetch crypto provider',
-        ),
-      ),
-    );
+  Future<String> encryptForPut(AtKey atKey, dynamic value) async {
     try {
-      final result = await provider.encrypt(
-        CryptoEncryptRequest(
-          atKey: atKey,
-          plaintext: value,
-          existingMetadata: _metadataFor(atKey, provider),
-        ),
-      );
-      atKey.metadata.appMetadata = result.metadata;
-      atKey.metadata.isEncrypted = result.isEncrypted;
-      return result;
+      final provider = _provider(atKey, 'put');
+      final ciphertext =
+          await provider.encrypt(_context(), atKey, _requireString(value));
+      return _stampEncrypted(atKey, provider, ciphertext);
     } on AtException catch (e) {
       e.stack(
         AtChainedException(
@@ -47,33 +30,12 @@ class CryptoRuntime {
     }
   }
 
-  Future<dynamic> decryptForGet(AtKey atKey, dynamic value) async {
-    return _decrypt(atKey, value, operation: 'get');
-  }
-
-  Future<dynamic> encryptForNotification(AtKey atKey, dynamic value) async {
-    final provider = await _lookupProvider(
-      atKey,
-      operation: 'notify',
-      onFailure: (e) => e.stack(
-        AtChainedException(
-          Intent.fetchCryptoProvider,
-          ExceptionScenario.decryptionFailed,
-          'Failed to fetch crypto provider',
-        ),
-      ),
-    );
+  Future<String> encryptForNotification(AtKey atKey, dynamic value) async {
     try {
-      final result = await provider.encrypt(
-        CryptoEncryptRequest(
-          atKey: atKey,
-          plaintext: value,
-          existingMetadata: _metadataFor(atKey, provider),
-        ),
-      );
-      atKey.metadata.appMetadata = result.metadata;
-      atKey.metadata.isEncrypted = result.isEncrypted;
-      return result.ciphertext;
+      final provider = _provider(atKey, 'notify');
+      final ciphertext =
+          await provider.encrypt(_context(), atKey, _requireString(value));
+      return _stampEncrypted(atKey, provider, ciphertext);
     } on AtException catch (e) {
       e.stack(
         AtChainedException(
@@ -85,28 +47,16 @@ class CryptoRuntime {
       rethrow;
     }
   }
+
+  Future<dynamic> decryptForGet(AtKey atKey, dynamic value) =>
+      _decrypt(atKey, value, 'get');
+
+  Future<dynamic> decryptForSyncConflict(AtKey atKey, dynamic value) =>
+      _decrypt(atKey, value, 'sync conflict');
 
   Future<dynamic> decryptForNotification(AtKey atKey, dynamic value) async {
-    final provider = await _lookupProvider(
-      atKey,
-      operation: 'notify',
-      onFailure: (e) => e.stack(
-        AtChainedException(
-          Intent.fetchCryptoProvider,
-          ExceptionScenario.decryptionFailed,
-          'Failed to fetch crypto provider',
-        ),
-      ),
-    );
     try {
-      final result = await provider.decrypt(
-        CryptoDecryptRequest(
-          atKey: atKey,
-          ciphertext: value,
-          metadata: _metadataFor(atKey, provider),
-        ),
-      );
-      return result.plaintext;
+      return await _decrypt(atKey, value, 'notify');
     } on AtException catch (e) {
       e.stack(
         AtChainedException(
@@ -119,131 +69,72 @@ class CryptoRuntime {
     }
   }
 
-  Future<dynamic> decryptForSyncConflict(AtKey atKey, dynamic value) async {
-    return _decrypt(atKey, value, operation: 'sync conflict');
+  Future<dynamic> _decrypt(AtKey atKey, dynamic value, String operation) {
+    // A null ciphertext (e.g. a notification with no value) is passed to the
+    // provider as '' so it surfaces the provider's own "encrypted value is
+    // null" error rather than a raw cast TypeError.
+    return _provider(atKey, operation)
+        .decrypt(_context(), atKey, (value as String?) ?? '');
   }
 
-  Future<dynamic> _decrypt(
-    AtKey atKey,
-    dynamic value, {
-    required String operation,
-  }) async {
-    final provider = await _lookupProvider(atKey, operation: operation);
-    final request = CryptoDecryptRequest(
-      atKey: atKey,
-      ciphertext: value,
-      metadata: _metadataFor(atKey, provider),
-    );
-    try {
-      final result = await provider.decrypt(request);
-      return result.plaintext;
-    } catch (e) {
-      final resolution = await _handleDecryptFailed(atKey, provider.id, e);
-      if (resolution is RetryCryptoOperation) {
-        // Single retry — the policy is expected to have remediated (e.g.
-        // triggered a sync that delivers a missing key). No loop.
-        final result = await provider.decrypt(request);
-        return result.plaintext;
-      }
-      rethrow;
-    }
-  }
+  // The built-in fallback, always available for [legacyProviderId] without the
+  // app having to list it in CryptoConfig.providers.
+  static final LegacyCryptoProvider _legacy = LegacyCryptoProvider();
 
-  Future<CryptoFailureResolution> _handleDecryptFailed(
-    AtKey atKey,
-    String providerId,
-    Object error,
-  ) async {
-    final preferences = _atClient.getPreferences();
-    return preferences!.crypto.policy.onDecryptFailed(
-      CryptoDecryptFailedContext(
-        cryptoContext: CryptoContext(
-          atClient: _atClient,
-          currentAtSign: (_atClient.getCurrentAtSign() ?? '').toAtsign(),
-          atChops: _atClient.atChops,
-          storage: CryptoSecondaryStorage(_atClient),
-        ),
-        atKey: atKey,
-        providerId: providerId,
-        error: error,
-      ),
-    );
-  }
-
-  Future<CryptoProvider> _lookupProvider(
-    AtKey atKey, {
-    String? operation,
-    void Function(AtException e)? onFailure,
-  }) {
+  CryptoProvider _provider(AtKey atKey, String operation) {
     final providerId =
         atKey.metadata.appMetadata?.providerId ?? legacyProviderId;
-    return _lookupProviderById(
-      atKey,
-      providerId,
-      operation: operation,
-      onFailure: onFailure,
+    final config =
+        _atClient.getPreferences()?.crypto ?? const CryptoConfig.legacy();
+    final provider = config.lookup(providerId);
+    if (provider != null) return provider;
+    if (providerId == legacyProviderId) return _legacy;
+    throw CryptoProviderNotRegistered(
+      _notRegisteredMessage(config, providerId, operation),
     );
   }
 
-  Future<CryptoProvider> _lookupProviderById(
-    AtKey atKey,
-    String providerId, {
-    String? operation,
-    void Function(AtException e)? onFailure,
-  }) async {
-    try {
-      return _atClient.cryptoRegistry.lookup(providerId, operation: operation);
-    } on CryptoProviderNotRegistered catch (e) {
-      final resolution = await _handleProviderNotFound(atKey, providerId, e);
-      if (resolution is RetryCryptoOperation) {
-        try {
-          return _atClient.cryptoRegistry.lookup(
-            providerId,
-            operation: operation,
-          );
-        } on AtException catch (retryError) {
-          onFailure?.call(retryError);
-          rethrow;
-        }
-      }
-      onFailure?.call(e);
-      rethrow;
-    } on AtException catch (e) {
-      onFailure?.call(e);
-      rethrow;
-    }
+  String _notRegisteredMessage(
+    CryptoConfig config,
+    String id,
+    String lookupReason,
+  ) {
+    final ids = [legacyProviderId, ...config.providers.map((p) => p.id)];
+    return 'Crypto provider "$id" is not registered. '
+        'Lookup reason: $lookupReason. '
+        'Registered providers: ${ids.join(', ')}. '
+        'Add it to AtClientPreference.crypto.providers.';
   }
 
-  AppMetadata _metadataFor(AtKey atKey, CryptoProvider provider) {
-    final appMetadata = atKey.metadata.appMetadata;
-    if (appMetadata == null) {
-      return AppMetadata(providerId: provider.id);
-    }
-    return appMetadata;
-  }
+  CryptoContext _context() => CryptoContext(atClient: _atClient);
 
-  Future<CryptoFailureResolution> _handleProviderNotFound(
+  // The SDK owns routing metadata: a provider contributes only
+  // appMetadata.additional; the runtime stamps the provider id and marks the
+  // value encrypted, so neither can be silently forgotten and break the read
+  // path (a missing isEncrypted would return ciphertext undecrypted).
+  String _stampEncrypted(
     AtKey atKey,
-    String providerId,
-    AtException error,
-  ) async {
-    final preferences = _atClient.getPreferences();
-    //weird gotcha, this method will technically only break on null-check if:
-    //preferences is null (can you have a preference-less atClient?)
-    //but otherwise will always contain a CryptoPolicy
-    final resolution = await preferences!.crypto.policy.onProviderNotFound(
-      CryptoProviderNotFoundContext(
-        cryptoContext: CryptoContext(
-          atClient: _atClient,
-          currentAtSign: (_atClient.getCurrentAtSign() ?? '').toAtsign(),
-          atChops: _atClient.atChops,
-          storage: CryptoSecondaryStorage(_atClient),
-        ),
-        atKey: atKey,
-        providerId: providerId,
-        error: error,
-      ),
+    CryptoProvider provider,
+    String ciphertext,
+  ) {
+    atKey.metadata.appMetadata = AppMetadata(
+      providerId: provider.id,
+      additional: atKey.metadata.appMetadata?.additional,
     );
-    return resolution;
+    atKey.metadata.isEncrypted = true;
+    return ciphertext;
+  }
+
+  // The provider contract is String-typed; reject a non-String plaintext at
+  // the boundary with the same error the value pipeline gave before, rather
+  // than silently stringifying it.
+  String _requireString(dynamic value) {
+    if (value is! String) {
+      throw AtEncryptionException(
+        'Invalid value type found: ${value.runtimeType}. '
+        'Valid value type is String',
+      );
+    }
+    return value;
   }
 }

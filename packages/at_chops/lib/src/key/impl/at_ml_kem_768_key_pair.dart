@@ -1,13 +1,8 @@
-import 'package:at_chops/src/key/keys.dart';
+import 'package:at_chops/src/key/impl/ml_kem_768_key_pair.dart';
 
-/// ML-KEM-768 (FIPS 203) key pair used for post-quantum key encapsulation.
-///
-/// Public keys are 1184 raw bytes; secret keys are 2400 raw bytes (pure-Dart
-/// format). Both are encoded as base64 strings to fit the existing
-/// [AsymmetricKeyPair] String contract. Only pure-Dart-format secret keys are
-/// serializable — the OpenSSL FFI backend returns process-lifetime opaque
-/// handles, so persisted ML-KEM secret keys must always be used with the
-/// pure-Dart algorithm.
-class AtMlKem768KeyPair extends AsymmetricKeyPair {
+@Deprecated(
+    'Use MlKem768KeyPair instead. This compatibility wrapper will be removed '
+    'in the next major release.')
+class AtMlKem768KeyPair extends MlKem768KeyPair {
   AtMlKem768KeyPair.create(super.publicKey, super.privateKey) : super.create();
 }

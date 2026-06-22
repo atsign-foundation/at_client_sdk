@@ -1,33 +1,35 @@
-import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/legacy/legacy_decryption.dart';
 import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
 import 'package:at_commons/at_commons.dart';
 
+/// The pre-pluggable encryption scheme, wrapped as a [CryptoProvider].
 class LegacyCryptoProvider extends CryptoProvider {
-  static const String providerId = 'legacy';
-
-  final AtClient _atClient;
-
-  LegacyCryptoProvider(this._atClient);
+  static const String providerId = legacyCryptoProviderId;
 
   @override
   String get id => providerId;
 
   @override
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async {
-    final legacy = LegacyEncryption.build(request.atKey, _atClient);
-    final ciphertext = await legacy.encrypt(request.atKey, request.plaintext);
-    return CryptoEncryptResult(
-      ciphertext: ciphertext,
-      metadata: AppMetadata(providerId: id),
-    );
+  Future<String> encrypt(
+    CryptoContext context,
+    AtKey atKey,
+    String plaintext,
+  ) async {
+    final legacy = LegacyEncryption.build(atKey, context.atClient);
+    // The runtime stamps appMetadata.providerId + isEncrypted on return.
+    final ciphertext = await legacy.encrypt(atKey, plaintext);
+    return ciphertext as String;
   }
 
   @override
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async {
-    final legacy = LegacyDecryption.build(request.atKey, _atClient);
-    final plaintext = await legacy.decrypt(request.atKey, request.ciphertext);
-    return CryptoDecryptResult(plaintext: plaintext);
+  Future<String> decrypt(
+    CryptoContext context,
+    AtKey atKey,
+    String ciphertext,
+  ) async {
+    final legacy = LegacyDecryption.build(atKey, context.atClient);
+    final plaintext = await legacy.decrypt(atKey, ciphertext);
+    return plaintext as String;
   }
 }

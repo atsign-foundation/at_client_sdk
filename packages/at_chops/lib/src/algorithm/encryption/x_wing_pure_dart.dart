@@ -3,8 +3,8 @@ import 'dart:math' show Random;
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
-import 'package:at_chops/src/algorithm/ml_kem_768_pure_dart_algo.dart';
-import 'package:at_chops/src/algorithm/x25519_pure_dart_algo.dart';
+import 'package:at_chops/src/algorithm/encryption/ml_kem_768_pure_dart.dart';
+import 'package:at_chops/src/algorithm/encryption/x25519_pure_dart_algo.dart';
 import 'package:cryptography/cryptography.dart' as crypto;
 import 'package:meta/meta.dart';
 import 'package:pointycastle/digests/sha3.dart';

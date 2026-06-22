@@ -1,6 +1,5 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
@@ -20,27 +19,21 @@ class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
 class MockLocalSecondary extends Mock implements LocalSecondary {}
 
-class MockCryptoRegistry extends Mock implements CryptoRegistry {
-  MockCryptoRegistry(AtClient atClient) {
-    register(LegacyCryptoProvider(atClient));
-  }
-}
-
 class MockCryptoProvider extends Mock implements CryptoProvider {}
 
 class FakeCryptoProvider extends Fake implements CryptoProvider {}
 
-class FakeCryptoEncryptRequest extends Fake implements CryptoEncryptRequest {}
-
-class FakeCryptoDecryptRequest extends Fake implements CryptoDecryptRequest {}
-
 class MockAtClientManager extends Mock implements AtClientManager {}
 
 class MockAtClient extends Mock implements AtClient {
+  // A stable, mutable preference (matching the real getPreferences(), which
+  // returns the live instance) so tests can set `.crypto` to inject a
+  // CryptoConfig that CryptoRuntime resolves against.
+  final AtClientPreference _preference = AtClientPreference()
+    ..namespace = 'wavi';
+
   @override
-  AtClientPreference getPreferences() {
-    return AtClientPreference()..namespace = 'wavi';
-  }
+  AtClientPreference getPreferences() => _preference;
 }
 
 class MockAtClientImpl extends Mock implements AtClientImpl {}

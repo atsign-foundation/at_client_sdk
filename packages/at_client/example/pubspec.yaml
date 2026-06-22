@@ -20,6 +20,8 @@ dependency_overrides:
     path: ../../at_client
   at_cli_commons:
     path: ../../at_cli_commons
+  at_chops:
+    path: ../../at_chops
   at_commons:
     path: ../../at_commons
   at_onboarding_cli:

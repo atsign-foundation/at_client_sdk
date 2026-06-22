@@ -58,12 +58,10 @@ class PutRequestTransformer
   }
 
   Future<void> _encryptData(UpdateVerbBuilder updateVerbBuilder) async {
-    final result = await CryptoRuntime(_atClient)
+    // The provider returns the wire ciphertext and mutates the AtKey's
+    // appMetadata + isEncrypted in place.
+    updateVerbBuilder.value = await CryptoRuntime(_atClient)
         .encryptForPut(updateVerbBuilder.atKey, updateVerbBuilder.value);
-    updateVerbBuilder.value = result.ciphertext;
-    // using appMetadata from result
-    updateVerbBuilder.atKey.metadata.appMetadata = result.metadata;
-    updateVerbBuilder.atKey.metadata.isEncrypted = result.isEncrypted;
   }
 
   String _cryptoProviderIdFor(PutRequestOptions options) {

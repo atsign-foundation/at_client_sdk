@@ -20,7 +20,7 @@ void main() {
       ..crypto = CryptoConfig(
         defaultProviderId: 'legacy',
         providers: [
-          (_) => TestProvider('test'),
+          TestProvider('test'),
         ],
       );
     atClientManager = await TestUtils.initAtClient(
@@ -212,16 +212,14 @@ class TestProvider extends CryptoProvider {
 
   TestProvider(this.id);
 
+  // The runtime stamps appMetadata.providerId (= id) + isEncrypted on return.
   @override
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async {
-    return const CryptoDecryptResult(plaintext: 'decrypted');
-  }
+  Future<String> encrypt(
+          CryptoContext context, AtKey atKey, String plaintext) async =>
+      'encrypted';
 
   @override
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async {
-    return CryptoEncryptResult(
-      ciphertext: 'encrypted',
-      metadata: AppMetadata(providerId: id),
-    );
-  }
+  Future<String> decrypt(
+          CryptoContext context, AtKey atKey, String ciphertext) async =>
+      'decrypted';
 }

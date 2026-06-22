@@ -1,5 +1,4 @@
-import 'package:at_chops/src/algorithm/padding/padding.dart';
-import 'package:at_chops/src/algorithm/padding/padding_params.dart';
+import 'package:at_chops/src/algorithm/padding/types.dart';
 import 'package:at_commons/at_commons.dart';
 
 class PKCS7Padding implements PaddingAlgorithm {

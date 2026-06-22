@@ -318,80 +318,62 @@ ceiling is **11 levels (root + 10 nested sub-collections)**.
 
 ## Crypto providers
 
-By default, encrypted writes use the legacy Atsign encryption provider. Apps
-that need their own encryption behavior can configure
-`AtClientPreference.crypto` with a `CryptoConfig` and one or more
-`CryptoProvider`s. For the common one-provider setup, use
-`CryptoConfig.singleProvider`. The SDK initializes those providers during
-`AtClientImpl` startup, before sync and notification services are wired, and
-uses the provider id in existing `appMetadata` to route future decrypts.
-`appMetadata` remains the wire field for this metadata: the SDK owns only the
-provider id used for routing, while any additional fields are provider-owned,
-opaque to the SDK, and visible to the atServer as plaintext metadata.
-Providers receive a `CryptoStorage` gateway in their
-`CryptoContext` for local / remote provider state keyed by owner,
-recipient, namespace, and name. They can also use `CryptoPolicy` to
-handle missing providers; the default policy still throws, while custom
-policies may register or lazy-load a provider and retry once.
+By default, encrypted writes use the built-in legacy Atsign encryption
+provider. Apps that need their own encryption configure
+`AtClientPreference.crypto` with a `CryptoConfig` listing one or more
+`CryptoProvider` instances. The SDK records the provider's id in the record's
+`appMetadata.providerId` and uses it to route future decrypts back to the same
+provider. `appMetadata` is the wire field for this: the SDK owns `providerId`
+(routing) and `isEncrypted`; any entries a provider adds to
+`appMetadata.additional` are provider-owned, opaque to the SDK, and visible to
+the atServer as plaintext metadata.
 
-A compact way to read the model split is:
+A `CryptoProvider` is stateless and implements three members — everything it
+needs arrives per call via `CryptoContext` (the client) and the `AtKey`:
 
 ```dart
-final preference = AtClientPreference()
-  ..crypto = CryptoConfig.singleProvider(
-    defaultProviderId: DemoCryptoProvider.providerId,
-    provider: (context) => DemoCryptoProvider(context.storage),
-  );
-
 class DemoCryptoProvider extends CryptoProvider {
   static const providerId = 'demo-v1';
-
-  final CryptoStorage storage;
-
-  DemoCryptoProvider(this.storage);
 
   @override
   String get id => providerId;
 
   @override
-  Future<void> initialize(CryptoContext context) async {
-    await storage.writeLocal(
-      CryptoStorageKey(
-        owner: context.currentAtSign,
-        recipient: context.currentAtSign,
-        namespace: 'demo_crypto',
-        name: 'ready',
-      ),
-      'true',
-    );
+  Future<String> encrypt(
+      CryptoContext context, AtKey atKey, String plaintext) async {
+    // The SDK stamps providerId + isEncrypted for you. Carry anything decrypt
+    // needs (an IV, a key id, a format version) in appMetadata.additional.
+    atKey.metadata.appMetadata =
+        AppMetadata(providerId: id, additional: {'format': 'demo'});
+    return 'demo:$plaintext';
   }
 
   @override
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async {
-    final ciphertext = 'demo:${request.plaintext}';
-    return CryptoEncryptResult(
-      ciphertext: ciphertext,
-      metadata: AppMetadata(providerId: id, additional: {'format': 'demo'}),
-    );
-  }
-
-  @override
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async {
-    final ciphertext = request.ciphertext.toString();
-    return CryptoDecryptResult(
-      plaintext: ciphertext.replaceFirst('demo:', ''),
-    );
+  Future<String> decrypt(
+      CryptoContext context, AtKey atKey, String ciphertext) async {
+    // Read back what encrypt stored, if you need it.
+    final _ = atKey.metadata.appMetadata?.additional?['format'];
+    return ciphertext.replaceFirst('demo:', '');
   }
 }
+
+final preference = AtClientPreference()
+  ..crypto = CryptoConfig(
+    defaultProviderId: DemoCryptoProvider.providerId,
+    providers: [DemoCryptoProvider()],
+  );
 ```
 
-`CryptoConfig` is app configuration, the provider factory receives
-`CryptoContext`, `CryptoStorage` is for provider-owned state, and
-`AppMetadata.providerId` is the stored routing value used by future decrypts.
+`plaintext`/`ciphertext` are opaque strings — for binary records (`putBinary`)
+a `Base2e15`-encoded string, so treat them as bytes, not text. Throw an
+`AtException` subclass (`AtEncryptionException` / `AtDecryptionException`) on
+failure. Supply a fresh provider instance per atSign only if your provider
+holds per-atSign state.
+
 Per-write provider overrides use `PutRequestOptions.cryptoProviderId`;
 notification overrides use `NotificationService.send(..., cryptoProviderId:)`
-or `NotificationParams.cryptoProviderId`.
-For the full model map, see [`CRYPTO_MODELS.md`](CRYPTO_MODELS.md).
+or `NotificationParams.cryptoProviderId`. For a runnable end-to-end example,
+see [`example/bin/custom_crypto_provider.dart`](example/bin/custom_crypto_provider.dart).
 
 For compact examples of provider registration and per-write overrides, see
 [`example/bin/custom_crypto_provider.dart`](example/bin/custom_crypto_provider.dart),

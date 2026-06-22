@@ -46,13 +46,11 @@ void main() {
       var testValue = 'abc!@123';
       var encryptedTestValue =
           EncryptionUtil.encryptValue(testValue, sharedSymmetricKey);
-      var provider = LegacyCryptoProvider(mockAtClient);
-      var decryptedTestValue = await provider.decrypt(CryptoDecryptRequest(
-        atKey: localKey,
-        ciphertext: encryptedTestValue,
-        metadata: AppMetadata(providerId: 'legacy'),
-      ));
-      expect(decryptedTestValue.plaintext, testValue);
+      localKey.metadata.appMetadata = AppMetadata(providerId: 'legacy');
+      var provider = LegacyCryptoProvider();
+      var decryptedTestValue = await provider.decrypt(
+          CryptoContext(atClient: mockAtClient), localKey, encryptedTestValue);
+      expect(decryptedTestValue, testValue);
     });
 
     test('test to check AtDecryptionException when encrypted value is null',
@@ -62,13 +60,13 @@ void main() {
         ..sharedBy = '@alice'
         ..sharedWith = '@bob'
         ..key = 'shared_key';
-      var provider = LegacyCryptoProvider(mockAtClient);
+      localKey.metadata.appMetadata = AppMetadata(providerId: 'legacy');
+      var provider = LegacyCryptoProvider();
+      // An empty ciphertext reaches the same null/empty guard as the old
+      // nullable-ciphertext request did; decrypt() now takes a non-null String.
       expect(
-          () async => await provider.decrypt(CryptoDecryptRequest(
-                atKey: localKey,
-                ciphertext: null,
-                metadata: AppMetadata(providerId: 'legacy'),
-              )),
+          () async => await provider.decrypt(
+              CryptoContext(atClient: mockAtClient), localKey, ''),
           throwsA(predicate((e) =>
               e is AtDecryptionException &&
               e.message == 'Decryption failed. Encrypted value is null')));
@@ -96,13 +94,13 @@ void main() {
       var testValue = 'abc!@123';
       var encryptedTestValue =
           EncryptionUtil.encryptValue(testValue, sharedSymmetricKey);
-      var provider = LegacyCryptoProvider(mockAtClient);
+      localKey.metadata.appMetadata = AppMetadata(providerId: 'legacy');
+      var provider = LegacyCryptoProvider();
       expect(
-          () async => await provider.decrypt(CryptoDecryptRequest(
-                atKey: localKey,
-                ciphertext: encryptedTestValue,
-                metadata: AppMetadata(providerId: 'legacy'),
-              )),
+          () async => await provider.decrypt(
+              CryptoContext(atClient: mockAtClient),
+              localKey,
+              encryptedTestValue),
           throwsA(predicate((e) =>
               e is SharedKeyNotFoundException &&
               e.message == 'Empty or null SharedKey is found')));

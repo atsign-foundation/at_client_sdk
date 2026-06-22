@@ -15,43 +15,49 @@ import 'package:at_client_examples/init_example_context.dart';
 // This toy provider XOR-encodes values with a fixed key just to show the
 // shape of the interface. Replace with a real algorithm in production.
 // ---------------------------------------------------------------------------
+// Providers are stateless: everything they need arrives per call. The same
+// instance is safely shared across atSigns.
 class XorCryptoProvider implements CryptoProvider {
   static const _xorKey = 0x5A;
   static const providerId = 'xor-demo';
   @override
   String get id => providerId;
 
-  // initialize() is called once by AtClientImpl after construction.
-  // Fetch or derive your long-term key material here.
+  // encrypt receives the plaintext and returns the wire ciphertext. The SDK
+  // stamps appMetadata.providerId + isEncrypted for you — a provider only needs
+  // to carry, in appMetadata.additional, anything its decrypt will need back
+  // (here a format version). Use context.atClient to fetch what you need (e.g.
+  // a recipient's public key). plaintext is opaque: for binary records it's a
+  // Base2e15-encoded string, so treat it as bytes, not text.
   @override
-  Future<void> initialize(CryptoContext context) async {
-    // context.atClient  – the fully-wired AtClient
-    // context.atChops   – low-level RSA/AES primitives (nullable)
-    // context.storage   – read/write keys to local or remote secondary
-    stdout.writeln(
-      '[XorCryptoProvider] initialized for ${context.currentAtSign}',
+  Future<String> encrypt(
+    CryptoContext context,
+    AtKey atKey,
+    String plaintext,
+  ) async {
+    final cipher = utf8.encode(plaintext).map((b) => b ^ _xorKey).toList();
+    atKey.metadata.appMetadata = AppMetadata(
+      providerId: id,
+      additional: {'v': 1},
     );
+    return base64.encode(cipher);
   }
 
+  // decrypt receives the wire ciphertext and returns the plaintext. Read back
+  // the per-record data stored on encrypt from appMetadata.additional, and
+  // throw an AtException subclass on failure so the SDK can chain diagnostics.
   @override
-  Future<CryptoEncryptResult> encrypt(CryptoEncryptRequest request) async {
-    final plainBytes = utf8.encode(request.plaintext.toString());
-    final cipher = plainBytes.map((b) => b ^ _xorKey).toList();
-    final encoded = base64.encode(cipher);
-    return CryptoEncryptResult(
-      ciphertext: encoded,
-      // metadata.providerId is SDK-owned routing; it must match this provider's id.
-      // Put any extra per-record info (e.g. IV, key ID) in metadata.additional –
-      // it travels with the record as appMetadata and is visible to atServer.
-      metadata: AppMetadata(providerId: id, additional: {'v': 1}),
-    );
-  }
-
-  @override
-  Future<CryptoDecryptResult> decrypt(CryptoDecryptRequest request) async {
-    final cipher = base64.decode(request.ciphertext.toString());
-    final plainBytes = cipher.map((b) => b ^ _xorKey).toList();
-    return CryptoDecryptResult(plaintext: utf8.decode(plainBytes));
+  Future<String> decrypt(
+    CryptoContext context,
+    AtKey atKey,
+    String ciphertext,
+  ) async {
+    final version = atKey.metadata.appMetadata?.additional?['v'];
+    if (version != 1) {
+      throw AtDecryptionException('Unsupported xor-demo format: v$version');
+    }
+    final plain = base64.decode(ciphertext).map((b) => b ^ _xorKey).toList();
+    return utf8.decode(plain);
   }
 }
 
@@ -60,19 +66,17 @@ class XorCryptoProvider implements CryptoProvider {
 //
 // Pass a CryptoConfig with:
 //   - defaultProviderId : the id of the provider used for new puts
-//   - provider          : factory that receives a CryptoContext at init time
-//   - policy            : (optional) handle unknown providers at read time
+//   - providers         : the provider instances to register on this client.
+//                         Supply a fresh instance per atSign only if your
+//                         provider holds per-atSign state. A read whose record
+//                         names an unregistered provider throws
+//                         CryptoProviderNotRegistered.
 // ---------------------------------------------------------------------------
 AtOnboardingPreference buildPreference() {
   return AtOnboardingPreference()
-    ..crypto = CryptoConfig.singleProvider(
+    ..crypto = CryptoConfig(
       defaultProviderId: XorCryptoProvider.providerId,
-      // CryptoProviderFactory = FutureOr<CryptoProvider> Function(CryptoContext)
-      provider: (context) => XorCryptoProvider(),
-      // CryptoPolicy.onProviderNotFound is called when a stored record
-      // references a provider that isn't registered yet (e.g. lazy loading).
-      // Return CryptoFailureResolution.throwError() (default) or .retry().
-      policy: const CryptoPolicy(),
+      providers: [XorCryptoProvider()],
     );
 }
 
@@ -130,7 +134,7 @@ void main(List<String> args) async {
             ..sharedWith = other.toAtsign();
 
       const plaintext = 'hello from the xor provider!';
-      stdout.writeln('Writing key: @$other:${key.key}.${key.namespace}@$me');
+      stdout.writeln('Writing key: ${key.toString()}');
       stdout.writeln('Writing: "$plaintext"');
       final putResult = await atClient.put(key, plaintext);
       stdout.writeln('put() returned: $putResult');
@@ -156,7 +160,7 @@ void main(List<String> args) async {
             ..sharedBy = other.toAtsign()
             ..sharedWith = me;
 
-      stdout.writeln('Reading key: @$me:${key.key}.${key.namespace}@$other');
+      stdout.writeln('Reading key: ${key.toString()}');
       final result = await atClient.get(key);
       stdout.writeln('Decrypted value: "${result.value}"');
 
