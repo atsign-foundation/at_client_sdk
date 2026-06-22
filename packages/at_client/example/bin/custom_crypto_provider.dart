@@ -134,9 +134,7 @@ void main(List<String> args) async {
             ..sharedWith = other.toAtsign();
 
       const plaintext = 'hello from the xor provider!';
-      stdout.writeln(
-        'Writing key: @$other:${key.toString()}.${key.namespace}@$me',
-      );
+      stdout.writeln('Writing key: ${key.toString()}');
       stdout.writeln('Writing: "$plaintext"');
       final putResult = await atClient.put(key, plaintext);
       stdout.writeln('put() returned: $putResult');
@@ -162,9 +160,7 @@ void main(List<String> args) async {
             ..sharedBy = other.toAtsign()
             ..sharedWith = me;
 
-      stdout.writeln(
-        'Reading key: @$me:${key.toString()}.${key.namespace}@$other',
-      );
+      stdout.writeln('Reading key: ${key.toString()}');
       final result = await atClient.get(key);
       stdout.writeln('Decrypted value: "${result.value}"');
 
