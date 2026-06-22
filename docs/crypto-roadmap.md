@@ -567,9 +567,15 @@ revocation and audit). The corresponding builder-facing surface is the
 "LLM-friendly verbs, explicit semantics, no hidden invariants" goal as the
 rest of `AtCollection`.
 
-## Foundations (what exists today)
+## Foundations (landed, in flight, and prototyped)
 
-**`xl-pluggable` — the provider seam.** `CryptoProvider { id;
+Status as of 2026-06-22 — only the first two below are at_chops/at_client code
+you can build against; the provider seam is in review; secret sharing and the
+`group` provider are spike prototypes still to be landed (see the build plan's
+[work-package sequence](crypto_impl_plan.md#the-work-package-sequence--single-source-for-ordering)).
+
+**`xl-pluggable` — the provider seam** *(at_client; PR #1930, in flight).*
+`CryptoProvider { id;
 encrypt(CryptoContext, AtKey, String) → String; decrypt(CryptoContext, AtKey,
 String) → String }` — **stateless**, with the per-operation `CryptoContext`
 (the client) handed in per call. Providers are declared in
@@ -585,10 +591,12 @@ re-encryption can be lazy. (Slimmed on this branch: the registry,
 `CryptoPolicy`, `CryptoStorage`, `initialize`, and the request/result wrappers
 were removed; resolution reads the live `preference.crypto`.)
 
-**`jt-pq` — PQ primitives.** ML-KEM-768 and X25519 (pure-Dart and
-OpenSSL-FFI), the `AtKemAlgorithm` interface, in at_chops.
+**`jt-pq` — PQ primitives** *(at_chops 3.2.1, in trunk).* ML-KEM-768 and X25519
+(pure-Dart and OpenSSL-FFI), the `AtKemAlgorithm` interface, in at_chops.
+HPKE `pqSeal`/`pqOpen` is in flight (PR #1993).
 
-**Secret sharing — identity + same-atSign delivery.** Per-client identity
+**Secret sharing — identity + same-atSign delivery** *(prototyped on
+`gkc-pqmls-spike`, NOT yet landed — carve-out WP-SS).* Per-client identity
 (clientId + X-Wing keypair) published as an APKAM-signed `ClientKeyPackage`:
 canonical hidden public key in the enrollment's reserved namespace (location
 exclusivity = identity anchor) plus namespace-scoped copies whose *presence*
