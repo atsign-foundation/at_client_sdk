@@ -2,26 +2,26 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
-import 'package:at_chops/src/key/keys.dart';
+import 'package:at_chops/src/key/impl/at_pkam_key_pair.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:crypton/crypton.dart';
 
-/// Data signing and verification using atsign encryption keypair
-/// Allowed algorithms are listed in [SigningAlgoType] and [HashingAlgoType]
-class RsaSigningAlgo implements AtSigningAlgorithm {
-  final AsymmetricKeyPair? _encryptionKeyPair;
+/// Data signing and verification for Public Key Authentication Mechanism - Pkam
+@Deprecated(
+    'Use RsaSigningAlgo with the appropriate key material instead. This '
+    'compatibility API will be removed in the next major release.')
+class PkamSigningAlgo implements AtSigningAlgorithm {
+  final AtPkamKeyPair? _pkamKeyPair;
   final HashingAlgoType _hashingAlgoType;
-
-  RsaSigningAlgo(this._encryptionKeyPair, this._hashingAlgoType);
+  PkamSigningAlgo(this._pkamKeyPair, this._hashingAlgoType);
 
   @override
   Uint8List sign(Uint8List data) {
-    if (_encryptionKeyPair == null) {
-      throw AtSigningException(
-          'encryption key pair not set for rsa signing algo');
+    if (_pkamKeyPair == null) {
+      throw AtSigningException('pkam key pair is null. cannot sign data');
     }
     final rsaPrivateKey =
-        RSAPrivateKey.fromString(_encryptionKeyPair.atPrivateKey.privateKey);
+        RSAPrivateKey.fromString(_pkamKeyPair.atPrivateKey.privateKey);
     switch (_hashingAlgoType) {
       case HashingAlgoType.sha256:
         return rsaPrivateKey.createSHA256Signature(data);
@@ -35,16 +35,17 @@ class RsaSigningAlgo implements AtSigningAlgorithm {
 
   @override
   bool verify(Uint8List signedData, Uint8List signature, {String? publicKey}) {
-    RSAPublicKey? rsaPublicKey;
+    RSAPublicKey rsaPublicKey;
     if (publicKey != null) {
       rsaPublicKey = RSAPublicKey.fromString(publicKey);
-    } else if (_encryptionKeyPair != null) {
+    } else if (_pkamKeyPair != null) {
       rsaPublicKey =
-          RSAPublicKey.fromString(_encryptionKeyPair.atPublicKey.publicKey);
+          RSAPublicKey.fromString(_pkamKeyPair.atPublicKey.publicKey);
     } else {
       throw AtSigningVerificationException(
-          'Encryption key pair or public key not set for default signing algo');
+          'Pkam key pair or public key not set for pkam verification');
     }
+
     switch (_hashingAlgoType) {
       case HashingAlgoType.sha256:
         return rsaPublicKey.verifySHA256Signature(signedData, signature);

@@ -2,16 +2,22 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_chops/at_chops.dart';
+import 'package:at_chops/src/algorithm/algo_type.dart';
+import 'package:at_chops/src/algorithm/at_iv.dart';
+import 'package:at_chops/src/algorithm/encryption/aes_encryption_algo.dart';
+import 'package:at_chops/src/algorithm/hashing/types.dart';
+import 'package:at_chops/src/factory/at_hashing_algo_factory.dart';
+import 'package:at_chops/src/key/impl/aes_key.dart';
+import 'package:at_chops/src/model/at_encrypted.dart';
+import 'package:at_chops/src/util/at_chops_util.dart';
 import 'package:at_commons/at_commons.dart';
-
-import '../../../../at_chops/lib/src/algorithm/hashing/types.dart';
 
 /// An abstract class that provides cryptographic operations for AtKeys using
 /// specific hashing algorithms.
 ///
 /// This class allows for encryption and decryption of AtKeys
 /// with a passphrase, using the provided hashing algorithm type.
+@Deprecated('This will be moved to at_auth')
 abstract class AtKeysCrypto {
   /// Returns an instance of [_AtKeysCryptoImpl] based on the
   /// provided [hashingAlgoType].
@@ -68,7 +74,7 @@ class _AtKeysCryptoImpl implements AtKeysCrypto {
     AESKey aesKey = AESKey(hashKey);
     StringAESEncryptor atEncryptionAlgorithm = StringAESEncryptor(aesKey);
 
-    InitialisationVector iv = InitialisationVector.random(16);
+    InitialisationVector iv = AtChopsUtil.generateRandomIV(16);
     String encryptedContent =
         atEncryptionAlgorithm.encrypt(plainAtKeys, iv: iv);
 
