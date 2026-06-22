@@ -347,7 +347,8 @@ Future<void> updateOrDeleteKey(AtKey atKey, int randomValueForOperation,
 
 Future<dynamic> _getServerCommitEntries(String regex) async {
   AtChopsKeys atChopsKeys = AtChopsKeys.create(
-      RsaKeyPair.create(demo_credentials.encryptionPublicKeyMap[currentAtSign]!,
+      AtEncryptionKeyPair.create(
+          demo_credentials.encryptionPublicKeyMap[currentAtSign]!,
           demo_credentials.encryptionPrivateKeyMap[currentAtSign]!),
       AtPkamKeyPair.create(demo_credentials.pkamPublicKeyMap[currentAtSign]!,
           demo_credentials.pkamPrivateKeyMap[currentAtSign]!));

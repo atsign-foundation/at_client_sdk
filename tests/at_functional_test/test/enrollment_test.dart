@@ -344,7 +344,7 @@ void main() {
       AtClientImpl.atClientInstanceMap.clear();
 
       // Get AtChops from the AtAuthKeys
-      RsaKeyPair atEncryptionKeyPair = RsaKeyPair.create(
+      AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
           encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
       AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
           atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
@@ -442,7 +442,7 @@ void main() {
       AtClientImpl.atClientInstanceMap.clear();
 
       // Get AtChops from the AtAuthKeys
-      RsaKeyPair atEncryptionKeyPair = RsaKeyPair.create(
+      AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
           encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
       AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
           atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
@@ -541,7 +541,7 @@ void main() {
       AtClientImpl.atClientInstanceMap.clear();
 
       // Get AtChops from the AtAuthKeys
-      RsaKeyPair atEncryptionKeyPair = RsaKeyPair.create(
+      AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
           encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
       AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
           atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),

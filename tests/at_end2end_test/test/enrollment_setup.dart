@@ -87,7 +87,7 @@ void main() {
           approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.approved);
 
       // Get AtChops from the AtAuthKeys
-      RsaKeyPair atEncryptionKeyPair = RsaKeyPair.create(
+      AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
           atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!
               .toString(),
           '');
@@ -106,7 +106,7 @@ void main() {
       atLookUp.enrollmentId = atEnrollmentResponse.enrollmentId;
 
       // Fetch the encryption private key and self encryption key from the remote secondary.
-      atChops.atChopsKeys.atEncryptionKeyPair = RsaKeyPair.create(
+      atChops.atChopsKeys.atEncryptionKeyPair = AtEncryptionKeyPair.create(
           atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!
               .toString(),
           await getDefaultEncryptionPrivateKey(
