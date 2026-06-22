@@ -14,6 +14,17 @@ that shares one shape (design → build → worked example):
 > roadmap wins. See the roadmap's
 > [document map](crypto-roadmap.md#document-map) for how the sections pair up.
 
+## Table of contents
+
+- [Walkthrough A — NoPorts, end to end](#walkthrough-a--noports-end-to-end)
+  - [Feature discovery — the backwards-compatibility lever](#feature-discovery--the-backwards-compatibility-lever)
+  - [One session, step by step](#one-session-step-by-step)
+- [Walkthrough B — a large group, end to end](#walkthrough-b--a-large-group-end-to-end)
+- [Walkthrough C — a two-atSign chat with client churn (`at_talk`)](#walkthrough-c--a-two-atsign-chat-with-client-churn-at_talk)
+  - [How a new client obtains the epoch key](#how-a-new-client-obtains-the-epoch-key)
+  - [New clients: new vs. past messages](#new-clients-new-vs-past-messages)
+  - [Caveats this example surfaces](#caveats-this-example-surfaces)
+
 The three walkthroughs map onto the design's two deliverables (see
 [the two deliverables](crypto-roadmap.md#the-two-major-deliverables)):
 
