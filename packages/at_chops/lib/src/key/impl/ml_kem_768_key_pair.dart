@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/key/keys.dart';
 
-import '../../algorithm/encryption/ml_kem_768_pure_dart_algo.dart';
+import '../../algorithm/encryption/ml_kem_768_pure_dart.dart';
 
 /// ML-KEM-768 (FIPS 203) key pair used for post-quantum key encapsulation.
 ///

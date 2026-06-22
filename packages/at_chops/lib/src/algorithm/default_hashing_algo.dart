@@ -1,4 +1,4 @@
-import 'package:at_chops/src/algorithm/hashing/md5_hashing_algo.dart';
+import 'package:at_chops/src/algorithm/hashing/md5.dart';
 
 @Deprecated(
     'Use Md5HashingAlgo instead. This compatibility wrapper will be removed '

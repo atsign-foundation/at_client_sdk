@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/key/keys.dart';
 
-import '../../algorithm/encryption/x_wing_pure_dart_algo.dart';
+import '../../algorithm/encryption/x_wing_pure_dart.dart';
 
 /// X-Wing hybrid post-quantum/traditional KEM key pair
 /// (draft-connolly-cfrg-xwing-kem).

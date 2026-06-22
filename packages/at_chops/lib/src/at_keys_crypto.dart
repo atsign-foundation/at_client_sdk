@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_iv.dart';
-import 'package:at_chops/src/algorithm/encryption/aes_encryption_algo.dart';
+import 'package:at_chops/src/algorithm/encryption/aes.dart';
 import 'package:at_chops/src/algorithm/hashing/types.dart';
 import 'package:at_chops/src/factory/at_hashing_algo_factory.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';

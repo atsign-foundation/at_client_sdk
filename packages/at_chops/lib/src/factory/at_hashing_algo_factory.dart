@@ -2,7 +2,7 @@ import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/default_hashing_algo.dart';
 import 'package:at_chops/src/algorithm/hashing/argon2id.dart';
-import 'package:at_chops/src/algorithm/hashing/sha_hashing_algo.dart';
+import 'package:at_chops/src/algorithm/hashing/sha.dart';
 
 /// A factory class for creating instances of different hashing algorithms
 /// based on the specified [HashingAlgoType].

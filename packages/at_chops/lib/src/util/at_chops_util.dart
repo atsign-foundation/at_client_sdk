@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_iv.dart';
-import 'package:at_chops/src/algorithm/encryption/ml_kem_768_pure_dart_algo.dart';
+import 'package:at_chops/src/algorithm/encryption/ml_kem_768_pure_dart.dart';
 import 'package:at_chops/src/algorithm/encryption/x25519_pure_dart_algo.dart';
-import 'package:at_chops/src/algorithm/encryption/x_wing_pure_dart_algo.dart';
+import 'package:at_chops/src/algorithm/encryption/x_wing_pure_dart.dart';
 import 'package:at_chops/src/algorithm/signing/ml_dsa_65_pure_dart.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
 import 'package:at_chops/src/key/impl/at_encryption_key_pair.dart';

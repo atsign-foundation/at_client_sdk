@@ -43,7 +43,9 @@ class TestSuiteInitializer {
               filePath: (_) =>
                   '${ConfigUtil.getYaml()['filePath']}/${atSign}_key.atKeys'),
         );
-        atAuthRequest.rootDomain = AtRootDomain(ConfigUtil.getYaml()['root_server']['url'], ConfigUtil.getYaml()['root_server']['port'] ?? 64);
+        atAuthRequest.rootDomain = AtRootDomain(
+            ConfigUtil.getYaml()['root_server']['url'],
+            ConfigUtil.getYaml()['root_server']['port'] ?? 64);
         atAuthResponse = await authenticate(atAuthRequest);
         atChops = createAtChopsFromAtAuthKeys(atAuthResponse.atAuthKeys!);
 
@@ -107,7 +109,7 @@ class TestSuiteInitializer {
   }
 
   AtChops createAtChopsFromAtAuthKeys(AtKeys atAuthKeys) {
-    RsaKeyPair atEncryptionKeyPair = RsaKeyPair.create(
+    AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
         atAuthKeys.defaultEncryptionPublicKey!.toString(),
         atAuthKeys.defaultEncryptionPrivateKey!.toString());
     AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
@@ -125,7 +127,7 @@ class TestSuiteInitializer {
   }
 
   AtChops createAtChopsFromDemoKeys(String atSign) {
-    var atEncryptionKeyPair = RsaKeyPair.create(
+    var atEncryptionKeyPair = AtEncryptionKeyPair.create(
         AtCredentials
             .credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY],
         AtCredentials

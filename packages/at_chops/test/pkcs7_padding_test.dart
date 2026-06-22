@@ -1,4 +1,4 @@
-import 'package:at_chops/src/algorithm/padding/pkcs7padding.dart';
+import 'package:at_chops/src/algorithm/padding/pkcs7.dart';
 import 'package:at_chops/src/algorithm/padding/types.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';

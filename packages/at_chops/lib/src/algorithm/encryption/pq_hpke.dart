@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_chops/src/algorithm/aes_gcm_encryption_algo.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/at_iv.dart';
-import 'package:at_chops/src/algorithm/hkdf_algo.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
 import 'package:at_commons/at_commons.dart';
+
+import '../hashing/hkdf.dart';
+import 'aes_gcm.dart';
 
 /// HPKE-*style* authenticated public-key encryption over an X-Wing KEM.
 ///
@@ -39,7 +40,8 @@ const int _gcmTagLen = AesGcm256EncryptionAlgo.tagLength;
 /// label so its HKDF-derived keys are domain-separated from every other version.
 Uint8List _suiteLabelFor(int version) => switch (version) {
       0x01 => Uint8List.fromList('atPQv1-base'.codeUnits),
-      _ => throw ArgumentError('no suite label for version 0x${version.toRadixString(16)}'),
+      _ => throw ArgumentError(
+          'no suite label for version 0x${version.toRadixString(16)}'),
     };
 
 /// Why a [pqOpen] call failed.
@@ -83,7 +85,8 @@ Future<Uint8List> pqSeal(
   Uint8List? aad,
 }) async {
   final enc = await xwing.encapsulate(recipientPublicKey);
-  final _DerivedKey dk = _deriveKeyAndNonce(enc.sharedSecret, _envelopeVersion, info);
+  final _DerivedKey dk =
+      _deriveKeyAndNonce(enc.sharedSecret, _envelopeVersion, info);
 
   // body = gcmCipherText || tag(16), per AesGcm256EncryptionAlgo's wire format.
   final Uint8List body = await AesGcm256EncryptionAlgo(_aesKey(dk.key)).encrypt(
@@ -160,9 +163,10 @@ class _DerivedKey {
 /// for [version] and the caller's [info]. Two HKDF labels (`0x01`/`0x02`) keep
 /// key and nonce independent.
 _DerivedKey _deriveKeyAndNonce(Uint8List ss, int version, Uint8List? info) {
-  final Uint8List suiteInfo = _concat([_suiteLabelFor(version), info ?? Uint8List(0)]);
-  final Uint8List key =
-      HkdfSha256.deriveKey(ss, info: _concat([suiteInfo, _u8(0x01)]), length: 32);
+  final Uint8List suiteInfo =
+      _concat([_suiteLabelFor(version), info ?? Uint8List(0)]);
+  final Uint8List key = HkdfSha256.deriveKey(ss,
+      info: _concat([suiteInfo, _u8(0x01)]), length: 32);
   final Uint8List nonce = HkdfSha256.deriveKey(ss,
       info: _concat([suiteInfo, _u8(0x02)]), length: _gcmNonceLen);
   return _DerivedKey(key, nonce);
