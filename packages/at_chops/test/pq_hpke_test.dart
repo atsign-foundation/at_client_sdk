@@ -152,8 +152,8 @@ void main() {
     // Golden envelopes are pinned, computed once by composing the
     // already-vector-verified HkdfSha256 + AesGcm256EncryptionAlgo. They lock
     // the seal construction (HKDF key schedule + AES-256-GCM body) against
-    // accidental drift. Regenerate via tool_kat_bootstrap.dart if the
-    // construction ever changes intentionally.
+    // accidental drift. To regenerate after an intentional construction change,
+    // seal with a _FixedKem double (see below) and print the envelope hex.
 
     test('fixed-KEM construction KAT: seal is deterministic + opens', () async {
       final ss = Uint8List.fromList(List<int>.generate(32, (i) => i)); // [0x00..0x1f]
