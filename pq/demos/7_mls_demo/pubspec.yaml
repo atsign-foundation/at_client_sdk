@@ -1,0 +1,14 @@
+name: pq_demo_7
+description: RFC 9420 MLS group chat with TreeKEM, Secret Tree, and PQXDH — post-quantum.
+publish_to: none
+version: 0.0.1
+environment:
+  sdk: ^3.11.0
+dependencies:
+  ffi: ^2.1.0
+  sqlite3: ^2.4.0
+  pq_demo_6:
+    path: ../6_pq_mls_demo
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0
