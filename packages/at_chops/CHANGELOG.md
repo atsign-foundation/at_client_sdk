@@ -1,7 +1,5 @@
 ## 3.3.0
 - feat: Add `pqSeal`/`pqOpen` — HPKE-style PQ encryption over X-Wing KEM with AES-256-GCM and forward-compatible versioning
-
-## 3.3.0
 - feat: Add direct algorithm and key-generation APIs for `at_chops`
 - feat: Deprecate `AtChops`, `AtChopsImpl`, `AtChopsKeys`, and related result/input metadata compatibility types in favour of direct algorithm usage
 - feat: Add static key-generation helpers on key classes
