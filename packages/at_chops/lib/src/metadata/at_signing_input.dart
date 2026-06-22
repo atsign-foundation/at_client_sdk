@@ -3,14 +3,16 @@ import 'dart:typed_data';
 import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/default_signing_algo.dart';
-import 'package:at_chops/src/algorithm/ecc_signing_algo.dart';
 import 'package:at_chops/src/algorithm/pkam_signing_algo.dart';
+import 'package:at_chops/src/algorithm/signing/ecc.dart';
 
 /// Represents input attributes required for data signing.
 ///
 ///   [_data] input data to be signed
 ///  [hashingAlgoType] - Hashing algorithm used to hash the input data. Refer [HashingAlgoType]
 ///  [signingAlgoType] - Signing algorithm used to generate signature for the input data. Refer [SigningAlgoType]
+@Deprecated('Call an AtSigningAlgorithm implementation directly instead. This '
+    'compatibility API will be removed in the next major release.')
 class AtSigningInput {
   /// Data that needs to be signed
   ///
@@ -57,6 +59,8 @@ class AtSigningInput {
 /// verification of data signature
 ///  [hashingAlgoType] - Hashing algorithm used to hash the input data. Refer [HashingAlgoType]
 ///  [signingAlgoType] - Signing algorithm used to verify signature for the input data. Refer [SigningAlgoType]
+@Deprecated('Call an AtSigningAlgorithm implementation directly instead. This '
+    'compatibility API will be removed in the next major release.')
 class AtSigningVerificationInput {
   /// Data that has to verified
   ///
@@ -109,4 +113,6 @@ class AtSigningVerificationInput {
   }
 }
 
+@Deprecated('Call an AtSigningAlgorithm implementation directly instead. This '
+    'compatibility API will be removed in the next major release.')
 enum AtSigningMode { pkam, data, sim }

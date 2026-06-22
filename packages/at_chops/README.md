@@ -1,16 +1,17 @@
 Package for Cryptographic and Hashing Operations (CHOPS) such as encryption, decryption,
-data signing, key agreement, and hashing that can be leveraged by client applications using the atProtocol.
+data signing, key agreement, and hashing that can be leveraged by client applications using the Atsign Protocol.
 
 ## Features
 
 - Asymmetric encryption/decryption using RSA-2048 and RSA-4096
-- Symmetric encryption/decryption using AES-128, AES-192, and AES-256 (CBC and GCM modes)
+- Symmetric encryption/decryption using AES-128, AES-192, and AES-256 (CTR and GCM modes)
 - Digest signing and verification for PKAM authentication (RSA, ECC secp256r1, Ed25519)
-- Data signing and verification for public data in the atProtocol
+- Data signing and verification for public data in the Atsign Protocol
 - Post-quantum digital signatures: ML-DSA-65 (FIPS 204) — pure-Dart and OpenSSL FFI backends
 - Post-quantum key encapsulation: ML-KEM-768 (FIPS 203) — pure-Dart and OpenSSL FFI backends
 - Hybrid PQ/classical KEM: X-Wing (X25519 + ML-KEM-768, draft-connolly-cfrg-xwing-kem-10)
 - Elliptic-curve key agreement: X25519 — pure-Dart and OpenSSL FFI backends
+- Serializable key-pair generation helpers for RSA, X25519, ML-KEM-768, ML-DSA-65, and X-Wing
 - Hashing: SHA-256, SHA-512, MD5, Argon2id
 - HKDF key derivation
 
@@ -18,29 +19,67 @@ data signing, key agreement, and hashing that can be leveraged by client applica
 
 Developers should have a basic understanding of asymmetric and symmetric encryption, as well as key encapsulation mechanisms (KEMs) for the PQC APIs.
 
-Use `AtChopsKeys` to supply key material and `AtChopsImpl` for the high-level operations. For PQC algorithms, use the algorithm classes directly (they are stateless where possible).
+Use the algorithm classes directly. Generate or load key material first, then
+pass it to the relevant encryption, signing, key agreement, KEM, or hashing
+class.
 
 ## Usage
 
-### Classical encryption (RSA / AES)
+Examples assume `package:at_chops/at_chops.dart` is imported. Snippets using
+`utf8` or `Uint8List` also require `dart:convert` or `dart:typed_data`.
+
+### Serializable key generation
+
+Use these helpers when the key material needs to fit the SDK's string-backed key
+types (`AtPublicKey`, `AtPrivateKey`, and `SymmetricKey`). Byte-oriented key
+pairs are base64-encoded by the wrapper classes.
 
 ```dart
-final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, null);
-final atChops = AtChopsImpl(atChopsKeys);
+final aes128 = AESKey.generate(16);
+final aes192 = AESKey.generate(24);
+final aes256 = AESKey.generate(32);
 
-final encrypted = await atChops.encryptString('Hello World', EncryptionKeyType.rsa2048);
-final decrypted = await atChops.decryptString(encrypted.result, EncryptionKeyType.rsa2048);
+final rsa2048 = RsaKeyPair.generate();
+final rsa4096 = RsaKeyPair.generate(keySize: 4096);
+
+final x25519 = await X25519KeyPair.generate();
+final mlKem768 = await MlKem768KeyPair.generate();
+final mlDsa65 = await MlDsa65KeyPair.generate();
+final xWing = await XWingKeyPair.generate();
+```
+
+### RSA encryption
+
+```dart
+final keyPair = RsaKeyPair.generate();
+final rsa = RsaEncryptionAlgo.fromKeyPair(keyPair);
+final message = Uint8List.fromList(utf8.encode('Hello World'));
+
+final encrypted = rsa.encrypt(message);
+final decrypted = rsa.decrypt(encrypted);
+```
+
+### AES encryption
+
+```dart
+final aesKey = AESKey.generate(32);
+final iv = InitialisationVector.random(16);
+final aes = AESEncryptionAlgo(aesKey);
+final message = Uint8List.fromList(utf8.encode('Hello World'));
+
+final encrypted = await aes.encrypt(message, iv: iv);
+final decrypted = await aes.decrypt(encrypted, iv: iv);
 ```
 
 ### Signing and verification
 
 ```dart
-final signingInput = AtSigningInput('data to sign')
-  ..signingAlgoType = SigningAlgoType.ecc_secp256r1;
-final signingResult = atChops.sign(signingInput);
+final keyPair = RsaKeyPair.generate();
+final signing = RsaSigningAlgo(keyPair, HashingAlgoType.sha256);
+final message = Uint8List.fromList(utf8.encode('data to sign'));
 
-final verifyInput = AtSigningVerificationInput(...)
-final verifyResult = atChops.verify(verifyInput);
+final signature = signing.sign(message);
+final valid = signing.verify(message, signature);
 ```
 
 ### ML-DSA-65 (post-quantum signing, pure-Dart)
@@ -98,7 +137,7 @@ final ssB = await x25519.dh(kpB.privateKey, kpA.publicKey);
 ### Hashing
 
 ```dart
-final hash = AtChops.hashWith(HashingAlgoType.sha256).hash(data);
+final hash = SHA512HashingAlgo().hash('some-data'.codeUnits);
 ```
 
 ## FFI backends

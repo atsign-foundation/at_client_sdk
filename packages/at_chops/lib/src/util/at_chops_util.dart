@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_iv.dart';
-import 'package:at_chops/src/algorithm/ml_dsa_65_pure_dart_algo.dart';
-import 'package:at_chops/src/algorithm/ml_kem_768_pure_dart_algo.dart';
-import 'package:at_chops/src/algorithm/x25519_pure_dart_algo.dart';
-import 'package:at_chops/src/algorithm/x_wing_pure_dart_algo.dart';
+import 'package:at_chops/src/algorithm/encryption/ml_kem_768_pure_dart.dart';
+import 'package:at_chops/src/algorithm/encryption/x25519_pure_dart_algo.dart';
+import 'package:at_chops/src/algorithm/encryption/x_wing_pure_dart.dart';
+import 'package:at_chops/src/algorithm/signing/ml_dsa_65_pure_dart.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
 import 'package:at_chops/src/key/impl/at_encryption_key_pair.dart';
 import 'package:at_chops/src/key/impl/at_ml_dsa_65_key_pair.dart';
@@ -19,6 +19,10 @@ import 'package:better_cryptography/better_cryptography.dart';
 import 'package:crypton/crypton.dart';
 import 'package:encrypt/encrypt.dart';
 
+@Deprecated(
+    'Use key class static generate methods and algorithm classes directly '
+    'instead. This compatibility utility will be removed in the next major '
+    'release.')
 class AtChopsUtil {
   /// Generates a random initialisation vector from a given length
   /// Length must be 0 to 16
