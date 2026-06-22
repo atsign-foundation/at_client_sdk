@@ -43,8 +43,7 @@ class TestSuiteInitializer {
               filePath: (_) =>
                   '${ConfigUtil.getYaml()['filePath']}/${atSign}_key.atKeys'),
         );
-        atAuthRequest.rootDomain =
-            AtRootDomain(ConfigUtil.getYaml()['root_server']['url'], 64);
+        atAuthRequest.rootDomain = AtRootDomain(ConfigUtil.getYaml()['root_server']['url'], ConfigUtil.getYaml()['root_server']['port'] ?? 64);
         atAuthResponse = await authenticate(atAuthRequest);
         atChops = createAtChopsFromAtAuthKeys(atAuthResponse.atAuthKeys!);
 

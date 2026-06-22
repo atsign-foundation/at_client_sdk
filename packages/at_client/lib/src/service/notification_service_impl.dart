@@ -122,7 +122,7 @@ class NotificationServiceImpl extends NotificationService {
   /// after a clean DB is a no-op.
   ///
   /// Deletes are local-only — both legacy name prefixes are
-  /// excluded by [SyncUtil.shouldSync], so the removals do not
+  /// excluded by `SyncUtil.shouldSync`, so the removals do not
   /// propagate to the atServer.
   /// Returns the canonical value after migration. The seeded value
   /// is returned directly (rather than re-read by the caller) so the
@@ -144,7 +144,7 @@ class NotificationServiceImpl extends NotificationService {
     // not just existence — otherwise we'd never seed from a legacy
     // form when the canonical row is present-but-empty.
     AtValue? canonicalValue;
-    if (keyStore.isKeyExists(canonicalStr)) {
+    if (await keyStore.exists(canonicalStr)) {
       try {
         canonicalValue = await atClient.get(lastReceivedNotificationAtKey);
         if (canonicalValue.value == null) canonicalValue = null;
@@ -161,7 +161,7 @@ class NotificationServiceImpl extends NotificationService {
       '$notificationIdKey.$ns$currentAtSign',
     ];
     for (final legacyStr in legacyForms) {
-      if (!keyStore.isKeyExists(legacyStr)) continue;
+      if (!await keyStore.exists(legacyStr)) continue;
 
       // Seed the canonical key from the first legacy form that has a
       // value — only when the canonical doesn't already carry one.

@@ -23,10 +23,12 @@ export 'src/algorithm/signing/ed25519.dart';
 export 'src/algorithm/signing/ml_dsa_65_ffi.dart';
 export 'src/algorithm/signing/ml_dsa_65_pure_dart.dart';
 export 'src/algorithm/signing/rsa.dart';
+export 'src/algorithm/pq_hpke.dart';
 export 'src/at_chops_base.dart';
 export 'src/at_chops_impl.dart';
+
+// Class to encrypt/decrypt atKeys file based on the password specified.
 export 'src/at_keys_crypto.dart';
-export 'src/factory/at_hashing_algo_factory.dart';
 export 'src/key/impl/aes_key.dart';
 export 'src/key/impl/at_chops_keys.dart';
 export 'src/key/impl/at_encryption_key_pair.dart';
@@ -48,5 +50,10 @@ export 'src/metadata/encryption_metadata.dart';
 export 'src/metadata/encryption_result.dart';
 export 'src/metadata/signing_metadata.dart';
 export 'src/metadata/signing_result.dart';
+
+// A model class which represents the encrypted AtKeys with a passphrase.
 export 'src/model/at_encrypted.dart';
+
+// Class representing the hashing parameters to pass to an hashing algorithm.
+export 'src/model/hash_params.dart' hide HashParams;
 export 'src/util/at_chops_util.dart';

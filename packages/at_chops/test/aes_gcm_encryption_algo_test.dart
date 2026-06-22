@@ -67,6 +67,50 @@ void main() {
     });
   });
 
+  group('AES-256-GCM with AAD', () {
+    final algo = AesGcm256EncryptionAlgo(AESKey.generate(32));
+
+    test('round-trips when AAD matches', () async {
+      final iv = AtChopsUtil.generateRandomIV(12);
+      final plain = Uint8List.fromList(utf8.encode('secret body'));
+      final aad = utf8.encode('authenticated header');
+
+      final encrypted = await algo.encrypt(plain, iv: iv, aad: aad);
+      final decrypted = await algo.decrypt(encrypted, iv: iv, aad: aad);
+      expect(utf8.decode(decrypted), 'secret body');
+    });
+
+    test('mismatched AAD throws AtDecryptionException', () async {
+      final iv = AtChopsUtil.generateRandomIV(12);
+      final plain = Uint8List.fromList(utf8.encode('secret body'));
+
+      final encrypted =
+          await algo.encrypt(plain, iv: iv, aad: utf8.encode('header-A'));
+      expect(() => algo.decrypt(encrypted, iv: iv, aad: utf8.encode('header-B')),
+          throwsA(isA<AtDecryptionException>()));
+    });
+
+    test('AAD present at encrypt but absent at decrypt throws', () async {
+      final iv = AtChopsUtil.generateRandomIV(12);
+      final plain = Uint8List.fromList(utf8.encode('secret body'));
+
+      final encrypted =
+          await algo.encrypt(plain, iv: iv, aad: utf8.encode('header'));
+      // default decrypt (empty AAD) must not authenticate.
+      expect(() => algo.decrypt(encrypted, iv: iv),
+          throwsA(isA<AtDecryptionException>()));
+    });
+
+    test('empty AAD equals omitting it (backward compatible)', () async {
+      final iv = AtChopsUtil.generateRandomIV(12);
+      final plain = Uint8List.fromList(utf8.encode('xyz'));
+
+      final withEmptyAad = await algo.encrypt(plain, iv: iv, aad: const []);
+      final withoutAad = await algo.encrypt(plain, iv: iv);
+      expect(withEmptyAad, equals(withoutAad));
+    });
+  });
+
   group('NIST GCM vectors (McGrew & Viega, 256-bit, no AAD)', () {
     // Test case 13: empty plaintext
     test('case 13: zero key/nonce, empty plaintext', () async {
