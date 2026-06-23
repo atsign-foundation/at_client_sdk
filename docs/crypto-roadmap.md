@@ -1002,6 +1002,13 @@ see [Foundations](#foundations). Build status is the plan's
   KeyPackages as public keys so other atSigns can fetch and verify them
   (signature chain to the publishing enrollment's `_apsk` / the atSign's
   public key, with pubkey-hash pinning as today).
+- **Per-enrollment vs per-client differences**: `.atKeys` files, keychain
+  entries, and future portable key implementations contain only copyable
+  enrollment-scoped material. Rotating `nskey` keypairs and persistent
+  per-client keys live in the client's local keystore (`LocalKeystoreAtKeysIo`);
+  ephemeral one-shot clients (`npt`, `sshnp`) keep per-client keys in memory
+  only and mint fresh keys on the next run. A NoPorts Desktop reinstall may
+  also mint fresh per-client keys rather than recovering the old client keys.
 
 ### Phase 3 — SecureGroup v1 + the `group` provider (self encryption)
 
