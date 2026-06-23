@@ -14,6 +14,41 @@ encryption work.
 >
 > See the [document map](#document-map) for how the sections pair up.
 
+## Table of contents
+
+- [Document map](#document-map)
+- [1. Current state (2026-06-22)](#1-current-state-2026-06-22)
+  - [Branches & delivery model (trunk-based)](#branches--delivery-model-trunk-based)
+  - [Publish sequence (dependency-ordered) — status](#publish-sequence-dependency-ordered--status)
+  - [What is built vs prototyped — re-baselined](#what-is-built-vs-prototyped--re-baselined-assume-only-trunk--1930--1993)
+  - [Phase status](#phase-status)
+- [2. D1 acceptance — what "done" means](#2-d1-acceptance--what-done-means)
+- [3. D1 — detailed implementation plan](#3-d1--detailed-implementation-plan)
+  - [D1-S · Structural enablers (prerequisite — lands first)](#d1-s--structural-enablers-prerequisite--lands-first)
+  - [D1-A · Finish the PQ primitives (small)](#d1-a--finish-the-pq-primitives-small)
+  - [D1-B · The `nskey` provider (D1 Tier1 — the default)](#d1-b--the-nskey-provider-d1-tier1--the-default)
+  - [D1-C · Migration & rollout machinery](#d1-c--migration--rollout-machinery)
+  - [D1-D · Versioning (the `disallowLegacyEncryption` flag)](#d1-d--versioning-the-disallowlegacyencryption-flag)
+  - [D1-E · D1 Tier2 shape-corrections](#d1-e--d1-tier2-shape-corrections-fold-into-wp-gp)
+  - [D1 · Test & acceptance plan](#d1--test--acceptance-plan)
+  - [D1 · PR delivery / publish](#d1--pr-delivery--publish)
+- [4. D2 — pq-mls (placeholders; detailed planning deferred)](#4-d2--pq-mls-placeholders-detailed-planning-deferred)
+- [5. Cross-repo PR / publish sequence & NoPorts](#5-cross-repo-pr--publish-sequence--noports)
+- [6. Standing verification & implementation record](#6-standing-verification--implementation-record)
+  - [Verification (every touched package)](#verification-every-touched-package)
+  - [Record — Phase 6 (at_chops sole security-crypto dependency) — COMPLETE](#record--phase-6-at_chops-sole-security-crypto-dependency--complete)
+  - [Record — at_persistence 5.x migration — DONE](#record--at_persistence-5x-migration--done)
+  - [Record — 4b refresh + Mode-B fix + rebuild (2026-06-18/19)](#record--4b-refresh--mode-b-fix--rebuild-2026-06-1819)
+  - [ADRs](#adrs)
+- [7. Delivery plan & work packages](#7-delivery-plan--work-packages)
+  - [Tracks (package domains, not people)](#tracks-package-domains-not-people)
+  - [Reconciliations since the slim refactor](#reconciliations-since-the-slim-refactor-xl-pluggable)
+  - [The work-package sequence — single source for ordering](#the-work-package-sequence--single-source-for-ordering)
+  - [Package versions & release sequencing](#package-versions--release-sequencing)
+  - [Integration is continuous, not a final step](#integration-is-continuous-not-a-final-step)
+  - [Critical path & merge discipline](#critical-path--merge-discipline)
+  - [Wave-1 PR stubs (ready to assign once Wave 0 is on trunk)](#wave-1-pr-stubs-ready-to-assign-once-wave-0-is-on-trunk)
+
 By intent this plan is **much more detailed for Deliverable 1 (D1 — PQ-safe
 messaging)**, which is the near-term build; **Deliverable 2 (D2 — pq-mls)** is
 left as **sparser placeholders that call out where detailed planning is still

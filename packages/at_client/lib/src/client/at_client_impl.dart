@@ -83,6 +83,7 @@ class AtClientImpl implements AtClient {
   @override
   AtChops? get atChops => _atChops;
 
+  /// Keeps track of CryptoProviders registered with this AtClient
   // ---------------------------------------------------------------------------
   // DataEvent stream — fires on every successful keystore mutation that
   // passes through `LocalSecondary._update` or `LocalSecondary._delete`,
@@ -193,7 +194,9 @@ class AtClientImpl implements AtClient {
   set notificationService(NotificationService notificationService) {
     _notificationService = notificationService;
     _finalizer.attach(
-        _notificationService!, 'NotificationService for $_atSign');
+      _notificationService!,
+      'NotificationService for $_atSign',
+    );
   }
 
   @override
@@ -282,24 +285,25 @@ class AtClientImpl implements AtClient {
       try {
         await c.cleanupOrphans();
       } catch (e, st) {
-        _logger.warning(
-          'cleanupOrphans on $namespace failed: $e\n$st',
-        );
+        _logger.warning('cleanupOrphans on $namespace failed: $e\n$st');
       }
     }
     return c;
   }
 
   static Future<AtClient> create(
-      String currentAtSign, String? namespace, AtClientPreference preferences,
-      {@Deprecated('no longer needed. will be removed in a future release')
-      AtClientManager? atClientManager,
-      RemoteSecondary? remoteSecondary,
-      EncryptionService? encryptionService,
-      AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
-      AtChops? atChops,
-      AtLookUp? atLookUp,
-      String? enrollmentId}) async {
+    String currentAtSign,
+    String? namespace,
+    AtClientPreference preferences, {
+    @Deprecated('no longer needed. will be removed in a future release')
+    AtClientManager? atClientManager,
+    RemoteSecondary? remoteSecondary,
+    EncryptionService? encryptionService,
+    AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
+    AtChops? atChops,
+    AtLookUp? atLookUp,
+    String? enrollmentId,
+  }) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
     // Fetch cached AtClientImpl for re-use, or create a new one and init it
@@ -307,14 +311,23 @@ class AtClientImpl implements AtClient {
     if (atClientInstanceMap.containsKey(currentAtSign)) {
       atClientImpl = atClientInstanceMap[currentAtSign];
       await atClientImpl!.start();
+      // Re-using a cached AtClient skips _init. Adopt the supplied preference's
+      // crypto config so providers (and a changed defaultProviderId) added
+      // after first creation take effect; CryptoRuntime resolves against the
+      // live preference.crypto, so there is nothing else to reconcile.
+      atClientImpl.getPreferences()?.crypto = preferences.crypto;
     } else {
-      atClientImpl = AtClientImpl._(currentAtSign, namespace, preferences,
-          remoteSecondary: remoteSecondary,
-          encryptionService: encryptionService,
-          localSecondaryKeyStore: localSecondaryKeyStore,
-          atChops: atChops,
-          atLookUp: atLookUp,
-          enrollmentId: enrollmentId);
+      atClientImpl = AtClientImpl._(
+        currentAtSign,
+        namespace,
+        preferences,
+        remoteSecondary: remoteSecondary,
+        encryptionService: encryptionService,
+        localSecondaryKeyStore: localSecondaryKeyStore,
+        atChops: atChops,
+        atLookUp: atLookUp,
+        enrollmentId: enrollmentId,
+      );
 
       await atClientImpl._init(atLookUp: atLookUp);
     }
@@ -342,7 +355,8 @@ class AtClientImpl implements AtClient {
 
     if (_localSecondaryKeyStore != null && !_preference!.isLocalStoreRequired) {
       throw IllegalArgumentException(
-          'An AtKeyValueStore was injected, but preference.isLocalStoreRequired is false');
+        'An AtKeyValueStore was injected, but preference.isLocalStoreRequired is false',
+      );
     }
 
     _remoteSecondary = remoteSecondary;
@@ -363,6 +377,7 @@ class AtClientImpl implements AtClient {
         onEvent: emitDataEvent,
       );
       _atChops ??= await _createAtChops(_atSign);
+      _validateDefaultCryptoProvider();
 
       // Wire the event-driven expiry timer to the data-events stream.
       // Re-arms on every keystore mutation; first arm uses the current
@@ -394,11 +409,14 @@ class AtClientImpl implements AtClient {
     }
 
     // Using ??= because we may be injecting a RemoteSecondary
-    _remoteSecondary ??= RemoteSecondary(_atSign, _preference!,
-        atChops: atChops,
-        atLookUp: atLookUp,
-        privateKey: _preference!.privateKey,
-        enrollmentId: enrollmentId);
+    _remoteSecondary ??= RemoteSecondary(
+      _atSign,
+      _preference!,
+      atChops: atChops,
+      atLookUp: atLookUp,
+      privateKey: _preference!.privateKey,
+      enrollmentId: enrollmentId,
+    );
 
     // Using ??= because we may be injecting an EncryptionService
     _encryptionService ??= EncryptionService(_atSign);
@@ -427,10 +445,7 @@ class AtClientImpl implements AtClient {
     if (gen != _expiryArmGen || _isStopped) return;
     if (when == null) return;
     final wait = when.difference(DateTime.timestamp());
-    _expiryTimer = Timer(
-      wait.isNegative ? Duration.zero : wait,
-      _onExpiryFire,
-    );
+    _expiryTimer = Timer(wait.isNegative ? Duration.zero : wait, _onExpiryFire);
   }
 
   /// Drives one expiry sweep and re-arms the timer for the next.
@@ -578,17 +593,20 @@ class AtClientImpl implements AtClient {
   }
 
   @Deprecated(
-      'Commit-log compaction was removed with the commit-log-free keystore; '
-      'this is now a no-op and will be removed in a future major release')
+    'Commit-log compaction was removed with the commit-log-free keystore; '
+    'this is now a no-op and will be removed in a future major release',
+  )
   @override
-  Future<void> startCompactionJob(
-      {Duration? commitLogCompactionDuration}) async {
+  Future<void> startCompactionJob({
+    Duration? commitLogCompactionDuration,
+  }) async {
     // No-op: the commit-log-free client has no commit log to compact.
   }
 
   @Deprecated(
-      'Commit-log compaction was removed with the commit-log-free keystore; '
-      'this is now a no-op and will be removed in a future major release')
+    'Commit-log compaction was removed with the commit-log-free keystore; '
+    'this is now a no-op and will be removed in a future major release',
+  )
   @override
   Future<void> stopCompactionJob() async {
     // No-op: the commit-log-free client has no commit log compaction job.
@@ -630,39 +648,50 @@ class AtClientImpl implements AtClient {
   Future<bool> persistPublicKey(String publicKey) async {
     var atData = AtData();
     atData.data = publicKey.toString();
-    await getLocalSecondary()!
-        .keyStore!
-        .put(AtConstants.atPkamPublicKey, atData);
+    await getLocalSecondary()!.keyStore!.put(
+          AtConstants.atPkamPublicKey,
+          atData,
+        );
     return true;
   }
 
   Future<String?> getPrivateKey(String atSign) async {
-    var privateKeyData =
-        await getLocalSecondary()!.keyStore!.get(AtConstants.atPkamPrivateKey);
+    var privateKeyData = await getLocalSecondary()!.keyStore!.get(
+          AtConstants.atPkamPrivateKey,
+        );
     var privateKey = privateKeyData?.data;
     return privateKey;
   }
 
   @override
-  Future<bool> delete(AtKey atKey,
-      {bool isDedicated = false, DeleteRequestOptions? deleteRequestOptions}) {
+  Future<bool> delete(
+    AtKey atKey, {
+    bool isDedicated = false,
+    DeleteRequestOptions? deleteRequestOptions,
+  }) {
     _telemetry?.controller.sink.add(
       // ignore: experimental_member_use
       AtTelemetryEvent('AtClient.delete called', {"key": atKey}),
     );
     // ignore: no_leading_underscores_for_local_identifiers
-    var _deleteResult =
-        _delete(atKey, deleteRequestOptions: deleteRequestOptions);
+    var _deleteResult = _delete(
+      atKey,
+      deleteRequestOptions: deleteRequestOptions,
+    );
     _telemetry?.controller.sink.add(
       // ignore: experimental_member_use
-      AtTelemetryEvent('AtClient.delete complete',
-          {"key": atKey, "_deleteResult": _deleteResult}),
+      AtTelemetryEvent('AtClient.delete complete', {
+        "key": atKey,
+        "_deleteResult": _deleteResult,
+      }),
     );
     return _deleteResult;
   }
 
-  Future<bool> _delete(AtKey atKey,
-      {DeleteRequestOptions? deleteRequestOptions}) async {
+  Future<bool> _delete(
+    AtKey atKey, {
+    DeleteRequestOptions? deleteRequestOptions,
+  }) async {
     atKey.sharedBy ??= _atSign;
     // When namespace is not set in AtKey.namespace, default it to namespace from
     // AtClientPreferences
@@ -672,17 +701,20 @@ class AtClientImpl implements AtClient {
     var builder = DeleteVerbBuilder()..atKey = atKey;
 
     var deleteResult = await executeUpdateOrDelete(
-        builder,
-        SecondaryManager.getRemoteLocalPrefForOp(
-          deleteRequestOptions?.useRemoteAtServer,
-          preference?.remoteLocalPref,
-        ));
+      builder,
+      SecondaryManager.getRemoteLocalPrefForOp(
+        deleteRequestOptions?.useRemoteAtServer,
+        preference?.remoteLocalPref,
+      ),
+    );
 
     return deleteResult != null;
   }
 
   Future<String?> executeUpdateOrDelete(
-      VerbBuilder builder, RemoteLocalPref prefForOp) async {
+    VerbBuilder builder,
+    RemoteLocalPref prefForOp,
+  ) async {
     switch (prefForOp) {
       case RemoteLocalPref.localOnly:
         return await localSecondary!.executeVerb(builder, sync: true);
@@ -692,15 +724,19 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<AtValue> get(AtKey atKey,
-      {bool isDedicated = false, GetRequestOptions? getRequestOptions}) async {
+  Future<AtValue> get(
+    AtKey atKey, {
+    bool isDedicated = false,
+    GetRequestOptions? getRequestOptions,
+  }) async {
     Secondary? secondary;
     try {
       // validate the get request.
       await AtClientValidation().validateAtKey(atKey);
       // Get the verb builder for the atKey
-      var verbBuilder = GetRequestTransformer(this)
-          .transform(atKey, requestOptions: getRequestOptions);
+      var verbBuilder = GetRequestTransformer(
+        this,
+      ).transform(atKey, requestOptions: getRequestOptions);
       // Execute the verb.
       if (atKey.isLocal) {
         secondary = getLocalSecondary()!;
@@ -709,12 +745,13 @@ class AtClientImpl implements AtClient {
           secondary = getRemoteSecondary()!;
         } else {
           secondary = SecondaryManager.getSecondary(
-              this,
-              verbBuilder,
-              SecondaryManager.getRemoteLocalPrefForOp(
-                getRequestOptions?.useRemoteAtServer,
-                preference?.remoteLocalPref,
-              ));
+            this,
+            verbBuilder,
+            SecondaryManager.getRemoteLocalPrefForOp(
+              getRequestOptions?.useRemoteAtServer,
+              preference?.remoteLocalPref,
+            ),
+          );
         }
       }
       var getResponse = await secondary.executeVerb(verbBuilder);
@@ -729,15 +766,17 @@ class AtClientImpl implements AtClient {
         ..one = atKey
         ..two = (getResponse);
       // Transform the response and return
-      var atValue =
-          await GetResponseTransformer(this).transform(getResponseTuple);
+      var atValue = await GetResponseTransformer(
+        this,
+      ).transform(getResponseTuple);
       return atValue;
     } on AtException catch (e) {
       var exceptionScenario = (secondary is LocalSecondary)
           ? ExceptionScenario.localVerbExecutionFailed
           : ExceptionScenario.remoteVerbExecutionFailed;
       e.stack(
-          AtChainedException(Intent.fetchData, exceptionScenario, e.message));
+        AtChainedException(Intent.fetchData, exceptionScenario, e.message),
+      );
       throw AtExceptionManager.createException(e);
     }
   }
@@ -777,12 +816,13 @@ class AtClientImpl implements AtClient {
       secondary = getRemoteSecondary()!;
     } else {
       secondary = SecondaryManager.getSecondary(
-          this,
-          scanBuilder,
-          SecondaryManager.getRemoteLocalPrefForOp(
-            useRemoteAtServer,
-            preference?.remoteLocalPref,
-          ));
+        this,
+        scanBuilder,
+        SecondaryManager.getRemoteLocalPrefForOp(
+          useRemoteAtServer,
+          preference?.remoteLocalPref,
+        ),
+      );
     }
 
     var scanResult = await secondary.executeVerb(scanBuilder);
@@ -818,7 +858,8 @@ class AtClientImpl implements AtClient {
           _logger.severe('$key is not a well-formed key');
         } on Exception catch (e) {
           _logger.severe(
-              'Exception occurred: ${e.toString()}. Unable to form key $key');
+            'Exception occurred: ${e.toString()}. Unable to form key $key',
+          );
         }
       }
     }
@@ -826,8 +867,12 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<bool> put(AtKey atKey, dynamic value,
-      {bool isDedicated = false, PutRequestOptions? putRequestOptions}) async {
+  Future<bool> put(
+    AtKey atKey,
+    dynamic value, {
+    bool isDedicated = false,
+    PutRequestOptions? putRequestOptions,
+  }) async {
     _telemetry?.controller.sink.add(
       // ignore: experimental_member_use
       AtTelemetryEvent('AtClient.put called', {"key": atKey}),
@@ -835,16 +880,23 @@ class AtClientImpl implements AtClient {
     // If the value is neither String nor List<int> throw exception
     if (value is! String && value is! List<int>) {
       throw AtValueException(
-          'Invalid value type found ${value.runtimeType}. Expected String or List<int>');
+        'Invalid value type found ${value.runtimeType}. Expected String or List<int>',
+      );
     }
     AtResponse atResponse = AtResponse();
     if (value is String) {
-      atResponse =
-          await putText(atKey, value, putRequestOptions: putRequestOptions);
+      atResponse = await putText(
+        atKey,
+        value,
+        putRequestOptions: putRequestOptions,
+      );
     }
     if (value is List<int>) {
-      atResponse =
-          await putBinary(atKey, value, putRequestOptions: putRequestOptions);
+      atResponse = await putBinary(
+        atKey,
+        value,
+        putRequestOptions: putRequestOptions,
+      );
     }
     _telemetry?.controller.sink.add(
       // ignore: experimental_member_use
@@ -855,8 +907,11 @@ class AtClientImpl implements AtClient {
 
   /// Puts text data into the keystore.
   @override
-  Future<AtResponse> putText(AtKey atKey, String value,
-      {PutRequestOptions? putRequestOptions}) async {
+  Future<AtResponse> putText(
+    AtKey atKey,
+    String value, {
+    PutRequestOptions? putRequestOptions,
+  }) async {
     try {
       // Setting metadata.isBinary to false for putText
       atKey.metadata.isBinary = false;
@@ -868,14 +923,20 @@ class AtClientImpl implements AtClient {
 
   /// Puts binary data (e.g. images, files etc.) into the keystore.
   @override
-  Future<AtResponse> putBinary(AtKey atKey, List<int> value,
-      {PutRequestOptions? putRequestOptions}) async {
+  Future<AtResponse> putBinary(
+    AtKey atKey,
+    List<int> value, {
+    PutRequestOptions? putRequestOptions,
+  }) async {
     try {
       // Setting metadata.isBinary to true for putBinary
       atKey.metadata.isBinary = true;
       // Base2e15.encode method converts the List<int> type to String.
       return await _putInternal(
-          atKey, Base2e15.encode(value), putRequestOptions);
+        atKey,
+        Base2e15.encode(value),
+        putRequestOptions,
+      );
     } on AtException catch (e) {
       throw AtExceptionManager.createException(e);
     }
@@ -886,14 +947,19 @@ class AtClientImpl implements AtClient {
     if (upperCaseRegex.hasMatch(atKey.key) ||
         (atKey.namespace != null &&
             upperCaseRegex.hasMatch(atKey.namespace!))) {
-      _logger.finer('AtKey: ${atKey.toString()} previously contained upper case'
-          ' characters, AtKey has been converted to lower case');
+      _logger.finer(
+        'AtKey: ${atKey.toString()} previously contained upper case'
+        ' characters, AtKey has been converted to lower case',
+      );
       //AtKey.toString() in the above log will convert the entire key to lower case
     }
   }
 
   Future<AtResponse> _putInternal(
-      AtKey atKey, dynamic value, PutRequestOptions? putRequestOptions) async {
+    AtKey atKey,
+    dynamic value,
+    PutRequestOptions? putRequestOptions,
+  ) async {
     // Performs the put request validations.
     AtClientValidation.validatePutRequest(atKey, value, preference!);
     // Set sharedBy to currentAtSign if not set.
@@ -920,11 +986,12 @@ class AtClientImpl implements AtClient {
       enforceNamespace = false;
     }
     var validationResult = AtKeyValidators.get().validate(
-        atKey.toString(),
-        ValidationContext()
-          ..atSign = _atSign
-          ..validateOwnership = true
-          ..enforceNamespace = enforceNamespace);
+      atKey.toString(),
+      ValidationContext()
+        ..atSign = _atSign
+        ..validateOwnership = true
+        ..enforceNamespace = enforceNamespace,
+    );
     // If the validationResult.isValid is false, validation of AtKey failed.
     // throw AtClientException with failure reason.
     if (!validationResult.isValid) {
@@ -941,15 +1008,18 @@ class AtClientImpl implements AtClient {
     }
     // Transform put request
     // Optionally passing encryption private key to sign the public data.
-    UpdateVerbBuilder putBuilder = await putRequestTransformer.transform(tuple,
-        encryptionPrivateKey: encryptionPrivateKey,
-        requestOptions: putRequestOptions);
+    UpdateVerbBuilder putBuilder = await putRequestTransformer.transform(
+      tuple,
+      encryptionPrivateKey: encryptionPrivateKey,
+      requestOptions: putRequestOptions,
+    );
     // Validate the size of the value after encryption/encoding
     // Since AtClientPreference is mandatory argument in create method, _preference
     // will not be null.
     if (putBuilder.value.length > _preference!.maxDataSize) {
       throw BufferOverFlowException(
-          'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference!.maxDataSize} bytes. Found ${value.toString().length} bytes');
+        'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference!.maxDataSize} bytes. Found ${value.toString().length} bytes',
+      );
     }
 
     RemoteLocalPref remoteLocalPref;
@@ -978,11 +1048,12 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<String> notifyList(
-      {String? fromDate,
-      String? toDate,
-      String? regex,
-      bool isDedicated = false}) async {
+  Future<String> notifyList({
+    String? fromDate,
+    String? toDate,
+    String? regex,
+    bool isDedicated = false,
+  }) async {
     try {
       var builder = NotifyListVerbBuilder()
         ..fromDate = fromDate
@@ -996,19 +1067,22 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<bool> putMeta(AtKey atKey,
-      {PutRequestOptions? putRequestOptions}) async {
+  Future<bool> putMeta(
+    AtKey atKey, {
+    PutRequestOptions? putRequestOptions,
+  }) async {
     var builder = UpdateVerbBuilder();
     builder
       ..atKey = atKey
       ..operation = AtConstants.updateMeta;
 
     var updateMetaResult = await executeUpdateOrDelete(
-        builder,
-        SecondaryManager.getRemoteLocalPrefForOp(
-          putRequestOptions?.useRemoteAtServer,
-          preference?.remoteLocalPref,
-        ));
+      builder,
+      SecondaryManager.getRemoteLocalPrefForOp(
+        putRequestOptions?.useRemoteAtServer,
+        preference?.remoteLocalPref,
+      ),
+    );
     return updateMetaResult != null;
   }
 
@@ -1018,12 +1092,13 @@ class AtClientImpl implements AtClient {
     }
     // Verifies if any of the args are not null
     var isMetadataNotNull = AtClientUtil.isAnyNotNull(
-        a1: data!.ttl,
-        a2: data.ttb,
-        a3: data.ttr,
-        a4: data.ccd,
-        a5: data.isBinary,
-        a6: data.isEncrypted);
+      a1: data!.ttl,
+      a2: data.ttb,
+      a3: data.ttr,
+      a4: data.ccd,
+      a5: data.isBinary,
+      a6: data.isEncrypted,
+    );
     //If value is not null and metadata is not null, return UPDATE_ALL
     if (value != null && isMetadataNotNull) {
       return AtConstants.updateAll;
@@ -1047,17 +1122,21 @@ class AtClientImpl implements AtClient {
     AtEncryptionKeyPair? atEncryptionKeyPair;
     AtPkamKeyPair? atPkamKeyPair;
     try {
-      var encryptionPublicKey =
-          await localSecondary!.getEncryptionPublicKey(atSign);
+      var encryptionPublicKey = await localSecondary!.getEncryptionPublicKey(
+        atSign,
+      );
       var encryptionPrivateKey =
           await localSecondary!.getEncryptionPrivateKey();
       if (encryptionPublicKey != null && encryptionPrivateKey != null) {
         atEncryptionKeyPair = AtEncryptionKeyPair.create(
-            encryptionPublicKey, encryptionPrivateKey);
+          encryptionPublicKey,
+          encryptionPrivateKey,
+        );
       }
     } on KeyNotFoundException catch (e) {
       _logger.warning(
-          '_createAtChops  - Exception while getting encryption key pair from local secondary: ${e.toString()}');
+        '_createAtChops  - Exception while getting encryption key pair from local secondary: ${e.toString()}',
+      );
     }
     try {
       var pkamPublicKey = await localSecondary!.getPkamPublicKey();
@@ -1068,29 +1147,55 @@ class AtClientImpl implements AtClient {
       }
     } on KeyNotFoundException catch (e) {
       _logger.warning(
-          '_createAtChops  - Exception while getting pkam key pair from local secondary: ${e.toString()}');
+        '_createAtChops  - Exception while getting pkam key pair from local secondary: ${e.toString()}',
+      );
     }
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-    return AtChopsImpl(atChopsKeys);
+    AtChopsImpl chops = AtChopsImpl(atChopsKeys);
+    return chops;
+  }
+
+  /// Fails fast at construction if the configured default provider id can't be
+  /// resolved — neither among `AtClientPreference.crypto.providers` nor the
+  /// built-in legacy provider. Crypto resolution itself is done by
+  /// [CryptoRuntime] against the live `preference.crypto`, so there is no
+  /// per-client registry to populate.
+  void _validateDefaultCryptoProvider() {
+    final config = _preference!.crypto;
+    final id = config.defaultProviderId;
+    if (config.lookup(id) == null && id != legacyCryptoProviderId) {
+      throw CryptoProviderNotRegistered(
+        'Default crypto provider "$id" is not registered. '
+        'Add it to AtClientPreference.crypto.providers.',
+      );
+    }
   }
 
   @override
   @Deprecated("Obsolete, will be removed in v4")
-  Future<AtStreamResponse> stream(String sharedWith, String filePath,
-      {String? namespace}) async {
+  Future<AtStreamResponse> stream(
+    String sharedWith,
+    String filePath, {
+    String? namespace,
+  }) async {
     var streamResponse = AtStreamResponse();
     var streamId = Uuid().v4();
     var file = File(filePath);
     var data = file.readAsBytesSync();
     var fileName = basename(filePath);
     fileName = base64.encode(utf8.encode(fileName));
-    var encryptedData =
-        await _encryptionService!.encryptStream(data, sharedWith);
+    var encryptedData = await _encryptionService!.encryptStream(
+      data,
+      sharedWith,
+    );
     var command =
         'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
     _logger.finer('sending stream init:$command');
-    var remoteSecondary =
-        RemoteSecondary(_atSign, _preference!, atChops: atChops);
+    var remoteSecondary = RemoteSecondary(
+      _atSign,
+      _preference!,
+      atChops: atChops,
+    );
     var result = await remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('ack message:$result');
     if (result != null && result.startsWith('stream:ack')) {
@@ -1119,12 +1224,13 @@ class AtClientImpl implements AtClient {
   @override
   @Deprecated("Obsolete, will be removed in v4")
   Future<void> sendStreamAck(
-      String streamId,
-      String fileName,
-      int fileLength,
-      String senderAtSign,
-      Function streamCompletionCallBack,
-      Function streamReceiveCallBack) async {
+    String streamId,
+    String fileName,
+    int fileLength,
+    String senderAtSign,
+    Function streamCompletionCallBack,
+    Function streamReceiveCallBack,
+  ) async {
     var handler = StreamNotificationHandler();
     handler.remoteSecondary = getRemoteSecondary();
     handler.localSecondary = getLocalSecondary();
@@ -1138,12 +1244,17 @@ class AtClientImpl implements AtClient {
       ..fileLength = fileLength;
     _logger.info('Sending ack for stream notification:$notification');
     await handler.streamAck(
-        notification, streamCompletionCallBack, streamReceiveCallBack);
+      notification,
+      streamCompletionCallBack,
+      streamReceiveCallBack,
+    );
   }
 
   @override
   Future<Map<String, FileTransferObject>> uploadFile(
-      List<File> files, List<String> sharedWithAtSigns) async {
+    List<File> files,
+    List<String> sharedWithAtSigns,
+  ) async {
     var encryptionKey = _encryptionService!.generateFileEncryptionKey();
     var key = TextConstants.fileTransferKey + Uuid().v4();
     var fileStatus = await _uploadFiles(key, files, encryptionKey);
@@ -1151,22 +1262,33 @@ class AtClientImpl implements AtClient {
     var fileUrl = TextConstants.fileBinURL + 'archive/' + key + '/zip';
 
     return shareFiles(
-        sharedWithAtSigns, key, fileUrl, encryptionKey, fileStatus);
+      sharedWithAtSigns,
+      key,
+      fileUrl,
+      encryptionKey,
+      fileStatus,
+    );
   }
 
   @override
   Future<Map<String, FileTransferObject>> shareFiles(
-      List<String> sharedWithAtSigns,
-      String key,
-      String fileUrl,
-      String encryptionKey,
-      List<FileStatus> fileStatus,
-      {DateTime? date}) async {
+    List<String> sharedWithAtSigns,
+    String key,
+    String fileUrl,
+    String encryptionKey,
+    List<FileStatus> fileStatus, {
+    DateTime? date,
+  }) async {
     var result = <String, FileTransferObject>{};
     for (var sharedWithAtSign in sharedWithAtSigns) {
       var fileTransferObject = FileTransferObject(
-          key, encryptionKey, fileUrl, sharedWithAtSign, fileStatus,
-          date: date);
+        key,
+        encryptionKey,
+        fileUrl,
+        sharedWithAtSign,
+        fileStatus,
+        date: date,
+      );
       try {
         var atKey = AtKey()
           ..key = key
@@ -1200,7 +1322,10 @@ class AtClientImpl implements AtClient {
   }
 
   Future<List<FileStatus>> _uploadFiles(
-      String transferId, List<File> files, String encryptionKey) async {
+    String transferId,
+    List<File> files,
+    String encryptionKey,
+  ) async {
     var fileStatuses = <FileStatus>[];
     for (var file in files) {
       var fileStatus = FileStatus(
@@ -1210,7 +1335,10 @@ class AtClientImpl implements AtClient {
       );
       try {
         final encryptedFile = await _encryptionService!.encryptFileInChunks(
-            file, encryptionKey, _preference!.fileEncryptionChunkSize);
+          file,
+          encryptionKey,
+          _preference!.fileEncryptionChunkSize,
+        );
         var response =
             await FileTransferService().uploadToFileBinWithStreamedRequest(
           encryptedFile,
@@ -1228,11 +1356,13 @@ class AtClientImpl implements AtClient {
         // storing sent files in a a directory.
         if (preference?.downloadPath != null) {
           var sentFilesDirectory = await Directory(
-                  '${preference!.downloadPath!}${Platform.pathSeparator}sent-files')
-              .create();
-          await File(file.path).copy(sentFilesDirectory.path +
-              Platform.pathSeparator +
-              (fileStatus.fileName ?? ''));
+            '${preference!.downloadPath!}${Platform.pathSeparator}sent-files',
+          ).create();
+          await File(file.path).copy(
+            sentFilesDirectory.path +
+                Platform.pathSeparator +
+                (fileStatus.fileName ?? ''),
+          );
         }
       } on Exception catch (e) {
         fileStatus.error = e.toString();
@@ -1244,15 +1374,23 @@ class AtClientImpl implements AtClient {
 
   @override
   Future<List<FileStatus>> reuploadFiles(
-      List<File> files, FileTransferObject fileTransferObject) async {
-    var response = await _uploadFiles(fileTransferObject.transferId, files,
-        fileTransferObject.fileEncryptionKey);
+    List<File> files,
+    FileTransferObject fileTransferObject,
+  ) async {
+    var response = await _uploadFiles(
+      fileTransferObject.transferId,
+      files,
+      fileTransferObject.fileEncryptionKey,
+    );
     return response;
   }
 
   @override
-  Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
-      {String? downloadPath}) async {
+  Future<List<File>> downloadFile(
+    String transferId,
+    String sharedByAtSign, {
+    String? downloadPath,
+  }) async {
     downloadPath ??= preference!.downloadPath;
     if (downloadPath == null) {
       throw Exception('downloadPath not found');
@@ -1266,34 +1404,47 @@ class AtClientImpl implements AtClient {
       if (FileTransferObject.fromJson(jsonDecode(result.value)) == null) {
         _logger.severe("FileTransferObject is null");
         throw AtClientException(
-            error_codes['AtClientException'], 'FileTransferObject is null');
+          error_codes['AtClientException'],
+          'FileTransferObject is null',
+        );
       }
-      fileTransferObject =
-          FileTransferObject.fromJson(jsonDecode(result.value))!;
+      fileTransferObject = FileTransferObject.fromJson(
+        jsonDecode(result.value),
+      )!;
     } on Exception catch (e) {
       throw Exception('json decode exception in download file ${e.toString()}');
     }
     var downloadedFiles = <File>[];
-    var fileDownloadResponse = await FileTransferService()
-        .downloadFromFileBin(fileTransferObject, downloadPath);
+    var fileDownloadResponse = await FileTransferService().downloadFromFileBin(
+      fileTransferObject,
+      downloadPath,
+    );
     if (fileDownloadResponse.isError) {
       throw Exception('download fail');
     }
-    var encryptedFileList =
-        Directory(fileDownloadResponse.filePath!).listSync();
+    var encryptedFileList = Directory(
+      fileDownloadResponse.filePath!,
+    ).listSync();
     try {
       for (var encryptedFile in encryptedFileList) {
         var decryptedFile = await _encryptionService!.decryptFileInChunks(
-            File(encryptedFile.path),
-            fileTransferObject.fileEncryptionKey,
-            _preference!.fileEncryptionChunkSize,
-            ivBase64: fileTransferObject.ivBase64);
-        decryptedFile.copySync(downloadPath +
-            Platform.pathSeparator +
-            encryptedFile.path.split(Platform.pathSeparator).last);
-        downloadedFiles.add(File(downloadPath +
-            Platform.pathSeparator +
-            encryptedFile.path.split(Platform.pathSeparator).last));
+          File(encryptedFile.path),
+          fileTransferObject.fileEncryptionKey,
+          _preference!.fileEncryptionChunkSize,
+          ivBase64: fileTransferObject.ivBase64,
+        );
+        decryptedFile.copySync(
+          downloadPath +
+              Platform.pathSeparator +
+              encryptedFile.path.split(Platform.pathSeparator).last,
+        );
+        downloadedFiles.add(
+          File(
+            downloadPath +
+                Platform.pathSeparator +
+                encryptedFile.path.split(Platform.pathSeparator).last,
+          ),
+        );
         decryptedFile.deleteSync();
       }
       // deleting temp directory
@@ -1308,8 +1459,10 @@ class AtClientImpl implements AtClient {
   @override
   Future<AtResponse> setSPP(String spp, {Duration? expiry}) async {
     if (expiry == null) {
-      _logger.shout('WARNING: Setting SPP without an expiration'
-          '- defaulting to ${AtClient.defaultSppExpiry}');
+      _logger.shout(
+        'WARNING: Setting SPP without an expiration'
+        '- defaulting to ${AtClient.defaultSppExpiry}',
+      );
       expiry = AtClient.defaultSppExpiry;
     }
     // SPP should be 6 characters PIN. Throw exception if its less
@@ -1327,8 +1480,9 @@ class AtClientImpl implements AtClient {
     String? otpVerbResponse;
     try {
       otpVerbResponse = await _remoteSecondary?.executeCommand(
-          'otp:put:$spp:ttl:${expiry.inMilliseconds}\n',
-          auth: true);
+        'otp:put:$spp:ttl:${expiry.inMilliseconds}\n',
+        auth: true,
+      );
     } on AtLookUpException catch (e) {
       throw AtClientException(e.errorCode, e.errorMessage);
     } on AtException catch (e) {
@@ -1342,8 +1496,10 @@ class AtClientImpl implements AtClient {
   Future<AtResponse> getOTP() async {
     String? otpVerbResponse;
     try {
-      otpVerbResponse =
-          await _remoteSecondary?.executeCommand('otp:get\n', auth: true);
+      otpVerbResponse = await _remoteSecondary?.executeCommand(
+        'otp:get\n',
+        auth: true,
+      );
     } on AtLookUpException catch (e) {
       throw AtClientException(e.errorCode, e.errorMessage);
     } on AtException catch (e) {
@@ -1364,27 +1520,37 @@ class AtClientImpl implements AtClient {
   ///[Deprecated] Use [AtClient.notificationService]
   @override
   @Deprecated('Use AtClient.notificationService')
-  Future<void> startMonitor(String privateKey, Function? notificationCallback,
-      {String? regex}) async {
+  Future<void> startMonitor(
+    String privateKey,
+    Function? notificationCallback, {
+    String? regex,
+  }) async {
     throw UnimplementedError('AtClient.startMonitor has been deprecated');
   }
 
   @override
   @Deprecated("Use NotificationService")
-  Future<bool> notify(AtKey atKey, String value, OperationEnum operation,
-      {MessageTypeEnum? messageType,
-      PriorityEnum? priority,
-      StrategyEnum? strategy,
-      int? latestN,
-      String? notifier = AtConstants.system,
-      bool isDedicated = false}) async {
+  Future<bool> notify(
+    AtKey atKey,
+    String value,
+    OperationEnum operation, {
+    MessageTypeEnum? messageType,
+    PriorityEnum? priority,
+    StrategyEnum? strategy,
+    int? latestN,
+    String? notifier = AtConstants.system,
+    bool isDedicated = false,
+  }) async {
     AtKeyValidators.get().validate(
-        atKey.toString(),
-        ValidationContext()
-          ..atSign = _atSign
-          ..validateOwnership = true);
-    final notificationParams =
-        NotificationParams.forUpdate(atKey, value: value);
+      atKey.toString(),
+      ValidationContext()
+        ..atSign = _atSign
+        ..validateOwnership = true,
+    );
+    final notificationParams = NotificationParams.forUpdate(
+      atKey,
+      value: value,
+    );
     final notifyResult = await notificationService.notify(notificationParams);
     return notifyResult.notificationStatusEnum ==
         NotificationStatusEnum.delivered;
@@ -1392,19 +1558,26 @@ class AtClientImpl implements AtClient {
 
   @override
   @Deprecated('Use NotificationService')
-  Future<String> notifyAll(AtKey atKey, String value, OperationEnum operation,
-      {bool isDedicated = false}) async {
+  Future<String> notifyAll(
+    AtKey atKey,
+    String value,
+    OperationEnum operation, {
+    bool isDedicated = false,
+  }) async {
     var returnMap = {};
     var sharedWithList = jsonDecode(atKey.sharedWith!);
     for (var sharedWith in sharedWithList) {
       atKey.sharedWith = sharedWith;
-      final notificationParams =
-          NotificationParams.forUpdate(atKey, value: value);
+      final notificationParams = NotificationParams.forUpdate(
+        atKey,
+        value: value,
+      );
       final notifyResult = await notificationService.notify(notificationParams);
       returnMap.putIfAbsent(
-          sharedWith,
-          () => (notifyResult.notificationStatusEnum ==
-              NotificationStatusEnum.delivered));
+        sharedWith,
+        () => (notifyResult.notificationStatusEnum ==
+            NotificationStatusEnum.delivered),
+      );
     }
     return jsonEncode(returnMap);
   }
@@ -1414,8 +1587,9 @@ class AtClientImpl implements AtClient {
   ///[Deprecated] Use [NotificationService.notify]
   @Deprecated("Use [NotificationService.notify]")
   Future<String?> notifyChange(NotificationParams notificationParams) async {
-    NotificationResult result =
-        await notificationService.notify(notificationParams);
+    NotificationResult result = await notificationService.notify(
+      notificationParams,
+    );
     if (result.atClientException != null) {
       throw result.atClientException!;
     }

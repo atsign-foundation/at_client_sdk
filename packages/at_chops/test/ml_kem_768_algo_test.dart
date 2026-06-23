@@ -8,8 +8,7 @@ void main() {
   group('ML-KEM-768 pure-Dart', () {
     test('encapsulate/decapsulate round-trip yields matching shared secrets',
         () async {
-      final AtMlKem768KeyPair kp =
-          await AtChopsUtil.generateMlKem768KeyPair();
+      final MlKem768KeyPair kp = await MlKem768KeyPair.generate();
       final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
       final Uint8List priv = base64Decode(kp.atPrivateKey.privateKey);
 
@@ -22,17 +21,16 @@ void main() {
     });
 
     test('Generated key pair has FIPS 203 key sizes', () async {
-      final AtMlKem768KeyPair kp =
-          await AtChopsUtil.generateMlKem768KeyPair();
+      final MlKem768KeyPair kp = await MlKem768KeyPair.generate();
       expect(base64Decode(kp.atPublicKey.publicKey).length, equals(1184));
       expect(base64Decode(kp.atPrivateKey.privateKey).length, equals(2400));
     });
 
-    test('Decapsulating tampered ciphertext does not throw and (per FIPS 203)'
+    test(
+        'Decapsulating tampered ciphertext does not throw and (per FIPS 203)'
         ' returns an implicit-rejection secret different from the real one',
         () async {
-      final AtMlKem768KeyPair kp =
-          await AtChopsUtil.generateMlKem768KeyPair();
+      final MlKem768KeyPair kp = await MlKem768KeyPair.generate();
       final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
       final Uint8List priv = base64Decode(kp.atPrivateKey.privateKey);
 
