@@ -65,6 +65,11 @@
       "id": 13,
       "prompt": "what's the difference between at_client and at_client_flutter",
       "expected_output": "Explains that at_client is the core Dart SDK (AtCollection, Query, NotificationService). at_client_flutter adds Flutter-specific auth dialogs, KeychainStorage, KeychainAtKeysIo, AtClientPreference, AtClientManager. at_client_flutter re-exports at_client."
+    },
+    {
+      "id": 14,
+      "prompt": "My Flutter app throws PlatformException(ENTITLEMENT_NOT_FOUND) on macOS when the user picks their .atKeys file to log in. How do I fix it?",
+      "expected_output": "Explains AtKeysFileDialog/file_picker is sandboxed on macOS and needs a file-access entitlement. Add com.apple.security.files.user-selected.read-only (read-write also works) to BOTH macos/Runner/DebugProfile.entitlements and macos/Runner/Release.entitlements. Notes it is macOS-only — iOS (document picker) and Android (Storage Access Framework) need no entitlement or permission."
     }
   ]
 }

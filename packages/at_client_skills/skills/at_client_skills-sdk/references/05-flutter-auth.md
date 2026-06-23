@@ -84,6 +84,20 @@ Future<void> loginWithFile(BuildContext context) async {
 }
 ```
 
+> **macOS platform setup (required).** `AtKeysFileDialog` uses `file_picker`,
+> which is sandboxed on macOS. Without a file-access entitlement the picker
+> throws `PlatformException(ENTITLEMENT_NOT_FOUND, ...)` at runtime. Add this to
+> **both** `macos/Runner/DebugProfile.entitlements` **and**
+> `macos/Runner/Release.entitlements`:
+>
+> ```xml
+> <key>com.apple.security.files.user-selected.read-only</key>
+> <true/>
+> ```
+>
+> macOS only — iOS (document picker) and Android (Storage Access Framework)
+> require no entitlement or permission.
+
 ---
 
 ## Flow 3: Device Keychain (Returning User)
