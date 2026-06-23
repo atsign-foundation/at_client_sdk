@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart' show SHA256HashingAlgo;
 import 'package:at_onboarding_cli/src/util/at_file_util.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:meta/meta.dart';
-import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as path;
 
 /// Manages the enrollment checkpoint file used to resume interrupted enrollments.
@@ -37,14 +37,14 @@ class EnrollmentCheckpoint {
           ..sort((a, b) => a.key.compareTo(b.key)))
         .map((e) => '${e.key}:${e.value}')
         .join(',');
-    return sha256
-        .convert(utf8.encode('$atSign$appName$deviceName$sortedNamespaces'))
-        .toString();
+    // SHA-256 hex via at_chops (= sha256.convert(...).toString()).
+    return SHA256HashingAlgo()
+        .hash(utf8.encode('$atSign$appName$deviceName$sortedNamespaces'));
   }
 
   @visibleForTesting
-  File getFile(String appName, String deviceName,
-          Map<String, String> namespaces) =>
+  File getFile(
+          String appName, String deviceName, Map<String, String> namespaces) =>
       File(path.join(Directory.current.path,
           '${_paramsHash(_atSign, appName, deviceName, namespaces)}.enrollment.checkpoint'));
 
@@ -62,13 +62,14 @@ class EnrollmentCheckpoint {
     expiry ??= defaultCheckpointExpiry;
 
     final Map<String, dynamic> json = er.toJson();
-    json.remove('atSign'); // do not reveal which atSign this checkpoint belongs to
+    json.remove(
+        'atSign'); // do not reveal which atSign this checkpoint belongs to
     json['atAuthKeys'] = er.atAuthKeys?.toJson();
     json['validTill'] = DateTime.now().add(expiry).millisecondsSinceEpoch;
 
     final file = getFile(appName, deviceName, namespaces);
     file.writeAsStringSync(jsonEncode(json));
-    
+
     await AtFileUtil.setSecureFilePermissions(file.path);
     _logger.info('Saved checkpoint for ${er.enrollmentId}');
   }
@@ -109,5 +110,4 @@ class EnrollmentCheckpoint {
     final file = getFile(appName, deviceName, namespaces);
     if (file.existsSync()) file.deleteSync();
   }
-
 }

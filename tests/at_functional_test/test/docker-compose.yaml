@@ -1,11 +1,24 @@
+# Functional-suite virtualenv.
+#
+# With no environment overrides (the CI path) this keeps the legacy fixed
+# ports: atDirectory 64, atServers 25000-25999, Redis 6379. runLocal.sh can set
+# a base port to shift the virtualenv into a [BASE, BASE+99] range so it can run
+# alongside another virtualenv (e.g. the e2e suite) on a different base port.
 services:
   virtualenv:
     image: atsigncompany/virtualenv:vip
+    # Run the base-port entrypoint explicitly. The published image's CMD runs
+    # supervisord directly and would ignore VIRTUALENV_BASE_PORT; entrypoint.sh
+    # does the port shift. With the var unset it just execs supervisord, so this
+    # is a no-op for the legacy/CI path.
+    entrypoint: ["/atsign/entrypoint.sh"]
     ports:
-      - "127.0.0.1:6379:6379"
-      - "64:64"
+      - "127.0.0.1:${VE_REDIS_PORT:-6379}:${VE_REDIS_PORT:-6379}"
+      - "${VE_ROOT_PORT:-64}:${VE_ROOT_PORT:-64}"
       - "443:443"
       - "127.0.0.1:9001:9001"
-      - "25000-25999:25000-25999"
+      - "${VE_SECONDARY_LOW:-25000}-${VE_SECONDARY_HIGH:-25999}:${VE_SECONDARY_LOW:-25000}-${VE_SECONDARY_HIGH:-25999}"
     extra_hosts:
       - "vip.ve.atsign.zone:127.0.0.1"
+    environment:
+      - VIRTUALENV_BASE_PORT

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/transformer/response_transformer/get_response_transformer.dart';
 import 'package:at_client/src/util/sync_util.dart';
 
@@ -69,11 +70,13 @@ void main() {
   test('Verify server changes are synced to local - server ahead', () async {
     var atClient = atClientManager.atClient;
 
+    var syncService = atClient.syncService as SyncServiceImpl;
+
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClient.syncService);
 
-    var localEntry = await SyncUtil().getLastSyncedEntry('', atSign: atSign);
-    expect(localEntry?.commitId, isNotNull);
+    // Commit-log-free: the sync watermark is the persisted pull cursor.
+    var localCommitIdBefore = await syncService.getLastReceivedServerCommitId();
 
     var value = 'Some value';
     String keyStr = 'public:${Uuid().v4()}.linkedin.$namespace$atSign';
@@ -86,13 +89,10 @@ void main() {
 
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClient.syncService);
-    // Getting server commit id after put
-    var localEntryAfterSync =
-        await SyncUtil().getLastSyncedEntry('', atSign: atSign);
-
-    // After sync successful, the localCommitId after put should be greater
-    // than localCommitId before put
-    expect(localEntryAfterSync!.commitId! > localEntry!.commitId!, true);
+    // After the server-side write is pulled to local, the pull cursor
+    // must advance beyond its pre-pull value.
+    var localCommitIdAfter = await syncService.getLastReceivedServerCommitId();
+    expect(localCommitIdAfter > localCommitIdBefore, true);
 
     await Future.delayed(Duration(seconds: 1));
 
@@ -130,13 +130,12 @@ void main() {
     // Getting server commit id after put
     var serverCommitIdAfterPut = await SyncUtil()
         .getLatestServerCommitId(atClient.getRemoteSecondary()!, '');
-    var localEntryAfterSync =
-        await SyncUtil().getLastSyncedEntry(namespace, atSign: atSign);
-    // As the regex is set to wavi, .mosphere key should not be synced
-    expect(
-        (localEntryAfterSync?.atKey!
-            .contains('$sharedWithAtSign:medium.atmosphere$atSign')),
-        false);
+    // NOTE: the old assertion here checked that the atmosphere key was
+    // absent from the LOCAL commit log under the wavi syncRegex — a
+    // regex-filtered local query that trivially excluded a non-matching
+    // key, never proof the key stayed off the server. The queue-based
+    // push does not filter by syncRegex, so that proof never held; the
+    // wavi key round-trip below is the real sync assertion.
     // After sync successful, the serverCommitId after put should be greater
     // than server commit before put
     expect(serverCommitIdAfterPut! > serverCommitId!, true);
@@ -199,9 +198,9 @@ void main() {
     expect(putResult, true);
     await FunctionalTestSyncService.getInstance()
         .syncData(syncSvc: atClient.syncService);
-    var localEntryAfterSync =
-        await SyncUtil().getLastSyncedEntry('', atSign: atSign);
-    expect(localEntryAfterSync!.atKey, isNot('local:localkey.wavi$atSign'));
+    // The local key must not have reached the server — a remote lookup
+    // throws. (This is the real proof; the old commit-log last-synced-entry
+    // check was redundant and is removed with the commit log.)
     var llookupVerbBuilder = LLookupVerbBuilder()
       ..atKey = (AtKey()
         ..key = 'local:localkey.wavi'

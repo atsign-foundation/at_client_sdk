@@ -18,8 +18,7 @@ import 'dart:convert';
 import 'package:at_client/at_client.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-
-class MockAtClient extends Mock implements AtClient {}
+import 'test_utils/mocks.dart';
 
 class FakeAtKey extends Fake implements AtKey {}
 

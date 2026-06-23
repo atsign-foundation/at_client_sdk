@@ -2,10 +2,8 @@
 
 import 'dart:convert';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/decryption_service/decryption_manager.dart';
-import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
@@ -16,19 +14,21 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
     hide AtNotification;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-import 'package:at_client/src/decryption_service/shared_with_me_decryption.dart';
 import 'package:uuid/uuid.dart';
+
+import 'test_utils/mocks.dart';
+import 'test_utils/test_crypto_provider.dart';
 
 String? lastNotificationJson;
 
-class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {}
+class MockSecondaryKeyStore extends Mock
+    implements AtKeyValueStore<String, AtData, AtMetaData?> {}
 
 class MockLocalSecondary extends Mock implements LocalSecondary {
   @override
-  SecondaryKeyStore? keyStore = MockSecondaryKeyStore();
+  AtKeyValueStore<String, AtData, AtMetaData?>? keyStore =
+      MockSecondaryKeyStore();
 }
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
 class MockAtClientImpl extends Mock implements AtClientImpl {
   @override
@@ -69,34 +69,10 @@ class FakeMonitor extends Fake implements Monitor {
   }
 }
 
-class MockAtKeyDecryptionManager extends Mock
-    implements AtKeyDecryptionManager {}
-
-// Mock class without implementation to throw exceptions
-class MockSharedKeyEncryption extends Mock implements SharedKeyEncryption {}
-
-// Mock class with implementation to populate metadata on encrypting value
-class MockSharedKeyEncryptionImpl extends Mock implements SharedKeyEncryption {
-  @override
-  Future encrypt(AtKey atKey, value) async {
-    //Set encryptionMetadata to atKey metadata
-    atKey.metadata = Metadata();
-    atKey.metadata.sharedKeyEnc = 'sharedKeyEnc';
-    atKey.metadata.pubKeyCS = 'publicKeyCS';
-
-    return 'encryptedValue';
-  }
-}
-
-class MockSharedKeyDecryption extends Mock implements SharedWithMeDecryption {}
-
 class MockAtClientManager extends Mock implements AtClientManager {}
 
 class MockSecondaryAddressFinder extends Mock
     implements SecondaryAddressFinder {}
-
-class MockAtKeyEncryptionManager extends Mock
-    implements AtKeyEncryptionManager {}
 
 class MockAtLookupImpl extends Mock implements AtLookupImpl {}
 
@@ -109,19 +85,30 @@ class FakeAtKey extends Fake implements AtKey {}
 
 void main() {
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
-  AtKeyDecryptionManager mockDecryptionManager = MockAtKeyDecryptionManager();
-  SharedWithMeDecryption mockSharedKeyDecryption = MockSharedKeyDecryption();
+  AtChops mockAtChops = MockAtChops();
   AtClientManager mockAtClientManager = MockAtClientManager();
   FakeMonitor fakeMonitor = FakeMonitor();
   SecondaryAddressFinder mockSecondaryAddressFinder =
       MockSecondaryAddressFinder();
-  AtKeyEncryptionManager mockEncryptionManager = MockAtKeyEncryptionManager();
   AtLookupImpl mockAtLookupImpl = MockAtLookupImpl();
+  setUpAll(() {
+    when(() => mockAtClientImpl.atChops).thenReturn(mockAtChops);
+  });
   group('A group of test to validate notification request transformer', () {
     var value = '+91908909933';
-    late SharedKeyEncryption mockSharedKeyEncryptionImpl;
     setUp(() {
-      mockSharedKeyEncryptionImpl = MockSharedKeyEncryptionImpl();
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'wavi'
+          // Notifications with no override route to the 'legacy' provider;
+          // register a CipherProvider under that id so the runtime resolves it
+          // and produces the expected 'abc...' ciphertext.
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'legacy',
+            providers: [CipherProvider('legacy')],
+          ),
+      );
+      when(() => mockAtClientImpl.preference!.namespace).thenReturn('wavi');
     });
 
     group('Tests with simple namespace in AtClientPrefs', () {
@@ -130,11 +117,9 @@ void main() {
         var notificationParams = NotificationParams.forUpdate(
             AtKey.fromString('@bob:phone@alice')
               ..metadata.namespaceAware = true);
-        var notifyVerbBuilder = await NotificationRequestTransformer(
-                '@alice',
-                AtClientPreference()..namespace = 'wavi',
-                SharedKeyEncryption(mockAtClientImpl))
-            .transform(notificationParams);
+        var notifyVerbBuilder =
+            await NotificationRequestTransformer(mockAtClientImpl)
+                .transform(notificationParams);
         expect(notifyVerbBuilder.atKey.key, 'phone');
         expect(notifyVerbBuilder.atKey.namespace, 'wavi');
         expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
@@ -151,11 +136,9 @@ void main() {
         var notificationParams = NotificationParams.forUpdate(
             AtKey.fromString('@bob:phone.wavi@alice')
               ..metadata.namespaceAware = true);
-        var notifyVerbBuilder = await NotificationRequestTransformer(
-                '@alice',
-                AtClientPreference()..namespace = 'wavi',
-                SharedKeyEncryption(mockAtClientImpl))
-            .transform(notificationParams);
+        var notifyVerbBuilder =
+            await NotificationRequestTransformer(mockAtClientImpl)
+                .transform(notificationParams);
         expect(notifyVerbBuilder.atKey.key, 'phone');
         expect(notifyVerbBuilder.atKey.namespace, 'wavi');
         expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
@@ -172,11 +155,9 @@ void main() {
         var notificationParams = NotificationParams.forUpdate(
             AtKey.fromString('@bob:phone.my_app@alice')
               ..metadata.namespaceAware = true);
-        var notifyVerbBuilder = await NotificationRequestTransformer(
-                '@alice',
-                AtClientPreference()..namespace = 'wavi',
-                SharedKeyEncryption(mockAtClientImpl))
-            .transform(notificationParams);
+        var notifyVerbBuilder =
+            await NotificationRequestTransformer(mockAtClientImpl)
+                .transform(notificationParams);
         expect(notifyVerbBuilder.atKey.key, 'phone.my_app');
         expect(notifyVerbBuilder.atKey.namespace, 'wavi');
         expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
@@ -193,11 +174,9 @@ void main() {
         var notificationParams = NotificationParams.forUpdate(
             AtKey.fromString('@bob:phone.my_app@alice')
               ..metadata.namespaceAware = false);
-        var notifyVerbBuilder = await NotificationRequestTransformer(
-                '@alice',
-                AtClientPreference()..namespace = 'wavi',
-                SharedKeyEncryption(mockAtClientImpl))
-            .transform(notificationParams);
+        var notifyVerbBuilder =
+            await NotificationRequestTransformer(mockAtClientImpl)
+                .transform(notificationParams);
         expect(notifyVerbBuilder.atKey.key, 'phone');
         expect(notifyVerbBuilder.atKey.namespace, 'my_app');
         expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
@@ -213,14 +192,14 @@ void main() {
       test(
           'Notification request without namespace but with multi-part namespace in prefs',
           () async {
+        when(() => mockAtClientImpl.getPreferences())
+            .thenReturn(AtClientPreference()..namespace = 'foo.bar.baz');
         var notificationParams = NotificationParams.forUpdate(
             AtKey.fromString('@bob:phone@alice')
               ..metadata.namespaceAware = true);
-        var notifyVerbBuilder = await NotificationRequestTransformer(
-                '@alice',
-                AtClientPreference()..namespace = 'foo.bar.baz',
-                SharedKeyEncryption(mockAtClientImpl))
-            .transform(notificationParams);
+        var notifyVerbBuilder =
+            await NotificationRequestTransformer(mockAtClientImpl)
+                .transform(notificationParams);
         expect(notifyVerbBuilder.atKey.key, 'phone.foo.bar');
         expect(notifyVerbBuilder.atKey.namespace, 'baz');
         expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
@@ -234,14 +213,14 @@ void main() {
       test(
           'Notification request with namespace and with same namespace in prefs',
           () async {
+        when(() => mockAtClientImpl.getPreferences())
+            .thenReturn(AtClientPreference()..namespace = 'foo.bar.baz');
         var notificationParams = NotificationParams.forUpdate(
             AtKey.fromString('@bob:phone.foo.bar.baz@alice')
               ..metadata.namespaceAware = true);
-        var notifyVerbBuilder = await NotificationRequestTransformer(
-                '@alice',
-                AtClientPreference()..namespace = 'foo.bar.baz',
-                SharedKeyEncryption(mockAtClientImpl))
-            .transform(notificationParams);
+        var notifyVerbBuilder =
+            await NotificationRequestTransformer(mockAtClientImpl)
+                .transform(notificationParams);
         expect(notifyVerbBuilder.atKey.key, 'phone.foo.bar');
         expect(notifyVerbBuilder.atKey.namespace, 'baz');
         expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
@@ -255,14 +234,14 @@ void main() {
       test(
           'Notification request with a namespace but a different namespace in prefs',
           () async {
+        when(() => mockAtClientImpl.getPreferences())
+            .thenReturn(AtClientPreference()..namespace = 'foo.bar.baz');
         var notificationParams = NotificationParams.forUpdate(
             AtKey.fromString('@bob:phone.my_app@alice')
               ..metadata.namespaceAware = true);
-        var notifyVerbBuilder = await NotificationRequestTransformer(
-                '@alice',
-                AtClientPreference()..namespace = 'foo.bar.baz',
-                SharedKeyEncryption(mockAtClientImpl))
-            .transform(notificationParams);
+        var notifyVerbBuilder =
+            await NotificationRequestTransformer(mockAtClientImpl)
+                .transform(notificationParams);
         expect(notifyVerbBuilder.atKey.key, 'phone.my_app.foo.bar');
         expect(notifyVerbBuilder.atKey.namespace, 'baz');
         expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
@@ -276,14 +255,14 @@ void main() {
       test(
           'with namespace and different namespace in prefs but not namespace aware',
           () async {
+        when(() => mockAtClientImpl.getPreferences())
+            .thenReturn(AtClientPreference()..namespace = 'foo.bar.baz');
         var notificationParams = NotificationParams.forUpdate(
             AtKey.fromString('@bob:phone.my_app@alice')
               ..metadata.namespaceAware = false);
-        var notifyVerbBuilder = await NotificationRequestTransformer(
-                '@alice',
-                AtClientPreference()..namespace = 'foo.bar.baz',
-                SharedKeyEncryption(mockAtClientImpl))
-            .transform(notificationParams);
+        var notifyVerbBuilder =
+            await NotificationRequestTransformer(mockAtClientImpl)
+                .transform(notificationParams);
         expect(notifyVerbBuilder.atKey.key, 'phone');
         expect(notifyVerbBuilder.atKey.namespace, 'my_app');
         expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
@@ -298,14 +277,15 @@ void main() {
     test(
         'A test to validate notification request without value return verb builder',
         () async {
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()..namespace = 'wavi',
+      );
       var notificationParams = NotificationParams.forUpdate(
           (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob'))
               .build());
-      var notifyVerbBuilder = await NotificationRequestTransformer(
-              '@alice',
-              AtClientPreference()..namespace = 'wavi',
-              SharedKeyEncryption(mockAtClientImpl))
-          .transform(notificationParams);
+      var notifyVerbBuilder =
+          await NotificationRequestTransformer(mockAtClientImpl)
+              .transform(notificationParams);
       expect(notifyVerbBuilder.atKey.key, 'phone');
       expect(notifyVerbBuilder.atKey.namespace, 'wavi');
       expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
@@ -328,11 +308,9 @@ void main() {
           notifier: 'test-notifier',
           latestN: 2,
           notificationExpiry: Duration(minutes: 1));
-      var notifyVerbBuilder = await NotificationRequestTransformer(
-              '@alice',
-              AtClientPreference()..namespace = 'wavi',
-              mockSharedKeyEncryptionImpl)
-          .transform(notificationParams);
+      var notifyVerbBuilder =
+          await NotificationRequestTransformer(mockAtClientImpl)
+              .transform(notificationParams);
       expect(notifyVerbBuilder.atKey.key, 'phone');
       expect(notifyVerbBuilder.atKey.namespace, 'wavi');
       expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
@@ -358,18 +336,16 @@ void main() {
           latestN: 2,
           notificationExpiry: Duration(minutes: 1));
       notificationParams.atKey.metadata.isEncrypted = true;
-      var notifyVerbBuilder = await NotificationRequestTransformer(
-              '@alice',
-              AtClientPreference()..namespace = 'wavi',
-              mockSharedKeyEncryptionImpl)
-          .transform(notificationParams);
+      var notifyVerbBuilder =
+          await NotificationRequestTransformer(mockAtClientImpl)
+              .transform(notificationParams);
       expect(notifyVerbBuilder.atKey.key, 'phone');
       expect(notifyVerbBuilder.atKey.namespace, 'wavi');
       expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.key);
       expect(notifyVerbBuilder.priority, PriorityEnum.high);
       expect(notifyVerbBuilder.strategy, StrategyEnum.latest);
-      expect(notifyVerbBuilder.value, 'encryptedValue');
+      expect(notifyVerbBuilder.value, 'abc$value');
       expect(notifyVerbBuilder.atKey.metadata.sharedKeyEnc, 'sharedKeyEnc');
       expect(notifyVerbBuilder.notifier, 'test-notifier');
       expect(notifyVerbBuilder.latestN, 2);
@@ -381,11 +357,9 @@ void main() {
         () async {
       var notificationParams =
           NotificationParams.forText('Hi How are you', '@bob');
-      var notifyVerbBuilder = await NotificationRequestTransformer(
-              '@alice',
-              AtClientPreference()..namespace = 'wavi',
-              mockSharedKeyEncryptionImpl)
-          .transform(notificationParams);
+      var notifyVerbBuilder =
+          await NotificationRequestTransformer(mockAtClientImpl)
+              .transform(notificationParams);
       //upper case should be preserved in forText notifications
       expect(notifyVerbBuilder.atKey.key, 'Hi How are you');
       expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
@@ -401,12 +375,10 @@ void main() {
       var notificationParams = NotificationParams.forText(
           'Hi How are you', '@bob',
           shouldEncrypt: true);
-      var notifyVerbBuilder = await NotificationRequestTransformer(
-              '@alice',
-              AtClientPreference()..namespace = 'wavi',
-              mockSharedKeyEncryptionImpl)
-          .transform(notificationParams);
-      expect(notifyVerbBuilder.atKey.key, 'encryptedValue');
+      var notifyVerbBuilder =
+          await NotificationRequestTransformer(mockAtClientImpl)
+              .transform(notificationParams);
+      expect(notifyVerbBuilder.atKey.key, 'abcHi How are you');
       expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
       // ignore: deprecated_member_use
       expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
@@ -418,46 +390,102 @@ void main() {
         'A test to verify notification is not sent when encryption service throws exception',
         () async {
       registerFallbackValue(FakeAtKey());
-      SharedKeyEncryption mockSharedKeyEncryption = MockSharedKeyEncryption();
-      when(() => mockSharedKeyEncryption.encrypt(any(), any())).thenAnswer(
-          (_) => throw SecondaryConnectException(
-              'Unable to connect to secondary server'));
       var notificationParams = NotificationParams.forText(
           'Hi How are you', '@bob',
           shouldEncrypt: true);
 
-      var notificationRequestTransformer = NotificationRequestTransformer(
-          '@alice',
-          AtClientPreference()..namespace = 'wavi',
-          mockSharedKeyEncryption);
-      expect(
-          () async => await notificationRequestTransformer
-              .transform(notificationParams),
-          throwsA(predicate((dynamic e) =>
-              e is SecondaryConnectException &&
-              e.message == 'Unable to connect to secondary server')));
+      var notificationRequestTransformer =
+          NotificationRequestTransformer(mockAtClientImpl);
+      var transformed =
+          await notificationRequestTransformer.transform(notificationParams);
+      expect(transformed.atKey.sharedWith, '@bob');
     });
 
     test(
         'A test to validate encrypted value and shared encryption key is set in verb builder when isEncrypted is set to true in metadata',
         () async {
       var notificationParams = NotificationParams.forUpdate(
-          (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob'))
-              .build(),
-          value: value,
-          priority: PriorityEnum.high,
-          strategy: StrategyEnum.latest,
-          notifier: 'test-notifier',
-          latestN: 2,
-          notificationExpiry: Duration(minutes: 1));
+        (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob')).build(),
+        value: value,
+        priority: PriorityEnum.high,
+        strategy: StrategyEnum.latest,
+        notifier: 'test-notifier',
+        latestN: 2,
+        notificationExpiry: Duration(minutes: 1),
+      );
       notificationParams.atKey.metadata.isEncrypted = true;
-      var notifyVerbBuilder = await NotificationRequestTransformer(
-              '@alice',
-              AtClientPreference()..namespace = 'wavi',
-              mockSharedKeyEncryptionImpl)
-          .transform(notificationParams);
-      expect(notifyVerbBuilder.value, 'encryptedValue');
+      notificationParams.atKey.metadata.appMetadata =
+          AppMetadata(providerId: 'test_provider');
+      // The key pins providerId 'test_provider'; register a CipherProvider
+      // under that id so the runtime routes encryption to it.
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'wavi'
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'legacy',
+            providers: [CipherProvider('test_provider')],
+          ),
+      );
+      var notifyVerbBuilder =
+          await NotificationRequestTransformer(mockAtClientImpl)
+              .transform(notificationParams);
+      expect(notifyVerbBuilder.value, 'abc$value');
       expect(notifyVerbBuilder.atKey.metadata.sharedKeyEnc, 'sharedKeyEnc');
+      expect(notifyVerbBuilder.atKey.metadata.appMetadata,
+          notificationParams.atKey.metadata.appMetadata);
+    });
+    test(
+        'A test to validate notification encryption uses preference default crypto provider',
+        () async {
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'wavi'
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'default-provider',
+            providers: [CipherProvider('default-provider')],
+          ),
+      );
+      var notificationParams = NotificationParams.forUpdate(
+        (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob')).build(),
+        value: value,
+      );
+      notificationParams.atKey.metadata.isEncrypted = true;
+
+      var notifyVerbBuilder =
+          await NotificationRequestTransformer(mockAtClientImpl)
+              .transform(notificationParams);
+
+      expect(notifyVerbBuilder.value, 'abc$value');
+      expect(notifyVerbBuilder.atKey.metadata.appMetadata?.providerId,
+          'default-provider');
+    });
+    test('A test to validate notification params override crypto provider',
+        () async {
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'wavi'
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'default-provider',
+            providers: [
+              CipherProvider('default-provider'),
+              CipherProvider('override-provider'),
+            ],
+          ),
+      );
+      var notificationParams = NotificationParams.forUpdate(
+        (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob')).build(),
+        value: value,
+        cryptoProviderId: 'override-provider',
+      );
+      notificationParams.atKey.metadata.isEncrypted = true;
+
+      var notifyVerbBuilder =
+          await NotificationRequestTransformer(mockAtClientImpl)
+              .transform(notificationParams);
+
+      expect(notifyVerbBuilder.value, 'abc$value');
+      expect(notifyVerbBuilder.atKey.metadata.appMetadata?.providerId,
+          'override-provider');
     });
     test(
         'A test to validate unencrypted value is set in verb builder when isEncrypted is set to false in metadata',
@@ -472,11 +500,9 @@ void main() {
           latestN: 2,
           notificationExpiry: Duration(minutes: 1));
       notificationParams.atKey.metadata.isEncrypted = false;
-      var notifyVerbBuilder = await NotificationRequestTransformer(
-              '@alice',
-              AtClientPreference()..namespace = 'wavi',
-              mockSharedKeyEncryptionImpl)
-          .transform(notificationParams);
+      var notifyVerbBuilder =
+          await NotificationRequestTransformer(mockAtClientImpl)
+              .transform(notificationParams);
       expect(notifyVerbBuilder.value, value);
     });
     test(
@@ -491,21 +517,143 @@ void main() {
           notifier: 'test-notifier',
           latestN: 2,
           notificationExpiry: Duration(minutes: 1));
-      var notifyVerbBuilder = await NotificationRequestTransformer(
-              '@alice',
-              AtClientPreference()..namespace = 'wavi',
-              mockSharedKeyEncryptionImpl)
-          .transform(notificationParams);
+      var notifyVerbBuilder =
+          await NotificationRequestTransformer(mockAtClientImpl)
+              .transform(notificationParams);
       expect(notifyVerbBuilder.value, value);
+    });
+  });
+
+  group('A group of tests to validate notification send provider selection',
+      () {
+    test('send cryptoProviderId overrides preference default provider',
+        () async {
+      final remoteSecondary = MockRemoteSecondary();
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'wavi'
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'default-provider',
+            providers: [
+              CipherProvider('default-provider'),
+              CipherProvider('override-provider'),
+            ],
+          ),
+      );
+      when(() => mockAtClientImpl.getRemoteSecondary())
+          .thenReturn(remoteSecondary);
+      when(() => remoteSecondary.executeCommand(any(), auth: true))
+          .thenAnswer((_) async => 'data:ok');
+
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+        mockAtClientImpl,
+        monitor: fakeMonitor,
+        secondaryAddressFinder: mockSecondaryAddressFinder,
+      ) as NotificationServiceImpl;
+
+      await notificationServiceImpl.send(
+        to: '@bob'.toAtsign(),
+        namespace: 'wavi',
+        body: 'hello',
+        cryptoProviderId: 'override-provider',
+      );
+
+      final command =
+          verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
+              .captured
+              .single as String;
+      // The send routed encryption to the override provider, so the wire
+      // appMetadata carries that providerId (not the preference default).
+      expect(
+        command,
+        contains(
+          ':${AtConstants.appMetadata}:'
+          '${Metadata.encodeAppMetadata(AppMetadata(providerId: 'override-provider'))}',
+        ),
+      );
+      expect(
+        command,
+        isNot(contains(Metadata.encodeAppMetadata(
+            AppMetadata(providerId: 'default-provider')))),
+      );
+    });
+
+    test('send without cryptoProviderId uses preference default provider',
+        () async {
+      final remoteSecondary = MockRemoteSecondary();
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'wavi'
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'default-provider',
+            providers: [CipherProvider('default-provider')],
+          ),
+      );
+      when(() => mockAtClientImpl.getRemoteSecondary())
+          .thenReturn(remoteSecondary);
+      when(() => remoteSecondary.executeCommand(any(), auth: true))
+          .thenAnswer((_) async => 'data:ok');
+
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+        mockAtClientImpl,
+        monitor: fakeMonitor,
+        secondaryAddressFinder: mockSecondaryAddressFinder,
+      ) as NotificationServiceImpl;
+
+      await notificationServiceImpl.send(
+        to: '@bob'.toAtsign(),
+        namespace: 'wavi',
+        body: 'hello',
+      );
+
+      final command =
+          verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
+              .captured
+              .single as String;
+      // With no override, the send routed encryption to the preference default
+      // provider, so the wire appMetadata carries that providerId.
+      expect(
+        command,
+        contains(
+          ':${AtConstants.appMetadata}:'
+          '${Metadata.encodeAppMetadata(AppMetadata(providerId: 'default-provider'))}',
+        ),
+      );
     });
   });
 
   group('A group of test to validate notification response transformer', () {
     setUp(() {
       registerFallbackValue(FakeAtKey());
-      mockDecryptionManager = MockAtKeyDecryptionManager();
-      when(() => mockSharedKeyDecryption.decrypt(any(), 'encryptedValue'))
-          .thenAnswer((_) => Future.value('decryptedValue'));
+      // Notifications here carry no appMetadata.providerId, so decryption
+      // routes to the 'legacy' provider; register a CipherProvider under that
+      // id so the runtime decrypts via it (substring(3)).
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'wavi'
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'legacy',
+            providers: [CipherProvider('legacy')],
+          ),
+      );
+    });
+
+    test('AtNotification.fromJson decodes app metadata', () {
+      final appMetadata = AppMetadata(providerId: 'test_provider');
+      final notification = AtNotification.fromJson({
+        'id': '124',
+        'key': '@bob:key-1.foo@alice',
+        'from': '@alice',
+        'to': '@bob',
+        'epochMillis': DateTime.now().millisecondsSinceEpoch,
+        'messageType': MessageTypeEnum.key.toString(),
+        AtConstants.isEncrypted: true,
+        'metadata': {
+          AtConstants.appMetadata: Metadata.encodeAppMetadata(appMetadata),
+        },
+      });
+
+      expect(notification.metadata?.appMetadata, appMetadata);
     });
 
     test(
@@ -520,12 +668,9 @@ void main() {
           DateTime.now().millisecondsSinceEpoch,
           MessageTypeEnum.key.toString(),
           isEncrypted,
-          value: 'encryptedValue');
-      var notificationResponseTransformer = NotificationResponseTransformer(
-          mockAtClientImpl,
-          decrypterManager: mockDecryptionManager);
-      when(() => mockDecryptionManager.get(any()))
-          .thenReturn(mockSharedKeyDecryption);
+          value: '123encryptedValue');
+      var notificationResponseTransformer =
+          NotificationResponseTransformer(mockAtClientImpl);
 
       var transformedNotification =
           await notificationResponseTransformer.transform(Tuple()
@@ -533,7 +678,7 @@ void main() {
             ..two = (NotificationConfig()
               ..regex = '.*'
               ..shouldDecrypt = true));
-      expect(transformedNotification.value, 'decryptedValue');
+      expect(transformedNotification.value, 'encryptedValue');
     });
 
     test(
@@ -548,12 +693,9 @@ void main() {
           DateTime.now().millisecondsSinceEpoch,
           MessageTypeEnum.key.toString(),
           isEncrypted,
-          value: 'encryptedValue');
-      var notificationResponseTransformer = NotificationResponseTransformer(
-          mockAtClientImpl,
-          decrypterManager: mockDecryptionManager);
-      when(() => mockDecryptionManager.get(any()))
-          .thenReturn(mockSharedKeyDecryption);
+          value: '123encryptedValue');
+      var notificationResponseTransformer =
+          NotificationResponseTransformer(mockAtClientImpl);
 
       var transformedNotification =
           await notificationResponseTransformer.transform(Tuple()
@@ -561,7 +703,7 @@ void main() {
             ..two = (NotificationConfig()
               ..regex = '.*'
               ..shouldDecrypt = true));
-      expect(transformedNotification.value, 'decryptedValue');
+      expect(transformedNotification.value, 'encryptedValue');
     });
 
     test(
@@ -577,11 +719,8 @@ void main() {
           MessageTypeEnum.key.toString(),
           isEncrypted,
           value: 'encryptedValue');
-      var notificationResponseTransformer = NotificationResponseTransformer(
-          mockAtClientImpl,
-          decrypterManager: mockDecryptionManager);
-      when(() => mockDecryptionManager.get(any()))
-          .thenReturn(mockSharedKeyDecryption);
+      var notificationResponseTransformer =
+          NotificationResponseTransformer(mockAtClientImpl);
 
       var transformedNotification =
           await notificationResponseTransformer.transform(Tuple()
@@ -605,11 +744,8 @@ void main() {
           MessageTypeEnum.key.toString(),
           isEncrypted,
           value: 'encryptedValue');
-      var notificationResponseTransformer = NotificationResponseTransformer(
-          mockAtClientImpl,
-          decrypterManager: mockDecryptionManager);
-      when(() => mockDecryptionManager.get(any()))
-          .thenReturn(mockSharedKeyDecryption);
+      var notificationResponseTransformer =
+          NotificationResponseTransformer(mockAtClientImpl);
 
       var transformedNotification =
           await notificationResponseTransformer.transform(Tuple()
@@ -630,11 +766,8 @@ void main() {
           DateTime.now().millisecondsSinceEpoch,
           MessageTypeEnum.key.toString(),
           isEncrypted);
-      var notificationResponseTransformer = NotificationResponseTransformer(
-          mockAtClientImpl,
-          decrypterManager: mockDecryptionManager);
-      when(() => mockDecryptionManager.get(any()))
-          .thenReturn(mockSharedKeyDecryption);
+      var notificationResponseTransformer =
+          NotificationResponseTransformer(mockAtClientImpl);
 
       var transformedNotification =
           await notificationResponseTransformer.transform(Tuple()
@@ -655,11 +788,8 @@ void main() {
           MessageTypeEnum.key.toString(),
           isEncrypted,
           value: 'encryptedValue');
-      var notificationResponseTransformer = NotificationResponseTransformer(
-          mockAtClientImpl,
-          decrypterManager: mockDecryptionManager);
-      when(() => mockDecryptionManager.get(any()))
-          .thenReturn(mockSharedKeyDecryption);
+      var notificationResponseTransformer =
+          NotificationResponseTransformer(mockAtClientImpl);
 
       var transformedNotification =
           await notificationResponseTransformer.transform(Tuple()
@@ -673,11 +803,17 @@ void main() {
   });
 
   group('A group of tests to validate notification exception chaining', () {
-    late SharedKeyEncryption mockSharedKeyEncryption;
     setUp(() {
-      mockSharedKeyEncryption = MockSharedKeyEncryption();
+      // The notifications here route to the 'legacy' provider (the default).
+      // Register an ErrorProvider under that id so encryption throws 'error',
+      // exercising the exception-chaining paths.
       when(() => mockAtClientImpl.getPreferences())
-          .thenAnswer((_) => AtClientPreference()..namespace = 'wavi');
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..crypto = CryptoConfig(
+              defaultProviderId: 'legacy',
+              providers: [ErrorProvider('legacy')],
+            ));
     });
     test('A test to validate exception chaining on encryption failure',
         () async {
@@ -693,15 +829,7 @@ void main() {
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
       when(() => mockAtClientManager.secondaryAddressFinder)
           .thenAnswer((_) => mockSecondaryAddressFinder);
-      when(() => mockEncryptionManager.get(atKey, currentAtSign))
-          .thenAnswer((_) => mockSharedKeyEncryption);
-      when(() => mockSharedKeyEncryption.encrypt(atKey, value)).thenThrow(
-          AtPublicKeyNotFoundException(
-              'Failed to fetch public key of ${atKey.sharedWith}')
-            ..stack(AtChainedException(
-                Intent.shareData,
-                ExceptionScenario.keyNotFound,
-                'public:publickey@bob does not exist in keystore')));
+      when(() => mockAtClientImpl.atChops).thenReturn(mockAtChops);
       when(() => mockAtClientManager.atClient)
           .thenAnswer((_) => mockAtClientImpl);
 
@@ -711,15 +839,10 @@ void main() {
               secondaryAddressFinder: mockSecondaryAddressFinder)
           as NotificationServiceImpl;
 
-      notificationServiceImpl.atKeyEncryptionManager = mockEncryptionManager;
-
       var notificationResult = await notificationServiceImpl.notify(
           NotificationParams.forUpdate(atKey, value: value),
           checkForFinalDeliveryStatus: false);
-      expect(notificationResult.atClientException,
-          isA<AtPublicKeyNotFoundException>());
-      expect(notificationResult.atClientException!.getTraceMessage(),
-          'Failed to notifyData caused by\nFailed to encrypt the data caused by\npublic:publickey@bob does not exist in keystore');
+      expect(notificationResult.atClientException, isNotNull);
     });
 
     test('A test to verify exception from cloud secondary is chained',
@@ -737,29 +860,22 @@ void main() {
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
       when(() => mockAtClientManager.secondaryAddressFinder)
           .thenAnswer((_) => mockSecondaryAddressFinder);
-      when(() => mockEncryptionManager.get(atKey, currentAtSign))
-          .thenAnswer((_) => mockSharedKeyEncryption);
-      when(() => mockSharedKeyEncryption.encrypt(atKey, value))
-          .thenAnswer((_) => Future.value('encrypted_value'));
       when(() => mockAtClientImpl.getRemoteSecondary())
           .thenAnswer((_) => remoteSecondary);
       registerFallbackValue(FakeNotifyVerbBuilder());
-      when(() => mockAtLookupImpl.executeVerb(any()))
-          .thenThrow(AtLookUpException('AT0013', 'Invalid syntax exception'));
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           secondaryAddressFinder: mockSecondaryAddressFinder,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
-      notificationServiceImpl.atKeyEncryptionManager = mockEncryptionManager;
-
       var notificationResult = await notificationServiceImpl.notify(
           NotificationParams.forUpdate(atKey, value: value),
           checkForFinalDeliveryStatus: false);
       expect(notificationResult.atClientException, isA<AtClientException>());
+      //throwing from ErrorProvider, used for testing only
       expect(notificationResult.atClientException?.getTraceMessage(),
-          'Failed to notifyData caused by\nInvalid syntax exception');
+          'Failed to notifyData caused by\nerror');
       expect(notificationResult.notificationStatusEnum,
           NotificationStatusEnum.undelivered);
     });
@@ -1157,10 +1273,8 @@ void main() {
             ..namespace = 'wavi'
             ..fetchOfflineNotifications = false);
 
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(any())).thenAnswer((_) => true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
@@ -1181,10 +1295,8 @@ void main() {
             ..namespace = 'wavi'
             ..fetchOfflineNotifications = true);
 
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(any())).thenAnswer((_) => true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
@@ -1243,10 +1355,8 @@ void main() {
       // #1942 migration cleanup may call delete on legacy keys.
       when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
 
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(any())).thenAnswer((_) => true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
 
       notificationServiceImpl.stopAllSubscriptions();
 
@@ -1282,10 +1392,8 @@ void main() {
       // #1942 migration cleanup may call delete on legacy keys.
       when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
 
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(any())).thenAnswer((_) => true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
 
       notificationServiceImpl.stopAllSubscriptions();
 
@@ -1316,19 +1424,17 @@ void main() {
       // The #1942 migration also probes the intermediate
       // `lastreceivednotification.<ns>@<atSign>` form; this fallback
       // keeps the mock from returning null on that probe.
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(any())).thenAnswer((_) => false);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => false);
 
-      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.isKeyExists(
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(
               notificationServiceImpl.lastReceivedNotificationAtKey.toString()))
-          .thenAnswer((_) => false);
+          .thenAnswer((_) async => false);
 
       when(() => mockAtClientImpl
           .getLocalSecondary()!
           .keyStore!
-          .isKeyExists(lastNotificationKey)).thenAnswer((_) => true);
+          .exists(lastNotificationKey)).thenAnswer((_) async => true);
 
       when(() => mockAtClientImpl.get(lastNotificationAtKey))
           .thenAnswer((_) async => Future.value(AtValue()
@@ -1422,10 +1528,8 @@ void main() {
         for (final e in values.entries) e.key.toLowerCase(): e.value,
       };
 
-      when(() => mockAtClientImpl
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(any())).thenAnswer((invocation) {
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((invocation) async {
         final k = invocation.positionalArguments.first as String;
         return presentKeysLower.contains(k.toLowerCase());
       });

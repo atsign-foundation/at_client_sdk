@@ -41,7 +41,7 @@ void main() {
           (await atClient.getLocalSecondary()!.getEncryptionSelfKey())!;
       var atData =
           await (atClient.getLocalSecondary()!.keyStore!.get(atKey.toString()));
-      var cipherText = atData.data;
+      var cipherText = atData!.data!;
       expect(
           EncryptionUtil.decryptValue(cipherText, selfEncryptionKey,
               ivBase64: atKey.metadata.ivNonce),

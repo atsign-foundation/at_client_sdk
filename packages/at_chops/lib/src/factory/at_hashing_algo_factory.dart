@@ -1,7 +1,8 @@
 import 'package:at_chops/src/algorithm/algo_type.dart';
-import 'package:at_chops/src/algorithm/argon2id_hashing_algo.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/default_hashing_algo.dart';
+import 'package:at_chops/src/algorithm/hashing/argon2id.dart';
+import 'package:at_chops/src/algorithm/hashing/sha.dart';
 
 /// A factory class for creating instances of different hashing algorithms
 /// based on the specified [HashingAlgoType].
@@ -9,6 +10,8 @@ import 'package:at_chops/src/algorithm/default_hashing_algo.dart';
 /// The [AtHashingAlgorithmFactory] class provides a static method
 /// [withHashingAlgorithm] which returns the appropriate hashing algorithm
 /// implementation corresponding to the provided [HashingAlgoType].
+@Deprecated('Instantiate hashing algorithm classes directly instead. This '
+    'compatibility API will be removed in the next major release.')
 class AtHashingAlgorithmFactory {
   /// Returns an instance of [AtHashingAlgorithm] based on the provided [HashingAlgoType].
   ///

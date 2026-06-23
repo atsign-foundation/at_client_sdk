@@ -45,8 +45,8 @@ void main() {
       final pureAlgo = X25519PureDartAlgo.instance;
       final ffiAlgo = X25519FfiAlgo.fromLib(lib);
 
-      final AtX25519KeyPair alice = await AtChopsUtil.generateX25519KeyPair();
-      final AtX25519KeyPair bob = await AtChopsUtil.generateX25519KeyPair();
+      final X25519KeyPair alice = await X25519KeyPair.generate();
+      final X25519KeyPair bob = await X25519KeyPair.generate();
 
       final Uint8List alicePriv = base64Decode(alice.atPrivateKey.privateKey);
       final Uint8List bobPub = base64Decode(bob.atPublicKey.publicKey);

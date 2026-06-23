@@ -52,7 +52,7 @@ void main() {
         fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.3)');
       }
 
-      final AtMlDsa65KeyPair kp = await AtChopsUtil.generateMlDsa65KeyPair();
+      final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
       final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
 

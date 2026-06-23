@@ -6,6 +6,8 @@ enum SigningAlgoType {
   ecc_secp256r1,
   rsa2048,
   rsa4096,
+  ed25519,
+  mldsa65,
 }
 
 enum HashingAlgoType {

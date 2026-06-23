@@ -1,31 +1,17 @@
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/compaction/at_commit_log_compaction.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/mocks.dart';
 import 'test_utils/test_utils.dart';
-
-class MockAtCompactionJob extends Mock implements AtCompactionJob {
-  bool isCronScheduled = false;
-
-  @override
-  void scheduleCompactionJob(AtCompactionConfig atCompactionConfig) {
-    isCronScheduled = true;
-  }
-
-  @override
-  Future<void> stopCompactionJob() async {
-    isCronScheduled = false;
-  }
-}
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
@@ -189,19 +175,6 @@ void main() {
           expect((itr.current as AtClientImpl).getCurrentAtSign(), atSign3);
         }
       }
-    });
-  });
-
-  group('A group of tests related to AtCommitLogCompaction', () {
-    test('A test to verify AtCommitLogCompaction is scheduled and stopped', () {
-      String atSign = '@bob';
-      MockAtCompactionJob mockAtCompactionJob = MockAtCompactionJob();
-      AtClientCommitLogCompaction atClientCommitLogCompaction =
-          AtClientCommitLogCompaction.create(atSign, mockAtCompactionJob);
-      atClientCommitLogCompaction.scheduleCompaction(1);
-      expect(mockAtCompactionJob.isCronScheduled, true);
-      atClientCommitLogCompaction.stopCompactionJob();
-      expect(mockAtCompactionJob.isCronScheduled, false);
     });
   });
 
@@ -401,4 +374,150 @@ void main() {
                   'Key length exceeds maximum permissible length of 248 characters')));
     });
   });
+
+  group(
+      'A group of tests to validate AtClient registers providers in CryptoRegistry',
+      () {
+    MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
+    MockLocalSecondary mockLocalSecondary = MockLocalSecondary();
+    MockAtChopsKeys mockAtChopsKeys = MockAtChopsKeys();
+    setUp(() {
+      AtClientImpl.atClientInstanceMap.remove('@alice');
+      var key = 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=';
+      registerFallbackValue(FakeLookupVerbBuilder());
+      when(() => mockLocalSecondary.executeVerb(any()))
+          .thenAnswer((_) => Future.value('yuh'));
+      when(() => mockRemoteSecondary.executeVerb(any()))
+          .thenAnswer((_) => Future.value('yuh'));
+      when(() => mockAtChopsKeys.selfEncryptionKey).thenReturn(AESKey(key));
+    });
+    test('defaults to the legacy crypto config when none is configured',
+        () async {
+      AtClientPreference preferences = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
+      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+      AtClient ac = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        preferences,
+        remoteSecondary: mockRemoteSecondary,
+        atChops: chops,
+      );
+      // No crypto config => the legacy default. The built-in legacy provider is
+      // the runtime's fallback (resolution itself is covered in
+      // crypto_runtime_test), so it is intentionally not in the config list.
+      final config = ac.getPreferences()?.crypto;
+      expect(config?.defaultProviderId, 'legacy');
+      expect(config?.lookup('legacy'), isNull);
+      expect(config?.lookup('bubblesort'), isNull);
+    });
+
+    test('registers configured crypto providers during at_client creation',
+        () async {
+      final provider = _RecordingCryptoProvider('test-provider');
+      AtClientPreference preferences = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path'
+        ..crypto = CryptoConfig(
+          defaultProviderId: 'test-provider',
+          providers: [provider],
+        );
+      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+
+      AtClient ac = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        preferences,
+        remoteSecondary: mockRemoteSecondary,
+        atChops: chops,
+      );
+
+      expect(ac.getPreferences()?.crypto.lookup('test-provider'),
+          isA<CryptoProvider>());
+    });
+
+    test('throws when configured default crypto provider is not registered',
+        () async {
+      AtClientPreference preferences = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path'
+        ..crypto = const CryptoConfig(
+          defaultProviderId: 'missing-provider',
+        );
+      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+
+      await expectLater(
+        () => AtClientImpl.create(
+          '@alice',
+          'buzz',
+          preferences,
+          remoteSecondary: mockRemoteSecondary,
+          atChops: chops,
+        ),
+        throwsA(isA<CryptoProviderNotRegistered>()),
+      );
+    });
+
+    test(
+        'adopts the new crypto config when a cached AtClient is re-used with '
+        'an updated preference', () async {
+      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+
+      // First creation registers only the legacy provider.
+      AtClient ac1 = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        AtClientPreference()
+          ..hiveStoragePath = 'test/hive'
+          ..commitLogPath = 'test/hive/path'
+          ..crypto = const CryptoConfig(defaultProviderId: 'legacy'),
+        remoteSecondary: mockRemoteSecondary,
+        atChops: chops,
+      );
+      expect(ac1.getPreferences()?.crypto.lookup('late-provider'), isNull);
+
+      // Re-creating the same atSign re-uses the cached instance; the new
+      // preference's crypto config is adopted onto it (no rebuild).
+      final provider = _RecordingCryptoProvider('late-provider');
+      AtClient ac2 = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        AtClientPreference()
+          ..hiveStoragePath = 'test/hive'
+          ..commitLogPath = 'test/hive/path'
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'legacy',
+            providers: [provider],
+          ),
+        remoteSecondary: mockRemoteSecondary,
+        atChops: chops,
+      );
+
+      expect(identical(ac1, ac2), true);
+      expect(ac2.getPreferences()?.crypto.lookup('late-provider'),
+          isA<CryptoProvider>());
+    });
+  });
+}
+
+class _RecordingCryptoProvider extends CryptoProvider {
+  @override
+  final String id;
+
+  _RecordingCryptoProvider(this.id);
+
+  @override
+  Future<String> encrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    atKey.metadata.appMetadata = AppMetadata(providerId: id);
+    atKey.metadata.isEncrypted = true;
+    return value;
+  }
+
+  @override
+  Future<String> decrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    return value;
+  }
 }

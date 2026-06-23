@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/response/response.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -49,7 +50,7 @@ void main() {
       final onBoardingRequest = AtOnboardingRequest(apkamAtSign)
         ..appName = 'wavi'
         ..deviceName = 'pixel1'
-        ..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64)
+        ..rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort)
         ..atKeysIo =
             FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys');
       // onboard with enable enrollment set
@@ -65,7 +66,7 @@ void main() {
         apkamAtSign,
         atKeysIo:
             FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
-      )..rootDomain = AtRootDomain('vip.ve.atsign.zone', 64));
+      )..rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort));
       expect(atAuthResponse.isSuccessful, true);
       expect(atAuthResponse.atAuthKeys, isNotNull);
 
@@ -73,7 +74,8 @@ void main() {
       var atClientPreference = AtClientPreference()
         ..commitLogPath = 'test/hive/commit/'
         ..hiveStoragePath = 'test/hive/client'
-        ..rootDomain = 'vip.ve.atsign.zone';
+        ..rootDomain = 'vip.ve.atsign.zone'
+        ..rootPort = TestUtils.rootServerPort;
 
       final atClientManager = await AtClientManager(apkamAtSign)
           .setCurrentAtSign(apkamAtSign, namespace, atClientPreference,
@@ -99,8 +101,10 @@ void main() {
           AtKey.self('email', namespace: 'buzz', sharedBy: apkamAtSign).build();
       value = 'test@gmail.com';
       AtResponse putBuzzKeyResponse = await atClient.putText(atKey, value);
+      // Commit-log-free: a local-first write carries no commit id (the
+      // server assigns one on sync), so the response is non-empty but not
+      // a positive commit number. Assert it succeeded, not a commit id.
       expect(putBuzzKeyResponse.response, isNotEmpty);
-      expect(int.parse(putBuzzKeyResponse.response), greaterThan(0));
     });
   });
 
@@ -178,7 +182,7 @@ void main() {
           namespaces: {'buzz': 'rw'},
           otp: 'a1b2c3'); //random invalid OTP
       var atEnrollment = AtEnrollment.create();
-      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
+      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       expect(
           () async => atEnrollment.submit(enrollmentRequest, newAtLookup),
           throwsA(predicate((dynamic e) =>
@@ -200,7 +204,7 @@ void main() {
           namespaces: {'buzz': 'rw'},
           otp: otp);
       var atEnrollment = AtEnrollment.create();
-      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
+      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       var enrollmentResponse =
           await atEnrollment.submit(enrollmentRequest, newAtLookup);
       expect(enrollmentResponse.enrollmentId, isNotEmpty);
@@ -363,7 +367,7 @@ void main() {
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
           AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', 64);
+      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);
@@ -460,7 +464,7 @@ void main() {
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
           AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', 64);
+      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       expect(
           () async => await atAuth.authenticate(atAuthRequest),
@@ -557,7 +561,7 @@ void main() {
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
           AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', 64);
+      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);
@@ -611,7 +615,7 @@ void main() {
         () async {
       String random = Uuid().v4().hashCode.toString();
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
-      AtLookUp atLookUp = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
+      AtLookUp atLookUp = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       AtClientManager atClientManager =
           await TestUtils.initAtClient(atSign, namespace);
@@ -665,11 +669,163 @@ void main() {
     });
     //To prevent failure due to latency, adding timeout for client to receive notifications sent from the server.
   }, timeout: Timeout(Duration(minutes: 1)));
+
+  group('Full enrollment round trip on a freshly CRAM-onboarded atSign', () {
+    test(
+        'CRAM onboard, generate OTP, enroll a second app, approve it, and '
+        'verify the enrolled client can act only within its granted namespace',
+        () async {
+      final cramAtSign = ConfigUtil.getYaml()['atSign']['apkamSecondAtSign'];
+      final cramSecret = cramKeyMap[cramAtSign]!;
+      String keysFilePath(String a) => 'test/testData/$a.atKeys';
+      final rootDomain = AtRootDomain('vip.ve.atsign.zone', 64);
+
+      // Onboarding refuses to run if a keys file already exists, so clear any
+      // left over from a prior run — this test mints @sachin's keys fresh
+      // against the (recycled) atServer.
+      final existingKeys = File(keysFilePath(cramAtSign));
+      if (existingKeys.existsSync()) {
+        existingKeys.deleteSync();
+      }
+
+      // (a) Initial onboarding with the CRAM secret. Mints the first
+      // (manage-capable) enrollment plus the atSign's key set, writes the
+      // .atKeys file; authenticate to load those keys into AtChops.
+      final ownerAuth = AtAuth.create();
+      final onboardResponse = await ownerAuth.onboard(
+        AtOnboardingRequest(cramAtSign)
+          ..appName = 'wavi'
+          ..deviceName = 'pixel-onboard'
+          ..rootDomain = rootDomain
+          ..atKeysIo = FileAtKeysIo(filePath: keysFilePath),
+        cramSecret,
+      );
+      expect(onboardResponse.isSuccessful, true);
+      expect(onboardResponse.enrollmentId, isNotEmpty);
+
+      final ownerAuthResponse = await ownerAuth.authenticate(
+        AtAuthRequest(cramAtSign,
+            atKeysIo: FileAtKeysIo(filePath: keysFilePath))
+          ..rootDomain = rootDomain,
+      );
+      expect(ownerAuthResponse.isSuccessful, true);
+
+      final ownerManager = await AtClientManager.getInstance().setCurrentAtSign(
+          cramAtSign, namespace, TestUtils.getPreference(cramAtSign),
+          atChops: ownerAuth.atChops,
+          enrollmentId: onboardResponse.enrollmentId);
+      final ownerClient = ownerManager.atClient;
+
+      // The atSign's default encryption keypair and self-encryption key are
+      // atSign-wide (shared across enrollments). Read them from the owner's
+      // AtChops to hand to the enrollee for authentication later.
+      final encryptionKeyPair =
+          ownerAuth.atChops!.atChopsKeys.atEncryptionKeyPair!;
+      final selfEncryptionKey =
+          ownerAuth.atChops!.atChopsKeys.selfEncryptionKey!.key;
+
+      // The enrollee fetches publickey<atSign> to wrap its apkamSymmetricKey,
+      // so ensure it is published.
+      await ownerClient.getRemoteSecondary()!.executeCommand(
+          'update:public:publickey$cramAtSign ${encryptionKeyPair.atPublicKey.publicKey}\n',
+          auth: true);
+
+      // (b) Generate an OTP from the onboarded (manage-capable) client.
+      final otp = (await ownerClient.getOTP()).response;
+      expect(otp.length, 6);
+
+      // (c) A second app submits an enrollment request with the OTP. submit
+      // generates a fresh APKAM keypair and wraps its apkamSymmetricKey with
+      // the atSign's default encryption public key.
+      final random = Uuid().v4().hashCode;
+      final enrolleeLookup = AtLookupImpl(cramAtSign, 'vip.ve.atsign.zone', 64);
+      final enrollResponse = await AtEnrollment.create().submit(
+        AtEnrollmentRequest(
+          atSign: cramAtSign,
+          appName: 'buzz-$random',
+          deviceName: 'pixel-enrollee',
+          otp: otp,
+          namespaces: {'buzz': 'rw'},
+        ),
+        enrolleeLookup,
+      );
+      expect(enrollResponse.enrollmentId, isNotEmpty);
+      expect(enrollResponse.enrollStatus, EnrollmentStatus.pending);
+
+      // (d) The owner approves the request. enroll:fetch returns the
+      // encryptedAPKAMSymmetricKey, which approve decrypts with the atSign's
+      // encryption private key and re-wraps for the new enrollment.
+      var fetchResponse = await ownerClient.getRemoteSecondary()!.executeCommand(
+          'enroll:fetch:{"enrollmentId":"${enrollResponse.enrollmentId}"}\n',
+          auth: true);
+      final fetched = Enrollment.fromJSON(
+          jsonDecode(fetchResponse!.replaceAll('data:', '')));
+      final approveResponse = await ownerClient.enrollmentService?.approve(
+          EnrollmentRequestDecision.approved(
+              enrollmentId: enrollResponse.enrollmentId,
+              atSign: cramAtSign,
+              apkamSymmetricKey:
+                  AtBytes.fromString(fetched.encryptedAPKAMSymmetricKey!)));
+      expect(approveResponse?.enrollStatus, EnrollmentStatus.approved);
+
+      // (e) Verify outcomes: the enrollee authenticates with its own APKAM
+      // keypair plus the atSign's default encryption/self keys, then can act in
+      // its granted namespace (buzz) but not in an ungranted one (wavi).
+      AtClientManager.getInstance().reset();
+      AtClientImpl.atClientInstanceMap.clear();
+
+      final enrolleeChopsKeys = AtChopsKeys.create(
+          AtEncryptionKeyPair.create(encryptionKeyPair.atPublicKey.publicKey,
+              encryptionKeyPair.atPrivateKey.privateKey),
+          AtPkamKeyPair.create(
+              enrollResponse.atAuthKeys!.apkamPublicKey!.toString(),
+              enrollResponse.atAuthKeys!.apkamPrivateKey!.toString()))
+        ..selfEncryptionKey = AESKey(selfEncryptionKey);
+      final enrolleeChops = AtChopsImpl(enrolleeChopsKeys);
+
+      final enrolleeAuth = AtAuth.create(atChops: enrolleeChops);
+      final enrolleeAuthRequest = AtAuthRequest(cramAtSign,
+          atKeysIo: FileAtKeysIo(filePath: keysFilePath))
+        ..enrollmentId = enrollResponse.enrollmentId
+        ..atAuthKeys = enrollResponse.atAuthKeys
+        ..rootDomain = rootDomain;
+      enrolleeAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
+          AtBytes.fromString(encryptionKeyPair.atPrivateKey.privateKey);
+      enrolleeAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
+          AtBytes.fromString(selfEncryptionKey);
+      final enrolleeAuthResponse =
+          await enrolleeAuth.authenticate(enrolleeAuthRequest);
+      expect(enrolleeAuthResponse.isSuccessful, true);
+
+      await AtClientManager.getInstance().setCurrentAtSign(
+          cramAtSign, 'buzz', TestUtils.getPreference(cramAtSign),
+          atChops: enrolleeChops, enrollmentId: enrollResponse.enrollmentId);
+      final enrolleeClient = AtClientManager.getInstance().atClient;
+
+      // Granted namespace (buzz): write then read back.
+      final buzzKey =
+          AtKey.self('mobile', namespace: 'buzz', sharedBy: cramAtSign).build();
+      final putResponse = await enrolleeClient.putText(buzzKey, '99899');
+      expect(putResponse.response, isNotEmpty);
+      final getValue = await enrolleeClient.get(buzzKey);
+      expect(getValue.value, '99899');
+
+      // Ungranted namespace (wavi): the server rejects the write.
+      final waviKey =
+          AtKey.self('phone', namespace: 'wavi', sharedBy: cramAtSign).build();
+      expect(
+          () async => await enrolleeClient.putText(waviKey, '123'),
+          throwsA(predicate((dynamic e) =>
+              e is AtClientException &&
+              e.message.contains('insufficient privilege'))));
+    }, timeout: Timeout(Duration(minutes: 2)));
+  });
 }
 
 AtClientPreference getClient2Preferences() {
   return AtClientPreference()
     ..commitLogPath = 'test/hive/client_2/commit'
     ..hiveStoragePath = 'test/hive/client_2'
-    ..rootDomain = 'vip.ve.atsign.zone';
+    ..rootDomain = 'vip.ve.atsign.zone'
+    ..rootPort = TestUtils.rootServerPort;
 }

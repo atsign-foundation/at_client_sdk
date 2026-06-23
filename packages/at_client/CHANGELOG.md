@@ -1,3 +1,15 @@
+## 3.13.0
+- refactor: migrate the local keystore to `at_persistence_secondary_server`
+  5.0.0 — the client is now commit-log-free. The client no longer maintains a
+  local commit log or runs commit-log compaction; sync tracks its progress
+  with a persisted pull cursor, and key-expiry processing is driven by the
+  keystore's `nextExpiresAt` / `peekNewlyAvailable` surface. Requires
+  `at_persistence_secondary_server ^5.0.0`.
+- deprecated: `AtClient.startCompactionJob` and `AtClient.stopCompactionJob`
+  are retained for source compatibility but are now no-ops (a commit-log-free
+  client has no commit log to compact); they will be removed in a future
+  major release.
+
 ## 3.12.0
 
 Several significant enhancements to the API to make it much easier to use.
@@ -10,6 +22,12 @@ Several significant enhancements to the API to make it much easier to use.
   easier to use than the old (still fine to use) `notify` method.
 - feat: added `factory AtRpc.server` to make it much simpler to create AtRpc 
   servers. 
+- feat: added preference-time crypto provider configuration via
+  `AtClientPreference.crypto`, `CryptoConfig`, and
+  `CryptoProvider`.
+- feat: added `CryptoStorage` to provider context for provider-owned local /
+  remote state, plus `CryptoPolicy.onProviderNotFound` for lazy
+  provider registration with a single retry.
 - fix(AtCollection): notification-path sub-item dispatch now recovers
   ancestor owners directly from the decrypted notification payload
   (which IS the envelope) instead of round-tripping through the local

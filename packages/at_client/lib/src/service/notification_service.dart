@@ -83,6 +83,7 @@ abstract class NotificationService {
     required String namespace,
     String body = '',
     bool shouldEncrypt = true,
+    String? cryptoProviderId,
     Duration expiration = NotificationService.defaultExpiration,
     bool cacheAtRecipient = false,
     DateTime? recipientCacheExpiration,
@@ -248,6 +249,7 @@ class NotificationParams {
   int _latestN = 1;
   String _notifier = AtConstants.system;
   Duration _notificationExpiry = Duration(hours: 24);
+  String? _cryptoProviderId;
 
   String get id => _id;
 
@@ -270,6 +272,8 @@ class NotificationParams {
 
   Duration get notificationExpiry => _notificationExpiry;
 
+  String? get cryptoProviderId => _cryptoProviderId;
+
   /// Returns [NotificationParams] to send an update notification.
   ///
   /// Optionally accepts the following
@@ -290,7 +294,8 @@ class NotificationParams {
       StrategyEnum strategy = StrategyEnum.all,
       int latestN = 1,
       String notifier = AtConstants.system,
-      Duration? notificationExpiry}) {
+      Duration? notificationExpiry,
+      String? cryptoProviderId}) {
     return NotificationParams()
       .._id = Uuid().v4()
       .._atKey = atKey
@@ -301,16 +306,18 @@ class NotificationParams {
       .._strategy = strategy
       .._latestN = latestN
       .._notifier = notifier
-      .._notificationExpiry = notificationExpiry ?? Duration(hours: 24);
+      .._notificationExpiry = notificationExpiry ?? Duration(hours: 24)
+      .._cryptoProviderId = cryptoProviderId;
   }
 
   /// Returns [NotificationParams] to send a delete notification.
-  static NotificationParams forDelete(AtKey atKey) {
+  static NotificationParams forDelete(AtKey atKey, {String? cryptoProviderId}) {
     return NotificationParams()
       .._id = Uuid().v4()
       .._atKey = atKey
       .._operation = OperationEnum.delete
-      .._messageType = MessageTypeEnum.key;
+      .._messageType = MessageTypeEnum.key
+      .._cryptoProviderId = cryptoProviderId;
   }
 
   /// Returns [NotificationParams] to send a text message to another atSign.
@@ -318,7 +325,7 @@ class NotificationParams {
   /// platform level lower case enforcement will not apply to forText notifications
   @Deprecated('No longer supported')
   static NotificationParams forText(String text, String whomToNotify,
-      {bool shouldEncrypt = false}) {
+      {bool shouldEncrypt = false, String? cryptoProviderId}) {
     var atKey = AtKey()
       ..key = text
       ..sharedWith = whomToNotify
@@ -327,7 +334,8 @@ class NotificationParams {
       .._id = Uuid().v4()
       .._atKey = atKey
       .._operation = OperationEnum.update
-      .._messageType = MessageTypeEnum.text;
+      .._messageType = MessageTypeEnum.text
+      .._cryptoProviderId = cryptoProviderId;
   }
 }
 

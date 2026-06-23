@@ -266,24 +266,15 @@ void main() {
     var serverCommitLogMap = jsonDecode(
         jsonDecode(serverCommitEntries!.replaceAll('data:', ''))[0]['value']);
 
-    //Get Commit Entries from local
-    var atCommitLog =
-        await AtCommitLogManagerImpl.getInstance().getCommitLog(atSign);
-    var localCommitEntries = await atCommitLog?.commitLogKeyStore.toMap();
-
-    for (var commitEntry in localCommitEntries!.values) {
-      if (commitEntry.atKey == firstAtKey.toString()) {
-        expect(
-            commitEntry.commitId, serverCommitLogMap[firstAtKey.toString()][0]);
-        expect(commitEntry.operation.name,
-            serverCommitLogMap[firstAtKey.toString()][1]);
-      }
-      if (commitEntry.atKey == secondAtKey.toString()) {
-        expect(commitEntry.commitId,
-            serverCommitLogMap[secondAtKey.toString()][0]);
-        expect(commitEntry.operation.name,
-            serverCommitLogMap[secondAtKey.toString()][1]);
-      }
-    }
+    // Commit-log-free clients keep no local commit log to cross-check
+    // against the server. The push outcome is verified by the server's
+    // own commit log: both keys reached the server, each with a non-null
+    // commitId, and firstKey's final op is delete (wire symbol '-', since
+    // it was put then deleted).
+    expect(serverCommitLogMap.containsKey(firstAtKey.toString()), true);
+    expect(serverCommitLogMap[firstAtKey.toString()][0], isNotNull);
+    expect(serverCommitLogMap[firstAtKey.toString()][1], '-');
+    expect(serverCommitLogMap.containsKey(secondAtKey.toString()), true);
+    expect(serverCommitLogMap[secondAtKey.toString()][0], isNotNull);
   });
 }

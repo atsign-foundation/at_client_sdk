@@ -16,7 +16,18 @@ void main() {
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    final preference = TestUtils.getPreference(atSign)
+      ..crypto = CryptoConfig(
+        defaultProviderId: 'legacy',
+        providers: [
+          TestProvider('test'),
+        ],
+      );
+    atClientManager = await TestUtils.initAtClient(
+      atSign,
+      namespace,
+      preference: preference,
+    );
     atClientManager.atClient.syncService.sync();
   });
 
@@ -58,7 +69,7 @@ void main() {
         .getLocalSecondary()!
         .keyStore!
         .get(phoneKey.toString());
-    expect(getKeyStoreResult.data, value);
+    expect(getKeyStoreResult!.data, value);
     var getResult = await atClientManager.atClient.get(phoneKey);
     expect(getResult.value, value);
     expect(getResult.metadata?.isEncrypted, false);
@@ -150,10 +161,65 @@ void main() {
     var getResult = await atClientManager.atClient.get(phoneKey);
     expect(getResult.value, value);
   });
+
+  test('put method - using pluggable encryption', () async {
+    var phoneKey = AtKey()
+      ..key = 'city.${DateTime.now().microsecondsSinceEpoch}'
+      ..sharedBy = atSign;
+    var value = 'copenhagen';
+    PutRequestOptions options = PutRequestOptions()
+      ..cryptoProviderId = 'test'
+      ..shouldEncrypt = true;
+    var putResult = await atClientManager.atClient.put(
+      phoneKey,
+      value,
+      putRequestOptions: options,
+    );
+    expect(putResult, true);
+
+    var getResult = await atClientManager.atClient.get(phoneKey);
+    expect(getResult.value, 'decrypted');
+    expect(getResult.metadata?.appMetadata?.providerId, 'test');
+  });
+
+  test('put method - using pluggable encryption: failure', () async {
+    var phoneKey = AtKey()..key = 'city';
+    var value = 'copenhagen';
+    PutRequestOptions options = PutRequestOptions()
+      ..cryptoProviderId = 'testfail'
+      ..shouldEncrypt = true;
+
+    expect(
+      () async => await atClientManager.atClient.put(
+        phoneKey,
+        value,
+        putRequestOptions: options,
+      ),
+      throwsA(isA<CryptoProviderNotRegistered>()),
+    );
+  });
 }
 
 Uint8List _getBinaryData(dynamic filePath) {
   var dir = Directory.current.path;
   var pathToFile = '$dir$filePath';
   return File(pathToFile).readAsBytesSync();
+}
+
+class TestProvider extends CryptoProvider {
+  @override
+  final String id;
+
+  TestProvider(this.id);
+
+  // The runtime stamps appMetadata.providerId (= id) + isEncrypted on return.
+  @override
+  Future<String> encrypt(
+          CryptoContext context, AtKey atKey, String plaintext) async =>
+      'encrypted';
+
+  @override
+  Future<String> decrypt(
+          CryptoContext context, AtKey atKey, String ciphertext) async =>
+      'decrypted';
 }

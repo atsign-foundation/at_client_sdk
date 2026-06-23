@@ -2,7 +2,8 @@
 
 import 'dart:async';
 
-import 'package:at_client/src/encryption_service/encryption.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
@@ -13,16 +14,20 @@ import 'package:at_commons/at_commons.dart';
 /// Class is responsible for taking the [NotificationParams] and converting into [NotifyVerbBuilder]
 class NotificationRequestTransformer
     implements Transformer<NotificationParams, VerbBuilder> {
-  late String currentAtSign;
-  late AtClientPreference atClientPreference;
-  late AtKeyEncryption atKeyEncryption;
+  String get currentAtSign => _atClient.getCurrentAtSign()!;
+  AtClientPreference get atClientPreference => _atClient.getPreferences()!;
+  final AtClient _atClient;
 
-  NotificationRequestTransformer(
-      this.currentAtSign, this.atClientPreference, this.atKeyEncryption);
+  NotificationRequestTransformer(this._atClient);
 
   @override
   Future<NotifyVerbBuilder> transform(
       NotificationParams notificationParams) async {
+    if (_shouldRouteThroughProvider(notificationParams)) {
+      notificationParams.atKey.metadata.appMetadata ??= AppMetadata(
+          providerId: notificationParams.cryptoProviderId ??
+              atClientPreference.crypto.defaultProviderId);
+    }
     // prepares notification builder
     NotifyVerbBuilder builder = await _prepareNotificationBuilder(
         notificationParams, atClientPreference);
@@ -123,15 +128,22 @@ class NotificationRequestTransformer
         notificationParams.atKey.metadata.skeEncAlgo;
     builder.atKey.metadata.pubKeyHash =
         notificationParams.atKey.metadata.pubKeyHash;
+    builder.atKey.metadata.appMetadata =
+        notificationParams.atKey.metadata.appMetadata;
   }
 
   Future<String> _encryptNotificationValue(AtKey atKey, String value) async {
-    try {
-      return await atKeyEncryption.encrypt(atKey, value);
-    } on AtException catch (e) {
-      e.stack(AtChainedException(Intent.notifyData,
-          ExceptionScenario.encryptionFailed, 'Failed to encrypt the data'));
-      rethrow;
+    return await CryptoRuntime(_atClient).encryptForNotification(atKey, value);
+  }
+
+  bool _shouldRouteThroughProvider(NotificationParams notificationParams) {
+    if (!notificationParams.atKey.metadata.isEncrypted) {
+      return false;
     }
+    if (notificationParams.value.isNotNull) {
+      return true;
+    }
+    // ignore: deprecated_member_use
+    return notificationParams.messageType == MessageTypeEnum.text;
   }
 }

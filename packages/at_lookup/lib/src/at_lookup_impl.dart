@@ -10,8 +10,6 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:crypto/crypto.dart';
-import 'package:crypton/crypton.dart';
 import 'package:mutex/mutex.dart';
 import 'package:at_chops/at_chops.dart';
 
@@ -175,15 +173,15 @@ class AtLookupImpl implements AtLookUp {
       publicKeyResult = publicKeyResult.replaceFirst(RegExp(r'^data:'), '');
       logger.finer('public key of $sharedBy :$publicKeyResult');
 
-      var publicKey = RSAPublicKey.fromString(publicKeyResult);
       var dataSignature = resultJson['metaData']['dataSignature'];
       var value = resultJson['data'];
       value = VerbUtil.getFormattedValue(value);
       logger.finer('value: $value dataSignature:$dataSignature');
-      var isDataValid = publicKey.verifySHA256Signature(
-          // ignore: unnecessary_cast
-          utf8.encode(value) as Uint8List,
-          base64Decode(dataSignature));
+      // RSA SHA-256 verify via at_chops (wraps the same crypton
+      // RSAPublicKey.verifySHA256Signature).
+      var isDataValid = PkamSigningAlgo(null, HashingAlgoType.sha256).verify(
+          Uint8List.fromList(utf8.encode(value)), base64Decode(dataSignature),
+          publicKey: publicKeyResult);
       logger.finer('data verify result: $isDataValid');
       return 'data:$value';
     } on Exception catch (e) {
@@ -451,10 +449,11 @@ class AtLookupImpl implements AtLookUp {
         }
         fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
         logger.finer('fromResponse $fromResponse');
-        var key = RSAPrivateKey.fromString(privateKey);
-        var sha256signature =
-            // ignore: unnecessary_cast
-            key.createSHA256Signature(utf8.encode(fromResponse) as Uint8List);
+        // RSA SHA-256 sign via at_chops (wraps the same crypton
+        // RSAPrivateKey.createSHA256Signature; only the private key is used).
+        var sha256signature = PkamSigningAlgo(
+                AtPkamKeyPair.create('', privateKey), HashingAlgoType.sha256)
+            .sign(Uint8List.fromList(utf8.encode(fromResponse)));
         var signature = base64Encode(sha256signature);
         logger.finer('Sending command pkam:$signature');
         await _sendCommand('pkam:$signature\n');
@@ -541,7 +540,8 @@ class AtLookupImpl implements AtLookUp {
         fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
         var digestInput = '$secret$fromResponse';
         var bytes = utf8.encode(digestInput);
-        var digest = sha512.convert(bytes);
+        // SHA-512 hex digest via at_chops (= sha512.convert(bytes).toString()).
+        var digest = SHA512HashingAlgo().hash(bytes);
         await _sendCommand('cram:$digest\n');
         var cramResponse = await messageListener.read(
             transientWaitTimeMillis: 4000, maxWaitMilliSeconds: 10000);

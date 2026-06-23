@@ -1,11 +1,8 @@
-import 'package:at_chops/src/key/keys.dart';
+import 'package:at_chops/src/key/impl/x25519_key_pair.dart';
 
-/// X25519 key pair used for Diffie–Hellman key agreement.
-///
-/// Both public and private keys are 32-byte raw values encoded as base64
-/// strings, so they fit the existing [AsymmetricKeyPair] String contract.
-/// Callers consuming the bytes should `base64Decode` at the algorithm
-/// boundary.
-class AtX25519KeyPair extends AsymmetricKeyPair {
+@Deprecated(
+    'Use X25519KeyPair instead. This compatibility wrapper will be removed '
+    'in the next major release.')
+class AtX25519KeyPair extends X25519KeyPair {
   AtX25519KeyPair.create(super.publicKey, super.privateKey) : super.create();
 }
