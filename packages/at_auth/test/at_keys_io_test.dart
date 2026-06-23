@@ -2,9 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
-import 'package:at_auth/src/keys/at_keys.dart';
+import 'package:at_auth/src/keys/at_keys_legacy.dart';
 import 'package:at_auth/src/keys/at_keys_io_impl.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';

@@ -1,4 +1,5 @@
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/src/keys/at_keys_legacy.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:meta/meta.dart';
 

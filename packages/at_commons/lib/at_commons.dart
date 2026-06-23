@@ -16,7 +16,6 @@ export 'package:at_commons/src/exception/at_exceptions.dart';
 export 'package:at_commons/src/exception/at_server_exceptions.dart';
 export 'package:at_commons/src/exception/error_message.dart';
 export 'package:at_commons/src/key/atbytes.dart';
-export 'package:at_commons/src/key/atkeys.dart';
 export 'package:at_commons/src/keystore/at_key.dart';
 export 'package:at_commons/src/keystore/key_type.dart';
 export 'package:at_commons/src/shared_key_status.dart';

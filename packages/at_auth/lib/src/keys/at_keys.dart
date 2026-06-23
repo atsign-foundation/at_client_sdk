@@ -1,184 +1,175 @@
-import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 
-class AtKeys {
-  AtBytes? apkamPublicKey;
-  AtBytes? apkamPrivateKey;
-  AtBytes? defaultEncryptionPublicKey;
-  AtBytes? defaultEncryptionPrivateKey;
-  AtBytes? defaultSelfEncryptionKey;
-  AtBytes? apkamSymmetricKey;
+abstract final class KeyPurposes {
+  static const pkam = 'pkam';
+  static const encryption = 'encryption';
+  static const signing = 'signing';
+  static const selfEncryption = 'self-encryption';
+  static const apkamSymmetric = 'apkam-symmetric';
+}
+
+bool? keyPurposeUsesAsymmetricPair(String purpose) {
+  return switch (purpose) {
+    KeyPurposes.pkam || KeyPurposes.encryption || KeyPurposes.signing => true,
+    KeyPurposes.selfEncryption || KeyPurposes.apkamSymmetric => false,
+    _ => null,
+  };
+}
+
+enum KeyRotationStatus {
+  active,
+  retired,
+  dead,
+}
+
+class KeyFingerprint {
+  final String algorithm;
+  final AtBytes value;
+
+  const KeyFingerprint({
+    required this.algorithm,
+    required this.value,
+  });
+}
+
+class KeyProtection {
+  final String keyRef;
+  final String algorithm;
+  final String iv;
+
+  const KeyProtection({
+    required this.keyRef,
+    required this.algorithm,
+    required this.iv,
+  });
+}
+
+class KeyRotation {
+  final KeyRotationStatus status;
+  final DateTime createdAt;
+  final DateTime retiredAt;
+
+  const KeyRotation({
+    required this.status,
+    required this.createdAt,
+    required this.retiredAt,
+  });
+}
+
+class AtKeysSet {
+  final Atsign atsign;
   String? enrollmentId;
-  Map<String, dynamic> metadata = {};
+  final List<AtAsymmetricKey> asymmetricKeys;
+  final List<AtSymmetricKey> symmetricKeys;
 
-  AtKeys();
+  AtKeysSet({
+    required this.atsign,
+    required this.asymmetricKeys,
+    required this.symmetricKeys,
+    this.enrollmentId,
+  });
 
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    if (other is! AtKeys) return false;
-    return enrollmentId == other.enrollmentId &&
-        apkamPublicKey == other.apkamPublicKey &&
-        apkamPrivateKey == other.apkamPrivateKey &&
-        defaultEncryptionPublicKey == other.defaultEncryptionPublicKey &&
-        defaultEncryptionPrivateKey == other.defaultEncryptionPrivateKey &&
-        defaultSelfEncryptionKey == other.defaultSelfEncryptionKey &&
-        apkamSymmetricKey == other.apkamSymmetricKey;
+  void addKey(AtKeysMaterial key) {
+    switch (key) {
+      case AtAsymmetricKey():
+        _addAsymmetricKey(key);
+      case AtSymmetricKey():
+        _addSymmetricKey(key);
+    }
   }
 
-  @override
-  int get hashCode => Object.hash(enrollmentId, metadata);
-
-  Map<String, dynamic> toJson() {
-    return {
-      auth_constants.apkamPublicKey: apkamPublicKey?.toString(),
-      auth_constants.apkamPrivateKey: apkamPrivateKey?.toString(),
-      auth_constants.defaultEncryptionPublicKey:
-          defaultEncryptionPublicKey?.toString(),
-      auth_constants.defaultEncryptionPrivateKey:
-          defaultEncryptionPrivateKey?.toString(),
-      auth_constants.defaultSelfEncryptionKey:
-          defaultSelfEncryptionKey?.toString(),
-      auth_constants.apkamSymmetricKey: apkamSymmetricKey?.toString(),
-      'enrollmentId': enrollmentId,
-      for (var entry in metadata.entries)
-        if (!auth_constants.keySchemaList.contains(entry.key))
-          entry.key: entry.value
-    };
+  void addKeys(Iterable<AtKeysMaterial> keys) {
+    for (final key in keys) {
+      addKey(key);
+    }
   }
 
-  factory AtKeys.fromJson(Map<String, dynamic> json) {
-    var keys = AtKeys()
-      ..apkamPublicKey = _existsAndNotNull(json, auth_constants.apkamPublicKey)
-          ? AtBytes.fromString(json[auth_constants.apkamPublicKey])
-          : null
-      ..apkamPrivateKey =
-          _existsAndNotNull(json, auth_constants.apkamPrivateKey)
-              ? AtBytes.fromString(json[auth_constants.apkamPrivateKey])
-              : null
-      ..defaultEncryptionPublicKey = _existsAndNotNull(
-              json, auth_constants.defaultEncryptionPublicKey)
-          ? AtBytes.fromString(json[auth_constants.defaultEncryptionPublicKey])
-          : null
-      ..defaultEncryptionPrivateKey = _existsAndNotNull(
-              json, auth_constants.defaultEncryptionPrivateKey)
-          ? AtBytes.fromString(json[auth_constants.defaultEncryptionPrivateKey])
-          : null
-      ..defaultSelfEncryptionKey = _existsAndNotNull(
-              json, auth_constants.defaultSelfEncryptionKey)
-          ? AtBytes.fromString(json[auth_constants.defaultSelfEncryptionKey])
-          : null
-      ..apkamSymmetricKey =
-          _existsAndNotNull(json, auth_constants.apkamSymmetricKey)
-              ? AtBytes.fromString(json[auth_constants.apkamSymmetricKey])
-              : null
-      ..enrollmentId =
-          _existsAndNotNull(json, 'enrollmentId') ? json['enrollmentId'] : null;
-    for (var entry in json.entries) {
-      if (!auth_constants.keySchemaList.contains(entry.key)) {
-        keys.metadata[entry.key] = entry.value;
+  void _addAsymmetricKey(AtAsymmetricKey key) {
+    if (getKeyPair(key.pairId) != null) {
+      throw ArgumentError.value(key.pairId, 'pairId', 'Duplicate key pair');
+    }
+    asymmetricKeys.add(key);
+  }
+
+  void _addSymmetricKey(AtSymmetricKey key) {
+    if (getSymmetricKey(key.id) != null) {
+      throw ArgumentError.value(key.id, 'id', 'Duplicate symmetric key');
+    }
+    symmetricKeys.add(key);
+  }
+
+  AtAsymmetricKey? getKeyPair(String pairId) {
+    for (final key in asymmetricKeys) {
+      if (key.pairId == pairId) {
+        return key;
       }
     }
-    return keys;
+    return null;
   }
 
-  AtKeys copyWith(AtKeys other) {
-    var keys = AtKeys()
-      ..apkamPublicKey = other.apkamPublicKey ?? apkamPublicKey
-      ..apkamPrivateKey = other.apkamPrivateKey ?? apkamPrivateKey
-      ..defaultEncryptionPublicKey =
-          other.defaultEncryptionPublicKey ?? defaultEncryptionPublicKey
-      ..defaultEncryptionPrivateKey =
-          other.defaultEncryptionPrivateKey ?? defaultEncryptionPrivateKey
-      ..defaultSelfEncryptionKey =
-          other.defaultSelfEncryptionKey ?? defaultSelfEncryptionKey
-      ..apkamSymmetricKey = other.apkamSymmetricKey ?? apkamSymmetricKey
-      ..enrollmentId = other.enrollmentId ?? enrollmentId;
-    if (other.metadata.isNotEmpty) {
-      keys.metadata.addAll(other.metadata);
+  AtSymmetricKey? getSymmetricKey(String id) {
+    for (final key in symmetricKeys) {
+      if (key.id == id) {
+        return key;
+      }
     }
-    return keys;
-  }
-
-  AtChops toAtChops() {
-    //if the keys contain an apkamSymmetricKey, they're a apkam key
-    return switch (apkamSymmetricKey) {
-      AtBytes() => _createApkamChops(this),
-      null => _createPkamChops(this),
-    };
+    return null;
   }
 }
 
-// Splitting these implementations to improve understanding
+sealed class AtKeysMaterial {
+  const AtKeysMaterial();
 
-/// APKAMChops should contain:
-///   - apkamPublicKey
-///   - apkamPrivateKey
-///   - usual PKAM keys
-/// As well as APKAMChops can potentially have two states:
-///   - approval
-///   - post approval
-/// During approval: the enroll will wait to confirm via PKAM
-/// post approval: we fetch the defaultEncryptionPrivateKey & defaultSelfEncryptionKey
-AtChops _createApkamChops(AtKeys atKeys) {
-  if (atKeys.apkamPublicKey == null) {
-    AtKeyNotFoundException(
-        "apkamPublicKey not found in AtKeys, unable to make atChops instance");
-  }
-  if (atKeys.apkamSymmetricKey == null) {
-    throw AtKeyNotFoundException(
-        "apkamSymmetricKey not found in AtKeys, unable to make atChops instance");
-  }
-  final atEncryptionKeyPair = AtEncryptionKeyPair.create(
-    atKeys.defaultEncryptionPublicKey!.toString(),
-    atKeys.defaultEncryptionPrivateKey == null
-        ? ''
-        : atKeys.defaultEncryptionPrivateKey!.toString(),
-  );
-
-  final atPkamKeyPair = AtPkamKeyPair.create(
-    atKeys.apkamPublicKey!.toString(),
-    atKeys.apkamPrivateKey!.toString(),
-  );
-
-  final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
-    ..apkamSymmetricKey = AESKey(atKeys.apkamSymmetricKey!.toString());
-
-  if (atKeys.defaultSelfEncryptionKey != null) {
-    atChopsKeys.selfEncryptionKey =
-        AESKey(atKeys.defaultSelfEncryptionKey!.toString());
-  }
-
-  return AtChopsImpl(atChopsKeys);
+  String get purpose;
+  String get algorithm;
 }
 
-AtChops _createPkamChops(AtKeys atKeys) {
-  if (atKeys.defaultEncryptionPrivateKey == null) {
-    throw AtPrivateKeyNotFoundException(
-        'PKAM mode requires defaultEncryptionPrivateKey');
-  }
-  if (atKeys.apkamPrivateKey == null) {
-    throw AtPrivateKeyNotFoundException(
-        'PKAM mode requries defaultPkamPrivateKey');
-  }
+class AtAsymmetricKey implements AtKeysMaterial {
+  final String pairId;
+  @override
+  final String purpose;
+  @override
+  final String algorithm;
+  final KeyFingerprint? fingerprint;
+  final AtBytes publicKey;
+  final AtBytes privateKey;
+  final KeyProtection? publicKeyProtection;
+  final KeyProtection? privateKeyProtection;
+  final KeyRotation? rotation;
+  final List<String> operations;
 
-  final atEncryptionKeyPair = AtEncryptionKeyPair.create(
-    atKeys.defaultEncryptionPublicKey!.toString(),
-    atKeys.defaultEncryptionPrivateKey!.toString(),
-  );
-
-  final atPkamKeyPair = AtPkamKeyPair.create(
-    atKeys.apkamPublicKey!.toString(),
-    atKeys.apkamPrivateKey!.toString(),
-  );
-
-  final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
-    ..selfEncryptionKey = AESKey(atKeys.defaultSelfEncryptionKey!.toString());
-
-  return AtChopsImpl(atChopsKeys);
+  const AtAsymmetricKey({
+    required this.pairId,
+    required this.purpose,
+    required this.algorithm,
+    required this.publicKey,
+    required this.privateKey,
+    this.fingerprint,
+    this.publicKeyProtection,
+    this.privateKeyProtection,
+    this.rotation,
+    this.operations = const [],
+  });
 }
 
-bool _existsAndNotNull(Map<String, dynamic> json, String key) {
-  return json.containsKey(key) && json[key] != null;
+class AtSymmetricKey implements AtKeysMaterial {
+  final String id;
+  @override
+  final String purpose;
+  @override
+  final String algorithm;
+  final AtBytes bytes;
+  final KeyProtection? protection;
+  final KeyRotation? rotation;
+  final List<String> operations;
+
+  const AtSymmetricKey({
+    required this.id,
+    required this.purpose,
+    required this.algorithm,
+    required this.bytes,
+    this.protection,
+    this.rotation,
+    this.operations = const [],
+  });
 }

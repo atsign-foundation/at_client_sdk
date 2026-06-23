@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'at_keys.dart' show AtKeys;
+import 'at_keys_legacy.dart' show AtKeys;
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
