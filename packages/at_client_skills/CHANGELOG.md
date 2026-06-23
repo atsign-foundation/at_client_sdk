@@ -1,5 +1,12 @@
 # Changelog — at_client_skills
 
+## 1.1.0 — 2026-06-23
+
+- Add `user-invocable: true` so the skill registers as a slash command.
+- Document the required macOS `file_picker` entitlement for the `.atKeys`
+  file login flow in `references/05-flutter-auth.md`.
+- Add an eval covering the macOS `ENTITLEMENT_NOT_FOUND` fix.
+
 ## 1.0.0 — 2026-06-08
 
 Initial release.

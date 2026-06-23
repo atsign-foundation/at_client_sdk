@@ -48,10 +48,3 @@ dart pub upgrade at_client_skills && dart run skills get
 When the official Dart/Flutter MCP server ships resource support
 <!-- pyml disable-next-line md013-->
 ([flutter.dev/go/packaged-ai-assets](https://flutter.dev/go/packaged-ai-assets)), this package will be updated to expose the skill content as MCP resources — no action needed on your end.
-
-## Validating the skill (maintainers)
-
-Maintainers can regression-test the skill end-to-end by having an agent build a
-deliberately comprehensive app from the skill alone. See
-[`validation/teamboard-skill-test.md`](validation/teamboard-skill-test.md) for
-the setup recipe and build prompt. (Not shipped to pub — see `.pubignore`.)
