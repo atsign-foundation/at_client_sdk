@@ -14,9 +14,10 @@ description: >
   at_invitation_flutter, at_sync_ui_flutter, and at_theme_flutter.
 license: BSD-3-Clause
 compatibility: Claude Code and any agentskills.io-compatible agent.
+user-invocable: true
 metadata:
-  version: "1.0.0"
-  last_modified: "Mon, 02 Jun 2026 00:00:00 GMT"
+  version: "1.1.0"
+  last_modified: "Tue, 23 Jun 2026 00:00:00 GMT"
 ---
 
 # atsign-dart-sdk Skill
