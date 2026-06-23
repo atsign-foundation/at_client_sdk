@@ -118,7 +118,7 @@ void main() {
           throwsA(predicate((e) =>
               e is AtSigningException &&
               e.toString().contains(
-                  'encryption key pair not set for default signing algo'))));
+                  'encryption key pair not set for rsa signing algo'))));
     });
     test('Test default verification - passing public key', () {
       var keyPair = AtChopsUtil.generateAtEncryptionKeyPair();

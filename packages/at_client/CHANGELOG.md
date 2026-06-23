@@ -22,6 +22,12 @@ Several significant enhancements to the API to make it much easier to use.
   easier to use than the old (still fine to use) `notify` method.
 - feat: added `factory AtRpc.server` to make it much simpler to create AtRpc 
   servers. 
+- feat: added preference-time crypto provider configuration via
+  `AtClientPreference.crypto`, `CryptoConfig`, and
+  `CryptoProvider`.
+- feat: added `CryptoStorage` to provider context for provider-owned local /
+  remote state, plus `CryptoPolicy.onProviderNotFound` for lazy
+  provider registration with a single retry.
 - fix(AtCollection): notification-path sub-item dispatch now recovers
   ancestor owners directly from the decrypted notification payload
   (which IS the envelope) instead of round-tripping through the local

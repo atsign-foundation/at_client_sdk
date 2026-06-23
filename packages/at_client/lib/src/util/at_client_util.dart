@@ -107,6 +107,8 @@ class AtClientUtil {
     metadata.isCached = isCached;
     metadata.pubKeyHash = PublicKeyHash.fromJson(
         metadataMap[AtConstants.sharedWithPublicKeyHash]);
+    metadata.appMetadata =
+        Metadata.decodeAppMetadata(metadataMap[AtConstants.appMetadata]);
 
     return metadata;
   }

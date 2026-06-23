@@ -110,6 +110,15 @@ class AtClientManager {
         atLookUp == null &&
         enrollmentId == null &&
         _currentAtClient!.isStopped == false) {
+      // The full stop/recreate path below recreates via AtClientImpl.create(),
+      // which adopts the supplied preference's crypto config onto a re-used
+      // cached client. The short-circuit skips create(), so adopt it here too —
+      // otherwise a same-atSign call carrying a new crypto config silently drops
+      // it, surfacing as CryptoProviderNotRegistered on the next put.
+      final existing = _currentAtClient;
+      if (existing is AtClientImpl) {
+        existing.getPreferences()?.crypto = preference.crypto;
+      }
       _logger
           .info('setCurrentAtSign: already on $atSign with no override args; '
               'returning existing atClient (no stop/recreate).');

@@ -3,14 +3,10 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
-
-class MockSecondaryAddressFinder extends Mock
-    implements SecondaryAddressFinder {}
-
-class MockAtLookUp extends Mock implements AtLookupImpl {}
+import 'test_utils/mocks.dart';
 
 void main() {
-  AtLookupImpl mockAtLookUp = MockAtLookUp();
+  AtLookupImpl mockAtLookUp = MockAtLookUpImpl();
   SecondaryAddressFinder mockSecondaryAddressFinder =
       MockSecondaryAddressFinder();
   SecondaryAddress fakeSecondaryAddress =

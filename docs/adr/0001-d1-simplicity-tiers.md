@@ -5,6 +5,13 @@
   "D1 — preserving legacy simplicity (two tiers)" and "Application migration &
   rollout".
 
+## Table of contents
+
+- [Context](#context)
+- [Decision](#decision)
+- [Consequences](#consequences)
+- [Alternatives considered](#alternatives-considered)
+
 ## Context
 
 D1's goal is post-quantum-safe messaging while **preserving the legacy
