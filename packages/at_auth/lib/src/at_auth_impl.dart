@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:at_auth/src/keys/atkeys.dart';
+import 'package:at_auth/src/keys/io/types.dart';
 import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
@@ -11,9 +13,8 @@ import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
-import 'package:at_auth/src/keys/at_keys_legacy.dart';
-import 'package:at_auth/src/keys/at_keys_io.dart';
-import 'package:at_auth/src/keys/at_keys_io_impl.dart';
+import 'package:at_auth/src/keys/legacy/at_keys_legacy.dart';
+import 'package:at_auth/src/keys/legacy/legacy_atkeysio.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
@@ -82,10 +83,14 @@ class AtAuthImpl implements AtAuth {
   ///
   /// returns an `AtAuthResponse` indicating success or failure of authentication
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
-    AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
+    AtKeysSet? atKeysSet = atAuthRequest.atAuthKeys?.toAtKeysSet(
+      atsign: atAuthRequest.atSign.toAtsign(),
+    );
     await validateAtServer(atAuthRequest);
     try {
-      atAuthKeys ??= await atAuthRequest.atKeysIo!.read(atAuthRequest.atSign);
+      atKeysSet ??= await atAuthRequest.atKeysIo!.read(
+        atAuthRequest.atSign.toAtsign(),
+      );
     } on AtKeyException catch (e) {
       _addProgress(
         "authentication",
@@ -97,14 +102,14 @@ class AtAuthImpl implements AtAuth {
       );
     }
 
-    atAuthRequest.enrollmentId ??= atAuthKeys.enrollmentId;
+    atAuthRequest.enrollmentId ??= atKeysSet.enrollmentId;
     atLookUp ??= AtLookupImpl(
       atAuthRequest.atSign,
       atAuthRequest.rootDomain.rootDomain,
       atAuthRequest.rootDomain.rootPort,
     );
     // ??= to support mocking
-    atChops ??= atAuthKeys.toAtChops();
+    atChops ??= AtKeys.fromAtKeysSet(atKeysSet).toAtChops();
     atLookUp!.atChops = atChops;
 
     _logger.finer('Authenticating using PKAM');
@@ -115,7 +120,7 @@ class AtAuthImpl implements AtAuth {
         ..isSuccessful = (await pkamAuthenticator!.authenticate(
             atAuthRequest.atSign, atLookUp!,
             enrollmentId: atAuthRequest.enrollmentId))
-        ..atAuthKeys = atAuthKeys
+        ..atAuthKeys = AtKeys.fromAtKeysSet(atKeysSet)
         ..atLookUp = atLookUp
         ..atChops = atChops;
 
@@ -169,9 +174,10 @@ class AtAuthImpl implements AtAuth {
 
     //If the user is providing atKeysIo, they might be onboarding again or with a specific key implementation.
     try {
-      atOnboardingRequest.atKeys = await atOnboardingRequest.atKeysIo?.read(
-        atOnboardingRequest.atSign,
+      AtKeysSet atKeysSet = await atOnboardingRequest.atKeysIo!.read(
+        atOnboardingRequest.atSign.toAtsign(),
       );
+      atOnboardingRequest.atKeys = AtKeys.fromAtKeysSet(atKeysSet);
     } catch (e, _) {
       _logger.info(
         'Failed to read keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
@@ -210,9 +216,8 @@ class AtAuthImpl implements AtAuth {
       //2a. if there is no specified implementation we're defaulting to FileAtKeysIo with a default file path
       atOnboardingRequest.atKeysIo ??= FileAtKeysIo();
       switch (atOnboardingRequest.atKeysIo) {
-        case WrittenAtKeysIo writtenKeys:
-          _atAuthKeys =
-              writtenKeys.generateKeyPairs(atSign: atOnboardingRequest.atSign);
+        case WrittenAtKeysIo _:
+          _atAuthKeys = FileAtKeysIoStatic.generateKeyPairs();
         default:
           throw AtAuthenticationException(
               'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');
@@ -264,7 +269,7 @@ class AtAuthImpl implements AtAuth {
     if (atOnboardingRequest.atKeysIo is WrittenAtKeysIo) {
       try {
         await (atOnboardingRequest.atKeysIo as WrittenAtKeysIo).write(
-          atOnboardingRequest.atSign,
+          atOnboardingRequest.atSign.toAtsign(),
           _atAuthKeys,
         );
         _logger.info(

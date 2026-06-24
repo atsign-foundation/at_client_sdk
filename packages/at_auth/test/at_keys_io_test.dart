@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
-import 'package:at_auth/src/keys/at_keys_legacy.dart';
-import 'package:at_auth/src/keys/at_keys_io_impl.dart';
+import 'package:at_auth/src/keys/legacy/at_keys_legacy.dart';
+import 'package:at_auth/src/keys/legacy/legacy_atkeysio.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -27,7 +27,8 @@ void main() {
 
     test('Test read() with valid atKeys file path', () async {
       final fileAtKeysIo = FileAtKeysIo(filePath: (_) => keyFilePath);
-      final atKeys = await fileAtKeysIo.read(atSign);
+      final atKeysSet = await fileAtKeysIo.read(atSign);
+      final atKeys = AtKeys.fromAtKeysSet(atKeysSet);
 
       expect(atKeys.apkamPrivateKey, isNotNull);
       expect(atKeys.apkamPublicKey, isNotNull);
@@ -48,7 +49,8 @@ void main() {
     test('Test read() without atKeys file path', () async {
       final fileAtKeysIo = FileAtKeysIo();
 
-      final atKeys = await fileAtKeysIo.read(atSign);
+      final atKeysSet = await fileAtKeysIo.read(atSign);
+      final atKeys = AtKeys.fromAtKeysSet(atKeysSet);
       expect(atKeys.apkamPrivateKey, isNotNull);
       expect(atKeys.apkamPublicKey, isNotNull);
       expect(atKeys.apkamSymmetricKey, isNotNull);
@@ -164,21 +166,22 @@ void main() {
 
 Future<void> matchesEncryptedAtKeys(AtKeys atKeys, String filePath,
     {String? passPhrase}) async {
-  final fileAtKeysIo =
-      FileAtKeysIo(filePath: (_) => filePath, passPhrase: passPhrase);
-
   Map<String, dynamic> atKeysFromFile =
       jsonDecode(File(filePath).readAsStringSync());
 
   // decrypt if passPhrase available
   if (passPhrase != null) {
-    atKeysFromFile =
-        await fileAtKeysIo.decodeAtKeys(atKeysFromFile, passPhrase: passPhrase);
+    atKeysFromFile = await FileAtKeysIoStatic.decodeAtKeys(
+      atKeysFromFile,
+      passPhrase: passPhrase,
+    );
   }
 
   // decrypt the atKeys read from file with self encryption key
-  AtKeys decryptedAtKeys = await fileAtKeysIo.decryptAtKeysWithSelfEncKey(
-      atKeysFromFile, PkamAuthMode.keysFile);
+  AtKeys decryptedAtKeys = await FileAtKeysIoStatic.decryptAtKeysWithSelfEncKey(
+    atKeysFromFile,
+    PkamAuthMode.keysFile,
+  );
 
   expect(decryptedAtKeys.apkamPrivateKey.toString(),
       atKeys.apkamPrivateKey.toString());

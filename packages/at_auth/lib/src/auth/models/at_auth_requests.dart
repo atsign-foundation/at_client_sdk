@@ -1,5 +1,5 @@
-import 'package:at_auth/src/keys/at_keys_legacy.dart';
-import 'package:at_auth/src/keys/at_keys_io.dart';
+import 'package:at_auth/src/keys/legacy/at_keys_legacy.dart';
+import 'package:at_auth/src/keys/io/types.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -65,6 +65,7 @@ class AtAuthRequest extends AuthRequest {
   ///
   /// optional:
   /// [rootDomain] is the default domain of the root server (e.g. root.atsign.org, 64)
+  // TODO: remove atAuthKeys from the request
   AtAuthRequest(
     super.atSign, {
     super.rootDomain,
@@ -85,9 +86,11 @@ class AtAuthRequest extends AuthRequest {
   String? enrollmentId;
 
   /// The keys for authentication of an atSign.
+  @Deprecated('Legacy, has not been used since 2.0.0')
   AtKeys? atAuthKeys;
 
   /// The contents of .atKeys file which contains the encrypted atKeys.
+  @Deprecated('Legacy, has not been used since 2.0.0')
   Map<String, dynamic>? encryptedKeysMap;
 }
 

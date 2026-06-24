@@ -1,3 +1,4 @@
+//TODO: v4 remove this and rely on constants from at_commons
 const String apkamPublicKey = 'aesPkamPublicKey';
 const String apkamPrivateKey = 'aesPkamPrivateKey';
 const String defaultEncryptionPublicKey = 'aesEncryptPublicKey';

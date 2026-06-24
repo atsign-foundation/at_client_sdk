@@ -1,7 +1,9 @@
-import 'package:at_auth/src/keys/at_keys_legacy.dart';
+import 'package:at_auth/src/keys/legacy/at_keys_legacy.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 
+// TODO: when doing at_auth 4.0.0, remove the AtChops, AtLookUp & AtKeys
+// and ideally return an AtRootDomain instance on return as well. (UX)
 sealed class AuthResponse {
   String atSign;
   bool isSuccessful = false;

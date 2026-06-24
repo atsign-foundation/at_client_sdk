@@ -1,10 +1,13 @@
-import 'package:at_auth/src/keys/at_keys.dart';
+import 'package:at_auth/src/keys/serialization/codec.dart';
+import 'package:at_auth/src/keys/serialization/document.dart';
+import 'package:at_auth/src/keys/serialization/resolver.dart';
+import 'package:at_auth/src/keys/atkeys.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
 void main() {
   group('AtKeysSet maps', () {
-    test('exposes map-backed keys as list-like getters', () {
+    test('exposes map-backed keys as iterable getters', () {
       final keyPair = _keyPair(pairId: 'default-pkam');
       final symmetricKey = _symmetricKey(id: 'self-encryption');
       final keys = _atKeysSet(
@@ -12,23 +15,18 @@ void main() {
         symmetricKey: symmetricKey,
       );
 
-      expect(keys.asymmetricKeys, [keyPair]);
+      expect(keys.keyPairs, [keyPair]);
       expect(keys.symmetricKeys, [symmetricKey]);
-      expect(
-        () => keys.asymmetricKeys.add(_keyPair(pairId: 'other-pkam')),
-        throwsUnsupportedError,
-      );
     });
 
     test('rejects duplicate identities in constructor and add', () {
       expect(
-        () => AtKeysSet(
+        () => WritableAtKeysSet(
           atsign: '@alice'.toAtsign(),
-          keyPairs: [
+          keys: [
             _keyPair(pairId: 'duplicate'),
             _keyPair(pairId: 'duplicate'),
           ],
-          symmetricKeys: const [],
         ),
         throwsArgumentError,
       );
@@ -83,17 +81,109 @@ void main() {
       expect(left, isNot(right));
     });
   });
+
+  group('AtKeys rotation serialization', () {
+    test('KeyRotation round trips through JSON', () {
+      final rotation = _rotation();
+
+      expect(KeyRotation.fromJson(rotation.toJson()), rotation);
+      expect(rotation.toJson(), {
+        'status': 'active',
+        'createdAt': '2026-01-01T00:00:00.000Z',
+        'retiredAt': '2027-01-01T00:00:00.000Z',
+      });
+    });
+
+    test('codec encodes and decodes rotation as an object', () {
+      final codec = AtKeysJsonCodec();
+      final rotation = _rotation();
+
+      final document = codec.decodeDocument({
+        'version': AtKeysJsonCodec.supportedVersion,
+        'atSign': '@alice',
+        'keys': [
+          {
+            'id': 'self-encryption',
+            'purpose': KeyPurposes.selfEncryption,
+            'kind': 'symmetric',
+            'algorithm': 'aes-256',
+            'rotation': rotation.toJson(),
+            'value': 'c3ltbWV0cmlj',
+          },
+        ],
+      });
+
+      expect(document.keys.single.rotation, rotation);
+
+      final encoded = codec.encodeDocument(document);
+      final encodedKey = (encoded['keys'] as List).single as Map;
+      expect(encodedKey['rotation'], rotation.toJson());
+      expect(encodedKey.containsKey('status'), isFalse);
+      expect(encodedKey.containsKey('createdAt'), isFalse);
+      expect(encodedKey.containsKey('retiredAt'), isFalse);
+    });
+
+    test('resolver preserves rotation between document and AtKeysSet', () {
+      final resolver = AtKeysDocumentResolver();
+      final rotation = _rotation();
+      final document = AtKeysDocument(
+        version: AtKeysDocumentResolver.version,
+        atsign: '@alice',
+        keys: [
+          KeyRecord(
+            id: 'default-pkam-public',
+            pairId: 'default-pkam',
+            purpose: KeyPurposes.pkam,
+            kind: KeyRecordKind.public,
+            algorithm: 'rsa-2048',
+            rotation: rotation,
+            bytes: AtBytes.fromString('cHVibGlj'),
+          ),
+          KeyRecord(
+            id: 'default-pkam-private',
+            pairId: 'default-pkam',
+            purpose: KeyPurposes.pkam,
+            kind: KeyRecordKind.private,
+            algorithm: 'rsa-2048',
+            rotation: rotation,
+            bytes: AtBytes.fromString('cHJpdmF0ZQ=='),
+          ),
+          KeyRecord(
+            id: 'self-encryption',
+            purpose: KeyPurposes.selfEncryption,
+            kind: KeyRecordKind.symmetric,
+            algorithm: 'aes-256',
+            rotation: rotation,
+            bytes: AtBytes.fromString('c3ltbWV0cmlj'),
+          ),
+        ],
+      );
+
+      final keys = resolver.resolve(document);
+
+      expect(keys.getKeyPair('default-pkam')!.rotation, rotation);
+      expect(keys.getSymmetricKey('self-encryption')!.rotation, rotation);
+
+      final resolvedDocument = resolver.resolveToDocument(keys);
+      expect(
+        resolvedDocument.keys.map((record) => record.rotation),
+        everyElement(equals(rotation)),
+      );
+    });
+  });
 }
 
-AtKeysSet _atKeysSet({
+WritableAtKeysSet _atKeysSet({
   AtKeyPair? keyPair,
   AtSymmetricKey? symmetricKey,
 }) {
-  return AtKeysSet(
+  return WritableAtKeysSet(
     atsign: '@alice'.toAtsign(),
     enrollmentId: 'enrollment',
-    keyPairs: [keyPair ?? _keyPair()],
-    symmetricKeys: [symmetricKey ?? _symmetricKey()],
+    keys: [
+      keyPair ?? _keyPair(),
+      symmetricKey ?? _symmetricKey(),
+    ],
   );
 }
 
@@ -121,11 +211,7 @@ AtKeyPair _keyPair({
       algorithm: 'aes-256-ctr',
       iv: 'AAAAAAAAAAAAAAAAAAAAAA==',
     ),
-    rotation: KeyRotation(
-      status: KeyRotationStatus.active,
-      createdAt: DateTime.utc(2026),
-      retiredAt: DateTime.utc(2027),
-    ),
+    rotation: _rotation(),
     operations: operations,
   );
 }
@@ -144,11 +230,15 @@ AtSymmetricKey _symmetricKey({
       algorithm: 'aes-256-ctr',
       iv: 'AAAAAAAAAAAAAAAAAAAAAA==',
     ),
-    rotation: KeyRotation(
-      status: KeyRotationStatus.active,
-      createdAt: DateTime.utc(2026),
-      retiredAt: DateTime.utc(2027),
-    ),
+    rotation: _rotation(),
     operations: const ['encrypt', 'decrypt'],
+  );
+}
+
+KeyRotation _rotation() {
+  return KeyRotation(
+    status: KeyRotationStatus.active,
+    createdAt: DateTime.utc(2026),
+    retiredAt: DateTime.utc(2027),
   );
 }

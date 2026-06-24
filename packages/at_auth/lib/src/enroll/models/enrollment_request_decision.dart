@@ -40,6 +40,7 @@ import 'package:at_commons/at_commons.dart';
 /// ```dart
 /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.revoked('enrollment123', force: false);
 /// ```
+// TODO: remove in at_auth v4 i never want to see this again pls.
 class EnrollmentRequestDecision {
   late final String _enrollmentId;
   late final String _atSign;

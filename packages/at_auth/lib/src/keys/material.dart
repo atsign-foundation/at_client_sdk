@@ -76,6 +76,37 @@ class KeyRotation {
     required this.retiredAt,
   });
 
+  factory KeyRotation.fromJson(Map<String, dynamic> json) {
+    final statusValue = json['status'];
+    if (statusValue is! String || statusValue.isEmpty) {
+      throw ArgumentError.value(statusValue, 'status');
+    }
+
+    final createdAtValue = json['createdAt'];
+    if (createdAtValue is! String || createdAtValue.isEmpty) {
+      throw ArgumentError.value(createdAtValue, 'createdAt');
+    }
+
+    final retiredAtValue = json['retiredAt'];
+    if (retiredAtValue is! String || retiredAtValue.isEmpty) {
+      throw ArgumentError.value(retiredAtValue, 'retiredAt');
+    }
+
+    return KeyRotation(
+      status: KeyRotationStatus.values.byName(statusValue),
+      createdAt: DateTime.parse(createdAtValue),
+      retiredAt: DateTime.parse(retiredAtValue),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'status': status.name,
+      'createdAt': createdAt.toUtc().toIso8601String(),
+      'retiredAt': retiredAt.toUtc().toIso8601String(),
+    };
+  }
+
   @override
   bool operator ==(Object other) {
     return other is KeyRotation &&
@@ -86,106 +117,6 @@ class KeyRotation {
 
   @override
   int get hashCode => Object.hash(status, createdAt, retiredAt);
-}
-
-class AtKeysSet {
-  final Atsign atsign;
-  String? enrollmentId;
-  final Map<String, AtKeyPair> _keyPairs;
-  final Map<String, AtSymmetricKey> _symmetricKeys;
-
-  AtKeysSet({
-    required this.atsign,
-    required List<AtKeyPair> keyPairs,
-    required List<AtSymmetricKey> symmetricKeys,
-    this.enrollmentId,
-  })  : _keyPairs = _indexAsymmetricKeys(keyPairs),
-        _symmetricKeys = _indexSymmetricKeys(symmetricKeys);
-
-  List<AtKeyPair> get asymmetricKeys => List.unmodifiable(_keyPairs.values);
-
-  List<AtSymmetricKey> get symmetricKeys =>
-      List.unmodifiable(_symmetricKeys.values);
-
-  void addKey(AtKeysMaterial key) {
-    switch (key) {
-      case AtKeyPair():
-        _addKeyPair(key);
-      case AtSymmetricKey():
-        _addSymmetricKey(key);
-    }
-  }
-
-  void addKeys(Iterable<AtKeysMaterial> keys) {
-    for (final key in keys) {
-      addKey(key);
-    }
-  }
-
-  void _addKeyPair(AtKeyPair key) {
-    if (_keyPairs.containsKey(key.pairId)) {
-      throw ArgumentError.value(key.pairId, 'pairId', 'Duplicate key pair');
-    }
-    _keyPairs[key.pairId] = key;
-  }
-
-  void _addSymmetricKey(AtSymmetricKey key) {
-    if (_symmetricKeys.containsKey(key.id)) {
-      throw ArgumentError.value(key.id, 'id', 'Duplicate symmetric key');
-    }
-    _symmetricKeys[key.id] = key;
-  }
-
-  AtKeyPair? getKeyPair(String pairId) {
-    return _keyPairs[pairId];
-  }
-
-  AtSymmetricKey? getSymmetricKey(String id) {
-    return _symmetricKeys[id];
-  }
-
-  @override
-  bool operator ==(Object other) {
-    return other is AtKeysSet &&
-        other.atsign == atsign &&
-        other.enrollmentId == enrollmentId &&
-        _listEquals(other.asymmetricKeys, asymmetricKeys) &&
-        _listEquals(other.symmetricKeys, symmetricKeys);
-  }
-
-  @override
-  int get hashCode => Object.hash(
-        atsign,
-        enrollmentId,
-        Object.hashAll(asymmetricKeys),
-        Object.hashAll(symmetricKeys),
-      );
-
-  static Map<String, AtKeyPair> _indexAsymmetricKeys(
-    List<AtKeyPair> keys,
-  ) {
-    final result = <String, AtKeyPair>{};
-    for (final key in keys) {
-      if (result.containsKey(key.pairId)) {
-        throw ArgumentError.value(key.pairId, 'pairId', 'Duplicate key pair');
-      }
-      result[key.pairId] = key;
-    }
-    return result;
-  }
-
-  static Map<String, AtSymmetricKey> _indexSymmetricKeys(
-    List<AtSymmetricKey> keys,
-  ) {
-    final result = <String, AtSymmetricKey>{};
-    for (final key in keys) {
-      if (result.containsKey(key.id)) {
-        throw ArgumentError.value(key.id, 'id', 'Duplicate symmetric key');
-      }
-      result[key.id] = key;
-    }
-    return result;
-  }
 }
 
 sealed class AtKeysMaterial {

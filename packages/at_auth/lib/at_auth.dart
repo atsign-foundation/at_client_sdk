@@ -26,9 +26,9 @@ export 'src/enroll/models/enrollment_request_decision.dart';
 /// The class stores enrollment request details. It notifies the approving app upon receiving a
 /// request from the requesting app, for approval or denial.
 export 'src/exception/at_auth_exceptions.dart';
-export 'src/keys/at_keys_legacy.dart';
-export 'src/keys/at_keys_io.dart';
-export 'src/keys/at_keys_io_impl.dart';
+export 'src/keys/legacy/at_keys_legacy.dart';
+export 'src/keys/io/types.dart';
+export 'src/keys/legacy/legacy_atkeysio.dart';
 
 /// Classes for registrar services
 export 'src/registrar/registrar.dart';

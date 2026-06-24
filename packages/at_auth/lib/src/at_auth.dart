@@ -8,6 +8,8 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
 
+//TODO: across the package for V4 change all String atSign --> Atsign atsign
+
 /// Interface for onboarding and authentication to a secondary server of an atsign
 abstract interface class AtAuth {
   AtChops? atChops;

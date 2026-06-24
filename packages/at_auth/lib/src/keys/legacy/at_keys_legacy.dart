@@ -1,6 +1,7 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
+import 'package:at_auth/src/keys/atkeys.dart';
 
 @Deprecated(
     'AtKeys are now the legacy model. Please use AtKeysSet, which is open ended id set of keys.')
@@ -110,6 +111,78 @@ class AtKeys {
       null => _createPkamChops(this),
     };
   }
+
+  static AtKeys fromAtKeysSet(AtKeysSet atKeysSet) {
+    final pkamKeyPair = _keyPairForLegacyPurpose(
+      atKeysSet,
+      KeyPurposes.pkam,
+    );
+    final encryptionKeyPair = _keyPairForLegacyPurpose(
+      atKeysSet,
+      KeyPurposes.encryption,
+    );
+    final selfEncryptionKey = _symmetricKeyForLegacyPurpose(
+      atKeysSet,
+      KeyPurposes.selfEncryption,
+    );
+    final apkamSymmetricKey = _symmetricKeyForLegacyPurpose(
+      atKeysSet,
+      KeyPurposes.apkamSymmetric,
+    );
+
+    return AtKeys()
+      ..apkamPublicKey = pkamKeyPair?.publicKey
+      ..apkamPrivateKey = pkamKeyPair?.privateKey
+      ..defaultEncryptionPublicKey = encryptionKeyPair?.publicKey
+      ..defaultEncryptionPrivateKey = encryptionKeyPair?.privateKey
+      ..defaultSelfEncryptionKey = selfEncryptionKey?.bytes
+      ..apkamSymmetricKey = apkamSymmetricKey?.bytes
+      ..enrollmentId = atKeysSet.enrollmentId;
+  }
+
+  AtKeysSet toAtKeysSet({Atsign? atsign}) {
+    final keyPairs = <AtKeyPair>[
+      if (apkamPublicKey != null || apkamPrivateKey != null)
+        _legacyKeyPair(
+          pairId: KeyPurposes.pkam,
+          purpose: KeyPurposes.pkam,
+          publicKey: apkamPublicKey,
+          privateKey: apkamPrivateKey,
+        ),
+      if (defaultEncryptionPublicKey != null ||
+          defaultEncryptionPrivateKey != null)
+        _legacyKeyPair(
+          pairId: KeyPurposes.encryption,
+          purpose: KeyPurposes.encryption,
+          publicKey: defaultEncryptionPublicKey,
+          privateKey: defaultEncryptionPrivateKey,
+        ),
+    ];
+
+    final symmetricKeys = <AtSymmetricKey>[
+      if (defaultSelfEncryptionKey != null)
+        _legacySymmetricKey(
+          id: KeyPurposes.selfEncryption,
+          purpose: KeyPurposes.selfEncryption,
+          bytes: defaultSelfEncryptionKey!,
+        ),
+      if (apkamSymmetricKey != null)
+        _legacySymmetricKey(
+          id: KeyPurposes.apkamSymmetric,
+          purpose: KeyPurposes.apkamSymmetric,
+          bytes: apkamSymmetricKey!,
+        ),
+    ];
+
+    return WritableAtKeysSet(
+      atsign: _resolveAtSign(this, atsign),
+      enrollmentId: enrollmentId,
+      keys: [
+        ...keyPairs,
+        ...symmetricKeys,
+      ],
+    );
+  }
 }
 
 // Splitting these implementations to improve understanding
@@ -184,3 +257,100 @@ AtChops _createPkamChops(AtKeys atKeys) {
 bool _existsAndNotNull(Map<String, dynamic> json, String key) {
   return json.containsKey(key) && json[key] != null;
 }
+
+AtKeyPair _legacyKeyPair({
+  required String pairId,
+  required String purpose,
+  required AtBytes? publicKey,
+  required AtBytes? privateKey,
+}) {
+  if (publicKey == null || privateKey == null) {
+    throw StateError(
+      'Legacy AtKeys $purpose key pair requires both public and private keys',
+    );
+  }
+
+  return AtKeyPair(
+    pairId: pairId,
+    purpose: purpose,
+    algorithm: _legacyRsaAlgorithm,
+    publicKey: publicKey,
+    privateKey: privateKey,
+  );
+}
+
+AtSymmetricKey _legacySymmetricKey({
+  required String id,
+  required String purpose,
+  required AtBytes bytes,
+}) {
+  return AtSymmetricKey(
+    id: id,
+    purpose: purpose,
+    algorithm: _legacyAesAlgorithm,
+    bytes: bytes,
+  );
+}
+
+Atsign _resolveAtSign(AtKeys atKeys, Atsign? atsign) {
+  if (atsign != null) {
+    return atsign;
+  }
+
+  final metadataAtSign = atKeys.metadata['atsign'] ?? atKeys.metadata['atSign'];
+  if (metadataAtSign is Atsign) {
+    return metadataAtSign;
+  }
+  if (metadataAtSign is String && metadataAtSign.isNotEmpty) {
+    return metadataAtSign.toAtsign();
+  }
+
+  throw ArgumentError(
+    'AtKeysSet requires an atSign. Pass atsign or set AtKeys.metadata["atsign"].',
+  );
+}
+
+AtKeyPair? _keyPairForLegacyPurpose(AtKeysSet atKeysSet, String purpose) {
+  final keyPairs =
+      atKeysSet.keyPairs.where((key) => key.purpose == purpose).toList();
+  return _singleLegacyKeyMaterial(keyPairs, purpose);
+}
+
+AtSymmetricKey? _symmetricKeyForLegacyPurpose(
+  AtKeysSet atKeysSet,
+  String purpose,
+) {
+  final symmetricKeys =
+      atKeysSet.symmetricKeys.where((key) => key.purpose == purpose).toList();
+  return _singleLegacyKeyMaterial(symmetricKeys, purpose);
+}
+
+T? _singleLegacyKeyMaterial<T extends AtKeysMaterial>(
+  List<T> keys,
+  String purpose,
+) {
+  if (keys.isEmpty) {
+    return null;
+  }
+
+  final activeKeys = keys
+      .where((key) =>
+          switch (key) {
+            AtKeyPair(:final rotation) => rotation?.status,
+            AtSymmetricKey(:final rotation) => rotation?.status,
+          } ==
+          KeyRotationStatus.active)
+      .toList();
+  final candidates = activeKeys.isEmpty ? keys : activeKeys;
+
+  if (candidates.length > 1) {
+    throw StateError(
+      'Legacy AtKeys supports only one $purpose key, found ${candidates.length}',
+    );
+  }
+
+  return candidates.single;
+}
+
+const _legacyRsaAlgorithm = 'rsa-2048';
+const _legacyAesAlgorithm = 'aes-256';
