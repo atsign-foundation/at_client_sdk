@@ -27,7 +27,7 @@ jobs:
           - at_contact
           - at_server_status
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: ./actions/setup-flutter-and-dart
         with:
@@ -56,7 +56,7 @@ jobs:
           - at_cli_commons
           - at_policy
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: ./actions/setup-flutter-and-dart
         with:
@@ -80,7 +80,7 @@ jobs:
       OPENSSL_VERSION: "3.5.0" # minimum version that OpenSSL supports MLKEM
       OPENSSL_INSTALL_DIR: ${{ github.workspace }}/.openssl
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: ./actions/setup-flutter-and-dart
 
@@ -153,7 +153,7 @@ jobs:
           - at_onboarding_cli_functional_tests_proxy
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: ./actions/setup-flutter-and-dart
         with:

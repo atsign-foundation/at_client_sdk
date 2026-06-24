@@ -39,6 +39,12 @@ rotation, and giving applications a bootstrap path to pq-mls groups.
   - [Versioning contract — the legacy-encryption flag (3.x default off, 4.x default on)](#versioning-contract--the-legacy-encryption-flag-3x-default-off-4x-default-on)
   - [Steps (any client may sit at any step, within 3.x)](#steps-any-client-may-sit-at-any-step-within-3x)
   - [Capabilities by application code-change level](#capabilities-by-application-code-change-level)
+- [Existing-client retrofit — auth upgrade & key distribution](#existing-client-retrofit--auth-upgrade--key-distribution)
+  - [Conveying a named secret between clients](#conveying-a-named-secret-between-clients)
+  - [The atSign-level PQ key — created once](#the-atsign-level-pq-key--created-once)
+  - [Upgrading an existing client — the sequence](#upgrading-an-existing-client--the-sequence)
+  - [Cardinality, legacy-key deletion, and revocation](#cardinality-legacy-key-deletion-and-revocation)
+  - [atServer support this requires](#atserver-support-this-requires)
 - [Starting point](#starting-point)
 - [The end state](#the-end-state)
   - [Key inventory and rotation](#key-inventory-and-rotation)
@@ -87,6 +93,7 @@ jump.
 | The two deliverables (D1 / D2) | [The two major deliverables](crypto-roadmap.md#the-two-major-deliverables) | [Current state (1)](crypto_impl_plan.md#1-current-state-2026-06-22) · [D1 acceptance (2)](crypto_impl_plan.md#2-d1-acceptance--what-done-means) | — |
 | D1 Tier1 — the `nskey` default | [D1 — preserving legacy simplicity](crypto-roadmap.md#d1--preserving-legacy-simplicity-two-tiers) | [D1-B (3)](crypto_impl_plan.md#d1-b--the-nskey-provider-d1-tier1--the-default) | — |
 | Migration, rollout & versioning | [Application migration & rollout](crypto-roadmap.md#application-migration--rollout) | [D1-C / D1-D (3)](crypto_impl_plan.md#d1-c--migration--rollout-machinery) | — |
+| Existing-client retrofit (auth + key dist) | [Existing-client retrofit](crypto-roadmap.md#existing-client-retrofit--auth-upgrade--key-distribution) | [D1-F (3)](crypto_impl_plan.md#d1-f--existing-client-retrofit--auth-upgrade--secret-conveyance) | — |
 | Identity, KeyPackages, self groups | [Phases 2–3](crypto-roadmap.md#phase-2--identity-layer-keypackages-and-per-client-atkeys) | [D1-E (3)](crypto_impl_plan.md#d1-e--d1-tier2-shape-corrections-fold-into-wp-gp) · [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | — |
 | Cross-atSign shared groups | [Phase 4](crypto-roadmap.md#phase-4--cross-atsign-groups-shared-encryption) | [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | [C — `at_talk` chat](crypto-walkthroughs.md#walkthrough-c--a-two-atsign-chat-with-client-churn-at_talk) |
 | pq-mls engine + Delivery Service | [atServer group Delivery Service](crypto-roadmap.md#atserver-group-delivery-service-target-design) | [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | [B — a large group](crypto-walkthroughs.md#walkthrough-b--a-large-group-end-to-end) |
@@ -193,8 +200,10 @@ exists from activation). Resolution: **alice uses the most specific key bob has
 published, falling back to the atSign-level PQ key.**
 
 1. Bob always has an atSign-level keypair; Phase 1 publishes a PQ sibling
-   (`public:publickey.pq@bob`). With no `at_talk` key, alice encapsulates to
-   **that** — every bob client can decrypt, instantly, like legacy.
+   (`public:pqpublickey@bob`). With no `at_talk` key, alice encapsulates to
+   **that** — every bob client can decrypt, instantly, like legacy (how every bob
+   client obtains the *private* half is
+   [Existing-client retrofit](#existing-client-retrofit--auth-upgrade--key-distribution)).
 2. The first bob `at_talk` client mints/derives and publishes the `at_talk`
    public key; subsequent messages **upgrade** to namespace-scoped automatically.
 
@@ -220,7 +229,7 @@ and writes the new private key into the `__`-secret self-group channel** as a
 reserved secret (`__nsk.<epoch>`), PQ-wrapped per-enrollment to each `at_talk`
 enrollment's conveyance key. Other clients receive it (push); a client that
 missed it pulls (`requestSecretsFromNamespace`); a *new* client gets the current
-key at enrollment approval. This reuses the **already-built** secret-sharing
+key at enrollment approval. This reuses the **prototyped** secret-sharing
 substrate (`__`-secrets, `excludeEnrollmentIds`) verbatim — the namespace key is
 just another secret on the channel.
 
@@ -256,7 +265,7 @@ membership) becomes an **opt-in** tier a namespace declares when it needs
 per-device revocation or forward secrecy. Most apps never touch it. Crucially
 the **secret-sharing substrate is shared** between tiers: D1 Tier1 uses it as
 *per-enrollment distribution plumbing* for rotation; D1 Tier2 uses it
-*per-client*. So the group work already built is not discarded — it is the
+*per-client*. So the group work already prototyped is not discarded — it is the
 plumbing under D1 Tier1 and the data path of D1 Tier2. D2/MLS swaps D1 Tier2's engine.
 
 ### Mixed-tier `@alice` ↔ `@bob`
@@ -446,6 +455,129 @@ flag* when your fleet is upgraded and your data becomes post-quantum-safe and
 namespace-scoped, negotiated down automatically for anyone still on the old
 build. Reach for *code* only to refuse legacy (strict PQ), drive your own
 rotation, or opt into per-device (D1 Tier2) security.
+
+## Existing-client retrofit — auth upgrade & key distribution
+
+[Application migration & rollout](#application-migration--rollout) covers how an
+*encryption scheme* rolls out per value. This section covers the **one-time retrofit**
+of an existing atSign whose clients onboarded before PQ: how each already-enrolled
+client gains the two PQ keypairs it needs — a **PQ APKAM** keypair (authentication)
+and the **atSign-level PQ encryption key** (`public:pqpublickey@alice`, the
+[Cold-start](#cold-start--bob-has-never-run-an-at_talk-app) fallback) — without
+re-onboarding and without any RSA-tainted shortcut.
+
+**Goal.** Existing atSigns reach PQ-safety for both auth and encryption with no
+re-onboarding, *closing* the last harvest-now-decrypt-later hole rather than inheriting
+it. Only existing clients run this retrofit; two populations never do:
+
+| Population | Gets `pqpublickey` via | Gets its PQ APKAM via |
+|---|---|---|
+| **Existing atSign, existing client** (this section) | **pull** from a peer client | mints its own (one per host) |
+| **New atSign** | generated at onboarding | generated at onboarding |
+| **New enrollment** (post-PQ) | **pushed** by the approver via enroll/approve | set up by enroll/approve |
+
+So the client-to-client *pull* below is fundamentally the retrofit path; in steady state
+PQ keys arrive at onboarding or by enroll/approve push.
+
+### Conveying a named secret between clients
+
+Every retrofit pull is one instance of a single primitive, **`requestSecret`**:
+
+> A client needs a *named secret*; at least one of its sibling clients holds it. The
+> requester asks; a holder **`pqSeal`s** the secret to the requester's
+> [`ClientKeyPackage`](#phase-2--identity-layer-keypackages-and-per-client-atkeys)
+> (X-Wing public key); the requester opens it with its local private half.
+
+PQ-safe by construction — the seal is X-Wing to a public key whose private half never
+transited, so nothing in the path depends on RSA-2048. **Secrets are namespaced, and the
+namespace is the authorisation boundary**: a holder serves a namespaced secret only to a
+requester whose enrollment is authorised for that namespace (the scope the atServer's
+APKAM already enforces), and never to a revoked enrollment. This reuses the
+secret-sharing [Foundations](#foundations) substrate (`requestSecretsFromNamespace` /
+`waitForSecret` / `shareSecretWith` / `excludeEnrollmentIds`), generalised from
+request-by-namespace to request-by-name. The same primitive carries every non-derivable
+secret in D1 — `nskey` private keys, rotation epoch keys, the atSign-level PQ key — so it
+is the reusable core, not a one-off.
+
+**Why not the obvious shortcut.** Wrapping the secret under the shared `selfEncryptionKey`
+and storing it server-side is *not* PQ-safe: the self key is conveyed at enrollment under
+the `apkamSymmetricKey`, which is **RSA-2048-wrapped** in transit — so a harvester who
+breaks RSA later recovers the self key and anything wrapped under it. The per-requester
+X-Wing seal is what avoids re-inheriting that hole.
+
+### The atSign-level PQ key — created once
+
+`public:pqpublickey@alice` is the **root (no-namespace)** encryption key — the universal
+fallback of [Cold-start](#cold-start--bob-has-never-run-an-at_talk-app), the PQ sibling of
+legacy `public:publickey@alice`. Because it is the broad fallback, its private half is
+conveyed to **every** non-revoked client (like the legacy default encryption private key),
+not gated by namespace.
+
+It is **created exactly once** using the atServer's **immutable / create-if-absent** write:
+the first client to try wins and publishes the public half (which can never be
+overwritten); every other client finds it present and *pulls* the private half via
+`requestSecret`. No election, no race — the immutable write is the coordinator. (Naming:
+the key must be `pqpublickey`, not `publickey.pq`, or the `.pq` suffix would place it in a
+namespace called `pq`.)
+
+### Upgrading an existing client — the sequence
+
+Each upgrading client bootstraps both keypairs with one uniform sequence; whether it is the
+*creator* or a *requester* of `pqpublickey` is decided by the immutable create, not known
+in advance:
+
+1. authenticate on the existing legacy connection;
+2. **mint-once per host** a PQ APKAM keypair (or reuse the one already in this host's
+   keyfile) and publish its public half as an immutable per-host record;
+3. verify PQ APKAM authentication works;
+4. **delete the legacy RSA APKAM public key** — only after step 3 confirms PQ auth;
+5. save AtKeys; publish its `ClientKeyPackage`;
+6. **attempt create** `pqpublickey`: won → generate, hold, and serve the private half;
+   exists → pull, verify public/private correspondence, store;
+7. once the roster holds the key, advertise PQ readiness (atSign-wide, once).
+
+The three "which client" cases — first client, a second on the *same* enrollment, a third
+on a *different* enrollment — differ in exactly one place: step 6 (the first creates
+`pqpublickey`; the rest pull it). For the APKAM keypair they are identical; the enrollment
+distinction only re-emerges for *namespaced* secrets, where a namespace-restricted
+enrollment is served a subset.
+
+### Cardinality, legacy-key deletion, and revocation
+
+- **APKAM cardinality is per (host, AtKeys file), not per client.** Many
+  clients/processes sharing one keyfile on one host share **one** minted PQ APKAM keypair.
+  The atServer allows **multiple APKAM keypairs per enrollment**, so a copy of the keyfile
+  on another host mints its own, different key. The new revocation granularity this unlocks
+  is therefore **per-host**, not per-client — sitting alongside the
+  [Phase-2](#phase-2--identity-layer-keypackages-and-per-client-atkeys) split of copyable
+  credential vs device-local material.
+- **Delete the legacy APKAM key by default** (the auth key only — keep the legacy
+  *encryption* key for reading history). It is both quantum-vulnerable and **shared across
+  every copy** of the keyfile; while it remains, per-host revocation is bypassable through
+  it. Deletion enforces "one enrollment's private APKAM key lives in exactly one keyfile" —
+  a copy that has not upgraded gets locked out and must re-enroll, the correct outcome for
+  copying we advise against. A grace period is available as a softer deployment knob.
+- **Revocation is two axes:** *auth* (per-enrollment, or — new — **per-host** by deleting
+  that host's PQ APKAM key, contingent on the legacy key being gone) and *encryption*
+  (per-namespace key rotation, [Revocation](#revocation-end-to-end)), which controls
+  new-data access and is orthogonal to auth.
+- **Where the PQ APKAM key lives.** No universal way to *cryptographically* bind it to a
+  host exists today (TPM/Secure Enclave lack PQ support). Default to storing it in the
+  keyfile/keychain that bootstrapped it (clean for dev/test — a reused keyfile doesn't
+  re-mint); offer OS-keychain/hardware as an opt-in for single-host high-security. Per-host
+  management/revocation comes from a **distinct labelled record per host** plus
+  **server-side TTL / usage-based eviction** of unused APKAM keys, which also self-cleans
+  dev/test and abandoned hosts.
+
+### atServer support this requires
+
+This retrofit reuses the atServer's **existing immutable write** (`Metadata.immutable`) for
+mint-once, plus **four new** atServer capabilities (detailed in the plan's
+[D1-F](crypto_impl_plan.md#d1-f--existing-client-retrofit--auth-upgrade--secret-conveyance)):
+multiple APKAM public keys per enrollment with auth
+against any; **PQ (ML-DSA) APKAM authentication**; deletion of a specific public key
+(legacy on upgrade, a host's PQ key on revocation); and TTL/usage-based eviction of APKAM
+keys (needing a per-key "last authenticated" timestamp).
 
 ## Starting point
 
@@ -878,7 +1010,7 @@ see [Foundations](#foundations). Build status is the plan's
   last harvest-now-decrypt-later hole: `encryptedAPKAMSymmetricKey` is
   RSA-wrapped to `public:publickey@alice`, and everything the approval
   conveys hangs off it. Fix without server changes: publish an X-Wing
-  public key alongside (`public:publickey.pq@alice` or a key-list format);
+  public key alongside (`public:pqpublickey@alice` or a key-list format);
   new enrollees prefer it for wrapping; approvers accept either.
 
 ### Phase 2 — identity layer: KeyPackages and per-client AtKeys
@@ -1002,6 +1134,13 @@ see [Foundations](#foundations). Build status is the plan's
   KeyPackages as public keys so other atSigns can fetch and verify them
   (signature chain to the publishing enrollment's `_apsk` / the atSign's
   public key, with pubkey-hash pinning as today).
+- **Per-enrollment vs per-client differences**: `.atKeys` files, keychain
+  entries, and future portable key implementations contain only copyable
+  enrollment-scoped material. Rotating `nskey` keypairs and persistent
+  per-client keys live in the client's local keystore (`LocalKeystoreAtKeysIo`);
+  ephemeral one-shot clients (`npt`, `sshnp`) keep per-client keys in memory
+  only and mint fresh keys on the next run. A NoPorts Desktop reinstall may
+  also mint fresh per-client keys rather than recovering the old client keys.
 
 ### Phase 3 — SecureGroup v1 + the `group` provider (self encryption)
 
