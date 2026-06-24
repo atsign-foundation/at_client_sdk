@@ -49,10 +49,11 @@ Alice client can publish a KeyPackage as Alice.
 
 Given that, the primitive is:
 
-1. **Request.** The requester broadcasts a request for a named secret **within a
-   namespace** (`requestSecretsFromNamespace`), carrying its own `ClientKeyPackage` so
-   responders know where to seal the answer. (The root PQ key is the no-namespace
-   exception — §3.)
+1. **Request.** The requester **discovers** the namespace's clients from their published
+   `ClientKeyPackage`s and **fans out** a sealed request to each (`requestSecretsFromNamespace`)
+   — there is no keyless broadcast: each request is a targeted `pqSeal`-ed envelope addressed to
+   a peer's `clientId`, carrying the requester's *own* clientId so responders know where to seal
+   the answer. (The root PQ key is the no-namespace exception — §3.)
 2. **Serve.** Each peer, on seeing the request, checks its `SecretStore`. If it holds
    the secret *and* the requester's enrollment is authorised for that **namespace**
    (below), it `pqSeal`s the secret to the requester's KeyPackage and writes the
@@ -91,6 +92,16 @@ WP-SS.
 
 ### Details the primitive must pin down
 
+- **Transport = `put` + sync, plus an optional wake-up notify.** Request and response are the
+  *same* targeted envelope key — `<msgId>.<recipientClientId>.__ssenv.<namespace>@<atSign>`, a
+  self key, `shouldEncrypt=false` (already sealed) — written with `atClient.put`. Delivery is the
+  **sync** service (a sync-progress listener + a periodic local sweep surface arrivals on
+  `receivedSecrets`), so it is offline-tolerant by construction. **Some clients don't sync** — so
+  the writer *also* sends an **optional wake-up `notify`** (default on) for that key; a sync-less
+  recipient wakes on its notification monitor and `get`s the key (`useRemoteAtServer`). This
+  applies to *both* the request (to each discovered peer) and the response (to the requester).
+  Ideally the atServer auto-emits the notify on a `put` to `__ssenv` keys (a future server
+  enhancement); until then the client sends it.
 - **Responder authorisation = namespace authorisation.** A peer serves a namespaced
   secret to requester `R` only if `R`'s enrollment is authorised for that
   **namespace** (a `app_1.my_apps`-scoped enrollment must not be handed the `app_2.my_apps` key) — the
@@ -383,6 +394,10 @@ atServer capabilities:
   within N days; bounds the per-enrollment set and self-cleans dev/test and abandoned hosts.
   Requires a **per-APKAM-key "last authenticated" timestamp** on the atServer (updated on
   each successful auth) — a small server-side data addition that eviction reads.
+- **(future, optional) Auto-notify on `__ssenv` puts** — the atServer emits the wake-up
+  notification itself when a secret-envelope key is written, so sync-less clients are covered
+  without the sending client firing it. New functionality; until it exists the sending client
+  sends the optional wake-up `notify` (default on).
 
 **Design points to pin down:**
 - **The §1 request/serve primitive is the real deliverable** — reused by the atSign-level

@@ -433,12 +433,19 @@ secret-sharing substrate (WP-SS). New atSigns (PQ-native at onboarding) and new 
 (approver push via WP10) do **not** run this.
 
 - [ ] **F1 · `requestSecret(name)` primitive.** Generalise the substrate's
-  `requestSecretsFromNamespace` to request a *named* secret; a holder responds with
-  `shareSecretWith(requester.ClientKeyPackage, secret)` (`pqSeal`); requester
-  `waitForSecret`. *Responder authorisation:* serve a namespaced secret only if the
-  requester's enrollment covers that namespace; never to an `excludeEnrollmentIds` member.
-  Handle no-holder-online (request persists; retry/backoff), thundering-herd (jitter +
-  `putIfNewer` dedup), and freshness (version/`kid`). *Files:*
+  `requestSecretsFromNamespace` to request a *named* secret. A request is a **targeted fan-out**
+  — discover the namespace's clients from their published `ClientKeyPackage`s and send each a
+  `pqSeal`-ed `__ssenv` envelope (no keyless broadcast); a holder responds with
+  `shareSecretWith(requester.ClientKeyPackage, secret)` (`pqSeal`) back to the requester's
+  clientId; requester `waitForSecret`. **Transport:** `atClient.put` of the `__ssenv` key
+  (`<msgId>.<recipientClientId>.__ssenv.<ns>@<atSign>`, self key, `shouldEncrypt=false`) +
+  **sync** delivery (sync-progress listener + periodic sweep → `receivedSecrets`), **plus an
+  optional wake-up `notify`** per put (default on) so **sync-less clients** wake and
+  `get(useRemoteAtServer)` — on both the request and the response. (Future: the atServer
+  auto-notifies on `__ssenv` puts, dropping the client-side notify.) *Responder authorisation:*
+  serve a namespaced secret only if the requester's enrollment covers that namespace; never to an
+  `excludeEnrollmentIds` member. Handle no-holder-online (request persists; retry/backoff),
+  thundering-herd (jitter + `putIfNewer` dedup), and freshness (version/`kid`). *Files:*
   `at_client/lib/src/secret_sharing/`.
 - [ ] **F2 · atSign-level `pqpublickey` lifecycle.** `public:pqpublickey@alice` (root, no
   namespace — *not* `publickey.pq`). Create via immutable create-if-absent (F5); the
