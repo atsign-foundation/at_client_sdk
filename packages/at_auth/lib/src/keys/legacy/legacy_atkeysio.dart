@@ -1,37 +1,108 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
-import 'at_keys_legacy.dart' show AtKeys;
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
+import 'package:at_auth/src/keys/atkeys.dart';
+import 'package:at_auth/src/keys/io/types.dart';
+import 'package:at_auth/src/keys/legacy/at_keys_legacy.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
-/// An interface that defines methods for reading AtKeys.
-/// It can be implemented by classes that read AtKeys from different sources,
-sealed class AtKeysIo {
-  FutureOr<AtKeys> read(String atSign);
+/// An implementation of [AtKeysIo] that reads and writes AtKeys to the file system.
+/// This implementation uses [FileAtKeysIoStatic] to encode and decode AtKeys.
+/// The [FileAtKeysIo] class can be configured with an optional [filePath] and [passPhrase].
+///
+/// Optional Parameters:
+/// If [filePath] is a format function derived from your atSign. Defaults to using %HOME%/.atsign/keys/$atsign_key.t atKeys
+/// The [passPhrase] is used for atKeys files that are password protected.
+@Deprecated(
+  'Use AtKeysSet-based key storage APIs instead. FileAtKeysIo is retained for legacy .atKeys files.',
+)
+class FileAtKeysIo extends WrittenAtKeysIo {
+  String Function(String)? filePath;
+  String? passPhrase;
+  FileAtKeysIo({this.filePath, this.passPhrase}) {
+    filePath ??=
+        (atsign) => getDefaultAtKeysFilePath(getHomeDirectory()!, atsign);
+  }
+
+  /// Reads AtKeys from the file system.
+  /// The [atSign] parameter is used to determine the file path if not provided during instantiation.
+  /// The method returns a Future that resolves to an instance of [AtKeys].
+  @override
+  Future<AtKeysSet> read(String atSign) async {
+    Map<String, dynamic> decodedAtKeysData = {};
+    String file = filePath!(atSign);
+    if (!File(file).existsSync()) {
+      throw AtException(
+          'provided keys file does not exist. Please check whether the file path $file is valid');
+    }
+    String atAuthData = await File(file).readAsString();
+    decodedAtKeysData = jsonDecode(atAuthData);
+    decodedAtKeysData = await FileAtKeysIoStatic.decodeAtKeys(
+      decodedAtKeysData,
+      passPhrase: passPhrase,
+    );
+    AtKeys atKeys = await FileAtKeysIoStatic.decryptAtKeysWithSelfEncKey(
+      decodedAtKeysData,
+      PkamAuthMode.keysFile,
+    );
+    return atKeys.toAtKeysSet(atsign: atSign.toAtsign());
+  }
+
+  @override
+  Future write(String atSign, AtKeys atKeys) async {
+    String path = filePath!(atSign);
+    if (!Directory(path).parent.existsSync()) {
+      await Directory(path).parent.create(recursive: true);
+    }
+    //don't overwrite the file
+    if (File(path).existsSync()) {
+      throw AtKeysFileOverwriteException(
+          'Tried writing $path, but failed since it already exists');
+    }
+
+    String atKeysData = await FileAtKeysIoStatic.encryptAtKeysWithSelfEncKey(
+      atKeys,
+      PkamAuthMode.keysFile,
+      atSign,
+    );
+
+    if (passPhrase != null && passPhrase!.isNotEmpty) {
+      AtEncrypted atEncrypted =
+          await AtKeysCrypto.fromHashingAlgorithm(HashingAlgoType.argon2id)
+              .encrypt(atKeysData, passPhrase!);
+      atKeysData = atEncrypted.toString();
+    }
+
+    await File(path).writeAsString(atKeysData);
+  }
+
+  static const keySchemaList = [
+    auth_constants.apkamPublicKey,
+    auth_constants.apkamPrivateKey,
+    auth_constants.defaultEncryptionPublicKey,
+    auth_constants.defaultEncryptionPrivateKey,
+    auth_constants.defaultSelfEncryptionKey,
+    auth_constants.apkamSymmetricKey,
+    auth_constants.apkamEnrollmentId
+  ];
 }
 
-/// An interface that defines methods for AtKeys that can be written.
-/// It can be implemented by classes that write AtKeys to different sources,
-/// such as file system or keychain.
-abstract class WrittenAtKeysIo extends AtKeysIo with KeyIOMixin {
-  Future write(String atSign, AtKeys atKeys);
-}
+/// Legacy AtKeys file encoding, decoding, and generation helpers.
+///
+/// Kept with [FileAtKeysIo] because these helpers operate on the legacy
+/// `.atKeys` file format rather than on the generic [AtKeysIo] interface.
+///
+///  One of the helpers had to remain the WrittenAtKeysIo as they contain a breaking change.
+@Deprecated('Only used as a legacy helper.')
+abstract final class FileAtKeysIoStatic {
+  static final AtSignLogger _logger = AtSignLogger('FileAtKeysIoStatic');
 
-/// An interface that defines methods for AtKeys that can be generated.
-/// It can be implemented by classes that generate AtKeys using different methods,
-/// such as secure element.
-abstract class GeneratedAtKeysIo extends AtKeysIo with KeyIOMixin {
-  AtKeys generateKeys(String publicKeyId);
-}
-
-/// A mixin that provides common functionality for encoding and decoding AtKeys.
-mixin KeyIOMixin on AtKeysIo {
-  final AtSignLogger _logger = AtSignLogger('BaseAtKeysIo');
-
-  FutureOr<AtKeys> decryptAtKeysWithSelfEncKey(
+  static FutureOr<AtKeys> decryptAtKeysWithSelfEncKey(
       Map<String, dynamic> jsonData, PkamAuthMode authMode) async {
     var securityKeys = AtKeys();
     String decryptionKey = jsonData[auth_constants.defaultSelfEncryptionKey];
@@ -57,8 +128,7 @@ mixin KeyIOMixin on AtKeysIo {
             jsonData[auth_constants.apkamPublicKey], EncryptionKeyType.aes256,
             keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
         .result);
-    // pkam private key will not be saved in keyfile if auth mode is sim/any other secure element.
-    // decrypt the private key only when auth mode is keysFile
+    // Pkam private key will not be saved in keyfile if auth mode is sim/secure element.
     if (authMode == PkamAuthMode.keysFile) {
       securityKeys.apkamPrivateKey = AtBytes.fromString(
           (await atChops.decryptString(jsonData[auth_constants.apkamPrivateKey],
@@ -73,7 +143,7 @@ mixin KeyIOMixin on AtKeysIo {
     return securityKeys;
   }
 
-  FutureOr<String> encryptAtKeysWithSelfEncKey(
+  static FutureOr<String> encryptAtKeysWithSelfEncKey(
       AtKeys atKeys, PkamAuthMode authMode, String atsign) async {
     Map<String, dynamic> atKeysMap = {};
     if (atKeys.defaultSelfEncryptionKey == null) {
@@ -119,52 +189,28 @@ mixin KeyIOMixin on AtKeysIo {
     return jsonEncode(atKeysMap);
   }
 
-  AtKeys generateKeyPairs({String? atSign}) {
+  static AtKeys generateKeyPairs({bool generatePkamKeyPair = true}) {
     var atKeysFile = AtKeys();
-    var logger = AtSignLogger("BaseAtKeysIo");
-    // generate user encryption keypair
+    var logger = AtSignLogger('FileAtKeysIoStatic');
     logger.info('Generating encryption keypair');
     var atEncryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
 
-    //generate selfEncryptionKey
     var selfEncryptionKey =
         AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
     var apkamSymmetricKey =
         AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
     logger.info('Generating your encryption keys and .atKeys file\n');
 
-    //generating pkamKeyPair only if authMode is keysFile
     String? pkamPublicKey;
-    if (this is WrittenAtKeysIo) {
+    if (generatePkamKeyPair) {
       logger.info('Generating pkam keypair');
       var apkamRsaKeypair = AtChopsUtil.generateAtPkamKeyPair();
       pkamPublicKey = apkamRsaKeypair.atPublicKey.publicKey.toString();
       atKeysFile.apkamPrivateKey = AtBytes.fromString(
           apkamRsaKeypair.atPrivateKey.privateKey.toString());
     }
-    // else if (this is GeneratedAtKeysIo) {
-    //   // get the public key from secure element
-    //   if (atSign == null) {
-    //     throw AtAuthenticationException('atSign is required to read pkam public key from sim/secure element');
-    //   }
-    //   String? publicKeyId = (this as SimAtKeysIo).publicKeyMap[atSign];
-    //   if (publicKeyId == null) {
-    //     throw AtAuthenticationException('publicKeyId is required in SimAtKeysIo.publicKeyMap to read pkam public key from sim/secure element');
-    //   }
-    //   pkamPublicKey = atChops.readPublicKey(publicKeyId);
-    //   logger.info('pkam  public key from sim: $pkamPublicKey');
 
-    //   // encryption key pair and self encryption symmetric key
-    //   // are not available to injected at_chops. Set it here
-    //   atChops.atChopsKeys.atEncryptionKeyPair = atEncryptionKeyPair;
-    //   atChops.atChopsKeys.selfEncryptionKey = selfEncryptionKey;
-    //   atChops.atChopsKeys.apkamSymmetricKey = apkamSymmetricKey;
-    // }
     atKeysFile.apkamPublicKey = AtBytes.fromString(pkamPublicKey.toString());
-    //Standard order of an atKeys file is ->
-    // pkam keypair -> encryption keypair -> selfEncryption key -> enrollmentId --> apkam symmetric key -->
-    // @sign: selfEncryptionKey[self encryption key again]
-    // note: "->" stands for "followed by"
     atKeysFile.defaultEncryptionPublicKey = AtBytes.fromString(
         atEncryptionKeyPair.atPublicKey.publicKey.toString());
     atKeysFile.defaultEncryptionPrivateKey = AtBytes.fromString(
@@ -176,11 +222,9 @@ mixin KeyIOMixin on AtKeysIo {
     return atKeysFile;
   }
 
-  Future<Map<String, dynamic>> decodeAtKeys(
+  static Future<Map<String, dynamic>> decodeAtKeys(
       Map<String, dynamic> decodedAtKeysData,
       {String? passPhrase}) async {
-    // If it contains "iv(InitializationVector)", it means the data is encrypted with a
-    // passphrase. Decrypt it.
     if (decodedAtKeysData.containsKey('iv') && passPhrase.isNullOrEmpty) {
       throw AtDecryptionException(
           'Pass Phrase is required for password protected atKeys file');
@@ -216,4 +260,41 @@ mixin KeyIOMixin on AtKeysIo {
 
     return decodedAtKeysData;
   }
+}
+
+// Taken from at_cli_commons, but I can't import it due to circular dependencies
+// at_cli_commons depends on at_onboarding_cli....
+String getDefaultAtKeysFilePath(String homeDirectory, String atSign) {
+  return '$homeDirectory/.atsign/keys/${atSign}_key.atKeys'
+      .replaceAll('/', Platform.pathSeparator);
+}
+
+String? getHomeDirectory({bool throwIfNull = false}) {
+  String? homeDir;
+  switch (Platform.operatingSystem) {
+    case 'linux':
+    case 'macos':
+      homeDir = Platform.environment['HOME'];
+      break;
+
+    case 'windows':
+      homeDir = Platform.environment['USERPROFILE'];
+      break;
+
+    case 'android':
+      // Probably want internal storage.
+      homeDir = '/storage/sdcard0';
+      break;
+
+    case 'ios':
+    // iOS doesn't really have a home directory.
+    case 'fuchsia':
+    // I have no idea.
+    default:
+      homeDir = null;
+  }
+  if (throwIfNull && homeDir == null) {
+    throw ('\nUnable to determine your home directory: please set environment variable\n\n');
+  }
+  return homeDir;
 }
