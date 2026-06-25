@@ -28,9 +28,11 @@ Key objects used throughout:
     world-readable**; **external senders** encapsulate CKs to it to send to @alice; alice's clients
     hold its private (decapsulates CKs inbound senders sent her).
   - `@bob`'s self nskey + `public:nskey.app_1.my_apps@bob`, symmetric.
-  The private halves are conveyed **per-APKAM** by the secret-sharing substrate (PUSH at
-  mint/approve/rotate via the gated `enroll:listfornamespace` verb + the `__ssenv` envelope;
-  `requestSecret` PULL as the offline backstop), held only by the owning atSign's own APKAM
+  The private halves are conveyed **per-APKAM** by the secret-sharing substrate over the `__ssenv`
+  envelope (PUSH at **mint/rotate** via the gated `enroll:listfornamespace` verb to enumerate
+  authorised members; at enrollment **approve** the approver seals directly to the new enrollment's
+  just-registered key package — no verb needed; `requestSecret` PULL as the offline backstop), held
+  only by the owning atSign's own APKAM
   keypairs. There are **two** nskeys per namespace (self + public): self data uses the unpublished
   self nskey; cross-atSign uses the recipient's published public nskey.
 - **X-Wing key package** — the per-APKAM X-Wing recipient keypair a sender `pqSeal`s to (its
@@ -381,7 +383,8 @@ no `pqpublickey`.
 ## 4.4 Mixed PQ/legacy across atSigns — UC-B4.1 / B4.3 / B4.4
 
 - **B4.1 — `@alice` PQ-ready, `@bob` legacy.** `alice1` shares/notifies `@bob`: writes **legacy**
-  (RSA-wrapped CK + AES) to bob's `publickey` (bob's readiness `n-r` gates it); alice's self-copy
+  (a per-value symmetric key RSA-wrapped inline onto the data, AES-256 under it — the monolithic
+  legacy model) to bob's `publickey` (bob's readiness `n-r` gates it); alice's self-copy
   may take the **nskey data path** independently. **Then:** no write/notification bob can't read;
   alice's own clients still get an nskey-data-path self-copy if all alice clients are PQ.
 - **B4.3 — partially-upgraded `@alice` (alice1 PQ, alice2 legacy) → `@bob` PQ-ready.** The write
