@@ -26,13 +26,13 @@ rotation, and giving applications a bootstrap path to pq-mls groups.
 - [The two major deliverables](#the-two-major-deliverables)
   - [Deliverable 1 — make Atsign Protocol messaging post-quantum safe](#deliverable-1--make-atsign-protocol-messaging-post-quantum-safe)
   - [Deliverable 2 — implement pq-mls](#deliverable-2--implement-pq-mls)
-- [D1 — preserving legacy simplicity (two tiers)](#d1--preserving-legacy-simplicity-two-tiers)
-  - [D1 Tier 1 — Baseline (the `nskey` provider, default)](#d1-tier-1--baseline-the-nskey-provider-default)
+- [D1 — preserving legacy simplicity (single-tier: the nskey data path)](#d1--preserving-legacy-simplicity-single-tier-the-nskey-data-path)
+  - [The nskey data path (D1's data path)](#the-nskey-data-path-d1s-data-path)
   - [Cold-start — bob has never run an at_talk app](#cold-start--bob-has-never-run-an-at_talk-app)
-  - [Opt-in key rotation (D1 Tier1)](#opt-in-key-rotation-d1-tier1)
+  - [Opt-in key rotation](#opt-in-key-rotation)
   - [Revocation, end to end](#revocation-end-to-end)
-  - [D1 Tier 2 — Hardened (opt-in per-device, the D2 substrate)](#d1-tier-2--hardened-opt-in-per-device-the-d2-substrate)
-  - [Mixed-tier `@alice` ↔ `@bob`](#mixed-tier-alice--bob)
+  - [`at/pqmls` is D2, not a D1 tier](#atpqmls-is-d2-not-a-d1-tier)
+  - [Mixed-scheme `@alice` ↔ `@bob`](#mixed-scheme-alice--bob)
   - [What this reframes (M0–M4)](#what-this-reframes-m0m4)
 - [Application migration & rollout](#application-migration--rollout)
   - [The invariant that makes independent upgrade safe](#the-invariant-that-makes-independent-upgrade-safe)
@@ -62,10 +62,11 @@ rotation, and giving applications a bootstrap path to pq-mls groups.
 - [Phases](#phases)
   - [Phase 0 — land the foundations](#phase-0--land-the-foundations)
   - [Phase 1 — complete the PQ primitives (at_chops)](#phase-1--complete-the-pq-primitives-at_chops)
-  - [Phase 2 — identity layer: KeyPackages and per-client AtKeys](#phase-2--identity-layer-keypackages-and-per-client-atkeys)
-  - [Phase 3 — SecureGroup v1 + the `group` provider (self encryption)](#phase-3--securegroup-v1--the-group-provider-self-encryption)
-  - [Phase 4 — cross-atSign groups (shared encryption)](#phase-4--cross-atsign-groups-shared-encryption)
-  - [Phase 5 — pq-mls engine (SecureGroup v2)](#phase-5--pq-mls-engine-securegroup-v2)
+  - [Phase 2 — identity layer: per-APKAM KeyPackages and per-APKAM AtKeys](#phase-2--identity-layer-per-apkam-keypackages-and-per-apkam-atkeys)
+  - [Phase 3 — the nskey data path (D1 self + shared)](#phase-3--the-nskey-data-path-d1-self--shared)
+  - [Phase 4 — at/pqmls (D2): intra-atSign forward-secure groups (SecureGroup v1)](#phase-4--atpqmls-d2-intra-atsign-forward-secure-groups-securegroup-v1)
+  - [Phase 5 — at/pqmls (D2): cross-atSign groups + Group Delivery Service](#phase-5--atpqmls-d2-cross-atsign-groups--group-delivery-service)
+  - [Phase 6 — pq-mls engine (SecureGroup v2)](#phase-6--pq-mls-engine-securegroup-v2)
 - [Retiring selfEncryptionKey (and shared_key.*)](#retiring-selfencryptionkey-and-shared_key)
 - [Dependencies](#dependencies)
 - [Upgrading NoPorts (with daemon-ping feature discovery)](#upgrading-noports-with-daemon-ping-feature-discovery)
@@ -91,11 +92,11 @@ jump.
 | Topic | Design (roadmap) | Build (plan) | Worked example |
 |---|---|---|---|
 | The two deliverables (D1 / D2) | [The two major deliverables](crypto-roadmap.md#the-two-major-deliverables) | [Current state (1)](crypto_impl_plan.md#1-current-state-2026-06-22) · [D1 acceptance (2)](crypto_impl_plan.md#2-d1-acceptance--what-done-means) | — |
-| D1 Tier1 — the `nskey` default | [D1 — preserving legacy simplicity](crypto-roadmap.md#d1--preserving-legacy-simplicity-two-tiers) | [D1-B (3)](crypto_impl_plan.md#d1-b--the-nskey-provider-d1-tier1--the-default) | — |
+| D1 — the nskey data path | [D1 — preserving legacy simplicity](crypto-roadmap.md#d1--preserving-legacy-simplicity-single-tier-the-nskey-data-path) | [D1-B (3)](crypto_impl_plan.md#d1-b--the-nskey-data-path-the-default-data-path) | — |
 | Migration, rollout & versioning | [Application migration & rollout](crypto-roadmap.md#application-migration--rollout) | [D1-C / D1-D (3)](crypto_impl_plan.md#d1-c--migration--rollout-machinery) | — |
 | Existing-client retrofit (auth + key dist) | [Existing-client retrofit](crypto-roadmap.md#existing-client-retrofit--auth-upgrade--key-distribution) | [D1-F (3)](crypto_impl_plan.md#d1-f--existing-client-retrofit--auth-upgrade--secret-conveyance) | — |
-| Identity, KeyPackages, self groups | [Phases 2–3](crypto-roadmap.md#phase-2--identity-layer-keypackages-and-per-client-atkeys) | [D1-E (3)](crypto_impl_plan.md#d1-e--d1-tier2-shape-corrections-fold-into-wp-gp) · [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | — |
-| Cross-atSign shared groups | [Phase 4](crypto-roadmap.md#phase-4--cross-atsign-groups-shared-encryption) | [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | [C — `at_talk` chat](crypto-walkthroughs.md#walkthrough-c--a-two-atsign-chat-with-client-churn-at_talk) |
+| Identity, KeyPackages, the nskey data path | [Phases 2–3](crypto-roadmap.md#phase-2--identity-layer-per-apkam-keypackages-and-per-apkam-atkeys) | [D1-E (3)](crypto_impl_plan.md#d1-e--atpqmls-provider-shape-corrections-fold-into-wp-gp) · [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | — |
+| Cross-atSign shared groups (D2) | [Phase 5](crypto-roadmap.md#phase-5--atpqmls-d2-cross-atsign-groups--group-delivery-service) | [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | [C — `at_talk` chat](crypto-walkthroughs.md#walkthrough-c--a-two-atsign-chat-with-apkam-keypair-churn-at_talk) |
 | pq-mls engine + Delivery Service | [atServer group Delivery Service](crypto-roadmap.md#atserver-group-delivery-service-target-design) | [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | [B — a large group](crypto-walkthroughs.md#walkthrough-b--a-large-group-end-to-end) |
 | NoPorts adoption | [Upgrading NoPorts](crypto-roadmap.md#upgrading-noports-with-daemon-ping-feature-discovery) | [Cross-repo & NoPorts (5)](crypto_impl_plan.md#5-cross-repo-pr--publish-sequence--noports) | [A — NoPorts](crypto-walkthroughs.md#walkthrough-a--noports-end-to-end) |
 | Structural enablers / WASM split | [Component responsibilities & WASM-readiness](crypto-roadmap.md#component-responsibilities--wasm-readiness) | [D1-S (3)](crypto_impl_plan.md#d1-s--structural-enablers-prerequisite--lands-first) | — |
@@ -119,60 +120,92 @@ confidentiality is the defense.
 It does **not** require MLS. It is reached by routing every encryption path
 through pluggable PQ providers — X-Wing hybrid KEM (ML-KEM-768 + X25519) for key
 transport, AES-256-GCM for data — publishing a PQ enrollment-conveyance key,
-then making those providers the default for self and shared data and retiring
-the classical-only `selfEncryptionKey` and `shared_key.*`. Milestones **M0–M4**
-carry it; the v1 group engine is already PQ-native, so PQ-safe messaging does
-not wait on the MLS work.
+then making the **nskey data path** the default for self and shared data and
+retiring the classical-only `selfEncryptionKey` and `shared_key.*`. D1's data
+path is the **nskey data path** — `at/nskey` conveys a symmetric content key
+(CK) and `at/symmetric/AES/GCM` encrypts the data under it (see
+[`pq-data-encryption.md`](pq-data-encryption.md)) — **not** the group engine.
+Milestones **M0–M4** carry it; the nskey data path is PQ-native by
+construction, so PQ-safe messaging does not wait on the MLS (group) work, which
+is the separate D2 `at/pqmls` provider.
 
 ### Deliverable 2 — implement pq-mls
 
 Replace the interim v1 group engine with a real MLS engine (RFC 9420 — TreeKEM,
 forward secrecy, post-compromise security) on post-quantum ciphersuites, behind
 the same `SecureGroup` interface and served by the atServer group Delivery
-Service. This adds what D1 does not: **forward secrecy** (a compromised key
-does not expose past traffic), **post-compromise security** (a group self-heals
-after a member is compromised, once that member rotates), standardized and
-audited group semantics, and **O(log n)** membership changes that make large
-groups practical. This is the **end-state architecture**. Milestones **M5–M6**
-carry it.
+Service. D1 already gives *coarse* forward secrecy (CK rotation + delete) and
+post-compromise security (nskey-keypair rotation); what D2 adds is
+**robust/per-message FS** (ratcheted leaves, no standing master key, so a
+compromised key does not expose past traffic at message granularity),
+**scale** (O(log n) membership changes that make large groups practical), and
+**decoupled membership** (groups whose membership is not tied to namespace
+authorisation), with standardized and audited group semantics. This is the
+**end-state architecture** for the *group* path. Milestones **M5–M6** carry it.
 
-D1 makes the bytes quantum-safe; D2 makes the *group* quantum-safe,
-forward-secret, and scalable. The roadmap is deliberately shaped so D2 is an
-engine swap under D1's stable interface — not a second migration. NoPorts
-adoption (the production payoff) is reachable as soon as D1 lands, and is
-strengthened — not gated — by D2.
+D1 makes the bytes quantum-safe (with coarse FS + PCS available); D2 makes the
+*group* quantum-safe with robust/per-message forward secrecy, scale, and
+decoupled membership. The roadmap is deliberately shaped so D2 is an engine
+swap under D1's stable interface — not a second migration. NoPorts adoption
+(the production payoff) is reachable as soon as D1 lands, and is strengthened —
+not gated — by D2.
 
-## D1 — preserving legacy simplicity (two tiers)
+## D1 — preserving legacy simplicity (single-tier: the nskey data path)
 
 D1's design objective is to keep the **legacy developer experience** — *Alice
 shares with `@bob`; every bob client with namespace access, present and future,
 decrypts it instantly, offline, with no ceremony* — while making it
 post-quantum-safe and closing the cheap legacy weaknesses.
 
-The tension is real and worth stating plainly. Legacy's simplicity comes from
-**one static, shared, copyable key** (the atSign-level encryption keypair in
-every `.atKeys`), which is exactly what gives per-device security its problems.
-Per-device non-copyable rotating keys are the opposite. **You cannot have both
-"a future device just works, instantly and offline" and "non-copyable per-device
-keys"** — instant offline access for a new device fundamentally requires a
-copyable shared key (otherwise someone must re-encrypt to the new device,
-online). Legacy chose copyable; full MLS chooses re-encrypt. D1 resolves this by
-**tiering**: the default keeps legacy's shape (hardened), and per-device
-security is opt-in.
+D1 ships as a **single tier: the nskey data path** — the only data path for
+both self and shared data. The nskey data path is **two providers** —
+`at/nskey` (which conveys a symmetric content key, sealing it once to an nskey
+as a discrete record) and `at/symmetric/AES/GCM` (which encrypts the data under
+that content key) — plus the built-in `legacy` provider (a value with no
+`providerId` defaults to legacy). The "two tiers" framing of [ADR
+0001](adr/0001-d1-simplicity-tiers.md) is superseded by [ADR
+0002](adr/0002-d1-single-tier-nskey.md): the property that earlier framing
+withheld to a "Tier 2" — forward secrecy — is a *rotation policy* of the single
+nskey data path, not a separate provider, and D1 provides it **coarsely and
+cheaply** (see [`pq-data-encryption.md`](pq-data-encryption.md)). The genuine
+delta of the forward-secure (MLS) group model — robust/per-message forward
+secrecy, O(log n) large-group scale, and groups whose membership is decoupled
+from namespace authorisation — is **D2**, the `at/pqmls` provider, not a D1
+tier.
 
-The two tiers are **D1 Tier 1 — Baseline** (the simple, legacy-shaped default)
-and **D1 Tier 2 — Hardened** (opt-in per-device security). They are abbreviated
-**D1 Tier1** and **D1 Tier2** below and throughout these docs.
+What earlier framing treated as a tension — *"you cannot have both a future
+device working instantly/offline and non-copyable per-device keys"* — was a
+false dichotomy (ADR 0002). Data is encrypted under symmetric content keys
+delivered **per-APKAM** (the secret-sharing substrate + push); there are no
+per-device data keys, and a *future* device is served by **push** —
+instant, offline — so instant/offline access and per-APKAM revocation coexist
+without a second tier.
 
-### D1 Tier 1 — Baseline (the `nskey` provider, default)
+### The nskey data path (D1's data path)
 
 Replace the one atSign-wide RSA default keypair (and `selfEncryptionKey`, and
-`shared_key.*`) with a **per-`(atSign, namespace)` X-Wing keypair**:
+`shared_key.*`) with a **pair of per-`(atSign, namespace)` X-Wing KEM keypairs** —
+a **self nskey** (not published; you encapsulate your *own* content keys to it)
+and a **public nskey** (`public:nskey.<ns>@<owner>`, published for external
+senders). An nskey only ever *wraps a symmetric content key (CK)*; it never
+encrypts application data directly. The CK is conveyed **once** — sealed to an
+nskey and written as its own discrete `<ckKid>.__ck.<ns>@<owner>` record by the
+`at/nskey` provider — and every data value just **cites it by `ckKid`** (no
+sealed CK is embedded per value; this is decision (a) of
+[`pq-data-encryption.md`](pq-data-encryption.md)). Two providers therefore make
+up the path: `at/nskey` (the CK-conveyance record) and `at/symmetric/AES/GCM`
+(the data, AES-256-GCM under the cited CK).
 
-- **Self data** → encapsulate the value's data key to *your own* namespace
-  public key. **Shared data** → encapsulate it to the *recipient's* namespace
-  public key. One mechanism, both directions; `selfEncryptionKey` and
-  `shared_key.*` both retire into "encrypt to the namespace keypair".
+- **Self data** → wrap the value's symmetric CK by encapsulating the CK to *your
+  own* **self nskey**, written once as an `at/nskey` CK-conveyance record; the
+  data value is then `at/symmetric/AES/GCM` (AES-256-GCM under that CK, citing
+  `ckKid`). **Shared data** → encapsulate the CK to the *recipient's* published
+  **public nskey** (again, a discrete `at/nskey` record), and write the data
+  with `at/symmetric/AES/GCM` citing `ckKid`. One mechanism, both directions —
+  differing only in *which* nskey the CK is sealed to; `selfEncryptionKey` and
+  `shared_key.*` both retire into "convey a content key once via `at/nskey`,
+  then `at/symmetric/AES/GCM` the data under that CK, cited by `ckKid`". See
+  [`pq-data-encryption.md`](pq-data-encryption.md) for the full model.
 - **Enrollment-granular, copyable** (the legacy bargain, kept): every client of
   an `at_talk`-authorized enrollment holds the `at_talk` private key. A new
   client receives it at **enrollment approval** (the approver hands it over) or
@@ -182,15 +215,15 @@ Replace the one atSign-wide RSA default keypair (and `selfEncryptionKey`, and
   `KeyPackage`, `members`, `clientId`, or single-owner lock anywhere in the
   app's face. Identity stays the *enrollment*, exactly as legacy.
 
-What D1 Tier1 closes vs legacy, at **zero developer-visible change**:
+What D1 closes vs legacy, at **zero developer-visible change**:
 
-| Legacy weakness | D1 Tier1 (`nskey`) |
+| Legacy weakness | D1 (nskey data path) |
 |---|---|
 | Not PQ-safe (RSA-2048) | **Closed** — X-Wing hybrid KEM |
 | Crypto broader than transport (one key spans all namespaces) | **Closed** — per-namespace keypair mirrors enrollment authorization |
 | `selfEncryptionKey` sits still forever, conveyed to every enrollment | **Closed** — per-namespace, **rotatable**; per-namespace blast radius, not atSign-wide |
-| No per-device revocation granularity | **Partial** — enrollment revocation cuts future access for free (below); per-device is D1 Tier2 |
-| No rotation / forward secrecy | **Partial** — rotatable on demand (post-compromise security); no per-message FS — D1 Tier2 |
+| No per-device revocation granularity | **Closed** — per-APKAM future-data revocation: rotate the nskey keypair excluding the revoked keypair (the expensive lever, the successor nskey conveyed per-APKAM) |
+| No rotation / forward secrecy | **Coarse FS** — rotate + delete the content keys (O(1) wrap to the shared nskey); robust/per-message FS is D2 (`at/pqmls`) |
 
 ### Cold-start — bob has never run an at_talk app
 
@@ -200,9 +233,11 @@ exists from activation). Resolution: **alice uses the most specific key bob has
 published, falling back to the atSign-level PQ key.**
 
 1. Bob always has an atSign-level keypair; Phase 1 publishes a PQ sibling
-   (`public:pqpublickey@bob`). With no `at_talk` key, alice encapsulates to
-   **that** — every bob client can decrypt, instantly, like legacy (how every bob
-   client obtains the *private* half is
+   (`public:pqpublickey@bob`). With no `at_talk` public nskey, alice encapsulates
+   the **content key** to **that** root key (the data is still AES-256-GCM under
+   the CK; **data is never encrypted directly to the root key** — only the CK
+   targets it) — every bob client can then unwrap the CK and decrypt, instantly,
+   like legacy (how every bob client obtains the root key's *private* half is
    [Existing-client retrofit](#existing-client-retrofit--auth-upgrade--key-distribution)).
 2. The first bob `at_talk` client mints/derives and publishes the `at_talk`
    public key; subsequent messages **upgrade** to namespace-scoped automatically.
@@ -216,83 +251,130 @@ The tight alternative — **seal-and-hold** (don't send until bob publishes an
 `at_talk` key) — sacrifices instant send for a namespace bob may never open, so
 it is the **opt-in** choice for high-security namespaces; the default is
 send-now with the atSign fallback. *Optional optimisation:* derive bob's
-namespace keypair deterministically (HKDF(master-seed, namespace) → X-Wing
-seed), so any bob client derives the private key with **no distribution** — this
-removes bob-side distribution but not alice's need for a published public key,
-so the atSign fallback still covers true cold-start.
+namespace nskey keypair deterministically (HKDF(master-seed, namespace) → X-Wing
+seed), so any bob client derives the nskey private with **no distribution** —
+this removes bob-side distribution but not alice's need for a published public
+nskey, so the atSign fallback still covers true cold-start.
 
-### Opt-in key rotation (D1 Tier1)
+### Opt-in key rotation
 
-Rotation is the same channel the self group already uses, at enrollment
-granularity. **bob1 mints a new namespace keypair, publishes the new public key,
-and writes the new private key into the `__`-secret self-group channel** as a
-reserved secret (`__nsk.<epoch>`), PQ-wrapped per-enrollment to each `at_talk`
-enrollment's conveyance key. Other clients receive it (push); a client that
-missed it pulls (`requestSecretsFromNamespace`); a *new* client gets the current
-key at enrollment approval. This reuses the **prototyped** secret-sharing
-substrate (`__`-secrets, `excludeEnrollmentIds`) verbatim — the namespace key is
-just another secret on the channel.
+D1 has **two distinct rotation levers**, at very different costs (see [ADR
+0002](adr/0002-d1-single-tier-nskey.md) and
+[`pq-data-encryption.md` §5.4](pq-data-encryption.md#54-ck-rotation--coarse-forward-secrecy)):
 
-- **Buys:** *post-compromise security at namespace granularity* — after a
-  rotation, a key captured *before* it reads nothing written *after*. Legacy's
-  `selfEncryptionKey` could never rotate; this is a real, cheap, opt-in upgrade.
-- **Does not buy:** forward secrecy or history re-encryption — clients **retain
-  old private keys** to read old messages (history-on), so rotation changes the
-  key for *new* data only.
-- **Rotation is also the revocation primitive:** distribute the new key
-  **excluding** the revoked enrollment(s).
+- **Content-key (CK) rotation — the routine, cheap (O(1)) lever; this is the
+  coarse-FS lever.** Cut a new CK, wrap it **once** to the *shared* nskey, and
+  write that one `<ckKid>.__ck.<ns>@<owner>` record (`at/nskey`) on ordinary
+  sync; every authorised client unwraps it with the shared nskey private. New
+  data uses the new CK. For forward secrecy, **delete** the old CK's `at/nskey`
+  conveyance record and evict the cached CK — old-CK data is then undecryptable
+  (decision (a) makes this possible: the CK was never embedded in the data
+  values). The nskey keypair is unchanged; this is one record on the normal
+  data path, **not** a substrate push.
+
+- **nskey-keypair rotation — the expensive (O(n)) per-APKAM revocation +
+  post-compromise-security lever.** A client mints a new namespace nskey
+  keypair, supersedes the published `public:nskey.<ns>@<owner>`, and the new
+  **private** half is conveyed **per-APKAM** through the secret-sharing
+  substrate (`__ssenv` envelopes sealed to each authorised APKAM key package,
+  pushed via `enroll:listfornamespace`; a client that missed the push pulls it
+  via `requestSecret`; a *new* APKAM keypair receives it at enrollment
+  approval). This is O(n) in authorised APKAM keypairs — costly precisely
+  because, to **exclude** a revoked keypair, the successor cannot use the O(1)
+  shared-nskey path (a revoked holder still has the old private). This reuses
+  the **prototyped** secret-sharing substrate (`__ssenv`, `enroll:listfornamespace`,
+  `excludeEnrollmentIds`) verbatim — the nskey private is just another secret
+  on the channel.
+
+- **CK rotation buys:** *coarse forward secrecy* — after rotate-and-delete, a CK
+  captured before the cut reads nothing written after (subject to deletion
+  discipline + eviction reachability, the FS TCB). Legacy's `selfEncryptionKey`
+  could never rotate; this is a real, cheap, opt-in upgrade.
+- **nskey-keypair rotation buys:** *post-compromise security at namespace
+  granularity* — after the keypair rotates, a private captured before it reads
+  nothing wrapped to the successor.
+- **Neither buys** history re-encryption — by default clients **retain** old CKs
+  / old nskey privates to read old data (history-on), so rotation changes the
+  key for *new* data only unless FS-mode deletes the old CK.
+- **nskey-keypair rotation is also the revocation primitive:** convey the
+  successor nskey private to every authorised member **excluding** the revoked
+  APKAM keypair(s).
 
 ### Revocation, end to end
 
 Three composable moves, increasing cost:
 
-1. **Revoke the enrollment (APKAM) — free, immediate.** The atServer stops
-   authenticating that device → no new data, no new keys. Cuts *future access*
-   with zero crypto work.
-2. **Rotate the namespace key excluding that enrollment — cheap, opt-in.** Even
-   a device with cached access gets no post-rotation key.
+1. **Revoke the enrollment / APKAM keypair — free, immediate.** The atServer
+   stops authenticating that keypair → no new data, no new keys. Cuts *future
+   access* with zero crypto work.
+2. **Rotate the nskey keypair excluding that APKAM keypair — expensive (O(n)),
+   opt-in.** This is the heavier lever: the successor nskey private is conveyed
+   per-APKAM through the substrate to every member *except* the revoked one, so
+   even a device with cached access gets no successor private. (Distinct from
+   the cheap O(1) **CK rotation** above, which is the routine coarse-FS lever
+   but cannot *exclude* a holder of the shared nskey private — that is exactly
+   why excluding a keypair forces the costly per-APKAM keypair rotation.)
 3. **Re-encrypt history — expensive, rarely needed.** The only way to revoke
-   access to data the device *already pulled* — and the boundary where D1 Tier2 /
-   D2 (per-device leaves + FS) actually earns its complexity.
+   access to data the device *already pulled* — and the boundary where robust,
+   per-message forward secrecy (D2's `at/pqmls`, per-APKAM ratcheted leaves)
+   actually earns its complexity.
 
-D1 Tier1 gives "stop future access" cheaply and partly for free; "scrub the past"
-is the opt-in tier's job.
+The nskey data path gives "stop future access" two ways: cheap **coarse FS** by
+rotating + deleting the content keys (O(1)), and **per-APKAM future-data
+revocation** by rotating the nskey keypair excluding the revoked keypair (the
+expensive O(n) lever); robust per-message "scrub the past" is D2's job.
 
-### D1 Tier 2 — Hardened (opt-in per-device, the D2 substrate)
+### `at/pqmls` is D2, not a D1 tier
 
-The per-client `group` provider (KeyPackages + epoch keys + per-device
-membership) becomes an **opt-in** tier a namespace declares when it needs
-per-device revocation or forward secrecy. Most apps never touch it. Crucially
-the **secret-sharing substrate is shared** between tiers: D1 Tier1 uses it as
-*per-enrollment distribution plumbing* for rotation; D1 Tier2 uses it
-*per-client*. So the group work already prototyped is not discarded — it is the
-plumbing under D1 Tier1 and the data path of D1 Tier2. D2/MLS swaps D1 Tier2's engine.
+The per-APKAM MLS group provider — `at/pqmls`, with KeyPackages, ratcheted leaf
+keys (no standing master key → robust/per-message FS), TreeKEM (O(log n)
+churn), and membership decoupled from namespace authorisation — is **D2**, not a
+D1 tier. Most apps never touch it; the **nskey data path** serves both self and
+shared data. Crucially the **secret-sharing substrate is shared**: the nskey
+data path uses it to convey nskey **privates** per-APKAM (Layer 1); `at/pqmls`
+uses the same substrate per-APKAM for its group messages. (Routine **CK
+rotation** does *not* ride the substrate — a new CK is conveyed as one ordinary
+`at/nskey` record on normal sync, O(1); only the heavier nskey-private
+conveyance uses the per-APKAM substrate.) So the group work already prototyped
+is not discarded — it is the plumbing under the nskey data path (D1) and the
+data path of `at/pqmls` (D2). D2/MLS swaps `at/pqmls`'s engine for a full RFC
+9420 MLS engine. (See [ADR 0002](adr/0002-d1-single-tier-nskey.md).)
 
-### Mixed-tier `@alice` ↔ `@bob`
+### Mixed-scheme `@alice` ↔ `@bob`
 
 The M0 provider seam lets schemes coexist per value, so the **sender encrypts in
 the scheme the recipient can decrypt**, discovered from what the recipient
-publishes (namespace key → `nskey`; KeyPackages+group advertised → `group`; only
-an RSA pubkey → `legacy`); `appMetadata.providerId` tells the recipient which
-provider to open with. The developer writes the same `put`; the SDK negotiates
-per-destination, downgrading to the recipient's best supported tier. D1 Tier1
-clients **retain legacy capability** for un-upgraded peers.
+publishes (a published public nskey → the **nskey data path**, i.e. an
+`at/nskey` CK-conveyance record plus `at/symmetric/AES/GCM` data; KeyPackages +
+group advertised → `at/pqmls`; only an RSA pubkey → `legacy`);
+`appMetadata.providerId` on each stored value tells the recipient which provider
+to open it with — so a CK record carries `at/nskey` and a data value carries
+`at/symmetric/AES/GCM` (there is no single `nskey` providerId to open with). The
+developer writes the same `put`; the SDK negotiates per-destination, downgrading
+to the recipient's best supported scheme. nskey-data-path clients **retain
+legacy capability** for un-upgraded peers.
 
 ### What this reframes (M0–M4)
 
-The milestones stand; the *delivery* shifts from "per-client groups are the
-path" to "per-client groups are the opt-in tier and the D2 substrate":
+The milestones stand; the *delivery* shifts from "per-APKAM groups are the D1
+data path" to "the **nskey data path** is D1's single data path; the per-APKAM
+MLS group provider is **D2** (`at/pqmls`) and the secret-sharing substrate
+underpins both":
 
-- **M0 / M1** unchanged — D1 Tier1 *is* a pluggable PQ provider; it uses X-Wing +
-  the Phase-1 enrollment-conveyance PQ key.
-- **M2** (per-client identity / KeyPackages) → the **substrate + D1 Tier2**, not a
-  prerequisite for the D1 Tier1 data path; the single-owner lock is D1 Tier2 only.
-- **M3** (self encryption) → D1 Tier1 ships `nskey` self-encryption (default);
-  the per-client `group` self-encryption is D1 Tier2.
-- **M4** (cross-atSign) → D1 Tier1 ships `nskey` shared-encryption (legacy-shaped,
-  the `(atSign, namespace)` keypair used toward another atSign); the per-client
-  `(pair, namespace)` group is D1 Tier2.
-- **D2 (M5–M6)** is D1 Tier2's MLS engine — unchanged.
+- **M0 / M1** unchanged — the nskey data path's providers (`at/nskey` +
+  `at/symmetric/AES/GCM`) are pluggable PQ providers; they use X-Wing + the
+  Phase-1 enrollment-conveyance PQ key.
+- **M2** (per-APKAM identity / KeyPackages) → the **substrate** (conveys nskey
+  privates per-APKAM for D1; underpins `at/pqmls` for D2), not a separate D1
+  data path; the single-owner lock is a D2 (`at/pqmls`) concern.
+- **M3** (self encryption) → D1 ships the **nskey data path** (`at/nskey`
+  conveying the CK + `at/symmetric/AES/GCM` encrypting data) as the default self
+  *and* shared data path; the per-APKAM forward-secure group provider
+  (`at/pqmls`) is D2, not the self path.
+- **M4** (cross-atSign) → D1 ships nskey-data-path shared-encryption
+  (legacy-shaped, the recipient's published public nskey targeted toward another
+  atSign); the per-APKAM `(pair, namespace)` MLS group is D2 (`at/pqmls`).
+- **D2 (M5–M6)** is `at/pqmls`'s MLS engine — unchanged.
 
 ## Application migration & rollout
 
@@ -337,9 +419,10 @@ behaviour change:
 - **`disallowLegacyEncryption`** (working name) — a flag on `AtClientPreference`
   meaning literally *"never write new data using the legacy provider for
   encryption."* When `true`, the SDK will not use the `legacy` `CryptoProvider`
-  to encrypt; it uses a PQ provider (`nskey`, `group`, or the atSign-level PQ
-  fallback), or — if a reader can only be reached via legacy — **refuses the
-  write** rather than fall back.
+  to encrypt; it uses a PQ path (the nskey data path's `at/nskey` +
+  `at/symmetric/AES/GCM`, `at/pqmls`, or the atSign-level PQ fallback), or — if a
+  reader can only be reached via legacy — **refuses the write** rather than fall
+  back.
 - **Defaults: `false` in 3.x, `true` in 4.0.** A 3.x app is legacy-compatible by
   default and may opt into PQ-only writes early; a 4.0 app is PQ-only by default
   and may opt back out (e.g. during a long migration tail).
@@ -380,25 +463,27 @@ silently (a `false` flag SHOUTs at startup).**
 0. **Baseline.** All legacy; every value legacy-encrypted (`providerId`
    absent / `legacy`).
 1. **Rebuild, behaviour-neutral (the soak).** Rebuild any subset against the new
-   AtClient. Rebuild *alone* adds the `nskey`/`group` providers and
-   provider-routing on **read** (decrypts any future PQ data) but keeps
-   **writing legacy**. Nothing observable changes; deploy client-by-client at
-   will — a zero-risk soak.
-2. **Publish the namespace key + capability marker (still writing legacy).** The
-   first upgraded client of an atSign mints/derives the `at_talk` `nskey` public
-   key and distributes the private key to that atSign's at_talk enrollments over
-   the self-group secret channel; each atSign publishes a per-`(atSign,
-   namespace)` capability marker, **initially not-ready**. Reads can consume
-   `nskey` if any appears; writes stay legacy.
+   AtClient. Rebuild *alone* adds the nskey-data-path providers (`at/nskey` +
+   `at/symmetric/AES/GCM`) and `at/pqmls`, plus provider-routing on **read**
+   (decrypts any future PQ data) but keeps **writing legacy**. Nothing
+   observable changes; deploy client-by-client at will — a zero-risk soak.
+2. **Publish the namespace nskey + capability marker (still writing legacy).**
+   The first upgraded client of an atSign mints/derives the `at_talk` public
+   nskey, and the nskey **privates** are conveyed **per-APKAM** to that atSign's
+   `at_talk`-authorised APKAM keypairs through the secret-sharing substrate
+   (`__ssenv` push + `enroll:listfornamespace`, pull backstop); each atSign
+   publishes a per-`(atSign, namespace)` capability marker, **initially
+   not-ready**. Reads can consume nskey-data-path values if any appear; writes
+   stay legacy.
 3. **Flip readiness (per atSign, per namespace).** When an atSign's at_talk
    fleet is fully upgraded — operator-declared, or auto-detected by "no legacy
    client has checked in" — mark it ready. Then, per-destination and
    automatically: senders writing **to** that atSign's at_talk switch new writes
-   to `nskey`; that atSign's **self** data switches to `nskey`; peers still
-   legacy elsewhere keep getting legacy.
+   to the nskey data path; that atSign's **self** data switches to the nskey data
+   path; peers still legacy elsewhere keep getting legacy.
 4. **Both ends ready ⇒ end-to-end D1.** Once alice *and* bob are marked ready,
-   alice↔bob at_talk runs `nskey` (PQ + namespace-scoped) both directions. A
-   mixed pair stays legacy *in that direction only*, automatically.
+   alice↔bob at_talk runs the nskey data path (PQ + namespace-scoped) both
+   directions. A mixed pair stays legacy *in that direction only*, automatically.
 5. **Retire legacy (gradual, then the v4 default flip).** Lazy re-encrypt old
    values on touch; stop conveying `selfEncryptionKey` for at_talk — all within
    3.x. The final phase is **`at_client` 4.0**, which flips the **default** of
@@ -411,14 +496,15 @@ silently (a `false` flag SHOUTs at startup).**
 The Step-3 marker flip is the only operator judgement call: flipping it while a
 legacy client of that atSign still runs is the one way to break a reader, so it
 defaults off and the SDK can warn on a recent legacy check-in. Everywhere else,
-a write only goes `nskey` when the readers' marker says all of them can read it,
-so no client ever receives a value it cannot decrypt.
+a write only goes to the nskey data path when the readers' marker says all of
+them can read it, so no client ever receives a value it cannot decrypt.
 
 *Independence example.* alice1 upgrades alone → reads everything, writes legacy
 to bob and legacy self (alice2 legacy) → nothing changes. alice2 upgrades →
-alice marks at_talk ready → alice's *self* data goes `nskey` (both alice clients
-read it) while *shared* to bob stays legacy (bob not ready). bob1+bob2 upgrade,
-bob marks ready → shared flips to `nskey`. At no step does anyone lose access.
+alice marks at_talk ready → alice's *self* data goes to the nskey data path
+(both alice clients read it) while *shared* to bob stays legacy (bob not ready).
+bob1+bob2 upgrade, bob marks ready → shared flips to the nskey data path. At no
+step does anyone lose access.
 
 ### Capabilities by application code-change level
 
@@ -432,16 +518,17 @@ refuses rather than write legacy (see the versioning contract).
 | Capability | Rebuild only (no code) | Flag flip (minimal config) | Simple code changes |
 |---|---|---|---|
 | Read all legacy / pre-existing data | ✓ | ✓ | ✓ (incl. v4) |
-| Read PQ (`nskey`) data from upgraded peers | ✓ | ✓ | ✓ |
+| Read PQ (nskey-data-path) data from upgraded peers | ✓ | ✓ | ✓ |
 | Stay compatible with un-upgraded **legacy** peers (auto-downgrade writes) | ✓ | ✓ | ✓ when `disallowLegacyEncryption=false` (3.x default); **off when `true`** (4.x default) |
 | Per-destination auto-negotiation of scheme | ✓ | ✓ | ✓ |
 | Your new writes are PQ + namespace-scoped | ◐ off by default¹ | ✓ (prefer-best + publish readiness) | ✓ |
-| Be a PQ recipient (peers send you `nskey`); self-data PQ | ✗ (still legacy-advertised) | ✓ (readiness marker) | ✓ |
+| Be a PQ recipient (peers send you nskey-data-path values); self-data PQ | ✗ (still legacy-advertised) | ✓ (readiness marker) | ✓ |
 | `selfEncryptionKey` retired for the namespace | lazy/auto as data migrates | ✓ (accelerated) | ✓ |
-| Opt-in key rotation (namespace-granular PCS) | ✗ | ✓ (enable in `CryptoConfig`) | ✓ (+ own rotation/revocation triggers) |
+| Coarse FS — CK rotation + delete (the cheap O(1) lever) | ✗ | ✓ (enable in `CryptoConfig`) | ✓ (+ own rotation triggers) |
+| Post-compromise security — nskey-keypair rotation (namespace-granular) | ✗ | ✓ (enable in `CryptoConfig`) | ✓ (+ own rotation/revocation triggers) |
 | Strict cold-start: refuse legacy fallback, require PQ | ✗ (defaults to fallback) | ◐ (policy toggle: hold vs send) | ✓ (custom seal-and-hold / error / notify) |
-| Per-device revocation — D1 Tier2 (`group` provider) | ✗ | ✗ | ✓ (opt-in per namespace) |
-| Forward secrecy / MLS — D2 | ✗ | ✗ | ✗ (future; opt-in when shipped) |
+| Per-APKAM future-data revocation — D1 (nskey-keypair rotation, the expensive lever) | ✗ | ✓ (rotate the nskey keypair excluding the revoked keypair) | ✓ (+ own revocation triggers) |
+| Robust/per-message forward secrecy / MLS — D2 (`at/pqmls`) | ✗ | ✗ | ✗ (future; opt-in when shipped) |
 | Consent hooks / custom membership policy | ✗ | ✗ | ✓ |
 
 ¹ ◐ = available but recommended off so rebuild stays behaviour-neutral; an
@@ -454,7 +541,7 @@ everything, stay fully compatible, and become PQ-ready. *Flip one readiness
 flag* when your fleet is upgraded and your data becomes post-quantum-safe and
 namespace-scoped, negotiated down automatically for anyone still on the old
 build. Reach for *code* only to refuse legacy (strict PQ), drive your own
-rotation, or opt into per-device (D1 Tier2) security.
+rotation/revocation, or opt into robust forward-secure groups (D2, `at/pqmls`).
 
 ## Existing-client retrofit — auth upgrade & key distribution
 
@@ -483,9 +570,10 @@ PQ keys arrive at onboarding or by enroll/approve push.
 
 Every retrofit pull is one instance of a single primitive, **`requestSecret`**:
 
-> A client needs a *named secret*; at least one of its sibling clients holds it. The
-> requester asks; a holder **`pqSeal`s** the secret to the requester's
-> [`ClientKeyPackage`](#phase-2--identity-layer-keypackages-and-per-client-atkeys)
+> A client (an APKAM keypair) needs a *named secret*; at least one of its sibling APKAM
+> keypairs holds it. The requester asks; a holder **`pqSeal`s** the secret to the
+> requester's APKAM
+> [`KeyPackage`](#phase-2--identity-layer-per-apkam-keypackages-and-per-apkam-atkeys)
 > (X-Wing public key); the requester opens it with its local private half.
 
 PQ-safe by construction — the seal is X-Wing to a public key whose private half never
@@ -496,8 +584,10 @@ APKAM already enforces), and never to a revoked enrollment. This reuses the
 secret-sharing [Foundations](#foundations) substrate (`requestSecretsFromNamespace` /
 `waitForSecret` / `shareSecretWith` / `excludeEnrollmentIds`), generalised from
 request-by-namespace to request-by-name. The same primitive carries every non-derivable
-secret in D1 — `nskey` private keys, rotation epoch keys, the atSign-level PQ key — so it
-is the reusable core, not a one-off.
+secret in D1 — nskey private keys (self and public nskey), successor nskey privates on
+keypair rotation, the atSign-level PQ key — so it is the reusable core, not a one-off.
+(Routine content-key rotation does *not* use this primitive: a new CK rides ordinary sync
+as one `at/nskey` record.)
 
 **Why not the obvious shortcut.** Wrapping the secret under the shared `selfEncryptionKey`
 and storing it server-side is *not* PQ-safe: the self key is conveyed at enrollment under
@@ -527,11 +617,11 @@ Each upgrading client bootstraps both keypairs with one uniform sequence; whethe
 in advance:
 
 1. authenticate on the existing legacy connection;
-2. **mint-once per host** a PQ APKAM keypair (or reuse the one already in this host's
-   keyfile) and publish its public half as an immutable per-host record;
+2. **mint-once per keyfile** a PQ APKAM keypair (or reuse the one already in this
+   keyfile) and publish its public half as an immutable per-APKAM record;
 3. verify PQ APKAM authentication works;
 4. **delete the legacy RSA APKAM public key** — only after step 3 confirms PQ auth;
-5. save AtKeys; publish its `ClientKeyPackage`;
+5. save AtKeys; store its per-APKAM KeyPackage (a self key, not published);
 6. **attempt create** `pqpublickey`: won → generate, hold, and serve the private half;
    exists → pull, verify public/private correspondence, store;
 7. once the roster holds the key, advertise PQ readiness (atSign-wide, once).
@@ -548,24 +638,25 @@ enrollment is served a subset.
   clients/processes sharing one keyfile on one host share **one** minted PQ APKAM keypair.
   The atServer allows **multiple APKAM keypairs per enrollment**, so a copy of the keyfile
   on another host mints its own, different key. The new revocation granularity this unlocks
-  is therefore **per-host**, not per-client — sitting alongside the
-  [Phase-2](#phase-2--identity-layer-keypackages-and-per-client-atkeys) split of copyable
-  credential vs device-local material.
+  is therefore **per-APKAM**, not per-client — sitting alongside the
+  [Phase-2](#phase-2--identity-layer-per-apkam-keypackages-and-per-apkam-atkeys) split of
+  copyable credential vs device-local material.
 - **Delete the legacy APKAM key by default** (the auth key only — keep the legacy
   *encryption* key for reading history). It is both quantum-vulnerable and **shared across
-  every copy** of the keyfile; while it remains, per-host revocation is bypassable through
+  every copy** of the keyfile; while it remains, per-APKAM revocation is bypassable through
   it. Deletion enforces "one enrollment's private APKAM key lives in exactly one keyfile" —
   a copy that has not upgraded gets locked out and must re-enroll, the correct outcome for
   copying we advise against. A grace period is available as a softer deployment knob.
-- **Revocation is two axes:** *auth* (per-enrollment, or — new — **per-host** by deleting
-  that host's PQ APKAM key, contingent on the legacy key being gone) and *encryption*
-  (per-namespace key rotation, [Revocation](#revocation-end-to-end)), which controls
-  new-data access and is orthogonal to auth.
+- **Revocation is two axes:** *auth* (per-enrollment, or — new — **per-APKAM keypair** by
+  deleting that keypair's PQ APKAM key, contingent on the legacy key being gone; since one
+  host's keyfile holds one APKAM keypair, this is per-APKAM granularity) and *encryption*
+  (per-namespace nskey-keypair rotation, [Revocation](#revocation-end-to-end)), which
+  controls new-data access and is orthogonal to auth.
 - **Where the PQ APKAM key lives.** No universal way to *cryptographically* bind it to a
   host exists today (TPM/Secure Enclave lack PQ support). Default to storing it in the
   keyfile/keychain that bootstrapped it (clean for dev/test — a reused keyfile doesn't
-  re-mint); offer OS-keychain/hardware as an opt-in for single-host high-security. Per-host
-  management/revocation comes from a **distinct labelled record per host** plus
+  re-mint); offer OS-keychain/hardware as an opt-in for single-host high-security. Per-APKAM
+  management/revocation comes from a **distinct labelled record per APKAM keypair** plus
   **server-side TTL / usage-based eviction** of unused APKAM keys, which also self-cleans
   dev/test and abandoned hosts.
 
@@ -591,17 +682,40 @@ implementation plan's
 
 ## The end state
 
-The organizing idea is that the end state is a *group* abstraction in both
-directions: "the clients of @alice" is a group, and "@alice's and @bob's
-clients" is a group. Legacy treats self and shared encryption as unrelated
-mechanisms; MLS unifies them. So everything becomes a group, with a
-deliberately MLS-shaped interim implementation, and "bootstrap to pq-mls"
-is an engine swap under a stable interface rather than a redesign.
+The end state has **two data paths**, not one (see [ADR
+0002](adr/0002-d1-single-tier-nskey.md)):
+
+- **The nskey data path (D1) — the default for self *and* shared data.** Per
+  `(atSign, namespace)` X-Wing nskey keypairs (self + public) convey symmetric
+  content keys; `at/symmetric/AES/GCM` encrypts the data under them. This is
+  *not* a group abstraction — Alice's self data and her shares to `@bob` both
+  ride it, differing only in which nskey the CK is sealed to.
+- **`at/pqmls` groups (D2) — robust/per-message FS, scale, decoupled
+  membership.** "The clients of @alice" and "@alice's and @bob's clients" are
+  *groups* here, with a deliberately MLS-shaped interim engine; "bootstrap to
+  pq-mls" is an engine swap under the stable `SecureGroup` interface rather than
+  a redesign. Most apps never need it; the nskey data path covers the common
+  case.
+
+The two share the **per-APKAM secret-sharing substrate** as plumbing. The key
+hierarchies differ per path.
+
+**The nskey data-path hierarchy (D1):**
 
 ```
 enrollment approval ceremony (human/policy decision)
-  └─ APKAM keypair                    (per enrollment — auth + signing root)
-      └─ leaf identity                (per client — KeyPackage: KEM init keys + leaf signing key)
+  └─ APKAM keypair                    (per keyfile — auth root; ≥1 per enrollment)
+      └─ nskey privates               (per (atSign, namespace) — self + public; conveyed per-APKAM via the substrate)
+          └─ content key (CK)         (per (atSign, namespace) per epoch — X-Wing-sealed to an nskey; the FS lever)
+              └─ data values          (AES-256-GCM under the CK, cited by ckKid)
+```
+
+**The `at/pqmls` group hierarchy (D2):**
+
+```
+enrollment approval ceremony (human/policy decision)
+  └─ APKAM keypair                    (per keyfile — auth root; ≥1 per enrollment)
+      └─ leaf identity                (per APKAM keypair — KeyPackage: KEM init keys + leaf signing key)
           └─ group membership          (per scope — commits)
               └─ epoch secrets         (per group — lever A)
                   └─ exported secrets  (per use — ephemeral)
@@ -610,35 +724,47 @@ enrollment approval ceremony (human/policy decision)
 Each tier anchors the one below; rotating a tier invalidates downward,
 never upward.
 
-**Two-lever rotation**, independently pullable:
+**Rotation levers per path:**
 
-- **Lever A (fast/cheap): data-key epochs.** Rotate the symmetric key a
-  group encrypts under — mandatorily on every membership change, by policy
-  on time/volume. Pre-MLS: distribute a new epoch key; in MLS: a commit.
-- **Lever B (slow/identity): leaf-key rotation.** A client retires its KEM
-  or signing keypair and publishes a fresh KeyPackage; peers encapsulate to
-  the new key thereafter. In MLS: a leaf Update. Neither lever forces the
-  other.
+- **D1 nskey data path — two levers:** **CK rotation** (cheap, O(1) — wrap a new
+  content key once to the shared nskey; the coarse-FS lever) and **nskey-keypair
+  rotation** (expensive, O(n) per-APKAM — a fresh nskey conveyed via the
+  substrate; the revocation + post-compromise-security lever).
+- **D2 `at/pqmls` groups — two levers, independently pullable:** **Lever A
+  (fast/cheap): data-key epochs.** Rotate the symmetric key a group encrypts
+  under — mandatorily on every membership change, by policy on time/volume.
+  Pre-MLS: distribute a new epoch key; in MLS: a commit. **Lever B
+  (slow/identity): leaf-key rotation.** A client retires its KEM or signing
+  keypair and publishes a fresh KeyPackage; peers encapsulate to the new key
+  thereafter. In MLS: a leaf Update. Neither lever forces the other.
 
 **What becomes obsolete**: `selfEncryptionKey` (one symmetric key for all
 self data, held identically by every client, never rotated, re-conveyed to
 every new enrollment forever) and the static per-pair `shared_key.bob@alice`
-keys. Both are replaced by groups and retire on the four-phase path in
+keys. Both retire into the **nskey data path** — a content key wrapped to an
+nskey via `at/nskey`, the data AES-256-GCM under it via `at/symmetric/AES/GCM` —
+on the four-phase path in
 [Retiring selfEncryptionKey](#retiring-selfencryptionkey-and-shared_key).
 
 ### Key inventory and rotation
 
-| Key                        | Scope          | Role in the end state                                                       | Rotation                                                                              |
-|----------------------------|----------------|------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
-| APKAM keypair              | per enrollment | atServer auth + trust root for everything the client publishes (`_apsk`)      | Rare; rotation ≈ revoke + re-enroll. Revocation must pull lever A in every group touched |
-| Default encryption keypair | per atSign     | Shrinks to enrollment-approval conveyance + legacy interop                    | Rare; blast radius shrinks as legacy data migrates. Gains a PQ sibling (phase 1)         |
-| apkamSymmetricKey          | per enrollment | Approval conveyance                                                           | n/a — lives and dies with the enrollment                                                 |
-| Leaf KEM init keys         | per client     | The KeyPackage; what others encapsulate to                                    | Lever B, frequent and cheap — scheduled with bundle TTL, after use as join material      |
-| Leaf signing key           | per client     | Signs KeyPackages/envelopes (v1: = APKAM key; MLS: per-leaf, APKAM-certified) | Lever B, months / on compromise                                                          |
-| Device storage master key  | per device     | Encrypts local dynamic state (epoch table, ratchet state)                     | Local decision, on compromise; re-encrypt local store only                               |
-| Group epoch secret         | per group      | Data encryption                                                               | Lever A: every membership change (mandatory) + schedule/volume (policy)                  |
-| selfEncryptionKey          | per atSign     | Legacy self data only                                                         | **Retired** — see below                                                                  |
-| shared_key.\<atSign\>      | per pair       | Legacy shared data only                                                       | **Retired** — same path                                                                  |
+The first block is shared by both paths; the **D1** block is the nskey data
+path; the **D2** block is the `at/pqmls` group engine.
+
+| Key                        | Scope                 | Role in the end state                                                       | Rotation                                                                              |
+|----------------------------|-----------------------|------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
+| APKAM keypair              | per keyfile (= per APKAM) | atServer auth + trust root for everything the client publishes (`_apsk`); the recipient/identity unit (≥1 per enrollment) | Rare; rotation ≈ revoke + re-enroll                                              |
+| Default encryption keypair | per atSign            | Shrinks to enrollment-approval conveyance + legacy interop                    | Rare; blast radius shrinks as legacy data migrates. Gains a PQ sibling `public:pqpublickey@<owner>` (phase 1) |
+| apkamSymmetricKey          | per enrollment        | Approval conveyance                                                           | n/a — lives and dies with the enrollment                                                 |
+| **D1 — self nskey keypair**   | per (atSign, namespace) | **not published**; owner encapsulates her own CKs to it; private conveyed per-APKAM via the substrate | Keypair rotation = the expensive per-APKAM revocation lever                          |
+| **D1 — public nskey keypair** | per (atSign, namespace) | `public:nskey.<ns>@<owner>`; external senders encapsulate CKs to it; private conveyed per-APKAM | Keypair rotation = the per-APKAM revocation + PCS lever                              |
+| **D1 — content key (CK)**     | per (atSign, namespace), per epoch | AES-256-GCM data encryption; X-Wing-sealed to an nskey, cited by `ckKid` | CK rotation = the cheap O(1) coarse-FS lever (rotate + delete, conveyed as one `at/nskey` record on sync) |
+| **D2 — leaf KEM init keys**   | per-APKAM             | The KeyPackage; what others encapsulate to                                    | Lever B, frequent and cheap — scheduled with bundle TTL, after use as join material      |
+| **D2 — leaf signing key**     | per-APKAM             | Signs KeyPackages/envelopes (v1: = APKAM key; MLS: per-leaf, APKAM-certified) | Lever B, months / on compromise                                                          |
+| **D2 — device storage master key** | per device      | Encrypts local dynamic state (epoch table, ratchet state)                     | Local decision, on compromise; re-encrypt local store only                               |
+| **D2 — group epoch secret**   | per group             | Group-message data encryption                                                 | Lever A: every membership change (mandatory) + schedule/volume (policy)                  |
+| selfEncryptionKey          | per atSign            | Legacy self data only                                                         | **Retired** into the nskey data path — see below                                         |
+| shared_key.\<atSign\>      | per pair              | Legacy shared data only                                                       | **Retired** into the nskey data path — same path                                         |
 
 ## Milestones and capabilities
 
@@ -650,26 +776,30 @@ its own; later ones build on earlier. (Phase numbers cross-reference the
 |-----------|------------------|----------------|
 | **M0 · Pluggable crypto seam** (Phase 0) | Per-value `CryptoProvider` routing via `AppMetadata`; legacy + new schemes coexist | The migration machinery — old data stays readable forever, new schemes drop in as providers, no flag-day. Everything rides this seam. |
 | **M1 · PQ primitives** (Phase 1) | X-Wing hybrid KEM, AES-256-GCM, HKDF in at_chops; PQ enrollment-conveyance pubkey | Post-quantum/hybrid building blocks; closes the last harvest-now-decrypt-later hole (enrollment); the crypto-agile base. |
-| **M2 · Per-client identity / KeyPackages** (Phase 2) | Each client = a leaf (clientId + X-Wing leaf keys + signing) as an APKAM-signed KeyPackage; AtKeys device-local split | The MLS identity layer; per-device granularity + revocability; the one-leaf-per-instance correctness precondition. |
-| **M3 · SecureGroup v1 + `group` provider** (Phase 3) | `seal/open/rotate/export` + a v1 epoch engine; self data encrypted as group messages; two-lever rotation; retires `selfEncryptionKey` | First real (intra-atSign) group encryption with rotating keys + revocation; the stable interface MLS later swaps under. |
-| **M4 · Cross-atSign groups** (Phase 4) | `(pair, namespace)`-scoped groups (distinct from either self group); epoch-key delivery server-gated by namespace (push + pull); `group` serves shared keys; retires static `shared_key.*` | First cross-atSign group encryption; per-client granularity/revocability for shared data; the precursor to NoPorts sessions. |
-| **M5 · Group Delivery Service** (atServer groups) | Ciphertext-only DS atSign + group object/verbs (`seq`, log, ack, fetch); wake-then-pull; ordering + catch-up + retention | Makes group-addressed delivery scale on the pairwise substrate; solves fan-out + ordering + retention; operable as infrastructure. This is what makes *large* groups work. |
-| **M6 · pq-mls engine** (Phase 5) | Swap the v1 engine for MLS (TreeKEM, RFC 9420 FS/PCS, PQ ciphersuites) behind the same interface + DS | O(log n) commits, standardized + audited group security — the actual end state. |
+| **M2 · Per-APKAM identity / KeyPackages** (Phase 2) | Each APKAM keypair = a leaf (X-Wing leaf keys + signing) as an APKAM-signed KeyPackage; per-APKAM AtKeys (per-client AtKeys storage retired) | The MLS identity layer + the substrate beneath the nskey data path; per-APKAM granularity + revocability; the one-leaf-per-APKAM-keypair correctness precondition. |
+| **M3 · the nskey data path** (Phase 3) | The nskey data path — `at/nskey` conveys the content key + `at/symmetric/AES/GCM` encrypts the data — ships as D1's default self **and** shared encryption; coarse FS via CK rotation; per-APKAM future-data revocation + PCS via nskey-keypair rotation; retires `selfEncryptionKey`/`shared_key.*` | **Completes Deliverable 1** — PQ-safe self + shared messaging, no group machinery in the app's face. No `at/pqmls`. |
+| **M4 · `at/pqmls` intra-atSign groups (D2)** (Phase 4) | `SecureGroup` v1 epoch engine (`seal/open/rotate/export`); per-APKAM leaves; two-lever rotation | First forward-secure (intra-atSign) group encryption with rotating keys + revocation; the stable interface MLS later swaps under. |
+| **M5 · `at/pqmls` cross-atSign groups + Group Delivery Service (D2)** (Phase 5) | `(pair, namespace)`-scoped groups; `at/pqmls` serves shared group keys (cross-atSign shared data otherwise rides the nskey data path); retires static `shared_key.*`; the ciphertext-only Group Delivery Service (`seq`, log, ack, fetch; wake-then-pull; ordering/catch-up/retention) | First cross-atSign group encryption + the delivery service that makes *large* groups scale; precursor to NoPorts sessions. |
+| **M6 · pq-mls engine** (Phase 6) | Swap the v1 engine for MLS (TreeKEM, RFC 9420 FS/PCS, PQ ciphersuites) behind the same interface + DS | O(log n) commits, standardized + audited group security — the actual end state. |
 | **NoPorts adoption** (finish line) | Session keys via `SecureGroup.export`; daemon-feature-gated tiers 0–2 | The production payoff: PQ-safe NoPorts, derived (not transmitted) session keys, fleet management. |
 
 In deliverable terms (see
-[The two major deliverables](#the-two-major-deliverables)): **M0–M4 are
-Deliverable 1** (PQ-safe messaging) and **M5–M6 are Deliverable 2** (pq-mls).
+[The two major deliverables](#the-two-major-deliverables)): **M0–M3 are
+Deliverable 1** (PQ-safe messaging via the nskey data path) and **M4–M6 are
+Deliverable 2** (the `at/pqmls` group provider through to the pq-mls engine).
 The authoritative build status is the plan's
 [phase status](crypto_impl_plan.md#phase-status); in brief — M1 (X-Wing/GCM/HKDF)
-and Phase 6 (at_chops as the sole security-crypto dependency) are in trunk; the
-M0 seam is in flight (#1930); the per-client KeyPackage framing (M2) and `group`
-provider (M3) are **prototyped on the spike, not yet landed**; M4 is the main
-remaining D1 piece and M5–M6 are the D2 build ahead. The M2–M4 rows above
-describe the **per-client group** capability; per
-[D1 — preserving legacy simplicity](#d1--preserving-legacy-simplicity-two-tiers)
-that is the **opt-in D1 Tier2** and the D2 substrate — D1's *default* path is the
-simpler `nskey` shared-namespace-key tier, with the same milestones reframed.
+and the at_chops-sole-security-crypto-dependency record (a separate
+impl-plan numbering, unrelated to these crypto phases) are in trunk; the
+M0 seam is in flight (#1930); the per-APKAM KeyPackage framing (M2) and the
+v1 `at/pqmls` group provider are **prototyped on the spike, not yet landed**;
+the nskey data path is the remaining D1 piece and the cross-atSign groups, the
+MLS engine, and the DS are the D2 build ahead. The group-provider parts of the
+M3–M4 rows describe the **per-APKAM group** capability; per
+[D1 — preserving legacy simplicity](#d1--preserving-legacy-simplicity-single-tier-the-nskey-data-path)
+that is **D2** (`at/pqmls`) and the shared secret-sharing substrate — D1's data
+path (self *and* shared) is the simpler **nskey data path** (`at/nskey` +
+`at/symmetric/AES/GCM`), with the same milestones reframed.
 
 ## How it works — in brief
 
@@ -700,11 +830,12 @@ no new task and the app author writes no new code in the common case.** Every
 milestone is held to that bar; the UX mechanisms elsewhere in this doc all
 exist to keep it true. The promises, each linking to where it's realised:
 
-- **No per-invocation identity tax.** A program is never told *which* client
-  it is. The SDK resolves the leaf by label (resume / fork-ephemeral / mint),
-  so many CLI programs (sshnp, npt) and the desktop app run under one atSign
-  with **zero `--client-id` args and no clones**. →
-  [Phase 2 · Client identity resolution](#phase-2--identity-layer-keypackages-and-per-client-atkeys)
+- **No per-invocation identity tax.** A program is never told *which* APKAM
+  keypair it is. The SDK resolves the APKAM keypair (and hence its leaf) by
+  label (resume / fork-to-fresh-APKAM / mint), so many CLI programs (sshnp, npt)
+  and the desktop app run under one atSign with **zero `--client-id` args and no
+  clones** (ephemeral CLI runs use throwaway per-APKAM keypairs). →
+  [Phase 2 · Client identity resolution](#phase-2--identity-layer-per-apkam-keypackages-and-per-apkam-atkeys)
 - **No manual "add to group" step.** Admission is a *consequence* of decisions
   already made — self-group membership is derived from enrollment
   authorisation; session/cross-atSign admission rides the existing accept
@@ -721,9 +852,10 @@ exist to keep it true. The promises, each linking to where it's realised:
   (daemon-ping `supportedFeatures`) gates new behaviour per peer; an old peer
   silently keeps the legacy path. →
   [Upgrading NoPorts](#upgrading-noports-with-daemon-ping-feature-discovery)
-- **Safety is automatic.** The single-owner lock prevents leaf cloning without
-  the user knowing it exists; a duplicate same-identity launch forks or
-  refuses deterministically rather than corrupting state.
+- **Safety is automatic.** The single-owner lock prevents cloning of an APKAM
+  keypair's leaf without the user knowing it exists; a duplicate same-identity
+  launch forks (to a fresh APKAM keypair) or refuses deterministically rather
+  than corrupting state.
 - **For NoPorts the target is _zero_ user-visible delta** — same commands,
   args, setup and authorisation — contingent on the port mapping existing
   identifiers onto the new machinery. →
@@ -734,9 +866,10 @@ must pass, a file a user must manage, a step an operator must perform, or a
 peer-by-peer break? If yes, it isn't done. Two standing requirements carry
 most of the weight: **identity is derived from identifiers the program already
 has** (program/device name, an `.atsign-client` context file — never a forced
-arg), and **admission stays per-atSign** (any validly-credentialed leaf of an
-authorised atSign is accepted; per-leaf is only an *optional* refinement for
-revocation and audit). The corresponding builder-facing surface is the
+arg), and **admission stays per-atSign** (any validly-credentialed leaf — one
+per APKAM keypair — of an authorised atSign is accepted; per-APKAM granularity is
+only an *optional* refinement for revocation and audit). The corresponding
+builder-facing surface is the
 `SecureGroup` interface plus sensible `CryptoConfig` defaults — the same
 "LLM-friendly verbs, explicit semantics, no hidden invariants" goal as the
 rest of `AtCollection`.
@@ -766,17 +899,25 @@ lazy.
 `pqSeal`/`pqOpen` is the one audited public-key-encryption primitive the
 providers seal through.
 
-**Secret sharing — identity + same-atSign delivery.** Per-client identity
-(clientId + X-Wing keypair) published as an APKAM-signed `ClientKeyPackage`:
-canonical hidden public key in the enrollment's reserved namespace (location
-exclusivity = identity anchor) plus namespace-scoped copies whose *presence*
-proves the enrollment holds `rw` on that namespace (server-enforced).
-Store-and-forward encrypted envelopes scoped by application namespace;
-`SecretStore` with newest-wins merge; enrollment-approval sharing; race-free
-`waitForSecret`; crypto-agile formats (`{kid, use, alg}` key lists,
-`{keyAlg, kid, encAlg}` envelopes) so algorithms upgrade by id with no schema
-change. PQ-native: `x-wing` key transport + `aes-256-gcm` payloads. The durable
-app-facing surface will be `SecureGroup`.
+**Secret sharing — identity + same-atSign delivery.** Per-APKAM identity
+(X-Wing keypair) carried as an APKAM-signed `KeyPackage`. KeyPackages are
+**never published** — each is **enrollment-internal**, registered in that APKAM
+keypair's enrollment record alongside its ML-DSA APKAM public key, and
+discovered only via the gated **`enroll:listfornamespace:<ns>`** verb (≥`r` on
+`<ns>`; see [`pq-secret-push.md`](pq-secret-push.md)). Store-and-forward
+encrypted envelopes (`<msgId>.<kpid>.__ssenv.<ns>@<owner>`) addressed by `kpid`
+(per-APKAM) and scoped by application namespace; the atServer gates delivery by
+namespace; `SecretStore` with newest-wins merge (`putIfNewer`);
+enrollment-approval sharing; race-free `waitForSecret`; crypto-agile formats
+(`{kid, use, alg}` key lists, `{keyAlg, kid, encAlg}` envelopes) so algorithms
+upgrade by id with no schema change. PQ-native: `x-wing` key transport +
+`aes-256-gcm` payloads. **This substrate is the shared transport beneath both
+D1 and D2:** it conveys the **nskey privates** per-APKAM (Layer 1 of the nskey
+data path — `__ssenv` push via `enroll:listfornamespace`, with `requestSecret`
+pull as the offline backstop; see
+[`pq-data-encryption.md`](pq-data-encryption.md)), and it carries `at/pqmls`
+group messages per-APKAM in D2. The durable app-facing surface for the group
+path will be `SecureGroup`.
 
 **Get-path invariants** (both the secret-sharing and pluggable-crypto paths
 touch get):
@@ -805,16 +946,18 @@ metadata, or public keys:
 
 | What | How |
 |------|-----|
-| Application data — self keys, shared keys | Encrypted by the active `CryptoProvider`; `isEncrypted` metadata tracks it. End-to-end: the server never holds the data key. |
-| Secret-sharing envelopes — epoch keys (`__rk`), pairwise payloads | X-Wing-encapsulated + AES-256-GCM sealed *before* the put; written `shouldEncrypt=false` *because* the value is already ciphertext, never to store plaintext. |
+| Application data — self keys, shared keys | `at/symmetric/AES/GCM` (AES-256-GCM under a content key cited by `ckKid`); `isEncrypted` metadata tracks it. End-to-end: the server never holds the content key. |
+| Content-key conveyance — `at/nskey` records (`<ckKid>.__ck.<ns>@<owner>`) | The CK is X-Wing-sealed to an nskey *before* the put; written `shouldEncrypt=false` *because* the value is already ciphertext. The server holds only the sealed CK, never the plaintext CK or the nskey private. |
+| Secret-sharing envelopes — nskey privates (D1, Layer 1), `at/pqmls` group epoch keys (D2, `__rk`), pairwise payloads | `pqSeal` (X-Wing-encapsulated + AES-256-GCM) *before* the put; written `shouldEncrypt=false` because the value is already ciphertext. |
 | Enrollment conveyance — `apkamSymmetricKey`, `selfEncryptionKey` hand-off | RSA / X-Wing-wrapped to the recipient's encryption public key. |
 
 **Never on the atServer at all:**
 
 | What | Where it lives |
 |------|----------------|
-| Raw epoch keys (`__rk.<epoch>.<kid>` plaintext) | Local `SecretStore` (in-memory / app-pluggable persistence). Reaches the server *only* as a sealed envelope. |
-| Private keys — PKAM / encryption private, leaf KEM seed | Device-local (`.atKeys` / device-local section). The roadmap explicitly *rejects* server-side leaf secrets (Phase 2). |
+| Plaintext content keys (CKs) and nskey privates | Local `SecretStore` / keystore (in-memory / app-pluggable persistence). A CK reaches the server only as a sealed `at/nskey` record; an nskey private only as a sealed `__ssenv` envelope. |
+| Raw `at/pqmls` epoch keys (`__rk.<epoch>.<kid>` plaintext) | Local `SecretStore`. Reaches the server *only* as a sealed envelope. |
+| Private keys — PKAM / APKAM private, encryption private, nskey privates, leaf KEM seed | Device-local (`.atKeys` / device-local section). The roadmap explicitly *rejects* server-side leaf secrets (Phase 2). |
 
 **Plaintext on the atServer — by design, and not secret values:**
 
@@ -852,13 +995,14 @@ moves it implies — including making `at_auth`'s core compile under `dart2wasm`
   `CryptoProvider` for each read/write by `appMetadata.providerId` — unchanged.
 - **CryptoProviders are stateless** and encrypt/decrypt via stateless AtChops
   primitives; everything they need arrives in the per-operation `CryptoContext`.
-  A **`WritableAtKeys`** holder — the single in-memory holder of every key the
-  client knows (per-enrollment *and* per-client-id), which providers read keys
-  from and **mint/add (and occasionally remove) keys through and have them
+  A **`WritableAtKeys`** (working name; deferred — read as "the APKAM keypair's
+  updatable `.atKeys` keystore") holder — the single in-memory holder of every
+  key the client knows (per-enrollment *and* per-APKAM), which providers read
+  keys from and **mint/add (and occasionally remove) keys through and have them
   *written*** (the backing `.atKeys` file, keychain entry, or local keystore
   updated) — is added as a `CryptoContext` field alongside its first consumer
-  (D1-S). Today the context carries the client. *(`WritableAtKeys` should
-  subclass at_auth's `AtKeys`, not wrap an `AtChops`.)*
+  (D1-S). Today the context carries the client. *(It should subclass at_auth's
+  `AtKeys`, not wrap an `AtChops`.)*
 - **AtChops is fully stateless** — a grab-bag of primitive functions
   (sign/verify/encrypt/decrypt/HKDF/HMAC/…) that take keys as arguments and hold
   no key material. A `@Deprecated` stateful `AtChopsImpl` shim ships for one
@@ -874,8 +1018,8 @@ secret-sharing substrate.
 | Key class | Store | Persistence |
 |---|---|---|
 | Enrollment bootstrap (encryption/PKAM/APKAM keypair, selfEnc, apkamSym) | `.atKeys` file **or** keychain | persisted, now **updatable** (today write-once) |
-| Distributed / rotating (nskey namespace keypairs, epoch `__rk`, persistent leaf) | local keystore (Hive) | persisted, per-key |
-| Ephemeral client-id leaf | in-memory | write-only; regenerated each run |
+| Distributed / rotating (nskey namespace keypairs, content keys, D2 epoch `__rk`, persistent leaf) | local keystore (Hive) | persisted, per-key |
+| Ephemeral per-APKAM leaf (npt/sshnp throwaway keypairs) | in-memory | write-only; regenerated each run |
 
 `WritableAtKeys` is **born at AtClient construction**, composed with the stores
 then available (the auth-loaded bootstrap bundle as seed + the local keystore +
@@ -945,14 +1089,14 @@ substrate owns epoch/nskey convergence and persists *through* `WritableAtKeys`.
 ```mermaid
 graph TD
   RT["AtClient · CryptoRuntime<br/>picks provider by appMetadata.providerId"]
-  PV["CryptoProvider<br/>legacy / nskey / group"]
+  PV["CryptoProvider<br/>legacy / at/nskey / at/symmetric/AES/GCM / at/pqmls"]
   CTX["CryptoContext { WritableAtKeys }"]
   W["WritableAtKeys<br/>holder: add / remove / write"]
   AC["at_chops stateless fns<br/>seal/open · sign · HKDF (keys per call)"]
   SUB["secret-sharing substrate<br/>convergence (newest-wins) + pull"]
-  MEM["InMemoryAtKeysIo<br/>ephemeral leaf"]
+  MEM["InMemoryAtKeysIo<br/>ephemeral per-APKAM leaf"]
   BOOT["File / Keychain AtKeysIo<br/>enrollment bootstrap (updatable)"]
-  LKS["LocalKeystoreAtKeysIo<br/>nskey keypairs · epoch keys · persistent leaf"]
+  LKS["LocalKeystoreAtKeysIo<br/>nskey keypairs · content keys · D2 epoch keys · persistent leaf"]
 
   RT -->|read & write| PV
   PV --> CTX
@@ -1000,12 +1144,12 @@ see [Foundations](#foundations). Build status is the plan's
   upstream in `pqcrypto`** (which already provides ML-KEM and experimental
   ML-DSA) — offer the implementation as a contribution; the
   `AtKemAlgorithm` seam makes the swap invisible to callers. ML-DSA
-  (needed around phase 5 for PQ signatures) is likewise pqcrypto's domain;
+  (needed around phase 6 for PQ signatures) is likewise pqcrypto's domain;
   register interest, adopt when it stabilizes against FIPS 204 vectors.
 - **AES-256-GCM AEAD** — **done on `gkc-pqmls-spike`**
   (`AesGcm256EncryptionAlgo`, NIST-vector verified). **HKDF** (via
   `cryptography`) — adapter only, when its first consumer (the rotating
-  provider's `export()`) arrives in phase 3.
+  provider's `export()`) arrives in phase 4.
 - **PQ public key for enrollment conveyance.** The enrollment flow is the
   last harvest-now-decrypt-later hole: `encryptedAPKAMSymmetricKey` is
   RSA-wrapped to `public:publickey@alice`, and everything the approval
@@ -1013,36 +1157,46 @@ see [Foundations](#foundations). Build status is the plan's
   public key alongside (`public:pqpublickey@alice` or a key-list format);
   new enrollees prefer it for wrapping; approvers accept either.
 
-### Phase 2 — identity layer: KeyPackages and per-client AtKeys
+### Phase 2 — identity layer: per-APKAM KeyPackages and per-APKAM AtKeys
+
+The identity/recipient unit is the **APKAM keypair** (one per keyfile/install,
+≥1 per enrollment), not a client process. Each APKAM keypair carries exactly one
+KeyPackage and (in D2) one MLS leaf. KeyPackages are part of the D1
+secret-sharing substrate as well as the D2 identity layer, and are
+**enrollment-internal** — registered in the per-APKAM enrollment record,
+discovered only via the gated `enroll:listfornamespace` verb, never published
+(see [`pq-secret-push.md`](pq-secret-push.md)).
 
 - **Frame bundles as KeyPackages.** **Done on `gkc-pqmls-spike`**, and
   more strongly than originally planned: since `jt-pq` merged before PR
   #1976 shipped, the classical interim was deleted outright — the identity
-  layer is **PQ-native from day one** (`ClientKeyPackage` carries a single
+  layer is **PQ-native from day one** (`KeyPackage` carries a single
   `x-wing` key; envelopes carry the KEM encapsulation ciphertext and seal
   payloads with `aes-256-gcm` under the encapsulated secret; nothing
   rsa-2048 ever shipped). The Dart types use the KeyPackage naming so the
-  phase-5 MLS join is mechanical; the API surface is marked
-  `@experimental` pending the `SecureGroup` reshaping in phase 3.
-- **Evolve AtKeys for per-client persistence.** Today's `.atKeys` file is
+  phase-6 MLS join is mechanical; the API surface is marked
+  `@experimental` pending the `SecureGroup` reshaping in phase 4.
+- **Evolve AtKeys for per-APKAM persistence.** Today's `.atKeys` file is
   per-credential and routinely copied across devices; leaf keys must not be
-  (copying would clone the client identity). Split:
+  (copying would clone the APKAM keypair's leaf identity). The D1 requirement to
+  store *per-client* AtKeys no longer exists — AtKeys are stored **per-APKAM**.
+  Split:
   - *Shareable credential section* (today's content): PKAM/APKAM keypair,
     encryption keypair, apkamSymmetricKey. Copyable as today.
-  - *Device-local client section* (new; marked section or sibling file):
-    clientId, leaf KEM private keys, leaf signing key, storage master key.
-    Never copied; importing a credential file without one mints a fresh
-    client identity.
+  - *Device-local section* (new; marked section or sibling file, keyed to the
+    APKAM keypair): leaf KEM private keys, leaf signing key, storage master key,
+    plus the nskey privates the substrate conveys. Never copied; importing a
+    credential file without one mints/uses a fresh APKAM keypair.
     **This is an MLS correctness precondition, not just key hygiene.** MLS
     gives each member one ratchet-tree leaf with exclusive, linearly-evolving
-    send/commit state, so two instances sharing one clientId + leaf keys
+    send/commit state, so two instances sharing one APKAM keypair's leaf keys
     cannot both act as that leaf: concurrent sends collide on the per-leaf
     generation counter (receivers drop the duplicate as a replay, or lose the
     key to forward secrecy) and concurrent commits race on the epoch. v1's
     stateless `seal()` (epoch key + random IV, no per-sender ratchet) masks
-    this — same-clientId clones "work" on v1 and break on the MLS swap. The
-    rule: **one clientId per running instance, leaf keys never copied → one
-    leaf per instance.** Two machines that should share an identity join as
+    this — leaf-sharing clones "work" on v1 and break on the MLS swap. The
+    rule: **one leaf per APKAM keypair, leaf keys never copied.** Two machines
+    that should share an identity each mint their own APKAM keypair and join as
     two leaves of the same group, not one shared leaf.
   Dynamic state (epoch tables, ratchet state) stays out — it churns per
   commit and lives in provider-owned storage encrypted under the
@@ -1051,9 +1205,10 @@ see [Foundations](#foundations). Build status is the plan's
   `SecretStorePersistence` hooks get default SDK implementations over the
   existing keychain/biometric/file plumbing, so apps supply nothing.
 
-  **Rejected alternative — per-clientId secrets on the atServer.** Storing
-  the leaf private keys + storage master key server-side (instead of
-  device-local) was considered and rejected. To be usable they must be
+  **Rejected alternative — per-APKAM leaf secrets on the atServer.** AtKeys
+  themselves are stored per-APKAM device-local; this rejects a *different* move
+  — storing the per-APKAM **leaf private keys + storage master key**
+  server-side (instead of device-local). To be usable they must be
   wrapped under a *locally-held* key, and the only local material here is the
   *portable* enrollment credential — so the leaf becomes reconstructable by
   any enrollment-holder. That (1) makes **cloning the default** rather than a
@@ -1081,31 +1236,32 @@ see [Foundations](#foundations). Build status is the plan's
   acquisition** — eyes open that it still leaves a server-resident PQ-key
   ciphertext and complicates lever-B (superseded leaf keys linger
   server-side until actively deleted).
-- **Client identity resolution (multi-program UX).** Requiring every CLI
+- **APKAM-keypair identity resolution (multi-program UX).** Requiring every CLI
   invocation to pass `--client-id` is a usability fail; the SDK should
-  *determine* the leaf. Each device-local keyset is
-  `{clientId (random), label (local selection metadata), leafKeys, lockfile}`,
+  *determine* the APKAM keypair (and hence its leaf). Each device-local keyset
+  is `{APKAM keypair, label (local selection metadata), leafKeys, lockfile}`,
   stored per-atSign. Default `label` = program-set, falling back to the
   executable basename. Resolution at startup:
   - explicit `--client-id` → claim it (lock; error if already live);
   - else scan keysets, filter to **claimable** (not locked by a live owner):
     a claimable label-match → **resume** it (the common case); a label-match
-    that is **locked** (another instance of me) → **fork** to an *ephemeral*
-    leaf (not persisted, so no keyset proliferation); no label-match → **mint**
-    a persistent keyset for the label; keysets exist but none is mine and no
-    label to go on → an **actionable error** listing the leaves and how to
-    pick.
+    that is **locked** (another instance of me) → **fork** to a *fresh,
+    ephemeral APKAM keypair* (not persisted, so no keyset proliferation); no
+    label-match → **mint** a persistent APKAM keypair for the label; keysets
+    exist but none is mine and no label to go on → an **actionable error**
+    listing the APKAM keypairs and how to pick.
   The owner lockfile (the single-owner advisory lock) doubles as the
   resolver's liveness check — it both prevents clones and drives
-  resume-vs-fork. *Prefer resume* (fork/mint leaves are brand-new and must
-  join groups first — see Phase 4). Intentional multi-instance (a daemon
+  resume-vs-fork. *Prefer resume* (fork/mint APKAM keypairs are brand-new and
+  must join groups first — see Phase 5). Intentional multi-instance (a daemon
   fleet of stable members) uses **distinct labels / keyset dirs** (persistent
-  leaves), not forks. Per-workspace identity, if wanted, comes from a
-  discoverable `.atsign-client` file (cwd/ancestor, like `.git`/`.env`), not
-  raw cwd. Ships as the default `loadClientKeys`/`saveClientKeys`
-  implementation, so apps supply nothing; zero-argument for the normal
-  multi-program case, never clones, asks for an id only when genuinely
-  ambiguous.
+  APKAM keypairs), not forks. Ephemeral one-shot clients (npt/sshnp) are
+  throwaway per-APKAM keypairs minted fresh each run. Per-workspace identity, if
+  wanted, comes from a discoverable `.atsign-client` file (cwd/ancestor, like
+  `.git`/`.env`), not raw cwd. Ships as the default
+  `loadClientKeys`/`saveClientKeys` implementation, so apps supply nothing;
+  zero-argument for the normal multi-program case, never clones, asks for an id
+  only when genuinely ambiguous.
 - **Cross-machine single-owner (atServer lease).** The device-local lock above
   only catches duplicates on *one* machine. To stop the same logical identity
   coming live on *two* machines — e.g. an `sshnpd` labelled `device1` deployed
@@ -1119,30 +1275,93 @@ see [Foundations](#foundations). Build status is the plan's
   self-heals a crashed holder (a genuine failover/standby takes over after
   expiry), while an accidental duplicate against a *live* holder fails
   immediately; the token fences a paused-then-resumed holder (on heartbeat it
-  sees a foreign token and yields). Keying on **label** (not clientId) catches
-  the duplicate whether host B copied A's keyset or fresh-installed — both are
-  trying to be the one logical `device1`; active/standby HA falls out (the
-  standby waits for the lease to lapse). This needs **no atServer code change**
-  — an ordinary TTL'd key used as a lease, honoured by the SDK (rule of thumb:
+  sees a foreign token and yields). Keying on **label** (not the APKAM keypair)
+  catches the duplicate whether host B copied A's keyset or fresh-installed —
+  both are trying to be the one logical `device1`; active/standby HA falls out
+  (the standby waits for the lease to lapse). The secret the lease protects is
+  the APKAM keypair's leaf — two instances driving one keypair's leaf is the
+  clone, not two processes per se. This needs **no atServer code change** — an
+  ordinary TTL'd key used as a lease, honoured by the SDK (rule of thumb:
   client-side coordination via an existing primitive). A fully-authoritative
-  variant — the atServer asserts `(enrollment, clientId)` on connect and
+  variant — the atServer asserts `(enrollment, APKAM keypair)` on connect and
   rejects/evicts a duplicate session — closes the TTL window and covers
   non-SDK clients, but it is a real server change, so it is an *optional*
   escalation. (Local file lock + atServer lease compose: same-machine vs
   cross-machine.)
-- **Cross-atSign KeyPackage publication**: each atSign exposes its clients'
-  KeyPackages as public keys so other atSigns can fetch and verify them
-  (signature chain to the publishing enrollment's `_apsk` / the atSign's
-  public key, with pubkey-hash pinning as today).
-- **Per-enrollment vs per-client differences**: `.atKeys` files, keychain
+- **Cross-atSign KeyPackage discovery**: KeyPackages are **not** published as
+  public keys — they are enrollment-internal. Another atSign discovers a
+  counterparty's per-APKAM KeyPackages only via the gated
+  `enroll:listfornamespace` verb (≥`r` on the namespace), then verifies them by
+  signature chain to the publishing enrollment's `_apsk` / the atSign's public
+  key, with pubkey-hash pinning as today (see
+  [`pq-secret-push.md`](pq-secret-push.md)).
+- **Per-enrollment vs per-APKAM differences**: `.atKeys` files, keychain
   entries, and future portable key implementations contain only copyable
   enrollment-scoped material. Rotating `nskey` keypairs and persistent
-  per-client keys live in the client's local keystore (`LocalKeystoreAtKeysIo`);
-  ephemeral one-shot clients (`npt`, `sshnp`) keep per-client keys in memory
-  only and mint fresh keys on the next run. A NoPorts Desktop reinstall may
-  also mint fresh per-client keys rather than recovering the old client keys.
+  per-APKAM keys (the leaf, the nskey privates conveyed to it) live in the
+  local keystore (`LocalKeystoreAtKeysIo`); ephemeral one-shot clients (`npt`,
+  `sshnp`) are throwaway per-APKAM keypairs that keep their leaf keys in memory
+  only and mint fresh keypairs on the next run. A NoPorts Desktop reinstall
+  likewise mints a fresh APKAM keypair rather than recovering the old one.
 
-### Phase 3 — SecureGroup v1 + the `group` provider (self encryption)
+### Phase 3 — the nskey data path (D1 self + shared)
+
+D1's default data path — for **self and shared data alike** — is the **nskey
+data path**, two providers plus `legacy`. It is fully specified in
+[`pq-data-encryption.md`](pq-data-encryption.md); this is the roadmap summary.
+It does **not** involve `SecureGroup`, KeyPackages, or group membership in the
+app's face — `put`/`get`/AtCollection are unchanged.
+
+**The three layers** (the seam routes each stored value by its
+`appMetadata.providerId`):
+
+- **Layer 3 — data** (`at/symmetric/AES/GCM`): the value is AES-256-GCM
+  ciphertext under a symmetric content key (CK) and references that CK by
+  `ckKid` — no asymmetric crypto, no sealed key embedded per value.
+- **Layer 2 — CK conveyance** (`at/nskey`): the CK is X-Wing-sealed to an nskey
+  and written **once** as its own `<ckKid>.__ck.<ns>@<owner>` record; every
+  Layer-3 value under that CK just cites `ckKid` (decision (a)).
+- **Layer 1 — nskey bootstrap** (the secret-sharing substrate, beneath the
+  seam): the nskey **private** is delivered **per-APKAM** to each authorised
+  APKAM keypair's keystore (`__ssenv` push via `enroll:listfornamespace`, with
+  `requestSecret` pull as the offline backstop) — transport, not a value-level
+  provider.
+
+**Two nskeys per `(atSign, namespace)`:** a **self nskey** (not published; the
+owner encapsulates her own CKs to it) and a **public nskey**
+(`public:nskey.<ns>@<owner>`, published; external senders encapsulate CKs to
+it). An nskey only ever wraps a CK; its private only ever **decapsulates** CKs —
+neither encrypts application data.
+
+**Self and cross-atSign use one identical flow**, differing only in which nskey
+the CK is sealed to (self → own self nskey; shared → recipient's published
+public nskey). `selfEncryptionKey` and `shared_key.*` both retire into it.
+
+**Forward secrecy / revocation — two levers, very different costs:**
+
+- **CK rotation — cheap (O(1)), the coarse-FS lever.** Cut a new CK, wrap it
+  once to the shared nskey, write one `at/nskey` record on ordinary sync; for FS,
+  delete the old CK's conveyance record and evict the cached CK (decision (a)
+  makes old-CK data undecryptable). Bounded by deletion discipline + eviction
+  reachability (the FS TCB). Cross-atSign FS is bilateral — the inbound CK is
+  cut and owned by the sender, so the recipient cannot unilaterally scrub it.
+- **nskey-keypair rotation — expensive (O(n) per-APKAM), the revocation + PCS
+  lever.** Mint a fresh nskey keypair, supersede the published public nskey, and
+  convey the successor private per-APKAM through the substrate **excluding** the
+  revoked keypair (the O(1) shared path cannot exclude a holder of the old
+  private).
+
+**Cold-start.** With no `public:nskey.<ns>@<recipient>` yet, the sender seals the
+**CK** to the recipient's atSign-level `public:pqpublickey@<recipient>` (root) as
+a bootstrap target; **data is never encrypted directly to the root key** — only
+the CK is. Once the namespace publishes its public nskey, new CKs target it; the
+root-keyed conveyance is the transient bridge.
+
+This retires `selfEncryptionKey` and `shared_key.*` (see
+[Retiring selfEncryptionKey](#retiring-selfencryptionkey-and-shared_key)). The
+forward-secure group provider `at/pqmls` is **D2**, not this path — see Phase 4.
+
+### Phase 4 — at/pqmls (D2): intra-atSign forward-secure groups (SecureGroup v1)
 
 One interface, two implementations over time:
 
@@ -1169,8 +1388,10 @@ abstract class SecureGroup {
   resolvable; no coordination protocol. O(n) per commit; forward secrecy on
   rotation; PCS via full rotation. Its state — member KeyPackages, epoch
   keys, delivery channel — is exactly MLS bootstrap material.
-- **`group` CryptoProvider**: encrypts self data as group messages.
-  `AppMetadata(providerId: 'group', additional: {groupId, epoch, kid, enc,
+- **`at/pqmls` CryptoProvider** (the **D2** forward-secure group data path —
+  *not* D1's self/shared path, which is the nskey data path; see [ADR
+  0002](adr/0002-d1-single-tier-nskey.md)): encrypts group messages.
+  `AppMetadata(providerId: 'at/pqmls', additional: {groupId, epoch, kid, enc,
   iv})`. Scope = **(atSign, namespace)** — the group key topology must
   mirror the server's enrollment authorization topology, or the crypto
   layer is more permissive than the transport layer (one atSign-wide group
@@ -1200,11 +1421,11 @@ abstract class SecureGroup {
   hook was removed in the slim-API refactor).
 - **selfEncryptionKey retirement phases 1–2** begin here (below).
 
-### Phase 4 — cross-atSign groups (shared encryption)
+### Phase 5 — at/pqmls (D2): cross-atSign groups + Group Delivery Service
 
 - **Pair groups** scoped to **`(pair, namespace)`** — `groupId` e.g.
   `pair:@alice:@bob:at_talk` — not merely per atSign pair. The namespace
-  component is mandatory, for the same reason self groups carry it (Phase 3):
+  component is mandatory, for the same reason self groups carry it (Phase 4):
   the group key topology must mirror the server's enrollment authorization
   topology. A shared key `@bob:<key>.at_talk@alice` is gated on *both* sides by
   `at_talk` enrollment access, so its group must be (a) **distinct from either
@@ -1214,11 +1435,12 @@ abstract class SecureGroup {
   authorized only for `at_talk` the keys to alice→bob `banking` shared data,
   re-introducing the crypto-more-permissive-than-transport bug at the pair
   level. Members = alice's `at_talk` clients + bob's `at_talk` clients;
-  per-client leaves give cross-atSign data the same per-device granularity and
+  per-APKAM leaves give cross-atSign data the same per-APKAM granularity and
   revocability as self data (vs. legacy `shared_key.bob@alice` — one static key
   decryptable by every bob client, any namespace, forever).
-- **Add flow for another atSign's client**: fetch + verify their published
-  KeyPackages → consent hook on the invitee's side (apps may auto-accept
+- **Add flow for another atSign's client**: discover + verify their per-APKAM
+  KeyPackages (via the gated `enroll:listfornamespace` verb, not a public
+  fetch) → consent hook on the invitee's side (apps may auto-accept
   for namespaces they manage) → Add + Commit by any current member →
   Welcome delivered by ordinary cross-atSign notification (a Welcome is
   already encrypted to the KeyPackage init key; transport needs integrity
@@ -1228,10 +1450,10 @@ abstract class SecureGroup {
 - **The namespace-authorization gate is enforced by the atServer on the
   epoch-key envelopes, not chosen by the sender.** Epoch keys travel as
   secret-sharing envelopes whose key carries the application-namespace suffix
-  (`<msgId>.<recipientClientId>.__ssenv.at_talk@…`), so **the atServer gates
+  (`<msgId>.<recipientKpId>.__ssenv.at_talk@…`), so **the atServer gates
   their deliverability by `at_talk` enrollment access — the same gate as the
   shared data key itself.** The sender therefore does **not** need to (and
-  cannot) evaluate bob's per-client authorization: the committer encapsulates
+  cannot) evaluate bob's per-APKAM authorization: the committer encapsulates
   the epoch key (X-Wing) to every counterparty KeyPackage that namespace
   discovery returns (`discoverClients(namespace:)` already lists only clients
   whose enrollment is approved for the namespace), and even if it pushed to a
@@ -1250,13 +1472,16 @@ abstract class SecureGroup {
     never blocks on a recipient join, and no bob client outside `at_talk` can
     obtain the key — so first contact is eventually-consistent (bounded by the
     recipient coming online + at most one pull round-trip), never synchronous.
-- The `group` provider now serves both self and shared keys: one code path,
-  the scope key widening from `(atSign, namespace)` to `(memberSet, namespace)`
-  (self = `{atSign}`, shared = `{alice, bob}`), for the first time.
+- The `at/pqmls` provider's group scope now widens from a self group to a
+  cross-atSign group with one code path: the scope key goes from `(atSign,
+  namespace)` to `(memberSet, namespace)` (self group = `{atSign}`, shared group
+  = `{alice, bob}`), for the first time. (This is D2's forward-secure group path;
+  D1's self *and* shared data path is the nskey data path — see [ADR
+  0002](adr/0002-d1-single-tier-nskey.md).)
 - Static `shared_key.*` retirement follows the same four-phase path as
   selfEncryptionKey.
 
-### Phase 5 — pq-mls engine (SecureGroup v2)
+### Phase 6 — pq-mls engine (SecureGroup v2)
 
 - **Engine decision**: pub.dev `openmls` wrapper (ships an experimental
   X-Wing ciphersuite; third-party Rust binary — supply-chain and
@@ -1264,10 +1489,10 @@ abstract class SecureGroup {
   (multi-month). If native, ship as a separate package so `at_client`
   stays pure Dart.
 - **Bootstrap**: create the MLS group from the *same member set* (their
-  KeyPackages are already published in MLS-compatible shape), flip
+  per-APKAM KeyPackages are already registered in MLS-compatible shape), flip
   `groupId`/`providerId` on new writes, lazily re-encrypt old values on
-  touch. Welcome/Commit ride the same delivery channels (phase 3 within an
-  atSign, phase 4 across atSigns). Apps see an engine swap under the same
+  touch. Welcome/Commit ride the same delivery channels (phase 4 within an
+  atSign, phase 5 across atSigns). Apps see an engine swap under the same
   `SecureGroup` interface; the consent/membership hooks are unchanged.
 - Gains over v1: TreeKEM (O(log n) commits), real forward secrecy and
   post-compromise security per RFC 9420, standardized group semantics, and
@@ -1279,9 +1504,11 @@ abstract class SecureGroup {
 
 "Obsolete" means three different things at different times; four phases:
 
-1. **Stops being used for new writes** — the default provider flips to
-   `'group'`. Old values keep routing to `LegacyCryptoProvider` via
-   `AppMetadata`; zero breakage.
+1. **Stops being used for new writes** — the default data path flips to the
+   **nskey data path** (`at/nskey` conveys the content key; `at/symmetric/AES/GCM`
+   encrypts the data under it — there is no single `'nskey'` provider to flip
+   to). Old values keep routing to `LegacyCryptoProvider` via `AppMetadata`;
+   zero breakage.
 2. **Stops protecting old data** — lazy re-encryption on touch plus an
    optional background sweep; migration progress is observable per atSign.
 3. **Stops being conveyed** — the real kill. `enroll:approve` today always
@@ -1296,18 +1523,22 @@ abstract class SecureGroup {
 
 End state: the only symmetric key that ever sat still is gone; every
 long-lived secret is either per-enrollment (rare rotation, anchored in an
-approval ceremony) or per-client (routine lever-B rotation); everything
-that actually encrypts data is epochal and rotates as a matter of course.
+approval ceremony) or per-APKAM (the nskey privates, or — in D2 — leaf keys on
+routine lever-B rotation). What actually encrypts data is epochal and rotates as
+a matter of course: in the **nskey data path** that is the symmetric **content
+key (CK)** (rotated cheaply, conveyed via `at/nskey`); in D2 groups it is the
+epoch secret.
 
 ## Dependencies
 
 ```
 0 (foundations: provider seam + PQ primitives + secret-sharing substrate)
 └─► 1 (X-Wing, GCM, HKDF, PQ enrollment pubkey)
-    └─► 2 (KeyPackages PQ-native, AtKeys split, cross-atSign publication)
-        └─► 3 (SecureGroup v1 + group provider, self)  ─► retire sEK 1–2
-            └─► 4 (cross-atSign pair groups, shared)   ─► retire shared_key
-                └─► 5 (pq-mls engine, bootstrap)       ─► retire sEK 3–4
+    └─► 2 (per-APKAM KeyPackages PQ-native, per-APKAM AtKeys, KeyPackage discovery)
+        └─► 3 (the nskey data path: at/nskey + at/symmetric/AES/GCM, self + shared)  ─► retire sEK / shared_key 1–2
+            └─► 4 (at/pqmls D2: SecureGroup v1 + group provider, intra-atSign)
+                └─► 5 (at/pqmls D2: cross-atSign pair groups + Delivery Service)   ─► retire shared_key
+                    └─► 6 (pq-mls engine, bootstrap)       ─► retire sEK 3–4
 ```
 
 ## Upgrading NoPorts (with daemon-ping feature discovery)
@@ -1327,7 +1558,7 @@ an old daemon), and features gate behavior per session — exactly how
 
 | Feature         | Daemon advertises that it...                                                  |
 |-----------------|-------------------------------------------------------------------------------|
-| `groupCrypto`   | can decrypt notifications encrypted by the SDK's `group` provider             |
+| `groupCrypto`   | can decrypt notifications encrypted by the SDK's `at/pqmls` provider          |
 | `pqSessionKeys` | supports deriving session keys from a pair-group `export()` (none in flight)  |
 
 The crucial subtlety: a client must NOT flip its default provider for
@@ -1340,7 +1571,7 @@ Three feature-gated tiers, each strictly compatible with un-upgraded peers:
 - **Tier 0 — transport becomes PQ-safe (no protocol change).** Daemons upgrade
   first (the new SDK decrypts both legacy- and group-encrypted values via
   `AppMetadata` routing) and advertise `groupCrypto`; clients then route
-  per-destination through `group` or fall back to `legacy`. The RSA-wrapped
+  per-destination through `at/pqmls` or fall back to `legacy`. The RSA-wrapped
   session keys travel *inside* these payloads, so tier 0 alone closes the
   harvest-now hole — a recorded exchange can no longer be peeled open later.
 - **Tier 1 — derive session keys, never transmit them.** Gated on
@@ -1444,7 +1675,7 @@ nuking all of `@client`); finer `@events` audit (attribute activity to a
 leaf/device).
 
 **Residuals (the under-the-hood changes):** more SDK-managed key files
-(one persistent leaf keyset per client program + transient, non-persisted
+(one persistent leaf keyset per APKAM keypair + transient, non-persisted
 ephemerals); transient short-TTL KeyPackage churn on `@client`'s atServer
 (self-cleaning); deterministic behaviour on a duplicate same-identity launch
 (fork/refuse instead of silent coexistence — visible only at the misuse
@@ -1478,45 +1709,45 @@ survive the swap.
 
 Risks, ordered by how much cheaper they are to fix now than later:
 
-1. **Membership is implicit — a Phase-3-only shape.** The implemented
+1. **Membership is implicit — a Phase-4-only shape.** The implemented
    `SecureGroup` is `groupId / currentEpoch / seal / open / rotate /
-   export`; it dropped the `members` / `add` / `remove` that the Phase 3
+   export`; it dropped the `members` / `add` / `remove` that the Phase 4
    sketch above lists. v1 self-groups *derive* membership (`rotate()`
    re-runs `discoverClients(namespace)`), which works only because one
-   server is the authority on authorization. Cross-atSign groups (Phase 4)
+   server is the authority on authorization. Cross-atSign groups (Phase 5)
    and MLS are explicit-roster, so the interface must grow membership ops
    there — and adding methods to a published abstract is a breaking change.
    **Action: lift `members` / `add` / `remove` into the durable
    `SecureGroup` interface now, with v1 implementing them by derivation, so
-   the app surface is stable across Phases 3→4→5.** (Cheap now.)
+   the app surface is stable across Phases 4→5→6.** (Cheap now.)
 
 2. **The delivery channel is a KeyPackage directory + best-effort secret
    channel, not an ordered MLS Delivery Service.** Epoch keys and envelopes
    converge newest-`createdAt`-wins, with no ordering guarantee; the v1
    model embraces forks. MLS requires agreement on commit *order*.
-   **Action: before Phase 5, decide where commit ordering comes from —
+   **Action: before Phase 6, decide where commit ordering comes from —
    atServer sequencing, a designated per-group committer, or per-epoch
-   compare-and-set — and record it in the Phase 5 plan.** The v1 "forks are
+   compare-and-set — and record it in the Phase 6 plan.** The v1 "forks are
    fine" assumption must not leak into MLS expectations.
 
-3. **Phase 3 → Phase 4 is the real discontinuity.** The code is solidly
-   Phase 3 (`GroupCryptoProvider.encrypt` hard-rejects shared keys).
+3. **Phase 4 → Phase 5 is the real discontinuity.** The code is solidly
+   Phase 4 (`GroupCryptoProvider.encrypt` hard-rejects shared keys).
    Cross-atSign pair groups — what NoPorts actually needs — require
-   cross-atSign KeyPackage fetch+verify, a consent hook, explicit
+   cross-atSign KeyPackage discovery+verify, a consent hook, explicit
    membership, and group state not derivable from one server. That is
    mostly greenfield; the substrate covers identity + transport only.
-   **Action: scope Phase 4 as the major build it is — treat
+   **Action: scope Phase 5 as the major build it is — treat
    membership/consent/group-state as new, not as an extension of the
    self-group path.**
 
 4. **`GroupCryptoProvider` corrupts binary values.** It does
    `utf8.encode(plaintext.toString())` / `utf8.decode(...)`; the legacy
-   path honours `isBinary` but the group provider does not.
-   **Action: make the `group` provider seal/open bytes (binary-safe)
+   path honours `isBinary` but the `at/pqmls` provider does not.
+   **Action: make the `at/pqmls` provider seal/open bytes (binary-safe)
    before any binary value relies on it.**
 
 5. **Naming collision.** The v1 self engine is `PairwiseGroup` ("pairwise"
-   = the X-Wing encapsulation method), but Phase 4's cross-atSign groups
+   = the X-Wing encapsulation method), but Phase 5's cross-atSign groups
    are also called "pair groups" above. **Action: rename the v1 engine
    (e.g. `SelfGroup`) to free "pair group" for the cross-atSign meaning.**
 
@@ -1524,35 +1755,36 @@ Risks, ordered by how much cheaper they are to fix now than later:
 
 at_client uses several physical connections to the atServer (monitor /
 request-response / sync) that collectively act as one logical client. This
-is **not** the cloning hazard: the MLS leaf binds to the logical client
-that exclusively owns the mutable crypto state — the `AtClientImpl` instance
-(it owns `atChops`, `cryptoRegistry`, and the group provider via
-`CryptoRuntime`) — **not** to a connection. MLS rides above transport, so N
+is **not** the cloning hazard: the MLS leaf binds to the **APKAM keypair**,
+not to a connection or a process — a process driving an APKAM keypair acts as
+that keypair's single leaf, and the `AtClientImpl` instance exclusively owns
+the mutable crypto state for it (it owns `atChops`, `cryptoRegistry`, and the
+`at/pqmls` provider via `CryptoRuntime`). MLS rides above transport, so N
 connections under one instance = one leaf, by construction. The default
-makes this safe out of the box: `clientId` is per-process and ephemeral
-(`Uuid().v4()`, lives until the process ends), so each instance is a fresh
-leaf regardless of socket count. If anything, the model is a *positive* — it
-hands MLS a single logical-client object to anchor leaf identity and group
-state on; multiplexing connections (fewer or more) is orthogonal.
+makes this safe out of the box: an ephemeral one-shot client mints a fresh
+APKAM keypair per run (it lives until the process ends), so each such instance
+is a fresh leaf regardless of socket count. If anything, the model is a
+*positive* — it hands MLS a single APKAM-keypair leaf to anchor identity and
+group state on; multiplexing connections (fewer or more) is orthogonal.
 
 The model is safe *because* one instance owns the state, which turns into
 three obligations:
 
-- **Serialize crypto-state mutation within the instance** (engine, Phase 5).
+- **Serialize crypto-state mutation within the instance** (engine, Phase 6).
   Connections drive concurrent async work — the monitor can deliver a Commit
   (epoch change) while a request connection is mid-`seal()`. MLS generation
   /ratchet/epoch transitions are not reentrancy-safe; a mutex/sequencer must
   guard seal/open/apply-commit. Intra-instance lock, cheap — not distributed.
 - **Apply inbound handshake before sealing under the new epoch** (engine,
-  Phase 5). Commits/Welcomes arrive on the notification connection; data on
+  Phase 6). Commits/Welcomes arrive on the notification connection; data on
   get/notify; sync on its own — all converge on one epoch/ratchet that must
   advance in order. Handshake and data are one state machine, not independent
   streams.
-- **One live owner per persisted `clientId`** (identity, Phase 2). The sharp
-  edge is `loadClientKeys`, not connections: handing the same stored
-  clientId + leaf seed to two *concurrent* instances (two apps, app + daemon,
+- **One live owner per persisted APKAM keypair** (identity, Phase 2). The sharp
+  edge is `loadClientKeys`, not connections: handing the same stored APKAM
+  keypair + leaf keys to two *concurrent* instances (two apps, app + daemon,
   overlapping restart, HA pair) is the clone bug regardless of socket count.
-  Rule: a persisted leaf identity has exactly one live owner at a time —
+  Rule: a persisted APKAM-keypair leaf has exactly one live owner at a time —
   mint-fresh by default (today's behavior) or persist-with-an-exclusive
   runtime lock. That lock is two layers: a device-local file lock
   (same-machine) and an **atServer lease keyed on `(atSign, label)`**
@@ -1779,6 +2011,6 @@ The end-to-end traces that exercise this design live in their own companion,
   — Deliverable 2 at scale against the
   [group Delivery Service](#atserver-group-delivery-service-target-design):
   create, add, append, catch-up, revoke, GC.
-- **[A two-atSign chat with client churn (`at_talk`)](crypto-walkthroughs.md#walkthrough-c--a-two-atsign-chat-with-client-churn-at_talk)**
-  — the Phase 4 `(pair, namespace)` shared group with late-joining clients
+- **[A two-atSign chat with client churn (`at_talk`)](crypto-walkthroughs.md#walkthrough-c--a-two-atsign-chat-with-apkam-keypair-churn-at_talk)**
+  — the Phase 5 `(pair, namespace)` shared group with late-joining clients
   reading new *and* past messages.

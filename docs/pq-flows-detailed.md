@@ -12,23 +12,39 @@ atServer) unless stated.
 Key objects used throughout:
 - `public:pqpublickey@alice` — atSign-level PQ encryption pubkey (X-Wing; root, no
   namespace; **immutable** once written). Private half = the root secret `pqid:<kid>`.
-- **PQ APKAM** keypair — ML-DSA signing key for auth; minted **per (host, keyfile)**;
-  public half published as an **immutable per-host record** (working name
-  `<enrollmentId>.<hostId>.pqapkam.__manage@alice`).
-- **Namespace key** (`nskey`) — a per-`(atSign, namespace)` X-Wing keypair. With namespace
-  `app_1.my_apps` (key name `nskey`, namespace `app_1.my_apps` — namespaces read right-to-left,
-  DNS-style: app `app_1` under org `my_apps`), three at-key shapes recur — keep them distinct:
-  - `nskey.app_1.my_apps@alice` — @alice's namespace **keypair** (self); alice's clients hold
-    the **private** half (decrypts both her self data and inbound shares).
-  - `public:nskey.app_1.my_apps@alice` — its **public** half, **published world-readable**;
-    **any** atSign (a peer, or alice for self data) encapsulates to it to send to @alice.
-  - `nskey.app_1.my_apps@bob` / `public:nskey.app_1.my_apps@bob` — @bob's keypair + published
-    public half, symmetric.
-  The private half is distributed via `requestSecret`, held only by the owning atSign's own
-  clients; the `public:` form is the one published key anyone encapsulates to — there is **no**
-  per-recipient key shape.
-- `ClientKeyPackage` (CKP) — per-client X-Wing pubkey for receiving sealed secrets.
-- `appMetadata.providerId ∈ {legacy, nskey, group}` — routes the reader to a provider.
+- **PQ APKAM** keypair — ML-DSA signing key for auth; minted **per APKAM keypair**
+  (one per keyfile/install, multiple per enrollment); public half registered in the
+  **per-APKAM enrollment record** (working name
+  `<enrollmentId>.<apkamId>.pqapkam.__manage@alice`, immutable per APKAM keypair).
+- **Namespace key** (`nskey`) — **two** per-`(atSign, namespace)` X-Wing KEM keypairs (a **self
+  nskey** and a **public nskey**). nskey is asymmetric and only ever **wraps symmetric content
+  keys (CKs)** — it never encrypts application data directly; its private **decapsulates CKs**. With
+  namespace `app_1.my_apps` (key name `nskey`, namespace `app_1.my_apps` — namespaces read
+  right-to-left, DNS-style: app `app_1` under org `my_apps`), the at-key shapes recur — keep them
+  distinct:
+  - **self nskey** (`nskey.app_1.my_apps@alice`, public half **not** published) — alice encapsulates
+    **her own** CKs to it; alice's clients hold the **private** half (decapsulates her own CKs).
+  - `public:nskey.app_1.my_apps@alice` — the **public nskey** public half, **published
+    world-readable**; **external senders** encapsulate CKs to it to send to @alice; alice's clients
+    hold its private (decapsulates CKs inbound senders sent her).
+  - `@bob`'s self nskey + `public:nskey.app_1.my_apps@bob`, symmetric.
+  The private halves are conveyed **per-APKAM** by the secret-sharing substrate (PUSH at
+  mint/approve/rotate via the gated `enroll:listfornamespace` verb + the `__ssenv` envelope;
+  `requestSecret` PULL as the offline backstop), held only by the owning atSign's own APKAM
+  keypairs. There are **two** nskeys per namespace (self + public): self data uses the unpublished
+  self nskey; cross-atSign uses the recipient's published public nskey.
+- **X-Wing key package** — the per-APKAM X-Wing recipient keypair a sender `pqSeal`s to (its
+  `kpid` = the kid of its X-Wing public half). Generated locally with each APKAM keypair;
+  **registered in the per-APKAM enrollment record** (`<enrollmentId>.<apkamId>.pqapkam.__manage@alice`)
+  alongside the ML-DSA APKAM pubkey — **never published**, never a client-published at-key,
+  discovered only via the gated `enroll:listfornamespace` verb. Its **private half never leaves
+  the keyfile**.
+- `appMetadata.providerId ∈ {legacy, at/nskey, at/symmetric/AES/GCM}` — routes the reader to a
+  provider; a value with **no** `providerId` defaults to **legacy**. `at/nskey` tags a
+  CK-conveyance record (a CK X-Wing-sealed to an nskey); `at/symmetric/AES/GCM` tags application
+  data AES-256-GCM under a CK, cited by `ckKid`. (`at/nskey` only **conveys** the CK — it never
+  encrypts application data; the umbrella for `at/nskey` + `at/symmetric/AES/GCM` is the **nskey
+  data path**.)
 
 ---
 
@@ -47,7 +63,7 @@ Key objects used throughout:
   - [2.4 Legacy APKAM deletion & lockout — UC-B2.1 / B2.2](#24-legacy-apkam-deletion--lockout--uc-b21--b22)
 - [3. E2EE within one atSign (self) — puts & notifications](#3-e2ee-within-one-atsign-self--puts--notifications)
   - [3.1 Self put, namespace key exists — UC-A3.1](#31-self-put-namespace-key-exists--uc-a31)
-  - [3.2 First self put in a namespace mints + distributes `nskey.app_1.my_apps@alice` — UC-A3.2](#32-first-self-put-in-a-namespace-mints--distributes-nskeyapp_1my_appsalice--uc-a32)
+  - [3.2 First self put in a namespace mints + distributes both `nskey.app_1.my_apps@alice` keypairs — UC-A3.2](#32-first-self-put-in-a-namespace-mints--distributes-both-nskeyapp_1my_appsalice-keypairs--uc-a32)
   - [3.3 Self put falls back to `pqpublickey` (no namespace key) — UC-A3.3](#33-self-put-falls-back-to-pqpublickey-no-namespace-key--uc-a33)
   - [3.4 Self notification — NEW](#34-self-notification--new)
   - [3.5 Mixed — upgraded `alice1`, un-upgraded `alice2` — UC-B3.1](#35-mixed--upgraded-alice1-un-upgraded-alice2--uc-b31)
@@ -67,12 +83,14 @@ Key objects used throughout:
 - **When:** `alice1` runs onboarding.
 - **Steps:**
   1. CRAM-authenticate with the activation secret.
-  2. Mint **PQ APKAM** keypair (ML-DSA); publish its public half as an immutable per-host
+  2. Mint **PQ APKAM** keypair (ML-DSA); register its public half in the per-APKAM enrollment
      record; set it as this enrollment's (E1) APKAM key.
   3. Mint the atSign-level **X-Wing** keypair; **immutable-create** `public:pqpublickey@alice`;
      keep the private half locally and seed it as `pqid:<kid>`.
-  4. Mint the client's **CKP** (X-Wing) and publish it.
-  5. Persist AtKeys (PQ APKAM private + `pqpublickey@alice⁻¹` + CKP private) to keyfile/keychain.
+  4. Mint this APKAM keypair's **X-Wing key package** and register it in the per-APKAM enrollment
+     record (private half stays in the keyfile; **not** published).
+  5. Persist AtKeys (PQ APKAM private + `pqpublickey@alice⁻¹` + X-Wing key package private half)
+     to the per-APKAM keyfile/keychain.
   6. **Verify**: re-authenticate using the PQ APKAM key (proves the server accepts PQ auth).
   7. Legacy interop (config flag, **default off**): publish `public:publickey@alice` (RSA)
      **only if enabled**, for legacy-peer inbound; default is PQ-only (omit it).
@@ -80,8 +98,11 @@ Key objects used throughout:
   - `alice1` authenticates with PQ APKAM; no RSA APKAM key is required for auth.
   - `public:pqpublickey@alice` exists, is immutable (a second create attempt is rejected),
     and `alice1` holds its private half.
-  - `alice1.CKP` is published and fetchable by peers.
-  - No `selfEncryptionKey` is minted (self data will use `nskey`/`pqpublickey`).
+  - `alice1`'s X-Wing key package is registered in its per-APKAM enrollment record (not
+    published; discoverable only via `enroll:listfornamespace`).
+  - No `selfEncryptionKey` is minted (self data will use the **nskey data path** — `at/nskey`
+    conveys the CK, `at/symmetric/AES/GCM` encrypts the data; cold-start seals the CK to
+    `pqpublickey`).
   - readiness may be `ready` (no legacy clients exist).
   - *(Legacy-interop flag on)* `public:publickey@alice` is present; **default (flag off)** it is
     absent and a legacy peer's send is unsupported (UC-B4.2).
@@ -96,14 +117,20 @@ Key objects used throughout:
      RSA — and sends `enroll:request` with its PQ APKAM public half + requested namespaces.
   3. `alice1` (approver) decapsulates `apkamSymmetricKey` with `pqpublickey@alice⁻¹`; approves E2;
      registers `alice2`'s PQ APKAM pubkey for E2 (multiple-per-enrollment).
-  4. `alice1` conveys to `alice2`, AEAD-wrapped under `apkamSymmetricKey`: the
-     **`pqpublickey@alice⁻¹`** (root) and the **`nskey.app_1.my_apps@alice⁻¹`** (authorised namespace only).
-  5. `alice2` fetches + decrypts the conveyed bundle; publishes its **CKP**; persists AtKeys.
+  4. `alice1` conveys the secrets `alice2` is authorised for:
+     - the **`pqpublickey@alice⁻¹`** (root) rides the approval response bundle (wrapped under
+       `apkamSymmetricKey`);
+     - the **`nskey.app_1.my_apps@alice⁻¹`** (authorised namespace only) is delivered by the
+       **substrate push** — `alice1` `pqSeal`s it to `alice2`'s X-Wing key package and `put`s it
+       to `<msgId>.<kpid>.__ssenv.app_1.my_apps@alice` (this is
+       `shareAllSecretsWithEnrollment(E2, approvedNamespaces)`, re-keyed to APKAM-level).
+  5. `alice2` consumes the substrate envelope + approval bundle, decapsulates, verifies; registers
+     its **X-Wing key package** in its per-APKAM enrollment record; persists AtKeys.
   6. `alice2` verifies PQ APKAM auth.
 - **Then:**
   - Nothing in the conveyance path is RSA-wrapped (`apkamSymmetricKey` rode X-Wing) — the
     enrollment harvest-now hole is closed.
-  - `alice2.APKAM = pq`, `pqpk⁻¹ = ✓`, `nskey.app_1.my_apps@alice⁻¹ = ✓`, `nskey.app_2.my_apps@alice⁻¹ = ✗`, `CKP = ✓`.
+  - `alice2.APKAM = pq`, `pqpk⁻¹ = ✓`, `nskey.app_1.my_apps@alice⁻¹ = ✓`, `nskey.app_2.my_apps@alice⁻¹ = ✗`, X-Wing key package registered.
   - `alice2` can authenticate PQ and decrypt `@alice`'s `app_1.my_apps` self data; a `app_2.my_apps` key request
     is refused.
   - E2's APKAM key is a distinct, individually-revocable record.
@@ -114,19 +141,19 @@ Key objects used throughout:
 - **When:** `alice1b` first runs.
 - **Steps:**
   1. `alice1b` authenticates (it has E1's existing APKAM private from the copied keyfile).
-  2. Host-local mint-once: the copied keyfile may already carry a PQ APKAM key (then reuse) or
-     not (then mint a **new** PQ APKAM keypair for this host and publish an immutable per-host
-     record under E1).
+  2. Mint-once per APKAM keypair: the copied keyfile may already carry a PQ APKAM keypair (then
+     reuse) or not (then mint a **new** PQ APKAM keypair and register an immutable per-APKAM
+     enrollment record under E1).
   3. Obtain `pqpublickey@alice⁻¹` — present in the copied keyfile, else `requestSecret`.
-  4. Publish `alice1b`'s CKP.
+  4. Register `alice1b`'s X-Wing key package in its per-APKAM enrollment record (not published).
 - **Then:**
-  - If the second host minted its own (the keyfile copy predated alice1's upgrade), E1 now has
-    **two** PQ APKAM keys (individually revocable); if it inherited the key from the copied
-    keyfile, E1 has **one** shared across both hosts.
+  - If the second host minted its own APKAM keypair (the keyfile copy predated alice1's upgrade),
+    E1 now has **two** PQ APKAM keypairs (individually revocable); if it inherited the keypair from
+    the copied keyfile, E1 has **one** shared across both hosts.
   - Both hosts share `pqpublickey@alice⁻¹` and E1's namespace authorisations.
   - **Decision (PQ APKAM placement):** the PQ APKAM private lives in the **copyable keyfile**
     section, so a copy made *after* upgrade inherits/shares it — revocation is per-keyfile-key,
-    not strictly per-device. Device-local/keychain is optional hardening for true per-host
+    not strictly per-device. Device-local/keychain is optional hardening for true host
     binding.
 
 ## 1.4 Namespace-restricted enrollment — UC-A2.3
@@ -159,10 +186,12 @@ no `pqpublickey`.
 - **When:** `alice1` runs the upgrade.
 - **Steps:**
   1. Authenticate legacy (RSA APKAM).
-  2. **Mint-once per host** a PQ APKAM keypair; publish its immutable per-host record for E1.
+  2. **Mint-once per APKAM keypair** a PQ APKAM keypair; register its immutable per-APKAM
+     enrollment record for E1.
   3. **Verify** PQ APKAM auth succeeds.
   4. **Delete** the legacy RSA APKAM pubkey for E1 (only after step 3).
-  5. Persist AtKeys; publish CKP.
+  5. Persist AtKeys; register this APKAM keypair's X-Wing key package in its per-APKAM enrollment
+     record (not published).
   6. **Immutable-create** `public:pqpublickey@alice` → **wins** → generate X-Wing keypair, hold
      `pqpublickey@alice⁻¹`, seed `pqid:<kid>`, serve on request.
   7. When the roster holds the key, flip readiness (or leave `n-r` until siblings upgrade).
@@ -175,11 +204,12 @@ no `pqpublickey`.
 
 - **Given:** after 2.1; `pqpublickey` exists; `alice2` on E1 (RSA APKAM).
 - **When:** `alice2` runs the upgrade.
-- **Steps:** 1–5 as 2.1 (mints its **own** PQ APKAM, publishes, verifies, deletes *its* legacy
-  view if applicable, persists, publishes CKP). Step 6: **immutable-create rejected (exists)**
-  → `requestSecret(pqid:<kid>)` → verify public/private correspondence → store.
+- **Steps:** 1–5 as 2.1 (mints its **own** PQ APKAM, registers its per-APKAM record, verifies,
+  deletes *its* legacy view if applicable, persists, registers its X-Wing key package in its
+  per-APKAM enrollment record). Step 6: **immutable-create rejected (exists)** →
+  `requestSecret(pqid:<kid>)` → verify public/private correspondence → store.
 - **Then:** `alice2.APKAM = pq`, `pqpk⁻¹ = ✓`; it never created or overwrote `pqpublickey`; E1
-  now has two PQ APKAM keys.
+  now has two PQ APKAM keypairs.
 
 ## 2.3 Third client, different enrollment — UC-B1.3
 
@@ -208,39 +238,55 @@ no `pqpublickey`.
 - **Given:** `@alice` pq-native; `public:nskey.app_1.my_apps@alice` published; `alice1`, `alice2` hold `nskey.app_1.my_apps@alice⁻¹`.
 - **When:** `alice1` does `put <k>.app_1.my_apps@alice` (shouldEncrypt).
 - **Steps:**
-  1. Generate a random data key; encrypt the value with it (AES-256-GCM).
-  2. **Encapsulate** the data key to @alice's own published public key
-     `public:nskey.app_1.my_apps@alice` (X-Wing); store the encapsulation in `appMetadata.additional`.
-  3. Stamp `appMetadata.providerId = nskey`, `isEncrypted = true`; write the key; sync.
+  1. Cut a symmetric **content key (CK)**; encrypt the value with it (AES-256-GCM under the CK).
+  2. **Convey the CK once** (`at/nskey`): X-Wing-seal the CK to @alice's **self nskey** (the
+     unpublished one) and write it as its own CK-conveyance record, cited by `ckKid`. (Skip if the
+     CK is already conveyed.)
+  3. Write the **data** value (`at/symmetric/AES/GCM`): stamp `appMetadata.providerId =
+     at/symmetric/AES/GCM`, `ckKid`, `iv`; the value carries **no** inline sealed CK. Write; sync.
 - **Then:**
-  - `alice2` syncs the key, routes by `providerId = nskey`, decapsulates the data key with
-    `nskey.app_1.my_apps@alice⁻¹`, decrypts the value.
+  - `alice2` syncs both records: the `at/nskey` provider decapsulates the CK with the self-nskey
+    private and caches it by `ckKid`; the `at/symmetric/AES/GCM` provider resolves the CK by `ckKid`
+    and AES-GCM-decrypts the value.
   - No legacy provider, no `selfEncryptionKey` used.
-  - Acceptance test: round-trip equals plaintext; `providerId = nskey`; a client lacking
-    `nskey.app_1.my_apps@alice⁻¹` cannot read.
+  - Acceptance test: round-trip equals plaintext; data value `providerId = at/symmetric/AES/GCM`
+    citing `ckKid`; a client lacking the self-nskey private cannot decapsulate the CK and so cannot
+    read.
 
-## 3.2 First self put in a namespace mints + distributes `nskey.app_1.my_apps@alice` — UC-A3.2
+## 3.2 First self put in a namespace mints + distributes both `nskey.app_1.my_apps@alice` keypairs — UC-A3.2
 
-- **Given:** `@alice` pq-native; **no** `public:nskey.app_1.my_apps@alice` yet; `alice1`, `alice2` PQ, both have CKP.
+- **Given:** `@alice` pq-native; **no** `nskey.app_1.my_apps@alice` yet; `alice1`, `alice2` PQ, both
+  with registered X-Wing key packages.
 - **When:** `alice1` does the first `put <k>.app_1.my_apps@alice`.
 - **Steps:**
-  1. `alice1` mints the `app_1.my_apps` X-Wing keypair `nskey.app_1.my_apps@alice`; **immutable-create**
-     `public:nskey.app_1.my_apps@alice`; seed `nskey.app_1.my_apps@alice⁻¹` as an **`app_1.my_apps`-namespaced**
-     secret (`__nsk.app_1.my_apps.<epoch>`, working name).
-  2. Encrypt the value to the new namespace key (as 3.1).
-  3. `alice2` `requestSecret` in `app_1.my_apps` (authorised), receives `nskey.app_1.my_apps@alice⁻¹` pqSealed to its CKP,
-     verifies correspondence, stores.
+  1. `alice1` mints **both** `app_1.my_apps` nskey X-Wing keypairs: the **self nskey** (the
+     unpublished `nskey.app_1.my_apps@alice`, to which alice encapsulates her own CKs) **and** the
+     **public nskey** (**immutable-create** `public:nskey.app_1.my_apps@alice`, to which external
+     senders encapsulate). `alice1` holds both privates and seeds each as
+     `Secret(namespace: app_1.my_apps, name: nskey:<kid>, value: <private>)` for substrate delivery
+     (working names; the canonical delivery shape is `<msgId>.<kpid>.__ssenv.app_1.my_apps@alice`).
+  2. Convey the CK once via the **nskey data path** (as 3.1): cut a CK, seal it to the self nskey
+     in an `at/nskey` record, write the data under `at/symmetric/AES/GCM`.
+  3. The two nskey privates are **pushed** per-APKAM to every authorised member: `alice1` calls
+     `enroll:listfornamespace:app_1.my_apps`, then `pqSeal`s each private to `alice2`'s X-Wing key
+     package (addressed by `kpid`) and delivers on `<msgId>.<kpid>.__ssenv.app_1.my_apps@alice`.
+     `alice2` verifies correspondence against `public:nskey.app_1.my_apps@alice` and `putIfNewer`s.
+     (`requestSecret` is the offline pull backstop if `alice2` missed the push.)
 - **Then:**
-  - `public:nskey.app_1.my_apps@alice` published once (immutable); `alice2` obtains the private and can read.
-  - An `app_2.my_apps`-only client is refused `nskey.app_1.my_apps@alice⁻¹`.
+  - `public:nskey.app_1.my_apps@alice` published once (immutable); the self nskey stays unpublished;
+    `alice2` obtains **both** privates and can read.
+  - An `app_2.my_apps`-only client is refused the `app_1.my_apps` nskey privates (namespace = authz
+    boundary, server-gated on the `__ssenv` channel).
 
 ## 3.3 Self put falls back to `pqpublickey` (no namespace key) — UC-A3.3
 
 - **Given:** `@alice` pq-native; no `public:nskey.app_1.my_apps@alice`; "seal-and-hold" **not** selected (send-now is the default; seal-and-hold is the per-namespace opt-in).
 - **When:** `alice1` writes self data before any namespace key exists.
-- **Then:** data key encapsulated to `public:pqpublickey@alice` (root); any `@alice` client decrypts;
-  `providerId = nskey` with a root-key marker (or a dedicated marker — to spec). Self-heals to
-  the namespace key on the first namespaced write.
+- **Then:** the **CK** is X-Wing-sealed to `public:pqpublickey@alice` (root) via an `at/nskey`
+  conveyance record (`recipientKind: root-pqpublickey`) — data is **never** encrypted directly to
+  the root key; the data value stays `at/symmetric/AES/GCM` citing `ckKid`. Any `@alice` client
+  decapsulates the CK with the root private and decrypts. Self-heals to the namespace's public/self
+  nskey on the first namespaced write.
 
 ## 3.4 Self notification — NEW
 
@@ -248,7 +294,9 @@ no `pqpublickey`.
 - **When:** `alice1` does `notify` to `@alice` (self) carrying an encrypted value (e.g. an
   `update`/`delete` notification with `value` + shouldEncrypt).
 - **Steps:**
-  1. Encrypt the notification value exactly as a self put (data key → namespace/`pqpublickey`).
+  1. Encrypt the notification value exactly as a self put: AES-256-GCM under a CK
+     (`at/symmetric/AES/GCM`, cited by `ckKid`); the CK is conveyed once via an `at/nskey` record
+     sealed to the **self nskey** (or `pqpublickey` cold-start).
   2. Stamp `appMetadata.providerId` on the **notification** payload; send `notify:`.
   3. atServer queues/delivers; `alice2`'s monitor receives the notification frame.
   4. `alice2` reads `providerId` from the notification, decapsulates, decrypts the value.
@@ -266,8 +314,8 @@ no `pqpublickey`.
 - **When:** `alice1` puts/notifies self data both must read.
 - **Then:** `alice1` writes/notifies **legacy** (the scheme `alice2` can read) until readiness
   flips; `alice2` reads via the legacy provider; no self data is unreadable by `alice2`. After
-  all `@alice` clients are PQ and readiness flips `ready`, new self puts/notifications go
-  `nskey` (UC-B3.2).
+  all `@alice` clients are PQ and readiness flips `ready`, new self puts/notifications use the
+  **nskey data path** (UC-B3.2).
 
 ---
 
@@ -279,15 +327,19 @@ no `pqpublickey`.
   `nskey.app_1.my_apps@bob⁻¹`; `@bob` readiness `ready`.
 - **When:** `alice1` does `put @bob:<k>.app_1.my_apps@alice` (shouldEncrypt).
 - **Steps:**
-  1. Generate a data key; encrypt the value.
-  2. **Encapsulate** the data key to **bob's** published public key `public:nskey.app_1.my_apps@bob`
-     (fetched from `@bob`).
-  3. Stamp `providerId = nskey`; write the shared key; sync (delivered to `@bob`).
-  4. Write the **self-copy** for alice's own clients (encapsulated to **alice's** own published public key
-     `public:nskey.app_1.my_apps@alice`).
+  1. Cut a symmetric **CK**; encrypt the value with it (AES-256-GCM under the CK).
+  2. **Convey the CK once** (`at/nskey`): X-Wing-seal the CK to **bob's** published public nskey
+     `public:nskey.app_1.my_apps@bob` (fetched from `@bob`), as a discrete CK-conveyance record
+     cited by `ckKid`.
+  3. Write the **data** value (`at/symmetric/AES/GCM`, citing `ckKid`); sync (delivered to `@bob`).
+  4. Write the **self-copy** for alice's own clients: convey the CK once via an `at/nskey` record
+     sealed to **alice's self nskey** (the unpublished one, **not** her published public nskey),
+     plus the data value under `at/symmetric/AES/GCM`.
 - **Then:**
-  - `bob1` and `bob2` decapsulate with `nskey.app_1.my_apps@bob⁻¹` and read; `alice`'s clients read the self-copy.
-  - PQ end to end; `providerId = nskey`; no RSA on any path.
+  - `bob1` and `bob2` decapsulate the CK with their **public-nskey private** and read; `alice`'s
+    clients decapsulate the self-copy's CK with the **self-nskey private** and read.
+  - PQ end to end; data values `providerId = at/symmetric/AES/GCM`, CK conveyances `at/nskey`; no
+    RSA on any path.
   - Acceptance: every authorised reader on both atSigns decrypts; an unauthorised `@bob`
     enrollment cannot fetch the ciphertext (server-gated) nor decrypt.
 
@@ -295,8 +347,9 @@ no `pqpublickey`.
 
 - **Given:** `@alice`, `@bob` pq-native; `@bob` has `public:pqpublickey@bob` but **no** `public:nskey.app_1.my_apps@bob`.
 - **When:** `alice1` shares `@bob:<k>.app_1.my_apps@alice`.
-- **Steps:** as 4.1 but encapsulate the data key to **bob's `public:pqpublickey@bob`** (root fallback);
-  mark the fallback in `appMetadata`.
+- **Steps:** as 4.1 but X-Wing-seal the **CK** to **bob's `public:pqpublickey@bob`** (root fallback)
+  in the `at/nskey` conveyance record (`recipientKind: root-pqpublickey`) — only the CK is sealed
+  to the root; the data value stays `at/symmetric/AES/GCM`. Mark the fallback in `appMetadata`.
 - **Then:** every bob client reads instantly (all hold `pqpublickey@bob⁻¹`); when a bob `app_1.my_apps` client
   later publishes `public:nskey.app_1.my_apps@bob`, subsequent writes **upgrade** to the namespace key. (High-security
   `app_1.my_apps` may instead seal-and-hold — the per-namespace opt-in.)
@@ -307,8 +360,10 @@ no `pqpublickey`.
   `@bob` readiness `ready`; `bob1` running a monitor.
 - **When:** `alice1` `notify`s `@bob` with an encrypted value (e.g. share a key + notify).
 - **Steps:**
-  1. Encrypt the notification value to bob's `public:nskey.app_1.my_apps@bob` (or `public:pqpublickey@bob`) — same
-     encapsulation as 4.1/4.2.
+  1. Encrypt the notification value under a CK (`at/symmetric/AES/GCM`, cited by `ckKid`); convey
+     the CK once via an `at/nskey` record X-Wing-sealed to bob's published public nskey
+     `public:nskey.app_1.my_apps@bob` (or `public:pqpublickey@bob` cold-start) — same CK→nskey
+     conveyance as 4.1/4.2.
   2. Stamp `appMetadata.providerId` on the notification; `notify:@bob…`.
   3. `bobS` queues; on `bob1` reconnect the monitor delivers the notification frame.
   4. `bob1` routes by `providerId`, decapsulates, decrypts; `bob2` likewise on its monitor.
@@ -326,14 +381,16 @@ no `pqpublickey`.
 ## 4.4 Mixed PQ/legacy across atSigns — UC-B4.1 / B4.3 / B4.4
 
 - **B4.1 — `@alice` PQ-ready, `@bob` legacy.** `alice1` shares/notifies `@bob`: writes **legacy**
-  RSA to bob's `publickey` (bob's readiness `n-r` gates it); alice's self-copy may be PQ
-  independently. **Then:** no write/notification bob can't read; alice's own clients still get a
-  PQ self-copy if all alice clients are PQ.
+  (RSA-wrapped CK + AES) to bob's `publickey` (bob's readiness `n-r` gates it); alice's self-copy
+  may take the **nskey data path** independently. **Then:** no write/notification bob can't read;
+  alice's own clients still get an nskey-data-path self-copy if all alice clients are PQ.
 - **B4.3 — partially-upgraded `@alice` (alice1 PQ, alice2 legacy) → `@bob` PQ-ready.** The write
-  to `@bob` may be PQ (bob ready), but alice's **self-copy** is legacy (alice2 can't read PQ)
-  until `@alice` readiness flips. **Then:** two directions, two schemes, one `put`/`notify`.
+  to `@bob` may take the **nskey data path** (bob ready), but alice's **self-copy** is legacy
+  (alice2 can't read PQ) until `@alice` readiness flips. **Then:** two directions, two schemes,
+  one `put`/`notify`.
 - **B4.4 — `@bob` finishes upgrading.** Once all bob clients PQ and bob readiness `ready`,
-  alice's next share/notify to `@bob` goes PQ. **Then:** legacy path no longer used toward bob.
+  alice's next share/notify to `@bob` takes the **nskey data path**. **Then:** legacy path no
+  longer used toward bob.
 
 ---
 
