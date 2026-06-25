@@ -30,6 +30,7 @@ encryption work.
   - [D1-C · Migration & rollout machinery](#d1-c--migration--rollout-machinery)
   - [D1-D · Versioning (the `disallowLegacyEncryption` flag)](#d1-d--versioning-the-disallowlegacyencryption-flag)
   - [D1-E · D1 Tier2 shape-corrections](#d1-e--d1-tier2-shape-corrections-fold-into-wp-gp)
+  - [D1-F · Existing-client retrofit — auth upgrade & secret conveyance](#d1-f--existing-client-retrofit--auth-upgrade--secret-conveyance)
   - [D1 · Test & acceptance plan](#d1--test--acceptance-plan)
   - [D1 · PR delivery / publish](#d1--pr-delivery--publish)
 - [4. D2 — pq-mls (placeholders; detailed planning deferred)](#4-d2--pq-mls-placeholders-detailed-planning-deferred)
@@ -66,6 +67,7 @@ jump.
 | The two deliverables (D1 / D2) | [The two major deliverables](crypto-roadmap.md#the-two-major-deliverables) | [Current state (1)](crypto_impl_plan.md#1-current-state-2026-06-22) · [D1 acceptance (2)](crypto_impl_plan.md#2-d1-acceptance--what-done-means) | — |
 | D1 Tier1 — the `nskey` default | [D1 — preserving legacy simplicity](crypto-roadmap.md#d1--preserving-legacy-simplicity-two-tiers) | [D1-B (3)](crypto_impl_plan.md#d1-b--the-nskey-provider-d1-tier1--the-default) | — |
 | Migration, rollout & versioning | [Application migration & rollout](crypto-roadmap.md#application-migration--rollout) | [D1-C / D1-D (3)](crypto_impl_plan.md#d1-c--migration--rollout-machinery) | — |
+| Existing-client retrofit (auth + key dist) | [Existing-client retrofit](crypto-roadmap.md#existing-client-retrofit--auth-upgrade--key-distribution) | [D1-F (3)](crypto_impl_plan.md#d1-f--existing-client-retrofit--auth-upgrade--secret-conveyance) | — |
 | Identity, KeyPackages, self groups | [Phases 2–3](crypto-roadmap.md#phase-2--identity-layer-keypackages-and-per-client-atkeys) | [D1-E (3)](crypto_impl_plan.md#d1-e--d1-tier2-shape-corrections-fold-into-wp-gp) · [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | — |
 | Cross-atSign shared groups | [Phase 4](crypto-roadmap.md#phase-4--cross-atsign-groups-shared-encryption) | [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | [C — `at_talk` chat](crypto-walkthroughs.md#walkthrough-c--a-two-atsign-chat-with-client-churn-at_talk) |
 | pq-mls engine + Delivery Service | [atServer group Delivery Service](crypto-roadmap.md#atserver-group-delivery-service-target-design) | [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | [B — a large group](crypto-walkthroughs.md#walkthrough-b--a-large-group-end-to-end) |
@@ -278,7 +280,7 @@ waves 1–2.*
   stateless surface. *Consumers:* B2 (`nskey`) and the `__ssenv` substrate
   seal/open **through this** (no open-coded encapsulate+GCM).
 - [ ] **PQ enrollment-conveyance public key.** Publish an X-Wing pubkey
-  alongside `public:publickey@alice` (e.g. `public:publickey.pq@alice` or a
+  alongside `public:publickey@alice` (e.g. `public:pqpublickey@alice` or a
   key-list); new enrollees prefer it for wrapping `apkamSymmetricKey`; approvers
   accept either. Closes the last harvest-now-decrypt-later hole; **no server
   change.** Design: roadmap
@@ -304,7 +306,7 @@ on the M0 seam; legacy-shaped (copyable, enrollment-granular), PQ + namespace
     derive bob's per-namespace *public* key from his master public key (ML-KEM
     has no public child-derivation) — so the public key must still be published.
   - Publication: the first upgraded client publishes
-    `public:<ns>.encryptionpublickey@<atSign>` (or a hidden public key);
+    `public:encryptionpublickey.<ns>@<atSign>` (or a hidden public key);
     signed by the publishing enrollment.
   - *Acceptance:* a second client of the same atSign, authorized for the
     namespace, can obtain the private key (at approval or by derivation) and
@@ -419,6 +421,63 @@ apply them as part of that carve-out, while touching the area.
   (currently `utf8.encode(plaintext.toString())` corrupts binary).
 - [ ] **Rename `PairwiseGroup` → `SelfGroup`** to free "pair group" for the
   Phase-4 cross-atSign meaning.
+
+### D1-F · Existing-client retrofit — auth upgrade & secret conveyance
+*Lands as a new **WP-AU** (auth upgrade); gated on the F5 atServer enhancements
+(cross-repo to `at_server`) — slot into the wave sequence at review.* Design: roadmap
+[Existing-client retrofit](crypto-roadmap.md#existing-client-retrofit--auth-upgrade--key-distribution).
+
+The one-time retrofit that brings an existing atSign's already-onboarded clients to
+PQ-safe **auth** (PQ APKAM) and **encryption** (the atSign-level PQ key), reusing the
+secret-sharing substrate (WP-SS). New atSigns (PQ-native at onboarding) and new enrollments
+(approver push via WP10) do **not** run this.
+
+- [ ] **F1 · `requestSecret(name)` primitive.** Generalise the substrate's
+  `requestSecretsFromNamespace` to request a *named* secret. A request is a **targeted fan-out**
+  — discover the namespace's clients from their published `ClientKeyPackage`s and send each a
+  `pqSeal`-ed `__ssenv` envelope (no keyless broadcast); a holder responds with
+  `shareSecretWith(requester.ClientKeyPackage, secret)` (`pqSeal`) back to the requester's
+  clientId; requester `waitForSecret`. **Transport:** `atClient.put` of the `__ssenv` key
+  (`<msgId>.<recipientClientId>.__ssenv.<ns>@<atSign>`, self key, `shouldEncrypt=false`) +
+  **sync** delivery (sync-progress listener + periodic sweep → `receivedSecrets`), **plus an
+  optional wake-up `notify`** per put (default on) so **sync-less clients** wake and
+  `get(useRemoteAtServer)` — on both the request and the response. (Future: the atServer
+  auto-notifies on `__ssenv` puts, dropping the client-side notify.) *Responder authorisation:*
+  serve a namespaced secret only if the requester's enrollment covers that namespace; never to an
+  `excludeEnrollmentIds` member. Handle no-holder-online (request persists; retry/backoff),
+  thundering-herd (jitter + `putIfNewer` dedup), and freshness (version/`kid`). *Files:*
+  `at_client/lib/src/secret_sharing/`.
+- [ ] **F2 · atSign-level `pqpublickey` lifecycle.** `public:pqpublickey@alice` (root, no
+  namespace — *not* `publickey.pq`). Create via immutable create-if-absent (F5); the
+  creator generates the X-Wing keypair, stores the private half, seeds it as a conveyable
+  secret (`pqid:<kid>`), and serves on request. A non-creator pulls via F1, **verifies
+  public/private correspondence**, and stores into the local keystore (`WritableAtKeys`).
+  Conveyed to *every* non-revoked client (root → no namespace gate).
+- [ ] **F3 · Per-host PQ APKAM upgrade.** Mint-once **per (host, AtKeys file)** under a
+  host-local lock (reuse an existing keyfile key; else mint + persist); publish the public
+  half as an immutable per-host record; verify PQ APKAM auth; **then** delete the legacy RSA
+  APKAM public key (delete-by-default, scope = auth key only — keep the legacy encryption
+  key for reads). Uniform sequence per the roadmap; "creator vs requester" decided by F2's
+  immutable create. *Storage:* keyfile/keychain by default; OS-keychain/hardware opt-in; a
+  distinct labelled per-host record drives per-host revocation.
+- [ ] **F4 · Revocation.** Per-host auth revocation = delete that host's PQ APKAM public key
+  (meaningful only after F3's legacy deletion). Encryption revocation stays per-namespace
+  rotation (D1-B / WP9). TTL/usage-based eviction of unused APKAM keys (F5).
+- [ ] **F5 · atServer enhancements** *(cross-repo, `at_server`; gate F2/F3/F4).* Mint-once
+  uses the **existing immutable write** (`Metadata.immutable` — already live, no change). New:
+  - **multiple APKAM public keys per enrollment** + authenticate against any;
+  - **PQ (ML-DSA) APKAM authentication**;
+  - **delete a specific public key** (legacy on upgrade; a host's PQ key on revocation);
+  - **TTL / usage-based eviction of APKAM keys** + a per-key **"last authenticated"
+    timestamp** (updated on each successful auth).
+- [ ] **F6 · Confirm WP10 alignment.** PQ-safe enroll/approve must convey `pqpublickey` +
+  the new enrollment's PQ APKAM over the **PQ enrollment key**, not the RSA-wrapped
+  `apkamSymmetricKey` — else the harvest-now hole reopens for new clients.
+
+*Acceptance:* an existing client upgrades end-to-end (mints PQ APKAM, authenticates PQ,
+legacy APKAM deleted, pulls `pqpublickey`, correspondence verified) with no re-onboarding; a
+second host mints a *distinct* PQ APKAM key; revoking one host's key cuts only that host; no
+secret is ever wrapped under an RSA-derived key.
 
 ### D1 · Test & acceptance plan
 - Unit: `nskey` round-trips (self/shared/binary), negotiation matrix, rotation

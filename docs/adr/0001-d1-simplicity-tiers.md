@@ -50,7 +50,7 @@ Deliver D1 in **two tiers** over the M0 pluggable `CryptoProvider` seam:
   namespace that needs **per-device** revocation or forward secrecy. It is also
   the **substrate D2/MLS swaps its engine into.**
 
-The already-built per-client secret-sharing substrate is **not discarded**: in
+The prototyped per-client secret-sharing substrate is **not discarded**: in
 D1 Tier1 it is the per-enrollment rotation/distribution plumbing; in D1 Tier2 it
 is the per-client data path. Senders **negotiate per-destination** (provider seam +
 `appMetadata.providerId`), downgrading to the recipient's best supported tier,
