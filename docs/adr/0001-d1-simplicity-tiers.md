@@ -1,6 +1,8 @@
-# ADR 0001 — D1 delivers as two tiers (shared `nskey` default, per-client `group` opt-in)
+# ADR 0001 — D1 delivers as two tiers (shared `nskey` default, per-APKAM `group` opt-in)
 
-- **Status:** Accepted (2026-06-20)
+> ⚠ **Superseded by [ADR 0002](0002-d1-single-tier-nskey.md).** D1 is single-tier `nskey`; the two-tier framing and the 'no forward secrecy' / 'copyable vs per-device' claims below are retained for history only — see ADR 0002 for the current model.
+
+- **Status:** Superseded by [ADR 0002](0002-d1-single-tier-nskey.md) (2026-06-25) — was Accepted (2026-06-20)
 - **Context doc:** [`docs/crypto-roadmap.md`](../crypto-roadmap.md) →
   "D1 — preserving legacy simplicity (two tiers)" and "Application migration &
   rollout".
@@ -19,7 +21,7 @@ developer experience**: *Alice shares with `@bob`; every bob client with
 namespace access, present and future, decrypts it instantly, offline, with no
 ceremony.*
 
-The earlier D1 framing made the **per-client group** model (X-Wing leaves,
+The earlier D1 framing made the **per-APKAM group** model (X-Wing leaves,
 epoch keys, explicit membership, single-owner lock) the path for *all* self and
 shared encryption. That delivers per-device revocation and a route to forward
 secrecy, but it is in direct tension with legacy simplicity:
@@ -28,7 +30,7 @@ secrecy, but it is in direct tension with legacy simplicity:
 > **copyable shared key**. Non-copyable per-device keys force re-encryption to
 > each new device (online, not instant). You cannot have both.
 
-Making per-client groups mandatory for D1 therefore taxes every app with
+Making per-APKAM groups mandatory for D1 therefore taxes every app with
 identity/membership machinery it does not need, and regresses the
 "future device just works" property that legacy apps rely on — to buy
 per-device security most namespaces never ask for.
@@ -46,17 +48,17 @@ Deliver D1 in **two tiers** over the M0 pluggable `CryptoProvider` seam:
   **opt-in** (post-compromise security at namespace granularity), distributed
   over the self-group secret channel and doubling as the revocation primitive.
 
-- **D1 Tier2 — `group` (opt-in).** The per-client group provider, declared by a
+- **D1 Tier2 — `group` (opt-in).** The per-APKAM group provider, declared by a
   namespace that needs **per-device** revocation or forward secrecy. It is also
   the **substrate D2/MLS swaps its engine into.**
 
-The already-built per-client secret-sharing substrate is **not discarded**: in
+The prototyped per-APKAM secret-sharing substrate is **not discarded**: in
 D1 Tier1 it is the per-enrollment rotation/distribution plumbing; in D1 Tier2 it
-is the per-client data path. Senders **negotiate per-destination** (provider seam +
+is the per-APKAM data path. Senders **negotiate per-destination** (provider seam +
 `appMetadata.providerId`), downgrading to the recipient's best supported tier,
 so mixed-tier and legacy peers interoperate automatically.
 
-This reframes the *delivery* of milestones M2–M4 (per-client group → opt-in
+This reframes the *delivery* of milestones M2–M4 (per-APKAM group → opt-in
 D1 Tier2 + substrate); the milestones themselves and D2 (M5–M6) are unchanged.
 
 ## Consequences
@@ -86,10 +88,10 @@ D1 Tier2 + substrate); the milestones themselves and D2 (M5–M6) are unchanged.
 
 ## Alternatives considered
 
-- **Per-client groups mandatory for all of D1** (the prior framing) — rejected:
+- **Per-APKAM groups mandatory for all of D1** (the prior framing) — rejected:
   taxes every app, regresses instant future-client access, over-buys
   per-device security for the common case.
-- **Server-stored per-client leaf secrets** (to recover convenience) — rejected
+- **Server-stored per-APKAM leaf secrets** (to recover convenience) — rejected
   in the roadmap (Phase 2): makes cloning the default, opens a PQ
   harvest-now-decrypt-later hole, and couples key/data blast radii.
 - **Keep one atSign-wide PQ keypair** (simplest) — rejected: leaves the
