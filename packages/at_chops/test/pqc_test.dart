@@ -47,11 +47,14 @@ void main() {
     });
   });
 
+  // These tests require libcrypto (OpenSSL >= 3.5) at runtime.
+  // They are tagged 'ffi' and intentionally FAIL (not skip) when the library
+  // is missing or too old — CI must provide OpenSSL before running --tags ffi.
   group('PqcFfi — FFI cross-backend interop', () {
     test('X-Wing: FFI encapsulate, pure-Dart decapsulate', () async {
-      if (lib == null) return markTestSkipped('libcrypto not available on this host');
+      if (lib == null) fail('libcrypto not available on this host');
       if (!xWingFfi) {
-        return markTestSkipped('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
+        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
       }
 
       final XWingKeyPair kp = await XWingKeyPair.generate();
@@ -62,9 +65,9 @@ void main() {
     }, tags: ['ffi']);
 
     test('X-Wing: pure-Dart encapsulate, FFI decapsulate', () async {
-      if (lib == null) return markTestSkipped('libcrypto not available on this host');
+      if (lib == null) fail('libcrypto not available on this host');
       if (!xWingFfi) {
-        return markTestSkipped('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
+        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
       }
 
       final XWingKeyPair kp = await XWingKeyPair.generate();
@@ -75,28 +78,28 @@ void main() {
     }, tags: ['ffi']);
 
     test('ML-DSA-65: FFI sign, pure-Dart verify', () async {
-      if (lib == null) return markTestSkipped('libcrypto not available on this host');
+      if (lib == null) fail('libcrypto not available on this host');
       if (!mlDsaFfi) {
-        return markTestSkipped('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.3)');
+        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.3)');
       }
 
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List msg = Uint8List.fromList('cross-backend sign'.codeUnits);
       final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib);
       final Uint8List sig = await ffiAlgo.signBytes(msg, kp.privateKeyBytes);
-      final bool ok = await MlDsa65PureDartAlgo.instance.verifyBytes(msg, sig, kp.publicKeyBytes);
+      final bool ok = await MlDsa65PureDartAlgo().verifyBytes(msg, sig, kp.publicKeyBytes);
       expect(ok, isTrue);
     }, tags: ['ffi']);
 
     test('ML-DSA-65: pure-Dart sign, FFI verify', () async {
-      if (lib == null) return markTestSkipped('libcrypto not available on this host');
+      if (lib == null) fail('libcrypto not available on this host');
       if (!mlDsaFfi) {
-        return markTestSkipped('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.3)');
+        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.3)');
       }
 
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List msg = Uint8List.fromList('cross-backend verify'.codeUnits);
-      final Uint8List sig = await MlDsa65PureDartAlgo.instance.signBytes(msg, kp.privateKeyBytes);
+      final Uint8List sig = await MlDsa65PureDartAlgo().signBytes(msg, kp.privateKeyBytes);
       final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib);
       final bool ok = await ffiAlgo.verifyBytes(msg, sig, kp.publicKeyBytes);
       expect(ok, isTrue);
