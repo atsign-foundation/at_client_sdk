@@ -40,15 +40,31 @@ abstract class ASymmetricEncryptionAlgorithm
   Uint8List decrypt(Uint8List encryptedData);
 }
 
-/// Interface for data signing. Data is signed using private key from a key pair
-/// Signed data signature is verified with public key of the key pair.
+/// Signing algorithm — key passed per call, safe to share as a singleton.
+///
+/// New implementations: override [signBytes] and [verifyBytes] only.
+/// Legacy implementations that override [sign]/[verify] will continue to
+/// compile; those methods will be removed in v4.
 abstract class AtSigningAlgorithm {
-  /// Signs the data using private key of asymmetric key pair
-  FutureOr<Uint8List> sign(Uint8List data);
+  /// Signs [message] with [secretKey].
+  Future<Uint8List> signBytes(Uint8List message, Uint8List secretKey) =>
+      throw UnimplementedError('implement signBytes');
 
-  /// Verifies the data signature using public key of asymmetric key pair or the passed [publicKey]
+  /// Verifies [signature] over [message] against [publicKey].
+  Future<bool> verifyBytes(
+          Uint8List message, Uint8List signature, Uint8List publicKey) =>
+      throw UnimplementedError('implement verifyBytes');
+
+  /// Signs [data] using a key stored on the instance.
+  @Deprecated('Implement signBytes(message, secretKey) instead.')
+  FutureOr<Uint8List> sign(Uint8List data) =>
+      throw UnimplementedError('implement signBytes');
+
+  /// Verifies [signature] over [signedData].
+  @Deprecated('Implement verifyBytes(message, signature, publicKey) instead.')
   FutureOr<bool> verify(Uint8List signedData, Uint8List signature,
-      {String? publicKey});
+          {String? publicKey}) =>
+      throw UnimplementedError('implement verifyBytes');
 }
 
 /// Interface for hashing data. Refer [DefaultHash] for sample implementation.

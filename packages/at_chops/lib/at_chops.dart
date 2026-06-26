@@ -6,21 +6,16 @@ export 'src/algorithm/default_hashing_algo.dart';
 export 'src/algorithm/default_signing_algo.dart';
 export 'src/algorithm/encryption/aes.dart';
 export 'src/algorithm/encryption/aes_gcm.dart';
-export 'src/algorithm/encryption/ml_kem_768_ffi.dart';
 export 'src/algorithm/encryption/ml_kem_768_pure_dart.dart';
 export 'src/algorithm/encryption/rsa.dart';
-export 'src/algorithm/encryption/x25519_ffi_algo.dart';
 export 'src/algorithm/encryption/x25519_pure_dart_algo.dart';
-export 'src/algorithm/encryption/x_wing_ffi.dart';
 export 'src/algorithm/encryption/x_wing_pure_dart.dart';
-export 'src/algorithm/ffi/openssl_loader.dart';
 export 'src/algorithm/hashing/hkdf.dart';
 export 'src/algorithm/hashing/sha.dart';
 export 'src/algorithm/hashing/types.dart';
 export 'src/algorithm/pkam_signing_algo.dart';
 export 'src/algorithm/signing/ecc.dart';
 export 'src/algorithm/signing/ed25519.dart';
-export 'src/algorithm/signing/ml_dsa_65_ffi.dart';
 export 'src/algorithm/signing/ml_dsa_65_pure_dart.dart';
 export 'src/algorithm/signing/rsa.dart';
 export 'src/algorithm/encryption/pq_hpke.dart';
@@ -57,3 +52,15 @@ export 'src/model/at_encrypted.dart';
 // Class representing the hashing parameters to pass to an hashing algorithm.
 export 'src/algorithm/hashing/types.dart' hide HashParams;
 export 'src/util/at_chops_util.dart';
+
+// Deprecated FFI exports — migrate to package:at_chops/at_chops_ffi.dart; removed in v4.
+@Deprecated('Import package:at_chops/at_chops_ffi.dart instead; removed from at_chops.dart in v4.')
+export 'src/algorithm/encryption/ml_kem_768_ffi.dart';
+@Deprecated('Import package:at_chops/at_chops_ffi.dart instead; removed from at_chops.dart in v4.')
+export 'src/algorithm/encryption/x25519_ffi_algo.dart';
+@Deprecated('Import package:at_chops/at_chops_ffi.dart instead; removed from at_chops.dart in v4.')
+export 'src/algorithm/encryption/x_wing_ffi.dart';
+@Deprecated('Import package:at_chops/at_chops_ffi.dart instead; removed from at_chops.dart in v4.')
+export 'src/algorithm/ffi/openssl_loader.dart';
+@Deprecated('Import package:at_chops/at_chops_ffi.dart instead; removed from at_chops.dart in v4.')
+export 'src/algorithm/signing/ml_dsa_65_ffi.dart';

@@ -12,8 +12,8 @@ void main() {
       final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
 
       final Uint8List message = Uint8List.fromList('Hello ML-DSA-65'.codeUnits);
-      final Uint8List sig = await MlDsa65PureDartAlgo.signBytes(message, sk);
-      final bool ok = await MlDsa65PureDartAlgo.verifyBytes(message, sig, pub);
+      final Uint8List sig = await MlDsa65PureDartAlgo().signBytes(message, sk);
+      final bool ok = await MlDsa65PureDartAlgo().verifyBytes(message, sig, pub);
 
       expect(ok, isTrue);
     });
@@ -28,7 +28,7 @@ void main() {
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
 
-      final Uint8List sig = await MlDsa65PureDartAlgo.signBytes(
+      final Uint8List sig = await MlDsa65PureDartAlgo().signBytes(
           Uint8List.fromList('test'.codeUnits), sk);
 
       expect(sig.length, equals(3309));
@@ -41,9 +41,9 @@ void main() {
       final Uint8List wrongPub = base64Decode(kp2.atPublicKey.publicKey);
 
       final Uint8List message = Uint8List.fromList('data'.codeUnits);
-      final Uint8List sig = await MlDsa65PureDartAlgo.signBytes(message, sk);
+      final Uint8List sig = await MlDsa65PureDartAlgo().signBytes(message, sk);
       final bool ok =
-          await MlDsa65PureDartAlgo.verifyBytes(message, sig, wrongPub);
+          await MlDsa65PureDartAlgo().verifyBytes(message, sig, wrongPub);
 
       expect(ok, isFalse);
     });
@@ -54,28 +54,23 @@ void main() {
       final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
 
       final Uint8List message = Uint8List.fromList('original'.codeUnits);
-      final Uint8List sig = await MlDsa65PureDartAlgo.signBytes(message, sk);
+      final Uint8List sig = await MlDsa65PureDartAlgo().signBytes(message, sk);
 
       final Uint8List tampered = Uint8List.fromList('tampered'.codeUnits);
-      final bool ok = await MlDsa65PureDartAlgo.verifyBytes(tampered, sig, pub);
+      final bool ok = await MlDsa65PureDartAlgo().verifyBytes(tampered, sig, pub);
 
       expect(ok, isFalse);
     });
 
-    test('Stateful sign/verify via AtSigningAlgorithm interface', () async {
+    test('signBytes/verifyBytes via AtSigningAlgorithm interface', () async {
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
+      final Uint8List pk = base64Decode(kp.atPublicKey.publicKey);
 
       final algo = MlDsa65PureDartAlgo();
-      algo.secretKey = sk;
-
       final Uint8List message = Uint8List.fromList('Hello'.codeUnits);
-      final Uint8List sig = await algo.sign(message);
-      final bool ok = await algo.verify(
-        message,
-        sig,
-        publicKey: kp.atPublicKey.publicKey,
-      );
+      final Uint8List sig = await algo.signBytes(message, sk);
+      final bool ok = await algo.verifyBytes(message, sig, pk);
 
       expect(ok, isTrue);
     });

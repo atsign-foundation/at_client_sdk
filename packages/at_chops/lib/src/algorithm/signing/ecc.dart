@@ -8,7 +8,7 @@ import 'package:elliptic/elliptic.dart' as elliptic;
 
 /// Data signing and verification for ECDSA - elliptic curve
 /// Uses sha256 hashing for data. Extend implementation for other hashing algorithm in the future.
-class EccSigningAlgo implements AtSigningAlgorithm {
+class EccSigningAlgo extends AtSigningAlgorithm {
   elliptic.PrivateKey? _privateKey;
 
   EccSigningAlgo();

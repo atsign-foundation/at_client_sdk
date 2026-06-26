@@ -10,7 +10,7 @@ import 'package:crypton/crypton.dart';
 @Deprecated(
     'Use RsaSigningAlgo with the appropriate key material instead. This '
     'compatibility API will be removed in the next major release.')
-class PkamSigningAlgo implements AtSigningAlgorithm {
+class PkamSigningAlgo extends AtSigningAlgorithm {
   final AtPkamKeyPair? _pkamKeyPair;
   final HashingAlgoType _hashingAlgoType;
   PkamSigningAlgo(this._pkamKeyPair, this._hashingAlgoType);

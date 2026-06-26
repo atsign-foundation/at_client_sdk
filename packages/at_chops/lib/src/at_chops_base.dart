@@ -81,16 +81,28 @@ abstract class AtChops {
       String? keyName,
       InitialisationVector? iv});
 
+  /// Signs [message] with [secretKey] using [algo]. Preferred over [sign].
+  Future<Uint8List> signBytes(
+          Uint8List message, Uint8List secretKey, AtSigningAlgorithm algo) =>
+      algo.signBytes(message, secretKey);
+
+  /// Verifies [signature] over [message] against [publicKey] using [algo]. Preferred over [verify].
+  Future<bool> verifyBytes(Uint8List message, Uint8List signature,
+          Uint8List publicKey, AtSigningAlgorithm algo) =>
+      algo.verifyBytes(message, signature, publicKey);
+
   /// Compute data signature using the private key from a key pair
   /// Input has to be set using [AtSigningInput] object
   /// Please refer to [AtSigningInput] to create a valid input instance
   /// [AtSigningResult.result] should be base64Encoded
+  @Deprecated('Use signBytes.')
   AtSigningResult sign(AtSigningInput signingInput);
 
   /// Verifies the signature computed for inpuat data using the public key from a key pair
   /// Input has to set using [AtSigningVerificationInput] object
   /// Please refer to [AtSigningVerificationInput] docs to create a valid input instance
   /// [AtSigningVerificationInput.result] should be base64Decoded if [AtSigningResult.result] is base64Encoded
+  @Deprecated('Use verifyBytes.')
   AtSigningResult verify(AtSigningVerificationInput verifyInput);
 
   /// Create a hash of input [signedData] using a [hashingAlgorithm].
