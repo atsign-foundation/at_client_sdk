@@ -23,4 +23,7 @@ class MlDsa65KeyPair extends AsymmetricKeyPair {
         await MlDsa65PureDartAlgo.generateKeyPair();
     return MlDsa65KeyPair.create(base64Encode(pub), base64Encode(sk));
   }
+
+  Uint8List get publicKeyBytes => base64Decode(atPublicKey.publicKey);
+  Uint8List get privateKeyBytes => base64Decode(atPrivateKey.privateKey);
 }
