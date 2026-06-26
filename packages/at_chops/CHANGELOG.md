@@ -1,7 +1,8 @@
 ## 3.4.0
 - feat: add `at_chops_ffi.dart` barrel and `PqcFfi` namespace for auto-resolved FFI/pure-Dart PQ backends
 - deprecate: FFI algorithm exports from `at_chops.dart`; use `at_chops_ffi.dart` instead
-- fix: parameter order in `MlDsa65FfiAlgo`
+- BREAKING: `MlDsa65FfiAlgo.signBytes` parameter order changed from `(secretKey, message)` to `(message, secretKey)` to match `AtSigningAlgorithm`; both params are `Uint8List` so old call sites compile but silently sign with swapped inputs
+- BREAKING: `MlDsa65PureDartAlgo.signBytes`/`verifyBytes` promoted from static to instance methods; `MlDsa65PureDartAlgo.signBytes(...)` no longer compiles
 
 ## 3.3.0
 - feat: Add `pqSeal`/`pqOpen` — HPKE-style PQ encryption over X-Wing KEM with AES-256-GCM and forward-compatible versioning
