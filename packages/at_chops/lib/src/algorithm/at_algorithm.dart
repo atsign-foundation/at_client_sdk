@@ -46,6 +46,7 @@ abstract class ASymmetricEncryptionAlgorithm
 /// Legacy implementations that override [sign]/[verify] will continue to
 /// compile; those methods will be removed in v4.
 abstract class AtSigningAlgorithm {
+  const AtSigningAlgorithm();
   /// Signs [message] with [secretKey].
   Future<Uint8List> signBytes(Uint8List message, Uint8List secretKey) =>
       throw UnimplementedError('implement signBytes');

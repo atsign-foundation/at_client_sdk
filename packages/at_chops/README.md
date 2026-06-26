@@ -88,9 +88,8 @@ final valid = signing.verify(message, signature);
 final kp = await MlDsa65PureDartAlgo.generateKeyPair();
 // kp.publicKey — 1952 bytes; kp.secretKey — 4032 bytes
 
-final algo = MlDsa65PureDartAlgo();
-final signature = await algo.signBytes(message, kp.secretKey);
-final valid = await algo.verifyBytes(message, signature, kp.publicKey);
+final signature = await MlDsa65PureDartAlgo.instance.signBytes(message, kp.secretKey);
+final valid = await MlDsa65PureDartAlgo.instance.verifyBytes(message, signature, kp.publicKey);
 ```
 
 ### ML-KEM-768 (post-quantum KEM, pure-Dart)

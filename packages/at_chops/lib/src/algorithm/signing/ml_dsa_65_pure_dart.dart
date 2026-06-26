@@ -7,7 +7,8 @@ import 'package:pqcrypto/pqcrypto.dart';
 ///
 /// Entry points: [generateKeyPair], then [signBytes] / [verifyBytes].
 final class MlDsa65PureDartAlgo extends AtSigningAlgorithm {
-  MlDsa65PureDartAlgo();
+  const MlDsa65PureDartAlgo();
+  static const MlDsa65PureDartAlgo instance = MlDsa65PureDartAlgo();
 
   /// Returns raw `(publicKey: 1952 bytes, secretKey: 4032 bytes)`.
   static Future<({Uint8List publicKey, Uint8List secretKey})>
