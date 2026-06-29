@@ -26,10 +26,10 @@ encryption work.
 - [3. D1 — detailed implementation plan](#3-d1--detailed-implementation-plan)
   - [D1-S · Structural enablers (prerequisite — lands first)](#d1-s--structural-enablers-prerequisite--lands-first)
   - [D1-A · Finish the PQ primitives (small)](#d1-a--finish-the-pq-primitives-small)
-  - [D1-B · The `nskey` provider (D1 Tier1 — the default)](#d1-b--the-nskey-provider-d1-tier1--the-default)
+  - [D1-B · The nskey data path (the default data path)](#d1-b--the-nskey-data-path-the-default-data-path)
   - [D1-C · Migration & rollout machinery](#d1-c--migration--rollout-machinery)
   - [D1-D · Versioning (the `disallowLegacyEncryption` flag)](#d1-d--versioning-the-disallowlegacyencryption-flag)
-  - [D1-E · D1 Tier2 shape-corrections](#d1-e--d1-tier2-shape-corrections-fold-into-wp-gp)
+  - [D1-E · `at/pqmls` provider shape-corrections](#d1-e--atpqmls-provider-shape-corrections-fold-into-wp-gp)
   - [D1-F · Existing-client retrofit — auth upgrade & secret conveyance](#d1-f--existing-client-retrofit--auth-upgrade--secret-conveyance)
   - [D1 · Test & acceptance plan](#d1--test--acceptance-plan)
   - [D1 · PR delivery / publish](#d1--pr-delivery--publish)
@@ -65,11 +65,11 @@ jump.
 | Topic | Design (roadmap) | Build (plan) | Worked example |
 |---|---|---|---|
 | The two deliverables (D1 / D2) | [The two major deliverables](crypto-roadmap.md#the-two-major-deliverables) | [Current state (1)](crypto_impl_plan.md#1-current-state-2026-06-22) · [D1 acceptance (2)](crypto_impl_plan.md#2-d1-acceptance--what-done-means) | — |
-| D1 Tier1 — the `nskey` default | [D1 — preserving legacy simplicity](crypto-roadmap.md#d1--preserving-legacy-simplicity-two-tiers) | [D1-B (3)](crypto_impl_plan.md#d1-b--the-nskey-provider-d1-tier1--the-default) | — |
+| D1 — the nskey data path default | [D1 — preserving legacy simplicity](crypto-roadmap.md#d1--preserving-legacy-simplicity-single-tier-the-nskey-data-path) | [D1-B (3)](crypto_impl_plan.md#d1-b--the-nskey-data-path-the-default-data-path) | — |
 | Migration, rollout & versioning | [Application migration & rollout](crypto-roadmap.md#application-migration--rollout) | [D1-C / D1-D (3)](crypto_impl_plan.md#d1-c--migration--rollout-machinery) | — |
 | Existing-client retrofit (auth + key dist) | [Existing-client retrofit](crypto-roadmap.md#existing-client-retrofit--auth-upgrade--key-distribution) | [D1-F (3)](crypto_impl_plan.md#d1-f--existing-client-retrofit--auth-upgrade--secret-conveyance) | — |
-| Identity, KeyPackages, self groups | [Phases 2–3](crypto-roadmap.md#phase-2--identity-layer-keypackages-and-per-client-atkeys) | [D1-E (3)](crypto_impl_plan.md#d1-e--d1-tier2-shape-corrections-fold-into-wp-gp) · [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | — |
-| Cross-atSign shared groups | [Phase 4](crypto-roadmap.md#phase-4--cross-atsign-groups-shared-encryption) | [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | [C — `at_talk` chat](crypto-walkthroughs.md#walkthrough-c--a-two-atsign-chat-with-client-churn-at_talk) |
+| Identity, per-APKAM KeyPackages, the nskey data path | [Phase 2](crypto-roadmap.md#phase-2--identity-layer-per-apkam-keypackages-and-per-apkam-atkeys) · [Phase 3](crypto-roadmap.md#phase-3--the-nskey-data-path-d1-self--shared) | [D1-B (3)](crypto_impl_plan.md#d1-b--the-nskey-data-path-the-default-data-path) · [D1-E (3)](crypto_impl_plan.md#d1-e--atpqmls-provider-shape-corrections-fold-into-wp-gp) · [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | — |
+| Cross-atSign `at/pqmls` (D2) groups | [Phase 5](crypto-roadmap.md#phase-5--atpqmls-d2-cross-atsign-groups--group-delivery-service) | [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | [C — `at_talk` chat](crypto-walkthroughs.md#walkthrough-c--a-two-atsign-chat-with-apkam-keypair-churn-at_talk) |
 | pq-mls engine + Delivery Service | [atServer group Delivery Service](crypto-roadmap.md#atserver-group-delivery-service-target-design) | [D2 (4)](crypto_impl_plan.md#4-d2--pq-mls-placeholders-detailed-planning-deferred) | [B — a large group](crypto-walkthroughs.md#walkthrough-b--a-large-group-end-to-end) |
 | NoPorts adoption | [Upgrading NoPorts](crypto-roadmap.md#upgrading-noports-with-daemon-ping-feature-discovery) | [Cross-repo & NoPorts (5)](crypto_impl_plan.md#5-cross-repo-pr--publish-sequence--noports) | [A — NoPorts](crypto-walkthroughs.md#walkthrough-a--noports-end-to-end) |
 | Structural enablers / WASM split | [Component responsibilities & WASM-readiness](crypto-roadmap.md#component-responsibilities--wasm-readiness) | [D1-S (3)](crypto_impl_plan.md#d1-s--structural-enablers-prerequisite--lands-first) | — |
@@ -89,7 +89,7 @@ jump.
 - **`gkc-pqmls-spike`** is now just a **personal working branch + historical
   context** (it holds the pre-trunk-based integration of the in-flight work:
   `5493f6504` = `origin/xl-pluggable` `391f55f67` (the 4b base / PR #1930) **+
-  51 cherry-picked commits**: secret sharing, the `group` provider,
+  51 cherry-picked commits**: secret sharing, the `at/pqmls` provider,
   `onDecryptFailed`, the Phase-6 at_chops migration, the CRAM test). That work
   flows to trunk as its WPs complete.
 - These **docs live on `trunk`** (canonical, shared, edited via small PRs).
@@ -109,8 +109,8 @@ jump.
 4. **`at_client 3.x`** — in progress:
    - **(4a)** commit-log-free persistence migration — **MERGED to trunk (#1984).**
    - **(4b)** pluggable crypto seam (slim) — **PR #1930, OPEN + green.**
-   - **(4c)** the secret-sharing substrate, `nskey` / D1 Tier1, and the `group`
-     provider — **land on trunk as the [section 7](#7-delivery-plan--work-packages) work packages complete** (WP-SS /
+   - **(4c)** the secret-sharing substrate, the `nskey` D1 data path, and the
+     `at/pqmls` (D2) provider — **land on trunk as the [section 7](#7-delivery-plan--work-packages) work packages complete** (WP-SS /
      WP6 / WP-GP …); the spike (`gkc-pqmls-spike`) holds working prototypes.
 
 ### What is built vs prototyped — re-baselined: assume only trunk + #1930 + #1993
@@ -139,16 +139,25 @@ jump.
 **Prototyped on `gkc-pqmls-spike` but NOT landed — first-class WPs ([section 7](#7-delivery-plan--work-packages)), not
 foundation.** The spike has working code for these; treat re-landing it on trunk
 as real work (carve-out + alignment to the slim seam + `pqSeal`):
-- **Secret-sharing substrate (PQ-native)** → **WP-SS**: per-client X-Wing
-  `ClientKeyPackage`/`PackageKey`; namespace-scoped registration + discovery
-  (`registerClient` / `discoverClients(namespace:)`, server-gated); AES-256-GCM
+- **Secret-sharing substrate (PQ-native)** → **WP-SS**: per-APKAM X-Wing key
+  packages (the spike's `ClientKeyPackage`/`PackageKey`); AES-256-GCM
   `__ssenv.<ns>` envelopes (open-coded encapsulate+GCM on the spike — **to
   consolidate onto `pqSeal`/`pqOpen`**); in-memory `SecretStore`;
   `requestSecretsFromNamespace`; `waitForSecret`; `excludeEnrollmentIds`;
-  reserved `__` system-secret names.
-- **`group` provider (D1 Tier2 self)** → **WP-GP**: `SecureGroup`/`PairwiseGroup`
-  v1 + the `group` `GroupCryptoProvider`; `__rk.<epoch>.<kid>` epoch keys; scope
-  `self:<atSign>:<namespace>`; self-encryption only (refuses shared keys).
+  reserved `__` system-secret names. **Re-key per-APKAM at carve-out:** the spike
+  API is per-client (`registerClient` / `discoverClients(namespace:)`, keyed by
+  `clientId`); the canonical model addresses envelopes by `kpid` (per-APKAM) and
+  moves discovery to the gated **`enroll:listfornamespace:<ns>`** verb, with key
+  packages held **enrollment-internal** (never published) — see
+  [pq-secret-push.md](pq-secret-push.md). The `registerClient` /
+  `discoverClients` / `clientId` names are **replaced**, not landed as-is.
+- **`at/pqmls` provider (D2's forward-secure groups)** → **WP-GP**:
+  `SecureGroup`/`PairwiseGroup` v1 + the `at/pqmls` `GroupCryptoProvider`;
+  `__rk.<epoch>.<kid>` epoch keys; scope `self:<atSign>:<namespace>`. The MLS-based
+  provider for robust/per-message forward secrecy + O(log n) scale +
+  decoupled-membership groups. (This `self:` scope is the `at/pqmls` SelfGroup
+  scope, a **D2** concept — **not** D1 self-encryption: D1 self/shared data uses
+  the nskey data path, see [ADR 0002](adr/0002-d1-single-tier-nskey.md).)
 
 *(The original `CryptoRegistry` / `CryptoPolicy` / `CryptoStorage` / `initialize`
 / Request-Result wrappers were removed in #1930's slim refactor; the
@@ -160,23 +169,30 @@ Cross-ref roadmap [Milestones](crypto-roadmap.md#milestones-and-capabilities).
 trunk** — first-class work to land (a WP), not "done". "In flight" is reserved
 for the open PRs **#1930 / #1993**.
 
+Numbering follows the roadmap's restructured **0–6 backbone** (D1 = the nskey
+data path, per-APKAM; D2 = `at/pqmls`).
+
 | Phase / Milestone | Status |
 |---|---|
-| 0 — foundations (secret sharing, pluggable crypto, jt-pq) | **Partial**: jt-pq + Phase-6 in trunk; pluggable crypto **in flight** (#1930); secret sharing **prototyped on spike, not landed** (→ WP-SS) |
+| 0 — foundations (secret sharing, pluggable crypto, jt-pq) | **Partial**: jt-pq + the at_chops-routing record in trunk; pluggable crypto **in flight** (#1930); secret sharing **prototyped on spike, not landed** (→ WP-SS) |
 | 1 — PQ primitives in at_chops (X-Wing, GCM, HKDF, HMAC) | **Done** (trunk); remaining: PQ enrollment-conveyance pubkey |
-| 2 — identity layer (KeyPackages + per-client AtKeys) | KeyPackage framing **prototyped on spike, not landed** (→ WP-SS); AtKeys device-local split + identity resolution: not started (mostly D2 / D1 Tier2) |
+| 2 — identity layer (per-APKAM KeyPackages + per-APKAM AtKeys) | KeyPackage framing **prototyped on spike, not landed** (→ WP-SS) — re-keyed per-APKAM (`kpid`), key packages enrollment-internal; AtKeys stored per-APKAM (per-client AtKeys storage retired); device-local split + identity resolution: not started (D2) |
 | 2.5 — at_persistence 5.x migration | **Done & verified** |
-| 3 — `SecureGroup` v1 + `group` provider (self) | **Prototyped on spike, not landed** (→ WP-GP); D1 Tier1 `nskey` self is **new D1 work** ([section 3](#3-d1--detailed-implementation-plan)) |
-| 4 — cross-atSign shared | D1 Tier1 `nskey` shared is **new D1 work** ([section 3](#3-d1--detailed-implementation-plan)); per-client pair group is D1 Tier2 / D2 |
-| 5 — pq-mls engine | **D2 placeholder** ([section 4](#4-d2--pq-mls-placeholders-detailed-planning-deferred)) |
-| 6 — at_chops sole security-crypto dependency | **Complete** (in-scope) |
+| 3 — the nskey data path (D1 self + shared) | **New D1 work** ([section 3](#3-d1--detailed-implementation-plan)): the `at/nskey` CK-conveyance + `at/symmetric/AES/GCM` data providers; self and shared share one flow |
+| 4 — `at/pqmls` (D2): intra-atSign forward-secure groups (`SecureGroup` v1) | **Prototyped on spike, not landed** (→ WP-GP, D2); robust/per-message FS, scale, decoupled membership — **not** D1's self path (self = the nskey data path) |
+| 5 — `at/pqmls` (D2): cross-atSign groups + Group Delivery Service | **D2 placeholder** ([section 4](#4-d2--pq-mls-placeholders-detailed-planning-deferred)); D1's nskey data path already covers cross-atSign **shared** data at enrollment granularity |
+| 6 — pq-mls engine (`SecureGroup` v2) | **D2 placeholder** ([section 4](#4-d2--pq-mls-placeholders-detailed-planning-deferred)) |
+
+Separately (a different numbering scheme — not part of the 0–6 backbone): the
+**at_chops sole security-crypto dependency** work is **complete** (record in
+[section 6](#6-standing-verification--implementation-record)).
 
 ---
 
 ## 2. D1 acceptance — what "done" means
 
 D1 is done when, per the roadmap
-([D1 tiers](crypto-roadmap.md#d1--preserving-legacy-simplicity-two-tiers) +
+([D1 — preserving legacy simplicity](crypto-roadmap.md#d1--preserving-legacy-simplicity-single-tier-the-nskey-data-path) +
 [migration](crypto-roadmap.md#application-migration--rollout)):
 
 1. An app **rebuilt with no code change** reads all legacy + PQ data and stays
@@ -195,7 +211,8 @@ D1 is done when, per the roadmap
 5. The **usability acceptance test** holds at each milestone ([section 5](#5-cross-repo-pr--publish-sequence--noports)): no new flag a
    user must pass, file a user must manage, operator step, or peer-by-peer break.
 
-The substantive D1 build is the **`nskey` provider (D1 Tier1)** and the
+The substantive D1 build is the **nskey data path** (the `at/nskey` CK-conveyance
+provider + the `at/symmetric/AES/GCM` data provider) and the
 **migration/versioning machinery**, on top of the foundation that lands first:
 the M0 seam (#1930), HPKE (#1993), and the carved-out **secret-sharing
 substrate** (WP-SS). Only the at_chops primitives, the commit-log-free keystore,
@@ -207,8 +224,9 @@ and the Phase-6 routing ([section 1](#1-current-state-2026-06-22)) are already i
 
 Workstreams are roughly ordered; B is the centrepiece. Each task notes its
 artifact and acceptance. Design references point at the roadmap. **D1-S
-(structural enablers) lands first** — the `nskey` provider (D1-B) is built on
-`WritableAtKeys` + stateless AtChops.
+(structural enablers) lands first** — the nskey data path (D1-B) is built on
+`WritableAtKeys` (**working name** for the APKAM keypair's updatable `.atKeys`
+keystore) + stateless AtChops.
 
 ### D1-S · Structural enablers (prerequisite — lands first)
 *Lands as [WP1–WP5 + WP8](#the-work-package-sequence--single-source-for-ordering)
@@ -253,7 +271,7 @@ the feature workstreams; only `at_auth` takes a major bump (see
   deprecate**); the (stateless) `LegacyCryptoProvider` reads keys from
   `context.keys` instead of `context.atClient`; `LocalKeystoreAtKeysIo` is
   injected into `WritableAtKeys` at AtClient construction.
-  *Acceptance:* legacy + group providers operate via `context.keys`; existing
+  *Acceptance:* legacy + `at/pqmls` providers operate via `context.keys`; existing
   unit/functional suites green.
 - [ ] **S6 · Consumer constraint bumps + sequencing.** `at_client` /
   `at_onboarding_cli` (`1.17.0`) / `at_client_flutter` (`1.2.0`) /
@@ -290,69 +308,110 @@ waves 1–2.*
   *Note:* this same atSign-level PQ key is the **cold-start fallback** for
   `nskey` (D1-B4) — build it first.
 
-### D1-B · The `nskey` provider (D1 Tier1 — the default)
+### D1-B · The nskey data path (the default data path)
 *Lands as [WP6 (B1–B4) + WP9 (B5/B6)](#the-work-package-sequence--single-source-for-ordering),
 waves 3–4.* Design: roadmap
-[D1 Tier1](crypto-roadmap.md#d1-tier-1--baseline-the-nskey-provider-default). New provider
-on the M0 seam; legacy-shaped (copyable, enrollment-granular), PQ + namespace
+[The nskey data path](crypto-roadmap.md#the-nskey-data-path-d1s-data-path). The two
+new providers on the M0 seam (`at/nskey` conveys the CK; `at/symmetric/AES/GCM`
+encrypts the data); legacy-shaped (copyable, enrollment-granular), PQ + namespace
 -scoped. Build order:
 
-- [ ] **B1 · Namespace keypair.** A per-`(atSign, namespace)` X-Wing keypair.
-  - Type + storage: the private key held by every client of a namespace
-    -authorized enrollment; new clients receive it at **enrollment approval**.
+- [ ] **B1 · Namespace nskeys (two per namespace).** Per-`(atSign, namespace)`
+  there are **two** X-Wing nskey keypairs (per [pq-data-encryption.md](pq-data-encryption.md)
+  section 2): a **self nskey** (the owner encapsulates her own CKs to it; its
+  public half is **not** published) and a **public nskey** (external senders
+  encapsulate to it; its public half **is** published). Both are KEM keypairs —
+  they *wrap/unwrap* symmetric content keys (CKs), never encrypt application data.
+  - Type + storage: **both** nskey privates held per-APKAM by every authorised
+    enrollment's APKAM keypairs; conveyed per-APKAM via the substrate (push at
+    **enrollment approval** + the pull backstop — see B5/F1).
   - *Optional* deterministic derivation: `HKDF(master-seed, namespace [, epoch])
-    → X-Wing seed`, so any client of the atSign derives the private key with **no
-    distribution** (master seed is in `.atKeys`). Note the limit: alice cannot
-    derive bob's per-namespace *public* key from his master public key (ML-KEM
-    has no public child-derivation) — so the public key must still be published.
-  - Publication: the first upgraded client publishes
-    `public:encryptionpublickey.<ns>@<atSign>` (or a hidden public key);
-    signed by the publishing enrollment.
-  - *Acceptance:* a second client of the same atSign, authorized for the
-    namespace, can obtain the private key (at approval or by derivation) and
-    decrypt data sealed to the public key.
-- [ ] **B2 · `nskey` `CryptoProvider`.** Encrypt/decrypt over the seam, sealing
-  via **`pqSeal`/`pqOpen`** (D1-A) — do not open-code encapsulate+GCM.
-  - **Self** → `pqSeal` the value's data key to *your own* namespace public
-    key. **Shared** → `pqSeal` to the *recipient's* namespace public key. One
-    code path, both directions. `selfEncryptionKey` and `shared_key.*` both
-    collapse into "encrypt to the namespace keypair." Bind the scope via HPKE
-    `info` (e.g. `groupId`/namespace) so an envelope can't be replayed cross-scope.
-  - `appMetadata(providerId: 'nskey', additional: {ns, kid, env})` — `env` is the
-    `pqSeal` envelope (carries the KEM ct + AEAD body); no separate `iv`/`kemCt`.
+    → X-Wing seed` for **each** nskey private, so any client of the atSign derives
+    both privates with **no distribution** (master seed is in `.atKeys`). The
+    public nskey's public half must **still be published** regardless: ML-KEM has
+    no public child-derivation, so alice cannot derive bob's per-namespace public
+    nskey from his master public key.
+  - Publication: the first upgraded client publishes the **public nskey** as
+    `public:nskey.<ns>@<atSign>`, signed by the publishing enrollment. The **self
+    nskey** is never published.
+  - *Acceptance:* a second APKAM keypair of the same atSign, authorised for the
+    namespace, obtains **both** nskey privates (via substrate push/pull or
+    derivation) and can decapsulate CKs sealed to either nskey.
+- [ ] **B2 · `at/nskey` + `at/symmetric/AES/GCM` providers.** Two providers over
+  the seam (not one): a value-level **`at/nskey`** CK-conveyance provider that
+  seals a symmetric content key (CK) to an nskey via **`pqSeal`/`pqOpen`** (D1-A),
+  and an **`at/symmetric/AES/GCM`** data provider that AES-256-GCM-encrypts the
+  application value under that CK. A CK is conveyed **once** as its own
+  `<ckKid>.__ck.<ns>@<owner>` record; data values cite the CK by `kid` and carry
+  **no** inline sealed key (decision (a)). The nskey is asymmetric and only ever
+  *wraps* the symmetric CK — it never encrypts application data, and its private
+  *decapsulates* CKs.
+  - **Self** → `pqSeal` the CK to *your own* **self** nskey (the unpublished
+    nskey, not a published public key). **Shared** → `pqSeal` the CK to the
+    *recipient's* **published public** nskey. One code path, both directions —
+    only which nskey the CK is sealed to differs. `selfEncryptionKey` and
+    `shared_key.*` both collapse into "wrap a symmetric CK to the nskey; encrypt
+    data under the CK with AES-256-GCM." Bind the scope via HPKE `info`
+    (namespace) so a conveyance can't be replayed cross-scope. (D1 is scoped by
+    `(owner, namespace)`; `groupId` is a D2 `at/pqmls` concept, not D1.)
+  - **CK-conveyance record** (`at/nskey`):
+    `appMetadata(providerId: 'at/nskey', additional: {ns, recipientKind, ckKid})`
+    — value is the `pqSeal` envelope wrapping the CK (KEM ct + AEAD body); no
+    separate `iv`/`kemCt`.
+  - **Data value** (`at/symmetric/AES/GCM`):
+    `appMetadata(providerId: 'at/symmetric/AES/GCM', additional: {ns, ckKid, iv})`
+    — cites the CK by `ckKid`; **no per-value KEM envelope** (decision (a)).
   - *Acceptance:* unit round-trips (self + shared); byte-exact decrypt; binary
     -safe (seal/open bytes, honour `isBinary` — do **not** repeat the
-    `utf8.encode(toString())` bug, see [section 3](#3-d1--detailed-implementation-plan) D1 Tier2 shape tasks).
+    `utf8.encode(toString())` bug, see [section 3](#3-d1--detailed-implementation-plan) `at/pqmls` shape tasks).
 - [ ] **B3 · Capability marker + per-destination negotiation.** Per-`(atSign,
   namespace)` published marker `{nskey: true, nskeyPubKid, …}`, **initially
   not-ready**; the sender reads the recipient's marker (+ its own, for self
   copies) and selects the scheme. Design: roadmap
-  [Mixed-tier](crypto-roadmap.md#mixed-tier-alice--bob) +
+  [Mixed-scheme](crypto-roadmap.md#mixed-scheme-alice--bob) +
   [Application migration & rollout](crypto-roadmap.md#application-migration--rollout).
   *Acceptance:* sender writes `nskey` only when the readers' marker is ready,
   legacy otherwise; mixed-fleet test (one legacy reader ⇒ legacy write).
 - [ ] **B4 · Cold-start fallback + lazy upgrade.** When the recipient has no
-  namespace key published, encapsulate to the **atSign-level PQ key** (D1-A);
-  first namespace run mints/derives + publishes the namespace key; subsequent
-  writes upgrade. Design: roadmap
+  **public nskey** published for the namespace, seal the **CK** to the recipient's
+  **atSign-level PQ key** (`public:pqpublickey`, D1-A) — only the CK is sealed to
+  root; the data is still AES-256-GCM under that CK (data is **never** encrypted
+  directly to root). The first namespace run mints/derives + publishes the public
+  nskey; subsequent writes upgrade to namespace-scoped. Design: roadmap
   [Cold-start](crypto-roadmap.md#cold-start--bob-has-never-run-an-at_talk-app).
   *Acceptance:* alice→bob (bob never ran at_talk) is PQ (atSign-level) and
   readable by any bob at_talk client; upgrades to namespace-scoped after bob's
   first run. Strict-mode alternative (seal-and-hold) is a policy toggle (D1-C).
-- [ ] **B5 · Opt-in rotation.** Mint a new namespace keypair → publish new
-  public key → write the new private key as `__nsk.<epoch>` over the
-  **per-enrollment** self-group secret channel (PQ-wrapped to each at_talk
-  enrollment's conveyance key); reuse the **WP-SS** `__`-secret substrate +
-  `requestSecretsFromNamespace` (push) + pull. Design: roadmap
-  [Opt-in rotation](crypto-roadmap.md#opt-in-key-rotation-d1-tier1).
-  *Buys:* namespace-granular **post-compromise security**; **not** FS / history
-  re-encryption (old private keys retained → history-on).
-  *Acceptance:* after rotation, new writes use epoch N+1; all current at_talk
-  clients converge; a pre-rotation key reads nothing post-rotation.
+- [ ] **B5a · CK rotation (the cheap, coarse forward-secrecy lever).** Mint a
+  fresh symmetric content key, cut a new `<ckKid>.__ck` conveyance record sealed
+  to the namespace's nskey, and **delete the old `at/nskey` conveyance** so the
+  superseded CK can no longer be unwrapped. O(1) and cheap — this is D1's coarse
+  FS mechanism, and it rides ordinary sync (not the substrate). Run it on a
+  cadence or on demand. Design: roadmap
+  [Opt-in rotation](crypto-roadmap.md#opt-in-key-rotation) +
+  [pq-data-encryption.md](pq-data-encryption.md) section 6.
+  *Acceptance:* after CK rotation, new writes cite epoch N+1's `ckKid`; a peer
+  that only held the old `__ck` conveyance (now deleted) cannot read new data.
+- [ ] **B5b · nskey-keypair rotation (the expensive post-compromise-security
+  lever).** Mint a new **self nskey AND public nskey** → publish the new **public
+  nskey** (`public:nskey.<ns>@<atSign>`) → convey **both** new nskey privates
+  **per-APKAM via the secret-sharing substrate** (`__ssenv` envelopes sealed to
+  each authorised APKAM keypair's key package, pushed via `enroll:listfornamespace`
+  + the pull backstop — WP-SS / [pq-secret-push.md](pq-secret-push.md)). This is
+  **expensive**: it is an O(n) per-APKAM re-conveyance, the per-APKAM revocation
+  lever — **not cheap**. Design: roadmap
+  [Opt-in rotation](crypto-roadmap.md#opt-in-key-rotation).
+  *Buys:* namespace-granular **post-compromise security**; **not** per-message FS
+  / history re-encryption (old nskey privates retained → history-on). Coarse FS
+  comes from B5a (CK rotation + delete), not from this.
+  *Acceptance:* after a keypair rotation, new CKs are sealed to the epoch-N+1
+  nskeys; all current authorised APKAM keypairs converge (substrate push/pull);
+  an APKAM keypair that holds only a pre-rotation nskey private reads nothing
+  sealed post-rotation.
 - [ ] **B6 · Revocation wiring.** Compose: (1) enrollment revocation (APKAM —
   free, cuts future server access); (2) rotation **excluding** the revoked
   enrollment (`excludeEnrollmentIds`); (3) optional re-encrypt of history
-  (expensive — D1 Tier2/D2). Design: roadmap
+  (expensive — D2). Design: roadmap
   [Revocation](crypto-roadmap.md#revocation-end-to-end).
   *Acceptance:* a revoked enrollment, excluded from a rotation, cannot read
   post-rotation data.
@@ -384,14 +443,18 @@ Design: roadmap
 - [ ] **C4 · Capability conformance.** Implement so the
   [capabilities table](crypto-roadmap.md#capabilities-by-application-code-change-level)
   holds: no-code = universal reader + back-compat; flag = PQ writer/recipient;
-  code = override defaults / D1 Tier2.
+  code = override defaults / D2 (`at/pqmls`).
 
 ### D1-D · Versioning (the `disallowLegacyEncryption` flag)
 *Lands as [WP7 (flag, default off) + WP-D3 (v4 default flip)](#the-work-package-sequence--single-source-for-ordering),
 waves 4 & 6.* Design: roadmap
 [Versioning contract](crypto-roadmap.md#versioning-contract--the-legacy-encryption-flag-3x-default-off-4x-default-on).
 - [ ] **D1 · All D1 lands in 3.x** — additive, backwards-compatible; a 3.x
-  client may write legacy when a reader isn't PQ-ready.
+  client may write legacy when a reader isn't PQ-ready. **No-providerId default:**
+  a stored value with **no** `appMetadata.providerId` is the **legacy** provider
+  (RSA-2048 + AES, monolithic, key inline-wrapped per value); the negotiation and
+  migration logic depends on this default (per
+  [pq-data-encryption.md](pq-data-encryption.md) section 3).
 - [ ] **D2 · The `disallowLegacyEncryption` flag** on `AtClientPreference`.
   Means literally "never write new data using the legacy provider for
   encryption." **Final at AtClient construction** (immutable for the client's
@@ -401,7 +464,10 @@ waves 4 & 6.* Design: roadmap
   `shouldEncrypt=false` *no-encryption* path are unaffected
   ([confidentiality](crypto-roadmap.md#what-the-atserver-can-and-cannot-see)).
   *Acceptance:* with the flag `true`, no write uses the legacy provider (test:
-  every write's `appMetadata.providerId ∈ {nskey, group}` or the PQ fallback; a
+  every write's `appMetadata.providerId ∈ {at/nskey, at/symmetric/AES/GCM}` —
+  the cold-start "PQ fallback" is **not** a third providerId, it is still an
+  `at/nskey` CK conveyance whose recipient is the root `pqpublickey` instead of a
+  namespace nskey; a
   legacy-only recipient causes a refused write, never a legacy write; legacy
   **read** still works; the flag cannot be mutated after construction). With the
   flag `false`, a single `SHOUT` is logged at creation.
@@ -410,17 +476,19 @@ waves 4 & 6.* Design: roadmap
   provider itself **stays** — needed for reads always and for writes when the
   flag is `false`). Gated on the ecosystem floor.
 
-### D1-E · D1 Tier2 shape-corrections (fold into WP-GP)
+### D1-E · `at/pqmls` provider shape-corrections (fold into WP-GP)
 *Lands as [WP-GP](#the-work-package-sequence--single-source-for-ordering), wave 5.*
-The `group` provider is prototyped on the spike (D1 Tier2 self) and lands as
-WP-GP. These preserve its shape before the self→shared and MLS transitions;
-apply them as part of that carve-out, while touching the area.
+The `at/pqmls` provider is prototyped on the spike and lands as WP-GP. It is
+**D2's** forward-secure (MLS-based) provider — not a D1 tier; D1 self/shared data
+uses the nskey data path ([ADR 0002](adr/0002-d1-single-tier-nskey.md)). These shape-corrections
+preserve the provider's shape before the self→shared and MLS transitions; apply
+them as part of that carve-out, while touching the area.
 - [ ] **Lift membership into `SecureGroup`** (`members`/`add`/`remove`); v1
   derives them. Avoids a later breaking change to a published abstract.
-- [ ] **Binary-safe `group` provider** — seal/open bytes, honour `isBinary`
+- [ ] **Binary-safe `at/pqmls` provider** — seal/open bytes, honour `isBinary`
   (currently `utf8.encode(plaintext.toString())` corrupts binary).
 - [ ] **Rename `PairwiseGroup` → `SelfGroup`** to free "pair group" for the
-  Phase-4 cross-atSign meaning.
+  Phase-5 cross-atSign meaning.
 
 ### D1-F · Existing-client retrofit — auth upgrade & secret conveyance
 *Lands as a new **WP-AU** (auth upgrade); gated on the F5 atServer enhancements
@@ -434,11 +502,13 @@ secret-sharing substrate (WP-SS). New atSigns (PQ-native at onboarding) and new 
 
 - [ ] **F1 · `requestSecret(name)` primitive.** Generalise the substrate's
   `requestSecretsFromNamespace` to request a *named* secret. A request is a **targeted fan-out**
-  — discover the namespace's clients from their published `ClientKeyPackage`s and send each a
-  `pqSeal`-ed `__ssenv` envelope (no keyless broadcast); a holder responds with
-  `shareSecretWith(requester.ClientKeyPackage, secret)` (`pqSeal`) back to the requester's
-  clientId; requester `waitForSecret`. **Transport:** `atClient.put` of the `__ssenv` key
-  (`<msgId>.<recipientClientId>.__ssenv.<ns>@<atSign>`, self key, `shouldEncrypt=false`) +
+  — discover the namespace's authorised enrollments and their **per-APKAM key packages** via the
+  gated **`enroll:listfornamespace:<ns>`** verb (key packages are enrollment-internal, **not**
+  published — see [pq-secret-push.md](pq-secret-push.md)), and seal a `pqSeal`-ed `__ssenv`
+  envelope to each APKAM key package (`kpid`); no keyless broadcast. A holder responds with
+  `shareSecretWith(requester key package, secret)` (`pqSeal`) back to the requester's key
+  package (addressed by `kpid`); requester `waitForSecret`. **Transport:** `atClient.put` of the `__ssenv` key
+  (`<msgId>.<recipientKpId>.__ssenv.<ns>@<atSign>`, self key, `shouldEncrypt=false`) +
   **sync** delivery (sync-progress listener + periodic sweep → `receivedSecrets`), **plus an
   optional wake-up `notify`** per put (default on) so **sync-less clients** wake and
   `get(useRemoteAtServer)` — on both the request and the response. (Future: the atServer
@@ -451,16 +521,18 @@ secret-sharing substrate (WP-SS). New atSigns (PQ-native at onboarding) and new 
   namespace — *not* `publickey.pq`). Create via immutable create-if-absent (F5); the
   creator generates the X-Wing keypair, stores the private half, seeds it as a conveyable
   secret (`pqid:<kid>`), and serves on request. A non-creator pulls via F1, **verifies
-  public/private correspondence**, and stores into the local keystore (`WritableAtKeys`).
-  Conveyed to *every* non-revoked client (root → no namespace gate).
-- [ ] **F3 · Per-host PQ APKAM upgrade.** Mint-once **per (host, AtKeys file)** under a
-  host-local lock (reuse an existing keyfile key; else mint + persist); publish the public
-  half as an immutable per-host record; verify PQ APKAM auth; **then** delete the legacy RSA
+  public/private correspondence**, and stores into the local keystore (the APKAM keypair's
+  updatable `.atKeys` keystore; working name `WritableAtKeys`). Conveyed per-APKAM to *every*
+  non-revoked enrollment (push at approval + pull backstop; root → no namespace gate).
+- [ ] **F3 · Per-keyfile PQ APKAM upgrade.** Mint-once **per (host, AtKeys file)** — i.e. **one
+  per APKAM keypair**, the canonical recipient unit (a keyfile carries one APKAM keypair) —
+  under a host-local lock (reuse an existing keyfile key; else mint + persist); publish the public
+  half as an immutable per-APKAM record; verify PQ APKAM auth; **then** delete the legacy RSA
   APKAM public key (delete-by-default, scope = auth key only — keep the legacy encryption
   key for reads). Uniform sequence per the roadmap; "creator vs requester" decided by F2's
   immutable create. *Storage:* keyfile/keychain by default; OS-keychain/hardware opt-in; a
-  distinct labelled per-host record drives per-host revocation.
-- [ ] **F4 · Revocation.** Per-host auth revocation = delete that host's PQ APKAM public key
+  distinct labelled per-APKAM record drives per-APKAM revocation.
+- [ ] **F4 · Revocation.** Per-APKAM auth revocation = delete that keypair's PQ APKAM public key
   (meaningful only after F3's legacy deletion). Encryption revocation stays per-namespace
   rotation (D1-B / WP9). TTL/usage-based eviction of unused APKAM keys (F5).
 - [ ] **F5 · atServer enhancements** *(cross-repo, `at_server`; gate F2/F3/F4).* Mint-once
@@ -485,10 +557,10 @@ secret is ever wrapped under an RSA-derived key.
   `SHOUT` when `false`, + immutability after construction), cold-start fallback,
   the regression test
   pattern (a test that fails without the fix).
-- Functional (live virtualenv): nskey self + shared, rotation, mixed-tier
+- Functional (live virtualenv): nskey self + shared, rotation, mixed-scheme
   (nskey↔legacy), cold-start, enrollment-revoke + rotate-exclude.
 - e2e (cross-atSign, `@ce2e*`): the `at_talk` chat scenario from
-  [Walkthrough C](crypto-walkthroughs.md#walkthrough-c--a-two-atsign-chat-with-client-churn-at_talk)
+  [Walkthrough C](crypto-walkthroughs.md#walkthrough-c--a-two-atsign-chat-with-apkam-keypair-churn-at_talk)
   — alice1/2 ↔ bob1/2 bidirectional, then bob3/alice3 join (new + past
   messages). Run concurrently via the base-port `runLocal.sh` rigs (PR #1992).
 - Usability acceptance test ([section 5](#5-cross-repo-pr--publish-sequence--noports)) at each milestone.
@@ -505,30 +577,37 @@ from an integration branch at the end. Overall publish order: roadmap
 
 ## 4. D2 — pq-mls (placeholders; detailed planning deferred)
 
-D2 swaps D1 Tier2's engine for MLS and adds the scaling/ordering infrastructure.
+D2 is the forward-secure (MLS-based) `at/pqmls` provider plus the scaling/ordering
+infrastructure — robust/per-message FS, O(log n) scale, and decoupled-membership
+groups ([ADR 0002](adr/0002-d1-single-tier-nskey.md)). D1's nskey data path
+already provides **coarse FS** via content-key rotation + deletion of the old
+`at/nskey` conveyance, **plus post-compromise security** via the (expensive,
+per-APKAM) nskey-keypair rotation lever; D2 adds robust/per-message FS, O(log n)
+scale, and decoupled membership on top.
 The **design** is in the roadmap; the **detailed build plan is intentionally
 deferred** — each item below is a placeholder that **requires its own planning
 pass** before implementation. Design refs:
 [Deliverable 2](crypto-roadmap.md#deliverable-2--implement-pq-mls),
-[Phase 5](crypto-roadmap.md#phase-5--pq-mls-engine-securegroup-v2),
+[Phase 6](crypto-roadmap.md#phase-6--pq-mls-engine-securegroup-v2),
 [Delivery Service](crypto-roadmap.md#atserver-group-delivery-service-target-design).
 
 > **⚠ DETAILED PLANNING REQUIRED** for every item in this section. Treat the
 > bullets as scope markers, not a task breakdown.
 
-- [ ] **Phase 4 (cross-atSign per-client pair groups) as D1 Tier2.** *Note:* D1's
-  `nskey` covers cross-atSign **shared** data at enrollment granularity; the
-  **per-client** `(pair, namespace)` group (per-device revocation/FS) is the
-  D1 Tier2/D2 form. Greenfield: cross-atSign KeyPackage fetch+verify, consent
-  hook, explicit membership, group state not derivable from one server. *Plan
-  when starting D1 Tier2 cross-atSign.*
-- [ ] **Phase 5 — MLS engine (`SecureGroup` v2).** Engine choice still open
+- [ ] **Phase 5 (cross-atSign per-APKAM pair groups) as D2.** *Note:* D1's
+  nskey data path covers cross-atSign **shared** data at enrollment granularity;
+  the **per-APKAM** `(pair, namespace)` group (per-device revocation / per-message
+  FS) is the D2 (`at/pqmls`) form. Greenfield: cross-atSign KeyPackage
+  fetch+verify, consent hook, explicit membership, group state not derivable from
+  one server. *Plan when starting D2 cross-atSign.*
+- [ ] **Phase 6 — MLS engine (`SecureGroup` v2).** Engine choice still open
   (openmls / mls-rs / pure-Dart); native bindings as a separate package so
-  `at_client` stays pure Dart. Bootstrap from the same published KeyPackages;
-  flip `groupId`/`providerId` on new writes; lazy re-encrypt on touch.
-  **History vs forward-secrecy:** D1 is history-on (retained keys); MLS gives
-  true FS, so "new member reads history" needs an explicit mechanism
-  (re-encrypt-to-member or a separate history key) — *decide in the Phase-5
+  `at_client` stays pure Dart. Bootstrap from the same per-APKAM KeyPackages
+  (enrollment-internal, discovered via `enroll:listfornamespace` — never
+  published); flip `groupId`/`providerId` on new writes; lazy re-encrypt on touch.
+  **History vs forward-secrecy:** D1 is history-on (retained nskey privates); MLS
+  gives true FS, so "new member reads history" needs an explicit mechanism
+  (re-encrypt-to-member or a separate history key) — *decide in the Phase-6
   plan.* *Plan: engine selection spike + binding package + state-ownership.*
 - [ ] **atServer group Delivery Service.** Ciphertext-only group object
   (`ownerAcl` + plaintext roster + monotonic `seq` + TTL'd log) + verbs
@@ -543,14 +622,15 @@ pass** before implementation. Design refs:
   apply inbound handshake before sealing under the new epoch. Roadmap
   [Connection model & the MLS leaf](crypto-roadmap.md#connection-model--the-mls-leaf).
   *Plan with the engine integration.*
-- [ ] **Per-client identity hardening (Phase 2 / D1 Tier2).** AtKeys device-local
-  split (leaf keys never copied); client-identity resolution
-  (label-keyed keysets, resume/fork/mint); **two-layer single-owner lock**
-  (device-local file lock + atServer `(atSign, label)` lease w/ fencing token +
-  TTL + heartbeat). MLS correctness precondition (one leaf per instance), not
-  needed by D1 Tier1. Roadmap
-  [Phase 2](crypto-roadmap.md#phase-2--identity-layer-keypackages-and-per-client-atkeys).
-  *Plan with Phase 5.*
+- [ ] **Per-APKAM identity hardening (Phase 2 / D2).** AtKeys device-local
+  split (leaf keys never copied; AtKeys are stored **per-APKAM**, not per-client);
+  per-APKAM identity resolution (label-keyed keysets, resume/fork/mint);
+  **two-layer single-owner lock** (device-local file lock + atServer
+  `(atSign, label)` lease w/ fencing token + TTL + heartbeat). MLS correctness
+  precondition (**one leaf per APKAM keypair**), not needed by D1's nskey data
+  path. Roadmap
+  [Phase 2](crypto-roadmap.md#phase-2--identity-layer-per-apkam-keypackages-and-per-apkam-atkeys).
+  *Plan with Phase 6.*
 
 Guidance (carries from the roadmap): the v1 `PairwiseGroup` epoch engine + its
 leaderless `kid`-is-truth convergence is **thrown away at the MLS swap** — don't
@@ -575,9 +655,9 @@ Nothing reaches NoPorts until the SDK ships in dependency order. Roadmap
 
 **NoPorts adoption (finish line, mostly D2-gated).** Route session keys through
 the group abstraction, daemon-feature-gated tiers 0–2; **target: zero
-user-visible delta**. Tier 0 (transport PQ-safe) is reachable with the `nskey`
-/ `group` path; tiers 1–2 (derive-don't-transmit, fleet self-group) lean on
-D1 Tier2 / D2. Roadmap
+user-visible delta**. Tier 0 (transport PQ-safe) is reachable with the nskey data
+path / `at/pqmls` path; tiers 1–2 (derive-don't-transmit, fleet `SelfGroup`) lean
+on D2 (`at/pqmls`). Roadmap
 [Upgrading NoPorts](crypto-roadmap.md#upgrading-noports-with-daemon-ping-feature-discovery)
 + Admission UX / User-visible-delta. *Detailed sshnoports plan: deferred.*
 
@@ -645,7 +725,8 @@ tests. Plan archived at `untracked/AT_PERSISTENCE_5_MIGRATION_PLAN.md`.
   `VIRTUALENV_BASE_PORT`).
 
 ### ADRs
-- [ADR 0001 — D1 delivers as two tiers](adr/0001-d1-simplicity-tiers.md).
+- [ADR 0002 — D1 is single-tier `nskey`; `at/pqmls` is D2](adr/0002-d1-single-tier-nskey.md)
+  (supersedes [ADR 0001 — D1 delivers as two tiers](adr/0001-d1-simplicity-tiers.md)).
 
 ## 7. Delivery plan & work packages
 
@@ -658,8 +739,9 @@ view.
 
 ### Tracks (package domains, not people)
 
-- **Track A — crypto primitives + provider:** `at_chops` (stateless core +
-  HPKE) → the `nskey` provider, `secret_sharing/`, `crypto/group/`.
+- **Track A — crypto primitives + providers:** `at_chops` (stateless core +
+  HPKE) → the nskey data path providers (`at/nskey` + `at/symmetric/AES/GCM`),
+  `secret_sharing/`, `crypto/group/`.
 - **Track B — key management:** `at_auth` (`WritableAtKeys`, `AtKeysIo`
   widening, the WASM barrel split) → PQ enrollment-conveyance key.
 - **Track C — at_client crypto seam + migration:** `crypto.dart` /
@@ -671,8 +753,8 @@ view.
 
 Within `at_client/crypto/`, the file partition keeps A and C apart: **C** owns
 `crypto.dart`, `crypto_runtime.dart`, `legacy/`; **A** owns `crypto/group/`,
-`crypto/nskey/` (new), `secret_sharing/`. The `nskey` provider is mostly new
-files — low collision by construction.
+`crypto/nskey/` (new), `secret_sharing/`. The nskey data path providers are mostly
+new files — low collision by construction.
 
 ### Reconciliations since the slim refactor (`xl-pluggable`)
 The slim-API + registry-fold landed on `xl-pluggable` (PR #1930) after this [section 7](#7-delivery-plan--work-packages)
@@ -697,7 +779,7 @@ at_lookup / at_auth / at_onboarding_cli (#1995–1998, **merged**). **In flight:
 #1993 (at_chops HPKE), #1930 (at_client M0 seam).
 
 **Prototyped on `gkc-pqmls-spike` but NOT landed — first-class work to do, not
-foundation:** the **secret-sharing substrate** (WP-SS) and the **`group`
+foundation:** the **secret-sharing substrate** (WP-SS) and the **`at/pqmls`
 provider** (WP-GP). They were previously folded into WP11/WP9 as "assumed
 built"; they are now their own carve-out WPs.
 
@@ -719,12 +801,12 @@ header links back to this section):
 | WP4 | [D1-S](#d1-s--structural-enablers-prerequisite--lands-first) S2/S3 (+ storage) | 1 |
 | WP-SS | [Foundations — secret sharing](crypto-roadmap.md#foundations) | 2 |
 | WP10 | [D1-A](#d1-a--finish-the-pq-primitives-small) (enrollment-conveyance key) | 2 |
-| WP6 | [D1-B](#d1-b--the-nskey-provider-d1-tier1--the-default) B1–B4 | 3 |
+| WP6 | [D1-B](#d1-b--the-nskey-data-path-the-default-data-path) B1–B4 | 3 |
 | WP5 | [D1-S](#d1-s--structural-enablers-prerequisite--lands-first) S4 (WASM cut) | 3 |
 | WP8 | [D1-S](#d1-s--structural-enablers-prerequisite--lands-first) S6 (consumer bumps) | 3 |
 | WP7 | [D1-C](#d1-c--migration--rollout-machinery) + [D1-D](#d1-d--versioning-the-disallowlegacyencryption-flag) D2 | 4 |
-| WP9 | [D1-B](#d1-b--the-nskey-provider-d1-tier1--the-default) B5/B6 | 4 |
-| WP-GP | [D1-E](#d1-e--d1-tier2-shape-corrections-fold-into-wp-gp) | 5 |
+| WP9 | [D1-B](#d1-b--the-nskey-data-path-the-default-data-path) B5/B6 | 4 |
+| WP-GP | [D1-E](#d1-e--atpqmls-provider-shape-corrections-fold-into-wp-gp) | 5 |
 | WP-D3 | [D1-D](#d1-d--versioning-the-disallowlegacyencryption-flag) D3 | 6 |
 
 **Wave 0 — land the in-flight foundation (gates everything).** #1930 is the
@@ -741,35 +823,38 @@ single biggest unblock; #1993 can be reviewed alongside it.
 - **WP4** (D) `LocalKeystoreAtKeysIo` + updatable `.atKeys`.
 
 **Wave 2 — substrate + enrollment key (parallel; on at_chops 3.3.0).**
-- **WP-SS** (A/C) carve the **secret-sharing substrate** spike → trunk:
-  `ClientKeyPackage`, `SecretStore`, namespace registration/discovery, `__ssenv`
-  envelopes **via `pqSeal`**, `requestSecretsFromNamespace`, `waitForSecret`,
-  `excludeEnrollmentIds`.
+- **WP-SS** (A/C) carve the **secret-sharing substrate** spike → trunk: per-APKAM
+  X-Wing key packages (enrollment-internal), `SecretStore`, discovery via the gated
+  `enroll:listfornamespace:<ns>` verb, `__ssenv` envelopes addressed by `kpid`
+  **via `pqSeal`**, `requestSecretsFromNamespace`, `waitForSecret`,
+  `excludeEnrollmentIds`. (Re-keys the spike's per-client `registerClient` /
+  `discoverClients` / `clientId` to per-APKAM `kpid`.)
 - **WP10** (B) PQ enrollment-conveyance public key (also the nskey cold-start
   fallback) — land before WP6.
 
-**Wave 3 — `nskey` core + the at_auth 4.0 cut (parallel).**
-- **WP6** (C/A, D1-B B1–B4) the **`nskey` provider** — namespace keypair
-  (derive/publish), seal/open via `pqSeal`, capability marker + negotiation,
-  cold-start fallback. Needs WP1, WP3, WP10 (+ WP-SS for the non-derivable
-  distribution path).
+**Wave 3 — nskey data path core + the at_auth 4.0 cut (parallel).**
+- **WP6** (C/A, D1-B B1–B4) the **nskey data path** (`at/nskey` +
+  `at/symmetric/AES/GCM`) — the two namespace nskeys (self + public;
+  derive/publish the public one), seal/open via `pqSeal`, capability marker +
+  negotiation, cold-start fallback. Needs WP1, WP3, WP10 (+ WP-SS for the
+  non-derivable distribution path).
   **▶ at_client (minor): PQ-safe writes available** — a rebuilt app is a
   universal reader; one readiness-flag flip makes its new writes `nskey`.
 - **WP5** (B) **`at_auth 4.0.0`** WASM barrel split (the one breaking cut). Needs WP2.
   **▶ at_auth 4.0.0** with **WP8** (D, consumer bumps onboarding/flutter/
   cli_commons) **▶** their minors right behind it.
 
-**Wave 4 — D1 Tier1 completion (migration, rotation, versioning).**
+**Wave 4 — D1 completion (migration, rotation, versioning).**
 - **WP7** (C, D1-C + D1-D flag) migration machinery (readiness-marker lifecycle,
   negotiation default, strict-mode toggles) + `disallowLegacyEncryption`
   (default `false`); legacy provider reads `WritableAtKeys`. Needs WP6.
 - **WP9** (A/C, D1-B B5/B6) nskey **rotation + revocation**; `__ssenv`
   consolidated on `pqSeal`. Needs WP-SS, WP6.
-  **▶ at_client `3.14.x`: D1 Tier1 GA — PQ-safe namespace messaging** (the
+  **▶ at_client `3.14.x`: D1 GA — PQ-safe namespace messaging** (the
   headline: rebuild = universal reader, one flag = PQ writer, opt-in rotation).
 
-**Wave 5 — D1 Tier2 (opt-in hardened) — parallel, off the Tier1 critical path.**
-- **WP-GP** (A/C) carve the **`group` provider** (`SecureGroup` / `SelfGroup`)
+**Wave 5 — D2's `at/pqmls` provider (forward-secure groups) — parallel, off the D1 critical path.**
+- **WP-GP** (A/C) carve the **`at/pqmls` provider** (`SecureGroup` / `SelfGroup`)
   spike → trunk + the D1-E shape fixes (binary-safe, lift membership, rename).
 
 **Wave 6 — the v4 cut (gated on the ecosystem floor).**
@@ -792,7 +877,7 @@ additive minor (`3.2.0`, WP2) then a breaking major (`4.0.0`, WP5) so
 | 1 | `at_chops` | minor `3.2.1 → 3.3.0` | WP1 | stateless functional core + HPKE `pqSeal`/`pqOpen` **added**; stateful `AtChopsImpl` kept as `@Deprecated` shim (additive) |
 | 2 | `at_auth` | minor `3.1.1 → 3.2.0` | WP2 | **additive API:** `WritableAtKeys` added; `AtKeysIo`/`WrittenAtKeysIo` widened (add/remove/update, default impls); `InMemoryAtKeysIo`. No barrel change yet — downstream can adopt `WritableAtKeys` immediately |
 | 3 | `at_auth` | **major `3.2.0 → 4.0.0`** | WP5 | **breaking WASM cut:** `FileAtKeysIo` out of the main barrel (→ `at_auth_io.dart`); `FileAtKeysIo()` default removed; registrar → `package:http`; probe extracted; core compiles under `dart2wasm` |
-| 4 | `at_client` | minor `3.13.0 → 3.14.0` | WP3 / WP6 | `at_auth ^4.0.0`; `CryptoContext` gains a `WritableAtKeys keys` field (additive; context is `{atClient}` today — nothing to deprecate); `LocalKeystoreAtKeysIo`; `nskey` provider scaffold |
+| 4 | `at_client` | minor `3.13.0 → 3.14.0` | WP3 / WP6 | `at_auth ^4.0.0`; `CryptoContext` gains a `WritableAtKeys keys` field (additive; context is `{atClient}` today — nothing to deprecate); `LocalKeystoreAtKeysIo`; nskey data path scaffold (`at/nskey` + `at/symmetric/AES/GCM`) |
 | 5 | `at_onboarding_cli` | minor `1.16.0 → 1.17.0` | WP8 | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; injects it explicitly (default gone) |
 | 6 | `at_client_flutter` | minor `1.1.3 → 1.2.0` | WP8 | `at_auth ^4.0.0`; `file_picker` imports `at_auth_io.dart` |
 | 7 | `at_cli_commons` | minor (constraint bump) | WP8 | consumes the new `at_onboarding_cli` / `at_client` |
@@ -808,10 +893,10 @@ before a batch lands, **spin up an ephemeral integration branch on demand**
 early, with no standing integration branch to drift.
 
 ### Critical path & merge discipline
-- **Critical path to D1 Tier1 GA:** #1930 → WP1 (`pqSeal`) + WP3
+- **Critical path to D1 GA:** #1930 → WP1 (`pqSeal`) + WP3
   (`CryptoContext`) + WP-SS (substrate) + WP10 (enrollment key) → WP6 (`nskey`)
   → WP7 (migration/flag) → WP9 (rotation). `at_auth 4.0` (WP5, WASM-readiness)
-  and WP-GP (the `group` provider) run **in parallel, off this path**.
+  and WP-GP (the `at/pqmls` provider) run **in parallel, off this path**.
 - **Interface-first:** the `pqSeal` signature (WP1), `WritableAtKeys` API (WP2),
   and `CryptoContext` field (WP3) are tiny PRs — merge them first (stubs OK) so
   every track compiles against stable shapes and never blocks on another.
