@@ -83,12 +83,12 @@ abstract class AtChops {
 
   /// Signs [message] with [secretKey] using [algo]. Preferred over [sign].
   Future<Uint8List> signBytes(
-          Uint8List message, Uint8List secretKey, AtSigningAlgorithm algo) =>
+          Uint8List message, Uint8List secretKey, AtSignatureAlgorithm algo) =>
       algo.signBytes(message, secretKey);
 
   /// Verifies [signature] over [message] against [publicKey] using [algo]. Preferred over [verify].
   Future<bool> verifyBytes(Uint8List message, Uint8List signature,
-          Uint8List publicKey, AtSigningAlgorithm algo) =>
+          Uint8List publicKey, AtSignatureAlgorithm algo) =>
       algo.verifyBytes(message, signature, publicKey);
 
   /// Compute data signature using the private key from a key pair

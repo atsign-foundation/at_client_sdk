@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:at_chops/src/algorithm/at_iv.dart';
 import 'package:at_chops/src/algorithm/hashing/types.dart';
 import 'package:at_chops/src/key/keys.dart';
+import 'package:meta/meta.dart';
 
 /// Interface for encrypting and decrypting data. Check [DefaultEncryptionAlgo] for sample implementation.
 abstract class AtEncryptionAlgorithm<T, V> {
@@ -40,31 +41,33 @@ abstract class ASymmetricEncryptionAlgorithm
   Uint8List decrypt(Uint8List encryptedData);
 }
 
-/// Signing algorithm — key passed per call, safe to share as a singleton.
+/// Stateful signing interface — implementors hold key material on the instance.
 ///
-/// New implementations: override [signBytes] and [verifyBytes] only.
-/// Legacy implementations that override [sign]/[verify] will continue to
-/// compile; those methods will be removed in v4.
+/// Prefer [AtSignatureAlgorithm] for new code: it is stateless (key material
+/// passed per call) and safe to share as a singleton.
+@sealed
 abstract class AtSigningAlgorithm {
-  /// Signs [message] with [secretKey].
-  Future<Uint8List> signBytes(Uint8List message, Uint8List secretKey) =>
-      throw UnimplementedError('implement signBytes');
-
-  /// Verifies [signature] over [message] against [publicKey].
-  Future<bool> verifyBytes(
-          Uint8List message, Uint8List signature, Uint8List publicKey) =>
-      throw UnimplementedError('implement verifyBytes');
-
   /// Signs [data] using a key stored on the instance.
-  @Deprecated('Implement signBytes(message, secretKey) instead.')
   FutureOr<Uint8List> sign(Uint8List data) =>
-      throw UnimplementedError('implement signBytes');
+      throw UnimplementedError('implement sign');
 
   /// Verifies [signature] over [signedData].
-  @Deprecated('Implement verifyBytes(message, signature, publicKey) instead.')
   FutureOr<bool> verify(Uint8List signedData, Uint8List signature,
           {String? publicKey}) =>
-      throw UnimplementedError('implement verifyBytes');
+      throw UnimplementedError('implement verify');
+}
+
+/// Stateless signing interface — all key material passed per call.
+///
+/// Safe to share as a singleton.
+abstract interface class AtSignatureAlgorithm {
+  /// Signs [message] with [secretKey]; returns the signature bytes.
+  Future<Uint8List> signBytes(Uint8List message, Uint8List secretKey);
+
+  /// Returns `true` if [signature] was produced over [message] with the
+  /// private key corresponding to [publicKey].
+  Future<bool> verifyBytes(
+      Uint8List message, Uint8List signature, Uint8List publicKey);
 }
 
 /// Interface for hashing data. Refer [DefaultHash] for sample implementation.

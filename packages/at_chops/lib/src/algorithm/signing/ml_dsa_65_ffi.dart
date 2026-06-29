@@ -12,6 +12,9 @@ import 'package:ffi/ffi.dart';
 /// `EVP_PKEY_get_raw_private_key` / `EVP_PKEY_get_raw_public_key`.
 ///
 /// Entry points: [generateKeyPair], then [signBytes] / [verifyBytes].
+///
+/// **Note on param order:** [signBytes] uses `(secretKey, message)` and [verifyBytes]
+/// uses `(publicKey, message, signature)` — non-canonical for backward compatibility.
 final class MlDsa65FfiAlgo extends AtSigningAlgorithm {
   final DynamicLibrary _lib;
 
@@ -106,8 +109,8 @@ final class MlDsa65FfiAlgo extends AtSigningAlgorithm {
   ///
   /// Returns a 3309-byte signature. Signing uses OpenSSL's internal
   /// randomness, so signatures are non-deterministic.
-  @override
-  Future<Uint8List> signBytes(Uint8List message, Uint8List secretKey) async {
+  ///
+  Future<Uint8List> signBytes(Uint8List secretKey, Uint8List message) async {
     final Pointer<EVP_PKEY> pkey = _loadPrivateKey(secretKey);
     try {
       return _sign(pkey, message);
@@ -117,9 +120,8 @@ final class MlDsa65FfiAlgo extends AtSigningAlgorithm {
   }
 
   /// Verify [signature] over [message] against the raw 1952-byte [publicKey].
-  @override
   Future<bool> verifyBytes(
-      Uint8List message, Uint8List signature, Uint8List publicKey) async {
+      Uint8List publicKey, Uint8List message, Uint8List signature) async {
     final Pointer<EVP_PKEY> pkey = _loadPublicKey(publicKey);
     try {
       return _verify(pkey, message, signature);
