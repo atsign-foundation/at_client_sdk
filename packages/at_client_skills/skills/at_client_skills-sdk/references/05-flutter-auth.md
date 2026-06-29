@@ -84,19 +84,23 @@ Future<void> loginWithFile(BuildContext context) async {
 }
 ```
 
-> **macOS platform setup (required).** `AtKeysFileDialog` uses `file_picker`,
-> which is sandboxed on macOS. Without a file-access entitlement the picker
-> throws `PlatformException(ENTITLEMENT_NOT_FOUND, ...)` at runtime. Add this to
-> **both** `macos/Runner/DebugProfile.entitlements` **and**
+> **macOS platform setup (required).** A sandboxed macOS build needs two
+> entitlements in **both** `macos/Runner/DebugProfile.entitlements` **and**
 > `macos/Runner/Release.entitlements`:
 >
 > ```xml
+> <!-- Connect to the atServer (required by every atSign app) -->
+> <key>com.apple.security.network.client</key>
+> <true/>
+> <!-- Pick the .atKeys file via AtKeysFileDialog / file_picker -->
 > <key>com.apple.security.files.user-selected.read-only</key>
 > <true/>
 > ```
 >
-> macOS only — iOS (document picker) and Android (Storage Access Framework)
-> require no entitlement or permission.
+> Without `network.client` the app cannot reach the atServer at all; without the
+> file-access entitlement `AtKeysFileDialog` throws
+> `PlatformException(ENTITLEMENT_NOT_FOUND, ...)` when picking the file.
+> macOS only — iOS and Android need neither.
 
 ---
 
