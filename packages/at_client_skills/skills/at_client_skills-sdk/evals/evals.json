@@ -34,7 +34,7 @@
     {
       "id": 7,
       "prompt": "How do I write unit tests for my AtCollection-backed service without spinning up a real atServer?",
-      "expected_output": "Explains collections_test_hooks.dart — collectionWithInjectedNotifications(), handleNotificationForTest(), clearFactoriesForTest(). Shows the import path package:at_client/src/collections/collections_test_hooks.dart."
+      "expected_output": "Explains collections_test_hooks.dart — collectionWithInjectedNotifications(), handleNotificationForTest(), clearFactoriesForTest(). Imports them from package:at_client/at_client.dart (NOT the src/collections/collections_test_hooks.dart path — that file is a part-of and cannot be imported directly)."
     },
     {
       "id": 8,

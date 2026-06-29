@@ -392,7 +392,7 @@ send/subscribe walkthrough.
 ## 13. Testing Without a Live atServer
 
 ```dart
-import 'package:at_client/src/collections/collections_test_hooks.dart';
+import 'package:at_client/at_client.dart'; // test hooks are re-exported here
 
 final ctrl = StreamController<AtNotification>.broadcast();
 final coll = collectionWithInjectedNotifications<Todo>(
