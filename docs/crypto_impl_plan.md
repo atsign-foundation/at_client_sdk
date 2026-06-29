@@ -355,11 +355,11 @@ encrypts the data); legacy-shaped (copyable, enrollment-granular), PQ + namespac
     (namespace) so a conveyance can't be replayed cross-scope. (D1 is scoped by
     `(owner, namespace)`; `groupId` is a D2 `at/pqmls` concept, not D1.)
   - **CK-conveyance record** (`at/nskey`):
-    `appMetadata(providerId: 'at/nskey', additional: {ns, recipientKind, ckKid})`
+    `appMetadata(providerId: 'at/nskey', additional: {recipientKind, ckKid})`
     — value is the `pqSeal` envelope wrapping the CK (KEM ct + AEAD body); no
     separate `iv`/`kemCt`.
   - **Data value** (`at/symmetric/AES/GCM`):
-    `appMetadata(providerId: 'at/symmetric/AES/GCM', additional: {ns, ckKid, iv})`
+    `appMetadata(providerId: 'at/symmetric/AES/GCM', additional: {ckKid, iv})`
     — cites the CK by `ckKid`; **no per-value KEM envelope** (decision (a)).
   - *Acceptance:* unit round-trips (self + shared); byte-exact decrypt; binary
     -safe (seal/open bytes, honour `isBinary` — do **not** repeat the
