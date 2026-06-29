@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:ffi/ffi.dart';
 
 /// ML-DSA-65 (FIPS 204) signing backed by OpenSSL 3 via Dart FFI; load libcrypto via [tryLoadLibCrypto].
@@ -27,6 +29,10 @@ final class MlDsa65FfiAlgo extends AtSigningAlgorithm {
   late final EvpPkeyGetRawKeyDart _getRawPrivateKey;
   late final EvpPkeyNewRawPrivateKeyExDart _newRawPrivateKeyEx;
   late final EvpPkeyNewRawPublicKeyExDart _newRawPublicKeyEx;
+  Uint8List? _secretKey;
+
+  set secretKey(Uint8List value) => _secretKey = value;
+
   late final EvpMdCtxNewDart _mdCtxNew;
   late final EvpMdCtxFreeDart _mdCtxFree;
   late final EvpDigestSignInitDart _digestSignInit;
@@ -130,6 +136,28 @@ final class MlDsa65FfiAlgo extends AtSigningAlgorithm {
     }
   }
 
+
+  // ── AtSigningAlgorithm ──────────────────────────────────────────────────────
+
+  @override
+  Future<Uint8List> sign(Uint8List data) async {
+    if (_secretKey == null) {
+      throw AtSigningException(
+          'ML-DSA-65 secret key must be set before signing');
+    }
+    return signBytes(_secretKey!, data);
+  }
+
+  @override
+  Future<bool> verify(Uint8List signedData, Uint8List signature,
+      {String? publicKey}) async {
+    if (publicKey == null) {
+      throw AtSigningException(
+          'public key must be provided for ML-DSA-65 signature verification');
+    }
+    final Uint8List pkBytes = base64Decode(publicKey);
+    return verifyBytes(pkBytes, signedData, signature);
+  }
 
   // ── Internal helpers ────────────────────────────────────────────────────────
 
