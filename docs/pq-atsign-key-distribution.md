@@ -2,6 +2,14 @@
 
 **Status:** proposal / working doc (not plan-of-record). Lives in `docs/`.
 
+**Companion to** [`pq-secret-push.md`](pq-secret-push.md) (the **push** dual). This doc is the
+**pull** facet of the WP-SS secret-sharing substrate: a client *requests* a named secret it needs
+(worked on the root `pqpublickey` + the existing-client retrofit lifecycle). The holder-initiated
+proactive **push** of namespaced secrets lives in the companion. The shared substrate facts — the
+delivery-envelope key shape, the `enroll:listfornamespace` verb, and the seal-vs-gate security
+property — are owned by [`pq-secret-push.md` §4–§5](pq-secret-push.md#4-key-shapes); cited here,
+not restated.
+
 **The general problem (the right frame).** Distributing the atSign-level PQ private
 key to Alice's existing clients is one instance of a single reusable primitive:
 
@@ -99,9 +107,10 @@ name** (a specific named secret) — is a small extension that lands with WP-SS.
 
 ### Details the primitive must pin down
 
-- **Transport = `put` + sync, plus an optional wake-up notify.** Request and response are the
-  *same* targeted envelope key — `<msgId>.<kpid>.__ssenv.<ns>@<owner>`, a
-  self key, `shouldEncrypt=false` (already sealed) — written with `atClient.put`. Delivery is the
+- **Transport = `put` + sync, plus an optional wake-up notify.** Request and response use the
+  *same* targeted delivery envelope key `<msgId>.<kpid>.__ssenv.<ns>@<owner>` (a self key,
+  `shouldEncrypt=false`, already sealed; shape owned by
+  [`pq-secret-push.md` §4](pq-secret-push.md#4-key-shapes)), written with `atClient.put`. Delivery is the
   **sync** service (a sync-progress listener + a periodic local sweep surface arrivals on
   `receivedSecrets`), so it is offline-tolerant by construction. **Some clients don't sync** — so
   the writer *also* sends an **optional wake-up `notify`** (default on) for that key; a sync-less
@@ -116,7 +125,8 @@ name** (a specific named secret) — is a small extension that lands with WP-SS.
   enrollment cover this namespace." The authoritative source is the server-sourced
   `enroll:listfornamespace` verb (`pq-secret-push.md` §2/§5), not a client self-claim, and
   delivery is additionally enforced by the namespace gate on the `__ssenv.<ns>` key (the
-  seal is the confidentiality boundary; the gate is defence in depth). Never serve to an
+  seal — not the gate — is the confidentiality boundary; see
+  [`pq-secret-push.md` §5](pq-secret-push.md#5-authorization--safety)). Never serve to an
   enrollment in `excludeEnrollmentIds` (revoked). The **root** PQ key is the exception: like the
   legacy default encryption private key (conveyed to *every* enrollment regardless of
   scope — `at_enrollment_impl.dart:154-174`), it is served to every non-revoked
