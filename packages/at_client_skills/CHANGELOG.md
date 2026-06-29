@@ -3,9 +3,12 @@
 ## 1.1.0 — 2026-06-23
 
 - Add `user-invocable: true` so the skill registers as a slash command.
-- Document the required macOS `file_picker` entitlement for the `.atKeys`
-  file login flow in `references/05-flutter-auth.md`.
-- Add an eval covering the macOS `ENTITLEMENT_NOT_FOUND` fix.
+- Document the required macOS entitlements in `references/05-flutter-auth.md`:
+  `network.client` (connect to the atServer) and
+  `files.user-selected.read-only` (the `.atKeys` file picker).
+- Fix the test-hooks import: the helpers come from `at_client.dart`, not the
+  `src/collections/...` `part of` file (`SKILL.md`, `references/09`).
+- Add an eval covering the macOS entitlement fix.
 
 ## 1.0.0 — 2026-06-08
 
