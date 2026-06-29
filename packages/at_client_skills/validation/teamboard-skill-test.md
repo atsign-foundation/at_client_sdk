@@ -31,14 +31,34 @@ cd ~                       # anywhere that is not inside at_client_sdk/
 flutter create teamboard_skill_test
 cd teamboard_skill_test
 
-# 2. Real (published) runtime deps — as a consumer would add them
+# 2. Published runtime deps + the skills CLI — the regular pub command,
+#    exactly as a real consumer would.
 dart pub add at_client_flutter at_auth path_provider
+dart pub add dev:skills
+```
 
-# 3. The skill, from your local working tree (unpublished)
-dart pub add --dev skills
-dart pub add --dev 'at_client_skills:{"path":"/ABSOLUTE/PATH/TO/at_client_sdk/packages/at_client_skills"}'
+Step 3 — add the skill from your **local** checkout as a path dev-dependency.
+The inline `dart pub add "pkg:{path: …}"` form is brittle, so edit
+`pubspec.yaml` directly and use a **relative** path to your `at_client_sdk`
+checkout:
 
-# 4. Install the skill into the IDE skills dir (.claude/skills, .cursor/skills, …)
+```yaml
+dev_dependencies:
+  # … (skills, test, etc.)
+  at_client_skills:
+    path: ../path/to/at_client_sdk/packages/at_client_skills   # RELATIVE path
+```
+
+> Tell the agent to compute the relative path from this test app to your
+> `at_client_sdk` checkout. If you're also validating unreleased `at_client` /
+> `at_client_flutter` changes, wire those as relative path deps the same way;
+> otherwise leave them as the published deps from step 2 to mirror a real
+> consumer.
+
+```sh
+# 4. Resolve deps, then install the skill into the IDE skills dir
+#    (.claude/skills, .cursor/skills, …)
+dart pub get
 dart run skills get
 ```
 
@@ -94,22 +114,28 @@ session** (no extra atSign context, no hints) and paste the prompt in §2.
 > out and back in. Fix any build or runtime errors you hit so it runs cleanly
 > start to finish.
 
+After everything is built, paste this follow-up prompt:
+
+> Create a report summarizing your findings. If any bug was due to the
+> `at_client_skills-sdk` skill not documenting the correct way to do something,
+> identify the gap in the skill that should be fixed.
+
 ---
 
 ## 3. What a clean build proves (coverage)
 
-| Prompt requirement | SDK surface exercised |
-|---|---|
-| Sign-in / import file / re-login / sign-out | all auth flows — **macOS file picker hits the entitlement step** |
-| Boards → Lists → Cards → checklist | sub-collections, `watchWithTree` deep hierarchies |
-| Share a board; collaborator edits | sharing items + `NotificationService` |
-| Real-time updates | event streams / `watch()` |
-| "Seen by" indicator | read receipts |
-| Filter by priority / tag / date / done | `Query<T>`, `wherePath` typed predicates |
-| Card fields (priority, due, tags) | richer domain objects (`AtCollection<T>` / `CItem<T>`, `toJson`/`typeTag`) |
-| Offline + reconcile | local store + sync behavior |
-| Tests without live server | unit-testing-without-atServer guidance (`collections_test_hooks.dart`) |
-| "run on macOS desktop" | guarantees the desktop entitlement path is exercised |
+| Prompt requirement                          | SDK surface exercised                                                      |
+| ------------------------------------------- | -------------------------------------------------------------------------- |
+| Sign-in / import file / re-login / sign-out | all auth flows — **macOS file picker hits the entitlement step**           |
+| Boards → Lists → Cards → checklist          | sub-collections, `watchWithTree` deep hierarchies                          |
+| Share a board; collaborator edits           | sharing items + `NotificationService`                                      |
+| Real-time updates                           | event streams / `watch()`                                                  |
+| "Seen by" indicator                         | read receipts                                                              |
+| Filter by priority / tag / date / done      | `Query<T>`, `wherePath` typed predicates                                   |
+| Card fields (priority, due, tags)           | richer domain objects (`AtCollection<T>` / `CItem<T>`, `toJson`/`typeTag`) |
+| Offline + reconcile                         | local store + sync behavior                                                |
+| Tests without live server                   | unit-testing-without-atServer guidance (`collections_test_hooks.dart`)     |
+| "run on macOS desktop"                      | guarantees the desktop entitlement path is exercised                       |
 
 ---
 
