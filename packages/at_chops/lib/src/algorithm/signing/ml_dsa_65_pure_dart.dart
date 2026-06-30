@@ -9,17 +9,30 @@ import 'package:pqcrypto/pqcrypto.dart';
 /// ML-DSA-65 (FIPS 204) digital signature backed by pure-Dart
 /// (`package:pqcrypto`).
 ///
-/// **Stateless use** (preferred — all key material passed explicitly):
-/// Call the static [generateKeyPair], [signBytes], and [verifyBytes] directly.
+/// **Preferred use:** call the static [generateKeyPair], [signBytes], and
+/// [verifyBytes] directly — all key material is passed explicitly. Or use
+/// [PqcFfi.mlDsa65] (typed [AtSignatureAlgorithm]) for auto-resolved FFI/pure
+/// dispatch without touching this class.
 ///
-/// **Stateful use** (implements [AtSigningAlgorithm]):
-/// Construct an instance, set [secretKey], then call [sign]. Pass the
-/// base64-encoded raw public key as the [publicKey] parameter to [verify].
+/// **Stateful use** — deprecated, removed in v4:
+/// Construct an instance, set [secretKey], then call [sign]/[verify].
+///
+/// ## v4 migration
+///
+/// In v4 this class will `implements AtSignatureAlgorithm` directly. The
+/// static [signBytes] and [verifyBytes] will become the canonical instance
+/// implementations. The stateful [secretKey]/[sign]/[verify] surface and
+/// the [AtSigningAlgorithm] conformance will be removed, along with the
+/// [MlDsa65PureDartSigner] adapter that currently bridges them.
 final class MlDsa65PureDartAlgo implements AtSigningAlgorithm {
   Uint8List? _secretKey;
 
   MlDsa65PureDartAlgo();
 
+  @Deprecated(
+    'Stateful API removed in v4. '
+    'Use the static signBytes/verifyBytes, or PqcFfi.mlDsa65 typed as AtSignatureAlgorithm.',
+  )
   set secretKey(Uint8List value) => _secretKey = value;
 
   /// Generate a fresh ML-DSA-65 key pair.
@@ -47,8 +60,12 @@ final class MlDsa65PureDartAlgo implements AtSigningAlgorithm {
     return MlDsa.verify(publicKey, message, signature, DilithiumParams.mlDsa65);
   }
 
-  // ── AtSigningAlgorithm ──────────────────────────────────────────────────────
+  // ── AtSigningAlgorithm — deprecated, removed in v4 ────────────────────────
 
+  @Deprecated(
+    'Stateful API removed in v4. '
+    'Use the static signBytes/verifyBytes, or PqcFfi.mlDsa65 typed as AtSignatureAlgorithm.',
+  )
   @override
   Future<Uint8List> sign(Uint8List data) async {
     if (_secretKey == null) {
@@ -58,6 +75,10 @@ final class MlDsa65PureDartAlgo implements AtSigningAlgorithm {
     return signBytes(data, _secretKey!);
   }
 
+  @Deprecated(
+    'Stateful API removed in v4. '
+    'Use the static signBytes/verifyBytes, or PqcFfi.mlDsa65 typed as AtSignatureAlgorithm.',
+  )
   @override
   Future<bool> verify(Uint8List signedData, Uint8List signature,
       {String? publicKey}) async {

@@ -14,16 +14,30 @@ import 'package:ffi/ffi.dart';
 /// ML-DSA-65. Both public (1952 bytes) and secret (4032 bytes) keys can be
 /// persisted and round-tripped between backends.
 ///
-/// **Stateful use** (implements [AtSigningAlgorithm]):
-/// Set [secretKey] before calling [sign]. Pass the base64-encoded raw public
-/// key as the [publicKey] parameter to [verify].
+/// **Preferred use:** call [generateKeyPair], then pass key bytes into
+/// [PqcFfi.mlDsa65] (typed [AtSignatureAlgorithm]) for signing and
+/// verification. [PqcFfi.mlDsa65] auto-selects FFI or pure-Dart at startup
+/// and presents canonical `(message, secretKey)` / `(message, sig, publicKey)`
+/// param order regardless of backend.
 ///
-/// **Stateless use** (preferred when keys are in hand):
-/// Call [generateKeyPair], [signBytes], and [verifyBytes] directly.
+/// **Stateless use** (direct — note non-canonical param order):
+/// [signBytes] and [verifyBytes] take `secretKey`/`publicKey` as the
+/// **first** argument for historical reasons. This order is corrected in v4.
+///
+/// **Stateful use** — deprecated, removed in v4:
+/// Set [secretKey] before calling [sign]/[verify].
 ///
 /// The caller loads libcrypto (e.g. via [tryLoadLibCrypto]) and passes the
 /// resulting [DynamicLibrary] in via [MlDsa65FfiAlgo.fromLib]. at_chops does
 /// no auto-resolution.
+///
+/// ## v4 migration
+///
+/// In v4 this class will `implements AtSignatureAlgorithm` directly with
+/// canonical `(message, secretKey)` / `(message, sig, publicKey)` param order.
+/// The current non-canonical [signBytes]/[verifyBytes] and the stateful
+/// [secretKey]/[sign]/[verify] surface will be removed, along with the
+/// [MlDsa65FfiSigner] adapter that currently bridges them.
 final class MlDsa65FfiAlgo implements AtSigningAlgorithm {
   final DynamicLibrary _lib;
 
@@ -45,6 +59,10 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm {
 
   Uint8List? _secretKey;
 
+  @Deprecated(
+    'Stateful API removed in v4. '
+    'Use PqcFfi.mlDsa65 typed as AtSignatureAlgorithm.',
+  )
   set secretKey(Uint8List value) => _secretKey = value;
 
   MlDsa65FfiAlgo.fromLib(this._lib) {
@@ -122,6 +140,16 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm {
   ///
   /// Returns a 3309-byte signature. Signing uses OpenSSL's internal
   /// randomness, so signatures are non-deterministic.
+  ///
+  /// **Note:** param order is `(secretKey, message)` — non-canonical. In v4
+  /// this class will implement [AtSignatureAlgorithm] and the order will flip
+  /// to canonical `(message, secretKey)`. Use [PqcFfi.mlDsa65] to insulate
+  /// call sites from this change.
+  @Deprecated(
+    'Non-canonical param order (secretKey-first). '
+    'In v4 this method is replaced by AtSignatureAlgorithm.signBytes(message, secretKey). '
+    'Use PqcFfi.mlDsa65 to insulate from the change.',
+  )
   Future<Uint8List> signBytes(Uint8List secretKey, Uint8List data) async {
     final Pointer<EVP_PKEY> pkey = _loadPrivateKey(secretKey);
     try {
@@ -132,6 +160,16 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm {
   }
 
   /// Verify [signature] over [data] against the raw 1952-byte [publicKey].
+  ///
+  /// **Note:** param order is `(publicKey, message, sig)` — non-canonical. In
+  /// v4 this class will implement [AtSignatureAlgorithm] and the order will
+  /// flip to canonical `(message, sig, publicKey)`. Use [PqcFfi.mlDsa65] to
+  /// insulate call sites from this change.
+  @Deprecated(
+    'Non-canonical param order (publicKey-first). '
+    'In v4 this method is replaced by AtSignatureAlgorithm.verifyBytes(message, sig, publicKey). '
+    'Use PqcFfi.mlDsa65 to insulate from the change.',
+  )
   Future<bool> verifyBytes(
       Uint8List publicKey, Uint8List data, Uint8List signature) async {
     final Pointer<EVP_PKEY> pkey = _loadPublicKey(publicKey);
@@ -142,17 +180,26 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm {
     }
   }
 
-  // ── AtSigningAlgorithm ──────────────────────────────────────────────────────
+  // ── AtSigningAlgorithm — deprecated, removed in v4 ────────────────────────
 
+  @Deprecated(
+    'Stateful API removed in v4. '
+    'Use PqcFfi.mlDsa65 typed as AtSignatureAlgorithm.',
+  )
   @override
   Future<Uint8List> sign(Uint8List data) async {
     if (_secretKey == null) {
       throw AtSigningException(
           'ML-DSA-65 secret key must be set before signing');
     }
+    // ignore: deprecated_member_use_from_same_package
     return signBytes(_secretKey!, data);
   }
 
+  @Deprecated(
+    'Stateful API removed in v4. '
+    'Use PqcFfi.mlDsa65 typed as AtSignatureAlgorithm.',
+  )
   @override
   Future<bool> verify(Uint8List signedData, Uint8List signature,
       {String? publicKey}) async {
@@ -161,6 +208,7 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm {
           'public key must be provided for ML-DSA-65 signature verification');
     }
     final Uint8List pkBytes = base64Decode(publicKey);
+    // ignore: deprecated_member_use_from_same_package
     return verifyBytes(pkBytes, signedData, signature);
   }
 

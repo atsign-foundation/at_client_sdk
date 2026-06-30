@@ -24,10 +24,22 @@ import 'package:at_chops/src/algorithm/signing/ml_dsa_65_pure_dart.dart';
 // MlDsa65PureDartSigner and MlDsa65FfiSigner absorb both mismatches so every
 // AtSignatureAlgorithm caller sees uniform canonical order regardless of backend.
 //
+// ## v4 removal
+//
+// Both adapters are removed in v4 when:
+//   - MlDsa65PureDartAlgo promotes its static signBytes/verifyBytes to instance
+//     methods and directly implements AtSignatureAlgorithm.
+//   - MlDsa65FfiAlgo corrects its param order to canonical and directly
+//     implements AtSignatureAlgorithm.
+// After that, PqcFfi.mlDsa65 returns the algo class directly — no adapter needed.
+//
 // Callers should always use [PqcFfi.mlDsa65] (typed [AtSignatureAlgorithm]) rather
 // than constructing these adapters directly — the concrete type is an impl detail.
 
 /// [AtSignatureAlgorithm] adapter over [MlDsa65PureDartAlgo]'s static methods.
+///
+/// Removed in v4 when [MlDsa65PureDartAlgo] implements [AtSignatureAlgorithm]
+/// directly.
 final class MlDsa65PureDartSigner implements AtSignatureAlgorithm {
   const MlDsa65PureDartSigner();
 
@@ -46,6 +58,9 @@ final class MlDsa65PureDartSigner implements AtSignatureAlgorithm {
 ///
 /// [MlDsa65FfiAlgo.signBytes] and [MlDsa65FfiAlgo.verifyBytes] use non-canonical
 /// order for backward compatibility; this adapter maps to canonical order internally.
+///
+/// Removed in v4 when [MlDsa65FfiAlgo] implements [AtSignatureAlgorithm] directly
+/// with corrected param order.
 final class MlDsa65FfiSigner implements AtSignatureAlgorithm {
   final MlDsa65FfiAlgo _algo;
 
@@ -53,11 +68,13 @@ final class MlDsa65FfiSigner implements AtSignatureAlgorithm {
 
   @override
   Future<Uint8List> signBytes(Uint8List message, Uint8List secretKey) =>
+      // ignore: deprecated_member_use_from_same_package
       _algo.signBytes(secretKey, message); // map canonical→FFI order
 
   @override
   Future<bool> verifyBytes(
           Uint8List message, Uint8List signature, Uint8List publicKey) =>
+      // ignore: deprecated_member_use_from_same_package
       _algo.verifyBytes(publicKey, message, signature); // map canonical→FFI order
 }
 
