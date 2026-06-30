@@ -7,17 +7,24 @@ import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:ffi/ffi.dart';
 
-/// ML-DSA-65 (FIPS 204) signing backed by OpenSSL 3 via Dart FFI; load libcrypto via [tryLoadLibCrypto].
+/// ML-DSA-65 (FIPS 204) digital signature backed by OpenSSL 3 via Dart FFI.
 ///
-/// Unlike [MlKem768FfiAlgo], secret keys are fully serializable: both the
-/// 4032-byte secret key and 1952-byte public key can be round-tripped via
-/// `EVP_PKEY_get_raw_private_key` / `EVP_PKEY_get_raw_public_key`.
+/// Unlike [MlKem768FfiAlgo], secret keys are real serializable byte arrays —
+/// `EVP_PKEY_get_raw_private_key` returns the full 4032-byte secret key for
+/// ML-DSA-65. Both public (1952 bytes) and secret (4032 bytes) keys can be
+/// persisted and round-tripped between backends.
 ///
-/// Entry points: [generateKeyPair], then [signBytes] / [verifyBytes].
+/// **Stateful use** (implements [AtSigningAlgorithm]):
+/// Set [secretKey] before calling [sign]. Pass the base64-encoded raw public
+/// key as the [publicKey] parameter to [verify].
 ///
-/// **Note on param order:** [signBytes] uses `(secretKey, message)` and [verifyBytes]
-/// uses `(publicKey, message, signature)` — non-canonical for backward compatibility.
-final class MlDsa65FfiAlgo extends AtSigningAlgorithm {
+/// **Stateless use** (preferred when keys are in hand):
+/// Call [generateKeyPair], [signBytes], and [verifyBytes] directly.
+///
+/// The caller loads libcrypto (e.g. via [tryLoadLibCrypto]) and passes the
+/// resulting [DynamicLibrary] in via [MlDsa65FfiAlgo.fromLib]. at_chops does
+/// no auto-resolution.
+final class MlDsa65FfiAlgo implements AtSigningAlgorithm {
   final DynamicLibrary _lib;
 
   late final EvpPkeyCtxNewFromNameDart _ctxNewFromName;
@@ -29,16 +36,16 @@ final class MlDsa65FfiAlgo extends AtSigningAlgorithm {
   late final EvpPkeyGetRawKeyDart _getRawPrivateKey;
   late final EvpPkeyNewRawPrivateKeyExDart _newRawPrivateKeyEx;
   late final EvpPkeyNewRawPublicKeyExDart _newRawPublicKeyEx;
-  Uint8List? _secretKey;
-
-  set secretKey(Uint8List value) => _secretKey = value;
-
   late final EvpMdCtxNewDart _mdCtxNew;
   late final EvpMdCtxFreeDart _mdCtxFree;
   late final EvpDigestSignInitDart _digestSignInit;
   late final EvpDigestSignDart _digestSign;
   late final EvpDigestVerifyInitDart _digestVerifyInit;
   late final EvpDigestVerifyDart _digestVerify;
+
+  Uint8List? _secretKey;
+
+  set secretKey(Uint8List value) => _secretKey = value;
 
   MlDsa65FfiAlgo.fromLib(this._lib) {
     _ctxNewFromName = _lib.lookupFunction<EvpPkeyCtxNewFromNameNative,
@@ -111,31 +118,29 @@ final class MlDsa65FfiAlgo extends AtSigningAlgorithm {
     }
   }
 
-  /// Sign [message] with the raw 4032-byte [secretKey].
+  /// Sign [data] with the raw 4032-byte [secretKey].
   ///
   /// Returns a 3309-byte signature. Signing uses OpenSSL's internal
   /// randomness, so signatures are non-deterministic.
-  ///
-  Future<Uint8List> signBytes(Uint8List secretKey, Uint8List message) async {
+  Future<Uint8List> signBytes(Uint8List secretKey, Uint8List data) async {
     final Pointer<EVP_PKEY> pkey = _loadPrivateKey(secretKey);
     try {
-      return _sign(pkey, message);
+      return _sign(pkey, data);
     } finally {
       _pkeyFree(pkey);
     }
   }
 
-  /// Verify [signature] over [message] against the raw 1952-byte [publicKey].
+  /// Verify [signature] over [data] against the raw 1952-byte [publicKey].
   Future<bool> verifyBytes(
-      Uint8List publicKey, Uint8List message, Uint8List signature) async {
+      Uint8List publicKey, Uint8List data, Uint8List signature) async {
     final Pointer<EVP_PKEY> pkey = _loadPublicKey(publicKey);
     try {
-      return _verify(pkey, message, signature);
+      return _verify(pkey, data, signature);
     } finally {
       _pkeyFree(pkey);
     }
   }
-
 
   // ── AtSigningAlgorithm ──────────────────────────────────────────────────────
 
