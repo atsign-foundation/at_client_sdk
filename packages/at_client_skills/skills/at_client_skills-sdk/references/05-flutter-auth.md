@@ -84,6 +84,24 @@ Future<void> loginWithFile(BuildContext context) async {
 }
 ```
 
+> **macOS platform setup (required).** A sandboxed macOS build needs two
+> entitlements in **both** `macos/Runner/DebugProfile.entitlements` **and**
+> `macos/Runner/Release.entitlements`:
+>
+> ```xml
+> <!-- Connect to the atServer (required by every atSign app) -->
+> <key>com.apple.security.network.client</key>
+> <true/>
+> <!-- Pick the .atKeys file via AtKeysFileDialog / file_picker -->
+> <key>com.apple.security.files.user-selected.read-only</key>
+> <true/>
+> ```
+>
+> Without `network.client` the app cannot reach the atServer at all; without the
+> file-access entitlement `AtKeysFileDialog` throws
+> `PlatformException(ENTITLEMENT_NOT_FOUND, ...)` when picking the file.
+> macOS only — iOS and Android need neither.
+
 ---
 
 ## Flow 3: Device Keychain (Returning User)

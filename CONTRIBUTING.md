@@ -111,8 +111,23 @@ open a follow-up `at_client_skills` PR to keep the skill accurate.
 packages/at_client_skills/skills/at_client_skills-sdk/
   SKILL.md              ← main skill body (edit this for API changes)
   references/           ← 10 reference files (one per topic area)
-  evals/evals.json      ← 13 eval definitions (add new ones when adding new guidance)
+  evals/evals.json      ← 14 eval definitions (add new ones when adding new guidance)
 ```
+
+### End-to-end validation (maintainers)
+
+Beyond the per-prompt evals,
+[`packages/at_client_skills/validation/teamboard-skill-test.md`](packages/at_client_skills/validation/teamboard-skill-test.md)
+is a heavyweight integration check: have any AI agent build a comprehensive app
+(TeamBoard) from the installed skill alone — isolated, like a real consumer —
+and treat any build failure as a skill gap. Use it when making substantive skill
+changes. It is maintainer-only and excluded from the published package
+(see `.pubignore`).
+
+When a skill change adds coverage of a **new SDK capability** (a new API, auth
+flow, or platform concern), extend the TeamBoard prompt and its coverage table so
+that surface is actually exercised — otherwise a passing run doesn't prove the new
+guidance works. Minor wording or pitfall tweaks don't require a prompt change.
 
 ### Running evals
 
