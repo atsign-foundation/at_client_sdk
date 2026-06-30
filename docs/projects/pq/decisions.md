@@ -1,0 +1,641 @@
+# Key decisions & timeline — D1 nskey data path
+
+**Status:** decision record (binding). The WHY + decision-timeline lane for the
+D1 post-quantum work.
+**Scope:** the governing ADRs (0001 superseded, 0002 accepted), the ratified
+OQ1–OQ9 working-design table, the resolved/open execution decisions #A–#F, the
+verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
+**Companions (each in its own lane — this doc cross-references, never restates):**
+`roadmap.md` (the high-level WHY/WHAT and phase trajectory),
+`implementation-plan.md` (the project sequence + dependency graph),
+`design.md` (per-subsystem mechanics with file:line),
+`acceptance.md` (the given/when/then UC catalogue).
+
+## Table of contents
+
+- [0. Scope & how to read this doc](#0-scope--how-to-read-this-doc)
+- [1. ADR 0001 — D1 as two tiers (SUPERSEDED)](#1-adr-0001--d1-as-two-tiers-superseded)
+- [2. ADR 0002 — D1 is single-tier nskey; at/pqmls is D2 (ACCEPTED)](#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted)
+- [3. The OQ1–9 ratified design-decisions table](#3-the-oq19-ratified-design-decisions-table)
+- [4. The verb-wire-shape & 1:1:1 cardinality rulings](#4-the-verb-wire-shape--111-cardinality-rulings)
+- [5. Retrofit ruling — fresh, self-spawned, auto-approved enrollment](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)
+- [6. Resolved & open execution decisions (#A–#F)](#6-resolved--open-execution-decisions-af)
+- [7. Decision log / timeline (dated)](#7-decision-log--timeline-dated)
+- [8. Stale-source reconciliation note](#8-stale-source-reconciliation-note)
+- [9. APKAM keypair as key package: considered and rejected (2026-06-30)](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30)
+- [10. nskey derivation from a shared master seed: rejected (2026-06-30)](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30)
+- [11. Single nskey per namespace, lazily published (2026-06-30)](#11-single-nskey-per-namespace-lazily-published-2026-06-30)
+
+---
+
+## 0. Scope & how to read this doc
+
+This is the **decision-and-timeline** lane of the D1 doc set. It records *why*
+each choice was made and *when*, not *how* the mechanism works or *which project*
+ships it. Concretely it holds: (a) the two ADRs — 0001 (superseded) folded in as
+history, 0002 (accepted) as the governing ruling; (b) the ratified OQ1–OQ9
+working-design table; (c) the resolved/open execution decisions #A–#F; (d) the
+verb-wire-shape and 1:1:1 cardinality rulings; and (e) a dated decision log.
+
+The **current model**, stated up front so nothing below is read against the older
+framing:
+
+- **D1 is single-tier `nskey`** ([ADR 0002](#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted)).
+  The forward-secure `at/pqmls` group model is **D2**, not a D1 tier.
+- **Enrollment cardinality is 1:1:1** — `enrollmentId ↔ APKAM keypair ↔ key
+  package`, never more than one keypair per enrollment ([decision #F](#6-resolved--open-execution-decisions-af),
+  2026-06-30).
+- **Retrofit is a fresh, self-spawned, auto-approved enrollment** — not a
+  mutation of the existing one ([section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)).
+
+**Lane boundaries (do not restate here):**
+
+| Topic | Lives in |
+|---|---|
+| High-level WHY/WHAT, conceptual nskey shape, phase trajectory M0–M6 | `roadmap.md` |
+| Project sequence (P-1…D2-1, SS-*, RF-*), dependency graph, waves, effort, publish gates, critical path | `implementation-plan.md` |
+| Per-subsystem mechanics (key shapes, `__ssenv`, `enroll:listfornamespace`, the enrollment record, providers) with file:line | `design.md` |
+| The given/when/then UC catalogue (A1.x–A5.x, B0.x–B5.x) | `acceptance.md` |
+
+This doc does **not** restate concrete key shapes, project lists, or tests — it
+cross-references those docs by filename.
+
+---
+
+## 1. ADR 0001 — D1 as two tiers (SUPERSEDED)
+
+> **Superseded by [ADR 0002](#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted).**
+> Retained for history. The "no forward secrecy", "copyable shared key vs
+> non-copyable per-device key — you cannot have both", and two-tier claims below
+> are **history-only**; ADR 0002 dissolved them (see [section 2](#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted)).
+
+- **Status:** Superseded by ADR 0002 (2026-06-25) — was Accepted (2026-06-20).
+- **Source:** `adr/0001-d1-simplicity-tiers.md`.
+
+**The original decision.** Deliver D1 in **two tiers** over the M0 pluggable
+`CryptoProvider` seam (the seam itself is in `design.md`):
+
+- **D1 Tier1 — `nskey` (default).** A per-`(atSign, namespace)` X-Wing keypair
+  replacing the atSign-wide RSA key, `selfEncryptionKey`, and `shared_key.*`.
+  Enrollment-granular and **copyable**, distributed at enrollment approval, so a
+  future client reads instantly/offline with full history (byte-for-byte legacy
+  semantics, now PQ-safe and namespace-scoped). No `SecureGroup`/`KeyPackage`/
+  single-owner lock in the app's face. Rotation opt-in, doubling as the
+  revocation primitive.
+- **D1 Tier2 — `group` (opt-in).** The per-APKAM group provider, declared by a
+  namespace needing per-device revocation or forward secrecy. Also the substrate
+  D2/MLS swaps its engine into.
+
+**The premise it rested on (since dissolved).** Two claims drove the split:
+
+- *"Instant, offline access for a future device fundamentally requires a*
+  ***copyable shared key***. *Non-copyable per-device keys force re-encryption to
+  each new device. You cannot have both."*
+- *Forward secrecy and per-device revocation* **require** *the group (MLS-style)
+  model.*
+
+Making per-APKAM groups mandatory for all of D1 would therefore tax every app
+with identity/membership machinery and regress "future device just works".
+
+**Alternatives it rejected** (still valid as rejections):
+
+| Alternative | Why rejected |
+|---|---|
+| Per-APKAM groups mandatory for all of D1 (the prior framing) | Taxes every app, regresses instant future-client access, over-buys per-device security for the common case. |
+| Server-stored per-APKAM leaf secrets (to recover convenience) | Makes cloning the default, opens a PQ harvest-now-decrypt-later hole, couples key/data blast radii. |
+| Keep one atSign-wide PQ keypair (simplest) | Leaves the crypto-broader-than-transport weakness (a `chess`-only enrollment would hold `banking` keys). Per-namespace is the minimum scope that mirrors enrollment authorization. |
+
+The *live* reasoning that replaced this is [section 2](#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted).
+
+---
+
+## 2. ADR 0002 — D1 is single-tier nskey; at/pqmls is D2 (ACCEPTED)
+
+- **Status:** **Accepted (2026-06-25). Supersedes [ADR 0001](#1-adr-0001--d1-as-two-tiers-superseded).**
+- **Source:** `adr/0002-d1-single-tier-nskey.md`.
+
+This is the governing ADR for the shape of D1.
+
+**The context that dissolved 0001's premise.** Two decisions taken since 0001
+turned its two-tier rationale into a false dichotomy:
+
+- **Per-APKAM delivery + push** (the `enroll:listfornamespace` verb): a secret is
+  delivered to every authorised APKAM keypair, definitively and proactively. A
+  *future* device gets the key **pushed** to it — instant, offline — regardless
+  of tier. So "future device just works" no longer argues for a
+  copyable-shared-key tier.
+- **`nskey` is a KEM wrapper, not the data key.** Data is encrypted under a
+  symmetric content/epoch key (CK); the CK is X-Wing-encapsulated to an `nskey`.
+  *Neither* model encrypts data per-device — both use symmetric data keys
+  delivered per-APKAM. So 0001's "copyable shared key vs per-device keys" was a
+  **false dichotomy**.
+
+With those corrected, `nskey` already gives D1 **coarse forward secrecy** (CK
+rotation) and **post-compromise security** (nskey-keypair rotation). The genuine
+`at/pqmls`/MLS delta — robust/per-message FS, O(log n) scale, and membership
+decoupled from namespace authorisation — is entirely D2. **There is no
+D1-internal Tier-1/Tier-2 boundary left.**
+
+**The corrected key model** (stated explicitly so it is not re-derived wrongly;
+the concrete at-key strings live in `design.md`):
+
+- **`nskey` is an asymmetric X-Wing KEM keypair** — the thing we *encapsulate
+  symmetric keys to*, not the thing that encrypts data. Per namespace there are
+  **two**:
+  - a **self nskey** — *not published*; Alice encapsulates her *own* content keys
+    to it. It **is a self at-key**, `nskey.<ns>@alice`: the public half is synced
+    to Alice's clients that have `<ns>` access (it is *not* a `public:` key), and
+    its **private half is conveyed as a Secret over the substrate** ([section 4](#4-the-verb-wire-shape--111-cardinality-rulings)).
+  - a **public nskey** — *published world-readable*, `public:nskey.<ns>@alice`;
+    external senders encapsulate content keys to it. Alice's authorised clients
+    hold its private.
+  Both convey symmetric CKs; neither encrypts application data directly.
+- **Data is encrypted under a symmetric content/epoch key (CK)** with
+  AES-256-GCM. The CK is X-Wing-encapsulated to an `nskey`; holders of the nskey
+  private unwrap the CK.
+- **Two delivery levels, very different costs** (this difference *is* the FS
+  lever):
+  - *Convey the nskey private* to each authorised APKAM keypair — **per-APKAM,
+    O(n), rare** (the push + `enroll:listfornamespace` substrate; pull as
+    backstop).
+  - *Rotate the symmetric CK* — wrap the new CK **once** to the shared nskey;
+    every authorised client unwraps with the shared private — **O(1),
+    frequent.**
+
+**The decision.** **D1 ships as a single tier: `nskey`.** Forward secrecy is **in
+scope for D1 as a *policy*, not a tier**:
+
+- **Coarse FS = rotate + delete the symmetric content/epoch keys** over the
+  stable nskey KEMs. Routine rotation is cheap (O(1) wrap to the shared nskey).
+  FS strength is **coarse** and bounded by the stable shared nskey private
+  remaining a standing decryption capability for any wrapped-CK that persists —
+  so **deletion discipline is the FS TCB**.
+- **Per-APKAM future-data revocation = rotate excluding the revoked keypair**
+  (the expensive lever: a fresh nskey conveyed per-APKAM, since the shared-nskey
+  O(1) path can't exclude a holder of that private).
+
+**`at/pqmls` is D2, not a D1 tier.** Ratcheted per-APKAM leaves (no standing
+master key → robust/per-message FS), TreeKEM (O(log n) churn), and groups whose
+membership is decoupled from namespace authorisation are the MLS engine's job.
+The **same per-APKAM secret-sharing substrate** underpins both `nskey` (now) and
+MLS (later); only the labelling changes — what 0001 called "D1 Tier 2" is **D2's
+first increment**.
+
+**Consequences.**
+
+- *Positive.* One D1 data path — the `nskey` data path (`at/nskey` conveys the
+  CK, `at/symmetric/AES/GCM` encrypts the data) — plus `legacy`; no `SecureGroup`/
+  `KeyPackage`/membership commits/single-owner lock in the app's face for D1.
+  Legacy developer experience preserved (a future device "just works" via push;
+  PQ + namespace scoping + per-namespace blast radius by default). FS is
+  *available* in D1 (coarse, cheap) rather than withheld to D2 — a strict
+  improvement over legacy's none, for namespaces that opt into rotation.
+- *Negative / accepted.* D1 FS is **coarse** and rests on deletion discipline
+  over **all** CK conveyances (self and inbound alike) plus the stable shared
+  nskey private being a standing capability. Robust/per-message FS, large-group
+  O(log n) scale, and decoupled-membership groups require D2.
+- *Inbound (cross-atSign) FS is structurally identical to self but only
+  achievable **bilaterally**.* Inbound uses the same flow as self: the sender
+  (`@bob`) cuts a CK, delivers it once as a discrete `at/nskey` conveyance
+  (encapsulated to Alice's published public nskey), and writes data under
+  `at/symmetric/AES/GCM` by kid — there is no per-message inline-wrapped CK that
+  "persists with the message". The residual bilaterality: (1) the inbound CK is
+  cut by `@bob` on **his** cadence, so Alice cannot force an FS cut finer than the
+  sender's rotation; (2) the authoritative `at/nskey` conveyance lives in a record
+  **owned by `@bob` on bob's atServer** — Alice holds only a synced cached
+  replica, so she can purge her cache but **cannot unilaterally delete bob's
+  copy**, which her stable published-nskey private re-decapsulates. For **self**,
+  Alice is both endpoints, so FS is unilateral and complete. (This bilaterality
+  is normal for any FS system, not specific to nskey.)
+
+**Alternatives rejected.**
+
+| Alternative | Why rejected |
+|---|---|
+| Keep the two D1 tiers (ADR 0001) | The distinguishing property (FS) is a rotation *policy* of the single `nskey` data path, not a separate provider; the only genuine delta (fine FS, scale, decoupled membership) is D2. Two D1 tiers split on the wrong axis. |
+| Withhold forward secrecy entirely to D2 | `nskey` gives coarse FS cheaply (O(1) epoch-key rotation); no reason to deny D1 a strict improvement over legacy. |
+| The 0001 "copyable shared key vs per-device keys" framing | False dichotomy: data is encrypted under symmetric keys delivered per-APKAM; there are no per-device data keys, and a future device is served by push, so instant/offline access and per-APKAM revocation coexist. |
+
+**Cross-refs:** the conceptual two-layer nskey shape and mixed-scheme philosophy
+are in `roadmap.md`; the 3-layer/3-provider mechanics, concrete key shapes, and
+the forward-secrecy/rotation levers are in `design.md`; the A5.x
+rotation/revocation tests are in `acceptance.md`.
+
+---
+
+## 3. The OQ1–9 ratified design-decisions table
+
+The binding working-design record, pulled from the WP-SS rework audit (ratified
+**2026-06-25**) so it lives in the tracked corpus. OQ4 and OQ7 are **RATIFIED**;
+the rest were recommended answers adopted as the working design. On **2026-06-30**,
+the 1:1:1 ruling ([decision #F](#6-resolved--open-execution-decisions-af))
+revised OQ2/OQ3 and the verb wire shape and added OQ8/OQ9. The table below is the
+**current** form — it absorbs the 1:1:1 ruling, the wire-shape flattening, and
+the `enroll:metadata` removal directly, and does **not** restate the retired
+multi-APKAM forms.
+
+| # | Question | Decision |
+|---|---|---|
+| OQ1 | `to`/`toKpid` vs `kid` on the envelope redundant? | Keep `toKpid` as the routing token + a `sealKid` for which advertised key was sealed to (crypto-agility if a KeyPackage advertises >1 enc key); they coincide today. Collapse to one only if multi-enc-key KeyPackages are ruled out. |
+| OQ2 | Cardinality of enrollment ↔ APKAM keypair ↔ key package? | **RATIFIED 1:1:1.** Exactly one APKAM keypair + one key package per `enrollmentId`; never >1 keypair per enrollment. The record stores a **single** `apkamPublicKey` + a `signingAlgo` (`rsa2048` \| `mldsa65`) so PKAM verify selects RSA vs ML-DSA for that one key; multi-keypair verify-against-any is removed. (Supersedes the original OQ2 "multiple APKAM keypairs per enrollment" premise, which is moot once an enrollment holds exactly one keypair.) |
+| OQ3 | How does a client learn its own `kpid` + X-Wing private at runtime? | Generate **one** X-Wing keypair per enrollment/keyfile at enrollment, stored in the keyfile alongside the APKAM keypair; `kpid = computeKid(pub)`. Each cloned pre-PQ keyfile retrofits to its **own distinct enrollmentId** (per-keyfile == per-enrollment under 1:1:1). |
+| OQ4 | Key package generated at enrollment-**request** time or lazily? | **RATIFIED: request time** — public half in the record the approver reads (no-verb approve). *(The constraint behind D1 decision #B → Option A.)* |
+| OQ5 | `putIfNewer` ordering source — explicit version int or kid-in-name? | Explicit monotonic `version` orders rotations of the same logical secret; the kid identifies the key generation (different kid ≠ "newer"); `createdAt` is a tiebreak only. |
+| OQ6 | Facade Expando keyed on `AtClient` or `(AtClient, enrollmentId)`? | `(AtClient, enrollmentId)` — identity is the enrollment's APKAM keypair, not the process. |
+| OQ7 | Barrel: hard-break the replaced names or `@Deprecated` shims? | **RATIFIED: hard break** — WP-SS is pre-publication (not on trunk, not published), so the consumer sweep is clean; no shims. |
+| OQ8 | Legacy-enrollment retirement mechanism? | **RATIFIED 2026-06-30: enrollment-expiry timer + `enroll:revoke`.** There is **no per-APKAM-key delete** (a record holds one key). A self-retrofit creates a fresh **auto-approved** enrollment (authenticated `enroll:request`, requester-subset namespaces, expiry copied from the authenticating enrollment); the OLD enrollment is **capped** to `min(now + grace, its expiry)` and ages out — not deleted-by-key, not revoked-with-teardown. Sibling clones may still retrofit until the cap elapses. |
+| OQ9 | Post-enrollment metadata writes? | **RATIFIED 2026-06-30: NONE.** The `enroll:metadata` verb is **removed**; the key package rides `EnrollParams.metadata` (opaque map) on `enroll:request`, and the server stores/returns it. No post-approval metadata round-trip ever. |
+
+**Cross-refs:** the substrate mechanics each OQ rides (kpid addressing, the
+`__ssenv` envelope, `SecretStore`, the `enroll:listfornamespace` verb,
+`EnrollParams.metadata`, the enrollment record) are in `design.md`; *which*
+projects implement each (SS-1a/b/c, SS-3, RF-SRV) is in
+`implementation-plan.md`.
+
+---
+
+## 4. The verb-wire-shape & 1:1:1 cardinality rulings
+
+The authoritative wire-and-cardinality ruling, dated **2026-06-30**
+([decision #F](#6-resolved--open-execution-decisions-af)). This section is the
+rewrite target for the stale multi-APKAM sources ([section 8](#8-stale-source-reconciliation-note)).
+
+**Cardinality is 1:1:1.** `enrollmentId ↔ APKAM keypair ↔ key package`, **never
+more than one keypair per enrollment.** The enrollment record stores a **single**
+`apkamPublicKey` + a `signingAlgo` (`rsa2048` | `mldsa65`). PKAM verify selects
+RSA vs ML-DSA from the **record's** `signingAlgo` — **record-authoritative**, not
+the client-supplied wire value (`_validateSignature` must read the *stored* algo,
+not `verbParams[atPkamSigningAlgo]`; legacy null → `rsa2048`).
+
+**Verb wire shape** (ratified 2026-06-25; flattened 2026-06-30 for 1:1:1):
+
+- The key package rides an **opaque `Map<String,dynamic>` `EnrollParams.metadata`**
+  carried on `enroll:request` (JSON tail; **no grammar change**). **The
+  `enroll:metadata` verb is removed.** The server stores it on the enrollment
+  record and returns it verbatim, with **no opinion** on the contents. Key
+  packages live in `metadata.keyPackages` — a client-defined map keyed by
+  key-package type, so types can evolve without server changes. **No
+  post-enrollment metadata write ever.**
+- Because cardinality is 1:1:1, the discovery response is **flat** — no nested
+  `apkam[]` array:
+  `enroll:listfornamespace:<ns>` → `[{enrollmentId, access, apkamPubKey, metadata}]`,
+  gated `≥r`. The substrate selects the key-package type(s) it understands from
+  `metadata.keyPackages`.
+
+**ML-DSA APKAM auth is retained** — at_chops `mldsa65` verify branch + at_commons
+pkam `signingAlgo` literal + server `_getSigningAlgoType` branch reading the
+**record's** `signingAlgo`.
+
+**Where `appMetadata` is mentioned:** it carries **no `ns` field**. (Full field
+definitions are in `design.md`; the only ruling recorded here is the no-`ns`
+decision.)
+
+**Cross-refs:** the `enroll:listfornamespace` verb mechanics,
+`EnrollParams.metadata`, and the enrollment record + authenticated self-retrofit
+flow + expiry copy/cap are in `design.md`; the projects (SS-1a/b/c, SS-3, RF-SRV,
+RF-2b/c) are in `implementation-plan.md`; the A2.x discovery, A3.x, and retrofit
+B-tests are in `acceptance.md`.
+
+**Retires (see [section 8](#8-stale-source-reconciliation-note)):** "multiple
+APKAM keypairs per enrollment" / verify-against-any / `ApkamPublicKey`-list
+(crypto_impl_plan D1-F, wp-ss P9/P12, pq-secret-push); per-APKAM-key delete
+(legacy retirement is the enrollment-expiry timer + `enroll:revoke`); the nested
+`apkam[]` array (now flat); the `enroll:metadata` verb (now `EnrollParams.metadata`).
+
+---
+
+## 5. Retrofit ruling — fresh, self-spawned, auto-approved enrollment
+
+Decision #F, 2026-06-30. **Retrofit is NOT a mutation of the existing
+enrollment** — it is a **fresh, self-spawned, auto-approved enrollment.**
+
+**The flow.** An authenticated pre-PQ client submits `enroll:request` with a
+**new `enrollmentId`** on its already-authenticated connection
+(`authType==apkam`, **no OTP**, not CRAM, not legacy PKAM). The server:
+
+1. validates the requested namespaces are a **subset** of the authenticating
+   enrollment's (reject escalation);
+2. **auto-approves** — modelled on the CRAM approved-state mechanics but
+   **without** the `__manage` + `*`:rw grant;
+3. **copies** the old enrollment's expiry (or `null` = never) to the new one;
+4. **caps** the old enrollment to `min(now + server-config grace, its existing
+   expiry)` **without removing it** (sibling clones may still retrofit until the
+   cap elapses).
+
+Each cloned pre-PQ keyfile retrofits to its **own distinct `enrollmentId`**
+(per-keyfile == per-enrollment under 1:1:1).
+
+**Why a fresh auto-approved enrollment, not a mutation.**
+
+- A *pending* enrollment cannot authenticate, so a key package **cannot be
+  written post-hoc**. The `enroll:request` payload is the only pre-approval
+  channel — this is exactly what forces [decision #B → Option A](#6-resolved--open-execution-decisions-af).
+- Under 1:1:1 there is **no "second keypair under the enrollment"** and **no
+  delete-after-ML-DSA-verifies ordering**. The old enrollment simply ages out via
+  the expiry cap (or an explicit `enroll:revoke`). The legacy **encryption** key
+  is kept for reads.
+
+**Cross-refs:** the authenticated self-retrofit flow + expiry copy/cap and the
+at_chops ML-DSA mint are in `design.md`; the projects (RF-SRV server half, RF-2b
+mint+request, RF-2c orchestration + readiness flip) are in
+`implementation-plan.md`; the retrofit e2e is in `acceptance.md`.
+
+**Rewrite target (see [section 8](#8-stale-source-reconciliation-note)):** the
+crypto-roadmap "Upgrading an existing client — the sequence" (step 4 "delete the
+legacy RSA APKAM public key after step 3 confirms PQ auth"), the
+"mint a SECOND keypair under the enrollment" / "atServer allows multiple APKAM
+keypairs per enrollment with auth against any" / "deletion of a specific public
+key" / "TTL/usage-based eviction" notes, and the wp-ss P12c "8-step upgrade +
+delete legacy RSA key after ML-DSA verifies" are **stale** — superseded by the
+fresh-auto-approved-enrollment model above.
+
+---
+
+## 6. Resolved & open execution decisions (#A–#F)
+
+The execution-decision ledger. The d1-execution-plan ledger is authoritative; the
+WP-SS Open decisions 1–4 are folded in where they overlap.
+
+### Resolved
+
+- **#B — `register()` call-site / key-package conveyance — RESOLVED 2026-06-30:
+  Option A.** The new enrollment's X-Wing key package rides into `enroll:request`
+  as an **opaque blob** built by an at_client orchestrator *above* at_auth
+  (at_auth ferries it, **never interprets** it); the atServer stores it on the
+  enrollment record and returns it, so the approver reads it at approve time —
+  satisfying OQ4 with no dependency cycle. This is *forced* by the timing fact
+  that a pending enrollment cannot authenticate, so the key package cannot be
+  written via a post-approval verb; the `enroll:request` payload is the only
+  pre-approval channel.
+  **`approvedNamespaces`:** add the field to `EnrollmentRequestDecision.approved`
+  (self-describing) and have an at_client approve-wrapper fire
+  `shareAllSecretsWithEnrollment(enrollmentId, approvedNamespaces)` after
+  at_auth's `approve` returns.
+  **1:1:1 refinement (2026-06-30):** the `enroll:metadata` verb is **removed
+  entirely** — the key package rides `EnrollParams.metadata` on `enroll:request`,
+  and there is **no** post-enrollment metadata write (retrofit = a fresh
+  auto-approved enrollment, not a mutation; see #F). Cost: a new typed field on
+  `EnrollParams`/`EnrollVerbBuilder` (+ regen), the `Enrollment` read model gains
+  the field, and an atServer schema change (separate `at_server`/`java_at_server`
+  repos) to store/return it — must land in the same release or OQ4 isn't met.
+- **#F — Enrollment cardinality + retrofit shape — RESOLVED 2026-06-30: 1:1:1,
+  fresh-enrollment retrofit.** The master ruling above (sections [4](#4-the-verb-wire-shape--111-cardinality-rulings)
+  and [5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)).
+  `enrollmentId ↔ APKAM keypair ↔ key package` is **1:1:1** (never >1 keypair per
+  enrollment) — this **retires the prior "multiple APKAM keypairs per enrollment"
+  (DEP3) decision.** Retrofit = a fresh, self-spawned, auto-approved enrollment on
+  the pre-PQ-authenticated connection (RF-SRV), inheriting the old enrollment's
+  expiry; the old enrollment is capped to `min(now + grace, old expiry)` and ages
+  out — never deleted-by-key. **Cascade:** `enroll:metadata` verb **removed** (→
+  `EnrollParams.metadata`); `listfornamespace` **flattened**
+  (`[{enrollmentId, access, apkamPubKey, metadata}]`, no `apkam[]`); DEP3/P9
+  multi-APKAM list + verify-against-any **removed** (single `apkamPublicKey` +
+  `signingAlgo`); per-APKAM-key delete (RF-2a/P12b) **removed**. ML-DSA APKAM auth
+  and `enroll:listfornamespace` are otherwise unchanged.
+
+### Open / standing
+
+- **#A — `pqpublickey` interface freeze (P-3 vs SS-4).** P-3 publishes/prefers
+  `pqpublickey` in Wave 2, but its create/seed/serve/pull **lifecycle** is SS-4.
+  Freeze the **name + create-once contract** as an interface-first artifact before
+  P-3 starts; P-3's acceptance can only prove "published + fetchable", not
+  cold-start serve/pull (that's SS-4). (Lifecycle mechanics → `design.md`; project
+  gating → `implementation-plan.md`.)
+- **#C — keep D1 GA off the auth retrofit (B-2 dep).** B-2 needs RF-2 only for the
+  per-APKAM revocation/exclude fan-out — satisfy that with **RF-1 + SS-3**, not
+  the full RF-2c upgrade orchestration, or D1 GA waits on the retrofit
+  (contradicting the design). Confirm B6's fan-out is satisfiable from RF-1+SS-3
+  alone.
+- **#D — inherited WP-SS decisions** (the WP-SS Open decisions 1–4, folded here):
+  (1) fold the pkam ML-DSA literal into SS-1a's at_commons publish — **one publish,
+  not two**; (3) keep ML-DSA verify **algo-level** (P-2), revisiting the async
+  `AtChops.verify` path only if a high-level caller needs it; (4) re-confirm the
+  at_commons version floor at SS-1a (pub.dev / last release tag is authoritative,
+  not in-tree precedent); plus the at_auth version question in S-1 (publish 3.1.1
+  first vs fold `WritableAtKeys` under the unshipped slot). (The WP-SS "where does
+  `register()` get called?" decision is resolved by #B above.)
+- **#E — S-2 scope / SoT conflict.** `crypto_impl_plan` §3-S5 ("migrate legacy to
+  `context.keys`") vs §7-WP3 ("legacy unchanged for now") conflict. This plan
+  takes the **additive-field-only** reading — add `CryptoContext.keys` but do not
+  migrate `LegacyCryptoProvider` to read from it (legacy pulls remote `plookup`s +
+  `atChops` cipher ops that the field's static keys can't supply). (The
+  `CryptoContext.keys` seam → `design.md`.)
+
+**Cross-refs:** the open-decisions pointer and which project each decision gates
+are in `implementation-plan.md`; the `pqpublickey` lifecycle and the
+`CryptoContext.keys` seam (#E) are in `design.md`.
+
+---
+
+## 7. Decision log / timeline (dated)
+
+Chronological, **oldest-first**. Each entry gives the one-line *why*.
+
+| Date | Decision / event | Why |
+|---|---|---|
+| **2026-06-17** | **Known shape-risk assessment.** Cardinality and the connection model flagged as the hardest open shapes. | Surface the risks before committing to a key/connection design — they drove the eventual 1:1:1 ruling. |
+| **2026-06-20** | **ADR 0001 Accepted — two tiers** (`nskey` default + `group` opt-in). Structural target / component-responsibilities for the crypto layer settled. | Preserve the legacy developer experience while adding PQ; confine per-device machinery to an opt-in tier. *(Superseded 5 days later.)* |
+| **2026-06-22** | **Wave-0 baseline landed (merged to trunk).** #1930 — the M0 pluggable-crypto seam (`at_client`); #1993 — `pqSeal`/`pqOpen` HPKE primitive on at_chops in-tree **3.3.0**; PR #2035 — design fixes. | The seam routes put/get/notify/sync by `appMetadata.providerId`; `pqSeal`/`pqOpen` give X-Wing + HKDF + AES-256-GCM. Everything downstream pins these. (Wave-0 detail → `implementation-plan.md`.) |
+| **2026-06-25** | **ADR 0002 Accepted — single-tier `nskey` supersedes 0001.** WP-SS rework audit ratified (OQ1–OQ7). Verb wire shape ratified. | Per-APKAM push + the KEM-wrapper realisation dissolved 0001's two claims (the false dichotomy); the only genuine MLS delta is D2. FS becomes a rotation *policy*, not a tier. |
+| **2026-06-30** | **Decision #F ratified — 1:1:1 + fresh-enrollment retrofit.** Decision #B resolved (Option A). OQ2/OQ3 revised, OQ8/OQ9 added. `listfornamespace` flattened. `enroll:metadata` verb removed (→ `EnrollParams.metadata`). Per-APKAM-key delete removed. The d1-execution-plan revision folded a 15-delta workflow (verified against the live `at_server`/at_commons/at_client trees). | One keypair per enrollment removes verify-against-any, the multi-key record reshape, and the delete-after-ML-DSA ordering; retrofit becomes a clean fresh auto-approved enrollment that ages the old one out. Simpler, smaller blast radius, no escalation path. |
+| **2026-06-30** | **APKAM keypair ≠ key package — kept two keypairs per enrollment.** Considered collapsing the enrollment's ML-DSA APKAM keypair and X-Wing key package into one (and single-seed derivation of the pair); both rejected. | ML-DSA (signature) and X-Wing (KEM) are distinct PQ primitives — one keypair can't both sign/auth and be encapsulated to. Two keypairs is the floor; single-seed derivation saves only keyfile bytes and adds a re-derivation-stability risk. See [9](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30). |
+| **2026-06-30** | **Shared-master-seed nskey derivation rejected; the `design.md` §1.3 derivation paragraph was removed.** nskey privates are minted as fresh random keypairs and conveyed per-APKAM over the substrate — never HKDF-derived from a shared seed. | A seed shared across an atSign's enrollments (required for the whole atSign to share one nskey per namespace) breaks post-compromise security, namespace compartmentalization, and rotation forward-secrecy; the namespace/epoch HKDF labels are public and don't gate who can derive. A full-corpus sweep confirmed this was the only insecure derivation. See [10](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30). |
+| **2026-06-30** | **Single nskey per namespace, lazily published — collapses the former self/public nskey pair.** One X-Wing keypair serves both self data and inbound shares; the public half is published lazily (owner-only self at-key → `public:` on first cross-atSign use). | Peer review: the two nskeys did the same KEM job with the same private-holders, so the split bought no real compartmentalization or authenticity, and one key simplifies the read path and rotation. Lazy publication preserves namespace-existence privacy for self-only namespaces. See [11](#11-single-nskey-per-namespace-lazily-published-2026-06-30). |
+
+**Cross-refs:** the Wave-0 "already landed" detail and the project that follows
+each decision are in `implementation-plan.md`; the phase trajectory this timeline
+tracks is in `roadmap.md`.
+
+---
+
+## 8. Stale-source reconciliation note
+
+The earlier source/working docs (`crypto-roadmap.md`, `crypto_impl_plan.md`,
+`wp-ss-execution-plan.md`, `pq-secret-push.md`, …) were **consolidated away on
+2026-06-30**; they encoded the **retired** multi-APKAM / `enroll:metadata` model, and
+sections [4](#4-the-verb-wire-shape--111-cardinality-rulings) and
+[5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment) of this doc are
+the authority that retired them. This table records what each encoded and the
+authority that superseded it — for anyone reading their **git history**:
+
+| Stale source section | Encodes (retired) | Authority |
+|---|---|---|
+| `wp-ss-execution-plan.md` P0 | `enroll:metadata` grammar (op + `metadataEnrollmentId`/`metadataJson` groups) | SS-1a (`EnrollParams.metadata`, no `metadata` op) |
+| `wp-ss-execution-plan.md` P5 | client `registerKeyPackage` → `enroll:metadata` write | SS-1c (write path removed; package rides `enroll:request`) |
+| `wp-ss-execution-plan.md` P9 | multi-APKAM `ApkamPublicKey` list + verify-against-any + plural `apkam[]` | SS-3 (single `apkamPublicKey` + `signingAlgo`); flat `listfornamespace` |
+| `wp-ss-execution-plan.md` P12a/b/c | "second keypair under the enrollment" (P12a), per-APKAM-key delete (P12b), 8-step delete-after-ML-DSA (P12c) | RF-2b/RF-2c + RF-SRV (fresh auto-approved enrollment; old one ages out) |
+| `crypto_impl_plan.md` D1-F F3/F4/F5 | multi-APKAM auth, per-APKAM-key delete, TTL/usage eviction | sections 4–5 here; SS-3, RF-SRV |
+| `crypto-roadmap.md` "Cardinality, legacy-key deletion, and revocation" | "atServer allows multiple APKAM keypairs per enrollment", "delete a specific public key", "TTL/usage-based eviction", "auth against any" | section 4 here (1:1:1, record-authoritative `signingAlgo`) |
+| `crypto-roadmap.md` "Upgrading an existing client — the sequence" + "atServer support this requires (four new capabilities)" | step-4 legacy-RSA delete after PQ auth; "four new" capabilities incl. multi-key + per-key delete | section 5 here (fresh auto-approved enrollment) |
+| `pq-secret-push.md` P9/P12 | multi-APKAM list + per-APKAM delete | sections 4–5 here |
+
+The OQ table in `wp-ss-execution-plan.md` is already updated (OQ2/OQ8/OQ9); only
+its **project bodies** (P0/P5/P9/P12) lag.
+
+**Cross-ref:** the corrected mechanics those sections should now match live in
+`design.md`.
+
+---
+
+## 9. APKAM keypair as key package: considered and rejected (2026-06-30)
+
+**Question.** Each enrollment carries two PQ keypairs: the **ML-DSA APKAM keypair**
+(uses: PKAM auth to the atServer + envelope signing, its public published as `_apsk`)
+and the **X-Wing key package** (use: secret-sharing recipient — a sender encapsulates a
+CK to it). Could one keypair serve all three uses, collapsing the two into one?
+
+**Ruling — no. They are different primitives, not one key with two roles.** ML-DSA
+(FIPS 204) is a **signature** scheme; the key package is **X-Wing** (ML-KEM-768 + X25519,
+FIPS 203 + a classical KEM) — a **KEM**. You cannot encapsulate a secret to an ML-DSA
+public key (it has no KEM operation), and X-Wing cannot sign. The three uses split
+exactly along that line: *auth* and *envelope signing* need a signature; being a
+*secret-sharing recipient* needs a KEM. Key-separation hygiene independently forbids
+reusing one keypair across sign + KEM even where a dual-use primitive exists.
+
+**The signing side is already unified.** Both signature uses — PKAM auth and envelope
+signing — are served by the **single** ML-DSA APKAM keypair (its public is published as
+`_apsk` for envelope verification). So each enrollment is already at the floor a PQ
+design allows: **one signature keypair + one KEM keypair**, managed as a single bundled
+credential — minted, registered, rotated, and revoked together under the 1:1:1 model
+(section [4](#4-the-verb-wire-shape--111-cardinality-rulings)).
+
+**Single-seed derivation — considered, rejected.** Deriving *both* keypairs from one
+per-enrollment seed (`HKDF(seed, label) → {ML-DSA, X-Wing}`) was weighed as a further
+simplification. Rejected:
+
+- It saves only **keyfile bytes** (~6 KB of privates → a 32-byte seed) and changes
+  **nothing** else — still two keypairs, two published keys, the same enrollment record,
+  the same wire shapes, the same two crypto operations.
+- It is plausibly **net-negative**: it adds seeded-keygen code for two PQ primitives plus
+  a **re-derivation-stability dependency** — the derived keypairs must reproduce
+  byte-identically *forever*, across at_chops/OpenSSL versions and platforms, or a client
+  loses access to its own keys. Storing the privates directly avoids that risk entirely.
+- A `HKDF(seed, namespace) → nskey` derivation was *also* floated for the nskey keypairs
+  and **rejected outright** for an independent, more serious reason ([§10](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30)):
+  there the seed would be **shared across the atSign's enrollments**, which breaks
+  post-compromise security, namespace compartmentalization, and rotation forward-secrecy.
+  The **per-enrollment** seed considered here does **not** share that flaw — it is local
+  to one enrollment and never distributed — but it also yields no distribution saving
+  (the APKAM + key-package privates never leave the keyfile), so the only benefit on offer
+  was the keyfile bytes already discounted above.
+
+**Decision.** Leave it as-is. **Two keypairs per enrollment — one signature, one KEM — is
+the irreducible floor** for a PQ design that needs both authenticated/signed messaging and
+secret-sharing *to* a specific enrollment. No single-seed derivation for the enrollment
+keypairs.
+
+---
+
+## 10. nskey derivation from a shared master seed: rejected (2026-06-30)
+
+**Proposed (and briefly written into `design.md` §1.3).** Derive both nskey X-Wing KEM
+privates per namespace as `HKDF(master-seed, namespace [, epoch]) → X-Wing seed`, with the
+master seed held in `.atKeys`, so that "any client of the atSign derives both privates with
+no distribution." The pitch was eliminating the per-APKAM substrate conveyance of the nskey
+privates.
+
+**Rejected — it is a post-compromise security hole, and worse.** For the whole atSign to
+share one nskey per namespace, every authorised client must derive the **same** keypair, so
+the master seed must be **shared across all of the atSign's enrollments**. That shared,
+long-term secret breaks the three properties the nskey design exists to provide:
+
+1. **Post-compromise security / self-healing.** Exfiltrating one device's master seed yields
+   every nskey private the atSign will *ever* have. Revoking that enrollment doesn't heal —
+   the attacker keeps deriving future namespace keys offline. The only remediation is a
+   fleet-wide master-seed re-key (re-derive + republish every namespace's public nskey,
+   re-convey every CK), the exact event per-enrollment revocation exists to avoid.
+2. **Namespace compartmentalization / cryptographic access control.** The namespace is only a
+   **public** HKDF label, so a seed-holder can derive nskey privates for namespaces it was
+   never authorised for — authorization stops being cryptographically enforced. Under
+   conveyance, an enrollment only ever receives the privates sealed to it, for the namespaces
+   it was granted.
+3. **Forward secrecy of rotation.** The `epoch` term is likewise a public label, so every
+   epoch is derivable from the one seed — epoch rotation buys **zero** FS against a seed leak.
+   The `epoch` lever (`design.md` §1.7) only works when the underlying private is random per
+   epoch.
+
+The shared seed is **intrinsic** to the derivation: a per-enrollment seed would derive
+*different* keys and so couldn't produce the shared namespace nskey at all. There is no safe
+scoping — the optimization is rejected outright, not demoted to optional. It was also
+internally inconsistent: `design.md` §4's `.atKeys` store taxonomy holds no master seed.
+
+**Accepted model (already used everywhere else in the corpus).** nskey privates are **minted
+as fresh random keypairs and conveyed per-APKAM over the substrate** (sealed to each
+authorised enrollment's key package); rotation mints a fresh keypair and distributes it to
+the surviving enrollments, **excluding the revoked one** (`implementation-plan.md` B5b). The
+public nskey's public half is still published (a sender has no other way to obtain a peer's
+per-namespace public key — ML-KEM has no public child-derivation). Compromise is then bounded
+to what one enrollment holds; the system heals on revocation + rotation; a client holds keys
+only for the namespaces granted to it.
+
+**Scope of the ruling.** A full-corpus derivation sweep (all five docs, finder + independent
+adversarial verifier per doc) found this to be the **only** insecure key-derivation site —
+present only here (`design.md` §1.3) and in the [§9](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30)
+cross-reference that mis-framed it as a "win"; both are now corrected. Every other derivation
+in the design is secure by construction: the X-Wing/HPKE key schedule (ephemeral per-op
+shared secret), the MLS/D2 ratchet (epoch secrets advance and are deleted), CK/nskey rotation
+(fresh independent material), and `kid`/`kpid` identifiers (a hash of a *public* key, not a
+secret). This is **distinct** from §9's **per-enrollment** single-seed idea, which is
+*per-principal* and local-only — it lacks this flaw and was rejected on the separate ground
+that it saves only keyfile bytes.
+
+---
+
+## 11. Single nskey per namespace, lazily published (2026-06-30)
+
+**Decision.** Each `(atSign, namespace)` has **one** X-Wing KEM nskey keypair, not two. The
+single nskey is the recipient key for **both** directions — the owner encapsulates her own
+content keys (CKs) to it for self data, and external senders encapsulate CKs to it when sharing
+with her. Its public half is **published lazily**: it lives as the self at-key
+`nskey.<ns>@<owner>` (owner-only, synced to the owner's authorised clients) until the namespace
+is first used cross-atSign, at which point the *same* public half is promoted to the
+world-readable `public:nskey.<ns>@<owner>`. The private half is minted fresh and conveyed
+per-APKAM over the substrate ([§10](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30)),
+never derived. This came from peer review, which observed that a separate "self nskey" and
+"public nskey" were doing the same cryptographic job (X-Wing KEM wrapping a CK) for the same
+private-holders.
+
+**Why it is sound — no security loss.**
+
+1. **Confidentiality.** A KEM public key is meant to be public; the private is the secret. A
+   world-readable encapsulation target lets anyone *create* sealed CKs (useless without the
+   private) but exposes nothing. Self-encapsulation is just one more encapsulator against a key
+   built for many.
+2. **Compartmentalization was illusory.** Two keypairs appear to isolate self data from
+   inbound-shared data, but both privates were held by the same clients and conveyed over the
+   same substrate to the same key packages — never separable in practice. Compromise blast
+   radius is identical for one key or two.
+3. **Authenticity is independent of the split.** A KEM gives confidentiality, not
+   sender-authenticity. Provenance is carried by record ownership + write-authorisation
+   (`…__ck.<ns>@alice` written by an authorised Alice client vs `…__ck.<ns>@bob` cached from
+   Bob), unchanged by collapsing the keys.
+4. **Revocation simplifies.** Evicting a compromised client rotates every nskey private it
+   held — both, anyway. One key is one rotation, and the read path loses the self-vs-inbound
+   branch.
+
+**The one weakness, and the mitigation taken.** A single key whose public half is published
+advertises the *existence* of the namespace to anyone doing a public `plookup`/scan, and makes
+namespace usage correlatable across atSigns. For a namespace used purely for the owner's own
+data — which under two keys had only an owner-only self nskey — this would be a new metadata
+leak (existence only; no CK, content, or key material). **Mitigation, adopted: lazy
+publication.** The public half stays an owner-only self at-key until the namespace is first
+shared cross-atSign; a purely-self namespace therefore never advertises itself. Inbound that
+arrives before promotion is bridged by cold-start to the root `public:pqpublickey` (then a lazy
+upgrade promotes the nskey). This keeps the one-keypair simplification (one private, one
+rotation, one decapsulation path) while preserving namespace-existence privacy.
+
+**Foreclosed capability — accepted.** Two keypairs could have granted a client read access to
+inbound-shared data but not the owner's own self data (convey only one private). The single-key
+model cannot draw that boundary — a client either holds the nskey private (reads both) or does
+not. The design does not use this asymmetric access today, so nothing is lost now; the option
+is foreclosed going forward.
+
+**Consequences for the model.**
+
+- `appMetadata.recipientKind` on an `at/nskey` CK-conveyance record is `nskey` (self + inbound)
+  or `root-pqpublickey` (cold-start) — the former self-nskey/public-nskey distinction is gone.
+- The reader decapsulates every `__ck` record with the one nskey private.
+- HPKE `info` binds `(namespace, owner)` so self and inbound flows stay domain-separated under
+  the shared key.
+- The detailed mechanics live in `design.md` (key shapes, the data flow, rotation), the build
+  steps in `implementation-plan.md`, and the acceptance cases in `acceptance.md`.
