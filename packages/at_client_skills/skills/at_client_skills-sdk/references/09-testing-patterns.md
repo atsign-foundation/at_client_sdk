@@ -1,9 +1,8 @@
 # Testing Patterns
 
-`at_client` ships a test-only library that lets you unit-test
-collection-backed services without a running atServer or network connection.
-Import it directly — it is intentionally **not** re-exported from
-`at_client.dart`.
+`at_client` ships test-only helpers that let you unit-test collection-backed
+services without a running atServer or network connection. They are available
+from `package:at_client/at_client.dart` — the normal import.
 
 ---
 
@@ -19,7 +18,6 @@ Import the test hooks library in your test file:
 
 ```dart
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/collections/collections_test_hooks.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 ```
@@ -103,7 +101,6 @@ final subColl = subCollectionWithInjectedNotifications<Parent, Child>(
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/collections/collections_test_hooks.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -273,10 +270,12 @@ The SDK's own test suite demonstrates every pattern in detail:
 
 ## Important Notes
 
-- The test hooks file (`collections_test_hooks.dart`) is **NOT** exported
-  from `at_client.dart` — you must import it by path. The `@visibleForTesting`
-  annotation means production code that accidentally imports it gets an
-  analyzer warning.
+- The test hooks (`collectionWithInjectedNotifications`,
+  `clearFactoriesForTest`, …) are test-only helpers available from
+  `package:at_client/at_client.dart` — import that, not the `src/...` path.
+  `collections_test_hooks.dart` is a `part of` `collections.dart` (which
+  `at_client.dart` exports), so importing the file directly fails with
+  "can't have a part-of directive".
 - `collectionWithInjectedNotifications` bypasses the cached-per-namespace
   instance management. Each call returns a fresh instance — safe for test
   isolation.
