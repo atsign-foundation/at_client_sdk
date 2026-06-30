@@ -80,6 +80,20 @@ bool libCryptoSupportsMlDsa65(DynamicLibrary lib) {
   return _libCryptoSupportsAlgorithm(lib, 'ML-DSA-65');
 }
 
+/// Returns `true` when [lib] exposes `EVP_aes_256_gcm` (available in every
+/// OpenSSL 1.0+ build, so this essentially just confirms the symbol resolves).
+///
+/// Call this before constructing [AesGcm256FfiAlgo] to confirm the symbol is
+/// present — it is effectively always true for any usable libcrypto.
+bool libCryptoSupportsAesGcm(DynamicLibrary lib) {
+  try {
+    lib.lookup<NativeFunction<Pointer<Void> Function()>>('EVP_aes_256_gcm');
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 bool _libCryptoSupportsAlgorithm(DynamicLibrary lib, String algorithmName) {
   try {
     final ctxNewFromName = lib.lookupFunction<

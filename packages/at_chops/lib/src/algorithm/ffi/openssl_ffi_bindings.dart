@@ -167,3 +167,74 @@ const int evpPkeyKeypair = 0x87;
 
 // NID_X25519 = 1034
 const int nidX25519 = 1034;
+
+// ── EVP_CIPHER_CTX — for AES-256-GCM symmetric AEAD ─────────────────────────
+
+final class EVP_CIPHER extends Opaque {}
+
+final class EVP_CIPHER_CTX extends Opaque {}
+
+typedef EvpAes256GcmNative = Pointer<EVP_CIPHER> Function();
+typedef EvpAes256GcmDart = Pointer<EVP_CIPHER> Function();
+
+typedef EvpCipherCtxNewNative = Pointer<EVP_CIPHER_CTX> Function();
+typedef EvpCipherCtxNewDart = Pointer<EVP_CIPHER_CTX> Function();
+
+typedef EvpCipherCtxFreeNative = Void Function(Pointer<EVP_CIPHER_CTX>);
+typedef EvpCipherCtxFreeDart = void Function(Pointer<EVP_CIPHER_CTX>);
+
+typedef EvpEncryptInitExNative = Int32 Function(
+    Pointer<EVP_CIPHER_CTX>,
+    Pointer<EVP_CIPHER>,
+    Pointer<Void>,
+    Pointer<Uint8>,
+    Pointer<Uint8>);
+typedef EvpEncryptInitExDart = int Function(
+    Pointer<EVP_CIPHER_CTX>,
+    Pointer<EVP_CIPHER>,
+    Pointer<Void>,
+    Pointer<Uint8>,
+    Pointer<Uint8>);
+
+typedef EvpDecryptInitExNative = Int32 Function(
+    Pointer<EVP_CIPHER_CTX>,
+    Pointer<EVP_CIPHER>,
+    Pointer<Void>,
+    Pointer<Uint8>,
+    Pointer<Uint8>);
+typedef EvpDecryptInitExDart = int Function(
+    Pointer<EVP_CIPHER_CTX>,
+    Pointer<EVP_CIPHER>,
+    Pointer<Void>,
+    Pointer<Uint8>,
+    Pointer<Uint8>);
+
+typedef EvpEncryptUpdateNative = Int32 Function(
+    Pointer<EVP_CIPHER_CTX>, Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, Int32);
+typedef EvpEncryptUpdateDart = int Function(
+    Pointer<EVP_CIPHER_CTX>, Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, int);
+
+typedef EvpDecryptUpdateNative = Int32 Function(
+    Pointer<EVP_CIPHER_CTX>, Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, Int32);
+typedef EvpDecryptUpdateDart = int Function(
+    Pointer<EVP_CIPHER_CTX>, Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, int);
+
+typedef EvpEncryptFinalExNative = Int32 Function(
+    Pointer<EVP_CIPHER_CTX>, Pointer<Uint8>, Pointer<Int32>);
+typedef EvpEncryptFinalExDart = int Function(
+    Pointer<EVP_CIPHER_CTX>, Pointer<Uint8>, Pointer<Int32>);
+
+typedef EvpDecryptFinalExNative = Int32 Function(
+    Pointer<EVP_CIPHER_CTX>, Pointer<Uint8>, Pointer<Int32>);
+typedef EvpDecryptFinalExDart = int Function(
+    Pointer<EVP_CIPHER_CTX>, Pointer<Uint8>, Pointer<Int32>);
+
+typedef EvpCipherCtxCtrlNative = Int32 Function(
+    Pointer<EVP_CIPHER_CTX>, Int32, Int32, Pointer<Void>);
+typedef EvpCipherCtxCtrlDart = int Function(
+    Pointer<EVP_CIPHER_CTX>, int, int, Pointer<Void>);
+
+// EVP_CIPHER_CTX_ctrl type values used for GCM
+const int evpCtrlGcmSetIvlen = 0x9;
+const int evpCtrlGcmGetTag = 0x10;
+const int evpCtrlGcmSetTag = 0x11;
