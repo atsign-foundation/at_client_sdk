@@ -14,30 +14,16 @@ import 'package:ffi/ffi.dart';
 /// ML-DSA-65. Both public (1952 bytes) and secret (4032 bytes) keys can be
 /// persisted and round-tripped between backends.
 ///
-/// **Preferred use:** call [generateKeyPair], then pass key bytes into
-/// [PqcFfi.mlDsa65] (typed [AtSignatureAlgorithm]) for signing and
-/// verification. [PqcFfi.mlDsa65] auto-selects FFI or pure-Dart at startup
-/// and presents canonical `(message, secretKey)` / `(message, sig, publicKey)`
-/// param order regardless of backend.
+/// **Stateful use** (implements [AtSigningAlgorithm]):
+/// Set [secretKey] before calling [sign]. Pass the base64-encoded raw public
+/// key as the [publicKey] parameter to [verify].
 ///
-/// **Stateless use** (direct — note non-canonical param order):
-/// [signBytes] and [verifyBytes] take `secretKey`/`publicKey` as the
-/// **first** argument for historical reasons. This order is corrected in v4.
-///
-/// **Stateful use** — deprecated, removed in v4:
-/// Set [secretKey] before calling [sign]/[verify].
+/// **Stateless use** (preferred when keys are in hand):
+/// Call [generateKeyPair], [signBytes], and [verifyBytes] directly.
 ///
 /// The caller loads libcrypto (e.g. via [tryLoadLibCrypto]) and passes the
 /// resulting [DynamicLibrary] in via [MlDsa65FfiAlgo.fromLib]. at_chops does
 /// no auto-resolution.
-///
-/// ## v4 migration
-///
-/// In v4 this class will `implements AtSignatureAlgorithm` directly with
-/// canonical `(message, secretKey)` / `(message, sig, publicKey)` param order.
-/// The current non-canonical [signBytes]/[verifyBytes] and the stateful
-/// [secretKey]/[sign]/[verify] surface will be removed, along with the
-/// [MlDsa65FfiSigner] adapter that currently bridges them.
 final class MlDsa65FfiAlgo implements AtSigningAlgorithm {
   final DynamicLibrary _lib;
 
