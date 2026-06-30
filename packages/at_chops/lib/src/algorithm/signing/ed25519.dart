@@ -7,7 +7,7 @@ import 'package:better_cryptography/better_cryptography.dart';
 
 /// Data signing and verification for Ed25519 - elliptic curve algorithm
 /// Keypair for the algorithm has to generated using [AtChopsUtil.generateEd25519KeyPair()]
-class Ed25519SigningAlgo extends AtSigningAlgorithm {
+class Ed25519SigningAlgo implements AtSigningAlgorithm {
   final _algorithm = Ed25519();
   SimpleKeyPair? _ed25519KeyPair;
 

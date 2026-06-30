@@ -41,20 +41,16 @@ abstract class ASymmetricEncryptionAlgorithm
   Uint8List decrypt(Uint8List encryptedData);
 }
 
-/// Stateful signing interface — implementors hold key material on the instance.
-///
-/// Prefer [AtSignatureAlgorithm] for new code: it is stateless (key material
-/// passed per call) and safe to share as a singleton.
+/// Interface for data signing. Data is signed using private key from a key pair.
+/// Signed data signature is verified with public key of the key pair.
 @sealed
 abstract class AtSigningAlgorithm {
-  /// Signs [data] using a key stored on the instance.
-  FutureOr<Uint8List> sign(Uint8List data) =>
-      throw UnimplementedError('implement sign');
+  /// Signs the data using private key of asymmetric key pair
+  FutureOr<Uint8List> sign(Uint8List data);
 
-  /// Verifies [signature] over [signedData].
+  /// Verifies the data signature using public key of asymmetric key pair or the passed [publicKey]
   FutureOr<bool> verify(Uint8List signedData, Uint8List signature,
-          {String? publicKey}) =>
-      throw UnimplementedError('implement verify');
+      {String? publicKey});
 }
 
 /// Stateless signing interface — all key material passed per call.

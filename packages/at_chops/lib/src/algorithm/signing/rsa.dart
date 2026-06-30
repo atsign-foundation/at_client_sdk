@@ -8,7 +8,7 @@ import 'package:crypton/crypton.dart';
 
 /// Data signing and verification using atsign encryption keypair
 /// Allowed algorithms are listed in [SigningAlgoType] and [HashingAlgoType]
-class RsaSigningAlgo extends AtSigningAlgorithm {
+class RsaSigningAlgo implements AtSigningAlgorithm {
   final AsymmetricKeyPair? _encryptionKeyPair;
   final HashingAlgoType _hashingAlgoType;
 
