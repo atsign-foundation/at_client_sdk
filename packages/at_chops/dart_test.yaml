@@ -1,3 +1,0 @@
-tags:
-  ffi:
-    description: "Requires libcrypto (OpenSSL >= 3.5) at runtime. Skipped gracefully when unavailable."

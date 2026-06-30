@@ -43,6 +43,9 @@ abstract class ASymmetricEncryptionAlgorithm
 
 /// Interface for data signing. Data is signed using private key from a key pair.
 /// Signed data signature is verified with public key of the key pair.
+///
+/// **Do not implement for new code.** Implement [AtSignatureAlgorithm] instead —
+/// it is stateless (key material passed per call) and safe to share as a singleton.
 @sealed
 abstract class AtSigningAlgorithm {
   /// Signs the data using private key of asymmetric key pair

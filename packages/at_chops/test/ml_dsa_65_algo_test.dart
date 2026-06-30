@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_chops/at_chops_ffi.dart';
-import 'package:at_chops/types.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -63,15 +62,20 @@ void main() {
       expect(ok, isFalse);
     });
 
-    test('signBytes/verifyBytes via AtSignatureAlgorithm interface', () async {
+    test('Stateful sign/verify via AtSigningAlgorithm interface', () async {
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
-      final Uint8List pk = base64Decode(kp.atPublicKey.publicKey);
 
-      final AtSignatureAlgorithm algo = const MlDsa65PureDartSigner();
+      final algo = MlDsa65PureDartAlgo();
+      algo.secretKey = sk;
+
       final Uint8List message = Uint8List.fromList('Hello'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, sk);
-      final bool ok = await algo.verifyBytes(message, sig, pk);
+      final Uint8List sig = await algo.sign(message);
+      final bool ok = await algo.verify(
+        message,
+        sig,
+        publicKey: kp.atPublicKey.publicKey,
+      );
 
       expect(ok, isTrue);
     });
