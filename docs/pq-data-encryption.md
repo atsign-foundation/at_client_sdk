@@ -73,7 +73,7 @@ APKAM keypairs, `kp1…` their key-package kids, `ck7…` content-key kids. Work
 
 | Object | Shape | Published? | Who holds the private | Role |
 |---|---|---|---|---|
-| **self nskey** | keypair; its public is **not** an at-key | no | Alice's authorised clients (conveyed via substrate) | Alice encapsulates **her own** CKs to it |
+| **self nskey** | `nskey.app_1.my_apps@alice` (public half) | no — **self at-key**, synced to Alice's `<ns>` clients | Alice's authorised clients (private conveyed via substrate) | Alice encapsulates **her own** CKs to it |
 | **public nskey** | `public:nskey.app_1.my_apps@alice` (public half) | **yes**, world-readable | Alice's authorised clients | external senders encapsulate CKs to it |
 | **CK conveyance** *(working)* | `<ckKid>.__ck.app_1.my_apps@alice` (self key) | no | n/a (it *is* a sealed CK) | `at/nskey` value: `X-Wing-seal(ck)` to an nskey |
 | **data value** | `<key>.app_1.my_apps@alice` | no | n/a | `at/symmetric/AES/GCM`: AES-GCM under a CK, cites `ckKid` |
@@ -89,12 +89,15 @@ replicas. (This ownership is why cross-atSign FS is bilateral — section [6](#6
 private (unwraps Alice's own CKs) and the public-nskey private (unwraps CKs external senders sent
 her). Both are KEM privates — they **decapsulate CKs**, they do not decrypt application data.
 
-**Where the self-nskey *public* half comes from.** The self nskey is never a published at-key, but
-a client still needs its public to *encapsulate* its own CKs. The substrate envelope that conveys
-the self-nskey private carries both halves (or the client derives the public from the X-Wing
-private), so any authorised client can both encapsulate (needs the public) and decapsulate (needs
-the private). Only Alice's own clients ever encapsulate to the self nskey, so it needs no
-world-readable artifact.
+**Where the self-nskey *public* half comes from.** The self-nskey public half is the **self
+at-key** `nskey.app_1.my_apps@alice` — an ordinary self key, synced to every one of Alice's
+clients authorised for the namespace, exactly as any self key is. It is not a `public:`
+(world-readable) key, because only Alice's own clients ever encapsulate to it. The **private**
+half is the sensitive part: it cannot ride the RSA-tainted self-encryption-key chain, so it is
+conveyed PQ-safely per-APKAM over the secret-sharing substrate. So a client gets the public by
+ordinary sync and the private from the substrate — precisely mirroring the public nskey, whose
+public half is the world-readable `public:nskey.app_1.my_apps@alice` and whose private is likewise
+substrate-conveyed.
 
 **Multi-namespace keying.** nskey privates are keyed by `(owner atSign, namespace)`; the CK cache
 by `(owner, namespace, ckKid)` — never `ckKid` alone, since kids are not unique across namespaces.
