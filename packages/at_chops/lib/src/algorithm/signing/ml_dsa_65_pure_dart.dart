@@ -11,7 +11,7 @@ import 'package:pqcrypto/pqcrypto.dart';
 ///
 /// **Preferred use:** call the static [generateKeyPair], [signBytes], and
 /// [verifyBytes] directly — all key material is passed explicitly. Or use
-/// [PqcFfi.mlDsa65] (typed [AtSignatureAlgorithm]) for auto-resolved FFI/pure
+/// [AtPqc.mlDsa65] (typed [AtSignatureAlgorithm]) for auto-resolved FFI/pure
 /// dispatch without touching this class.
 ///
 /// **Stateful use** — deprecated, removed in v4:
@@ -23,7 +23,7 @@ import 'package:pqcrypto/pqcrypto.dart';
 /// static [signBytes] and [verifyBytes] will become the canonical instance
 /// implementations. The stateful [secretKey]/[sign]/[verify] surface and
 /// the [AtSigningAlgorithm] conformance will be removed, along with the
-/// [MlDsa65PureDartSigner] adapter that currently bridges them.
+/// [MlDsa65SigningPureDartAlgo] adapter that currently bridges them.
 final class MlDsa65PureDartAlgo implements AtSigningAlgorithm {
   Uint8List? _secretKey;
 
@@ -31,7 +31,7 @@ final class MlDsa65PureDartAlgo implements AtSigningAlgorithm {
 
   @Deprecated(
     'Stateful API removed in v4. '
-    'Use the static signBytes/verifyBytes, or PqcFfi.mlDsa65 typed as AtSignatureAlgorithm.',
+    'Use the static signBytes/verifyBytes, or AtPqc.mlDsa65 typed as AtSignatureAlgorithm.',
   )
   set secretKey(Uint8List value) => _secretKey = value;
 
@@ -64,7 +64,7 @@ final class MlDsa65PureDartAlgo implements AtSigningAlgorithm {
 
   @Deprecated(
     'Stateful API removed in v4. '
-    'Use the static signBytes/verifyBytes, or PqcFfi.mlDsa65 typed as AtSignatureAlgorithm.',
+    'Use the static signBytes/verifyBytes, or AtPqc.mlDsa65 typed as AtSignatureAlgorithm.',
   )
   @override
   Future<Uint8List> sign(Uint8List data) async {
@@ -77,7 +77,7 @@ final class MlDsa65PureDartAlgo implements AtSigningAlgorithm {
 
   @Deprecated(
     'Stateful API removed in v4. '
-    'Use the static signBytes/verifyBytes, or PqcFfi.mlDsa65 typed as AtSignatureAlgorithm.',
+    'Use the static signBytes/verifyBytes, or AtPqc.mlDsa65 typed as AtSignatureAlgorithm.',
   )
   @override
   Future<bool> verify(Uint8List signedData, Uint8List signature,
@@ -89,4 +89,21 @@ final class MlDsa65PureDartAlgo implements AtSigningAlgorithm {
     final Uint8List pkBytes = base64Decode(publicKey);
     return verifyBytes(signedData, signature, pkBytes);
   }
+}
+
+/// [AtSignatureAlgorithm] adapter over [MlDsa65PureDartAlgo]'s static methods.
+///
+/// Removed in v4 when [MlDsa65PureDartAlgo] implements [AtSignatureAlgorithm]
+/// directly.
+final class MlDsa65SigningPureDartAlgo implements AtSignatureAlgorithm {
+  const MlDsa65SigningPureDartAlgo();
+
+  @override
+  Future<Uint8List> signBytes(Uint8List message, Uint8List secretKey) =>
+      MlDsa65PureDartAlgo.signBytes(message, secretKey);
+
+  @override
+  Future<bool> verifyBytes(
+          Uint8List message, Uint8List signature, Uint8List publicKey) =>
+      MlDsa65PureDartAlgo.verifyBytes(message, signature, publicKey);
 }

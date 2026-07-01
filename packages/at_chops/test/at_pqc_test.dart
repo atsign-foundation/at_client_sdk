@@ -9,31 +9,31 @@ void main() {
   final bool xWingFfi = lib != null && libCryptoSupportsMlKem768(lib);
   final bool mlDsaFfi = lib != null && libCryptoSupportsMlDsa65(lib);
 
-  group('PqcFfi — host-agnostic', () {
-    test('PqcFfi.xWing is FFI when supported, else pure', () {
+  group('AtPqc — host-agnostic', () {
+    test('AtPqc.xWing is FFI when supported, else pure', () {
       if (xWingFfi) {
-        expect(PqcFfi.xWing, isA<XWingFfiAlgo>());
+        expect(AtPqc.xWing, isA<XWingFfiAlgo>());
       } else {
-        expect(PqcFfi.xWing, isA<XWingPureDartAlgo>());
+        expect(AtPqc.xWing, isA<XWingPureDartAlgo>());
       }
     });
 
-    test('PqcFfi.mlDsa65 is FFI when supported, else pure', () {
+    test('AtPqc.mlDsa65 is FFI when supported, else pure', () {
       if (mlDsaFfi) {
-        expect(PqcFfi.mlDsa65, isA<MlDsa65FfiSigner>());
+        expect(AtPqc.mlDsa65, isA<MlDsa65SigningFfiAlgo>());
       } else {
-        expect(PqcFfi.mlDsa65, isA<MlDsa65PureDartSigner>());
+        expect(AtPqc.mlDsa65, isA<MlDsa65SigningPureDartAlgo>());
       }
     });
 
     test('xWing encapsulate/decapsulate round-trip', () async {
       final XWingKeyPair kp = await XWingKeyPair.generate();
 
-      final enc = await PqcFfi.xWing.encapsulate(kp.publicKeyBytes);
+      final enc = await AtPqc.xWing.encapsulate(kp.publicKeyBytes);
       expect(enc.ciphertext.length, 1120);
       expect(enc.sharedSecret.length, 32);
 
-      final ss = await PqcFfi.xWing.decapsulate(kp.privateKeyBytes, enc.ciphertext);
+      final ss = await AtPqc.xWing.decapsulate(kp.privateKeyBytes, enc.ciphertext);
       expect(ss, enc.sharedSecret);
     });
 
@@ -41,8 +41,8 @@ void main() {
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
 
       final Uint8List msg = Uint8List.fromList('hello pqc'.codeUnits);
-      final Uint8List sig = await PqcFfi.mlDsa65.signBytes(msg, kp.privateKeyBytes);
-      final bool ok = await PqcFfi.mlDsa65.verifyBytes(msg, sig, kp.publicKeyBytes);
+      final Uint8List sig = await AtPqc.mlDsa65.signBytes(msg, kp.privateKeyBytes);
+      final bool ok = await AtPqc.mlDsa65.verifyBytes(msg, sig, kp.publicKeyBytes);
       expect(ok, isTrue);
     });
   });
@@ -50,7 +50,7 @@ void main() {
   // These tests require libcrypto (OpenSSL >= 3.5) at runtime.
   // They are tagged 'ffi' and intentionally FAIL (not skip) when the library
   // is missing or too old — CI must provide OpenSSL before running --tags ffi.
-  group('PqcFfi — FFI cross-backend interop', () {
+  group('AtPqc — FFI cross-backend interop', () {
     test('X-Wing: FFI encapsulate, pure-Dart decapsulate', () async {
       if (lib == null) fail('libcrypto not available on this host');
       if (!xWingFfi) {

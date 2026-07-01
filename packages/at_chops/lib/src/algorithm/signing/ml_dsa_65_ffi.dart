@@ -47,7 +47,7 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm {
 
   @Deprecated(
     'Stateful API removed in v4. '
-    'Use PqcFfi.mlDsa65 typed as AtSignatureAlgorithm.',
+    'Use AtPqc.mlDsa65 typed as AtSignatureAlgorithm.',
   )
   set secretKey(Uint8List value) => _secretKey = value;
 
@@ -129,12 +129,12 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm {
   ///
   /// **Note:** param order is `(secretKey, message)` — non-canonical. In v4
   /// this class will implement [AtSignatureAlgorithm] and the order will flip
-  /// to canonical `(message, secretKey)`. Use [PqcFfi.mlDsa65] to insulate
+  /// to canonical `(message, secretKey)`. Use [AtPqc.mlDsa65] to insulate
   /// call sites from this change.
   @Deprecated(
     'Non-canonical param order (secretKey-first). '
     'In v4 this method is replaced by AtSignatureAlgorithm.signBytes(message, secretKey). '
-    'Use PqcFfi.mlDsa65 to insulate from the change.',
+    'Use AtPqc.mlDsa65 to insulate from the change.',
   )
   Future<Uint8List> signBytes(Uint8List secretKey, Uint8List data) async {
     final Pointer<EVP_PKEY> pkey = _loadPrivateKey(secretKey);
@@ -149,12 +149,12 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm {
   ///
   /// **Note:** param order is `(publicKey, message, sig)` — non-canonical. In
   /// v4 this class will implement [AtSignatureAlgorithm] and the order will
-  /// flip to canonical `(message, sig, publicKey)`. Use [PqcFfi.mlDsa65] to
+  /// flip to canonical `(message, sig, publicKey)`. Use [AtPqc.mlDsa65] to
   /// insulate call sites from this change.
   @Deprecated(
     'Non-canonical param order (publicKey-first). '
     'In v4 this method is replaced by AtSignatureAlgorithm.verifyBytes(message, sig, publicKey). '
-    'Use PqcFfi.mlDsa65 to insulate from the change.',
+    'Use AtPqc.mlDsa65 to insulate from the change.',
   )
   Future<bool> verifyBytes(
       Uint8List publicKey, Uint8List data, Uint8List signature) async {
@@ -170,7 +170,7 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm {
 
   @Deprecated(
     'Stateful API removed in v4. '
-    'Use PqcFfi.mlDsa65 typed as AtSignatureAlgorithm.',
+    'Use AtPqc.mlDsa65 typed as AtSignatureAlgorithm.',
   )
   @override
   Future<Uint8List> sign(Uint8List data) async {
@@ -184,7 +184,7 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm {
 
   @Deprecated(
     'Stateful API removed in v4. '
-    'Use PqcFfi.mlDsa65 typed as AtSignatureAlgorithm.',
+    'Use AtPqc.mlDsa65 typed as AtSignatureAlgorithm.',
   )
   @override
   Future<bool> verify(Uint8List signedData, Uint8List signature,
@@ -328,4 +328,29 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm {
       _mdCtxFree(ctx);
     }
   }
+}
+
+/// [AtSignatureAlgorithm] adapter over [MlDsa65FfiAlgo] that presents canonical
+/// `(message, secretKey)` / `(message, signature, publicKey)` param order.
+///
+/// [MlDsa65FfiAlgo.signBytes] and [MlDsa65FfiAlgo.verifyBytes] use non-canonical
+/// order for backward compatibility; this adapter maps to canonical order internally.
+///
+/// Removed in v4 when [MlDsa65FfiAlgo] implements [AtSignatureAlgorithm] directly
+/// with corrected param order.
+final class MlDsa65SigningFfiAlgo implements AtSignatureAlgorithm {
+  final MlDsa65FfiAlgo _algo;
+
+  const MlDsa65SigningFfiAlgo(this._algo);
+
+  @override
+  Future<Uint8List> signBytes(Uint8List message, Uint8List secretKey) =>
+      // ignore: deprecated_member_use_from_same_package
+      _algo.signBytes(secretKey, message); // map canonical→FFI order
+
+  @override
+  Future<bool> verifyBytes(
+          Uint8List message, Uint8List signature, Uint8List publicKey) =>
+      // ignore: deprecated_member_use_from_same_package
+      _algo.verifyBytes(publicKey, message, signature); // map canonical→FFI order
 }
