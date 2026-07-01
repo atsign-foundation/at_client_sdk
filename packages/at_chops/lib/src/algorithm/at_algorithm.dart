@@ -46,6 +46,12 @@ abstract class ASymmetricEncryptionAlgorithm
 ///
 /// **Do not implement for new code.** Implement [AtSignatureAlgorithm] instead —
 /// it is stateless (key material passed per call) and safe to share as a singleton.
+///
+/// Removed in v4. Will become `sealed` once all implementers move into this
+/// library, closing the hierarchy in favor of [AtSignatureAlgorithm].
+@Deprecated(
+  'Removed in v4. Use AtSignatureAlgorithm instead.',
+)
 @sealed
 abstract class AtSigningAlgorithm {
   /// Signs the data using private key of asymmetric key pair
