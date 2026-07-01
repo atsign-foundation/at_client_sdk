@@ -1,3 +1,8 @@
+## 5.12.0
+
+- feat: enroll:listns
+- feat: enroll:metadata
+
 ## 5.11.0
 
 - feat: add `Metadata.appMetadata` (`AppMetadata{providerId, additional}`),
