@@ -344,6 +344,36 @@ void main() {
       var enrollmentInfo = jsonDecode(enrollVerbParams['enrollParams']!);
       expect(enrollmentInfo['enrollmentId'], '4567');
     });
+
+    test('A test to verify enroll:listns parses namespace', () {
+      String command = 'enroll:listns:wavi\n';
+      var verbParams =
+          VerbUtil.getVerbParam(VerbSyntax.enroll, command.trim())!;
+      expect(verbParams['operation'], 'listns');
+      expect(verbParams['namespace'], 'wavi');
+    });
+
+    test(
+        'A test to verify enroll:listns without namespace parses correctly',
+        () {
+      String command = 'enroll:listns\n';
+      var verbParams =
+          VerbUtil.getVerbParam(VerbSyntax.enroll, command.trim())!;
+      expect(verbParams['operation'], 'listns');
+      expect(verbParams['namespace'], isNull);
+    });
+
+    test('A test to verify enroll:metadata parses enrollmentId and payload',
+        () {
+      const enrollmentId = 'abc123';
+      const payload = '{"kpid":"deadbeef","xWingPub":"AAAA"}';
+      String command = 'enroll:metadata:$enrollmentId:$payload\n';
+      var verbParams =
+          VerbUtil.getVerbParam(VerbSyntax.enroll, command.trim())!;
+      expect(verbParams['operation'], 'metadata');
+      expect(verbParams['namespace'], enrollmentId);
+      expect(verbParams['enrollParams'], payload);
+    });
   });
 
   group('A group of tests related to otp verb', () {
