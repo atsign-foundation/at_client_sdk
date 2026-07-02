@@ -245,7 +245,9 @@ void main() {
       // Per OQ4 the new enrollment's key package is in the record from request
       // time; approval makes it discoverable for the namespace.
       final clientB = buildSharer('enroll-b', seedB);
-      await clientB.register();
+      // key package reaches the record via enroll:request (modelled by seed);
+      // authorize makes it discoverable for the namespace.
+      directory.seed('enroll-b', await clientB.register());
       directory.authorize('myapp', 'enroll-b');
 
       final shared = await approverA.shareAllSecretsWithEnrollment('enroll-b', {
@@ -269,7 +271,9 @@ void main() {
     test('honours excludeEnrollmentIds (revoked enrollment gets nothing)',
         () async {
       final clientB = buildSharer('enroll-b', seedB);
-      await clientB.register();
+      // key package reaches the record via enroll:request (modelled by seed);
+      // authorize makes it discoverable for the namespace.
+      directory.seed('enroll-b', await clientB.register());
       directory.authorize('myapp', 'enroll-b');
 
       final shared = await approverA.shareAllSecretsWithEnrollment(

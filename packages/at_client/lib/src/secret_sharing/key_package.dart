@@ -55,18 +55,19 @@ class PackageKey {
 /// The X-Wing recipient key(s) one **APKAM keypair** advertises so that other
 /// clients of the same atSign can seal secrets to it.
 ///
-/// The recipient unit is the APKAM keypair, not a client process: a key
-/// package is identified by ([enrollmentId], [apkamId]). Several APKAM
-/// keypairs may belong to one enrollment (the keyfile copied to another
-/// device, each minting its own), so an enrollment can expose more than one.
+/// The recipient unit is the APKAM keypair, not a client process. Enrollment
+/// cardinality is **1:1:1** — one enrollment has exactly one APKAM keypair and
+/// therefore exactly one key package — so a key package is identified by its
+/// [enrollmentId] (with [apkamId] carried alongside for reference).
 ///
-/// Key packages are **enrollment-internal** — they live in the per-APKAM
-/// enrollment record (written under that APKAM keypair's authenticated write)
-/// and are discovered only via the gated `enroll:listfornamespace` verb (see
-/// [EnrollmentDirectory]). They are **not** published and **not** separately
-/// signed: the atServer vouches that a returned key package belongs to the
-/// enrollment it is filed under. (Message authenticity is the per-envelope
-/// APKAM signature, see EnvelopeSigning — unchanged.)
+/// Key packages are **enrollment-internal** — they live in the enrollment
+/// record, conveyed there by riding `enroll:request` as opaque
+/// `EnrollParams.metadata` at enrollment time, and are discovered only via the
+/// gated `enroll:listns` verb (see [EnrollmentDirectory]). They are **not**
+/// published and **not** separately signed: the atServer vouches that a
+/// returned key package belongs to the enrollment it is filed under. (Message
+/// authenticity is the per-envelope APKAM signature, see EnvelopeSigning —
+/// unchanged.)
 ///
 /// The wire form is the value stored at `metadata.keyPackages[<format-id>]`
 /// in the enrollment record ([toJson] / [fromPayload]); [enrollmentId] and
@@ -81,9 +82,9 @@ class KeyPackage {
   /// The enrollment this key package belongs to.
   final String enrollmentId;
 
-  /// The APKAM keypair this key package belongs to, as reported by the verb.
-  /// Null on a key package this client builds for its own registration — the
-  /// atServer files it under whichever APKAM keypair authenticated the write.
+  /// The APKAM keypair this key package belongs to, as reported by the verb
+  /// (the enrollment's `apkamPubKey`). Null on a key package this client builds
+  /// for its own enrollment — identity is carried by the enclosing enrollment.
   final String? apkamId;
 
   final DateTime createdAt;
