@@ -2,10 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_iv.dart';
+import 'package:at_chops/src/algorithm/at_pqc.dart';
 import 'package:at_chops/src/algorithm/encryption/ml_kem_768_pure_dart.dart';
 import 'package:at_chops/src/algorithm/encryption/x25519_pure_dart_algo.dart';
-import 'package:at_chops/src/algorithm/encryption/x_wing_pure_dart.dart';
-import 'package:at_chops/src/algorithm/signing/ml_dsa_65_pure_dart.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
 import 'package:at_chops/src/key/impl/at_encryption_key_pair.dart';
 import 'package:at_chops/src/key/impl/at_ml_dsa_65_key_pair.dart';
@@ -101,21 +100,21 @@ class AtChopsUtil {
   /// (draft-connolly-cfrg-xwing-kem; X25519 + ML-KEM-768).
   ///
   /// Raw 1216-byte public key and 32-byte seed secret key are
-  /// base64-encoded. Pure Dart, fully serializable.
+  /// base64-encoded. Uses [AtPqc.xWing] — FFI when available, else pure-Dart.
   static Future<AtXWingKeyPair> generateXWingKeyPair() async {
     final (publicKey: Uint8List pub, secretKey: Uint8List sk) =
-        await XWingPureDartAlgo.instance.generateKeyPair();
+        await AtPqc.xWing.generateKeyPair();
     return AtXWingKeyPair.create(base64Encode(pub), base64Encode(sk));
   }
 
   /// Generates an ML-DSA-65 key pair for post-quantum digital signatures.
   ///
-  /// Backed by the pure-Dart ML-DSA-65 implementation (via `package:pqcrypto`).
   /// Raw 1952-byte public key and 4032-byte secret key are base64-encoded.
-  /// Both keys are serializable and interoperable with the FFI backend.
+  /// Both keys are serializable and interoperable across backends. Uses
+  /// [AtPqc.mlDsa65] — FFI when available, else pure-Dart.
   static Future<AtMlDsa65KeyPair> generateMlDsa65KeyPair() async {
     final (publicKey: Uint8List pub, secretKey: Uint8List sk) =
-        await MlDsa65PureDartAlgo.generateKeyPair();
+        await AtPqc.mlDsa65.generateKeyPair();
     return AtMlDsa65KeyPair.create(base64Encode(pub), base64Encode(sk));
   }
 

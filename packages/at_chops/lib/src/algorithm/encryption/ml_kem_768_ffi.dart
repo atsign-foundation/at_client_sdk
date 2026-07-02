@@ -98,8 +98,15 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
   /// Generate a fresh ML-KEM-768 key pair via OpenSSL.
   ///
   /// Returns `(publicKey: 1184 raw bytes, secretKey: 8-byte opaque handle)`.
-  /// The handle is **not serializable** — see class docs.
-  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair() async {
+  /// The handle is **not serializable** — see class docs. Pass a 64-byte FIPS
+  /// 203 seed (`d || z`) for deterministic generation — used internally by
+  /// the X-Wing FFI backend, whose ML-KEM secret key is derived
+  /// deterministically from the X-Wing seed.
+  @override
+  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair(
+      [Uint8List? seed]) async {
+    if (seed != null) return _generateKeyPairFromSeed(seed);
+
     final Pointer<Utf8> algName = 'ML-KEM-768'.toNativeUtf8();
     final Pointer<EVP_PKEY_CTX> ctx =
         _ctxNewFromName(nullptr, algName, nullptr);
@@ -127,14 +134,7 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
     }
   }
 
-  /// Generate an ML-KEM-768 key pair deterministically from a 64-byte FIPS 203
-  /// seed (`d || z`), via OpenSSL.
-  ///
-  /// Returns `(publicKey: 1184 raw bytes, secretKey: 8-byte opaque handle)`.
-  /// The handle decapsulates within this instance/process only (see class
-  /// docs). Used by the X-Wing FFI backend, whose ML-KEM secret key is derived
-  /// deterministically from the X-Wing seed.
-  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPairFromSeed(
+  Future<({Uint8List publicKey, Uint8List secretKey})> _generateKeyPairFromSeed(
       Uint8List seed) async {
     if (seed.length != 64) {
       throw ArgumentError.value(

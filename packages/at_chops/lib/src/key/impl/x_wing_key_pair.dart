@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/key/keys.dart';
 
-import '../../algorithm/encryption/x_wing_pure_dart.dart';
+import '../../algorithm/at_pqc.dart';
 
 /// X-Wing hybrid post-quantum/traditional KEM key pair
 /// (draft-connolly-cfrg-xwing-kem).
@@ -19,10 +19,10 @@ class XWingKeyPair extends AsymmetricKeyPair {
   /// (draft-connolly-cfrg-xwing-kem; X25519 + ML-KEM-768).
   ///
   /// Raw 1216-byte public key and 32-byte seed secret key are
-  /// base64-encoded. Pure Dart, fully serializable.
+  /// base64-encoded. Uses [AtPqc.xWing] — FFI when available, else pure-Dart.
   static Future<XWingKeyPair> generate() async {
     final (publicKey: Uint8List pub, secretKey: Uint8List sk) =
-        await XWingPureDartAlgo.instance.generateKeyPair();
+        await AtPqc.xWing.generateKeyPair();
     return XWingKeyPair.create(base64Encode(pub), base64Encode(sk));
   }
 

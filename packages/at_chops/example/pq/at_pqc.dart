@@ -12,6 +12,7 @@ Future<void> main() async {
 }
 
 Future<void> _xWingRoundTrip() async {
+  // Generate a fresh key pair for Alice.
   final XWingKeyPair kp = await XWingKeyPair.generate();
 
   // Bob encapsulates using Alice's public key.

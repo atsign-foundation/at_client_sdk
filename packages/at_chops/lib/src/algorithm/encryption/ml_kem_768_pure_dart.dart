@@ -25,6 +25,7 @@ final class MlKem768PureDartAlgo implements AtKemAlgorithm {
   /// Returns raw `(publicKey: 1184 bytes, secretKey: 2400 bytes)`. Optionally
   /// accepts a 64-byte [seed] (d||z) for deterministic generation — testing
   /// only.
+  @override
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair(
       [Uint8List? seed]) async {
     final (Uint8List pk, Uint8List sk) = _kem.generateKeyPair(seed);

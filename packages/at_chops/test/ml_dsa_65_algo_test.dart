@@ -6,6 +6,19 @@ import 'package:test/test.dart';
 
 void main() {
   group('ML-DSA-65 pure-Dart', () {
+    test('instance generateKeyPair produces FIPS 204 key sizes', () async {
+      // Pins the generateKeyPair conversion from a static method to an
+      // instance method (required to implement AtSignatureAlgorithm).
+      final algo = MlDsa65PureDartAlgo();
+      final kp = await algo.generateKeyPair();
+      expect(kp.publicKey.length, equals(1952));
+      expect(kp.secretKey.length, equals(4032));
+
+      final Uint8List message = Uint8List.fromList('instance keygen'.codeUnits);
+      final Uint8List sig = await algo.signBytes(message, kp.secretKey);
+      expect(await algo.verifyBytes(message, sig, kp.publicKey), isTrue);
+    });
+
     test('sign/verify round-trip yields true', () async {
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);

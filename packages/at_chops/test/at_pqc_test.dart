@@ -45,6 +45,46 @@ void main() {
       final bool ok = await AtPqc.mlDsa65.verifyBytes(msg, sig, kp.publicKeyBytes);
       expect(ok, isTrue);
     });
+
+    test('AtPqc.xWing.generateKeyPair() round-trips directly, with no wrapper',
+        () async {
+      final kp = await AtPqc.xWing.generateKeyPair();
+      expect(kp.publicKey.length, 1216);
+      expect(kp.secretKey.length, 32);
+
+      final enc = await AtPqc.xWing.encapsulate(kp.publicKey);
+      final ss = await AtPqc.xWing.decapsulate(kp.secretKey, enc.ciphertext);
+      expect(ss, enc.sharedSecret);
+    });
+
+    test('AtPqc.mlDsa65.generateKeyPair() round-trips directly, with no wrapper',
+        () async {
+      final kp = await AtPqc.mlDsa65.generateKeyPair();
+      expect(kp.publicKey.length, 1952);
+      expect(kp.secretKey.length, 4032);
+
+      final Uint8List msg = Uint8List.fromList('direct facade keygen'.codeUnits);
+      final Uint8List sig = await AtPqc.mlDsa65.signBytes(msg, kp.secretKey);
+      expect(await AtPqc.mlDsa65.verifyBytes(msg, sig, kp.publicKey), isTrue);
+    });
+
+    test('XWingKeyPair.generate() delegates to AtPqc.xWing.generateKeyPair()',
+        () async {
+      // Both must resolve to the same backend on this host, so a key
+      // generated via the wrapper is usable directly against AtPqc.xWing.
+      final XWingKeyPair kp = await XWingKeyPair.generate();
+      final enc = await AtPqc.xWing.encapsulate(kp.publicKeyBytes);
+      final ss = await AtPqc.xWing.decapsulate(kp.privateKeyBytes, enc.ciphertext);
+      expect(ss, enc.sharedSecret);
+    });
+
+    test('MlDsa65KeyPair.generate() delegates to AtPqc.mlDsa65.generateKeyPair()',
+        () async {
+      final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
+      final Uint8List msg = Uint8List.fromList('wrapper delegation'.codeUnits);
+      final Uint8List sig = await AtPqc.mlDsa65.signBytes(msg, kp.privateKeyBytes);
+      expect(await AtPqc.mlDsa65.verifyBytes(msg, sig, kp.publicKeyBytes), isTrue);
+    });
   });
 
   // These tests require libcrypto (OpenSSL >= 3.5) at runtime.

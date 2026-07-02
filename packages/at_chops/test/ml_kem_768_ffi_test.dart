@@ -64,5 +64,70 @@ void main() {
           await MlKem768PureDartAlgo.instance.decapsulate(priv, enc.ciphertext);
       expect(recovered, equals(enc.sharedSecret));
     });
+
+    // The following pin the generateKeyPairFromSeed -> generateKeyPair([seed])
+    // merge (used internally by XWingFfiAlgo) directly at the ML-KEM-768
+    // level, rather than only transitively through X-Wing.
+    group('seeded generateKeyPair (merged from generateKeyPairFromSeed)', () {
+      final seed = Uint8List.fromList(List<int>.generate(64, (i) => i));
+
+      test('matches the pure-Dart public key for the same 64-byte seed',
+          () async {
+        if (lib == null) {
+          fail('libcrypto not available on this host');
+        }
+        if (!mlKemSupported) {
+          fail(
+              'libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.3)');
+        }
+
+        final ffiAlgo = MlKem768FfiAlgo.fromLib(lib);
+        final ffiKp = await ffiAlgo.generateKeyPair(seed);
+        final pureKp = await MlKem768PureDartAlgo.instance.generateKeyPair(seed);
+        try {
+          expect(ffiKp.publicKey, equals(pureKp.publicKey));
+        } finally {
+          ffiAlgo.releaseKeyPair(ffiKp);
+        }
+      });
+
+      test('encapsulate/decapsulate round-trip with a seeded key pair',
+          () async {
+        if (lib == null) {
+          fail('libcrypto not available on this host');
+        }
+        if (!mlKemSupported) {
+          fail(
+              'libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.3)');
+        }
+
+        final ffiAlgo = MlKem768FfiAlgo.fromLib(lib);
+        final kp = await ffiAlgo.generateKeyPair(seed);
+        try {
+          final enc = await ffiAlgo.encapsulate(kp.publicKey);
+          final Uint8List recovered =
+              await ffiAlgo.decapsulate(kp.secretKey, enc.ciphertext);
+          expect(recovered, equals(enc.sharedSecret));
+        } finally {
+          ffiAlgo.releaseKeyPair(kp);
+        }
+      });
+
+      test('rejects a seed that is not 64 bytes', () async {
+        if (lib == null) {
+          fail('libcrypto not available on this host');
+        }
+        if (!mlKemSupported) {
+          fail(
+              'libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.3)');
+        }
+
+        final ffiAlgo = MlKem768FfiAlgo.fromLib(lib);
+        expect(
+          () => ffiAlgo.generateKeyPair(Uint8List(32)),
+          throwsA(isA<ArgumentError>()),
+        );
+      });
+    });
   });
 }

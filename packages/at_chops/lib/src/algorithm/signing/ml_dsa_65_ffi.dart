@@ -75,6 +75,7 @@ final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
   ///
   /// Returns `(publicKey: 1952 raw bytes, secretKey: 4032 raw bytes)`.
   /// Both values are serializable and interoperable with [MlDsa65PureDartAlgo].
+  @override
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair() async {
     final Pointer<Utf8> algName = 'ML-DSA-65'.toNativeUtf8();
     final Pointer<EVP_PKEY_CTX> ctx =

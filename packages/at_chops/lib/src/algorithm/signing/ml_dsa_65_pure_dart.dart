@@ -17,8 +17,8 @@ final class MlDsa65PureDartAlgo implements AtSignatureAlgorithm {
   /// Generate a fresh ML-DSA-65 key pair.
   ///
   /// Returns raw `(publicKey: 1952 bytes, secretKey: 4032 bytes)`.
-  static Future<({Uint8List publicKey, Uint8List secretKey})>
-      generateKeyPair() async {
+  @override
+  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair() async {
     final (Uint8List pk, Uint8List sk) =
         MlDsa.generateKeyPair(DilithiumParams.mlDsa65);
     return (publicKey: pk, secretKey: sk);

@@ -5,14 +5,14 @@ import 'package:at_chops/at_chops.dart';
 
 Future<void> main() async {
   // Alice generates a key pair. Both public and secret keys are raw bytes.
+  final algo = MlDsa65PureDartAlgo();
   final ({Uint8List publicKey, Uint8List secretKey}) kp =
-      await MlDsa65PureDartAlgo.generateKeyPair();
+      await algo.generateKeyPair();
 
   print('Public key (${kp.publicKey.length} bytes): ${base64Encode(kp.publicKey)}');
   print('Secret key (${kp.secretKey.length} bytes): ${base64Encode(kp.secretKey)}');
 
   // Alice signs a message with her secret key.
-  final algo = MlDsa65PureDartAlgo();
   final Uint8List message = Uint8List.fromList(utf8.encode('hello pqc'));
   final Uint8List signature = await algo.signBytes(message, kp.secretKey);
 

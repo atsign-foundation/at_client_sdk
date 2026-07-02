@@ -66,6 +66,9 @@ abstract class AtSigningAlgorithm {
 ///
 /// Safe to share as a singleton.
 abstract interface class AtSignatureAlgorithm {
+  /// Generate a fresh signing key pair.
+  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair();
+
   /// Signs [message] with [secretKey]; returns the signature bytes.
   Future<Uint8List> signBytes(Uint8List message, Uint8List secretKey);
 
@@ -88,6 +91,13 @@ abstract class AtHashingAlgorithm<K, V> {
 /// recipient's public key, the recipient via [decapsulate] using their
 /// secret key and the ciphertext sent by the sender.
 abstract class AtKemAlgorithm {
+  /// Generate a fresh key pair.
+  ///
+  /// Pass [seed] for deterministic generation (testing); otherwise one is
+  /// drawn from a secure random source.
+  FutureOr<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair(
+      [Uint8List? seed]);
+
   /// Encapsulate a fresh shared secret against [publicKey].
   ///
   /// Returns the [ciphertext] to transmit to the holder of the matching

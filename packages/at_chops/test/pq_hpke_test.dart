@@ -15,6 +15,10 @@ final class _FixedKem implements AtKemAlgorithm {
   final Uint8List _ct;
   _FixedKem(this._ss, this._ct);
   @override
+  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair(
+          [Uint8List? seed]) async =>
+      throw UnsupportedError('not used in this test');
+  @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
           Uint8List publicKey) async =>
       (ciphertext: _ct, sharedSecret: _ss);
