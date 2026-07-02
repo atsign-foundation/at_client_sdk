@@ -64,10 +64,13 @@ class PackageKey {
 /// record, conveyed there by riding `enroll:request` as opaque
 /// `EnrollParams.metadata` at enrollment time, and are discovered only via the
 /// gated `enroll:listns` verb (see [EnrollmentDirectory]). They are **not**
-/// published and **not** separately signed: the atServer vouches that a
-/// returned key package belongs to the enrollment it is filed under. (Message
-/// authenticity is the per-envelope APKAM signature, see EnvelopeSigning —
-/// unchanged.)
+/// published as ordinary at-keys. Per the ratified design the advertised key
+/// package is wrapped in an APKAM-signed envelope by its generating enrollment
+/// and verified against that enrollment's `_apsk` — the same path same-atSign
+/// and cross-atSign — so the encapsulation target is authenticated, not merely
+/// server-vouched. *(Signing/verifying the advertised package is not yet
+/// implemented here — today it is advertised unsigned; per-envelope `__ssenv`
+/// messages are already APKAM-signed, see EnvelopeSigning.)*
 ///
 /// The wire form is the value stored at `metadata.keyPackage`
 /// in the enrollment record ([toJson] / [fromPayload]); [enrollmentId] and
