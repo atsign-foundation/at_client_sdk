@@ -12,15 +12,14 @@ Future<void> main() async {
   print('Secret key (${kp.secretKey.length} bytes): ${base64Encode(kp.secretKey)}');
 
   // Alice signs a message with her secret key.
+  final algo = MlDsa65PureDartAlgo();
   final Uint8List message = Uint8List.fromList(utf8.encode('hello pqc'));
-  final Uint8List signature =
-      await MlDsa65PureDartAlgo.signBytes(message, kp.secretKey);
+  final Uint8List signature = await algo.signBytes(message, kp.secretKey);
 
   print('Signature (${signature.length} bytes): ${base64Encode(signature)}');
 
   // Bob verifies the signature against Alice's public key.
-  final bool ok =
-      await MlDsa65PureDartAlgo.verifyBytes(message, signature, kp.publicKey);
+  final bool ok = await algo.verifyBytes(message, signature, kp.publicKey);
 
   print('Verified: $ok');
 }

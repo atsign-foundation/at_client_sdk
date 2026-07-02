@@ -88,8 +88,9 @@ final valid = signing.verify(message, signature);
 final kp = await MlDsa65PureDartAlgo.generateKeyPair();
 // kp.publicKey — 1952 bytes; kp.secretKey — 4032 bytes
 
-final signature = await MlDsa65PureDartAlgo().signBytes(message, kp.secretKey);
-final valid = await MlDsa65PureDartAlgo().verifyBytes(message, signature, kp.publicKey);
+final mlDsa65 = MlDsa65PureDartAlgo();
+final signature = await mlDsa65.signBytes(message, kp.secretKey);
+final valid = await mlDsa65.verifyBytes(message, signature, kp.publicKey);
 ```
 
 ### ML-KEM-768 (post-quantum KEM, pure-Dart)
@@ -122,6 +123,28 @@ final ss2 = await xwing.decapsulate(kp.secretKey, ct);
 // ss1 == ss2
 ```
 
+### AtPqc (auto-resolved PQ backends)
+
+`AtPqc` is the recommended entry point for PQ crypto — it auto-resolves the
+OpenSSL FFI backend when `libcrypto` supports it, falling back to pure-Dart
+otherwise, so callers don't need to pick a backend by hand. Import
+`package:at_chops/at_chops_ffi.dart` to access it.
+
+```dart
+import 'package:at_chops/at_chops_ffi.dart';
+
+// Signing — AtPqc.mlDsa65 is typed as AtSignatureAlgorithm
+final kp = await MlDsa65KeyPair.generate();
+final signature = await AtPqc.mlDsa65.signBytes(message, kp.privateKeyBytes);
+final valid = await AtPqc.mlDsa65.verifyBytes(message, signature, kp.publicKeyBytes);
+
+// KEM — AtPqc.xWing is typed as AtKemAlgorithm
+final xwKp = await XWingKeyPair.generate();
+final (ciphertext: ct, sharedSecret: ss1) = await AtPqc.xWing.encapsulate(xwKp.publicKeyBytes);
+final ss2 = await AtPqc.xWing.decapsulate(xwKp.privateKeyBytes, ct);
+// ss1 == ss2
+```
+
 ### X25519 (Diffie–Hellman, pure-Dart)
 
 ```dart
@@ -145,6 +168,11 @@ final hash = SHA512HashingAlgo().hash('some-data'.codeUnits);
 ML-DSA-65, ML-KEM-768, and X25519 each have an OpenSSL FFI backend (`MlDsa65FfiAlgo`, `MlKem768FfiAlgo`, `X25519FfiAlgo`) that requires `libcrypto` to be installed. The pure-Dart backends (`*PureDartAlgo`) work on all platforms without native dependencies.
 
 X-Wing (`XWingFfiAlgo`) composes the FFI backends for maximum performance when `libcrypto` is available.
+
+FFI backends are exported from `package:at_chops/at_chops_ffi.dart`, not the
+main `at_chops.dart` barrel, so pure-Dart-only consumers aren't forced to
+carry FFI bindings. Use [AtPqc](#atpqc-auto-resolved-pq-backends) instead of
+picking an FFI/pure-Dart backend directly when possible.
 
 ## Running Tests
 

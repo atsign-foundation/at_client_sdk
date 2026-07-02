@@ -23,6 +23,6 @@ abstract final class AtPqc {
   /// Do not downcast to the concrete type — it is an implementation detail.
   static final AtSignatureAlgorithm mlDsa65 =
       (_lib != null && libCryptoSupportsMlDsa65(_lib!))
-              ? MlDsa65SigningFfiAlgo(MlDsa65FfiAlgo.fromLib(_lib!))
-          : const MlDsa65SigningPureDartAlgo();
+          ? MlDsa65FfiAlgo.fromLib(_lib!)
+          : MlDsa65PureDartAlgo();
 }

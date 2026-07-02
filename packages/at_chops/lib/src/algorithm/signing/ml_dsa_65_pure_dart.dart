@@ -1,39 +1,18 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:pqcrypto/pqcrypto.dart';
 
 /// ML-DSA-65 (FIPS 204) digital signature backed by pure-Dart
 /// (`package:pqcrypto`).
 ///
-/// **Preferred use:** call the static [generateKeyPair], [signBytes], and
-/// [verifyBytes] directly — all key material is passed explicitly. Or use
-/// [AtPqc.mlDsa65] (typed [AtSignatureAlgorithm]) for auto-resolved FFI/pure
-/// dispatch without touching this class.
-///
-/// **Stateful use** — deprecated, removed in v4:
-/// Construct an instance, set [secretKey], then call [sign]/[verify].
-///
-/// ## v4 migration
-///
-/// In v4 this class will `implements AtSignatureAlgorithm` directly. The
-/// static [signBytes] and [verifyBytes] will become the canonical instance
-/// implementations. The stateful [secretKey]/[sign]/[verify] surface and
-/// the [AtSigningAlgorithm] conformance will be removed, along with the
-/// [MlDsa65SigningPureDartAlgo] adapter that currently bridges them.
-final class MlDsa65PureDartAlgo implements AtSigningAlgorithm {
-  Uint8List? _secretKey;
-
+/// Construct an instance and call [signBytes]/[verifyBytes] (the
+/// [AtSignatureAlgorithm] interface) — all key material is passed
+/// explicitly. Or use [AtPqc.mlDsa65] (typed [AtSignatureAlgorithm]) for
+/// auto-resolved FFI/pure dispatch without touching this class.
+final class MlDsa65PureDartAlgo implements AtSignatureAlgorithm {
   MlDsa65PureDartAlgo();
-
-  @Deprecated(
-    'Stateful API removed in v4. '
-    'Use the static signBytes/verifyBytes, or AtPqc.mlDsa65 typed as AtSignatureAlgorithm.',
-  )
-  set secretKey(Uint8List value) => _secretKey = value;
 
   /// Generate a fresh ML-DSA-65 key pair.
   ///
@@ -45,65 +24,21 @@ final class MlDsa65PureDartAlgo implements AtSigningAlgorithm {
     return (publicKey: pk, secretKey: sk);
   }
 
+  // ── AtSignatureAlgorithm ────────────────────────────────────────────────
+
   /// Sign [message] with [secretKey] (raw 4032-byte secret key).
   ///
   /// Returns a 3309-byte signature. Signing is hedged per FIPS 204 —
   /// a fresh random value is mixed in, so signatures are non-deterministic.
-  static Future<Uint8List> signBytes(
-      Uint8List message, Uint8List secretKey) async {
+  @override
+  Future<Uint8List> signBytes(Uint8List message, Uint8List secretKey) async {
     return MlDsa.sign(secretKey, message, DilithiumParams.mlDsa65);
   }
 
   /// Verify [signature] over [message] against [publicKey] (raw 1952 bytes).
-  static Future<bool> verifyBytes(
+  @override
+  Future<bool> verifyBytes(
       Uint8List message, Uint8List signature, Uint8List publicKey) async {
     return MlDsa.verify(publicKey, message, signature, DilithiumParams.mlDsa65);
   }
-
-  // ── AtSigningAlgorithm — deprecated, removed in v4 ────────────────────────
-
-  @Deprecated(
-    'Stateful API removed in v4. '
-    'Use the static signBytes/verifyBytes, or AtPqc.mlDsa65 typed as AtSignatureAlgorithm.',
-  )
-  @override
-  Future<Uint8List> sign(Uint8List data) async {
-    if (_secretKey == null) {
-      throw AtSigningException(
-          'ML-DSA-65 secret key must be set before signing');
-    }
-    return signBytes(data, _secretKey!);
-  }
-
-  @Deprecated(
-    'Stateful API removed in v4. '
-    'Use the static signBytes/verifyBytes, or AtPqc.mlDsa65 typed as AtSignatureAlgorithm.',
-  )
-  @override
-  Future<bool> verify(Uint8List signedData, Uint8List signature,
-      {String? publicKey}) async {
-    if (publicKey == null) {
-      throw AtSigningException(
-          'public key must be provided for ML-DSA-65 signature verification');
-    }
-    final Uint8List pkBytes = base64Decode(publicKey);
-    return verifyBytes(signedData, signature, pkBytes);
-  }
-}
-
-/// [AtSignatureAlgorithm] adapter over [MlDsa65PureDartAlgo]'s static methods.
-///
-/// Removed in v4 when [MlDsa65PureDartAlgo] implements [AtSignatureAlgorithm]
-/// directly.
-final class MlDsa65SigningPureDartAlgo implements AtSignatureAlgorithm {
-  const MlDsa65SigningPureDartAlgo();
-
-  @override
-  Future<Uint8List> signBytes(Uint8List message, Uint8List secretKey) =>
-      MlDsa65PureDartAlgo.signBytes(message, secretKey);
-
-  @override
-  Future<bool> verifyBytes(
-          Uint8List message, Uint8List signature, Uint8List publicKey) =>
-      MlDsa65PureDartAlgo.verifyBytes(message, signature, publicKey);
 }

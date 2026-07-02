@@ -20,9 +20,9 @@ void main() {
 
     test('AtPqc.mlDsa65 is FFI when supported, else pure', () {
       if (mlDsaFfi) {
-        expect(AtPqc.mlDsa65, isA<MlDsa65SigningFfiAlgo>());
+        expect(AtPqc.mlDsa65, isA<MlDsa65FfiAlgo>());
       } else {
-        expect(AtPqc.mlDsa65, isA<MlDsa65SigningPureDartAlgo>());
+        expect(AtPqc.mlDsa65, isA<MlDsa65PureDartAlgo>());
       }
     });
 
@@ -86,8 +86,9 @@ void main() {
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List msg = Uint8List.fromList('cross-backend sign'.codeUnits);
       final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib);
-      final Uint8List sig = await ffiAlgo.signBytes(kp.privateKeyBytes, msg);
-      final bool ok = await MlDsa65PureDartAlgo.verifyBytes(msg, sig, kp.publicKeyBytes);
+      final Uint8List sig = await ffiAlgo.signBytes(msg, kp.privateKeyBytes);
+      final bool ok =
+          await MlDsa65PureDartAlgo().verifyBytes(msg, sig, kp.publicKeyBytes);
       expect(ok, isTrue);
     }, tags: ['ffi']);
 
@@ -99,9 +100,10 @@ void main() {
 
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List msg = Uint8List.fromList('cross-backend verify'.codeUnits);
-      final Uint8List sig = await MlDsa65PureDartAlgo.signBytes(msg, kp.privateKeyBytes);
+      final Uint8List sig =
+          await MlDsa65PureDartAlgo().signBytes(msg, kp.privateKeyBytes);
       final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib);
-      final bool ok = await ffiAlgo.verifyBytes(kp.publicKeyBytes, msg, sig);
+      final bool ok = await ffiAlgo.verifyBytes(msg, sig, kp.publicKeyBytes);
       expect(ok, isTrue);
     }, tags: ['ffi']);
   });

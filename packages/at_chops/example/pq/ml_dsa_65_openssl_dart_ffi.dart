@@ -22,14 +22,12 @@ Future<void> main() async {
 
   // Alice signs a message with her secret key.
   final Uint8List message = Uint8List.fromList(utf8.encode('hello pqc'));
-  // ignore: deprecated_member_use
-  final Uint8List signature = await algo.signBytes(kp.secretKey, message);
+  final Uint8List signature = await algo.signBytes(message, kp.secretKey);
 
   print('Signature (${signature.length} bytes): ${base64Encode(signature)}');
 
   // Bob verifies the signature against Alice's public key.
-  // ignore: deprecated_member_use
-  final bool ok = await algo.verifyBytes(kp.publicKey, message, signature);
+  final bool ok = await algo.verifyBytes(message, signature, kp.publicKey);
 
   print('Verified: $ok');
 }
