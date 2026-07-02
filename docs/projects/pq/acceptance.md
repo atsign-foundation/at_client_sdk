@@ -6,6 +6,26 @@ post-quantum work — the full use-case list **A1.x–A5.x** (PQ-native greenfie
 and **B0.x–B5.x** (retrofit / mixed), each as **Given / When / Then** with
 concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
+## Table of contents
+
+- [0. Purpose, scope & how to read this doc](#0-purpose-scope--how-to-read-this-doc)
+- [1. Notation, state model & key objects (test vocabulary)](#1-notation-state-model--key-objects-test-vocabulary)
+- [2. A1 · Onboard a new atSign (PQ-native)](#2-a1--onboard-a-new-atsign-pq-native)
+- [3. A2 · Enrollments (a new enrollment joins)](#3-a2--enrollments-a-new-enrollment-joins)
+- [4. A3 · E2EE within one atSign (self data) + self notification](#4-a3--e2ee-within-one-atsign-self-data--self-notification)
+- [5. A4 · E2EE across atSigns (shared data) + cross-atSign notification](#5-a4--e2ee-across-atsigns-shared-data--cross-atsign-notification)
+- [6. A5 · Rotation & revocation (new world)](#6-a5--rotation--revocation-new-world)
+- [7. B0 · Prerequisite — atServer upgrade](#7-b0--prerequisite--atserver-upgrade)
+- [8. B1 · Upgrade an existing (pre-PQ) atSign — the retrofit scenarios](#8-b1--upgrade-an-existing-pre-pq-atsign--the-retrofit-scenarios)
+- [9. B2 · Legacy retirement & lockout](#9-b2--legacy-retirement--lockout)
+- [10. B3 · Mixed-PQ within one atSign](#10-b3--mixed-pq-within-one-atsign)
+- [11. B4 · Mixed-PQ across atSigns](#11-b4--mixed-pq-across-atsigns)
+- [12. B5 · Retrofit edge cases](#12-b5--retrofit-edge-cases)
+- [13. Cross-cutting acceptance (applies to all flows)](#13-cross-cutting-acceptance-applies-to-all-flows)
+- [14. Test harness & impl/verify mapping](#14-test-harness--implverify-mapping)
+
+---
+
 ## 0. Purpose, scope & how to read this doc
 
 Each use case carries **both** the given/when/then acceptance rows **and** the
@@ -99,7 +119,7 @@ per keyfile/install):
 - **X-Wing key package** — the per-enrollment X-Wing recipient keypair a sender
   `pqSeal`s to (`kpid` = the kid of its X-Wing public half). Registered in the
   enrollment record alongside the ML-DSA public key; **never published**;
-  discovered only via `enroll:listfornamespace`. Private half never leaves the
+  discovered only via `enroll:listns`. Private half never leaves the
   keyfile.
 - **`appMetadata.providerId`** routes a reader to a provider; a value with **no**
   `providerId` defaults to **legacy**. `appMetadata` carries **no `ns` field**:
@@ -118,7 +138,7 @@ the **existing** immutable write (`Metadata.immutable`) for mint-once, plus —
   recorded for the enrollment, using a **record-authoritative** `signingAlgo`
   (`rsa2048` | `mldsa65`): the server's `_getSigningAlgoType` reads the **record**
   `signingAlgo`, **not** the client-supplied wire value.
-- **`enroll:listfornamespace:<ns>`** — the gated discovery verb (requester must
+- **`enroll:listns:<ns>`** — the gated discovery verb (requester must
   hold ≥`r` on `<ns>`), returning a **flattened**
   `[{enrollmentId, access, apkamPubKey, metadata}]` list — **no** nested
   `apkam[]` array.
@@ -159,7 +179,7 @@ once in `design.md`; UCs below reference them by name.
   - `public:pqpublickey@alice` exists, is immutable (a second create is rejected),
     `alice1.pqpk⁻¹ = ✓`.
   - `alice1.KP = ✓`, registered in E1's record (not published; discoverable only via
-    `enroll:listfornamespace`).
+    `enroll:listns`).
   - **No `selfEncryptionKey` minted** (self data uses the nskey data path; cold-start
     seals the CK to `pqpublickey`).
   - Readiness may be `ready` (no legacy enrollments exist).
@@ -172,7 +192,7 @@ once in `design.md`; UCs below reference them by name.
 | E1  | pq    | ✓      | —       | ✓  |
 
 - **Cross-ref:** `design.md` (cold-start, `pqpublickey` root lifecycle);
-  `decisions.md` (Decision #1, legacy-peer interop flag).
+  `decisions.md` ([Decision #1](decisions.md#numbered-rulings-14), legacy-peer interop flag).
 - **Impl/verify:** project **ON-1** (see `implementation-plan.md`); harness
   `tests/at_functional_test` runLocal.sh (live CRAM onboard).
 
@@ -228,7 +248,7 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
   - Both hosts share `pqpublickey@alice⁻¹` and E1's namespace authorisations.
   - Revocation is per-enrollment (`enroll:revoke`), so revoking E1 cuts every host
     sharing the copy at once.
-- **Cross-ref:** `decisions.md` (Decision #3 PQ-APKAM copyable-keyfile placement,
+- **Cross-ref:** `decisions.md` ([Decision #3](decisions.md#numbered-rulings-14) PQ-APKAM copyable-keyfile placement,
   Decision #F 1:1:1).
 
 ### 3.3 UC-A2.3 — Namespace-restricted enrollment
@@ -241,7 +261,7 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
   boundary is enforced at the atServer `__ssenv` namespace-delivery gate (it will not
   deliver an `…__ssenv.app_2.my_apps` key to an enrollment lacking `r` on it), not by
   a client-side refusal alone. `alice3` can read/write `app_1.my_apps` but not `app_2.my_apps`.
-- **Cross-ref:** `decisions.md` (Decision #4 push-at-approve + pull backstop);
+- **Cross-ref:** `decisions.md` ([Decision #4](decisions.md#numbered-rulings-14) push-at-approve + pull backstop);
   `design.md` (the substrate enroll flow, `__ssenv` envelope, `shareAllSecretsWithEnrollment`).
 - **Impl/verify (A2.x):** projects **SS-2 / SS-4** + **RF-2b**; harness
   `tests/at_functional_test` runLocal.sh (enroll/approve round-trip, `__ssenv` delivery).
@@ -286,7 +306,7 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
      (`recipientKind: nskey`) in an `at/nskey` record; write the data under
      `at/symmetric/AES/GCM`.
   3. **Push** the nskey private per-enrollment to every ≥`r` member: call
-     `enroll:listfornamespace:app_1.my_apps`, `pqSeal` the private to each member's
+     `enroll:listns:app_1.my_apps`, `pqSeal` the private to each member's
      key package (addressed by `kpid`), put on
      `<msgId>.<kpid>.__ssenv.app_1.my_apps@alice`. `alice2` verifies correspondence
      against the self at-key `nskey.app_1.my_apps@alice` and `putIfNewer`s.
@@ -336,7 +356,10 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
 - **Cross-ref:** `design.md` (nskey data path: 3 layers / 3 providers, CK model, the
   nskey + its lazy publication, `pqpublickey` cold-start).
 - **Impl/verify (A3.x):** **SS-4** (mints) + **B-1** (data path); harness at_chops
-  vectors (KEM/seal) + at_client `dart test` round-trip.
+  vectors (KEM/seal) + at_client `dart test` round-trip for the data path, **plus**
+  `tests/at_functional_test` runLocal.sh for UC-A3.2's per-enrollment nskey push and
+  its server-gated `__ssenv` refusal ("an `app_2.my_apps`-only client is refused the
+  `app_1.my_apps` nskey private" is a live-atServer assertion, not a client-only one).
 
 ## 5. A4 · E2EE across atSigns (shared data) + cross-atSign notification
 
@@ -447,7 +470,7 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
 - **When:** operator runs `enroll:revoke` on E2.
 - **Then:** E2's one APKAM keypair can no longer authenticate; `alice1` unaffected; E2
   gets no new secrets — excluded at **both** discovery+push (`excludeEnrollmentIds` on
-  `enroll:listfornamespace`/serve) **and** the `requestSecret` pull serve (the
+  `enroll:listns`/serve) **and** the `requestSecret` pull serve (the
   revocation guard). (Under 1:1:1 "revoke E2's APKAM key" == revoke its enrollment;
   there is no per-pubkey delete.)
 
@@ -473,7 +496,7 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
 - **Given:** `aliceS = legacy` (no PQ verbs); `alice1` is a PQ-capable build.
 - **When:** `alice1` attempts the upgrade sequence.
 - **Then:** the new PQ surface — PQ-APKAM (ML-DSA) auth, the flattened
-  `enroll:listfornamespace`, `EnrollParams.metadata` on `enroll:request`, the
+  `enroll:listns`, `EnrollParams.metadata` on `enroll:request`, the
   authenticated self-retrofit auto-approve — is unavailable → `alice1` **aborts
   cleanly, stays legacy**, mints no PQ keys, logs why. No partial state on the server.
   (The atServer's immutable write is long-standing and present even here — it is
@@ -599,7 +622,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 | E1  | pq    | legacy + nskey data path   | legacy (until ready) → nskey data path |
 | E2  | rsa   | legacy                     | legacy                                 |
 
-- **Cross-ref:** `decisions.md` (Decision #2 readiness per `(atSign, namespace)`);
+- **Cross-ref:** `decisions.md` ([Decision #2](decisions.md#numbered-rulings-14) readiness per `(atSign, namespace)`);
   `design.md` (migration philosophy, capability negotiation).
 - **Impl/verify:** **R-1** (scheme negotiation) + **RF-2c**.
 
@@ -623,7 +646,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
   `public:publickey@alice`**, which exists only if alice enabled the legacy-interop
   flag (default off). **Test outcome:** a PQ-native atSign is PQ-only by default, so a
   legacy-peer send to it is **unsupported unless** that flag is on.
-- **Cross-ref:** `decisions.md` (Decision #1 legacy interop ruling).
+- **Cross-ref:** `decisions.md` ([Decision #1](decisions.md#numbered-rulings-14) legacy interop ruling).
 
 ### 11.3 UC-B4.3 — Partially-upgraded `@alice` (alice1 PQ, alice2 legacy) shares with `@bob`
 
@@ -642,7 +665,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
   cold-start; `at/symmetric/AES/GCM` encrypts the data); the legacy path is no longer
   used toward bob.
 
-- **Cross-ref:** `decisions.md` (Decision #1 legacy interop); `roadmap.md`
+- **Cross-ref:** `decisions.md` ([Decision #1](decisions.md#numbered-rulings-14) legacy interop); `roadmap.md`
   (mixed-scheme + migration philosophy).
 - **Impl/verify:** **R-1** + **RF-2c**; harness `tests/at_end2end_test`.
 
@@ -654,10 +677,10 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
   `pqpublickey` created by `alice1`.
 - **When:** `alice2` next comes online and retrofits.
 - **Then:** `pqpublickey` is root (no namespace), so it has **no**
-  `enroll:listfornamespace` push — its `requestSecret` for `pqpublickey@alice⁻¹` is
+  `enroll:listns` push — its `requestSecret` for `pqpublickey@alice⁻¹` is
   the steady-state path, answered by any online holder (persists until one answers).
   Namespaced `nskey` privates `alice2` missed during its offline window arrive by the
-  **push** primary path once a holder is online (`enroll:listfornamespace` + `__ssenv`),
+  **push** primary path once a holder is online (`enroll:listns` + `__ssenv`),
   with `requestSecret` as the backstop. (Pull = `requestSecret` and push =
   `pushSecretToNamespaceMembers` are dual facets of one substrate — see `design.md`.)
 
@@ -707,6 +730,13 @@ These invariants are testable against **every** UC above:
   create is rejected, never an overwrite. (The owner-only self at-key
   `nskey.<ns>@owner` is an ordinary at-key — it syncs and is re-written on
   nskey-keypair rotation; only its promotion to `public:` is immutable.)
+- **Performance is measured, not assumed.** The PQ primitives (ML-KEM / ML-DSA,
+  X-Wing encap/decap, `pqSeal`) land on hot paths — PKAM auth and every put/get — that
+  run on mobile/IoT hardware (the roadmap's NoPorts finish line). PKAM-auth latency and
+  put/get latency deltas vs the legacy RSA/AES path are **measured on one reference
+  low-end device** by a bench harness landed **with B-1** — the harness is the durable
+  artefact, re-run on every later key-shape change (bench-before-redesign). The ceiling
+  is **pinned when the harness lands**: a measured budget, not a guessed number.
 
 - **Cross-ref:** `design.md` (at_chops primitives: X-Wing, pqSeal/pqOpen, ML-DSA; the
   record-authoritative `signingAlgo` verify); `decisions.md` (1:1:1 + verb-wire-shape rulings).
@@ -719,22 +749,33 @@ Every UC cluster runs against one or more of four test layers:
 |------------------------------------|------------------------------------------------------------------------------------------|
 | **at_chops vectors**               | KEM / seal / ML-DSA primitives (X-Wing encap/decap, pqSeal/pqOpen, `mldsa65` verify). Baseline already on trunk — see below. |
 | **at_client `dart test`**          | data-path providers (`at/nskey`, `at/symmetric/AES/GCM`), CK cache, round-trip equality. Run with `--concurrency=1`. |
-| **`tests/at_functional_test` runLocal.sh** | same-atSign self keys, enroll / `listfornamespace` round-trip, `__ssenv` delivery; `docker compose down` before each run; cap runs at 180000 ms. |
+| **`tests/at_functional_test` runLocal.sh** | same-atSign self keys, enroll / `listns` round-trip, `__ssenv` delivery; `docker compose down` before each run; cap runs at 180000 ms. |
 | **`tests/at_end2end_test`**        | cross-atSign shares/notifications, retrofit, readiness flip.                             |
 
 **Baseline (already shipped, not pending work).** The primitive layer is on trunk:
 **#1930** (M0 crypto seam) and **#1993 / at_chops 3.3.0** (`pqSeal`/`pqOpen`), with
 **PR #2035** (design fixes) merged. at_chops-vector coverage exercises this shipped base.
 
+**PQ-capable test image (harness gap).** Both `tests/at_functional_test` and
+`tests/at_end2end_test` pin `atsigncompany/virtualenv:vip`, which refreshes only via
+certs-on-trunk or a canary→prod promotion — no work package delivers a PQ-verb-capable
+image, so **SS-1b's "first live round-trip" acceptance is not yet executable**. Close
+the gap with: a documented way to build a virtualenv image from an at_server branch, an
+image-override env var (e.g. `VE_IMAGE`) honoured by **both** `runLocal.sh` harnesses,
+and a stated policy for when CI switches its pinned tag from `:vip` to a PQ-capable one.
+Until that exists, **SS-1b's live-round-trip acceptance must sequence after an at_server
+release that carries the verb** — the client layer and at_chops vectors can land earlier,
+but the live assertion cannot run against `:vip`.
+
 **UC → project coverage** (cross-ref only — the authoritative sequence / dependency
 graph / effort lives in `implementation-plan.md`; this is the one place acceptance.md
 restates project IDs, and only as a coverage map):
 
-| UC cluster                                     | Project(s)                          |
-|------------------------------------------------|-------------------------------------|
-| A1.1 (PQ-native onboard, Decision #1, B4.2)    | **ON-1**                            |
-| A2.x / A3.x / A4.x / A5.x                      | **SS-4, B-1, B-2, RF-2b**           |
-| B0.x / B1.x / B2.x / B3.x / B4.x / B5.x        | **RF-2c** (retrofit) + **R-1** (scheme negotiation) + **RF-SRV** (server auto-approve) |
+| UC cluster                                                                      | Project(s)                      |
+|---------------------------------------------------------------------------------|---------------------------------|
+| A1.1 (PQ-native onboard, [Decision #1](decisions.md#numbered-rulings-14), B4.2) | **ON-1**                        |
+| A2.x / A3.x / A4.x / A5.x                                                       | **SS-2, SS-4, B-1, B-2, RF-2b** |
+| B0.x / B1.x / B2.x / B3.x / B4.x / B5.x                                         | **RF-2c** (retrofit) + **R-1** (scheme negotiation) + **RF-SRV** (server auto-approve) |
 
 Project names follow the `implementation-plan.md` scheme (RF-SRV / RF-2b /
 RF-2c).

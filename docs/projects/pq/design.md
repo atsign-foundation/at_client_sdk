@@ -6,6 +6,16 @@
 path) and the secret-sharing substrate it rides on. This is the "how it is built"
 companion to four sibling docs (see the orientation table in [section 0](#0-scope-conventions--document-map)).
 
+## Table of contents
+
+- [0. Scope, conventions & document map](#0-scope-conventions--document-map)
+- [1. Subsystem A — D1 nskey data path](#1-subsystem-a--d1-nskey-data-path)
+- [2. Subsystem B — the secret-sharing substrate (WP-SS)](#2-subsystem-b--the-secret-sharing-substrate-wp-ss)
+- [3. Subsystem C — at_chops PQ primitives](#3-subsystem-c--at_chops-pq-primitives)
+- [4. Subsystem D — structural design (CryptoProvider seam, WritableAtKeys / key stores, WASM barrel)](#4-subsystem-d--structural-design-cryptoprovider-seam-writableatkeys--key-stores-wasm-barrel)
+- [5. Subsystem E — worked design walkthroughs (NoPorts, at_talk)](#5-subsystem-e--worked-design-walkthroughs-noports-at_talk)
+- [6. Implementation notes & file-level pointers (consolidated)](#6-implementation-notes--file-level-pointers-consolidated)
+
 ---
 
 ## 0. Scope, conventions & document map
@@ -303,7 +313,7 @@ nskey private.
 Mint a **new nskey keypair** → re-publish its public half (re-promote to
 `public:nskey.<ns>@<atSign>` if the old one was published) → convey the new nskey
 private **per-APKAM over the substrate** (`__ssenv` envelopes sealed to each
-authorised APKAM keypair's key package, pushed via `enroll:listfornamespace` + the
+authorised APKAM keypair's key package, pushed via `enroll:listns` + the
 pull backstop — [§2](#2-subsystem-b--the-secret-sharing-substrate-wp-ss)),
 **excluding** any revoked keypairs (`excludeEnrollmentIds`). Buys
 namespace-granular **post-compromise security**; it is the per-APKAM revocation
@@ -409,7 +419,12 @@ everything *shared* is scoped at atSign / namespace / group level.
 `secret_envelope.dart`, `key_package.dart`, `secret_store.dart`,
 `enrollment_directory.dart`, `mixins/envelope_signing.dart`) — but it is **not
 wired into AtClient**, the **server verb is absent**, and the **consumer layers**
-(nskey minting, `pqpublickey` lifecycle, PQ APKAM mint + retrofit) are absent. The
+(nskey minting, `pqpublickey` lifecycle, PQ APKAM mint + retrofit) are absent.
+Additionally, the built `VerbEnrollmentDirectory` still speaks the **retired** wire
+shape — a nested `apkam[]` response parse plus the removed `enroll:metadata`
+registration write — contrary to decision #F (1:1:1) / OQ9; the WP-SS rework
+(PR #2037 / SS-1c) rewrites it to the flat, single-key, `enroll:listns`,
+no-write-path model. The
 full built/gap inventory with `file:line` evidence is in
 [§6](#6-implementation-notes--file-level-pointers-consolidated).
 
@@ -461,10 +476,12 @@ verify precedes open at `pairwise_secret_sharing.dart:366`); kpid addressing
   (default on) per put, so sync-less clients wake on their notification monitor
   and `get` the key (`useRemoteAtServer`). Applies to both request and response.
   (Future: the atServer auto-notifies on `__ssenv` puts — see DEP4 in
-  [§6](#6-implementation-notes--file-level-pointers-consolidated).)
+  [§6](#6-implementation-notes--file-level-pointers-consolidated); DEP4 is delivered
+  inside SS-2 per the implementation plan — the auto-notify is additive and could ship
+  independently, but the client default-flip is sequenced in SS-2.)
 - **Responder authorisation = namespace authorisation.** Serve a namespaced secret
   to requester `R` only if `R`'s enrollment is authorised for that namespace; the
-  authoritative source is the server-sourced discovery verb ([§2.3](#23-the-enrolllistfornamespace-verb--enrollparamsmetadata)), not a client
+  authoritative source is the server-sourced discovery verb ([§2.3](#23-the-enrolllistns-verb--enrollparamsmetadata)), not a client
   self-claim. **Never serve to an `excludeEnrollmentIds` member** (revoked).
 - **Root `pqpublickey` is the no-namespace exception** — like the legacy default
   encryption private key, it is served to **every non-revoked enrollment**
@@ -479,7 +496,7 @@ verify precedes open at `pairwise_secret_sharing.dart:366`); kpid addressing
 
 **`requestSecret(name)` / `waitForSecret` (pull).** Targeted fan-out — **no
 keyless broadcast**. Discover the namespace's authorised APKAM keypairs and their
-key packages via the gated verb ([§2.3](#23-the-enrolllistfornamespace-verb--enrollparamsmetadata)); `pqSeal` a request to each `kpid`,
+key packages via the gated verb ([§2.3](#23-the-enrolllistns-verb--enrollparamsmetadata)); `pqSeal` a request to each `kpid`,
 carrying the requester's *own* `kpid` so responders know where to seal the answer.
 A holder serves with `shareSecretWith(keyPackage, Secret)` (`pqSeal` back to the
 carried `kpid`); the requester `waitForSecret` resolves on the first valid
@@ -498,12 +515,12 @@ key package, so it conveys each held secret for a granted namespace **without a 
 call or poll** (no enumerate-all step). (`pairwise_secret_sharing.dart:689`;
 `excludeEnrollmentIds` guard threaded at `:458,641,694`.)
 
-### 2.3 The enroll:listfornamespace verb + EnrollParams.metadata
+### 2.3 The enroll:listns verb + EnrollParams.metadata
 
 A pusher (or puller) needs two facts: **who** is authorised for the namespace, and
 **what key** to seal to for each. One gated verb returns both.
 
-> **`enroll:listfornamespace:<ns>`** (working name) — returns every **approved**
+> **`enroll:listns:<ns>`** (working name) — returns every **approved**
 > enrollment authorised for `<ns>`, with its access level, its APKAM public key,
 > and its key-package metadata. **Gated:** the caller must hold ≥`r` on `<ns>`.
 
@@ -537,16 +554,16 @@ Old clients tolerate an absent `metadata` (the discovery element simply omits it
 **atServer build points** (verb spec; effort **L** — full DEP1 spec in
 [§6](#6-implementation-notes--file-level-pointers-consolidated)):
 
-- `at_commons/lib/src/verb/operation_enum.dart:24-33` — add `listfornamespace`
+- `at_commons/lib/src/verb/operation_enum.dart:24-33` — add `listns`
   to `EnrollOperationEnum` (adjacent to `list`).
-- `at_commons/lib/src/verb/syntax.dart:151` — **fold `listfornamespace` INTO the
+- `at_commons/lib/src/verb/syntax.dart:151` — **fold `listns` INTO the
   `(?<operation>…)` group, longest-first (before `list`, else `list` prefix-wins)**,
   with an optional `:(?<listNamespace>…)` segment. A *separate* top-level
   alternative leaves the `operation` group null and the handler does `operation!`
   (`enroll_verb_handler.dart:85`) → NPE — so the op token **must** populate
   `operation`.
 - `at_secondary_server/.../enroll_verb_handler.dart` — extend the enrollParams
-  guard (`:74-83`) to exempt `listfornamespace`; add `case 'listfornamespace':`
+  guard (`:74-83`) to exempt `listns`; add `case 'listns':`
   (after `:144`) → a new `_listForNamespace` helper (model on `_fetchEnrollmentRequests :481`);
   add a `_validateParams` case (`:630`) asserting the namespace is present.
 - **Gate** with a fresh helper that **mirrors `_checkForNamespaceAuthorization`**
@@ -564,11 +581,10 @@ bound to its stored algo.
 
 **ML-DSA APKAM auth is retained** (PQ-safe authentication):
 
-- **at_chops** — add an ML-DSA member to `SigningAlgoType` (`algo_type.dart:5-9`)
-  and a branch in `_getVerificationAlgorithm` (`at_chops_impl.dart:281`) returning
-  the **existing** `MlDsa65PureDartAlgo` / `MlDsa65FfiAlgo` (FFI vs pure-Dart
-  selection). **Do not write a new algo class** — at_chops already ships ML-DSA
-  ([§3](#3-subsystem-c--at_chops-pq-primitives)).
+- **at_chops** — the `mldsa65` `SigningAlgoType` member ALREADY ships
+  (`algo_type.dart:10`); add only the `mldsa65` branch in `_getVerificationAlgorithm`
+  (`at_chops_impl.dart:284`) returning the existing `MlDsa65PureDartAlgo` /
+  `MlDsa65FfiAlgo` ([§3](#3-subsystem-c--at_chops-pq-primitives)).
 - **at_commons** — widen the pkam `signingAlgo` alternation for an ML-DSA literal
   (`syntax.dart:10`).
 - **at_secondary_server** — `_getSigningAlgoType` (`pkam_verb_handler.dart:199-210`)
@@ -584,6 +600,16 @@ gains the `signingAlgo` + `metadata` fields; regenerate `.g.dart` via `build_run
 (don't hand-drift). Full DEP3 spec (effort **XL**) in
 [§6](#6-implementation-notes--file-level-pointers-consolidated).
 
+**Cross-tier property (atServer-guaranteed).** Envelope sender-authenticity rests on
+the atServer restricting writes to
+`public:_apsk.<enrollmentId>.<perEnrollmentApproved>@<atSign>` to that enrollment's
+own authenticated connection — a client fetches the signer's `_apsk` public key from
+there and trusts it. This was verified empirically against the released atServer
+(June 2026); it MUST be asserted by an e2e test (a second enrollment attempting to
+overwrite another enrollment's `_apsk` key is refused) and stated in the atServer
+DEP list, because the whole substrate's authentication collapses if that ACL
+regresses.
+
 ### 2.5 The authenticated self-retrofit flow (fresh, auto-approved enrollment)
 
 **Retrofit is a fresh, self-spawned, AUTO-APPROVED enrollment — NOT a mutation of
@@ -595,7 +621,7 @@ sequence in [`acceptance.md`](acceptance.md).)
 1. **Submits `enroll:request` with a NEW `enrollmentId` on its already-authenticated
    connection** — **no OTP** (it is already authenticated). The request carries the
    PQ APKAM public key + `signingAlgo=mldsa65` and the X-Wing key package via
-   `EnrollParams.metadata` ([§2.3](#23-the-enrolllistfornamespace-verb--enrollparamsmetadata)).
+   `EnrollParams.metadata` ([§2.3](#23-the-enrolllistns-verb--enrollparamsmetadata)).
 2. The **server validates** that the requested namespaces are a **subset** of the
    authenticating enrollment's namespaces, then **auto-approves** (no human step,
    no OTP).
@@ -648,7 +674,7 @@ The providers and the substrate seal through one audited PQ primitive.
 **X-Wing KEM** (`draft-connolly-cfrg-xwing-kem-10`): ML-KEM-768 + X25519 with the
 SHA3-256 combiner; 32-byte seed secret keys expanded via SHAKE-256. Vector-verified
 byte-exact against the draft's Appendix C vectors (incl. derandomized encapsulation).
-**ON TRUNK** (`at_chops 3.2.1`).
+**ON TRUNK** (`at_chops 3.3.0`, published 2026-06-23).
 
 **`pqSeal` / `pqOpen`** — the one audited PQ public-key-encryption primitive:
 
@@ -672,8 +698,12 @@ pqOpen(recipientSecretKey, envelope, {info, aad}) → plaintext
 
 **ML-DSA (`mldsa65`) verify.** `MlDsa65PureDartAlgo` / `MlDsa65FfiAlgo` (implementing
 `AtSigningAlgorithm.verify`) **already ship** in at_chops. To wire PQ APKAM auth,
-add the `SigningAlgoType` member + the `_getVerificationAlgorithm` branch returning
-the existing algo (FFI vs pure-Dart) — **do not write a new algo class** ([§2.4](#24-the-atserver-enrollment-record--ml-dsa-apkam-auth)).
+add only the `_getVerificationAlgorithm` branch (the `mldsa65` member already ships)
+returning the existing algo (FFI vs pure-Dart) — **do not write a new algo class** ([§2.4](#24-the-atserver-enrollment-record--ml-dsa-apkam-auth)).
+
+**Backend policy (2026-07-02).** The FFI backend auto-resolves as the default where a
+native library is present, with the pure-Dart backend as fallback; WASM builds force
+pure-Dart. (Ruling in [`decisions.md`](decisions.md).)
 
 **PQ enrollment-conveyance public key.** Publishing the atSign-level X-Wing public
 key (`public:pqpublickey@alice`) alongside `public:publickey@alice` closes the last
@@ -878,7 +908,7 @@ APKAM keypairs."
    never published). A holder (`Kb1`) `pqSeal`s the `at_talk` nskey **private** to
    `Kb3`'s key package and writes `<msgId>.<kp(Kb3)>.__ssenv.at_talk@bob` —
    addressed by `kpid`, per-APKAM, once per APKAM keypair (approval-time push /
-   `enroll:listfornamespace` / `requestSecret` pull backstop). Both gates of
+   `enroll:listns` / `requestSecret` pull backstop). Both gates of
    [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify) protect the copy: the transport gate (Kb3 is `at_talk`-authorised) and the
    crypto gate (sealed to Kb3's key package).
 2. **Layer 2 — the CK, on ordinary sync.** Once `Kb3` holds the nskey private, it
@@ -924,7 +954,7 @@ Given/When/Then acceptance in [`acceptance.md`](acceptance.md); decisions/timeli
 **Baseline (terse — full status is [`implementation-plan.md`](implementation-plan.md)'s lane).**
 `#1930` (M0 crypto seam) **merged**; `at_chops 3.3.0` (`pqSeal`/`pqOpen` + stateless
 core) **on trunk**; PR `#2035` (design fixes) **merged**. `at_commons 5.11.0`
-(`appMetadata` wire), `at_chops 3.2.1` (X-Wing, AES-256-GCM, HKDF, HMAC), and the
+(`appMetadata` wire), `at_chops 3.3.0` (X-Wing, AES-256-GCM, HKDF, HMAC; published 2026-06-23), and the
 commit-log-free 5.x keystore are on trunk.
 
 ### Client substrate — built, unit-green (`gkc-jt-secret-sharing-substrate`)
@@ -948,15 +978,19 @@ check is missing (`pairwise_secret_sharing.dart:360-407`); the root `pqpublickey
 no-namespace serve exception is missing (`grep pqpublickey` = 0); durable storage
 is deferred (in-memory `SecretStore` + a pluggable persistence hook,
 `secret_store.dart:62`; `WritableAtKeys` not wired); anti-storm is a plain rate cap
-without jitter (`:539`). `pushSecretToNamespaceMembers` is untested.
+without jitter (`:539`). `pushSecretToNamespaceMembers` is untested. Finally, the
+built `VerbEnrollmentDirectory` still speaks the **retired** wire shape — it parses
+a nested `apkam[]` response and performs an `enroll:metadata` registration write —
+contrary to decision #F (1:1:1) / OQ9; the WP-SS rework (PR #2037 / SS-1c) rewrites
+it to the flat, single-key, `enroll:listns`, no-write-path model.
 
 ### atServer change lists (DEP1–DEP4)
 
 `at_server` is a sibling repo present locally; these are "in-repo (sibling) but
 unimplemented."
 
-- **DEP1 — `enroll:listfornamespace:<ns>` gated discovery verb** (effort **L**).
-  Enum + regex + handler + gate per [§2.3](#23-the-enrolllistfornamespace-verb--enrollparamsmetadata). Returns the **flattened**
+- **DEP1 — `enroll:listns:<ns>` gated discovery verb** (effort **L**).
+  Enum + regex + handler + gate per [§2.3](#23-the-enrolllistns-verb--enrollparamsmetadata). Returns the **flattened**
   `[{enrollmentId, access, apkamPubKey, metadata}]`. Purely additive; old clients
   never send it; old servers reject as `InvalidSyntaxException` (client treats
   non-`data:` as `[]`).
@@ -971,16 +1005,26 @@ unimplemented."
   `signingAlgo ∈ {rsa2048, mldsa65}`; `_getSigningAlgoType`
   (`pkam_verb_handler.dart:199-210`) reads the **record's** algo, not the wire
   value (`:164`); at_chops wires the existing `MlDsa65*Algo`
-  (`algo_type.dart:5-9`, `at_chops_impl.dart:281`); at_commons widens the pkam
+  (the `mldsa65` member already ships at `algo_type.dart:10`; add the branch at
+  `at_chops_impl.dart:284`); at_commons widens the pkam
   `signingAlgo` literal (`syntax.dart:10`). Legacy single-string record → `rsa2048`
   on `fromJson`; legacy `atPkamPublicKey` mirror preserved.
-- **DEP4 — atServer auto-notify on `__ssenv` puts** (effort **M**, non-blocking,
-  ships independently). On an `update` put to a key whose name contains the full
+- **DEP4 — atServer auto-notify on `__ssenv` puts** (effort **M**; delivered inside
+  SS-2 per [`implementation-plan.md`](implementation-plan.md) — the auto-notify itself
+  is additive and could ship independently, but the client
+  `sendWakeUpNotification=false` default-flip is sequenced in SS-2). On an `update`
+  put to a key whose name contains the full
   `.__ssenv.` segment, enqueue a value-less self-notification (`NotificationType.self`,
   `opType=update`), model on `_storeNotification` (`enroll_verb_handler.dart:529-560`)
   but **drop the `rethrow` (`:558`)** so a failed enqueue can't fail the put; gate
   strictly to `opType=update` (a recipient's *delete* of a consumed envelope must
   not fire a spurious wake-up). Later, default the client `sendWakeUpNotification=false`.
+- **`_apsk` write-restriction ACL** — the atServer MUST restrict writes to
+  `public:_apsk.<enrollmentId>.<perEnrollmentApproved>@<atSign>` to that enrollment's
+  own authenticated connection (verified empirically June 2026; needs an e2e test that
+  a second enrollment cannot overwrite another's `_apsk` key). Envelope
+  sender-authentication ([§2.4](#24-the-atserver-enrollment-record--ml-dsa-apkam-auth))
+  collapses if this ACL regresses.
 
 ### Verification recipe
 
