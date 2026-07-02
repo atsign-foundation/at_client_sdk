@@ -385,16 +385,12 @@ void main() {
       final params = EnrollParams()
         ..signingAlgo = 'mldsa65'
         ..metadata = {
-          'keyPackages': {
-            'x-wing-v1': {'v': 1}
-          }
+          'keyPackage': {'v': 1}
         };
       final restored = EnrollParams.fromJson(params.toJson());
       expect(restored.signingAlgo, 'mldsa65');
       expect(restored.metadata, {
-        'keyPackages': {
-          'x-wing-v1': {'v': 1}
-        }
+        'keyPackage': {'v': 1}
       });
     });
 
@@ -418,9 +414,7 @@ void main() {
         ..otp = '123456'
         ..apkamPublicKey = 'pk'
         ..signingAlgo = 'mldsa65'
-        ..metadata = {
-          'keyPackages': {'x-wing-v1': {}}
-        };
+        ..metadata = {'keyPackage': {}};
       final command = withMeta.buildCommand();
       expect(command, contains('"metadata"'));
       expect(command, contains('"signingAlgo":"mldsa65"'));

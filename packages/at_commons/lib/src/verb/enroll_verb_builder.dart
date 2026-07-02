@@ -48,7 +48,7 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
 
   /// Opaque, additive metadata stored verbatim on the enrollment record and
   /// returned from discovery (`enroll:listns`). Carries the enrollment's key
-  /// package (`metadata.keyPackages`) for the secret-sharing substrate.
+  /// package (`metadata.keyPackage`) for the secret-sharing substrate.
   Map<String, dynamic>? metadata;
 
   /// Used to force revoke the enrollment request.

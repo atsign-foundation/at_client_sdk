@@ -24,7 +24,7 @@ class EnrollParams {
 
   /// Opaque, additive metadata the server stores verbatim on the enrollment
   /// record and returns from discovery (`enroll:listns`). Carries the
-  /// enrollment's key package (`metadata.keyPackages`) for the secret-sharing
+  /// enrollment's key package (`metadata.keyPackage`) for the secret-sharing
   /// substrate; the server has no opinion on its contents.
   Map<String, dynamic>? metadata;
 
