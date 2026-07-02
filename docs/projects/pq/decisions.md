@@ -25,6 +25,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [9. APKAM keypair as key package: considered and rejected (2026-06-30)](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30)
 - [10. nskey derivation from a shared master seed: rejected (2026-06-30)](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30)
 - [11. Single nskey per namespace, lazily published (2026-06-30)](#11-single-nskey-per-namespace-lazily-published-2026-06-30)
+- [12. Advertised recipient keys are signed against `_apsk` (2026-07-02)](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)
 
 ---
 
@@ -506,23 +507,15 @@ Execution rulings from the plan-vs-code review (post-review); each is binding.
   connection. Recorded in design.md §2.4 and the atServer DEP list; e2e tests (an
   approved enrollment's `_apsk` is fetchable without a client publish; a cross-enrollment
   overwrite is refused) are required before WP-SS ships.
-- **Advertised recipient keys are signed by the generating enrollment's APKAM key.**
-  Every advertised recipient/encapsulation key — the per-enrollment **key package**
-  (Layer 1), the published **`nskey`** public half, and **`public:pqpublickey@<atSign>`**
-  — is wrapped in an **APKAM-signed envelope** by the enrollment that generates it (the
-  same `wrapAndSign` / `AtSigningMode.pkam` path as `__ssenv`). Verifiers — **same-atSign
-  and cross-atSign, identically** — fetch the generating enrollment's `_apsk`
-  (per the at_client `ApkamSigning` mixin) and verify. The signature **self-describes
-  enough to verify** — the `signingAlgo` (which implies what sort of key `_apsk` holds:
-  RSA / ML-DSA / ECC) and `hashingAlgo` — so authenticity anchors on the `_apsk` key and
-  a lie about the algorithm merely fails the verify. This **supersedes** the earlier "key
-  packages are unsigned; the atServer vouches" stance: the recipient key is now
-  *authenticated*, not server-asserted (the correspondence check for conveyed keypair
-  secrets remains a useful secondary check). Trust nuance: same-atSign anchors on the
-  `_apsk` write-restriction (above); cross-atSign anchors on the remote atServer's served
-  `_apsk`, so it is no weaker than classical public-key discovery but not stronger.
-  Implementation is substrate work (sign in the mint paths SS-2 / SS-4, verify on read
-  SS-1c); mechanics in design.md §2.1.
+- **Advertised recipient keys are signed against `_apsk` — the full ruling is
+  [section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02).**
+  Every advertised recipient/encapsulation key (the per-enrollment key package, the
+  published `nskey` public half, and `public:pqpublickey@<atSign>`) is APKAM-signed by
+  its generating enrollment and verified against that enrollment's `_apsk` — the same
+  way same-atSign and cross-atSign — superseding the "atServer vouches" stance. The
+  atServer keeps `_apsk` present **and** write-restricted. See section 12 for the
+  mechanism, the self-describing signature, the trust model, and the SS-1b/1c/2/4
+  implementation split.
 
 ---
 
@@ -542,7 +535,7 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 | **2026-06-30** | **Shared-master-seed nskey derivation rejected; the `design.md` §1.3 derivation paragraph was removed.** nskey privates are minted as fresh random keypairs and conveyed per-APKAM over the substrate — never HKDF-derived from a shared seed. | A seed shared across an atSign's enrollments (required for the whole atSign to share one nskey per namespace) breaks post-compromise security, namespace compartmentalization, and rotation forward-secrecy; the namespace/epoch HKDF labels are public and don't gate who can derive. A full-corpus sweep confirmed this was the only insecure derivation. See [10](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30). |
 | **2026-06-30** | **Single nskey per namespace, lazily published — collapses the former self/public nskey pair.** One X-Wing keypair serves both self data and inbound shares; the public half is published lazily (owner-only self at-key → `public:` on first cross-atSign use). | Peer review: the two nskeys did the same KEM job with the same private-holders, so the split bought no real compartmentalization or authenticity, and one key simplifies the read path and rotation. Lazy publication preserves namespace-existence privacy for self-only namespaces. See [11](#11-single-nskey-per-namespace-lazily-published-2026-06-30). |
 | **2026-07-02** | **Six execution rulings** (post-review): verb name `enroll:listns`; D1 surface scope (`.atKeys`-at-rest IN via KF-1; TLS + atDirectory non-goals); readiness operator-primary + auto-detect fast-follow; R-2 ecosystem-floor package set named; FFI auto-resolve default; `_apsk` write-restriction pinned + e2e-test-required. | Landed from the plan-vs-code review that found in-flight PRs implementing superseded rulings; the rulings + a conformance gate keep execution aligned to the record. |
-| **2026-07-02** | **Advertised-key signing + `_apsk` always-present.** Advertised recipient keys (key package, `nskey` public, `pqpublickey`) are APKAM-signed by the generating enrollment and verified against its `_apsk` — same path same-atSign and cross-atSign; the atServer keeps `_apsk` present (populated from the record) as well as write-restricted. Supersedes "atServer vouches". Also: the key package is a **singular signed `metadata.keyPackage`** (no format-keyed map). | Removes the atServer from the confidentiality TCB for same-atSign advertisements (the encapsulation target is authenticated, not server-asserted); reuses the existing `wrapAndSign`/`_apsk` machinery; the format-map was redundant with in-package `keys[].alg` + `v` agility. |
+| **2026-07-02** | **Advertised-key signing + `_apsk` always-present** ([section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)). Advertised recipient keys (key package, `nskey` public, `pqpublickey`) are APKAM-signed by the generating enrollment and verified against its `_apsk` — same path same-atSign and cross-atSign; the atServer keeps `_apsk` present (populated from the record) as well as write-restricted. Supersedes "atServer vouches". Also: the key package is a **singular signed `metadata.keyPackage`** (no format-keyed map). | Removes the atServer from the confidentiality TCB for same-atSign advertisements (the encapsulation target is authenticated, not server-asserted); reuses the existing `wrapAndSign`/`_apsk` machinery; the format-map was redundant with in-package `keys[].alg` + `v` agility. |
 
 **Cross-refs:** the Wave-0 "already landed" detail and the project that follows
 each decision are in `implementation-plan.md`; the phase trajectory this timeline
@@ -741,3 +734,84 @@ is foreclosed going forward.
   the shared key.
 - The detailed mechanics live in `design.md` (key shapes, the data flow, rotation), the build
   steps in `implementation-plan.md`, and the acceptance cases in `acceptance.md`.
+
+---
+
+## 12. Advertised recipient keys are signed against `_apsk` (2026-07-02)
+
+**Decision.** Every *advertised recipient/encapsulation key* is **signed by the
+generating enrollment's APKAM key** and verified by the fetcher against that
+enrollment's published `_apsk` — **the same way for a same-atSign and a
+cross-atSign verifier**. This **supersedes** the earlier "key packages are unsigned;
+the atServer vouches" stance ([section 4](#4-the-verb-wire-shape--111-cardinality-rulings),
+the substrate's original design): the encapsulation target is now
+**authenticated**, not merely server-asserted.
+
+**What is covered.** The three keys a party fetches in order to seal *to* someone:
+
+- the per-enrollment **key package** (the X-Wing recipient key at the singular
+  `metadata.keyPackage`, Layer 1 of the substrate);
+- the published **`nskey`** public half (`nskey.<ns>@<atSign>` → promoted
+  `public:nskey.<ns>@<atSign>`);
+- the atSign-level root **`public:pqpublickey@<atSign>`**.
+
+**Mechanism.** The generating enrollment wraps the advertised key in an
+**APKAM-signed envelope** — the *same* `wrapAndSign` / `AtSigningMode.pkam`
+construction already used for `__ssenv` messages (`envelope_signing.dart`). A
+verifier fetches the generating enrollment's `_apsk` public key from
+`public:_apsk.<enrollmentId>.<perEnrollmentApproved>@<atSign>` — the location the
+at_client **`ApkamSigning`** mixin defines — and verifies the signature. There is
+**one** verify path: a same-atSign client (another of the owner's enrollments) and a
+cross-atSign client (a peer atSign's enrollment) both do exactly this.
+
+**The signature self-describes enough to verify.** The signed envelope carries the
+**`signingAlgo`** (which implies *what sort of key* `_apsk` holds — RSA / ML-DSA /
+ECC) and the **`hashingAlgo`**, so the verifier selects the correct verification
+routine. Authenticity anchors on the `_apsk` key itself: a lie about `signingAlgo`
+simply fails the verify against the real key.
+
+**`_apsk` is a cross-tier property the atServer guarantees — present *and*
+write-restricted.** Because verification depends entirely on `_apsk`, the atServer:
+
+1. **keeps `_apsk` present** — it populates
+   `public:_apsk.<enrollmentId>.<perEnrollmentApproved>@<atSign>` from the enrollment
+   record's stored `apkamPublicKey` (on approval / first authenticated use), rather
+   than leaving it to the client-side `ApkamSigning.publishPublicSigningKey`
+   get-then-put (which races and can be absent when a verifier looks). A verifier can
+   always resolve a generator's `_apsk`.
+2. **write-restricts `_apsk`** — only the owning enrollment's own authenticated
+   connection may write it (verified empirically against the released atServer, June
+   2026).
+
+Both properties MUST be asserted by e2e tests (an approved enrollment's `_apsk` is
+fetchable without a client publish; a cross-enrollment overwrite is refused).
+
+**Trust model — stated honestly.**
+
+- **Same-atSign** advertisements gain *real* integrity: the verifier's trust anchors
+  on the `_apsk` **write-restriction** the atServer enforces, so a same-atSign
+  advertisement's encapsulation target is authenticated — this **removes the atServer
+  from the confidentiality TCB** for same-atSign secret sharing.
+- **Cross-atSign** advertisements verify by the *same* path, but the remote
+  enrollment's `_apsk` is itself served by the *remote* atServer, which a remote
+  verifier cannot independently anchor. So cross-atSign authenticity is **no weaker
+  than classical public-key discovery, but not stronger** — it does not by itself
+  remove a malicious remote atServer from the TCB (that is an atSign-level identity
+  problem, out of scope here).
+
+The public/private **correspondence check** for a conveyed keypair secret (`nskey` /
+`pqpublickey` privates) remains a useful **secondary** check, subordinate to the
+signature.
+
+**Why.** It reuses machinery that already exists (`wrapAndSign` + the `_apsk`
+resolution in `ApkamSigning` / `EnvelopeSigning`), needs no new key type (the ML-DSA
+APKAM signing key and the X-Wing encapsulation key are correctly distinct —
+[section 9](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30)), and
+closes the one place the substrate otherwise trusted the atServer for confidentiality.
+
+**Implementation status.** Target, not yet built: sign in the mint paths
+(**SS-2** key package, **SS-4** nskey / pqpublickey), verify on read (**SS-1c**); the
+atServer `_apsk`-always-present + write-restriction is **SS-1b**. The current
+substrate advertises the key package **unsigned** — tracked as a gap in `design.md`
+§6. Mechanics: `design.md` §2.1 (*Advertised-key authenticity*) and §2.4; sequencing:
+`implementation-plan.md` SS-1b/SS-1c/SS-2/SS-4; acceptance: `acceptance.md` §13.
