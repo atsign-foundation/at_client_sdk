@@ -401,10 +401,15 @@ DEP3 (record `signingAlgo`).
 `metadata` + `signingAlgo`; store a **single** `apkamPublicKey`). Add the gated `enroll:listns`
 discovery (a new `_isAtLeastReadOnNamespace` gate) emitting the **flat**
 `data:[{enrollmentId, access, apkamPubKey, metadata}]`; at_server_spec dartdoc; first live functional round-trip.
+Also **keep `_apsk` present**: the atServer populates `public:_apsk.<eid>.<perEnrollmentApproved>@<atSign>`
+from the record's `apkamPublicKey` (on approval / first authenticated use) rather than relying on the
+client-side `publishPublicSigningKey`, and keeps its write-restriction — the presence + write-restriction
+cross-tier property (design.md §2.4) that both envelope and advertised-key verification depend on.
 **Acceptance → [acceptance.md](acceptance.md):** metadata stored verbatim + returned by `listns`;
 **schema-migration test** (pre-`metadata`/`signingAlgo` record opens null, write round-trips); flat records,
-≥r gate, approved-only, `*` wildcard; UC-A2.3 server discovery gate; `runLocal.sh` (compose-down, ≤180s) +
-**both** suites green.
+≥r gate, approved-only, `*` wildcard; UC-A2.3 server discovery gate; an approved enrollment's `_apsk` is
+fetchable without a client publish, and a cross-enrollment `_apsk` overwrite is refused; `runLocal.sh`
+(compose-down, ≤180s) + **both** suites green.
 **Effort:** L.
 **Watch-outs:** ⚠️ the at_commons fields (SS-1a) must publish first; **the atServer-schema change must land in
 the same release as the client**; check the enroll-record value-size limit accommodates a ~1KB key-package
@@ -416,11 +421,15 @@ blob; downstream client obligation = SS-1c.
 **Builds on:** SS-0 (substrate baseline on trunk) + SS-1b.
 **Deliverables → [design.md](design.md)** (`enroll:listns` client parser): rewrite
 `VerbEnrollmentDirectory.listForNamespace` for the **flat** `[{enrollmentId, access, apkamPubKey, metadata}]`
-shape (one `NamespaceMember` per enrollment, single-element keyPackages, `KeyPackage.apkamId` from
-`apkamPubKey`). The key package rides `enroll:request` (SS-2); there is no `registerKeyPackage` /
-`enroll:metadata` write path, interface decl, `register()` call site, or `FakeEnrollmentDirectory.registerKeyPackage`.
-The `listForNamespace` dartdocs state the **1:1:1 single-key** model.
-**Acceptance → [acceptance.md](acceptance.md):** flat parse → `NamespaceMember` + decoded `KeyPackage`; **no
+shape (one `NamespaceMember` per enrollment, **singular nullable `metadata.keyPackage`** — no format-keyed
+map, `KeyPackage.apkamId` from `apkamPubKey`). The key package rides `enroll:request` (SS-2); there is no
+`registerKeyPackage` / `enroll:metadata` write path, interface decl, `register()` call site, or
+`FakeEnrollmentDirectory.registerKeyPackage`. The `listForNamespace` dartdocs state the **1:1:1 single-key**
+model. **Verify the advertised key package's APKAM signature** against the enrolling atSign's `_apsk`
+(design.md §2.1 *Advertised-key authenticity*) before trusting it — the same verify path same-atSign and
+cross-atSign; reject an unsigned / wrong-signer package.
+**Acceptance → [acceptance.md](acceptance.md):** flat parse → `NamespaceMember` + decoded `KeyPackage`; a
+signed key package verifies against `_apsk`, a tampered / wrong-signer one is rejected; **no
 code path issues `enroll:metadata`**; the test-consumer sweep migrates all three suites off the `registered`
 seam to a 1:1:1 seeding seam; a client-driven functional round-trip.
 **Effort:** M.
@@ -434,8 +443,10 @@ seam to a 1:1:1 seeding seam; a client-driven functional round-trip.
 **Deliverables → [design.md](design.md)** (substrate production wiring + server wake-up): DEP4 `__ssenv`
 update-put auto-notify (drop the rethrow; update-path only) + flip client self-wake-up off. **Production
 wiring:** re-key the facade Expando to `(AtClient, enrollmentId)` (+ `enrollmentId`
-on `forClient`); the X-Wing key package rides into `enroll:request` as the opaque `EnrollParams.metadata`
-(built by an at_client orchestrator *above* at_auth; at_auth ferries, never interprets). **Conveyance is the
+on `forClient`); the X-Wing key package — **APKAM-signed via `wrapAndSign`** (design.md §2.1
+*Advertised-key authenticity*) and placed at the singular `metadata.keyPackage` — rides into `enroll:request`
+as the opaque `EnrollParams.metadata` (built by an at_client orchestrator *above* at_auth; at_auth ferries,
+never interprets). **Conveyance is the
 NEW-DEVICE approver path only:** an at_client approve-wrapper fires `shareAllSecretsWithEnrollment` after
 at_auth's `approve` (seals an `__ssenv` envelope to the new device's key package). The **auto-approved
 self-retrofit** (RF-2b/RF-SRV) needs **no conveyance** — the retrofitting client already holds its own
@@ -476,12 +487,17 @@ privates).
 keypair per `(atSign, namespace)` and store its public half as the owner-only self at-key
 `nskey.<ns>@alice` (this alone suffices for self data — Alice's own clients hold it); publish the
 world-readable `public:nskey.<ns>@alice` **lazily**, on the namespace's first cross-atSign share
-(immutable create-if-absent, promoting the same public half). `pqpublickey` create/seed/serve/pull under
-`pqid:<kid>` + root no-namespace serve exception; public/private correspondence check in `_consume`. The
+(immutable create-if-absent, promoting the same public half). Both the `nskey` public half and
+`public:pqpublickey@alice` are **advertised as APKAM-signed envelopes** (design.md §2.1 *Advertised-key
+authenticity*), so a fetching client verifies them against the publishing enrollment's `_apsk` — same path
+same-atSign and cross-atSign. `pqpublickey` create/seed/serve/pull under
+`pqid:<kid>` + root no-namespace serve exception; public/private correspondence check in `_consume` (the
+signature is primary; correspondence is the secondary check). The
 nskey private is conveyed per-APKAM as a Secret over the substrate.
 **Acceptance → [acceptance.md](acceptance.md):** UC-A3.2 (2nd APKAM obtains the nskey private, decapsulates
-a test secret sealed to it; app_2 refused to an app_1-only client); UC-B5.1/B5.3 (offline pull;
-create-once race); pqpublickey create→seed→serve→pull + correspondence-mismatch rejection.
+a test secret sealed to it; app_2 refused to an app_1-only client); a fetched `nskey` / `pqpublickey`
+advertisement verifies against the publisher's `_apsk` and a tampered one is rejected; UC-B5.1/B5.3 (offline
+pull; create-once race); pqpublickey create→seed→serve→pull + correspondence-mismatch rejection.
 **Effort:** L–XL.
 **Watch-outs:** delivers **key material only** — the value-level providers are B-1. The **first convergence
 feeder** into the data path.

@@ -306,10 +306,12 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
      (`recipientKind: nskey`) in an `at/nskey` record; write the data under
      `at/symmetric/AES/GCM`.
   3. **Push** the nskey private per-enrollment to every ≥`r` member: call
-     `enroll:listns:app_1.my_apps`, `pqSeal` the private to each member's
+     `enroll:listns:app_1.my_apps`, verify each member's advertised key package's
+     APKAM signature against its `_apsk` (§13), `pqSeal` the private to each member's
      key package (addressed by `kpid`), put on
-     `<msgId>.<kpid>.__ssenv.app_1.my_apps@alice`. `alice2` verifies correspondence
-     against the self at-key `nskey.app_1.my_apps@alice` and `putIfNewer`s.
+     `<msgId>.<kpid>.__ssenv.app_1.my_apps@alice`. `alice2` verifies the envelope
+     signature, then correspondence against the self at-key
+     `nskey.app_1.my_apps@alice`, and `putIfNewer`s.
 - **Then:**
   - The self at-key `nskey.app_1.my_apps@alice` syncs to authorised Alice clients;
     **no** `public:nskey.app_1.my_apps@alice` exists (the namespace's existence is not
@@ -730,6 +732,17 @@ These invariants are testable against **every** UC above:
   create is rejected, never an overwrite. (The owner-only self at-key
   `nskey.<ns>@owner` is an ordinary at-key — it syncs and is re-written on
   nskey-keypair rotation; only its promotion to `public:` is immutable.)
+- **Advertised recipient keys are signed and verified.** Every advertised
+  encapsulation key — the per-enrollment key package (`metadata.keyPackage`), the
+  published `nskey` public half, and `public:pqpublickey@owner` — is an **APKAM-signed
+  envelope** produced by the generating enrollment (`wrapAndSign`). A fetcher verifies
+  it against that enrollment's `_apsk` **the same way same-atSign and cross-atSign**
+  (fetch `public:_apsk.<eid>.a.__e@owner`, verify using the envelope's `signingAlgo` /
+  `hashingAlgo`) **before** encapsulating to it; a **tampered, unsigned, or
+  wrong-signer** advertised key is **rejected**. The atServer keeps every approved
+  enrollment's `_apsk` **present** (fetchable without a client publish) and
+  **write-restricted** (a cross-enrollment overwrite is refused). *(Substrate work —
+  sign SS-2/SS-4, verify SS-1c; target-not-built on the current substrate.)*
 - **Performance is measured, not assumed.** The PQ primitives (ML-KEM / ML-DSA,
   X-Wing encap/decap, `pqSeal`) land on hot paths — PKAM auth and every put/get — that
   run on mobile/IoT hardware (the roadmap's NoPorts finish line). PKAM-auth latency and

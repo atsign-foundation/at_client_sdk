@@ -177,9 +177,12 @@ The public half is published **lazily**: it starts as the self at-key
 `nskey.<ns>@<atSign>` (synced to the owner's own `<ns>`-authorised clients, which is
 all self data needs), and on the namespace's **first cross-atSign share** the same
 public half is promoted to the world-readable `public:nskey.<ns>@<atSign>`
-(immutable create-if-absent, signed by the publishing enrollment) so a sender can
-fetch it via plookup. A namespace used only for the owner's own data keeps the self
-at-key form and never publishes a `public:` key.
+(immutable create-if-absent, **advertised as an APKAM-signed envelope** by the
+publishing enrollment — verified against its `_apsk`, exactly as a key package; see
+*Advertised-key authenticity*, [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify))
+so a sender can fetch it via plookup and verify its authenticity. A namespace used
+only for the owner's own data keeps the self at-key form and never publishes a
+`public:` key.
 
 ### 1.4 the nskey and the pqpublickey root
 
@@ -204,9 +207,14 @@ replacement). When a sender has no `public:nskey.<ns>@<recipient>` to seal to
 **CK** to `public:pqpublickey@<recipient>` (`recipientKind: "root-pqpublickey"`).
 **Only the CK is sealed to the root key — application data is never encrypted
 directly to it**, so the nskey-never-encrypts-data invariant holds (`pqpublickey`
-is just another KEM target for the CK). Once the namespace promotes its nskey's
-public half to `public:nskey.<ns>@<recipient>`, new CKs target the nskey; the
-root-keyed conveyance is the transient cold-start bridge, lazily upgraded (B4).
+is just another KEM target for the CK). Like the `nskey` public half, the published
+`public:pqpublickey@<atSign>` is **advertised as an APKAM-signed envelope** by the
+creating enrollment and verified against its `_apsk` (see *Advertised-key
+authenticity*, [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify)), so a
+cold-start sender authenticates the root key before encapsulating to it. Once the
+namespace promotes its nskey's public half to `public:nskey.<ns>@<recipient>`, new
+CKs target the nskey; the root-keyed conveyance is the transient cold-start bridge,
+lazily upgraded (B4).
 
 **Naming.** Because this key is root (no namespace), its name carries no namespace
 suffix: use **`pqpublickey`**, not `publickey.pq` (a `.pq` suffix would land it
@@ -449,11 +457,38 @@ it: discovery/sealing mistakes cannot leak. Gate = defence in depth; seal = boun
 
 **Sign / verify-before-decrypt.** Each envelope is **APKAM-signed**; the receiver
 **verifies before decrypt** (`_consume`), proving a genuine owner-client wrote it.
-Per-enrollment `_apsk` signing-key resolution drives the verify. For a **keypair
-secret** (`nskey`, `pqpublickey`) the receiver also checks public/private
-correspondence against the published public half, so a wrong key can't be injected.
-*(Current gap: the correspondence check is not yet implemented — `_consume` verifies
-the signature + opens, nothing more; `pairwise_secret_sharing.dart:360-407`.)*
+Per-enrollment `_apsk` signing-key resolution drives the verify.
+
+**Advertised-key authenticity (decision 2026-07-02, [`decisions.md`](decisions.md) §6).**
+Every *advertised recipient key* — the per-enrollment **key package** (Layer 1), the
+published **`nskey`** public half, and **`public:pqpublickey@<atSign>`** — is itself
+wrapped in an **APKAM-signed envelope** by the enrollment that generates it (the same
+`wrapAndSign` / `AtSigningMode.pkam` construction as `__ssenv`, `envelope_signing.dart`).
+Verifiers — **same-atSign and cross-atSign, identically** — fetch the generating
+enrollment's `_apsk` public key
+(`public:_apsk.<enrollmentId>.<perEnrollmentApproved>@<atSign>`, per the
+`ApkamSigning` mixin) and verify the signature. The signed envelope **self-describes
+enough to verify** — `signingAlgo` (which implies the `_apsk` key type: RSA / ML-DSA /
+ECC) and `hashingAlgo` — so the verifier selects the right routine and a lie about
+`signingAlgo` merely fails the verify against the real `_apsk` key; authenticity
+anchors on that key. This **supersedes** the earlier "key packages are unsigned; the
+atServer vouches" stance — the crypto gate's *recipient key is now authenticated*, not
+merely server-asserted. For a **keypair secret** conveyed over the substrate
+(`nskey` / `pqpublickey` privates) the receiver additionally checks public/private
+correspondence against the (signed) published public half — a useful secondary check,
+subordinate to the signature.
+
+**Trust nuance.** For a *same-atSign* advertisement the verifier's trust anchors on the
+`_apsk` **write-restriction** (only the owning enrollment may write it — the cross-tier
+property in [§2.4](#24-the-atserver-enrollment-record--ml-dsa-apkam-auth), which the
+atServer both **enforces and keeps populated**). For a *cross-atSign* advertisement the
+remote enrollment's `_apsk` is served by the remote atServer, so cross-atSign
+authenticity is **no weaker than classical public-key discovery, but not stronger**.
+*(Current gaps: advertised-key signing + verify is not yet implemented — the substrate
+signs `__ssenv` envelopes but advertises the key package unsigned
+[`pairwise_secret_sharing.dart:360-407`], and the correspondence check is likewise
+pending. Both are substrate work: sign in the mint paths [SS-2 / SS-4], verify on read
+[SS-1c].)*
 
 `file:line` evidence: `pqSeal`/`pqOpen` of `__ssenv` (`pairwise_secret_sharing.dart:191,398,99`;
 `pq_hpke.dart:80`); sign + verify-before-decrypt (`envelope_signing.dart:74,152`;
@@ -520,7 +555,7 @@ call or poll** (no enumerate-all step). (`pairwise_secret_sharing.dart:689`;
 A pusher (or puller) needs two facts: **who** is authorised for the namespace, and
 **what key** to seal to for each. One gated verb returns both.
 
-> **`enroll:listns:<ns>`** (working name) — returns every **approved**
+> **`enroll:listns:<ns>`** — returns every **approved**
 > enrollment authorised for `<ns>`, with its access level, its APKAM public key,
 > and its key-package metadata. **Gated:** the caller must hold ≥`r` on `<ns>`.
 
@@ -550,6 +585,13 @@ time (a JSON tail on the existing request — **no grammar change**); the server
 stores it on the enrollment record and returns it from the discovery verb. There
 is **no `enroll:metadata` verb** and **no post-enrollment metadata write, ever**.
 Old clients tolerate an absent `metadata` (the discovery element simply omits it).
+
+The key package sits at a **singular `metadata.keyPackage`** (1:1:1 — one enrollment,
+one key package; **no format-keyed `keyPackages` map** — key/suite agility already
+lives inside the package via `keys[].alg` + `KeyPackage.v`). Its value is the
+**APKAM-signed envelope** wrapping the key-package payload (see *Advertised-key
+authenticity*, [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify)); the server
+stores and returns it opaquely and has no opinion on its contents.
 
 **atServer build points** (verb spec; effort **L** — full DEP1 spec in
 [§6](#6-implementation-notes--file-level-pointers-consolidated)):
@@ -600,15 +642,27 @@ gains the `signingAlgo` + `metadata` fields; regenerate `.g.dart` via `build_run
 (don't hand-drift). Full DEP3 spec (effort **XL**) in
 [§6](#6-implementation-notes--file-level-pointers-consolidated).
 
-**Cross-tier property (atServer-guaranteed).** Envelope sender-authenticity rests on
-the atServer restricting writes to
-`public:_apsk.<enrollmentId>.<perEnrollmentApproved>@<atSign>` to that enrollment's
-own authenticated connection — a client fetches the signer's `_apsk` public key from
-there and trusts it. This was verified empirically against the released atServer
-(June 2026); it MUST be asserted by an e2e test (a second enrollment attempting to
-overwrite another enrollment's `_apsk` key is refused) and stated in the atServer
-DEP list, because the whole substrate's authentication collapses if that ACL
-regresses.
+**Cross-tier property (atServer-guaranteed): `_apsk` is present and write-restricted.**
+Both envelope sender-authenticity **and** advertised-key authenticity
+([§2.1](#21-kpid-addressing-__ssenv-envelope-signverify)) rest on the `_apsk` published
+signing key. The atServer guarantees two things about
+`public:_apsk.<enrollmentId>.<perEnrollmentApproved>@<atSign>`:
+
+1. **Always present (decision 2026-07-02).** The atServer populates `_apsk` from the
+   enrollment record's stored `apkamPublicKey` (on approval / first authenticated use),
+   rather than leaving it to the client-side `ApkamSigning.publishPublicSigningKey`
+   get-then-put — which removes a race (a verifier fetching before a generator has
+   published) and a missing-key failure mode. A verifier can always resolve a signer's /
+   generator's `_apsk`.
+2. **Write-restricted.** Writes to that key are restricted to that enrollment's own
+   authenticated connection — a client fetches the `_apsk` public key and trusts it.
+
+The write-restriction was verified empirically against the released atServer (June 2026);
+both properties MUST be asserted by e2e tests (a second enrollment cannot overwrite
+another's `_apsk`; an approved enrollment's `_apsk` is fetchable without the client
+having published it) and are stated in the atServer DEP list, because both the
+substrate's sender-authentication and its advertised-key authenticity collapse if these
+regress.
 
 ### 2.5 The authenticated self-retrofit flow (fresh, auto-approved enrollment)
 
@@ -973,8 +1027,13 @@ commit-log-free 5.x keystore are on trunk.
 | `namespaceAuthorizes` (suffix/`*` match) | `secret_store.dart:169` |
 | Transport: put + sync listener + optional wake-up notify; `receivedSecrets` + `_consume` | `:220,724,239,360,601` |
 
-**Known client gaps** (within the substrate): the public/private correspondence
-check is missing (`pairwise_secret_sharing.dart:360-407`); the root `pqpublickey`
+**Known client gaps** (within the substrate): **advertised-key signing + verify is not
+yet implemented** — the substrate signs `__ssenv` envelopes but advertises the key
+package (and, later, the `nskey` / `pqpublickey` public halves) **unsigned**, so the
+authenticity decision of [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify) is
+target-not-built (sign in the mint paths SS-2 / SS-4, verify on read SS-1c); the
+public/private correspondence check is likewise missing
+(`pairwise_secret_sharing.dart:360-407`); the root `pqpublickey`
 no-namespace serve exception is missing (`grep pqpublickey` = 0); durable storage
 is deferred (in-memory `SecretStore` + a pluggable persistence hook,
 `secret_store.dart:62`; `WritableAtKeys` not wired); anti-storm is a plain rate cap
@@ -982,7 +1041,8 @@ without jitter (`:539`). `pushSecretToNamespaceMembers` is untested. Finally, th
 built `VerbEnrollmentDirectory` still speaks the **retired** wire shape — it parses
 a nested `apkam[]` response and performs an `enroll:metadata` registration write —
 contrary to decision #F (1:1:1) / OQ9; the WP-SS rework (PR #2037 / SS-1c) rewrites
-it to the flat, single-key, `enroll:listns`, no-write-path model.
+it to the flat, single-key, `enroll:listns`, no-write-path model (singular signed
+`metadata.keyPackage`, no format-keyed map).
 
 ### atServer change lists (DEP1–DEP4)
 
@@ -1019,12 +1079,17 @@ unimplemented."
   but **drop the `rethrow` (`:558`)** so a failed enqueue can't fail the put; gate
   strictly to `opType=update` (a recipient's *delete* of a consumed envelope must
   not fire a spurious wake-up). Later, default the client `sendWakeUpNotification=false`.
-- **`_apsk` write-restriction ACL** — the atServer MUST restrict writes to
-  `public:_apsk.<enrollmentId>.<perEnrollmentApproved>@<atSign>` to that enrollment's
-  own authenticated connection (verified empirically June 2026; needs an e2e test that
-  a second enrollment cannot overwrite another's `_apsk` key). Envelope
-  sender-authentication ([§2.4](#24-the-atserver-enrollment-record--ml-dsa-apkam-auth))
-  collapses if this ACL regresses.
+- **`_apsk` presence + write-restriction ACL** — the atServer MUST (1) **keep `_apsk`
+  present**, populating `public:_apsk.<enrollmentId>.<perEnrollmentApproved>@<atSign>`
+  from the enrollment record's `apkamPublicKey` rather than relying on the client-side
+  `publishPublicSigningKey` (removes a race + a missing-key failure mode), and (2)
+  **restrict writes** to that key to the owning enrollment's own authenticated
+  connection (verified empirically June 2026). Needs e2e tests for both (an approved
+  enrollment's `_apsk` is fetchable without a client publish; a second enrollment cannot
+  overwrite another's `_apsk`). Both envelope sender-authentication and advertised-key
+  authenticity ([§2.1](#21-kpid-addressing-__ssenv-envelope-signverify),
+  [§2.4](#24-the-atserver-enrollment-record--ml-dsa-apkam-auth)) collapse if these
+  regress.
 
 ### Verification recipe
 
