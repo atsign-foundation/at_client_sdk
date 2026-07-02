@@ -15,6 +15,7 @@ companion to four sibling docs (see the orientation table in [section 0](#0-scop
 - [4. Subsystem D — structural design (CryptoProvider seam, WritableAtKeys / key stores, WASM barrel)](#4-subsystem-d--structural-design-cryptoprovider-seam-writableatkeys--key-stores-wasm-barrel)
 - [5. Subsystem E — worked design walkthroughs (NoPorts, at_talk)](#5-subsystem-e--worked-design-walkthroughs-noports-at_talk)
 - [6. Implementation notes & file-level pointers (consolidated)](#6-implementation-notes--file-level-pointers-consolidated)
+- [7. Trust boundary & residual threats](#7-trust-boundary--residual-threats)
 
 ---
 
@@ -478,12 +479,15 @@ merely server-asserted. For a **keypair secret** conveyed over the substrate
 correspondence against the (signed) published public half — a useful secondary check,
 subordinate to the signature.
 
-**Trust nuance.** For a *same-atSign* advertisement the verifier's trust anchors on the
-`_apsk` **write-restriction** (only the owning enrollment may write it — the cross-tier
-property in [§2.4](#24-the-atserver-enrollment-record--ml-dsa-apkam-auth), which the
-atServer both **enforces and keeps populated**). For a *cross-atSign* advertisement the
-remote enrollment's `_apsk` is served by the remote atServer, so cross-atSign
-authenticity is **no weaker than classical public-key discovery, but not stronger**.
+**Trust nuance.** The signature is verified against `_apsk`, which the atServer serves —
+so it authenticates against a rogue *insider* enrollment (under an honest server) but
+**not** against a malicious atServer *operator*, which controls both the signature key
+and the `_apsk` it is checked against. This holds same-atSign and cross-atSign alike;
+the operator of an atSign's atServer stays in the confidentiality TCB for data destined
+to that atSign until the anchor is distributed independently. See
+[§7 Trust boundary & residual threats](#7-trust-boundary--residual-threats) for the full
+model and the mitigation ladder — do **not** describe signing as removing the atServer
+from the TCB.
 *(Current gaps: advertised-key signing + verify is not yet implemented — the substrate
 signs `__ssenv` envelopes but advertises the key package unsigned
 [`pairwise_secret_sharing.dart:360-407`], and the correspondence check is likewise
@@ -1099,3 +1103,210 @@ byte-exact. Functional: recycle the virtualenv (`docker compose down` first —
 one-shot CRAM secrets), then `tests/at_functional_test` via `runLocal.sh`. e2e:
 `tests/at_end2end_test` via the base-port `runLocal.sh` rigs. The full
 Given/When/Then test plan + harness mapping is in [`acceptance.md`](acceptance.md).
+
+---
+
+## 7. Trust boundary & residual threats
+
+This section records the confidentiality trust boundary honestly, so nothing elsewhere
+in the doc set overclaims what the advertised-key signing ([§2.1](#21-kpid-addressing-__ssenv-envelope-signverify),
+[decisions.md §12](decisions.md)) achieves. The headline: **the operator of an atSign's
+atServer is in the confidentiality TCB for all data destined to that atSign**, and the
+signing does not, by itself, change that. The last subsection sketches the key-transparency
+direction that would.
+
+### 7.1 The anchor problem: an atServer is the de-facto CA for its own atSign
+
+D1 encryption is only as trustworthy as the binding *atSign → recipient public key*. A
+sender obtains that binding from the recipient's atServer (directly, or proxied through
+its own). Advertised-key signing chains the recipient key to the enrollment's `_apsk`,
+but **`_apsk` is itself served by the same atServer** — so the anchor of the whole chain
+is a key the atServer supplies. In effect, an atServer is the certificate authority for
+its own atSign's keys. This is a property of the Atsign Protocol, not of the substrate:
+classical Atsign has it too (a sender fetches `public:publickey@alice` from @alice's
+atServer and encrypts to whatever it returns).
+
+### 7.2 The malicious-operator attack (transparent, split-view MITM)
+
+A maliciously-operated @alice-atServer can read data sent *to* @alice:
+
+1. It generates its own keypair `EVIL`.
+2. It serves `EVIL_pub` as an @alice enrollment's `_apsk`.
+3. It serves an advertised recipient key (a `nskey` public / `pqpublickey` / key package)
+   that it generated, **signed with `EVIL_priv`**.
+4. A sender (a peer `@bob`, or one of @alice's own clients) fetches the advertised key,
+   verifies its signature against the `_apsk` — which is `EVIL_pub` — and it **passes**,
+   because the server controls both halves of the chain.
+5. The sender seals the content key to the server's key; the server decapsulates and reads.
+
+It is **transparent to both ends**: after reading, the server re-seals the plaintext to
+@alice's *real* recipient key (which it holds — @alice's own client published it) and
+stores that, so @alice's client decrypts normally. The sender saw a signature that
+"verified"; @alice received a message that decrypts. Neither observes an anomaly.
+
+The signing gives the sender **zero** protection here, because the sender's only source
+for the `_apsk` it verifies against is the same server that forged the signature — the
+trust is circular for any party whose sole path to @alice's keys is @alice's atServer.
+
+### 7.3 Impact scope — precisely what an operator can and cannot do
+
+- **Can — read:** transparently MITM (read) all data **destined to** the atSigns it hosts
+  — inbound cross-atSign shares, and self-data where the client relies on server-served
+  keys rather than locally-held ones — by substituting the *recipient* key. The power is
+  **per-inbound and symmetric**: @alice's operator owns inbound-to-@alice; @bob's operator
+  owns inbound-to-@bob. @alice's operator cannot read what @alice sends *out* to @bob (that
+  is sealed to @bob's key, from @bob's atServer).
+- **Can — modify (a strictly harder bar):** read and integrity are **asymmetric**. Pure
+  read is a pass-through re-seal, so any *sender* signature inside the payload survives
+  unchanged and still verifies. To silently **modify**, the operator must also defeat that
+  sender signature — which for a §2.1-signed payload means substituting the *sender's*
+  signing key **as the recipient's client sees it**. It can (it mediates that client's
+  lookups too), so modify is achievable — but it needs a **second** substitution and is
+  defeated the moment the recipient anchors the sender's key independently (out-of-band
+  pin / KT). An unsigned or self-data payload is silently modifiable with the single
+  recipient-key substitution. So: read depends on one substitution; silent modify depends
+  on two (and both collapse under an independent anchor).
+- **Cannot:** decrypt data sealed to the atSign's *real* keys that never passed through a
+  substituted exchange (e.g. a key a peer pinned out-of-band); break the primitives
+  (X-Wing / AES-GCM are sound — this is key substitution at the anchor, not a crypto
+  break); or MITM traffic to atSigns it does not host.
+- **Self-data caveat:** a client that mints or holds its own `nskey` private also holds
+  the matching public and should seal self-data to the **locally-held** key, never a
+  server-fetched one — which takes self-data out of the operator's reach. Clients SHOULD
+  prefer locally-held keys over server-served keys wherever they hold the private.
+
+### 7.4 Detectability — undetectable to a *targeted* victim today
+
+- **Untargeted** substitution (the server shows `EVIL` to everyone, including @alice's own
+  clients) is **detectable**: an @alice client knows its own real public key (it holds the
+  private), so a **self-audit** — fetch my own `_apsk` / `public:nskey@alice` as served and
+  compare to what I published — catches it. Cheap; catches the lazy attacker immediately.
+- **Targeted** substitution (the server shows the *real* keys to @alice's authenticated
+  clients and `EVIL` only to remote lookups) is **effectively undetectable by @alice's
+  clients**, because they never observe the response the server gives a peer. The server
+  discriminates trivially — it knows whether a lookup arrives on @alice's authenticated
+  APKAM connection or as a remote/proxied request. This is a classic **split-view** attack;
+  it is caught only by a mechanism that cross-checks the two sides' views (an out-of-band
+  fingerprint, or a gossiped transparency log — [§7.6](#76-key-transparency-on-the-atdirectory)).
+
+### 7.5 Mitigation ladder
+
+Ordered roughly cheapest/soonest → strongest/longest. These compose; they are not
+exclusive.
+
+1. **Self-hosting (Atsign-native, strongest for a privacy-critical atSign).** If @alice
+   runs her own atServer, the operator *is* @alice — no third party in her inbound TCB.
+   First-class in the platform; residual risk moves to the resolution path (a malicious
+   atDirectory, or the peer's own atServer), addressed by 3–4 below.
+2. **Client self-audit of own advertised keys.** Each client periodically fetches its own
+   `_apsk` / `nskey` public / `pqpublickey` as a remote party would and compares to the
+   locally-held truth. Cheap; defeats *untargeted* substitution and forces an attacker to
+   target, which raises cost and risk.
+3. **Out-of-band fingerprint / safety number (TOFU-then-verify, the Signal model).** Peers
+   compare a fingerprint of the atSign's identity key over an independent channel (QR,
+   voice, printed code) and pin it. Catches *targeted* split views; needs **no** trust in
+   the server implementation. Natural fit for pairwise relationships (NoPorts device pairs,
+   at_talk contacts). Weakness: first-contact and user friction.
+4. **atDirectory Key Transparency + root-anchored signatures ([§7.6](#76-key-transparency-on-the-atdirectory)).**
+   The structural answer for *hosted* atSigns: publish atSign→identity-key bindings to an
+   append-only, gossiped, auditable log; sign advertised keys with the atSign's long-term
+   **root** identity key (not just the per-enrollment `_apsk`); serve an inclusion proof
+   alongside each key. Makes operator substitution *detectable and attributable* without
+   trusting any binary.
+5. **Attestation / audit of the atServer implementation.** Remote attestation (TEE) or
+   reproducible-build + independent audit proves the deployed instance runs honest,
+   unmodified code. The only family that gives *prevention with full user-transparency
+   while still trusting a third-party host* — but the heaviest: TEEs move trust to the
+   silicon vendor and carry side-channel/rollback risk; audit proves the *source* honest,
+   not that the *running instance* is that source (needs attestation to bridge the gap).
+
+**Note on `disallowLegacyEncryption` / PQ scope:** none of the above is a PQ-specific
+problem — it is the standard end-to-end trust-root problem, present classically. PQ makes
+the *bytes* harvest-resistant; the anchor problem is orthogonal and is not solved (or
+worsened) by the D1 work. It is called out here so the doc set does not imply otherwise.
+
+### 7.6 Key transparency on the atDirectory
+
+> **Status: forward-looking design sketch, not a D1 decision.** Recorded so the
+> operator-in-TCB gap has a credible answer on file. Belongs to a separate effort
+> (identity / transparency), not the D1 substrate.
+
+The atDirectory already maps *atSign → atServer address*. Key Transparency (KT) adds a
+second job: **atSign → identity-key binding**, published so that misbehaviour is
+*detectable* rather than *preventable-only-by-trust*. The security comes from
+verifiability, witnessing, and monitoring — **not** from trusting the log operator — so it
+holds **even if Atsign hosts the atDirectory**.
+
+**What is logged.** The atSign's long-term **root identity public key** (the onboarding
+PKAM key in the `.atKeys`) — the stable anchor; the volatile `nskey` / `pqpublickey`
+publics then chain to it via signatures ([§2.1](#21-kpid-addressing-__ssenv-envelope-signverify))
+and need not be logged individually. Logging the stable root minimises churn.
+
+**Structure (CONIKS / Key-Transparency lineage).** A **verifiable key directory**: a
+Merkle prefix tree keyed by atSign, giving each atSign an efficient proof of *its current
+binding* and of *absence of any other binding*. Each **epoch** the directory publishes a
+**signed tree head (STH)** committing to the whole tree; STHs form a hash chain (each
+commits to the previous) so the operator cannot silently rewrite history — the log is
+append-only and that is *provable*. A **VRF over the atSign** gives the tree a private
+index, so the log does not enumerate atSigns (their names stay confidential — important
+given atSigns are identifiers); only a party who already knows `@alice` can request and
+verify her proof.
+
+**Why it holds even when Atsign runs the atDirectory — three interdependent checks.**
+No single check prevents substitution; together they force any substitution to go
+*through the witnessed, append-only log*, where it is *caught*. (KT is **detection**, not
+prevention — see the Net effect below.)
+
+1. **Inclusion proof on every key fetch** forces substitution on-log. When a sender
+   fetches @alice's advertised key (from her atServer), it also obtains a KT **inclusion
+   proof** binding @alice → root in a recent STH, plus the signature chain root → advertised
+   key, and accepts the key only if all verify. A malicious atServer therefore cannot serve
+   a rogue key that is *not* backed by a rogue root **in the log** — it can no longer
+   substitute *undetectably* off-log; it must get a rogue root inserted (checks 2–3).
+2. **Witness co-signing defeats split views.** A set of **independent witnesses**
+   (community members, self-hosters, an org's own nodes — *not* only Atsign) co-sign each
+   STH; clients accept an STH only with a quorum of witness signatures. Atsign alone then
+   cannot produce a valid STH, so it cannot show a *different* tree to a targeted victim
+   than to everyone else without colluding with the witnesses. Gossip of STHs (piggybacked
+   on ordinary atServer-to-atServer traffic) reinforces this — a split view surfaces the
+   moment two parties compare roots.
+3. **Per-atSign monitoring makes insertion loud.** A malicious atDirectory *can* insert a
+   rogue @alice root and produce a valid inclusion proof for it — checks 1–2 do not prevent
+   that. What stops it being *silent* is monitoring: @alice (or monitors she delegates to)
+   watches the log for any binding under @alice she did not create, and the append-only log
+   guarantees she detects a rogue insertion by the next epoch. Security reduces from "trust
+   Atsign" to "Atsign cannot cheat @alice without @alice (or her monitor) noticing."
+
+**Net effect — detection, not TCB removal.** With KT anchoring the root and
+[§2.1](#21-kpid-addressing-__ssenv-envelope-signverify) signatures chaining advertised keys
+to it, a cheating operator is made **detectable and attributable** rather than removed from
+the TCB: it converts an *undetectable* confidentiality adversary into one that is *caught*,
+which deters sustained abuse — but a one-shot attacker can still read a single epoch's
+traffic before the rogue binding is exposed, so the operator is **not** removed from the
+confidentiality TCB (do not claim otherwise — that is the same detection-as-prevention
+overclaim §7 exists to avoid). The residual is "Atsign *and* a witness quorum collude, *or*
+@alice is not (or does not delegate) monitoring, for one epoch." Self-hosting the atDirectory
++ witnesses (split-horizon, already supported) removes Atsign entirely for a closed
+ecosystem; pairing KT with out-of-band fingerprints ([§7.5](#75-mitigation-ladder) item 3)
+closes the one-epoch window for the highest-assurance pairs.
+
+**Honest limits (this is a sketch — these are the open problems a real design must close).**
+
+- **First contact is TOFU.** KT protects the *continuity* of a binding, not the initial
+  root publication (trust-on-first-use unless verified out-of-band, [§7.5](#75-mitigation-ladder)
+  item 3).
+- **Assurance = witness independence.** A handful of genuinely independent witnesses makes
+  targeted equivocation hard; Atsign-only witnesses make it weak.
+- **Detection, not prevention** (restated because it is the crux): a cheating operator is
+  *caught*, which deters, but a one-shot attacker may still read one epoch before exposure.
+  Out-of-band fingerprints close that last window for the highest-assurance pairs.
+- **Root rotation / revocation is unspecified here.** Logging only the stable root means a
+  compromised or rotated root needs a *monitored key-change entry* and defined
+  revocation/rotation semantics; without them a stolen root stays a valid chain anchor.
+- **STH freshness / liveness is unspecified here.** Clients must reject stale STHs (bound
+  the max STH age), or a freeze/rollback that pins a victim to an old epoch hides a
+  legitimate rotation and delays exposure of a rogue insertion.
+- **Monitoring is the element most users won't run themselves.** For a typical end user the
+  *delegated-monitor* path is the one that actually carries the guarantee — an atSign with
+  no monitor (self- or delegated) gets **zero** KT protection. A real design must make
+  independent delegated monitoring the default, not an opt-in.
