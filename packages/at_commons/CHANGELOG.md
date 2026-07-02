@@ -1,7 +1,15 @@
 ## 5.12.0
 
-- feat: enroll:listns
-- feat: enroll:metadata
+- feat: add the `enroll:listns:<listNamespace>` operation to the enroll verb
+  grammar (the gated per-namespace enrollment-discovery verb), ordered before
+  `list` in the operation alternation so it is not prefix-shadowed.
+- feat: add `EnrollParams.metadata` (opaque `Map<String, dynamic>`, stored
+  verbatim on the enrollment record and returned from discovery) and
+  `EnrollParams.signingAlgo` (`rsa2048` | `mldsa65`), with the matching
+  `EnrollVerbBuilder` fields; an empty `metadata` map is dropped from the
+  built command.
+- feat: widen the `pkam` verb `signingAlgo` literal to accept `mldsa65`
+  (post-quantum ML-DSA APKAM authentication).
 
 ## 5.11.0
 

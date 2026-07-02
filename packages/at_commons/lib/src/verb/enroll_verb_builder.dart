@@ -42,6 +42,15 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
 
   String? encryptedAPKAMSymmetricKey;
 
+  /// The signing algorithm of [apkamPublicKey] — `rsa2048` or `mldsa65`.
+  /// Recorded on the enrollment so PKAM verification is record-authoritative.
+  String? signingAlgo;
+
+  /// Opaque, additive metadata stored verbatim on the enrollment record and
+  /// returned from discovery (`enroll:listns`). Carries the enrollment's key
+  /// package (`metadata.keyPackage`) for the secret-sharing substrate.
+  Map<String, dynamic>? metadata;
+
   /// Used to force revoke the enrollment request.
   bool force = false;
 
@@ -74,6 +83,8 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
       ..encryptedDefaultSelfEncryptionKey = encryptedDefaultSelfEncryptionKey
       ..selfEncKeyIV = selfEncKeyIV
       ..encryptedAPKAMSymmetricKey = encryptedAPKAMSymmetricKey
+      ..signingAlgo = signingAlgo
+      ..metadata = metadata
       ..enrollmentStatusFilter = enrollmentStatusFilter
       ..apkamKeysExpiryDuration = apkamKeysExpiryDuration;
 
@@ -95,6 +106,10 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
   /// to refrain adding the key and its value to the enroll verb command.
   bool _removeElements(String key, dynamic value) {
     if (value == null || value.toString().isEmpty) {
+      return true;
+    }
+    // Drop an empty metadata map so it never reaches the wire.
+    if (value is Map && value.isEmpty) {
       return true;
     }
     // EnrollmentStatusFilter is only applicable to EnrollOperation.list

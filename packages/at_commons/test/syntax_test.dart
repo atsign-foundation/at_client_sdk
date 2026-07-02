@@ -1,6 +1,7 @@
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -72,6 +73,15 @@ void main() {
           'pkam:signingAlgo:ecc_secp256r1:hashingAlgo:sha256:abcd1234';
       var verbParams = getVerbParams(VerbSyntax.pkam, command);
       expect(verbParams[AtConstants.atPkamSigningAlgo], 'ecc_secp256r1');
+      expect(verbParams[AtConstants.atPkamHashingAlgo], 'sha256');
+      expect(verbParams[AtConstants.atPkamSignature], 'abcd1234');
+    });
+
+    test('pkam regex with mldsa65 (PQ) signing algo and sha256 hashing algo',
+        () {
+      var command = 'pkam:signingAlgo:mldsa65:hashingAlgo:sha256:abcd1234';
+      var verbParams = getVerbParams(VerbSyntax.pkam, command);
+      expect(verbParams[AtConstants.atPkamSigningAlgo], 'mldsa65');
       expect(verbParams[AtConstants.atPkamHashingAlgo], 'sha256');
       expect(verbParams[AtConstants.atPkamSignature], 'abcd1234');
     });
@@ -345,34 +355,69 @@ void main() {
       expect(enrollmentInfo['enrollmentId'], '4567');
     });
 
-    test('A test to verify enroll:listns parses namespace', () {
+    test('A test to verify enroll:listns parses the listNamespace', () {
       String command = 'enroll:listns:wavi\n';
       var verbParams =
           VerbUtil.getVerbParam(VerbSyntax.enroll, command.trim())!;
       expect(verbParams['operation'], 'listns');
-      expect(verbParams['namespace'], 'wavi');
+      expect(verbParams['listNamespace'], 'wavi');
     });
 
-    test(
-        'A test to verify enroll:listns without namespace parses correctly',
+    test('A test to verify enroll:listns without a namespace parses correctly',
         () {
       String command = 'enroll:listns\n';
       var verbParams =
           VerbUtil.getVerbParam(VerbSyntax.enroll, command.trim())!;
       expect(verbParams['operation'], 'listns');
-      expect(verbParams['namespace'], isNull);
+      expect(verbParams['listNamespace'], isNull);
     });
 
-    test('A test to verify enroll:metadata parses enrollmentId and payload',
-        () {
-      const enrollmentId = 'abc123';
-      const payload = '{"kpid":"deadbeef","xWingPub":"AAAA"}';
-      String command = 'enroll:metadata:$enrollmentId:$payload\n';
+    test('A test to verify enroll:listns is matched before enroll:list', () {
+      // `listns` must be an earlier alternative than `list`, else `list`
+      // prefix-wins and the operation parses as `list` + leftover `ns:...`.
+      String command = 'enroll:listns:wavi\n';
       var verbParams =
           VerbUtil.getVerbParam(VerbSyntax.enroll, command.trim())!;
-      expect(verbParams['operation'], 'metadata');
-      expect(verbParams['namespace'], enrollmentId);
-      expect(verbParams['enrollParams'], payload);
+      expect(verbParams['operation'], 'listns');
+    });
+
+    test('EnrollParams round-trips metadata and signingAlgo', () {
+      final params = EnrollParams()
+        ..signingAlgo = 'mldsa65'
+        ..metadata = {
+          'keyPackage': {'v': 1}
+        };
+      final restored = EnrollParams.fromJson(params.toJson());
+      expect(restored.signingAlgo, 'mldsa65');
+      expect(restored.metadata, {
+        'keyPackage': {'v': 1}
+      });
+    });
+
+    test('EnrollVerbBuilder drops empty metadata but keeps a populated one',
+        () {
+      final withEmpty = EnrollVerbBuilder()
+        ..operation = EnrollOperationEnum.request
+        ..appName = 'app'
+        ..deviceName = 'dev'
+        ..namespaces = {'wavi': 'rw'}
+        ..otp = '123456'
+        ..apkamPublicKey = 'pk'
+        ..metadata = {};
+      expect(withEmpty.buildCommand(), isNot(contains('metadata')));
+
+      final withMeta = EnrollVerbBuilder()
+        ..operation = EnrollOperationEnum.request
+        ..appName = 'app'
+        ..deviceName = 'dev'
+        ..namespaces = {'wavi': 'rw'}
+        ..otp = '123456'
+        ..apkamPublicKey = 'pk'
+        ..signingAlgo = 'mldsa65'
+        ..metadata = {'keyPackage': {}};
+      final command = withMeta.buildCommand();
+      expect(command, contains('"metadata"'));
+      expect(command, contains('"signingAlgo":"mldsa65"'));
     });
   });
 
