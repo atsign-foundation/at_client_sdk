@@ -2,8 +2,9 @@
 
 **Status:** design source of truth (high-level WHY + WHAT). Companion docs carry
 the build sequence, detailed mechanics, acceptance tests, and the decision log.
-**Scope:** the move from the legacy encryption schemes to post-quantum-safe,
-group-based encryption with rotating keys — preserving every current capability
+**Scope:** the move from the legacy encryption schemes to post-quantum-safe
+encryption with rotating keys — the single-tier `nskey` data path (D1), then
+group-based `at/pqmls` (D2) — preserving every current capability
 (encrypt/decrypt for other clients of the same atSign, encrypt/decrypt for other
 atSigns) — framed as two deliverables, **D1** (the single-tier `nskey` data
 path) and **D2** (the `at/pqmls` group provider, referenced not detailed here).
@@ -33,7 +34,7 @@ the canonical home rather than duplicating it.
 |---|---|
 | **roadmap.md** (this doc) | Roadmap & high-level design — the WHY + WHAT: deliverables D1/D2, the conceptual `nskey` shape, migration philosophy, usability/crypto-agility constraints, the phase trajectory at a glance. |
 | [`implementation-plan.md`](implementation-plan.md) | The build sequence — the project list (Wave-0 baseline, P-1..P-3, S-1..S-6, SS-*, B-*, RF-*, R-1/R-2, ON-1, D2-1), the dependency graph, waves/parallelism, effort, publish gates, the critical path, and the coverage map. |
-| [`design.md`](design.md) | Detailed designs by subsystem — the D1 `nskey` data-path key shapes / 3 providers / `appMetadata` / CK model / cold-start / FS + rotation levers; the secret-sharing substrate (`kpid`, `__ssenv`, `SecretStore`, push/pull, `enroll:listfornamespace`, the enrollment record + self-retrofit flow); at_chops primitives; the `CryptoProvider` seam / key stores / WASM split; and the worked walkthroughs (NoPorts, at_talk). Build-level notes with `file:line`. |
+| [`design.md`](design.md) | Detailed designs by subsystem — the D1 `nskey` data-path key shapes / 3 providers / `appMetadata` / CK model / cold-start / FS + rotation levers; the secret-sharing substrate (`kpid`, `__ssenv`, `SecretStore`, push/pull, `enroll:listns`, the enrollment record + self-retrofit flow); at_chops primitives; the `CryptoProvider` seam / key stores / WASM split; and the worked walkthroughs (NoPorts, at_talk). Build-level notes with `file:line`. |
 | [`acceptance.md`](acceptance.md) | The given/when/then use-case catalogue (A1.x–A5.x, B0.x–B5.x) with concrete at-keys plus the impl/verify steps and the test harness. |
 | [`decisions.md`](decisions.md) | The decision log — the design rulings (the verb wire shape, the 1:1:1 ruling), the resolved and open decisions, and a dated timeline. The WHY behind every choice. |
 
@@ -64,6 +65,17 @@ the group engine. The `nskey` data path is PQ-native by construction, so PQ-safe
 messaging does not wait on the MLS (group) work, which is the separate D2
 `at/pqmls` provider. (For the data-path mechanics see
 [`design.md`](design.md); for tests, [`acceptance.md`](acceptance.md).)
+
+**Authentication is PQ-safe too.** D1 also moves APKAM/PKAM signatures to
+**ML-DSA-65**. Unlike confidentiality, signatures are not
+harvest-now-decrypt-later-vulnerable — a recorded signature is worthless once
+its key is retired — so the adversary here is an *active* cryptographically-relevant
+quantum computer forging live authentications, not a passive recorder. ML-DSA
+APKAM auth rides D1 because the enrollment-record reshape and the substrate's
+envelope-trust both already touch the auth path, so doing it separately would
+mean a second server-schema migration; it is record-authoritative (the atServer
+verifies against the algorithm stored on the enrollment record, never the
+wire-declared one).
 
 ### D2 — implement pq-mls (the `at/pqmls` group provider)
 
@@ -155,6 +167,23 @@ leaf keys, TreeKEM, membership decoupled from namespace authorisation — is
 secret-sharing substrate is shared**: D1 uses it to convey `nskey` privates
 per-APKAM, and D2's `at/pqmls` uses the same substrate for group messages — so
 the substrate work serves both deliverables.
+
+### D1 scope boundaries
+
+**In D1 scope:** self data, data shared with other atSigns, the
+enrollment-approval key conveyance, APKAM/PKAM authentication signatures
+(ML-DSA), and — ruled in 2026-07-02 — **`.atKeys`-at-rest protection**: once
+payloads are PQ-safe, the keyfile holding the PQ private material becomes the
+highest-value harvest target, so encrypting the PQ privates at rest and the
+keyfile backup/restore story are D1 concerns (sequenced as `KF-1` in the
+implementation plan).
+
+**Explicit non-goals (D1):** the **TLS session** to the atServer/atDirectory —
+post-D1 the payloads inside are already E2E PQ-safe, so the residual TLS
+exposure is verb-level metadata (key names, timing) the atServer sees by design
+anyway; and the **atDirectory** itself, which holds no ciphertext. Both may be
+revisited as separate efforts; neither gates D1. (For the ruling see
+[`decisions.md`](decisions.md).)
 
 ## Mixed-scheme coexistence & migration philosophy
 
@@ -264,13 +293,13 @@ If yes, it isn't done.
 **Crypto-agility** is a sibling constraint: schemes upgrade **by id with no
 schema change** — the provider seam routes per value, so new algorithms and
 providers drop in without a flag-day. Key lists and envelopes carry their
-`{kid, use, alg}` / `{keyAlg, kid, encAlg}` descriptors so the wire format never
+`{kid, use, alg}` / `{suite, kid}` descriptors so the wire format never
 has to change when a primitive is replaced.
 
 How these constraints are realised — the `CryptoProvider` seam and the NoPorts
-admission UX — lives in [`design.md`](design.md) (identity resolution and a default
-`SecretStorePersistence` are D2/deferred); the per-milestone usability tests live in
-[`acceptance.md`](acceptance.md).
+admission UX — lives in [`design.md`](design.md) (identity resolution is D2/deferred; the
+default `SecretStorePersistence` ships in D1 at SS-3); the per-milestone
+usability tests live in [`acceptance.md`](acceptance.md).
 
 ## The phase trajectory at a glance
 
