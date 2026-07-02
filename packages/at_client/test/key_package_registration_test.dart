@@ -99,10 +99,10 @@ void main() {
 
   group('register', () {
     test(
-        'publishes the _apsk signing key and registers a key package with an '
+        'publishes the _apsk signing key and returns a key package with an '
         'x-wing enc key (nothing is published as an at-key)', () async {
-      final directory = FakeEnrollmentDirectory();
-      final registrant = buildRegistrant('enroll-a', directory, seed: seedA);
+      final registrant =
+          buildRegistrant('enroll-a', FakeEnrollmentDirectory(), seed: seedA);
       final keyPackage = await registrant.register();
 
       expect(keyPackage.enrollmentId, 'enroll-a');
@@ -112,10 +112,10 @@ void main() {
       expect(remoteData['public:_apsk.enroll-a.a.__e$atSign'],
           registrant.publicSigningKey);
 
-      // the key package is in the directory, NOT published as a hidden key
-      final registered = directory.registered['enroll-a']!;
-      expect(registered, hasLength(1));
-      final encKey = registered.single.bestKeyFor(SecretSharingAlgos.keyAlgos);
+      // the returned key package carries the x-wing enc key; register() does
+      // NOT write it anywhere (it rides enroll:request), and nothing is
+      // published as a hidden at-key
+      final encKey = keyPackage.bestKeyFor(SecretSharingAlgos.keyAlgos);
       expect(encKey, isNotNull);
       expect(encKey!.alg, SecretSharingAlgos.xWing);
       expect(encKey.use, SecretSharingAlgos.useEnc);
@@ -200,47 +200,32 @@ void main() {
         'exclude', () async {
       final atClient = buildMockClient('enroll-self');
       final secondary = atClient.getRemoteSecondary()!;
+      // Flat 1:1:1 shape: one record per enrollment, no nested apkam[] array;
+      // apkamPubKey + metadata sit directly on the record.
       final response = jsonEncode([
         {
           'enrollmentId': 'enroll-b',
           'access': 'rw',
-          'apkam': [
-            {
-              'apkamId': 'apkam-b1',
-              'apkamPubKey': 'pk',
-              'metadata': {
-                'keyPackages': {
-                  SecretSharingAlgos.keyPackageType: {
-                    'v': 1,
-                    'createdAt': '2026-06-11T00:00:00.000Z',
-                    'keys': [
-                      {
-                        'kid': 'kb',
-                        'use': 'enc',
-                        'alg': 'x-wing',
-                        'pub': 'pubb'
-                      }
-                    ],
-                  }
-                }
-              }
+          'apkamPubKey': 'pkb',
+          'metadata': {
+            'keyPackage': {
+              'v': 1,
+              'createdAt': '2026-06-11T00:00:00.000Z',
+              'keys': [
+                {'kid': 'kb', 'use': 'enc', 'alg': 'x-wing', 'pub': 'pubb'}
+              ],
             }
-          ]
+          }
         },
         {
           'enrollmentId': 'enroll-c',
           'access': 'r',
-          'apkam': [
-            {
-              'apkamId': 'apkam-c1',
-              'apkamPubKey': 'pk',
-              'metadata': {'keyPackages': {}}
-            }
-          ]
+          'apkamPubKey': 'pkc',
+          'metadata': {}
         },
       ]);
-      when(() => secondary.executeCommand('enroll:listfornamespace:myapp\n',
-          auth: true)).thenAnswer((_) async => 'data:$response');
+      when(() => secondary.executeCommand('enroll:listns:myapp\n', auth: true))
+          .thenAnswer((_) async => 'data:$response');
 
       final directory = VerbEnrollmentDirectory(atClient);
       final members = await directory.listForNamespace('myapp');
@@ -248,37 +233,17 @@ void main() {
           members.map((m) => m.enrollmentId).toSet(), {'enroll-b', 'enroll-c'});
       final b = members.firstWhere((m) => m.enrollmentId == 'enroll-b');
       expect(b.access, 'rw');
-      expect(b.keyPackages, hasLength(1));
-      expect(b.keyPackages.single.apkamId, 'apkam-b1');
-      expect(b.keyPackages.single.bestKeyFor(SecretSharingAlgos.keyAlgos)!.pub,
-          'pubb');
+      expect(b.keyPackage, isNotNull);
+      // apkamId is populated from the record's apkamPubKey
+      expect(b.keyPackage!.apkamId, 'pkb');
+      expect(
+          b.keyPackage!.bestKeyFor(SecretSharingAlgos.keyAlgos)!.pub, 'pubb');
       final c = members.firstWhere((m) => m.enrollmentId == 'enroll-c');
-      expect(c.keyPackages, isEmpty);
+      expect(c.keyPackage, isNull);
 
       final excluded = await directory
           .listForNamespace('myapp', excludeEnrollmentIds: {'enroll-b'});
       expect(excluded.map((m) => m.enrollmentId), ['enroll-c']);
-    });
-
-    test(
-        'registerKeyPackage issues an enroll:metadata command with the package',
-        () async {
-      final atClient = buildMockClient('enroll-self');
-      final secondary = atClient.getRemoteSecondary()!;
-      String? sent;
-      when(() => secondary.executeCommand(any(), auth: any(named: 'auth')))
-          .thenAnswer((inv) async {
-        sent = inv.positionalArguments[0] as String;
-        return 'data:ok';
-      });
-      final directory = VerbEnrollmentDirectory(atClient);
-      await directory.registerKeyPackage(KeyPackage(
-          enrollmentId: 'enroll-self',
-          createdAt: DateTime.utc(2026, 6, 11),
-          keys: [PackageKey(use: 'enc', alg: 'x-wing', pub: 'p')]));
-      expect(sent, isNotNull);
-      expect(sent, startsWith('enroll:metadata:enroll-self:'));
-      expect(sent, contains(SecretSharingAlgos.keyPackageType));
     });
   });
 }

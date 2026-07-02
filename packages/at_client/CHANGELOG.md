@@ -1,4 +1,13 @@
 ## 3.13.0
+- feat (experimental): per-APKAM same-atSign secret-sharing substrate —
+  `AtClientSecretSharing` / `PairwiseSecretSharing` (mixins `KeyPackageRegistration`,
+  `EnvelopeSigning`), `SecretStore`, `KeyPackage`, `SecretEnvelope`, and the
+  `EnrollmentDirectory` seam. Secrets travel in X-Wing-sealed (`pqSeal`),
+  APKAM-signed `__ssenv` envelopes addressed by `kpid`; key packages are
+  enrollment-internal (conveyed via `enroll:request`, discovered via the gated
+  `enroll:listns` verb) and never published. The whole surface is
+  `@experimental` — the wire shape is subject to change pending the atServer
+  verb work — and requires `at_chops ^3.3.0` (`pqSeal`/`pqOpen`).
 - refactor: migrate the local keystore to `at_persistence_secondary_server`
   5.0.0 — the client is now commit-log-free. The client no longer maintains a
   local commit log or runs commit-log compaction; sync tracks its progress

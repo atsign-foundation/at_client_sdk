@@ -1,18 +1,16 @@
-import 'dart:convert' show jsonDecode, jsonEncode;
+import 'dart:convert' show jsonDecode;
 
 import 'package:at_client/at_client.dart' show AtClient;
-import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:meta/meta.dart' show experimental;
 
 /// One enrollment authorised for a namespace, as returned by
 /// [EnrollmentDirectory.listForNamespace]: its access level and the key
-/// packages of every APKAM keypair it has registered.
+/// package of its APKAM keypair.
 ///
-/// An enrollment can expose several [keyPackages] — one per APKAM keypair
-/// (the keyfile copied to another device mints its own). A sender seals once
-/// per key package, so every client sharing the enrollment receives the
-/// secret.
+/// Enrollment cardinality is **1:1:1** — one enrollment has exactly one APKAM
+/// keypair and therefore exactly one key package — so each member has exactly
+/// one [keyPackage] (null if the enrollment advertised none).
 @experimental
 class NamespaceMember {
   final String enrollmentId;
@@ -22,54 +20,53 @@ class NamespaceMember {
   /// key — reading the data requires it.
   final String access;
 
-  /// One [KeyPackage] per APKAM keypair of this enrollment that advertised one.
-  final List<KeyPackage> keyPackages;
+  /// This enrollment's single key package, or null if it advertised none
+  /// (1:1:1).
+  final KeyPackage? keyPackage;
 
   NamespaceMember({
     required this.enrollmentId,
     required this.access,
-    required this.keyPackages,
+    this.keyPackage,
   });
 }
 
-/// The atServer-backed directory of per-APKAM key packages.
+/// The atServer-backed directory of per-enrollment key packages.
 ///
-/// Discovery and storage of key packages live behind this seam so the
-/// secret-sharing substrate above it is independent of the wire protocol and
-/// fully unit-testable with a fake. The concrete [VerbEnrollmentDirectory]
-/// talks to the gated `enroll:listfornamespace` verb and the enrollment
-/// record; tests substitute their own implementation.
+/// Discovery of key packages lives behind this seam so the secret-sharing
+/// substrate above it is independent of the wire protocol and fully
+/// unit-testable with a fake. The concrete [VerbEnrollmentDirectory] talks to
+/// the gated `enroll:listns` verb; tests substitute their own implementation.
+///
+/// There is no registration method: a key package is conveyed into its
+/// enrollment record by riding `enroll:request` as opaque
+/// `EnrollParams.metadata` at enrollment time (there is no post-enrollment
+/// metadata write, and no `enroll:metadata` verb).
 @experimental
 abstract class EnrollmentDirectory {
   /// The enrollments authorised for [namespace] (the caller's own enrollment
   /// must hold at least read access — the atServer gates the verb), each with
-  /// the per-APKAM key packages to seal to. [excludeEnrollmentIds] drops
-  /// revoked enrollments before they ever enter a roster.
+  /// the key package to seal to. [excludeEnrollmentIds] drops revoked
+  /// enrollments before they ever enter a roster.
   Future<List<NamespaceMember>> listForNamespace(
     String namespace, {
     Set<String> excludeEnrollmentIds = const {},
   });
-
-  /// Records [keyPackage] in this client's enrollment record (filed by the
-  /// atServer under whichever APKAM keypair authenticated the write), so peers
-  /// discover it via [listForNamespace]. Idempotent.
-  Future<void> registerKeyPackage(KeyPackage keyPackage);
 }
 
-/// [EnrollmentDirectory] backed by the atServer's `enroll:listfornamespace`
-/// verb and enrollment-record metadata.
+/// [EnrollmentDirectory] backed by the atServer's `enroll:listns` verb.
 ///
-/// **Wire shape (assumed):** the server stores an opaque `metadata` JSON map
-/// per APKAM keypair and returns it verbatim — it has no opinion on the
-/// contents, only on the auth info it needs to verify PKAM. Key packages live
-/// in `metadata.keyPackages`, a map keyed by key-package format id
-/// ([SecretSharingAlgos.keyPackageType]) so formats can evolve without server
-/// changes:
+/// **Wire shape:** the server returns one flat record per approved enrollment
+/// authorised for the namespace (1:1:1 — no nested `apkam[]` array). Each
+/// record carries the enrollment's access level, its single APKAM public key,
+/// and its opaque `metadata` map (stored verbatim by the server from the
+/// enrollment's `enroll:request`). The enrollment's single key package lives
+/// directly under `metadata.keyPackage` (the payload itself — no format-id
+/// sub-key):
 ///
-///     enroll:listfornamespace:<ns>
-///       -> data:[{"enrollmentId":..,"access":"rw",
-///                 "apkam":[{"apkamId":..,"apkamPubKey":..,
-///                           "metadata":{"keyPackages":{"x-wing-v1":{..}}}}]}]
+///     enroll:listns:<ns>
+///       -> data:[{"enrollmentId":..,"access":"rw","apkamPubKey":..,
+///                 "metadata":{"keyPackage":{"v":1,"createdAt":..,"keys":[..]}}}]
 @experimental
 class VerbEnrollmentDirectory implements EnrollmentDirectory {
   final AtClient atClient;
@@ -83,7 +80,7 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
   }) async {
     final String? raw = await atClient
         .getRemoteSecondary()
-        ?.executeCommand('enroll:listfornamespace:$namespace\n', auth: true);
+        ?.executeCommand('enroll:listns:$namespace\n', auth: true);
     final decoded = _data(raw);
     if (decoded is! List) {
       return const [];
@@ -95,24 +92,18 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
       final access = e['access'];
       if (enrollmentId is! String || access is! String) continue;
       if (excludeEnrollmentIds.contains(enrollmentId)) continue;
-      final apkams = e['apkam'];
-      final keyPackages = <KeyPackage>[];
-      if (apkams is List) {
-        for (final a in apkams) {
-          if (a is! Map) continue;
-          final apkamId = a['apkamId'];
-          final metadata = a['metadata'];
-          if (metadata is! Map) continue;
-          final pkgs = metadata['keyPackages'];
-          if (pkgs is! Map) continue;
-          final payload = pkgs[SecretSharingAlgos.keyPackageType];
-          if (payload == null) continue;
+      KeyPackage? keyPackage;
+      final apkamPubKey = e['apkamPubKey'];
+      final metadata = e['metadata'];
+      if (metadata is Map) {
+        final pkg = metadata['keyPackage'];
+        if (pkg != null) {
           try {
-            keyPackages.add(KeyPackage.fromPayload(
-              payload,
+            keyPackage = KeyPackage.fromPayload(
+              pkg,
               enrollmentId: enrollmentId,
-              apkamId: apkamId is String ? apkamId : null,
-            ));
+              apkamId: apkamPubKey is String ? apkamPubKey : null,
+            );
           } catch (_) {
             // skip a malformed/unknown-format package; a newer client may
             // have written one this version doesn't understand
@@ -122,22 +113,10 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
       members.add(NamespaceMember(
         enrollmentId: enrollmentId,
         access: access,
-        keyPackages: keyPackages,
+        keyPackage: keyPackage,
       ));
     }
     return members;
-  }
-
-  @override
-  Future<void> registerKeyPackage(KeyPackage keyPackage) async {
-    // The server stores the metadata opaquely under the authenticating APKAM
-    // keypair; the substrate's format lives under `keyPackages.<format-id>`.
-    final metadata = jsonEncode({
-      'keyPackages': {SecretSharingAlgos.keyPackageType: keyPackage.toJson()}
-    });
-    await atClient.getRemoteSecondary()?.executeCommand(
-        'enroll:metadata:${atClient.enrollmentId}:$metadata\n',
-        auth: true);
   }
 
   /// Strips the at-protocol `data:` prefix and JSON-decodes a verb response.

@@ -26,12 +26,13 @@ class PersistedApkamKeys {
 
 /// Maintains this APKAM keypair's [KeyPackage] for same-atSign secret sharing.
 ///
-/// The recipient unit is the **APKAM keypair**: this client holds one X-Wing
-/// enc keypair (its [kpid] is the SHA-256 prefix of the public key), registers
-/// it via the [EnrollmentDirectory] into its enrollment record, and publishes
-/// its APKAM signing key so peers can verify the envelopes it sends. Key
-/// packages are enrollment-internal — never published, discovered only via the
-/// gated `enroll:listfornamespace` verb.
+/// The recipient unit is the **APKAM keypair** (1:1:1 — one enrollment, one
+/// APKAM keypair, one key package): this client holds one X-Wing enc keypair
+/// (its [kpid] is the SHA-256 prefix of the public key) and publishes its APKAM
+/// signing key so peers can verify the envelopes it sends. Its key package is
+/// conveyed into the enrollment record by riding `enroll:request` as opaque
+/// `EnrollParams.metadata` at enrollment time (there is no post-enrollment
+/// write); peers discover it via the gated `enroll:listns` verb.
 ///
 /// By default the enc keypair is generated fresh and held in memory; apps that
 /// want it stable across restarts supply [loadApkamKeys] / [saveApkamKeys]
@@ -98,9 +99,13 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
       );
 
   /// Generates (or loads, via [loadApkamKeys]) this APKAM keypair's X-Wing enc
-  /// keypair, publishes its APKAM signing key (so peers can verify its
-  /// envelopes), and registers its key package in the enrollment record so
-  /// peers can discover it. Idempotent.
+  /// keypair and publishes its APKAM signing key (so peers can verify its
+  /// envelopes), then returns this client's [KeyPackage]. Idempotent.
+  ///
+  /// The returned key package is conveyed into the enrollment record by riding
+  /// `enroll:request` as opaque `EnrollParams.metadata` at enrollment time — it
+  /// is never written by a post-enrollment directory call. Peers then discover
+  /// it via the gated `enroll:listns` verb.
   Future<KeyPackage> register() async {
     if (_xWingSeed == null) {
       final loaded = await loadApkamKeys?.call();
@@ -118,11 +123,9 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
       }
     }
     await publishPublicSigningKey();
-    final keyPackage = myKeyPackage;
-    await directory.registerKeyPackage(keyPackage);
     _registered = true;
-    logger.info('Registered key package for enrollment $enrollmentId '
+    logger.info('Prepared key package for enrollment $enrollmentId '
         '(kpid $kpid)');
-    return keyPackage;
+    return myKeyPackage;
   }
 }

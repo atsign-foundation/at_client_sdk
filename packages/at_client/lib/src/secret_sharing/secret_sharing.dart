@@ -3,12 +3,12 @@
 /// Multiple atClients frequently authenticate as the same atSign — on
 /// different APKAM enrollments, or as several APKAM keypairs of one
 /// enrollment. This library lets them share secrets such that only the target
-/// **APKAM keypair** can read them: each APKAM keypair registers a [KeyPackage]
-/// (per [KeyPackageRegistration]) into its enrollment record, and secrets
-/// travel in signed, encrypted [SecretEnvelope]s addressed by `kpid` and scoped
-/// by application namespace (per [PairwiseSecretSharing]). Key packages are
-/// discovered via the gated `enroll:listfornamespace` verb behind
-/// [EnrollmentDirectory] — never published.
+/// **APKAM keypair** can read them: each APKAM keypair holds a [KeyPackage]
+/// (per [KeyPackageRegistration]) conveyed into its enrollment record via
+/// `enroll:request`, and secrets travel in signed, encrypted [SecretEnvelope]s
+/// addressed by `kpid` and scoped by application namespace (per
+/// [PairwiseSecretSharing]). Key packages are discovered via the gated
+/// `enroll:listns` verb behind [EnrollmentDirectory] — never published.
 ///
 /// [AtClientSecretSharing] is the ready-made entry point; the mixins are
 /// exported for apps that prefer composing them into their own classes.

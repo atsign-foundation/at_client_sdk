@@ -187,8 +187,11 @@ void main() {
     directory = FakeEnrollmentDirectory();
     sharerA = buildSharer('enroll-a', seedA);
     sharerB = buildSharer('enroll-b', seedB);
-    await sharerA.register();
-    await sharerB.register();
+    // register() prepares each keypair + publishes its signing key; the key
+    // package reaches the directory via enroll:request in production, modelled
+    // here with seed() so peers discover each other via listForNamespace.
+    directory.seed('enroll-a', await sharerA.register());
+    directory.seed('enroll-b', await sharerB.register());
   });
 
   tearDown(() async {

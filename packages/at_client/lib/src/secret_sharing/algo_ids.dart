@@ -26,13 +26,6 @@ class SecretSharingAlgos {
   /// `suite` field records which construction produced it.
   static const String xWingHpke = 'x-wing-hpke-v1';
 
-  /// The key-package **format id** this substrate writes into, and reads from,
-  /// an enrollment record's `metadata.keyPackages` map. Keying that map by
-  /// format id lets the key-package shape evolve (a new id) without the
-  /// atServer — which stores `metadata` opaquely and has no opinion on its
-  /// contents — needing any change.
-  static const String keyPackageType = 'x-wing-v1';
-
   /// Key-establishment algorithms this client supports, strongest first.
   /// A sender picks the first of these that the recipient's key package
   /// advertises.

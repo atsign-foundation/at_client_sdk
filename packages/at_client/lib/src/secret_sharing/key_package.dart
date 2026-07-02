@@ -55,20 +55,24 @@ class PackageKey {
 /// The X-Wing recipient key(s) one **APKAM keypair** advertises so that other
 /// clients of the same atSign can seal secrets to it.
 ///
-/// The recipient unit is the APKAM keypair, not a client process: a key
-/// package is identified by ([enrollmentId], [apkamId]). Several APKAM
-/// keypairs may belong to one enrollment (the keyfile copied to another
-/// device, each minting its own), so an enrollment can expose more than one.
+/// The recipient unit is the APKAM keypair, not a client process. Enrollment
+/// cardinality is **1:1:1** — one enrollment has exactly one APKAM keypair and
+/// therefore exactly one key package — so a key package is identified by its
+/// [enrollmentId] (with [apkamId] carried alongside for reference).
 ///
-/// Key packages are **enrollment-internal** — they live in the per-APKAM
-/// enrollment record (written under that APKAM keypair's authenticated write)
-/// and are discovered only via the gated `enroll:listfornamespace` verb (see
-/// [EnrollmentDirectory]). They are **not** published and **not** separately
-/// signed: the atServer vouches that a returned key package belongs to the
-/// enrollment it is filed under. (Message authenticity is the per-envelope
-/// APKAM signature, see EnvelopeSigning — unchanged.)
+/// Key packages are **enrollment-internal** — they live in the enrollment
+/// record, conveyed there by riding `enroll:request` as opaque
+/// `EnrollParams.metadata` at enrollment time, and are discovered only via the
+/// gated `enroll:listns` verb (see [EnrollmentDirectory]). They are **not**
+/// published as ordinary at-keys. Per the ratified design the advertised key
+/// package is wrapped in an APKAM-signed envelope by its generating enrollment
+/// and verified against that enrollment's `_apsk` — the same path same-atSign
+/// and cross-atSign — so the encapsulation target is authenticated, not merely
+/// server-vouched. *(Signing/verifying the advertised package is not yet
+/// implemented here — today it is advertised unsigned; per-envelope `__ssenv`
+/// messages are already APKAM-signed, see EnvelopeSigning.)*
 ///
-/// The wire form is the value stored at `metadata.keyPackages[<format-id>]`
+/// The wire form is the value stored at `metadata.keyPackage`
 /// in the enrollment record ([toJson] / [fromPayload]); [enrollmentId] and
 /// [apkamId] are carried by the enclosing verb structure, not duplicated in
 /// the payload.
@@ -81,9 +85,9 @@ class KeyPackage {
   /// The enrollment this key package belongs to.
   final String enrollmentId;
 
-  /// The APKAM keypair this key package belongs to, as reported by the verb.
-  /// Null on a key package this client builds for its own registration — the
-  /// atServer files it under whichever APKAM keypair authenticated the write.
+  /// The APKAM keypair this key package belongs to, as reported by the verb
+  /// (the enrollment's `apkamPubKey`). Null on a key package this client builds
+  /// for its own enrollment — identity is carried by the enclosing enrollment.
   final String? apkamId;
 
   final DateTime createdAt;
@@ -117,7 +121,7 @@ class KeyPackage {
     return null;
   }
 
-  /// The value stored at `metadata.keyPackages[<format-id>]` — the payload
+  /// The value stored at `metadata.keyPackage` — the payload
   /// only. [enrollmentId] / [apkamId] are carried by the enclosing verb
   /// structure (the enrollment and its APKAM-keypair entry), not repeated here.
   Map<String, Object?> toJson() => {
@@ -126,7 +130,7 @@ class KeyPackage {
         'keys': keys.map((k) => k.toJson()).toList(),
       };
 
-  /// Parses a stored key-package [payload] (from `metadata.keyPackages`),
+  /// Parses a stored key-package [payload] (from `metadata.keyPackage`),
   /// injecting the [enrollmentId] / [apkamId] the enclosing verb structure
   /// carried. Skips malformed entries in `keys` rather than throwing — a
   /// payload written by a newer client may carry key entries (or extra fields)
