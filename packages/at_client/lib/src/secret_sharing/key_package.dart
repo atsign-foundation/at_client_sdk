@@ -69,7 +69,7 @@ class PackageKey {
 /// authenticity is the per-envelope APKAM signature, see EnvelopeSigning —
 /// unchanged.)
 ///
-/// The wire form is the value stored at `metadata.keyPackages[<format-id>]`
+/// The wire form is the value stored at `metadata.keyPackage`
 /// in the enrollment record ([toJson] / [fromPayload]); [enrollmentId] and
 /// [apkamId] are carried by the enclosing verb structure, not duplicated in
 /// the payload.
@@ -118,7 +118,7 @@ class KeyPackage {
     return null;
   }
 
-  /// The value stored at `metadata.keyPackages[<format-id>]` — the payload
+  /// The value stored at `metadata.keyPackage` — the payload
   /// only. [enrollmentId] / [apkamId] are carried by the enclosing verb
   /// structure (the enrollment and its APKAM-keypair entry), not repeated here.
   Map<String, Object?> toJson() => {
@@ -127,7 +127,7 @@ class KeyPackage {
         'keys': keys.map((k) => k.toJson()).toList(),
       };
 
-  /// Parses a stored key-package [payload] (from `metadata.keyPackages`),
+  /// Parses a stored key-package [payload] (from `metadata.keyPackage`),
   /// injecting the [enrollmentId] / [apkamId] the enclosing verb structure
   /// carried. Skips malformed entries in `keys` rather than throwing — a
   /// payload written by a newer client may carry key entries (or extra fields)

@@ -208,14 +208,12 @@ void main() {
           'access': 'rw',
           'apkamPubKey': 'pkb',
           'metadata': {
-            'keyPackages': {
-              SecretSharingAlgos.keyPackageType: {
-                'v': 1,
-                'createdAt': '2026-06-11T00:00:00.000Z',
-                'keys': [
-                  {'kid': 'kb', 'use': 'enc', 'alg': 'x-wing', 'pub': 'pubb'}
-                ],
-              }
+            'keyPackage': {
+              'v': 1,
+              'createdAt': '2026-06-11T00:00:00.000Z',
+              'keys': [
+                {'kid': 'kb', 'use': 'enc', 'alg': 'x-wing', 'pub': 'pubb'}
+              ],
             }
           }
         },
@@ -223,7 +221,7 @@ void main() {
           'enrollmentId': 'enroll-c',
           'access': 'r',
           'apkamPubKey': 'pkc',
-          'metadata': {'keyPackages': {}}
+          'metadata': {}
         },
       ]);
       when(() => secondary.executeCommand('enroll:listns:myapp\n', auth: true))
@@ -235,13 +233,13 @@ void main() {
           members.map((m) => m.enrollmentId).toSet(), {'enroll-b', 'enroll-c'});
       final b = members.firstWhere((m) => m.enrollmentId == 'enroll-b');
       expect(b.access, 'rw');
-      expect(b.keyPackages, hasLength(1));
+      expect(b.keyPackage, isNotNull);
       // apkamId is populated from the record's apkamPubKey
-      expect(b.keyPackages.single.apkamId, 'pkb');
-      expect(b.keyPackages.single.bestKeyFor(SecretSharingAlgos.keyAlgos)!.pub,
-          'pubb');
+      expect(b.keyPackage!.apkamId, 'pkb');
+      expect(
+          b.keyPackage!.bestKeyFor(SecretSharingAlgos.keyAlgos)!.pub, 'pubb');
       final c = members.firstWhere((m) => m.enrollmentId == 'enroll-c');
-      expect(c.keyPackages, isEmpty);
+      expect(c.keyPackage, isNull);
 
       final excluded = await directory
           .listForNamespace('myapp', excludeEnrollmentIds: {'enroll-b'});

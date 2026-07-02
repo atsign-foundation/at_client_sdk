@@ -461,8 +461,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         excludeEnrollmentIds: excludeEnrollmentIds);
     int sent = 0;
     for (final member in members) {
-      for (final to in member.keyPackages) {
-        if (to.kpid == kpid) continue; // skip ourselves
+      final to = member.keyPackage;
+      if (to != null && to.kpid != kpid) {
         await sendEnvelope(to, namespace, {
           'kind': secretRequestKind,
           if (names != null) 'want': names,
@@ -510,11 +510,9 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       if (member.enrollmentId != received.fromEnrollmentId) {
         continue;
       }
-      for (final kp in member.keyPackages) {
-        if (kp.kpid == received.fromKpid) {
-          requester = kp;
-          break;
-        }
+      final kp = member.keyPackage;
+      if (kp != null && kp.kpid == received.fromKpid) {
+        requester = kp;
       }
       if (requester != null) break;
     }
@@ -667,8 +665,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         excludeEnrollmentIds: excludeEnrollmentIds);
     int pushed = 0;
     for (final member in members) {
-      for (final to in member.keyPackages) {
-        if (to.kpid == kpid) continue; // skip ourselves
+      final to = member.keyPackage;
+      if (to != null && to.kpid != kpid) {
         await shareSecretWith(to, secret);
         pushed++;
       }
@@ -699,7 +697,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       if (ns == '*') continue; // a wildcard isn't a queryable namespace
       for (final member in await directory.listForNamespace(ns)) {
         if (member.enrollmentId != enrollmentId) continue;
-        for (final kp in member.keyPackages) {
+        final kp = member.keyPackage;
+        if (kp != null) {
           final id = kp.kpid;
           if (id != null) byKpid[id] = kp;
         }

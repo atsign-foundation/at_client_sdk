@@ -1,7 +1,6 @@
 import 'dart:convert' show jsonDecode;
 
 import 'package:at_client/at_client.dart' show AtClient;
-import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:meta/meta.dart' show experimental;
 
@@ -10,10 +9,8 @@ import 'package:meta/meta.dart' show experimental;
 /// package of its APKAM keypair.
 ///
 /// Enrollment cardinality is **1:1:1** — one enrollment has exactly one APKAM
-/// keypair and therefore exactly one key package — so [keyPackages] holds at
-/// most one element (empty if the enrollment advertised none). It is kept a
-/// list only so a sender can iterate uniformly; a sender seals once per key
-/// package, reaching the enrollment.
+/// keypair and therefore exactly one key package — so each member has exactly
+/// one [keyPackage] (null if the enrollment advertised none).
 @experimental
 class NamespaceMember {
   final String enrollmentId;
@@ -23,13 +20,14 @@ class NamespaceMember {
   /// key — reading the data requires it.
   final String access;
 
-  /// This enrollment's key package(s): 0 or 1 element under 1:1:1.
-  final List<KeyPackage> keyPackages;
+  /// This enrollment's single key package, or null if it advertised none
+  /// (1:1:1).
+  final KeyPackage? keyPackage;
 
   NamespaceMember({
     required this.enrollmentId,
     required this.access,
-    required this.keyPackages,
+    this.keyPackage,
   });
 }
 
@@ -62,13 +60,13 @@ abstract class EnrollmentDirectory {
 /// authorised for the namespace (1:1:1 — no nested `apkam[]` array). Each
 /// record carries the enrollment's access level, its single APKAM public key,
 /// and its opaque `metadata` map (stored verbatim by the server from the
-/// enrollment's `enroll:request`). Key packages live in `metadata.keyPackages`,
-/// a map keyed by key-package format id ([SecretSharingAlgos.keyPackageType])
-/// so formats can evolve without server changes:
+/// enrollment's `enroll:request`). The enrollment's single key package lives
+/// directly under `metadata.keyPackage` (the payload itself — no format-id
+/// sub-key):
 ///
 ///     enroll:listns:<ns>
 ///       -> data:[{"enrollmentId":..,"access":"rw","apkamPubKey":..,
-///                 "metadata":{"keyPackages":{"x-wing-v1":{..}}}}]
+///                 "metadata":{"keyPackage":{"v":1,"createdAt":..,"keys":[..]}}}]
 @experimental
 class VerbEnrollmentDirectory implements EnrollmentDirectory {
   final AtClient atClient;
@@ -94,31 +92,28 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
       final access = e['access'];
       if (enrollmentId is! String || access is! String) continue;
       if (excludeEnrollmentIds.contains(enrollmentId)) continue;
-      final keyPackages = <KeyPackage>[];
+      KeyPackage? keyPackage;
       final apkamPubKey = e['apkamPubKey'];
       final metadata = e['metadata'];
       if (metadata is Map) {
-        final pkgs = metadata['keyPackages'];
-        if (pkgs is Map) {
-          final payload = pkgs[SecretSharingAlgos.keyPackageType];
-          if (payload != null) {
-            try {
-              keyPackages.add(KeyPackage.fromPayload(
-                payload,
-                enrollmentId: enrollmentId,
-                apkamId: apkamPubKey is String ? apkamPubKey : null,
-              ));
-            } catch (_) {
-              // skip a malformed/unknown-format package; a newer client may
-              // have written one this version doesn't understand
-            }
+        final pkg = metadata['keyPackage'];
+        if (pkg != null) {
+          try {
+            keyPackage = KeyPackage.fromPayload(
+              pkg,
+              enrollmentId: enrollmentId,
+              apkamId: apkamPubKey is String ? apkamPubKey : null,
+            );
+          } catch (_) {
+            // skip a malformed/unknown-format package; a newer client may
+            // have written one this version doesn't understand
           }
         }
       }
       members.add(NamespaceMember(
         enrollmentId: enrollmentId,
         access: access,
-        keyPackages: keyPackages,
+        keyPackage: keyPackage,
       ));
     }
     return members;

@@ -36,7 +36,7 @@ class FakeEnrollmentDirectory implements EnrollmentDirectory {
       members.add(NamespaceMember(
         enrollmentId: enrollmentId,
         access: acc,
-        keyPackages: kp == null ? const [] : [kp],
+        keyPackage: kp,
       ));
     });
     return members;
