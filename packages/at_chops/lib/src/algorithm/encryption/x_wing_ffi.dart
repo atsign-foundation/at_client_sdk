@@ -23,8 +23,10 @@ import 'package:pointycastle/digests/shake.dart';
 /// ML-KEM encapsulation does not accept external randomness, so draft test
 /// vectors are verified against the pure-Dart backend instead.
 ///
-/// The caller loads libcrypto (e.g. via [tryLoadLibCrypto]) and passes the
-/// resulting [DynamicLibrary] in. at_chops does no auto-resolution.
+/// Prefer [AtPqc.xWing], which auto-resolves to this backend when libcrypto
+/// supports ML-KEM-768 and falls back to pure-Dart otherwise. Construct via
+/// [XWingFfiAlgo.fromLib] only to pin a specific [DynamicLibrary]
+/// (e.g. loaded via [tryLoadLibCrypto]).
 final class XWingFfiAlgo implements AtKemAlgorithm {
   final MlKem768FfiAlgo _mlKem;
   final X25519FfiAlgo _x25519;
@@ -51,6 +53,7 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
   /// the [seed]; everything else is re-derived from it on decapsulation. Pass a
   /// 32-byte [seed] for deterministic generation (testing), otherwise one is
   /// drawn from a secure random source.
+  @override
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair(
       [Uint8List? seed]) async {
     seed ??= _randomSeed();
@@ -118,7 +121,7 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
 
   /// `expandDecapsulationKey(sk)`: SHAKE-256(sk, 96 bytes); bytes [0:64] are
   /// ML-KEM-768's (d || z), bytes [64:96] the X25519 secret key. The ML-KEM key
-  /// pair is materialised in OpenSSL via [MlKem768FfiAlgo.generateKeyPairFromSeed]
+  /// pair is materialised in OpenSSL via [MlKem768FfiAlgo.generateKeyPair]
   /// — callers must release it (see [generateKeyPair]/[decapsulate]).
   Future<_Expanded> _expand(Uint8List seed) async {
     if (seed.length != seedLength) {
@@ -131,7 +134,7 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
     shake.doOutput(expanded, 0, 96);
 
     final ({Uint8List publicKey, Uint8List secretKey}) mlKemKeyPair =
-        await _mlKem.generateKeyPairFromSeed(expanded.sublist(0, 64));
+        await _mlKem.generateKeyPair(expanded.sublist(0, 64));
     final Uint8List skX = expanded.sublist(64, 96);
     final Uint8List pkX = _x25519.publicKeyFromPrivate(skX);
     return _Expanded(
