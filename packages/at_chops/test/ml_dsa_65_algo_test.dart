@@ -76,5 +76,30 @@ void main() {
 
       expect(ok, isFalse);
     });
+
+    test('Deprecated stateful sign/verify via AtSigningAlgorithm still works',
+        () async {
+      // The stateful path shipped in 3.3.0 and AtChopsImpl's
+      // signing/verification dispatch is typed against AtSigningAlgorithm,
+      // so it must keep working until it is removed in a major release.
+      final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
+      final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
+
+      final algo = MlDsa65PureDartAlgo();
+      // ignore: deprecated_member_use_from_same_package
+      algo.secretKey = sk;
+
+      final Uint8List message = Uint8List.fromList('Hello'.codeUnits);
+      // ignore: deprecated_member_use_from_same_package
+      final Uint8List sig = await algo.sign(message);
+      // ignore: deprecated_member_use_from_same_package
+      final bool ok = await algo.verify(
+        message,
+        sig,
+        publicKey: kp.atPublicKey.publicKey,
+      );
+
+      expect(ok, isTrue);
+    });
   });
 }
