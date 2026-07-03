@@ -136,12 +136,19 @@ jobs:
         working-directory: packages/at_chops
         run: dart analyze
 
-      - name: run FFI tests
+      - name: run tests with libcrypto available
         working-directory: packages/at_chops
         env:
           AT_CHOPS_LIBCRYPTO_PATH: ${{ env.LIBCRYPTO_REAL_PATH }}
           LD_LIBRARY_PATH: ${{ env.OPENSSL_INSTALL_DIR }}/lib
-        run: dart test --concurrency=1 --tags ffi
+        # The ffi-tagged tests everywhere, plus all of at_pqc_test.dart —
+        # its untagged tests select their backend by probing libcrypto, so
+        # they exercise the FFI selection path only in this job (the
+        # build_and_test matrix already runs the rest of the suite with
+        # --exclude-tags ffi and no libcrypto).
+        run: |
+          dart test --concurrency=1 --tags ffi
+          dart test --concurrency=1 test/at_pqc_test.dart
 
   functional_tests_at_onboarding_cli:
     runs-on: ubuntu-latest

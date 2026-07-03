@@ -53,6 +53,7 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
   /// IS the [seed]; everything else is re-derived from it on decapsulation.
   /// Pass a 32-byte [seed] for deterministic generation (testing), otherwise
   /// one is drawn from a secure random source.
+  @override
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair(
       [Uint8List? seed]) async {
     seed ??= _randomSeed();

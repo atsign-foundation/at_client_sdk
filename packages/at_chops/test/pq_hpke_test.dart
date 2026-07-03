@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:test/test.dart';
 
 import 'x_wing_test_vectors.dart';
@@ -14,6 +13,9 @@ final class _FixedKem implements AtKemAlgorithm {
   final Uint8List _ss;
   final Uint8List _ct;
   _FixedKem(this._ss, this._ct);
+  @override
+  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair() async =>
+      throw UnsupportedError('not used in this test');
   @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
           Uint8List publicKey) async =>
