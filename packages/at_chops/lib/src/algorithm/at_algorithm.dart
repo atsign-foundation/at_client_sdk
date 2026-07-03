@@ -97,12 +97,15 @@ abstract class AtHashingAlgorithm<K, V> {
 /// recipient's public key, the recipient via [decapsulate] using their
 /// secret key and the ciphertext sent by the sender.
 abstract class AtKemAlgorithm {
-  /// Generate a fresh key pair.
+  /// Generate a fresh key pair from a secure random source.
   ///
-  /// Pass [seed] for deterministic generation (testing); otherwise one is
-  /// drawn from a secure random source.
-  FutureOr<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair(
-      [Uint8List? seed]);
+  /// Deterministic (seeded) generation is deliberately not part of this
+  /// interface: seed length and format are backend-specific (e.g. a 32-byte
+  /// X-Wing seed vs a 64-byte ML-KEM `d || z`), so a caller holding an
+  /// [AtKemAlgorithm] cannot supply a valid seed without knowing the
+  /// concrete backend. Backends that support it take an optional seed on
+  /// the concrete class.
+  FutureOr<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair();
 
   /// Encapsulate a fresh shared secret against [publicKey].
   ///
