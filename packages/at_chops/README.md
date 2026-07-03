@@ -89,8 +89,9 @@ final mlDsa65 = MlDsa65PureDartAlgo();
 final kp = await mlDsa65.generateKeyPair();
 // kp.publicKey — 1952 bytes; kp.secretKey — 4032 bytes
 
-final signature = await mlDsa65.signBytes(message, kp.secretKey);
-final valid = await mlDsa65.verifyBytes(message, signature, kp.publicKey);
+final signature = await mlDsa65.signBytes(message, secretKey: kp.secretKey);
+final valid =
+    await mlDsa65.verifyBytes(message, signature: signature, publicKey: kp.publicKey);
 ```
 
 ### ML-KEM-768 (post-quantum KEM, pure-Dart)
@@ -135,8 +136,10 @@ import 'package:at_chops/at_chops_ffi.dart';
 
 // Signing — AtPqc.mlDsa65 is typed as AtSignatureAlgorithm
 final kp = await MlDsa65KeyPair.generate();
-final signature = await AtPqc.mlDsa65.signBytes(message, kp.privateKeyBytes);
-final valid = await AtPqc.mlDsa65.verifyBytes(message, signature, kp.publicKeyBytes);
+final signature =
+    await AtPqc.mlDsa65.signBytes(message, secretKey: kp.privateKeyBytes);
+final valid = await AtPqc.mlDsa65.verifyBytes(message,
+    signature: signature, publicKey: kp.publicKeyBytes);
 
 // KEM — AtPqc.xWing is typed as AtKemAlgorithm
 final xwKp = await XWingKeyPair.generate();

@@ -19,7 +19,8 @@ abstract final class AtPqc {
 
   /// ML-DSA-65 signing — FFI when available, else pure-Dart.
   ///
-  /// Typed as [AtSignatureAlgorithm]: pass `message` first, then key material.
+  /// Typed as [AtSignatureAlgorithm]: `message` is positional; key material
+  /// is passed via required named parameters.
   /// Do not downcast to the concrete type — it is an implementation detail.
   static final AtSignatureAlgorithm mlDsa65 =
       (_lib != null && libCryptoSupportsMlDsa65(_lib!))

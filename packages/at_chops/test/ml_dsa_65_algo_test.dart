@@ -15,8 +15,8 @@ void main() {
       expect(kp.secretKey.length, equals(4032));
 
       final Uint8List message = Uint8List.fromList('instance keygen'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, kp.secretKey);
-      expect(await algo.verifyBytes(message, sig, kp.publicKey), isTrue);
+      final Uint8List sig = await algo.signBytes(message, secretKey: kp.secretKey);
+      expect(await algo.verifyBytes(message, signature: sig, publicKey: kp.publicKey), isTrue);
     });
 
     test('sign/verify round-trip yields true', () async {
@@ -26,8 +26,8 @@ void main() {
 
       final algo = MlDsa65PureDartAlgo();
       final Uint8List message = Uint8List.fromList('Hello ML-DSA-65'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, sk);
-      final bool ok = await algo.verifyBytes(message, sig, pub);
+      final Uint8List sig = await algo.signBytes(message, secretKey: sk);
+      final bool ok = await algo.verifyBytes(message, signature: sig, publicKey: pub);
 
       expect(ok, isTrue);
     });
@@ -43,7 +43,8 @@ void main() {
       final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
 
       final Uint8List sig = await MlDsa65PureDartAlgo().signBytes(
-          Uint8List.fromList('test'.codeUnits), sk);
+          Uint8List.fromList('test'.codeUnits),
+          secretKey: sk);
 
       expect(sig.length, equals(3309));
     });
@@ -56,8 +57,8 @@ void main() {
 
       final algo = MlDsa65PureDartAlgo();
       final Uint8List message = Uint8List.fromList('data'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, sk);
-      final bool ok = await algo.verifyBytes(message, sig, wrongPub);
+      final Uint8List sig = await algo.signBytes(message, secretKey: sk);
+      final bool ok = await algo.verifyBytes(message, signature: sig, publicKey: wrongPub);
 
       expect(ok, isFalse);
     });
@@ -69,10 +70,10 @@ void main() {
 
       final algo = MlDsa65PureDartAlgo();
       final Uint8List message = Uint8List.fromList('original'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, sk);
+      final Uint8List sig = await algo.signBytes(message, secretKey: sk);
 
       final Uint8List tampered = Uint8List.fromList('tampered'.codeUnits);
-      final bool ok = await algo.verifyBytes(tampered, sig, pub);
+      final bool ok = await algo.verifyBytes(tampered, signature: sig, publicKey: pub);
 
       expect(ok, isFalse);
     });

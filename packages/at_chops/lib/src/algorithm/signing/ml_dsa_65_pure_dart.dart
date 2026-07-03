@@ -44,14 +44,15 @@ final class MlDsa65PureDartAlgo
   /// Returns a 3309-byte signature. Signing is hedged per FIPS 204 —
   /// a fresh random value is mixed in, so signatures are non-deterministic.
   @override
-  Future<Uint8List> signBytes(Uint8List message, Uint8List secretKey) async {
+  Future<Uint8List> signBytes(Uint8List message,
+      {required Uint8List secretKey}) async {
     return MlDsa.sign(secretKey, message, DilithiumParams.mlDsa65);
   }
 
   /// Verify [signature] over [message] against [publicKey] (raw 1952 bytes).
   @override
-  Future<bool> verifyBytes(
-      Uint8List message, Uint8List signature, Uint8List publicKey) async {
+  Future<bool> verifyBytes(Uint8List message,
+      {required Uint8List signature, required Uint8List publicKey}) async {
     return MlDsa.verify(publicKey, message, signature, DilithiumParams.mlDsa65);
   }
 
@@ -64,7 +65,7 @@ final class MlDsa65PureDartAlgo
       throw AtSigningException(
           'ML-DSA-65 secret key must be set before signing');
     }
-    return signBytes(data, _secretKey!);
+    return signBytes(data, secretKey: _secretKey!);
   }
 
   @Deprecated('Use verifyBytes with explicit key material instead.')
@@ -76,6 +77,6 @@ final class MlDsa65PureDartAlgo
           'public key must be provided for ML-DSA-65 signature verification');
     }
     final Uint8List pkBytes = base64Decode(publicKey);
-    return verifyBytes(signedData, signature, pkBytes);
+    return verifyBytes(signedData, signature: signature, publicKey: pkBytes);
   }
 }

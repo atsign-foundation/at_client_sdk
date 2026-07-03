@@ -65,17 +65,23 @@ abstract class AtSigningAlgorithm {
 /// Stateless signing interface — all key material passed per call.
 ///
 /// Safe to share as a singleton.
+///
+/// Key material is passed via named parameters so that call sites cannot
+/// silently transpose same-typed byte arguments (the published 3.3.0 FFI
+/// backend took `(secretKey, data)`; a positional reorder would keep
+/// compiling while binding arguments to the wrong slots).
 abstract interface class AtSignatureAlgorithm {
   /// Generate a fresh signing key pair.
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair();
 
   /// Signs [message] with [secretKey]; returns the signature bytes.
-  Future<Uint8List> signBytes(Uint8List message, Uint8List secretKey);
+  Future<Uint8List> signBytes(Uint8List message,
+      {required Uint8List secretKey});
 
   /// Returns `true` if [signature] was produced over [message] with the
   /// private key corresponding to [publicKey].
-  Future<bool> verifyBytes(
-      Uint8List message, Uint8List signature, Uint8List publicKey);
+  Future<bool> verifyBytes(Uint8List message,
+      {required Uint8List signature, required Uint8List publicKey});
 }
 
 /// Interface for hashing data. Refer [DefaultHash] for sample implementation.

@@ -127,7 +127,8 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
   /// Returns a 3309-byte signature. Signing uses OpenSSL's internal
   /// randomness, so signatures are non-deterministic.
   @override
-  Future<Uint8List> signBytes(Uint8List message, Uint8List secretKey) async {
+  Future<Uint8List> signBytes(Uint8List message,
+      {required Uint8List secretKey}) async {
     final Pointer<EVP_PKEY> pkey = _loadPrivateKey(secretKey);
     try {
       return _sign(pkey, message);
@@ -138,8 +139,8 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
 
   /// Verify [signature] over [message] against the raw 1952-byte [publicKey].
   @override
-  Future<bool> verifyBytes(
-      Uint8List message, Uint8List signature, Uint8List publicKey) async {
+  Future<bool> verifyBytes(Uint8List message,
+      {required Uint8List signature, required Uint8List publicKey}) async {
     final Pointer<EVP_PKEY> pkey = _loadPublicKey(publicKey);
     try {
       return _verify(pkey, message, signature);
@@ -157,7 +158,7 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
       throw AtSigningException(
           'ML-DSA-65 secret key must be set before signing');
     }
-    return signBytes(data, _secretKey!);
+    return signBytes(data, secretKey: _secretKey!);
   }
 
   @Deprecated('Use verifyBytes with explicit key material instead.')
@@ -169,7 +170,7 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
           'public key must be provided for ML-DSA-65 signature verification');
     }
     final Uint8List pkBytes = base64Decode(publicKey);
-    return verifyBytes(signedData, signature, pkBytes);
+    return verifyBytes(signedData, signature: signature, publicKey: pkBytes);
   }
 
   // ── Internal helpers ────────────────────────────────────────────────────────

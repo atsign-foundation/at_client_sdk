@@ -1,5 +1,6 @@
 ## 3.4.0
-- feat: add `AtSignatureAlgorithm` — new stateless signing interface (`signBytes`/`verifyBytes`, key material passed per call); `MlDsa65PureDartAlgo` and `MlDsa65FfiAlgo` implement it directly with canonical `(message, key)` param order
+- feat: add `AtSignatureAlgorithm` — new stateless signing interface (`signBytes`/`verifyBytes`, key material passed per call); `MlDsa65PureDartAlgo` and `MlDsa65FfiAlgo` implement it directly. `message` is positional; key material is passed via required named parameters so same-typed byte arguments cannot be silently transposed
+- breaking: `MlDsa65PureDartAlgo.generateKeyPair`/`signBytes`/`verifyBytes` are instance methods (were static in 3.3.0) and `MlDsa65FfiAlgo.signBytes`/`verifyBytes` key material moves to named parameters — 3.3.0 call sites get a compile error instead of silently binding bytes to the wrong slots
 - feat: add `at_chops_ffi.dart` barrel and `AtPqc` namespace; `AtPqc.mlDsa65`/`AtPqc.xWing` auto-select FFI or pure-Dart at first access for encapsulate/decapsulate/sign/verify and key generation
 - feat: add `XWingKeyPair.publicKeyBytes`/`privateKeyBytes` and `MlDsa65KeyPair.publicKeyBytes`/`privateKeyBytes` — callers no longer need to manually `base64Decode` the `AtPublicKey`/`AtPrivateKey` strings
 - breaking: remove FFI algorithm exports (`MlKem768FfiAlgo`, `X25519FfiAlgo`, `XWingFfiAlgo`, `MlDsa65FfiAlgo`, `openssl_loader`) from `at_chops.dart` — import `at_chops_ffi.dart` instead
