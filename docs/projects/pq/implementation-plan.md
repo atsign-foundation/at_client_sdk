@@ -172,10 +172,15 @@ at_chops minor** (**3.4.0 or later**), it cannot fold into the already-shipped P
 `_getVerificationAlgorithm` returning `MlDsa65PureDartAlgo()` (no `DynamicLibrary` in `AtChopsImpl` — do
 **not** claim FFI-when-available); no new `SigningAlgoType` member, no new algo class; publish in the new
 minor. **Coordinate the slot:** two FFI PRs are **also** claiming a 3.4.0 slot — #2030 (the `at_chops_ffi`
-barrel + `PqcFfi` auto-resolver) and #2039 (AES-GCM FFI) — so sequence P-2 against them into **one agreed
+barrel + `AtPqc` auto-resolver) and #2039 (AES-GCM FFI) — so sequence P-2 against them into **one agreed
 3.4.0** (agreed contents), not a free slot each. Those FFI PRs realise the **FFI-auto-resolve-default** policy
 (FFI when available, pure-Dart fallback, WASM forces pure-Dart — ruling in [decisions.md](decisions.md)); they
-are **in D1 scope**, on the at_chops track.
+are **in D1 scope**, on the at_chops track. **Scope note (2026-07-03 ruling):** auto-resolve applies to the
+`AtPqc` accessors (`AtPqc.xWing`/`AtPqc.mlDsa65`, including their keygen); key generation through the
+web-safe barrel's key pair classes (`XWingKeyPair.generate`, `MlDsa65KeyPair.generate`,
+`AtChopsUtil.generate*KeyPair`) is pure-Dart by construction — those exports must stay out of the
+`dart:ffi` import graph or `dart compile js`/wasm breaks for web consumers. Both backends are
+wire-compatible, so pure-Dart-generated keys work with the FFI backends and vice versa.
 **Acceptance → [acceptance.md](acceptance.md):** **algorithm-level** sign/verify (true) + tamper (false);
 rsa/ecc/pkam unchanged. Do **not** assert end-to-end `AtChops.verify(mldsa65)` — the deprecated sync path
 doesn't await the async ML-DSA verify.
@@ -754,7 +759,7 @@ out of scope here** — see [roadmap.md](roadmap.md) for the D2 trajectory.
 | #  | Package             | Bump                          | Project(s) | Why |
 |----|---------------------|-------------------------------|------------|-----|
 | 1  | `at_chops`          | minor `3.2.1 → 3.3.0` **(published 2026-06-23, done)** | P-1    | stateless functional core + HPKE `pqSeal`/`pqOpen`; `@Deprecated AtChopsImpl` shim |
-| 2  | `at_chops`          | minor `3.3.0 → 3.4.0`         | P-2        | ML-DSA `mldsa65` verify branch; **coordinate the 3.4.0 slot** with PR #2030 (`at_chops_ffi` barrel + `PqcFfi` auto-resolver) + PR #2039 (AES-GCM FFI) — one agreed 3.4.0 |
+| 2  | `at_chops`          | minor `3.3.0 → 3.4.0`         | P-2        | ML-DSA `mldsa65` verify branch; **coordinate the 3.4.0 slot** with PR #2030 (`at_chops_ffi` barrel + `AtPqc` auto-resolver) + PR #2039 (AES-GCM FFI) — one agreed 3.4.0, minor under the recorded one-time semver exemption ([decisions.md](decisions.md) rulings 2026-07-03) |
 | 3  | `at_commons`        | minor `5.11.0 → 5.12.0`       | SS-1a      | `EnrollParams.metadata` + `signingAlgo`; flattened `listns`; pkam `mldsa65` literal |
 | 4  | `at_auth`           | minor `3.1.1 → 3.2.0`         | S-1        | additive: `WritableAtKeys`; `AtKeysIo`/`WrittenAtKeysIo` widened; `InMemoryAtKeysIo` |
 | 5  | `at_auth`           | **major `3.2.0 → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
