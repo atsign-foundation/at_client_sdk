@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
