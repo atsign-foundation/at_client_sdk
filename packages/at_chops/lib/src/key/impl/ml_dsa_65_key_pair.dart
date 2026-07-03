@@ -10,7 +10,7 @@ import '../../algorithm/signing/ml_dsa_65_pure_dart.dart';
 /// Both keys are stored as base64-encoded raw bytes:
 /// - Public key: 1952 bytes
 /// - Secret key: 4032 bytes
-class MlDsa65KeyPair extends AsymmetricKeyPair {
+class MlDsa65KeyPair extends AsymmetricKeyPair with RawKeyPairBytes {
   MlDsa65KeyPair.create(super.publicKey, super.privateKey) : super.create();
 
   /// Generates an ML-DSA-65 key pair for post-quantum digital signatures.
@@ -23,7 +23,4 @@ class MlDsa65KeyPair extends AsymmetricKeyPair {
         await MlDsa65PureDartAlgo().generateKeyPair();
     return MlDsa65KeyPair.create(base64Encode(pub), base64Encode(sk));
   }
-
-  Uint8List get publicKeyBytes => base64Decode(atPublicKey.publicKey);
-  Uint8List get privateKeyBytes => base64Decode(atPrivateKey.privateKey);
 }

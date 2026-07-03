@@ -22,12 +22,12 @@ Future<void> main() async {
 
   // Alice signs a message with her secret key.
   final Uint8List message = Uint8List.fromList(utf8.encode('hello pqc'));
-  final Uint8List signature = await algo.signBytes(message, kp.secretKey);
+  final Uint8List signature = await algo.signBytes(message, secretKey: kp.secretKey);
 
   print('Signature (${signature.length} bytes): ${base64Encode(signature)}');
 
   // Bob verifies the signature against Alice's public key.
-  final bool ok = await algo.verifyBytes(message, signature, kp.publicKey);
+  final bool ok = await algo.verifyBytes(message, signature: signature, publicKey: kp.publicKey);
 
   print('Verified: $ok');
 }

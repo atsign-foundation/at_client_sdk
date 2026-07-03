@@ -41,8 +41,8 @@ void main() {
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
 
       final Uint8List msg = Uint8List.fromList('hello pqc'.codeUnits);
-      final Uint8List sig = await AtPqc.mlDsa65.signBytes(msg, kp.privateKeyBytes);
-      final bool ok = await AtPqc.mlDsa65.verifyBytes(msg, sig, kp.publicKeyBytes);
+      final Uint8List sig = await AtPqc.mlDsa65.signBytes(msg, secretKey: kp.privateKeyBytes);
+      final bool ok = await AtPqc.mlDsa65.verifyBytes(msg, signature: sig, publicKey: kp.publicKeyBytes);
       expect(ok, isTrue);
     });
 
@@ -64,8 +64,8 @@ void main() {
       expect(kp.secretKey.length, 4032);
 
       final Uint8List msg = Uint8List.fromList('direct facade keygen'.codeUnits);
-      final Uint8List sig = await AtPqc.mlDsa65.signBytes(msg, kp.secretKey);
-      expect(await AtPqc.mlDsa65.verifyBytes(msg, sig, kp.publicKey), isTrue);
+      final Uint8List sig = await AtPqc.mlDsa65.signBytes(msg, secretKey: kp.secretKey);
+      expect(await AtPqc.mlDsa65.verifyBytes(msg, signature: sig, publicKey: kp.publicKey), isTrue);
     });
 
     test(
@@ -88,8 +88,8 @@ void main() {
       // is pure-Dart-only and does not delegate to AtPqc.mlDsa65.
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List msg = Uint8List.fromList('cross-backend key reuse'.codeUnits);
-      final Uint8List sig = await AtPqc.mlDsa65.signBytes(msg, kp.privateKeyBytes);
-      expect(await AtPqc.mlDsa65.verifyBytes(msg, sig, kp.publicKeyBytes), isTrue);
+      final Uint8List sig = await AtPqc.mlDsa65.signBytes(msg, secretKey: kp.privateKeyBytes);
+      expect(await AtPqc.mlDsa65.verifyBytes(msg, signature: sig, publicKey: kp.publicKeyBytes), isTrue);
     });
   });
 
@@ -126,30 +126,30 @@ void main() {
     test('ML-DSA-65: FFI sign, pure-Dart verify', () async {
       if (lib == null) fail('libcrypto not available on this host');
       if (!mlDsaFfi) {
-        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.3)');
+        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
       }
 
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List msg = Uint8List.fromList('cross-backend sign'.codeUnits);
       final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib);
-      final Uint8List sig = await ffiAlgo.signBytes(msg, kp.privateKeyBytes);
+      final Uint8List sig = await ffiAlgo.signBytes(msg, secretKey: kp.privateKeyBytes);
       final bool ok =
-          await MlDsa65PureDartAlgo().verifyBytes(msg, sig, kp.publicKeyBytes);
+          await MlDsa65PureDartAlgo().verifyBytes(msg, signature: sig, publicKey: kp.publicKeyBytes);
       expect(ok, isTrue);
     }, tags: ['ffi']);
 
     test('ML-DSA-65: pure-Dart sign, FFI verify', () async {
       if (lib == null) fail('libcrypto not available on this host');
       if (!mlDsaFfi) {
-        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.3)');
+        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
       }
 
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List msg = Uint8List.fromList('cross-backend verify'.codeUnits);
       final Uint8List sig =
-          await MlDsa65PureDartAlgo().signBytes(msg, kp.privateKeyBytes);
+          await MlDsa65PureDartAlgo().signBytes(msg, secretKey: kp.privateKeyBytes);
       final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib);
-      final bool ok = await ffiAlgo.verifyBytes(msg, sig, kp.publicKeyBytes);
+      final bool ok = await ffiAlgo.verifyBytes(msg, signature: sig, publicKey: kp.publicKeyBytes);
       expect(ok, isTrue);
     }, tags: ['ffi']);
   });

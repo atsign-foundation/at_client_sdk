@@ -27,7 +27,7 @@ void main() {
         fail('libcrypto not available on this host');
       }
       if (!mlKemSupported) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.3)');
+        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
       }
 
       final algo = MlKem768FfiAlgo.fromLib(lib);
@@ -49,7 +49,7 @@ void main() {
         fail('libcrypto not available on this host');
       }
       if (!mlKemSupported) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.3)');
+        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
       }
 
       final MlKem768KeyPair kp = await MlKem768KeyPair.generate();
@@ -78,7 +78,7 @@ void main() {
         }
         if (!mlKemSupported) {
           fail(
-              'libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.3)');
+              'libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
         }
 
         final ffiAlgo = MlKem768FfiAlgo.fromLib(lib);
@@ -98,7 +98,7 @@ void main() {
         }
         if (!mlKemSupported) {
           fail(
-              'libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.3)');
+              'libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
         }
 
         final ffiAlgo = MlKem768FfiAlgo.fromLib(lib);
@@ -119,7 +119,7 @@ void main() {
         }
         if (!mlKemSupported) {
           fail(
-              'libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.3)');
+              'libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
         }
 
         final ffiAlgo = MlKem768FfiAlgo.fromLib(lib);

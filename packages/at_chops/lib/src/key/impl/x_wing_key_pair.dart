@@ -12,7 +12,7 @@ import '../../algorithm/encryption/x_wing_pure_dart.dart';
 /// private key is the 32-byte seed from which everything else is re-derived.
 /// Both are encoded as base64 strings to fit the existing
 /// [AsymmetricKeyPair] String contract.
-class XWingKeyPair extends AsymmetricKeyPair {
+class XWingKeyPair extends AsymmetricKeyPair with RawKeyPairBytes {
   XWingKeyPair.create(super.publicKey, super.privateKey) : super.create();
 
   /// Generates an X-Wing hybrid post-quantum/traditional KEM key pair
@@ -25,7 +25,4 @@ class XWingKeyPair extends AsymmetricKeyPair {
         await XWingPureDartAlgo.instance.generateKeyPair();
     return XWingKeyPair.create(base64Encode(pub), base64Encode(sk));
   }
-
-  Uint8List get publicKeyBytes => base64Decode(atPublicKey.publicKey);
-  Uint8List get privateKeyBytes => base64Decode(atPrivateKey.privateKey);
 }

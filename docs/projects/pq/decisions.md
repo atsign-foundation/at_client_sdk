@@ -492,11 +492,13 @@ Execution rulings from the plan-vs-code review (post-review); each is binding.
   tags (not now); the observable signal is that each has published a release that
   reads `nskey`-path values.
 - **Crypto backend policy: FFI auto-resolve default.** Where a native crypto
-  library is present, at_chops' `PqcFfi` auto-resolver selects the FFI backend as
+  library is present, at_chops' `AtPqc` auto-resolver selects the FFI backend as
   the default (faster on mobile/desktop); the pure-Dart backend is the fallback and
   the forced choice under WASM. PRs #2030 (`at_chops_ffi` barrel + auto-resolver)
   and #2039 (AES-GCM FFI) are IN D1 scope, landing in the coordinated at_chops 3.4.0
-  slot alongside P-2.
+  slot alongside P-2. (Scope note → the 2026-07-03 rulings below: auto-resolve
+  applies to the `AtPqc` accessors; key generation through the web-safe barrel's
+  key pair classes is pure-Dart by construction.)
 - **`_apsk` is a pinned cross-tier property — present and write-restricted.** Envelope
   sender-authentication and advertised-key authenticity (below) both depend on the
   enrollment's `_apsk` published signing key. The atServer (1) **keeps `_apsk` present**,
@@ -517,6 +519,55 @@ Execution rulings from the plan-vs-code review (post-review); each is binding.
   mechanism, the self-describing signature, the trust model, and the SS-1b/1c/2/4
   implementation split.
 
+### Rulings — 2026-07-03 (PR #2030 review)
+
+Rulings from the two-pass review of PR #2030 (`at_chops_ffi` barrel + `AtPqc`);
+each is binding. The code-side alignment lands in the review-fixes PR stacked on
+#2030's branch.
+
+- **`AtPqc` supersedes the `PqcFfi` working name.** The auto-resolver ships as
+  `abstract final class AtPqc`, exported from `at_chops_ffi.dart`; the PR's
+  public API, README, CHANGELOG, and tests all use `AtPqc`, and `PqcFfi` appears
+  nowhere in code. All doc mentions are updated in place (same supersession
+  pattern as `enroll:listns` over `listfornamespace`).
+- **`AtSignatureAlgorithm` recorded; `AtSigningAlgorithm` deprecation is staged,
+  not immediate.** at_chops 3.4.0 adds `AtSignatureAlgorithm` — a stateless
+  signing interface (`generateKeyPair`/`signBytes`/`verifyBytes`; `message` is
+  positional, key material is required-named so same-typed byte arguments cannot
+  be silently transposed). `AtSigningAlgorithm` is `@Deprecated` + `@sealed`
+  (package:meta — no new external subtypes) but **stays implemented** by
+  `MlDsa65PureDartAlgo`/`MlDsa65FfiAlgo` and every existing signing algo:
+  P-2's `_getVerificationAlgorithm` branch and the section-12
+  `wrapAndSign`/`AtSigningMode.pkam` machinery are typed against it, so P-2 and
+  SS-1c/SS-2/SS-4 proceed exactly as specified. Its removal is deferred to a
+  future at_chops major that is **not** in the D1 release ladder and requires a
+  successor ruling for the `wrapAndSign` path first.
+- **at_chops 3.4.0 semver exemption (one-time).** The coordinated 3.4.0 slot
+  stays a **minor** despite three technically-breaking changes to the 3.3.0
+  surface: (1) the FFI algorithm exports move from `at_chops.dart` to the new
+  `at_chops_ffi.dart` — required for the web-safe main barrel; no shim can keep
+  a `dart:ffi` export web-safe; (2) `AtKemAlgorithm` gains an abstract seedless
+  `generateKeyPair()`; (3) the ML-DSA-65 signing methods become instance methods
+  with named key-material parameters. Rationale mirrors OQ7's: 3.3.0 published
+  2026-06-23, the affected surface is days old, and the consumer sweep (this
+  workspace, sibling repos, pub-cache) found no external users. Every break is
+  declared under a `breaking:` label in the CHANGELOG. This exemption does not
+  set precedent — post-3.4.0 the surface is treated as stable and breaking
+  changes require a major.
+- **Conformance coverage for the FFI PRs.** #2030 and #2039 are covered under
+  P-2's coordinated 3.4.0 slot for the purposes of implementation-plan §10(e):
+  their PR descriptions cite "P-2 (coordinated 3.4.0 slot)"; no separate project
+  id is minted.
+- **Auto-resolve scope: accessors, not keygen helpers.** The FFI-auto-resolve
+  default applies to the `AtPqc` accessors (`AtPqc.xWing`, `AtPqc.mlDsa65`),
+  including their `generateKeyPair()`. Key generation through the web-safe
+  barrel's key pair classes (`XWingKeyPair.generate`, `MlDsa65KeyPair.generate`,
+  `AtChopsUtil.generate*KeyPair`) is **pure-Dart by construction** — those
+  exports must stay out of the `dart:ffi` import graph or `dart compile js`/wasm
+  breaks for web consumers. Both backends stay wire-compatible (pinned by
+  cross-backend interop tests), so keys generated pure-Dart are usable by the
+  FFI backends and vice versa.
+
 ---
 
 ## 7. Decision log / timeline (dated)
@@ -536,6 +587,8 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 | **2026-06-30** | **Single nskey per namespace, lazily published — collapses the former self/public nskey pair.** One X-Wing keypair serves both self data and inbound shares; the public half is published lazily (owner-only self at-key → `public:` on first cross-atSign use). | Peer review: the two nskeys did the same KEM job with the same private-holders, so the split bought no real compartmentalization or authenticity, and one key simplifies the read path and rotation. Lazy publication preserves namespace-existence privacy for self-only namespaces. See [11](#11-single-nskey-per-namespace-lazily-published-2026-06-30). |
 | **2026-07-02** | **Six execution rulings** (post-review): verb name `enroll:listns`; D1 surface scope (`.atKeys`-at-rest IN via KF-1; TLS + atDirectory non-goals); readiness operator-primary + auto-detect fast-follow; R-2 ecosystem-floor package set named; FFI auto-resolve default; `_apsk` write-restriction pinned + e2e-test-required. | Landed from the plan-vs-code review that found in-flight PRs implementing superseded rulings; the rulings + a conformance gate keep execution aligned to the record. |
 | **2026-07-02** | **Advertised-key signing + `_apsk` always-present** ([section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)). Advertised recipient keys (key package, `nskey` public, `pqpublickey`) are APKAM-signed by the generating enrollment and verified against its `_apsk` — same path same-atSign and cross-atSign; the atServer keeps `_apsk` present (populated from the record) as well as write-restricted. Supersedes "atServer vouches". Also: the key package is a **singular signed `metadata.keyPackage`** (no format-keyed map). | Authenticates the encapsulation target against a rogue *insider* enrollment under an honest server (not server-asserted); reuses the existing `wrapAndSign`/`_apsk` machinery. Does **not** remove a malicious atServer *operator* from the TCB — the operator is the `_apsk` anchor (see section 12 + design.md *Trust boundary*). The format-map was redundant with in-package `keys[].alg` + `v` agility. |
+
+| **2026-07-03** | **PR #2030 review rulings** (five, → [section 6](#6-resolved--open-execution-decisions-af)): `AtPqc` supersedes the `PqcFfi` working name; `AtSignatureAlgorithm` recorded with a **staged** `AtSigningAlgorithm` deprecation (stays implemented through D1 — P-2 and the section-12 `wrapAndSign` path are typed against it; removal deferred past the D1 ladder); at_chops 3.4.0 stays a minor under a recorded one-time semver exemption for the barrel-split breaks; #2030/#2039 conformance-covered under P-2's coordinated slot; auto-resolve scoped to the `AtPqc` accessors (web-safe-barrel keygen is pure-Dart by construction). | The two-pass review of #2030 found the PR shipping designs the record didn't yet name (`AtPqc`, `AtSignatureAlgorithm`) and removals the ladder didn't authorize; these rulings plus the stacked review-fixes PR align code and record. |
 
 **Cross-refs:** the Wave-0 "already landed" detail and the project that follows
 each decision are in `implementation-plan.md`; the phase trajectory this timeline

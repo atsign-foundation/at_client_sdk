@@ -1,6 +1,7 @@
 library;
 
 export 'src/algorithm/algo_type.dart';
+export 'src/algorithm/at_algorithm.dart';
 export 'src/algorithm/at_iv.dart';
 export 'src/algorithm/default_hashing_algo.dart';
 export 'src/algorithm/default_signing_algo.dart';

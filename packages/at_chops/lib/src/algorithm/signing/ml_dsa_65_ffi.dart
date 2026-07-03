@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:ffi/ffi.dart';
 
 /// ML-DSA-65 (FIPS 204) digital signature backed by OpenSSL 3 via Dart FFI.
@@ -15,11 +17,21 @@ import 'package:ffi/ffi.dart';
 /// Implements [AtSignatureAlgorithm] — call [generateKeyPair], [signBytes],
 /// and [verifyBytes] directly.
 ///
-/// The caller loads libcrypto (e.g. via [tryLoadLibCrypto]) and passes the
-/// resulting [DynamicLibrary] in via [MlDsa65FfiAlgo.fromLib]. at_chops does
-/// no auto-resolution.
-final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
+/// The stateful [AtSigningAlgorithm] path ([secretKey]/[sign]/[verify]) is
+/// retained for compatibility with the published 3.3.0 surface; it is
+/// deprecated — new code should pass key material per call.
+///
+/// Prefer [AtPqc.mlDsa65], which auto-resolves to this backend when libcrypto
+/// supports ML-DSA-65 and falls back to pure-Dart otherwise. Construct via
+/// [MlDsa65FfiAlgo.fromLib] only to pin a specific [DynamicLibrary]
+/// (e.g. loaded via [tryLoadLibCrypto]).
+final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
   final DynamicLibrary _lib;
+
+  Uint8List? _secretKey;
+
+  @Deprecated('Pass the secret key to signBytes instead.')
+  set secretKey(Uint8List value) => _secretKey = value;
 
   late final EvpPkeyCtxNewFromNameDart _ctxNewFromName;
   late final EvpPkeyCtxFreeDart _ctxFree;
@@ -116,7 +128,8 @@ final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
   /// Returns a 3309-byte signature. Signing uses OpenSSL's internal
   /// randomness, so signatures are non-deterministic.
   @override
-  Future<Uint8List> signBytes(Uint8List message, Uint8List secretKey) async {
+  Future<Uint8List> signBytes(Uint8List message,
+      {required Uint8List secretKey}) async {
     final Pointer<EVP_PKEY> pkey = _loadPrivateKey(secretKey);
     try {
       return _sign(pkey, message);
@@ -127,14 +140,38 @@ final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
 
   /// Verify [signature] over [message] against the raw 1952-byte [publicKey].
   @override
-  Future<bool> verifyBytes(
-      Uint8List message, Uint8List signature, Uint8List publicKey) async {
+  Future<bool> verifyBytes(Uint8List message,
+      {required Uint8List signature, required Uint8List publicKey}) async {
     final Pointer<EVP_PKEY> pkey = _loadPublicKey(publicKey);
     try {
       return _verify(pkey, message, signature);
     } finally {
       _pkeyFree(pkey);
     }
+  }
+
+  // ── AtSigningAlgorithm (deprecated stateful path) ───────────────────────────
+
+  @Deprecated('Use signBytes with explicit key material instead.')
+  @override
+  Future<Uint8List> sign(Uint8List data) async {
+    if (_secretKey == null) {
+      throw AtSigningException(
+          'ML-DSA-65 secret key must be set before signing');
+    }
+    return signBytes(data, secretKey: _secretKey!);
+  }
+
+  @Deprecated('Use verifyBytes with explicit key material instead.')
+  @override
+  Future<bool> verify(Uint8List signedData, Uint8List signature,
+      {String? publicKey}) async {
+    if (publicKey == null) {
+      throw AtSigningException(
+          'public key must be provided for ML-DSA-65 signature verification');
+    }
+    final Uint8List pkBytes = base64Decode(publicKey);
+    return verifyBytes(signedData, signature: signature, publicKey: pkBytes);
   }
 
   // ── Internal helpers ────────────────────────────────────────────────────────
