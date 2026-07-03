@@ -85,10 +85,10 @@ final valid = signing.verify(message, signature);
 ### ML-DSA-65 (post-quantum signing, pure-Dart)
 
 ```dart
-final kp = await MlDsa65PureDartAlgo.generateKeyPair();
+final mlDsa65 = MlDsa65PureDartAlgo();
+final kp = await mlDsa65.generateKeyPair();
 // kp.publicKey — 1952 bytes; kp.secretKey — 4032 bytes
 
-final mlDsa65 = MlDsa65PureDartAlgo();
 final signature = await mlDsa65.signBytes(message, kp.secretKey);
 final valid = await mlDsa65.verifyBytes(message, signature, kp.publicKey);
 ```

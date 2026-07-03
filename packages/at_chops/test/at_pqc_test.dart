@@ -68,20 +68,26 @@ void main() {
       expect(await AtPqc.mlDsa65.verifyBytes(msg, sig, kp.publicKey), isTrue);
     });
 
-    test('XWingKeyPair.generate() delegates to AtPqc.xWing.generateKeyPair()',
-        () async {
-      // Both must resolve to the same backend on this host, so a key
-      // generated via the wrapper is usable directly against AtPqc.xWing.
+    test(
+        'XWingKeyPair.generate() (pure-Dart) is interoperable with AtPqc.xWing '
+        'regardless of which backend AtPqc selects', () async {
+      // XWingKeyPair.generate() is pure-Dart-only by design — it must stay
+      // out of the dart:ffi import graph so at_chops.dart (the web-safe
+      // barrel) keeps compiling for web/wasm. It does NOT delegate to
+      // AtPqc.xWing. This only checks the two backends stay wire-compatible.
       final XWingKeyPair kp = await XWingKeyPair.generate();
       final enc = await AtPqc.xWing.encapsulate(kp.publicKeyBytes);
       final ss = await AtPqc.xWing.decapsulate(kp.privateKeyBytes, enc.ciphertext);
       expect(ss, enc.sharedSecret);
     });
 
-    test('MlDsa65KeyPair.generate() delegates to AtPqc.mlDsa65.generateKeyPair()',
-        () async {
+    test(
+        'MlDsa65KeyPair.generate() (pure-Dart) is interoperable with '
+        'AtPqc.mlDsa65 regardless of which backend AtPqc selects', () async {
+      // Same rationale as XWingKeyPair above — MlDsa65KeyPair.generate()
+      // is pure-Dart-only and does not delegate to AtPqc.mlDsa65.
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
-      final Uint8List msg = Uint8List.fromList('wrapper delegation'.codeUnits);
+      final Uint8List msg = Uint8List.fromList('cross-backend key reuse'.codeUnits);
       final Uint8List sig = await AtPqc.mlDsa65.signBytes(msg, kp.privateKeyBytes);
       expect(await AtPqc.mlDsa65.verifyBytes(msg, sig, kp.publicKeyBytes), isTrue);
     });

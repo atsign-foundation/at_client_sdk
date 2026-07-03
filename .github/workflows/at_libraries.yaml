@@ -136,12 +136,12 @@ jobs:
         working-directory: packages/at_chops
         run: dart analyze
 
-      - name: run FFI tests
+      - name: run tests with libcrypto available
         working-directory: packages/at_chops
         env:
           AT_CHOPS_LIBCRYPTO_PATH: ${{ env.LIBCRYPTO_REAL_PATH }}
           LD_LIBRARY_PATH: ${{ env.OPENSSL_INSTALL_DIR }}/lib
-        run: dart test --concurrency=1 --tags ffi
+        run: dart test --concurrency=1
 
   functional_tests_at_onboarding_cli:
     runs-on: ubuntu-latest

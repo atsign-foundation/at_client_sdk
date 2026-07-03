@@ -1,8 +1,10 @@
 ## 3.4.0
 - feat: add `AtSignatureAlgorithm` — new stateless signing interface (`signBytes`/`verifyBytes`, key material passed per call); `MlDsa65PureDartAlgo` and `MlDsa65FfiAlgo` implement it directly with canonical `(message, key)` param order
-- feat: add `at_chops_ffi.dart` barrel and `AtPqc` namespace; `AtPqc.mlDsa65` typed as `AtSignatureAlgorithm` auto-selects FFI or pure-Dart at first access
-- deprecate: FFI algorithm exports from `at_chops.dart`; use `at_chops_ffi.dart` instead
+- feat: add `at_chops_ffi.dart` barrel and `AtPqc` namespace; `AtPqc.mlDsa65`/`AtPqc.xWing` auto-select FFI or pure-Dart at first access for encapsulate/decapsulate/sign/verify and key generation
+- feat: add `XWingKeyPair.publicKeyBytes`/`privateKeyBytes` and `MlDsa65KeyPair.publicKeyBytes`/`privateKeyBytes` — callers no longer need to manually `base64Decode` the `AtPublicKey`/`AtPrivateKey` strings
+- breaking: remove FFI algorithm exports (`MlKem768FfiAlgo`, `X25519FfiAlgo`, `XWingFfiAlgo`, `MlDsa65FfiAlgo`, `openssl_loader`) from `at_chops.dart` — import `at_chops_ffi.dart` instead
 - breaking: remove the stateful `secretKey` setter, `sign`, and `verify` from `MlDsa65PureDartAlgo` and `MlDsa65FfiAlgo` — use `signBytes`/`verifyBytes`, or `AtPqc.mlDsa65` typed as `AtSignatureAlgorithm`
+- deprecate: `AtSigningAlgorithm` (`@sealed`) — implement `AtSignatureAlgorithm` for new code instead
 
 ## 3.3.0
 - feat: Add `pqSeal`/`pqOpen` — HPKE-style PQ encryption over X-Wing KEM with AES-256-GCM and forward-compatible versioning

@@ -52,15 +52,3 @@ export 'src/model/at_encrypted.dart';
 // Class representing the hashing parameters to pass to an hashing algorithm.
 export 'src/algorithm/hashing/types.dart' hide HashParams;
 export 'src/util/at_chops_util.dart';
-
-// Deprecated FFI exports — migrate to package:at_chops/at_chops_ffi.dart; removed in v4.
-@Deprecated('Import package:at_chops/at_chops_ffi.dart instead; removed from at_chops.dart in v4.')
-export 'src/algorithm/encryption/ml_kem_768_ffi.dart';
-@Deprecated('Import package:at_chops/at_chops_ffi.dart instead; removed from at_chops.dart in v4.')
-export 'src/algorithm/encryption/x25519_ffi_algo.dart';
-@Deprecated('Import package:at_chops/at_chops_ffi.dart instead; removed from at_chops.dart in v4.')
-export 'src/algorithm/encryption/x_wing_ffi.dart';
-@Deprecated('Import package:at_chops/at_chops_ffi.dart instead; removed from at_chops.dart in v4.')
-export 'src/algorithm/ffi/openssl_loader.dart';
-@Deprecated('Import package:at_chops/at_chops_ffi.dart instead; removed from at_chops.dart in v4.')
-export 'src/algorithm/signing/ml_dsa_65_ffi.dart';
