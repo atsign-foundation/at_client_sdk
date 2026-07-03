@@ -23,8 +23,10 @@ import 'package:pointycastle/digests/shake.dart';
 /// ML-KEM encapsulation does not accept external randomness, so draft test
 /// vectors are verified against the pure-Dart backend instead.
 ///
-/// The caller loads libcrypto (e.g. via [tryLoadLibCrypto]) and passes the
-/// resulting [DynamicLibrary] in. at_chops does no auto-resolution.
+/// Prefer [AtPqc.xWing], which auto-resolves to this backend when libcrypto
+/// supports ML-KEM-768 and falls back to pure-Dart otherwise. Construct via
+/// [XWingFfiAlgo.fromLib] only to pin a specific [DynamicLibrary]
+/// (e.g. loaded via [tryLoadLibCrypto]).
 final class XWingFfiAlgo implements AtKemAlgorithm {
   final MlKem768FfiAlgo _mlKem;
   final X25519FfiAlgo _x25519;

@@ -21,9 +21,10 @@ import 'package:ffi/ffi.dart';
 /// retained for compatibility with the published 3.3.0 surface; it is
 /// deprecated — new code should pass key material per call.
 ///
-/// The caller loads libcrypto (e.g. via [tryLoadLibCrypto]) and passes the
-/// resulting [DynamicLibrary] in via [MlDsa65FfiAlgo.fromLib]. at_chops does
-/// no auto-resolution.
+/// Prefer [AtPqc.mlDsa65], which auto-resolves to this backend when libcrypto
+/// supports ML-DSA-65 and falls back to pure-Dart otherwise. Construct via
+/// [MlDsa65FfiAlgo.fromLib] only to pin a specific [DynamicLibrary]
+/// (e.g. loaded via [tryLoadLibCrypto]).
 final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
   final DynamicLibrary _lib;
 

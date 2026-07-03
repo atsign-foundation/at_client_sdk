@@ -19,8 +19,10 @@ import 'package:ffi/ffi.dart';
 /// underlying native memory.
 ///
 /// The caller loads libcrypto (e.g. via [tryLoadLibCrypto]) and passes the
-/// resulting [DynamicLibrary] in via [MlKem768FfiAlgo.fromLib]. at_chops
-/// intentionally does no auto-resolution.
+/// resulting [DynamicLibrary] in via [MlKem768FfiAlgo.fromLib]. [AtPqc]
+/// intentionally does not auto-resolve standalone ML-KEM-768: this backend's
+/// secret keys are process-lifetime handles (see above), which is unsafe
+/// behind a generic facade whose pure-Dart branch returns serializable keys.
 final class MlKem768FfiAlgo implements AtKemAlgorithm {
   final DynamicLibrary _lib;
   final Random _rng = Random.secure();
