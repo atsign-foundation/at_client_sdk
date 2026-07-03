@@ -678,7 +678,8 @@ void main() {
       final cramAtSign = ConfigUtil.getYaml()['atSign']['apkamSecondAtSign'];
       final cramSecret = cramKeyMap[cramAtSign]!;
       String keysFilePath(String a) => 'test/testData/$a.atKeys';
-      final rootDomain = AtRootDomain('vip.ve.atsign.zone', 64);
+      final rootDomain =
+          AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       // Onboarding refuses to run if a keys file already exists, so clear any
       // left over from a prior run — this test mints @sachin's keys fresh
@@ -738,7 +739,8 @@ void main() {
       // generates a fresh APKAM keypair and wraps its apkamSymmetricKey with
       // the atSign's default encryption public key.
       final random = Uuid().v4().hashCode;
-      final enrolleeLookup = AtLookupImpl(cramAtSign, 'vip.ve.atsign.zone', 64);
+      final enrolleeLookup =
+          AtLookupImpl(cramAtSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       final enrollResponse = await AtEnrollment.create().submit(
         AtEnrollmentRequest(
           atSign: cramAtSign,
