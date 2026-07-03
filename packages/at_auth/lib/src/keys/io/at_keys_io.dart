@@ -1,37 +1,47 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'at_keys.dart' show AtKeys;
+import 'package:at_auth/src/keys/serialization/codec.dart';
+import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart';
+import 'package:at_auth/src/keys/serialization/resolver.dart';
+
+import '../at_keys.dart' show AtKeys;
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
-import 'package:at_chops/at_chops.dart';
+import 'package:at_chops/at_chops.dart' hide AtKeysCrypto;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
 /// An interface that defines methods for reading AtKeys.
 /// It can be implemented by classes that read AtKeys from different sources,
 sealed class AtKeysIo {
+  final resolver = const AtKeysDocumentResolver();
+  final codec = const AtKeysJsonCodec();
+  final passwordCodec = const AtKeysPassphraseEnvelopeCodec();
   FutureOr<AtKeys> read(String atSign);
 }
 
 /// An interface that defines methods for AtKeys that can be written.
 /// It can be implemented by classes that write AtKeys to different sources,
 /// such as file system or keychain.
-abstract class WrittenAtKeysIo extends AtKeysIo with KeyIOMixin {
+abstract class WrittenAtKeysIo extends AtKeysIo {
   Future write(String atSign, AtKeys atKeys);
 }
 
 /// An interface that defines methods for AtKeys that can be generated.
 /// It can be implemented by classes that generate AtKeys using different methods,
 /// such as secure element.
-abstract class GeneratedAtKeysIo extends AtKeysIo with KeyIOMixin {
+abstract class GeneratedAtKeysIo extends AtKeysIo {
   AtKeys generateKeys(String publicKeyId);
 }
 
-/// A mixin that provides common functionality for encoding and decoding AtKeys.
-mixin KeyIOMixin on AtKeysIo {
-  final AtSignLogger _logger = AtSignLogger('BaseAtKeysIo');
+/// Static helpers for encoding, decoding, encrypting and decrypting AtKeys.
+@Deprecated('Legacy mixin turned into a static helper class')
+class AtKeysIoUtil {
+  AtKeysIoUtil._();
 
-  FutureOr<AtKeys> decryptAtKeysWithSelfEncKey(
+  static final AtSignLogger _logger = AtSignLogger('BaseAtKeysIo');
+
+  static Future<AtKeys> decryptAtKeysWithSelfEncKey(
       Map<String, dynamic> jsonData, PkamAuthMode authMode) async {
     var securityKeys = AtKeys();
     String decryptionKey = jsonData[auth_constants.defaultSelfEncryptionKey];
@@ -73,7 +83,7 @@ mixin KeyIOMixin on AtKeysIo {
     return securityKeys;
   }
 
-  FutureOr<String> encryptAtKeysWithSelfEncKey(
+  static Future<String> encryptAtKeysWithSelfEncKey(
       AtKeys atKeys, PkamAuthMode authMode, String atsign) async {
     Map<String, dynamic> atKeysMap = {};
     if (atKeys.defaultSelfEncryptionKey == null) {
@@ -119,11 +129,12 @@ mixin KeyIOMixin on AtKeysIo {
     return jsonEncode(atKeysMap);
   }
 
-  AtKeys generateKeyPairs({String? atSign}) {
+  static AtKeys generateKeyPairs({
+    PkamAuthMode authMode = PkamAuthMode.keysFile,
+  }) {
     var atKeysFile = AtKeys();
-    var logger = AtSignLogger("BaseAtKeysIo");
     // generate user encryption keypair
-    logger.info('Generating encryption keypair');
+    _logger.info('Generating encryption keypair');
     var atEncryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
 
     //generate selfEncryptionKey
@@ -131,12 +142,12 @@ mixin KeyIOMixin on AtKeysIo {
         AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
     var apkamSymmetricKey =
         AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-    logger.info('Generating your encryption keys and .atKeys file\n');
+    _logger.info('Generating your encryption keys and .atKeys file\n');
 
     //generating pkamKeyPair only if authMode is keysFile
     String? pkamPublicKey;
-    if (this is WrittenAtKeysIo) {
-      logger.info('Generating pkam keypair');
+    if (authMode == PkamAuthMode.keysFile) {
+      _logger.info('Generating pkam keypair');
       var apkamRsaKeypair = AtChopsUtil.generateAtPkamKeyPair();
       pkamPublicKey = apkamRsaKeypair.atPublicKey.publicKey.toString();
       atKeysFile.apkamPrivateKey = AtBytes.fromString(
@@ -176,7 +187,7 @@ mixin KeyIOMixin on AtKeysIo {
     return atKeysFile;
   }
 
-  Future<Map<String, dynamic>> decodeAtKeys(
+  static Future<Map<String, dynamic>> decodeAtKeys(
       Map<String, dynamic> decodedAtKeysData,
       {String? passPhrase}) async {
     // If it contains "iv(InitializationVector)", it means the data is encrypted with a
@@ -188,17 +199,18 @@ mixin KeyIOMixin on AtKeysIo {
     if (decodedAtKeysData.containsKey('iv')) {
       _logger.info(
           'Found encrypted atKeys files. Decrypting with the given pass-phrase');
-      AtEncrypted atEncrypted = AtEncrypted.fromJson(decodedAtKeysData);
+      PassphraseEnvelope envelope =
+          PassphraseEnvelope.fromJson(decodedAtKeysData);
 
-      if (atEncrypted.hashingAlgoType == null) {
+      if (envelope.hashingAlgoType == null) {
         throw AtDecryptionException(
             'Hashing algo type is required for decryption of password protected atKeys file');
       }
 
       try {
-        final decryptedAtKeysData = await AtKeysCrypto.fromHashingAlgorithm(
-                atEncrypted.hashingAlgoType!)
-            .decrypt(atEncrypted, passPhrase!);
+        final decryptedAtKeysData =
+            await AtKeysCrypto.fromHashingAlgorithm(envelope.hashingAlgoType!)
+                .decrypt(envelope, passPhrase!);
         // jsonDecode must stay inside the try: the cipher is unauthenticated,
         // so an incorrect passphrase does not fail decrypt() -- it yields
         // arbitrary bytes. Whether those bytes parse as a JSON object is

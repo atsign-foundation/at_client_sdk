@@ -12,8 +12,8 @@ import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
-import 'package:at_auth/src/keys/at_keys_io.dart';
-import 'package:at_auth/src/keys/at_keys_io_impl.dart';
+import 'package:at_auth/src/keys/io/at_keys_io.dart';
+import 'package:at_auth/src/keys/io/at_keys_io_impl.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
@@ -210,9 +210,8 @@ class AtAuthImpl implements AtAuth {
       //2a. if there is no specified implementation we're defaulting to FileAtKeysIo with a default file path
       atOnboardingRequest.atKeysIo ??= FileAtKeysIo();
       switch (atOnboardingRequest.atKeysIo) {
-        case WrittenAtKeysIo writtenKeys:
-          _atAuthKeys =
-              writtenKeys.generateKeyPairs(atSign: atOnboardingRequest.atSign);
+        case WrittenAtKeysIo():
+          _atAuthKeys = AtKeysIoUtil.generateKeyPairs();
         default:
           throw AtAuthenticationException(
               'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');

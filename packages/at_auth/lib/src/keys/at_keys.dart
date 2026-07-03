@@ -1,18 +1,56 @@
-import 'package:at_chops/at_chops.dart';
+import 'package:at_auth/src/keys/types.dart';
+import 'package:at_chops/at_chops.dart' hide AtPublicKey, AtPrivateKey;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 
 class AtKeys {
-  AtBytes? apkamPublicKey;
-  AtBytes? apkamPrivateKey;
-  AtBytes? defaultEncryptionPublicKey;
-  AtBytes? defaultEncryptionPrivateKey;
-  AtBytes? defaultSelfEncryptionKey;
-  AtBytes? apkamSymmetricKey;
-  String? enrollmentId;
-  Map<String, dynamic> metadata = {};
+  final Atsign? atsign;
+  final Map<Type, Map<String, AtKeysMaterial>> _keysByType = {};
+  final List<AtKeysMaterial> _keyMaterials = [];
 
-  AtKeys();
+  Iterable<AtKeysMaterial> get keyMaterials => List.unmodifiable(_keyMaterials);
+
+  // will become the default ctor for v4
+  AtKeys({
+    this.atsign,
+    List<AtKeysMaterial> keysList = const [],
+    Map<String, dynamic>? legacyJson,
+  }) {
+    for (final key in keysList) {
+      switch (key) {
+        case AtPublicKey():
+          //uses the pairId in their respective map
+          addKey<AtPublicKey>(key.pairId, key);
+        case AtPrivateKey():
+          //uses the pairId in their respective map
+          addKey<AtPrivateKey>(key.pairId, key);
+        case AtSymmetricKey():
+          //uses id in their respective map
+          addKey<AtSymmetricKey>(key.id, key);
+        case AtKeyPackage():
+          //uses enrollmentId in their respective map
+          addKey<AtKeyPackage>(key.enrollmentId, key);
+      }
+    }
+  }
+
+  T? getKey<T extends AtKeysMaterial>(String id) {
+    final key = _keysByType[T]?[id];
+    return key is T ? key : null;
+  }
+
+  void addKey<T extends AtKeysMaterial>(
+    String id,
+    T key,
+  ) {
+    final keysForType = _keysByType.putIfAbsent(T, () => {});
+    if (keysForType.containsKey(id)) {
+      throw ArgumentError.value(id, 'primaryId',
+          'Duplicate $T with their unique privateId, see AtKeys ctor for the respective id');
+    }
+    keysForType[id] = key;
+    _keyMaterials.add(key);
+  }
 
   @override
   bool operator ==(Object other) {
@@ -30,6 +68,26 @@ class AtKeys {
   @override
   int get hashCode => Object.hash(enrollmentId, metadata);
 
+  // the LEGACY
+
+  @Deprecated('hard-coded keys are legacy, see new methods')
+  AtBytes? apkamPublicKey;
+  @Deprecated('hard-coded keys are legacy, see new methods')
+  AtBytes? apkamPrivateKey;
+  @Deprecated('hard-coded keys are legacy, see new methods')
+  AtBytes? defaultEncryptionPublicKey;
+  @Deprecated('hard-coded keys are legacy, see new methods')
+  AtBytes? defaultEncryptionPrivateKey;
+  @Deprecated('hard-coded keys are legacy, see new methods')
+  AtBytes? defaultSelfEncryptionKey;
+  @Deprecated('hard-coded keys are legacy, see new methods')
+  AtBytes? apkamSymmetricKey;
+  @Deprecated('hard-coded keys are legacy, see new methods')
+  String? enrollmentId;
+  @Deprecated('hard-coded keys are legacy, see new methods')
+  Map<String, dynamic> metadata = {};
+  @Deprecated(
+      'designed for legacy hard-coded atkeys, see serialization/resolver.dart')
   Map<String, dynamic> toJson() {
     return {
       auth_constants.apkamPublicKey: apkamPublicKey?.toString(),
@@ -48,8 +106,17 @@ class AtKeys {
     };
   }
 
+  @Deprecated(
+      'designed for legacy hard-coded atkeys, see serialization/resolver.dart')
   factory AtKeys.fromJson(Map<String, dynamic> json) {
-    var keys = AtKeys()
+    var keys = AtKeys();
+    return loadLegacy(keys, json);
+  }
+
+  @Deprecated('designed for legacy loading of keys')
+  static AtKeys loadLegacy(AtKeys keys, Map<String, dynamic>? json) {
+    if (json == null) return keys;
+    keys
       ..apkamPublicKey = _existsAndNotNull(json, auth_constants.apkamPublicKey)
           ? AtBytes.fromString(json[auth_constants.apkamPublicKey])
           : null
@@ -83,24 +150,7 @@ class AtKeys {
     return keys;
   }
 
-  AtKeys copyWith(AtKeys other) {
-    var keys = AtKeys()
-      ..apkamPublicKey = other.apkamPublicKey ?? apkamPublicKey
-      ..apkamPrivateKey = other.apkamPrivateKey ?? apkamPrivateKey
-      ..defaultEncryptionPublicKey =
-          other.defaultEncryptionPublicKey ?? defaultEncryptionPublicKey
-      ..defaultEncryptionPrivateKey =
-          other.defaultEncryptionPrivateKey ?? defaultEncryptionPrivateKey
-      ..defaultSelfEncryptionKey =
-          other.defaultSelfEncryptionKey ?? defaultSelfEncryptionKey
-      ..apkamSymmetricKey = other.apkamSymmetricKey ?? apkamSymmetricKey
-      ..enrollmentId = other.enrollmentId ?? enrollmentId;
-    if (other.metadata.isNotEmpty) {
-      keys.metadata.addAll(other.metadata);
-    }
-    return keys;
-  }
-
+  @Deprecated('AtChops is being deprecated, by extension this method as well')
   AtChops toAtChops() {
     //if the keys contain an apkamSymmetricKey, they're a apkam key
     return switch (apkamSymmetricKey) {

@@ -1,5 +1,5 @@
 import 'package:at_auth/src/keys/at_keys.dart';
-import 'package:at_auth/src/keys/at_keys_io.dart';
+import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -48,6 +48,7 @@ class AtOnboardingRequest extends AuthRequest {
   String appName = "firstApp";
   String deviceName = "firstDevice";
   AtKeysIo? atKeysIo;
+  @Deprecated('remove in v4')
   AtKeys? atKeys;
 }
 
@@ -85,9 +86,11 @@ class AtAuthRequest extends AuthRequest {
   String? enrollmentId;
 
   /// The keys for authentication of an atSign.
+  @Deprecated('remove in v4')
   AtKeys? atAuthKeys;
 
   /// The contents of .atKeys file which contains the encrypted atKeys.
+  @Deprecated('remove in v4')
   Map<String, dynamic>? encryptedKeysMap;
 }
 

@@ -1,15 +1,16 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_chops/at_chops.dart';
+import 'package:at_auth/src/keys/serialization/document.dart';
+import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart';
+import 'package:at_chops/at_chops.dart' hide AtKeysCrypto;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
-import 'package:at_auth/src/keys/at_keys_io.dart';
+import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 
 /// An implementation of [AtKeysIo] that reads and writes AtKeys to the file system.
-/// This implementation uses a mixin [KeyIOMixin] to provide common functionality for encoding and decoding AtKeys.
+/// This implementation uses [AtKeysIoUtil] for encoding and decoding AtKeys.
 /// The [FileAtKeysIo] class can be configured with an optional [filePath] and [passPhrase].
 ///
 /// Optional Parameters:
@@ -28,18 +29,18 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   /// The method returns a Future that resolves to an instance of [AtKeys].
   @override
   Future<AtKeys> read(String atSign) async {
-    Map<String, dynamic> decodedAtKeysData = {};
     String file = filePath!(atSign);
     if (!File(file).existsSync()) {
       throw AtException(
           'provided keys file does not exist. Please check whether the file path $file is valid');
     }
     String atAuthData = await File(file).readAsString();
-    decodedAtKeysData = jsonDecode(atAuthData);
-    decodedAtKeysData =
-        await decodeAtKeys(decodedAtKeysData, passPhrase: passPhrase);
-    return decryptAtKeysWithSelfEncKey(
-        decodedAtKeysData, PkamAuthMode.keysFile);
+    Map<String, dynamic> json = jsonDecode(atAuthData);
+    if (passwordCodec.isEnvelope(json)) {
+      json = await passwordCodec.decode(json, passPhrase: passPhrase);
+    }
+    AtKeysDocument document = codec.decodeDocument(json);
+    return resolver.resolve(document);
   }
 
   @override
@@ -54,20 +55,17 @@ class FileAtKeysIo extends WrittenAtKeysIo {
           'Tried writing $path, but failed since it already exists');
     }
 
-    String atKeysData = await encryptAtKeysWithSelfEncKey(
-      atKeys,
-      PkamAuthMode.keysFile,
-      atSign,
-    );
-
+    final document = resolver.resolveToDocument(atKeys);
+    final json = codec.encodeDocument(document);
+    String plaintext = jsonEncode(json);
     if (passPhrase != null && passPhrase!.isNotEmpty) {
-      AtEncrypted atEncrypted =
+      PassphraseEnvelope envelope =
           await AtKeysCrypto.fromHashingAlgorithm(HashingAlgoType.argon2id)
-              .encrypt(atKeysData, passPhrase!);
-      atKeysData = atEncrypted.toString();
+              .encrypt(plaintext, passPhrase!);
+      plaintext = envelope.toString();
     }
 
-    await File(path).writeAsString(atKeysData);
+    await File(path).writeAsString(plaintext);
   }
 }
 

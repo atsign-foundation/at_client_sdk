@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:at_auth/src/keys/at_keys.dart';
+import 'package:at_auth/src/keys/types.dart' as key_types;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
@@ -99,6 +100,46 @@ void main() {
       apkam.defaultEncryptionPrivateKey = null;
       apkam.apkamSymmetricKey = null;
       expect(() => apkam.toAtChops(), throwsA(isA<AtException>()));
+    });
+  });
+
+  group('AtKeys typed key lookup', () {
+    test('getKey disambiguates keys with the same id by type', () {
+      final publicKey = key_types.AtPublicKey(
+        pairId: 'shared-pair',
+        algorithm: 'RSA',
+        bytes: AtBytes.fromString('cHVibGlj'),
+      );
+      final privateKey = key_types.AtPrivateKey(
+        pairId: 'shared-pair',
+        algorithm: 'RSA',
+        bytes: AtBytes.fromString('cHJpdmF0ZQ=='),
+      );
+
+      final atKeys = AtKeys(keysList: [publicKey, privateKey]);
+
+      expect(
+        atKeys.getKey<key_types.AtPublicKey>('shared-pair'),
+        same(publicKey),
+      );
+      expect(
+        atKeys.getKey<key_types.AtPrivateKey>('shared-pair'),
+        same(privateKey),
+      );
+    });
+
+    test('getKey returns null when the id exists for another key type', () {
+      final atKeys = AtKeys(
+        keysList: [
+          key_types.AtSymmetricKey(
+            id: 'shared-id',
+            algorithm: 'AES-256',
+            bytes: AtBytes.fromString('c2VjcmV0'),
+          ),
+        ],
+      );
+
+      expect(atKeys.getKey<key_types.AtPrivateKey>('shared-id'), isNull);
     });
   });
 }

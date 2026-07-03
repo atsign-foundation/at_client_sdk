@@ -3,9 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/src/exception/at_auth_exceptions.dart';
-import 'package:at_auth/src/keys/at_keys.dart';
-import 'package:at_auth/src/keys/at_keys_io_impl.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -60,23 +57,14 @@ void main() {
 
     test('Test write()', () async {
       final fileAtKeysIo = FileAtKeysIo(filePath: (_) => writeFilePath);
-      final atKeys = AtKeys()
-        ..apkamPublicKey =
-            AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
-        ..apkamPrivateKey =
-            AtBytes.fromString(base64Encode(utf8.encode('testApkamPrivateKey')))
-        ..defaultEncryptionPublicKey = AtBytes.fromString(
-            base64Encode(utf8.encode('defaultEncryptionPublicKey')))
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(
-            base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
-        ..defaultSelfEncryptionKey = AtBytes.fromString(
-            base64Encode(utf8.encode('defaultSelfEncryptionKey')))
-        ..apkamSymmetricKey =
-            AtBytes.fromString(base64Encode(utf8.encode('apkamSymmetricKey')))
-        ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
+      final atKeys = createTestAtKeys(atSign);
       await fileAtKeysIo.write(atSign, atKeys);
 
-      await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atSign));
+      await matchesEncryptedAtKeys(
+        atKeys,
+        fileAtKeysIo.filePath!(atSign),
+        atSign,
+      );
     });
 
     test('Test write() -> throws due to overwrite', () {
@@ -92,20 +80,7 @@ void main() {
       final fileAtKeysIo =
           FileAtKeysIo(filePath: (_) => writeFilePath, passPhrase: passPhrase);
 
-      final atKeys = AtKeys()
-        ..apkamPublicKey =
-            AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
-        ..apkamPrivateKey =
-            AtBytes.fromString(base64Encode(utf8.encode('testApkamPrivateKey')))
-        ..defaultEncryptionPublicKey = AtBytes.fromString(
-            base64Encode(utf8.encode('defaultEncryptionPublicKey')))
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(
-            base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
-        ..defaultSelfEncryptionKey = AtBytes.fromString(
-            base64Encode(utf8.encode('defaultSelfEncryptionKey')))
-        ..apkamSymmetricKey =
-            AtBytes.fromString(base64Encode(utf8.encode('apkamSymmetricKey')))
-        ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
+      final atKeys = createTestAtKeys(atSign);
       await fileAtKeysIo.write(atSign, atKeys); // writes encrypted keys
 
       // read the generated file and validate fields
@@ -119,8 +94,12 @@ void main() {
       // assert that when fileAtKeysIo decrypts and reads the passphrase
       // encrypted file the decrypted keys are the same as the original keys
       // Note: the method call below tests the encrypted keys read path too
-      await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atSign),
-          passPhrase: passPhrase);
+      await matchesEncryptedAtKeys(
+        atKeys,
+        fileAtKeysIo.filePath!(atSign),
+        atSign,
+        passPhrase: passPhrase,
+      );
     });
 
     test('Test read() -> throws with incorrect passphrase', () async {
@@ -128,20 +107,7 @@ void main() {
       final fileAtKeysIo =
           FileAtKeysIo(filePath: (_) => writeFilePath, passPhrase: passPhrase);
 
-      final atKeys = AtKeys()
-        ..apkamPublicKey =
-            AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
-        ..apkamPrivateKey =
-            AtBytes.fromString(base64Encode(utf8.encode('testApkamPrivateKey')))
-        ..defaultEncryptionPublicKey = AtBytes.fromString(
-            base64Encode(utf8.encode('defaultEncryptionPublicKey')))
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(
-            base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
-        ..defaultSelfEncryptionKey = AtBytes.fromString(
-            base64Encode(utf8.encode('defaultSelfEncryptionKey')))
-        ..apkamSymmetricKey =
-            AtBytes.fromString(base64Encode(utf8.encode('apkamSymmetricKey')))
-        ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
+      final atKeys = createTestAtKeys(atSign);
       await fileAtKeysIo.write(atSign, atKeys); // writes encrypted keys
 
       fileAtKeysIo.passPhrase = 'incorrect_pass';
@@ -163,23 +129,29 @@ void main() {
   });
 }
 
-Future<void> matchesEncryptedAtKeys(AtKeys atKeys, String filePath,
+AtKeys createTestAtKeys(String atSign) {
+  return AtKeys(atsign: atSign.toAtsign())
+    ..apkamPublicKey =
+        AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
+    ..apkamPrivateKey =
+        AtBytes.fromString(base64Encode(utf8.encode('testApkamPrivateKey')))
+    ..defaultEncryptionPublicKey = AtBytes.fromString(
+        base64Encode(utf8.encode('defaultEncryptionPublicKey')))
+    ..defaultEncryptionPrivateKey = AtBytes.fromString(
+        base64Encode(utf8.encode('defaultEncryptionPrivateKey')))
+    ..defaultSelfEncryptionKey = AtBytes.fromString(
+        base64Encode(utf8.encode('defaultSelfEncryptionKey')))
+    ..apkamSymmetricKey =
+        AtBytes.fromString(base64Encode(utf8.encode('apkamSymmetricKey')))
+    ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
+}
+
+Future<void> matchesEncryptedAtKeys(
+    AtKeys atKeys, String filePath, String atSign,
     {String? passPhrase}) async {
   final fileAtKeysIo =
       FileAtKeysIo(filePath: (_) => filePath, passPhrase: passPhrase);
-
-  Map<String, dynamic> atKeysFromFile =
-      jsonDecode(File(filePath).readAsStringSync());
-
-  // decrypt if passPhrase available
-  if (passPhrase != null) {
-    atKeysFromFile =
-        await fileAtKeysIo.decodeAtKeys(atKeysFromFile, passPhrase: passPhrase);
-  }
-
-  // decrypt the atKeys read from file with self encryption key
-  AtKeys decryptedAtKeys = await fileAtKeysIo.decryptAtKeysWithSelfEncKey(
-      atKeysFromFile, PkamAuthMode.keysFile);
+  final decryptedAtKeys = await fileAtKeysIo.read(atSign);
 
   expect(decryptedAtKeys.apkamPrivateKey.toString(),
       atKeys.apkamPrivateKey.toString());
