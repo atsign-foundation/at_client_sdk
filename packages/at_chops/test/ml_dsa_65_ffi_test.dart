@@ -26,7 +26,7 @@ void main() {
         fail('libcrypto not available on this host');
       }
       if (!mlDsaSupported) {
-        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.3)');
+        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
       }
 
       final algo = MlDsa65FfiAlgo.fromLib(lib);
@@ -49,7 +49,7 @@ void main() {
         fail('libcrypto not available on this host');
       }
       if (!mlDsaSupported) {
-        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.3)');
+        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
       }
 
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
@@ -71,7 +71,7 @@ void main() {
         fail('libcrypto not available on this host');
       }
       if (!mlDsaSupported) {
-        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.3)');
+        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
       }
 
       final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib);
@@ -91,7 +91,7 @@ void main() {
         fail('libcrypto not available on this host');
       }
       if (!mlDsaSupported) {
-        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.3)');
+        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
       }
 
       final algo = MlDsa65FfiAlgo.fromLib(lib);

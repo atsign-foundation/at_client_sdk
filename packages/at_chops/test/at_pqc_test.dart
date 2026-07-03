@@ -126,7 +126,7 @@ void main() {
     test('ML-DSA-65: FFI sign, pure-Dart verify', () async {
       if (lib == null) fail('libcrypto not available on this host');
       if (!mlDsaFfi) {
-        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.3)');
+        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
       }
 
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
@@ -141,7 +141,7 @@ void main() {
     test('ML-DSA-65: pure-Dart sign, FFI verify', () async {
       if (lib == null) fail('libcrypto not available on this host');
       if (!mlDsaFfi) {
-        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.3)');
+        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
       }
 
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
