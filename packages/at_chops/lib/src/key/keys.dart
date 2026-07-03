@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 /// Represents abstract format all keys should be in.
 sealed class AbstractKey {
   final String _key;
@@ -37,4 +40,16 @@ abstract class AsymmetricKeyPair extends AbstractKeyPair {
   AsymmetricKeyPair.create(String publicKey, String privateKey)
       : super(AtPublicKey.fromString(publicKey),
             AtPrivateKey.fromString(privateKey));
+}
+
+/// Raw-byte accessors for key pairs whose [AtPublicKey]/[AtPrivateKey]
+/// strings hold base64-encoded raw key bytes (not DER/PEM) — the PQ and
+/// X25519 key pairs. Not for the RSA-family pairs, whose strings are
+/// base64-encoded DER.
+mixin RawKeyPairBytes on AsymmetricKeyPair {
+  /// The raw public key bytes ([atPublicKey] base64-decoded).
+  Uint8List get publicKeyBytes => base64Decode(atPublicKey.publicKey);
+
+  /// The raw private key bytes ([atPrivateKey] base64-decoded).
+  Uint8List get privateKeyBytes => base64Decode(atPrivateKey.privateKey);
 }
