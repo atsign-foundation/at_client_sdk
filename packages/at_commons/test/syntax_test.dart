@@ -86,6 +86,26 @@ void main() {
       expect(verbParams[AtConstants.atPkamSignature], 'abcd1234');
     });
 
+    test('pkam regex with mldsa65 (PQ) signing algo and sha512 hashing algo',
+        () {
+      var command = 'pkam:signingAlgo:mldsa65:hashingAlgo:sha512:abcd1234';
+      var verbParams = getVerbParams(VerbSyntax.pkam, command);
+      expect(verbParams[AtConstants.atPkamSigningAlgo], 'mldsa65');
+      expect(verbParams[AtConstants.atPkamHashingAlgo], 'sha512');
+      expect(verbParams[AtConstants.atPkamSignature], 'abcd1234');
+    });
+
+    test('pkam regex with mldsa65 (PQ) signing algo and enrollmentId (APKAM)',
+        () {
+      var command =
+          'pkam:signingAlgo:mldsa65:hashingAlgo:sha256:enrollmentId:1234:abcd1234';
+      var verbParams = getVerbParams(VerbSyntax.pkam, command);
+      expect(verbParams[AtConstants.atPkamSigningAlgo], 'mldsa65');
+      expect(verbParams[AtConstants.atPkamHashingAlgo], 'sha256');
+      expect(verbParams[AtConstants.enrollmentId], '1234');
+      expect(verbParams[AtConstants.atPkamSignature], 'abcd1234');
+    });
+
     test('pkam regex with ecc signing algo and sha512 hashing algo', () {
       var command =
           'pkam:signingAlgo:ecc_secp256r1:hashingAlgo:sha512:abcd1234';
