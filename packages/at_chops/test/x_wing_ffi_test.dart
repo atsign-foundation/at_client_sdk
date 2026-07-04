@@ -4,7 +4,7 @@ library;
 import 'dart:ffi';
 import 'dart:typed_data';
 
-import 'package:at_chops/at_chops.dart';
+import 'package:at_chops/at_chops_ffi.dart';
 import 'package:test/test.dart';
 
 import 'x_wing_test_vectors.dart';

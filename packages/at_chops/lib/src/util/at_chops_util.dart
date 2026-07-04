@@ -115,7 +115,7 @@ class AtChopsUtil {
   /// Both keys are serializable and interoperable with the FFI backend.
   static Future<AtMlDsa65KeyPair> generateMlDsa65KeyPair() async {
     final (publicKey: Uint8List pub, secretKey: Uint8List sk) =
-        await MlDsa65PureDartAlgo.generateKeyPair();
+        await MlDsa65PureDartAlgo().generateKeyPair();
     return AtMlDsa65KeyPair.create(base64Encode(pub), base64Encode(sk));
   }
 

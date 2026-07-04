@@ -19,8 +19,10 @@ import 'package:ffi/ffi.dart';
 /// underlying native memory.
 ///
 /// The caller loads libcrypto (e.g. via [tryLoadLibCrypto]) and passes the
-/// resulting [DynamicLibrary] in via [MlKem768FfiAlgo.fromLib]. at_chops
-/// intentionally does no auto-resolution.
+/// resulting [DynamicLibrary] in via [MlKem768FfiAlgo.fromLib]. [AtPqc]
+/// intentionally does not auto-resolve standalone ML-KEM-768: this backend's
+/// secret keys are process-lifetime handles (see above), which is unsafe
+/// behind a generic facade whose pure-Dart branch returns serializable keys.
 final class MlKem768FfiAlgo implements AtKemAlgorithm {
   final DynamicLibrary _lib;
   final Random _rng = Random.secure();
@@ -98,8 +100,15 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
   /// Generate a fresh ML-KEM-768 key pair via OpenSSL.
   ///
   /// Returns `(publicKey: 1184 raw bytes, secretKey: 8-byte opaque handle)`.
-  /// The handle is **not serializable** — see class docs.
-  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair() async {
+  /// The handle is **not serializable** — see class docs. Pass a 64-byte FIPS
+  /// 203 seed (`d || z`) for deterministic generation — used internally by
+  /// the X-Wing FFI backend, whose ML-KEM secret key is derived
+  /// deterministically from the X-Wing seed.
+  @override
+  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair(
+      [Uint8List? seed]) async {
+    if (seed != null) return _generateKeyPairFromSeed(seed);
+
     final Pointer<Utf8> algName = 'ML-KEM-768'.toNativeUtf8();
     final Pointer<EVP_PKEY_CTX> ctx =
         _ctxNewFromName(nullptr, algName, nullptr);
@@ -127,14 +136,7 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
     }
   }
 
-  /// Generate an ML-KEM-768 key pair deterministically from a 64-byte FIPS 203
-  /// seed (`d || z`), via OpenSSL.
-  ///
-  /// Returns `(publicKey: 1184 raw bytes, secretKey: 8-byte opaque handle)`.
-  /// The handle decapsulates within this instance/process only (see class
-  /// docs). Used by the X-Wing FFI backend, whose ML-KEM secret key is derived
-  /// deterministically from the X-Wing seed.
-  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPairFromSeed(
+  Future<({Uint8List publicKey, Uint8List secretKey})> _generateKeyPairFromSeed(
       Uint8List seed) async {
     if (seed.length != 64) {
       throw ArgumentError.value(
