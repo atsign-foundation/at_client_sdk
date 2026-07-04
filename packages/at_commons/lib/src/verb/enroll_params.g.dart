@@ -24,6 +24,8 @@ EnrollParams _$EnrollParamsFromJson(Map<String, dynamic> json) => EnrollParams()
   ..selfEncKeyIV = json['selfEncKeyIV'] as String?
   ..encryptedAPKAMSymmetricKey = json['encryptedAPKAMSymmetricKey'] as String?
   ..apkamPublicKey = json['apkamPublicKey'] as String?
+  ..signingAlgo = json['signingAlgo'] as String?
+  ..metadata = json['metadata'] as Map<String, dynamic>?
   ..enrollmentStatusFilter = (json['enrollmentStatusFilter'] as List<dynamic>?)
       ?.map((e) => $enumDecode(_$EnrollmentStatusEnumMap, e))
       .toList()
@@ -46,6 +48,8 @@ Map<String, dynamic> _$EnrollParamsToJson(EnrollParams instance) =>
       'selfEncKeyIV': instance.selfEncKeyIV,
       'encryptedAPKAMSymmetricKey': instance.encryptedAPKAMSymmetricKey,
       'apkamPublicKey': instance.apkamPublicKey,
+      'signingAlgo': instance.signingAlgo,
+      'metadata': instance.metadata,
       'enrollmentStatusFilter': instance.enrollmentStatusFilter
           ?.map((e) => _$EnrollmentStatusEnumMap[e]!)
           .toList(),
