@@ -242,6 +242,27 @@ void main() {
   });
 
   group('A group of tests for data signing and verification', () {
+    test(
+        'Test verify() dispatches mldsa65 signingAlgoType to MlDsa65PureDartAlgo',
+        () async {
+      final encryptionKeypair = AtChopsUtil.generateAtEncryptionKeyPair();
+      final atChopsKeys = AtChopsKeys.create(encryptionKeypair, null);
+      final atChops = AtChopsImpl(atChopsKeys);
+
+      final algo = MlDsa65PureDartAlgo();
+      final keyPair = await algo.generateKeyPair();
+      final data = Uint8List.fromList(utf8.encode('mldsa65 dispatch test'));
+      final signature =
+          await algo.signBytes(data, secretKey: keyPair.secretKey);
+
+      AtSigningVerificationInput verificationInput = AtSigningVerificationInput(
+          data, signature, base64Encode(keyPair.publicKey));
+      verificationInput.signingAlgoType = SigningAlgoType.mldsa65;
+      // No verificationInput.signingAlgorithm set — forces dispatch through
+      // AtChopsImpl._getVerificationAlgorithm's mldsa65 branch.
+      expect(() => atChops.verify(verificationInput), returnsNormally);
+    });
+
     test('Test sign() and verify() with default algorithms', () {
       final data = 'testData';
       final encryptionKeypair = AtChopsUtil.generateAtEncryptionKeyPair();
