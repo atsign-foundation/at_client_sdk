@@ -23,8 +23,9 @@ const String _envVar = 'AT_CHOPS_LIBCRYPTO_PATH';
 /// candidate fails. Never throws.
 ///
 /// at_chops does not call this automatically — consumers decide their own
-/// fallback strategy. Pass the returned library to [MlKem768FfiAlgo.fromLib]
-/// or [X25519FfiAlgo.fromLib] when constructing FFI-backed algorithms.
+/// fallback strategy. Pass the returned library to an FFI-backed algorithm's
+/// `.fromLib` constructor (e.g. [MlKem768FfiAlgo.fromLib],
+/// [X25519FfiAlgo.fromLib], [AesGcm256FfiAlgo.fromLib]).
 ///
 /// If [loadedPath] is provided it will be set to the path that was
 /// successfully opened, which callers can use to verify whether the env-var

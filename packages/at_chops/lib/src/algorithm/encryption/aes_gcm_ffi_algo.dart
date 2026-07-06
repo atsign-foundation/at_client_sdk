@@ -18,8 +18,8 @@ import 'package:ffi/ffi.dart';
 /// correctly with the other.
 ///
 /// The caller loads libcrypto (e.g. via [tryLoadLibCrypto]) and passes the
-/// resulting [DynamicLibrary] via [AesGcm256FfiAlgo.fromLib].  at_chops does
-/// no auto-resolution — consumers decide their own fallback strategy.
+/// resulting [DynamicLibrary] via [AesGcm256FfiAlgo.fromLib].
+/// Prefer [AtPqc.aesGcm256] for automatic FFI-vs-pure-Dart resolution.
 final class AesGcm256FfiAlgo
     implements SymmetricEncryptionAlgorithm<Uint8List, Uint8List> {
   static const int nonceLength = 12;
