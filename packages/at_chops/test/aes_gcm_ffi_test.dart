@@ -113,8 +113,7 @@ void main() {
       final AesGcm256FfiAlgo algo = makeAlgo(key);
       final Uint8List plain = Uint8List.fromList([1, 2, 3]);
       expect(() => algo.encrypt(plain), throwsA(isA<AtEncryptionException>()));
-      expect(
-          () => algo.encrypt(plain, iv: InitialisationVector.random(16)),
+      expect(() => algo.encrypt(plain, iv: InitialisationVector.random(16)),
           throwsA(isA<AtEncryptionException>()));
     });
 
@@ -135,7 +134,8 @@ void main() {
         final List<int> aad = utf8.encode('authenticated header');
 
         final Uint8List encrypted = await algo.encrypt(plain, iv: iv, aad: aad);
-        final Uint8List decrypted = await algo.decrypt(encrypted, iv: iv, aad: aad);
+        final Uint8List decrypted =
+            await algo.decrypt(encrypted, iv: iv, aad: aad);
         expect(utf8.decode(decrypted), 'secret body');
       });
 

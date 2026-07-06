@@ -40,8 +40,8 @@ final class AesGcm256FfiAlgo
   late final EvpCipherCtxCtrlDart _ctxCtrl;
 
   AesGcm256FfiAlgo.fromLib(this._lib, this._aesKey) {
-    _evpAes256Gcm = _lib
-        .lookupFunction<EvpAes256GcmNative, EvpAes256GcmDart>('EVP_aes_256_gcm');
+    _evpAes256Gcm = _lib.lookupFunction<EvpAes256GcmNative, EvpAes256GcmDart>(
+        'EVP_aes_256_gcm');
     _ctxNew = _lib.lookupFunction<EvpCipherCtxNewNative, EvpCipherCtxNewDart>(
         'EVP_CIPHER_CTX_new');
     _ctxFree =
@@ -128,7 +128,8 @@ final class AesGcm256FfiAlgo
       if (plainData.isNotEmpty) {
         plainBuf.asTypedList(plainData.length).setAll(0, plainData);
       }
-      final Pointer<Uint8> outBuf = calloc<Uint8>(plainData.isEmpty ? 1 : plainData.length);
+      final Pointer<Uint8> outBuf =
+          calloc<Uint8>(plainData.isEmpty ? 1 : plainData.length);
       final Pointer<Int32> outLen = calloc<Int32>();
       try {
         if (_encryptUpdate(ctx, outBuf, outLen, plainBuf, plainData.length) <=
@@ -156,7 +157,8 @@ final class AesGcm256FfiAlgo
             }
             final Uint8List cipherText =
                 Uint8List.fromList(outBuf.asTypedList(encLen));
-            final Uint8List tag = Uint8List.fromList(tagBuf.asTypedList(tagLength));
+            final Uint8List tag =
+                Uint8List.fromList(tagBuf.asTypedList(tagLength));
             return Uint8List.fromList(cipherText + tag);
           } finally {
             calloc.free(tagBuf);

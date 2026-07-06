@@ -36,8 +36,7 @@ typedef EvpPkeyKeygenInitDart = int Function(Pointer<EVP_PKEY_CTX>);
 
 typedef EvpPkeyKemInitNative = Int32 Function(
     Pointer<EVP_PKEY_CTX>, Pointer<Void>);
-typedef EvpPkeyKemInitDart = int Function(
-    Pointer<EVP_PKEY_CTX>, Pointer<Void>);
+typedef EvpPkeyKemInitDart = int Function(Pointer<EVP_PKEY_CTX>, Pointer<Void>);
 
 typedef EvpPkeyFromdataInitNative = Int32 Function(Pointer<EVP_PKEY_CTX>);
 typedef EvpPkeyFromdataInitDart = int Function(Pointer<EVP_PKEY_CTX>);
@@ -130,20 +129,36 @@ typedef EvpMdCtxNewDart = Pointer<EVP_MD_CTX> Function();
 typedef EvpMdCtxFreeNative = Void Function(Pointer<EVP_MD_CTX>);
 typedef EvpMdCtxFreeDart = void Function(Pointer<EVP_MD_CTX>);
 
-typedef EvpDigestSignInitNative = Int32 Function(Pointer<EVP_MD_CTX>,
-    Pointer<Pointer<EVP_PKEY_CTX>>, Pointer<Void>, Pointer<Void>, Pointer<EVP_PKEY>);
-typedef EvpDigestSignInitDart = int Function(Pointer<EVP_MD_CTX>,
-    Pointer<Pointer<EVP_PKEY_CTX>>, Pointer<Void>, Pointer<Void>, Pointer<EVP_PKEY>);
+typedef EvpDigestSignInitNative = Int32 Function(
+    Pointer<EVP_MD_CTX>,
+    Pointer<Pointer<EVP_PKEY_CTX>>,
+    Pointer<Void>,
+    Pointer<Void>,
+    Pointer<EVP_PKEY>);
+typedef EvpDigestSignInitDart = int Function(
+    Pointer<EVP_MD_CTX>,
+    Pointer<Pointer<EVP_PKEY_CTX>>,
+    Pointer<Void>,
+    Pointer<Void>,
+    Pointer<EVP_PKEY>);
 
 typedef EvpDigestSignNative = Int32 Function(Pointer<EVP_MD_CTX>,
     Pointer<Uint8>, Pointer<IntPtr>, Pointer<Uint8>, IntPtr);
-typedef EvpDigestSignDart = int Function(Pointer<EVP_MD_CTX>,
-    Pointer<Uint8>, Pointer<IntPtr>, Pointer<Uint8>, int);
+typedef EvpDigestSignDart = int Function(
+    Pointer<EVP_MD_CTX>, Pointer<Uint8>, Pointer<IntPtr>, Pointer<Uint8>, int);
 
-typedef EvpDigestVerifyInitNative = Int32 Function(Pointer<EVP_MD_CTX>,
-    Pointer<Pointer<EVP_PKEY_CTX>>, Pointer<Void>, Pointer<Void>, Pointer<EVP_PKEY>);
-typedef EvpDigestVerifyInitDart = int Function(Pointer<EVP_MD_CTX>,
-    Pointer<Pointer<EVP_PKEY_CTX>>, Pointer<Void>, Pointer<Void>, Pointer<EVP_PKEY>);
+typedef EvpDigestVerifyInitNative = Int32 Function(
+    Pointer<EVP_MD_CTX>,
+    Pointer<Pointer<EVP_PKEY_CTX>>,
+    Pointer<Void>,
+    Pointer<Void>,
+    Pointer<EVP_PKEY>);
+typedef EvpDigestVerifyInitDart = int Function(
+    Pointer<EVP_MD_CTX>,
+    Pointer<Pointer<EVP_PKEY_CTX>>,
+    Pointer<Void>,
+    Pointer<Void>,
+    Pointer<EVP_PKEY>);
 
 typedef EvpDigestVerifyNative = Int32 Function(
     Pointer<EVP_MD_CTX>, Pointer<Uint8>, IntPtr, Pointer<Uint8>, IntPtr);
@@ -183,41 +198,25 @@ typedef EvpCipherCtxNewDart = Pointer<EVP_CIPHER_CTX> Function();
 typedef EvpCipherCtxFreeNative = Void Function(Pointer<EVP_CIPHER_CTX>);
 typedef EvpCipherCtxFreeDart = void Function(Pointer<EVP_CIPHER_CTX>);
 
-typedef EvpEncryptInitExNative = Int32 Function(
-    Pointer<EVP_CIPHER_CTX>,
-    Pointer<EVP_CIPHER>,
-    Pointer<Void>,
-    Pointer<Uint8>,
-    Pointer<Uint8>);
-typedef EvpEncryptInitExDart = int Function(
-    Pointer<EVP_CIPHER_CTX>,
-    Pointer<EVP_CIPHER>,
-    Pointer<Void>,
-    Pointer<Uint8>,
-    Pointer<Uint8>);
+typedef EvpEncryptInitExNative = Int32 Function(Pointer<EVP_CIPHER_CTX>,
+    Pointer<EVP_CIPHER>, Pointer<Void>, Pointer<Uint8>, Pointer<Uint8>);
+typedef EvpEncryptInitExDart = int Function(Pointer<EVP_CIPHER_CTX>,
+    Pointer<EVP_CIPHER>, Pointer<Void>, Pointer<Uint8>, Pointer<Uint8>);
 
-typedef EvpDecryptInitExNative = Int32 Function(
-    Pointer<EVP_CIPHER_CTX>,
-    Pointer<EVP_CIPHER>,
-    Pointer<Void>,
-    Pointer<Uint8>,
-    Pointer<Uint8>);
-typedef EvpDecryptInitExDart = int Function(
-    Pointer<EVP_CIPHER_CTX>,
-    Pointer<EVP_CIPHER>,
-    Pointer<Void>,
-    Pointer<Uint8>,
-    Pointer<Uint8>);
+typedef EvpDecryptInitExNative = Int32 Function(Pointer<EVP_CIPHER_CTX>,
+    Pointer<EVP_CIPHER>, Pointer<Void>, Pointer<Uint8>, Pointer<Uint8>);
+typedef EvpDecryptInitExDart = int Function(Pointer<EVP_CIPHER_CTX>,
+    Pointer<EVP_CIPHER>, Pointer<Void>, Pointer<Uint8>, Pointer<Uint8>);
 
-typedef EvpEncryptUpdateNative = Int32 Function(
-    Pointer<EVP_CIPHER_CTX>, Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, Int32);
-typedef EvpEncryptUpdateDart = int Function(
-    Pointer<EVP_CIPHER_CTX>, Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, int);
+typedef EvpEncryptUpdateNative = Int32 Function(Pointer<EVP_CIPHER_CTX>,
+    Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, Int32);
+typedef EvpEncryptUpdateDart = int Function(Pointer<EVP_CIPHER_CTX>,
+    Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, int);
 
-typedef EvpDecryptUpdateNative = Int32 Function(
-    Pointer<EVP_CIPHER_CTX>, Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, Int32);
-typedef EvpDecryptUpdateDart = int Function(
-    Pointer<EVP_CIPHER_CTX>, Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, int);
+typedef EvpDecryptUpdateNative = Int32 Function(Pointer<EVP_CIPHER_CTX>,
+    Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, Int32);
+typedef EvpDecryptUpdateDart = int Function(Pointer<EVP_CIPHER_CTX>,
+    Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, int);
 
 typedef EvpEncryptFinalExNative = Int32 Function(
     Pointer<EVP_CIPHER_CTX>, Pointer<Uint8>, Pointer<Int32>);
