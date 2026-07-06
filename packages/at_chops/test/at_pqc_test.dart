@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
@@ -8,6 +9,7 @@ void main() {
   final DynamicLibrary? lib = tryLoadLibCrypto();
   final bool xWingFfi = lib != null && libCryptoSupportsMlKem768(lib);
   final bool mlDsaFfi = lib != null && libCryptoSupportsMlDsa65(lib);
+  final bool aesGcmFfi = lib != null && libCryptoSupportsAesGcm(lib);
 
   group('AtPqc — host-agnostic', () {
     test('AtPqc.xWing is FFI when supported, else pure', () {
@@ -24,6 +26,27 @@ void main() {
       } else {
         expect(AtPqc.mlDsa65, isA<MlDsa65PureDartAlgo>());
       }
+    });
+
+    test('AtPqc.aesGcm256 is FFI when supported, else pure', () {
+      final AESKey key = AESKey.generate(32);
+      if (aesGcmFfi) {
+        expect(AtPqc.aesGcm256(key), isA<AesGcm256FfiAlgo>());
+      } else {
+        expect(AtPqc.aesGcm256(key), isA<AesGcm256EncryptionAlgo>());
+      }
+    });
+
+    test('aesGcm256 encrypt/decrypt round-trip', () async {
+      final AESKey key = AESKey.generate(32);
+      final InitialisationVector iv = InitialisationVector.random(12);
+      final Uint8List plain = Uint8List.fromList(utf8.encode('hello pqc aead'));
+
+      final Uint8List encrypted =
+          await AtPqc.aesGcm256(key).encrypt(plain, iv: iv);
+      final Uint8List decrypted =
+          await AtPqc.aesGcm256(key).decrypt(encrypted, iv: iv);
+      expect(decrypted, plain);
     });
 
     test('xWing encapsulate/decapsulate round-trip', () async {
