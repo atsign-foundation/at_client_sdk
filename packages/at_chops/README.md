@@ -172,6 +172,8 @@ ML-DSA-65, ML-KEM-768, and X25519 each have an OpenSSL FFI backend (`MlDsa65FfiA
 
 X-Wing (`XWingFfiAlgo`) composes the FFI backends for maximum performance when `libcrypto` is available.
 
+AES-256-GCM also has an OpenSSL FFI backend (`AesGcm256FfiAlgo`) alongside its pure-Dart counterpart (`AesGcm256EncryptionAlgo`); the two are fully interoperable. Unlike the PQ backends, AES-GCM is not covered by `AtPqc` (it is symmetric AEAD, not a PQ primitive), so callers construct it directly via `AesGcm256FfiAlgo.fromLib(lib, key)`.
+
 FFI backends are exported from `package:at_chops/at_chops_ffi.dart`, not the
 main `at_chops.dart` barrel, so pure-Dart-only consumers aren't forced to
 carry FFI bindings. Use [AtPqc](#atpqc-auto-resolved-pq-backends) instead of
