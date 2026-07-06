@@ -8,8 +8,8 @@ import 'package:ffi/ffi.dart';
 /// X25519 Diffie–Hellman key agreement backed by OpenSSL 3 via Dart FFI.
 ///
 /// The caller loads libcrypto (e.g. via [tryLoadLibCrypto]) and passes the
-/// resulting [DynamicLibrary] in. at_chops does no auto-resolution —
-/// consumers decide their own fallback strategy.
+/// resulting [DynamicLibrary] in. [AtPqc] does not auto-resolve standalone
+/// X25519 — consumers decide their own fallback strategy.
 final class X25519FfiAlgo implements AtKeyAgreementAlgorithm {
   final DynamicLibrary _lib;
 

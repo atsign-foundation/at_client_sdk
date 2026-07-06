@@ -1,3 +1,14 @@
+## 3.4.0
+- feat: add `AtSignatureAlgorithm` — new stateless signing interface (`signBytes`/`verifyBytes`, key material passed per call); `MlDsa65PureDartAlgo` and `MlDsa65FfiAlgo` implement it directly. `message` is positional; key material is passed via required named parameters so same-typed byte arguments cannot be silently transposed
+- breaking: `MlDsa65PureDartAlgo.generateKeyPair`/`signBytes`/`verifyBytes` are instance methods (were static in 3.3.0) and `MlDsa65FfiAlgo.signBytes`/`verifyBytes` key material moves to named parameters — 3.3.0 call sites get a compile error instead of silently binding bytes to the wrong slots
+- feat: add `at_chops_ffi.dart` barrel and `AtPqc` namespace; `AtPqc.mlDsa65`/`AtPqc.xWing` auto-select FFI or pure-Dart at first access for encapsulate/decapsulate/sign/verify and key generation
+- feat: add `RawKeyPairBytes` mixin — `publicKeyBytes`/`privateKeyBytes` on `XWingKeyPair`, `MlDsa65KeyPair`, `MlKem768KeyPair`, and `X25519KeyPair`; callers no longer need to manually `base64Decode` the `AtPublicKey`/`AtPrivateKey` strings
+- breaking: remove FFI algorithm exports (`MlKem768FfiAlgo`, `X25519FfiAlgo`, `XWingFfiAlgo`, `MlDsa65FfiAlgo`, `openssl_loader`) from `at_chops.dart` — import `at_chops_ffi.dart` instead
+- breaking: `AtKemAlgorithm` gains an abstract `generateKeyPair()` — external `implements` users must add it. The method is seedless at the interface (seed length/format are backend-specific); deterministic generation stays on the concrete classes' optional `seed` parameter
+- deprecate: the stateful `secretKey` setter, `sign`, and `verify` on `MlDsa65PureDartAlgo` and `MlDsa65FfiAlgo` (both still implement `AtSigningAlgorithm`) — use `signBytes`/`verifyBytes`, or `AtPqc.mlDsa65` typed as `AtSignatureAlgorithm`
+- deprecate: `AtSigningAlgorithm` (`@sealed`) — implement `AtSignatureAlgorithm` for new code instead
+- fix: export the algorithm interfaces (`AtSignatureAlgorithm`, `AtKemAlgorithm`, etc.) from `at_chops.dart` — previously only reachable via `types.dart`
+
 ## 3.3.0
 - feat: Add `pqSeal`/`pqOpen` — HPKE-style PQ encryption over X-Wing KEM with AES-256-GCM and forward-compatible versioning
 - feat: Add direct algorithm and key-generation APIs for `at_chops`

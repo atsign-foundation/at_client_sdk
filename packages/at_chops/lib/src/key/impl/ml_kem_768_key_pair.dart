@@ -13,7 +13,7 @@ import '../../algorithm/encryption/ml_kem_768_pure_dart.dart';
 /// serializable — the OpenSSL FFI backend returns process-lifetime opaque
 /// handles, so persisted ML-KEM secret keys must always be used with the
 /// pure-Dart algorithm.
-class MlKem768KeyPair extends AsymmetricKeyPair {
+class MlKem768KeyPair extends AsymmetricKeyPair with RawKeyPairBytes {
   MlKem768KeyPair.create(super.publicKey, super.privateKey) : super.create();
 
   /// Generates an ML-KEM-768 key pair for post-quantum key encapsulation.
