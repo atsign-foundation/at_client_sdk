@@ -30,6 +30,7 @@ given/when/then here.
 - [10. Cross-cutting: publish gates, critical path, waves/parallelism, testing](#10-cross-cutting-publish-gates-critical-path-wavesparallelism-testing)
 - [11. Coverage map (D1 package / UC → project)](#11-coverage-map-d1-package--uc--project)
 - [12. Open decisions pointer & verification provenance](#12-open-decisions-pointer--verification-provenance)
+- [13. Phase IS — inter-server PQ authentication (IS-1)](#13-phase-is--inter-server-pq-authentication-is-1)
 
 ---
 
@@ -99,7 +100,7 @@ The file-partition/track detail and the `CryptoConfig`/`CryptoRuntime` mechanics
 
 ```
                  ┌──────────────────────── PQ primitives ───────────────────────┐
-  [#1993 done]→  P-1 at_chops 3.3.0 (published)    P-2 mldsa65 verify (publish 3.4.0, indep root)
+  [#1993 done]→  P-1 at_chops 3.3.0 (published)    P-2 mldsa65 verify (fold into unpublished 3.4.0)
                      │                                   │
   [#1930 done]→  S-2 CryptoContext.keys (additive)       │
                  S-1 at_auth WritableAtKeys ─→ S-3 LocalKeystore/.atKeys updatable
@@ -128,6 +129,7 @@ The file-partition/track detail and the `CryptoConfig`/`CryptoRuntime` mechanics
      B-3 selfEncryptionKey retirement (phases 1-3, needs at_server)     ON-1 PQ-native onboarding + legacy-interop flag
      S-5 at_auth 4.0 WASM split → S-6 consumer bumps          D2-1 at/pqmls carve + D1-E (D2)
      KF-1 .atKeys-at-rest protection + backup/restore (builds on S-3)
+     IS-1 inter-server PQ auth (FROM/POL: X-Wing KEM + ML-DSA-65, PR #2683) — needs at_chops PQ API (XWingCert/resolvers) published
      R-2 at_client 4.0 (flip flag default true) — final, gated on the ecosystem floor
 ```
 
@@ -166,14 +168,18 @@ published 3.3.0 surface. Don't break the deprecated sync verify path.
 ### P-2 — at_chops: wire `mldsa65` into the verification branch; publish a NEW minor · at_chops · M (≈1 PR)
 **Goal:** the one missing ML-DSA verification branch (the enum member + algo classes already ship in 3.3.0).
 **Builds on:** — (independent root; parallel to P-1). ⚠️ The `_getVerificationAlgorithm` `mldsa65` branch
-**did NOT make the 3.3.0 publish** — trunk `at_chops` has no ML-DSA verify branch, so P-2 needs **its own
-at_chops minor** (**3.4.0 or later**), it cannot fold into the already-shipped P-1 3.3.0.
+**did NOT make the 3.3.0 publish** — trunk `at_chops` has no ML-DSA verify branch. The **unpublished 3.4.0**
+already on trunk (bumped by #2030, merged 2026-07-03) is the slot: **P-2 folds its `mldsa65` verify branch
+into that existing 3.4.0 before it publishes** — not a fresh new minor. (Decision 2026-07-06.)
 **Deliverables → [design.md](design.md)** (at_chops primitives, ML-DSA): add an `mldsa65` branch in
 `_getVerificationAlgorithm` returning `MlDsa65PureDartAlgo()` (no `DynamicLibrary` in `AtChopsImpl` — do
 **not** claim FFI-when-available); no new `SigningAlgoType` member, no new algo class; publish in the new
-minor. **Coordinate the slot:** two FFI PRs are **also** claiming a 3.4.0 slot — #2030 (the `at_chops_ffi`
-barrel + `AtPqc` auto-resolver) and #2039 (AES-GCM FFI) — so sequence P-2 against them into **one agreed
-3.4.0** (agreed contents), not a free slot each. Those FFI PRs realise the **FFI-auto-resolve-default** policy
+minor. **The 3.4.0 slot is already open on trunk:** #2030 (the `at_chops_ffi` barrel + `AtPqc`
+auto-resolver + `AtSignatureAlgorithm` classes) **merged to trunk 2026-07-03** (+ #2046 review-fixes) and
+bumped `at_chops` to 3.4.0, **assembled-but-unpublished** under the one-time semver exemption. P-2's
+`_getVerificationAlgorithm` `mldsa65` branch is the one remaining deliverable to add into that same 3.4.0
+before publish; #2039 (AES-GCM FFI) is still **draft** and folds into 3.4.0 too if it lands first. Those
+FFI PRs realise the **FFI-auto-resolve-default** policy
 (FFI when available, pure-Dart fallback, WASM forces pure-Dart — ruling in [decisions.md](decisions.md)); they
 are **in D1 scope**, on the at_chops track. **Scope note (2026-07-03 ruling):** auto-resolve applies to the
 `AtPqc` accessors (`AtPqc.xWing`/`AtPqc.mlDsa65`, including their keygen); key generation through the
@@ -185,8 +191,9 @@ wire-compatible, so pure-Dart-generated keys work with the FFI backends and vice
 rsa/ecc/pkam unchanged. Do **not** assert end-to-end `AtChops.verify(mldsa65)` — the deprecated sync path
 doesn't await the async ML-DSA verify.
 **Effort:** M.
-**Watch-outs:** publish the 3.4.0 minor before `at_server` bumps its pin in SS-3; agree the 3.4.0 contents
-with PR #2030/#2039 first. **ML-DSA APKAM auth is retained** — the
+**Watch-outs:** add the `mldsa65` verify branch into the existing **unpublished** 3.4.0 (already on trunk
+via #2030) and publish before `at_server` bumps its pin in SS-3; do **not** open a fresh minor. **ML-DSA
+APKAM auth is retained** — the
 1:1:1 simplification does not drop ML-DSA: the at_chops `mldsa65` verify branch (this project), the
 at_commons pkam `signingAlgo` literal (folded into SS-1a's publish), and the server `_getSigningAlgoType`
 branch reading the **record** `signingAlgo` together make it work.
@@ -366,19 +373,21 @@ on trunk. It does **not** gate on S-1/S-2/S-3.
 presuppose but that lives only on the feature branch today.
 **Builds on:** #1930 + P-1 (`pqSeal`, published 3.3.0).
 **Deliverables → [design.md](design.md)** (secret-sharing substrate): land the WP-SS substrate baseline
-(**draft PR #2037**, branch commit `6184eab12`), **reworked to the 1:1:1 / flat `listns` / no-write-path
-shape before merge** (single `apkamPublicKey` + `signingAlgo`; flat discovery roster; no
-`registerKeyPackage` / `enroll:metadata` write path). This is the `__ssenv` envelope, `SecretStore`,
+(**PR #2037**, open, non-draft, ready for review), **already reworked to the 1:1:1 / flat `listns` /
+no-write-path shape** (via #2043, merged onto the branch — single `apkamPublicKey` + `signingAlgo`; flat
+discovery roster; no `registerKeyPackage` / `enroll:metadata` write path); pending merge to trunk. This is
+the `__ssenv` envelope, `SecretStore`,
 `putIfNewer` ordering, `kpid` addressing, and the push/pull primitives the later SS projects wire up.
 **Acceptance → [acceptance.md](acceptance.md):** substrate unit suite green; the baseline compiles in the
 1:1:1 shape with no write-path residue.
 **Effort:** M.
-**Watch-outs:** PR #2037 must be reworked to the current shape (1:1:1, flat `listns`, no write path) **before**
-merge — don't land the pre-decision-#F shape. It is the prerequisite for SS-1c / SS-2 / RF-1; those projects
-cite PR #2037 as "already landed," not implied trunk state.
+**Watch-outs:** PR #2037 is already in the current shape (1:1:1, flat `listns`, no write path — the
+pre-decision-#F shape has been reworked out via #2043). It is the prerequisite for SS-1c / SS-2 / RF-1;
+those projects cite PR #2037 as "already landed," so it must merge to trunk before they can.
 **coversD1:** D1-F substrate baseline.
 
-### SS-1a — at_commons enroll grammar: `EnrollParams.metadata` + flattened `listns`; publish 5.12.0 · at_commons · M
+### SS-1a — at_commons enroll grammar: `EnrollParams.metadata` + flattened `listns`; publish 5.12.0 — **SATISFIED (at_commons 5.12.0 published 2026-07-04; grammar on trunk via #2040)** · at_commons · M
+**Status:** SATISFIED — landed on trunk via #2040 (2026-07-04, with #2044 stacked in); at_commons 5.12.0 published to pub.dev.
 **Goal:** publish the grammar the new enroll verbs need before any server can parse them.
 **Builds on:** — (root). The key package rides `EnrollParams.metadata` (no grammar change); there is no
 `enroll:metadata` op.
@@ -759,8 +768,8 @@ out of scope here** — see [roadmap.md](roadmap.md) for the D2 trajectory.
 | #  | Package             | Bump                          | Project(s) | Why |
 |----|---------------------|-------------------------------|------------|-----|
 | 1  | `at_chops`          | minor `3.2.1 → 3.3.0` **(published 2026-06-23, done)** | P-1    | stateless functional core + HPKE `pqSeal`/`pqOpen`; `@Deprecated AtChopsImpl` shim |
-| 2  | `at_chops`          | minor `3.3.0 → 3.4.0`         | P-2        | ML-DSA `mldsa65` verify branch; **coordinate the 3.4.0 slot** with PR #2030 (`at_chops_ffi` barrel + `AtPqc` auto-resolver) + PR #2039 (AES-GCM FFI) — one agreed 3.4.0, minor under the recorded one-time semver exemption ([decisions.md](decisions.md) rulings 2026-07-03) |
-| 3  | `at_commons`        | minor `5.11.0 → 5.12.0`       | SS-1a      | `EnrollParams.metadata` + `signingAlgo`; flattened `listns`; pkam `mldsa65` literal |
+| 2  | `at_chops`          | minor `3.3.0 → 3.4.0` **(bumped on trunk via #2030, unpublished)** | P-2 | #2030 (`at_chops_ffi` barrel + `AtPqc` + `AtSignatureAlgorithm`) landed the 3.4.0 bump on trunk 2026-07-03 (+ #2046), assembled-but-unpublished; **P-2 folds its `mldsa65` verify branch into this same 3.4.0 before publish**; #2039 (AES-GCM FFI) still draft. Minor under the one-time semver exemption ([decisions.md](decisions.md) 2026-07-03) |
+| 3  | `at_commons`        | minor `5.11.0 → 5.12.0` **(published 2026-07-04, done)** | SS-1a | `EnrollParams.metadata` + `signingAlgo`; flattened `listns`; pkam `mldsa65` literal |
 | 4  | `at_auth`           | minor `3.1.1 → 3.2.0`         | S-1        | additive: `WritableAtKeys`; `AtKeysIo`/`WrittenAtKeysIo` widened; `InMemoryAtKeysIo` |
 | 5  | `at_auth`           | **major `3.2.0 → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
 | 6  | `at_client`         | minor `3.13.0 → 3.14.0`       | S-2…B-2    | `at_auth ^4.0.0`; `CryptoContext.keys`; nskey data path; rotation. **= D1 GA** ⚠️ pub.dev latest is **3.12.0**, in-tree **3.13.0** (unshipped) — publish the in-progress slot first **or** fold; decide at execution against pub.dev |
@@ -874,4 +883,48 @@ knows where the sequencing assumptions come from:
 **Verification.** This plan is verified against the live trees: the `at_client_sdk` monorepo — which
 **contains** `at_chops`, `at_auth`, and `at_commons` as workspace packages (`packages/at_chops`,
 `packages/at_auth`, `packages/at_commons`) — plus the separate `at_server` / `java_at_server` repos.
+
+---
+
+## 13. Phase IS — inter-server PQ authentication (IS-1)
+
+*Off the D1 GA critical path (server-to-server, `at_server`), but in D1 scope (ruled 2026-07-06). This is
+the atServer↔atServer handshake, orthogonal to the client-side `nskey` data path (§6) — a compromised
+inter-server channel and a compromised client channel are different threats, so this track ships on its own
+schedule and does **not** gate D1 GA.*
+
+### IS-1 — atServer FROM/POL handshake: X-Wing KEM + ML-DSA-65, RSA fallback · at_secondary_server (+ at_chops) · L
+
+**Goal:** replace the RSA-only server-to-server FROM/POL handshake with a hybrid quantum-safe path, with
+automatic fallback to legacy UUID/RSA for non-PQ peers (zero flag day, mixed-fleet safe).
+
+**Builds on:** the at_chops PQ primitives (P-1 `pqSeal`/X-Wing, P-2 ML-DSA verify) **plus a new at_chops
+API surface** — `XWingCert`, `resolveXWing` / `resolveMlDsa65`, and `at_algorithm.dart` exports — that is
+**not yet on `at_chops` trunk**. It lives on branch `pq/st/at-chops-pq-api` and **must be published (as part
+of, or after, the 3.4.0 slot — see P-2) before IS-1 can land without the workspace path override**.
+(`generateXWingKeyPair` / `generateMlDsa65KeyPair` already exist on `at_chops` trunk 3.4.0.)
+
+**Deliverables:** a `PqKeyManager` (server-internal, **not** an at_chops class) managing the ML-DSA-65 +
+X-Wing keypair lifecycle, cert generation/rotation (30-day grace window on the previous cert), and
+HKDF-SHA256 key-confirmation tag derivation — the raw shared secret never crosses the wire or is persisted.
+The handshake: `lookup:pq_xwing_cert@<peer>` + `lookup:pq_signing_publickey@<peer>` (live every handshake,
+never cached) → `ML-DSA-65.verify(cert)` → `xwing.encaps(cert.pk)` → `tag = HKDF(ss, info=sessionID‖@peer)`
+→ `proof:sessionID@<peer>:pq:<ciphertext_b64>` → decaps → matching tag ⇒ `isPolAuthenticated`. Env
+`AT_DISABLE_PQ_AUTH=true` forces UUID; self-auth always UUID; a peer with no PQ cert falls back to
+UUID/RSA.
+
+**Acceptance:** `PqKeyManager` unit suite (cert round-trip, verify valid/expired/wrong-key, KEM round-trip,
+rotate lifecycle, prev-cert expiry); FROM/POL PQ-proof + fallback paths; pure-Dart fallback (unset
+`AT_CHOPS_LIBCRYPTO_PATH`, ML-DSA resolves to pure-Dart without throwing); mixed-fleet (no-PQ-cert peer →
+UUID challenge, POL via RSA signing key). Existing delete/update verb tests still pass (protected-key count
+updated for the PQ secret keys).
+
+**Tracking:** PR **#2683** (`at_server`, `pq/st/pq-interserver-comms`, currently draft, "Phase 0") →
+sub-issue under #1889. Design detail in [design.md](design.md) (§ inter-server PQ authentication).
+
+**Watch-outs:** (1) the at_chops PQ-API dependency above is the gating prerequisite — do not merge IS-1
+against the workspace path override. (2) The PR body's "Phase 0" title vs its `diag/interserver-comms-phase1.md`
+filename disagree, and that diag file is absent on the branch — reconcile before review. (3) `pq_xwing_cert`
+/ `pq_signing_publickey` are looked up live every handshake and never cached — keep it that way (cert
+rotation depends on it).
 

@@ -16,6 +16,7 @@ companion to four sibling docs (see the orientation table in [section 0](#0-scop
 - [5. Subsystem E — worked design walkthroughs (NoPorts, at_talk)](#5-subsystem-e--worked-design-walkthroughs-noports-at_talk)
 - [6. Implementation notes & file-level pointers (consolidated)](#6-implementation-notes--file-level-pointers-consolidated)
 - [7. Trust boundary & residual threats](#7-trust-boundary--residual-threats)
+- [8. Subsystem F — inter-server PQ authentication (IS-1)](#8-subsystem-f--inter-server-pq-authentication-is-1)
 
 ---
 
@@ -1310,3 +1311,65 @@ closes the one-epoch window for the highest-assurance pairs.
   *delegated-monitor* path is the one that actually carries the guarantee — an atSign with
   no monitor (self- or delegated) gets **zero** KT protection. A real design must make
   independent delegated monitoring the default, not an opt-in.
+
+---
+
+## 8. Subsystem F — inter-server PQ authentication (IS-1)
+
+*The atServer↔atServer FROM/POL handshake, orthogonal to Subsystems A/B (which secure the
+client↔server data path). Project [IS-1](implementation-plan.md); tracking PR #2683
+(`at_server`, `pq/st/pq-interserver-comms`). Off the D1 GA critical path.*
+
+### 8.1 What it replaces
+
+Today the server-to-server FROM/POL handshake authenticates with a UUID challenge signed by
+RSA-2048 — the same Shor-vulnerable primitive #1889 exists to retire. IS-1 replaces it with a
+hybrid quantum-safe path and an automatic fallback so a mixed fleet needs no flag day:
+
+- **X-Wing KEM** (ML-KEM-768 + X25519) for key encapsulation.
+- **ML-DSA-65** for signing the inter-server certificate.
+- **Fallback to legacy UUID/RSA** for any peer that advertises no PQ cert.
+
+### 8.2 The handshake
+
+Certs and signing keys are looked up **live every handshake and never cached** (so cert rotation
+takes effect immediately):
+
+```
+Alice → Bob   from:@alice
+Bob   → Alice lookup:pq_xwing_cert@alice          (live, never cached)
+Bob   → Alice lookup:pq_signing_publickey@alice
+Bob:  ML-DSA-65.verify(cert) → xwing.encaps(cert.pk) → tag = HKDF-SHA256(ss, info = sessionID‖@alice)
+Bob   → Alice proof:sessionID@alice:pq:<ciphertext_b64>
+Alice: xwing.decaps(ciphertext) → same tag → saveCookie pq:<tag>
+Alice → Bob   pol
+Bob   → Alice lookup:sessionID@alice → tags equal ⇒ isPolAuthenticated = true
+```
+
+The raw shared secret never crosses the wire and is never persisted — only the HKDF
+key-confirmation tag is exchanged. `AT_DISABLE_PQ_AUTH=true` forces UUID; self-auth is always
+UUID; a peer with no PQ cert falls back to the UUID/RSA path.
+
+### 8.3 `PqKeyManager` (server-internal)
+
+A new `at_secondary_server` class — **not** an at_chops type — owns the ML-DSA-65 + X-Wing keypair
+lifecycle, cert generation and rotation (a 30-day grace window keeps the previous cert valid across
+a rotation), and the HKDF-SHA256 tag derivation. Its PQ secret keys join the protected-key set
+(delete/update verb protection).
+
+### 8.4 at_chops dependency (the gating prerequisite)
+
+IS-1 needs an at_chops API surface **not yet on `at_chops` trunk**: `XWingCert`, the resolver
+functions `resolveXWing` / `resolveMlDsa65`, and `at_algorithm.dart` exports.
+(`generateXWingKeyPair` / `generateMlDsa65KeyPair` already ship on trunk 3.4.0.) That surface lives
+on branch `pq/st/at-chops-pq-api` and **must be published — as part of, or after, the 3.4.0 slot
+([P-2](implementation-plan.md)) — before IS-1 can land without a workspace path override.** This is
+the single hard cross-package gate for the track.
+
+### 8.5 Threat scope
+
+IS-1 hardens the **inter-server channel** only; it is independent of the client-side `nskey` data
+path (Subsystem A) — a compromised server-to-server link and a compromised client-to-server link
+are different threats with different anchors. The pure-Dart fallback (ML-DSA resolves without
+libcrypto when `AT_CHOPS_LIBCRYPTO_PATH` is unset) keeps the track deployable on hosts without an
+OpenSSL build.
