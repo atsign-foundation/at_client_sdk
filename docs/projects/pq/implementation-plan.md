@@ -48,8 +48,8 @@ size, watch-outs, and a `coversD1` line tying it back to the D1 workstreams.
 - **Partition by package.** Four package-domain tracks keep concurrent PRs off each other's files:
   - **Track A — crypto primitives + providers:** `at_chops` (stateless core + HPKE) → the nskey data
     path providers (`at/nskey` + `at/symmetric/AES/GCM`), `secret_sharing/`, `crypto/group/`.
-  - **Track B — key management:** `at_auth` (`WritableAtKeys`, `AtKeysIo` widening, the WASM barrel
-    split) → the PQ enrollment-conveyance key.
+  - **Track B — key management:** `at_auth` (extend `AtKeys` in place, `AtKeysIo` runtime persistence, the
+    WASM barrel split) → the PQ enrollment-conveyance key.
   - **Track C — at_client crypto seam + migration:** `crypto.dart` / `crypto_runtime.dart` / `legacy/`,
     `AtClientPreference`; the publish ladder.
   - **Track D — storage + platform + consumers:** `LocalKeystoreAtKeysIo`, the updatable `.atKeys`
@@ -57,9 +57,9 @@ size, watch-outs, and a `coversD1` line tying it back to the D1 workstreams.
   Within `at_client/crypto/`, the file partition keeps A and C apart: **C** owns `crypto.dart`,
   `crypto_runtime.dart`, `legacy/`; **A** owns `crypto/group/`, `crypto/nskey/` (new), `secret_sharing/`.
   The nskey providers are mostly new files — low collision by construction.
-- **Land contracts first.** Merge the tiny interface PRs (the `pqSeal` signature, the `WritableAtKeys`
-  API, the `CryptoContext.keys` field) first, stubs OK, so every track compiles against stable shapes
-  and never blocks on another.
+- **Land contracts first.** Merge the tiny interface PRs (the `pqSeal` signature, the extended
+  `AtKeys`/`AtKeysIo` API, the `CryptoContext.keys` field) first, stubs OK, so every track compiles against
+  stable shapes and never blocks on another.
 - **Keep merges additive / flag-gated** so trunk stays releasable at every commit boundary.
 - **Every project needs a named owner.** Each project id (`P-1`, `SS-1a`, `B-1`, …) is assigned a single
   accountable owner before its first PR; owner names are **TBD** until assigned. The owner shepherds the
@@ -103,7 +103,7 @@ The file-partition/track detail and the `CryptoConfig`/`CryptoRuntime` mechanics
   [#1993 done]→  P-1 at_chops 3.3.0 (published)    P-2 mldsa65 verify (fold into unpublished 3.4.0)
                      │                                   │
   [#1930 done]→  S-2 CryptoContext.keys (additive)       │
-                 S-1 at_auth WritableAtKeys ─→ S-3 LocalKeystore/.atKeys updatable
+                 S-1 at_auth AtKeys/AtKeysIo extend-in-place ─→ S-3 LocalKeystore/.atKeys updatable
                                                   │
    Substrate (SS-*)                                │
    SS-0 land WP-SS substrate baseline (PR #2037, reworked to 1:1:1 / flat listns / no-write-path) ─┐
@@ -222,7 +222,9 @@ lifecycle); P-3's acceptance can only prove "published + fetchable," not cold-st
 ## 4. Phase S — Structural enablers / key management (S-1, S-2, S-3, S-5, S-6, KF-1)
 
 **Structural facts (stated once).** (1) `CryptoContext` is `{atClient}`, so the additive `keys` field has
-**nothing to deprecate**; (2) `WritableAtKeys` **subclasses** at_auth's `AtKeys` (the material holder); (3)
+**nothing to deprecate**; (2) at_auth's `AtKeys` is **extended in place** — additive PQ-safe methods with the
+legacy key fields/methods deprecated (no new holder class) — and `AtKeysIo` gains runtime persistence
+(ratified 2026-07-06, #2045 — see [decisions.md](decisions.md)); (3)
 `CryptoRuntime` resolves against the live `AtClientPreference.crypto`, and cached-client reuse adopts the
 new config (there is no `CryptoRegistry`).
 
@@ -230,27 +232,34 @@ new config (there is no `CryptoRegistry`).
 `P-1`/`pqSeal` publish gate is **already satisfied** (at_chops 3.3.0, published 2026-06-23), leaving the SS-0
 baseline (PR #2037) as its prerequisite (see [section 10](#10-cross-cutting-publish-gates-critical-path-wavesparallelism-testing)).
 
-### S-1 — at_auth: `WritableAtKeys` holder + `WrittenAtKeysIo` widening (API only); publish 3.2.0 · at_auth · M
-**Goal:** the single in-memory holder of every key (per-enrollment AND per-APKAM); interface-first.
+### S-1 — at_auth: extend `AtKeys` in place (additive PQ methods, deprecate legacy) + `AtKeysIo` runtime persistence (API only); publish 3.2.0 · at_auth · M
+**Goal:** extend the existing `AtKeys` in place so it holds every key (per-enrollment AND per-APKAM) via
+additive PQ-safe accessors while the legacy key fields deprecate; interface-first.
 **Builds on:** at_auth `AtKeys`. Additive only; gates nothing in Wave 2.
-**Deliverables → [design.md](design.md)** (structural design: WritableAtKeys/key stores): `WritableAtKeys
-extends AtKeys` (add/remove/write); widen `WrittenAtKeysIo` (plain `abstract`, externally *extended* by
-`KeychainAtKeysIo`) with add/remove/update + default impls; `InMemoryAtKeysIo`. ⚠️ `AtKeysIo` is `sealed`
-— the real break surface is `WrittenAtKeysIo`; concrete-default-on-abstract is the correct mitigation for
-its `extends`-users.
-**Acceptance → [acceptance.md](acceptance.md):** existing onboard/auth suites green; `WritableAtKeys`
-add→read→remove; `InMemoryAtKeysIo` round-trip (persistent round-trip proven once **S-3** wires the stores).
+**Deliverables → [design.md](design.md)** (structural design: extend `AtKeys`/`AtKeysIo` in place): keep the
+`AtKeys` class hierarchy as-is and extend it **additively** with PQ-safe methods, **deprecating** the legacy
+key fields/methods (they stay for back-compat so call sites migrate over time); extend `AtKeysIo` with
+**runtime persistence** (`append()`, `save()`, …) — new methods ship with default impls so existing
+implementers don't break — so it stays the single contact point keeping runtime `AtKeys` objects and the
+persisted keyfile in-line. Concrete impls (`InMemoryAtKeysIo`, the keychain/file `AtKeysIo`) remain
+`AtKeysIo` implementations. (Supersedes the earlier `WritableAtKeys` holder, #2045 — ratified 2026-07-06,
+see [decisions.md](decisions.md).)
+**Acceptance → [acceptance.md](acceptance.md):** existing onboard/auth suites green; the extended `AtKeys`
+PQ add→read→remove (legacy fields still readable via the deprecated accessors); `InMemoryAtKeysIo` round-trip
+(persistent round-trip proven once **S-3** wires the stores).
 **Effort:** M.
 **Watch-outs:** ⚠️ **version** — pub.dev latest at_auth is **3.1.0**, in-tree is **3.1.1** (unshipped).
-Publish 3.1.1 first **or** fold `WritableAtKeys` under the unshipped slot before cutting 3.2.0 (Open
-decision #D).
+Publish 3.1.1 first **or** fold the `AtKeys`/`AtKeysIo` extensions under the unshipped slot before cutting
+3.2.0 (Open decision #D).
 **coversD1:** D1-S S2.
 
 ### S-2 — at_client: `CryptoContext.keys` additive field (interface-first only) · at_client · S (≈1 PR)
 **Goal:** the tiny field the data path compiles against.
-**Builds on:** #1930 + S-1's `WritableAtKeys` type.
-**Deliverables → [design.md](design.md)** (CryptoProvider seam): add `WritableAtKeys keys` to
-`CryptoContext` (additive); `CryptoRuntime` threads it into provider calls.
+**Builds on:** #1930 + S-1's extended `AtKeys` / injected `AtKeysIo`.
+**Deliverables → [design.md](design.md)** (CryptoProvider seam): add an `AtKeysIo keys` field to
+`CryptoContext` (additive) — the provider seam is injected the `AtKeysIo` (the key source) and yields the
+extended `AtKeys`; `CryptoRuntime` threads it into provider calls (ratified 2026-07-06, #2045 — see
+[decisions.md](decisions.md)).
 **Acceptance → [acceptance.md](acceptance.md):** existing crypto/legacy round-trips green; behaviour-neutral
 (no wire/stored-value change); Mode-B regression retained.
 **Effort:** S.
@@ -264,10 +273,10 @@ Resolve where `context.keys` is sourced at construction (overlaps S-3).
 ### S-3 — at_client/at_auth: `LocalKeystoreAtKeysIo` + updatable `.atKeys`/keychain · at_client, at_auth, at_client_flutter · L
 **Goal:** durable, updatable key-storage homes (bootstrap→file/keychain, distributed/rotating→keystore,
 ephemeral→memory). Stores are **dumb** — convergence stays in the substrate.
-**Builds on:** S-1's widened update API.
+**Builds on:** S-1's extended `AtKeysIo` runtime-persistence API.
 **Deliverables → [design.md](design.md)** (key stores): `LocalKeystoreAtKeysIo` over the 5.x keystore; make
-`FileAtKeysIo` updatable (re-wrap the self-encryption key on rewrite, atomic write + backup); compose
-`WritableAtKeys` at AtClient construction.
+`FileAtKeysIo` updatable (re-wrap the self-encryption key on rewrite, atomic write + backup); compose the
+extended `AtKeys` (via its injected `AtKeysIo`) at AtClient construction.
 **Acceptance → [acceptance.md](acceptance.md):** post-onboarding key add persists + survives close/reopen;
 ephemeral stays in-memory; **migration test** on a v(N-1) `.atKeys`/store fixture (backend is **Hive**
 today, not SQLite — keep the test backend-agnostic; name any legacy box/table explicitly); a **keychain
@@ -279,7 +288,7 @@ suite at every commit boundary (resource lifecycle). Does **not** gate the subst
 
 ### S-5 — at_auth 4.0.0: WASM barrel split · at_auth · L  *(parallel, off the GA critical path)*
 **Goal:** make the at_auth core WASM-safe (the one breaking major in the program).
-**Builds on:** S-3 (so `WritableAtKeys` + updatable stores bake on 3.2.0 before the breaking cut).
+**Builds on:** S-3 (so the extended `AtKeys`/`AtKeysIo` + updatable stores bake on 3.2.0 before the breaking cut).
 **Deliverables → [design.md](design.md)** (WASM barrel): move `FileAtKeysIo` + the `dart:io` socket probe
 to a new `at_auth_io.dart` barrel; drop the `atKeysIo ??= FileAtKeysIo()` default (require injection);
 registrar on `package:http`; publish 4.0.0.
@@ -758,8 +767,8 @@ out of scope here** — see [roadmap.md](roadmap.md) for the D2 trajectory.
 
 ### (a) Publish gates
 - `at_chops` (P-1, P-2) and `at_commons` (SS-1a) publish **before** `at_server`/consumers bump pins.
-- `at_auth` is split **additive-3.2.0** (S-1) then **breaking-4.0.0** (S-5) so `WritableAtKeys` bakes before
-  the barrel cut.
+- `at_auth` is split **additive-3.2.0** (S-1) then **breaking-4.0.0** (S-5) so the `AtKeys`/`AtKeysIo`
+  extend-in-place bakes before the barrel cut.
 - `at_client` stays **minor 3.14.x** through D1 GA; the v4 flip (R-2) is the final gated cutover.
 
 **Package versions & release sequencing** (single reference — publish in dependency order; two majors —
@@ -770,7 +779,7 @@ out of scope here** — see [roadmap.md](roadmap.md) for the D2 trajectory.
 | 1  | `at_chops`          | minor `3.2.1 → 3.3.0` **(published 2026-06-23, done)** | P-1    | stateless functional core + HPKE `pqSeal`/`pqOpen`; `@Deprecated AtChopsImpl` shim |
 | 2  | `at_chops`          | minor `3.3.0 → 3.4.0` **(bumped on trunk via #2030, unpublished)** | P-2 | #2030 (`at_chops_ffi` barrel + `AtPqc` + `AtSignatureAlgorithm`) landed the 3.4.0 bump on trunk 2026-07-03 (+ #2046), assembled-but-unpublished; **P-2 folds its `mldsa65` verify branch into this same 3.4.0 before publish**; #2039 (AES-GCM FFI) still draft. Minor under the one-time semver exemption ([decisions.md](decisions.md) 2026-07-03) |
 | 3  | `at_commons`        | minor `5.11.0 → 5.12.0` **(published 2026-07-04, done)** | SS-1a | `EnrollParams.metadata` + `signingAlgo`; flattened `listns`; pkam `mldsa65` literal |
-| 4  | `at_auth`           | minor `3.1.1 → 3.2.0`         | S-1        | additive: `WritableAtKeys`; `AtKeysIo`/`WrittenAtKeysIo` widened; `InMemoryAtKeysIo` |
+| 4  | `at_auth`           | minor `3.1.1 → 3.2.0`         | S-1        | additive: extend `AtKeys` in place (deprecate legacy); `AtKeysIo` runtime persistence; `InMemoryAtKeysIo` |
 | 5  | `at_auth`           | **major `3.2.0 → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
 | 6  | `at_client`         | minor `3.13.0 → 3.14.0`       | S-2…B-2    | `at_auth ^4.0.0`; `CryptoContext.keys`; nskey data path; rotation. **= D1 GA** ⚠️ pub.dev latest is **3.12.0**, in-tree **3.13.0** (unshipped) — publish the in-progress slot first **or** fold; decide at execution against pub.dev |
 | 7  | `at_client`         | **major `3.14.0 → 4.0.0`**    | R-2        | flip `disallowLegacyEncryption` default → true; selfEncryptionKey stop-existing; dead-code removal |
@@ -806,14 +815,14 @@ dependency, `P-1`/`pqSeal` on `at_chops` 3.3.0, **shipped to pub.dev 2026-06-23*
 | Gate item                        | Blocks the substrate? |
 |----------------------------------|-----------------------|
 | P-1 (at_chops 3.3.0 / `pqSeal`)  | No — already published (2026-06-23); substrate ungated |
-| S-1 (`WritableAtKeys` + `AtKeysIo`) | No |
+| S-1 (`AtKeys`/`AtKeysIo` extend-in-place) | No |
 | S-2 (`CryptoContext.keys`)       | No — sibling of the substrate on the critical path, not a prerequisite |
 | S-3 (`LocalKeystoreAtKeysIo`)    | No |
 
 **Merge discipline.** Per-package PRs to **trunk** in dependency order (no mega-PRs); rebase on trunk daily;
 keep PRs small + additive / flag-gated so trunk stays releasable; prove cross-package combinations with an
 **ephemeral** integration branch (or CI), not a standing one. **Interface-first** — freeze the `pqSeal`
-signature (P-1), the `WritableAtKeys` API (S-1), and the `CryptoContext.keys` field (S-2) first (stubs OK).
+signature (P-1), the extended `AtKeys`/`AtKeysIo` API (S-1), and the `CryptoContext.keys` field (S-2) first (stubs OK).
 Integration is **continuous**, not a final step: each project merges to trunk when complete and publishes as
 needed.
 
@@ -841,7 +850,7 @@ Single authoritative map of D1 items, workstreams, and use cases to projects.
 | D1 item / workstream / UC | Project(s) |
 |---|---|
 | D1-S S1 (at_chops stateless) | P-1 |
-| D1-S S2/S3 (WritableAtKeys, stores) | S-1, S-3 |
+| D1-S S2/S3 (AtKeys/AtKeysIo extend-in-place, stores) | S-1, S-3 |
 | D1-S S4 (WASM split) | S-5 |
 | D1-S S5 (CryptoContext.keys) | S-2 |
 | D1-S S6 (consumer bumps) | S-6 |

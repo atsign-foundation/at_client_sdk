@@ -12,7 +12,7 @@ companion to four sibling docs (see the orientation table in [section 0](#0-scop
 - [1. Subsystem A — D1 nskey data path](#1-subsystem-a--d1-nskey-data-path)
 - [2. Subsystem B — the secret-sharing substrate (WP-SS)](#2-subsystem-b--the-secret-sharing-substrate-wp-ss)
 - [3. Subsystem C — at_chops PQ primitives](#3-subsystem-c--at_chops-pq-primitives)
-- [4. Subsystem D — structural design (CryptoProvider seam, WritableAtKeys / key stores, WASM barrel)](#4-subsystem-d--structural-design-cryptoprovider-seam-writableatkeys--key-stores-wasm-barrel)
+- [4. Subsystem D — structural design (CryptoProvider seam, AtKeys/AtKeysIo & key stores, WASM barrel)](#4-subsystem-d--structural-design-cryptoprovider-seam-atkeysatkeysio--key-stores-wasm-barrel)
 - [5. Subsystem E — worked design walkthroughs (NoPorts, at_talk)](#5-subsystem-e--worked-design-walkthroughs-noports-at_talk)
 - [6. Implementation notes & file-level pointers (consolidated)](#6-implementation-notes--file-level-pointers-consolidated)
 - [7. Trust boundary & residual threats](#7-trust-boundary--residual-threats)
@@ -59,7 +59,7 @@ case, this doc links `acceptance.md` and does not re-narrate the Given/When/Then
 - **[Subsystem A — D1 nskey data path](#1-subsystem-a--d1-nskey-data-path)** (§1) — the three layers, three providers, key shapes, CK model, cold-start, FS/rotation levers, and migration/rollout + the `disallowLegacyEncryption` flag (§1.8).
 - **[Subsystem B — the secret-sharing substrate (WP-SS)](#2-subsystem-b--the-secret-sharing-substrate-wp-ss)** (§2) — kpid addressing, `__ssenv`, push/pull, the discovery verb, the enrollment record, the self-retrofit flow.
 - **[Subsystem C — at_chops PQ primitives](#3-subsystem-c--at_chops-pq-primitives)** (§3) — X-Wing, `pqSeal`/`pqOpen`, ML-DSA verify.
-- **[Subsystem D — structural design](#4-subsystem-d--structural-design-cryptoprovider-seam-writableatkeys--key-stores-wasm-barrel)** (§4) — the CryptoProvider seam, `WritableAtKeys`/key stores, the WASM barrel split.
+- **[Subsystem D — structural design](#4-subsystem-d--structural-design-cryptoprovider-seam-atkeysatkeysio--key-stores-wasm-barrel)** (§4) — the CryptoProvider seam, `AtKeys`/`AtKeysIo` & key stores, the WASM barrel split.
 - **[Subsystem E — worked design walkthroughs](#5-subsystem-e--worked-design-walkthroughs-noports-at_talk)** (§5) — NoPorts, at_talk.
 - **[Implementation notes & file-level pointers](#6-implementation-notes--file-level-pointers-consolidated)** (§6) — the consolidated `file:line` build map.
 
@@ -134,7 +134,7 @@ Notes:
   `recipientKind: "root-pqpublickey"` ([§1.4](#14-the-nskey-and-the-pqpublickey-root)).
 
 (The seam itself — `CryptoRuntime`, `CryptoConfig`, `appMetadata.providerId`
-routing — is the structural subsystem [§4](#4-subsystem-d--structural-design-cryptoprovider-seam-writableatkeys--key-stores-wasm-barrel).)
+routing — is the structural subsystem [§4](#4-subsystem-d--structural-design-cryptoprovider-seam-atkeysatkeysio--key-stores-wasm-barrel).)
 
 ### 1.3 Keys & key shapes
 
@@ -691,7 +691,8 @@ sequence in [`acceptance.md`](acceptance.md).)
 4. The new client **registers** its key package (already carried in step 1's
    `EnrollParams.metadata` — no post-enrollment write), then **pulls** `pqpublickey`
    + the namespace nskey privates over the substrate ([§2.2](#22-secretstore-push--pull-primitives)), **verifies
-   correspondence**, and stores them in the local keystore (`WritableAtKeys`, [§4](#4-subsystem-d--structural-design-cryptoprovider-seam-writableatkeys--key-stores-wasm-barrel)).
+   correspondence**, and stores them in the local keystore (the extended `AtKeys`,
+   via its injected `AtKeysIo`, [§4](#4-subsystem-d--structural-design-cryptoprovider-seam-atkeysatkeysio--key-stores-wasm-barrel)).
 
 **Each cloned pre-PQ keyfile retrofits to its OWN distinct `enrollmentId`** (1:1:1).
 A keyfile copied onto a second host mints its own single, *different* PQ APKAM
@@ -772,7 +773,7 @@ the cold-start fallback recipient for the nskey data path — [§1.4](#14-the-ns
 
 ---
 
-## 4. Subsystem D — structural design (CryptoProvider seam, WritableAtKeys / key stores, WASM barrel)
+## 4. Subsystem D — structural design (CryptoProvider seam, AtKeys/AtKeysIo & key stores, WASM barrel)
 
 The seams every other subsystem is built on. The S-1..S-6 *project* sequencing is
 in [`implementation-plan.md`](implementation-plan.md); this section owns the *design*.
@@ -805,16 +806,21 @@ CryptoProvider { id; encrypt(CryptoContext, AtKey, String) → String; decrypt(C
 routed provider). `shouldEncrypt = false` is a true no-crypto path on write and
 read — secret-sharing envelopes and key-package copies are stored that way.
 
-### `WritableAtKeys` + key stores
+### `AtKeys`/`AtKeysIo` extend-in-place + key stores
 
-**`WritableAtKeys`** (working name; deferred — not yet wired) is a **subclass of
-at_auth's `AtKeys`** (the key-material holder) adding `add` / `remove` / `write`.
-It is the single in-memory holder of every key the client knows (per-enrollment
-*and* per-APKAM), which providers read keys from and mint/add/write through.
-*(NOT a wrapper over `AtChops` — `AtKeys` already produces one via `toAtChops()`
-and carries a `metadata` stash.)* `CryptoContext` gains a `WritableAtKeys keys`
-field — **additive** (`CryptoContext` is `{atClient}`, with no `atChops` field). Convergence (newest-wins / pull recovery)
-stays in the secret-sharing substrate; the stores are **dumb** key-value backends.
+The existing **`AtKeys`** is **extended in place** — additive PQ-safe methods
+(`add` / `remove` / `write`), with the legacy key fields/methods **deprecated** but
+retained for back-compat so call sites migrate over time (ratified 2026-07-06, #2045
+— see [`decisions.md`](decisions.md); supersedes the earlier `WritableAtKeys` holder
+working name). It stays the single in-memory holder of every key the client knows
+(per-enrollment *and* per-APKAM), which providers read keys from and mint/add/write
+through. *(NOT a wrapper over `AtChops` — `AtKeys` already produces one via
+`toAtChops()` and carries a `metadata` stash.)* The provider seam is injected an
+**`AtKeysIo`** (the key source, extended with runtime persistence — `append()` /
+`save()`) alongside `(AtClient, AtChops)`; `CryptoContext` carries the `AtKeysIo` —
+**additive** (`CryptoContext` is `{atClient}`, with no `atChops` field). Convergence
+(newest-wins / pull recovery) stays in the secret-sharing substrate; the stores are
+**dumb** key-value backends.
 
 **Key taxonomy → store routing** (explicit named stores, no magic router):
 
@@ -828,8 +834,8 @@ Store homes: `InMemoryAtKeysIo` + the interfaces in `at_auth` (main barrel);
 `FileAtKeysIo` (updatable) in `at_auth_io.dart`; `LocalKeystoreAtKeysIo` in
 `at_client` (needs at_persistence, injected down); `KeychainAtKeysIo` in
 `at_client_flutter`. `.atKeys` / keychain are made **updatable** (re-wrap the
-self-enc key on rewrite; atomic write + backup). `WritableAtKeys` is born at
-AtClient construction and immutable after.
+self-enc key on rewrite; atomic write + backup). The extended `AtKeys` (with its
+injected `AtKeysIo`) is born at AtClient construction and immutable after.
 
 ### WASM barrel split (`at_auth 4.0.0`)
 
@@ -837,8 +843,8 @@ AtClient construction and immutable after.
 authenticates via at_auth; only onboarding/setup is desktop/CLI). `dart2wasm`
 errors on any `dart:io` reachable from the entry point, so:
 
-- **`at_auth.dart`** (main barrel, WASM-safe): `AtKeys` / `WritableAtKeys`, the
-  `AtKeysIo` / `WrittenAtKeysIo` interfaces, `InMemoryAtKeysIo`, the auth core,
+- **`at_auth.dart`** (main barrel, WASM-safe): `AtKeys` (extended in place), the
+  `AtKeysIo` interfaces, `InMemoryAtKeysIo`, the auth core,
   and the registrar **on `package:http`** (no `dart:io HttpClient`, so it is WASM-safe).
 - **`at_auth_io.dart`** (new non-wasm barrel): `FileAtKeysIo` + the `dart:io`
   socket-probe default. CLI and `at_client_flutter`'s `file_picker` import it —
@@ -881,7 +887,7 @@ missing map = an old daemon) — exactly how `twinKeys` rolled out. Two new
 
 The crucial subtlety: a client must **NOT** flip its default provider for traffic
 to a daemon that can't decrypt it. `PutRequestOptions.cryptoProviderId` (the
-per-operation override from the M0 seam, [§4](#4-subsystem-d--structural-design-cryptoprovider-seam-writableatkeys--key-stores-wasm-barrel)) is the per-destination gate.
+per-operation override from the M0 seam, [§4](#4-subsystem-d--structural-design-cryptoprovider-seam-atkeysatkeysio--key-stores-wasm-barrel)) is the per-destination gate.
 
 **One session, step by step:**
 
@@ -1041,7 +1047,8 @@ public/private correspondence check is likewise missing
 (`pairwise_secret_sharing.dart:360-407`); the root `pqpublickey`
 no-namespace serve exception is missing (`grep pqpublickey` = 0); durable storage
 is deferred (in-memory `SecretStore` + a pluggable persistence hook,
-`secret_store.dart:62`; `WritableAtKeys` not wired); anti-storm is a plain rate cap
+`secret_store.dart:62`; the extended `AtKeys`/`AtKeysIo` runtime persistence not
+wired); anti-storm is a plain rate cap
 without jitter (`:539`). `pushSecretToNamespaceMembers` is untested. Finally, the
 built `VerbEnrollmentDirectory` still speaks the **retired** wire shape — it parses
 a nested `apkam[]` response and performs an `enroll:metadata` registration write —

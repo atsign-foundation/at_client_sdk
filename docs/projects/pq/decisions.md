@@ -449,7 +449,8 @@ timeline rows).
   `AtChops.verify` path only if a high-level caller needs it; (4) re-confirm the
   at_commons version floor at SS-1a (pub.dev / last release tag is authoritative,
   not in-tree precedent); plus the at_auth version question in S-1 (publish 3.1.1
-  first vs fold `WritableAtKeys` under the unshipped slot). (The WP-SS "where does
+  first vs fold the `AtKeys`/`AtKeysIo` extend-in-place change under the unshipped
+  slot). (The WP-SS "where does
   `register()` get called?" decision is resolved by #B above.)
 - **#E — S-2 scope / SoT conflict.** `crypto_impl_plan` §3-S5 ("migrate legacy to
   `context.keys`") vs §7-WP3 ("legacy unchanged for now") conflict. This plan
@@ -570,6 +571,27 @@ each is binding. The code-side alignment landed via #2046 (merged 2026-07-03 int
   breaks for web consumers. Both backends stay wire-compatible (pinned by
   cross-backend interop tests), so keys generated pure-Dart are usable by the
   FFI backends and vice versa.
+
+### Rulings — 2026-07-06 (planning day)
+
+- **AtKeys: extend in place, deprecate legacy — supersedes the `WritableAtKeys`
+  holder** ([#2045](https://github.com/atsign-foundation/at_client_sdk/issues/2045)).
+  Keep the existing `AtKeys` class hierarchy **as-is** and extend it
+  **additively** with PQ-safe methods; **deprecate** the legacy key
+  fields/methods (they stay for back-compat, so call sites migrate to the
+  PQ-safe methods over time). `AtKeysIo` is extended with **runtime
+  persistence** (`append()`, `save()`, …) and remains the single contact point
+  that keeps runtime `AtKeys` objects and the persisted keyfile in-line.
+  Providers are injected **(`AtClient`, `AtKeysIo`, `AtChops`)**. There is
+  **no** new `WritableAtKeys` holder class and **no** separate `WrittenAtKeysIo`
+  widening — `AtKeysIo` itself is widened. *Rationale:* much simpler migration —
+  the code contract stays the same (deprecated fields/methods remain), the
+  deprecation path is clear-cut, and the churn is far smaller than carving a new
+  holder hierarchy. *Affects:* **S-1** (reframed from "new `WritableAtKeys`
+  holder" to "extend `AtKeys`/`AtKeysIo` in place"), **S-2**, **S-3**, and
+  design §4. *Open question (not decided):* whether `AtClient` needs any concept
+  of `AtKeys` outside the provider seam at all (encrypt/decrypt and auth already
+  reach keys via the injected `AtKeysIo`).
 
 ---
 
