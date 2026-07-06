@@ -7,8 +7,6 @@ export 'src/algorithm/default_hashing_algo.dart';
 export 'src/algorithm/default_signing_algo.dart';
 export 'src/algorithm/encryption/aes.dart';
 export 'src/algorithm/encryption/aes_gcm.dart';
-export 'src/algorithm/encryption/aes_gcm_ffi_algo.dart';
-export 'src/algorithm/encryption/ml_kem_768_ffi.dart';
 export 'src/algorithm/encryption/ml_kem_768_pure_dart.dart';
 export 'src/algorithm/encryption/rsa.dart';
 export 'src/algorithm/encryption/x25519_pure_dart_algo.dart';
