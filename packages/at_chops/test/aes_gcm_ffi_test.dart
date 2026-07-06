@@ -68,7 +68,7 @@ void main() {
 
       final Uint8List tampered = Uint8List.fromList(encrypted);
       tampered[0] ^= 0x01;
-      expect(() => algo.decrypt(tampered, iv: iv),
+      await expectLater(algo.decrypt(tampered, iv: iv),
           throwsA(isA<AtDecryptionException>()));
     });
 
@@ -81,7 +81,7 @@ void main() {
 
       final Uint8List tampered = Uint8List.fromList(encrypted);
       tampered[encrypted.length - 1] ^= 0x01;
-      expect(() => algo.decrypt(tampered, iv: iv),
+      await expectLater(algo.decrypt(tampered, iv: iv),
           throwsA(isA<AtDecryptionException>()));
     });
 
@@ -93,7 +93,7 @@ void main() {
       final Uint8List encrypted = await algo.encrypt(plain, iv: iv);
 
       final InitialisationVector otherIv = InitialisationVector.random(12);
-      expect(() => algo.decrypt(encrypted, iv: otherIv),
+      await expectLater(algo.decrypt(encrypted, iv: otherIv),
           throwsA(isA<AtDecryptionException>()));
     });
 
@@ -104,7 +104,7 @@ void main() {
       final Uint8List plain = Uint8List.fromList(utf8.encode('secret'));
 
       final Uint8List encrypted = await makeAlgo(key1).encrypt(plain, iv: iv);
-      expect(() => makeAlgo(key2).decrypt(encrypted, iv: iv),
+      await expectLater(makeAlgo(key2).decrypt(encrypted, iv: iv),
           throwsA(isA<AtDecryptionException>()));
     });
 
@@ -112,15 +112,17 @@ void main() {
       final AESKey key = AESKey.generate(32);
       final AesGcm256FfiAlgo algo = makeAlgo(key);
       final Uint8List plain = Uint8List.fromList([1, 2, 3]);
-      expect(() => algo.encrypt(plain), throwsA(isA<AtEncryptionException>()));
-      expect(() => algo.encrypt(plain, iv: InitialisationVector.random(16)),
+      await expectLater(
+          algo.encrypt(plain), throwsA(isA<AtEncryptionException>()));
+      await expectLater(
+          algo.encrypt(plain, iv: InitialisationVector.random(16)),
           throwsA(isA<AtEncryptionException>()));
     });
 
     test('a key that is not 256 bits is rejected', () async {
       final AesGcm256FfiAlgo algo = makeAlgo(AESKey.generate(16));
-      expect(
-          () => algo.encrypt(Uint8List.fromList([1]),
+      await expectLater(
+          algo.encrypt(Uint8List.fromList([1]),
               iv: InitialisationVector.random(12)),
           throwsA(isA<AtEncryptionException>()));
     });
@@ -147,8 +149,8 @@ void main() {
 
         final Uint8List encrypted =
             await algo.encrypt(plain, iv: iv, aad: utf8.encode('header-A'));
-        expect(
-            () => algo.decrypt(encrypted, iv: iv, aad: utf8.encode('header-B')),
+        await expectLater(
+            algo.decrypt(encrypted, iv: iv, aad: utf8.encode('header-B')),
             throwsA(isA<AtDecryptionException>()));
       });
     });
