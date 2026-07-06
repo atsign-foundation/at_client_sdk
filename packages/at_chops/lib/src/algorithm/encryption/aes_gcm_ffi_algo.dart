@@ -132,13 +132,16 @@ final class AesGcm256FfiAlgo
           calloc<Uint8>(plainData.isEmpty ? 1 : plainData.length);
       final Pointer<Int32> outLen = calloc<Int32>();
       try {
-        if (_encryptUpdate(ctx, outBuf, outLen, plainBuf, plainData.length) <=
-            0) {
+        final int encLen;
+        try {
+          if (_encryptUpdate(ctx, outBuf, outLen, plainBuf, plainData.length) <=
+              0) {
+            throw StateError('EVP_EncryptUpdate (plaintext) failed');
+          }
+          encLen = outLen.value;
+        } finally {
           calloc.free(plainBuf);
-          throw StateError('EVP_EncryptUpdate (plaintext) failed');
         }
-        calloc.free(plainBuf);
-        final int encLen = outLen.value;
 
         // 6. Finalise (GCM produces no extra output here, but required).
         final Pointer<Uint8> finalBuf = calloc<Uint8>(16);
@@ -247,13 +250,16 @@ final class AesGcm256FfiAlgo
           calloc<Uint8>(cipherText.isEmpty ? 1 : cipherText.length);
       final Pointer<Int32> outLen = calloc<Int32>();
       try {
-        if (_decryptUpdate(ctx, outBuf, outLen, ctBuf, cipherText.length) <=
-            0) {
+        final int decLen;
+        try {
+          if (_decryptUpdate(ctx, outBuf, outLen, ctBuf, cipherText.length) <=
+              0) {
+            throw StateError('EVP_DecryptUpdate (ciphertext) failed');
+          }
+          decLen = outLen.value;
+        } finally {
           calloc.free(ctBuf);
-          throw StateError('EVP_DecryptUpdate (ciphertext) failed');
         }
-        calloc.free(ctBuf);
-        final int decLen = outLen.value;
 
         // 6. Set expected tag before finalise.
         final Pointer<Uint8> tagBuf = calloc<Uint8>(tagLength);
