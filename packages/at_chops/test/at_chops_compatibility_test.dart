@@ -262,6 +262,32 @@ void main() {
       expect(tamperedVerified, false);
     });
 
+    test(
+        'Test AtChopsImpl._getVerificationAlgorithm dispatches mldsa65 signingAlgoType without throwing',
+        () async {
+      final encryptionKeypair = AtChopsUtil.generateAtEncryptionKeyPair();
+      final atChopsKeys = AtChopsKeys.create(encryptionKeypair, null);
+      final atChops = AtChopsImpl(atChopsKeys);
+
+      final algo = MlDsa65PureDartAlgo();
+      final keyPair = await algo.generateKeyPair();
+      final data = Uint8List.fromList(utf8.encode('mldsa65 dispatch test'));
+      final signature =
+          await algo.signBytes(data, secretKey: keyPair.secretKey);
+
+      AtSigningVerificationInput verificationInput = AtSigningVerificationInput(
+          data, signature, base64Encode(keyPair.publicKey));
+      verificationInput.signingAlgoType = SigningAlgoType.mldsa65;
+      // No signingAlgorithm/signingMode set, so this only matches the
+      // mldsa65 branch — every other branch in _getVerificationAlgorithm
+      // falls through to `throw AtSigningVerificationException(...)`.
+      // This only proves the synchronous branch selection; it does not
+      // (and cannot reliably) assert the verification result, since
+      // AtChopsImpl.verify() is sync but MlDsa65PureDartAlgo.verify() is
+      // async — the unawaited Future ends up in AtSigningResult.result.
+      expect(() => atChops.verify(verificationInput), returnsNormally);
+    });
+
     test('Test sign() and verify() with default algorithms', () {
       final data = 'testData';
       final encryptionKeypair = AtChopsUtil.generateAtEncryptionKeyPair();
