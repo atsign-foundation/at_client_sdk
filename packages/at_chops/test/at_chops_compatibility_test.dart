@@ -243,24 +243,23 @@ void main() {
 
   group('A group of tests for data signing and verification', () {
     test(
-        'Test verify() dispatches mldsa65 signingAlgoType to MlDsa65PureDartAlgo',
+        'Test MlDsa65PureDartAlgo algorithm-level verifyBytes accepts a valid signature and rejects a tampered one',
         () async {
-      final encryptionKeypair = AtChopsUtil.generateAtEncryptionKeyPair();
-      final atChopsKeys = AtChopsKeys.create(encryptionKeypair, null);
-      final atChops = AtChopsImpl(atChopsKeys);
-
       final algo = MlDsa65PureDartAlgo();
       final keyPair = await algo.generateKeyPair();
       final data = Uint8List.fromList(utf8.encode('mldsa65 dispatch test'));
       final signature =
           await algo.signBytes(data, secretKey: keyPair.secretKey);
 
-      AtSigningVerificationInput verificationInput = AtSigningVerificationInput(
-          data, signature, base64Encode(keyPair.publicKey));
-      verificationInput.signingAlgoType = SigningAlgoType.mldsa65;
-      // No verificationInput.signingAlgorithm set — forces dispatch through
-      // AtChopsImpl._getVerificationAlgorithm's mldsa65 branch.
-      expect(() => atChops.verify(verificationInput), returnsNormally);
+      final verified = await algo.verifyBytes(data,
+          signature: signature, publicKey: keyPair.publicKey);
+      expect(verified, true);
+
+      final tamperedData =
+          Uint8List.fromList(utf8.encode('mldsa65 tampered data'));
+      final tamperedVerified = await algo.verifyBytes(tamperedData,
+          signature: signature, publicKey: keyPair.publicKey);
+      expect(tamperedVerified, false);
     });
 
     test('Test sign() and verify() with default algorithms', () {
