@@ -14,6 +14,8 @@ import 'package:at_chops/src/key/impl/aes_key.dart';
 /// Auto-resolves FFI vs pure-Dart PQ backends; libcrypto probed once on first access.
 abstract final class AtPqc {
   static final DynamicLibrary? _lib = tryLoadLibCrypto();
+  static final bool _aesGcmSupported =
+      _lib != null && libCryptoSupportsAesGcm(_lib!);
 
   /// X-Wing hybrid KEM — FFI when available, else [XWingPureDartAlgo].
   static final AtKemAlgorithm xWing =
@@ -41,7 +43,7 @@ abstract final class AtPqc {
   /// Do not downcast to the concrete type — it is an implementation detail.
   static SymmetricEncryptionAlgorithm<Uint8List, Uint8List> aesGcm256(
           AESKey key) =>
-      (_lib != null && libCryptoSupportsAesGcm(_lib!))
+      _aesGcmSupported
           ? AesGcm256FfiAlgo.fromLib(_lib!, key)
           : AesGcm256EncryptionAlgo(key);
 }
