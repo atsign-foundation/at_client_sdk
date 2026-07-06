@@ -100,7 +100,7 @@ The file-partition/track detail and the `CryptoConfig`/`CryptoRuntime` mechanics
 
 ```
                  ┌──────────────────────── PQ primitives ───────────────────────┐
-  [#1993 done]→  P-1 at_chops 3.3.0 (published)    P-2 mldsa65 verify (fold into unpublished 3.4.0)
+  [#1993 done]→  P-1 at_chops 3.3.0 (published)    P-2 mldsa65 verify (landed on trunk #2056; 3.4.0 unpublished)
                      │                                   │
   [#1930 done]→  S-2 CryptoContext.keys (additive)       │
                  S-1 at_auth AtKeys/AtKeysIo extend-in-place ─→ S-3 LocalKeystore/.atKeys updatable
@@ -165,7 +165,8 @@ tamper→`authFailure` / info-aad-mismatch green; downstream construction sites 
 published 3.3.0 surface. Don't break the deprecated sync verify path.
 **coversD1:** D1-S S1 + D1-A.
 
-### P-2 — at_chops: wire `mldsa65` into the verification branch; publish a NEW minor · at_chops · M (≈1 PR)
+### P-2 — at_chops: wire `mldsa65` into the verification branch; publish a NEW minor — **verify branch LANDED on trunk 2026-07-06 (#2056, closes #2050); completes on the 3.4.0 publish** · at_chops · M (≈1 PR)
+**Status:** the `_getVerificationAlgorithm` `mldsa65` branch **landed on trunk via #2056** (2026-07-06), in the already-bumped **unpublished** at_chops 3.4.0. The only remaining gate is publishing 3.4.0 (shared with #2030's content; #2039 optional).
 **Goal:** the one missing ML-DSA verification branch (the enum member + algo classes already ship in 3.3.0).
 **Builds on:** — (independent root; parallel to P-1). ⚠️ The `_getVerificationAlgorithm` `mldsa65` branch
 **did NOT make the 3.3.0 publish** — trunk `at_chops` has no ML-DSA verify branch. The **unpublished 3.4.0**
@@ -177,8 +178,9 @@ into that existing 3.4.0 before it publishes** — not a fresh new minor. (Decis
 minor. **The 3.4.0 slot is already open on trunk:** #2030 (the `at_chops_ffi` barrel + `AtPqc`
 auto-resolver + `AtSignatureAlgorithm` classes) **merged to trunk 2026-07-03** (+ #2046 review-fixes) and
 bumped `at_chops` to 3.4.0, **assembled-but-unpublished** under the one-time semver exemption. P-2's
-`_getVerificationAlgorithm` `mldsa65` branch is the one remaining deliverable to add into that same 3.4.0
-before publish; #2039 (AES-GCM FFI) is still **draft** and folds into 3.4.0 too if it lands first. Those
+`_getVerificationAlgorithm` `mldsa65` branch **landed on trunk via #2056 (2026-07-06)**, in that same
+unpublished 3.4.0; the remaining gate is the publish. #2039 (AES-GCM FFI) is still **draft** and folds into
+3.4.0 too if it lands first. Those
 FFI PRs realise the **FFI-auto-resolve-default** policy
 (FFI when available, pure-Dart fallback, WASM forces pure-Dart — ruling in [decisions.md](decisions.md)); they
 are **in D1 scope**, on the at_chops track. **Scope note (2026-07-03 ruling):** auto-resolve applies to the
@@ -191,8 +193,8 @@ wire-compatible, so pure-Dart-generated keys work with the FFI backends and vice
 rsa/ecc/pkam unchanged. Do **not** assert end-to-end `AtChops.verify(mldsa65)` — the deprecated sync path
 doesn't await the async ML-DSA verify.
 **Effort:** M.
-**Watch-outs:** add the `mldsa65` verify branch into the existing **unpublished** 3.4.0 (already on trunk
-via #2030) and publish before `at_server` bumps its pin in SS-3; do **not** open a fresh minor. **ML-DSA
+**Watch-outs:** the `mldsa65` verify branch is now in the **unpublished** 3.4.0 on trunk (#2056); publish
+3.4.0 before `at_server` bumps its pin in SS-3; do **not** open a fresh minor. **ML-DSA
 APKAM auth is retained** — the
 1:1:1 simplification does not drop ML-DSA: the at_chops `mldsa65` verify branch (this project), the
 at_commons pkam `signingAlgo` literal (folded into SS-1a's publish), and the server `_getSigningAlgoType`
@@ -777,7 +779,7 @@ out of scope here** — see [roadmap.md](roadmap.md) for the D2 trajectory.
 | #  | Package             | Bump                          | Project(s) | Why |
 |----|---------------------|-------------------------------|------------|-----|
 | 1  | `at_chops`          | minor `3.2.1 → 3.3.0` **(published 2026-06-23, done)** | P-1    | stateless functional core + HPKE `pqSeal`/`pqOpen`; `@Deprecated AtChopsImpl` shim |
-| 2  | `at_chops`          | minor `3.3.0 → 3.4.0` **(bumped on trunk via #2030, unpublished)** | P-2 | #2030 (`at_chops_ffi` barrel + `AtPqc` + `AtSignatureAlgorithm`) landed the 3.4.0 bump on trunk 2026-07-03 (+ #2046), assembled-but-unpublished; **P-2 folds its `mldsa65` verify branch into this same 3.4.0 before publish**; #2039 (AES-GCM FFI) still draft. Minor under the one-time semver exemption ([decisions.md](decisions.md) 2026-07-03) |
+| 2  | `at_chops`          | minor `3.3.0 → 3.4.0` **(assembled on trunk, unpublished)** | P-2 | #2030 (`at_chops_ffi` barrel + `AtPqc` + `AtSignatureAlgorithm`) landed the 3.4.0 bump on trunk 2026-07-03 (+ #2046); **P-2's `mldsa65` verify branch landed via #2056 (2026-07-06)**; #2039 (AES-GCM FFI) still draft. All assembled-but-**unpublished** under the one-time semver exemption ([decisions.md](decisions.md) 2026-07-03); publish gate open. |
 | 3  | `at_commons`        | minor `5.11.0 → 5.12.0` **(published 2026-07-04, done)** | SS-1a | `EnrollParams.metadata` + `signingAlgo`; flattened `listns`; pkam `mldsa65` literal |
 | 4  | `at_auth`           | minor `3.1.1 → 3.2.0`         | S-1        | additive: extend `AtKeys` in place (deprecate legacy); `AtKeysIo` runtime persistence; `InMemoryAtKeysIo` |
 | 5  | `at_auth`           | **major `3.2.0 → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
