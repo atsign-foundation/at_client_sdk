@@ -449,7 +449,8 @@ timeline rows).
   `AtChops.verify` path only if a high-level caller needs it; (4) re-confirm the
   at_commons version floor at SS-1a (pub.dev / last release tag is authoritative,
   not in-tree precedent); plus the at_auth version question in S-1 (publish 3.1.1
-  first vs fold `WritableAtKeys` under the unshipped slot). (The WP-SS "where does
+  first vs fold the `AtKeys`/`AtKeysIo` extend-in-place change under the unshipped
+  slot). (The WP-SS "where does
   `register()` get called?" decision is resolved by #B above.)
 - **#E — S-2 scope / SoT conflict.** `crypto_impl_plan` §3-S5 ("migrate legacy to
   `context.keys`") vs §7-WP3 ("legacy unchanged for now") conflict. This plan
@@ -495,8 +496,11 @@ Execution rulings from the plan-vs-code review (post-review); each is binding.
   library is present, at_chops' `AtPqc` auto-resolver selects the FFI backend as
   the default (faster on mobile/desktop); the pure-Dart backend is the fallback and
   the forced choice under WASM. PRs #2030 (`at_chops_ffi` barrel + auto-resolver)
-  and #2039 (AES-GCM FFI) are IN D1 scope, landing in the coordinated at_chops 3.4.0
-  slot alongside P-2. (Scope note → the 2026-07-03 rulings below: auto-resolve
+  and #2039 (AES-GCM FFI) are IN D1 scope on the at_chops 3.4.0 slot alongside P-2.
+  **Status (2026-07-06):** #2030 **merged to trunk 2026-07-03** (+ #2046 review-fixes),
+  bumping at_chops to 3.4.0 assembled-but-unpublished; #2039 is still **draft**; and
+  **P-2's `mldsa65` verify branch folds into this same unpublished 3.4.0 before it
+  publishes** (decision 2026-07-06 — not a fresh minor). (Scope note → the 2026-07-03 rulings below: auto-resolve
   applies to the `AtPqc` accessors; key generation through the web-safe barrel's
   key pair classes is pure-Dart by construction.)
 - **`_apsk` is a pinned cross-tier property — present and write-restricted.** Envelope
@@ -522,8 +526,8 @@ Execution rulings from the plan-vs-code review (post-review); each is binding.
 ### Rulings — 2026-07-03 (PR #2030 review)
 
 Rulings from the two-pass review of PR #2030 (`at_chops_ffi` barrel + `AtPqc`);
-each is binding. The code-side alignment lands in the review-fixes PR stacked on
-#2030's branch.
+each is binding. The code-side alignment landed via #2046 (merged 2026-07-03 into
+#2030's `st/at_chops_ffi` branch, then folded to trunk when #2030 merged).
 
 - **`AtPqc` supersedes the `PqcFfi` working name.** The auto-resolver ships as
   `abstract final class AtPqc`, exported from `at_chops_ffi.dart`; the PR's
@@ -568,6 +572,27 @@ each is binding. The code-side alignment lands in the review-fixes PR stacked on
   cross-backend interop tests), so keys generated pure-Dart are usable by the
   FFI backends and vice versa.
 
+### Rulings — 2026-07-06 (planning day)
+
+- **AtKeys: extend in place, deprecate legacy — supersedes the `WritableAtKeys`
+  holder** ([#2045](https://github.com/atsign-foundation/at_client_sdk/issues/2045)).
+  Keep the existing `AtKeys` class hierarchy **as-is** and extend it
+  **additively** with PQ-safe methods; **deprecate** the legacy key
+  fields/methods (they stay for back-compat, so call sites migrate to the
+  PQ-safe methods over time). `AtKeysIo` is extended with **runtime
+  persistence** (`append()`, `save()`, …) and remains the single contact point
+  that keeps runtime `AtKeys` objects and the persisted keyfile in-line.
+  Providers are injected **(`AtClient`, `AtKeysIo`, `AtChops`)**. There is
+  **no** new `WritableAtKeys` holder class and **no** separate `WrittenAtKeysIo`
+  widening — `AtKeysIo` itself is widened. *Rationale:* much simpler migration —
+  the code contract stays the same (deprecated fields/methods remain), the
+  deprecation path is clear-cut, and the churn is far smaller than carving a new
+  holder hierarchy. *Affects:* **S-1** (reframed from "new `WritableAtKeys`
+  holder" to "extend `AtKeys`/`AtKeysIo` in place"), **S-2**, **S-3**, and
+  design §4. *Open question (not decided):* whether `AtClient` needs any concept
+  of `AtKeys` outside the provider seam at all (encrypt/decrypt and auth already
+  reach keys via the injected `AtKeysIo`).
+
 ---
 
 ## 7. Decision log / timeline (dated)
@@ -589,6 +614,7 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 | **2026-07-02** | **Advertised-key signing + `_apsk` always-present** ([section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)). Advertised recipient keys (key package, `nskey` public, `pqpublickey`) are APKAM-signed by the generating enrollment and verified against its `_apsk` — same path same-atSign and cross-atSign; the atServer keeps `_apsk` present (populated from the record) as well as write-restricted. Supersedes "atServer vouches". Also: the key package is a **singular signed `metadata.keyPackage`** (no format-keyed map). | Authenticates the encapsulation target against a rogue *insider* enrollment under an honest server (not server-asserted); reuses the existing `wrapAndSign`/`_apsk` machinery. Does **not** remove a malicious atServer *operator* from the TCB — the operator is the `_apsk` anchor (see section 12 + design.md *Trust boundary*). The format-map was redundant with in-package `keys[].alg` + `v` agility. |
 
 | **2026-07-03** | **PR #2030 review rulings** (five, → [section 6](#6-resolved--open-execution-decisions-af)): `AtPqc` supersedes the `PqcFfi` working name; `AtSignatureAlgorithm` recorded with a **staged** `AtSigningAlgorithm` deprecation (stays implemented through D1 — P-2 and the section-12 `wrapAndSign` path are typed against it; removal deferred past the D1 ladder); at_chops 3.4.0 stays a minor under a recorded one-time semver exemption for the barrel-split breaks; #2030/#2039 conformance-covered under P-2's coordinated slot; auto-resolve scoped to the `AtPqc` accessors (web-safe-barrel keygen is pure-Dart by construction). | The two-pass review of #2030 found the PR shipping designs the record didn't yet name (`AtPqc`, `AtSignatureAlgorithm`) and removals the ladder didn't authorize; these rulings plus the stacked review-fixes PR align code and record. |
+| **2026-07-06** | **Planning-day reconciliation rulings** (two): (1) **inter-server PQ authentication is IN D1 scope** as new project **IS-1** ([implementation-plan.md §13](implementation-plan.md)) — the atServer FROM/POL X-Wing+ML-DSA-65 handshake (PR #2683), off the D1 GA critical path, gated on publishing the at_chops PQ-API surface (`XWingCert`/`resolveXWing`/`resolveMlDsa65`). (2) **P-2's `mldsa65` verify branch folds into the existing unpublished at_chops 3.4.0** (bumped on trunk by #2030) before it publishes — not a fresh minor. | Planning-day reconciliation of #1889 vs the plan vs merged/open PRs across at_client_sdk + at_server surfaced a whole untracked inter-server workstream and an at_chops 3.4.0 slot already opened on trunk; these two rulings place both in the record. |
 
 **Cross-refs:** the Wave-0 "already landed" detail and the project that follows
 each decision are in `implementation-plan.md`; the phase trajectory this timeline

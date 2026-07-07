@@ -242,6 +242,26 @@ void main() {
   });
 
   group('A group of tests for data signing and verification', () {
+    test(
+        'Test MlDsa65PureDartAlgo algorithm-level verifyBytes accepts a valid signature and rejects a tampered one',
+        () async {
+      final algo = MlDsa65PureDartAlgo();
+      final keyPair = await algo.generateKeyPair();
+      final data = Uint8List.fromList(utf8.encode('mldsa65 dispatch test'));
+      final signature =
+          await algo.signBytes(data, secretKey: keyPair.secretKey);
+
+      final verified = await algo.verifyBytes(data,
+          signature: signature, publicKey: keyPair.publicKey);
+      expect(verified, true);
+
+      final tamperedData =
+          Uint8List.fromList(utf8.encode('mldsa65 tampered data'));
+      final tamperedVerified = await algo.verifyBytes(tamperedData,
+          signature: signature, publicKey: keyPair.publicKey);
+      expect(tamperedVerified, false);
+    });
+
     test('Test sign() and verify() with default algorithms', () {
       final data = 'testData';
       final encryptionKeypair = AtChopsUtil.generateAtEncryptionKeyPair();
