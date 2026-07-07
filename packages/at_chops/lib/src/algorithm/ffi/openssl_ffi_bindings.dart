@@ -209,12 +209,12 @@ typedef EvpDecryptInitExDart = int Function(Pointer<EVP_CIPHER_CTX>,
     Pointer<EVP_CIPHER>, Pointer<Void>, Pointer<Uint8>, Pointer<Uint8>);
 
 typedef EvpEncryptUpdateNative = Int32 Function(Pointer<EVP_CIPHER_CTX>,
-    Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, Int32);
+    Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, IntPtr);
 typedef EvpEncryptUpdateDart = int Function(Pointer<EVP_CIPHER_CTX>,
     Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, int);
 
 typedef EvpDecryptUpdateNative = Int32 Function(Pointer<EVP_CIPHER_CTX>,
-    Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, Int32);
+    Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, IntPtr);
 typedef EvpDecryptUpdateDart = int Function(Pointer<EVP_CIPHER_CTX>,
     Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, int);
 
