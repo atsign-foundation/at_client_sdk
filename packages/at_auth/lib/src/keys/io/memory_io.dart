@@ -35,7 +35,6 @@ class InMemoryAtKeysIo extends WrittenAtKeysIo {
   ///
   /// If no keys have been loaded yet, this creates a new [AtKeys] object for the
   /// atSign before adding the material.
-  @override
   FutureOr<void> append(Atsign atsign, AtKeysMaterial material) {
     final atKeys = _internal.putIfAbsent(atsign, () => AtKeys(atsign: atsign));
     atKeys.addKey(material);

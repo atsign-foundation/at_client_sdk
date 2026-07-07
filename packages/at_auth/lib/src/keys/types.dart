@@ -33,6 +33,7 @@ sealed class AtKeysMaterial {
 }
 
 final class AtSymmetricKey extends AtKeysMaterial {
+  @override
   final String id;
   @override
   final String algorithm;
