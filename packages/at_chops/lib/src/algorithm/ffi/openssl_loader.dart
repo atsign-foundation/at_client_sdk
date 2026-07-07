@@ -1,6 +1,7 @@
 import 'dart:ffi';
 import 'dart:io';
 
+import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
 import 'package:ffi/ffi.dart';
 
 /// Candidate libcrypto paths tried in order when [_envVar] is unset or fails.
@@ -81,15 +82,18 @@ bool libCryptoSupportsMlDsa65(DynamicLibrary lib) {
   return _libCryptoSupportsAlgorithm(lib, 'ML-DSA-65');
 }
 
-/// Returns `true` when [lib] exposes `EVP_aes_256_gcm` (available in every
-/// OpenSSL 1.0+ build, so this essentially just confirms the symbol resolves).
+/// Returns `true` when [lib] supports AES-256-GCM.
 ///
-/// Call this before constructing [AesGcm256FfiAlgo] to confirm the symbol is
-/// present — it is effectively always true for any usable libcrypto.
+/// Calls `EVP_aes_256_gcm()` and checks the returned cipher pointer is
+/// non-null — this catches FIPS/policy-restricted libcrypto builds where the
+/// symbol resolves but the cipher is disabled at init, which would otherwise
+/// cause [AesGcm256FfiAlgo] to throw a bare [StateError] at encrypt/decrypt
+/// instead of falling back to pure-Dart.
 bool libCryptoSupportsAesGcm(DynamicLibrary lib) {
   try {
-    lib.lookup<NativeFunction<Pointer<Void> Function()>>('EVP_aes_256_gcm');
-    return true;
+    final fn = lib.lookupFunction<EvpAes256GcmNative, EvpAes256GcmDart>(
+        'EVP_aes_256_gcm');
+    return fn() != nullptr;
   } catch (_) {
     return false;
   }
