@@ -31,3 +31,7 @@ class AtKeysProtectionException extends AtKeysValidationException {
 class AtKeysDecryptionException extends AtDecryptionException {
   AtKeysDecryptionException(super.message);
 }
+
+class AtKeysNotInMemoryException extends AtException {
+  AtKeysNotInMemoryException(super.message);
+}

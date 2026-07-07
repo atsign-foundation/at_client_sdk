@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:at_auth/src/keys/serialization/codec.dart';
 import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart';
 import 'package:at_auth/src/keys/serialization/resolver.dart';
+import 'package:at_auth/src/keys/types.dart';
 
 import '../at_keys.dart' show AtKeys;
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
@@ -17,7 +18,7 @@ sealed class AtKeysIo {
   final resolver = const AtKeysDocumentResolver();
   final codec = const AtKeysJsonCodec();
   final passwordCodec = const AtKeysPassphraseEnvelopeCodec();
-  FutureOr<AtKeys> read(String atSign);
+  FutureOr<AtKeys> read(String atsign);
 }
 
 //todo: remove atsign from method signature
@@ -25,7 +26,9 @@ sealed class AtKeysIo {
 /// It can be implemented by classes that write AtKeys to different sources,
 /// such as file system or keychain.
 abstract class WrittenAtKeysIo extends AtKeysIo {
-  Future write(String atSign, AtKeys atKeys);
+  //todo: futureOr & Atsign types
+  Future write(String atsign, AtKeys atKeys);
+  FutureOr<void> append(Atsign atsign, AtKeysMaterial material);
 }
 
 /// An interface that defines methods for AtKeys that can be generated.

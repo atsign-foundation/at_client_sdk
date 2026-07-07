@@ -12,7 +12,7 @@ import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 
 /// An implementation of [AtKeysIo] that reads and writes AtKeys to the file system.
-/// This implementation uses [AtKeysIoUtil] for encoding and decoding AtKeys.
+/// This implementation still uses [AtKeysIoUtil] for encoding and decoding Legacy AtKeys.
 /// The [FileAtKeysIo] class can be configured with an optional [filePath] and [passPhrase].
 ///
 /// Optional Parameters:
