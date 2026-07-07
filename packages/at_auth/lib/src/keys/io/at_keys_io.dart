@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:at_auth/src/keys/serialization/codec.dart';
 import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart';
 import 'package:at_auth/src/keys/serialization/resolver.dart';
-import 'package:at_auth/src/keys/types.dart';
 
 import '../at_keys.dart' show AtKeys;
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
