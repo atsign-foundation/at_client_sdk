@@ -73,8 +73,8 @@ final class AesGcm256FfiAlgo
   @override
   Future<Uint8List> encrypt(Uint8List plainData,
       {InitialisationVector? iv, List<int> aad = const []}) async {
-    final Uint8List keyBytes = _keyBytes();
-    final List<int> nonce = _nonceBytes(iv);
+    final Uint8List keyBytes = _keyBytesForEncrypt();
+    final List<int> nonce = _nonceBytesForEncrypt(iv);
 
     final Pointer<EVP_CIPHER_CTX> ctx = _ctxNew();
     if (ctx == nullptr) throw StateError('EVP_CIPHER_CTX_new failed');
@@ -102,6 +102,7 @@ final class AesGcm256FfiAlgo
           throw StateError('EVP_EncryptInit_ex (key/IV) failed');
         }
       } finally {
+        keyPtr.asTypedList(keyBytes.length).fillRange(0, keyBytes.length, 0);
         calloc.free(keyPtr);
         calloc.free(ivPtr);
       }
@@ -187,8 +188,8 @@ final class AesGcm256FfiAlgo
           'AES-256-GCM (FFI) input shorter than the $tagLength-byte tag');
     }
 
-    final Uint8List keyBytes = _keyBytes();
-    final List<int> nonce = _nonceBytes(iv);
+    final Uint8List keyBytes = _keyBytesForDecrypt();
+    final List<int> nonce = _nonceBytesForDecrypt(iv);
     final Uint8List cipherText =
         encryptedData.sublist(0, encryptedData.length - tagLength);
     final Uint8List tag =
@@ -220,6 +221,7 @@ final class AesGcm256FfiAlgo
           throw StateError('EVP_DecryptInit_ex (key/IV) failed');
         }
       } finally {
+        keyPtr.asTypedList(keyBytes.length).fillRange(0, keyBytes.length, 0);
         calloc.free(keyPtr);
         calloc.free(ivPtr);
       }
@@ -298,7 +300,7 @@ final class AesGcm256FfiAlgo
 
   // ── Internal helpers ───────────────────────────────────────────────────────
 
-  Uint8List _keyBytes() {
+  Uint8List _keyBytesForEncrypt() {
     final Uint8List keyBytes = base64Decode(_aesKey.key);
     if (keyBytes.length != 32) {
       throw AtEncryptionException(
@@ -307,9 +309,27 @@ final class AesGcm256FfiAlgo
     return keyBytes;
   }
 
-  List<int> _nonceBytes(InitialisationVector? iv) {
+  Uint8List _keyBytesForDecrypt() {
+    final Uint8List keyBytes = base64Decode(_aesKey.key);
+    if (keyBytes.length != 32) {
+      throw AtDecryptionException(
+          'AES-256-GCM requires a 256-bit key; got ${keyBytes.length * 8} bits');
+    }
+    return keyBytes;
+  }
+
+  List<int> _nonceBytesForEncrypt(InitialisationVector? iv) {
     if (iv == null || iv.ivBytes.length != nonceLength) {
       throw AtEncryptionException(
+          'AES-256-GCM requires an explicit $nonceLength-byte nonce; '
+          'use AtChopsUtil.generateRandomIV($nonceLength)');
+    }
+    return iv.ivBytes;
+  }
+
+  List<int> _nonceBytesForDecrypt(InitialisationVector? iv) {
+    if (iv == null || iv.ivBytes.length != nonceLength) {
+      throw AtDecryptionException(
           'AES-256-GCM requires an explicit $nonceLength-byte nonce; '
           'use AtChopsUtil.generateRandomIV($nonceLength)');
     }
