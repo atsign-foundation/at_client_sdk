@@ -124,13 +124,12 @@ final class AesGcm256FfiAlgo
       }
 
       // 5. Encrypt plaintext.
-      final Pointer<Uint8> plainBuf =
-          calloc<Uint8>(plainData.isEmpty ? 1 : plainData.length);
+      final int plainBufLen = plainData.isEmpty ? 1 : plainData.length;
+      final Pointer<Uint8> plainBuf = calloc<Uint8>(plainBufLen);
       if (plainData.isNotEmpty) {
         plainBuf.asTypedList(plainData.length).setAll(0, plainData);
       }
-      final Pointer<Uint8> outBuf =
-          calloc<Uint8>(plainData.isEmpty ? 1 : plainData.length);
+      final Pointer<Uint8> outBuf = calloc<Uint8>(plainBufLen);
       final Pointer<Int32> outLen = calloc<Int32>();
       try {
         final int encLen;
@@ -141,6 +140,8 @@ final class AesGcm256FfiAlgo
           }
           encLen = outLen.value;
         } finally {
+          // Wipe the plaintext copy from native heap before freeing.
+          plainBuf.asTypedList(plainBufLen).fillRange(0, plainBufLen, 0);
           calloc.free(plainBuf);
         }
 
@@ -243,13 +244,12 @@ final class AesGcm256FfiAlgo
       }
 
       // 5. Decrypt ciphertext.
-      final Pointer<Uint8> ctBuf =
-          calloc<Uint8>(cipherText.isEmpty ? 1 : cipherText.length);
+      final int outBufLen = cipherText.isEmpty ? 1 : cipherText.length;
+      final Pointer<Uint8> ctBuf = calloc<Uint8>(outBufLen);
       if (cipherText.isNotEmpty) {
         ctBuf.asTypedList(cipherText.length).setAll(0, cipherText);
       }
-      final Pointer<Uint8> outBuf =
-          calloc<Uint8>(cipherText.isEmpty ? 1 : cipherText.length);
+      final Pointer<Uint8> outBuf = calloc<Uint8>(outBufLen);
       final Pointer<Int32> outLen = calloc<Int32>();
       try {
         final int decLen;
@@ -290,6 +290,8 @@ final class AesGcm256FfiAlgo
           calloc.free(finalLen);
         }
       } finally {
+        // Wipe the recovered plaintext from native heap before freeing.
+        outBuf.asTypedList(outBufLen).fillRange(0, outBufLen, 0);
         calloc.free(outBuf);
         calloc.free(outLen);
       }
