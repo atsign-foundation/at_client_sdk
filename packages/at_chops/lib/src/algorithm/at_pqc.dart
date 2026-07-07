@@ -35,12 +35,14 @@ abstract final class AtPqc {
 
   /// AES-256-GCM authenticated encryption — FFI when available, else pure-Dart.
   ///
-  /// AES-256-GCM is the AEAD layer in the PQ-HPKE construction, so it is
-  /// treated as a PQ-adjacent primitive and resolved through [AtPqc] like the
-  /// other backends.  Because the algorithm requires a key at construction time
-  /// this is a factory method rather than a static field.
+  /// Because the algorithm requires a key at construction time this is a
+  /// factory method rather than a static field.
   ///
-  /// Do not downcast to the concrete type — it is an implementation detail.
+  /// **AAD note:** [SymmetricEncryptionAlgorithm] does not carry an `aad`
+  /// parameter on its interface. If you need AAD (e.g. for PQ-HPKE), use
+  /// [AesGcm256EncryptionAlgo] or [AesGcm256FfiAlgo] directly — both expose
+  /// `encrypt`/`decrypt` with `{List<int> aad}`. Routing PQ-HPKE through
+  /// [AtPqc] is deferred until the interface is widened to carry AAD.
   static SymmetricEncryptionAlgorithm<Uint8List, Uint8List> aesGcm256(
           AESKey key) =>
       _aesGcmSupported
