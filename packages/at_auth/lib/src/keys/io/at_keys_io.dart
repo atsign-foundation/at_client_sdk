@@ -28,7 +28,6 @@ sealed class AtKeysIo {
 abstract class WrittenAtKeysIo extends AtKeysIo {
   //todo: futureOr & Atsign types
   Future write(String atsign, AtKeys atKeys);
-  FutureOr<void> append(Atsign atsign, AtKeysMaterial material);
 }
 
 /// An interface that defines methods for AtKeys that can be generated.
@@ -157,24 +156,6 @@ class AtKeysIoUtil {
       atKeysFile.apkamPrivateKey = AtBytes.fromString(
           apkamRsaKeypair.atPrivateKey.privateKey.toString());
     }
-    // else if (this is GeneratedAtKeysIo) {
-    //   // get the public key from secure element
-    //   if (atSign == null) {
-    //     throw AtAuthenticationException('atSign is required to read pkam public key from sim/secure element');
-    //   }
-    //   String? publicKeyId = (this as SimAtKeysIo).publicKeyMap[atSign];
-    //   if (publicKeyId == null) {
-    //     throw AtAuthenticationException('publicKeyId is required in SimAtKeysIo.publicKeyMap to read pkam public key from sim/secure element');
-    //   }
-    //   pkamPublicKey = atChops.readPublicKey(publicKeyId);
-    //   logger.info('pkam  public key from sim: $pkamPublicKey');
-
-    //   // encryption key pair and self encryption symmetric key
-    //   // are not available to injected at_chops. Set it here
-    //   atChops.atChopsKeys.atEncryptionKeyPair = atEncryptionKeyPair;
-    //   atChops.atChopsKeys.selfEncryptionKey = selfEncryptionKey;
-    //   atChops.atChopsKeys.apkamSymmetricKey = apkamSymmetricKey;
-    // }
     atKeysFile.apkamPublicKey = AtBytes.fromString(pkamPublicKey.toString());
     //Standard order of an atKeys file is ->
     // pkam keypair -> encryption keypair -> selfEncryption key -> enrollmentId --> apkam symmetric key -->

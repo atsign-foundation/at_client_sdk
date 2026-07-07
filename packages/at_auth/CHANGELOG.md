@@ -1,3 +1,10 @@
+## 3.2.0
+- feat: add versioned AtKeys document serialization with codec/resolver layers, optional key record fields, key protection metadata, and validation for duplicate ids, malformed records, unsupported versions, and invalid protection references.
+- feat: add passphrase envelope support using `argon2id` and add `InMemoryAtKeysIo` for in-memory/test flows.
+- refactor: move AtKeys IO implementations under `src/keys/io`, keep `FileAtKeysIo` exported, and replace the legacy IO mixin helpers with static helpers on `AtKeysIoUtil`.
+- fix: preserve legacy `.atKeys` read/write behavior, including legacy self-encrypted key files and generated keys after write/read.
+- chore(deps): require `at_chops` ^3.4.1 for hashing algorithm barrel exports used by AtKeys passphrase handling.
+
 ## 3.1.1
 - refactor: route enrollment RSA (encrypt/decrypt `apkamSymmetricKey` under the default encryption keypair) through at_chops (`RsaEncryptionAlgo`) — `crypton` no longer imported in `lib` and moved to `dev_dependencies` (only the enrollment test still uses it for RSA keypair fixtures). Same framing, byte-identical by construction.
 - fix: `decodeAtKeys()` now reliably throws `AtDecryptionException` on an incorrect passphrase. The `jsonDecode` of the decrypted bytes now runs inside the decrypt try/catch, so wrong-passphrase garbage no longer escapes as an uncaught `FormatException` (an intermittent failure in `at_keys_io_test`).
