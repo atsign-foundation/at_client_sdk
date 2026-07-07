@@ -26,6 +26,7 @@ class KeyProtection {
 sealed class AtKeysMaterial {
   const AtKeysMaterial();
 
+  String get id;
   String get algorithm;
   AtBytes get bytes;
   List<String> get operations;
@@ -52,6 +53,8 @@ final class AtSymmetricKey extends AtKeysMaterial {
 final class AtPublicKey extends AtKeysMaterial {
   final String pairId;
   @override
+  String get id => pairId; // pairId serves as it's id
+  @override
   final String algorithm;
   @override
   final AtBytes bytes;
@@ -67,6 +70,8 @@ final class AtPublicKey extends AtKeysMaterial {
 
 final class AtPrivateKey extends AtKeysMaterial {
   final String pairId;
+  @override
+  String get id => pairId; // pairId serves as it's id
   @override
   final String algorithm;
   @override
@@ -87,6 +92,8 @@ final class AtKeyPackage extends AtKeysMaterial {
   // required in cases where we strictly share only half of this package.
   final String pairId;
   final String enrollmentId;
+  @override
+  String get id => enrollmentId; // enrollmentId serves as it's id
   @override
   final String algorithm;
   @override

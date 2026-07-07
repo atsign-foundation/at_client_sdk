@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/src/keys/serialization/document.dart';
 import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart';
+import 'package:at_auth/src/keys/types.dart';
 import 'package:at_chops/at_chops.dart' hide AtKeysCrypto;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
@@ -25,11 +27,11 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   }
 
   /// Reads AtKeys from the file system.
-  /// The [atSign] parameter is used to determine the file path if not provided during instantiation.
+  /// The [atsign] parameter is used to determine the file path if not provided during instantiation.
   /// The method returns a Future that resolves to an instance of [AtKeys].
   @override
-  Future<AtKeys> read(String atSign) async {
-    String file = filePath!(atSign);
+  Future<AtKeys> read(String atsign) async {
+    String file = filePath!(atsign);
     if (!File(file).existsSync()) {
       throw AtException(
           'provided keys file does not exist. Please check whether the file path $file is valid');
@@ -40,12 +42,18 @@ class FileAtKeysIo extends WrittenAtKeysIo {
       json = await passwordCodec.decode(json, passPhrase: passPhrase);
     }
     AtKeysDocument document = codec.decodeDocument(json);
+    if (document is LegacyAtKeysDocument) {
+      return AtKeysIoUtil.decryptAtKeysWithSelfEncKey(
+        document.legacyJson!,
+        PkamAuthMode.keysFile,
+      );
+    }
     return resolver.resolve(document);
   }
 
   @override
-  Future write(String atSign, AtKeys atKeys) async {
-    String path = filePath!(atSign);
+  Future write(String atsign, AtKeys atKeys) async {
+    String path = filePath!(atsign);
     if (!Directory(path).parent.existsSync()) {
       await Directory(path).parent.create(recursive: true);
     }
@@ -54,8 +62,34 @@ class FileAtKeysIo extends WrittenAtKeysIo {
       throw AtKeysFileOverwriteException(
           'Tried writing $path, but failed since it already exists');
     }
+    String plaintext;
+    if (atKeys.keyMaterials.isEmpty) {
+      plaintext = await AtKeysIoUtil.encryptAtKeysWithSelfEncKey(
+        atKeys,
+        PkamAuthMode.keysFile,
+        atsign,
+      );
+    } else {
+      //todo: remove this line in v4, ensures we're writing new format
+      atKeys.atsign ??= atsign.toAtsign();
+      final document = resolver.resolveToDocument(atKeys);
+      final json = codec.encodeDocument(document);
+      plaintext = jsonEncode(json);
+    }
+    if (passPhrase != null && passPhrase!.isNotEmpty) {
+      PassphraseEnvelope envelope =
+          await AtKeysCrypto.fromHashingAlgorithm(HashingAlgoType.argon2id)
+              .encrypt(plaintext, passPhrase!);
+      plaintext = envelope.toString();
+    }
 
-    final document = resolver.resolveToDocument(atKeys);
+    await File(path).writeAsString(plaintext);
+  }
+
+  FutureOr<void> append(Atsign atsign, AtKeysMaterial material) async {
+    AtKeys keys = await read(atsign);
+    keys.addKey(material);
+    final document = resolver.resolveToDocument(keys);
     final json = codec.encodeDocument(document);
     String plaintext = jsonEncode(json);
     if (passPhrase != null && passPhrase!.isNotEmpty) {
@@ -65,6 +99,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
       plaintext = envelope.toString();
     }
 
+    String path = filePath!(atsign);
     await File(path).writeAsString(plaintext);
   }
 }

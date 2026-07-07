@@ -4,7 +4,8 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 
 class AtKeys {
-  final Atsign? atsign;
+  //todo: make non-nullable and final in v4
+  Atsign? atsign;
   final Map<Type, Map<String, AtKeysMaterial>> _keysByType = {};
   final List<AtKeysMaterial> _keyMaterials = [];
 
@@ -20,16 +21,16 @@ class AtKeys {
       switch (key) {
         case AtPublicKey():
           //uses the pairId in their respective map
-          addKey<AtPublicKey>(key.pairId, key);
+          addKey<AtPublicKey>(key);
         case AtPrivateKey():
           //uses the pairId in their respective map
-          addKey<AtPrivateKey>(key.pairId, key);
+          addKey<AtPrivateKey>(key);
         case AtSymmetricKey():
           //uses id in their respective map
-          addKey<AtSymmetricKey>(key.id, key);
+          addKey<AtSymmetricKey>(key);
         case AtKeyPackage():
           //uses enrollmentId in their respective map
-          addKey<AtKeyPackage>(key.enrollmentId, key);
+          addKey<AtKeyPackage>(key);
       }
     }
   }
@@ -40,15 +41,14 @@ class AtKeys {
   }
 
   void addKey<T extends AtKeysMaterial>(
-    String id,
     T key,
   ) {
     final keysForType = _keysByType.putIfAbsent(T, () => {});
-    if (keysForType.containsKey(id)) {
-      throw ArgumentError.value(id, 'primaryId',
+    if (keysForType.containsKey(key.id)) {
+      throw ArgumentError.value(key.id, 'primaryId',
           'Duplicate $T with their unique privateId, see AtKeys ctor for the respective id');
     }
-    keysForType[id] = key;
+    keysForType[key.id] = key;
     _keyMaterials.add(key);
   }
 

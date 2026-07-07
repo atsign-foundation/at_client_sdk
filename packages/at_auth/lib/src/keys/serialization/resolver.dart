@@ -5,8 +5,6 @@ import 'package:at_auth/src/keys/serialization/document.dart';
 import 'package:at_auth/src/keys/types.dart';
 import 'package:at_commons/at_commons.dart';
 
-import '../../../at_auth.dart' as auth_constants;
-
 abstract class AtKeysResolver {
   AtKeys resolve(AtKeysDocument document);
   AtKeysDocument resolveToDocument(AtKeys keys);
@@ -30,12 +28,14 @@ class AtKeysDocumentResolver implements AtKeysResolver {
       keysList: document.keys.map(_resolveRecord).toList(),
     );
     //if these atkeys format is new, regardless we need to load legacy for now.
-    //I'll come back to this in another PR because I think I do can some changes around atchops without breaking for now.
+    //todo: when we remove legacy callsites, remove this as well
     return AtKeys.loadLegacy(atKeys, document.legacyJson);
   }
 
   @override
   AtKeysDocument resolveToDocument(AtKeys keys) {
+    //todo: remove at v4 when we can expect Atsigns to exist in the AtKeys
+    //defintely a suboptimal way of doing this, but a good patch for 3.2.0
     final atsign = keys.atsign;
     if (atsign == null) {
       return LegacyAtKeysDocument(keys.toJson());

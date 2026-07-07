@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:crypton/crypton.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -72,6 +73,20 @@ void main() {
       AtKeys atKeys = AtKeys();
       expect(() => fileAtKeysIo.write('test', atKeys),
           throwsA(isA<AtKeysFileOverwriteException>()));
+    });
+
+    test('Test generated keys remain PKAM parseable after write/read',
+        () async {
+      final fileAtKeysIo = FileAtKeysIo(filePath: (_) => writeFilePath);
+      final atKeys = AtKeysIoUtil.generateKeyPairs();
+
+      await fileAtKeysIo.write(atSign, atKeys);
+      final readAtKeys = await fileAtKeysIo.read(atSign);
+
+      expect(
+        () => RSAPrivateKey.fromString(readAtKeys.apkamPrivateKey!.toString()),
+        returnsNormally,
+      );
     });
 
     test('Test write() -> should encrypt with passphrase when available',
