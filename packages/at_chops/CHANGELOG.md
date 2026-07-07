@@ -1,3 +1,6 @@
+## 3.4.1
+- fix: export `Argon2idHashingAlgo` and `Md5HashingAlgo` from the main `at_chops.dart` barrel so callers can use all supported hashing algorithms through the public package import.
+
 ## 3.4.0
 - feat: add `AtSignatureAlgorithm` — new stateless signing interface (`signBytes`/`verifyBytes`, key material passed per call); `MlDsa65PureDartAlgo` and `MlDsa65FfiAlgo` implement it directly. `message` is positional; key material is passed via required named parameters so same-typed byte arguments cannot be silently transposed
 - breaking: `MlDsa65PureDartAlgo.generateKeyPair`/`signBytes`/`verifyBytes` are instance methods (were static in 3.3.0) and `MlDsa65FfiAlgo.signBytes`/`verifyBytes` key material moves to named parameters — 3.3.0 call sites get a compile error instead of silently binding bytes to the wrong slots
