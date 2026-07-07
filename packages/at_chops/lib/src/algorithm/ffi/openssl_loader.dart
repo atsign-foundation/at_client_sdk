@@ -82,21 +82,17 @@ bool libCryptoSupportsMlDsa65(DynamicLibrary lib) {
   return _libCryptoSupportsAlgorithm(lib, 'ML-DSA-65');
 }
 
-/// Returns `true` when [lib] supports AES-256-GCM.
+/// Returns `true` when [lib] can fetch a usable AES-256-GCM cipher.
 ///
-/// Calls `EVP_aes_256_gcm()` and checks the returned cipher pointer is
-/// non-null — this catches FIPS/policy-restricted libcrypto builds where the
-/// symbol resolves but the cipher is disabled at init, which would otherwise
-/// cause [AesGcm256FfiAlgo] to throw a bare [StateError] at encrypt/decrypt
-/// instead of falling back to pure-Dart.
+/// Uses `EVP_CIPHER_fetch` — the OpenSSL 3 provider-aware fetch-by-name, the
+/// symmetric-cipher analogue of the `EVP_PKEY_CTX_new_from_name` probe used for
+/// ML-DSA/ML-KEM. On a FIPS-/policy-restricted libcrypto where the legacy
+/// `EVP_aes_256_gcm` symbol still resolves but the cipher is disabled by the
+/// active provider, the fetch returns null, so [AtPqc.aesGcm256] falls back to
+/// pure-Dart instead of selecting [AesGcm256FfiAlgo] and then throwing a bare
+/// [StateError] at encrypt/decrypt.
 bool libCryptoSupportsAesGcm(DynamicLibrary lib) {
-  try {
-    final fn = lib.lookupFunction<EvpAes256GcmNative, EvpAes256GcmDart>(
-        'EVP_aes_256_gcm');
-    return fn() != nullptr;
-  } catch (_) {
-    return false;
-  }
+  return _libCryptoSupportsCipher(lib, 'AES-256-GCM');
 }
 
 bool _libCryptoSupportsAlgorithm(DynamicLibrary lib, String algorithmName) {
@@ -117,6 +113,33 @@ bool _libCryptoSupportsAlgorithm(DynamicLibrary lib, String algorithmName) {
       return true;
     } finally {
       calloc.free(algName);
+    }
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Fetch-by-name probe for a symmetric cipher, mirroring
+/// [_libCryptoSupportsAlgorithm] but for `EVP_CIPHER`, which uses a distinct
+/// fetch/free API (`EVP_CIPHER_fetch`/`EVP_CIPHER_free`) from `EVP_PKEY`.
+bool _libCryptoSupportsCipher(DynamicLibrary lib, String cipherName) {
+  try {
+    final cipherFetch = lib.lookupFunction<
+        Pointer<EVP_CIPHER> Function(
+            Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>),
+        Pointer<EVP_CIPHER> Function(
+            Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>)>('EVP_CIPHER_fetch');
+    final cipherFree = lib.lookupFunction<Void Function(Pointer<EVP_CIPHER>),
+        void Function(Pointer<EVP_CIPHER>)>('EVP_CIPHER_free');
+
+    final Pointer<Utf8> name = cipherName.toNativeUtf8();
+    try {
+      final Pointer<EVP_CIPHER> cipher = cipherFetch(nullptr, name, nullptr);
+      if (cipher == nullptr) return false;
+      cipherFree(cipher);
+      return true;
+    } finally {
+      calloc.free(name);
     }
   } catch (_) {
     return false;
