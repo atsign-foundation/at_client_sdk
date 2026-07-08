@@ -158,6 +158,25 @@ class AtKeys {
       null => _createPkamChops(this),
     };
   }
+
+  @Deprecated('legacy, please use addKey to add additional keys.')
+  AtKeys copyWith(AtKeys other) {
+    var keys = AtKeys()
+      ..apkamPublicKey = other.apkamPublicKey ?? apkamPublicKey
+      ..apkamPrivateKey = other.apkamPrivateKey ?? apkamPrivateKey
+      ..defaultEncryptionPublicKey =
+          other.defaultEncryptionPublicKey ?? defaultEncryptionPublicKey
+      ..defaultEncryptionPrivateKey =
+          other.defaultEncryptionPrivateKey ?? defaultEncryptionPrivateKey
+      ..defaultSelfEncryptionKey =
+          other.defaultSelfEncryptionKey ?? defaultSelfEncryptionKey
+      ..apkamSymmetricKey = other.apkamSymmetricKey ?? apkamSymmetricKey
+      ..enrollmentId = other.enrollmentId ?? enrollmentId;
+    if (other.metadata.isNotEmpty) {
+      keys.metadata.addAll(other.metadata);
+    }
+    return keys;
+  }
 }
 
 // Splitting these implementations to improve understanding

@@ -211,7 +211,8 @@ class AtAuthImpl implements AtAuth {
       atOnboardingRequest.atKeysIo ??= FileAtKeysIo();
       switch (atOnboardingRequest.atKeysIo) {
         case WrittenAtKeysIo():
-          _atAuthKeys = AtKeysIoUtil.generateKeyPairs();
+          _atAuthKeys = (atOnboardingRequest.atKeysIo! as WrittenAtKeysIo)
+              .generateKeyPairs();
         default:
           throw AtAuthenticationException(
               'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');

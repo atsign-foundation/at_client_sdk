@@ -24,7 +24,7 @@ sealed class AtKeysIo {
 /// An interface that defines methods for AtKeys that can be written.
 /// It can be implemented by classes that write AtKeys to different sources,
 /// such as file system or keychain.
-abstract class WrittenAtKeysIo extends AtKeysIo {
+abstract class WrittenAtKeysIo extends AtKeysIo with KeyIOMixin {
   //todo: futureOr & Atsign types
   Future write(String atsign, AtKeys atKeys);
 }
@@ -32,18 +32,17 @@ abstract class WrittenAtKeysIo extends AtKeysIo {
 /// An interface that defines methods for AtKeys that can be generated.
 /// It can be implemented by classes that generate AtKeys using different methods,
 /// such as secure element.
-abstract class GeneratedAtKeysIo extends AtKeysIo {
+abstract class GeneratedAtKeysIo extends AtKeysIo with KeyIOMixin {
   AtKeys generateKeys(String publicKeyId);
 }
 
-/// Static helpers for encoding, decoding, encrypting and decrypting AtKeys.
-@Deprecated('Legacy mixin turned into a static helper class')
-class AtKeysIoUtil {
-  AtKeysIoUtil._();
+@Deprecated('legacy helpers for serialization')
+mixin KeyIOMixin on AtKeysIo {
+  final AtSignLogger _logger = AtSignLogger('AtKeysIOUtil -- legacy');
 
-  static final AtSignLogger _logger = AtSignLogger('BaseAtKeysIo');
-
-  static Future<AtKeys> decryptAtKeysWithSelfEncKey(
+  @Deprecated(
+      'legacy helpers for serialization, if we need to retain this turn it into a static helper')
+  Future<AtKeys> decryptAtKeysWithSelfEncKey(
       Map<String, dynamic> jsonData, PkamAuthMode authMode) async {
     var securityKeys = AtKeys();
     String decryptionKey = jsonData[auth_constants.defaultSelfEncryptionKey];
@@ -85,7 +84,9 @@ class AtKeysIoUtil {
     return securityKeys;
   }
 
-  static Future<String> encryptAtKeysWithSelfEncKey(
+  @Deprecated(
+      'legacy helpers for serialization, if we need to retain this turn it into a static helper')
+  Future<String> encryptAtKeysWithSelfEncKey(
       AtKeys atKeys, PkamAuthMode authMode, String atsign) async {
     Map<String, dynamic> atKeysMap = {};
     if (atKeys.defaultSelfEncryptionKey == null) {
@@ -131,7 +132,9 @@ class AtKeysIoUtil {
     return jsonEncode(atKeysMap);
   }
 
-  static AtKeys generateKeyPairs({
+  @Deprecated(
+      'legacy helpers for serialization, if we need to retain this turn it into a static helper')
+  AtKeys generateKeyPairs({
     PkamAuthMode authMode = PkamAuthMode.keysFile,
   }) {
     var atKeysFile = AtKeys();
@@ -171,7 +174,9 @@ class AtKeysIoUtil {
     return atKeysFile;
   }
 
-  static Future<Map<String, dynamic>> decodeAtKeys(
+  @Deprecated(
+      'legacy helpers for serialization, if we need to retain this turn it into a static helper')
+  Future<Map<String, dynamic>> decodeAtKeys(
       Map<String, dynamic> decodedAtKeysData,
       {String? passPhrase}) async {
     // If it contains "iv(InitializationVector)", it means the data is encrypted with a

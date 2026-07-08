@@ -43,7 +43,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     }
     AtKeysDocument document = codec.decodeDocument(json);
     if (document is LegacyAtKeysDocument) {
-      return AtKeysIoUtil.decryptAtKeysWithSelfEncKey(
+      return decryptAtKeysWithSelfEncKey(
         document.legacyJson!,
         PkamAuthMode.keysFile,
       );
@@ -64,7 +64,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     }
     String plaintext;
     if (atKeys.keyMaterials.isEmpty) {
-      plaintext = await AtKeysIoUtil.encryptAtKeysWithSelfEncKey(
+      plaintext = await encryptAtKeysWithSelfEncKey(
         atKeys,
         PkamAuthMode.keysFile,
         atsign,
