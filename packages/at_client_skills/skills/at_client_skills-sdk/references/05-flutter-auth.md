@@ -207,6 +207,7 @@ Future<void> _setupAtClient(
     ..rootDomain    = atRootDomain.rootDomain
     ..rootPort      = atRootDomain.rootPort
     ..namespace     = 'my_namespace'
+    ..syncRegex     = 'my_namespace'   // scope sync to this app (see references/11-sync.md)
     ..commitLogPath  = dir.path
     ..hiveStoragePath = dir.path;
 
@@ -230,6 +231,10 @@ Future<void> _setupAtClient(
 | `hiveStoragePath` | `String` | Path to Hive storage directory |
 | `rootDomain` | `String` | atServer root domain (from `authRequest.rootDomain.rootDomain`) |
 | `rootPort` | `int` | atServer root port (from `authRequest.rootDomain.rootPort`) |
+
+**Strongly recommended:** set `..syncRegex = '<your namespace>'` (shown above).
+Without it, sync covers the atSign's entire keystore and can wedge — see
+[references/11-sync.md](11-sync.md).
 
 **Important:** Use `atChops` and `atLookUp` from the `response` (not freshly
 created) — these are already authenticated instances.

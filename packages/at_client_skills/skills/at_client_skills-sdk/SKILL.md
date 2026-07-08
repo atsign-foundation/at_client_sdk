@@ -324,6 +324,11 @@ Read [references/05-flutter-auth.md](references/05-flutter-auth.md) for all 4
 flows (including Flow 1: CRAM new-atSign and Flow 4: APKAM enrollment) with
 complete code.
 
+> **Sync setup:** set `AtClientPreference.syncRegex = '<your namespace>'` —
+> without it, sync covers the atSign's whole keystore and can wedge, so shares
+> and updates never propagate. Reads are local; writes sync in the background.
+> See [references/11-sync.md](references/11-sync.md).
+
 ---
 
 ## 11. Domain-Object Checklist

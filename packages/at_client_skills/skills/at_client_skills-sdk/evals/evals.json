@@ -70,6 +70,11 @@
       "id": 14,
       "prompt": "My Flutter app throws PlatformException(ENTITLEMENT_NOT_FOUND) on macOS when the user picks their .atKeys file to log in. How do I fix it?",
       "expected_output": "Explains AtKeysFileDialog/file_picker is sandboxed on macOS and needs a file-access entitlement. Add com.apple.security.files.user-selected.read-only (read-write also works) to BOTH macos/Runner/DebugProfile.entitlements and macos/Runner/Release.entitlements. Notes it is macOS-only — iOS (document picker) and Android (Storage Access Framework) need no entitlement or permission."
+    },
+    {
+      "id": 15,
+      "prompt": "My Flutter app using AtCollection shares data with another atSign, but nothing syncs — SyncService stays inProgress and shared items never arrive. How do I debug this?",
+      "expected_output": "Treats a stuck-inProgress SyncService as a wedged sync and DIAGNOSES it rather than assuming a single cause. Explains the common cause is unscoped sync: with AtClientPreference.syncRegex unset, sync covers the atSign's ENTIRE keystore, so one unrelated/dangling key from another app or namespace can abort the whole round (e.g. 'key not found : <key> does not exist in keystore'). Recommends scoping syncRegex to the app's namespace and notes reserved keys (pkam/encryption/public/shared_key/cached:) sync regardless, so sharing/decryption still work. Also frames that reads are local-only, writes sync in the background, and completion is observed via SyncProgressListener (not the deprecated sync(onDone:))."
     }
   ]
 }

@@ -1,5 +1,12 @@
 # Changelog — at_client_skills
 
+## 1.2.0 — 2026-07-07
+
+- Document sync scoping (`syncRegex`) and the sync lifecycle in a new
+  `references/11-sync.md`: reads are local-only, writes sync in the background,
+  scope sync to your namespace to avoid a wedged sync, and observe completion
+  via `SyncProgressListener`.
+
 ## 1.1.0 — 2026-06-23
 
 - Add `user-invocable: true` so the skill registers as a slash command.
