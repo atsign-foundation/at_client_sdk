@@ -139,6 +139,14 @@ await todos.delete(item);                    // throws StateError if has sub-ite
 await todos.delete(item, cascade: true);     // removes self-owned descendants first
 ```
 
+> **Ownership model:** `AtCollection` is **owner-writes-only** — an atSign can
+> only mutate items it owns. `update` / `updateSharedWith` / `delete` throw
+> `ArgumentError` on an item whose `owner` isn't you. Collaboration is
+> **additive**: sharing grants the recipient a *readable* copy, not write
+> access. For a peer to contribute, they create their own item and share it
+> back — you never edit theirs in place. (Reading a received item works;
+> mutating it doesn't.)
+
 ---
 
 ## 5. Reading Data

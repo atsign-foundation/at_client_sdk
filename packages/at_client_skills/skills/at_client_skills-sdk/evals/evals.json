@@ -80,6 +80,11 @@
       "id": 16,
       "prompt": "In my Flutter app a collaborator's change is received (the collection fires CItemUpdated) but my StreamBuilder UI doesn't refresh until I hot reload. Why?",
       "expected_output": "Diagnoses that the watch() stream is being created inside build() (e.g. stream: collection.query().watch()), so every rebuild mints a new stream and tears down the live subscription, dropping live emissions. Fix: create the watch() stream once and hold it in State (a late final field or initState) and pass that held stream to StreamBuilder; never call watch() in build(). If the query has runtime inputs (e.g. a filter), recreate the held stream when those inputs change — in the setState that changes them — not on every build."
+    },
+    {
+      "id": 17,
+      "prompt": "I want a user to edit an item that another atSign shared with them, but calling update() on it throws ArgumentError. How should collaborative editing work?",
+      "expected_output": "Explains AtCollection is owner-writes-only: update/updateSharedWith/delete throw ArgumentError when item.owner is not the current atSign, so you cannot edit another atSign's item in place. The model is additive: each atSign owns what it creates, and sharing grants a readable copy, not write access. To model contribution, the peer creates their own item and shares it back; reading a received item works but mutating it does not."
     }
   ]
 }
