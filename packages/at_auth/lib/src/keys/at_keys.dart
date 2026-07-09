@@ -18,20 +18,7 @@ class AtKeys {
     Map<String, dynamic>? legacyJson,
   }) {
     for (final key in keysList) {
-      switch (key) {
-        case AtPublicKey():
-          //uses the pairId in their respective map
-          addKey<AtPublicKey>(key);
-        case AtPrivateKey():
-          //uses the pairId in their respective map
-          addKey<AtPrivateKey>(key);
-        case AtSymmetricKey():
-          //uses id in their respective map
-          addKey<AtSymmetricKey>(key);
-        case AtKeyPackage():
-          //uses enrollmentId in their respective map
-          addKey<AtKeyPackage>(key);
-      }
+      addKey(key);
     }
   }
 
@@ -40,13 +27,24 @@ class AtKeys {
     return key is T ? key : null;
   }
 
+  /// Returns every key material tagged with [enrollmentId] — the query-based
+  /// replacement for the former atomic `AtKeyPackage` grouping.
+  Iterable<AtKeysMaterial> keysForEnrollment(String enrollmentId) {
+    return _keyMaterials
+        .where((material) => material.enrollmentId == enrollmentId);
+  }
+
   void addKey<T extends AtKeysMaterial>(
     T key,
   ) {
-    final keysForType = _keysByType.putIfAbsent(T, () => {});
+    // Bucket by the runtime type, not the static T: callers that pass an
+    // AtKeysMaterial-typed value (e.g. append) would otherwise all land in the
+    // same AtKeysMaterial bucket and be unfindable by getKey<ConcreteType>.
+    final type = key.runtimeType;
+    final keysForType = _keysByType.putIfAbsent(type, () => {});
     if (keysForType.containsKey(key.id)) {
       throw ArgumentError.value(key.id, 'primaryId',
-          'Duplicate $T with their unique privateId, see AtKeys ctor for the respective id');
+          'Duplicate $type with their unique privateId, see AtKeys ctor for the respective id');
     }
     keysForType[key.id] = key;
     _keyMaterials.add(key);
@@ -192,7 +190,7 @@ class AtKeys {
 /// post approval: we fetch the defaultEncryptionPrivateKey & defaultSelfEncryptionKey
 AtChops _createApkamChops(AtKeys atKeys) {
   if (atKeys.apkamPublicKey == null) {
-    AtKeyNotFoundException(
+    throw AtKeyNotFoundException(
         "apkamPublicKey not found in AtKeys, unable to make atChops instance");
   }
   if (atKeys.apkamSymmetricKey == null) {

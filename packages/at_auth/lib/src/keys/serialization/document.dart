@@ -4,14 +4,14 @@ import 'package:at_commons/at_commons.dart';
 class AtKeysDocument {
   final int version;
   final Atsign atsign;
-  final Map<String, dynamic>? legacyJson;
+  final Map<String, dynamic> legacyJson;
   final List<KeyRecord> keys;
 
   const AtKeysDocument({
     required this.version,
     required this.atsign,
     required this.keys,
-    this.legacyJson,
+    required this.legacyJson,
   });
 }
 
@@ -23,12 +23,12 @@ class LegacyAtKeysDocument implements AtKeysDocument {
   @override
   List<KeyRecord> get keys => [];
   @override
-  final Map<String, dynamic>? legacyJson;
+  final Map<String, dynamic> legacyJson;
 
   const LegacyAtKeysDocument(this.legacyJson);
 }
 
-enum KeyRecordKind { public, private, package, symmetric }
+enum KeyRecordKind { public, private, symmetric }
 
 extension KeyKindJson on KeyRecordKind {
   String get jsonToken {
@@ -36,7 +36,6 @@ extension KeyKindJson on KeyRecordKind {
       KeyRecordKind.public => 'public',
       KeyRecordKind.private => 'private',
       KeyRecordKind.symmetric => 'symmetric',
-      KeyRecordKind.package => 'package',
     };
   }
 }
@@ -47,12 +46,12 @@ class KeyRecord {
   final String algorithm;
   final List<String> operations;
   final AtBytes bytes;
-  //protection for symmetric, private keys and secrets
+  //protection for symmetric and private keys
   final KeyProtection? protection;
   // pairIds exist for the public/private halves to link them together (if applicable)
   final String? pairId;
-  // key packages have publicKey and a secret (ie bytes)
-  final AtBytes? publicKey;
+  // groups the records produced by a single enrollment (null if not enrollment-specific)
+  final String? enrollmentId;
 
   const KeyRecord({
     required this.id,
@@ -62,6 +61,6 @@ class KeyRecord {
     this.pairId,
     this.operations = const [],
     this.protection,
-    this.publicKey,
+    this.enrollmentId,
   });
 }

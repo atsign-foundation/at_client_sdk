@@ -14,6 +14,7 @@ void main() {
       final document = AtKeysDocument(
         version: AtKeysJsonCodec.supportedVersion,
         atsign: '@alice'.toAtsign(),
+        legacyJson: const {},
         keys: [
           KeyRecord(
             id: 'public-pair',
@@ -40,18 +41,27 @@ void main() {
             algorithm: 'AES-256',
             bytes: AtBytes.fromString('c2VjcmV0'),
           ),
+          // The two records an enrollment used to bundle as one AtKeyPackage:
+          // an APKAM public key and its symmetric secret, grouped by enrollmentId.
           KeyRecord(
-            id: 'enrollment',
-            pairId: 'package-pair',
-            kind: KeyRecordKind.package,
+            id: 'enroll-public',
+            pairId: 'enroll-pair',
+            kind: KeyRecordKind.public,
             algorithm: 'RSA',
+            bytes: AtBytes.fromString('ZW5yb2xsUHVibGlj'),
+            enrollmentId: 'enroll-1',
+          ),
+          KeyRecord(
+            id: 'enroll-secret',
+            kind: KeyRecordKind.symmetric,
+            algorithm: 'AES-256',
             protection: const KeyProtection(
               keyRef: 'symmetric',
               algorithm: 'AES-256-GCM',
               iv: 'aXY=',
             ),
-            publicKey: AtBytes.fromString('cGFja2FnZVB1YmxpYw=='),
-            bytes: AtBytes.fromString('cGFja2FnZVNlY3JldA=='),
+            bytes: AtBytes.fromString('ZW5yb2xsU2VjcmV0'),
+            enrollmentId: 'enroll-1',
           ),
         ],
       );
@@ -69,8 +79,11 @@ void main() {
         'c2VjcmV0',
       );
       expect(
-        keys.getKey<AtKeyPackage>('enrollment')?.publicKey.toString(),
-        'cGFja2FnZVB1YmxpYw==',
+        keys
+            .keysForEnrollment('enroll-1')
+            .map((material) => material.id)
+            .toSet(),
+        {'enroll-pair', 'enroll-secret'},
       );
     });
 
@@ -98,17 +111,22 @@ void main() {
             algorithm: 'AES-256',
             bytes: AtBytes.fromString('c2VjcmV0'),
           ),
-          AtKeyPackage(
-            enrollmentId: 'enrollment',
-            pairId: 'package-pair',
+          AtPublicKey(
+            pairId: 'enroll-pair',
             algorithm: 'RSA',
-            secretProtection: const KeyProtection(
+            bytes: AtBytes.fromString('ZW5yb2xsUHVibGlj'),
+            enrollmentId: 'enroll-1',
+          ),
+          AtSymmetricKey(
+            id: 'enroll-secret',
+            algorithm: 'AES-256',
+            protection: const KeyProtection(
               keyRef: 'symmetric',
               algorithm: 'AES-256-GCM',
               iv: 'aXY=',
             ),
-            publicKey: AtBytes.fromString('cGFja2FnZVB1YmxpYw=='),
-            bytes: AtBytes.fromString('cGFja2FnZVNlY3JldA=='),
+            bytes: AtBytes.fromString('ZW5yb2xsU2VjcmV0'),
+            enrollmentId: 'enroll-1',
           ),
         ],
       );
@@ -121,16 +139,18 @@ void main() {
         KeyRecordKind.public,
         KeyRecordKind.private,
         KeyRecordKind.symmetric,
-        KeyRecordKind.package,
+        KeyRecordKind.public,
+        KeyRecordKind.symmetric,
       ]);
       expect(document.keys[0].id, 'public:pair');
       expect(document.keys[1].id, 'private:pair');
       expect(document.keys[1].protection?.keyRef, 'symmetric');
       expect(document.keys[2].id, 'symmetric');
-      expect(document.keys[3].id, 'enrollment');
-      expect(document.keys[3].pairId, 'package-pair');
-      expect(document.keys[3].publicKey.toString(), 'cGFja2FnZVB1YmxpYw==');
-      expect(document.keys[3].protection?.keyRef, 'symmetric');
+      expect(document.keys[3].id, 'public:enroll-pair');
+      expect(document.keys[3].enrollmentId, 'enroll-1');
+      expect(document.keys[4].id, 'enroll-secret');
+      expect(document.keys[4].enrollmentId, 'enroll-1');
+      expect(document.keys[4].protection?.keyRef, 'symmetric');
     });
 
     test('resolveToDocument preserves atSign-less keys as legacy document', () {

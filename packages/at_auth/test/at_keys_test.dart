@@ -101,6 +101,13 @@ void main() {
       apkam.apkamSymmetricKey = null;
       expect(() => apkam.toAtChops(), throwsA(isA<AtException>()));
     });
+
+    test('APKAM AtKeys with a null apkamPublicKey -> throws', () {
+      // apkamSymmetricKey is set, so this routes through the APKAM path, which
+      // must throw (not fall through to a null-deref) when apkamPublicKey is null.
+      apkam.apkamPublicKey = null;
+      expect(() => apkam.toAtChops(), throwsA(isA<AtException>()));
+    });
   });
 
   group('AtKeys typed key lookup', () {
@@ -140,6 +147,48 @@ void main() {
       );
 
       expect(atKeys.getKey<key_types.AtPrivateKey>('shared-id'), isNull);
+    });
+
+    test('addKey rejects a duplicate id within the same key type', () {
+      final atKeys = AtKeys();
+      atKeys.addKey(key_types.AtSymmetricKey(
+        id: 'dupe',
+        algorithm: 'AES-256',
+        bytes: AtBytes.fromString('c2VjcmV0'),
+      ));
+
+      expect(
+        () => atKeys.addKey(key_types.AtSymmetricKey(
+          id: 'dupe',
+          algorithm: 'AES-256',
+          bytes: AtBytes.fromString('b3RoZXI='),
+        )),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('keysForEnrollment returns only keys tagged with that enrollment', () {
+      final atKeys = AtKeys(
+        keysList: [
+          key_types.AtPublicKey(
+            pairId: 'enroll-pair',
+            algorithm: 'RSA',
+            bytes: AtBytes.fromString('cHVibGlj'),
+            enrollmentId: 'enroll-1',
+          ),
+          key_types.AtSymmetricKey(
+            id: 'standalone',
+            algorithm: 'AES-256',
+            bytes: AtBytes.fromString('c2VjcmV0'),
+          ),
+        ],
+      );
+
+      expect(
+        atKeys.keysForEnrollment('enroll-1').map((m) => m.id),
+        ['enroll-pair'],
+      );
+      expect(atKeys.keysForEnrollment('nope'), isEmpty);
     });
   });
 }

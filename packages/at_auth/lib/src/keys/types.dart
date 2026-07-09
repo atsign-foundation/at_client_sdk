@@ -30,6 +30,11 @@ sealed class AtKeysMaterial {
   String get algorithm;
   AtBytes get bytes;
   List<String> get operations;
+
+  /// Groups the keys produced by a single enrollment (formerly an
+  /// `AtKeyPackage`). Null for keys that are not enrollment-specific, e.g. the
+  /// default encryption keypair shared across enrollments.
+  String? get enrollmentId;
 }
 
 final class AtSymmetricKey extends AtKeysMaterial {
@@ -41,6 +46,8 @@ final class AtSymmetricKey extends AtKeysMaterial {
   final AtBytes bytes;
   @override
   final List<String> operations;
+  @override
+  final String? enrollmentId;
   final KeyProtection? protection;
   const AtSymmetricKey({
     required this.id,
@@ -48,6 +55,7 @@ final class AtSymmetricKey extends AtKeysMaterial {
     required this.bytes,
     this.protection,
     this.operations = const [],
+    this.enrollmentId,
   });
 }
 
@@ -61,11 +69,14 @@ final class AtPublicKey extends AtKeysMaterial {
   final AtBytes bytes;
   @override
   final List<String> operations;
+  @override
+  final String? enrollmentId;
   const AtPublicKey({
     required this.pairId,
     required this.algorithm,
     required this.bytes,
     this.operations = const [],
+    this.enrollmentId,
   });
 }
 
@@ -79,6 +90,8 @@ final class AtPrivateKey extends AtKeysMaterial {
   final AtBytes bytes;
   @override
   final List<String> operations;
+  @override
+  final String? enrollmentId;
   final KeyProtection? protection;
   const AtPrivateKey({
     required this.pairId,
@@ -86,33 +99,6 @@ final class AtPrivateKey extends AtKeysMaterial {
     required this.bytes,
     this.protection,
     this.operations = const [],
-  });
-}
-
-final class AtKeyPackage extends AtKeysMaterial {
-  // required in cases where we strictly share only half of this package.
-  final String pairId;
-  final String enrollmentId;
-  @override
-  String get id => enrollmentId; // enrollmentId serves as it's id
-  @override
-  final String algorithm;
-  @override
-
-  /// equivalent to AtKeysPackage.secret
-  final AtBytes bytes;
-  final AtBytes publicKey;
-  AtBytes get secret => bytes;
-  @override
-  final List<String> operations;
-  final KeyProtection? secretProtection;
-  const AtKeyPackage({
-    required this.pairId,
-    required this.enrollmentId,
-    required this.algorithm,
-    required this.bytes,
-    this.secretProtection,
-    this.operations = const [],
-    required this.publicKey,
+    this.enrollmentId,
   });
 }

@@ -3,7 +3,6 @@ import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/serialization/codec.dart';
 import 'package:at_auth/src/keys/serialization/document.dart';
 import 'package:at_auth/src/keys/types.dart';
-import 'package:at_commons/at_commons.dart';
 
 abstract class AtKeysResolver {
   AtKeys resolve(AtKeysDocument document);
@@ -16,11 +15,7 @@ class AtKeysDocumentResolver implements AtKeysResolver {
   @override
   AtKeys resolve(AtKeysDocument document) {
     if (document is LegacyAtKeysDocument) {
-      if (document.legacyJson == null) {
-        throw AtKeysParseException(
-            'Somehow parsing a legacy atKeys file with no json in the document object');
-      }
-      return AtKeys.fromJson(document.legacyJson!);
+      return AtKeys.fromJson(document.legacyJson);
     }
     //
     var atKeys = AtKeys(
@@ -56,6 +51,7 @@ class AtKeysDocumentResolver implements AtKeysResolver {
           algorithm: record.algorithm,
           bytes: record.bytes,
           operations: record.operations,
+          enrollmentId: record.enrollmentId,
         ),
       KeyRecordKind.private => AtPrivateKey(
           pairId: _expectPairId(record),
@@ -63,6 +59,7 @@ class AtKeysDocumentResolver implements AtKeysResolver {
           bytes: record.bytes,
           operations: record.operations,
           protection: record.protection,
+          enrollmentId: record.enrollmentId,
         ),
       KeyRecordKind.symmetric => AtSymmetricKey(
           id: record.id,
@@ -70,15 +67,7 @@ class AtKeysDocumentResolver implements AtKeysResolver {
           bytes: record.bytes,
           operations: record.operations,
           protection: record.protection,
-        ),
-      KeyRecordKind.package => AtKeyPackage(
-          enrollmentId: record.id,
-          pairId: _expectPairId(record),
-          algorithm: record.algorithm,
-          bytes: record.bytes,
-          publicKey: _expectPublicKey(record),
-          operations: record.operations,
-          secretProtection: record.protection,
+          enrollmentId: record.enrollmentId,
         ),
     };
   }
@@ -92,6 +81,7 @@ class AtKeysDocumentResolver implements AtKeysResolver {
           algorithm: material.algorithm,
           bytes: material.bytes,
           operations: material.operations,
+          enrollmentId: material.enrollmentId,
         ),
       AtPrivateKey() => KeyRecord(
           id: 'private:${material.pairId}',
@@ -101,6 +91,7 @@ class AtKeysDocumentResolver implements AtKeysResolver {
           bytes: material.bytes,
           operations: material.operations,
           protection: material.protection,
+          enrollmentId: material.enrollmentId,
         ),
       AtSymmetricKey() => KeyRecord(
           id: material.id,
@@ -109,16 +100,7 @@ class AtKeysDocumentResolver implements AtKeysResolver {
           bytes: material.bytes,
           operations: material.operations,
           protection: material.protection,
-        ),
-      AtKeyPackage() => KeyRecord(
-          id: material.enrollmentId,
-          pairId: material.pairId,
-          kind: KeyRecordKind.package,
-          algorithm: material.algorithm,
-          bytes: material.bytes,
-          operations: material.operations,
-          protection: material.secretProtection,
-          publicKey: material.publicKey,
+          enrollmentId: material.enrollmentId,
         ),
     };
   }
@@ -130,14 +112,5 @@ class AtKeysDocumentResolver implements AtKeysResolver {
           '${record.kind.name} key "${record.id}" must have pairId');
     }
     return pairId;
-  }
-
-  AtBytes _expectPublicKey(KeyRecord record) {
-    final publicKey = record.publicKey;
-    if (publicKey == null) {
-      throw AtKeysValidationException(
-          'Package key "${record.id}" must have publicKey');
-    }
-    return publicKey;
   }
 }
