@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_auth/src/keys/serialization/codec.dart';
 import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart';
 import 'package:at_auth/src/keys/serialization/resolver.dart';
@@ -17,6 +18,7 @@ sealed class AtKeysIo {
   final resolver = const AtKeysDocumentResolver();
   final codec = const AtKeysJsonCodec();
   final passwordCodec = const AtKeysPassphraseEnvelopeCodec();
+  final assurance = const AtKeysAssurance();
   FutureOr<AtKeys> read(String atsign);
 }
 

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_auth/src/keys/serialization/document.dart';
 import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart';
 import 'package:at_auth/src/keys/types.dart';
@@ -44,7 +45,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     AtKeysDocument document = codec.decodeDocument(json);
     if (document is LegacyAtKeysDocument) {
       return decryptAtKeysWithSelfEncKey(
-        document.legacyJson!,
+        document.legacyJson,
         PkamAuthMode.keysFile,
       );
     }
@@ -100,6 +101,20 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     }
 
     String path = filePath!(atsign);
+    final existingText = await File(path).readAsString();
+    // Validate against the decrypted document, not the raw bytes: a
+    // passphrase-protected file on disk is an envelope, which the codec would
+    // otherwise mistake for a legacy document and reject.
+    Map<String, dynamic> existingJson = jsonDecode(existingText);
+    if (passwordCodec.isEnvelope(existingJson)) {
+      existingJson =
+          await passwordCodec.decode(existingJson, passPhrase: passPhrase);
+    }
+    // assure safety, keep an archive (verbatim, still encrypted if it was),
+    // then over-write.
+    assurance.validateMapUpdate(existing: existingJson, candidate: json);
+    await File(AtKeysAssurance.archiveNameFor(path))
+        .writeAsString(existingText);
     await File(path).writeAsString(plaintext);
   }
 }

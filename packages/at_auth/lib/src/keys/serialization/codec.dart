@@ -28,7 +28,7 @@ class AtKeysJsonCodec implements AtKeysCodec {
     }
 
     final atsign = _expectNonEmptyString(json['atSign'], 'atSign').toAtsign();
-    final legacyJson = _optionalLegacyJson(json['legacy'], 'legacy');
+    final legacyJson = _expectLegacyJson(json['legacy'], 'legacy');
     final keysJson = _expectList(json['keys'], 'keys');
 
     final keys = keysJson
@@ -42,6 +42,7 @@ class AtKeysJsonCodec implements AtKeysCodec {
 
     _validateDuplicateIds(keys);
     _validateProtectionReferences(keys);
+    _validateEnrollmentGrouping(keys);
 
     return AtKeysDocument(
       version: version,
@@ -54,7 +55,7 @@ class AtKeysJsonCodec implements AtKeysCodec {
   @override
   Map<String, dynamic> encodeDocument(AtKeysDocument document) {
     if (document is LegacyAtKeysDocument) {
-      return document.legacyJson ?? {};
+      return document.legacyJson;
     }
     return {
       'legacy': jsonEncode(document.legacyJson),
@@ -85,8 +86,8 @@ KeyRecord _decodeRecord(Map<String, dynamic> json, int index) {
   _validateBase64(value, '$fieldPrefix.value');
 
   final pairId = _optionalString(json['pairId'], '$fieldPrefix.pairId');
-  final publicKey =
-      _optionalBase64Bytes(json['publicKey'], '$fieldPrefix.publicKey');
+  final enrollmentId =
+      _optionalString(json['enrollmentId'], '$fieldPrefix.enrollmentId');
   final protection = json.containsKey('protection')
       ? _decodeProtection(json['protection'], '$fieldPrefix.protection')
       : null;
@@ -96,14 +97,8 @@ KeyRecord _decodeRecord(Map<String, dynamic> json, int index) {
       throw AtKeysValidationException(
           'Symmetric key "$id" must not have pairId');
     }
-  } else if (kind != KeyRecordKind.package &&
-      (pairId == null || pairId.isEmpty)) {
+  } else if (pairId == null || pairId.isEmpty) {
     throw AtKeysValidationException('Asymmetric key "$id" must have pairId');
-  }
-
-  if (publicKey != null && kind != KeyRecordKind.package) {
-    throw AtKeysValidationException(
-        'Only package key "$id" may have publicKey');
   }
 
   if (protection != null && kind == KeyRecordKind.public) {
@@ -119,7 +114,7 @@ KeyRecord _decodeRecord(Map<String, dynamic> json, int index) {
         _optionalStringList(json['operations'], '$fieldPrefix.operations'),
     protection: protection,
     bytes: AtBytes.fromString(value),
-    publicKey: publicKey,
+    enrollmentId: enrollmentId,
   );
 }
 
@@ -131,7 +126,7 @@ Map<String, dynamic> _encodeRecord(KeyRecord record) {
     'algorithm': record.algorithm,
     if (record.operations.isNotEmpty) 'operations': record.operations,
     if (record.protection != null) 'protection': record.protection!.toJson(),
-    if (record.publicKey != null) 'publicKey': record.publicKey!.toString(),
+    if (record.enrollmentId != null) 'enrollmentId': record.enrollmentId,
     'value': record.bytes.toString(),
   };
 }
@@ -178,8 +173,8 @@ List<String> _optionalStringList(Object? value, String fieldName) {
 }
 
 Map<String, dynamic> _expectMap(Object? value, String fieldName) {
-  if (value is Map<String, dynamic>) {
-    return value;
+  if (value is Map) {
+    return Map<String, dynamic>.from(value);
   }
   throw AtKeysParseException('Expected object at $fieldName');
 }
@@ -191,20 +186,14 @@ List<dynamic> _expectList(Object? value, String fieldName) {
   throw AtKeysParseException('Expected array at $fieldName');
 }
 
-Map<String, dynamic>? _optionalLegacyJson(Object? value, String fieldName) {
-  if (value == null) {
-    return null;
-  }
-  if (value is Map<String, dynamic>) {
-    return value;
+Map<String, dynamic> _expectLegacyJson(Object? value, String fieldName) {
+  if (value is Map) {
+    return Map<String, dynamic>.from(value);
   }
   if (value is String) {
     final decoded = jsonDecode(value);
-    if (decoded == null) {
-      return null;
-    }
-    if (decoded is Map<String, dynamic>) {
-      return decoded;
+    if (decoded is Map) {
+      return Map<String, dynamic>.from(decoded);
     }
   }
   throw AtKeysParseException('Expected object at $fieldName');
@@ -216,15 +205,6 @@ void _validateBase64(String value, String fieldName) {
   } on FormatException catch (e) {
     throw AtKeysValidationException('Malformed base64 at $fieldName: $e');
   }
-}
-
-AtBytes? _optionalBase64Bytes(Object? value, String fieldName) {
-  if (value == null) {
-    return null;
-  }
-  final stringValue = _expectNonEmptyString(value, fieldName);
-  _validateBase64(stringValue, fieldName);
-  return AtBytes.fromString(stringValue);
 }
 
 KeyProtection _decodeProtection(Object? value, String fieldName) {
@@ -241,6 +221,23 @@ void _validateDuplicateIds(List<KeyRecord> keys) {
   for (final key in keys) {
     if (!seen.add(key.id)) {
       throw AtKeysValidationException('Duplicate atKeys id "${key.id}"');
+    }
+  }
+}
+
+// An enrollment (formerly one AtKeyPackage) produces at most one key of each
+// kind, so records sharing an enrollmentId must not duplicate a kind.
+void _validateEnrollmentGrouping(List<KeyRecord> keys) {
+  final kindsByEnrollment = <String, Set<KeyRecordKind>>{};
+  for (final key in keys) {
+    final enrollmentId = key.enrollmentId;
+    if (enrollmentId == null) {
+      continue;
+    }
+    final kinds = kindsByEnrollment.putIfAbsent(enrollmentId, () => {});
+    if (!kinds.add(key.kind)) {
+      throw AtKeysEnrollmentException(
+          'Enrollment "$enrollmentId" has more than one ${key.kind.name} key');
     }
   }
 }
