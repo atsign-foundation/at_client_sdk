@@ -6,6 +6,8 @@
   `references/11-sync.md`: reads are local-only, writes sync in the background,
   scope sync to your namespace to avoid a wedged sync, and observe completion
   via `SyncProgressListener`.
+- Add the Flutter rule to hold `watch()` streams in `State` — never create them
+  in `build()` — and fix the `StreamBuilder` snippets accordingly.
 
 ## 1.1.0 — 2026-06-23
 

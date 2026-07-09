@@ -192,6 +192,11 @@ todos.query()
     .watch();
 ```
 
+> **Flutter rule:** create a `watch()` stream **once** and hold it in `State`
+> (a `late final` field or `initState`); never call `watch()` inside `build()`,
+> or each rebuild mints a new stream and drops live updates. Memoise the `Query`
+> and recreate the stream only when its inputs change.
+
 Read [references/03-query-api.md](references/03-query-api.md) for all terminals
 (`distinct`, `groupBy`, `watchWithSub`, `watchWithTree`) and the full
 `PathField` operator list.
