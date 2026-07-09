@@ -1,14 +1,15 @@
 ## 3.2.0
-- feat: add versioned AtKeys document serialization with codec/resolver layers, optional key record fields, key protection metadata, and validation for duplicate ids, malformed records, unsupported versions, and invalid protection references.
-- feat: add passphrase envelope support using `argon2id` and add `InMemoryAtKeysIo` for in-memory/test flows.
-- refactor: move AtKeys IO implementations under `src/keys/io`, keep `FileAtKeysIo` exported, and replace the legacy IO mixin helpers with static helpers on `AtKeysIoUtil`.
+- feat: add versioned AtKeys document serialization (codec/resolver/document layers) with validation for duplicate ids, malformed records, unsupported versions, and invalid protection references.
+- feat: add typed key materials — `AtPublicKey`, `AtPrivateKey`, `AtSymmetricKey` (with `KeyProtection`) — exported from `at_auth.dart`. Keys produced by one enrollment are grouped by an optional `enrollmentId` and queried via `AtKeys.keysForEnrollment(...)`; the codec enforces at most one key of each kind per `enrollmentId`.
+- feat: add passphrase envelope support using `argon2id`, and add `InMemoryAtKeysIo` for in-memory/test flows (both exported).
+- feat: add `FileAtKeysIo.append(...)`, which safety-checks the rewrite (`AtKeysAssurance`) and archives the prior file before overwriting.
+- refactor: move AtKeys IO implementations under `src/keys/io` (`FileAtKeysIo` stays exported).
 - fix: preserve legacy `.atKeys` read/write behavior, including legacy self-encrypted key files and generated keys after write/read.
 - chore(deps): require `at_chops` ^3.4.1 for hashing algorithm barrel exports used by AtKeys passphrase handling.
 
 ## 3.1.1
 - refactor: route enrollment RSA (encrypt/decrypt `apkamSymmetricKey` under the default encryption keypair) through at_chops (`RsaEncryptionAlgo`) — `crypton` no longer imported in `lib` and moved to `dev_dependencies` (only the enrollment test still uses it for RSA keypair fixtures). Same framing, byte-identical by construction.
 - fix: `decodeAtKeys()` now reliably throws `AtDecryptionException` on an incorrect passphrase. The `jsonDecode` of the decrypted bytes now runs inside the decrypt try/catch, so wrong-passphrase garbage no longer escapes as an uncaught `FormatException` (an intermittent failure in `at_keys_io_test`).
-- refactor: replace the AtKeys IO mixin with static helpers on `AtKeysIoUtil`.
 
 ## 3.1.0
 - feat: `validateAtServer()` now emits progress events and probes atSign connectivity before returning

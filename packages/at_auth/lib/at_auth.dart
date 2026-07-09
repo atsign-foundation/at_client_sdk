@@ -27,8 +27,16 @@ export 'src/enroll/models/enrollment_request_decision.dart';
 /// request from the requesting app, for approval or denial.
 export 'src/exception/at_auth_exceptions.dart';
 export 'src/keys/at_keys.dart';
+// Typed key materials and the versioned document serialization layer.
+export 'src/keys/types.dart';
+export 'src/keys/serialization/assurance.dart';
+export 'src/keys/serialization/codec.dart';
+export 'src/keys/serialization/document.dart';
+export 'src/keys/serialization/passphrase_envelope.dart';
+export 'src/keys/serialization/resolver.dart';
 export 'src/keys/io/at_keys_io.dart';
 export 'src/keys/io/file_io.dart';
+export 'src/keys/io/memory_io.dart';
 
 /// Classes for registrar services
 export 'src/registrar/registrar.dart';
