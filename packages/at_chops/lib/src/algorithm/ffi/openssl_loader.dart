@@ -1,6 +1,7 @@
 import 'dart:ffi';
 import 'dart:io';
 
+import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
 import 'package:ffi/ffi.dart';
 
 /// Candidate libcrypto paths tried in order when [_envVar] is unset or fails.
@@ -23,8 +24,9 @@ const String _envVar = 'AT_CHOPS_LIBCRYPTO_PATH';
 /// candidate fails. Never throws.
 ///
 /// at_chops does not call this automatically — consumers decide their own
-/// fallback strategy. Pass the returned library to [MlKem768FfiAlgo.fromLib]
-/// or [X25519FfiAlgo.fromLib] when constructing FFI-backed algorithms.
+/// fallback strategy. Pass the returned library to an FFI-backed algorithm's
+/// `.fromLib` constructor (e.g. [MlKem768FfiAlgo.fromLib],
+/// [X25519FfiAlgo.fromLib], [AesGcm256FfiAlgo.fromLib]).
 ///
 /// If [loadedPath] is provided it will be set to the path that was
 /// successfully opened, which callers can use to verify whether the env-var
@@ -80,6 +82,19 @@ bool libCryptoSupportsMlDsa65(DynamicLibrary lib) {
   return _libCryptoSupportsAlgorithm(lib, 'ML-DSA-65');
 }
 
+/// Returns `true` when [lib] can fetch a usable AES-256-GCM cipher.
+///
+/// Uses `EVP_CIPHER_fetch` — the OpenSSL 3 provider-aware fetch-by-name, the
+/// symmetric-cipher analogue of the `EVP_PKEY_CTX_new_from_name` probe used for
+/// ML-DSA/ML-KEM. On a FIPS-/policy-restricted libcrypto where the legacy
+/// `EVP_aes_256_gcm` symbol still resolves but the cipher is disabled by the
+/// active provider, the fetch returns null, so [AtPqc.aesGcm256] falls back to
+/// pure-Dart instead of selecting [AesGcm256FfiAlgo] and then throwing a bare
+/// [StateError] at encrypt/decrypt.
+bool libCryptoSupportsAesGcm(DynamicLibrary lib) {
+  return _libCryptoSupportsCipher(lib, 'AES-256-GCM');
+}
+
 bool _libCryptoSupportsAlgorithm(DynamicLibrary lib, String algorithmName) {
   try {
     final ctxNewFromName = lib.lookupFunction<
@@ -98,6 +113,33 @@ bool _libCryptoSupportsAlgorithm(DynamicLibrary lib, String algorithmName) {
       return true;
     } finally {
       calloc.free(algName);
+    }
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Fetch-by-name probe for a symmetric cipher, mirroring
+/// [_libCryptoSupportsAlgorithm] but for `EVP_CIPHER`, which uses a distinct
+/// fetch/free API (`EVP_CIPHER_fetch`/`EVP_CIPHER_free`) from `EVP_PKEY`.
+bool _libCryptoSupportsCipher(DynamicLibrary lib, String cipherName) {
+  try {
+    final cipherFetch = lib.lookupFunction<
+        Pointer<EVP_CIPHER> Function(
+            Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>),
+        Pointer<EVP_CIPHER> Function(
+            Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>)>('EVP_CIPHER_fetch');
+    final cipherFree = lib.lookupFunction<Void Function(Pointer<EVP_CIPHER>),
+        void Function(Pointer<EVP_CIPHER>)>('EVP_CIPHER_free');
+
+    final Pointer<Utf8> name = cipherName.toNativeUtf8();
+    try {
+      final Pointer<EVP_CIPHER> cipher = cipherFetch(nullptr, name, nullptr);
+      if (cipher == nullptr) return false;
+      cipherFree(cipher);
+      return true;
+    } finally {
+      calloc.free(name);
     }
   } catch (_) {
     return false;
