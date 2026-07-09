@@ -2,12 +2,10 @@
 
 ## 1.2.0 — 2026-07-07
 
-- Document sync scoping (`syncRegex`) and the sync lifecycle in a new
-  `references/11-sync.md`: reads are local-only, writes sync in the background,
-  scope sync to your namespace to avoid a wedged sync, and observe completion
-  via `SyncProgressListener`.
-- Add the Flutter rule to hold `watch()` streams in `State` — never create them
-  in `build()` — and fix the `StreamBuilder` snippets accordingly.
+- Document sync scoping (`syncRegex`) and the sync lifecycle
+  (new `references/11-sync.md`).
+- Document the rule to hold `watch()` streams in `State`, never in `build()`,
+  and fix the `StreamBuilder` snippets.
 - Document the owner-writes-only collaboration/ownership model.
 - Document the atSign activation / atDirectory prerequisite.
 
