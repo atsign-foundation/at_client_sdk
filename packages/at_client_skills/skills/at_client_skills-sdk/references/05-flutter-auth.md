@@ -15,6 +15,24 @@ dart pub add at_client_flutter at_auth path_provider
 
 ---
 
+## Prerequisite: the atSign must be activated
+
+Before any of these flows can authenticate, the atSign must be **activated** —
+its atServer must be registered in the **atDirectory** (the atServer address
+registry). Activation happens once, via Flow 1 (CRAM) below or an onboarding
+app / the registrar.
+
+Authenticating an atSign that isn't activated (or a typo) fails lookup with:
+
+```text
+SecondaryNotFoundException: No entry in atDirectory for @alice
+```
+
+That means the atSign has no atServer registered yet — activate it first (Flow
+1), then Flows 2–4 (existing keys / keychain / APKAM) will resolve it.
+
+---
+
 ## Flow 1: New atSign — CRAM Activation (first-time only)
 
 Use when a developer wants to activate a brand-new atSign for a user.

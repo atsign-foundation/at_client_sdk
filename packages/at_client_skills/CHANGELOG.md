@@ -9,6 +9,7 @@
 - Add the Flutter rule to hold `watch()` streams in `State` — never create them
   in `build()` — and fix the `StreamBuilder` snippets accordingly.
 - Document the owner-writes-only collaboration/ownership model.
+- Document the atSign activation / atDirectory prerequisite.
 
 ## 1.1.0 — 2026-06-23
 

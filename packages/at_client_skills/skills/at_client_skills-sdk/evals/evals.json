@@ -85,6 +85,11 @@
       "id": 17,
       "prompt": "I want a user to edit an item that another atSign shared with them, but calling update() on it throws ArgumentError. How should collaborative editing work?",
       "expected_output": "Explains AtCollection is owner-writes-only: update/updateSharedWith/delete throw ArgumentError when item.owner is not the current atSign, so you cannot edit another atSign's item in place. The model is additive: each atSign owns what it creates, and sharing grants a readable copy, not write access. To model contribution, the peer creates their own item and shares it back; reading a received item works but mutating it does not."
+    },
+    {
+      "id": 18,
+      "prompt": "My Flutter app fails to authenticate an atSign with SecondaryNotFoundException: 'No entry in atDirectory for @alice'. What does this mean and how do I fix it?",
+      "expected_output": "Explains the atSign isn't activated/registered — its atServer address isn't in the atDirectory yet (or the atSign string is mistyped). An atSign must be activated once (via CRAM onboarding / Flow 1, an onboarding app, or the registrar) before existing-keys / keychain / APKAM login can resolve it. Fix: activate the atSign first, then authenticate; also verify the atSign is spelled correctly."
     }
   ]
 }
