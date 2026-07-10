@@ -1,16 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart';
-import 'package:meta/meta.dart';
 
 import '../at_keys.dart' show AtKeys;
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
+
+import '../types.dart';
 
 /// An interface that defines methods for reading AtKeys.
 /// It can be implemented by classes that read AtKeys from different sources,
