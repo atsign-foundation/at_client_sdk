@@ -485,6 +485,41 @@ void main() {
     });
   });
 
+  group('a member with no mutually-supported key is skipped, not fatal', () {
+    // A forward-compatible peer that advertises only a suite this client does
+    // not understand has a null kpid. It must be skipped so delivery still
+    // reaches the rest of the namespace — a null kpid used to satisfy the
+    // `!= kpid` self-check and drive an aborting StateError.
+    setUp(() {
+      directory.authorize('myapp', 'enroll-a');
+      directory.authorize('myapp', 'enroll-b');
+      final futurePeer = KeyPackage(
+        enrollmentId: 'enroll-future',
+        createdAt: DateTime.utc(2026, 6, 11),
+        keys: [PackageKey(use: 'enc', alg: 'x-wing-99', pub: 'future-pub')],
+      );
+      expect(futurePeer.kpid, isNull); // no key in SecretSharingAlgos.keyAlgos
+      directory.seed('enroll-future', futurePeer);
+      directory.authorize('myapp', 'enroll-future');
+    });
+
+    test('pushSecretToNamespaceMembers skips it and still reaches the rest',
+        () async {
+      await sharerA.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v'));
+      final pushed = await sharerA.pushSecretToNamespaceMembers(
+          sharerA.secretStore.getSecret('myapp', 'token')!);
+      expect(pushed, 1); // enroll-b only; enroll-future skipped, no StateError
+      expect(await sharerB.sweepOnce(), 1);
+    });
+
+    test('requestSecretsFromNamespace skips it and still reaches the rest',
+        () async {
+      final sent = await sharerA.requestSecretsFromNamespace('myapp');
+      expect(sent, 1); // enroll-b only; enroll-future skipped, no StateError
+    });
+  });
+
   group('request/response pull flow', () {
     setUp(() {
       // Both enrollments authorized for the namespace so they discover each
