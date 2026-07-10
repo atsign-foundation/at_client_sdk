@@ -462,7 +462,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     int sent = 0;
     for (final member in members) {
       final to = member.keyPackage;
-      if (to != null && to.kpid != kpid) {
+      if (to != null && to.kpid != null && to.kpid != kpid) {
         await sendEnvelope(to, namespace, {
           'kind': secretRequestKind,
           if (names != null) 'want': names,
@@ -666,7 +666,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     int pushed = 0;
     for (final member in members) {
       final to = member.keyPackage;
-      if (to != null && to.kpid != kpid) {
+      if (to != null && to.kpid != null && to.kpid != kpid) {
         await shareSecretWith(to, secret);
         pushed++;
       }
