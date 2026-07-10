@@ -3,9 +3,8 @@ import 'dart:io';
 
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
+import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/serialization/assurance.dart';
-import 'package:at_auth/src/keys/serialization/codec.dart';
-import 'package:at_auth/src/keys/serialization/document.dart';
 import 'package:at_auth/src/keys/types.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
@@ -13,7 +12,6 @@ import 'package:test/test.dart';
 void main() {
   group('AtKeysAssurance', () {
     const assurance = AtKeysAssurance();
-    const codec = AtKeysJsonCodec();
 
     test('archiveSuffix formats UTC timestamps for filenames', () {
       final timestamp = DateTime.utc(2026, 7, 9, 15, 4, 5, 0, 123);
@@ -35,16 +33,11 @@ void main() {
 
     test('populates legacy records when round-tripping fixture into v1', () {
       final existing = _fixtureLegacyJson();
-      final existingDocument = codec.decodeDocument(existing);
-      final candidate = codec.encodeDocument(
-        AtKeysDocument(
-          version: AtKeysJsonCodec.supportedVersion,
-          atsign: '@alice🛠'.toAtsign(),
-          legacyJson: existingDocument.legacyJson,
-          keys: [_symmetricRecord()],
-        ),
+      final candidate = _documentMap(
+        atSign: '@alice🛠',
+        legacyJson: existing,
+        keys: [_symmetricMaterial()],
       );
-      final roundTripped = codec.decodeDocument(candidate);
 
       expect(
         () => assurance.validateMapUpdate(
@@ -55,7 +48,7 @@ void main() {
       );
       for (final entry in existing.entries) {
         expect(
-          roundTripped.legacyJson[entry.key],
+          candidate[entry.key],
           entry.value,
           reason: '${entry.key} must survive legacy -> v1 round trip',
         );
@@ -68,7 +61,7 @@ void main() {
       for (final key in auth_constants.keySchemaList) {
         final changedLegacy = Map<String, dynamic>.from(existing);
         changedLegacy[key] = 'changed-${changedLegacy[key]}';
-        final candidate = _candidateWithLegacy(codec, changedLegacy);
+        final candidate = _candidateWithLegacy(changedLegacy);
 
         expect(
           () => assurance.validateMapUpdate(
@@ -86,7 +79,7 @@ void main() {
 
       for (final key in auth_constants.keySchemaList) {
         final changedLegacy = Map<String, dynamic>.from(existing)..remove(key);
-        final candidate = _candidateWithLegacy(codec, changedLegacy);
+        final candidate = _candidateWithLegacy(changedLegacy);
 
         expect(
           () => assurance.validateMapUpdate(
@@ -103,7 +96,7 @@ void main() {
       final existing = _fixtureLegacyJson();
       final changedLegacy = Map<String, dynamic>.from(existing)
         ..remove('@alice🛠');
-      final candidate = _candidateWithLegacy(codec, changedLegacy);
+      final candidate = _candidateWithLegacy(changedLegacy);
 
       expect(
         () => assurance.validateMapUpdate(
@@ -114,10 +107,10 @@ void main() {
       );
     });
 
-    test('rejects map update when candidate has no legacy payload', () {
+    test('rejects map update when candidate drops all legacy fields', () {
       final existing = _fixtureLegacyJson();
       final candidate = {
-        'version': AtKeysJsonCodec.supportedVersion,
+        'version': AtKeys.supportedVersion,
         'atSign': '@alice🛠',
         'keys': [_recordJson()],
       };
@@ -127,25 +120,7 @@ void main() {
           existing: existing,
           candidate: candidate,
         ),
-        throwsA(isA<AtKeysParseException>()),
-      );
-    });
-
-    test('rejects map update when candidate legacy payload is malformed', () {
-      final existing = _fixtureLegacyJson();
-      final candidate = {
-        'version': AtKeysJsonCodec.supportedVersion,
-        'atSign': '@alice🛠',
-        'legacy': 'not json',
-        'keys': [_recordJson()],
-      };
-
-      expect(
-        () => assurance.validateMapUpdate(
-          existing: existing,
-          candidate: candidate,
-        ),
-        throwsA(anything),
+        throwsA(isA<AtKeysAssuranceException>()),
       );
     });
 
@@ -155,7 +130,7 @@ void main() {
       for (final key in auth_constants.keySchemaList) {
         final changedLegacy = Map<String, dynamic>.from(existing);
         changedLegacy[key] = const [];
-        final candidate = _candidateWithLegacy(codec, changedLegacy);
+        final candidate = _candidateWithLegacy(changedLegacy);
 
         expect(
           () => assurance.validateMapUpdate(
@@ -168,43 +143,10 @@ void main() {
       }
     });
 
-    test('rejects map update when legacy fields are copied to wrong nesting',
-        () {
-      final existing = _fixtureLegacyJson();
-      final candidate = {
-        'version': AtKeysJsonCodec.supportedVersion,
-        'atSign': '@alice🛠',
-        'keys': [_recordJson()],
-        ...existing,
-      };
-
-      expect(
-        () => assurance.validateMapUpdate(
-          existing: existing,
-          candidate: candidate,
-        ),
-        throwsA(isA<AtKeysParseException>()),
-      );
-    });
-
     test('rejects map update when an existing key record changes', () {
-      final existing = codec.encodeDocument(
-        AtKeysDocument(
-          version: AtKeysJsonCodec.supportedVersion,
-          atsign: '@alice'.toAtsign(),
-          legacyJson: const {},
-          keys: [_symmetricRecord()],
-        ),
-      );
-      final candidate = codec.encodeDocument(
-        AtKeysDocument(
-          version: AtKeysJsonCodec.supportedVersion,
-          atsign: '@alice'.toAtsign(),
-          legacyJson: const {},
-          keys: [
-            _symmetricRecord(bytes: 'Y2hhbmdlZA=='),
-          ],
-        ),
+      final existing = _documentMap(keys: [_symmetricMaterial()]);
+      final candidate = _documentMap(
+        keys: [_symmetricMaterial(bytes: 'Y2hhbmdlZA==')],
       );
 
       expect(
@@ -217,22 +159,8 @@ void main() {
     });
 
     test('rejects map update when an existing key record is missing', () {
-      final existing = codec.encodeDocument(
-        AtKeysDocument(
-          version: AtKeysJsonCodec.supportedVersion,
-          atsign: '@alice'.toAtsign(),
-          legacyJson: const {},
-          keys: [_symmetricRecord()],
-        ),
-      );
-      final candidate = codec.encodeDocument(
-        AtKeysDocument(
-          version: AtKeysJsonCodec.supportedVersion,
-          atsign: '@alice'.toAtsign(),
-          legacyJson: const {},
-          keys: const [],
-        ),
-      );
+      final existing = _documentMap(keys: [_symmetricMaterial()]);
+      final candidate = _documentMap(keys: const []);
 
       expect(
         () => assurance.validateMapUpdate(
@@ -245,42 +173,19 @@ void main() {
 
     test('rejects map update when optional key record fields change', () {
       final existing = _documentMap(
-        codec,
-        keys: [_wrapperRecord(), _enrollRecord()],
+        keys: [_wrapperMaterial(), _enrollMaterial()],
       );
       final candidates = [
         _documentMap(
-          codec,
           keys: [
-            _wrapperRecord(),
-            _enrollRecord(operations: const ['sign']),
+            _wrapperMaterial(),
+            _enrollMaterial(operations: const ['sign']),
           ],
         ),
         _documentMap(
-          codec,
           keys: [
-            _wrapperRecord(),
-            _enrollRecord(
-              protection: const KeyProtection(
-                keyRef: 'wrapper',
-                algorithm: 'AES-128-GCM',
-                iv: 'aXY=',
-              ),
-            ),
-          ],
-        ),
-        _documentMap(
-          codec,
-          keys: [
-            _wrapperRecord(),
-            _enrollRecord(pairId: 'changed-pair'),
-          ],
-        ),
-        _documentMap(
-          codec,
-          keys: [
-            _wrapperRecord(),
-            _enrollRecord(enrollmentId: 'changed-enroll'),
+            _wrapperMaterial(),
+            _enrollMaterial(enrollmentId: 'changed-enroll'),
           ],
         ),
       ];
@@ -298,20 +203,12 @@ void main() {
 
     test('rejects map update when optional key record fields are removed', () {
       final existing = _documentMap(
-        codec,
-        keys: [_wrapperRecord(), _enrollRecord()],
+        keys: [_wrapperMaterial(), _enrollMaterial()],
       );
       final candidate = _documentMap(
-        codec,
         keys: [
-          _wrapperRecord(),
-          KeyRecord(
-            id: 'enroll-priv',
-            pairId: 'enroll-pair',
-            kind: KeyRecordKind.private,
-            algorithm: 'RSA',
-            bytes: AtBytes.fromString('c2VjcmV0'),
-          ),
+          _wrapperMaterial(),
+          _enrollMaterial(operations: const []),
         ],
       );
 
@@ -325,14 +222,13 @@ void main() {
     });
 
     test('rejects map update when candidate has duplicate key ids', () {
-      final existing = _documentMap(codec, keys: [_symmetricRecord()]);
+      final existing = _documentMap(keys: [_symmetricMaterial()]);
       final candidate = {
-        'version': AtKeysJsonCodec.supportedVersion,
+        'version': AtKeys.supportedVersion,
         'atSign': '@alice',
-        'legacy': const {},
         'keys': [
-          _recordJson(id: 'duplicate'),
-          _recordJson(id: 'duplicate'),
+          _recordJson(keyId: 'duplicate'),
+          _recordJson(keyId: 'duplicate'),
         ],
       };
 
@@ -346,17 +242,10 @@ void main() {
     });
 
     test('rejects map update when the atSign changes on a v1 rewrite', () {
-      final existing = _documentMap(
-        codec,
-        keys: [_symmetricRecord()],
-      );
-      final candidate = codec.encodeDocument(
-        AtKeysDocument(
-          version: AtKeysJsonCodec.supportedVersion,
-          atsign: '@bob'.toAtsign(),
-          legacyJson: const {},
-          keys: [_symmetricRecord()],
-        ),
+      final existing = _documentMap(keys: [_symmetricMaterial()]);
+      final candidate = _documentMap(
+        atSign: '@bob',
+        keys: [_symmetricMaterial()],
       );
 
       expect(
@@ -368,106 +257,110 @@ void main() {
       );
     });
 
-    test('rejects map update when candidate breaks protection references', () {
-      final existing = _documentMap(
-        codec,
-        keys: [_wrapperRecord(), _enrollRecord()],
-      );
-      final candidate = {
-        'version': AtKeysJsonCodec.supportedVersion,
-        'atSign': '@alice',
-        'legacy': const {},
-        'keys': [
-          _recordJson(
-            id: 'enroll-priv',
-            kind: 'private',
-            pairId: 'enroll-pair',
-            protection: const {
-              'keyRef': 'missing-wrapper',
-              'algorithm': 'AES-256-GCM',
-              'iv': 'aXY=',
+    test('rejects a key material whose atKey does not match the derived value',
+        () {
+      final json = _documentMap(keys: const []);
+      json['keys'] = [
+        {
+          ..._recordJson(),
+          'keyParts': [
+            {
+              ..._recordJson()['keyParts'][0] as Map<String, dynamic>,
+              'atKey': 'symmetric:wrong-id',
             },
-          ),
-        ],
-      };
+          ],
+        },
+      ];
 
       expect(
-        () => assurance.validateMapUpdate(
-          existing: existing,
-          candidate: candidate,
-        ),
-        throwsA(isA<AtKeysProtectionException>()),
+        () => AtKeys.fromDocumentJson(json),
+        throwsA(isA<AtKeysValidationException>()),
       );
     });
   });
 }
 
-KeyRecord _symmetricRecord({String bytes = 'dmFsdWU='}) {
-  return KeyRecord(
-    id: 'symmetric',
-    kind: KeyRecordKind.symmetric,
-    algorithm: 'AES-256',
-    bytes: AtBytes.fromString(bytes),
+final _createdAt = DateTime.utc(2024, 1, 1);
+
+AtKeysRecord _symmetricMaterial({String bytes = 'dmFsdWU='}) {
+  return AtKeysRecord(
+    keyId: 'symmetric',
+    keyGroup: 'default',
+    materials: [
+      AtKeysMaterial(
+        keyId: 'symmetric',
+        keyGroup: 'default',
+        keyPartType: CryptographicKeyType.symmetricDataEncryption,
+        visibility: AtKeyVisibility.symmetric,
+        keyAlgorithmType: KeyAlgorithmType.aes,
+        bytes: AtBytes.fromString(bytes),
+        createdAt: _createdAt,
+      ),
+    ],
   );
 }
 
-KeyRecord _wrapperRecord() {
-  return KeyRecord(
-    id: 'wrapper',
-    kind: KeyRecordKind.symmetric,
-    algorithm: 'AES-256',
-    bytes: AtBytes.fromString('d3JhcHBlcg=='),
+AtKeysRecord _wrapperMaterial() {
+  return AtKeysRecord(
+    keyId: 'wrapper',
+    keyGroup: 'default',
+    materials: [
+      AtKeysMaterial(
+        keyId: 'wrapper',
+        keyGroup: 'default',
+        keyPartType: CryptographicKeyType.keyWrapping,
+        visibility: AtKeyVisibility.symmetric,
+        keyAlgorithmType: KeyAlgorithmType.aes,
+        bytes: AtBytes.fromString('d3JhcHBlcg=='),
+        createdAt: _createdAt,
+      ),
+    ],
   );
 }
 
-KeyRecord _enrollRecord({
-  String pairId = 'enroll-pair',
+AtKeysRecord _enrollMaterial({
+  String keyId = 'enroll-priv',
   String enrollmentId = 'enroll-1',
   List<String> operations = const ['decrypt'],
-  KeyProtection protection = const KeyProtection(
-    keyRef: 'wrapper',
-    algorithm: 'AES-256-GCM',
-    iv: 'aXY=',
-  ),
 }) {
-  return KeyRecord(
-    id: 'enroll-priv',
-    pairId: pairId,
-    kind: KeyRecordKind.private,
-    algorithm: 'RSA',
-    operations: operations,
-    protection: protection,
-    bytes: AtBytes.fromString('c2VjcmV0'),
+  return AtKeysRecord(
+    keyId: keyId,
+    keyGroup: 'default',
     enrollmentId: enrollmentId,
+    materials: [
+      AtKeysMaterial(
+        keyId: keyId,
+        keyGroup: 'default',
+        enrollmentId: enrollmentId,
+        keyPartType: CryptographicKeyType.classicalPrivateDecryption,
+        visibility: AtKeyVisibility.private,
+        keyAlgorithmType: KeyAlgorithmType.rsa,
+        operations: operations,
+        bytes: AtBytes.fromString('c2VjcmV0'),
+        createdAt: _createdAt,
+      ),
+    ],
   );
 }
 
-Map<String, dynamic> _documentMap(
-  AtKeysJsonCodec codec, {
-  required List<KeyRecord> keys,
+Map<String, dynamic> _documentMap({
+  required List<AtKeysRecord> keys,
   Map<String, dynamic> legacyJson = const {},
+  String atSign = '@alice',
 }) {
-  return codec.encodeDocument(
-    AtKeysDocument(
-      version: AtKeysJsonCodec.supportedVersion,
-      atsign: '@alice'.toAtsign(),
-      legacyJson: legacyJson,
-      keys: keys,
-    ),
-  );
+  return {
+    ...legacyJson,
+    'version': AtKeys.supportedVersion,
+    'atSign': atSign,
+    'keys': keys.map((record) => record.toJson()).toList(),
+  };
 }
 
-Map<String, dynamic> _candidateWithLegacy(
-  AtKeysJsonCodec codec,
-  Map<String, dynamic> legacyJson,
-) {
-  return codec.encodeDocument(
-    AtKeysDocument(
-      version: AtKeysJsonCodec.supportedVersion,
-      atsign: '@alice🛠'.toAtsign(),
-      legacyJson: legacyJson,
-      keys: [_symmetricRecord()],
-    ),
+Map<String, dynamic> _candidateWithLegacy(Map<String, dynamic> legacyJson) {
+  return _documentMap(
+    atSign: '@alice🛠',
+    legacyJson: legacyJson,
+    keys: [_symmetricMaterial()],
   );
 }
 
@@ -484,18 +377,20 @@ File _fixtureFile() {
   return File('packages/at_auth/test/data/@alice🛠_key.atKeys');
 }
 
-Map<String, dynamic> _recordJson({
-  String id = 'symmetric',
-  String kind = 'symmetric',
-  String? pairId,
-  Map<String, dynamic>? protection,
-}) {
+Map<String, dynamic> _recordJson({String keyId = 'symmetric'}) {
   return {
-    'id': id,
-    if (pairId != null) 'pairId': pairId,
-    'kind': kind,
-    'algorithm': 'AES-256',
-    if (protection != null) 'protection': protection,
-    'value': 'dmFsdWU=',
+    'keyId': keyId,
+    'keyGroup': 'default',
+    'keyParts': [
+      {
+        'keyPartType': CryptographicKeyType.symmetricDataEncryption.name,
+        'visibility': AtKeyVisibility.symmetric.name,
+        'keyAlgorithmType': KeyAlgorithmType.aes.name,
+        'atKey': '${AtKeyVisibility.symmetric.name}:$keyId',
+        'createdAt': _createdAt.toIso8601String(),
+        'status': KeyPartStatus.active.name,
+        'bytes': 'dmFsdWU=',
+      },
+    ],
   };
 }

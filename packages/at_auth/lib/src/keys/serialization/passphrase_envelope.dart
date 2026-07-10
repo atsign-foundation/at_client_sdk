@@ -3,8 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
-import 'package:at_chops/at_chops.dart' hide AtEncrypted, AtKeysCrypto;
-import 'package:at_chops/types.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 
 class AtKeysPassphraseEnvelopeCodec {
@@ -41,22 +40,20 @@ class AtKeysPassphraseEnvelopeCodec {
           'Hashing algo type is required for decryption of password protected atKeys file');
     }
 
-    final String decryptedAtKeysData;
     try {
-      decryptedAtKeysData = await AtKeysCrypto.fromHashingAlgorithm(
+      final decryptedAtKeysData = await AtKeysPassphraseCrypto.fromHashingAlgorithm(
         envelope.hashingAlgoType!,
       ).decrypt(envelope, passPhrase!);
+      final decodedJson = jsonDecode(decryptedAtKeysData);
+      if (decodedJson is! Map<String, dynamic>) {
+        throw AtKeysParseException(
+            'Expected decrypted atKeys file to contain a JSON object');
+      }
+      return decodedJson;
     } catch (e) {
       throw _decryptionException(
           'Failed to decrypt atKeys file - passphrase may be incorrect: $e');
     }
-
-    final decodedJson = jsonDecode(decryptedAtKeysData);
-    if (decodedJson is! Map<String, dynamic>) {
-      throw AtKeysParseException(
-          'Expected decrypted atKeys file to contain a JSON object');
-    }
-    return decodedJson;
   }
 }
 
@@ -130,14 +127,14 @@ class PassphraseEnvelope {
 ///
 /// This class allows for encryption and decryption of AtKeys
 /// with a passphrase, using the provided hashing algorithm type.
-abstract class AtKeysCrypto {
-  /// Returns an instance of [_AtKeysCryptoImpl] based on the
+abstract class AtKeysPassphraseCrypto {
+  /// Returns an instance of [_AtKeysPassphraseCryptoImpl] based on the
   /// provided [hashingAlgoType].
   ///
   /// The [hashingAlgoType] parameter determines the hashing
   /// algorithm to be used in the cryptographic operations.
-  static AtKeysCrypto fromHashingAlgorithm(HashingAlgoType hashingAlgoType) =>
-      _AtKeysCryptoImpl(hashingAlgoType);
+  static AtKeysPassphraseCrypto fromHashingAlgorithm(HashingAlgoType hashingAlgoType) =>
+      _AtKeysPassphraseCryptoImpl(hashingAlgoType);
 
   /// Encrypts the given [plainAtKeys] using the provided [passPhrase] and
   /// optional [hashParams].
@@ -169,12 +166,12 @@ abstract class AtKeysCrypto {
       {HashParams? hashParams});
 }
 
-/// The implementation class of [AtKeysCrypto]. The implementation classes is marked private.
-/// Use [AtKeysCrypto.fromHashingAlgorithm] to get an instance of [_AtKeysCryptoImpl].
-class _AtKeysCryptoImpl implements AtKeysCrypto {
+/// The implementation class of [AtKeysPassphraseCrypto]. The implementation classes is marked private.
+/// Use [AtKeysPassphraseCrypto.fromHashingAlgorithm] to get an instance of [_AtKeysPassphraseCryptoImpl].
+class _AtKeysPassphraseCryptoImpl implements AtKeysPassphraseCrypto {
   final HashingAlgoType _hashingAlgoType;
 
-  _AtKeysCryptoImpl(this._hashingAlgoType);
+  _AtKeysPassphraseCryptoImpl(this._hashingAlgoType);
 
   @override
   Future<PassphraseEnvelope> encrypt(String plainAtKeys, String passPhrase,

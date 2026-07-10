@@ -2,22 +2,22 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/keys/serialization/assurance.dart';
-import 'package:at_auth/src/keys/serialization/document.dart';
 import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart';
 import 'package:at_auth/src/keys/types.dart';
-import 'package:at_chops/at_chops.dart' hide AtKeysCrypto;
+import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 
 /// An implementation of [AtKeysIo] that reads and writes AtKeys to the file system.
-/// This implementation still uses [AtKeysIoUtil] for encoding and decoding Legacy AtKeys.
+/// This implementation still uses [KeyIOMixin] for encoding and decoding Legacy AtKeys.
 /// The [FileAtKeysIo] class can be configured with an optional [filePath] and [passPhrase].
 ///
 /// Optional Parameters:
-/// If [filePath] is a format function derived from your atSign. Defaults to using %HOME%/.atsign/keys/$atsign_key.t atKeys
+/// [filePath] formats the file path from your atSign. Defaults to %HOME%/.atsign/keys/<atsign>_key.atKeys
 /// The [passPhrase] is used for atKeys files that are password protected.
 class FileAtKeysIo extends WrittenAtKeysIo {
   String Function(String)? filePath;
@@ -39,17 +39,13 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     }
     String atAuthData = await File(file).readAsString();
     Map<String, dynamic> json = jsonDecode(atAuthData);
-    if (passwordCodec.isEnvelope(json)) {
-      json = await passwordCodec.decode(json, passPhrase: passPhrase);
+    if (passphraseCodec.isEnvelope(json)) {
+      json = await passphraseCodec.decode(json, passPhrase: passPhrase);
     }
-    AtKeysDocument document = codec.decodeDocument(json);
-    if (document is LegacyAtKeysDocument) {
-      return decryptAtKeysWithSelfEncKey(
-        document.legacyJson,
-        PkamAuthMode.keysFile,
-      );
+    if (!json.containsKey('version')) {
+      return decryptAtKeysWithSelfEncKey(json, PkamAuthMode.keysFile);
     }
-    return resolver.resolve(document);
+    return AtKeys.fromDocumentJson(json);
   }
 
   @override
@@ -73,49 +69,63 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     } else {
       //todo: remove this line in v4, ensures we're writing new format
       atKeys.atsign ??= atsign.toAtsign();
-      final document = resolver.resolveToDocument(atKeys);
-      final json = codec.encodeDocument(document);
-      plaintext = jsonEncode(json);
+      plaintext = jsonEncode(atKeys.toDocumentJson());
     }
-    if (passPhrase != null && passPhrase!.isNotEmpty) {
-      PassphraseEnvelope envelope =
-          await AtKeysCrypto.fromHashingAlgorithm(HashingAlgoType.argon2id)
-              .encrypt(plaintext, passPhrase!);
-      plaintext = envelope.toString();
-    }
+    plaintext = await _encryptWithPassPhraseIfNeeded(plaintext);
 
     await File(path).writeAsString(plaintext);
   }
 
+  @override
   FutureOr<void> append(Atsign atsign, AtKeysMaterial material) async {
-    AtKeys keys = await read(atsign);
-    keys.addKey(material);
-    final document = resolver.resolveToDocument(keys);
-    final json = codec.encodeDocument(document);
-    String plaintext = jsonEncode(json);
-    if (passPhrase != null && passPhrase!.isNotEmpty) {
-      PassphraseEnvelope envelope =
-          await AtKeysCrypto.fromHashingAlgorithm(HashingAlgoType.argon2id)
-              .encrypt(plaintext, passPhrase!);
-      plaintext = envelope.toString();
+    final path = filePath!(atsign);
+    final originalText = await File(path).readAsString();
+    Map<String, dynamic> fileJson = jsonDecode(originalText);
+    if (passphraseCodec.isEnvelope(fileJson)) {
+      fileJson = await passphraseCodec.decode(fileJson, passPhrase: passPhrase);
     }
 
-    String path = filePath!(atsign);
-    final existingText = await File(path).readAsString();
-    // Validate against the decrypted document, not the raw bytes: a
-    // passphrase-protected file on disk is an envelope, which the codec would
-    // otherwise mistake for a legacy document and reject.
-    Map<String, dynamic> existingJson = jsonDecode(existingText);
-    if (passwordCodec.isEnvelope(existingJson)) {
-      existingJson =
-          await passwordCodec.decode(existingJson, passPhrase: passPhrase);
+    final AtKeys keys;
+    final Map<String, dynamic> existingForAssurance;
+    if (fileJson.containsKey('version')) {
+      keys = AtKeys.fromDocumentJson(fileJson);
+      existingForAssurance = fileJson;
+    } else {
+      // Legacy files may hold some fields self-encrypted; decrypt first so
+      // assurance compares plaintext against plaintext, not ciphertext
+      // against plaintext.
+      keys = await decryptAtKeysWithSelfEncKey(fileJson, PkamAuthMode.keysFile)
+        ..atsign = atsign;
+      keys.metadata.addAll({
+        for (final entry in fileJson.entries)
+          if (!auth_constants.keySchemaList.contains(entry.key))
+            entry.key: entry.value,
+      });
+      existingForAssurance = keys.toJson();
     }
-    // assure safety, keep an archive (verbatim, still encrypted if it was),
-    // then over-write.
-    assurance.validateMapUpdate(existing: existingJson, candidate: json);
+
+    keys.addKey(material);
+    final candidate = keys.toDocumentJson();
+
+    assurance.validateMapUpdate(
+      existing: existingForAssurance,
+      candidate: candidate,
+    );
+    final plaintext =
+        await _encryptWithPassPhraseIfNeeded(jsonEncode(candidate));
     await File(AtKeysAssurance.archiveNameFor(path))
-        .writeAsString(existingText);
+        .writeAsString(originalText);
     await File(path).writeAsString(plaintext);
+  }
+
+  Future<String> _encryptWithPassPhraseIfNeeded(String plaintext) async {
+    if (passPhrase == null || passPhrase!.isEmpty) {
+      return plaintext;
+    }
+    final envelope = await AtKeysPassphraseCrypto.fromHashingAlgorithm(
+            HashingAlgoType.argon2id)
+        .encrypt(plaintext, passPhrase!);
+    return envelope.toString();
   }
 }
 

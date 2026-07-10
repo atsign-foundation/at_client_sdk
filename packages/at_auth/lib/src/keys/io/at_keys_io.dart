@@ -1,23 +1,21 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/keys/serialization/assurance.dart';
-import 'package:at_auth/src/keys/serialization/codec.dart';
 import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart';
-import 'package:at_auth/src/keys/serialization/resolver.dart';
+import 'package:meta/meta.dart';
 
 import '../at_keys.dart' show AtKeys;
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
-import 'package:at_chops/at_chops.dart' hide AtKeysCrypto;
+import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
 /// An interface that defines methods for reading AtKeys.
 /// It can be implemented by classes that read AtKeys from different sources,
 sealed class AtKeysIo {
-  final resolver = const AtKeysDocumentResolver();
-  final codec = const AtKeysJsonCodec();
-  final passwordCodec = const AtKeysPassphraseEnvelopeCodec();
+  final passphraseCodec = const AtKeysPassphraseEnvelopeCodec();
   final assurance = const AtKeysAssurance();
   FutureOr<AtKeys> read(String atsign);
 }
@@ -29,6 +27,13 @@ sealed class AtKeysIo {
 abstract class WrittenAtKeysIo extends AtKeysIo with KeyIOMixin {
   //todo: futureOr & Atsign types
   Future write(String atsign, AtKeys atKeys);
+  FutureOr<void> append(Atsign atsign, AtKeysMaterial material) {
+    throw UnimplementedError('unimplemented');
+  }
+
+  void save(Atsign atsign, AtKeys atKeys) {
+    throw UnimplementedError('unimplemented');
+  }
 }
 
 /// An interface that defines methods for AtKeys that can be generated.
@@ -138,6 +143,9 @@ mixin KeyIOMixin on AtKeysIo {
       'legacy helpers for serialization, if we need to retain this turn it into a static helper')
   AtKeys generateKeyPairs({
     PkamAuthMode authMode = PkamAuthMode.keysFile,
+    @Deprecated(
+        'ignored; kept so existing atSign: call sites compile — remove in v4')
+    String? atSign,
   }) {
     var atKeysFile = AtKeys();
     // generate user encryption keypair
@@ -200,7 +208,8 @@ mixin KeyIOMixin on AtKeysIo {
 
       try {
         final decryptedAtKeysData =
-            await AtKeysCrypto.fromHashingAlgorithm(envelope.hashingAlgoType!)
+            await AtKeysPassphraseCrypto.fromHashingAlgorithm(
+                    envelope.hashingAlgoType!)
                 .decrypt(envelope, passPhrase!);
         // jsonDecode must stay inside the try: the cipher is unauthenticated,
         // so an incorrect passphrase does not fail decrypt() -- it yields

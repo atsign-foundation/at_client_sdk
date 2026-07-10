@@ -9,6 +9,8 @@ import 'package:at_auth/src/keys/types.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/at_keys.dart';
+
 void main() {
   String atSign = '@alice🛠';
   String keyFilePath = 'test/data/@alice🛠_key.atKeys';
@@ -158,11 +160,7 @@ void main() {
         final atKeys = AtKeys(
           atsign: atSign.toAtsign(),
           keysList: [
-            AtSymmetricKey(
-              id: 'existing',
-              algorithm: 'AES-256',
-              bytes: AtBytes.fromString('ZXhpc3Rpbmc='),
-            ),
+            symmetricKey('existing', value: 'ZXhpc3Rpbmc='),
           ],
         );
         await fileAtKeysIo.write(atSign, atKeys);
@@ -170,11 +168,7 @@ void main() {
         final existingText = await File(tempPath).readAsString();
         await fileAtKeysIo.append(
           atSign.toAtsign(),
-          AtSymmetricKey(
-            id: 'appended',
-            algorithm: 'AES-256',
-            bytes: AtBytes.fromString('YXBwZW5kZWQ='),
-          ),
+          symmetricKey('appended', value: 'YXBwZW5kZWQ='),
         );
 
         final archives = tempDir
@@ -198,31 +192,34 @@ void main() {
         final atKeys = AtKeys(
           atsign: atSign.toAtsign(),
           keysList: [
-            AtSymmetricKey(
-              id: 'sym',
-              algorithm: 'AES-256',
-              bytes: AtBytes.fromString('c2VjcmV0'),
-            ),
-            AtPublicKey(
-              pairId: 'pair',
-              algorithm: 'RSA',
-              bytes: AtBytes.fromString('cHVibGlj'),
-            ),
-            AtPrivateKey(
-              pairId: 'pair',
-              algorithm: 'RSA',
-              bytes: AtBytes.fromString('cHJpdmF0ZQ=='),
-            ),
+            symmetricKey('sym', value: 'c2VjcmV0'),
+            ...rsaKeyPair('pair',
+                publicValue: 'cHVibGlj', privateValue: 'cHJpdmF0ZQ=='),
           ],
         );
         await io.write(atSign, atKeys);
 
         final readKeys = await io.read(atSign);
-        expect(readKeys.getKey<AtSymmetricKey>('sym')?.bytes.toString(),
+        expect(
+            readKeys
+                .getMaterial(
+                    'sym', CryptographicKeyType.symmetricDataEncryption)
+                ?.bytes
+                .toString(),
             'c2VjcmV0');
         expect(
-            readKeys.getKey<AtPublicKey>('pair')?.bytes.toString(), 'cHVibGlj');
-        expect(readKeys.getKey<AtPrivateKey>('pair')?.bytes.toString(),
+            readKeys
+                .getMaterial(
+                    'pair', CryptographicKeyType.classicalPublicEncryption)
+                ?.bytes
+                .toString(),
+            'cHVibGlj');
+        expect(
+            readKeys
+                .getMaterial(
+                    'pair', CryptographicKeyType.classicalPrivateDecryption)
+                ?.bytes
+                .toString(),
             'cHJpdmF0ZQ==');
       } finally {
         await tempDir.delete(recursive: true);
@@ -239,11 +236,7 @@ void main() {
         final atKeys = AtKeys(
           atsign: atSign.toAtsign(),
           keysList: [
-            AtSymmetricKey(
-              id: 'existing',
-              algorithm: 'AES-256',
-              bytes: AtBytes.fromString('ZXhpc3Rpbmc='),
-            ),
+            symmetricKey('existing', value: 'ZXhpc3Rpbmc='),
           ],
         );
         await fileAtKeysIo.write(atSign, atKeys);
@@ -251,11 +244,7 @@ void main() {
 
         await fileAtKeysIo.append(
           atSign.toAtsign(),
-          AtSymmetricKey(
-            id: 'appended',
-            algorithm: 'AES-256',
-            bytes: AtBytes.fromString('YXBwZW5kZWQ='),
-          ),
+          symmetricKey('appended', value: 'YXBwZW5kZWQ='),
         );
 
         // The archive keeps the original bytes verbatim (still encrypted).
@@ -269,8 +258,74 @@ void main() {
 
         // Both keys survive a decrypt-and-read of the rewritten file.
         final readKeys = await fileAtKeysIo.read(atSign);
-        expect(readKeys.getKey<AtSymmetricKey>('existing'), isNotNull);
-        expect(readKeys.getKey<AtSymmetricKey>('appended'), isNotNull);
+        expect(readKeys.materialsForKeyId('existing'), isNotEmpty);
+        expect(readKeys.materialsForKeyId('appended'), isNotEmpty);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    for (final passPhrase in [null, 'qwerty']) {
+      test(
+          'Test append() upgrades a legacy file to a v1 document'
+          '${passPhrase == null ? '' : ' with passphrase'}', () async {
+        final tempDir =
+            await Directory.systemTemp.createTemp('at_keys_io_test');
+        try {
+          final tempPath = '${tempDir.path}/@alice_key.atKeys';
+          final fileAtKeysIo =
+              FileAtKeysIo(filePath: (_) => tempPath, passPhrase: passPhrase);
+          final legacyKeys = legacyAtKeys();
+          await fileAtKeysIo.write(atSign, legacyKeys);
+          final originalText = await File(tempPath).readAsString();
+
+          await fileAtKeysIo.append(
+            atSign.toAtsign(),
+            symmetricKey('appended', value: 'YXBwZW5kZWQ='),
+          );
+
+          // The archive keeps the original legacy bytes verbatim.
+          final archives = tempDir
+              .listSync()
+              .whereType<File>()
+              .where((file) => file.path.startsWith('$tempPath.'))
+              .toList();
+          expect(archives, hasLength(1));
+          expect(await archives.single.readAsString(), originalText);
+
+          // The rewritten file is a v1 document that reads back with the
+          // legacy keys intact plus the appended material.
+          final readKeys = await fileAtKeysIo.read(atSign);
+          expectLegacyAtKeys(readKeys, legacyKeys);
+          expect(readKeys.materialsForKeyId('appended'), isNotEmpty);
+        } finally {
+          await tempDir.delete(recursive: true);
+        }
+      });
+    }
+
+    test('Test append() with an incorrect passphrase -> throws', () async {
+      final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
+      try {
+        final tempPath = '${tempDir.path}/@alice_key.atKeys';
+        await FileAtKeysIo(filePath: (_) => tempPath, passPhrase: 'right')
+            .write(
+          atSign,
+          AtKeys(
+            atsign: atSign.toAtsign(),
+            keysList: [symmetricKey('existing')],
+          ),
+        );
+
+        final wrongPassphraseIo =
+            FileAtKeysIo(filePath: (_) => tempPath, passPhrase: 'wrong');
+        await expectLater(
+          () async => await wrongPassphraseIo.append(
+              atSign.toAtsign(), symmetricKey('appended')),
+          throwsA(isA<AtDecryptionException>()),
+        );
+        // Nothing was archived or rewritten.
+        expect(tempDir.listSync().whereType<File>().toList(), hasLength(1));
       } finally {
         await tempDir.delete(recursive: true);
       }

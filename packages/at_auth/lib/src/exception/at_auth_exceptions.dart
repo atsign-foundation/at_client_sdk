@@ -32,10 +32,6 @@ class AtKeysEnrollmentException extends AtKeysValidationException {
   AtKeysEnrollmentException(super.message);
 }
 
-class AtKeysDecryptionException extends AtDecryptionException {
-  AtKeysDecryptionException(super.message);
-}
-
 class AtKeysNotInMemoryException extends AtException {
   AtKeysNotInMemoryException(super.message);
 }

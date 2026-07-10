@@ -52,5 +52,5 @@ export 'src/metadata/signing_result.dart';
 export 'src/model/at_encrypted.dart';
 
 // Class representing the hashing parameters to pass to an hashing algorithm.
-export 'src/algorithm/hashing/types.dart' hide HashParams;
+export 'src/algorithm/hashing/types.dart';
 export 'src/util/at_chops_util.dart';

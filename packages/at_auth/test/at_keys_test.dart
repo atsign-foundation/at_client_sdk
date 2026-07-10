@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:at_auth/src/keys/at_keys.dart';
-import 'package:at_auth/src/keys/types.dart' as key_types;
+import 'package:at_auth/src/keys/types.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:test/test.dart';
+
+import 'test_utils/at_keys.dart';
 
 void main() {
   String filePath = 'test/data/@alice🛠_key.atKeys';
@@ -111,58 +113,81 @@ void main() {
   });
 
   group('AtKeys typed key lookup', () {
-    test('getKey disambiguates keys with the same id by type', () {
-      final publicKey = key_types.AtPublicKey(
-        pairId: 'shared-pair',
-        algorithm: 'RSA',
-        bytes: AtBytes.fromString('cHVibGlj'),
-      );
-      final privateKey = key_types.AtPrivateKey(
-        pairId: 'shared-pair',
-        algorithm: 'RSA',
-        bytes: AtBytes.fromString('cHJpdmF0ZQ=='),
-      );
-
-      final atKeys = AtKeys(keysList: [publicKey, privateKey]);
-
-      expect(
-        atKeys.getKey<key_types.AtPublicKey>('shared-pair'),
-        same(publicKey),
-      );
-      expect(
-        atKeys.getKey<key_types.AtPrivateKey>('shared-pair'),
-        same(privateKey),
-      );
-    });
-
-    test('getKey returns null when the id exists for another key type', () {
-      final atKeys = AtKeys(
+    test('equality includes atSign and typed key material', () {
+      final first = AtKeys(
+        atsign: '@alice'.toAtsign(),
         keysList: [
-          key_types.AtSymmetricKey(
-            id: 'shared-id',
-            algorithm: 'AES-256',
-            bytes: AtBytes.fromString('c2VjcmV0'),
-          ),
+          symmetricKey('shared'),
+        ],
+      );
+      final same = AtKeys(
+        atsign: '@alice'.toAtsign(),
+        keysList: [
+          symmetricKey('shared'),
+        ],
+      );
+      final differentKey = AtKeys(
+        atsign: '@alice'.toAtsign(),
+        keysList: [
+          symmetricKey('shared', value: 'b3RoZXI='),
+        ],
+      );
+      final differentAtsign = AtKeys(
+        atsign: '@bob'.toAtsign(),
+        keysList: [
+          symmetricKey('shared'),
         ],
       );
 
-      expect(atKeys.getKey<key_types.AtPrivateKey>('shared-id'), isNull);
+      expect(first, same);
+      expect(first.hashCode, same.hashCode);
+      expect(first, isNot(differentKey));
+      expect(first, isNot(differentAtsign));
     });
 
-    test('addKey rejects a duplicate id within the same key type', () {
-      final atKeys = AtKeys();
-      atKeys.addKey(key_types.AtSymmetricKey(
-        id: 'dupe',
-        algorithm: 'AES-256',
-        bytes: AtBytes.fromString('c2VjcmV0'),
-      ));
+    test('getMaterial disambiguates materials of the same keyId by type', () {
+      final pair = rsaKeyPair('shared-pair');
+      final atKeys = AtKeys(keysList: pair);
+      final publicMaterial = pair.firstWhere((m) =>
+          m.keyPartType == CryptographicKeyType.classicalPublicEncryption);
+      final privateMaterial = pair.firstWhere((m) =>
+          m.keyPartType == CryptographicKeyType.classicalPrivateDecryption);
 
       expect(
-        () => atKeys.addKey(key_types.AtSymmetricKey(
-          id: 'dupe',
-          algorithm: 'AES-256',
-          bytes: AtBytes.fromString('b3RoZXI='),
-        )),
+        atKeys.getMaterial(
+            'shared-pair', CryptographicKeyType.classicalPublicEncryption),
+        same(publicMaterial),
+      );
+      expect(
+        atKeys.getMaterial(
+            'shared-pair', CryptographicKeyType.classicalPrivateDecryption),
+        same(privateMaterial),
+      );
+    });
+
+    test('getMaterial returns null when the keyId has no material of that type',
+        () {
+      final atKeys = AtKeys(keysList: [symmetricKey('shared-id')]);
+
+      expect(
+        atKeys.getMaterial(
+            'shared-id', CryptographicKeyType.classicalPrivateDecryption),
+        isNull,
+      );
+    });
+
+    test('materialsForKeyId returns empty for an unknown keyId', () {
+      final atKeys = AtKeys(keysList: [symmetricKey('shared-id')]);
+
+      expect(atKeys.materialsForKeyId('nope'), isEmpty);
+    });
+
+    test('addKey rejects a duplicate keyId', () {
+      final atKeys = AtKeys();
+      atKeys.addKey(symmetricKey('dupe'));
+
+      expect(
+        () => atKeys.addKey(symmetricKey('dupe', value: 'b3RoZXI=')),
         throwsA(isA<ArgumentError>()),
       );
     });
@@ -170,24 +195,18 @@ void main() {
     test('keysForEnrollment returns only keys tagged with that enrollment', () {
       final atKeys = AtKeys(
         keysList: [
-          key_types.AtPublicKey(
-            pairId: 'enroll-pair',
-            algorithm: 'RSA',
-            bytes: AtBytes.fromString('cHVibGlj'),
-            enrollmentId: 'enroll-1',
-          ),
-          key_types.AtSymmetricKey(
-            id: 'standalone',
-            algorithm: 'AES-256',
-            bytes: AtBytes.fromString('c2VjcmV0'),
-          ),
+          ...rsaKeyPair('enroll-pair', enrollmentId: 'enroll-1'),
+          symmetricKey('standalone'),
         ],
       );
 
+      // Both materials of the 'enroll-pair' keypair carry enrollmentId
+      // 'enroll-1', so keysForEnrollment returns both.
       expect(
-        atKeys.keysForEnrollment('enroll-1').map((m) => m.id),
-        ['enroll-pair'],
+        atKeys.keysForEnrollment('enroll-1').map((m) => m.keyId).toSet(),
+        {'enroll-pair'},
       );
+      expect(atKeys.keysForEnrollment('enroll-1'), hasLength(2));
       expect(atKeys.keysForEnrollment('nope'), isEmpty);
     });
   });
