@@ -39,13 +39,11 @@ void main() {
 
     test('aesGcm256 encrypt/decrypt round-trip', () async {
       final AESKey key = AESKey.generate(32);
-      final InitialisationVector iv = InitialisationVector.random(12);
       final Uint8List plain = Uint8List.fromList(utf8.encode('hello pqc aead'));
 
-      final Uint8List encrypted =
-          await AtPqc.aesGcm256(key).encrypt(plain, iv: iv);
-      final Uint8List decrypted =
-          await AtPqc.aesGcm256(key).decrypt(encrypted, iv: iv);
+      // Ciphertext is self-contained (nonce(12) || ct || tag(16)) — no IV.
+      final Uint8List encrypted = await AtPqc.aesGcm256(key).encrypt(plain);
+      final Uint8List decrypted = await AtPqc.aesGcm256(key).decrypt(encrypted);
       expect(decrypted, plain);
     });
 
