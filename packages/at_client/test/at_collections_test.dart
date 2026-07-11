@@ -1659,11 +1659,12 @@ void main() {
       // The cache-priming `readBy` scans the entire __rr sub-collection
       // (no owner filter); wasMarkedReadByMe then checks self membership.
       // Regex shape mirrors `_getKeysInternal`: `^(?!local:)` rejects
-      // at_client's bookkeeping keys (#1942), `(?:[^:]*:)?` allows an
-      // optional sharedWith prefix, and every `.` in the composed
-      // namespace is escaped.
+      // at_client's bookkeeping keys (#1942), `(?:[^:]*:){0,2}` allows up
+      // to two wrapper segments (`@bob:` for an outgoing share,
+      // `cached:@self:` for a received copy — #2032), and every `.` in the
+      // composed namespace is escaped.
       final escapedComposed = '__rr.idr.$namespace'.replaceAll('.', '\\.');
-      final rrRegex = '^(?!local:)(?:[^:]*:)?[^.]+\\.$escapedComposed@';
+      final rrRegex = '^(?!local:)(?:[^:]*:){0,2}[^.]+\\.$escapedComposed@';
       // Parent scan returns bob's item; the __rr sub-collection scan
       // returns nothing (no receipts sent yet).
       when(

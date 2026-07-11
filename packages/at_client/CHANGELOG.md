@@ -9,6 +9,27 @@
   are retained for source compatibility but are now no-ops (a commit-log-free
   client has no commit log to compact); they will be removed in a future
   major release.
+- fix: `AtCollection` — resolve received (shared-in) items in the id-scoped
+  read path. `Query.watch()` (delta path), `getOrNull` / `get(id, owner)` and
+  `exists(id, owner)` missed items stored locally as
+  `cached:@<self>:<id>.<ns>@<owner>` because the scan regex allowed only one
+  key-wrapper segment; it now allows the two a received copy carries (#2032).
+- fix: `AtCollection` — end-anchor owner-scoped scans and deletes so a concrete
+  owner (`@bob`) can't prefix-match a longer atSign (`@bobby`), which could
+  return another atSign's items or delete a same-id received copy.
+- fix: `AtCollection.cleanupOrphans()` no longer deletes a live self-owned item
+  under a received parent when offline — the ancestor presence check reads the
+  local cached copy instead of routing to a remote lookup.
+- fix: `AtCollection` rejects a top-level item id containing `.` at write time
+  (it was stored intact but read back truncated at the first dot).
+- fix: `AtCollection` — a reader's own `markReadByMe` no longer emits a spurious
+  self `CReadReceipt` on the data-event path.
+- fix: `AtCollection.availableEvents` now fires `CItemAvailable` for an item
+  whose `availableAt` is still in the future when its create/update event
+  arrives (the scheduler read filtered them out, and the value-less placeholder
+  crashed for a non-nullable item type).
+- fix: `AtCollection` reads no longer duplicate the preceding item when a key
+  expires or is deleted between the scan and its per-key read.
 
 ## 3.12.0
 

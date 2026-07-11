@@ -751,6 +751,63 @@ void main() {
       expect(deleted, contains(commentKey.toString()));
     });
 
+    test(
+        'a self-owned descendant under a RECEIVED parent survives when the '
+        "parent's cached copy is present locally", () async {
+      // self=@alice has a comment on @bob's post p1 (a received parent). The
+      // root chain-walk must probe the parent's LOCAL cached copy
+      // (`cached:@alice:p1.<ns>@bob`), not a non-cached key that routes to a
+      // remote lookup — else an offline/unreachable probe throws and the
+      // live comment is wrongly swept.
+      final c = buildParent();
+      final commentKey =
+          AtKey.fromString('c1.comments.p1.$parentNs$selfAtSignStr');
+      final cachedParent =
+          AtKey.fromString('cached:$selfAtSignStr:p1.$parentNs$bobStr');
+      when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((inv) async {
+        final re = RegExp(inv.namedArguments[const Symbol('regex')] as String);
+        return [commentKey].where((k) => re.hasMatch(k.toString())).toList();
+      });
+      when(() => c.atClient.get(any())).thenAnswer((inv) async {
+        final ks = (inv.positionalArguments.first as AtKey).toString();
+        if (ks == commentKey.toString()) {
+          return AtValue()
+            ..value = jsonEncode({
+              'type': 'n/a',
+              'obj': "my comment on bob's post",
+              'parents': [
+                {'owner': bobStr},
+              ],
+            })
+            ..metadata = (Metadata()
+              ..createdAt = DateTime.now().toUtc()
+              ..expiresAt = DateTime.now().add(const Duration(days: 1)));
+        }
+        if (ks == cachedParent.toString()) {
+          return AtValue()
+            ..value = jsonEncode({'type': 'n/a', 'obj': "bob's post"})
+            ..metadata = (Metadata()
+              ..createdAt = DateTime.now().toUtc()
+              ..expiresAt = DateTime.now().add(const Duration(days: 1)));
+        }
+        // Any other probe — e.g. the pre-fix non-cached `p1.<ns>@bob`, which
+        // routed remote — is "not in the local store".
+        throw KeyNotFoundException('not local: $ks');
+      });
+      final deleted = <String>[];
+      when(() => c.atClient.delete(any())).thenAnswer((inv) async {
+        deleted.add((inv.positionalArguments.first as AtKey).toString());
+        return true;
+      });
+
+      await c.parent.cleanupOrphans();
+
+      expect(deleted, isNot(contains(commentKey.toString())),
+          reason: "the parent's cached copy is local — the comment must "
+              'survive');
+    });
+
     test('legacy depth-2 descendant whose middleman is gone is swept',
         () async {
       // Setup: a depth-2 reply r1 under comment c1 under post p1.
@@ -767,11 +824,15 @@ void main() {
       // descendant scan returns the orphaned reply.
       // alive-at-mid-namespace scan returns no comments.
       // After the #1942 regex tightening, namespace dots are escaped
-      // and every scan is prefixed with `^(?!local:)(?:[^:]*:)?`.
+      // and every scan is prefixed with `^(?!local:)(?:[^:]*:){0,2}`
+      // (up to two wrapper segments so received `cached:@self:` keys
+      // scan — #2032).
       final escapedParentNs = parentNs.replaceAll('.', '\\.');
-      final directRegex = '^(?!local:)(?:[^:]*:)?[^.]+\\.$escapedParentNs@';
+      final directRegex = '^(?!local:)(?:[^:]*:){0,2}[^.]+\\.$escapedParentNs@';
+      // Concrete owner suffix is end-anchored (`@self$`) so it can't
+      // prefix-match a longer atSign — see _ownerAnchor.
       final descendantRegex =
-          '^(?!local:)(?:[^:]*:)?.+\\.$escapedParentNs$selfAtSignStr';
+          '^(?!local:)(?:[^:]*:){0,2}.+\\.$escapedParentNs$selfAtSignStr\$';
       when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
           .thenAnswer((inv) async {
         final regex = inv.namedArguments[#regex] as String;
