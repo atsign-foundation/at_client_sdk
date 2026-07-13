@@ -114,6 +114,46 @@ See [`example/enrollment_request.dart`](example/enrollment_request.dart)
 for the submitting side; the approve/deny side is demonstrated in
 [`at_onboarding_cli/example/apkam_examples/enroll_app_listen.dart`](../at_onboarding_cli/example/apkam_examples/enroll_app_listen.dart).
 
+## The `.atKeys` file format
+
+`FileAtKeysIo` reads and writes `.atKeys` files
+(default path `~/.atsign/keys/<atsign>_key.atKeys`). A file has up to
+three layers, outermost first:
+
+1. **Optional passphrase envelope** — when a `passPhrase` is configured,
+   the whole document is AES-encrypted with a key derived from the
+   passphrase (argon2id) and stored as
+   `{"content": ..., "iv": ..., "hashingAlgoType": "argon2id"}`.
+   Detected by the presence of `iv`.
+2. **Self-encrypted legacy fields** — the document's four legacy RSA
+   fields (`aesPkamPublicKey`, `aesPkamPrivateKey`,
+   `aesEncryptPublicKey`, `aesEncryptPrivateKey`) are AES-256-encrypted
+   with the document's own plaintext `selfEncryptionKey`, using a
+   deterministic IV (so identical plaintext always produces identical
+   ciphertext).
+3. **The document** — one of two shapes:
+   - **Legacy flat** (no `version` field): a flat JSON object of the
+     fields above plus `selfEncryptionKey`, `apkamSymmetricKey`, and
+     `enrollmentId`.
+   - **v1** (`"version": 1`): adds `atSign` and a `keys` array of typed
+     key materials (grouped by `keyId` with their `keyParts`), while the
+     legacy fields stay flat at the top level — a v1 file's legacy
+     portion is byte-identical to a legacy-only file, so pre-v1 readers
+     can still use it.
+
+In memory, `AtKeys` always holds plaintext; all three layers are applied
+and peeled exclusively by `FileAtKeysIo`.
+
+Persistence has two verbs:
+
+- `write(atsign, atKeys)` — create-only initial persist (fresh onboard);
+  throws if the file already exists.
+- `flush(atsign, atKeys)` — persist the current in-memory state (e.g.
+  after `AtKeys.addKey`). If the file exists, `flush` first validates
+  that nothing it holds would be lost, then rewrites it; flushing a
+  legacy file upgrades it in place to a v1 document. If the file does not
+  exist, `flush` creates it.
+
 ## Where to go next
 
 | If you're building…            | Use                                                                                   |

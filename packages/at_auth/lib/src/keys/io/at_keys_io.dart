@@ -10,8 +10,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
-import '../types.dart';
-
 /// An interface that defines methods for reading AtKeys.
 /// It can be implemented by classes that read AtKeys from different sources,
 sealed class AtKeysIo {
@@ -25,14 +23,21 @@ sealed class AtKeysIo {
 /// It can be implemented by classes that write AtKeys to different sources,
 /// such as file system or keychain.
 abstract class WrittenAtKeysIo extends AtKeysIo with KeyIOMixin {
+  /// Create-only initial persist (fresh onboard); implementations throw if
+  /// the target already exists. Use [flush] to persist later mutations.
   //todo: futureOr & Atsign types
   Future write(String atsign, AtKeys atKeys);
-  FutureOr<void> append(Atsign atsign, AtKeysMaterial material) {
-    throw UnimplementedError('unimplemented');
-  }
 
-  void save(Atsign atsign, AtKeys atKeys) {
-    throw UnimplementedError('unimplemented');
+  /// Persists [atKeys] as the complete new state for [atsign].
+  ///
+  /// This is the runtime counterpart to [write]: mutate the in-memory
+  /// [AtKeys] (e.g. [AtKeys.addKey]), then flush the whole object.
+  /// Implementations backed by durable storage must not lose data: when a
+  /// target already exists, validate that everything in it is preserved in
+  /// [atKeys] (see [AtKeysAssurance.validateMapUpdate]), then rewrite. When
+  /// no target exists, flush creates it — there is nothing to lose.
+  FutureOr<void> flush(Atsign atsign, AtKeys atKeys) {
+    throw UnimplementedError('new method for v4 WrittenAtKeysIo');
   }
 }
 
@@ -188,44 +193,7 @@ mixin KeyIOMixin on AtKeysIo {
       'legacy helpers for serialization, if we need to retain this turn it into a static helper')
   Future<Map<String, dynamic>> decodeAtKeys(
       Map<String, dynamic> decodedAtKeysData,
-      {String? passPhrase}) async {
-    // If it contains "iv(InitializationVector)", it means the data is encrypted with a
-    // passphrase. Decrypt it.
-    if (decodedAtKeysData.containsKey('iv') && passPhrase.isNullOrEmpty) {
-      throw AtDecryptionException(
-          'Pass Phrase is required for password protected atKeys file');
-    }
-    if (decodedAtKeysData.containsKey('iv')) {
-      _logger.info(
-          'Found encrypted atKeys files. Decrypting with the given pass-phrase');
-      PassphraseEnvelope envelope =
-          PassphraseEnvelope.fromJson(decodedAtKeysData);
-
-      if (envelope.hashingAlgoType == null) {
-        throw AtDecryptionException(
-            'Hashing algo type is required for decryption of password protected atKeys file');
-      }
-
-      try {
-        final decryptedAtKeysData =
-            await AtKeysPassphraseCrypto.fromHashingAlgorithm(
-                    envelope.hashingAlgoType!)
-                .decrypt(envelope, passPhrase!);
-        // jsonDecode must stay inside the try: the cipher is unauthenticated,
-        // so an incorrect passphrase does not fail decrypt() -- it yields
-        // arbitrary bytes. Whether those bytes parse as a JSON object is
-        // effectively random per file (the IV varies per write), so a wrong
-        // passphrase otherwise escapes as an uncaught FormatException (invalid
-        // JSON) or a cast error (valid non-object JSON) instead of the
-        // documented AtDecryptionException.
-        decodedAtKeysData =
-            jsonDecode(decryptedAtKeysData) as Map<String, dynamic>;
-      } catch (e) {
-        throw AtDecryptionException(
-            'Failed to decrypt atKeys file - passphrase may be incorrect: $e');
-      }
-    }
-
-    return decodedAtKeysData;
+      {String? passPhrase}) {
+    return passphraseCodec.decode(decodedAtKeysData, passPhrase: passPhrase);
   }
 }

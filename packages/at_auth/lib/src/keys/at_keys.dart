@@ -5,6 +5,15 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 
+/// The in-memory model of an atSign's cryptographic keys.
+///
+/// An AtKeys instance always holds **plaintext** key material — every
+/// at-rest concern (the passphrase envelope, self-encryption of the legacy
+/// fields) lives in `FileAtKeysIo`, not here. Typed key material
+/// ([AtKeysMaterial]) is added with [addKey] and looked up by
+/// `(keyId, CryptographicKeyType)` via [getMaterial] / [materialsForKeyId] /
+/// [keysForEnrollment]. The pre-v1 flat fields live in the fenced legacy
+/// section further down.
 class AtKeys {
   static const supportedVersion = 1;
   static const _reservedTopLevelKeys = {'version', 'atSign', 'keys'};
@@ -34,29 +43,28 @@ class AtKeys {
   Iterable<AtKeysMaterial> materialsForKeyId(String keyId) =>
       _materialsByKeyId[keyId]?.values ?? const [];
 
-  /// Returns every key material tagged with [enrollmentId] — the query-based
-  /// replacement for the former atomic `AtKeyPackage` grouping.
-  Iterable<AtKeysMaterial> keysForEnrollment(String enrollmentId) {
-    return keyMaterials
-        .where((material) => material.enrollmentId == enrollmentId);
-  }
-
   void addKey(AtKeysMaterial material) {
     final byType = _materialsByKeyId.putIfAbsent(material.keyId, () => {});
     if (byType.containsKey(material.keyPartType)) {
-      throw ArgumentError.value(material.keyId, 'key',
+      throw ArgumentError.value(material.keyId, 'material',
           'AtKeys already contains a ${material.keyPartType.name} material for this keyId');
     }
     byType[material.keyPartType] = material;
   }
 
   /// Decodes the v1 typed-keys document shape (`version`, `atSign`, `keys`,
-  /// plus legacy fields flat at the top level). Legacy-only (pre-v1) json
-  /// should be routed to [loadLegacy] instead. `keys` entries are parsed via
-  /// [AtKeysRecord] only to group/validate them — the flattened
-  /// [AtKeysMaterial]s are what's actually stored.
-  factory AtKeys.fromDocumentJson(Map<String, dynamic> json) {
+  /// plus legacy fields flat at the top level). Json without a `version`
+  /// field is accepted as the pre-v1 flat shape (delegates to
+  /// [fromLegacyJson]); a `version` other than [supportedVersion] throws
+  /// [AtKeysUnsupportedVersionException]. `keys` entries are parsed and
+  /// validated by [parseAtKeysDocument], which returns the flattened
+  /// [AtKeysMaterial]s that are actually stored.
+  factory AtKeys.fromJson(Map<String, dynamic> json) {
     const assurance = AtKeysAssurance();
+    // Legacy files have no version field - accept them as legacy.
+    if (!json.containsKey('version')) {
+      return AtKeys.fromLegacyJson(json);
+    }
     final version = assurance.expectInt(json['version'], 'version');
     if (version != supportedVersion) {
       throw AtKeysUnsupportedVersionException(
@@ -67,12 +75,8 @@ class AtKeys {
         assurance.expectNonEmptyString(json['atSign'], 'atSign').toAtsign();
     final keysJson = assurance.expectList(json['keys'], 'keys');
 
-    final keyRecords = keysJson.asMap().entries.map((entry) {
-      final recordJson = assurance.expectMap(entry.value, 'keys[${entry.key}]');
-      return AtKeysRecord.fromJson(recordJson, index: entry.key);
-    }).toList();
-
-    assurance.validateKeyRecords(keyRecords);
+    final materials = parseAtKeysDocument(keysJson);
+    assurance.validateKeyMaterials(materials);
 
     final legacyJson = {
       for (final entry in json.entries)
@@ -82,49 +86,35 @@ class AtKeys {
     //form the new AtKeys
     AtKeys atKeys = AtKeys(
       atsign: atsign,
-      keysList: keyRecords.expand((record) => record.materials.values).toList(),
+      keysList: materials,
     );
 
     // join them with the legacy format
-    return AtKeys.fromJson(legacyJson, existing: atKeys);
+    return AtKeys.fromLegacyJson(legacyJson, existing: atKeys);
   }
 
   /// Encodes this [AtKeys] to the v1 typed-keys document shape. Legacy fields
   /// merge flatly into the top level alongside `version`/`atSign`/`keys` —
   /// upgrading a legacy file is additive, not a format swap. Falls back to
-  /// the legacy flat shape when there's no atSign and no typed key material.
-  Map<String, dynamic> toDocumentJson() {
+  /// the legacy flat shape (see [toLegacyJson]) when there's no atSign and no
+  /// typed key material.
+  ///
+  /// All values are emitted plaintext; at-rest self-encryption of the legacy
+  /// portion (and the optional passphrase envelope) is `FileAtKeysIo`'s job.
+  Map<String, dynamic> toJson() {
     if (atsign == null) {
       if (keyMaterials.isNotEmpty) {
         throw AtKeysValidationException(
             'atSign is required to serialize typed atKeys material');
       }
-      return toJson();
+      return toLegacyJson();
     }
     return {
-      ...toJson(),
+      ...toLegacyJson(),
       'version': supportedVersion,
       'atSign': atsign.toString(),
-      'keys': _groupIntoRecords().map((record) => record.toJson()).toList(),
+      'keys': encodeAtKeysDocument(keyMaterials),
     };
-  }
-
-  /// Groups the flat [keyMaterials] back into [AtKeysRecord]s by `keyId`,
-  /// purely to produce the wire's nested shape — never exposed publicly.
-  List<AtKeysRecord> _groupIntoRecords() {
-    final materialsByKeyId = <String, List<AtKeysMaterial>>{};
-    for (final material in keyMaterials) {
-      materialsByKeyId.putIfAbsent(material.keyId, () => []).add(material);
-    }
-    return materialsByKeyId.entries.map((entry) {
-      final materials = entry.value;
-      return AtKeysRecord(
-        keyId: entry.key,
-        keyGroup: materials.first.keyGroup,
-        enrollmentId: materials.first.enrollmentId,
-        materials: materials,
-      );
-    }).toList();
   }
 
   @override
@@ -140,7 +130,18 @@ class AtKeys {
         defaultSelfEncryptionKey == other.defaultSelfEncryptionKey &&
         apkamSymmetricKey == other.apkamSymmetricKey &&
         _mapEquals(metadata, other.metadata) &&
-        _listEquals(keyMaterials.toList(), other.keyMaterials.toList());
+        _materialsEqual(other);
+  }
+
+  /// Order-insensitive: two AtKeys holding the same materials are equal no
+  /// matter the order they were added in.
+  bool _materialsEqual(AtKeys other) {
+    final materials = keyMaterials.toList();
+    if (materials.length != other.keyMaterials.length) {
+      return false;
+    }
+    return materials.every((material) =>
+        other.getMaterial(material.keyId, material.keyPartType) == material);
   }
 
   @override
@@ -154,10 +155,14 @@ class AtKeys {
         defaultSelfEncryptionKey,
         apkamSymmetricKey,
         _metadataHash(metadata),
-        Object.hashAll(keyMaterials),
+        // Commutative fold so hashCode matches the order-insensitive equality.
+        keyMaterials.fold<int>(0, (acc, material) => acc ^ material.hashCode),
       );
 
-  // the LEGACY
+  // ───── Legacy flat fields (pre-v1 .atKeys shape) ─────
+  // A pre-v1 .atKeys file is a flat JSON object of the six fields below plus
+  // enrollmentId and arbitrary metadata. They stay readable/writable (and
+  // merge flatly into the v1 document) so existing files keep working.
 
   @Deprecated('hard-coded keys are legacy, see new methods')
   AtBytes? apkamPublicKey;
@@ -175,9 +180,11 @@ class AtKeys {
   String? enrollmentId;
   @Deprecated('hard-coded keys are legacy, see new methods')
   Map<String, dynamic> metadata = {};
-  @Deprecated(
-      'designed for legacy hard-coded atkeys, see serialization/resolver.dart')
-  Map<String, dynamic> toJson() {
+
+  /// Encodes just the legacy flat shape — the hard-coded fields plus
+  /// [metadata] — with no `version`/`atSign`/`keys`. Use [toJson] unless you
+  /// specifically need this pre-v1 shape.
+  Map<String, dynamic> toLegacyJson() {
     return {
       auth_constants.apkamPublicKey: apkamPublicKey?.toString(),
       auth_constants.apkamPrivateKey: apkamPrivateKey?.toString(),
@@ -195,8 +202,10 @@ class AtKeys {
     };
   }
 
-  @Deprecated('designed for legacy loading of keys')
-  factory AtKeys.fromJson(Map<String, dynamic> json, {AtKeys? existing}) {
+  /// Decodes the legacy flat shape (no `version`/`atSign`/`keys`) produced by
+  /// [toLegacyJson]. Use [fromJson] unless you specifically need to load a
+  /// pre-v1 file.
+  factory AtKeys.fromLegacyJson(Map<String, dynamic> json, {AtKeys? existing}) {
     var keys = existing ?? AtKeys();
     keys
       ..apkamPublicKey = _existsAndNotNull(json, auth_constants.apkamPublicKey)
@@ -259,18 +268,6 @@ class AtKeys {
     }
     return keys;
   }
-}
-
-bool _listEquals<T>(List<T> left, List<T> right) {
-  if (left.length != right.length) {
-    return false;
-  }
-  for (var i = 0; i < left.length; i++) {
-    if (left[i] != right[i]) {
-      return false;
-    }
-  }
-  return true;
 }
 
 bool _mapEquals(Map<String, dynamic> left, Map<String, dynamic> right) {
@@ -342,8 +339,17 @@ AtChops _createPkamChops(AtKeys atKeys) {
         'PKAM mode requires defaultEncryptionPrivateKey');
   }
   if (atKeys.apkamPrivateKey == null) {
-    throw AtPrivateKeyNotFoundException(
-        'PKAM mode requries defaultPkamPrivateKey');
+    throw AtPrivateKeyNotFoundException('PKAM mode requires apkamPrivateKey');
+  }
+  if (atKeys.apkamPublicKey == null) {
+    throw AtKeyNotFoundException('PKAM mode requires apkamPublicKey');
+  }
+  if (atKeys.defaultEncryptionPublicKey == null) {
+    throw AtKeyNotFoundException(
+        'PKAM mode requires defaultEncryptionPublicKey');
+  }
+  if (atKeys.defaultSelfEncryptionKey == null) {
+    throw AtKeyNotFoundException('PKAM mode requires defaultSelfEncryptionKey');
   }
 
   final atEncryptionKeyPair = AtEncryptionKeyPair.create(

@@ -10,16 +10,16 @@ void main() {
   group('legacy AtKeys survival', () {
     test('bare legacy json has no version field', () {
       final legacyKeys = legacyAtKeys();
-      final json = legacyKeys.toJson();
+      final json = legacyKeys.toLegacyJson();
 
       expect(json.containsKey('version'), isFalse);
-      expectLegacyAtKeys(AtKeys.fromJson(json), legacyKeys);
+      expectLegacyAtKeys(AtKeys.fromLegacyJson(json), legacyKeys);
     });
 
     test('v1 document preserves legacy payload', () {
       final legacyKeys = legacyAtKeys(atsign: '@alice'.toAtsign());
-      final encoded = legacyKeys.toDocumentJson();
-      final decoded = AtKeys.fromDocumentJson(encoded);
+      final encoded = legacyKeys.toJson();
+      final decoded = AtKeys.fromJson(encoded);
 
       // Legacy fields merge flatly into the top level alongside version/atSign/keys.
       expect(encoded['enrollmentId'], legacyKeys.enrollmentId);
@@ -50,7 +50,7 @@ void main() {
       });
 
       test(
-          'FileAtKeysIo append() upgrades legacy AtKeys'
+          'FileAtKeysIo flush() upgrades legacy AtKeys'
           '${passPhrase == null ? '' : ' with passphrase'}', () async {
         final tempDir = await Directory.systemTemp.createTemp('at_keys_');
         addTearDown(() async {
@@ -65,19 +65,16 @@ void main() {
           passPhrase: passPhrase,
         );
         final legacyKeys = legacyAtKeys();
-        final appendedKey = symmetricKey('appended', value: 'YXBwZW5kZWQ=');
 
         await fileAtKeysIo.write('@alice', legacyKeys);
-        final originalText = await File(path).readAsString();
-        await fileAtKeysIo.append('@alice'.toAtsign(), appendedKey);
 
-        final archives = tempDir
-            .listSync()
-            .whereType<File>()
-            .where((file) => file.path.startsWith('$path.'))
-            .toList();
-        expect(archives, hasLength(1));
-        expect(await archives.single.readAsString(), originalText);
+        final keys = await fileAtKeysIo.read('@alice');
+        keys.addKey(symmetricKey('appended', value: 'YXBwZW5kZWQ='));
+        await fileAtKeysIo.flush('@alice'.toAtsign(), keys);
+
+        final files = tempDir.listSync().whereType<File>().toList();
+        expect(files, hasLength(1));
+        expect(files.single.path, path);
 
         final readKeys = await fileAtKeysIo.read('@alice');
         expectLegacyAtKeys(readKeys, legacyKeys);

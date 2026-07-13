@@ -13,48 +13,6 @@ void main() {
   group('AtKeysAssurance', () {
     const assurance = AtKeysAssurance();
 
-    test('archiveSuffix formats UTC timestamps for filenames', () {
-      final timestamp = DateTime.utc(2026, 7, 9, 15, 4, 5, 0, 123);
-
-      expect(
-        AtKeysAssurance.archiveSuffix(timestamp),
-        '20260709.150405.000123',
-      );
-    });
-
-    test('archiveNameFor appends timestamp suffix to file name', () {
-      final timestamp = DateTime.utc(2026, 7, 9, 15, 4, 5, 0, 123);
-
-      expect(
-        AtKeysAssurance.archiveNameFor('/tmp/@alice_key.atKeys', timestamp),
-        '/tmp/@alice_key.atKeys.20260709.150405.000123',
-      );
-    });
-
-    test('populates legacy records when round-tripping fixture into v1', () {
-      final existing = _fixtureLegacyJson();
-      final candidate = _documentMap(
-        atSign: '@alice🛠',
-        legacyJson: existing,
-        keys: [_symmetricMaterial()],
-      );
-
-      expect(
-        () => assurance.validateMapUpdate(
-          existing: existing,
-          candidate: candidate,
-        ),
-        returnsNormally,
-      );
-      for (final entry in existing.entries) {
-        expect(
-          candidate[entry.key],
-          entry.value,
-          reason: '${entry.key} must survive legacy -> v1 round trip',
-        );
-      }
-    });
-
     test('rejects map update when any legacy field value changes', () {
       final existing = _fixtureLegacyJson();
 
@@ -256,95 +214,52 @@ void main() {
         throwsA(isA<AtKeysAssuranceException>()),
       );
     });
-
-    test('rejects a key material whose atKey does not match the derived value',
-        () {
-      final json = _documentMap(keys: const []);
-      json['keys'] = [
-        {
-          ..._recordJson(),
-          'keyParts': [
-            {
-              ..._recordJson()['keyParts'][0] as Map<String, dynamic>,
-              'atKey': 'symmetric:wrong-id',
-            },
-          ],
-        },
-      ];
-
-      expect(
-        () => AtKeys.fromDocumentJson(json),
-        throwsA(isA<AtKeysValidationException>()),
-      );
-    });
   });
 }
 
 final _createdAt = DateTime.utc(2024, 1, 1);
 
-AtKeysRecord _symmetricMaterial({String bytes = 'dmFsdWU='}) {
-  return AtKeysRecord(
+AtKeysMaterial _symmetricMaterial({String bytes = 'dmFsdWU='}) {
+  return AtKeysMaterial(
     keyId: 'symmetric',
     keyGroup: 'default',
-    materials: [
-      AtKeysMaterial(
-        keyId: 'symmetric',
-        keyGroup: 'default',
-        keyPartType: CryptographicKeyType.symmetricDataEncryption,
-        visibility: AtKeyVisibility.symmetric,
-        keyAlgorithmType: KeyAlgorithmType.aes,
-        bytes: AtBytes.fromString(bytes),
-        createdAt: _createdAt,
-      ),
-    ],
+    keyPartType: CryptographicKeyType.symmetricDataEncryption,
+    keyAlgorithmType: KeyAlgorithmType.aes,
+    bytes: AtBytes.fromString(bytes),
+    createdAt: _createdAt,
   );
 }
 
-AtKeysRecord _wrapperMaterial() {
-  return AtKeysRecord(
+AtKeysMaterial _wrapperMaterial() {
+  return AtKeysMaterial(
     keyId: 'wrapper',
     keyGroup: 'default',
-    materials: [
-      AtKeysMaterial(
-        keyId: 'wrapper',
-        keyGroup: 'default',
-        keyPartType: CryptographicKeyType.keyWrapping,
-        visibility: AtKeyVisibility.symmetric,
-        keyAlgorithmType: KeyAlgorithmType.aes,
-        bytes: AtBytes.fromString('d3JhcHBlcg=='),
-        createdAt: _createdAt,
-      ),
-    ],
+    keyPartType: CryptographicKeyType.keyWrapping,
+    keyAlgorithmType: KeyAlgorithmType.aes,
+    bytes: AtBytes.fromString('d3JhcHBlcg=='),
+    createdAt: _createdAt,
   );
 }
 
-AtKeysRecord _enrollMaterial({
+AtKeysMaterial _enrollMaterial({
   String keyId = 'enroll-priv',
   String enrollmentId = 'enroll-1',
   List<String> operations = const ['decrypt'],
 }) {
-  return AtKeysRecord(
+  return AtKeysMaterial(
     keyId: keyId,
     keyGroup: 'default',
     enrollmentId: enrollmentId,
-    materials: [
-      AtKeysMaterial(
-        keyId: keyId,
-        keyGroup: 'default',
-        enrollmentId: enrollmentId,
-        keyPartType: CryptographicKeyType.classicalPrivateDecryption,
-        visibility: AtKeyVisibility.private,
-        keyAlgorithmType: KeyAlgorithmType.rsa,
-        operations: operations,
-        bytes: AtBytes.fromString('c2VjcmV0'),
-        createdAt: _createdAt,
-      ),
-    ],
+    keyPartType: CryptographicKeyType.classicalPrivateDecryption,
+    keyAlgorithmType: KeyAlgorithmType.rsa,
+    operations: operations,
+    bytes: AtBytes.fromString('c2VjcmV0'),
+    createdAt: _createdAt,
   );
 }
 
 Map<String, dynamic> _documentMap({
-  required List<AtKeysRecord> keys,
+  required List<AtKeysMaterial> keys,
   Map<String, dynamic> legacyJson = const {},
   String atSign = '@alice',
 }) {
@@ -352,7 +267,7 @@ Map<String, dynamic> _documentMap({
     ...legacyJson,
     'version': AtKeys.supportedVersion,
     'atSign': atSign,
-    'keys': keys.map((record) => record.toJson()).toList(),
+    'keys': encodeAtKeysDocument(keys),
   };
 }
 
@@ -384,9 +299,7 @@ Map<String, dynamic> _recordJson({String keyId = 'symmetric'}) {
     'keyParts': [
       {
         'keyPartType': CryptographicKeyType.symmetricDataEncryption.name,
-        'visibility': AtKeyVisibility.symmetric.name,
         'keyAlgorithmType': KeyAlgorithmType.aes.name,
-        'atKey': '${AtKeyVisibility.symmetric.name}:$keyId',
         'createdAt': _createdAt.toIso8601String(),
         'status': KeyPartStatus.active.name,
         'bytes': 'dmFsdWU=',

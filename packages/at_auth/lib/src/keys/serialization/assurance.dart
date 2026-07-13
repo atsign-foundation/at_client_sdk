@@ -9,8 +9,8 @@ class AtKeysAssuranceException extends AtKeysValidationException {
 }
 
 /// Single home for all atKeys validation: low-level parsing/value checks
-/// (`expect*`/`optional*`, called by the models' `fromJson`) and cross-record
-/// structural invariants (`validateKeyRecords`, `validateMapUpdate`).
+/// (`expect*`/`optional*`, called by the models' `fromJson`) and cross-material
+/// structural invariants (`validateKeyMaterials`, `validateMapUpdate`).
 class AtKeysAssurance {
   const AtKeysAssurance();
 
@@ -104,29 +104,22 @@ class AtKeysAssurance {
     }
   }
 
-  void expectAtKeyMatches(String atKey, String expected, String fieldName) {
-    if (atKey != expected) {
-      throw AtKeysValidationException(
-          'atKey "$atKey" at $fieldName does not match derived "$expected"');
-    }
-  }
-
   // ---- cross-record structural invariants ----
 
-  /// No two records may share a `keyId`, and an enrollment may not
-  /// contribute more than one material of the same `CryptographicKeyType`
-  /// (formerly one atomic `AtKeyPackage`) across all of its records.
-  void validateKeyRecords(List<AtKeysRecord> records) {
-    _validateDuplicateKeyIds(records);
-    _validateEnrollmentGrouping(records);
+  /// An enrollment may not contribute more than one material of the same
+  /// `CryptographicKeyType` (formerly one atomic `AtKeyPackage`) across all
+  /// of its materials. (Duplicate `keyId`s across document entries are
+  /// rejected earlier, by [parseAtKeysDocument].)
+  void validateKeyMaterials(List<AtKeysMaterial> materials) {
+    _validateEnrollmentGrouping(materials);
   }
 
   void validateMapUpdate({
     required Map<String, dynamic> existing,
     required Map<String, dynamic> candidate,
   }) {
-    final existingRecords = _decode(existing);
-    final candidateRecords = _decode(candidate);
+    final existingMaterials = _decode(existing);
+    final candidateMaterials = _decode(candidate);
 
     _assertCodecRoundTrip(candidate);
     // A legacy -> v1 upgrade legitimately introduces the atSign and version,
@@ -140,26 +133,10 @@ class AtKeysAssurance {
       _legacyJsonOf(candidate),
       'map.legacy',
     );
-    _assertRecordsPreserved(existingRecords, candidateRecords);
+    _assertMaterialsPreserved(existingMaterials, candidateMaterials);
   }
 
-  static String archiveSuffix([DateTime? now]) {
-    final utc = (now ?? DateTime.now()).toUtc();
-    // Full sub-second precision: utc.microsecond is only the 0..999 sub-ms
-    // component, so it drops the millisecond field entirely and lets two
-    // archives in the same second collide on the filename.
-    final subSecond =
-        utc.microsecondsSinceEpoch % Duration.microsecondsPerSecond;
-    return '${_four(utc.year)}${_two(utc.month)}${_two(utc.day)}.'
-        '${_two(utc.hour)}${_two(utc.minute)}${_two(utc.second)}.'
-        '${_six(subSecond)}';
-  }
-
-  static String archiveNameFor(String name, [DateTime? now]) {
-    return '$name.${archiveSuffix(now)}';
-  }
-
-  List<AtKeysRecord> _decode(Map<String, dynamic> json) {
+  List<AtKeysMaterial> _decode(Map<String, dynamic> json) {
     if (!json.containsKey('version')) {
       return const [];
     }
@@ -167,12 +144,9 @@ class AtKeysAssurance {
     if (keysJson is! List) {
       return const [];
     }
-    final records = keysJson.asMap().entries.map((entry) {
-      final recordJson = expectMap(entry.value, 'keys[${entry.key}]');
-      return AtKeysRecord.fromJson(recordJson, index: entry.key);
-    }).toList();
-    validateKeyRecords(records);
-    return records;
+    final materials = parseAtKeysDocument(keysJson);
+    validateKeyMaterials(materials);
+    return materials;
   }
 
   /// Legacy fields are just "everything except the reserved top-level v1
@@ -188,41 +162,36 @@ class AtKeysAssurance {
   }
 
   void _assertCodecRoundTrip(Map<String, dynamic> candidate) {
-    final records = _decode(candidate);
-    final reencoded = records.map((record) => record.toJson()).toList();
-    final redecoded = reencoded
-        .asMap()
-        .entries
-        .map((entry) => AtKeysRecord.fromJson(entry.value, index: entry.key))
-        .toList();
+    final materials = _decode(candidate);
+    final reencoded = encodeAtKeysDocument(materials);
+    final redecoded = parseAtKeysDocument(reencoded);
 
     _assertSame(
-      _recordsFingerprint(records),
-      _recordsFingerprint(redecoded),
+      _materialsFingerprint(materials),
+      _materialsFingerprint(redecoded),
       'map.codecRoundTrip',
     );
   }
 }
 
-void _assertRecordsPreserved(
-  List<AtKeysRecord> existing,
-  List<AtKeysRecord> candidate,
+void _assertMaterialsPreserved(
+  List<AtKeysMaterial> existing,
+  List<AtKeysMaterial> candidate,
 ) {
-  final candidateByKeyId = {
-    for (final record in candidate) record.keyId: record,
-  };
+  final existingByKeyId = _groupByKeyId(existing);
+  final candidateByKeyId = _groupByKeyId(candidate);
 
-  for (final existingRecord in existing) {
-    final candidateRecord = candidateByKeyId[existingRecord.keyId];
-    if (candidateRecord == null) {
+  for (final entry in existingByKeyId.entries) {
+    final candidateGroup = candidateByKeyId[entry.key];
+    if (candidateGroup == null) {
       throw AtKeysAssuranceException(
-        'Map key record "${existingRecord.keyId}" is not preserved',
+        'Map key record "${entry.key}" is not preserved',
       );
     }
     _assertSame(
-      _recordFingerprint(existingRecord),
-      _recordFingerprint(candidateRecord),
-      'map.keys.${existingRecord.keyId}',
+      _materialGroupFingerprint(entry.key, entry.value),
+      _materialGroupFingerprint(entry.key, candidateGroup),
+      'map.keys.${entry.key}',
     );
   }
 }
@@ -250,27 +219,42 @@ void _assertSame(Object? existing, Object? candidate, String path) {
   }
 }
 
-List<Map<String, dynamic>> _recordsFingerprint(
-  List<AtKeysRecord> records,
+Map<String, List<AtKeysMaterial>> _groupByKeyId(
+  List<AtKeysMaterial> materials,
 ) {
-  return records.map(_recordFingerprint).toList();
+  final byKeyId = <String, List<AtKeysMaterial>>{};
+  for (final material in materials) {
+    byKeyId.putIfAbsent(material.keyId, () => []).add(material);
+  }
+  return byKeyId;
 }
 
-Map<String, dynamic> _recordFingerprint(AtKeysRecord record) {
+List<Map<String, dynamic>> _materialsFingerprint(
+  List<AtKeysMaterial> materials,
+) {
+  final byKeyId = _groupByKeyId(materials);
+  return byKeyId.entries
+      .map((entry) => _materialGroupFingerprint(entry.key, entry.value))
+      .toList();
+}
+
+Map<String, dynamic> _materialGroupFingerprint(
+  String keyId,
+  List<AtKeysMaterial> group,
+) {
   return {
-    'keyId': record.keyId,
-    'keyGroup': record.keyGroup,
-    'enrollmentId': record.enrollmentId,
+    'keyId': keyId,
+    'keyGroup': group.first.keyGroup,
+    'enrollmentId': group.first.enrollmentId,
     'materials': {
-      for (final entry in record.materials.entries)
-        entry.key.name: _materialFingerprint(entry.value),
+      for (final material in group)
+        material.keyPartType.name: _materialFingerprint(material),
     },
   };
 }
 
 Map<String, dynamic> _materialFingerprint(AtKeysMaterial material) {
   return {
-    'visibility': material.visibility.name,
     'keyAlgorithmType': material.keyAlgorithmType.name,
     'operations': material.operations,
     'bytes': material.bytes.toString(),
@@ -300,31 +284,19 @@ String _two(int value) => value.toString().padLeft(2, '0');
 String _four(int value) => value.toString().padLeft(4, '0');
 String _six(int value) => value.toString().padLeft(6, '0');
 
-void _validateDuplicateKeyIds(List<AtKeysRecord> records) {
-  final seen = <String>{};
-  for (final record in records) {
-    if (!seen.add(record.keyId)) {
-      throw AtKeysValidationException(
-          'Duplicate atKeys keyId "${record.keyId}"');
-    }
-  }
-}
-
 // An enrollment (formerly one AtKeyPackage) produces at most one material of
-// each CryptographicKeyType, across all of the records it's tagged on.
-void _validateEnrollmentGrouping(List<AtKeysRecord> records) {
+// each CryptographicKeyType, across all of the materials it's tagged on.
+void _validateEnrollmentGrouping(List<AtKeysMaterial> materials) {
   final typesByEnrollment = <String, Set<CryptographicKeyType>>{};
-  for (final record in records) {
-    final enrollmentId = record.enrollmentId;
+  for (final material in materials) {
+    final enrollmentId = material.enrollmentId;
     if (enrollmentId == null) {
       continue;
     }
     final types = typesByEnrollment.putIfAbsent(enrollmentId, () => {});
-    for (final partType in record.materials.keys) {
-      if (!types.add(partType)) {
-        throw AtKeysEnrollmentException(
-            'Enrollment "$enrollmentId" has more than one ${partType.name} key material');
-      }
+    if (!types.add(material.keyPartType)) {
+      throw AtKeysEnrollmentException(
+          'Enrollment "$enrollmentId" has more than one ${material.keyPartType.name} key material');
     }
   }
 }

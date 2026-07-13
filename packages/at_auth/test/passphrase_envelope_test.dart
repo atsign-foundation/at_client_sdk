@@ -1,37 +1,30 @@
-import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart'
-    as passphrase_envelope;
+import 'dart:convert';
+
+import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart';
 import 'package:at_chops/at_chops.dart' show HashingAlgoType;
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('AtKeysPassphraseCrypto', () {
-    test('encrypts and decrypts with argon2id', () async {
-      const plainAtKeys = '{"version":1,"keys":[]}';
-      final crypto = passphrase_envelope.AtKeysPassphraseCrypto.fromHashingAlgorithm(
-        HashingAlgoType.argon2id,
-      );
-
-      final encrypted = await crypto.encrypt(plainAtKeys, 'passphrase');
-      final decrypted = await crypto.decrypt(encrypted, 'passphrase');
-
-      expect(encrypted.hashingAlgoType, HashingAlgoType.argon2id);
-      expect(decrypted, plainAtKeys);
-    });
-  });
-
   group('AtKeysPassphraseEnvelopeCodec', () {
-    const codec = passphrase_envelope.AtKeysPassphraseEnvelopeCodec();
+    const codec = AtKeysPassphraseEnvelopeCodec();
 
     Future<Map<String, dynamic>> envelopeFor(String plaintext) async {
-      final envelope =
-          await passphrase_envelope.AtKeysPassphraseCrypto.fromHashingAlgorithm(
-        HashingAlgoType.argon2id,
-      ).encrypt(plaintext, 'right');
-      return Map<String, dynamic>.from(
-        (envelope.toJson())..removeWhere((_, value) => value == null),
-      );
+      return jsonDecode(await codec.encode(plaintext, 'right'))
+          as Map<String, dynamic>;
     }
+
+    test('encode/decode round-trips with argon2id', () async {
+      const plainAtKeys = '{"version":1,"keys":[]}';
+      final envelope = await envelopeFor(plainAtKeys);
+
+      expect(envelope['hashingAlgoType'], HashingAlgoType.argon2id.name);
+      expect(codec.isEnvelope(envelope), isTrue);
+      expect(
+        await codec.decode(envelope, passPhrase: 'right'),
+        jsonDecode(plainAtKeys),
+      );
+    });
 
     test('returns the map unchanged when it is not an envelope', () async {
       final json = {'not': 'an-envelope'};

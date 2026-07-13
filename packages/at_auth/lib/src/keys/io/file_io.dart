@@ -1,136 +1,155 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
-import 'package:at_auth/src/keys/serialization/assurance.dart';
-import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart';
-import 'package:at_auth/src/keys/types.dart';
-import 'package:at_chops/at_chops.dart';
-import 'package:at_commons/at_commons.dart';
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
-import 'package:at_auth/src/exception/at_auth_exceptions.dart';
+import 'package:at_chops/at_chops.dart';
+import 'package:at_commons/at_commons.dart';
 
-/// An implementation of [AtKeysIo] that reads and writes AtKeys to the file system.
-/// This implementation still uses [KeyIOMixin] for encoding and decoding Legacy AtKeys.
-/// The [FileAtKeysIo] class can be configured with an optional [filePath] and [passPhrase].
-///
-/// Optional Parameters:
-/// [filePath] formats the file path from your atSign. Defaults to %HOME%/.atsign/keys/<atsign>_key.atKeys
-/// The [passPhrase] is used for atKeys files that are password protected.
+/// File-backed `.atKeys` storage.
 class FileAtKeysIo extends WrittenAtKeysIo {
   String Function(String)? filePath;
   String? passPhrase;
+
   FileAtKeysIo({this.filePath, this.passPhrase}) {
     filePath ??=
         (atsign) => getDefaultAtKeysFilePath(getHomeDirectory()!, atsign);
   }
 
-  /// Reads AtKeys from the file system.
-  /// The [atsign] parameter is used to determine the file path if not provided during instantiation.
-  /// The method returns a Future that resolves to an instance of [AtKeys].
   @override
   Future<AtKeys> read(String atsign) async {
-    String file = filePath!(atsign);
-    if (!File(file).existsSync()) {
+    final file = File(filePath!(atsign));
+    if (!file.existsSync()) {
       throw AtException(
-          'provided keys file does not exist. Please check whether the file path $file is valid');
+          'provided keys file does not exist. Please check whether the file path ${file.path} is valid');
     }
-    String atAuthData = await File(file).readAsString();
-    Map<String, dynamic> json = jsonDecode(atAuthData);
-    if (passphraseCodec.isEnvelope(json)) {
-      json = await passphraseCodec.decode(json, passPhrase: passPhrase);
-    }
-    if (!json.containsKey('version')) {
-      return decryptAtKeysWithSelfEncKey(json, PkamAuthMode.keysFile);
-    }
-    return AtKeys.fromDocumentJson(json);
+
+    final json = await _readAtRestDocument(file);
+    final plaintextJson = await _selfDecryptLegacyFields(json);
+    return _atKeysFromJson(plaintextJson, atsign);
   }
 
   @override
   Future write(String atsign, AtKeys atKeys) async {
-    String path = filePath!(atsign);
-    if (!Directory(path).parent.existsSync()) {
-      await Directory(path).parent.create(recursive: true);
-    }
-    //don't overwrite the file
-    if (File(path).existsSync()) {
+    final file = File(filePath!(atsign));
+    if (file.existsSync()) {
       throw AtKeysFileOverwriteException(
-          'Tried writing $path, but failed since it already exists');
+          'Tried writing ${file.path}, but failed since it already exists');
     }
-    String plaintext;
-    if (atKeys.keyMaterials.isEmpty) {
-      plaintext = await encryptAtKeysWithSelfEncKey(
-        atKeys,
-        PkamAuthMode.keysFile,
-        atsign,
-      );
-    } else {
-      //todo: remove this line in v4, ensures we're writing new format
-      atKeys.atsign ??= atsign.toAtsign();
-      plaintext = jsonEncode(atKeys.toDocumentJson());
-    }
-    plaintext = await _encryptWithPassPhraseIfNeeded(plaintext);
 
-    await File(path).writeAsString(plaintext);
+    await _writeAtRestDocument(file, await _encodeAtRest(atKeys, atsign));
   }
 
   @override
-  FutureOr<void> append(Atsign atsign, AtKeysMaterial material) async {
-    final path = filePath!(atsign);
-    final originalText = await File(path).readAsString();
-    Map<String, dynamic> fileJson = jsonDecode(originalText);
-    if (passphraseCodec.isEnvelope(fileJson)) {
-      fileJson = await passphraseCodec.decode(fileJson, passPhrase: passPhrase);
-    }
+  Future<void> flush(Atsign atsign, AtKeys atKeys) async {
+    final file = File(filePath!(atsign));
+    final document = await _encodeAtRest(atKeys, atsign);
 
-    final AtKeys keys;
-    final Map<String, dynamic> existingForAssurance;
-    if (fileJson.containsKey('version')) {
-      keys = AtKeys.fromDocumentJson(fileJson);
-      existingForAssurance = fileJson;
-    } else {
-      // Legacy files may hold some fields self-encrypted; decrypt first so
-      // assurance compares plaintext against plaintext, not ciphertext
-      // against plaintext.
-      keys = await decryptAtKeysWithSelfEncKey(fileJson, PkamAuthMode.keysFile)
-        ..atsign = atsign;
-      keys.metadata.addAll({
-        for (final entry in fileJson.entries)
-          if (!auth_constants.keySchemaList.contains(entry.key))
-            entry.key: entry.value,
-      });
-      existingForAssurance = keys.toJson();
+    if (!file.existsSync()) {
+      await _writeAtRestDocument(file, document);
+      return;
     }
-
-    keys.addKey(material);
-    final candidate = keys.toDocumentJson();
 
     assurance.validateMapUpdate(
-      existing: existingForAssurance,
-      candidate: candidate,
+      existing: await _readAtRestDocument(file),
+      candidate: document,
     );
-    final plaintext =
-        await _encryptWithPassPhraseIfNeeded(jsonEncode(candidate));
-    await File(AtKeysAssurance.archiveNameFor(path))
-        .writeAsString(originalText);
-    await File(path).writeAsString(plaintext);
+    await _writeAtRestDocument(file, document);
   }
 
-  Future<String> _encryptWithPassPhraseIfNeeded(String plaintext) async {
+  Future<Map<String, dynamic>> _encodeAtRest(
+      AtKeys atKeys, String atsign) async {
+    atKeys.atsign ??= atsign.toAtsign();
+    return _selfEncryptLegacyFields(atKeys.toJson());
+  }
+
+  Future<Map<String, dynamic>> _readAtRestDocument(File file) async {
+    final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+    if (!passphraseCodec.isEnvelope(json)) return json;
+    return passphraseCodec.decode(json, passPhrase: passPhrase);
+  }
+
+  Future<void> _writeAtRestDocument(
+    File file,
+    Map<String, dynamic> document,
+  ) async {
+    if (!file.parent.existsSync()) {
+      await file.parent.create(recursive: true);
+    }
+    await file.writeAsString(await _encodePassphraseEnvelope(document));
+  }
+
+  Future<String> _encodePassphraseEnvelope(
+      Map<String, dynamic> document) async {
+    final plaintext = jsonEncode(document);
     if (passPhrase == null || passPhrase!.isEmpty) {
       return plaintext;
     }
-    final envelope = await AtKeysPassphraseCrypto.fromHashingAlgorithm(
-            HashingAlgoType.argon2id)
-        .encrypt(plaintext, passPhrase!);
-    return envelope.toString();
+    return passphraseCodec.encode(plaintext, passPhrase!);
   }
 }
 
-// Taken from at_cli_commons, but I can't import it due to circular dependencies
-// at_cli_commons depends on at_onboarding_cli....
+const _selfEncryptedLegacyFields = [
+  auth_constants.apkamPublicKey,
+  auth_constants.apkamPrivateKey,
+  auth_constants.defaultEncryptionPublicKey,
+  auth_constants.defaultEncryptionPrivateKey,
+];
+
+Future<Map<String, dynamic>> _selfEncryptLegacyFields(
+    Map<String, dynamic> document) {
+  return _applyToLegacyFields(
+      document,
+      (atChops, value) async => (await atChops.encryptString(
+              value, EncryptionKeyType.aes256,
+              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
+          .result);
+}
+
+Future<Map<String, dynamic>> _selfDecryptLegacyFields(
+    Map<String, dynamic> document) {
+  return _applyToLegacyFields(
+      document,
+      (atChops, value) async => (await atChops.decryptString(
+              value, EncryptionKeyType.aes256,
+              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
+          .result);
+}
+
+Future<Map<String, dynamic>> _applyToLegacyFields(
+  Map<String, dynamic> document,
+  Future<String> Function(AtChops atChops, String value) transform,
+) async {
+  final present = _selfEncryptedLegacyFields
+      .where((field) => document[field] != null)
+      .toList();
+  if (present.isEmpty) {
+    return document;
+  }
+  final selfEncryptionKey =
+      document[auth_constants.defaultSelfEncryptionKey] as String?;
+  if (selfEncryptionKey == null) {
+    throw AtException('selfEncryptionKey is required to encrypt the atKeys');
+  }
+  final atChops =
+      AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(selfEncryptionKey));
+  final result = Map<String, dynamic>.from(document);
+  for (final field in present) {
+    result[field] = await transform(atChops, document[field] as String);
+  }
+  return result;
+}
+
+AtKeys _atKeysFromJson(Map<String, dynamic> json, String atsign) {
+  if (json.containsKey('version')) {
+    return AtKeys.fromJson(json);
+  }
+  return AtKeys.fromLegacyJson(json)..atsign = atsign.toAtsign();
+}
+
+// Copied from at_cli_commons to avoid a circular dependency.
 String getDefaultAtKeysFilePath(String homeDirectory, String atSign) {
   return '$homeDirectory/.atsign/keys/${atSign}_key.atKeys'
       .replaceAll('/', Platform.pathSeparator);
@@ -149,14 +168,11 @@ String? getHomeDirectory({bool throwIfNull = false}) {
       break;
 
     case 'android':
-      // Probably want internal storage.
       homeDir = '/storage/sdcard0';
       break;
 
     case 'ios':
-    // iOS doesn't really have a home directory.
     case 'fuchsia':
-    // I have no idea.
     default:
       homeDir = null;
   }

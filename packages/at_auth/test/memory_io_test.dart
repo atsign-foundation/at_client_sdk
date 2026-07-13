@@ -37,34 +37,45 @@ void main() {
       expect(await io.read('@alice'), same(replacement));
     });
 
-    test('append creates a key set when none exists', () async {
-      await io.append('@alice'.toAtsign(), symmetricKey('appended'));
+    test('flush creates a key set when none exists', () async {
+      await io.flush(
+          '@alice'.toAtsign(),
+          AtKeys(
+              atsign: '@alice'.toAtsign(),
+              keysList: [symmetricKey('flushed')]));
 
       final keys = await io.read('@alice');
-      expect(keys.materialsForKeyId('appended'), isNotEmpty);
+      expect(keys.materialsForKeyId('flushed'), isNotEmpty);
       expect(keys.atsign, '@alice'.toAtsign());
     });
 
-    test('append adds to an existing key set', () async {
+    test('read, addKey, flush adds to an existing key set', () async {
       await io.write(
           '@alice',
           AtKeys(
               atsign: '@alice'.toAtsign(),
               keysList: [symmetricKey('existing')]));
-      await io.append('@alice'.toAtsign(), symmetricKey('appended'));
 
       final keys = await io.read('@alice');
-      expect(keys.materialsForKeyId('existing'), isNotEmpty);
-      expect(keys.materialsForKeyId('appended'), isNotEmpty);
+      keys.addKey(symmetricKey('appended'));
+      await io.flush('@alice'.toAtsign(), keys);
+
+      final reread = await io.read('@alice');
+      expect(reread.materialsForKeyId('existing'), isNotEmpty);
+      expect(reread.materialsForKeyId('appended'), isNotEmpty);
     });
 
-    test('append and read agree on the normalized atSign', () async {
-      // append stores under the Atsign; read normalizes its String arg. A
-      // differently-cased read must still resolve to the same slot.
-      await io.append('@Alice'.toAtsign(), symmetricKey('appended'));
+    test('flush and read agree on the normalized atSign', () async {
+      // flush stores under the normalized Atsign; read normalizes its String
+      // arg. A differently-cased read must still resolve to the same slot.
+      await io.flush(
+          '@Alice'.toAtsign(),
+          AtKeys(
+              atsign: '@Alice'.toAtsign(),
+              keysList: [symmetricKey('flushed')]));
 
       final keys = await io.read('@alice');
-      expect(keys.materialsForKeyId('appended'), isNotEmpty);
+      expect(keys.materialsForKeyId('flushed'), isNotEmpty);
     });
   });
 }

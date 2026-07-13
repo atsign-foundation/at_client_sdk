@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
+import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_auth/src/keys/types.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
@@ -151,8 +153,7 @@ void main() {
           throwsA(isA<AtDecryptionException>()));
     });
 
-    test('Test append() archives the existing file before overwriting',
-        () async {
+    test('Test flush() rewrites the existing file in place', () async {
       final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
       try {
         final tempPath = '${tempDir.path}/@alice_key.atKeys';
@@ -166,19 +167,74 @@ void main() {
         await fileAtKeysIo.write(atSign, atKeys);
 
         final existingText = await File(tempPath).readAsString();
-        await fileAtKeysIo.append(
+        final keys = await fileAtKeysIo.read(atSign);
+        keys.addKey(symmetricKey('appended', value: 'YXBwZW5kZWQ='));
+        keys.addKey(symmetricKey('another', value: 'YW5vdGhlcg=='));
+        await fileAtKeysIo.flush(atSign.toAtsign(), keys);
+
+        final files = tempDir.listSync().whereType<File>().toList();
+        expect(files, hasLength(1));
+        expect(files.single.path, tempPath);
+        expect(await File(tempPath).readAsString(), isNot(existingText));
+        final reread = await fileAtKeysIo.read(atSign);
+        expect(reread.materialsForKeyId('appended'), isNotEmpty);
+        expect(reread.materialsForKeyId('another'), isNotEmpty);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('Test flush() creates the file (and parent dirs) when absent',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
+      try {
+        final tempPath = '${tempDir.path}/nested/dir/@alice_key.atKeys';
+        final fileAtKeysIo = FileAtKeysIo(filePath: (_) => tempPath);
+        await fileAtKeysIo.flush(
           atSign.toAtsign(),
-          symmetricKey('appended', value: 'YXBwZW5kZWQ='),
+          AtKeys(atsign: atSign.toAtsign(), keysList: [symmetricKey('fresh')]),
         );
 
-        final archives = tempDir
-            .listSync()
-            .whereType<File>()
-            .where((file) => file.path.startsWith('$tempPath.'))
-            .toList();
-        expect(archives, hasLength(1));
-        expect(await archives.single.readAsString(), existingText);
-        expect(await File(tempPath).readAsString(), isNot(existingText));
+        final readKeys = await fileAtKeysIo.read(atSign);
+        expect(readKeys.materialsForKeyId('fresh'), isNotEmpty);
+        expect(
+          File(tempPath).parent.listSync().whereType<File>().toList(),
+          hasLength(1),
+        );
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test(
+        'Test flush() with a divergent AtKeys -> throws AtKeysAssuranceException '
+        'and writes nothing', () async {
+      final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
+      try {
+        final tempPath = '${tempDir.path}/@alice_key.atKeys';
+        final fileAtKeysIo = FileAtKeysIo(filePath: (_) => tempPath);
+        await fileAtKeysIo.write(
+          atSign,
+          AtKeys(
+            atsign: atSign.toAtsign(),
+            keysList: [symmetricKey('existing', value: 'ZXhpc3Rpbmc=')],
+          ),
+        );
+        final originalText = await File(tempPath).readAsString();
+
+        // A fresh keyset that does not preserve the existing material.
+        final divergent = AtKeys(
+          atsign: atSign.toAtsign(),
+          keysList: [symmetricKey('unrelated')],
+        );
+        await expectLater(
+          () async => await fileAtKeysIo.flush(atSign.toAtsign(), divergent),
+          throwsA(isA<AtKeysAssuranceException>()),
+        );
+
+        // Nothing was rewritten.
+        expect(tempDir.listSync().whereType<File>().toList(), hasLength(1));
+        expect(await File(tempPath).readAsString(), originalText);
       } finally {
         await tempDir.delete(recursive: true);
       }
@@ -226,7 +282,7 @@ void main() {
       }
     });
 
-    test('Test append() round-trips through a passphrase-protected file',
+    test('Test flush() round-trips through a passphrase-protected file',
         () async {
       final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
       try {
@@ -242,19 +298,14 @@ void main() {
         await fileAtKeysIo.write(atSign, atKeys);
         final encryptedOriginal = await File(tempPath).readAsString();
 
-        await fileAtKeysIo.append(
-          atSign.toAtsign(),
-          symmetricKey('appended', value: 'YXBwZW5kZWQ='),
-        );
+        final keys = await fileAtKeysIo.read(atSign);
+        keys.addKey(symmetricKey('appended', value: 'YXBwZW5kZWQ='));
+        await fileAtKeysIo.flush(atSign.toAtsign(), keys);
 
-        // The archive keeps the original bytes verbatim (still encrypted).
-        final archives = tempDir
-            .listSync()
-            .whereType<File>()
-            .where((file) => file.path.startsWith('$tempPath.'))
-            .toList();
-        expect(archives, hasLength(1));
-        expect(await archives.single.readAsString(), encryptedOriginal);
+        final files = tempDir.listSync().whereType<File>().toList();
+        expect(files, hasLength(1));
+        expect(files.single.path, tempPath);
+        expect(await File(tempPath).readAsString(), isNot(encryptedOriginal));
 
         // Both keys survive a decrypt-and-read of the rewritten file.
         final readKeys = await fileAtKeysIo.read(atSign);
@@ -267,7 +318,7 @@ void main() {
 
     for (final passPhrase in [null, 'qwerty']) {
       test(
-          'Test append() upgrades a legacy file to a v1 document'
+          'Test flush() upgrades a legacy file to a v1 document'
           '${passPhrase == null ? '' : ' with passphrase'}', () async {
         final tempDir =
             await Directory.systemTemp.createTemp('at_keys_io_test');
@@ -277,21 +328,14 @@ void main() {
               FileAtKeysIo(filePath: (_) => tempPath, passPhrase: passPhrase);
           final legacyKeys = legacyAtKeys();
           await fileAtKeysIo.write(atSign, legacyKeys);
-          final originalText = await File(tempPath).readAsString();
 
-          await fileAtKeysIo.append(
-            atSign.toAtsign(),
-            symmetricKey('appended', value: 'YXBwZW5kZWQ='),
-          );
+          final keys = await fileAtKeysIo.read(atSign);
+          keys.addKey(symmetricKey('appended', value: 'YXBwZW5kZWQ='));
+          await fileAtKeysIo.flush(atSign.toAtsign(), keys);
 
-          // The archive keeps the original legacy bytes verbatim.
-          final archives = tempDir
-              .listSync()
-              .whereType<File>()
-              .where((file) => file.path.startsWith('$tempPath.'))
-              .toList();
-          expect(archives, hasLength(1));
-          expect(await archives.single.readAsString(), originalText);
+          final files = tempDir.listSync().whereType<File>().toList();
+          expect(files, hasLength(1));
+          expect(files.single.path, tempPath);
 
           // The rewritten file is a v1 document that reads back with the
           // legacy keys intact plus the appended material.
@@ -304,28 +348,130 @@ void main() {
       });
     }
 
-    test('Test append() with an incorrect passphrase -> throws', () async {
+    test(
+        'Test write() self-encrypts the legacy portion of a v1 document, '
+        'byte-identical to a legacy-only file', () async {
+      final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
+      try {
+        final legacyPath = '${tempDir.path}/@legacy_key.atKeys';
+        final v1Path = '${tempDir.path}/@v1_key.atKeys';
+        await FileAtKeysIo(filePath: (_) => legacyPath)
+            .write(atSign, legacyAtKeys());
+        await FileAtKeysIo(filePath: (_) => v1Path).write(
+          atSign,
+          legacyAtKeys(atsign: atSign.toAtsign())
+            ..addKey(symmetricKey('typed')),
+        );
+
+        final Map<String, dynamic> legacyJson =
+            jsonDecode(await File(legacyPath).readAsString());
+        final Map<String, dynamic> v1Json =
+            jsonDecode(await File(v1Path).readAsString());
+        final plaintext = legacyAtKeys();
+
+        expect(v1Json['version'], isNotNull);
+        for (final field in [
+          auth_constants.apkamPublicKey,
+          auth_constants.apkamPrivateKey,
+          auth_constants.defaultEncryptionPublicKey,
+          auth_constants.defaultEncryptionPrivateKey,
+        ]) {
+          expect(v1Json[field], legacyJson[field],
+              reason: '$field must match the legacy-only encoding');
+          expect(v1Json[field], isNot(plaintext.toLegacyJson()[field]),
+              reason: '$field must not be stored as plaintext');
+        }
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('Test read() returns plaintext legacy fields from a v1 document',
+        () async {
       final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
       try {
         final tempPath = '${tempDir.path}/@alice_key.atKeys';
-        await FileAtKeysIo(filePath: (_) => tempPath, passPhrase: 'right')
-            .write(
+        final io = FileAtKeysIo(filePath: (_) => tempPath);
+        final atKeys = legacyAtKeys(atsign: atSign.toAtsign())
+          ..addKey(symmetricKey('typed'));
+        await io.write(atSign, atKeys);
+
+        final readKeys = await io.read(atSign);
+        expectLegacyAtKeys(readKeys, legacyAtKeys());
+        expect(readKeys.materialsForKeyId('typed'), isNotEmpty);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test(
+        'Test write()/read() works for typed materials only '
+        '(no selfEncryptionKey needed)', () async {
+      final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
+      try {
+        final tempPath = '${tempDir.path}/@alice_key.atKeys';
+        final io = FileAtKeysIo(filePath: (_) => tempPath);
+        await io.write(
+          atSign,
+          AtKeys(
+            atsign: atSign.toAtsign(),
+            keysList: [symmetricKey('only-typed')],
+          ),
+        );
+
+        final readKeys = await io.read(atSign);
+        expect(readKeys.materialsForKeyId('only-typed'), isNotEmpty);
+        expect(readKeys.defaultSelfEncryptionKey, isNull);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test(
+        'Test write() with legacy fields but no selfEncryptionKey '
+        '-> throws before touching the file', () async {
+      final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
+      try {
+        final tempPath = '${tempDir.path}/@alice_key.atKeys';
+        final io = FileAtKeysIo(filePath: (_) => tempPath);
+        final atKeys = legacyAtKeys()..defaultSelfEncryptionKey = null;
+
+        await expectLater(
+          () async => await io.write(atSign, atKeys),
+          throwsA(isA<AtException>()),
+        );
+        expect(File(tempPath).existsSync(), isFalse);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('Test flush() with an incorrect passphrase -> throws', () async {
+      final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
+      try {
+        final tempPath = '${tempDir.path}/@alice_key.atKeys';
+        final rightPassphraseIo =
+            FileAtKeysIo(filePath: (_) => tempPath, passPhrase: 'right');
+        await rightPassphraseIo.write(
           atSign,
           AtKeys(
             atsign: atSign.toAtsign(),
             keysList: [symmetricKey('existing')],
           ),
         );
+        final originalText = await File(tempPath).readAsString();
 
+        final keys = await rightPassphraseIo.read(atSign);
+        keys.addKey(symmetricKey('appended'));
         final wrongPassphraseIo =
             FileAtKeysIo(filePath: (_) => tempPath, passPhrase: 'wrong');
         await expectLater(
-          () async => await wrongPassphraseIo.append(
-              atSign.toAtsign(), symmetricKey('appended')),
+          () async => await wrongPassphraseIo.flush(atSign.toAtsign(), keys),
           throwsA(isA<AtDecryptionException>()),
         );
-        // Nothing was archived or rewritten.
+        // Nothing was rewritten.
         expect(tempDir.listSync().whereType<File>().toList(), hasLength(1));
+        expect(await File(tempPath).readAsString(), originalText);
       } finally {
         await tempDir.delete(recursive: true);
       }

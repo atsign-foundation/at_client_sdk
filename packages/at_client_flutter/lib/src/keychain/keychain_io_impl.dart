@@ -28,4 +28,10 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
     atKeys.metadata['atsign'] = atSign;
     await keychainStorage.appendAtKeysToKeychain(keys: atKeys);
   }
+
+  /// Keychain storage replaces the stored [AtKeys] wholesale, so flushing is
+  /// the same operation as [write] — there is no at-rest document to
+  /// preserve or archive.
+  @override
+  Future<void> flush(Atsign atsign, AtKeys atKeys) => write(atsign, atKeys);
 }
