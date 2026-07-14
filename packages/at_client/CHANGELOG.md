@@ -9,6 +9,15 @@
   are retained for source compatibility but are now no-ops (a commit-log-free
   client has no commit log to compact); they will be removed in a future
   major release.
+- deprecated: `FileTransferService` and `FileTransferObject` are now marked
+  `@Deprecated`. The SDK file-sharing API (`uploadFile` / `downloadFile` /
+  `shareFiles` / `reuploadFiles`) has moved to the app layer and will be
+  removed, along with the `archive` dependency, in the next major version
+  (#1113).
+- chore(deps): remove the unused `cron` dependency — it was only used by the
+  commit-log compaction that the `at_persistence_secondary_server` 5.0.0
+  migration removed, and nothing in the client imports it (#1378). `uuid` is
+  already on `^4.0.0`.
 
 ## 3.12.0
 
