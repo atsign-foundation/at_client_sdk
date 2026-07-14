@@ -65,14 +65,33 @@ class PkamDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    auth.authenticate(request, backupKeys: backupKeys).then((response) {
-      if (onAuthenticationComplete != null) {
-        onAuthenticationComplete!(request);
-      } else {
-        _logger.info(response.toString());
-      }
-      Navigator.of(context).pop(response);
-    });
+    auth
+        .authenticate(request, backupKeys: backupKeys)
+        .then((response) {
+          if (onAuthenticationComplete != null) {
+            onAuthenticationComplete!(request);
+          } else {
+            _logger.info(response.toString());
+          }
+          if (context.mounted) Navigator.of(context).pop(response);
+        })
+        .catchError((Object e) {
+          // Authentication failed (e.g. invalid atKeys or the atServer is
+          // unreachable). Without an error path the dialog would hang forever and
+          // PkamDialog.show() would never complete (issue #1909).
+          _logger.severe('Authentication via PKAM failed: $e');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Authentication failed. Please check your atKeys and connection, '
+                  'then try again.',
+                ),
+              ),
+            );
+            Navigator.of(context).pop(null);
+          }
+        });
     return Dialog(
       child: Container(
         padding: const EdgeInsets.all(16.0),

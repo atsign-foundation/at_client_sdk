@@ -125,6 +125,19 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
       final response = await _sendEnrollment(otp);
       if (!mounted) return;
       Navigator.of(context).pop(response);
+    } catch (e) {
+      // Enrollment failed (e.g. wrong OTP or the atServer is unreachable).
+      // Surface it instead of leaking an unhandled exception, and keep the
+      // dialog open so the user can retry (issue #1909).
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Activation failed. Please check the code and your connection, '
+            'then try again.',
+          ),
+        ),
+      );
     } finally {
       if (!mounted) return;
       setState(() {

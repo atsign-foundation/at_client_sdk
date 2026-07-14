@@ -8,6 +8,12 @@
   `at_auth ^3.2.0` (#1923).
 - fix: `FlutterEnrollmentService.enroll` no longer leaks the `AtLookupImpl`
   connection when the enrollment submit fails — it now closes in a `finally`.
+- fix: `CramDialog` and `PkamDialog` no longer hang forever when
+  onboarding/authentication throws (e.g. the atServer is unreachable). Both now
+  handle the error path — pop the dialog and surface a user-friendly message —
+  so `.show()` always completes. `ApkamActivationDialog` now catches enrollment
+  errors and shows a message instead of leaking an unhandled exception
+  (#1905, #1909).
 
 ## 1.1.3
 

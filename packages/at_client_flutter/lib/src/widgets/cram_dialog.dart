@@ -68,14 +68,32 @@ class CramDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     String secret = _parseCramKey(cramKey);
-    _authService.onboard(request, secret).then((response) {
-      if (onOnboardingComplete != null) {
-        onOnboardingComplete!(request);
-      } else {
-        _logger.info('Onboarding response: $response');
-      }
-      Navigator.of(context).pop(response);
-    });
+    _authService
+        .onboard(request, secret)
+        .then((response) {
+          if (onOnboardingComplete != null) {
+            onOnboardingComplete!(request);
+          } else {
+            _logger.info('Onboarding response: $response');
+          }
+          if (context.mounted) Navigator.of(context).pop(response);
+        })
+        .catchError((Object e) {
+          // Onboarding failed (e.g. the atServer is unreachable). Without an error
+          // path the dialog would stay on screen forever and CramDialog.show()
+          // would never complete (issue #1905 / #1909).
+          _logger.severe('Onboarding via CRAM failed: $e');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Onboarding failed. Please check your connection and try again.',
+                ),
+              ),
+            );
+            Navigator.of(context).pop(null);
+          }
+        });
     return AlertDialog(
       title: Text("Onboarding"),
       content: Column(
