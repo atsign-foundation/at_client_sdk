@@ -5,7 +5,7 @@ import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/serialization/assurance.dart';
-import 'package:at_auth/src/keys/types.dart';
+import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -129,6 +129,40 @@ void main() {
       );
     });
 
+    test('accepts map update when a key status moves forward', () {
+      final existing = _documentMap(keys: [_symmetricMaterial()]);
+      final candidate = _documentMap(
+        keys: [_symmetricMaterial().withStatus(KeyPartStatus.retired)],
+      );
+
+      assurance.validateMapUpdate(existing: existing, candidate: candidate);
+    });
+
+    test('rejects map update when a key status moves backward', () {
+      final existing = _documentMap(
+        keys: [_symmetricMaterial().withStatus(KeyPartStatus.dead)],
+      );
+      final candidate = _documentMap(
+        keys: [_symmetricMaterial().withStatus(KeyPartStatus.retired)],
+      );
+
+      expect(
+        () => assurance.validateMapUpdate(
+          existing: existing,
+          candidate: candidate,
+        ),
+        throwsA(isA<AtKeysAssuranceException>()),
+      );
+    });
+
+    test('accepts map update adding a new part to an existing keyId', () {
+      final pair = _rsaPairMaterials();
+      final existing = _documentMap(keys: [pair.first]);
+      final candidate = _documentMap(keys: pair);
+
+      assurance.validateMapUpdate(existing: existing, candidate: candidate);
+    });
+
     test('rejects map update when optional key record fields change', () {
       final existing = _documentMap(
         keys: [_wrapperMaterial(), _enrollMaterial()],
@@ -199,7 +233,8 @@ void main() {
       );
     });
 
-    test('rejects map update when the atSign changes on a v1 rewrite', () {
+    test('rejects map update when the atSign changes on a typed-keys rewrite',
+        () {
       final existing = _documentMap(keys: [_symmetricMaterial()]);
       final candidate = _documentMap(
         atSign: '@bob',
@@ -222,7 +257,6 @@ final _createdAt = DateTime.utc(2024, 1, 1);
 AtKeysMaterial _symmetricMaterial({String bytes = 'dmFsdWU='}) {
   return AtKeysMaterial(
     keyId: 'symmetric',
-    keyGroup: 'default',
     keyPartType: CryptographicKeyType.symmetricDataEncryption,
     keyAlgorithmType: KeyAlgorithmType.aes,
     bytes: AtBytes.fromString(bytes),
@@ -230,10 +264,28 @@ AtKeysMaterial _symmetricMaterial({String bytes = 'dmFsdWU='}) {
   );
 }
 
+List<AtKeysMaterial> _rsaPairMaterials() {
+  return [
+    AtKeysMaterial(
+      keyId: 'pair',
+      keyPartType: CryptographicKeyType.classicalPublicEncryption,
+      keyAlgorithmType: KeyAlgorithmType.rsa,
+      bytes: AtBytes.fromString('cHVibGlj'),
+      createdAt: _createdAt,
+    ),
+    AtKeysMaterial(
+      keyId: 'pair',
+      keyPartType: CryptographicKeyType.classicalPrivateDecryption,
+      keyAlgorithmType: KeyAlgorithmType.rsa,
+      bytes: AtBytes.fromString('cHJpdmF0ZQ=='),
+      createdAt: _createdAt,
+    ),
+  ];
+}
+
 AtKeysMaterial _wrapperMaterial() {
   return AtKeysMaterial(
     keyId: 'wrapper',
-    keyGroup: 'default',
     keyPartType: CryptographicKeyType.keyWrapping,
     keyAlgorithmType: KeyAlgorithmType.aes,
     bytes: AtBytes.fromString('d3JhcHBlcg=='),
@@ -248,7 +300,6 @@ AtKeysMaterial _enrollMaterial({
 }) {
   return AtKeysMaterial(
     keyId: keyId,
-    keyGroup: 'default',
     enrollmentId: enrollmentId,
     keyPartType: CryptographicKeyType.classicalPrivateDecryption,
     keyAlgorithmType: KeyAlgorithmType.rsa,
@@ -295,7 +346,6 @@ File _fixtureFile() {
 Map<String, dynamic> _recordJson({String keyId = 'symmetric'}) {
   return {
     'keyId': keyId,
-    'keyGroup': 'default',
     'keyParts': [
       {
         'keyPartType': CryptographicKeyType.symmetricDataEncryption.name,

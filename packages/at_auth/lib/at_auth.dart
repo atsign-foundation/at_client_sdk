@@ -31,7 +31,7 @@ export 'src/keys/at_keys.dart';
 // AtKeys's API deals in. It owns its own JSON (de)serialization; the
 // document-level `keys[]` grouping/validation lives in
 // parseAtKeysDocument/encodeAtKeysDocument, also exported here.
-export 'src/keys/types.dart';
+export 'src/keys/serialization/atkey_material.dart';
 export 'src/keys/serialization/assurance.dart';
 export 'src/keys/serialization/passphrase_envelope.dart';
 export 'src/keys/io/at_keys_io.dart';

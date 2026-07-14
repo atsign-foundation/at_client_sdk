@@ -27,10 +27,7 @@ class InMemoryAtKeysIo extends WrittenAtKeysIo {
     _internal[atsign.toAtsign()] = atKeys;
   }
 
-  /// Plain replace — no assurance check. [AtKeysAssurance.validateMapUpdate]
-  /// protects durable bytes that can't be recovered; in memory the caller
-  /// still holds every object, and read → [AtKeys.addKey] → flush gives
-  /// merge semantics for free.
+  /// Literal mirror to write as there is no need to flush to memory.
   @override
   FutureOr<void> flush(Atsign atsign, AtKeys atKeys) {
     _internal[atsign.toAtsign()] = atKeys;

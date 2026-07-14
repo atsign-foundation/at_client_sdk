@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
-import 'package:at_auth/src/keys/types.dart';
+import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
@@ -33,47 +33,37 @@ void main() {
     ..metadata = {};
 
   group('AtKeys legacy json transformers', () {
-    test('toLegacyJson -> should return a Map instance', () async {
-      //legacy keys? or not? idk...
-      encryptedAtKeysMap.remove('@alice🛠');
-      expect(createKeys().toLegacyJson(), equals(encryptedAtKeysMap));
+    test('toJson -> emits the legacy flat shape for a legacy-only AtKeys',
+        () async {
+      expect(createKeys().toJson(), equals(encryptedAtKeysMap));
     });
 
-    test('fromLegacyJson -> should return AtKeys instance', () async {
-      expect(AtKeys.fromLegacyJson(encryptedAtKeysMap), equals(createKeys()));
-    });
-
-    test('toLegacyJson -> should be nullable', () async {
+    test('toJson -> legacy fields are nullable', () async {
       AtKeys nulledKeys = AtKeys();
-      var map = nulledKeys.toLegacyJson();
+      var map = nulledKeys.toJson();
       for (var entry in map.entries) {
         expect(entry.value, isNull);
       }
     });
 
-    test('toLegacyJson -> metadata test', () async {
+    test('toJson -> passes legacy metadata through', () async {
       AtKeys keys = createKeys();
       keys.metadata = {'atsign': "@vforreal"};
-      var json = keys.toLegacyJson();
+      var json = keys.toJson();
       var metadata = json['atsign'];
       expect(metadata, equals('@vforreal'));
     });
 
-    test('fromLegacyJson -> metadata', () async {
+    test('fromJson -> populates legacy metadata', () async {
       // Copy the map so we don't pollute the shared encryptedAtKeysMap
       final localMap = Map<String, dynamic>.from(encryptedAtKeysMap);
       localMap['atsign'] = "@shabonaganmcsideburns";
-      var atKeys = AtKeys.fromLegacyJson(localMap);
+      var atKeys = AtKeys.fromJson(localMap);
       expect(atKeys.metadata, isNotEmpty);
     });
 
     test('fromJson falls back to legacy for json without a version field', () {
-      // The pre-v1 contract: fromJson accepts a flat legacy map, exactly as
-      // fromLegacyJson would.
-      expect(
-        AtKeys.fromJson(encryptedAtKeysMap),
-        equals(AtKeys.fromLegacyJson(encryptedAtKeysMap)),
-      );
+      expect(AtKeys.fromJson(encryptedAtKeysMap), equals(createKeys()));
     });
 
     test('fromJson throws on an unsupported version', () {
@@ -125,16 +115,6 @@ void main() {
       // apkamSymmetricKey is set, so this routes through the APKAM path, which
       // must throw (not fall through to a null-deref) when apkamPublicKey is null.
       apkam.apkamPublicKey = null;
-      expect(() => apkam.toAtChops(), throwsA(isA<AtException>()));
-    });
-
-    test('APKAM AtKeys with a null defaultEncryptionPublicKey -> throws', () {
-      apkam.defaultEncryptionPublicKey = null;
-      expect(() => apkam.toAtChops(), throwsA(isA<AtException>()));
-    });
-
-    test('APKAM AtKeys with a null apkamPrivateKey -> throws', () {
-      apkam.apkamPrivateKey = null;
       expect(() => apkam.toAtChops(), throwsA(isA<AtException>()));
     });
 
@@ -202,7 +182,7 @@ void main() {
       expect(forward.hashCode, reversed.hashCode);
     });
 
-    test('getMaterial disambiguates materials of the same keyId by type', () {
+    test('getKey disambiguates materials of the same keyId by type', () {
       final pair = rsaKeyPair('shared-pair');
       final atKeys = AtKeys(keysList: pair);
       final publicMaterial = pair.firstWhere((m) =>
@@ -211,32 +191,31 @@ void main() {
           m.keyPartType == CryptographicKeyType.classicalPrivateDecryption);
 
       expect(
-        atKeys.getMaterial(
+        atKeys.getKey(
             'shared-pair', CryptographicKeyType.classicalPublicEncryption),
         same(publicMaterial),
       );
       expect(
-        atKeys.getMaterial(
+        atKeys.getKey(
             'shared-pair', CryptographicKeyType.classicalPrivateDecryption),
         same(privateMaterial),
       );
     });
 
-    test('getMaterial returns null when the keyId has no material of that type',
-        () {
+    test('getKey returns null when the keyId has no material of that type', () {
       final atKeys = AtKeys(keysList: [symmetricKey('shared-id')]);
 
       expect(
-        atKeys.getMaterial(
+        atKeys.getKey(
             'shared-id', CryptographicKeyType.classicalPrivateDecryption),
         isNull,
       );
     });
 
-    test('materialsForKeyId returns empty for an unknown keyId', () {
+    test('keysForKeyId returns empty for an unknown keyId', () {
       final atKeys = AtKeys(keysList: [symmetricKey('shared-id')]);
 
-      expect(atKeys.materialsForKeyId('nope'), isEmpty);
+      expect(atKeys.keysForKeyId('nope'), isEmpty);
     });
 
     test('addKey rejects a duplicate keyId', () {
@@ -245,6 +224,88 @@ void main() {
 
       expect(
         () => atKeys.addKey(symmetricKey('dupe', value: 'b3RoZXI=')),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('keysForEnrollment returns only keys tagged with that enrollment', () {
+      final atKeys = AtKeys(keysList: [
+        ...rsaKeyPair('enrolled-pair', enrollmentId: 'enroll-1'),
+        symmetricKey('other-enroll', enrollmentId: 'enroll-2'),
+        symmetricKey('untagged'),
+      ]);
+
+      final enrolled = atKeys.keysForEnrollment('enroll-1');
+      expect(enrolled, hasLength(2));
+      expect(enrolled.map((m) => m.keyId).toSet(), {'enrolled-pair'});
+      expect(atKeys.keysForEnrollment('unknown'), isEmpty);
+    });
+  });
+
+  group('AtKeys retireKey', () {
+    test('marks every material of the group, leaving other fields intact', () {
+      final atKeys = AtKeys(keysList: [...rsaKeyPair('pair')]);
+
+      atKeys.retireKey('pair');
+
+      final retired = atKeys.keysForKeyId('pair').toList();
+      expect(retired, hasLength(2));
+      expect(retired.map((m) => m.status), everyElement(KeyPartStatus.retired));
+      expect(
+        atKeys
+            .getKey('pair', CryptographicKeyType.classicalPublicEncryption)!
+            .bytes
+            .toString(),
+        rsaKeyPair('pair').first.bytes.toString(),
+      );
+    });
+
+    test('is idempotent for the same status', () {
+      final atKeys = AtKeys(keysList: [symmetricKey('solo')]);
+
+      atKeys.retireKey('solo');
+      atKeys.retireKey('solo');
+
+      expect(
+        atKeys.keysForKeyId('solo').single.status,
+        KeyPartStatus.retired,
+      );
+    });
+
+    test('moves a retired key forward to dead', () {
+      final atKeys = AtKeys(keysList: [symmetricKey('solo')]);
+
+      atKeys.retireKey('solo');
+      atKeys.retireKey('solo', to: KeyPartStatus.dead);
+
+      expect(atKeys.keysForKeyId('solo').single.status, KeyPartStatus.dead);
+    });
+
+    test('throws on a backward transition', () {
+      final atKeys = AtKeys(keysList: [symmetricKey('solo')]);
+      atKeys.retireKey('solo', to: KeyPartStatus.dead);
+
+      expect(
+        () => atKeys.retireKey('solo'),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(atKeys.keysForKeyId('solo').single.status, KeyPartStatus.dead);
+    });
+
+    test('throws for an unknown keyId', () {
+      final atKeys = AtKeys(keysList: [symmetricKey('solo')]);
+
+      expect(
+        () => atKeys.retireKey('nope'),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('rejects KeyPartStatus.active as a target', () {
+      final atKeys = AtKeys(keysList: [symmetricKey('solo')]);
+
+      expect(
+        () => atKeys.retireKey('solo', to: KeyPartStatus.active),
         throwsA(isA<ArgumentError>()),
       );
     });

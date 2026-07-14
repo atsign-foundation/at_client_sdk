@@ -29,12 +29,10 @@ AtKeysMaterial symmetricKey(
   KeyAlgorithmType algorithm = KeyAlgorithmType.aes,
   List<String> operations = const [],
   String? enrollmentId,
-  String keyGroup = 'default',
   DateTime? createdAt,
 }) {
   return AtKeysMaterial(
     keyId: keyId,
-    keyGroup: keyGroup,
     enrollmentId: enrollmentId,
     keyPartType: CryptographicKeyType.symmetricDataEncryption,
     keyAlgorithmType: algorithm,
@@ -51,14 +49,12 @@ List<AtKeysMaterial> rsaKeyPair(
   String publicValue = 'cHVibGlj',
   String privateValue = 'cHJpdmF0ZQ==',
   String? enrollmentId,
-  String keyGroup = 'default',
   DateTime? createdAt,
 }) {
   final at = createdAt ?? _defaultCreatedAt;
   return [
     AtKeysMaterial(
       keyId: keyId,
-      keyGroup: keyGroup,
       enrollmentId: enrollmentId,
       keyPartType: CryptographicKeyType.classicalPublicEncryption,
       keyAlgorithmType: KeyAlgorithmType.rsa,
@@ -67,7 +63,6 @@ List<AtKeysMaterial> rsaKeyPair(
     ),
     AtKeysMaterial(
       keyId: keyId,
-      keyGroup: keyGroup,
       enrollmentId: enrollmentId,
       keyPartType: CryptographicKeyType.classicalPrivateDecryption,
       keyAlgorithmType: KeyAlgorithmType.rsa,

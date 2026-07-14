@@ -16,8 +16,8 @@ enum KeyAlgorithmType {
   userDefined
 }
 
-/// The cryptographic role a key material plays. This is the richer, PQ-ready
-/// successor to the old public/private/symmetric split.
+/// The cryptographic role a key material plays (independent of the algorithm
+/// family — see [KeyAlgorithmType]).
 enum CryptographicKeyType {
   symmetricDataEncryption,
   symmetricMessageAuthentication,
@@ -44,12 +44,12 @@ enum KeyPartStatus { active, retired, dead }
 
 /// One cryptographic key material — e.g. the public half of an encryption
 /// keypair. This is the object app code interacts with everywhere in
-/// [AtKeys]'s API (`addKey`, `getMaterial`, `keysForEnrollment`, ...); it is
-/// fully self-describing (`keyId`/`keyGroup`/`enrollmentId` included) so it
-/// never needs an owning wrapper to be meaningful on its own.
+/// [AtKeys]'s API (`addKey`, `getKey`, `keysForKeyId`, `keysForEnrollment`,
+/// `retireKey`); it is fully self-describing (`keyId`/`enrollmentId`
+/// included) so it never needs an owning wrapper to be meaningful on
+/// its own.
 final class AtKeysMaterial {
   final String keyId;
-  final String keyGroup;
   final String? enrollmentId;
   final CryptographicKeyType keyPartType;
   final KeyAlgorithmType keyAlgorithmType;
@@ -60,7 +60,6 @@ final class AtKeysMaterial {
 
   const AtKeysMaterial({
     required this.keyId,
-    required this.keyGroup,
     this.enrollmentId,
     required this.keyPartType,
     required this.keyAlgorithmType,
@@ -73,28 +72,38 @@ final class AtKeysMaterial {
   factory AtKeysMaterial.fromJson(
     Map<String, dynamic> json, {
     required String keyId,
-    required String keyGroup,
     String? enrollmentId,
-    required String fieldPrefix,
   }) {
     const assurance = AtKeysAssurance();
     final material = AtKeysMaterial(
       keyId: keyId,
-      keyGroup: keyGroup,
       enrollmentId: enrollmentId,
-      keyPartType: assurance.expectEnum(json['keyPartType'],
-          CryptographicKeyType.values, '$fieldPrefix.keyPartType'),
+      keyPartType: assurance.expectEnum(
+          json['keyPartType'], CryptographicKeyType.values, 'keyPartType'),
       keyAlgorithmType: assurance.expectEnum(json['keyAlgorithmType'],
-          KeyAlgorithmType.values, '$fieldPrefix.keyAlgorithmType'),
-      bytes: assurance.expectBytes(json['bytes'], '$fieldPrefix.bytes'),
-      operations: assurance.optionalStringList(
-          json['operations'], '$fieldPrefix.operations'),
-      createdAt:
-          assurance.expectDateTime(json['createdAt'], '$fieldPrefix.createdAt'),
+          KeyAlgorithmType.values, 'keyAlgorithmType'),
+      bytes: assurance.expectBytes(json['bytes'], 'bytes'),
+      operations:
+          assurance.optionalStringList(json['operations'], 'operations'),
+      createdAt: assurance.expectDateTime(json['createdAt'], 'createdAt'),
       status: assurance.expectEnum(json['status'] ?? KeyPartStatus.active.name,
-          KeyPartStatus.values, '$fieldPrefix.status'),
+          KeyPartStatus.values, 'status'),
     );
     return material;
+  }
+
+  /// A copy of this material with only [status] replaced.
+  AtKeysMaterial withStatus(KeyPartStatus status) {
+    return AtKeysMaterial(
+      keyId: keyId,
+      enrollmentId: enrollmentId,
+      keyPartType: keyPartType,
+      keyAlgorithmType: keyAlgorithmType,
+      bytes: bytes,
+      operations: operations,
+      createdAt: createdAt,
+      status: status,
+    );
   }
 
   Map<String, dynamic> toJson() {
@@ -113,7 +122,6 @@ final class AtKeysMaterial {
     if (identical(this, other)) return true;
     if (other is! AtKeysMaterial) return false;
     return keyId == other.keyId &&
-        keyGroup == other.keyGroup &&
         enrollmentId == other.enrollmentId &&
         keyPartType == other.keyPartType &&
         keyAlgorithmType == other.keyAlgorithmType &&
@@ -126,7 +134,6 @@ final class AtKeysMaterial {
   @override
   int get hashCode => Object.hash(
         keyId,
-        keyGroup,
         enrollmentId,
         keyPartType,
         keyAlgorithmType,
@@ -137,8 +144,9 @@ final class AtKeysMaterial {
       );
 }
 
-/// Parses the v1 document's `keys` array into a flat list of
-/// [AtKeysMaterial], validating each entry's `keyParts` (no duplicate
+/// Parses the typed-keys document's `keys` array into a flat list of
+/// [AtKeysMaterial].
+/// Validating each entry's `keyParts` (no duplicate
 /// `keyPartType` within one `keyId`) and rejecting a `keyId` that repeats
 /// across separate entries.
 List<AtKeysMaterial> parseAtKeysDocument(List<dynamic> keysJson) {
@@ -154,8 +162,6 @@ List<AtKeysMaterial> parseAtKeysDocument(List<dynamic> keysJson) {
     if (!seenKeyIds.add(keyId)) {
       throw AtKeysValidationException('Duplicate atKeys keyId "$keyId"');
     }
-    final keyGroup = assurance.expectNonEmptyString(
-        entryJson['keyGroup'], '$fieldPrefix.keyGroup');
     final enrollmentId = assurance.optionalString(
         entryJson['enrollmentId'], '$fieldPrefix.enrollmentId');
     final keyPartsJson =
@@ -163,14 +169,12 @@ List<AtKeysMaterial> parseAtKeysDocument(List<dynamic> keysJson) {
 
     final seenKeyPartTypes = <CryptographicKeyType>{};
     for (final part in keyPartsJson.asMap().entries) {
-      final partPrefix = '$fieldPrefix.keyParts[${part.key}]';
-      final partJson = assurance.expectMap(part.value, partPrefix);
+      final partJson =
+          assurance.expectMap(part.value, '$fieldPrefix.keyParts[${part.key}]');
       final material = AtKeysMaterial.fromJson(
         partJson,
         keyId: keyId,
-        keyGroup: keyGroup,
         enrollmentId: enrollmentId,
-        fieldPrefix: partPrefix,
       );
       if (!seenKeyPartTypes.add(material.keyPartType)) {
         throw AtKeysValidationException(
@@ -182,11 +186,11 @@ List<AtKeysMaterial> parseAtKeysDocument(List<dynamic> keysJson) {
   return materials;
 }
 
-/// Encodes a flat list of [AtKeysMaterial] into the v1 document's nested
+/// Encodes a flat list of [AtKeysMaterial] into the typed-keys document's
+/// nested
 /// `keys` shape, grouping materials that share a `keyId` (e.g. the
 /// public+private halves of a keypair) and validating that every material in
-/// a group agrees on `keyGroup`/`enrollmentId` and doesn't repeat a
-/// `keyPartType`.
+/// a group agrees on `enrollmentId` and doesn't repeat a `keyPartType`.
 List<Map<String, dynamic>> encodeAtKeysDocument(
   Iterable<AtKeysMaterial> materials,
 ) {
@@ -195,10 +199,9 @@ List<Map<String, dynamic>> encodeAtKeysDocument(
     final group = groups.putIfAbsent(material.keyId, () => []);
     if (group.isNotEmpty) {
       final first = group.first;
-      if (material.keyGroup != first.keyGroup ||
-          material.enrollmentId != first.enrollmentId) {
+      if (material.enrollmentId != first.enrollmentId) {
         throw AtKeysValidationException(
-            'Material for keyId "${material.keyId}" does not match the keyGroup/enrollmentId of its group');
+            'Material for keyId "${material.keyId}" does not match the enrollmentId of its group');
       }
       if (group
           .any((existing) => existing.keyPartType == material.keyPartType)) {
@@ -212,7 +215,6 @@ List<Map<String, dynamic>> encodeAtKeysDocument(
     final group = entry.value;
     return {
       'keyId': entry.key,
-      'keyGroup': group.first.keyGroup,
       if (group.first.enrollmentId != null)
         'enrollmentId': group.first.enrollmentId,
       'keyParts': group.map((material) => material.toJson()).toList(),

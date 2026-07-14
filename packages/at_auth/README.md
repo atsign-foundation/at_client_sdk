@@ -135,11 +135,11 @@ three layers, outermost first:
    - **Legacy flat** (no `version` field): a flat JSON object of the
      fields above plus `selfEncryptionKey`, `apkamSymmetricKey`, and
      `enrollmentId`.
-   - **v1** (`"version": 1`): adds `atSign` and a `keys` array of typed
-     key materials (grouped by `keyId` with their `keyParts`), while the
-     legacy fields stay flat at the top level — a v1 file's legacy
-     portion is byte-identical to a legacy-only file, so pre-v1 readers
-     can still use it.
+   - **Typed-keys** (`"version": 1`): adds `atSign` and a `keys` array
+     of typed key materials (grouped by `keyId` with their `keyParts`),
+     while the legacy fields stay flat at the top level — a typed-keys
+     file's legacy portion is byte-identical to a legacy-only file, so
+     legacy readers can still use it.
 
 In memory, `AtKeys` always holds plaintext; all three layers are applied
 and peeled exclusively by `FileAtKeysIo`.
@@ -149,10 +149,12 @@ Persistence has two verbs:
 - `write(atsign, atKeys)` — create-only initial persist (fresh onboard);
   throws if the file already exists.
 - `flush(atsign, atKeys)` — persist the current in-memory state (e.g.
-  after `AtKeys.addKey`). If the file exists, `flush` first validates
-  that nothing it holds would be lost, then rewrites it; flushing a
-  legacy file upgrades it in place to a v1 document. If the file does not
-  exist, `flush` creates it.
+  after `AtKeys.addKey` or `AtKeys.retireKey`). If the file exists,
+  `flush` first validates that nothing it holds would be lost (key
+  material is never removed — a key's `status` may only move forward,
+  `active` → `retired` → `dead`), then rewrites it; flushing a legacy
+  file upgrades it in place to a typed-keys document. If the file does
+  not exist, `flush` creates it.
 
 ## Where to go next
 

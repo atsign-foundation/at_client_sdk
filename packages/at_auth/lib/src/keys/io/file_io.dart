@@ -28,7 +28,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
 
     final json = await _readAtRestDocument(file);
     final plaintextJson = await _selfDecryptLegacyFields(json);
-    return _atKeysFromJson(plaintextJson, atsign);
+    return AtKeys.fromJson(plaintextJson);
   }
 
   @override
@@ -140,13 +140,6 @@ Future<Map<String, dynamic>> _applyToLegacyFields(
     result[field] = await transform(atChops, document[field] as String);
   }
   return result;
-}
-
-AtKeys _atKeysFromJson(Map<String, dynamic> json, String atsign) {
-  if (json.containsKey('version')) {
-    return AtKeys.fromJson(json);
-  }
-  return AtKeys.fromLegacyJson(json)..atsign = atsign.toAtsign();
 }
 
 // Copied from at_cli_commons to avoid a circular dependency.

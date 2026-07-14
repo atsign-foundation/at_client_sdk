@@ -7,7 +7,7 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
 import 'package:at_auth/src/keys/serialization/assurance.dart';
-import 'package:at_auth/src/keys/types.dart';
+import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -177,8 +177,8 @@ void main() {
         expect(files.single.path, tempPath);
         expect(await File(tempPath).readAsString(), isNot(existingText));
         final reread = await fileAtKeysIo.read(atSign);
-        expect(reread.materialsForKeyId('appended'), isNotEmpty);
-        expect(reread.materialsForKeyId('another'), isNotEmpty);
+        expect(reread.keysForKeyId('appended'), isNotEmpty);
+        expect(reread.keysForKeyId('another'), isNotEmpty);
       } finally {
         await tempDir.delete(recursive: true);
       }
@@ -196,10 +196,42 @@ void main() {
         );
 
         final readKeys = await fileAtKeysIo.read(atSign);
-        expect(readKeys.materialsForKeyId('fresh'), isNotEmpty);
+        expect(readKeys.keysForKeyId('fresh'), isNotEmpty);
         expect(
           File(tempPath).parent.listSync().whereType<File>().toList(),
           hasLength(1),
+        );
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('Test flush() persists a retired key (status transition allowed)',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
+      try {
+        final tempPath = '${tempDir.path}/@alice_key.atKeys';
+        final fileAtKeysIo = FileAtKeysIo(filePath: (_) => tempPath);
+        await fileAtKeysIo.write(
+          atSign,
+          AtKeys(
+            atsign: atSign.toAtsign(),
+            keysList: [symmetricKey('rotated'), symmetricKey('kept')],
+          ),
+        );
+
+        final keys = await fileAtKeysIo.read(atSign);
+        keys.retireKey('rotated');
+        await fileAtKeysIo.flush(atSign.toAtsign(), keys);
+
+        final reread = await fileAtKeysIo.read(atSign);
+        expect(
+          reread.keysForKeyId('rotated').single.status,
+          KeyPartStatus.retired,
+        );
+        expect(
+          reread.keysForKeyId('kept').single.status,
+          KeyPartStatus.active,
         );
       } finally {
         await tempDir.delete(recursive: true);
@@ -240,7 +272,7 @@ void main() {
       }
     });
 
-    test('Test write()/read() round-trips v1 typed keys', () async {
+    test('Test write()/read() round-trips typed keys', () async {
       final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
       try {
         final tempPath = '${tempDir.path}/@alice_key.atKeys';
@@ -258,22 +290,19 @@ void main() {
         final readKeys = await io.read(atSign);
         expect(
             readKeys
-                .getMaterial(
-                    'sym', CryptographicKeyType.symmetricDataEncryption)
+                .getKey('sym', CryptographicKeyType.symmetricDataEncryption)
                 ?.bytes
                 .toString(),
             'c2VjcmV0');
         expect(
             readKeys
-                .getMaterial(
-                    'pair', CryptographicKeyType.classicalPublicEncryption)
+                .getKey('pair', CryptographicKeyType.classicalPublicEncryption)
                 ?.bytes
                 .toString(),
             'cHVibGlj');
         expect(
             readKeys
-                .getMaterial(
-                    'pair', CryptographicKeyType.classicalPrivateDecryption)
+                .getKey('pair', CryptographicKeyType.classicalPrivateDecryption)
                 ?.bytes
                 .toString(),
             'cHJpdmF0ZQ==');
@@ -309,8 +338,8 @@ void main() {
 
         // Both keys survive a decrypt-and-read of the rewritten file.
         final readKeys = await fileAtKeysIo.read(atSign);
-        expect(readKeys.materialsForKeyId('existing'), isNotEmpty);
-        expect(readKeys.materialsForKeyId('appended'), isNotEmpty);
+        expect(readKeys.keysForKeyId('existing'), isNotEmpty);
+        expect(readKeys.keysForKeyId('appended'), isNotEmpty);
       } finally {
         await tempDir.delete(recursive: true);
       }
@@ -318,7 +347,7 @@ void main() {
 
     for (final passPhrase in [null, 'qwerty']) {
       test(
-          'Test flush() upgrades a legacy file to a v1 document'
+          'Test flush() upgrades a legacy file to a typed-keys document'
           '${passPhrase == null ? '' : ' with passphrase'}', () async {
         final tempDir =
             await Directory.systemTemp.createTemp('at_keys_io_test');
@@ -337,11 +366,11 @@ void main() {
           expect(files, hasLength(1));
           expect(files.single.path, tempPath);
 
-          // The rewritten file is a v1 document that reads back with the
+          // The rewritten file is a typed-keys document that reads back with the
           // legacy keys intact plus the appended material.
           final readKeys = await fileAtKeysIo.read(atSign);
           expectLegacyAtKeys(readKeys, legacyKeys);
-          expect(readKeys.materialsForKeyId('appended'), isNotEmpty);
+          expect(readKeys.keysForKeyId('appended'), isNotEmpty);
         } finally {
           await tempDir.delete(recursive: true);
         }
@@ -349,15 +378,15 @@ void main() {
     }
 
     test(
-        'Test write() self-encrypts the legacy portion of a v1 document, '
-        'byte-identical to a legacy-only file', () async {
+        'Test write() self-encrypts the legacy portion of a typed-keys '
+        'document, byte-identical to a legacy-only file', () async {
       final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
       try {
         final legacyPath = '${tempDir.path}/@legacy_key.atKeys';
-        final v1Path = '${tempDir.path}/@v1_key.atKeys';
+        final typedKeysPath = '${tempDir.path}/@typed_key.atKeys';
         await FileAtKeysIo(filePath: (_) => legacyPath)
             .write(atSign, legacyAtKeys());
-        await FileAtKeysIo(filePath: (_) => v1Path).write(
+        await FileAtKeysIo(filePath: (_) => typedKeysPath).write(
           atSign,
           legacyAtKeys(atsign: atSign.toAtsign())
             ..addKey(symmetricKey('typed')),
@@ -365,20 +394,20 @@ void main() {
 
         final Map<String, dynamic> legacyJson =
             jsonDecode(await File(legacyPath).readAsString());
-        final Map<String, dynamic> v1Json =
-            jsonDecode(await File(v1Path).readAsString());
+        final Map<String, dynamic> typedKeysJson =
+            jsonDecode(await File(typedKeysPath).readAsString());
         final plaintext = legacyAtKeys();
 
-        expect(v1Json['version'], isNotNull);
+        expect(typedKeysJson['version'], isNotNull);
         for (final field in [
           auth_constants.apkamPublicKey,
           auth_constants.apkamPrivateKey,
           auth_constants.defaultEncryptionPublicKey,
           auth_constants.defaultEncryptionPrivateKey,
         ]) {
-          expect(v1Json[field], legacyJson[field],
+          expect(typedKeysJson[field], legacyJson[field],
               reason: '$field must match the legacy-only encoding');
-          expect(v1Json[field], isNot(plaintext.toLegacyJson()[field]),
+          expect(typedKeysJson[field], isNot(plaintext.toJson()[field]),
               reason: '$field must not be stored as plaintext');
         }
       } finally {
@@ -386,7 +415,8 @@ void main() {
       }
     });
 
-    test('Test read() returns plaintext legacy fields from a v1 document',
+    test(
+        'Test read() returns plaintext legacy fields from a typed-keys document',
         () async {
       final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
       try {
@@ -398,7 +428,7 @@ void main() {
 
         final readKeys = await io.read(atSign);
         expectLegacyAtKeys(readKeys, legacyAtKeys());
-        expect(readKeys.materialsForKeyId('typed'), isNotEmpty);
+        expect(readKeys.keysForKeyId('typed'), isNotEmpty);
       } finally {
         await tempDir.delete(recursive: true);
       }
@@ -420,7 +450,7 @@ void main() {
         );
 
         final readKeys = await io.read(atSign);
-        expect(readKeys.materialsForKeyId('only-typed'), isNotEmpty);
+        expect(readKeys.keysForKeyId('only-typed'), isNotEmpty);
         expect(readKeys.defaultSelfEncryptionKey, isNull);
       } finally {
         await tempDir.delete(recursive: true);

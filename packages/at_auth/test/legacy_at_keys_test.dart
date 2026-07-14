@@ -10,13 +10,13 @@ void main() {
   group('legacy AtKeys survival', () {
     test('bare legacy json has no version field', () {
       final legacyKeys = legacyAtKeys();
-      final json = legacyKeys.toLegacyJson();
+      final json = legacyKeys.toJson();
 
       expect(json.containsKey('version'), isFalse);
-      expectLegacyAtKeys(AtKeys.fromLegacyJson(json), legacyKeys);
+      expectLegacyAtKeys(AtKeys.fromJson(json), legacyKeys);
     });
 
-    test('v1 document preserves legacy payload', () {
+    test('typed-keys document preserves legacy payload', () {
       final legacyKeys = legacyAtKeys(atsign: '@alice'.toAtsign());
       final encoded = legacyKeys.toJson();
       final decoded = AtKeys.fromJson(encoded);
@@ -78,7 +78,7 @@ void main() {
 
         final readKeys = await fileAtKeysIo.read('@alice');
         expectLegacyAtKeys(readKeys, legacyKeys);
-        expect(readKeys.materialsForKeyId('appended'), isNotEmpty);
+        expect(readKeys.keysForKeyId('appended'), isNotEmpty);
       });
     }
   });
