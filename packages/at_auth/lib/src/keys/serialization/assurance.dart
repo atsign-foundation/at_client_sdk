@@ -10,7 +10,8 @@ class AtKeysAssuranceException extends AtKeysValidationException {
 
 /// Single home for all atKeys validation: low-level parsing/value checks
 /// (`expect*`/`optional*`, called by the models' `fromJson`) and cross-material
-/// structural invariants (`validateKeyMaterials`, `validateMapUpdate`).
+/// structural invariants (`validateKeyMaterials`, `validateAddKey`,
+/// `validateMapUpdate`).
 class AtKeysAssurance {
   const AtKeysAssurance();
 
@@ -124,6 +125,37 @@ class AtKeysAssurance {
     }
   }
 
+  /// All of `AtKeys.addKey`'s validation in one place. Rejects, in order:
+  /// a duplicate `(keyId, keyPartType)`, an enrollmentId that disagrees with
+  /// the candidate's keyId group, and a second material of the same
+  /// `keyPartType` for one enrollment across keyIds (the
+  /// [validateKeyMaterials] invariant, held incrementally).
+  ///
+  /// Throws [ArgumentError] rather than an [AtKeysValidationException]:
+  /// addKey misuse is a caller programming error, not a malformed file.
+  void validateAddKey({
+    required Iterable<AtKeysMaterial> existing,
+    required AtKeysMaterial candidate,
+  }) {
+    for (final material in existing) {
+      if (material.keyId == candidate.keyId) {
+        if (material.keyPartType == candidate.keyPartType) {
+          throw ArgumentError.value(candidate.keyId, 'material',
+              'AtKeys already contains a ${candidate.keyPartType.name} material for this keyId');
+        }
+        if (material.enrollmentId != candidate.enrollmentId) {
+          throw ArgumentError.value(candidate.keyId, 'material',
+              'enrollmentId "${candidate.enrollmentId}" does not match "${material.enrollmentId}" already on this keyId');
+        }
+      } else if (candidate.enrollmentId != null &&
+          material.enrollmentId == candidate.enrollmentId &&
+          material.keyPartType == candidate.keyPartType) {
+        throw ArgumentError.value(candidate.enrollmentId, 'material',
+            'Enrollment "${candidate.enrollmentId}" already has a ${candidate.keyPartType.name} key material');
+      }
+    }
+  }
+
   void validateMapUpdate({
     required Map<String, dynamic> existing,
     required Map<String, dynamic> candidate,
@@ -150,11 +182,7 @@ class AtKeysAssurance {
     if (!json.containsKey('version')) {
       return const [];
     }
-    final keysJson = json['keys'];
-    if (keysJson is! List) {
-      return const [];
-    }
-    final materials = parseAtKeysDocument(keysJson);
+    final materials = parseAtKeysDocument(expectList(json['keys'], 'keys'));
     validateKeyMaterials(materials);
     return materials;
   }

@@ -210,9 +210,8 @@ class AtAuthImpl implements AtAuth {
       //2a. if there is no specified implementation we're defaulting to FileAtKeysIo with a default file path
       atOnboardingRequest.atKeysIo ??= FileAtKeysIo();
       switch (atOnboardingRequest.atKeysIo) {
-        case WrittenAtKeysIo():
-          _atAuthKeys = (atOnboardingRequest.atKeysIo! as WrittenAtKeysIo)
-              .generateKeyPairs();
+        case WrittenAtKeysIo writtenKeys:
+          _atAuthKeys = writtenKeys.generateKeyPairs();
         default:
           throw AtAuthenticationException(
               'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');

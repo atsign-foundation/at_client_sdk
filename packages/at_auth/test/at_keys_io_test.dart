@@ -507,6 +507,48 @@ void main() {
       }
     });
 
+    test('Test write() with a mismatched atSign -> throws, writes nothing',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
+      try {
+        final tempPath = '${tempDir.path}/@alice_key.atKeys';
+        final io = FileAtKeysIo(filePath: (_) => tempPath);
+        final bobKeys = AtKeys(
+          atsign: '@bob'.toAtsign(),
+          keysList: [symmetricKey('k')],
+        );
+
+        await expectLater(
+          () async => await io.write(atSign, bobKeys),
+          throwsA(isA<AtKeysValidationException>()),
+        );
+        expect(File(tempPath).existsSync(), isFalse);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('Test flush() with a mismatched atSign -> throws, writes nothing',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
+      try {
+        final tempPath = '${tempDir.path}/@alice_key.atKeys';
+        final io = FileAtKeysIo(filePath: (_) => tempPath);
+        final bobKeys = AtKeys(
+          atsign: '@bob'.toAtsign(),
+          keysList: [symmetricKey('k')],
+        );
+
+        await expectLater(
+          () async => await io.flush(atSign.toAtsign(), bobKeys),
+          throwsA(isA<AtKeysValidationException>()),
+        );
+        expect(File(tempPath).existsSync(), isFalse);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
     tearDown(() {
       final keyFile = File(writeFilePath);
       if (keyFile.existsSync()) {

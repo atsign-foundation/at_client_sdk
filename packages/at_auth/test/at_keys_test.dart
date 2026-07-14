@@ -229,6 +229,33 @@ void main() {
       );
     });
 
+    test(
+        'addKey rejects a second material of the same type for one enrollment '
+        'even across keyIds', () {
+      // The read-side invariant (validateKeyMaterials) must hold in memory
+      // too, otherwise write() persists a file that read() rejects.
+      final atKeys = AtKeys(keysList: [
+        symmetricKey('first', enrollmentId: 'enroll-1'),
+      ]);
+
+      expect(
+        () => atKeys.addKey(symmetricKey('second', enrollmentId: 'enroll-1')),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('addKey rejects an enrollmentId mismatch within a keyId group', () {
+      final atKeys = AtKeys(
+        keysList: [rsaKeyPair('pair', enrollmentId: 'enroll-1').first],
+      );
+      final mismatched = rsaKeyPair('pair', enrollmentId: 'enroll-2').last;
+
+      expect(
+        () => atKeys.addKey(mismatched),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
     test('keysForEnrollment returns only keys tagged with that enrollment', () {
       final atKeys = AtKeys(keysList: [
         ...rsaKeyPair('enrolled-pair', enrollmentId: 'enroll-1'),

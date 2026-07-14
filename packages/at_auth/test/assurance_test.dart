@@ -249,6 +249,32 @@ void main() {
         throwsA(isA<AtKeysAssuranceException>()),
       );
     });
+
+    test('rejects map update when a versioned document has a non-list keys',
+        () {
+      // A corrupted keys field must not silently skip material preservation.
+      final corrupted = {
+        'version': AtKeys.supportedVersion,
+        'atSign': '@alice',
+        'keys': 'garbage',
+      };
+      final wellFormed = _documentMap(keys: [_symmetricMaterial()]);
+
+      expect(
+        () => assurance.validateMapUpdate(
+          existing: corrupted,
+          candidate: wellFormed,
+        ),
+        throwsA(isA<AtKeysParseException>()),
+      );
+      expect(
+        () => assurance.validateMapUpdate(
+          existing: wellFormed,
+          candidate: corrupted,
+        ),
+        throwsA(isA<AtKeysParseException>()),
+      );
+    });
   });
 }
 

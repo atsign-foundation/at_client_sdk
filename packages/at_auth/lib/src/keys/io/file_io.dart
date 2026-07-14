@@ -61,7 +61,12 @@ class FileAtKeysIo extends WrittenAtKeysIo {
 
   Future<Map<String, dynamic>> _encodeAtRest(
       AtKeys atKeys, String atsign) async {
-    atKeys.atsign ??= atsign.toAtsign();
+    final normalized = atsign.toAtsign();
+    if (atKeys.atsign != null && atKeys.atsign != normalized) {
+      throw AtKeysValidationException(
+          'AtKeys belongs to ${atKeys.atsign} but is being persisted for $normalized');
+    }
+    atKeys.atsign ??= normalized;
     return _selfEncryptLegacyFields(atKeys.toJson());
   }
 
@@ -131,7 +136,8 @@ Future<Map<String, dynamic>> _applyToLegacyFields(
   final selfEncryptionKey =
       document[auth_constants.defaultSelfEncryptionKey] as String?;
   if (selfEncryptionKey == null) {
-    throw AtException('selfEncryptionKey is required to encrypt the atKeys');
+    throw AtException(
+        'selfEncryptionKey is required to process the self-encrypted legacy atKeys fields');
   }
   final atChops =
       AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(selfEncryptionKey));

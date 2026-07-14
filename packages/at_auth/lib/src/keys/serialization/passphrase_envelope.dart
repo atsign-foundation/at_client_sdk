@@ -17,16 +17,7 @@ import 'package:at_commons/at_commons.dart';
 /// A JSON object is recognized as an envelope by the presence of its `iv`
 /// field ([isEnvelope]).
 class AtKeysPassphraseEnvelopeCodec {
-  final AtDecryptionException Function(String) _decryptionException;
-
-  const AtKeysPassphraseEnvelopeCodec({
-    AtDecryptionException Function(String)? decryptionException,
-  }) : _decryptionException =
-            decryptionException ?? _defaultDecryptionException;
-
-  static AtDecryptionException _defaultDecryptionException(String message) {
-    return AtDecryptionException(message);
-  }
+  const AtKeysPassphraseEnvelopeCodec();
 
   bool isEnvelope(Map<String, dynamic> json) {
     return json.containsKey('iv');
@@ -60,30 +51,30 @@ class AtKeysPassphraseEnvelopeCodec {
       return json;
     }
     if (passPhrase.isNullOrEmpty) {
-      throw _decryptionException(
+      throw AtDecryptionException(
           'Pass Phrase is required for password protected atKeys file');
     }
 
-    final String? hashingAlgoName = json['hashingAlgoType'];
-    if (hashingAlgoName == null || hashingAlgoName.isEmpty) {
-      throw _decryptionException(
+    final hashingAlgoName = json['hashingAlgoType'];
+    if (hashingAlgoName is! String || hashingAlgoName.isEmpty) {
+      throw AtDecryptionException(
           'Hashing algo type is required for decryption of password protected atKeys file');
+    }
+    final iv = json['iv'];
+    if (iv is! String || iv.isEmpty) {
+      throw AtDecryptionException(
+          'Initialization vector is required for decryption');
+    }
+    final content = json['content'];
+    if (content is! String || content.isEmpty) {
+      throw AtDecryptionException('Cannot decrypt empty or null content');
     }
 
     try {
-      final String? iv = json['iv'];
-      final String? content = json['content'];
-      if (iv.isNullOrEmpty) {
-        throw AtDecryptionException(
-            'Initialization vector is required for decryption');
-      }
-      if (content.isNullOrEmpty) {
-        throw AtDecryptionException('Cannot decrypt empty or null content');
-      }
       final aes = await _encryptorForPassphrase(
           passPhrase!, HashingAlgoType.fromString(hashingAlgoName));
       final plaintext =
-          aes.decrypt(content!, iv: InitialisationVector(base64Decode(iv!)));
+          aes.decrypt(content, iv: InitialisationVector(base64Decode(iv)));
       // jsonDecode must stay inside the try: the cipher is unauthenticated,
       // so an incorrect passphrase does not fail decrypt() -- it yields
       // arbitrary bytes. Whether those bytes parse as a JSON object is
@@ -98,7 +89,7 @@ class AtKeysPassphraseEnvelopeCodec {
       }
       return decodedJson;
     } catch (e) {
-      throw _decryptionException(
+      throw AtDecryptionException(
           'Failed to decrypt atKeys file - passphrase may be incorrect: $e');
     }
   }

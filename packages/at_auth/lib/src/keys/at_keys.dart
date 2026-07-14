@@ -49,13 +49,9 @@ class AtKeys {
       keys.where((material) => material.enrollmentId == enrollmentId);
 
   void addKey(AtKeysMaterial material) {
-    // putIfAbsent returns the reference to the inner group, not a copy
-    final group = _materialsByKeyId.putIfAbsent(material.keyId, () => {});
-    if (group.containsKey(material.keyPartType)) {
-      throw ArgumentError.value(material.keyId, 'material',
-          'AtKeys already contains a ${material.keyPartType.name} material for this keyId');
-    }
-    group[material.keyPartType] = material;
+    const AtKeysAssurance().validateAddKey(existing: keys, candidate: material);
+    _materialsByKeyId.putIfAbsent(material.keyId, () => {})[
+        material.keyPartType] = material;
   }
 
   /// Marks every material of [keyId] as [to] ([KeyPartStatus.retired] by
