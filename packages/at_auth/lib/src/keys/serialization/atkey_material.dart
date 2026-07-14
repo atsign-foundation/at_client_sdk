@@ -40,7 +40,7 @@ enum CryptographicKeyType {
   userDefined,
 }
 
-enum KeyPartStatus { active, retired, dead }
+enum KeyPartStatus { active, retired, revoked, dead }
 
 /// One cryptographic key material — e.g. the public half of an encryption
 /// keypair. This is the object app code interacts with everywhere in

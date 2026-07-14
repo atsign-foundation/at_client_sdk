@@ -30,7 +30,8 @@ void main() {
     ..apkamSymmetricKey =
         AtBytes.fromString(encryptedAtKeysMap[auth_constants.apkamSymmetricKey])
     ..enrollmentId = encryptedAtKeysMap['enrollmentId']
-    ..metadata = {};
+    // The fixture's non-schema trailer entry lands in metadata.
+    ..metadata = {'@alice🛠': encryptedAtKeysMap['@alice🛠']};
 
   group('AtKeys legacy json transformers', () {
     test('toJson -> emits the legacy flat shape for a legacy-only AtKeys',
