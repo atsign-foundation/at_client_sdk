@@ -3,22 +3,29 @@ import 'package:test/test.dart';
 
 void main() {
   group('AtNetworkTimeouts', () {
-    test('maxAllowed is 30 seconds', () {
-      expect(AtNetworkTimeouts.maxAllowed, const Duration(seconds: 30));
+    test('maxAllowed is 60 seconds', () {
+      expect(AtNetworkTimeouts.maxAllowed, const Duration(seconds: 60));
     });
 
     test('cap clamps values above maxAllowed down to maxAllowed', () {
       expect(AtNetworkTimeouts.cap(const Duration(minutes: 5)),
           AtNetworkTimeouts.maxAllowed);
-      expect(AtNetworkTimeouts.cap(const Duration(seconds: 31)),
+      expect(AtNetworkTimeouts.cap(const Duration(seconds: 90)),
           AtNetworkTimeouts.maxAllowed);
     });
 
     test('cap passes through values within range unchanged', () {
       expect(AtNetworkTimeouts.cap(const Duration(seconds: 5)),
           const Duration(seconds: 5));
+      // 45s is above the 30s default but below the 60s ceiling.
+      expect(AtNetworkTimeouts.cap(const Duration(seconds: 45)),
+          const Duration(seconds: 45));
       expect(AtNetworkTimeouts.cap(AtNetworkTimeouts.maxAllowed),
           AtNetworkTimeouts.maxAllowed);
+    });
+
+    test('defaultTimeout is 30 seconds', () {
+      expect(AtNetworkTimeouts.defaultTimeout, const Duration(seconds: 30));
     });
 
     test('cap clamps negative values to zero', () {

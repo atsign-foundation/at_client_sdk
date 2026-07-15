@@ -1,9 +1,10 @@
 ## 5.13.0
 
 - feat: add `AtNetworkTimeouts` — the process-wide network-timeout policy
-  (`defaultTimeout`, `maxAllowed` = 30s hard cap, `cap()`). The single place to
-  set the default network timeout for the whole SDK; every resolved timeout is
-  passed through `cap()` so nothing can wait longer than 30 seconds (#1923).
+  (`defaultTimeout` = 30s, `maxAllowed` = 60s hard cap, `cap()`). The single
+  place to set the default network timeout for the whole SDK; every resolved
+  timeout is passed through `cap()` so nothing can wait longer than 60 seconds
+  (#1923).
 - feat: add `SecureSocketConfig.connectTimeout` so a connect deadline can be
   threaded through to `SecureSocket.connect`.
 

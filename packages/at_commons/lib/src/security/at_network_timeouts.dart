@@ -15,8 +15,10 @@ class AtNetworkTimeouts {
   AtNetworkTimeouts._();
 
   /// The hard ceiling on any effective network timeout. Nothing waits longer
-  /// than this, regardless of what a caller requests.
-  static const Duration maxAllowed = Duration(seconds: 30);
+  /// than this, regardless of what a caller requests. Callers may request up to
+  /// this much; the [defaultTimeout] (used when no explicit timeout is given)
+  /// is shorter.
+  static const Duration maxAllowed = Duration(seconds: 60);
 
   /// The process-wide default network timeout. Change this once to move the
   /// default everywhere. Always read through [cap] / [effectiveDefault] so it

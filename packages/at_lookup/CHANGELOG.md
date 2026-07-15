@@ -10,8 +10,8 @@
   `SecureSocket.connect`. `SecondaryAddressFinder.findSecondary` takes an
   optional `timeout` that bounds the entire atDirectory lookup — the retry loop
   and the previously-fixed 30-second response busy-wait — as a single deadline.
-  Both default to `AtNetworkTimeouts.effectiveDefault` and are capped at 30s
-  (#1923). Requires `at_commons ^5.13.0`.
+  Both default to `AtNetworkTimeouts.effectiveDefault` (30s) and are capped at
+  60s (#1923). Requires `at_commons ^5.13.0`.
 
 ## 3.5.0
 
