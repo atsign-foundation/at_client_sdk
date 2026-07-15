@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 1.1.4
+
+- feat: `AuthService.onboard` / `authenticate` accept an optional `timeout` that
+  bounds the whole onboarding/auth attempt (sets `RetryOptions.overallTimeout`;
+  otherwise the process-wide `AtNetworkTimeouts` default applies). Requires
+  `at_auth ^3.2.0` (#1923).
+- fix: `FlutterEnrollmentService.enroll` no longer leaks the `AtLookupImpl`
+  connection when the enrollment submit fails — it now closes in a `finally`.
+
 ## 1.1.3
 
 - fix: force uppercase on OTP/CRAM input fields so lowercase or pasted alphanumeric codes no longer fail validation

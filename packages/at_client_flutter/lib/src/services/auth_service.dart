@@ -22,11 +22,19 @@ class AuthService {
   /// Returns [AtOnboardingResponse] which contains keys and status of onboarding
   Future<AtOnboardingResponse> onboard(
     AtOnboardingRequest request,
-    String cramSecret,
-  ) async {
+    String cramSecret, {
+    Duration? timeout,
+  }) async {
     AtOnboardingResponse? atOnboardingResponse;
     try {
       request.atKeysIo ??= KeychainAtKeysIo();
+      if (timeout != null) {
+        request.retryOptions = RetryOptions(
+          maxRetries: request.retryOptions.maxRetries,
+          retryDelay: request.retryOptions.retryDelay,
+          overallTimeout: timeout,
+        );
+      }
       atOnboardingResponse = await _atAuth.onboard(request, cramSecret);
     } catch (e) {
       rethrow;
@@ -44,9 +52,17 @@ class AuthService {
   Future<AtAuthResponse> authenticate(
     AtAuthRequest atAuthRequest, {
     List<WrittenAtKeysIo>? backupKeys,
+    Duration? timeout,
   }) async {
     AtAuthResponse? atAuthResponse;
     try {
+      if (timeout != null) {
+        atAuthRequest.retryOptions = RetryOptions(
+          maxRetries: atAuthRequest.retryOptions.maxRetries,
+          retryDelay: atAuthRequest.retryOptions.retryDelay,
+          overallTimeout: timeout,
+        );
+      }
       atAuthResponse = await _atAuth.authenticate(atAuthRequest);
       if (backupKeys != null &&
           atAuthResponse.atAuthKeys != null &&
