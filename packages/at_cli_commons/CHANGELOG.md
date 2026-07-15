@@ -1,3 +1,11 @@
+## 3.1.1
+
+- fix: `getUserName` now resolves via `USER` → `LOGNAME` → `USERNAME` → `whoami`
+  instead of returning `USER` directly, so it works under Docker / systemd /
+  network-OS supervisors that leave `USER` unset, and its `throwIfNull` branch
+  is reachable — callers that use `!` get a clear message instead of a bare
+  null-check crash ([#2060](https://github.com/atsign-foundation/at_client_sdk/issues/2060)).
+
 ## 3.1.0
 
 - feat: `CLIBase` constructor and `CLIBase.fromCommandLineArgs` now accept an

@@ -21,7 +21,6 @@ dependencies:
   crypto: ^3.0.5
   crypton: ^2.2.1
   encrypt: ^5.0.3
-  cron: ^0.5.1
   uuid: ^4.0.0
   archive: ^4.0.7
   http: ^1.2.1

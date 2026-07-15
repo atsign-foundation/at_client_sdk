@@ -40,17 +40,19 @@ void main() async {
 
     setUp(() {
       reset(mockSecondaryFinder);
-      when(() => mockSecondaryFinder
-              .findSecondaryUrl(any(that: startsWith('registered'))))
+      when(() => mockSecondaryFinder.findSecondaryUrl(
+              any(that: startsWith('registered')),
+              deadline: any(named: 'deadline')))
           .thenAnswer((invocation) async =>
               addressFromAtSign(invocation.positionalArguments.first));
-      when(() => mockSecondaryFinder
-              .findSecondaryUrl(any(that: startsWith('notCached'))))
+      when(() => mockSecondaryFinder.findSecondaryUrl(
+              any(that: startsWith('notCached')),
+              deadline: any(named: 'deadline')))
           .thenAnswer((invocation) async =>
               addressFromAtSign(invocation.positionalArguments.first));
-      when(() => mockSecondaryFinder
-              .findSecondaryUrl(any(that: startsWith('notRegistered'))))
-          .thenAnswer((invocation) async {
+      when(() => mockSecondaryFinder.findSecondaryUrl(
+          any(that: startsWith('notRegistered')),
+          deadline: any(named: 'deadline'))).thenAnswer((invocation) async {
         throw SecondaryNotFoundException(
             CacheableSecondaryAddressFinder.getNotFoundExceptionMessage(
                 invocation.positionalArguments.first));
@@ -173,8 +175,8 @@ void main() async {
               socketFactory: mockSocketFactory));
 
       numSocketCreateCalls = 0;
-      when(() =>
-              mockSocketFactory.createSocket(mockAtDirectoryHost, '64', any()))
+      when(() => mockSocketFactory.createSocket(
+              mockAtDirectoryHost, '64', any(), timeout: any(named: 'timeout')))
           .thenAnswer((invocation) {
         print(
             'mock create socket: numFailures $numSocketCreateCalls requiredFailures $requiredFailures');
@@ -208,6 +210,28 @@ void main() async {
       SecondaryAddress sa = await cachingAtServerFinder.findSecondary(atSign);
       expect(sa.toString(), mockedAtServerAddress);
       expect(numSocketCreateCalls - 1, requiredFailures);
+    });
+
+    test(
+        'findSecondary honours its timeout budget when the atDirectory '
+        'connects but never answers (does not busy-wait for 30s)', () async {
+      requiredFailures = 0;
+      // The atDirectory accepts the connection but never returns an address,
+      // so the response-wait must be bounded by the deadline, not the old
+      // fixed 30-second busy-wait.
+      when(() => mockSocket.write('$noAtAtSign\n'))
+          .thenAnswer((invocation) async {
+        // deliberately send nothing back
+      });
+      final sw = Stopwatch()..start();
+      await expectLater(
+        cachingAtServerFinder.findSecondary(atSign,
+            timeout: const Duration(milliseconds: 300)),
+        throwsA(isA<AtException>()),
+      );
+      sw.stop();
+      expect(sw.elapsed, lessThan(const Duration(seconds: 10)),
+          reason: 'findSecondary should honour the deadline, not wait ~30s');
     });
 
     test('test lookup of @alice with mocked atDirectory and 1 failure',
@@ -324,6 +348,7 @@ void main() async {
         rootDomain,
         rootPort.toString(),
         any(),
+        timeout: any(named: 'timeout'),
       ),
     ).thenAnswer((invocation) async {
       configPassedToFactory = invocation.positionalArguments[2];
