@@ -34,7 +34,8 @@ class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
 class FakeSecondaryAddressFinder extends Fake
     implements CacheableSecondaryAddressFinder {
   @override
-  Future<SecondaryAddress> findSecondary(String atSign) async {
+  Future<SecondaryAddress> findSecondary(String atSign,
+      {Duration? timeout}) async {
     return SecondaryAddress('abcd', 123);
   }
 }
