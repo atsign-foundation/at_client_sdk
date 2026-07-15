@@ -1,5 +1,12 @@
 abstract class SecondaryAddressFinder {
-  Future<SecondaryAddress> findSecondary(String atSign);
+  /// Finds the atServer address for [atSign] by looking it up in the atDirectory.
+  ///
+  /// [timeout] bounds the TOTAL wall-clock spent doing so (connect + the
+  /// internal retries + waiting for the atDirectory response). When null, the
+  /// process-wide default (`AtNetworkTimeouts.effectiveDefault`) is used, and
+  /// the value is always capped at `AtNetworkTimeouts.maxAllowed` (30s). On
+  /// expiry the socket is closed and an `AtTimeoutException` is thrown.
+  Future<SecondaryAddress> findSecondary(String atSign, {Duration? timeout});
 }
 
 class SecondaryAddress {
