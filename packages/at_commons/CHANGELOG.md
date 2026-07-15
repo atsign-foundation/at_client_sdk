@@ -1,10 +1,11 @@
 ## 5.13.0
 
-- feat: add `AtNetworkTimeouts` — the process-wide network-timeout policy
-  (`defaultTimeout` = 30s, `maxAllowed` = 60s hard cap, `cap()`). The single
-  place to set the default network timeout for the whole SDK; every resolved
-  timeout is passed through `cap()` so nothing can wait longer than 60 seconds
-  (#1923).
+- feat: add `AtNetworkTimeouts` — the process-wide network-timeout policy:
+  `defaultTimeout` (30s, the per-attempt default), `maxAllowed` (60s hard cap on
+  any single network operation), `defaultOnboardingTimeout` (5 min — the poll
+  budget for waiting on a newly-registered atSign to be provisioned, deliberately
+  longer than the per-op cap), and `cap()`. The single place to set the SDK's
+  network timeouts (#1923).
 - feat: add `SecureSocketConfig.connectTimeout` so a connect deadline can be
   threaded through to `SecureSocket.connect`.
 

@@ -380,17 +380,28 @@ class AtAuthImpl implements AtAuth {
   /// This method is used internally before onboarding or authentication operations.
   @override
   Future<void> validateAtServer(AuthRequest atRequest) async {
-    final maxRetries = atRequest.retryOptions.maxRetries;
-    final retryDelay = atRequest.retryOptions.retryDelay;
-    // Bound the TOTAL wall-clock across all retries with a single deadline, so
-    // this loop cannot multiply the inner (now individually-bounded) network
-    // waits into a minutes-long hang on a dead network. Defaults to the
-    // process-wide network timeout, capped at AtNetworkTimeouts.maxAllowed.
-    final deadline = DateTime.now().add(AtNetworkTimeouts.cap(
-        atRequest.retryOptions.overallTimeout ??
-            AtNetworkTimeouts.defaultTimeout));
-    int retryCount = 0;
+    // Floor the poll interval so a zero/tiny retryDelay can't hammer the network
+    // for the whole (possibly minutes-long) onboarding budget.
+    final retryDelay =
+        atRequest.retryOptions.retryDelay < const Duration(milliseconds: 100)
+            ? const Duration(milliseconds: 100)
+            : atRequest.retryOptions.retryDelay;
+    // Bound the TOTAL wall-clock of this poll with a single overall deadline.
+    // The two paths need opposite budgets: authentication of an EXISTING atSign
+    // must fail fast on a dead network (#1923), but ONBOARDING polls for a
+    // newly-registered atSign to be provisioned, which can take minutes. So the
+    // default depends on the request type. This budget bounds the whole poll and
+    // is deliberately NOT clamped to AtNetworkTimeouts.maxAllowed (that cap is
+    // for individual network operations); the retry COUNT no longer bounds the
+    // loop — the deadline does.
+    final overallTimeout = atRequest.retryOptions.overallTimeout ??
+        (atRequest is AtOnboardingRequest
+            ? AtNetworkTimeouts.defaultOnboardingTimeout
+            : AtNetworkTimeouts.effectiveDefault);
+    final deadline = DateTime.now().add(overallTimeout);
+    int attempt = 0;
     bool validated = false;
+    Object? lastError;
 
     //support mocking
     atServerStatus ??= AtStatusImpl(
@@ -398,12 +409,12 @@ class AtAuthImpl implements AtAuth {
       rootPort: atRequest.rootDomain.rootPort,
     );
 
-    while (retryCount < maxRetries && DateTime.now().isBefore(deadline)) {
-      retryCount++;
+    while (DateTime.now().isBefore(deadline)) {
+      attempt++;
       try {
         _addProgress(
             'Find',
-            '#[$retryCount/$maxRetries] : looking up ${atRequest.atSign} in atDirectory',
+            '#[$attempt] : looking up ${atRequest.atSign} in atDirectory',
             ProgressEventType.info);
 
         // Bound each network call by the budget remaining before the deadline,
@@ -460,7 +471,7 @@ class AtAuthImpl implements AtAuth {
         // AtServer availability probing
         _addProgress(
             'Connect',
-            '#[$retryCount/$maxRetries] : Connecting to ${atRequest.atSign} atServer',
+            '#[$attempt] : Connecting to ${atRequest.atSign} atServer',
             ProgressEventType.info);
 
         secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
@@ -478,26 +489,19 @@ class AtAuthImpl implements AtAuth {
 
         _addProgress(
             'Connect',
-            '#[$retryCount/$maxRetries] : Connected to ${atRequest.atSign} atServer',
+            '#[$attempt] : Connected to ${atRequest.atSign} atServer',
             ProgressEventType.success);
 
         validated = true;
         break; // Exit loop if no exception occurs
       } catch (e) {
+        lastError = e;
         if (e is SocketException) {
-          _logger.warning(
-              'Attempt #[$retryCount/$maxRetries] Probe socket failed: $e');
+          _logger.warning('Attempt #[$attempt] Probe socket failed: $e');
         } else {
-          _logger.severe('Attempt #[$retryCount/$maxRetries] failed: $e');
+          _logger.severe('Attempt #[$attempt] failed: $e');
         }
-        if (retryCount >= maxRetries) {
-          _addProgress('Connect', '#[$retryCount/$maxRetries] : $e',
-              ProgressEventType.error);
-          throw AtAuthenticationException(
-              'Max retries reached while validating atSign server. Last error: $e');
-        }
-        _addProgress('Connect', '#[$retryCount/$maxRetries] : $e',
-            ProgressEventType.error);
+        _addProgress('Connect', '#[$attempt] : $e', ProgressEventType.error);
         // Don't sleep past the overall deadline before the next attempt.
         if (!DateTime.now().add(retryDelay).isBefore(deadline)) {
           break;
@@ -506,14 +510,12 @@ class AtAuthImpl implements AtAuth {
       }
     }
     if (!validated) {
-      // We left the loop because the overall deadline passed (success and
-      // retries-exhausted both throw above), so surface a timeout.
-      final budget = AtNetworkTimeouts.cap(
-          atRequest.retryOptions.overallTimeout ??
-              AtNetworkTimeouts.defaultTimeout);
+      // We left the loop because the overall deadline passed (success breaks out
+      // above). Surface a timeout with the last error seen.
       throw AtTimeoutException(
-          'Timed out after ${budget.inSeconds}s while reaching '
-          '${atRequest.atSign} atServer');
+          'Timed out after ${overallTimeout.inSeconds}s while reaching '
+          '${atRequest.atSign} atServer'
+          '${lastError == null ? '' : ' : $lastError'}');
     }
   }
 }
