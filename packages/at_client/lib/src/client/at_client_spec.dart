@@ -61,7 +61,7 @@ abstract class AtClient {
 
   /// The client's key source (`package:at_auth`), injected at construction
   /// via `AtClientImpl.create(atKeysIo:)`. `CryptoRuntime` threads it to
-  /// providers as `CryptoContext.keys`. Null until injected — there is no
+  /// providers as `CryptoContext.io`. Null until injected — there is no
   /// default source.
   AtKeysIo? get atKeysIo;
 
