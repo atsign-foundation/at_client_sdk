@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/response.dart';
@@ -57,6 +58,12 @@ abstract class AtClient {
   set atChops(AtChops? atChops);
 
   AtChops? get atChops;
+
+  /// The client's key source (`package:at_auth`), injected at construction
+  /// via `AtClientImpl.create(atKeysIo:)`. `CryptoRuntime` threads it to
+  /// providers as `CryptoContext.keys`. Null until injected — there is no
+  /// default source.
+  AtKeysIo? get atKeysIo;
 
   /// Enrollment id for apkam enrolled clients
   set enrollmentId(String? enrollmentId);

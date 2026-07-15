@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
@@ -56,6 +57,8 @@ class AtClientImpl implements AtClient {
   // ignore: override_on_non_overriding_member
   AtChops? _atChops;
 
+  AtKeysIo? _atKeysIo;
+
   EncryptionService? _encryptionService;
 
   @experimental
@@ -82,6 +85,9 @@ class AtClientImpl implements AtClient {
 
   @override
   AtChops? get atChops => _atChops;
+
+  @override
+  AtKeysIo? get atKeysIo => _atKeysIo;
 
   /// Keeps track of CryptoProviders registered with this AtClient
   // ---------------------------------------------------------------------------
@@ -301,6 +307,7 @@ class AtClientImpl implements AtClient {
     EncryptionService? encryptionService,
     AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
     AtChops? atChops,
+    AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     String? enrollmentId,
   }) async {
@@ -316,6 +323,9 @@ class AtClientImpl implements AtClient {
       // after first creation take effect; CryptoRuntime resolves against the
       // live preference.crypto, so there is nothing else to reconcile.
       atClientImpl.getPreferences()?.crypto = preferences.crypto;
+      // atKeysIo (like atChops) is only honored on first construction — the
+      // extended AtKeys is meant to be born at construction and immutable
+      // after, so a re-used cached client keeps its original key source.
     } else {
       atClientImpl = AtClientImpl._(
         currentAtSign,
@@ -325,6 +335,7 @@ class AtClientImpl implements AtClient {
         encryptionService: encryptionService,
         localSecondaryKeyStore: localSecondaryKeyStore,
         atChops: atChops,
+        atKeysIo: atKeysIo,
         atLookUp: atLookUp,
         enrollmentId: enrollmentId,
       );
@@ -344,6 +355,7 @@ class AtClientImpl implements AtClient {
     EncryptionService? encryptionService,
     AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
     AtChops? atChops,
+    AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     this.enrollmentId,
   }) {
@@ -362,6 +374,7 @@ class AtClientImpl implements AtClient {
     _remoteSecondary = remoteSecondary;
     _encryptionService = encryptionService;
     _atChops = atChops;
+    _atKeysIo = atKeysIo;
   }
 
   Future<void> _init({AtLookUp? atLookUp}) async {
