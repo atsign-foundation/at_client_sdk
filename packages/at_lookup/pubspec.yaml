@@ -11,7 +11,7 @@ resolution: workspace
 
 dependencies:
   at_utils: ^3.0.19
-  at_commons: ^5.7.0
+  at_commons: ^5.13.0
   mutex: ^3.0.0
   meta: ^1.16.0
   at_chops: ^3.0.0

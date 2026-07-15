@@ -38,12 +38,18 @@ class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
   }
 
   @override
-  Future<SecondaryAddress> findSecondary(String atSign) async {
+  Future<SecondaryAddress> findSecondary(String atSign,
+      {Duration? timeout}) async {
     atSign = stripAtSignFromAtSign(atSign);
+
+    // Convert the timeout into an absolute deadline once, then thread it down so
+    // the retry loop, the connect and the response-wait all share ONE budget.
+    final DateTime deadline = DateTime.now().add(
+        AtNetworkTimeouts.cap(timeout ?? AtNetworkTimeouts.defaultTimeout));
 
     if (_cacheIsEmptyOrExpired(atSign)) {
       // _updateCache will either populate the cache, or throw an exception
-      await _updateCache(atSign, defaultCacheDuration);
+      await _updateCache(atSign, defaultCacheDuration, deadline);
     }
     if (_map.containsKey(atSign)) {
       // should always be true, since _updateCache will throw an exception if it fails
@@ -86,9 +92,11 @@ class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
     return 'Failed attempt to lookup atServer address for $atSign';
   }
 
-  Future<void> _updateCache(String atSign, Duration cacheFor) async {
+  Future<void> _updateCache(
+      String atSign, Duration cacheFor, DateTime deadline) async {
     try {
-      String? secondaryUrl = await _secondaryFinder.findSecondaryUrl(atSign);
+      String? secondaryUrl =
+          await _secondaryFinder.findSecondaryUrl(atSign, deadline: deadline);
       if (secondaryUrl == null ||
           secondaryUrl.isEmpty ||
           secondaryUrl == 'data:null') {
@@ -149,7 +157,7 @@ class SecondaryUrlFinder {
   /// (b) the delay before each retry
   static List<int> retryDelaysMillis = [50, 100, 150, 200];
 
-  Future<String?> findSecondaryUrl(String atSign) async {
+  Future<String?> findSecondaryUrl(String atSign, {DateTime? deadline}) async {
     if (_rootDomain.startsWith("proxy:")) {
       // In order to make it easy for clients to connect to a reverse proxy
       // instead of doing a root lookup,  we adopt the convention that:
@@ -158,19 +166,30 @@ class SecondaryUrlFinder {
       // and the secondary port will be deemed to be the rootPort
       return '${_rootDomain.substring("proxy:".length)}:$_rootPort';
     }
+    deadline ??= DateTime.now().add(AtNetworkTimeouts.effectiveDefault);
     String? address;
     String lastExceptionMsg = '';
     for (int i = 0; i <= retryDelaysMillis.length; i++) {
+      // Abandon the retry loop once the overall deadline has passed, instead of
+      // always running all attempts (each of which can take seconds).
+      if (!DateTime.now().isBefore(deadline)) {
+        throw AtTimeoutException('AtLookup.findAtServer for $atSign timed out'
+            '${lastExceptionMsg.isEmpty ? '' : ' : $lastExceptionMsg'}');
+      }
       try {
-        address = await _findSecondary(atSign);
+        address = await _findSecondary(atSign, deadline);
         return address;
       } catch (e) {
         lastExceptionMsg = e.toString();
         if (i < retryDelaysMillis.length) {
-          _logger.info('AtLookup.findAtServer for $atSign failed with $e'
-              ' : will retry in ${retryDelaysMillis[i]} milliseconds');
-          await Future.delayed(Duration(milliseconds: retryDelaysMillis[i]));
-          continue;
+          final delay = Duration(milliseconds: retryDelaysMillis[i]);
+          // Only wait for the backoff if it still fits inside the deadline.
+          if (DateTime.now().add(delay).isBefore(deadline)) {
+            _logger.info('AtLookup.findAtServer for $atSign failed with $e'
+                ' : will retry in ${retryDelaysMillis[i]} milliseconds');
+            await Future.delayed(delay);
+            continue;
+          }
         }
         _logger.severe('findAtServer for $atSign : $e');
         if (e is RootServerConnectivityException) {
@@ -181,7 +200,7 @@ class SecondaryUrlFinder {
     throw AtConnectException('findAtServer for $atSign : $lastExceptionMsg');
   }
 
-  Future<String?> _findSecondary(String atsign) async {
+  Future<String?> _findSecondary(String atsign, DateTime deadline) async {
     String? response;
     SecureSocket? socket;
     try {
@@ -193,10 +212,14 @@ class SecondaryUrlFinder {
       var prompt = false;
       var once = true;
 
+      // Bound the connect by whatever budget remains before the deadline.
+      final remaining =
+          AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
       socket = await _socketFactory.createSocket(
         _rootDomain,
         '$_rootPort',
         _socketConfig,
+        timeout: remaining,
       );
       _logger.finer('findAtServerUrl: connection to atDirectory established');
       // listen to the received data event stream
@@ -222,8 +245,9 @@ class SecondaryUrlFinder {
           ans = true;
         }
       });
-      // wait 30 seconds
-      for (var i = 0; i < 6000; i++) {
+      // Wait for the atDirectory to answer, bounded by the overall deadline
+      // (previously a fixed 30-second busy-wait, ignoring any caller budget).
+      while (DateTime.now().isBefore(deadline)) {
         await Future.delayed(Duration(milliseconds: 5));
         if (ans) {
           response = secondary;

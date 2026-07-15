@@ -7,8 +7,16 @@ class SecureSocketUtil {
 
   ///method that creates and returns a [SecureSocket]. If [decryptPackets] is set to true,the TLS keys are logged into a file.
   static Future<SecureSocket> createSecureSocket(
-      String host, String port, SecureSocketConfig secureSocketConfig) async {
+      String host, String port, SecureSocketConfig secureSocketConfig,
+      {Duration? timeout}) async {
     SecurityContext securityContext = SecurityContext.defaultContext;
+
+    // Bound the TCP + TLS connect so a dead/black-hole network cannot block
+    // here indefinitely. Precedence: explicit [timeout] > config.connectTimeout
+    // > process default, always capped at AtNetworkTimeouts.maxAllowed.
+    final Duration connectTimeout = AtNetworkTimeouts.cap(timeout ??
+        secureSocketConfig.connectTimeout ??
+        AtNetworkTimeouts.defaultTimeout);
 
     bool certsProvided = false;
     if (secureSocketConfig.pathToCerts != null &&
@@ -22,6 +30,7 @@ class SecureSocketUtil {
         host,
         int.parse(port),
         context: securityContext,
+        timeout: connectTimeout,
       );
       aSecureSocket.setOption(SocketOption.tcpNoDelay, true);
       return aSecureSocket;
@@ -40,6 +49,7 @@ class SecureSocketUtil {
         SecureSocket aSecureSocket = await SecureSocket.connect(
             host, int.parse(port),
             context: securityContext,
+            timeout: connectTimeout,
             keyLog: (line) =>
                 keysFile?.writeAsStringSync(line, mode: FileMode.append));
         aSecureSocket.setOption(SocketOption.tcpNoDelay, true);
