@@ -15,7 +15,7 @@ class AtKeysAssuranceException extends AtKeysValidationException {
 class AtKeysAssurance {
   const AtKeysAssurance();
 
-  static const _reservedTopLevelKeys = {'version', 'atSign', 'keys'};
+  static const _reservedTopLevelKeys = {'version', 'atsign', 'keys'};
 
   // ---- low-level parsing/value primitives, called by the models' fromJson ----
 
@@ -163,11 +163,11 @@ class AtKeysAssurance {
     final existingMaterials = _decode(existing);
     final candidateMaterials = _decode(candidate);
 
-    // A legacy -> typed-keys upgrade legitimately introduces the atSign and
+    // A legacy -> typed-keys upgrade legitimately introduces the atsign and
     // version, so only pin them when the existing file is already a
     // typed-keys document.
     if (existing.containsKey('version')) {
-      _assertSame(existing['atSign'], candidate['atSign'], 'map.atSign');
+      _assertSame(existing['atsign'], candidate['atsign'], 'map.atsign');
       _assertSame(existing['version'], candidate['version'], 'map.version');
     }
     _assertLegacyPreserved(

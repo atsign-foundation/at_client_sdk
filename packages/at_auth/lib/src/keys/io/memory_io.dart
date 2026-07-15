@@ -9,12 +9,13 @@ import 'package:at_commons/atsign.dart';
 /// have already been loaded or generated elsewhere. It does not encrypt,
 /// serialize, or persist keys beyond the lifetime of this object.
 class InMemoryAtKeysIo extends WrittenAtKeysIo {
-  /// Keys are indexed by normalized [Atsign] so callers can pass either raw
-  /// string atSigns or [Atsign] values through the public methods.
+  /// Keys are indexed by normalized [Atsign] (via `toAtsign()`), so the
+  /// `String`-typed [read]/[write] and the [Atsign]-typed [flush] all resolve
+  /// to the same entry.
   final Map<Atsign, AtKeys> _internal = {};
 
   /// Returns the keys for [atsign], or throws if nothing has been loaded into
-  /// memory for that atSign.
+  /// memory for that atsign.
   @override
   FutureOr<AtKeys> read(String atsign) {
     return _internal[atsign.toAtsign()] ??

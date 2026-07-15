@@ -14,7 +14,7 @@ import 'package:test/test.dart';
 import 'test_utils/at_keys.dart';
 
 void main() {
-  String atSign = '@alice🛠';
+  String atsign = '@alice🛠';
   String keyFilePath = 'test/data/@alice🛠_key.atKeys';
   String writeFilePath = 'test/data/@bober_key.atKeys';
   late String homeDirKeys;
@@ -32,7 +32,7 @@ void main() {
 
     test('Test read() with valid atKeys file path', () async {
       final fileAtKeysIo = FileAtKeysIo(filePath: (_) => keyFilePath);
-      final atKeys = await fileAtKeysIo.read(atSign);
+      final atKeys = await fileAtKeysIo.read(atsign);
 
       expect(atKeys.apkamPrivateKey, isNotNull);
       expect(atKeys.apkamPublicKey, isNotNull);
@@ -46,14 +46,14 @@ void main() {
       final fileAtKeysIo =
           FileAtKeysIo(filePath: (_) => 'test/data/hello/@alice🛠_key.atKeys');
 
-      expect(() async => await fileAtKeysIo.read(atSign),
+      expect(() async => await fileAtKeysIo.read(atsign),
           throwsA(isA<AtException>()));
     });
 
     test('Test read() without atKeys file path', () async {
       final fileAtKeysIo = FileAtKeysIo();
 
-      final atKeys = await fileAtKeysIo.read(atSign);
+      final atKeys = await fileAtKeysIo.read(atsign);
       expect(atKeys.apkamPrivateKey, isNotNull);
       expect(atKeys.apkamPublicKey, isNotNull);
       expect(atKeys.apkamSymmetricKey, isNotNull);
@@ -78,9 +78,9 @@ void main() {
         ..apkamSymmetricKey =
             AtBytes.fromString(base64Encode(utf8.encode('apkamSymmetricKey')))
         ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
-      await fileAtKeysIo.write(atSign, atKeys);
+      await fileAtKeysIo.write(atsign, atKeys);
 
-      await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atSign));
+      await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atsign));
     });
 
     test('Test write() -> throws due to overwrite', () {
@@ -110,7 +110,7 @@ void main() {
         ..apkamSymmetricKey =
             AtBytes.fromString(base64Encode(utf8.encode('apkamSymmetricKey')))
         ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
-      await fileAtKeysIo.write(atSign, atKeys); // writes encrypted keys
+      await fileAtKeysIo.write(atsign, atKeys); // writes encrypted keys
 
       // read the generated file and validate fields
       File encryptedAtKeysFile = File(writeFilePath);
@@ -123,7 +123,7 @@ void main() {
       // assert that when fileAtKeysIo decrypts and reads the passphrase
       // encrypted file the decrypted keys are the same as the original keys
       // Note: the method call below tests the encrypted keys read path too
-      await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atSign),
+      await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atsign),
           passPhrase: passPhrase);
     });
 
@@ -146,10 +146,10 @@ void main() {
         ..apkamSymmetricKey =
             AtBytes.fromString(base64Encode(utf8.encode('apkamSymmetricKey')))
         ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
-      await fileAtKeysIo.write(atSign, atKeys); // writes encrypted keys
+      await fileAtKeysIo.write(atsign, atKeys); // writes encrypted keys
 
       fileAtKeysIo.passPhrase = 'incorrect_pass';
-      await expectLater(() async => await fileAtKeysIo.read(atSign),
+      await expectLater(() async => await fileAtKeysIo.read(atsign),
           throwsA(isA<AtDecryptionException>()));
     });
 
@@ -159,24 +159,24 @@ void main() {
         final tempPath = '${tempDir.path}/@alice_key.atKeys';
         final fileAtKeysIo = FileAtKeysIo(filePath: (_) => tempPath);
         final atKeys = AtKeys(
-          atsign: atSign.toAtsign(),
+          atsign: atsign.toAtsign(),
           keysList: [
             symmetricKey('existing', value: 'ZXhpc3Rpbmc='),
           ],
         );
-        await fileAtKeysIo.write(atSign, atKeys);
+        await fileAtKeysIo.write(atsign, atKeys);
 
         final existingText = await File(tempPath).readAsString();
-        final keys = await fileAtKeysIo.read(atSign);
+        final keys = await fileAtKeysIo.read(atsign);
         keys.addKey(symmetricKey('appended', value: 'YXBwZW5kZWQ='));
         keys.addKey(symmetricKey('another', value: 'YW5vdGhlcg=='));
-        await fileAtKeysIo.flush(atSign.toAtsign(), keys);
+        await fileAtKeysIo.flush(atsign.toAtsign(), keys);
 
         final files = tempDir.listSync().whereType<File>().toList();
         expect(files, hasLength(1));
         expect(files.single.path, tempPath);
         expect(await File(tempPath).readAsString(), isNot(existingText));
-        final reread = await fileAtKeysIo.read(atSign);
+        final reread = await fileAtKeysIo.read(atsign);
         expect(reread.keysForKeyId('appended'), isNotEmpty);
         expect(reread.keysForKeyId('another'), isNotEmpty);
       } finally {
@@ -191,11 +191,11 @@ void main() {
         final tempPath = '${tempDir.path}/nested/dir/@alice_key.atKeys';
         final fileAtKeysIo = FileAtKeysIo(filePath: (_) => tempPath);
         await fileAtKeysIo.flush(
-          atSign.toAtsign(),
-          AtKeys(atsign: atSign.toAtsign(), keysList: [symmetricKey('fresh')]),
+          atsign.toAtsign(),
+          AtKeys(atsign: atsign.toAtsign(), keysList: [symmetricKey('fresh')]),
         );
 
-        final readKeys = await fileAtKeysIo.read(atSign);
+        final readKeys = await fileAtKeysIo.read(atsign);
         expect(readKeys.keysForKeyId('fresh'), isNotEmpty);
         expect(
           File(tempPath).parent.listSync().whereType<File>().toList(),
@@ -213,18 +213,18 @@ void main() {
         final tempPath = '${tempDir.path}/@alice_key.atKeys';
         final fileAtKeysIo = FileAtKeysIo(filePath: (_) => tempPath);
         await fileAtKeysIo.write(
-          atSign,
+          atsign,
           AtKeys(
-            atsign: atSign.toAtsign(),
+            atsign: atsign.toAtsign(),
             keysList: [symmetricKey('rotated'), symmetricKey('kept')],
           ),
         );
 
-        final keys = await fileAtKeysIo.read(atSign);
+        final keys = await fileAtKeysIo.read(atsign);
         keys.retireKey('rotated');
-        await fileAtKeysIo.flush(atSign.toAtsign(), keys);
+        await fileAtKeysIo.flush(atsign.toAtsign(), keys);
 
-        final reread = await fileAtKeysIo.read(atSign);
+        final reread = await fileAtKeysIo.read(atsign);
         expect(
           reread.keysForKeyId('rotated').single.status,
           KeyPartStatus.retired,
@@ -246,9 +246,9 @@ void main() {
         final tempPath = '${tempDir.path}/@alice_key.atKeys';
         final fileAtKeysIo = FileAtKeysIo(filePath: (_) => tempPath);
         await fileAtKeysIo.write(
-          atSign,
+          atsign,
           AtKeys(
-            atsign: atSign.toAtsign(),
+            atsign: atsign.toAtsign(),
             keysList: [symmetricKey('existing', value: 'ZXhpc3Rpbmc=')],
           ),
         );
@@ -256,11 +256,11 @@ void main() {
 
         // A fresh keyset that does not preserve the existing material.
         final divergent = AtKeys(
-          atsign: atSign.toAtsign(),
+          atsign: atsign.toAtsign(),
           keysList: [symmetricKey('unrelated')],
         );
         await expectLater(
-          () async => await fileAtKeysIo.flush(atSign.toAtsign(), divergent),
+          () async => await fileAtKeysIo.flush(atsign.toAtsign(), divergent),
           throwsA(isA<AtKeysAssuranceException>()),
         );
 
@@ -278,16 +278,16 @@ void main() {
         final tempPath = '${tempDir.path}/@alice_key.atKeys';
         final io = FileAtKeysIo(filePath: (_) => tempPath);
         final atKeys = AtKeys(
-          atsign: atSign.toAtsign(),
+          atsign: atsign.toAtsign(),
           keysList: [
             symmetricKey('sym', value: 'c2VjcmV0'),
             ...rsaKeyPair('pair',
                 publicValue: 'cHVibGlj', privateValue: 'cHJpdmF0ZQ=='),
           ],
         );
-        await io.write(atSign, atKeys);
+        await io.write(atsign, atKeys);
 
-        final readKeys = await io.read(atSign);
+        final readKeys = await io.read(atsign);
         expect(
             readKeys
                 .getKey('sym', CryptographicKeyType.symmetricDataEncryption)
@@ -319,17 +319,17 @@ void main() {
         final fileAtKeysIo =
             FileAtKeysIo(filePath: (_) => tempPath, passPhrase: 'qwerty');
         final atKeys = AtKeys(
-          atsign: atSign.toAtsign(),
+          atsign: atsign.toAtsign(),
           keysList: [
             symmetricKey('existing', value: 'ZXhpc3Rpbmc='),
           ],
         );
-        await fileAtKeysIo.write(atSign, atKeys);
+        await fileAtKeysIo.write(atsign, atKeys);
         final encryptedOriginal = await File(tempPath).readAsString();
 
-        final keys = await fileAtKeysIo.read(atSign);
+        final keys = await fileAtKeysIo.read(atsign);
         keys.addKey(symmetricKey('appended', value: 'YXBwZW5kZWQ='));
-        await fileAtKeysIo.flush(atSign.toAtsign(), keys);
+        await fileAtKeysIo.flush(atsign.toAtsign(), keys);
 
         final files = tempDir.listSync().whereType<File>().toList();
         expect(files, hasLength(1));
@@ -337,7 +337,7 @@ void main() {
         expect(await File(tempPath).readAsString(), isNot(encryptedOriginal));
 
         // Both keys survive a decrypt-and-read of the rewritten file.
-        final readKeys = await fileAtKeysIo.read(atSign);
+        final readKeys = await fileAtKeysIo.read(atsign);
         expect(readKeys.keysForKeyId('existing'), isNotEmpty);
         expect(readKeys.keysForKeyId('appended'), isNotEmpty);
       } finally {
@@ -356,11 +356,11 @@ void main() {
           final fileAtKeysIo =
               FileAtKeysIo(filePath: (_) => tempPath, passPhrase: passPhrase);
           final legacyKeys = legacyAtKeys();
-          await fileAtKeysIo.write(atSign, legacyKeys);
+          await fileAtKeysIo.write(atsign, legacyKeys);
 
-          final keys = await fileAtKeysIo.read(atSign);
+          final keys = await fileAtKeysIo.read(atsign);
           keys.addKey(symmetricKey('appended', value: 'YXBwZW5kZWQ='));
-          await fileAtKeysIo.flush(atSign.toAtsign(), keys);
+          await fileAtKeysIo.flush(atsign.toAtsign(), keys);
 
           final files = tempDir.listSync().whereType<File>().toList();
           expect(files, hasLength(1));
@@ -368,7 +368,7 @@ void main() {
 
           // The rewritten file is a typed-keys document that reads back with the
           // legacy keys intact plus the appended material.
-          final readKeys = await fileAtKeysIo.read(atSign);
+          final readKeys = await fileAtKeysIo.read(atsign);
           expectLegacyAtKeys(readKeys, legacyKeys);
           expect(readKeys.keysForKeyId('appended'), isNotEmpty);
         } finally {
@@ -385,10 +385,10 @@ void main() {
         final legacyPath = '${tempDir.path}/@legacy_key.atKeys';
         final typedKeysPath = '${tempDir.path}/@typed_key.atKeys';
         await FileAtKeysIo(filePath: (_) => legacyPath)
-            .write(atSign, legacyAtKeys());
+            .write(atsign, legacyAtKeys());
         await FileAtKeysIo(filePath: (_) => typedKeysPath).write(
-          atSign,
-          legacyAtKeys(atsign: atSign.toAtsign())
+          atsign,
+          legacyAtKeys(atsign: atsign.toAtsign())
             ..addKey(symmetricKey('typed')),
         );
 
@@ -422,11 +422,11 @@ void main() {
       try {
         final tempPath = '${tempDir.path}/@alice_key.atKeys';
         final io = FileAtKeysIo(filePath: (_) => tempPath);
-        final atKeys = legacyAtKeys(atsign: atSign.toAtsign())
+        final atKeys = legacyAtKeys(atsign: atsign.toAtsign())
           ..addKey(symmetricKey('typed'));
-        await io.write(atSign, atKeys);
+        await io.write(atsign, atKeys);
 
-        final readKeys = await io.read(atSign);
+        final readKeys = await io.read(atsign);
         expectLegacyAtKeys(readKeys, legacyAtKeys());
         expect(readKeys.keysForKeyId('typed'), isNotEmpty);
       } finally {
@@ -442,14 +442,14 @@ void main() {
         final tempPath = '${tempDir.path}/@alice_key.atKeys';
         final io = FileAtKeysIo(filePath: (_) => tempPath);
         await io.write(
-          atSign,
+          atsign,
           AtKeys(
-            atsign: atSign.toAtsign(),
+            atsign: atsign.toAtsign(),
             keysList: [symmetricKey('only-typed')],
           ),
         );
 
-        final readKeys = await io.read(atSign);
+        final readKeys = await io.read(atsign);
         expect(readKeys.keysForKeyId('only-typed'), isNotEmpty);
         expect(readKeys.defaultSelfEncryptionKey, isNull);
       } finally {
@@ -467,7 +467,7 @@ void main() {
         final atKeys = legacyAtKeys()..defaultSelfEncryptionKey = null;
 
         await expectLater(
-          () async => await io.write(atSign, atKeys),
+          () async => await io.write(atsign, atKeys),
           throwsA(isA<AtException>()),
         );
         expect(File(tempPath).existsSync(), isFalse);
@@ -483,20 +483,20 @@ void main() {
         final rightPassphraseIo =
             FileAtKeysIo(filePath: (_) => tempPath, passPhrase: 'right');
         await rightPassphraseIo.write(
-          atSign,
+          atsign,
           AtKeys(
-            atsign: atSign.toAtsign(),
+            atsign: atsign.toAtsign(),
             keysList: [symmetricKey('existing')],
           ),
         );
         final originalText = await File(tempPath).readAsString();
 
-        final keys = await rightPassphraseIo.read(atSign);
+        final keys = await rightPassphraseIo.read(atsign);
         keys.addKey(symmetricKey('appended'));
         final wrongPassphraseIo =
             FileAtKeysIo(filePath: (_) => tempPath, passPhrase: 'wrong');
         await expectLater(
-          () async => await wrongPassphraseIo.flush(atSign.toAtsign(), keys),
+          () async => await wrongPassphraseIo.flush(atsign.toAtsign(), keys),
           throwsA(isA<AtDecryptionException>()),
         );
         // Nothing was rewritten.
@@ -507,7 +507,7 @@ void main() {
       }
     });
 
-    test('Test write() with a mismatched atSign -> throws, writes nothing',
+    test('Test write() with a mismatched atsign -> throws, writes nothing',
         () async {
       final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
       try {
@@ -519,7 +519,7 @@ void main() {
         );
 
         await expectLater(
-          () async => await io.write(atSign, bobKeys),
+          () async => await io.write(atsign, bobKeys),
           throwsA(isA<AtKeysValidationException>()),
         );
         expect(File(tempPath).existsSync(), isFalse);
@@ -528,7 +528,7 @@ void main() {
       }
     });
 
-    test('Test flush() with a mismatched atSign -> throws, writes nothing',
+    test('Test flush() with a mismatched atsign -> throws, writes nothing',
         () async {
       final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
       try {
@@ -540,7 +540,7 @@ void main() {
         );
 
         await expectLater(
-          () async => await io.flush(atSign.toAtsign(), bobKeys),
+          () async => await io.flush(atsign.toAtsign(), bobKeys),
           throwsA(isA<AtKeysValidationException>()),
         );
         expect(File(tempPath).existsSync(), isFalse);

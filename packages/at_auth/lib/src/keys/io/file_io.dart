@@ -149,8 +149,8 @@ Future<Map<String, dynamic>> _applyToLegacyFields(
 }
 
 // Copied from at_cli_commons to avoid a circular dependency.
-String getDefaultAtKeysFilePath(String homeDirectory, String atSign) {
-  return '$homeDirectory/.atsign/keys/${atSign}_key.atKeys'
+String getDefaultAtKeysFilePath(String homeDirectory, String atsign) {
+  return '$homeDirectory/.atsign/keys/${atsign}_key.atKeys'
       .replaceAll('/', Platform.pathSeparator);
 }
 

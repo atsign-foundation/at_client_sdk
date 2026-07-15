@@ -10,7 +10,7 @@ void main() {
 
     setUp(() => io = InMemoryAtKeysIo());
 
-    test('read throws when nothing is loaded for the atSign', () {
+    test('read throws when nothing is loaded for the atsign', () {
       expect(
         () => io.read('@alice'),
         throwsA(isA<AtKeysNotInMemoryException>()),
@@ -25,7 +25,7 @@ void main() {
       expect(await io.read('@alice'), same(keys));
     });
 
-    test('write replaces any existing keys for the atSign', () async {
+    test('write replaces any existing keys for the atsign', () async {
       await io.write(
           '@alice',
           AtKeys(
@@ -65,7 +65,7 @@ void main() {
       expect(reread.keysForKeyId('appended'), isNotEmpty);
     });
 
-    test('flush and read agree on the normalized atSign', () async {
+    test('flush and read agree on the normalized atsign', () async {
       // flush stores under the normalized Atsign; read normalizes its String
       // arg. A differently-cased read must still resolve to the same slot.
       await io.flush(

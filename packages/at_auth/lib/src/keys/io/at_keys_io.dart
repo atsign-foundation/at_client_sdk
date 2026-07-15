@@ -10,15 +10,14 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
-/// An interface that defines methods for reading AtKeys.
-/// It can be implemented by classes that read AtKeys from different sources,
+/// Base type for reading [AtKeys]. Implemented by classes that read AtKeys
+/// from different sources.
 sealed class AtKeysIo {
   final passphraseCodec = const AtKeysPassphraseEnvelopeCodec();
   final assurance = const AtKeysAssurance();
   FutureOr<AtKeys> read(String atsign);
 }
 
-//todo: remove atsign from method signature
 /// An interface that defines methods for AtKeys that can be written.
 /// It can be implemented by classes that write AtKeys to different sources,
 /// such as file system or keychain.

@@ -145,8 +145,7 @@ final class AtKeysMaterial {
 }
 
 /// Parses the typed-keys document's `keys` array into a flat list of
-/// [AtKeysMaterial].
-/// Validating each entry's `keyParts` (no duplicate
+/// [AtKeysMaterial], validating each entry's `keyParts` (no duplicate
 /// `keyPartType` within one `keyId`) and rejecting a `keyId` that repeats
 /// across separate entries.
 List<AtKeysMaterial> parseAtKeysDocument(List<dynamic> keysJson) {

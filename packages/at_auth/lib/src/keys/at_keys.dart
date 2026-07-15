@@ -15,7 +15,7 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 /// [keysForEnrollment], and retired (never removed) with [retireKey].
 class AtKeys {
   static const supportedVersion = 1;
-  static const _reservedTopLevelKeys = {'version', 'atSign', 'keys'};
+  static const _reservedTopLevelKeys = {'version', 'atsign', 'keys'};
 
   //todo: make non-nullable and final in v4
   Atsign? atsign;
@@ -50,8 +50,8 @@ class AtKeys {
 
   void addKey(AtKeysMaterial material) {
     const AtKeysAssurance().validateAddKey(existing: keys, candidate: material);
-    _materialsByKeyId.putIfAbsent(material.keyId, () => {})[
-        material.keyPartType] = material;
+    _materialsByKeyId.putIfAbsent(
+        material.keyId, () => {})[material.keyPartType] = material;
   }
 
   /// Marks every material of [keyId] as [to] ([KeyPartStatus.retired] by
@@ -77,7 +77,7 @@ class AtKeys {
     byType.updateAll((_, material) => material.withStatus(to));
   }
 
-  /// Decodes the typed-keys document shape (`version`, `atSign`, `keys`,
+  /// Decodes the typed-keys document shape (`version`, `atsign`, `keys`,
   /// plus legacy fields flat at the top level). Json without a `version`
   /// field is accepted as the legacy flat shape (delegates to
   /// [_fromLegacyJson]); a `version` other than [supportedVersion] throws
@@ -97,7 +97,7 @@ class AtKeys {
     }
 
     final atsign =
-        assurance.expectNonEmptyString(json['atSign'], 'atsign').toAtsign();
+        assurance.expectNonEmptyString(json['atsign'], 'atsign').toAtsign();
     final keysJson = assurance.expectList(json['keys'], 'keys');
 
     final materials = parseAtKeysDocument(keysJson);
@@ -119,9 +119,9 @@ class AtKeys {
   }
 
   /// Encodes this [AtKeys] to the typed-keys document shape. Legacy fields
-  /// merge flatly into the top level alongside `version`/`atSign`/`keys` —
+  /// merge flatly into the top level alongside `version`/`atsign`/`keys` —
   /// upgrading a legacy file is additive, not a format swap. Falls back to
-  /// the legacy flat shape (see [_toLegacyJson]) when there's no atSign and
+  /// the legacy flat shape (see [_toLegacyJson]) when there's no atsign and
   /// no typed key material.
   ///
   /// All values are emitted plaintext; at-rest self-encryption of the legacy
@@ -130,14 +130,14 @@ class AtKeys {
     if (atsign == null) {
       if (keys.isNotEmpty) {
         throw AtKeysValidationException(
-            'atSign is required to serialize typed atKeys material');
+            'atsign is required to serialize typed atKeys material');
       }
       return _toLegacyJson();
     }
     return {
       ..._toLegacyJson(),
       'version': supportedVersion,
-      'atSign': atsign.toString(),
+      'atsign': atsign.toString(),
       'keys': encodeAtKeysDocument(keys),
     };
   }
@@ -207,7 +207,7 @@ class AtKeys {
   Map<String, dynamic> metadata = {};
 
   /// Encodes just the legacy flat shape — the hard-coded fields plus
-  /// [metadata] — with no `version`/`atSign`/`keys`.
+  /// [metadata] — with no `version`/`atsign`/`keys`.
   Map<String, dynamic> _toLegacyJson() {
     return {
       auth_constants.apkamPublicKey: apkamPublicKey?.toString(),

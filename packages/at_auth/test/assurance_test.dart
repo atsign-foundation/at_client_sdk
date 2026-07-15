@@ -69,7 +69,7 @@ void main() {
       final existing = _fixtureLegacyJson();
       final candidate = {
         'version': AtKeys.supportedVersion,
-        'atSign': '@alice🛠',
+        'atsign': '@alice🛠',
         'keys': [_recordJson()],
       };
 
@@ -217,7 +217,7 @@ void main() {
       final existing = _documentMap(keys: [_symmetricMaterial()]);
       final candidate = {
         'version': AtKeys.supportedVersion,
-        'atSign': '@alice',
+        'atsign': '@alice',
         'keys': [
           _recordJson(keyId: 'duplicate'),
           _recordJson(keyId: 'duplicate'),
@@ -233,11 +233,11 @@ void main() {
       );
     });
 
-    test('rejects map update when the atSign changes on a typed-keys rewrite',
+    test('rejects map update when the atsign changes on a typed-keys rewrite',
         () {
       final existing = _documentMap(keys: [_symmetricMaterial()]);
       final candidate = _documentMap(
-        atSign: '@bob',
+        atsign: '@bob',
         keys: [_symmetricMaterial()],
       );
 
@@ -255,7 +255,7 @@ void main() {
       // A corrupted keys field must not silently skip material preservation.
       final corrupted = {
         'version': AtKeys.supportedVersion,
-        'atSign': '@alice',
+        'atsign': '@alice',
         'keys': 'garbage',
       };
       final wellFormed = _documentMap(keys: [_symmetricMaterial()]);
@@ -338,19 +338,19 @@ AtKeysMaterial _enrollMaterial({
 Map<String, dynamic> _documentMap({
   required List<AtKeysMaterial> keys,
   Map<String, dynamic> legacyJson = const {},
-  String atSign = '@alice',
+  String atsign = '@alice',
 }) {
   return {
     ...legacyJson,
     'version': AtKeys.supportedVersion,
-    'atSign': atSign,
+    'atsign': atsign,
     'keys': encodeAtKeysDocument(keys),
   };
 }
 
 Map<String, dynamic> _candidateWithLegacy(Map<String, dynamic> legacyJson) {
   return _documentMap(
-    atSign: '@alice🛠',
+    atsign: '@alice🛠',
     legacyJson: legacyJson,
     keys: [_symmetricMaterial()],
   );

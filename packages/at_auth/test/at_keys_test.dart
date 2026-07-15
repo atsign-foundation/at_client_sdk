@@ -69,7 +69,7 @@ void main() {
 
     test('fromJson throws on an unsupported version', () {
       expect(
-        () => AtKeys.fromJson({'version': 2, 'atSign': '@alice', 'keys': []}),
+        () => AtKeys.fromJson({'version': 2, 'atsign': '@alice', 'keys': []}),
         throwsA(isA<AtKeysUnsupportedVersionException>()),
       );
     });
@@ -136,7 +136,7 @@ void main() {
   });
 
   group('AtKeys typed key lookup', () {
-    test('equality includes atSign and typed key material', () {
+    test('equality includes atsign and typed key material', () {
       final first = AtKeys(
         atsign: '@alice'.toAtsign(),
         keysList: [
