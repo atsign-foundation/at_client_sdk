@@ -19,6 +19,16 @@ class AuthService {
   ///
   ///   [cramSecret] - Cram secret
   ///
+  ///   [timeout] - Overall wall-clock budget for the whole onboarding attempt,
+  ///   including the poll that waits for a newly-registered atSign to be
+  ///   provisioned. **Leave this null** to keep the default provisioning poll
+  ///   (`AtNetworkTimeouts.defaultOnboardingTimeout`, 5 minutes) — a new atSign
+  ///   can take minutes to provision, and a short value here truncates that
+  ///   wait, so onboarding may time out before the atServer comes up. Pass a
+  ///   value only to deliberately widen the window (e.g. an unusually slow
+  ///   provisioner) or narrow it. It bounds the overall poll, not each probe:
+  ///   individual network calls stay capped at 60s regardless.
+  ///
   /// Returns [AtOnboardingResponse] which contains keys and status of onboarding
   Future<AtOnboardingResponse> onboard(
     AtOnboardingRequest request,
@@ -47,6 +57,13 @@ class AuthService {
   ///   [atAuthRequest] - AtAuthRequest containing atSign, AtRootDomain, AtKeysIo.
   ///
   ///		[backupKeys] - Optional Parameter allowing for your keys to be backed up via provided WrittenAtKeysIo implementations
+  ///
+  ///   [timeout] - Overall wall-clock budget for the authentication attempt.
+  ///   Leave null to use the default (`AtNetworkTimeouts.effectiveDefault`,
+  ///   30s), which fails fast when the atServer is unreachable. Unlike
+  ///   [onboard], this path authenticates an *existing* atSign, so there is no
+  ///   provisioning wait to accommodate — override only to tune the fail-fast
+  ///   window.
   ///
   /// Returns [AtAuthResponse] which contains keys and status of authentication
   Future<AtAuthResponse> authenticate(
