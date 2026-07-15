@@ -98,5 +98,16 @@ class RetryOptions {
   final int maxRetries;
   final Duration retryDelay;
 
-  const RetryOptions({required this.maxRetries, required this.retryDelay});
+  /// The maximum total wall-clock to spend reaching/validating the atServer,
+  /// across all [maxRetries] attempts. When null, the process-wide default
+  /// (`AtNetworkTimeouts.effectiveDefault`, 30s) is used; the resolved value is
+  /// always capped at `AtNetworkTimeouts.maxAllowed` (60s). This is what stops
+  /// the retry loop from multiplying the inner network waits into a
+  /// minutes-long hang on a dead network.
+  final Duration? overallTimeout;
+
+  const RetryOptions(
+      {required this.maxRetries,
+      required this.retryDelay,
+      this.overallTimeout});
 }

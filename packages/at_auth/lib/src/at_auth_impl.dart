@@ -382,7 +382,15 @@ class AtAuthImpl implements AtAuth {
   Future<void> validateAtServer(AuthRequest atRequest) async {
     final maxRetries = atRequest.retryOptions.maxRetries;
     final retryDelay = atRequest.retryOptions.retryDelay;
+    // Bound the TOTAL wall-clock across all retries with a single deadline, so
+    // this loop cannot multiply the inner (now individually-bounded) network
+    // waits into a minutes-long hang on a dead network. Defaults to the
+    // process-wide network timeout, capped at AtNetworkTimeouts.maxAllowed.
+    final deadline = DateTime.now().add(AtNetworkTimeouts.cap(
+        atRequest.retryOptions.overallTimeout ??
+            AtNetworkTimeouts.defaultTimeout));
     int retryCount = 0;
+    bool validated = false;
 
     //support mocking
     atServerStatus ??= AtStatusImpl(
@@ -390,7 +398,7 @@ class AtAuthImpl implements AtAuth {
       rootPort: atRequest.rootDomain.rootPort,
     );
 
-    while (retryCount < maxRetries) {
+    while (retryCount < maxRetries && DateTime.now().isBefore(deadline)) {
       retryCount++;
       try {
         _addProgress(
@@ -398,7 +406,12 @@ class AtAuthImpl implements AtAuth {
             '#[$retryCount/$maxRetries] : looking up ${atRequest.atSign} in atDirectory',
             ProgressEventType.info);
 
-        var atStatus = await atServerStatus!.get(atRequest.atSign);
+        // Bound each network call by the budget remaining before the deadline,
+        // so no single call can overshoot the overall timeout.
+        Duration remaining =
+            AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
+        var atStatus =
+            await atServerStatus!.get(atRequest.atSign).timeout(remaining);
 
         // 3 Checks for onboarding:
         //   1. Root server should be found
@@ -454,17 +467,21 @@ class AtAuthImpl implements AtAuth {
           atRequest.rootDomain.rootDomain,
           atRequest.rootDomain.rootPort,
         );
-        SecondaryAddress secondaryAddress =
-            await secondaryAddressFinder!.findSecondary(atRequest.atSign);
+        remaining = AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
+        SecondaryAddress secondaryAddress = await secondaryAddressFinder!
+            .findSecondary(atRequest.atSign, timeout: remaining);
 
+        remaining = AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
         await (probeSocket ?? _defaultProbeSocket)(
-            secondaryAddress.host, secondaryAddress.port);
+                secondaryAddress.host, secondaryAddress.port)
+            .timeout(remaining);
 
         _addProgress(
             'Connect',
             '#[$retryCount/$maxRetries] : Connected to ${atRequest.atSign} atServer',
             ProgressEventType.success);
 
+        validated = true;
         break; // Exit loop if no exception occurs
       } catch (e) {
         if (e is SocketException) {
@@ -481,8 +498,22 @@ class AtAuthImpl implements AtAuth {
         }
         _addProgress('Connect', '#[$retryCount/$maxRetries] : $e',
             ProgressEventType.error);
+        // Don't sleep past the overall deadline before the next attempt.
+        if (!DateTime.now().add(retryDelay).isBefore(deadline)) {
+          break;
+        }
         await Future.delayed(retryDelay); // Wait before retrying
       }
+    }
+    if (!validated) {
+      // We left the loop because the overall deadline passed (success and
+      // retries-exhausted both throw above), so surface a timeout.
+      final budget = AtNetworkTimeouts.cap(
+          atRequest.retryOptions.overallTimeout ??
+              AtNetworkTimeouts.defaultTimeout);
+      throw AtTimeoutException(
+          'Timed out after ${budget.inSeconds}s while reaching '
+          '${atRequest.atSign} atServer');
     }
   }
 }
