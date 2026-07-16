@@ -5,7 +5,7 @@
 - feat: `AuthService.onboard` / `authenticate` accept an optional `timeout` that
   bounds the whole onboarding/auth attempt (sets `RetryOptions.overallTimeout`;
   otherwise the process-wide `AtNetworkTimeouts` default applies). Requires
-  `at_auth ^3.2.0` (#1923).
+  `at_auth ^3.2.0` (#1909).
 - fix: `FlutterEnrollmentService.enroll` no longer leaks the `AtLookupImpl`
   connection when the enrollment submit fails — it now closes in a `finally`.
 - fix: `CramDialog` and `PkamDialog` no longer hang forever when
