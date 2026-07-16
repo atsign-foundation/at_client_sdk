@@ -126,23 +126,26 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
       if (!mounted) return;
       Navigator.of(context).pop(response);
     } catch (e) {
-      // Enrollment failed (e.g. wrong OTP or the atServer is unreachable).
-      // Surface it instead of leaking an unhandled exception, and keep the
-      // dialog open so the user can retry (issue #1909).
+      // Enrollment failed or timed out (e.g. wrong OTP or the atServer is
+      // unreachable). Surface it instead of leaking an unhandled exception, and
+      // keep the dialog open so the user can retry (issue #1909).
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Activation failed. Please check the code and your connection, '
-            'then try again.',
-          ),
-        ),
-      );
+      final message = e is AtTimeoutException
+          ? 'Activation timed out — the atServer could not be reached. '
+                'Please check your connection and try again.'
+          : 'Activation failed. Please check the code and your connection, '
+                'then try again.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
+      // Guard against setState after the dialog was dismissed mid-await; a bare
+      // `return` here would instead swallow any in-flight exception.
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
