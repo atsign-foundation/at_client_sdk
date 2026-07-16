@@ -58,8 +58,11 @@ class FlutterEnrollmentService {
       atEnrollmentResponse = await _atEnrollment.submit(request, atLookup);
     } catch (e, s) {
       throw Exception('Enrollment failed: $e \n $s');
+    } finally {
+      // Always close the connection, including when submit() throws (a timeout
+      // or a network failure) — otherwise the AtLookupImpl connection leaks.
+      await atLookup.close();
     }
-    await atLookup.close();
 
     if (atEnrollmentResponse.atAuthKeys != null) {
       EnrollmentData enrollmentData = EnrollmentData(
