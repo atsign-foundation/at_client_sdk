@@ -8,17 +8,21 @@ import 'package:at_lookup/src/util/lookup_util.dart';
 import 'package:at_utils/at_logger.dart';
 
 class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
-  static const Duration defaultCacheDuration = Duration(minutes: 1);
+  static const Duration defaultCacheDuration = Duration(hours: 1);
 
   final Map<String, SecondaryAddressCacheEntry> _map = {};
   final _logger = AtSignLogger('AtServerAddressCacheImpl');
 
   final String _rootDomain;
   final int _rootPort;
+  final Duration _cacheDuration;
   late SecondaryUrlFinder _secondaryFinder;
 
   CacheableSecondaryAddressFinder(this._rootDomain, this._rootPort,
-      {SecondaryUrlFinder? secondaryFinder, SecureSocketConfig? socketConfig}) {
+      {Duration? cacheDuration,
+      SecondaryUrlFinder? secondaryFinder,
+      SecureSocketConfig? socketConfig})
+      : _cacheDuration = cacheDuration ?? defaultCacheDuration {
     _secondaryFinder = secondaryFinder ??
         SecondaryUrlFinder(_rootDomain, _rootPort, socketConfig: socketConfig);
   }
@@ -49,7 +53,7 @@ class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
 
     if (_cacheIsEmptyOrExpired(atSign)) {
       // _updateCache will either populate the cache, or throw an exception
-      await _updateCache(atSign, defaultCacheDuration, deadline);
+      await _updateCache(atSign, _cacheDuration, deadline);
     }
     if (_map.containsKey(atSign)) {
       // should always be true, since _updateCache will throw an exception if it fails
