@@ -8,7 +8,7 @@ import 'package:at_lookup/src/util/lookup_util.dart';
 import 'package:at_utils/at_logger.dart';
 
 class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
-  static const Duration defaultCacheDuration = Duration(hours: 1);
+  static const Duration defaultCacheDuration = Duration(minutes: 1);
 
   final Map<String, SecondaryAddressCacheEntry> _map = {};
   final _logger = AtSignLogger('AtServerAddressCacheImpl');
