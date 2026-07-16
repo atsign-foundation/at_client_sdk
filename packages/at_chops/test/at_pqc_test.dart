@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
@@ -8,6 +9,7 @@ void main() {
   final DynamicLibrary? lib = tryLoadLibCrypto();
   final bool xWingFfi = lib != null && libCryptoSupportsMlKem768(lib);
   final bool mlDsaFfi = lib != null && libCryptoSupportsMlDsa65(lib);
+  final bool aesGcmFfi = lib != null && libCryptoSupportsAesGcm(lib);
 
   group('AtPqc — host-agnostic', () {
     test('AtPqc.xWing is FFI when supported, else pure', () {
@@ -26,6 +28,27 @@ void main() {
       }
     });
 
+    test('AtPqc.aesGcm256 is FFI when supported, else pure', () {
+      final AESKey key = AESKey.generate(32);
+      if (aesGcmFfi) {
+        expect(AtPqc.aesGcm256(key), isA<AesGcm256FfiAlgo>());
+      } else {
+        expect(AtPqc.aesGcm256(key), isA<AesGcm256EncryptionAlgo>());
+      }
+    });
+
+    test('aesGcm256 encrypt/decrypt round-trip', () async {
+      final AESKey key = AESKey.generate(32);
+      final InitialisationVector iv = InitialisationVector.random(12);
+      final Uint8List plain = Uint8List.fromList(utf8.encode('hello pqc aead'));
+
+      final Uint8List encrypted =
+          await AtPqc.aesGcm256(key).encrypt(plain, iv: iv);
+      final Uint8List decrypted =
+          await AtPqc.aesGcm256(key).decrypt(encrypted, iv: iv);
+      expect(decrypted, plain);
+    });
+
     test('xWing encapsulate/decapsulate round-trip', () async {
       final XWingKeyPair kp = await XWingKeyPair.generate();
 
@@ -33,7 +56,8 @@ void main() {
       expect(enc.ciphertext.length, 1120);
       expect(enc.sharedSecret.length, 32);
 
-      final ss = await AtPqc.xWing.decapsulate(kp.privateKeyBytes, enc.ciphertext);
+      final ss =
+          await AtPqc.xWing.decapsulate(kp.privateKeyBytes, enc.ciphertext);
       expect(ss, enc.sharedSecret);
     });
 
@@ -41,8 +65,10 @@ void main() {
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
 
       final Uint8List msg = Uint8List.fromList('hello pqc'.codeUnits);
-      final Uint8List sig = await AtPqc.mlDsa65.signBytes(msg, secretKey: kp.privateKeyBytes);
-      final bool ok = await AtPqc.mlDsa65.verifyBytes(msg, signature: sig, publicKey: kp.publicKeyBytes);
+      final Uint8List sig =
+          await AtPqc.mlDsa65.signBytes(msg, secretKey: kp.privateKeyBytes);
+      final bool ok = await AtPqc.mlDsa65
+          .verifyBytes(msg, signature: sig, publicKey: kp.publicKeyBytes);
       expect(ok, isTrue);
     });
 
@@ -57,15 +83,21 @@ void main() {
       expect(ss, enc.sharedSecret);
     });
 
-    test('AtPqc.mlDsa65.generateKeyPair() round-trips directly, with no wrapper',
+    test(
+        'AtPqc.mlDsa65.generateKeyPair() round-trips directly, with no wrapper',
         () async {
       final kp = await AtPqc.mlDsa65.generateKeyPair();
       expect(kp.publicKey.length, 1952);
       expect(kp.secretKey.length, 4032);
 
-      final Uint8List msg = Uint8List.fromList('direct facade keygen'.codeUnits);
-      final Uint8List sig = await AtPqc.mlDsa65.signBytes(msg, secretKey: kp.secretKey);
-      expect(await AtPqc.mlDsa65.verifyBytes(msg, signature: sig, publicKey: kp.publicKey), isTrue);
+      final Uint8List msg =
+          Uint8List.fromList('direct facade keygen'.codeUnits);
+      final Uint8List sig =
+          await AtPqc.mlDsa65.signBytes(msg, secretKey: kp.secretKey);
+      expect(
+          await AtPqc.mlDsa65
+              .verifyBytes(msg, signature: sig, publicKey: kp.publicKey),
+          isTrue);
     });
 
     test(
@@ -77,7 +109,8 @@ void main() {
       // AtPqc.xWing. This only checks the two backends stay wire-compatible.
       final XWingKeyPair kp = await XWingKeyPair.generate();
       final enc = await AtPqc.xWing.encapsulate(kp.publicKeyBytes);
-      final ss = await AtPqc.xWing.decapsulate(kp.privateKeyBytes, enc.ciphertext);
+      final ss =
+          await AtPqc.xWing.decapsulate(kp.privateKeyBytes, enc.ciphertext);
       expect(ss, enc.sharedSecret);
     });
 
@@ -87,9 +120,14 @@ void main() {
       // Same rationale as XWingKeyPair above — MlDsa65KeyPair.generate()
       // is pure-Dart-only and does not delegate to AtPqc.mlDsa65.
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
-      final Uint8List msg = Uint8List.fromList('cross-backend key reuse'.codeUnits);
-      final Uint8List sig = await AtPqc.mlDsa65.signBytes(msg, secretKey: kp.privateKeyBytes);
-      expect(await AtPqc.mlDsa65.verifyBytes(msg, signature: sig, publicKey: kp.publicKeyBytes), isTrue);
+      final Uint8List msg =
+          Uint8List.fromList('cross-backend key reuse'.codeUnits);
+      final Uint8List sig =
+          await AtPqc.mlDsa65.signBytes(msg, secretKey: kp.privateKeyBytes);
+      expect(
+          await AtPqc.mlDsa65
+              .verifyBytes(msg, signature: sig, publicKey: kp.publicKeyBytes),
+          isTrue);
     });
   });
 
@@ -106,7 +144,8 @@ void main() {
       final XWingKeyPair kp = await XWingKeyPair.generate();
       final ffiAlgo = XWingFfiAlgo.fromLib(lib);
       final enc = await ffiAlgo.encapsulate(kp.publicKeyBytes);
-      final ss = await XWingPureDartAlgo.instance.decapsulate(kp.privateKeyBytes, enc.ciphertext);
+      final ss = await XWingPureDartAlgo.instance
+          .decapsulate(kp.privateKeyBytes, enc.ciphertext);
       expect(ss, enc.sharedSecret);
     }, tags: ['ffi']);
 
@@ -117,7 +156,8 @@ void main() {
       }
 
       final XWingKeyPair kp = await XWingKeyPair.generate();
-      final enc = await XWingPureDartAlgo.instance.encapsulate(kp.publicKeyBytes);
+      final enc =
+          await XWingPureDartAlgo.instance.encapsulate(kp.publicKeyBytes);
       final ffiAlgo = XWingFfiAlgo.fromLib(lib);
       final ss = await ffiAlgo.decapsulate(kp.privateKeyBytes, enc.ciphertext);
       expect(ss, enc.sharedSecret);
@@ -132,9 +172,10 @@ void main() {
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List msg = Uint8List.fromList('cross-backend sign'.codeUnits);
       final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib);
-      final Uint8List sig = await ffiAlgo.signBytes(msg, secretKey: kp.privateKeyBytes);
-      final bool ok =
-          await MlDsa65PureDartAlgo().verifyBytes(msg, signature: sig, publicKey: kp.publicKeyBytes);
+      final Uint8List sig =
+          await ffiAlgo.signBytes(msg, secretKey: kp.privateKeyBytes);
+      final bool ok = await MlDsa65PureDartAlgo()
+          .verifyBytes(msg, signature: sig, publicKey: kp.publicKeyBytes);
       expect(ok, isTrue);
     }, tags: ['ffi']);
 
@@ -145,11 +186,13 @@ void main() {
       }
 
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
-      final Uint8List msg = Uint8List.fromList('cross-backend verify'.codeUnits);
-      final Uint8List sig =
-          await MlDsa65PureDartAlgo().signBytes(msg, secretKey: kp.privateKeyBytes);
+      final Uint8List msg =
+          Uint8List.fromList('cross-backend verify'.codeUnits);
+      final Uint8List sig = await MlDsa65PureDartAlgo()
+          .signBytes(msg, secretKey: kp.privateKeyBytes);
       final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib);
-      final bool ok = await ffiAlgo.verifyBytes(msg, signature: sig, publicKey: kp.publicKeyBytes);
+      final bool ok = await ffiAlgo.verifyBytes(msg,
+          signature: sig, publicKey: kp.publicKeyBytes);
       expect(ok, isTrue);
     }, tags: ['ffi']);
   });

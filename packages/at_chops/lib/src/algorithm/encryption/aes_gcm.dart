@@ -39,8 +39,8 @@ final class AesGcm256EncryptionAlgo
       {InitialisationVector? iv, List<int> aad = const []}) async {
     final crypto.SecretBox box = await _aesGcm.encrypt(
       plainData,
-      secretKey: crypto.SecretKey(_keyBytes()),
-      nonce: _nonceBytes(iv),
+      secretKey: crypto.SecretKey(_keyBytesForEncrypt()),
+      nonce: _nonceBytesForEncrypt(iv),
       aad: aad,
     );
     return Uint8List.fromList(box.cipherText + box.mac.bytes);
@@ -60,8 +60,8 @@ final class AesGcm256EncryptionAlgo
     try {
       final List<int> plain = await _aesGcm.decrypt(
         crypto.SecretBox(cipherText,
-            nonce: _nonceBytes(iv), mac: crypto.Mac(tag)),
-        secretKey: crypto.SecretKey(_keyBytes()),
+            nonce: _nonceBytesForDecrypt(iv), mac: crypto.Mac(tag)),
+        secretKey: crypto.SecretKey(_keyBytesForDecrypt()),
         aad: aad,
       );
       return Uint8List.fromList(plain);
@@ -72,7 +72,7 @@ final class AesGcm256EncryptionAlgo
     }
   }
 
-  Uint8List _keyBytes() {
+  Uint8List _keyBytesForEncrypt() {
     // AESKey carries its material base64-encoded, per the at_chops contract.
     final Uint8List keyBytes = base64Decode(_aesKey.key);
     if (keyBytes.length != 32) {
@@ -82,9 +82,27 @@ final class AesGcm256EncryptionAlgo
     return keyBytes;
   }
 
-  List<int> _nonceBytes(InitialisationVector? iv) {
+  Uint8List _keyBytesForDecrypt() {
+    final Uint8List keyBytes = base64Decode(_aesKey.key);
+    if (keyBytes.length != 32) {
+      throw AtDecryptionException(
+          'AES-256-GCM requires a 256-bit key; got ${keyBytes.length * 8} bits');
+    }
+    return keyBytes;
+  }
+
+  List<int> _nonceBytesForEncrypt(InitialisationVector? iv) {
     if (iv == null || iv.ivBytes.length != nonceLength) {
       throw AtEncryptionException(
+          'AES-256-GCM requires an explicit $nonceLength-byte nonce; '
+          'use AtChopsUtil.generateRandomIV($nonceLength)');
+    }
+    return iv.ivBytes;
+  }
+
+  List<int> _nonceBytesForDecrypt(InitialisationVector? iv) {
+    if (iv == null || iv.ivBytes.length != nonceLength) {
+      throw AtDecryptionException(
           'AES-256-GCM requires an explicit $nonceLength-byte nonce; '
           'use AtChopsUtil.generateRandomIV($nonceLength)');
     }

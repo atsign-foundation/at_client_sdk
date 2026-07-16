@@ -21,14 +21,13 @@ dependencies:
   crypto: ^3.0.5
   crypton: ^2.2.1
   encrypt: ^5.0.3
-  cron: ^0.5.1
   uuid: ^4.0.0
   archive: ^4.0.7
   http: ^1.2.1
   internet_connection_checker: ^1.0.0+1
   async: ^2.9.0
   at_base2e15: ^1.0.0
-  at_commons: ^5.9.0
+  at_commons: ^5.13.0
   at_utils: ^3.2.0
   at_chops: ^3.0.0
   at_lookup: ^3.1.0

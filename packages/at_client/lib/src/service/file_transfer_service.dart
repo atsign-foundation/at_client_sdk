@@ -5,6 +5,8 @@ import 'package:at_client/src/stream/file_transfer_object.dart';
 import 'package:at_client/src/util/constants.dart';
 import 'package:http/http.dart' as http;
 
+@Deprecated('Will be removed from the SDK in a future major release; '
+    'file sharing has moved to the app layer')
 class FileTransferService {
   Future<dynamic> uploadToFileBin(
       List<int> file, String container, String fileName) async {
