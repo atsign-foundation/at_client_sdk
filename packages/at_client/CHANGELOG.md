@@ -8,6 +8,12 @@
   `enroll:listns` verb) and never published. The whole surface is
   `@experimental` — the wire shape is subject to change pending the atServer
   verb work — and requires `at_chops ^3.3.0` (`pqSeal`/`pqOpen`).
+- feat: add `AtClientPreference.networkTimeout` — when set on the preference used
+  to create an `AtClient`, it becomes the process-wide network-timeout default
+  (`AtNetworkTimeouts.defaultTimeout`, capped at 60s), bounding every atServer
+  connect / atDirectory lookup / operation so a dead network can't hang the SDK.
+  Supersedes the misnamed `outboundConnectionTimeout` (a socket idle time).
+  Requires `at_commons ^5.13.0` (#1923).
 - refactor: migrate the local keystore to `at_persistence_secondary_server`
   5.0.0 — the client is now commit-log-free. The client no longer maintains a
   local commit log or runs commit-log compaction; sync tracks its progress

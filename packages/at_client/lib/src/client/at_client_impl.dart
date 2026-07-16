@@ -351,6 +351,14 @@ class AtClientImpl implements AtClient {
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
     _preference?.namespace ??= namespace;
+    // If the app configured a process-wide network timeout, apply it as the
+    // single default that bounds every atServer connect / atDirectory lookup /
+    // operation. Only mutates the global when explicitly set, so the built-in
+    // default otherwise stands.
+    if (preference.networkTimeout != null) {
+      AtNetworkTimeouts.defaultTimeout =
+          AtNetworkTimeouts.cap(preference.networkTimeout!);
+    }
     _localSecondaryKeyStore = localSecondaryKeyStore;
 
     if (_localSecondaryKeyStore != null && !_preference!.isLocalStoreRequired) {
