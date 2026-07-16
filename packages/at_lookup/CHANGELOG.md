@@ -1,3 +1,16 @@
+## 3.7.0
+
+- feat: `CacheableSecondaryAddressFinder` accepts an optional `cacheDuration`
+  constructor parameter, so callers that need faster recovery from a stale
+  secondary address (e.g. after an atSign reset) can pass a shorter TTL
+  instead of the fixed 1-hour default. `defaultCacheDuration` is unchanged, so
+  existing callers see no behavior change.
+- fix(deps): `at_chops` constraint corrected to `^3.3.0` — `cramAuthenticate`
+  calls `SHA512HashingAlgo` from `package:at_chops/at_chops.dart`, which the
+  package's barrel file only exports starting at `3.3.0`; the previous
+  `^3.0.0` constraint let dependents resolve an `at_chops` that fails to
+  compile against this package.
+
 ## 3.6.0
 
 - refactor: route PKAM/CRAM signing + hashing through at_chops
