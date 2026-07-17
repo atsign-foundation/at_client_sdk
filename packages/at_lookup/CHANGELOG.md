@@ -1,3 +1,8 @@
+## 3.7.0
+
+- feat: `CacheableSecondaryAddressFinder` takes an optional `cacheDuration` to override the default 1-hour cache TTL.
+- fix(deps): updated the `at_chops` constraint to `^3.3.0`, the actual minimum this package compiles against.
+
 ## 3.6.0
 
 - refactor: route PKAM/CRAM signing + hashing through at_chops
