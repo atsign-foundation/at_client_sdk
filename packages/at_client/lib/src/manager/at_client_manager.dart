@@ -78,6 +78,7 @@ class AtClientManager {
       String atSign, String? namespace, AtClientPreference preference,
       {AtServiceFactory? serviceFactory,
       AtChops? atChops,
+      AtKeysIo? atKeysIo,
       AtLookUp? atLookUp,
       String? enrollmentId}) async {
     serviceFactory ??= DefaultAtServiceFactory();
@@ -107,6 +108,7 @@ class AtClientManager {
     if (currentAtSign != null &&
         currentAtSign == atSign &&
         atChops == null &&
+        atKeysIo == null &&
         atLookUp == null &&
         enrollmentId == null &&
         _currentAtClient!.isStopped == false) {
@@ -136,7 +138,10 @@ class AtClientManager {
     // Spin up the new atClient
     _currentAtClient = await serviceFactory.atClient(
         _atSign, namespace, preference, this,
-        atChops: atChops, atLookUp: atLookUp, enrollmentId: enrollmentId);
+        atChops: atChops,
+        atKeysIo: atKeysIo,
+        atLookUp: atLookUp,
+        enrollmentId: enrollmentId);
 
     var notificationService = await serviceFactory.notificationService(
         _currentAtClient!, this,
@@ -172,6 +177,32 @@ class AtClientManager {
     _logger.info("setCurrentAtSign complete");
 
     return this;
+  }
+
+  /// Explicit, typed hand-off from auth to client.
+  ///
+  /// Consumes an [AtAuthSession] (the key *source* + confirmed params) and lets
+  /// the client rebuild its own connection: [session.atKeysIo] flows to
+  /// `AtClientImpl.create(atKeysIo:)`, which derives its own PKAM [AtChops] and
+  /// opens a fresh socket that PKAMs itself. Costs one extra PKAM handshake at
+  /// startup — the accepted price of clean auth/client separation.
+  ///
+  /// Set [reuse] to adopt auth's already-authenticated connection
+  /// ([session.atLookUp]) and skip the second handshake — the perf escape hatch.
+  /// When false (default) the client opens its own fresh socket.
+  Future<AtClientManager> setFromAuthSession(
+      AtAuthSession session, AtClientPreference preference,
+      {AtServiceFactory? serviceFactory, bool reuse = false}) async {
+    // Destructure rootDomain onto the preference for now. A follow-up will add
+    // an AtRootDomain-typed accessor to AtClientPreference so this can stop.
+    preference.rootDomain = session.rootDomain.rootDomain;
+    preference.rootPort = session.rootDomain.rootPort;
+
+    return setCurrentAtSign(session.atSign, session.namespace, preference,
+        serviceFactory: serviceFactory,
+        atKeysIo: session.atKeysIo,
+        atLookUp: reuse ? session.atLookUp : null,
+        enrollmentId: session.enrollmentId);
   }
 
   void listenToAtSignChange(AtSignChangeListener listener) {
@@ -227,9 +258,16 @@ class AtClientManager {
 /// The default production implementation is [DefaultAtServiceFactory].
 /// Override this in tests to inject fakes or mocks without subclassing [AtClientManager].
 abstract class AtServiceFactory {
-  Future<AtClient> atClient(String atSign, String? namespace,
-      AtClientPreference preference, AtClientManager atClientManager,
-      {AtChops? atChops, AtLookUp? atLookUp, String? enrollmentId});
+  Future<AtClient> atClient(
+    String atSign,
+    String? namespace,
+    AtClientPreference preference,
+    AtClientManager atClientManager, {
+    AtChops? atChops,
+    AtKeysIo? atKeysIo,
+    AtLookUp? atLookUp,
+    String? enrollmentId,
+  });
 
   Future<NotificationService> notificationService(
       AtClient atClient,
@@ -247,14 +285,26 @@ abstract class AtServiceFactory {
 
 class DefaultAtServiceFactory implements AtServiceFactory {
   @override
-  Future<AtClient> atClient(String atSign, String? namespace,
-      AtClientPreference preference, AtClientManager atClientManager,
-      {AtChops? atChops, AtLookUp? atLookUp, String? enrollmentId}) async {
-    return await AtClientImpl.create(atSign, namespace, preference,
-        atClientManager: atClientManager,
-        atChops: atChops,
-        atLookUp: atLookUp,
-        enrollmentId: enrollmentId);
+  Future<AtClient> atClient(
+    String atSign,
+    String? namespace,
+    AtClientPreference preference,
+    AtClientManager atClientManager, {
+    AtChops? atChops,
+    AtKeysIo? atKeysIo,
+    AtLookUp? atLookUp,
+    String? enrollmentId,
+  }) async {
+    return await AtClientImpl.create(
+      atSign,
+      namespace,
+      preference,
+      atClientManager: atClientManager,
+      atChops: atChops,
+      atKeysIo: atKeysIo,
+      atLookUp: atLookUp,
+      enrollmentId: enrollmentId,
+    );
   }
 
   @override
