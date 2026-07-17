@@ -1,0 +1,227 @@
+import 'package:at_client/src/secret_sharing/secret_store.dart';
+import 'package:test/test.dart';
+
+class InMemoryPersistence implements SecretStorePersistence {
+  List<Secret> stored = [];
+  int saveCount = 0;
+
+  @override
+  Future<List<Secret>> load() async => stored;
+
+  @override
+  Future<void> save(List<Secret> secrets) async {
+    stored = secrets;
+    saveCount++;
+  }
+}
+
+void main() {
+  group('SecretStore CRUD', () {
+    test('put, get, list, remove', () async {
+      final store = SecretStore();
+      await store
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 't1'));
+      await store
+          .putSecret(Secret(namespace: 'myapp', name: 'pin', value: 'p1'));
+      await store
+          .putSecret(Secret(namespace: 'mychat', name: 'token', value: 't2'));
+
+      expect(store.getSecret('myapp', 'token')!.value, 't1');
+      expect(store.getSecret('mychat', 'token')!.value, 't2');
+      expect(store.getSecret('myapp', 'nope'), isNull);
+
+      // (namespace, name) is the identity: same name in two namespaces
+      // coexist
+      expect(store.listSecrets(), hasLength(3));
+      expect(store.listSecrets(namespace: 'myapp'), hasLength(2));
+
+      expect(await store.removeSecret('myapp', 'token'), isTrue);
+      expect(await store.removeSecret('myapp', 'token'), isFalse);
+      expect(store.listSecrets(), hasLength(2));
+    });
+
+    test('listSecrets filters by namePrefix, alone and with namespace',
+        () async {
+      final store = SecretStore();
+      await store.putSecret(
+          Secret(namespace: 'myapp', name: '__rk.1.aaaa', value: 'k1'),
+          allowReservedName: true);
+      await store.putSecret(
+          Secret(namespace: 'myapp', name: '__rk.2.bbbb', value: 'k2'),
+          allowReservedName: true);
+      await store.putSecret(
+          Secret(namespace: 'myapp', name: '__rk.current', value: 'ptr'),
+          allowReservedName: true);
+      await store
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 't'));
+      // Same reserved prefix in a different namespace must not leak in.
+      await store.putSecret(
+          Secret(namespace: 'mychat', name: '__rk.1.cccc', value: 'k3'),
+          allowReservedName: true);
+
+      // Prefix alone spans namespaces.
+      expect(store.listSecrets(namePrefix: '__rk.'), hasLength(4));
+      // Prefix + namespace scopes to one (atSign,namespace) family.
+      final myappRk =
+          store.listSecrets(namespace: 'myapp', namePrefix: '__rk.');
+      expect(myappRk, hasLength(3));
+      expect(myappRk.every((s) => s.namespace == 'myapp'), isTrue);
+      // Tighter prefix selects the epoch keys, not the pointer.
+      expect(store.listSecrets(namespace: 'myapp', namePrefix: '__rk.1.'),
+          hasLength(1));
+      // Non-matching prefix → empty.
+      expect(store.listSecrets(namePrefix: 'nope'), isEmpty);
+    });
+
+    test('putSecret overwrites; putIfNewer only stores strictly newer',
+        () async {
+      final store = SecretStore();
+      final older = Secret(
+          namespace: 'myapp',
+          name: 'token',
+          value: 'old',
+          createdAt: DateTime.utc(2026, 1, 1));
+      final newer = Secret(
+          namespace: 'myapp',
+          name: 'token',
+          value: 'new',
+          createdAt: DateTime.utc(2026, 6, 1));
+
+      await store.putSecret(newer);
+      expect(await store.putIfNewer(older), isFalse);
+      expect(store.getSecret('myapp', 'token')!.value, 'new');
+      // equal createdAt is not newer
+      expect(await store.putIfNewer(newer), isFalse);
+
+      await store.putSecret(older); // unconditional overwrite
+      expect(store.getSecret('myapp', 'token')!.value, 'old');
+      expect(await store.putIfNewer(newer), isTrue);
+      expect(store.getSecret('myapp', 'token')!.value, 'new');
+    });
+
+    test('putIfNewer orders on version when present, createdAt as tiebreak',
+        () async {
+      final store = SecretStore();
+      // higher version wins even with an EARLIER clock; a lower version loses
+      // even with a LATER clock — so a clock-skewed stale push cannot win.
+      final v2 = Secret(
+          namespace: 'myapp',
+          name: 'epoch',
+          value: 'e2',
+          version: 2,
+          createdAt: DateTime.utc(2026, 1, 1));
+      await store.putSecret(v2);
+
+      final v1LaterClock = Secret(
+          namespace: 'myapp',
+          name: 'epoch',
+          value: 'e1',
+          version: 1,
+          createdAt: DateTime.utc(2026, 12, 31));
+      expect(await store.putIfNewer(v1LaterClock), isFalse,
+          reason: 'lower version loses despite a later clock');
+      expect(store.getSecret('myapp', 'epoch')!.value, 'e2');
+
+      final v3EarlierClock = Secret(
+          namespace: 'myapp',
+          name: 'epoch',
+          value: 'e3',
+          version: 3,
+          createdAt: DateTime.utc(2025, 1, 1));
+      expect(await store.putIfNewer(v3EarlierClock), isTrue);
+      expect(store.getSecret('myapp', 'epoch')!.value, 'e3');
+
+      // equal version falls back to createdAt: an earlier-clock same-version
+      // arrival is not newer
+      final v3Earlier = Secret(
+          namespace: 'myapp',
+          name: 'epoch',
+          value: 'old3',
+          version: 3,
+          createdAt: DateTime.utc(2024, 1, 1));
+      expect(await store.putIfNewer(v3Earlier), isFalse);
+      expect(store.getSecret('myapp', 'epoch')!.value, 'e3');
+    });
+  });
+
+  group('reserved names', () {
+    test('putSecret rejects __ names unless allowReservedName', () async {
+      final store = SecretStore();
+      expect(
+          () => store.putSecret(
+              Secret(namespace: 'myapp', name: '__rk.current', value: 'x')),
+          throwsA(isA<ArgumentError>()));
+      expect(store.getSecret('myapp', '__rk.current'), isNull);
+
+      await store.putSecret(
+          Secret(namespace: 'myapp', name: '__rk.current', value: 'x'),
+          allowReservedName: true);
+      expect(store.getSecret('myapp', '__rk.current')!.value, 'x');
+    });
+
+    test('putIfNewer (the arrival path) accepts reserved names', () async {
+      final store = SecretStore();
+      expect(
+          await store.putIfNewer(
+              Secret(namespace: 'myapp', name: '__rk.current', value: 'x')),
+          isTrue);
+      expect(store.getSecret('myapp', '__rk.current')!.value, 'x');
+    });
+  });
+
+  group('persistence delegate', () {
+    test('mutations save, init loads', () async {
+      final persistence = InMemoryPersistence();
+      final store = SecretStore(persistence: persistence);
+      await store
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 't1'));
+      await store.removeSecret('myapp', 'token');
+      await store
+          .putSecret(Secret(namespace: 'myapp', name: 'pin', value: 'p1'));
+      expect(persistence.saveCount, 3);
+      expect(persistence.stored, hasLength(1));
+
+      final reloaded = SecretStore(persistence: persistence);
+      await reloaded.init();
+      expect(reloaded.getSecret('myapp', 'pin')!.value, 'p1');
+    });
+  });
+
+  group('namespaceAuthorizes (mirrors the atServer suffix rule)', () {
+    test('exact, suffix, wildcard, and non-matches', () {
+      expect(SecretStore.namespaceAuthorizes({'myapp': 'rw'}, 'myapp'), isTrue);
+      expect(SecretStore.namespaceAuthorizes({'myapp': 'r'}, 'data.myapp'),
+          isTrue);
+      expect(SecretStore.namespaceAuthorizes({'*': 'rw'}, 'anything'), isTrue);
+      // 'mychat' is not authorized by 'myapp', and substring != dot-suffix
+      expect(
+          SecretStore.namespaceAuthorizes({'myapp': 'rw'}, 'mychat'), isFalse);
+      expect(SecretStore.namespaceAuthorizes({'app': 'rw'}, 'myapp'), isFalse);
+      expect(SecretStore.namespaceAuthorizes({}, 'myapp'), isFalse);
+    });
+  });
+
+  group('Secret json', () {
+    test('round trip and malformed', () {
+      final secret = Secret(
+          namespace: 'myapp',
+          name: 'token',
+          value: 't1',
+          version: 5,
+          createdAt: DateTime.utc(2026, 6, 11));
+      final reparsed = Secret.fromJson(secret.toJson());
+      expect(reparsed.namespace, 'myapp');
+      expect(reparsed.name, 'token');
+      expect(reparsed.value, 't1');
+      expect(reparsed.version, 5);
+      expect(reparsed.createdAt, DateTime.utc(2026, 6, 11));
+
+      // version is optional: a payload without it parses as null
+      expect(Secret.fromJson({...secret.toJson()..remove('version')}).version,
+          isNull);
+
+      expect(() => Secret.fromJson({'name': 'x'}),
+          throwsA(isA<FormatException>()));
+    });
+  });
+}
