@@ -809,15 +809,21 @@ read — secret-sharing envelopes and key-package copies are stored that way.
 ### `AtKeys`/`AtKeysIo` extend-in-place + key stores
 
 The existing **`AtKeys`** is **extended in place** — additive PQ-safe methods
-(`add` / `remove` / `write`), with the legacy key fields/methods **deprecated** but
-retained for back-compat so call sites migrate over time (ratified 2026-07-06, #2045
-— see [`decisions.md`](decisions.md); supersedes the earlier `WritableAtKeys` holder
+(`addKey` / `retireKey`; material is **never removed** — `retireKey` moves status
+forward-only, `active` → `retired` → `dead`, since retired bytes are still needed
+to decrypt data they protected), with the legacy key fields/methods **deprecated**
+but retained for back-compat so call sites migrate over time (ratified 2026-07-06,
+#2045; the retire-never-remove and `flush()` shapes ratified 2026-07-17 — see
+[`decisions.md`](decisions.md); supersedes the earlier `WritableAtKeys` holder
 working name). It stays the single in-memory holder of every key the client knows
 (per-enrollment *and* per-APKAM), which providers read keys from and mint/add/write
 through. *(NOT a wrapper over `AtChops` — `AtKeys` already produces one via
 `toAtChops()` and carries a `metadata` stash.)* The provider seam is injected an
-**`AtKeysIo`** (the key source, extended with runtime persistence — `append()` /
-`save()`) alongside `(AtClient, AtChops)`; `CryptoContext` carries the `AtKeysIo` —
+**`AtKeysIo`** (the key source, extended with runtime persistence — one
+whole-state `flush(atsign, atKeys)`: mutate in memory, then flush; on an existing
+target the rewrite is safety-checked by `AtKeysAssurance.validateMapUpdate` and is
+atomic, write-to-temp + rename, keeping the previous state as `<file>.bak`)
+alongside `(AtClient, AtChops)`; `CryptoContext` carries the `AtKeysIo` —
 **additive** (`CryptoContext` is `{atClient}`, with no `atChops` field). Convergence
 (newest-wins / pull recovery) stays in the secret-sharing substrate; the stores are
 **dumb** key-value backends.
@@ -836,6 +842,16 @@ Store homes: `InMemoryAtKeysIo` + the interfaces in `at_auth` (main barrel);
 `at_client_flutter`. `.atKeys` / keychain are made **updatable** (re-wrap the
 self-enc key on rewrite; atomic write + backup). The extended `AtKeys` (with its
 injected `AtKeysIo`) is born at AtClient construction and immutable after.
+
+**Never-lose is a bootstrap-store property, not an `AtKeysIo`-wide invariant**
+(ruling 2026-07-17, [`decisions.md`](decisions.md)). `flush`'s
+nothing-may-be-lost contract binds the bootstrap stores (`.atKeys` file,
+keychain). The distributed/rotating row above holds CK-class material whose
+**deletion is the B5a coarse-FS lever** ([§1.7](#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation))
+— whatever store ends up holding it must support eviction, not inherit the
+flush contract. `LocalKeystoreAtKeysIo` is **not needed at this time**; its
+routing (and whether it exists at all vs. the ordinary keystore + in-memory CK
+cache) is decided when S-3/SS-4 execute.
 
 ### WASM barrel split (`at_auth 4.0.0`)
 
