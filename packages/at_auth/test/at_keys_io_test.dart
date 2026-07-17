@@ -173,9 +173,13 @@ void main() {
         await fileAtKeysIo.flush(atsign.toAtsign(), keys);
 
         final files = tempDir.listSync().whereType<File>().toList();
-        expect(files, hasLength(1));
-        expect(files.single.path, tempPath);
+        expect(
+          files.map((file) => file.path).toSet(),
+          {tempPath, '$tempPath.bak'},
+        );
         expect(await File(tempPath).readAsString(), isNot(existingText));
+        // The .bak preserves the pre-flush state byte-for-byte.
+        expect(await File('$tempPath.bak').readAsString(), existingText);
         final reread = await fileAtKeysIo.read(atsign);
         expect(reread.keysForKeyId('appended'), isNotEmpty);
         expect(reread.keysForKeyId('another'), isNotEmpty);
@@ -332,9 +336,12 @@ void main() {
         await fileAtKeysIo.flush(atsign.toAtsign(), keys);
 
         final files = tempDir.listSync().whereType<File>().toList();
-        expect(files, hasLength(1));
-        expect(files.single.path, tempPath);
+        expect(
+          files.map((file) => file.path).toSet(),
+          {tempPath, '$tempPath.bak'},
+        );
         expect(await File(tempPath).readAsString(), isNot(encryptedOriginal));
+        expect(await File('$tempPath.bak').readAsString(), encryptedOriginal);
 
         // Both keys survive a decrypt-and-read of the rewritten file.
         final readKeys = await fileAtKeysIo.read(atsign);
@@ -363,8 +370,10 @@ void main() {
           await fileAtKeysIo.flush(atsign.toAtsign(), keys);
 
           final files = tempDir.listSync().whereType<File>().toList();
-          expect(files, hasLength(1));
-          expect(files.single.path, tempPath);
+          expect(
+            files.map((file) => file.path).toSet(),
+            {tempPath, '$tempPath.bak'},
+          );
 
           // The rewritten file is a typed-keys document that reads back with the
           // legacy keys intact plus the appended material.

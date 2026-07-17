@@ -73,8 +73,10 @@ void main() {
         await fileAtKeysIo.flush('@alice'.toAtsign(), keys);
 
         final files = tempDir.listSync().whereType<File>().toList();
-        expect(files, hasLength(1));
-        expect(files.single.path, path);
+        expect(
+          files.map((file) => file.path).toSet(),
+          {path, '$path.bak'},
+        );
 
         final readKeys = await fileAtKeysIo.read('@alice');
         expectLegacyAtKeys(readKeys, legacyKeys);

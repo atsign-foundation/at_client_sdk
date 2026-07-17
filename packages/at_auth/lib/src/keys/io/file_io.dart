@@ -56,6 +56,9 @@ class FileAtKeysIo extends WrittenAtKeysIo {
       existing: await _readAtRestDocument(file),
       candidate: document,
     );
+    // Keep the previous state recoverable as .bak. A copy, not a rename, so
+    // the live keyfile exists at every instant of the flush.
+    await file.copy('${file.path}.bak');
     await _writeAtRestDocument(file, document);
   }
 
@@ -83,7 +86,12 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     if (!file.parent.existsSync()) {
       await file.parent.create(recursive: true);
     }
-    await file.writeAsString(await _encodePassphraseEnvelope(document));
+    // Write-to-temp then rename: a crash mid-write can never truncate the
+    // keyfile — the rename swaps in the fully-written temp file or leaves
+    // the original untouched.
+    final temp = File('${file.path}.tmp');
+    await temp.writeAsString(await _encodePassphraseEnvelope(document));
+    await temp.rename(file.path);
   }
 
   Future<String> _encodePassphraseEnvelope(
