@@ -148,6 +148,30 @@ void main() {
       expect(atKey.metadata.appMetadata?.providerId, 'bare');
       expect(atKey.metadata.isEncrypted, true);
     });
+
+    test('threads the client\'s atKeysIo into the provider context', () async {
+      final keysIo = StubAtKeysIo();
+      when(() => mockAtClient.atKeysIo).thenReturn(keysIo);
+      final atKey = AtKey()..metadata = Metadata();
+
+      await CryptoRuntime(mockAtClient).encryptForPut(atKey, 'data');
+      expect(identical(legacyProvider.lastContext!.atKeysIo, keysIo), true);
+      expect(
+          identical(legacyProvider.lastContext!.atClient, mockAtClient), true);
+
+      await CryptoRuntime(mockAtClient).decryptForGet(atKey, 'ciphertext');
+      expect(identical(legacyProvider.lastContext!.atKeysIo, keysIo), true);
+    });
+
+    test('context.io is null when the client has no key source', () async {
+      // atKeysIo is left unstubbed; mocktail returns null for an unstubbed
+      // nullable getter.
+      final atKey = AtKey()..metadata = Metadata();
+
+      await CryptoRuntime(mockAtClient).encryptForPut(atKey, 'data');
+
+      expect(legacyProvider.lastContext!.atKeysIo, isNull);
+    });
   });
 }
 
@@ -156,6 +180,7 @@ class _RecordingProvider extends CryptoProvider {
   final String id;
   int encryptCalls = 0;
   int decryptCalls = 0;
+  CryptoContext? lastContext;
 
   _RecordingProvider(this.id);
 
@@ -163,6 +188,7 @@ class _RecordingProvider extends CryptoProvider {
   Future<String> encrypt(
       CryptoContext context, AtKey atKey, String value) async {
     encryptCalls++;
+    lastContext = context;
     atKey.metadata.appMetadata = AppMetadata(providerId: id);
     atKey.metadata.isEncrypted = true;
     return '$id encrypted $value';
@@ -172,6 +198,7 @@ class _RecordingProvider extends CryptoProvider {
   Future<String> decrypt(
       CryptoContext context, AtKey atKey, String value) async {
     decryptCalls++;
+    lastContext = context;
     return '$id decrypted $value';
   }
 }
