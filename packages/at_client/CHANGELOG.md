@@ -1,14 +1,4 @@
-## 3.13.0
-- refactor: migrate the local keystore to `at_persistence_secondary_server`
-  5.0.0 — the client is now commit-log-free. The client no longer maintains a
-  local commit log or runs commit-log compaction; sync tracks its progress
-  with a persisted pull cursor, and key-expiry processing is driven by the
-  keystore's `nextExpiresAt` / `peekNewlyAvailable` surface. Requires
-  `at_persistence_secondary_server ^5.0.0`.
-- deprecated: `AtClient.startCompactionJob` and `AtClient.stopCompactionJob`
-  are retained for source compatibility but are now no-ops (a commit-log-free
-  client has no commit log to compact); they will be removed in a future
-  major release.
+## 3.14.0
 - fix: `AtCollection` — resolve received (shared-in) items in the id-scoped
   read path. `Query.watch()` (delta path), `getOrNull` / `get(id, owner)` and
   `exists(id, owner)` missed items stored locally as
@@ -30,6 +20,36 @@
   crashed for a non-nullable item type).
 - fix: `AtCollection` reads no longer duplicate the preceding item when a key
   expires or is deleted between the scan and its per-key read.
+
+## 3.13.0
+- feat: add `AtClientPreference.networkTimeout` — when set on the preference used
+  to create an `AtClient`, it becomes the process-wide network-timeout default
+  (`AtNetworkTimeouts.defaultTimeout`, capped at 60s), bounding every atServer
+  connect / atDirectory lookup / operation so a dead network can't hang the SDK.
+  Supersedes the misnamed `outboundConnectionTimeout` (a socket idle time).
+  Requires `at_commons ^5.13.0` (#1923).
+- chore(deps): `at_lookup: ^3.6.0`, `at_auth: ^3.2.0` — the bounded socket
+  connects and the deadline-driven `validateAtServer` live in those versions;
+  with older ones resolved, `networkTimeout` would set a policy nothing reads.
+- refactor: migrate the local keystore to `at_persistence_secondary_server`
+  5.0.0 — the client is now commit-log-free. The client no longer maintains a
+  local commit log or runs commit-log compaction; sync tracks its progress
+  with a persisted pull cursor, and key-expiry processing is driven by the
+  keystore's `nextExpiresAt` / `peekNewlyAvailable` surface. Requires
+  `at_persistence_secondary_server ^5.0.0`.
+- deprecated: `AtClient.startCompactionJob` and `AtClient.stopCompactionJob`
+  are retained for source compatibility but are now no-ops (a commit-log-free
+  client has no commit log to compact); they will be removed in a future
+  major release.
+- deprecated: `FileTransferService` and `FileTransferObject` are now marked
+  `@Deprecated`. The SDK file-sharing API (`uploadFile` / `downloadFile` /
+  `shareFiles` / `reuploadFiles`) has moved to the app layer and will be
+  removed, along with the `archive` dependency, in the next major version
+  (#1113).
+- chore(deps): remove the unused `cron` dependency — it was only used by the
+  commit-log compaction that the `at_persistence_secondary_server` 5.0.0
+  migration removed, and nothing in the client imports it (#1378). `uuid` is
+  already on `^4.0.0`.
 
 ## 3.12.0
 

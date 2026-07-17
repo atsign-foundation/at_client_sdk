@@ -1,3 +1,5 @@
+@Deprecated('Will be removed from the SDK in a future major release; '
+    'file sharing has moved to the app layer')
 class FileTransferObject {
   final String transferId;
   final List<FileStatus> fileStatus;

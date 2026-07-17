@@ -688,8 +688,10 @@ class AtLookupImpl implements AtLookUp {
 
 class AtLookupSecureSocketFactory {
   Future<SecureSocket> createSocket(
-      String host, String port, SecureSocketConfig socketConfig) async {
-    return await SecureSocketUtil.createSecureSocket(host, port, socketConfig);
+      String host, String port, SecureSocketConfig socketConfig,
+      {Duration? timeout}) async {
+    return await SecureSocketUtil.createSecureSocket(host, port, socketConfig,
+        timeout: timeout);
   }
 }
 

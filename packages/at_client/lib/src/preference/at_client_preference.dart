@@ -48,6 +48,16 @@ class AtClientPreference {
   /// Idle time in milliseconds of connection to secondary server. Default to 10 minutes.
   int outboundConnectionTimeout = 600000;
 
+  /// The process-wide default network timeout: the maximum wall-clock the SDK
+  /// will spend reaching/using the atServer (connect + retries + waiting for a
+  /// response) before giving up. When set on the `AtClientPreference` used to
+  /// create an `AtClient`, it becomes `AtNetworkTimeouts.defaultTimeout` for the
+  /// whole process (capped at `AtNetworkTimeouts.maxAllowed`, 60s). When null,
+  /// the existing default (30s) applies. This supersedes the misleadingly-named
+  /// [outboundConnectionTimeout], which is a socket idle time, not an
+  /// operation/connect timeout, and does not bound onboarding/auth.
+  Duration? networkTimeout;
+
   /// The maximum size of the value that a secondary server can store.
   /// [BufferOverFlowException] is thrown when size of the value exceeds the [maxDataSize]
   int maxDataSize = 10230000;
