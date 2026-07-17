@@ -27,8 +27,16 @@ export 'src/enroll/models/enrollment_request_decision.dart';
 /// request from the requesting app, for approval or denial.
 export 'src/exception/at_auth_exceptions.dart';
 export 'src/keys/at_keys.dart';
-export 'src/keys/at_keys_io.dart';
-export 'src/keys/at_keys_io_impl.dart';
+// AtKeysMaterial is the API-level typed key material — the only type
+// AtKeys's API deals in. It owns its own JSON (de)serialization; the
+// document-level `keys[]` grouping/validation lives in
+// parseAtKeysDocument/encodeAtKeysDocument, also exported here.
+export 'src/keys/serialization/atkey_material.dart';
+export 'src/keys/serialization/assurance.dart';
+export 'src/keys/serialization/passphrase_envelope.dart';
+export 'src/keys/io/at_keys_io.dart';
+export 'src/keys/io/file_io.dart';
+export 'src/keys/io/memory_io.dart';
 
 /// Classes for registrar services
 export 'src/registrar/registrar.dart';
