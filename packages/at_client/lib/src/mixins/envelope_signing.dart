@@ -201,5 +201,4 @@ mixin EnvelopeSigning on ApkamSigning {
     }
     return jsonEncode(payload, toEncodable: toEncodable);
   }
-
 }
