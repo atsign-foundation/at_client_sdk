@@ -100,7 +100,7 @@ The file-partition/track detail and the `CryptoConfig`/`CryptoRuntime` mechanics
 
 ```
                  ┌──────────────────────── PQ primitives ───────────────────────┐
-  [#1993 done]→  P-1 at_chops 3.3.0 (published)    P-2 mldsa65 verify (fold into unpublished 3.4.0)
+  [#1993 done]→  P-1 at_chops 3.3.0 (published)    P-2 mldsa65 verify (SATISFIED on trunk; publish 3.4.x)
                      │                                   │
   [#1930 done]→  S-2 CryptoContext.keys (additive)       │
                  S-1 at_auth AtKeys/AtKeysIo extend-in-place ─→ S-3 LocalKeystore/.atKeys updatable
@@ -165,12 +165,13 @@ tamper→`authFailure` / info-aad-mismatch green; downstream construction sites 
 published 3.3.0 surface. Don't break the deprecated sync verify path.
 **coversD1:** D1-S S1 + D1-A.
 
-### P-2 — at_chops: wire `mldsa65` into the verification branch; publish a NEW minor · at_chops · M (≈1 PR)
+### P-2 — at_chops: wire `mldsa65` into the verification branch; publish with the 3.4.x slot · at_chops · M — **SATISFIED on trunk (2026-07-06); residual = the 3.4.x publish**
 **Goal:** the one missing ML-DSA verification branch (the enum member + algo classes already ship in 3.3.0).
-**Builds on:** — (independent root; parallel to P-1). ⚠️ The `_getVerificationAlgorithm` `mldsa65` branch
-**did NOT make the 3.3.0 publish** — trunk `at_chops` has no ML-DSA verify branch. The **unpublished 3.4.0**
-already on trunk (bumped by #2030, merged 2026-07-03) is the slot: **P-2 folds its `mldsa65` verify branch
-into that existing 3.4.0 before it publishes** — not a fresh new minor. (Decision 2026-07-06.)
+**Done:** the `_getVerificationAlgorithm` `mldsa65` branch **merged to trunk 2026-07-06** (issue #2050 /
+PR #2056), folded into the unpublished 3.4.x slot per the 2026-07-06 decision; #2039 (AES-GCM FFI) merged
+into the same slot. The residual is the **3.4.x publish itself** (3.4.1 as of PR #2047's barrel-export fix),
+which must land on pub.dev before `at_server` bumps its pin in SS-3 and before at_auth 3.3.0 publishes.
+**Builds on:** — (independent root; parallel to P-1).
 **Deliverables → [design.md](design.md)** (at_chops primitives, ML-DSA): add an `mldsa65` branch in
 `_getVerificationAlgorithm` returning `MlDsa65PureDartAlgo()` (no `DynamicLibrary` in `AtChopsImpl` — do
 **not** claim FFI-when-available); no new `SigningAlgoType` member, no new algo class; publish in the new
@@ -232,25 +233,29 @@ new config (there is no `CryptoRegistry`).
 `P-1`/`pqSeal` publish gate is **already satisfied** (at_chops 3.3.0, published 2026-06-23), leaving the SS-0
 baseline (PR #2037) as its prerequisite (see [section 10](#10-cross-cutting-publish-gates-critical-path-wavesparallelism-testing)).
 
-### S-1 — at_auth: extend `AtKeys` in place (additive PQ methods, deprecate legacy) + `AtKeysIo` runtime persistence (API only); publish 3.2.0 · at_auth · M
+### S-1 — at_auth: extend `AtKeys` in place (additive PQ methods, deprecate legacy) + `AtKeysIo` runtime persistence (API only); publish 3.3.0 · at_auth · M — **implemented (PR #2047, in review)**
 **Goal:** extend the existing `AtKeys` in place so it holds every key (per-enrollment AND per-APKAM) via
 additive PQ-safe accessors while the legacy key fields deprecate; interface-first.
 **Builds on:** at_auth `AtKeys`. Additive only; gates nothing in Wave 2.
 **Deliverables → [design.md](design.md)** (structural design: extend `AtKeys`/`AtKeysIo` in place): keep the
-`AtKeys` class hierarchy as-is and extend it **additively** with PQ-safe methods, **deprecating** the legacy
-key fields/methods (they stay for back-compat so call sites migrate over time); extend `AtKeysIo` with
-**runtime persistence** (`append()`, `save()`, …) — new methods ship with default impls so existing
-implementers don't break — so it stays the single contact point keeping runtime `AtKeys` objects and the
-persisted keyfile in-line. Concrete impls (`InMemoryAtKeysIo`, the keychain/file `AtKeysIo`) remain
-`AtKeysIo` implementations. (Supersedes the earlier `WritableAtKeys` holder, #2045 — ratified 2026-07-06,
-see [decisions.md](decisions.md).)
+`AtKeys` class hierarchy as-is and extend it **additively** with PQ-safe methods (`addKey`/`retireKey` over
+typed `AtKeysMaterial`; **retire, never remove** — forward-only status, 2026-07-17 ruling), **deprecating**
+the legacy key fields/methods (they stay for back-compat so call sites migrate over time); extend `AtKeysIo`
+with **runtime persistence** — the single whole-state **`flush()`** (supersedes the `append()`/`save()`
+working names, 2026-07-17 ruling), safety-checked via `AtKeysAssurance.validateMapUpdate`, atomic
+(temp + rename, `.bak` kept), with a throwing default impl so existing implementers compile unchanged — so
+it stays the single contact point keeping runtime `AtKeys` objects and the persisted keyfile in-line.
+Concrete impls (`InMemoryAtKeysIo`, the keychain/file `AtKeysIo`) remain `AtKeysIo` implementations.
+(Supersedes the earlier `WritableAtKeys` holder, #2045 — ratified 2026-07-06, see
+[decisions.md](decisions.md).)
 **Acceptance → [acceptance.md](acceptance.md):** existing onboard/auth suites green; the extended `AtKeys`
-PQ add→read→remove (legacy fields still readable via the deprecated accessors); `InMemoryAtKeysIo` round-trip
-(persistent round-trip proven once **S-3** wires the stores).
+PQ add→read→retire (material never removed; legacy fields still readable via the deprecated accessors);
+`InMemoryAtKeysIo` round-trip (persistent round-trip proven once **S-3** wires the stores); unknown
+`keyPartType`/`keyAlgorithmType` tokens round-trip unmodified.
 **Effort:** M.
-**Watch-outs:** ⚠️ **version** — pub.dev latest at_auth is **3.1.0**, in-tree is **3.1.1** (unshipped).
-Publish 3.1.1 first **or** fold the `AtKeys`/`AtKeysIo` extensions under the unshipped slot before cutting
-3.2.0 (Open decision #D).
+**Watch-outs:** ⚠️ **version** — resolved 2026-07-17: at_auth 3.1.1 published, then **3.2.0 was consumed by
+the validateAtServer network-timeout release**; S-1 ships as **3.3.0** (Open decision #D closed). Requires
+the at_chops 3.4.x publish first (hashing-algo barrel exports).
 **coversD1:** D1-S S2.
 
 ### S-2 — at_client: `CryptoContext.keys` additive field (interface-first only) · at_client · S (≈1 PR)
@@ -282,13 +287,17 @@ ephemeral stays in-memory; **migration test** on a v(N-1) `.atKeys`/store fixtur
 today, not SQLite — keep the test backend-agnostic; name any legacy box/table explicitly); a **keychain
 updatable round-trip on mobile/desktop**; functional onboard+add+read-next-run green.
 **Effort:** L.
-**Watch-outs:** file rewrite must re-wrap the self-enc key or it's unreadable next run; run the integration
-suite at every commit boundary (resource lifecycle). Does **not** gate the substrate.
+**Watch-outs:** file rewrite must re-wrap the self-enc key or it's unreadable next run — and note
+`flush`'s `validateMapUpdate` compares the legacy fields as ciphertext, so a self-enc-key re-wrap fails
+assurance as-built; S-3 needs an explicit re-wrap path. `LocalKeystoreAtKeysIo` is **not needed at this
+time** (2026-07-17 ruling, [decisions.md](decisions.md)) — decide its existence/routing here, and any store
+holding CK-class material must support eviction (B5a), not inherit `flush`'s never-lose contract. Run the
+integration suite at every commit boundary (resource lifecycle). Does **not** gate the substrate.
 **coversD1:** D1-S S2/S3.
 
 ### S-5 — at_auth 4.0.0: WASM barrel split · at_auth · L  *(parallel, off the GA critical path)*
 **Goal:** make the at_auth core WASM-safe (the one breaking major in the program).
-**Builds on:** S-3 (so the extended `AtKeys`/`AtKeysIo` + updatable stores bake on 3.2.0 before the breaking cut).
+**Builds on:** S-3 (so the extended `AtKeys`/`AtKeysIo` + updatable stores bake on 3.3.0 before the breaking cut).
 **Deliverables → [design.md](design.md)** (WASM barrel): move `FileAtKeysIo` + the `dart:io` socket probe
 to a new `at_auth_io.dart` barrel; drop the `atKeysIo ??= FileAtKeysIo()` default (require injection);
 registrar on `package:http`; publish 4.0.0.
@@ -331,6 +340,9 @@ detected (re-retrofit or clear error), not a silent auth against the aged-out en
 **Effort:** L.
 **Watch-outs:** the stale-backup case couples to RF-SRV's expiry cap — a backup taken before a retrofit
 carries an enrollmentId the server has since capped; restore must reconcile against the live enrollment state.
+Restoring an older backup over a newer keyfile is **rejected by `flush`'s `validateMapUpdate`** (materials
+missing / statuses moving backward) — the right default, so KF-1's restore flow needs an explicit override
+path, and stale-backup detection is mandatory, not optional.
 **coversD1:** D1-S keyfile-at-rest + backup/restore (new scope).
 
 **NoPorts uptake (pointer).** NoPorts is the roadmap's finish line, yet this plan carries no NoPorts work
@@ -767,7 +779,7 @@ out of scope here** — see [roadmap.md](roadmap.md) for the D2 trajectory.
 
 ### (a) Publish gates
 - `at_chops` (P-1, P-2) and `at_commons` (SS-1a) publish **before** `at_server`/consumers bump pins.
-- `at_auth` is split **additive-3.2.0** (S-1) then **breaking-4.0.0** (S-5) so the `AtKeys`/`AtKeysIo`
+- `at_auth` is split **additive-3.3.0** (S-1; 3.2.0 was consumed by the network-timeout release) then **breaking-4.0.0** (S-5) so the `AtKeys`/`AtKeysIo`
   extend-in-place bakes before the barrel cut.
 - `at_client` stays **minor 3.14.x** through D1 GA; the v4 flip (R-2) is the final gated cutover.
 
@@ -779,8 +791,8 @@ out of scope here** — see [roadmap.md](roadmap.md) for the D2 trajectory.
 | 1  | `at_chops`          | minor `3.2.1 → 3.3.0` **(published 2026-06-23, done)** | P-1    | stateless functional core + HPKE `pqSeal`/`pqOpen`; `@Deprecated AtChopsImpl` shim |
 | 2  | `at_chops`          | minor `3.3.0 → 3.4.0` **(bumped on trunk via #2030, unpublished)** | P-2 | #2030 (`at_chops_ffi` barrel + `AtPqc` + `AtSignatureAlgorithm`) landed the 3.4.0 bump on trunk 2026-07-03 (+ #2046), assembled-but-unpublished; **P-2 folds its `mldsa65` verify branch into this same 3.4.0 before publish**; #2039 (AES-GCM FFI) still draft. Minor under the one-time semver exemption ([decisions.md](decisions.md) 2026-07-03) |
 | 3  | `at_commons`        | minor `5.11.0 → 5.12.0` **(published 2026-07-04, done)** | SS-1a | `EnrollParams.metadata` + `signingAlgo`; flattened `listns`; pkam `mldsa65` literal |
-| 4  | `at_auth`           | minor `3.1.1 → 3.2.0`         | S-1        | additive: extend `AtKeys` in place (deprecate legacy); `AtKeysIo` runtime persistence; `InMemoryAtKeysIo` |
-| 5  | `at_auth`           | **major `3.2.0 → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
+| 4  | `at_auth`           | minor `3.2.0 → 3.3.0`         | S-1        | additive: extend `AtKeys` in place (deprecate legacy); `AtKeysIo` runtime persistence; `InMemoryAtKeysIo` |
+| 5  | `at_auth`           | **major `3.3.0 → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
 | 6  | `at_client`         | minor `3.13.0 → 3.14.0`       | S-2…B-2    | `at_auth ^4.0.0`; `CryptoContext.keys`; nskey data path; rotation. **= D1 GA** ⚠️ pub.dev latest is **3.12.0**, in-tree **3.13.0** (unshipped) — publish the in-progress slot first **or** fold; decide at execution against pub.dev |
 | 7  | `at_client`         | **major `3.14.0 → 4.0.0`**    | R-2        | flip `disallowLegacyEncryption` default → true; selfEncryptionKey stop-existing; dead-code removal |
 | 8  | `at_onboarding_cli` | minor `1.16.0 → 1.17.0`       | S-6        | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; explicit injection ⚠️ pub.dev latest is **1.15.0**, in-tree **1.16.0** (unshipped) — publish or fold; decide at execution against pub.dev |
