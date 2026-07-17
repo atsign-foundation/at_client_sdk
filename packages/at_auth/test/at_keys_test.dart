@@ -168,6 +168,20 @@ void main() {
       expect(first, isNot(differentAtsign));
     });
 
+    test('equality compares metadata structurally, not by identity', () {
+      // Two jsonDecode calls produce distinct nested map instances.
+      final first = AtKeys()
+        ..metadata = jsonDecode('{"nested": {"a": 1, "list": [1, 2]}}');
+      final same = AtKeys()
+        ..metadata = jsonDecode('{"nested": {"a": 1, "list": [1, 2]}}');
+      final different = AtKeys()
+        ..metadata = jsonDecode('{"nested": {"a": 2, "list": [1, 2]}}');
+
+      expect(first, same);
+      expect(first.hashCode, same.hashCode);
+      expect(first, isNot(different));
+    });
+
     test('equality ignores the order materials were added in', () {
       final pair = rsaKeyPair('pair');
       final forward = AtKeys(
@@ -186,19 +200,17 @@ void main() {
     test('getKey disambiguates materials of the same keyId by type', () {
       final pair = rsaKeyPair('shared-pair');
       final atKeys = AtKeys(keysList: pair);
-      final publicMaterial = pair.firstWhere((m) =>
-          m.keyPartType == CryptographicKeyType.classicalPublicEncryption);
-      final privateMaterial = pair.firstWhere((m) =>
-          m.keyPartType == CryptographicKeyType.classicalPrivateDecryption);
+      final publicMaterial = pair.firstWhere(
+          (m) => m.keyPartType == CryptographicKeyType.publicEncryption);
+      final privateMaterial = pair.firstWhere(
+          (m) => m.keyPartType == CryptographicKeyType.privateDecryption);
 
       expect(
-        atKeys.getKey(
-            'shared-pair', CryptographicKeyType.classicalPublicEncryption),
+        atKeys.getKey('shared-pair', CryptographicKeyType.publicEncryption),
         same(publicMaterial),
       );
       expect(
-        atKeys.getKey(
-            'shared-pair', CryptographicKeyType.classicalPrivateDecryption),
+        atKeys.getKey('shared-pair', CryptographicKeyType.privateDecryption),
         same(privateMaterial),
       );
     });
@@ -207,8 +219,7 @@ void main() {
       final atKeys = AtKeys(keysList: [symmetricKey('shared-id')]);
 
       expect(
-        atKeys.getKey(
-            'shared-id', CryptographicKeyType.classicalPrivateDecryption),
+        atKeys.getKey('shared-id', CryptographicKeyType.privateDecryption),
         isNull,
       );
     });
@@ -268,6 +279,31 @@ void main() {
       expect(enrolled.map((m) => m.keyId).toSet(), {'enrolled-pair'});
       expect(atKeys.keysForEnrollment('unknown'), isEmpty);
     });
+
+    test('unknown keyPartType/keyAlgorithmType tokens round-trip unmodified',
+        () {
+      // keyPartType and keyAlgorithmType are open Strings: a reader must
+      // hold and re-emit tokens it does not recognise, so a keyfile written
+      // by a newer client survives a read-modify-flush by an older one.
+      final futuristic = AtKeysMaterial(
+        keyId: 'from-the-future',
+        keyPartType: 'somethingNotInventedYet',
+        keyAlgorithmType: 'slhdsa128s',
+        bytes: AtBytes.fromString('ZnV0dXJl'),
+        createdAt: DateTime.utc(2024, 1, 1),
+      );
+      final atKeys = AtKeys(
+        atsign: '@alice'.toAtsign(),
+        keysList: [futuristic, symmetricKey('familiar')],
+      );
+
+      final reparsed = AtKeys.fromJson(atKeys.toJson());
+      expect(
+        reparsed.getKey('from-the-future', 'somethingNotInventedYet'),
+        futuristic,
+      );
+      expect(reparsed, atKeys);
+    });
   });
 
   group('AtKeys retireKey', () {
@@ -281,7 +317,7 @@ void main() {
       expect(retired.map((m) => m.status), everyElement(KeyPartStatus.retired));
       expect(
         atKeys
-            .getKey('pair', CryptographicKeyType.classicalPublicEncryption)!
+            .getKey('pair', CryptographicKeyType.publicEncryption)!
             .bytes
             .toString(),
         rsaKeyPair('pair').first.bytes.toString(),

@@ -35,8 +35,19 @@ abstract class WrittenAtKeysIo extends AtKeysIo with KeyIOMixin {
   /// target already exists, validate that everything in it is preserved in
   /// [atKeys] (see [AtKeysAssurance.validateMapUpdate]), then rewrite. When
   /// no target exists, flush creates it — there is nothing to lose.
+  ///
+  /// The never-lose contract applies to stores of bootstrap key material
+  /// (the `.atKeys` file, keychain). A store holding rotating or evictable
+  /// material defines its own retention policy — deletion there is a
+  /// feature (forward secrecy), not data loss.
+  ///
+  /// The default implementation throws: pre-existing [WrittenAtKeysIo]
+  /// implementations compile unchanged but must override [flush] to
+  /// support runtime persistence.
   FutureOr<void> flush(Atsign atsign, AtKeys atKeys) {
-    throw UnimplementedError('new method for v4 WrittenAtKeysIo');
+    throw UnimplementedError(
+        '$runtimeType does not implement flush(); override it to support '
+        'runtime persistence');
   }
 }
 

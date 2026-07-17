@@ -156,6 +156,10 @@ Persistence has two verbs:
   file upgrades it in place to a typed-keys document. If the file does
   not exist, `flush` creates it.
 
+Both verbs write atomically (write-to-temp + rename), so a crash mid-write
+can never truncate the keyfile, and a `flush` over an existing file first
+preserves the previous state as `<file>.bak` alongside it.
+
 ## Where to go next
 
 | If you're building…            | Use                                                                                   |

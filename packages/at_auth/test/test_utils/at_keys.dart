@@ -26,7 +26,7 @@ final _defaultCreatedAt = DateTime.utc(2024, 1, 1);
 AtKeysMaterial symmetricKey(
   String keyId, {
   String value = 'c2VjcmV0',
-  KeyAlgorithmType algorithm = KeyAlgorithmType.aes,
+  String algorithm = KeyAlgorithmType.aes256,
   List<String> operations = const [],
   String? enrollmentId,
   DateTime? createdAt,
@@ -34,7 +34,7 @@ AtKeysMaterial symmetricKey(
   return AtKeysMaterial(
     keyId: keyId,
     enrollmentId: enrollmentId,
-    keyPartType: CryptographicKeyType.symmetricDataEncryption,
+    keyPartType: CryptographicKeyType.symmetricEncryption,
     keyAlgorithmType: algorithm,
     bytes: AtBytes.fromString(value),
     operations: operations,
@@ -56,16 +56,16 @@ List<AtKeysMaterial> rsaKeyPair(
     AtKeysMaterial(
       keyId: keyId,
       enrollmentId: enrollmentId,
-      keyPartType: CryptographicKeyType.classicalPublicEncryption,
-      keyAlgorithmType: KeyAlgorithmType.rsa,
+      keyPartType: CryptographicKeyType.publicEncryption,
+      keyAlgorithmType: KeyAlgorithmType.rsa2048,
       bytes: AtBytes.fromString(publicValue),
       createdAt: at,
     ),
     AtKeysMaterial(
       keyId: keyId,
       enrollmentId: enrollmentId,
-      keyPartType: CryptographicKeyType.classicalPrivateDecryption,
-      keyAlgorithmType: KeyAlgorithmType.rsa,
+      keyPartType: CryptographicKeyType.privateDecryption,
+      keyAlgorithmType: KeyAlgorithmType.rsa2048,
       bytes: AtBytes.fromString(privateValue),
       createdAt: at,
     ),

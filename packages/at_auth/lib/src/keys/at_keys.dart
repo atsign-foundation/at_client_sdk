@@ -11,7 +11,7 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 /// at-rest concern (the passphrase envelope, self-encryption of the legacy
 /// fields) lives in `FileAtKeysIo`, not here. Typed key material
 /// ([AtKeysMaterial]) is added with [addKey], looked up by
-/// `(keyId, CryptographicKeyType)` via [getKey] / [keysForKeyId] /
+/// `(keyId, keyPartType)` via [getKey] / [keysForKeyId] /
 /// [keysForEnrollment], and retired (never removed) with [retireKey].
 class AtKeys {
   static const supportedVersion = 1;
@@ -19,8 +19,10 @@ class AtKeys {
 
   //todo: make non-nullable and final in v4
   Atsign? atsign;
-  final Map<String, Map<CryptographicKeyType, AtKeysMaterial>>
-      _materialsByKeyId = {};
+
+  // Inner map keyed by keyPartType (see CryptographicKeyType for the known
+  // tokens; unknown tokens are held too).
+  final Map<String, Map<String, AtKeysMaterial>> _materialsByKeyId = {};
 
   Iterable<AtKeysMaterial> get keys =>
       _materialsByKeyId.values.expand((byType) => byType.values);
@@ -34,7 +36,9 @@ class AtKeys {
     }
   }
 
-  AtKeysMaterial? getKey(String keyId, CryptographicKeyType type) =>
+  /// Looks up one material by its `(keyId, keyPartType)` — [type] is a
+  /// [CryptographicKeyType] token.
+  AtKeysMaterial? getKey(String keyId, String type) =>
       _materialsByKeyId[keyId]?[type];
 
   /// Returns every material sharing [keyId] — e.g. the public+private halves
@@ -291,24 +295,51 @@ class AtKeys {
   }
 }
 
+// metadata holds JSON-derived values, so nested maps/lists compare by
+// identity under ==; compare (and hash) them structurally instead.
 bool _mapEquals(Map<String, dynamic> left, Map<String, dynamic> right) {
-  if (left.length != right.length) {
-    return false;
-  }
-  for (final entry in left.entries) {
-    if (!right.containsKey(entry.key) || right[entry.key] != entry.value) {
-      return false;
-    }
-  }
-  return true;
+  return _deepEquals(left, right);
 }
 
-int _metadataHash(Map<String, dynamic> metadata) {
-  final entries = metadata.entries.toList()
-    ..sort((a, b) => a.key.compareTo(b.key));
-  return Object.hashAll(
-    entries.map((entry) => Object.hash(entry.key, entry.value)),
-  );
+bool _deepEquals(Object? left, Object? right) {
+  if (left is Map && right is Map) {
+    if (left.length != right.length) {
+      return false;
+    }
+    for (final key in left.keys) {
+      if (!right.containsKey(key) || !_deepEquals(left[key], right[key])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (left is List && right is List) {
+    if (left.length != right.length) {
+      return false;
+    }
+    for (var i = 0; i < left.length; i++) {
+      if (!_deepEquals(left[i], right[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return left == right;
+}
+
+int _metadataHash(Map<String, dynamic> metadata) => _deepHash(metadata);
+
+int _deepHash(Object? value) {
+  if (value is Map) {
+    final entries = value.entries.toList()
+      ..sort((a, b) => a.key.toString().compareTo(b.key.toString()));
+    return Object.hashAll(entries.map(
+        (entry) => Object.hash(entry.key.toString(), _deepHash(entry.value))));
+  }
+  if (value is List) {
+    return Object.hashAll(value.map(_deepHash));
+  }
+  return value.hashCode;
 }
 
 // Splitting these implementations to improve understanding

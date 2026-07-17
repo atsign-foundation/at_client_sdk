@@ -111,7 +111,7 @@ class AtKeysAssurance {
   /// `CryptographicKeyType` across all of its materials. (Duplicate `keyId`s
   /// across document entries are rejected earlier, by [parseAtKeysDocument].)
   void validateKeyMaterials(List<AtKeysMaterial> materials) {
-    final typesByEnrollment = <String, Set<CryptographicKeyType>>{};
+    final typesByEnrollment = <String, Set<String>>{};
     for (final material in materials) {
       final enrollmentId = material.enrollmentId;
       if (enrollmentId == null) {
@@ -120,7 +120,7 @@ class AtKeysAssurance {
       final types = typesByEnrollment.putIfAbsent(enrollmentId, () => {});
       if (!types.add(material.keyPartType)) {
         throw AtKeysEnrollmentException(
-            'Enrollment "$enrollmentId" has more than one ${material.keyPartType.name} key material');
+            'Enrollment "$enrollmentId" has more than one ${material.keyPartType} key material');
       }
     }
   }
@@ -141,7 +141,7 @@ class AtKeysAssurance {
       if (material.keyId == candidate.keyId) {
         if (material.keyPartType == candidate.keyPartType) {
           throw ArgumentError.value(candidate.keyId, 'material',
-              'AtKeys already contains a ${candidate.keyPartType.name} material for this keyId');
+              'AtKeys already contains a ${candidate.keyPartType} material for this keyId');
         }
         if (material.enrollmentId != candidate.enrollmentId) {
           throw ArgumentError.value(candidate.keyId, 'material',
@@ -151,7 +151,7 @@ class AtKeysAssurance {
           material.enrollmentId == candidate.enrollmentId &&
           material.keyPartType == candidate.keyPartType) {
         throw ArgumentError.value(candidate.enrollmentId, 'material',
-            'Enrollment "${candidate.enrollmentId}" already has a ${candidate.keyPartType.name} key material');
+            'Enrollment "${candidate.enrollmentId}" already has a ${candidate.keyPartType} key material');
       }
     }
   }
@@ -213,7 +213,7 @@ class AtKeysAssurance {
     };
 
     for (final material in existing) {
-      final path = 'map.keys.${material.keyId}.${material.keyPartType.name}';
+      final path = 'map.keys.${material.keyId}.${material.keyPartType}';
       final counterpart =
           candidateByPart[(material.keyId, material.keyPartType)];
       if (counterpart == null) {

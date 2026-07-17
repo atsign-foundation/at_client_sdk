@@ -2,42 +2,79 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_commons/at_commons.dart';
 
-/// The algorithm family used by a key material (independent of its
-/// cryptographic role — see [CryptographicKeyType]).
-enum KeyAlgorithmType {
-  aes,
-  des,
-  rsa,
-  ecc,
-  mlKem,
-  mlDsa,
-  slhDsa,
-  falcon,
-  userDefined
+/// Known values for [AtKeysMaterial.keyAlgorithmType] — the algorithm family
+/// used by a key material, independent of its cryptographic role (see
+/// [CryptographicKeyType]).
+///
+/// The field is an open `String`, not an enum: a reader must accept — and
+/// round-trip unmodified on flush — values it does not recognise, so a
+/// keyfile written by a newer client stays readable and losslessly
+/// flushable by an older one. Tokens carry their parameter set and reuse
+/// the literals the Atsign Protocol already uses elsewhere (the
+/// pkam/enrollment `signingAlgo` values `rsa2048`/`mldsa65`/
+/// `ecc_secp256r1`). Values are case-sensitive.
+abstract final class KeyAlgorithmType {
+  static const String aes256 = 'aes256';
+  static const String rsa2048 = 'rsa2048';
+  static const String eccSecp256r1 = 'ecc_secp256r1';
+  static const String ed25519 = 'ed25519';
+  static const String x25519 = 'x25519';
+  static const String mlKem768 = 'mlkem768';
+  static const String mlDsa65 = 'mldsa65';
+
+  /// X-Wing hybrid KEM (ML-KEM-768 + X25519) — the KEM used for APKAM key
+  /// packages, nskey keypairs and `pqpublickey`.
+  static const String xWing = 'xwing';
+
+  /// The tokens this version knows about. For warn-level tooling only —
+  /// never reject a value for not being in this set.
+  static const Set<String> known = {
+    aes256,
+    rsa2048,
+    eccSecp256r1,
+    ed25519,
+    x25519,
+    mlKem768,
+    mlDsa65,
+    xWing,
+  };
 }
 
-/// The cryptographic role a key material plays (independent of the algorithm
-/// family — see [KeyAlgorithmType]).
-enum CryptographicKeyType {
-  symmetricDataEncryption,
-  symmetricMessageAuthentication,
-  session,
-  keyWrapping,
-  masterDerivation,
-  classicalPublicEncryption,
-  classicalPrivateDecryption,
-  classicalPublicVerification,
-  classicalPrivateSigning,
-  classicalKeyAgreement,
-  postQuantumPublicVerification,
-  postQuantumPrivateSigning,
-  postQuantumEncapsulation,
-  postQuantumDecapsulation,
-  statefulHashPrivateSigning,
-  statefulHashPublicVerification,
-  hybridPublic,
-  hybridPrivate,
-  userDefined,
+/// Known values for [AtKeysMaterial.keyPartType] — the mechanical role a key
+/// material plays, independent of the algorithm family (see
+/// [KeyAlgorithmType]).
+///
+/// An open `String` with the same forward-compatibility contract as
+/// [KeyAlgorithmType]. Roles describe what the mathematics does; whether an
+/// algorithm is classical, post-quantum or hybrid is a property of the
+/// [KeyAlgorithmType] token, and deployment purpose belongs in the keyId
+/// and [AtKeysMaterial.operations].
+abstract final class CryptographicKeyType {
+  static const String symmetricEncryption = 'symmetricEncryption';
+  static const String symmetricAuthentication = 'symmetricAuthentication';
+  static const String publicEncryption = 'publicEncryption';
+  static const String privateDecryption = 'privateDecryption';
+  static const String publicVerification = 'publicVerification';
+  static const String privateSigning = 'privateSigning';
+  static const String publicEncapsulation = 'publicEncapsulation';
+  static const String privateDecapsulation = 'privateDecapsulation';
+  static const String publicKeyAgreement = 'publicKeyAgreement';
+  static const String privateKeyAgreement = 'privateKeyAgreement';
+
+  /// The tokens this version knows about. For warn-level tooling only —
+  /// never reject a value for not being in this set.
+  static const Set<String> known = {
+    symmetricEncryption,
+    symmetricAuthentication,
+    publicEncryption,
+    privateDecryption,
+    publicVerification,
+    privateSigning,
+    publicEncapsulation,
+    privateDecapsulation,
+    publicKeyAgreement,
+    privateKeyAgreement,
+  };
 }
 
 enum KeyPartStatus { active, retired, dead }
@@ -51,8 +88,15 @@ enum KeyPartStatus { active, retired, dead }
 final class AtKeysMaterial {
   final String keyId;
   final String? enrollmentId;
-  final CryptographicKeyType keyPartType;
-  final KeyAlgorithmType keyAlgorithmType;
+
+  /// The material's cryptographic role — see [CryptographicKeyType] for the
+  /// known tokens. Unknown values are preserved, never rejected.
+  final String keyPartType;
+
+  /// The material's algorithm family — see [KeyAlgorithmType] for the known
+  /// tokens. Unknown values are preserved, never rejected.
+  final String keyAlgorithmType;
+
   final AtBytes bytes;
   final List<String> operations;
   final DateTime createdAt;
@@ -78,10 +122,10 @@ final class AtKeysMaterial {
     final material = AtKeysMaterial(
       keyId: keyId,
       enrollmentId: enrollmentId,
-      keyPartType: assurance.expectEnum(
-          json['keyPartType'], CryptographicKeyType.values, 'keyPartType'),
-      keyAlgorithmType: assurance.expectEnum(json['keyAlgorithmType'],
-          KeyAlgorithmType.values, 'keyAlgorithmType'),
+      keyPartType:
+          assurance.expectNonEmptyString(json['keyPartType'], 'keyPartType'),
+      keyAlgorithmType: assurance.expectNonEmptyString(
+          json['keyAlgorithmType'], 'keyAlgorithmType'),
       bytes: assurance.expectBytes(json['bytes'], 'bytes'),
       operations:
           assurance.optionalStringList(json['operations'], 'operations'),
@@ -108,8 +152,8 @@ final class AtKeysMaterial {
 
   Map<String, dynamic> toJson() {
     return {
-      'keyPartType': keyPartType.name,
-      'keyAlgorithmType': keyAlgorithmType.name,
+      'keyPartType': keyPartType,
+      'keyAlgorithmType': keyAlgorithmType,
       if (operations.isNotEmpty) 'operations': operations,
       'createdAt': createdAt.toIso8601String(),
       'status': status.name,
@@ -166,7 +210,7 @@ List<AtKeysMaterial> parseAtKeysDocument(List<dynamic> keysJson) {
     final keyPartsJson =
         assurance.expectList(entryJson['keyParts'], '$fieldPrefix.keyParts');
 
-    final seenKeyPartTypes = <CryptographicKeyType>{};
+    final seenKeyPartTypes = <String>{};
     for (final part in keyPartsJson.asMap().entries) {
       final partJson =
           assurance.expectMap(part.value, '$fieldPrefix.keyParts[${part.key}]');
@@ -177,7 +221,7 @@ List<AtKeysMaterial> parseAtKeysDocument(List<dynamic> keysJson) {
       );
       if (!seenKeyPartTypes.add(material.keyPartType)) {
         throw AtKeysValidationException(
-            'Duplicate keyPartType "${material.keyPartType.name}" for keyId "$keyId"');
+            'Duplicate keyPartType "${material.keyPartType}" for keyId "$keyId"');
       }
       materials.add(material);
     }
@@ -205,7 +249,7 @@ List<Map<String, dynamic>> encodeAtKeysDocument(
       if (group
           .any((existing) => existing.keyPartType == material.keyPartType)) {
         throw AtKeysValidationException(
-            'Duplicate keyPartType "${material.keyPartType.name}" for keyId "${material.keyId}"');
+            'Duplicate keyPartType "${material.keyPartType}" for keyId "${material.keyId}"');
       }
     }
     group.add(material);

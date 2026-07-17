@@ -283,8 +283,8 @@ final _createdAt = DateTime.utc(2024, 1, 1);
 AtKeysMaterial _symmetricMaterial({String bytes = 'dmFsdWU='}) {
   return AtKeysMaterial(
     keyId: 'symmetric',
-    keyPartType: CryptographicKeyType.symmetricDataEncryption,
-    keyAlgorithmType: KeyAlgorithmType.aes,
+    keyPartType: CryptographicKeyType.symmetricEncryption,
+    keyAlgorithmType: KeyAlgorithmType.aes256,
     bytes: AtBytes.fromString(bytes),
     createdAt: _createdAt,
   );
@@ -294,15 +294,15 @@ List<AtKeysMaterial> _rsaPairMaterials() {
   return [
     AtKeysMaterial(
       keyId: 'pair',
-      keyPartType: CryptographicKeyType.classicalPublicEncryption,
-      keyAlgorithmType: KeyAlgorithmType.rsa,
+      keyPartType: CryptographicKeyType.publicEncryption,
+      keyAlgorithmType: KeyAlgorithmType.rsa2048,
       bytes: AtBytes.fromString('cHVibGlj'),
       createdAt: _createdAt,
     ),
     AtKeysMaterial(
       keyId: 'pair',
-      keyPartType: CryptographicKeyType.classicalPrivateDecryption,
-      keyAlgorithmType: KeyAlgorithmType.rsa,
+      keyPartType: CryptographicKeyType.privateDecryption,
+      keyAlgorithmType: KeyAlgorithmType.rsa2048,
       bytes: AtBytes.fromString('cHJpdmF0ZQ=='),
       createdAt: _createdAt,
     ),
@@ -312,8 +312,8 @@ List<AtKeysMaterial> _rsaPairMaterials() {
 AtKeysMaterial _wrapperMaterial() {
   return AtKeysMaterial(
     keyId: 'wrapper',
-    keyPartType: CryptographicKeyType.keyWrapping,
-    keyAlgorithmType: KeyAlgorithmType.aes,
+    keyPartType: CryptographicKeyType.symmetricEncryption,
+    keyAlgorithmType: KeyAlgorithmType.aes256,
     bytes: AtBytes.fromString('d3JhcHBlcg=='),
     createdAt: _createdAt,
   );
@@ -327,8 +327,8 @@ AtKeysMaterial _enrollMaterial({
   return AtKeysMaterial(
     keyId: keyId,
     enrollmentId: enrollmentId,
-    keyPartType: CryptographicKeyType.classicalPrivateDecryption,
-    keyAlgorithmType: KeyAlgorithmType.rsa,
+    keyPartType: CryptographicKeyType.privateDecryption,
+    keyAlgorithmType: KeyAlgorithmType.rsa2048,
     operations: operations,
     bytes: AtBytes.fromString('c2VjcmV0'),
     createdAt: _createdAt,
@@ -374,8 +374,8 @@ Map<String, dynamic> _recordJson({String keyId = 'symmetric'}) {
     'keyId': keyId,
     'keyParts': [
       {
-        'keyPartType': CryptographicKeyType.symmetricDataEncryption.name,
-        'keyAlgorithmType': KeyAlgorithmType.aes.name,
+        'keyPartType': CryptographicKeyType.symmetricEncryption,
+        'keyAlgorithmType': KeyAlgorithmType.aes256,
         'createdAt': _createdAt.toIso8601String(),
         'status': KeyPartStatus.active.name,
         'bytes': 'dmFsdWU=',
