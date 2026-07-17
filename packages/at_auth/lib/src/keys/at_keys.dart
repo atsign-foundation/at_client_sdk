@@ -11,7 +11,7 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 /// at-rest concern (the passphrase envelope, self-encryption of the legacy
 /// fields) lives in `FileAtKeysIo`, not here. Typed key material
 /// ([AtKeysMaterial]) is added with [addKey], looked up by
-/// `(keyId, CryptographicKeyType)` via [getKey] / [keysForKeyId] /
+/// `(keyId, keyPartType)` via [getKey] / [keysForKeyId] /
 /// [keysForEnrollment], and retired (never removed) with [retireKey].
 class AtKeys {
   static const supportedVersion = 1;
@@ -19,8 +19,10 @@ class AtKeys {
 
   //todo: make non-nullable and final in v4
   Atsign? atsign;
-  final Map<String, Map<CryptographicKeyType, AtKeysMaterial>>
-      _materialsByKeyId = {};
+
+  // Inner map keyed by keyPartType (see CryptographicKeyType for the known
+  // tokens; unknown tokens are held too).
+  final Map<String, Map<String, AtKeysMaterial>> _materialsByKeyId = {};
 
   Iterable<AtKeysMaterial> get keys =>
       _materialsByKeyId.values.expand((byType) => byType.values);
@@ -34,7 +36,9 @@ class AtKeys {
     }
   }
 
-  AtKeysMaterial? getKey(String keyId, CryptographicKeyType type) =>
+  /// Looks up one material by its `(keyId, keyPartType)` — [type] is a
+  /// [CryptographicKeyType] token.
+  AtKeysMaterial? getKey(String keyId, String type) =>
       _materialsByKeyId[keyId]?[type];
 
   /// Returns every material sharing [keyId] — e.g. the public+private halves
