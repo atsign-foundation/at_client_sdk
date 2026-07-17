@@ -5,9 +5,22 @@
 - feat: `AuthService.onboard` / `authenticate` accept an optional `timeout` that
   bounds the whole onboarding/auth attempt (sets `RetryOptions.overallTimeout`;
   otherwise the process-wide `AtNetworkTimeouts` default applies). Requires
-  `at_auth ^3.2.0` (#1923).
+  `at_auth ^3.2.0` (#1909).
 - fix: `FlutterEnrollmentService.enroll` no longer leaks the `AtLookupImpl`
   connection when the enrollment submit fails — it now closes in a `finally`.
+- fix: `CramDialog` and `PkamDialog` no longer hang forever when
+  onboarding/authentication throws (e.g. the atServer is unreachable). Both now
+  handle the error path — surface a user-friendly message and pop the dialog —
+  so `.show()` always completes. On an `AtTimeoutException` the onboarding
+  dialog explains the atSign may still be provisioning rather than reporting a
+  hard failure; `ApkamActivationDialog` likewise catches enrollment errors and
+  distinguishes a timeout from a failure instead of leaking an unhandled
+  exception (#1905, #1909).
+- fix: `CramDialog` / `PkamDialog` now start onboarding/authentication once in
+  `initState` instead of from `build`, so a widget rebuild during the wait can
+  no longer spawn a second attempt; and their default loading view surfaces live
+  `progressStream` messages instead of static text, so a multi-minute
+  provisioning wait shows real progress.
 
 ## 1.1.3
 

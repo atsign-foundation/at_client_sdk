@@ -1,6 +1,7 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/src/services/auth_service.dart';
 import 'package:at_client_flutter/src/widgets/shared/loading.dart';
+import 'package:at_commons/at_commons.dart' show AtTimeoutException;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:flutter/material.dart';
@@ -15,16 +16,18 @@ import 'package:flutter/material.dart';
 ///
 /// Optional Parameters:
 /// - [title]: A title string for the dialog (default: "Onboarding Atsign via cram").
-/// - [description]: A description string displayed while onboarding is in progress (default: "Authenticating, please wait...").
+/// - [description]: A description shown while onboarding is in progress, until the
+///   first progress event arrives; thereafter the live progress message is shown
+///   (default: "Authenticating, please wait...").
 /// - [progressBuilder]: An optional builder function to customize the display of progress events.
 ///   It takes a `ProgressEvent` and returns a `Widget`, allowing for tailored UI updates during the onboarding process.
-///   Otherwise, by default it will pop the dialog with the progress event.
+///   When supplied it takes over rendering entirely.
 /// - [onOnboardingComplete]: An optional callback function that is invoked when the onboarding process completes successfully.
 ///
 /// Returns:
 /// - An `AtOnboardingResponse` upon successful onboarding, or null if the process fails or is cancelled.
-class CramDialog extends StatelessWidget {
-  CramDialog({
+class CramDialog extends StatefulWidget {
+  const CramDialog({
     super.key,
     required this.request,
     required this.cramKey,
@@ -36,12 +39,10 @@ class CramDialog extends StatelessWidget {
 
   final AtOnboardingRequest request;
   final String cramKey;
-  final AuthService _authService = AuthService();
   final Widget Function(ProgressEvent)? progressBuilder;
   final void Function(AtOnboardingRequest)? onOnboardingComplete;
   final String? title;
   final String? description;
-  final AtSignLogger _logger = AtSignLogger('CramDialog');
 
   static Future<AtOnboardingResponse?> show(
     BuildContext context, {
@@ -66,35 +67,74 @@ class CramDialog extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    String secret = _parseCramKey(cramKey);
-    _authService.onboard(request, secret).then((response) {
-      if (onOnboardingComplete != null) {
-        onOnboardingComplete!(request);
+  State<CramDialog> createState() => _CramDialogState();
+}
+
+class _CramDialogState extends State<CramDialog> {
+  final AuthService _authService = AuthService();
+  final AtSignLogger _logger = AtSignLogger('CramDialog');
+
+  @override
+  void initState() {
+    super.initState();
+    // Kick off onboarding exactly once. Starting it here rather than in build()
+    // means a widget rebuild — e.g. the parent repainting during the up-to-5-min
+    // provisioning wait — can't spawn a second onboard() call.
+    _onboard();
+  }
+
+  Future<void> _onboard() async {
+    final secret = _parseCramKey(widget.cramKey);
+    try {
+      final response = await _authService.onboard(widget.request, secret);
+      if (widget.onOnboardingComplete != null) {
+        widget.onOnboardingComplete!(widget.request);
       } else {
         _logger.info('Onboarding response: $response');
       }
-      Navigator.of(context).pop(response);
-    });
+      if (mounted) Navigator.of(context).pop(response);
+    } catch (e) {
+      // Onboarding failed or timed out. Without an error path the dialog would
+      // stay on screen forever and CramDialog.show() would never complete
+      // (issue #1905 / #1909).
+      _logger.severe('Onboarding via CRAM failed: $e');
+      if (!mounted) return;
+      // A timeout during onboarding usually means the newly-registered atSign
+      // is still provisioning, not a hard failure — say so and invite a retry.
+      final message = e is AtTimeoutException
+          ? 'Onboarding is taking longer than expected — your atSign may still '
+                'be provisioning. Please try again in a moment.'
+          : 'Onboarding failed. Please check your connection and try again.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+      Navigator.of(context).pop(null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text("Onboarding"),
+      title: const Text("Onboarding"),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          StreamBuilder(
+          StreamBuilder<ProgressEvent>(
             stream: _authService.progressStream,
             builder: (context, snapshot) {
-              // When a custom progressBuilder is provided, render it for each
-              // progress event. Otherwise keep showing the loading indicator
-              // until onboarding completes and the dialog is popped —
-              // returning an empty widget here caused a blank dialog box to
-              // flash on screen during login (issue #1956).
-              if (snapshot.hasData && progressBuilder != null) {
-                return progressBuilder!(snapshot.data as ProgressEvent);
+              // A custom progressBuilder takes over rendering entirely.
+              if (snapshot.hasData && widget.progressBuilder != null) {
+                return widget.progressBuilder!(snapshot.data!);
               }
+              // Otherwise show the loading indicator, surfacing the latest
+              // progress message so a multi-minute provisioning wait shows live
+              // status rather than static text. (Returning an empty widget here
+              // caused a blank dialog box to flash on screen — issue #1956.)
               return LoadingDialog(
-                title: title ?? "Onboarding Atsign via cram",
-                description: description ?? "Authenticating, please wait...",
+                title: widget.title ?? "Onboarding Atsign via cram",
+                description: snapshot.hasData
+                    ? snapshot.data!.msg
+                    : (widget.description ?? "Authenticating, please wait..."),
               );
             },
           ),

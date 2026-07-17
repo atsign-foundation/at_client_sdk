@@ -5,7 +5,7 @@
   any single network operation), `defaultOnboardingTimeout` (5 min — the poll
   budget for waiting on a newly-registered atSign to be provisioned, deliberately
   longer than the per-op cap), and `cap()`. The single place to set the SDK's
-  network timeouts (#1923).
+  network timeouts (#1909).
 - feat: add `SecureSocketConfig.connectTimeout` so a connect deadline can be
   threaded through to `SecureSocket.connect`.
 
