@@ -36,5 +36,17 @@ void main() {
       expect(AtNetworkTimeouts.effectiveDefault,
           lessThanOrEqualTo(AtNetworkTimeouts.maxAllowed));
     });
+
+    test('defaultOnboardingTimeout is 5 minutes and longer than defaultTimeout',
+        () {
+      expect(AtNetworkTimeouts.defaultOnboardingTimeout,
+          const Duration(minutes: 5));
+      // The onboarding poll waits for provisioning, so it must be much longer
+      // than the per-attempt default and is intentionally above the 60s op cap.
+      expect(AtNetworkTimeouts.defaultOnboardingTimeout,
+          greaterThan(AtNetworkTimeouts.defaultTimeout));
+      expect(AtNetworkTimeouts.defaultOnboardingTimeout,
+          greaterThan(AtNetworkTimeouts.maxAllowed));
+    });
   });
 }
