@@ -1,22 +1,32 @@
+import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 
+@Deprecated('remove in v4 in favour of AtAuthSession')
 sealed class AuthResponse {
   String atSign;
   bool isSuccessful = false;
   //todo: v4, please return a AtRootDomain, helps cleanup the sdk.
-  //will remain the response
+  @Deprecated('remove in v4')
   AtKeys? atAuthKeys;
   @Deprecated('remove in v4')
   AtLookUp? atLookUp;
   @Deprecated('remove in v4')
   AtChops? atChops;
+
+  /// Explicit, typed hand-off to the client. Populated on success when the
+  /// request supplied an [AtKeysIo]. The forward-looking replacement for the
+  /// deprecated [atLookUp]/[atChops] fields.
+  AtAuthSession? session;
+
   // todo: only functional for old-style keys... needs rethinking.
   String? get enrollmentId => atAuthKeys?.enrollmentId;
 
   AuthResponse(this.atSign);
 }
+
+@Deprecated('remove in v4 in favour of AtAuthSession')
 
 /// Represents an onboarding response of an atSign.
 class AtOnboardingResponse extends AuthResponse {
@@ -30,6 +40,7 @@ class AtOnboardingResponse extends AuthResponse {
   }
 }
 
+@Deprecated('remove in v4 in favour of AtAuthSession')
 class AtAuthResponse extends AuthResponse {
   /// Constructor that takes an @sign as a parameter
   AtAuthResponse(super.atSign);

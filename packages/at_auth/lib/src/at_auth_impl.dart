@@ -5,6 +5,7 @@ import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
 import 'package:at_auth/src/auth/models/at_auth_responses.dart';
+import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
@@ -14,6 +15,7 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
+import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
@@ -118,6 +120,30 @@ class AtAuthImpl implements AtAuth {
         ..atAuthKeys = atAuthKeys
         ..atLookUp = atLookUp
         ..atChops = atChops;
+
+      // Build the explicit hand-off session from the request's confirmed
+      // subset. The session always carries an AtKeysIo *source*: use the
+      // request's when present, otherwise wrap the resolved keys in an
+      // InMemoryAtKeysIo so the legacy atAuthKeys-only path hands a source
+      // across too.
+      if (pkamResponse.isSuccessful) {
+        final AtKeysIo source;
+        if (atAuthRequest.atKeysIo != null) {
+          source = atAuthRequest.atKeysIo!;
+        } else {
+          final memoryIo = InMemoryAtKeysIo();
+          await memoryIo.write(atAuthRequest.atSign, atAuthKeys);
+          source = memoryIo;
+        }
+        pkamResponse.session = AtAuthSession(
+          atSign: atAuthRequest.atSign,
+          rootDomain: atAuthRequest.rootDomain,
+          namespace: atAuthRequest.namespace,
+          atKeysIo: source,
+          enrollmentId: atAuthRequest.enrollmentId,
+          atLookUp: atLookUp,
+        );
+      }
 
       if (!pkamResponse.isSuccessful) {
         _addProgress(
@@ -303,6 +329,21 @@ class AtAuthImpl implements AtAuth {
       ..atAuthKeys = _atAuthKeys
       ..atLookUp = atLookUp
       ..atChops = atChops;
+
+    // Hand back the same explicit session as authenticate(), so a
+    // freshly-onboarded atSign flows straight into the client. atKeysIo is
+    // guaranteed set here (defaulted to FileAtKeysIo above); the guard mirrors
+    // authenticate() for parity.
+    if (atOnboardingRequest.atKeysIo != null) {
+      atOnboardingResponse.session = AtAuthSession(
+        atSign: atOnboardingRequest.atSign,
+        rootDomain: atOnboardingRequest.rootDomain,
+        namespace: atOnboardingRequest.namespace,
+        atKeysIo: atOnboardingRequest.atKeysIo!,
+        enrollmentId: enrollmentIdFromServer,
+        atLookUp: atLookUp,
+      );
+    }
 
     _addProgress(
         "onboarding",
