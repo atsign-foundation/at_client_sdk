@@ -26,6 +26,14 @@ import 'package:meta/meta.dart' show experimental;
 /// than minting duplicate enc keypairs. (Correctness does not depend on it —
 /// kpid-addressed envelopes converge idempotently via [SecretStore.putIfNewer]
 /// — but a single instance avoids redundant registration and double delivery.)
+///
+/// > **⚠ Not yet suitable for production secrets.** The recipient key package
+/// > a sender seals to is discovered via the gated `enroll:listns` verb and is
+/// > not yet APKAM-signed or verified, so sealing currently trusts the
+/// > atServer to return the genuine key package — a tampering atServer could
+/// > substitute the encapsulation target and read the secret. This caveat
+/// > lifts once advertised key packages are signed by their generating
+/// > enrollment and verified against its `_apsk` before sealing.
 @experimental
 class AtClientSecretSharing
     with
