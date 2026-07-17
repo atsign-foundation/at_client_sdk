@@ -126,20 +126,6 @@ mixin EnvelopeSigning on ApkamSigning {
     }
   }
 
-  /// The exact text that is signed and verified. Strings are signed as-is;
-  /// everything else is signed as its json encoding. Verification re-derives
-  /// this from the decoded envelope, which is stable because Dart maps
-  /// preserve insertion order through a jsonEncode/jsonDecode round trip.
-  String _signableText(
-    Object? payload, {
-    Object? Function(Object? nonEncodable)? toEncodable,
-  }) {
-    if (payload is String) {
-      return payload;
-    }
-    return jsonEncode(payload, toEncodable: toEncodable);
-  }
-
   /// Fetch the APKAM public signing key which [enrollmentId] of [atSign] has
   /// published in its per-enrollment namespace. See
   /// [ApkamSigning.publicSigningKeyUri].
@@ -201,4 +187,19 @@ mixin EnvelopeSigning on ApkamSigning {
     }
     return cacheValue.$1;
   }
+
+  /// The exact text that is signed and verified. Strings are signed as-is;
+  /// everything else is signed as its json encoding. Verification re-derives
+  /// this from the decoded envelope, which is stable because Dart maps
+  /// preserve insertion order through a jsonEncode/jsonDecode round trip.
+  String _signableText(
+    Object? payload, {
+    Object? Function(Object? nonEncodable)? toEncodable,
+  }) {
+    if (payload is String) {
+      return payload;
+    }
+    return jsonEncode(payload, toEncodable: toEncodable);
+  }
+
 }
