@@ -1,4 +1,4 @@
-## 3.13.0
+## 3.14.0
 - feat (experimental): per-APKAM same-atSign secret-sharing substrate —
   `AtClientSecretSharing` / `PairwiseSecretSharing` (mixins `KeyPackageRegistration`,
   `EnvelopeSigning`), `SecretStore`, `KeyPackage`, `SecretEnvelope`, and the
@@ -8,6 +8,8 @@
   `enroll:listns` verb) and never published. The whole surface is
   `@experimental` — the wire shape is subject to change pending the atServer
   verb work — and requires `at_chops ^3.3.0` (`pqSeal`/`pqOpen`).
+
+## 3.13.0
 - feat: add `AtClientPreference.networkTimeout` — when set on the preference used
   to create an `AtClient`, it becomes the process-wide network-timeout default
   (`AtNetworkTimeouts.defaultTimeout`, capped at 60s), bounding every atServer
