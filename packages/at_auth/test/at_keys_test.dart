@@ -168,6 +168,20 @@ void main() {
       expect(first, isNot(differentAtsign));
     });
 
+    test('equality compares metadata structurally, not by identity', () {
+      // Two jsonDecode calls produce distinct nested map instances.
+      final first = AtKeys()
+        ..metadata = jsonDecode('{"nested": {"a": 1, "list": [1, 2]}}');
+      final same = AtKeys()
+        ..metadata = jsonDecode('{"nested": {"a": 1, "list": [1, 2]}}');
+      final different = AtKeys()
+        ..metadata = jsonDecode('{"nested": {"a": 2, "list": [1, 2]}}');
+
+      expect(first, same);
+      expect(first.hashCode, same.hashCode);
+      expect(first, isNot(different));
+    });
+
     test('equality ignores the order materials were added in', () {
       final pair = rsaKeyPair('pair');
       final forward = AtKeys(
@@ -186,19 +200,17 @@ void main() {
     test('getKey disambiguates materials of the same keyId by type', () {
       final pair = rsaKeyPair('shared-pair');
       final atKeys = AtKeys(keysList: pair);
-      final publicMaterial = pair.firstWhere((m) =>
-          m.keyPartType == CryptographicKeyType.publicEncryption);
-      final privateMaterial = pair.firstWhere((m) =>
-          m.keyPartType == CryptographicKeyType.privateDecryption);
+      final publicMaterial = pair.firstWhere(
+          (m) => m.keyPartType == CryptographicKeyType.publicEncryption);
+      final privateMaterial = pair.firstWhere(
+          (m) => m.keyPartType == CryptographicKeyType.privateDecryption);
 
       expect(
-        atKeys.getKey(
-            'shared-pair', CryptographicKeyType.publicEncryption),
+        atKeys.getKey('shared-pair', CryptographicKeyType.publicEncryption),
         same(publicMaterial),
       );
       expect(
-        atKeys.getKey(
-            'shared-pair', CryptographicKeyType.privateDecryption),
+        atKeys.getKey('shared-pair', CryptographicKeyType.privateDecryption),
         same(privateMaterial),
       );
     });
@@ -207,8 +219,7 @@ void main() {
       final atKeys = AtKeys(keysList: [symmetricKey('shared-id')]);
 
       expect(
-        atKeys.getKey(
-            'shared-id', CryptographicKeyType.privateDecryption),
+        atKeys.getKey('shared-id', CryptographicKeyType.privateDecryption),
         isNull,
       );
     });

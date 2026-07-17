@@ -295,24 +295,51 @@ class AtKeys {
   }
 }
 
+// metadata holds JSON-derived values, so nested maps/lists compare by
+// identity under ==; compare (and hash) them structurally instead.
 bool _mapEquals(Map<String, dynamic> left, Map<String, dynamic> right) {
-  if (left.length != right.length) {
-    return false;
-  }
-  for (final entry in left.entries) {
-    if (!right.containsKey(entry.key) || right[entry.key] != entry.value) {
-      return false;
-    }
-  }
-  return true;
+  return _deepEquals(left, right);
 }
 
-int _metadataHash(Map<String, dynamic> metadata) {
-  final entries = metadata.entries.toList()
-    ..sort((a, b) => a.key.compareTo(b.key));
-  return Object.hashAll(
-    entries.map((entry) => Object.hash(entry.key, entry.value)),
-  );
+bool _deepEquals(Object? left, Object? right) {
+  if (left is Map && right is Map) {
+    if (left.length != right.length) {
+      return false;
+    }
+    for (final key in left.keys) {
+      if (!right.containsKey(key) || !_deepEquals(left[key], right[key])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (left is List && right is List) {
+    if (left.length != right.length) {
+      return false;
+    }
+    for (var i = 0; i < left.length; i++) {
+      if (!_deepEquals(left[i], right[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return left == right;
+}
+
+int _metadataHash(Map<String, dynamic> metadata) => _deepHash(metadata);
+
+int _deepHash(Object? value) {
+  if (value is Map) {
+    final entries = value.entries.toList()
+      ..sort((a, b) => a.key.toString().compareTo(b.key.toString()));
+    return Object.hashAll(entries.map(
+        (entry) => Object.hash(entry.key.toString(), _deepHash(entry.value))));
+  }
+  if (value is List) {
+    return Object.hashAll(value.map(_deepHash));
+  }
+  return value.hashCode;
 }
 
 // Splitting these implementations to improve understanding
