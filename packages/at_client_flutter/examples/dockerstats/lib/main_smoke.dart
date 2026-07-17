@@ -108,13 +108,11 @@ class _SmokeBootstrapState extends State<_SmokeBootstrap> {
         ..namespace = applicationNamespace
         ..commitLogPath = dir.path
         ..hiveStoragePath = dir.path;
-      // Hand the client the session, reusing auth's already-authenticated
-      // AtLookUp to skip a second PKAM handshake. Omit [reuse] to have the
-      // client open its own fresh connection from the session's key source.
+      // Hand the client the session; it rebuilds its own authenticated
+      // connection from the session's key source rather than adopting auth's.
       await AtClientManager.getInstance().setFromAuthSession(
         response.session!,
         acp,
-        reuse: true,
       );
       _setStatus('AtClient ready, navigating to dashboard');
       if (!mounted) return;

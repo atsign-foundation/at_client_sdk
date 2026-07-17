@@ -15,7 +15,6 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
-import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
@@ -122,24 +121,15 @@ class AtAuthImpl implements AtAuth {
         ..atChops = atChops;
 
       // Build the explicit hand-off session from the request's confirmed
-      // subset. The session always carries an AtKeysIo *source*: use the
-      // request's when present, otherwise wrap the resolved keys in an
-      // InMemoryAtKeysIo so the legacy atAuthKeys-only path hands a source
-      // across too.
-      if (pkamResponse.isSuccessful) {
-        final AtKeysIo source;
-        if (atAuthRequest.atKeysIo != null) {
-          source = atAuthRequest.atKeysIo!;
-        } else {
-          final memoryIo = InMemoryAtKeysIo();
-          await memoryIo.write(atAuthRequest.atSign, atAuthKeys);
-          source = memoryIo;
-        }
+      // subset — only when the request supplied an AtKeysIo source. The legacy
+      // atAuthKeys-only path has no source to hand across, so it gets no
+      // session.
+      if (pkamResponse.isSuccessful && atAuthRequest.atKeysIo != null) {
         pkamResponse.session = AtAuthSession(
           atSign: atAuthRequest.atSign,
           rootDomain: atAuthRequest.rootDomain,
           namespace: atAuthRequest.namespace,
-          atKeysIo: source,
+          atKeysIo: atAuthRequest.atKeysIo!,
           enrollmentId: atAuthRequest.enrollmentId,
           atLookUp: atLookUp,
         );

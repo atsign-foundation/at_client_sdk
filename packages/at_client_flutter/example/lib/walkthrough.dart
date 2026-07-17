@@ -139,13 +139,11 @@ Future<void> onboard(BuildContext context) async {
       ..hiveStoragePath = dir.path;
 
     _logger.info('Setting current atSign: ${response.atSign}');
-    // Hand the client the session, reusing auth's already-authenticated AtLookUp
-    // to skip a second PKAM handshake. Omit [reuse] to have the client open its
-    // own fresh connection from the session's key source instead.
+    // Hand the client the session; it rebuilds its own authenticated connection
+    // from the session's key source rather than adopting auth's.
     await AtClientManager.getInstance().setFromAuthSession(
       response.session!,
       acp,
-      reuse: true,
     );
 
     _logger.info('Navigation to HomePage');
@@ -210,7 +208,7 @@ Future<void> loginWithKeychain(BuildContext context) async {
     }
 
     _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, response.session!, reuse: true);
+    await _setupAtClient(context, response);
   }, context: context);
 }
 
@@ -248,7 +246,7 @@ Future<void> loginWithFile(BuildContext context) async {
     }
 
     _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, response.session!, reuse: true);
+    await _setupAtClient(context, response);
   }, context: context);
 }
 
@@ -301,7 +299,7 @@ Future<void> loginWithApkam(BuildContext context) async {
     }
 
     _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, response.session!, reuse: true);
+    await _setupAtClient(context, response);
   }, context: context);
 }
 
@@ -383,12 +381,8 @@ Future<String?> _openFileSaveDialog({
 }
 
 /// Helper method to set up the atClient instance and navigate to home page
-Future<void> _setupAtClient(
-  BuildContext context,
-  AtAuthSession session, {
-  bool reuse = false,
-}) async {
-  _logger.info('Setting up atClient for ${session.atSign}');
+Future<void> _setupAtClient(BuildContext context, AuthResponse response) async {
+  _logger.info('Setting up atClient for ${response.atSign}');
 
   var dir = await getApplicationSupportDirectory();
   _logger.info('Using directory: ${dir.path}');
@@ -398,17 +392,27 @@ Future<void> _setupAtClient(
     ..commitLogPath = dir.path
     ..hiveStoragePath = dir.path;
 
-  if (session.enrollmentId == null) {
+  if (response.enrollmentId == null) {
     _logger.warning("EnrollmentId is null");
   }
-  // Hand the client the session. Passing [reuse] lets it adopt auth's
-  // already-authenticated AtLookUp and skip a second PKAM handshake; omit it to
-  // have the client open its own fresh connection from the session's key source.
-  await AtClientManager.getInstance().setFromAuthSession(
-    session,
-    acp,
-    reuse: reuse,
-  );
+  final session = response.session;
+  if (session != null) {
+    // Preferred path: hand over the session; the client rebuilds its own
+    // authenticated connection from the session's key source.
+    await AtClientManager.getInstance().setFromAuthSession(session, acp);
+  } else {
+    // Transitional fallback for flows that hand back only atAuthKeys with no
+    // AtKeysIo source (e.g. APKAM enrollment): adopt auth's already-
+    // authenticated AtChops/AtLookUp directly.
+    await AtClientManager.getInstance().setCurrentAtSign(
+      response.atSign,
+      namespace,
+      acp,
+      enrollmentId: response.enrollmentId,
+      atChops: response.atChops,
+      atLookUp: response.atLookUp,
+    );
+  }
 
   if (context.mounted) {
     _logger.info('Navigating to HomePage');

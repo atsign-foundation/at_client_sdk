@@ -198,6 +198,12 @@ class AtClientManager {
     preference.rootDomain = session.rootDomain.rootDomain;
     preference.rootPort = session.rootDomain.rootPort;
 
+    if (reuse && session.atLookUp == null) {
+      _logger
+          .warning('setFromAuthSession(reuse: true) but the session carries no '
+              'authenticated AtLookUp; opening a fresh connection instead.');
+    }
+
     return setCurrentAtSign(session.atSign, session.namespace, preference,
         serviceFactory: serviceFactory,
         atKeysIo: session.atKeysIo,
