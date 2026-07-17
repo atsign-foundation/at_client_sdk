@@ -11,6 +11,9 @@
   lookup and the connectivity probe) is bounded by the remaining budget and capped
   at 60s. **`RetryOptions.maxRetries` no longer bounds this loop** (the deadline
   does) (#1923). Requires `at_commons ^5.13.0`.
+- chore(deps): `at_lookup: ^3.6.0` — `validateAtServer` passes the `timeout`
+  parameter that `SecondaryAddressFinder.findSecondary` gained in at_lookup
+  3.6.0, so this version does not compile against at_lookup ≤3.5.x.
 
 ## 3.1.1
 - refactor: route enrollment RSA (encrypt/decrypt `apkamSymmetricKey` under the default encryption keypair) through at_chops (`RsaEncryptionAlgo`) — `crypton` no longer imported in `lib` and moved to `dev_dependencies` (only the enrollment test still uses it for RSA keypair fixtures). Same framing, byte-identical by construction.
