@@ -5,9 +5,14 @@ import 'package:at_lookup/at_lookup.dart';
 sealed class AuthResponse {
   String atSign;
   bool isSuccessful = false;
+  //todo: v4, please return a AtRootDomain, helps cleanup the sdk.
+  //will remain the response
   AtKeys? atAuthKeys;
+  @Deprecated('remove in v4')
   AtLookUp? atLookUp;
+  @Deprecated('remove in v4')
   AtChops? atChops;
+  // todo: only functional for old-style keys... needs rethinking.
   String? get enrollmentId => atAuthKeys?.enrollmentId;
 
   AuthResponse(this.atSign);

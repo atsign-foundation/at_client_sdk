@@ -448,9 +448,9 @@ timeline rows).
   not two**; (3) keep ML-DSA verify **algo-level** (P-2), revisiting the async
   `AtChops.verify` path only if a high-level caller needs it; (4) re-confirm the
   at_commons version floor at SS-1a (pub.dev / last release tag is authoritative,
-  not in-tree precedent); plus the at_auth version question in S-1 (publish 3.1.1
-  first vs fold the `AtKeys`/`AtKeysIo` extend-in-place change under the unshipped
-  slot). (The WP-SS "where does
+  not in-tree precedent); plus the at_auth version question in S-1 — **resolved
+  2026-07-17: 3.1.1 published, 3.2.0 taken by the network-timeout release, S-1
+  ships as 3.3.0** (see the 2026-07-17 rulings). (The WP-SS "where does
   `register()` get called?" decision is resolved by #B above.)
 - **#E — S-2 scope / SoT conflict.** `crypto_impl_plan` §3-S5 ("migrate legacy to
   `context.keys`") vs §7-WP3 ("legacy unchanged for now") conflict. This plan
@@ -580,7 +580,8 @@ each is binding. The code-side alignment landed via #2046 (merged 2026-07-03 int
   **additively** with PQ-safe methods; **deprecate** the legacy key
   fields/methods (they stay for back-compat, so call sites migrate to the
   PQ-safe methods over time). `AtKeysIo` is extended with **runtime
-  persistence** (`append()`, `save()`, …) and remains the single contact point
+  persistence** (`append()`, `save()`, … — method names superseded 2026-07-17
+  by the single `flush()`) and remains the single contact point
   that keeps runtime `AtKeys` objects and the persisted keyfile in-line.
   Providers are injected **(`AtClient`, `AtKeysIo`, `AtChops`)**. There is
   **no** new `WritableAtKeys` holder class and **no** separate `WrittenAtKeysIo`
@@ -592,6 +593,56 @@ each is binding. The code-side alignment landed via #2046 (merged 2026-07-03 int
   design §4. *Open question (not decided):* whether `AtClient` needs any concept
   of `AtKeys` outside the provider seam at all (encrypt/decrypt and auth already
   reach keys via the injected `AtKeysIo`).
+
+### Rulings — 2026-07-17 (PR #2047 / S-1 conformance review)
+
+Five rulings from the review of PR #2047 (the S-1 implementation) against this
+record:
+
+- **`flush()` supersedes the `append()`/`save()` working names.** `AtKeysIo`'s
+  runtime persistence is one whole-state operation: mutate the in-memory
+  `AtKeys` (`addKey`, `retireKey`, …), then `flush(atsign, atKeys)`. On an
+  existing target the flush is safety-checked by
+  `AtKeysAssurance.validateMapUpdate` (nothing lost; statuses forward-only;
+  additions fine) and is atomic (write-to-temp + rename) with the previous
+  state kept as `<file>.bak`. The default implementation throws
+  (compile-compat for pre-existing implementers; there are no runtime callers
+  of the new surface yet).
+- **Retire, never remove.** `AtKeys` has no key-removal operation:
+  `retireKey(keyId, {to})` moves status forward-only
+  (`active` → `retired` → `dead`) and material bytes are never deleted —
+  retired bytes are still needed to decrypt data they protected. Consistent
+  with OQ8's no-per-APKAM-key-delete ruling. (Supersedes the
+  `add`/`remove`/`write` working names in design §4 and S-1's
+  "add→read→remove" acceptance line.)
+- **The never-lose contract is scoped to bootstrap key stores.**
+  `WrittenAtKeysIo.flush`'s nothing-may-be-lost contract applies to stores of
+  bootstrap key material (the `.atKeys` file, keychain). It is **not** an
+  `AtKeysIo`-wide invariant: a store holding rotating/evictable material
+  defines its own retention — CK-class deletion is the B5a coarse-FS lever
+  (design §1.7), a feature, not data loss. Corollary: **`LocalKeystoreAtKeysIo`
+  is not needed at this time** — nskey-private / CK-class storage routing is
+  decided when S-3/SS-4 execute, and whatever store holds CK-class material
+  must support eviction rather than inherit the flush contract.
+- **`keyPartType` / `keyAlgorithmType` are open String tokens, not enums.**
+  Enums make every unknown value a whole-file parse failure, forcing lockstep
+  reader upgrades and breaking flush's round-trip-what-you-don't-understand
+  requirement. Known tokens live as static consts: `KeyAlgorithmType`
+  (`aes256`, `rsa2048`, `ecc_secp256r1`, `ed25519`, `x25519`, `mlkem768`,
+  `mldsa65`, `xwing` — parameter set in the token, matching the
+  pkam/enrollment `signingAlgo` literals) and `CryptographicKeyType`
+  (mechanical roles only: symmetric encryption/authentication and the
+  public/private halves of encryption, verification/signing,
+  encapsulation/decapsulation, key agreement). The classical/post-quantum/
+  hybrid axis is a property of the algorithm token (X-Wing material is
+  `xwing` + encapsulation/decapsulation), never a second role axis.
+  `KeyPartStatus` stays an enum (a closed state machine the format owns).
+  Unknown tokens are accepted, held, and re-emitted byte-identical.
+- **S-1 ships as at_auth 3.3.0.** The 3.2.0 slot was consumed by the
+  validateAtServer network-timeout release (published from trunk 2026-07-17),
+  resolving Open decision #D's at_auth version question: 3.1.1 published
+  first, then 3.2.0 (timeouts), and the `AtKeys`/`AtKeysIo` extension opens
+  3.3.0. S-5's breaking cut is unchanged (3.x → 4.0.0).
 
 ---
 
@@ -615,6 +666,8 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 
 | **2026-07-03** | **PR #2030 review rulings** (five, → [section 6](#6-resolved--open-execution-decisions-af)): `AtPqc` supersedes the `PqcFfi` working name; `AtSignatureAlgorithm` recorded with a **staged** `AtSigningAlgorithm` deprecation (stays implemented through D1 — P-2 and the section-12 `wrapAndSign` path are typed against it; removal deferred past the D1 ladder); at_chops 3.4.0 stays a minor under a recorded one-time semver exemption for the barrel-split breaks; #2030/#2039 conformance-covered under P-2's coordinated slot; auto-resolve scoped to the `AtPqc` accessors (web-safe-barrel keygen is pure-Dart by construction). | The two-pass review of #2030 found the PR shipping designs the record didn't yet name (`AtPqc`, `AtSignatureAlgorithm`) and removals the ladder didn't authorize; these rulings plus the stacked review-fixes PR align code and record. |
 | **2026-07-06** | **Planning-day reconciliation rulings** (two): (1) **inter-server PQ authentication is IN D1 scope** as new project **IS-1** ([implementation-plan.md §13](implementation-plan.md)) — the atServer FROM/POL X-Wing+ML-DSA-65 handshake (PR #2683), off the D1 GA critical path, gated on publishing the at_chops PQ-API surface (`XWingCert`/`resolveXWing`/`resolveMlDsa65`). (2) **P-2's `mldsa65` verify branch folds into the existing unpublished at_chops 3.4.0** (bumped on trunk by #2030) before it publishes — not a fresh minor. | Planning-day reconciliation of #1889 vs the plan vs merged/open PRs across at_client_sdk + at_server surfaced a whole untracked inter-server workstream and an at_chops 3.4.0 slot already opened on trunk; these two rulings place both in the record. |
+| **2026-07-06** | **P-2 satisfied on trunk** — the `mldsa65` `_getVerificationAlgorithm` branch merged (issue #2050 / PR #2056), folded into the unpublished at_chops 3.4.x slot per the ruling above; #2039 (AES-GCM FFI) merged into the same slot. | The one missing ML-DSA verify branch is now in the tree; P-2's residual is the 3.4.x publish itself. |
+| **2026-07-17** | **PR #2047 / S-1 conformance rulings** (five, → [section 6](#6-resolved--open-execution-decisions-af)): `flush()` supersedes `append()`/`save()`; retire-never-remove (`retireKey`, forward-only status); the never-lose flush contract scoped to bootstrap stores (`LocalKeystoreAtKeysIo` not needed at this time; CK-class stores must support eviction for B5a); `keyPartType`/`keyAlgorithmType` as open String tokens with known-token consts (X-Wing = `xwing` + encapsulation/decapsulation); S-1 ships as at_auth **3.3.0** (3.2.0 consumed by the network-timeout release). | The S-1 implementation review found the built shape better than the recorded working names in three places and a version-slot collision; these rulings align the record with the code before at_auth 3.3.0 publishes. |
 
 **Cross-refs:** the Wave-0 "already landed" detail and the project that follows
 each decision are in `implementation-plan.md`; the phase trajectory this timeline
