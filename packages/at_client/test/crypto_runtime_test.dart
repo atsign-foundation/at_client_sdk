@@ -155,12 +155,12 @@ void main() {
       final atKey = AtKey()..metadata = Metadata();
 
       await CryptoRuntime(mockAtClient).encryptForPut(atKey, 'data');
-      expect(identical(legacyProvider.lastContext!.io, keysIo), true);
+      expect(identical(legacyProvider.lastContext!.atKeysIo, keysIo), true);
       expect(
           identical(legacyProvider.lastContext!.atClient, mockAtClient), true);
 
       await CryptoRuntime(mockAtClient).decryptForGet(atKey, 'ciphertext');
-      expect(identical(legacyProvider.lastContext!.io, keysIo), true);
+      expect(identical(legacyProvider.lastContext!.atKeysIo, keysIo), true);
     });
 
     test('context.io is null when the client has no key source', () async {
@@ -170,7 +170,7 @@ void main() {
 
       await CryptoRuntime(mockAtClient).encryptForPut(atKey, 'data');
 
-      expect(legacyProvider.lastContext!.io, isNull);
+      expect(legacyProvider.lastContext!.atKeysIo, isNull);
     });
   });
 }

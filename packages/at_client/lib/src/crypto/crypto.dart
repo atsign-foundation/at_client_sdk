@@ -57,9 +57,9 @@ class CryptoContext {
   /// injects one — store wiring (so this is populated by default) lands in a
   /// later project. The built-in legacy provider deliberately does not read
   /// this yet.
-  final AtKeysIo? io;
+  final AtKeysIo? atKeysIo;
 
-  const CryptoContext({required this.atClient, this.io});
+  const CryptoContext({required this.atClient, this.atKeysIo});
 }
 
 /// The contract every encryption scheme implements. The SDK routes each

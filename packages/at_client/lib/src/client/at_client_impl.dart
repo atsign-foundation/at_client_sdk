@@ -306,6 +306,7 @@ class AtClientImpl implements AtClient {
     RemoteSecondary? remoteSecondary,
     EncryptionService? encryptionService,
     AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
+    @Deprecated('replaced by atKeysIo, will be removed in the next release')
     AtChops? atChops,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
