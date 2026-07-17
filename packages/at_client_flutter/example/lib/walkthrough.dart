@@ -134,21 +134,18 @@ Future<void> onboard(BuildContext context) async {
     _logger.info('Application support directory: ${dir.path}');
 
     var acp = AtClientPreference()
-      ..rootDomain = authRequest.rootDomain.rootDomain
-      ..rootPort = authRequest.rootDomain.rootPort
       ..namespace = namespace
       ..commitLogPath = dir.path
       ..hiveStoragePath = dir.path;
 
     _logger.info('Setting current atSign: ${response.atSign}');
-    // make sure to use the atChops and atLookUp provided by the response as these are already authenticated.
-    await AtClientManager.getInstance().setCurrentAtSign(
-      response.atSign,
-      namespace,
-      enrollmentId: response.enrollmentId,
+    // Hand the client the session, reusing auth's already-authenticated AtLookUp
+    // to skip a second PKAM handshake. Omit [reuse] to have the client open its
+    // own fresh connection from the session's key source instead.
+    await AtClientManager.getInstance().setFromAuthSession(
+      response.session!,
       acp,
-      atChops: response.atChops,
-      atLookUp: response.atLookUp,
+      reuse: true,
     );
 
     _logger.info('Navigation to HomePage');
@@ -213,7 +210,7 @@ Future<void> loginWithKeychain(BuildContext context) async {
     }
 
     _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, authRequest, response);
+    await _setupAtClient(context, response.session!, reuse: true);
   }, context: context);
 }
 
@@ -251,7 +248,7 @@ Future<void> loginWithFile(BuildContext context) async {
     }
 
     _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, authRequest, response);
+    await _setupAtClient(context, response.session!, reuse: true);
   }, context: context);
 }
 
@@ -304,7 +301,7 @@ Future<void> loginWithApkam(BuildContext context) async {
     }
 
     _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, authRequest, response);
+    await _setupAtClient(context, response.session!, reuse: true);
   }, context: context);
 }
 
@@ -388,36 +385,29 @@ Future<String?> _openFileSaveDialog({
 /// Helper method to set up the atClient instance and navigate to home page
 Future<void> _setupAtClient(
   BuildContext context,
-  AtAuthRequest authRequest,
-  AuthResponse response,
-) async {
-  _logger.info('Setting up atClient for ${response.atSign}');
+  AtAuthSession session, {
+  bool reuse = false,
+}) async {
+  _logger.info('Setting up atClient for ${session.atSign}');
 
   var dir = await getApplicationSupportDirectory();
   _logger.info('Using directory: ${dir.path}');
 
   var acp = AtClientPreference()
-    ..rootDomain = authRequest.rootDomain.rootDomain
-    ..rootPort = authRequest.rootDomain.rootPort
     ..namespace = namespace
     ..commitLogPath = dir.path
     ..hiveStoragePath = dir.path;
 
-  _logger.info('AtClientPreference configured:');
-  _logger.info('  - rootDomain: ${acp.rootDomain}');
-  _logger.info('  - rootPort: ${acp.rootPort}');
-  _logger.info('  - namespace: ${acp.namespace}');
-  if (response.enrollmentId == null) {
+  if (session.enrollmentId == null) {
     _logger.warning("EnrollmentId is null");
   }
-  // Make sure to use the atChops and atLookUp provided by the response
-  await AtClientManager.getInstance().setCurrentAtSign(
-    response.atSign,
-    namespace,
+  // Hand the client the session. Passing [reuse] lets it adopt auth's
+  // already-authenticated AtLookUp and skip a second PKAM handshake; omit it to
+  // have the client open its own fresh connection from the session's key source.
+  await AtClientManager.getInstance().setFromAuthSession(
+    session,
     acp,
-    enrollmentId: response.enrollmentId,
-    atChops: response.atChops,
-    atLookUp: response.atLookUp,
+    reuse: reuse,
   );
 
   if (context.mounted) {

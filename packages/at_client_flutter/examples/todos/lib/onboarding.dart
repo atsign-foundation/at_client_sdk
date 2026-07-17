@@ -38,7 +38,7 @@ Future<bool> loginWithKeychain(BuildContext context) async {
   );
   if (response == null || !response.isSuccessful) return false;
 
-  await _setupAtClient(authRequest, response);
+  await _setupAtClient(response.session!, reuse: true);
   return true;
 }
 
@@ -58,7 +58,7 @@ Future<bool> loginWithFile(BuildContext context) async {
   );
   if (response == null || !response.isSuccessful) return false;
 
-  await _setupAtClient(authRequest, response);
+  await _setupAtClient(response.session!, reuse: true);
   return true;
 }
 
@@ -88,7 +88,7 @@ Future<bool> loginWithApkam(BuildContext context) async {
   );
   if (response == null || !response.isSuccessful) return false;
 
-  await _setupAtClient(authRequest, response);
+  await _setupAtClient(response.session!, reuse: true);
   return true;
 }
 
@@ -96,27 +96,22 @@ Future<void> logout() async {
   AtClientManager.getInstance().reset();
 }
 
-Future<void> _setupAtClient(
-  AtAuthRequest authRequest,
-  AuthResponse response,
-) async {
+Future<void> _setupAtClient(AtAuthSession session, {bool reuse = false}) async {
   final dir = await getApplicationSupportDirectory();
   final acp = AtClientPreference()
-    ..rootDomain = authRequest.rootDomain.rootDomain
-    ..rootPort = authRequest.rootDomain.rootPort
     ..namespace = _namespace
     ..commitLogPath = dir.path
     ..hiveStoragePath = dir.path;
 
-  await AtClientManager.getInstance().setCurrentAtSign(
-    response.atSign,
-    _namespace,
+  // Hand the client the session, not auth's live AtChops. Passing [reuse] lets
+  // the client adopt auth's already-authenticated AtLookUp so it skips a second
+  // PKAM handshake; omit it to have the client open its own fresh connection.
+  await AtClientManager.getInstance().setFromAuthSession(
+    session,
     acp,
-    enrollmentId: response.enrollmentId,
-    atChops: response.atChops,
-    atLookUp: response.atLookUp,
+    reuse: reuse,
   );
-  _log.info('atClient ready for ${response.atSign}');
+  _log.info('atClient ready for ${session.atSign}');
 }
 
 void _snack(BuildContext context, String message) {
