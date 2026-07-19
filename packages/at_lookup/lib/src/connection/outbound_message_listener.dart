@@ -10,6 +10,8 @@ import 'package:meta/meta.dart';
 
 ///Listener class for messages received by [RemoteSecondary]
 class OutboundMessageListener {
+  static int defaultTransientWaitTimeMillis = 30000;
+  static int defaultMaxWaitTimeMillis = 90000;
   final logger = AtSignLogger('OutboundMessageListener');
   late ByteBuffer _buffer;
   final Queue _queue = Queue();
@@ -131,9 +133,12 @@ class OutboundMessageListener {
   /// If there is no message in queue after [maxWaitMilliSeconds], return null. Defaults to 90 seconds.
   /// Whenever data is received on client socket from server, [_lastReceivedTime] will be updated to current time.
   /// [transientWaitTimeMillis] specifies the max duration to wait between current time and [_lastReceivedTime] before timing out.Defaults to 10 seconds.
-  Future<String> read(
-      {int maxWaitMilliSeconds = 90000,
-      int transientWaitTimeMillis = 10000}) async {
+  Future<String> read({
+    int? maxWaitMilliSeconds,
+    int? transientWaitTimeMillis,
+  }) async {
+    maxWaitMilliSeconds ??= defaultMaxWaitTimeMillis;
+    transientWaitTimeMillis ??= defaultTransientWaitTimeMillis;
     String result;
     _lastReceivedTime = DateTime.now();
     var startTime = DateTime.now();
