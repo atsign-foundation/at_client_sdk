@@ -310,10 +310,21 @@ enum EventSource { data, notifs, both }
 ///     cursor, etc.) and must never be confused with collection
 ///     items, even when their tail happens to share the namespace
 ///     shape (the underlying defect behind #1942).
-///   - `(?:[^:]*:)?` tolerates an optional sharedWith prefix
-///     (`@bob:`, `cached:@bob:`) so the same regex can match an
-///     outgoing-shared or cached-incoming copy of a self-owned key.
-const String _atKeyScanPrefix = r'^(?!local:)(?:[^:]*:)?';
+///   - `(?:[^:]*:){0,2}` tolerates up to two leading wrapper
+///     segments, covering every local shape a collection item can
+///     take: none for a self-owned key (`<id>.<ns>@self`), one for
+///     an outgoing share (`@bob:<id>.<ns>@self`), and two for a
+///     received copy (`cached:@self:<id>.<ns>@owner`). Bounding at
+///     two keeps the match linear and confined to the wrapper
+///     region — the `\.<namespace><owner>` anchor is unchanged, so
+///     widening the wrapper count can't reach a different namespace
+///     or owner. A single optional segment silently dropped received
+///     items from every id-scoped read (the concrete-id `getOrNull` /
+///     `get` and the `watch()` delta path), because the escaped id
+///     could not absorb the second `@self:` segment the way the
+///     `[^.]+` wildcard on the unfiltered scan does — the defect
+///     behind #2032.
+const String _atKeyScanPrefix = r'^(?!local:)(?:[^:]*:){0,2}';
 
 interface class AtCollection<T> {
   static const String _rr = '__rr';
@@ -783,6 +794,14 @@ interface class AtCollection<T> {
   }) {
     final now = DateTime.now().toUtc();
     id ??= _newItemId();
+    // An id is one dot-separated key segment. A dotted id is written intact
+    // but read back truncated at the first dot (`k.key.split('.').first`),
+    // so it silently corrupts identity and collides with a real item of the
+    // truncated id. Reject it at the single construction point — same guard
+    // subCollection applies to `parent.id`.
+    if (id.contains('.')) {
+      throw ArgumentError('id must not contain dots: "$id"');
+    }
     return CItem._(
       owner: atSign,
       id: id,
@@ -1142,8 +1161,18 @@ interface class AtCollection<T> {
   /// e.g. `@alice` (an Atsign's `toString()`) restricts to one.
   String _directKeyRegex({String? id, String ownerSuffix = '@'}) {
     final idPattern = id != null ? RegExp.escape(id) : '[^.]+';
-    return '$_atKeyScanPrefix$idPattern\\.$_escapedNamespace$ownerSuffix';
+    return '$_atKeyScanPrefix$idPattern\\.$_escapedNamespace${_ownerAnchor(ownerSuffix)}';
   }
+
+  // A concrete owner suffix (e.g. `@bob`) is end-anchored so it can't
+  // prefix-match a longer atSign (`@bobby`, `@bob2`); the any-owner
+  // sentinel `@` stays open (it must match every `@<owner>`). Without the
+  // anchor an owner-scoped scan — or a self-delete, which removes every
+  // key `_getKeysInternal(id, owner: self)` returns — would reach a
+  // different atSign's same-id items: an (owner, id) identity violation,
+  // and locally destructive on delete.
+  static String _ownerAnchor(String ownerSuffix) =>
+      ownerSuffix == '@' ? ownerSuffix : '$ownerSuffix\$';
 
   /// Regex matching **descendants** of this collection at any depth
   /// `≥ 1`: `<prefix>.+\.<ns><ownerSuffix>`, or — when [parentId] is
@@ -1156,7 +1185,7 @@ interface class AtCollection<T> {
   /// any-owner scan that's almost never what the caller wants.
   String _descendantKeyRegex({String? parentId, required String ownerSuffix}) {
     final mid = parentId != null ? '.+\\.${RegExp.escape(parentId)}' : '.+';
-    return '$_atKeyScanPrefix$mid\\.$_escapedNamespace$ownerSuffix';
+    return '$_atKeyScanPrefix$mid\\.$_escapedNamespace${_ownerAnchor(ownerSuffix)}';
   }
 
   /// Regex matching direct items at an **arbitrary pre-composed
@@ -1173,17 +1202,24 @@ interface class AtCollection<T> {
   /// `getOrNull(id, owner) != null` when you only care whether the
   /// item is there.
   ///
-  /// Both paths issue a single [AtClient.get] probe. For self-owned
-  /// items the call short-circuits on the seen-id cache populated by
-  /// every successful read/write in this process and only probes on
-  /// a miss. For items owned by other atSigns it probes the
-  /// recipient copy `<self>:<id>.<namespace><owner>` directly.
+  /// Both paths issue a single [AtClient.get] probe against the LOCAL
+  /// store. For self-owned items the call short-circuits on the seen-id
+  /// cache populated by every successful read/write in this process and
+  /// only probes on a miss. For items owned by other atSigns it probes the
+  /// received copy `cached:<self>:<id>.<namespace><owner>` — the same
+  /// locally-stored key shape [getOrNull] reads — so `exists` and
+  /// `getOrNull(id, owner) != null` agree, including offline.
   Future<bool> exists(String id, Atsign owner) async {
     if (owner == atSign) {
       return _selfKeyExists(id);
     }
+    // Build the cached shape (leading `cached:` sets isCached, which routes
+    // the get to the LOCAL secondary). Omitting it yields `@self:id.ns@owner`
+    // with isCached=false — an other-owner key the verb-builder routes to a
+    // REMOTE lookup, which would diverge from getOrNull and fail offline.
     try {
-      await atClient.get(AtKey.fromString('$atSign:$id.$namespace$owner'));
+      await atClient
+          .get(AtKey.fromString('cached:$atSign:$id.$namespace$owner'));
       return true;
     } catch (_) {
       return false;
@@ -1215,6 +1251,21 @@ interface class AtCollection<T> {
   Future<CItem<T>?> getOrNull(String id, Atsign owner) async {
     await for (final item in getItemsAsStream(id: id, owner: owner)) {
       return item; // first match; stream unsubscribed here.
+    }
+    return null;
+  }
+
+  /// Like [getOrNull] but also resolves an item whose `availableAt` is
+  /// still in the future (yielded as a value-less placeholder carrying
+  /// owner/id/availableAt). The [_CItemTimerScheduler] uses this to
+  /// (re)register a firing on an update event — the public [getOrNull]
+  /// filters not-yet-available items out, which would drop the very items
+  /// [availableEvents] exists to fire.
+  Future<CItem<T>?> _firstIncludingNotYetAvailable(
+      String id, Atsign owner) async {
+    await for (final item in _getItemsAsStreamInternal(
+        id: id, owner: owner, includeNotYetAvailable: true)) {
+      return item;
     }
     return null;
   }
@@ -1284,6 +1335,13 @@ interface class AtCollection<T> {
       try {
         if (k.fullKeyAndOwner != pendingKey) {
           if (pending != null) yield pending;
+          // Reset the buffer up front: after this boundary yield, if the
+          // current key is skipped (data:null, not-yet-available, or a
+          // KeyNotFoundException expiry/delete race below) the just-yielded
+          // item must not be re-yielded at the next boundary. The success
+          // and placeholder paths set `pending` again before any yield.
+          pending = null;
+          pendingKey = k.fullKeyAndOwner;
           final v = await atClient.get(k);
           // An item that is not yet available (`availableAt` in the
           // future) or whose value the keystore won't return for any
@@ -1314,11 +1372,9 @@ interface class AtCollection<T> {
             // beyond `availableAt`.
             final md = v.metadata;
             if (md == null || md.availableAt == null) continue;
-            final placeholder = CItem._(
+            final placeholder = CItem<T>._placeholder(
               owner: k.sharedBy!.toAtsign(),
               id: k.key.split('.').first,
-              type: 'n/a',
-              obj: null as T,
               sharedWith: {},
               createdAt: md.createdAt ?? DateTime.now().toUtc(),
               expiresAt: md.expiresAt ??
@@ -1374,7 +1430,9 @@ interface class AtCollection<T> {
           pendingKey = k.fullKeyAndOwner;
         }
         if (k.sharedWith != null) {
-          pending!.sharedWith.add(k.sharedWith!.toAtsign());
+          // `pending?`: a group whose primary copy was skipped above leaves
+          // `pending` null; dropping a sibling's sharedWith is correct then.
+          pending?.sharedWith.add(k.sharedWith!.toAtsign());
         }
       } on KeyNotFoundException {
         // Expiry race: the key passed the keystore's expiry filter
@@ -2072,7 +2130,13 @@ interface class AtCollection<T> {
         final ancOwner = i < ancestorOwners.length
             ? ancestorOwners[i]
             : self; // lenient: short chain ⇒ treat missing as self
-        final ancKey = AtKey.fromString('$ancId.$composed$ancOwner');
+        // A received ancestor lives locally as `cached:<self>:<id>.<ns>@<owner>`;
+        // without the `cached:` prefix the key is other-owner and non-cached,
+        // which routes to a REMOTE lookup — so an offline/unreachable probe
+        // would throw and wrongly mark a live descendant orphaned, deleting it.
+        final ancKey = ancOwner == self
+            ? AtKey.fromString('$ancId.$composed$ancOwner')
+            : AtKey.fromString('cached:$self:$ancId.$composed$ancOwner');
         try {
           await atClient.get(ancKey);
         } catch (_) {
@@ -2364,10 +2428,15 @@ interface class AtCollection<T> {
           id: parts.id,
           ancestry: _zipAncestryOwners(parts.ancestry, parentOwners),
         ));
-        if (directParent.subName == _rr) {
+        if (directParent.subName == _rr && parts.from != self) {
           // For an incoming __rr write the parent's owner is `self`
           // (the receipt was sent TO us) — same identity that
-          // `n.to.toAtsign()` carries on the notification path.
+          // `n.to.toAtsign()` carries on the notification path. The
+          // `parts.from != self` guard drops the reader's OWN outgoing
+          // receipt: on the data-event path `markReadByMe`'s local write
+          // (`@owner:r.__rr.id.<ns>@self`, from=self) re-enters here and
+          // would otherwise fire a phantom CReadReceipt(owner: self,
+          // from: self) that the notification path never produces.
           _events.add(CReadReceipt(
             owner: self,
             id: directParent.id,
@@ -4557,7 +4626,10 @@ final class _CItemTimerScheduler<E extends CEvent, T> {
     // `availableAt` / `expiresAt` may differ.
     _removeByOwnerId(owner, id);
     try {
-      final fresh = await collection.getOrNull(id, owner);
+      // Include not-yet-available items: an item created/updated with
+      // `availableAt` in the future must still be registered so its
+      // CItemAvailable fires. The public getOrNull would filter it out.
+      final fresh = await collection._firstIncludingNotYetAvailable(id, owner);
       if (_disposed) return;
       if (fresh != null) {
         _registerForItem(fresh);
@@ -4653,8 +4725,11 @@ final class CItem<T> {
   /// otherwise `'binary'` for [Uint8List] or `'n/a'` for primitives.
   late final String type;
 
-  /// The application's domain object.
-  final T obj;
+  /// The application's domain object. `late final` so a not-yet-available
+  /// placeholder ([CItem._placeholder]) can omit it — a non-nullable `T`
+  /// has no null value, and the scheduler that consumes placeholders never
+  /// reads `obj`. Reading it on a placeholder throws.
+  late final T obj;
 
   /// atSigns who receive a copy of this item. Mutable; edit then call
   /// [AtCollection.update] to persist.
@@ -4706,6 +4781,24 @@ final class CItem<T> {
       throw ArgumentError('type for Uint8List must be "binary"');
     }
   }
+
+  /// A value-less placeholder for a not-yet-available item, used ONLY by
+  /// [_CItemTimerScheduler] to compute a firing's `fireAt`. `obj` is left
+  /// unset — the scheduler reads only owner/id/availableAt/expiresAt, and
+  /// the public read path filters these out, so they never reach app code.
+  /// (`CItem._(obj: null as T)` would throw for a non-nullable `T`.)
+  CItem._placeholder({
+    required this.owner,
+    required this.id,
+    required this.availableAt,
+    required this.createdAt,
+    required this.expiresAt,
+    required this.sharedWith,
+    required AtCollection<T> collection,
+    List<Atsign>? parentOwners,
+  })  : _collection = collection,
+        type = 'n/a',
+        parentOwners = parentOwners ?? const <Atsign>[];
 
   Map<String, dynamic> toJson() {
     final base = type == 'binary'

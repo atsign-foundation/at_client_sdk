@@ -497,10 +497,10 @@ Execution rulings from the plan-vs-code review (post-review); each is binding.
   the default (faster on mobile/desktop); the pure-Dart backend is the fallback and
   the forced choice under WASM. PRs #2030 (`at_chops_ffi` barrel + auto-resolver)
   and #2039 (AES-GCM FFI) are IN D1 scope on the at_chops 3.4.0 slot alongside P-2.
-  **Status (2026-07-06):** #2030 **merged to trunk 2026-07-03** (+ #2046 review-fixes),
-  bumping at_chops to 3.4.0 assembled-but-unpublished; #2039 is still **draft**; and
-  **P-2's `mldsa65` verify branch folds into this same unpublished 3.4.0 before it
-  publishes** (decision 2026-07-06 — not a fresh minor). (Scope note → the 2026-07-03 rulings below: auto-resolve
+  **Status (2026-07-20): closed.** #2030 merged to trunk 2026-07-03 (+ #2046
+  review-fixes), opening the at_chops 3.4.0 slot; #2039 merged 2026-07-09 and P-2's
+  `mldsa65` verify branch (#2056) merged 2026-07-06, both folded into that same slot
+  rather than a fresh minor; **at_chops 3.4.0 published 2026-07-17**. (Scope note → the 2026-07-03 rulings below: auto-resolve
   applies to the `AtPqc` accessors; key generation through the web-safe barrel's
   key pair classes is pure-Dart by construction.)
 - **`_apsk` is a pinned cross-tier property — present and write-restricted.** Envelope
@@ -668,6 +668,8 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 | **2026-07-06** | **Planning-day reconciliation rulings** (two): (1) **inter-server PQ authentication is IN D1 scope** as new project **IS-1** ([implementation-plan.md §13](implementation-plan.md)) — the atServer FROM/POL X-Wing+ML-DSA-65 handshake (PR #2683), off the D1 GA critical path, gated on publishing the at_chops PQ-API surface (`XWingCert`/`resolveXWing`/`resolveMlDsa65`). (2) **P-2's `mldsa65` verify branch folds into the existing unpublished at_chops 3.4.0** (bumped on trunk by #2030) before it publishes — not a fresh minor. | Planning-day reconciliation of #1889 vs the plan vs merged/open PRs across at_client_sdk + at_server surfaced a whole untracked inter-server workstream and an at_chops 3.4.0 slot already opened on trunk; these two rulings place both in the record. |
 | **2026-07-06** | **P-2 satisfied on trunk** — the `mldsa65` `_getVerificationAlgorithm` branch merged (issue #2050 / PR #2056), folded into the unpublished at_chops 3.4.x slot per the ruling above; #2039 (AES-GCM FFI) merged into the same slot. | The one missing ML-DSA verify branch is now in the tree; P-2's residual is the 3.4.x publish itself. |
 | **2026-07-17** | **PR #2047 / S-1 conformance rulings** (five, → [section 6](#6-resolved--open-execution-decisions-af)): `flush()` supersedes `append()`/`save()`; retire-never-remove (`retireKey`, forward-only status); the never-lose flush contract scoped to bootstrap stores (`LocalKeystoreAtKeysIo` not needed at this time; CK-class stores must support eviction for B5a); `keyPartType`/`keyAlgorithmType` as open String tokens with known-token consts (X-Wing = `xwing` + encapsulation/decapsulation); S-1 ships as at_auth **3.3.0** (3.2.0 consumed by the network-timeout release). | The S-1 implementation review found the built shape better than the recorded working names in three places and a version-slot collision; these rulings align the record with the code before at_auth 3.3.0 publishes. |
+| **2026-07-17** | **Release train published:** `at_commons 5.13.0`, `at_chops 3.4.0`, `at_client 3.13.0` then `3.14.0`, `at_auth 3.3.0-rc1`, `at_lookup 3.6.0`, `at_onboarding_cli 1.16.0`. Same day, **SS-0 merged** (#2037) and **S-2 completed** (#2076, `AtKeysIo` threaded through `CryptoContext`). | Closes P-2's 3.4.x publish residual and the at_chops prerequisite for both S-1 and IS-1; `at_client 3.14.0` now carries the SS-0 substrate as an experimental surface, moving the D1 GA version slot off 3.14.x. |
+| **2026-07-20** | **Planning-day reconciliation** (#1889 vs the doc set vs merged/open PRs and branches). Recorded: SS-0, SS-1b, S-1 and S-2 are **satisfied**; P-2 is fully closed by the 3.4.0 publish; `SS-1c` is the next actionable critical-path project. Issues cut for the previously-untracked substrate tail — SS-1c [#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084), SS-2 [#2085](https://github.com/atsign-foundation/at_client_sdk/issues/2085), SS-3 [#2086](https://github.com/atsign-foundation/at_client_sdk/issues/2086), SS-4 [#2087](https://github.com/atsign-foundation/at_client_sdk/issues/2087) — and **two merged-but-unpublished residuals recorded as open gates**: the at_auth rc1 → stable 3.3.0 promotion (blocking S-6 and SS-2), and S-2's `CryptoContext.keys` (#2076), which merged at 18:20Z on 2026-07-17 — after `at_client 3.14.0` published at 16:02Z — so it awaits the next at_client release. IS-1 (at_server #2683) restated as in progress and off the critical path. | #2008 had been closed on the SS-0 merge, leaving `SS-1c → SS-2 → SS-3 → SS-4` — the whole run-up to the D1 GA gate — with no tracking issue; and the 2026-07-17 release train had closed several publish gates the docs still carried as open. |
 
 **Cross-refs:** the Wave-0 "already landed" detail and the project that follows
 each decision are in `implementation-plan.md`; the phase trajectory this timeline
@@ -696,11 +698,14 @@ authority that superseded it — for anyone reading their **git history**:
 | `crypto-roadmap.md` "Upgrading an existing client — the sequence" + "atServer support this requires (four new capabilities)" | step-4 legacy-RSA delete after PQ auth; "four new" capabilities incl. multi-key + per-key delete | section 5 here (fresh auto-approved enrollment) |
 | `pq-secret-push.md` P9/P12 | multi-APKAM list + per-APKAM delete | sections 4–5 here |
 
-The OQ table in `wp-ss-execution-plan.md` is already updated (OQ2/OQ8/OQ9); only
-its **project bodies** (P0/P5/P9/P12) lag.
+All the files named above were **deleted** in the 2026-06-30 consolidation — none
+of them is a live document, and nothing in this table is an outstanding edit. At the
+point of deletion, `wp-ss-execution-plan.md`'s OQ table had been brought up to date
+(OQ2/OQ8/OQ9) while its project bodies (P0/P5/P9/P12) still lagged; that mismatch is
+recorded here only so anyone reading the file's **git history** knows which parts of
+it were already stale when it was removed.
 
-**Cross-ref:** the corrected mechanics those sections should now match live in
-`design.md`.
+**Cross-ref:** the corrected mechanics live in `design.md`.
 
 ---
 

@@ -165,22 +165,21 @@ tamper→`authFailure` / info-aad-mismatch green; downstream construction sites 
 published 3.3.0 surface. Don't break the deprecated sync verify path.
 **coversD1:** D1-S S1 + D1-A.
 
-### P-2 — at_chops: wire `mldsa65` into the verification branch; publish with the 3.4.x slot · at_chops · M — **SATISFIED on trunk (2026-07-06); residual = the 3.4.x publish**
+### P-2 — at_chops: wire `mldsa65` into the verification branch; publish with the 3.4.x slot · at_chops · M — **SATISFIED (published 2026-07-17)**
 **Goal:** the one missing ML-DSA verification branch (the enum member + algo classes already ship in 3.3.0).
 **Done:** the `_getVerificationAlgorithm` `mldsa65` branch **merged to trunk 2026-07-06** (issue #2050 /
-PR #2056), folded into the unpublished 3.4.x slot per the 2026-07-06 decision; #2039 (AES-GCM FFI) merged
-into the same slot. The residual is the **3.4.x publish itself** (3.4.1 as of PR #2047's barrel-export fix),
-which must land on pub.dev before `at_server` bumps its pin in SS-3 and before at_auth 3.3.0 publishes.
+PR #2056), folded into the 3.4.0 slot per the 2026-07-06 decision; #2039 (AES-GCM FFI) merged into the same
+slot on 2026-07-09. **`at_chops` 3.4.0 was published to pub.dev on 2026-07-17**, closing the publish
+residual — `at_server` can bump its pin in SS-3, and the at_chops publish no longer gates IS-1.
 **Builds on:** — (independent root; parallel to P-1).
 **Deliverables → [design.md](design.md)** (at_chops primitives, ML-DSA): add an `mldsa65` branch in
 `_getVerificationAlgorithm` returning `MlDsa65PureDartAlgo()` (no `DynamicLibrary` in `AtChopsImpl` — do
 **not** claim FFI-when-available); no new `SigningAlgoType` member, no new algo class; publish in the new
-minor. **The 3.4.0 slot is already open on trunk:** #2030 (the `at_chops_ffi` barrel + `AtPqc`
-auto-resolver + `AtSignatureAlgorithm` classes) **merged to trunk 2026-07-03** (+ #2046 review-fixes) and
-bumped `at_chops` to 3.4.0, **assembled-but-unpublished** under the one-time semver exemption. P-2's
-`_getVerificationAlgorithm` `mldsa65` branch is the one remaining deliverable to add into that same 3.4.0
-before publish; #2039 (AES-GCM FFI) is still **draft** and folds into 3.4.0 too if it lands first. Those
-FFI PRs realise the **FFI-auto-resolve-default** policy
+minor. **The 3.4.0 slot assembled on trunk and published 2026-07-17:** #2030 (the `at_chops_ffi` barrel +
+`AtPqc` auto-resolver + `AtSignatureAlgorithm` classes) **merged to trunk 2026-07-03** (+ #2046
+review-fixes) and bumped `at_chops` to 3.4.0 under the one-time semver exemption; P-2's
+`_getVerificationAlgorithm` `mldsa65` branch (#2056) and #2039 (AES-GCM FFI, merged 2026-07-09) folded into
+that same 3.4.0, which then shipped. Those FFI PRs realise the **FFI-auto-resolve-default** policy
 (FFI when available, pure-Dart fallback, WASM forces pure-Dart — ruling in [decisions.md](decisions.md)); they
 are **in D1 scope**, on the at_chops track. **Scope note (2026-07-03 ruling):** auto-resolve applies to the
 `AtPqc` accessors (`AtPqc.xWing`/`AtPqc.mlDsa65`, including their keygen); key generation through the
@@ -192,9 +191,9 @@ wire-compatible, so pure-Dart-generated keys work with the FFI backends and vice
 rsa/ecc/pkam unchanged. Do **not** assert end-to-end `AtChops.verify(mldsa65)` — the deprecated sync path
 doesn't await the async ML-DSA verify.
 **Effort:** M.
-**Watch-outs:** add the `mldsa65` verify branch into the existing **unpublished** 3.4.0 (already on trunk
-via #2030) and publish before `at_server` bumps its pin in SS-3; do **not** open a fresh minor. **ML-DSA
-APKAM auth is retained** — the
+**Watch-outs:** historical — the `mldsa65` verify branch went into the then-unpublished 3.4.0 (opened on
+trunk via #2030) rather than a fresh minor; that slot has since published. **ML-DSA APKAM auth is
+retained** — the
 1:1:1 simplification does not drop ML-DSA: the at_chops `mldsa65` verify branch (this project), the
 at_commons pkam `signingAlgo` literal (folded into SS-1a's publish), and the server `_getSigningAlgoType`
 branch reading the **record** `signingAlgo` together make it work.
@@ -233,7 +232,7 @@ new config (there is no `CryptoRegistry`).
 `P-1`/`pqSeal` publish gate is **already satisfied** (at_chops 3.3.0, published 2026-06-23), leaving the SS-0
 baseline (PR #2037) as its prerequisite (see [section 10](#10-cross-cutting-publish-gates-critical-path-wavesparallelism-testing)).
 
-### S-1 — at_auth: extend `AtKeys` in place (additive PQ methods, deprecate legacy) + `AtKeysIo` runtime persistence (API only); publish 3.3.0 · at_auth · M — **implemented (PR #2047, in review)**
+### S-1 — at_auth: extend `AtKeys` in place (additive PQ methods, deprecate legacy) + `AtKeysIo` runtime persistence (API only); publish 3.3.0 · at_auth · M — **SATISFIED on trunk (2026-07-17); residual = the stable 3.3.0 publish**
 **Goal:** extend the existing `AtKeys` in place so it holds every key (per-enrollment AND per-APKAM) via
 additive PQ-safe accessors while the legacy key fields deprecate; interface-first.
 **Builds on:** at_auth `AtKeys`. Additive only; gates nothing in Wave 2.
@@ -254,12 +253,26 @@ PQ add→read→retire (material never removed; legacy fields still readable via
 `keyPartType`/`keyAlgorithmType` tokens round-trip unmodified.
 **Effort:** M.
 **Watch-outs:** ⚠️ **version** — resolved 2026-07-17: at_auth 3.1.1 published, then **3.2.0 was consumed by
-the validateAtServer network-timeout release**; S-1 ships as **3.3.0** (Open decision #D closed). Requires
-the at_chops 3.4.x publish first (hashing-algo barrel exports).
+the validateAtServer network-timeout release**; S-1 ships as **3.3.0** (Open decision #D closed). The
+at_chops 3.4.x prerequisite (hashing-algo barrel exports) is satisfied — 3.4.0 published 2026-07-17.
+**Publish state:** S-1 landed via PR #2047 (+ #2080 tweaks) and is published as **`at_auth 3.3.0-rc1`**.
+The **rc1 → stable 3.3.0 promotion is an open gate**: S-6 (consumer bumps) and SS-2's at_auth work both
+need a stable at_auth 3.3.0 to pin against, and consumers cannot depend on a prerelease without an explicit
+prerelease constraint. Timing is unresolved — see [section 10](#10-cross-cutting-publish-gates-critical-path-wavesparallelism-testing).
+**S-2 carries a sibling residual** (its `CryptoContext.keys` merged after `at_client 3.14.0` published), so
+both structural enablers are merged-but-unpublished and clear together on the next release round.
 **coversD1:** D1-S S2.
 
-### S-2 — at_client: `CryptoContext.keys` additive field (interface-first only) · at_client · S (≈1 PR)
+### S-2 — at_client: `CryptoContext.keys` additive field (interface-first only) · at_client · S (≈1 PR) — **SATISFIED on trunk (2026-07-17); residual = the at_client publish**
 **Goal:** the tiny field the data path compiles against.
+**Done:** the seam landed with #1930; PR **#2076** threaded the `AtKeysIo` through `CryptoContext` on
+2026-07-17, completing the additive field.
+⚠️ **Merged but not yet published.** #2076 merged at 18:20Z on 2026-07-17, *after* `at_client 3.14.0`
+published at 16:02Z the same day, and the 3.14.0 changelog does not mention it. The `CryptoContext.keys`
+field therefore sits on trunk **unreleased** — a consumer pinning a hosted `at_client` cannot compile
+against it yet. Downstream projects that need the field from a published package (rather than through
+workspace path resolution, which masks the gap locally and in CI) must sequence after the next `at_client`
+release.
 **Builds on:** #1930 + S-1's extended `AtKeys` / injected `AtKeysIo`.
 **Deliverables → [design.md](design.md)** (CryptoProvider seam): add an `AtKeysIo keys` field to
 `CryptoContext` (additive) — the provider seam is injected the `AtKeysIo` (the key source) and yields the
@@ -275,13 +288,14 @@ Open decision #E in [decisions.md](decisions.md).
 Resolve where `context.keys` is sourced at construction (overlaps S-3).
 **coversD1:** D1-S S5.
 
-### S-3 — at_client/at_auth: `LocalKeystoreAtKeysIo` + updatable `.atKeys`/keychain · at_client, at_auth, at_client_flutter · L
+### S-3 — at_client/at_auth: updatable `.atKeys`/keychain via the injected `AtKeysIo` · at_client, at_auth, at_client_flutter · L
 **Goal:** durable, updatable key-storage homes (bootstrap→file/keychain, distributed/rotating→keystore,
 ephemeral→memory). Stores are **dumb** — convergence stays in the substrate.
 **Builds on:** S-1's extended `AtKeysIo` runtime-persistence API.
-**Deliverables → [design.md](design.md)** (key stores): `LocalKeystoreAtKeysIo` over the 5.x keystore; make
-`FileAtKeysIo` updatable (re-wrap the self-encryption key on rewrite, atomic write + backup); compose the
-extended `AtKeys` (via its injected `AtKeysIo`) at AtClient construction.
+**Deliverables → [design.md](design.md)** (key stores): make `FileAtKeysIo` updatable (re-wrap the
+self-encryption key on rewrite, atomic write + backup); compose the extended `AtKeys` (via its injected
+`AtKeysIo`) at AtClient construction; cover the keychain store, which `flush()` alone does not reach.
+`LocalKeystoreAtKeysIo` over the 5.x keystore is **out of scope** (2026-07-17 ruling).
 **Acceptance → [acceptance.md](acceptance.md):** post-onboarding key add persists + survives close/reopen;
 ephemeral stays in-memory; **migration test** on a v(N-1) `.atKeys`/store fixture (backend is **Hive**
 today, not SQLite — keep the test backend-agnostic; name any legacy box/table explicitly); a **keychain
@@ -355,8 +369,8 @@ later pulled into this lane, slot it after B-1.
 ## 5. Phase SS — Secret-sharing substrate (SS-1a, SS-1b, SS-1c, SS-2, SS-3, SS-4)
 
 The `SS-*` projects define the secret-sharing substrate work; the substrate design lives in
-[design.md](design.md) §2. **SS-0 lands the substrate baseline first** — SS-1c / SS-2 / RF-1 all presuppose
-the substrate code from PR #2037, which is not yet on trunk.
+[design.md](design.md) §2. **SS-0 landed the substrate baseline** (PR #2037, merged 2026-07-17) — SS-1c /
+SS-2 / RF-1 all presuppose that code, and it is now on trunk.
 
 **Shared substrate fact (stated once).** **pull** (`requestSecret`) and **push**
 (`pushSecretToNamespaceMembers`) are **dual facets of one substrate**: the same `__ssenv` envelope sealed
@@ -389,22 +403,19 @@ on trunk. It does **not** gate on S-1/S-2/S-3.
    application data — is conveyed per-APKAM as a Secret over the substrate.
 5. **appMetadata carries NO `ns` field** (see B-1 in [section 6](#6-phase-b--the-nskey-data-path-b-1-the-d1-centrepiece)).
 
-### SS-0 — land the WP-SS substrate baseline · at_client · M
+### SS-0 — land the WP-SS substrate baseline · at_client · M — **SATISFIED (merged to trunk 2026-07-17)**
 **Goal:** get the WP-SS secret-sharing substrate code onto trunk — the foundation SS-1c / SS-2 / RF-1
-presuppose but that lives only on the feature branch today.
+presuppose.
 **Builds on:** #1930 + P-1 (`pqSeal`, published 3.3.0).
-**Deliverables → [design.md](design.md)** (secret-sharing substrate): land the WP-SS substrate baseline
-(**PR #2037**, open, non-draft, ready for review), **already reworked to the 1:1:1 / flat `listns` /
-no-write-path shape** (via #2043, merged onto the branch — single `apkamPublicKey` + `signingAlgo`; flat
-discovery roster; no `registerKeyPackage` / `enroll:metadata` write path); pending merge to trunk. This is
-the `__ssenv` envelope, `SecretStore`,
-`putIfNewer` ordering, `kpid` addressing, and the push/pull primitives the later SS projects wire up.
+**Done:** **PR #2037 merged to trunk on 2026-07-17**, in the 1:1:1 / flat `listns` / no-write-path shape
+(reworked via #2043 — single `apkamPublicKey` + `signingAlgo`; flat discovery roster; no
+`registerKeyPackage` / `enroll:metadata` write path). It shipped in `at_client 3.14.0` (published
+2026-07-17) as an experimental surface. This is the `__ssenv` envelope, `SecretStore`, `putIfNewer`
+ordering, `kpid` addressing, and the push/pull primitives the later SS projects wire up.
 **Acceptance → [acceptance.md](acceptance.md):** substrate unit suite green; the baseline compiles in the
 1:1:1 shape with no write-path residue.
 **Effort:** M.
-**Watch-outs:** PR #2037 is already in the current shape (1:1:1, flat `listns`, no write path — the
-pre-decision-#F shape has been reworked out via #2043). It is the prerequisite for SS-1c / SS-2 / RF-1;
-those projects cite PR #2037 as "already landed," so it must merge to trunk before they can.
+**Watch-outs:** SS-1c / SS-2 / RF-1 cite PR #2037 as "already landed" — that prerequisite is now met.
 **coversD1:** D1-F substrate baseline.
 
 ### SS-1a — at_commons enroll grammar: `EnrollParams.metadata` + flattened `listns`; publish 5.12.0 — **SATISFIED (at_commons 5.12.0 published 2026-07-04; grammar on trunk via #2040)** · at_commons · M
@@ -428,9 +439,14 @@ folded into this publish).
 **coversD1:** D1-F DEP1 (flatten, commons) + DEP2 (`EnrollParams.metadata` replaces `enroll:metadata`) +
 DEP3 (record `signingAlgo`).
 
-### SS-1b — server: store/return `EnrollParams.metadata` + flattened `listns` + first live round-trip · at_secondary_server, at_server_spec · L
+### SS-1b — server: store/return `EnrollParams.metadata` + flattened `listns` + first live round-trip · at_secondary_server, at_server_spec · L — **SATISFIED (merged 2026-07-07)**
 **Goal:** persist the opaque blob and serve the gated discovery roster.
 **Builds on:** SS-1a (publish first).
+**Done:** landed in `at_server` across **#2685** (the `enroll:listns` verb, verbatim enrollment `metadata`,
+`_apsk` APKAM pubkey publication, merged 2026-07-07), **#2687** (alignment to the ratified WP-SS shape),
+**#2696** (typed `EnrollParams` metadata/signingAlgo), **#2698** (functional tests for the `listns` roster
+and enrollment metadata) and **#2710** (per-enrollment move scoping). The client obligation (SS-1c, #2084)
+is now unblocked.
 **Deliverables → [design.md](design.md)** (atServer enrollment record): on `enroll:request`, persist
 `enrollParams.metadata` + `signingAlgo` onto the enrollment record (`EnrollDataStoreValue` gains
 `metadata` + `signingAlgo`; store a **single** `apkamPublicKey`). Add the gated `enroll:listns`
@@ -451,7 +467,7 @@ the same release as the client**; check the enroll-record value-size limit accom
 blob; downstream client obligation = SS-1c.
 **coversD1:** D1-F DEP1 (server) + DEP2.
 
-### SS-1c — wire at_client to the live verbs + flattened parser · at_client, tests · M
+### SS-1c — wire at_client to the live verbs + flattened parser · at_client, tests · M — [#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084)
 **Goal:** drive the live verbs and parse the flat shape.
 **Builds on:** SS-0 (substrate baseline on trunk) + SS-1b.
 **Deliverables → [design.md](design.md)** (`enroll:listns` client parser): rewrite
@@ -472,7 +488,7 @@ seam to a 1:1:1 seeding seam; a client-driven functional round-trip.
 #2037) — don't duplicate it. Clear the test's own `.atKeys` and gitignore it.
 **coversD1:** D1-F DEP1 (client parser) + DEP2 (write path removed).
 
-### SS-2 — substrate wired into AtClient + server wake-up; key-package-in-request (new-device conveyance only) · at_secondary_server, at_client, at_auth, at_commons · L
+### SS-2 — substrate wired into AtClient + server wake-up; key-package-in-request (new-device conveyance only) · at_secondary_server, at_client, at_auth, at_commons · L — [#2085](https://github.com/atsign-foundation/at_client_sdk/issues/2085)
 **Goal:** the first production call sites + the server-side wake-up + the new-device conveyance path.
 **Builds on:** SS-1c.
 **Deliverables → [design.md](design.md)** (substrate production wiring + server wake-up): DEP4 `__ssenv`
@@ -497,9 +513,9 @@ envelope + fires `shareAllSecretsWithEnrollment`; **no `enroll:metadata` command
 release; ~1KB blob size limit; listener-before-trigger for the wake-up subscription.
 **coversD1:** D1-F DEP4 + production wiring (new-device conveyance).
 
-### SS-3 — substrate hardening (durable store + jitter) + single `apkamPublicKey` + `signingAlgo` verify · at_secondary_server, at_client · L
+### SS-3 — substrate hardening (durable store + jitter) + single `apkamPublicKey` + `signingAlgo` verify · at_secondary_server, at_client · L — [#2086](https://github.com/atsign-foundation/at_client_sdk/issues/2086)
 **Goal:** durable secret storage + smoothed anti-storm + the single-key record-authoritative verify.
-**Builds on:** SS-2 ◀ P-2.
+**Builds on:** SS-2 ◀ P-2 (satisfied — at_chops 3.4.0 published 2026-07-17).
 **Deliverables → [design.md](design.md)** (SecretStore durability + single-key verify): the enrollment record keeps a **single** `apkamPublicKey`; PKAM verify selects RSA vs
 ML-DSA from the record's **`signingAlgo`** (**record-authoritative** — `_validateSignature` reads the
 *stored* algo, **not** the client-supplied `verbParams[atPkamSigningAlgo]`; legacy null → `rsa2048`). Plus
@@ -513,11 +529,11 @@ rsa2048; both functional + e2e.
 by SS-1a.
 **coversD1:** D1-F DEP3 (single-key + signingAlgo).
 
-### SS-4 — nskey minting + pqpublickey lifecycle + correspondence check · at_client · L–XL
+### SS-4 — nskey minting + pqpublickey lifecycle + correspondence check · at_client · L–XL — [#2087](https://github.com/atsign-foundation/at_client_sdk/issues/2087)
 **Goal:** mint the per-namespace key material and the atSign-level root PQ key — the first convergence
 feeder into the data path.
-**Builds on:** SS-3 + **P-3** (pqpublickey name/cold-start target) + **S-3** (LocalKeystore for nskey
-privates).
+**Builds on:** SS-3 + **P-3** (pqpublickey name/cold-start target) + **S-3** (updatable local key
+storage for nskey privates).
 **Deliverables → [design.md](design.md)** (nskey minting + pqpublickey lifecycle): mint **one** nskey
 keypair per `(atSign, namespace)` and store its public half as the owner-only self at-key
 `nskey.<ns>@alice` (this alone suffices for self data — Alice's own clients hold it); publish the
@@ -789,14 +805,14 @@ out of scope here** — see [roadmap.md](roadmap.md) for the D2 trajectory.
 | #  | Package             | Bump                          | Project(s) | Why |
 |----|---------------------|-------------------------------|------------|-----|
 | 1  | `at_chops`          | minor `3.2.1 → 3.3.0` **(published 2026-06-23, done)** | P-1    | stateless functional core + HPKE `pqSeal`/`pqOpen`; `@Deprecated AtChopsImpl` shim |
-| 2  | `at_chops`          | minor `3.3.0 → 3.4.0` **(bumped on trunk via #2030, unpublished)** | P-2 | #2030 (`at_chops_ffi` barrel + `AtPqc` + `AtSignatureAlgorithm`) landed the 3.4.0 bump on trunk 2026-07-03 (+ #2046), assembled-but-unpublished; **P-2 folds its `mldsa65` verify branch into this same 3.4.0 before publish**; #2039 (AES-GCM FFI) still draft. Minor under the one-time semver exemption ([decisions.md](decisions.md) 2026-07-03) |
-| 3  | `at_commons`        | minor `5.11.0 → 5.12.0` **(published 2026-07-04, done)** | SS-1a | `EnrollParams.metadata` + `signingAlgo`; flattened `listns`; pkam `mldsa65` literal |
-| 4  | `at_auth`           | minor `3.2.0 → 3.3.0`         | S-1        | additive: extend `AtKeys` in place (deprecate legacy); `AtKeysIo` runtime persistence; `InMemoryAtKeysIo` |
+| 2  | `at_chops`          | minor `3.3.0 → 3.4.0` **(published 2026-07-17, done)** | P-2 | #2030 (`at_chops_ffi` barrel + `AtPqc` + `AtSignatureAlgorithm`) landed the 3.4.0 bump on trunk 2026-07-03 (+ #2046); P-2's `mldsa65` verify branch (#2056, 07-06) and #2039 (AES-GCM FFI, 07-09) folded into the same slot, which then published. Minor under the one-time semver exemption ([decisions.md](decisions.md) 2026-07-03) |
+| 3  | `at_commons`        | minor `5.11.0 → 5.12.0` **(published 2026-07-04, done)** | SS-1a | `EnrollParams.metadata` + `signingAlgo`; flattened `listns`; pkam `mldsa65` literal. *(at_commons has since published 5.13.0, 2026-07-17, outside this program.)* |
+| 4  | `at_auth`           | minor `3.2.0 → 3.3.0` **(3.3.0-rc1 published 2026-07-17; stable pending)** | S-1 | additive: extend `AtKeys` in place (deprecate legacy); `AtKeysIo` runtime persistence; `InMemoryAtKeysIo`. ⚠️ **the rc1 → stable promotion is an open gate** — S-6 and SS-2's at_auth work need a stable 3.3.0 to pin against; timing unresolved |
 | 5  | `at_auth`           | **major `3.3.0 → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
-| 6  | `at_client`         | minor `3.13.0 → 3.14.0`       | S-2…B-2    | `at_auth ^4.0.0`; `CryptoContext.keys`; nskey data path; rotation. **= D1 GA** ⚠️ pub.dev latest is **3.12.0**, in-tree **3.13.0** (unshipped) — publish the in-progress slot first **or** fold; decide at execution against pub.dev |
-| 7  | `at_client`         | **major `3.14.0 → 4.0.0`**    | R-2        | flip `disallowLegacyEncryption` default → true; selfEncryptionKey stop-existing; dead-code removal |
-| 8  | `at_onboarding_cli` | minor `1.16.0 → 1.17.0`       | S-6        | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; explicit injection ⚠️ pub.dev latest is **1.15.0**, in-tree **1.16.0** (unshipped) — publish or fold; decide at execution against pub.dev |
-| 9  | `at_client_flutter` | minor `1.1.3 → 1.2.0`         | S-6        | `at_auth ^4.0.0`; `file_picker` imports `at_auth_io.dart` |
+| 6  | `at_client`         | minor `3.14.x → 3.15.x`       | S-2…B-2    | `at_auth ^4.0.0`; `CryptoContext.keys`; nskey data path; rotation. **= D1 GA**. ⚠️ **3.13.0 and 3.14.0 both published 2026-07-17** (3.14.0 carries the SS-0 substrate as an experimental surface), so the GA slot has moved off 3.14.x — re-derive the target minor at execution against pub.dev. ⚠️ **S-2's `CryptoContext.keys` (#2076) is on trunk but unreleased** — it merged after 3.14.0 published, so the next at_client release is the first that carries it |
+| 7  | `at_client`         | **major `3.15.x → 4.0.0`**    | R-2        | flip `disallowLegacyEncryption` default → true; selfEncryptionKey stop-existing; dead-code removal |
+| 8  | `at_onboarding_cli` | minor `1.16.0 → 1.17.0`       | S-6        | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; explicit injection. 1.16.0 published 2026-07-17, so 1.17.0 is a clean next slot |
+| 9  | `at_client_flutter` | minor `1.1.4 → 1.2.0`         | S-6        | `at_auth ^4.0.0`; `file_picker` imports `at_auth_io.dart` |
 | 10 | `at_cli_commons`    | minor (constraint bump)       | S-6        | consumes the new `at_onboarding_cli` / `at_client` (transitive at_auth) |
 
 **Dependency-floor bumps (at_client's own pins).** at_client's constraints on trunk are `at_chops ^3.0.0`
@@ -804,7 +820,7 @@ and `at_commons ^5.9.0`; both floors rise during D1:
 
 | at_client pin | Floor bump          | Lands at | Why |
 |---------------|---------------------|----------|-----|
-| `at_chops`    | `^3.0.0 → ^3.3.0`   | SS-0     | the substrate baseline needs the published `pqSeal`/`pqOpen` (3.3.0) |
+| `at_chops`    | `^3.0.0 → ^3.3.0`   | SS-0     | the substrate baseline needs the published `pqSeal`/`pqOpen` (3.3.0) — landed with #2037 |
 | `at_commons`  | `^5.9.0 → ^5.12.0`  | SS-1c    | the flat `listns` grammar + `EnrollParams.metadata` (5.12.0) |
 
 ⚠️ Workspace resolution wires `at_chops`/`at_commons` as path deps, so a too-low floor still resolves green
@@ -813,7 +829,8 @@ build.
 
 ### (b) Critical path to D1 GA
 `#1930(done) → P-1 + S-2 → SS-1a → SS-1b → SS-1c → SS-2 → SS-3 → SS-4 (+ P-3) → B-1 → R-1 → B-2`
-(= at_client 3.14.x, D1 GA: rebuild = universal reader, one flag = PQ writer, opt-in rotation).
+(D1 GA: rebuild = universal reader, one flag = PQ writer, opt-in rotation).
+**Everything up to and including SS-1b is satisfied as of 2026-07-17** — `SS-1c` ([#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084)) is the next actionable project on the path.
 **Off-path (parallel):** `RF-SRV → RF-2b → RF-2c` (RF-1 confirm), `B-3`, `ON-1`, `S-5 → S-6`, `D2-1`, `KF-1`
 (builds on S-3), and the final `R-2`.
 
@@ -821,8 +838,8 @@ build.
 The wave-1 → wave-2 boundary is **soft** — the "waves" are parallelism groupings, not barriers; the actual
 gating is the per-project dependency list. **The substrate has no remaining publish gate** — its only publish
 dependency, `P-1`/`pqSeal` on `at_chops` 3.3.0, **shipped to pub.dev 2026-06-23**; `S-1`/`S-2`/`S-3`
-(WP2/WP3/WP4) do **not** block Wave 2 either. The substrate's remaining prerequisite is the **SS-0 baseline**
-(PR #2037) landing on trunk, not a hosted publish.
+(WP2/WP3/WP4) do **not** block Wave 2 either. The substrate's last prerequisite was the **SS-0 baseline**
+(PR #2037) landing on trunk rather than a hosted publish — **met on 2026-07-17**.
 
 | Gate item                        | Blocks the substrate? |
 |----------------------------------|-----------------------|
@@ -921,8 +938,9 @@ automatic fallback to legacy UUID/RSA for non-PQ peers (zero flag day, mixed-fle
 
 **Builds on:** the at_chops PQ primitives (P-1 `pqSeal`/X-Wing, P-2 ML-DSA verify) **plus a new at_chops
 API surface** — `XWingCert`, `resolveXWing` / `resolveMlDsa65`, and `at_algorithm.dart` exports — that is
-**not yet on `at_chops` trunk**. It lives on branch `pq/st/at-chops-pq-api` and **must be published (as part
-of, or after, the 3.4.0 slot — see P-2) before IS-1 can land without the workspace path override**.
+**not yet on `at_chops` trunk**. It lives on branch `pq/st/at-chops-pq-api` and **must be published before
+IS-1 can land without the workspace path override** — note the 3.4.0 slot has since published (2026-07-17),
+so this surface needs its own slot rather than folding into 3.4.0.
 (`generateXWingKeyPair` / `generateMlDsa65KeyPair` already exist on `at_chops` trunk 3.4.0.)
 
 **Deliverables:** a `PqKeyManager` (server-internal, **not** an at_chops class) managing the ML-DSA-65 +
@@ -940,12 +958,11 @@ rotate lifecycle, prev-cert expiry); FROM/POL PQ-proof + fallback paths; pure-Da
 UUID challenge, POL via RSA signing key). Existing delete/update verb tests still pass (protected-key count
 updated for the PQ secret keys).
 
-**Tracking:** PR **#2683** (`at_server`, `pq/st/pq-interserver-comms`, currently draft, "Phase 0") →
-sub-issue under #1889. Design detail in [design.md](design.md) (§ inter-server PQ authentication).
+**Tracking:** PR **#2683** (`at_server`, `pq/st/pq-interserver-comms`) — **in progress, not near merge**;
+off the D1 GA critical path. Sub-issue [#2049](https://github.com/atsign-foundation/at_client_sdk/issues/2049) under #1889. Design detail in [design.md](design.md) (§ inter-server PQ authentication).
 
 **Watch-outs:** (1) the at_chops PQ-API dependency above is the gating prerequisite — do not merge IS-1
-against the workspace path override. (2) The PR body's "Phase 0" title vs its `diag/interserver-comms-phase1.md`
-filename disagree, and that diag file is absent on the branch — reconcile before review. (3) `pq_xwing_cert`
+against the workspace path override. (2) `pq_xwing_cert`
 / `pq_signing_publickey` are looked up live every handshake and never cached — keep it that way (cert
 rotation depends on it).
 
