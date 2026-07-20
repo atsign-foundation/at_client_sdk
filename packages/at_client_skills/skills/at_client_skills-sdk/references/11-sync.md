@@ -80,7 +80,7 @@ sync.removeProgressListener(listener);
 
 `SyncProgress` carries `syncStatus` (`SyncStatus`:
 `started` / `notStarted` / `inProgress` / `success` / `failure`),
-`localCommitId`, `serverCommitId`, `lastSyncedOn`, and `atClientException`.
+`localCommitId`, `serverCommitId`, `pendingPushCount`, and `atClientException`.
 
 ---
 
