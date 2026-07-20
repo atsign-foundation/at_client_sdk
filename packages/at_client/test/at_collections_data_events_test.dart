@@ -186,4 +186,47 @@ void main() {
       await sub.cancel();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // #4 — a reader's OWN outgoing read-receipt (written by markReadByMe) comes
+  // back as a local DataUpdated. It must NOT fire a CReadReceipt: you can't
+  // receipt your own read. An INCOMING receipt (from another atSign) still
+  // must. The guard is `parts.from != self`.
+  group('#4 — read-receipt self/incoming discrimination', () {
+    test("a reader's own outgoing __rr write fires no CReadReceipt", () async {
+      final c = buildCollection<String>();
+      final receipts = <CReadReceipt>[];
+      final sub = c.readReceipts.listen(receipts.add);
+
+      // self=@alice read @bob's item t1 and wrote her own receipt:
+      // `@bob:r.__rr.t1.<ns>@alice` (sharedBy = @alice = self).
+      dataEvents.add(DataUpdated(
+        AtKey.fromString('$bobStr:r.__rr.t1.$namespace$selfAtSignStr'),
+      ));
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(receipts, isEmpty);
+      await sub.cancel();
+    });
+
+    test('an incoming receipt from another atSign still fires', () async {
+      final c = buildCollection<String>();
+      final receipts = <CReadReceipt>[];
+      final sub = c.readReceipts.listen(receipts.add);
+
+      // @bob read self=@alice's item t1 and posted a receipt; on @alice it
+      // lands as `cached:@alice:r.__rr.t1.<ns>@bob` (sharedBy = @bob).
+      dataEvents.add(DataUpdated(
+        AtKey.fromString('cached:$selfAtSignStr:r.__rr.t1.$namespace$bobStr'),
+      ));
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(receipts, hasLength(1));
+      expect(receipts.single.from, bob);
+      expect(receipts.single.id, 't1');
+      await sub.cancel();
+    });
+  });
 }

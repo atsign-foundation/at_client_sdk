@@ -1,23 +1,54 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'at_keys.dart' show AtKeys;
+import 'package:at_auth/src/keys/serialization/assurance.dart';
+import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart';
+
+import '../at_keys.dart' show AtKeys;
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
-/// An interface that defines methods for reading AtKeys.
-/// It can be implemented by classes that read AtKeys from different sources,
+/// Base type for reading [AtKeys]. Implemented by classes that read AtKeys
+/// from different sources.
 sealed class AtKeysIo {
-  FutureOr<AtKeys> read(String atSign);
+  final passphraseCodec = const AtKeysPassphraseEnvelopeCodec();
+  final assurance = const AtKeysAssurance();
+  FutureOr<AtKeys> read(String atsign);
 }
 
 /// An interface that defines methods for AtKeys that can be written.
 /// It can be implemented by classes that write AtKeys to different sources,
 /// such as file system or keychain.
 abstract class WrittenAtKeysIo extends AtKeysIo with KeyIOMixin {
-  Future write(String atSign, AtKeys atKeys);
+  /// Create-only initial persist (fresh onboard); implementations throw if
+  /// the target already exists. Use [flush] to persist later mutations.
+  //todo: futureOr & Atsign types
+  Future write(String atsign, AtKeys atKeys);
+
+  /// Persists [atKeys] as the complete new state for [atsign].
+  ///
+  /// This is the runtime counterpart to [write]: mutate the in-memory
+  /// [AtKeys] (e.g. [AtKeys.addKey]), then flush the whole object.
+  /// Implementations backed by durable storage must not lose data: when a
+  /// target already exists, validate that everything in it is preserved in
+  /// [atKeys] (see [AtKeysAssurance.validateMapUpdate]), then rewrite. When
+  /// no target exists, flush creates it — there is nothing to lose.
+  ///
+  /// The never-lose contract applies to stores of bootstrap key material
+  /// (the `.atKeys` file, keychain). A store holding rotating or evictable
+  /// material defines its own retention policy — deletion there is a
+  /// feature (forward secrecy), not data loss.
+  ///
+  /// The default implementation throws: pre-existing [WrittenAtKeysIo]
+  /// implementations compile unchanged but must override [flush] to
+  /// support runtime persistence.
+  FutureOr<void> flush(Atsign atsign, AtKeys atKeys) {
+    throw UnimplementedError(
+        '$runtimeType does not implement flush(); override it to support '
+        'runtime persistence');
+  }
 }
 
 /// An interface that defines methods for AtKeys that can be generated.
@@ -27,11 +58,13 @@ abstract class GeneratedAtKeysIo extends AtKeysIo with KeyIOMixin {
   AtKeys generateKeys(String publicKeyId);
 }
 
-/// A mixin that provides common functionality for encoding and decoding AtKeys.
+@Deprecated('legacy helpers for serialization')
 mixin KeyIOMixin on AtKeysIo {
-  final AtSignLogger _logger = AtSignLogger('BaseAtKeysIo');
+  final AtSignLogger _logger = AtSignLogger('AtKeysIOUtil -- legacy');
 
-  FutureOr<AtKeys> decryptAtKeysWithSelfEncKey(
+  @Deprecated(
+      'legacy helpers for serialization, if we need to retain this turn it into a static helper')
+  Future<AtKeys> decryptAtKeysWithSelfEncKey(
       Map<String, dynamic> jsonData, PkamAuthMode authMode) async {
     var securityKeys = AtKeys();
     String decryptionKey = jsonData[auth_constants.defaultSelfEncryptionKey];
@@ -73,7 +106,9 @@ mixin KeyIOMixin on AtKeysIo {
     return securityKeys;
   }
 
-  FutureOr<String> encryptAtKeysWithSelfEncKey(
+  @Deprecated(
+      'legacy helpers for serialization, if we need to retain this turn it into a static helper')
+  Future<String> encryptAtKeysWithSelfEncKey(
       AtKeys atKeys, PkamAuthMode authMode, String atsign) async {
     Map<String, dynamic> atKeysMap = {};
     if (atKeys.defaultSelfEncryptionKey == null) {
@@ -119,11 +154,17 @@ mixin KeyIOMixin on AtKeysIo {
     return jsonEncode(atKeysMap);
   }
 
-  AtKeys generateKeyPairs({String? atSign}) {
+  @Deprecated(
+      'legacy helpers for serialization, if we need to retain this turn it into a static helper')
+  AtKeys generateKeyPairs({
+    PkamAuthMode authMode = PkamAuthMode.keysFile,
+    @Deprecated(
+        'ignored; kept so existing atSign: call sites compile — remove in v4')
+    String? atSign,
+  }) {
     var atKeysFile = AtKeys();
-    var logger = AtSignLogger("BaseAtKeysIo");
     // generate user encryption keypair
-    logger.info('Generating encryption keypair');
+    _logger.info('Generating encryption keypair');
     var atEncryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
 
     //generate selfEncryptionKey
@@ -131,35 +172,17 @@ mixin KeyIOMixin on AtKeysIo {
         AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
     var apkamSymmetricKey =
         AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-    logger.info('Generating your encryption keys and .atKeys file\n');
+    _logger.info('Generating your encryption keys and .atKeys file\n');
 
     //generating pkamKeyPair only if authMode is keysFile
     String? pkamPublicKey;
-    if (this is WrittenAtKeysIo) {
-      logger.info('Generating pkam keypair');
+    if (authMode == PkamAuthMode.keysFile) {
+      _logger.info('Generating pkam keypair');
       var apkamRsaKeypair = AtChopsUtil.generateAtPkamKeyPair();
       pkamPublicKey = apkamRsaKeypair.atPublicKey.publicKey.toString();
       atKeysFile.apkamPrivateKey = AtBytes.fromString(
           apkamRsaKeypair.atPrivateKey.privateKey.toString());
     }
-    // else if (this is GeneratedAtKeysIo) {
-    //   // get the public key from secure element
-    //   if (atSign == null) {
-    //     throw AtAuthenticationException('atSign is required to read pkam public key from sim/secure element');
-    //   }
-    //   String? publicKeyId = (this as SimAtKeysIo).publicKeyMap[atSign];
-    //   if (publicKeyId == null) {
-    //     throw AtAuthenticationException('publicKeyId is required in SimAtKeysIo.publicKeyMap to read pkam public key from sim/secure element');
-    //   }
-    //   pkamPublicKey = atChops.readPublicKey(publicKeyId);
-    //   logger.info('pkam  public key from sim: $pkamPublicKey');
-
-    //   // encryption key pair and self encryption symmetric key
-    //   // are not available to injected at_chops. Set it here
-    //   atChops.atChopsKeys.atEncryptionKeyPair = atEncryptionKeyPair;
-    //   atChops.atChopsKeys.selfEncryptionKey = selfEncryptionKey;
-    //   atChops.atChopsKeys.apkamSymmetricKey = apkamSymmetricKey;
-    // }
     atKeysFile.apkamPublicKey = AtBytes.fromString(pkamPublicKey.toString());
     //Standard order of an atKeys file is ->
     // pkam keypair -> encryption keypair -> selfEncryption key -> enrollmentId --> apkam symmetric key -->
@@ -176,44 +199,11 @@ mixin KeyIOMixin on AtKeysIo {
     return atKeysFile;
   }
 
+  @Deprecated(
+      'legacy helpers for serialization, if we need to retain this turn it into a static helper')
   Future<Map<String, dynamic>> decodeAtKeys(
       Map<String, dynamic> decodedAtKeysData,
-      {String? passPhrase}) async {
-    // If it contains "iv(InitializationVector)", it means the data is encrypted with a
-    // passphrase. Decrypt it.
-    if (decodedAtKeysData.containsKey('iv') && passPhrase.isNullOrEmpty) {
-      throw AtDecryptionException(
-          'Pass Phrase is required for password protected atKeys file');
-    }
-    if (decodedAtKeysData.containsKey('iv')) {
-      _logger.info(
-          'Found encrypted atKeys files. Decrypting with the given pass-phrase');
-      AtEncrypted atEncrypted = AtEncrypted.fromJson(decodedAtKeysData);
-
-      if (atEncrypted.hashingAlgoType == null) {
-        throw AtDecryptionException(
-            'Hashing algo type is required for decryption of password protected atKeys file');
-      }
-
-      try {
-        final decryptedAtKeysData = await AtKeysCrypto.fromHashingAlgorithm(
-                atEncrypted.hashingAlgoType!)
-            .decrypt(atEncrypted, passPhrase!);
-        // jsonDecode must stay inside the try: the cipher is unauthenticated,
-        // so an incorrect passphrase does not fail decrypt() -- it yields
-        // arbitrary bytes. Whether those bytes parse as a JSON object is
-        // effectively random per file (the IV varies per write), so a wrong
-        // passphrase otherwise escapes as an uncaught FormatException (invalid
-        // JSON) or a cast error (valid non-object JSON) instead of the
-        // documented AtDecryptionException.
-        decodedAtKeysData =
-            jsonDecode(decryptedAtKeysData) as Map<String, dynamic>;
-      } catch (e) {
-        throw AtDecryptionException(
-            'Failed to decrypt atKeys file - passphrase may be incorrect: $e');
-      }
-    }
-
-    return decodedAtKeysData;
+      {String? passPhrase}) {
+    return passphraseCodec.decode(decodedAtKeysData, passPhrase: passPhrase);
   }
 }

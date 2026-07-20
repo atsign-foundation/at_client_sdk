@@ -1,3 +1,4 @@
+import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
@@ -37,5 +38,20 @@ class MockAtClient extends Mock implements AtClient {
 }
 
 class MockAtClientImpl extends Mock implements AtClientImpl {}
+
+/// `AtKeysIo` is `sealed`, but that only restricts direct subtyping of the
+/// base — `WrittenAtKeysIo` is an ordinary `abstract class`, so extending it
+/// outside at_auth is legal. Both methods throw so any accidental key IO in
+/// the S-2 seam fails loudly (the stub doubles as the behaviour-neutrality
+/// proof). Deliberately does NOT override `flush` (not present on the
+/// at_auth version this branch compiles against).
+class StubAtKeysIo extends WrittenAtKeysIo {
+  @override
+  Future<AtKeys> read(String atSign) => throw UnimplementedError();
+
+  @override
+  Future<void> write(String atSign, AtKeys atKeys) =>
+      throw UnimplementedError();
+}
 
 class FakeLookupVerbBuilder extends Fake implements LookupVerbBuilder {}

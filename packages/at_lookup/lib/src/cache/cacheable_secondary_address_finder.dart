@@ -15,10 +15,14 @@ class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
 
   final String _rootDomain;
   final int _rootPort;
+  final Duration _cacheDuration;
   late SecondaryUrlFinder _secondaryFinder;
 
   CacheableSecondaryAddressFinder(this._rootDomain, this._rootPort,
-      {SecondaryUrlFinder? secondaryFinder, SecureSocketConfig? socketConfig}) {
+      {Duration? cacheDuration,
+      SecondaryUrlFinder? secondaryFinder,
+      SecureSocketConfig? socketConfig})
+      : _cacheDuration = cacheDuration ?? defaultCacheDuration {
     _secondaryFinder = secondaryFinder ??
         SecondaryUrlFinder(_rootDomain, _rootPort, socketConfig: socketConfig);
   }
@@ -49,7 +53,7 @@ class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
 
     if (_cacheIsEmptyOrExpired(atSign)) {
       // _updateCache will either populate the cache, or throw an exception
-      await _updateCache(atSign, defaultCacheDuration, deadline);
+      await _updateCache(atSign, _cacheDuration, deadline);
     }
     if (_map.containsKey(atSign)) {
       // should always be true, since _updateCache will throw an exception if it fails

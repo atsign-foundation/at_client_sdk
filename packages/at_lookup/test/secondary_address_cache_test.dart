@@ -115,6 +115,22 @@ void main() async {
       expect((approxExpiry - cache.getCacheExpiryTime(atSign)!) < 100, true);
     });
 
+    test('test expiry time - custom cache expiry passed to constructor',
+        () async {
+      var atSign = 'registeredAtSign1';
+      final customCache = CacheableSecondaryAddressFinder(
+          rootDomain, rootPort,
+          secondaryFinder: mockSecondaryFinder,
+          cacheDuration: Duration(minutes: 1));
+      await customCache.findSecondary(atSign);
+      final approxExpiry =
+          DateTime.now().add(Duration(minutes: 1)).millisecondsSinceEpoch;
+      expect(customCache.getCacheExpiryTime(atSign), isNotNull);
+      expect(
+          (approxExpiry - customCache.getCacheExpiryTime(atSign)!) < 100,
+          true);
+    });
+
     // TODO Why are these tests commented out?
 //    test('test expiry time  - custom cache expiry for registeredAtSign1',
 //        () async {
