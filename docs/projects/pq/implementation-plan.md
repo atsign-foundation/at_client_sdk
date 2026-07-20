@@ -259,12 +259,20 @@ at_chops 3.4.x prerequisite (hashing-algo barrel exports) is satisfied — 3.4.0
 The **rc1 → stable 3.3.0 promotion is an open gate**: S-6 (consumer bumps) and SS-2's at_auth work both
 need a stable at_auth 3.3.0 to pin against, and consumers cannot depend on a prerelease without an explicit
 prerelease constraint. Timing is unresolved — see [section 10](#10-cross-cutting-publish-gates-critical-path-wavesparallelism-testing).
+**S-2 carries a sibling residual** (its `CryptoContext.keys` merged after `at_client 3.14.0` published), so
+both structural enablers are merged-but-unpublished and clear together on the next release round.
 **coversD1:** D1-S S2.
 
-### S-2 — at_client: `CryptoContext.keys` additive field (interface-first only) · at_client · S (≈1 PR) — **SATISFIED on trunk (2026-07-17)**
+### S-2 — at_client: `CryptoContext.keys` additive field (interface-first only) · at_client · S (≈1 PR) — **SATISFIED on trunk (2026-07-17); residual = the at_client publish**
 **Goal:** the tiny field the data path compiles against.
 **Done:** the seam landed with #1930; PR **#2076** threaded the `AtKeysIo` through `CryptoContext` on
 2026-07-17, completing the additive field.
+⚠️ **Merged but not yet published.** #2076 merged at 18:20Z on 2026-07-17, *after* `at_client 3.14.0`
+published at 16:02Z the same day, and the 3.14.0 changelog does not mention it. The `CryptoContext.keys`
+field therefore sits on trunk **unreleased** — a consumer pinning a hosted `at_client` cannot compile
+against it yet. Downstream projects that need the field from a published package (rather than through
+workspace path resolution, which masks the gap locally and in CI) must sequence after the next `at_client`
+release.
 **Builds on:** #1930 + S-1's extended `AtKeys` / injected `AtKeysIo`.
 **Deliverables → [design.md](design.md)** (CryptoProvider seam): add an `AtKeysIo keys` field to
 `CryptoContext` (additive) — the provider seam is injected the `AtKeysIo` (the key source) and yields the
@@ -801,7 +809,7 @@ out of scope here** — see [roadmap.md](roadmap.md) for the D2 trajectory.
 | 3  | `at_commons`        | minor `5.11.0 → 5.12.0` **(published 2026-07-04, done)** | SS-1a | `EnrollParams.metadata` + `signingAlgo`; flattened `listns`; pkam `mldsa65` literal. *(at_commons has since published 5.13.0, 2026-07-17, outside this program.)* |
 | 4  | `at_auth`           | minor `3.2.0 → 3.3.0` **(3.3.0-rc1 published 2026-07-17; stable pending)** | S-1 | additive: extend `AtKeys` in place (deprecate legacy); `AtKeysIo` runtime persistence; `InMemoryAtKeysIo`. ⚠️ **the rc1 → stable promotion is an open gate** — S-6 and SS-2's at_auth work need a stable 3.3.0 to pin against; timing unresolved |
 | 5  | `at_auth`           | **major `3.3.0 → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
-| 6  | `at_client`         | minor `3.14.0 → 3.15.x`       | S-2…B-2    | `at_auth ^4.0.0`; `CryptoContext.keys`; nskey data path; rotation. **= D1 GA**. ⚠️ **3.13.0 and 3.14.0 both published 2026-07-17** (3.14.0 carries the SS-0 substrate as an experimental surface), so the GA slot has moved off 3.14.x — re-derive the target minor at execution against pub.dev |
+| 6  | `at_client`         | minor `3.14.x → 3.15.x`       | S-2…B-2    | `at_auth ^4.0.0`; `CryptoContext.keys`; nskey data path; rotation. **= D1 GA**. ⚠️ **3.13.0 and 3.14.0 both published 2026-07-17** (3.14.0 carries the SS-0 substrate as an experimental surface), so the GA slot has moved off 3.14.x — re-derive the target minor at execution against pub.dev. ⚠️ **S-2's `CryptoContext.keys` (#2076) is on trunk but unreleased** — it merged after 3.14.0 published, so the next at_client release is the first that carries it |
 | 7  | `at_client`         | **major `3.15.x → 4.0.0`**    | R-2        | flip `disallowLegacyEncryption` default → true; selfEncryptionKey stop-existing; dead-code removal |
 | 8  | `at_onboarding_cli` | minor `1.16.0 → 1.17.0`       | S-6        | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; explicit injection. 1.16.0 published 2026-07-17, so 1.17.0 is a clean next slot |
 | 9  | `at_client_flutter` | minor `1.1.4 → 1.2.0`         | S-6        | `at_auth ^4.0.0`; `file_picker` imports `at_auth_io.dart` |
