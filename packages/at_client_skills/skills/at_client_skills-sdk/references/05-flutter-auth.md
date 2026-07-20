@@ -279,8 +279,8 @@ final atClient = AtClientManager.getInstance().atClient;
 ## Canonical Examples
 
 <!-- pyml disable-num-lines 2 md013-->
-- [packages/at_client_flutter/examples/todos/lib/onboarding.dart](../../packages/at_client_flutter/examples/todos/lib/onboarding.dart) — Flows 2, 3, 4 with `_setupAtClient`
-- [packages/at_client_flutter/example/lib/walkthrough.dart](../../packages/at_client_flutter/example/lib/walkthrough.dart) — All 4 flows in one file
+- [packages/at_client_flutter/examples/todos/lib/onboarding.dart](../../../../at_client_flutter/examples/todos/lib/onboarding.dart) — Flows 2, 3, 4 with `_setupAtClient`
+- [packages/at_client_flutter/example/lib/walkthrough.dart](../../../../at_client_flutter/example/lib/walkthrough.dart) — All 4 flows in one file
 
 ---
 
