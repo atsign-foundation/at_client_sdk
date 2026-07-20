@@ -497,10 +497,10 @@ Execution rulings from the plan-vs-code review (post-review); each is binding.
   the default (faster on mobile/desktop); the pure-Dart backend is the fallback and
   the forced choice under WASM. PRs #2030 (`at_chops_ffi` barrel + auto-resolver)
   and #2039 (AES-GCM FFI) are IN D1 scope on the at_chops 3.4.0 slot alongside P-2.
-  **Status (2026-07-06):** #2030 **merged to trunk 2026-07-03** (+ #2046 review-fixes),
-  bumping at_chops to 3.4.0 assembled-but-unpublished; #2039 is still **draft**; and
-  **P-2's `mldsa65` verify branch folds into this same unpublished 3.4.0 before it
-  publishes** (decision 2026-07-06 — not a fresh minor). (Scope note → the 2026-07-03 rulings below: auto-resolve
+  **Status (2026-07-20): closed.** #2030 merged to trunk 2026-07-03 (+ #2046
+  review-fixes), opening the at_chops 3.4.0 slot; #2039 merged 2026-07-09 and P-2's
+  `mldsa65` verify branch (#2056) merged 2026-07-06, both folded into that same slot
+  rather than a fresh minor; **at_chops 3.4.0 published 2026-07-17**. (Scope note → the 2026-07-03 rulings below: auto-resolve
   applies to the `AtPqc` accessors; key generation through the web-safe barrel's
   key pair classes is pure-Dart by construction.)
 - **`_apsk` is a pinned cross-tier property — present and write-restricted.** Envelope
@@ -698,11 +698,14 @@ authority that superseded it — for anyone reading their **git history**:
 | `crypto-roadmap.md` "Upgrading an existing client — the sequence" + "atServer support this requires (four new capabilities)" | step-4 legacy-RSA delete after PQ auth; "four new" capabilities incl. multi-key + per-key delete | section 5 here (fresh auto-approved enrollment) |
 | `pq-secret-push.md` P9/P12 | multi-APKAM list + per-APKAM delete | sections 4–5 here |
 
-The OQ table in `wp-ss-execution-plan.md` is already updated (OQ2/OQ8/OQ9); only
-its **project bodies** (P0/P5/P9/P12) lag.
+All the files named above were **deleted** in the 2026-06-30 consolidation — none
+of them is a live document, and nothing in this table is an outstanding edit. At the
+point of deletion, `wp-ss-execution-plan.md`'s OQ table had been brought up to date
+(OQ2/OQ8/OQ9) while its project bodies (P0/P5/P9/P12) still lagged; that mismatch is
+recorded here only so anyone reading the file's **git history** knows which parts of
+it were already stale when it was removed.
 
-**Cross-ref:** the corrected mechanics those sections should now match live in
-`design.md`.
+**Cross-ref:** the corrected mechanics live in `design.md`.
 
 ---
 
