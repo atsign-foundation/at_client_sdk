@@ -1,4 +1,4 @@
-## 3.14.0
+## 3.14.1
 - fix: `AtCollection` — resolve received (shared-in) items in the id-scoped
   read path. `Query.watch()` (delta path), `getOrNull` / `get(id, owner)` and
   `exists(id, owner)` missed items stored locally as
@@ -20,6 +20,17 @@
   crashed for a non-nullable item type).
 - fix: `AtCollection` reads no longer duplicate the preceding item when a key
   expires or is deleted between the scan and its per-key read.
+
+## 3.14.0
+- feat (experimental): per-APKAM same-atSign secret-sharing substrate —
+  `AtClientSecretSharing` / `PairwiseSecretSharing` (mixins `KeyPackageRegistration`,
+  `EnvelopeSigning`), `SecretStore`, `KeyPackage`, `SecretEnvelope`, and the
+  `EnrollmentDirectory` seam. Secrets travel in X-Wing-sealed (`pqSeal`),
+  APKAM-signed `__ssenv` envelopes addressed by `kpid`; key packages are
+  enrollment-internal (conveyed via `enroll:request`, discovered via the gated
+  `enroll:listns` verb) and never published. The whole surface is
+  `@experimental` — the wire shape is subject to change pending the atServer
+  verb work — and requires `at_chops ^3.3.0` (`pqSeal`/`pqOpen`).
 
 ## 3.13.0
 - feat: add `AtClientPreference.networkTimeout` — when set on the preference used

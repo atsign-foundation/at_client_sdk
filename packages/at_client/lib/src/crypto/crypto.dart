@@ -1,3 +1,4 @@
+import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -47,14 +48,18 @@ class CryptoContext {
   /// complete an operation — a recipient's public key, a shared key, a
   /// namespace key from the secondary, etc. The current atSign is
   /// `atClient.getCurrentAtSign()`.
-  ///
-  /// This is the only field today. The planned `WritableAtKeys` holder — an
-  /// `AtKeys` subclass letting providers read/stash/persist key material — is
-  /// added here alongside its first consumer in the key-management workstream,
-  /// at which point providers move off the client for keys.
   final AtClient atClient;
 
-  const CryptoContext({required this.atClient});
+  /// The client's key source (ratified atsign-foundation/at_client_sdk#2045):
+  /// an `AtKeysIo` (`package:at_auth`) whose `read(atSign)` yields the
+  /// client's `AtKeys`. Sourced from [AtClient.atKeysIo], injected at client
+  /// construction (`AtClientImpl.create(atKeysIo:)`). Null until an app
+  /// injects one — store wiring (so this is populated by default) lands in a
+  /// later project. The built-in legacy provider deliberately does not read
+  /// this yet.
+  final AtKeysIo? atKeysIo;
+
+  const CryptoContext({required this.atClient, this.atKeysIo});
 }
 
 /// The contract every encryption scheme implements. The SDK routes each

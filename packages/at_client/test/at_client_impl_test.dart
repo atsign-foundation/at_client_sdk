@@ -498,6 +498,69 @@ void main() {
       expect(ac2.getPreferences()?.crypto.lookup('late-provider'),
           isA<CryptoProvider>());
     });
+
+    test('stores the injected atKeysIo', () async {
+      final keysIo = StubAtKeysIo();
+      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+      AtClient ac = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        AtClientPreference()
+          ..hiveStoragePath = 'test/hive'
+          ..commitLogPath = 'test/hive/path',
+        remoteSecondary: mockRemoteSecondary,
+        atChops: chops,
+        atKeysIo: keysIo,
+      );
+
+      expect(identical(ac.atKeysIo, keysIo), true);
+    });
+
+    test('has no default key source when none is injected', () async {
+      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+      AtClient ac = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        AtClientPreference()
+          ..hiveStoragePath = 'test/hive'
+          ..commitLogPath = 'test/hive/path',
+        remoteSecondary: mockRemoteSecondary,
+        atChops: chops,
+      );
+
+      expect(ac.atKeysIo, isNull);
+    });
+
+    test(
+        'cached re-use retains the original atKeysIo (no adoption, unlike '
+        'crypto config)', () async {
+      final firstKeysIo = StubAtKeysIo();
+      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+      AtClient ac1 = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        AtClientPreference()
+          ..hiveStoragePath = 'test/hive'
+          ..commitLogPath = 'test/hive/path',
+        remoteSecondary: mockRemoteSecondary,
+        atChops: chops,
+        atKeysIo: firstKeysIo,
+      );
+
+      AtClient ac2 = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        AtClientPreference()
+          ..hiveStoragePath = 'test/hive'
+          ..commitLogPath = 'test/hive/path',
+        remoteSecondary: mockRemoteSecondary,
+        atChops: chops,
+        atKeysIo: StubAtKeysIo(),
+      );
+
+      expect(identical(ac1, ac2), true);
+      expect(identical(ac2.atKeysIo, firstKeysIo), true);
+    });
   });
 }
 
