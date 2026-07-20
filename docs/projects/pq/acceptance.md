@@ -765,20 +765,30 @@ Every UC cluster runs against one or more of four test layers:
 | **`tests/at_functional_test` runLocal.sh** | same-atSign self keys, enroll / `listns` round-trip, `__ssenv` delivery; `docker compose down` before each run; cap runs at 180000 ms. |
 | **`tests/at_end2end_test`**        | cross-atSign shares/notifications, retrofit, readiness flip.                             |
 
-**Baseline (already shipped, not pending work).** The primitive layer is on trunk:
+**Baseline (already shipped, not pending work).** The primitive layer is published:
 **#1930** (M0 crypto seam) and **#1993 / at_chops 3.3.0** (`pqSeal`/`pqOpen`), with
 **PR #2035** (design fixes) merged. at_chops-vector coverage exercises this shipped base.
+As of the **2026-07-17 release train** the baseline also includes **at_chops 3.4.0**
+(ML-DSA-65 verify dispatch, AES-GCM FFI), **at_commons 5.13.0**, **at_client 3.14.0**
+(carrying the SS-0 substrate, PR #2037) and **at_auth 3.3.0-rc1** (extended `AtKeys` +
+`AtKeysIo.flush()`), so SS-0 / SS-1b / S-1 / S-2 acceptance is against shipped code.
 
 **PQ-capable test image (harness gap).** Both `tests/at_functional_test` and
 `tests/at_end2end_test` pin `atsigncompany/virtualenv:vip`, which refreshes only via
-certs-on-trunk or a canary→prod promotion — no work package delivers a PQ-verb-capable
-image, so **SS-1b's "first live round-trip" acceptance is not yet executable**. Close
-the gap with: a documented way to build a virtualenv image from an at_server branch, an
+certs-on-trunk or a canary→prod promotion. The `enroll:listns` verb itself **has now
+landed in at_server** (#2685, merged 2026-07-07, with functional coverage in #2698), so
+the blocker is no longer "no server implements it" — it is **whether the pinned `:vip`
+tag carries a build new enough**. Verify that before relying on any live `listns`
+assertion from this repo's harnesses; a green local run against `at_virtual_env:local`
+does not imply CI parity.
+
+The underlying gap is unchanged: no work package delivers an image-override path. Close
+it with a documented way to build a virtualenv image from an at_server branch, an
 image-override env var (e.g. `VE_IMAGE`) honoured by **both** `runLocal.sh` harnesses,
-and a stated policy for when CI switches its pinned tag from `:vip` to a PQ-capable one.
-Until that exists, **SS-1b's live-round-trip acceptance must sequence after an at_server
-release that carries the verb** — the client layer and at_chops vectors can land earlier,
-but the live assertion cannot run against `:vip`.
+and a stated policy for when CI switches its pinned tag. Until that exists, **SS-1c's
+client-driven live round-trip must sequence after a `:vip` refresh that carries the
+verb** — the client layer and at_chops vectors can land earlier, but the live assertion
+cannot be trusted against an unverified `:vip`.
 
 **UC → project coverage** (cross-ref only — the authoritative sequence / dependency
 graph / effort lives in `implementation-plan.md`; this is the one place acceptance.md

@@ -424,18 +424,24 @@ redundant. The genuinely per-APKAM artefacts (the PQ APKAM signing keypair, the
 X-Wing key-package *private* half) are minted locally and **never on the wire**;
 everything *shared* is scoped at atSign / namespace / group level.
 
-**Current state.** The client substrate is built and unit-green on
-`gkc-jt-secret-sharing-substrate` (`pairwise_secret_sharing.dart`,
-`secret_envelope.dart`, `key_package.dart`, `secret_store.dart`,
-`enrollment_directory.dart`, `mixins/envelope_signing.dart`) — but it is **not
-wired into AtClient**, the **server verb is absent**, and the **consumer layers**
-(nskey minting, `pqpublickey` lifecycle, PQ APKAM mint + retrofit) are absent.
-Additionally, the built `VerbEnrollmentDirectory` still speaks the **retired** wire
-shape — a nested `apkam[]` response parse plus the removed `enroll:metadata`
-registration write — contrary to decision #F (1:1:1) / OQ9; the WP-SS rework
-(PR #2037 / SS-1c) rewrites it to the flat, single-key, `enroll:listns`,
-no-write-path model. The
-full built/gap inventory with `file:line` evidence is in
+**Current state (2026-07-20).** The client substrate is **on trunk** — SS-0 merged
+via PR #2037 on 2026-07-17 and shipped in `at_client 3.14.0` as an experimental
+surface (`pairwise_secret_sharing.dart`, `secret_envelope.dart`,
+`key_package.dart`, `secret_store.dart`, `enrollment_directory.dart`,
+`mixins/envelope_signing.dart`), in the 1:1:1 / flat `listns` / no-write-path
+shape (the retired nested `apkam[]` parse and the `enroll:metadata` registration
+write were reworked out via #2043, per decision #F / OQ9). The **server verb has
+landed** too (at_server #2685, merged 2026-07-07, plus #2687 / #2696 / #2698 /
+#2710).
+
+Still absent: the substrate is **not yet wired into AtClient** (SS-2,
+[#2085](https://github.com/atsign-foundation/at_client_sdk/issues/2085)), the
+client is **not yet driving the live verbs** (SS-1c,
+[#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084)), and the
+**consumer layers** — nskey minting, `pqpublickey` lifecycle (SS-4,
+[#2087](https://github.com/atsign-foundation/at_client_sdk/issues/2087)), PQ APKAM
+mint + retrofit (RF-2b/RF-2c) — are unbuilt. The full built/gap inventory with
+`file:line` evidence is in
 [§6](#6-implementation-notes--file-level-pointers-consolidated).
 
 ### 2.1 kpid addressing, __ssenv envelope, sign/verify
@@ -1034,11 +1040,14 @@ Given/When/Then acceptance in [`acceptance.md`](acceptance.md); decisions/timeli
 
 **Baseline (terse — full status is [`implementation-plan.md`](implementation-plan.md)'s lane).**
 `#1930` (M0 crypto seam) **merged**; `at_chops 3.3.0` (`pqSeal`/`pqOpen` + stateless
-core) **on trunk**; PR `#2035` (design fixes) **merged**. `at_commons 5.11.0`
-(`appMetadata` wire), `at_chops 3.3.0` (X-Wing, AES-256-GCM, HKDF, HMAC; published 2026-06-23), and the
-commit-log-free 5.x keystore are on trunk.
+core) **published 2026-06-23**; PR `#2035` (design fixes) **merged**. `at_commons 5.11.0`
+(`appMetadata` wire) and the commit-log-free 5.x keystore are on trunk. As of the
+**2026-07-17 release train**, `at_chops 3.4.0` (ML-DSA-65 verify dispatch, AES-GCM FFI,
+`at_chops_ffi` barrel + `AtPqc`), `at_commons 5.13.0`, `at_client 3.14.0` (carrying the
+SS-0 substrate) and `at_auth 3.3.0-rc1` (the extended `AtKeys` + `AtKeysIo.flush()`) are
+all published.
 
-### Client substrate — built, unit-green (`gkc-jt-secret-sharing-substrate`)
+### Client substrate — on trunk (SS-0, PR #2037, merged 2026-07-17)
 
 | Capability | Evidence (`file:line`) |
 |---|---|
@@ -1058,24 +1067,27 @@ commit-log-free 5.x keystore are on trunk.
 yet implemented** — the substrate signs `__ssenv` envelopes but advertises the key
 package (and, later, the `nskey` / `pqpublickey` public halves) **unsigned**, so the
 authenticity decision of [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify) is
-target-not-built (sign in the mint paths SS-2 / SS-4, verify on read SS-1c); the
+target-not-built (sign in the mint paths SS-2 [#2085] / SS-4 [#2087], verify on read
+SS-1c [#2084]); the
 public/private correspondence check is likewise missing
 (`pairwise_secret_sharing.dart:360-407`); the root `pqpublickey`
 no-namespace serve exception is missing (`grep pqpublickey` = 0); durable storage
 is deferred (in-memory `SecretStore` + a pluggable persistence hook,
 `secret_store.dart:62`; the extended `AtKeys`/`AtKeysIo` runtime persistence not
 wired); anti-storm is a plain rate cap
-without jitter (`:539`). `pushSecretToNamespaceMembers` is untested. Finally, the
-built `VerbEnrollmentDirectory` still speaks the **retired** wire shape — it parses
-a nested `apkam[]` response and performs an `enroll:metadata` registration write —
-contrary to decision #F (1:1:1) / OQ9; the WP-SS rework (PR #2037 / SS-1c) rewrites
-it to the flat, single-key, `enroll:listns`, no-write-path model (singular signed
-`metadata.keyPackage`, no format-keyed map).
+without jitter (`:539`, SS-3 [#2086]). `pushSecretToNamespaceMembers` is untested.
+`VerbEnrollmentDirectory` was reworked to the flat, single-key, `enroll:listns`,
+no-write-path model (singular signed `metadata.keyPackage`, no format-keyed map) via
+#2043 before SS-0 merged — the retired nested `apkam[]` parse and `enroll:metadata`
+registration write are gone. Driving it against the **live** verb is SS-1c
+([#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084)).
 
 ### atServer change lists (DEP1–DEP4)
 
-`at_server` is a sibling repo present locally; these are "in-repo (sibling) but
-unimplemented."
+`at_server` is a sibling repo present locally. **DEP1–DEP3 landed on 2026-07-07**
+(at_server #2685, plus #2687 / #2696 / #2698 / #2710 — SS-1b); **DEP4 (the `__ssenv`
+update-put auto-notify wake-up) remains unimplemented** and is owned by SS-2
+([#2085](https://github.com/atsign-foundation/at_client_sdk/issues/2085)).
 
 - **DEP1 — `enroll:listns:<ns>` gated discovery verb** (effort **L**).
   Enum + regex + handler + gate per [§2.3](#23-the-enrolllistns-verb--enrollparamsmetadata). Returns the **flattened**
