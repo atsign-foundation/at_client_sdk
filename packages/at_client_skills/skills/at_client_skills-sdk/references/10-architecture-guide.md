@@ -40,9 +40,10 @@ await todos.create(
   sharedWith: {'@bob'.toAtsign()},
 );
 
-// Receiver (@bob): reactive watch
+// Receiver (@bob): reactive watch — hold the stream in State, never in build()
+final _todos = todos.query().where((t) => !t.obj.done).watch();
 StreamBuilder<List<CItem<Todo>>>(
-  stream: todos.query().where((t) => !t.obj.done).watch(),
+  stream: _todos,
   builder: (ctx, snap) { ... },
 )
 ```
