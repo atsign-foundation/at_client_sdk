@@ -1,4 +1,12 @@
 ## 3.14.1
+- feat: `nskey` data path providers — `at/symmetric/AES/GCM` encrypts
+  application data with AES-256-GCM under a symmetric content key (CK), and
+  `at/nskey` conveys that CK by X-Wing-sealing it to the namespace's `nskey`
+  and writing it as a discrete `<ckKid>.__ck` record. Data values cite the CK
+  by `ckKid` and carry no sealed key inline; the CK cache is keyed
+  `(owner, namespace, ckKid)`. `NskeyKeyRing` is the seam the secret-sharing
+  substrate lands behind — an experimental surface, not yet routed by
+  `CryptoRuntime` (#2089, #2090).
 - fix: `AtCollection` — resolve received (shared-in) items in the id-scoped
   read path. `Query.watch()` (delta path), `getOrNull` / `get(id, owner)` and
   `exists(id, owner)` missed items stored locally as
