@@ -1,3 +1,4 @@
+import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_commons/at_commons.dart';
 
 /// The BaseEnrollmentRequest class encapsulates shared fields between the InitialEnrollmentRequest and EnrollmentRequest.
@@ -35,21 +36,39 @@ abstract class EnrollmentRequest {
 /// authorization to access the specified namespaces in the request. Conversely, if the request is disapproved, the requesting
 /// app is denied login access.
 class AtEnrollmentRequest extends EnrollmentRequest {
+  /// The authenticated session of the app submitting this enrollment request.
+  ///
+  /// When supplied, it is the source of the request's [atSign] and [rootDomain],
+  /// and its [AtAuthSession.atKeysIo] is where the newly enrolled app's keys are
+  /// persisted and handed back on the [AtEnrollmentResponse.session] after
+  /// approval. Prefer this over the deprecated `atSign`/`rootDomain` params.
+  final AtAuthSession? session;
+
   Map<String, String> namespaces;
   String? encryptedAPKAMSymmetricKey;
   String otp;
   Duration? apkamKeysExpiryDuration;
 
-  AtEnrollmentRequest(
-      {required super.appName,
-      required super.atSign,
-      required super.deviceName,
-      super.apkamPublicKey,
-      super.rootDomain,
-      required this.otp,
-      required this.namespaces,
-      this.encryptedAPKAMSymmetricKey,
-      this.apkamKeysExpiryDuration});
+  AtEnrollmentRequest({
+    this.session,
+    @Deprecated('Provide `session` instead; its atSign is used.') String? atSign,
+    @Deprecated('Provide `session` instead; its rootDomain is used.')
+    AtRootDomain? rootDomain,
+    required super.appName,
+    required super.deviceName,
+    super.apkamPublicKey,
+    required this.otp,
+    required this.namespaces,
+    this.encryptedAPKAMSymmetricKey,
+    this.apkamKeysExpiryDuration,
+  }) : super(
+          atSign: session?.atSign ??
+              atSign ??
+              (throw ArgumentError(
+                  'AtEnrollmentRequest requires a `session` (or the deprecated `atSign`)')),
+          rootDomain:
+              session?.rootDomain ?? rootDomain ?? AtRootDomain.atsignDomain,
+        );
 }
 
 /// The FirstEnrollmentRequest represents an enrollment request when onboarding (activating) an atSign.

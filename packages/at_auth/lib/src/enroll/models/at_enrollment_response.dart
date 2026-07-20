@@ -129,21 +129,32 @@ class AtEnrollmentResponse extends AtEnrollmentRecord {
   EnrollmentStatus get enrollmentStatus => enrollStatus;
 
   /// Optional atSign associated with the enrollment.
+  @Deprecated('Use `session.atSign` instead.')
   String? atSign;
 
   /// Optional root domain associated with the enrollment.
+  @Deprecated('Use `session.rootDomain` instead.')
   AtRootDomain? rootDomain;
 
   /// The authentication keys associated with the enrollment.
+  @Deprecated('Use `session` instead; the keys are sourced via `session.atKeysIo`.')
   AtKeys? atAuthKeys;
+
+  /// The hand-off session for the newly enrolled app, populated on the
+  /// requesting-app success path once the enrollment is approved.
+  ///
+  /// Pass it straight into `AtClientManager.setFromAuthSession(...)`; the client
+  /// derives its own keys via [AtAuthSession.atKeysIo] rather than adopting the
+  /// deprecated [atAuthKeys] material directly.
+  AtAuthSession? session;
 
   /// Creates an instance of [AtEnrollmentResponse].
   ///
   /// The [enrollmentId] is the unique identifier for the enrollment.
   /// The [enrollStatus] represents the status of the enrollment operation.
-  /// The [atAuthKeys] are  authentication keys associated with the enrollment.
+  /// The [session] is the hand-off session for the newly enrolled app.
   AtEnrollmentResponse(this.enrollmentId, this.enrollStatus,
-      {this.atSign, this.rootDomain, this.atAuthKeys});
+      {this.atSign, this.rootDomain, this.atAuthKeys, this.session});
 
   @override
   String toString() {
