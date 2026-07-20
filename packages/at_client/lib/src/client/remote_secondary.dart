@@ -7,7 +7,6 @@ import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/util/at_client_util.dart';
-import 'package:at_client/src/util/logger_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -84,19 +83,20 @@ class RemoteSecondary implements Secondary {
     return clientConfig;
   }
 
-  /// Executes the command returned by [VerbBuilder] build command on a remote secondary server.
-  /// Optionally [privateKey] is passed for verb builders which require authentication.
+  /// Executes the command returned by [VerbBuilder] on a remote
+  /// secondary server. Authentication is handled by the injected
+  /// `AtLookUp`. [sync] is accepted for [Secondary] interface
+  /// compatibility but is ignored. [cameFromServer] is also accepted
+  /// for interface compatibility and ignored — remote secondaries
+  /// don't have a client→server sync queue to skip enqueuing into.
   @override
-  Future<String> executeVerb(VerbBuilder builder, {sync = false}) async {
+  Future<String> executeVerb(VerbBuilder builder,
+      {sync = false, bool cameFromServer = false}) async {
     try {
       String verbResult;
-      logger.finer(logger.getLogMessageWithClientParticulars(
-          _preference.atClientParticulars,
-          'Command sent to server: ${builder.buildCommand()}'));
+      logger.finer('Command sent to server: ${builder.buildCommand()}');
       verbResult = (await atLookUp.executeVerb(builder))!;
-      logger.finer(logger.getLogMessageWithClientParticulars(
-          _preference.atClientParticulars,
-          'Response from server: $verbResult'));
+      logger.finer('Response from server: $verbResult');
       return verbResult;
     } on AtException catch (e) {
       throw e
@@ -186,7 +186,7 @@ class RemoteSecondary implements Secondary {
       var host = secondaryInfo[0];
       var port = secondaryInfo[1];
       var internetAddress = await InternetAddress.lookup(host);
-      //TODO getting first ip for now. explore best solution
+      // TODO: getting first ip for now. explore best solution
       var addressCheckOptions = AddressCheckOptions(
           address: internetAddress[0], port: int.parse(port));
       var addressCheckResult = await InternetConnectionChecker()

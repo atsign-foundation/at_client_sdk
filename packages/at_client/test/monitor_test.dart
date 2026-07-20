@@ -11,8 +11,7 @@ import 'package:test/test.dart';
 
 import 'package:mocktail/mocktail.dart';
 
-class MockSecondaryAddressFinder extends Mock
-    implements SecondaryAddressFinder {}
+import 'test_utils/mocks.dart';
 
 class MockSecureSocket extends Mock implements SecureSocket {}
 
@@ -22,8 +21,6 @@ class MockOutboundConnection extends Mock implements OutboundConnection {}
 
 class MockMonitorOutboundConnectionFactory extends Mock
     implements MonitorOutboundConnectionFactory {}
-
-class MockAtChops extends Mock implements AtChops {}
 
 class FakeAtSigningInput extends Fake implements AtSigningInput {}
 
@@ -317,7 +314,7 @@ void main() {
 
     test('Monitor heartbeat sending regularly', () async {
       atClientPreference.monitorHeartbeatInterval = Duration(milliseconds: 20);
-      Duration waitTime = Duration(milliseconds: 21);
+      Duration waitTime = Duration(milliseconds: 25);
 
       int numHeartbeatsSent = 0;
       when(() => mockOutboundConnection.write("noop:0\n"))

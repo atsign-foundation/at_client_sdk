@@ -89,6 +89,86 @@ void main() {
     });
   });
 
+  group('A group of tests for DeleteVerbBuilder noCommit and deletedAt', () {
+    final when = DateTime.utc(2026, 5, 5, 11, 59, 44, 123, 456);
+    const whenIso = '2026-05-05T11:59:44.123456Z';
+
+    test('deletedAt and noCommit are unset by default', () {
+      var builder = DeleteVerbBuilder()
+        ..atKey.key = 'phone'
+        ..atKey.sharedBy = '@bob';
+      expect(builder.noCommit, false);
+      expect(builder.deletedAt, null);
+      expect(builder.buildCommand(), 'delete:phone@bob\n');
+    });
+
+    test('noCommit=true emits :nc:', () {
+      var builder = DeleteVerbBuilder()
+        ..noCommit = true
+        ..atKey.key = 'phone'
+        ..atKey.sharedBy = '@bob';
+      expect(builder.buildCommand(), 'delete:nc:phone@bob\n');
+    });
+
+    test('deletedAt emits :dAt:<iso8601-utc-microseconds>:', () {
+      var builder = DeleteVerbBuilder()
+        ..deletedAt = when
+        ..atKey.key = 'phone'
+        ..atKey.sharedBy = '@bob';
+      expect(builder.buildCommand(), 'delete:dAt:$whenIso:phone@bob\n');
+    });
+
+    test('deletedAt and noCommit emit in regex order: dAt before nc', () {
+      var builder = DeleteVerbBuilder()
+        ..deletedAt = when
+        ..noCommit = true
+        ..atKey.key = 'phone'
+        ..atKey.sharedBy = '@bob';
+      expect(builder.buildCommand(), 'delete:dAt:$whenIso:nc:phone@bob\n');
+    });
+
+    test('deletedAt + noCommit + force on a public shared key', () {
+      var builder = DeleteVerbBuilder()
+        ..deletedAt = when
+        ..noCommit = true
+        ..force = true
+        ..atKey.metadata.isPublic = true
+        ..atKey.key = 'phone'
+        ..atKey.sharedBy = '@bob';
+      expect(builder.buildCommand(),
+          'delete:dAt:$whenIso:nc:force:public:phone@bob\n');
+    });
+
+    test('deletedAt converts a non-UTC source DateTime to UTC on emit', () {
+      var localWhen = DateTime(2026, 5, 5, 11, 59, 44, 123, 456);
+      var builder = DeleteVerbBuilder()
+        ..deletedAt = localWhen
+        ..atKey.key = 'phone'
+        ..atKey.sharedBy = '@bob';
+      var command = builder.buildCommand();
+      expect(command, contains('Z:phone@bob'));
+      var rebuilt = DeleteVerbBuilder.getBuilder(command.trim());
+      expect(rebuilt.deletedAt!.isUtc, true);
+      expect(rebuilt.deletedAt!.microsecondsSinceEpoch,
+          localWhen.microsecondsSinceEpoch);
+    });
+
+    test('getBuilder round-trips noCommit and deletedAt', () {
+      String command = 'delete:dAt:$whenIso:nc:@alice:phone.wavi@bob\n';
+      var builder = DeleteVerbBuilder.getBuilder(command.trim());
+      expect(builder.noCommit, true);
+      expect(builder.deletedAt, when);
+      expect(builder.buildCommand(), command);
+    });
+
+    test('getBuilder leaves noCommit=false and deletedAt=null when absent', () {
+      String command = 'delete:@alice:phone.wavi@bob\n';
+      var builder = DeleteVerbBuilder.getBuilder(command.trim());
+      expect(builder.noCommit, false);
+      expect(builder.deletedAt, null);
+    });
+  });
+
   group('A group of tests to validate the exceptions', () {
     test('test to verify cached local key throws invalid atkey exception', () {
       expect(

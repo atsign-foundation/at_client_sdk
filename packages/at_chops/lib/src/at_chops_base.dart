@@ -1,16 +1,23 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:at_chops/at_chops.dart';
+import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
-import 'package:at_chops/src/algorithm/default_hashing_algo.dart';
+import 'package:at_chops/src/algorithm/at_iv.dart';
 import 'package:at_chops/src/factory/at_hashing_algo_factory.dart';
+import 'package:at_chops/src/key/impl/at_chops_keys.dart';
+import 'package:at_chops/src/key/key_type.dart';
+import 'package:at_chops/src/metadata/at_signing_input.dart';
+import 'package:at_chops/src/metadata/encryption_result.dart';
+import 'package:at_chops/src/metadata/signing_result.dart';
 
 /// Base class for all Cryptographic and Hashing Operations. Callers have to either implement
 /// specific encryption, signing or hashing algorithms. Otherwise default implementation of specific algorithms will be used.
+@Deprecated(
+    'Use the algorithm classes directly instead. This compatibility API will '
+    'be removed in the next major release.')
 abstract class AtChops {
   final AtChopsKeys _atChopsKeys;
-
   AtChopsKeys get atChopsKeys => _atChopsKeys;
 
   AtChops(this._atChopsKeys);

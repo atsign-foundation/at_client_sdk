@@ -10,29 +10,67 @@ permissions: # added using https://github.com/step-security/secure-workflows
 
 jobs:
   check_for_new_channel_version:
-    strategy:
-      fail-fast: true
-      matrix:
-        channel: ["stable", "beta"]
     runs-on: ubuntu-latest
     steps:
       - name: checkout repo content
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Get flutter ${{ matrix.channel }} ref
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Get flutter stable and beta refs
+        id: check_refs
         run: |
-          sha=$(
+          current_stable=$(cat flutter_ref-stable | tr -d '\r\n ')
+          current_beta=$(cat flutter_ref-beta | tr -d '\r\n ')
+
+          stable_sha=$(
             curl -fsSL \
               --retry 3 \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              https://api.github.com/repos/flutter/flutter/branches/${{ matrix.channel }} |
+              https://api.github.com/repos/flutter/flutter/branches/stable |
             jq -r '.commit.sha'
           )
-          if [ -z "$sha" ] || [ "$sha" == "null" ]; then
-            echo "Error: Could not retrieve SHA for ${{ matrix.channel }}"
+          if [ -z "$stable_sha" ] || [ "$stable_sha" == "null" ]; then
+            echo "Error: Could not retrieve SHA for stable"
             exit 1
           fi
-          echo "$sha" >flutter_ref-${{ matrix.channel }}
+
+          beta_sha=$(
+            curl -fsSL \
+              --retry 3 \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/flutter/flutter/branches/beta |
+            jq -r '.commit.sha'
+          )
+          if [ -z "$beta_sha" ] || [ "$beta_sha" == "null" ]; then
+            echo "Error: Could not retrieve SHA for beta"
+            exit 1
+          fi
+
+          echo "$stable_sha" >flutter_ref-stable
+          echo "$beta_sha" >flutter_ref-beta
+
+          stable_changed=false
+          beta_changed=false
+          if [ "$stable_sha" != "$current_stable" ]; then
+            stable_changed=true
+          fi
+          if [ "$beta_sha" != "$current_beta" ]; then
+            beta_changed=true
+          fi
+
+          if [ "$stable_changed" = "true" ] && [ "$beta_changed" = "true" ]; then
+            echo "title=chore: New Flutter stable and beta versions" >> "$GITHUB_OUTPUT"
+            echo "commit_message=chore: Bump flutter_ref files to match latest stable and beta releases" >> "$GITHUB_OUTPUT"
+          elif [ "$stable_changed" = "true" ]; then
+            echo "title=chore: New Flutter stable version" >> "$GITHUB_OUTPUT"
+            echo "commit_message=chore: Bump flutter_ref file to match latest stable release" >> "$GITHUB_OUTPUT"
+          elif [ "$beta_changed" = "true" ]; then
+            echo "title=chore: New Flutter beta version" >> "$GITHUB_OUTPUT"
+            echo "commit_message=chore: Bump flutter_ref file to match latest beta release" >> "$GITHUB_OUTPUT"
+          else
+            echo "title=chore: Update Flutter versions" >> "$GITHUB_OUTPUT"
+            echo "commit_message=chore: Update Flutter versions" >> "$GITHUB_OUTPUT"
+          fi
         working-directory: ./actions/setup-flutter-and-dart/
 
       - name: Create Pull Request
@@ -40,16 +78,16 @@ jobs:
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           token: ${{ secrets.MY_GITHUB_TOKEN }}
-          commit-message: "chore: Bump flutter_ref file to match latest ${{ matrix.channel }} release"
+          commit-message: ${{ steps.check_refs.outputs.commit_message }}
           committer: library-action[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           author: library-action[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           signoff: false
           add-paths: .
-          branch: bot-new-${{ matrix.channel }}-version
+          branch: bot-new-flutter-version
           delete-branch: true
-          title: "chore: New Flutter ${{ matrix.channel }} version"
+          title: ${{ steps.check_refs.outputs.title }}
           labels: |
             operations
-          assignees: xavierchanth
+          assignees: cpswan
           reviewers: gkc
           draft: false

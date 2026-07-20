@@ -1,9 +1,55 @@
+## 5.13.0
+
+- feat: add `AtNetworkTimeouts` — the process-wide network-timeout policy:
+  `defaultTimeout` (30s, the per-attempt default), `maxAllowed` (60s hard cap on
+  any single network operation), `defaultOnboardingTimeout` (5 min — the poll
+  budget for waiting on a newly-registered atSign to be provisioned, deliberately
+  longer than the per-op cap), and `cap()`. The single place to set the SDK's
+  network timeouts (#1909).
+- feat: add `SecureSocketConfig.connectTimeout` so a connect deadline can be
+  threaded through to `SecureSocket.connect`.
+
+## 5.12.0
+
+- feat: add the `enroll:listns:<listNamespace>` operation to the enroll verb
+  grammar (the gated per-namespace enrollment-discovery verb), ordered before
+  `list` in the operation alternation so it is not prefix-shadowed.
+- feat: add `EnrollParams.metadata` (opaque `Map<String, dynamic>`, stored
+  verbatim on the enrollment record and returned from discovery) and
+  `EnrollParams.signingAlgo` (`rsa2048` | `mldsa65`), with the matching
+  `EnrollVerbBuilder` fields; an empty `metadata` map is dropped from the
+  built command.
+- feat: widen the `pkam` verb `signingAlgo` literal to accept `mldsa65`
+  (post-quantum ML-DSA APKAM authentication).
+
+## 5.11.0
+
+- feat: add `Metadata.appMetadata` (`AppMetadata{providerId, additional}`),
+  emitted on the wire as `:appMetadata:` (base64-encoded JSON) on the
+  `update`, `update:meta` and `notify` verbs and parsed back by the verb
+  builders. `providerId` routes pluggable-crypto decryption; `additional`
+  is provider-owned opaque metadata. `providerId` must be a non-empty
+  string (a `FormatException` is thrown otherwise).
+
 ## 5.10.0
+
+- feat: add `:cl` flag to the `scan` verb syntax, plus
+  `ScanVerbBuilder.commitLog`
+- feat: add `:nc` (no-commit) flag to the `update`, `update:meta`, `update:json`
+  and `delete` verb syntaxes, plus `UpdateVerbBuilder.noCommit` and
+  `DeleteVerbBuilder.noCommit`
+- feat: add `:dAt` (deletedAt) timestamp to the `delete` verb syntax, plus
+  `DeleteVerbBuilder.deletedAt`
+- feat: emit `Metadata.createdAt` / `updatedAt` / `expiresAt` / `availableAt` on
+  the wire as `:cAt:` / `:uAt:` / `:eAt:` / `:aAt:` (used by `update`,
+  `update:meta` and `notify`)
+- feat: timestamp wire format is ISO 8601 UTC with 6 fractional-second digits,
+  e.g. `2026-05-05T11:59:44.123456Z`; helper at `VerbUtil.formatIso8601Micros`
+
+## 5.9.0
 
 - feat: add `AtKey.fullKey` getter — key name including its namespace
 - feat: add `AtKey.fullKeyAndOwner` getter — `fullKey` combined with the owning atSign
-
-## 5.9.0
 - feat: add equals method for `AtBytes`
 
 ## 5.8.0

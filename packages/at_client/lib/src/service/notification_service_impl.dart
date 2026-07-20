@@ -3,10 +3,7 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart' hide StringBuffer;
-import 'package:at_client/src/encryption_service/encryption.dart';
-import 'package:at_client/src/encryption_service/encryption_manager.dart';
-import 'package:at_client/src/encryption_service/self_key_encryption.dart';
-import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
+import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
@@ -39,9 +36,6 @@ class NotificationServiceImpl extends NotificationService {
   DateTime? _lastReceipt;
 
   @visibleForTesting
-  late AtKeyEncryptionManager atKeyEncryptionManager;
-
-  @visibleForTesting
   AtClientValidation atClientValidation = AtClientValidation();
 
   @visibleForTesting
@@ -64,10 +58,13 @@ class NotificationServiceImpl extends NotificationService {
         secondaryAddressFinder: secondaryAddressFinder);
   }
 
+  final String myStatsNotifKey;
+
   NotificationServiceImpl._(
       {required this.atClient,
       Monitor? monitor,
-      SecondaryAddressFinder? secondaryAddressFinder}) {
+      SecondaryAddressFinder? secondaryAddressFinder})
+      : myStatsNotifKey = 'statsNotification.${atClient.atSign}' {
     logger = AtSignLogger(
         'NotificationServiceImpl (${atClient.getCurrentAtSign()})');
 
@@ -90,7 +87,100 @@ class NotificationServiceImpl extends NotificationService {
             lastReceivedNotificationKey, atClient.getCurrentAtSign()!,
             namespace: atClient.getPreferences()!.namespace)
         .build();
-    atKeyEncryptionManager = AtKeyEncryptionManager(atClient);
+  }
+
+  /// Migrate any legacy (non-`local:`) forms of the
+  /// last-received-notification key to the canonical
+  /// `local:lastreceivednotification.<ns>@<atSign>` form, and delete
+  /// every legacy form found so they no longer pollute the local
+  /// keystore.
+  ///
+  /// Fixes the underlying defect behind #1942 — `AtCollection`
+  /// regex scans over the local keystore were matching the bare
+  /// (non-`local:`) `lastreceivednotification.<ns>@<atSign>` key
+  /// because it has the same structural shape as a self-owned
+  /// collection item. The canonical key has been `local:`-prefixed
+  /// since the move to `AtKey.local`, but clients upgraded from
+  /// older builds still carry the bare form on disk.
+  ///
+  /// Three forms have existed:
+  ///   1. `local:lastreceivednotification.<ns>@<atSign>` — canonical
+  ///   2. `      lastreceivednotification.<ns>@<atSign>` — intermediate
+  ///   3. `      _latestNotificationIdv2.<ns>@<atSign>`  — original
+  ///
+  /// If the canonical key is missing its value is seeded from the
+  /// newest legacy form that has one (preferring the intermediate
+  /// over the original — its value is fresher). Every legacy entry
+  /// is then deleted. The migration is idempotent: re-running it
+  /// after a clean DB is a no-op.
+  ///
+  /// Deletes are local-only — both legacy name prefixes are
+  /// excluded by `SyncUtil.shouldSync`, so the removals do not
+  /// propagate to the atServer.
+  /// Returns the canonical value after migration. The seeded value
+  /// is returned directly (rather than re-read by the caller) so the
+  /// `put` we just did doesn't have to round-trip back through a
+  /// `get` — useful both for performance and because some mocks /
+  /// fakes aren't stateful across the put-then-get.
+  @visibleForTesting
+  Future<AtValue?> migrateLegacyLastReceivedNotificationKeysForTest() =>
+      _migrateLegacyLastReceivedNotificationKeys();
+
+  Future<AtValue?> _migrateLegacyLastReceivedNotificationKeys() async {
+    final keyStore = atClient.getLocalSecondary()!.keyStore!;
+    final ns = atClient.getPreferences()!.namespace;
+    final currentAtSign = atClient.getCurrentAtSign()!;
+    final canonicalStr = lastReceivedNotificationAtKey.toString();
+
+    // The canonical key can exist with a null value (e.g. when an
+    // earlier `put` seeded a placeholder). Check the actual value,
+    // not just existence — otherwise we'd never seed from a legacy
+    // form when the canonical row is present-but-empty.
+    AtValue? canonicalValue;
+    if (await keyStore.exists(canonicalStr)) {
+      try {
+        canonicalValue = await atClient.get(lastReceivedNotificationAtKey);
+        if (canonicalValue.value == null) canonicalValue = null;
+      } on Exception {
+        // Treat read failures as "needs seeding" — the legacy
+        // forms become the source of truth.
+      }
+    }
+
+    // Newest legacy form first so we prefer fresher values when
+    // seeding the canonical key.
+    final legacyForms = <String>[
+      'lastreceivednotification.$ns$currentAtSign',
+      '$notificationIdKey.$ns$currentAtSign',
+    ];
+    for (final legacyStr in legacyForms) {
+      if (!await keyStore.exists(legacyStr)) continue;
+
+      // Seed the canonical key from the first legacy form that has a
+      // value — only when the canonical doesn't already carry one.
+      if (canonicalValue == null) {
+        try {
+          final v = await atClient.get(AtKey.fromString(legacyStr));
+          if (v.value != null) {
+            await atClient.put(lastReceivedNotificationAtKey, v.value);
+            canonicalValue = v;
+          }
+        } on Exception catch (e) {
+          logger.warning(
+              'Migration: failed to seed canonical key from $legacyStr: $e');
+        }
+      }
+
+      // Drop the legacy key regardless of whether we seeded from it
+      // — older forms are no longer load-bearing once the canonical
+      // exists, and pollute the local keystore (#1942).
+      try {
+        await atClient.delete(AtKey.fromString(legacyStr));
+      } on Exception catch (e) {
+        logger.warning('Migration: failed to delete legacy key $legacyStr: $e');
+      }
+    }
+    return canonicalValue;
   }
 
   /// Return the last received notification DateTime in epochMillis when
@@ -106,58 +196,23 @@ class NotificationServiceImpl extends NotificationService {
       return null;
     }
 
-    // fetchOfflineNotifications == true (the default) means we want all notifications since the last one we received
-    // We keep track of the last notification id in the client-side key store
-    // Check if the new key (local:lastNotificationReceived@alice) is available in the keystore.
-    // If yes, fetch the value;
-    AtValue? atValue;
-    if (atClient
-        .getLocalSecondary()!
-        .keyStore!
-        .isKeyExists(lastReceivedNotificationAtKey.toString())) {
-      atValue = await atClient.get(lastReceivedNotificationAtKey);
-    }
-    // If new key does not exist or value is null, check for the old key (_latestNotificationIdv2@alice)
-    // If old key exist, fetch the value and update the new key with old key's value
-    if (atValue == null || atValue.value == null) {
-      var lastNotificationKeyStr =
-          '$notificationIdKey.${atClient.getPreferences()!.namespace}${atClient.getCurrentAtSign()}';
-      var atKey = AtKey.fromString(lastNotificationKeyStr);
-      if (atClient
-          .getLocalSecondary()!
-          .keyStore!
-          .isKeyExists(lastNotificationKeyStr)) {
-        try {
-          atValue = await atClient.get(atKey);
-          await atClient.put(lastReceivedNotificationAtKey, atValue.value);
-        } on Exception catch (e) {
-          logger.severe(
-              'Exception in getting last notification id: ${e.toString}');
-        }
-      }
-    }
+    // Migration runs first and returns the canonical key's value
+    // (either the pre-existing value or one freshly seeded from a
+    // legacy form). Use that directly instead of re-reading the
+    // canonical key — the migration has already done that work.
+    AtValue? atValue = await _migrateLegacyLastReceivedNotificationKeys();
     if (atValue?.value != null) {
       logger.finer('json from hive: ${atValue?.value}');
       return jsonDecode(atValue?.value)['epochMillis'];
     }
 
-    // If we're here, we've never received a notification, since the last
-    // notification received time has never been saved.
-    //
-    // In that case, we're going to set the last notification received time to
-    // _now_
-    //
-    // But we're still going to return null. But then, next time we're called,
-    // we'll have a value to return.
-    //
-    // This upholds the principle of least surprise which is that
-    // - I run a client for the first time, I get no notifications from the past
-    // - But let's assume you only run the client for a very short period, so
-    //   you get no notifications before you shut it down.
-    // - You run up the client again some time later, assuming that any
-    //   notifications received while you were offline will be delivered to you
-    // - And now because we did this last time, that will be true. Whereas
-    //   previously, you would simply have got no notifications, again.
+    // First-call branch: no last-received-notification record exists.
+    // Set the record to "now" so that subsequent calls (after a
+    // restart, say) will return a value, but return null for THIS
+    // call to keep first-run semantics ("don't replay history I never
+    // saw"). Without this seed, a short-lived first session followed
+    // by a longer second session would silently miss any notifications
+    // that arrived in between.
     AtNotification n = AtNotification(
       'abcd-123456-wxyz',
       '@bob:notification.foo.bar.baz@alice',
@@ -207,19 +262,23 @@ class NotificationServiceImpl extends NotificationService {
   @visibleForTesting
   Future<void> handleNotificationReceipt(String notificationJSON) async {
     try {
-      logger.info('DEBUG: $notificationJSON');
+      logger.finest('DEBUG: $notificationJSON');
       if (isStopped) return;
 
       final notifs = notificationParser
           .getAtNotifications(notificationParser.parse(notificationJSON));
       _lastReceipt = DateTime.now().toUtc();
-      for (var notif in notifs) {
-        logger.info('Received ${notif.key}');
+      for (var n in notifs) {
+        if (n.key == myStatsNotifKey) {
+          logger.finer('Received ${n.key} (serverCommitId) ${n.value}');
+        } else {
+          logger.info('Received ${n.key}');
+        }
         // Saves latest notification id to the keys if its not a stats notification.
-        if (notif.id != '-1') {
+        if (n.id != '-1') {
           try {
             await atClient.put(
-                lastReceivedNotificationAtKey, jsonEncode(notif.toJson()));
+                lastReceivedNotificationAtKey, jsonEncode(n.toJson()));
           } catch (e) {
             logger.warning('Failed to save last received notification ID: $e');
           }
@@ -229,11 +288,11 @@ class NotificationServiceImpl extends NotificationService {
             var transformedNotification =
                 await NotificationResponseTransformer(atClient)
                     .transform(Tuple()
-                      ..one = notif
+                      ..one = n
                       ..two = notificationConfig);
 
             if (notificationConfig.regex != emptyRegex) {
-              if (hasRegexMatch(notif.key, notificationConfig.regex)) {
+              if (hasRegexMatch(n.key, notificationConfig.regex)) {
                 streamController.add(transformedNotification);
               }
             } else {
@@ -258,6 +317,7 @@ class NotificationServiceImpl extends NotificationService {
     bool shouldEncrypt = true,
     Duration expiration = NotificationService.defaultExpiration,
     bool cacheAtRecipient = false,
+    String? cryptoProviderId,
     DateTime? recipientCacheExpiration,
   }) async {
     if (cacheAtRecipient && recipientCacheExpiration == null) {
@@ -270,10 +330,13 @@ class NotificationServiceImpl extends NotificationService {
     final String notifPayload;
     body = body.trim();
     if (body.isNotEmpty && shouldEncrypt) {
-      AtKeyEncryption encrypter = atSign == to
-          ? SelfKeyEncryption(atClient)
-          : SharedKeyEncryption(atClient);
-      notifPayload = await encrypter.encrypt(atKey, body);
+      atKey.metadata.appMetadata ??= AppMetadata(
+        providerId: cryptoProviderId ??
+            atClient.getPreferences()?.crypto.defaultProviderId ??
+            CryptoRuntime.legacyProviderId,
+      );
+      notifPayload =
+          await CryptoRuntime(atClient).encryptForNotification(atKey, body);
       atKey.metadata.isEncrypted = true;
     } else {
       notifPayload = body;
@@ -318,6 +381,16 @@ class NotificationServiceImpl extends NotificationService {
     required String namespace,
   }) {
     String r = '^$atSign:([^.]+\\.)?$namespace@';
+    // Single-subscription controller. Its onPause/onResume hooks are
+    // deliberately NOT wired to pause the upstream subscription:
+    // [subscribe] returns a broadcast stream, and broadcast
+    // subscriptions DO NOT buffer events emitted during pause()
+    // (events are delivered to other live subscribers and dropped
+    // for the paused one). When the downstream consumer pauses
+    // [sc.stream], the single-sub controller buffers incoming
+    // notifications internally; we keep accepting from upstream
+    // and adding to the controller, and the controller delivers
+    // the buffered notifications when the consumer resumes.
     StreamController<AtNotification> sc = StreamController<AtNotification>();
     StreamSubscription<AtNotification>? notifStreamSubscription;
     sc.onListen = () {
@@ -336,23 +409,14 @@ class NotificationServiceImpl extends NotificationService {
     sc.onCancel = () {
       notifStreamSubscription?.cancel();
     };
-    sc.onPause = () {
-      notifStreamSubscription?.pause();
-    };
-    sc.onResume = () {
-      notifStreamSubscription?.resume();
-    };
     return sc.stream;
   }
 
   @override
   Future<NotificationResult> notify(NotificationParams notificationParams,
-      {bool waitForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
-      bool checkForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
-      bool encryptValue =
-          true, // this was the behaviour before introducing this parameter
+      {bool waitForFinalDeliveryStatus = true,
+      bool checkForFinalDeliveryStatus = true,
+      bool encryptValue = true,
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary}) async {
@@ -377,14 +441,8 @@ class NotificationServiceImpl extends NotificationService {
           notificationParams,
           atClient.getPreferences()!,
           atClient.getCurrentAtSign()!);
-      // Get the EncryptionInstance to encrypt the data.
-      var atKeyEncryption = atKeyEncryptionManager.get(
-          notificationParams.atKey, atClient.getCurrentAtSign()!);
       // Get the NotifyVerbBuilder from NotificationParams
-      var builder = await NotificationRequestTransformer(
-              atClient.getCurrentAtSign()!,
-              atClient.getPreferences()!,
-              atKeyEncryption)
+      var builder = await NotificationRequestTransformer(atClient)
           .transform(notificationParams);
 
       notificationValueValidation(notificationParams, builder);
@@ -544,7 +602,7 @@ class NotificationServiceImpl extends NotificationService {
     //
     // Additionally, in order to give application code full control over the
     // lifecycle of the notifications listener, we will only start the monitor
-    // for subscriptions when AtClientPreference.autoStartMonitor] is true,
+    // for subscriptions when AtClientPreference.monitorAutoStart is true,
     // which it is by default (legacy behaviour). This gives application code
     // much better clear control over the notification listening lifecycle.
     if (atClient.getPreferences()?.monitorAutoStart == true) {

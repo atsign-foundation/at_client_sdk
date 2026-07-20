@@ -10,7 +10,10 @@ for atKeys, and Flutter-specific extensions — so a new Flutter app can
 go from "user has an atSign" to "authenticated `AtClient` in hand" with
 a few widget calls.
 
-Supports mobile, desktop, web, and IoT targets via Flutter.
+Supports mobile, desktop, and IoT targets via Flutter. **Flutter
+web is not supported** — atSign onboarding and key handling rely
+on platform plugins (key-chain, file storage) that don't have web
+implementations today.
 
 ## What's in the box
 
@@ -39,10 +42,116 @@ example app. Read these rather than copying snippets from here:
 - [`example/lib/main.dart`](example/lib/main.dart) — minimal host app
   wiring the two flows above into navigation.
 
+Smaller copy/paste snippets live under
+[`example/lib/snippets`](example/lib/snippets):
+
+- [`example/lib/snippets/at_invitation.dart`](example/lib/snippets/at_invitation.dart)
+  — replacement for the deprecated `at_invitation_flutter` package. It keeps
+  the SMS/email invite flow as app-owned code instead of a separate Flutter
+  package.
+
 For a **full Flutter app** using `at_client_flutter` in anger, see
-[`../at_client_flutter/examples/todos/`](../at_client_flutter/examples/todos)
-— a shared-todos app that combines onboarding, auth, and the
-`AtCollection<T>` API from [`at_client`](../at_client).
+the two flagship examples — deliberately positioned side-by-side
+to make a fundamental SDK trade-off visible:
+
+### todos — the idiomatic `AtCollection<T>` Flutter app
+
+[`examples/todos/`](examples/todos/README.md) is the **first
+place to look** when building a real Flutter application on the
+Atsign Protocol that needs a typed shared **dataset**. It drives
+every common collection-shaped pattern through the mobile /
+desktop widget stack: typed `AtCollection<T>` with `fromJson` /
+`typeTag`, sub-collections (notes per todo), the `Query<T>`
+builder with reactive `watch()` / `watchWithSub` / `watchSingle`,
+`sharedWith` updates, built-in read receipts, scheduled visibility
+via `availableAt`. Wire-compatible with the
+[CLI sibling](../at_client/example/README.md#collections--todos-app)
+so the same data flows live between TUI and Flutter instances.
+
+Full design, source tour, and multi-device demo in
+[`examples/todos/README.md`](examples/todos/README.md).
+
+### dockerstats — live container telemetry
+
+[`examples/dockerstats/`](examples/dockerstats/README.md) is the
+canonical worked example of an SDK pattern the API doesn't
+impose: **deliver via short-lived notifications, store in a
+relational database**. The publisher (a [Dart CLI](../at_client/example/README.md#dockerstats--notification-based-live-telemetry))
+emits one `docker stats` sample per container per cycle as a
+single `notificationService.send(...)` — no AtCollection, no
+keystore writes, no sync queue. The Flutter dashboard subscribes,
+persists every sample as-received to a per-atSign **SQLite**
+database (no roll-up, no compaction at rest), and renders charts
+off that local store with a user-selectable window (5 m → all).
+Each window change runs one SQL `GROUP BY` query sized to the
+chart's pixel budget, so even an "all" view over years of raw
+data stays responsive; live notifications fold into the visible
+buckets incrementally.
+
+It exists to demonstrate the trade-off explicitly: mis-applying
+`AtCollection<T>` to a high-frequency observation stream — where
+query / aggregation / windowing is the dominant design concern —
+would be wrong. `AtCollection<T>` is for typed shared *datasets*
+(the `todos` example above); notifications + local DB is for
+*streams* of observations.
+
+Full design, query-time aggregation semantics, and the seed-DB
+workflow for cross-window chart development are in
+[`examples/dockerstats/README.md`](examples/dockerstats/README.md).
+
+## Onboarding, provisioning & timeouts
+
+Registering a brand-new atSign and having its atServer **provisioned** are two
+separate steps — provisioning can lag registration by anything from seconds to a
+few minutes. The SDK handles that wait for you: `AuthService.onboard` polls for
+the atServer to come up for **5 minutes** by default
+(`AtNetworkTimeouts.defaultOnboardingTimeout`), retrying every `retryDelay` with
+each individual network probe capped at 60s. Returning-user sign-in
+(`authenticate`) instead **fails fast** at 30s, because an existing atSign is
+already provisioned and a dead network there should surface quickly.
+
+What a Flutter app should do:
+
+1. **Call `onboard()` with no `timeout`.** The 5-minute provisioning poll is
+   built in — don't wrap your own retry loop around it (that just re-stacks the
+   retries this design removed).
+
+2. **Show progress from `AuthService.progressStream`, not a blind spinner.** A
+   multi-minute wait behind an indeterminate spinner reads as "hung." Subscribe
+   *before* calling `onboard` — it's a broadcast stream and won't replay events
+   you missed:
+
+   ```dart
+   final sub = authService.progressStream.listen((e) {
+     setState(() => _status = e.msg); // e.type: info / success / warning / error
+   });
+   try {
+     await authService.onboard(request, cramSecret); // no timeout → full 5-min poll
+   } on AtTimeoutException {
+     // provisioning still not ready after 5 minutes — offer Retry (step 3)
+   } finally {
+     await sub.cancel();
+   }
+   ```
+
+3. **On `AtTimeoutException`, offer *Retry* rather than a longer timeout.** In the
+   rare case provisioning runs past 5 minutes, a "Still setting up your atSign —
+   tap to keep waiting" button that re-calls `onboard()` (a fresh 5-minute poll)
+   beats baking in a 15-minute single timeout that makes every genuine failure
+   feel broken.
+
+4. **Override `timeout` only to *widen* the window, and only when you know the
+   provisioner is slow** — e.g. a self-hosted atServer or custom atDirectory.
+   Never pass a *short* `timeout` to `onboard()` for a new atSign; it truncates
+   the very wait you need.
+
+5. **Returning users go through `authenticate()`** and keep the 30s fail-fast —
+   don't borrow onboarding's patience for routine sign-in.
+
+> **Note:** `onboard()` has no cancellation token, so the 5-minute poll runs to
+> completion or timeout even if the user navigates away — a "Cancel" button can
+> only change the UI, not abort the in-flight poll. True cancellation is tracked
+> in [#2075](https://github.com/atsign-foundation/at_client_sdk/issues/2075).
 
 ## Post-authentication initialization
 
@@ -105,6 +214,5 @@ atKeysIo.write(atSign, atKeys);
 - [`at_commons`](../at_commons) — `AtKey`, `Metadata`, and friends
 
 ## Open source usage and contributions
-
 BSD3-licensed. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) for
 guidance on setting up tools, running tests, and raising a PR.

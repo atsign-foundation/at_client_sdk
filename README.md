@@ -6,122 +6,130 @@
 
 # at_client_sdk
 
-at_client_sdk is the main repository for storing libraries related to building
-applications with the atPlatform. The repository is broken up into multiple
-categories:
-
-- SDKs
-- libraries
-- widgets (currently in
-  [at_widgets](https://github.com/atsign-foundation/at_widgets), but will be
-  moved here soon)
+The main repository for libraries used to build applications on the
+Atsign Platform. Three categories: SDKs, libraries, and Flutter
+widgets.
 
 ## SDKs
 
 [![Build Status](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_client_sdk.yaml/badge.svg?branch=trunk)](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_client_sdk.yaml)
 
-This repo contains two versions of the at_client_sdk that you can choose from
-depending on what kind of device you are targeting for your application.
-
-- [at_client](./packages/at_client) a non platform specific SDK that can be used
-for writing things like command line applications and headless apps for Internet
-of Things (IoT) devices.
-
-- [at_client_mobile](./packages/at_client_mobile) an SDK specifically written
-for iOS and Android apps with support for secure storage and keys backup on the
-device with embedded storage and hardware trusted root keychain.
+- [at_client](./packages/at_client): the platform-neutral Dart SDK,
+  for command-line apps, headless services, and Internet-of-Things
+  devices.
+- [at_client_flutter](./packages/at_client_flutter): the Flutter
+  layer on top of `at_client`, for mobile and desktop apps.
+  Adds onboarding / authentication dialogs and device-keychain
+  storage. Flutter web is not a supported target.
 
 ## Libraries
 
 [![Build Status](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_libraries.yaml/badge.svg?branch=trunk)](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_libraries.yaml)
 
-This repository also contains various atPlatform libraries for developers building
-their own atPlatform applications. (These libraries can also be found on
-[pub.dev](https://pub.dev/publishers/atsign.org/packages))
+Dart libraries for building Atsign Platform applications. All are
+published on
+[pub.dev](https://pub.dev/publishers/atsign.org/packages).
 
-These libraries were previously located at
-[at_libraries](https://github.com/atsign-foundation/at_libraries)
+- [at_auth](./packages/at_auth): platform-neutral core of
+  onboarding, authentication, and APKAM enrollment.
+- [at_chops](./packages/at_chops): cryptographic and hashing
+  operations (encryption, decryption, signing, hashing) used by the
+  rest of the SDK.
+- [at_cli_commons](./packages/at_cli_commons): helpers for Dart CLI
+  / server programs that use `at_client`. Wraps the boilerplate of
+  parsing flags, loading keys, and producing an authenticated
+  `AtClient`.
+- [at_commons](./packages/at_commons): foundational types used
+  across every package: keys, metadata, atSign validation,
+  root-domain parsing, verb builders for the Atsign Protocol wire
+  format, and the exception hierarchy.
+- [at_contact](./packages/at_contact): contacts library that
+  persists across different Atsign Platform applications.
+- [at_lookup](./packages/at_lookup): low-level direct
+  implementation of the Atsign Protocol verbs. Used by `at_client`
+  and `at_client_mobile`.
+- [at_onboarding_cli](./packages/at_onboarding_cli): command-line
+  tooling and library surface for registering, onboarding, and
+  enrolling atSigns. Useful for headless / IoT applications.
+- [at_policy](./packages/at_policy): scaffolding for building
+  policy-management services that talk to enforcement endpoints
+  via the Atsign Protocol.
+- [at_server_status](./packages/at_server_status): logs the status
+  of the root server and the atServer for an atSign of your
+  choice.
+- [at_utils](./packages/at_utils): utility library: atSign,
+  metadata, configuration, logger.
+- [base2e15](./packages/base2e15): fork of the upstream
+  [base2e15](https://pub.dev/packages/base2e15) package, kept here
+  for null-safety support.
+- [dart_utf7](./packages/dart_utf7): fork of the upstream
+  [utf7](https://pub.dev/packages/utf7) package, kept here for
+  null-safety support.
 
-- [at_commons](https://pub.dev/packages/at_commons) Commonly used components
-in implementation of the Atsign Protocol.
-
-- [at_utils](https://pub.dev/packages/at_utils) This is the Utility library
-for Atsign Protocol projects. It contains utility classes for atSign, atMetadata,
-configuration and logger.
-
-- [at_contact](https://pub.dev/packages/at_contact): A contacts library that
-persists across different @ Platform applications. You can see this dependency
-in action by cloning the at_chat_flutter project from the
-[at_widgets repository](https://github.com/atsign-foundation/at_widgets).
-
-- [at_lookup](https://pub.dev/packages/at_lookup): A low-level library that
-directly implements the Atsign Protocol verbs. You can find this dependency in
-several other packages such as at_client and at_client_mobile.
-
-- [at_onboarding_cli](https://pub.dev/packages/at_onboarding_cli): A command
-line library to authenticate and onboard atSigns intended for use in
-headless applications such as Internet of Things (IoT) devices.
-
-- [at_server_status](https://pub.dev/packages/at_server_status): A helpful
-library that logs the status of the root server as well as a secondary
-server of your choice.
-
-- [at_cli_commons](https://pub.dev/packages/at_cli_commons): A library of
-generic / reusable stuff which is useful when building cli programs which
-use the [atClient SDK](#SDKs)
-
-## Flutter Packages
+## Flutter packages
 
 [![Build Status](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_widgets.yml/badge.svg?branch=trunk)](https://github.com/atsign-foundation/at_client_sdk/actions/workflows/at_widgets.yml)
 
-This repository also contains various atPlatform widgets for developers building
-their own Flutter applications. (These libraries can also be found on
-[pub.dev](https://pub.dev/publishers/atsign.org/packages))
+> **Status:** Most of the `at_*_flutter` packages listed below are
+> in the process of being deprecated. Over the next few months
+> they'll be replaced by example application code rather than
+> reusable widget packages. The recommended path for new Flutter
+> work is to read the example app at
+> [`packages/at_client_flutter/examples/todos`](./packages/at_client_flutter/examples/todos)
+> and adapt it directly. The packages will continue to publish
+> until that migration completes.
 
-These libraries were previously located at
-[at_widgets](https://github.com/atsign-foundation/at_widgets)
+- [at_backupkey_flutter](./packages/at_backupkey_flutter): saves
+  the backup key file for an onboarded atSign.
+- [at_chat_flutter](./packages/at_chat_flutter): chat feature
+  using atSigns and the Atsign Protocol.
+- [at_common_flutter](./packages/at_common_flutter): common
+  widgets used by other Atsign Flutter packages. **Already
+  deprecated** in favour of `at_client_flutter`.
+- [at_contacts_flutter](./packages/at_contacts_flutter):
+  contact-management widgets for atSign-based apps.
+- [at_contacts_group_flutter](./packages/at_contacts_group_flutter):
+  group functionality on top of `at_contacts_flutter`.
+- [at_events_flutter](./packages/at_events_flutter): event
+  management.
+- [at_follows_flutter](./packages/at_follows_flutter): a basic
+  social "follows" feature for atSigns.
+- [at_invitation_flutter](./deprecated/flutter/at_invitation_flutter):
+  deprecated; invite contacts via SMS or email using the
+  [`at_client_flutter` snippet](./packages/at_client_flutter/example/lib/snippets/at_invitation.dart).
+- [at_location_flutter](./packages/at_location_flutter): share
+  location between two atSigns and view on
+  [OpenStreetMap](https://www.openstreetmap.org/).
+- [at_login_flutter](./packages/at_login_flutter): zero-trust
+  logins using the Atsign Protocol.
+- [at_notify_flutter](./packages/at_notify_flutter): notification
+  surface.
+- [at_sync_ui_flutter](./packages/at_sync_ui_flutter): UI
+  indicator for the SDK's sync process.
+- [at_theme_flutter](./packages/at_theme_flutter): theme
+  switching.
 
+## Installation
 
-- [at_backupkey_flutter](https://pub.dev/packages/at_backupkey_flutter)- A
-flutter plugin project for saving the backup key of any atSign that is being
-onboarded with Atsign Protocol apps. Backup key can be used to authenticate in any
-Atsign Protocol apps.
+Each package's own README and pub.dev page have the installation
+details. Click any of the links above.
 
-- [at_chat_flutter](https://pub.dev/packages/at_chat_flutter)- A flutter plugin
-project to provide a chat feature using atSigns and Atsign Protocol.
+## AI Agent Skill
 
-- [at_common_flutter](https://pub.dev/packages/at_common_flutter)- A flutter
-package to provide common widgets used by other Atsign flutter packages.
+The `at_client_skills` package gives AI agents accurate, up-to-date knowledge of
+`at_client` and `at_client_flutter` — covering `AtCollection<T>`, auth flows,
+querying, sub-collections, testing patterns, and common pitfalls.
 
-- [at_contacts_flutter](https://pub.dev/packages/at_contacts_flutter)- A
-flutter plugin project to provide ease of managing contacts for an atSign
-using Atsign Protocol.
+```sh
+# Add to your project
+dart pub add --dev at_client_skills skills
 
-- [at_contacts_group_flutter](https://pub.dev/packages/at_contacts_group_flutter)-
-A flutter plugin to provide group functionality for atSign contacts.
+# Install the skill into your IDE
+dart run skills get
+```
 
-- [at_events_flutter](https://pub.dev/packages/at_events_flutter)- A flutter
-plugin project to manage events.
-
-- [at_location_flutter](https://pub.dev/packages/at_location_flutter)- A flutter
-plugin project to share location between two atSigns and track them on Open
-Street Map ([OSM](https://www.openstreetmap.org/)).
-
-- [at_onboarding_flutter](https://pub.dev/packages/at_onboarding_flutter)- A
-flutter plugin project for onboarding any atSign in Atsign Protocol apps with ease.
-Provides QRscanner and upload key file options to authenticate.
-
-- [atsign_authentication_helper](https://pub.dev/packages/atsign_authentication_helper)-
-(DISCONTINUED) A flutter plugin project to provide authentication for Atsign
-apps. It provides both a QR scanner and feature to upload files.
-
-- [at_follows_flutter](https://pub.dev/packages/at_follows_flutter)-  A flutter
-plugin project to integrate follows feature for atSigns.
-
-## How do I install?
-
-All installation guidelines are written in their respective directories
-and pub.dev sites. Click on the links above for those details.
+Works with Claude Code, Cursor, GitHub Copilot, Cline, and any agent
+supporting the [agentskills.io](https://agentskills.io) specification.
 
 ## Maintainers
 

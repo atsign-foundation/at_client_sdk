@@ -27,7 +27,7 @@ jobs:
           - at_contact
           - at_server_status
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: ./actions/setup-flutter-and-dart
         with:
@@ -56,7 +56,7 @@ jobs:
           - at_cli_commons
           - at_policy
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: ./actions/setup-flutter-and-dart
         with:
@@ -72,7 +72,83 @@ jobs:
 
       - name: run tests
         working-directory: packages/${{ matrix.package }}
-        run: dart test --concurrency=1
+        run: dart test --concurrency=1 --exclude-tags ffi
+
+  build_and_test_ffi:
+    runs-on: ubuntu-latest
+    env:
+      OPENSSL_VERSION: "3.5.0" # minimum version that OpenSSL supports MLKEM
+      OPENSSL_INSTALL_DIR: ${{ github.workspace }}/.openssl
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: ./actions/setup-flutter-and-dart
+
+      - name: Cache OpenSSL build
+        id: cache-openssl
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.OPENSSL_INSTALL_DIR }}
+          key: openssl-${{ env.OPENSSL_VERSION }}-ubuntu-latest
+
+      - name: Build OpenSSL ${{ env.OPENSSL_VERSION }} from source
+        # Guard on the actual library file, not the cache-hit flag — a corrupt
+        # or partial cache restore would otherwise skip the build and fail later.
+        # Use --libdir=lib to force installation into lib/ regardless of whether
+        # the host is 32 or 64-bit (otherwise OpenSSL 3.x defaults to lib64/).
+        run: |
+          LIBCRYPTO="${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so.3"
+          if [ -f "${LIBCRYPTO}" ]; then
+            echo "libcrypto already present at ${LIBCRYPTO}, skipping build."
+            exit 0
+          fi
+          echo "Building OpenSSL ${OPENSSL_VERSION}..."
+          sudo apt-get update && sudo apt-get install -y build-essential
+          curl -fsSL "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz" \
+            | tar xz -C /tmp
+          cd "/tmp/openssl-${OPENSSL_VERSION}"
+          ./Configure --prefix="${{ env.OPENSSL_INSTALL_DIR }}" \
+            --openssldir="${{ env.OPENSSL_INSTALL_DIR }}/ssl" \
+            --libdir=lib \
+            shared no-tests
+          make -j$(nproc)
+          make install_sw
+
+      - name: Verify OpenSSL build
+        run: |
+          # Resolve the real .so file (not a symlink) to avoid SONAME lookup
+          # issues when Dart's DynamicLibrary.open follows the versioned symlink
+          # and the dynamic linker resolves the SONAME against the system lib.
+          LIBCRYPTO=$(realpath "${{ env.OPENSSL_INSTALL_DIR }}/lib/libcrypto.so.3")
+          echo "Resolved libcrypto: ${LIBCRYPTO}"
+          test -f "${LIBCRYPTO}" || (echo "ERROR: ${LIBCRYPTO} not found" && exit 1)
+          strings "${LIBCRYPTO}" | grep -q "ML-DSA-65"  || (echo "ERROR: ML-DSA-65 not found in ${LIBCRYPTO}"  && exit 1)
+          strings "${LIBCRYPTO}" | grep -q "ML-KEM-768" || (echo "ERROR: ML-KEM-768 not found in ${LIBCRYPTO}" && exit 1)
+          echo "OK: ${LIBCRYPTO} exists and contains ML-DSA-65 and ML-KEM-768"
+          # Export for the FFI test step — opening the real file bypasses SONAME resolution
+          echo "LIBCRYPTO_REAL_PATH=${LIBCRYPTO}" >> "$GITHUB_ENV"
+
+      - name: Install dependencies in at_chops
+        working-directory: packages/at_chops
+        run: dart pub get
+
+      - name: Analyze project source in at_chops
+        working-directory: packages/at_chops
+        run: dart analyze
+
+      - name: run tests with libcrypto available
+        working-directory: packages/at_chops
+        env:
+          AT_CHOPS_LIBCRYPTO_PATH: ${{ env.LIBCRYPTO_REAL_PATH }}
+          LD_LIBRARY_PATH: ${{ env.OPENSSL_INSTALL_DIR }}/lib
+        # The ffi-tagged tests everywhere, plus all of at_pqc_test.dart —
+        # its untagged tests select their backend by probing libcrypto, so
+        # they exercise the FFI selection path only in this job (the
+        # build_and_test matrix already runs the rest of the suite with
+        # --exclude-tags ffi and no libcrypto).
+        run: |
+          dart test --concurrency=1 --tags ffi
+          dart test --concurrency=1 test/at_pqc_test.dart
 
   functional_tests_at_onboarding_cli:
     runs-on: ubuntu-latest
@@ -84,7 +160,7 @@ jobs:
           - at_onboarding_cli_functional_tests_proxy
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: ./actions/setup-flutter-and-dart
         with:

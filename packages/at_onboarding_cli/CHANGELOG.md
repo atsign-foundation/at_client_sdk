@@ -1,10 +1,14 @@
 ## 1.16.0
+- refactor: route enrollment crypto — `sha256` hashing, AES key generation and RSA keypair generation — through at_chops (`SHA256HashingAlgo`, `AtChopsUtil.generateSymmetricKey`, `AtChopsUtil.generateAtEncryptionKeyPair`). `crypto`, `encrypt` and `crypton` are no longer imported anywhere in the package and have been dropped from `dependencies`. Byte-identical by construction.
 - feat: enrollment authorization wait can now be resumed across sessions
 - feat: atKeys files are now restricted to read/write permissions for the current user only
 - feat: atKeys file writability is verified before enrollment or onboarding begins
 - feat: activate_cli: new `decrypt` command outputs a passphrase-decrypted version of the atKeys file
 - feat: activate_cli: version is now shown via `--version`, `--help`, and `help`
 - fix: at_onboarding_cli now subscribes to at_auth progress stream events
+- chore(deps): `at_auth: ^3.2.0`, `at_lookup: ^3.6.0` — onboarding/auth network
+  waits are time-bounded (deadline-driven `validateAtServer`, bounded
+  atDirectory lookups) only with these versions resolved.
 
 ## 1.15.0
 

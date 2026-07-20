@@ -8,18 +8,14 @@ body:
       label: Which at_widget package you find issue with?
       multiple: true
       options:
-        - at_backupkey_flutter
         - at_chat_flutter
-        - at_common_flutter
         - at_contacts_flutter
         - at_contacts_group_flutter
         - at_events_flutter
         - at_follows_flutter
-        - at_invitation_flutter
         - at_location_flutter
         - at_login_flutter
         - at_notify_flutter
-        - at_onboarding_flutter
         - at_sync_ui_flutter
         - at_theme_flutter
     validations:

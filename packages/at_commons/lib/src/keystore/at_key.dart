@@ -4,6 +4,7 @@ import 'package:at_commons/src/keystore/at_key_builder_impl.dart';
 import 'package:at_commons/src/keystore/public_key_hash.dart';
 import 'package:at_commons/src/utils/at_key_regex_utils.dart';
 import 'package:at_commons/src/utils/string_utils.dart';
+import 'package:at_commons/src/verb/verb_util.dart';
 
 import '../at_constants.dart';
 import '../exception/at_exceptions.dart';
@@ -525,6 +526,14 @@ class Metadata {
   /// when executing the `delete` verb.
   bool immutable = false;
 
+  /// Provider-owned crypto metadata serialized on the wire as `appMetadata`.
+  ///
+  /// The SDK owns [AppMetadata.providerId] only for routing to the
+  /// provider that can decrypt the value. [AppMetadata.additional] is opaque to
+  /// the SDK and belongs to that provider. It is plaintext metadata, so
+  /// providers must not store record plaintext or other sensitive values here.
+  AppMetadata? appMetadata;
+
   @override
   String toString() {
     return 'Metadata{${jsonEncode(toJson())}}';
@@ -548,6 +557,18 @@ class Metadata {
     }
     if (ccd != null) {
       sb.write(':ccd:$ccd');
+    }
+    if (createdAt != null) {
+      sb.write(':cAt:${VerbUtil.formatIso8601Micros(createdAt!)}');
+    }
+    if (updatedAt != null) {
+      sb.write(':uAt:${VerbUtil.formatIso8601Micros(updatedAt!)}');
+    }
+    if (expiresAt != null) {
+      sb.write(':eAt:${VerbUtil.formatIso8601Micros(expiresAt!)}');
+    }
+    if (availableAt != null) {
+      sb.write(':aAt:${VerbUtil.formatIso8601Micros(availableAt!)}');
     }
     if (dataSignature.isNotNullOrEmpty) {
       sb.write(':${AtConstants.publicDataSignature}:$dataSignature');
@@ -596,6 +617,10 @@ class Metadata {
     if (immutable) {
       sb.write(':${AtConstants.immutable}:$immutable');
     }
+    if (appMetadata != null) {
+      sb.write(
+          ':${AtConstants.appMetadata}:${Metadata.encodeAppMetadata(appMetadata!)}');
+    }
     return sb.toString();
   }
 
@@ -626,6 +651,7 @@ class Metadata {
     map[AtConstants.sharedKeyEncryptedEncryptingKeyName] = skeEncKeyName;
     map[AtConstants.sharedKeyEncryptedEncryptingAlgo] = skeEncAlgo;
     map[AtConstants.immutable] = immutable;
+    map[AtConstants.appMetadata] = appMetadata?.toJson();
     map['namespaceAware'] = namespaceAware;
     map['isCached'] = isCached;
 
@@ -690,8 +716,34 @@ class Metadata {
     metaData.skeEncAlgo = json[AtConstants.sharedKeyEncryptedEncryptingAlgo];
     metaData.namespaceAware = json['namespaceAware'] ?? false;
     metaData.immutable = json[AtConstants.immutable] ?? false;
+    metaData.appMetadata =
+        Metadata.decodeAppMetadata(json[AtConstants.appMetadata]);
 
     return metaData;
+  }
+
+  static String encodeAppMetadata(AppMetadata appMetadata) {
+    return base64Encode(utf8.encode(jsonEncode(appMetadata.toJson())));
+  }
+
+  static AppMetadata? decodeAppMetadata(dynamic value) {
+    if (value == null || value == 'null') {
+      return null;
+    }
+    if (value is AppMetadata) {
+      return value;
+    }
+    if (value is Map) {
+      return AppMetadata.fromJson(value);
+    }
+    if (value is String && value.isNotEmpty) {
+      final decoded = utf8.decode(base64Decode(value));
+      final decodedJson = jsonDecode(decoded);
+      if (decodedJson is Map) {
+        return AppMetadata.fromJson(decodedJson);
+      }
+    }
+    throw FormatException('Invalid appMetadata: $value');
   }
 
   @override
@@ -726,7 +778,8 @@ class Metadata {
           ivNonce == other.ivNonce &&
           skeEncKeyName == other.skeEncKeyName &&
           skeEncAlgo == other.skeEncAlgo &&
-          immutable == other.immutable;
+          immutable == other.immutable &&
+          appMetadata == other.appMetadata;
 
   @override
   int get hashCode =>
@@ -757,7 +810,8 @@ class Metadata {
       ivNonce.hashCode ^
       skeEncKeyName.hashCode ^
       skeEncAlgo.hashCode ^
-      immutable.hashCode;
+      immutable.hashCode ^
+      appMetadata.hashCode;
 }
 
 class AtValue {
@@ -779,4 +833,91 @@ class AtValue {
 
   @override
   int get hashCode => value.hashCode ^ metadata.hashCode;
+}
+
+class AppMetadata {
+  /// SDK-owned routing field for the crypto provider which can decrypt the
+  /// associated value.
+  String providerId;
+
+  /// Provider-owned opaque plaintext metadata.
+  ///
+  /// Serialized flat in the appMetadata JSON object.
+  /// The SDK preserves these values but does not interpret them.
+  Map<String, dynamic>? additional;
+
+  AppMetadata({required String providerId, this.additional})
+      : providerId = _validateProviderId(providerId);
+
+  Map<String, dynamic> toJson() {
+    final map = <String, dynamic>{
+      'providerId': providerId,
+    };
+    if (additional != null) {
+      map.addAll(additional!);
+    }
+    return map;
+  }
+
+  static AppMetadata fromJson(Map json) {
+    final providerId = json['providerId'];
+    if (providerId is! String) {
+      throw FormatException('Invalid appMetadata.providerId: $providerId');
+    }
+    final additional = <String, dynamic>{};
+    json.forEach((key, value) {
+      if (key != 'providerId') {
+        additional[key.toString()] = value;
+      }
+    });
+
+    return AppMetadata(
+      providerId: providerId,
+      additional: additional.isEmpty ? null : additional,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppMetadata &&
+          runtimeType == other.runtimeType &&
+          providerId == other.providerId &&
+          _mapEquals(additional, other.additional);
+
+  @override
+  int get hashCode => providerId.hashCode ^ _mapHash(additional);
+
+  static bool _mapEquals(Map<String, dynamic>? a, Map<String, dynamic>? b) {
+    if (a == null || a.isEmpty) {
+      return b == null || b.isEmpty;
+    }
+    if (b == null || a.length != b.length) {
+      return false;
+    }
+    for (final entry in a.entries) {
+      if (!b.containsKey(entry.key) || b[entry.key] != entry.value) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static int _mapHash(Map<String, dynamic>? map) {
+    if (map == null || map.isEmpty) {
+      return 0;
+    }
+    var hash = 0;
+    for (final key in map.keys.toList()..sort()) {
+      hash = hash ^ key.hashCode ^ map[key].hashCode;
+    }
+    return hash;
+  }
+
+  static String _validateProviderId(String providerId) {
+    if (providerId.trim().isEmpty) {
+      throw FormatException('Invalid appMetadata.providerId: $providerId');
+    }
+    return providerId;
+  }
 }

@@ -82,3 +82,10 @@ class InvalidPinException extends AtClientException {
 
   InvalidPinException.message(String message) : super.message(message);
 }
+
+class CryptoProviderNotRegistered extends AtClientException {
+  CryptoProviderNotRegistered(String message,
+      {Intent? intent, ExceptionScenario? exceptionScenario})
+      : super.message(message,
+            intent: intent, exceptionScenario: exceptionScenario);
+}

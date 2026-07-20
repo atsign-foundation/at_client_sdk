@@ -8,8 +8,12 @@ var _queue = Queue();
 
 void main() {
   var atsign = '@sitaram🛠';
-  var atsignPort = 25017;
   var rootServer = 'vip.ve.atsign.zone';
+  // @sitaram🛠's secondary is 25017 by default; a base-port virtualenv shifts
+  // every secondary by (VIRTUALENV_BASE_PORT + 1) - 25000.
+  final basePort =
+      int.tryParse(Platform.environment['VIRTUALENV_BASE_PORT'] ?? '') ?? 64;
+  var atsignPort = basePort == 64 ? 25017 : 25017 + (basePort + 1 - 25000);
 
   SecureSocket secureSocket;
 

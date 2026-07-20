@@ -1,6 +1,6 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/encryption_service/shared_key_encryption.dart';
+import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -9,13 +9,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/no_op_services.dart';
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
-class MockLocalSecondary extends Mock implements LocalSecondary {}
-
-class MockSecondaryAddressFinder extends Mock
-    implements SecondaryAddressFinder {}
+import 'test_utils/mocks.dart';
 
 bool wrappedDecryptSucceeds(
     {required String cipherText,
@@ -79,7 +73,7 @@ void main() {
     late int remotePLookupRequestCount;
     late int remoteUpdateRequestCount;
     late bool remoteSecondaryAvailable;
-    late SecondaryKeyStore localStore;
+    late AtKeyValueStore<String, AtData, AtMetaData?> localStore;
 
     registerFallbackValue(llookupMySharedKeyForBob);
 
@@ -202,7 +196,7 @@ void main() {
             .getLocalSecondary()!
             .keyStore!
             .get(atKey.toString()));
-        var cipherText = atData.data;
+        var cipherText = atData!.data!;
         expect(
             wrappedDecryptSucceeds(
                 cipherText: cipherText,
@@ -230,7 +224,7 @@ void main() {
             .getLocalSecondary()!
             .keyStore!
             .get(atKey.toString()));
-        var cipherText = atData.data;
+        var cipherText = atData!.data!;
         expect(
             wrappedDecryptSucceeds(
                 cipherText: cipherText,
@@ -683,20 +677,20 @@ void main() {
         // We've written two copies (us and them) to atServer
         expect(remoteUpdateRequestCount, 2);
         expect(remoteUpdatedMap[myCopyVicSymKeyName] != null, true);
-        expect(localStore.isKeyExists(myCopyVicSymKeyName), true);
+        expect(await localStore.exists(myCopyVicSymKeyName), true);
       });
 
       // 3. My copy not found in local, found in atServer => save to local
       test('no my copy locally, but found on atServer, so should store locally',
           () async {
         SharedKeyEncryption ske = SharedKeyEncryption(atClient);
-        expect(localStore.isKeyExists(myCopyVicSymKeyName), false);
+        expect(await localStore.exists(myCopyVicSymKeyName), false);
         remoteLLookupMap[myCopyVicSymKeyName] = myEncryptedVicSymKey;
 
         var decryptedSymmetricKey =
             await ske.getMyCopyOfSharedSymmetricKey(fooBarForVictor);
         expect(decryptedSymmetricKey, victorSymKey);
-        expect(localStore.isKeyExists(myCopyVicSymKeyName), true);
+        expect(await localStore.exists(myCopyVicSymKeyName), true);
       });
 
       // 4. My copy found locally, make no request to atServer
@@ -705,7 +699,7 @@ void main() {
         await atClient
             .getLocalSecondary()!
             .putValue(myCopyVicSymKeyName, myEncryptedVicSymKey);
-        expect(localStore.isKeyExists(myCopyVicSymKeyName), true);
+        expect(await localStore.exists(myCopyVicSymKeyName), true);
 
         var decryptedSymmetricKey =
             await ske.getMyCopyOfSharedSymmetricKey(fooBarForVictor);

@@ -1,18 +1,11 @@
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/src/decryption_service/shared_by_me_decryption.dart';
+import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
-
-class MockAtClientImpl extends Mock implements AtClient {}
-
-class MockLocalSecondary extends Mock implements LocalSecondary {}
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
-class MockAtLookupImpl extends Mock implements AtLookUp {}
+import 'test_utils/mocks.dart';
 
 class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
 
@@ -20,7 +13,7 @@ class FakeDeleteVerbBuilder extends Fake implements DeleteVerbBuilder {}
 
 void main() {
   AtClient mockAtClient = MockAtClientImpl();
-  AtLookUp mockAtLookUp = MockAtLookupImpl();
+  AtLookUp mockAtLookUp = MockAtLookUpImpl();
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
   RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
   setUp(() {
@@ -39,6 +32,7 @@ void main() {
           sharedSymmetricKey, rsaKeyPair.atPublicKey.publicKey);
       AtChopsKeys atChopsKeys = AtChopsKeys.create(rsaKeyPair, null);
       var atChopsImpl = AtChopsImpl(atChopsKeys);
+      when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
       when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
       print('encryptedSharedSymmetricKey:$encryptedSharedSymmetricKey');
       when(() => mockAtClient.getLocalSecondary())
@@ -52,21 +46,27 @@ void main() {
       var testValue = 'abc!@123';
       var encryptedTestValue =
           EncryptionUtil.encryptValue(testValue, sharedSymmetricKey);
-      var localKeyDecryption = SharedByMeDecryption(mockAtClient);
-      var decryptedTestValue =
-          await localKeyDecryption.decrypt(localKey, encryptedTestValue);
+      localKey.metadata.appMetadata = AppMetadata(providerId: 'legacy');
+      var provider = LegacyCryptoProvider();
+      var decryptedTestValue = await provider.decrypt(
+          CryptoContext(atClient: mockAtClient), localKey, encryptedTestValue);
       expect(decryptedTestValue, testValue);
     });
 
     test('test to check AtDecryptionException when encrypted value is null',
         () async {
-      var localKeyDecryption = SharedByMeDecryption(mockAtClient);
+      when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
       var localKey = AtKey()
         ..sharedBy = '@alice'
         ..sharedWith = '@bob'
         ..key = 'shared_key';
+      localKey.metadata.appMetadata = AppMetadata(providerId: 'legacy');
+      var provider = LegacyCryptoProvider();
+      // An empty ciphertext reaches the same null/empty guard as the old
+      // nullable-ciphertext request did; decrypt() now takes a non-null String.
       expect(
-          () async => await localKeyDecryption.decrypt(localKey, null),
+          () async => await provider.decrypt(
+              CryptoContext(atClient: mockAtClient), localKey, ''),
           throwsA(predicate((e) =>
               e is AtDecryptionException &&
               e.message == 'Decryption failed. Encrypted value is null')));
@@ -94,10 +94,13 @@ void main() {
       var testValue = 'abc!@123';
       var encryptedTestValue =
           EncryptionUtil.encryptValue(testValue, sharedSymmetricKey);
-      var localKeyDecryption = SharedByMeDecryption(mockAtClient);
+      localKey.metadata.appMetadata = AppMetadata(providerId: 'legacy');
+      var provider = LegacyCryptoProvider();
       expect(
-          () async =>
-              await localKeyDecryption.decrypt(localKey, encryptedTestValue),
+          () async => await provider.decrypt(
+              CryptoContext(atClient: mockAtClient),
+              localKey,
+              encryptedTestValue),
           throwsA(predicate((e) =>
               e is SharedKeyNotFoundException &&
               e.message == 'Empty or null SharedKey is found')));

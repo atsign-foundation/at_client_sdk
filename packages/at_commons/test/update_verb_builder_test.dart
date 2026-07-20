@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
@@ -66,6 +68,30 @@ void main() {
           skeEncKeyName);
       expect(updateVerbParams[AtConstants.sharedKeyEncryptedEncryptingAlgo],
           skeEncAlgo);
+    });
+
+    test('verify update command with app metadata', () {
+      final appMetadata = AppMetadata(providerId: 'test_provider', additional: {
+        'encKeyName': 'key_12345.__shared_keys.wavi',
+        'encAlgo': 'test_algo',
+      });
+      final encodedAppMetadata = Metadata.encodeAppMetadata(appMetadata);
+      var updateBuilder = UpdateVerbBuilder()
+        ..value = 'alice@atsign.com'
+        ..atKey.key = 'email.wavi'
+        ..atKey.sharedBy = '@alice'
+        ..atKey.sharedWith = '@bob'
+        ..atKey.metadata.appMetadata = appMetadata;
+      var updateCommand = updateBuilder.buildCommand();
+      expect(
+          updateCommand,
+          'update:isEncrypted:false'
+          ':appMetadata:$encodedAppMetadata'
+          ':@bob:email.wavi@alice alice@atsign.com'
+          '\n');
+      var roundTrippedBuilder =
+          UpdateVerbBuilder.getBuilder(updateCommand.trim())!;
+      expect(roundTrippedBuilder.atKey.metadata.appMetadata, appMetadata);
     });
 
     test('verify local key command', () {
@@ -159,6 +185,25 @@ void main() {
           skeEncKeyName);
       expect(updateMetaVerbParams[AtConstants.sharedKeyEncryptedEncryptingAlgo],
           skeEncAlgo);
+    });
+
+    test('verify update:meta command with app metadata', () {
+      final appMetadata = AppMetadata(providerId: 'test_provider');
+      final encodedAppMetadata = Metadata.encodeAppMetadata(appMetadata);
+      var updateBuilder = UpdateVerbBuilder()
+        ..atKey.key = 'email.wavi'
+        ..atKey.sharedBy = '@alice'
+        ..atKey.sharedWith = '@bob'
+        ..atKey.metadata.appMetadata = appMetadata;
+      var updateMetaCommand = updateBuilder.buildCommandForMeta();
+      expect(
+          updateMetaCommand,
+          'update:meta:@bob:email.wavi@alice:isEncrypted:false'
+          ':appMetadata:$encodedAppMetadata'
+          '\n');
+      var roundTrippedBuilder =
+          UpdateVerbBuilder.getBuilder(updateMetaCommand.trim())!;
+      expect(roundTrippedBuilder.atKey.metadata.appMetadata, appMetadata);
     });
   });
 
@@ -634,7 +679,6 @@ void main() {
       var updateBuilder = UpdateVerbBuilder()
         ..value = 'sampleEncryptedValue'
         ..atKey.metadata.ttl = 5000
-        ..atKey.metadata.isEncrypted = false
         ..atKey.key = 'email'
         ..atKey.sharedBy = '@alice'
         ..atKey.sharedWith = '@bob';
@@ -646,6 +690,194 @@ void main() {
           getVerbParams(VerbSyntax.update, updateCommand.trim());
       print(updateVerbParams);
       expect(updateVerbParams['isEncrypted'], 'false');
+    });
+  });
+
+  group('A group of tests for UpdateVerbBuilder noCommit flag', () {
+    test('noCommit is false by default and :nc is not emitted', () {
+      var builder = UpdateVerbBuilder()
+        ..value = 'v'
+        ..atKey.key = 'phone'
+        ..atKey.sharedBy = '@alice';
+      expect(builder.noCommit, false);
+      expect(
+          builder.buildCommand(), 'update:isEncrypted:false:phone@alice v\n');
+    });
+
+    test('noCommit=true emits :nc immediately after update', () {
+      var builder = UpdateVerbBuilder()
+        ..noCommit = true
+        ..value = 'v'
+        ..atKey.key = 'phone'
+        ..atKey.sharedBy = '@alice';
+      expect(builder.buildCommand(),
+          'update:nc:isEncrypted:false:phone@alice v\n');
+    });
+
+    test('noCommit=true also emits :nc on the update:meta form', () {
+      var builder = UpdateVerbBuilder()
+        ..noCommit = true
+        ..atKey.key = 'phone'
+        ..atKey.sharedBy = '@alice';
+      expect(builder.buildCommandForMeta(),
+          'update:meta:nc:phone@alice:isEncrypted:false\n');
+    });
+
+    test('noCommit=true emits :nc on the json form', () {
+      var builder = UpdateVerbBuilder()
+        ..noCommit = true
+        ..isJson = true
+        ..value = 'alice@gmail.com'
+        ..atKey.key = 'email'
+        ..atKey.sharedBy = '@alice';
+      var command = builder.buildCommand();
+      expect(command, startsWith('update:nc:json:'));
+      var verbParams = getVerbParams(VerbSyntax.update, command.trim());
+      expect(verbParams['noCommit'], '');
+      expect(verbParams['json'], isNotNull);
+    });
+
+    test('json form without noCommit does not emit :nc', () {
+      var builder = UpdateVerbBuilder()
+        ..isJson = true
+        ..value = 'alice@gmail.com'
+        ..atKey.key = 'email'
+        ..atKey.sharedBy = '@alice';
+      var command = builder.buildCommand();
+      expect(command, startsWith('update:json:'));
+      var verbParams = getVerbParams(VerbSyntax.update, command.trim());
+      expect(verbParams['noCommit'], null);
+    });
+
+    test('json form round-trips app metadata through UpdateParams', () {
+      final appMetadata = AppMetadata(providerId: 'test_provider', additional: {
+        'encKeyName': 'key_12345.__shared_keys.wavi',
+        'encAlgo': 'test_algo',
+      });
+      var builder = UpdateVerbBuilder()
+        ..isJson = true
+        ..value = 'alice@atsign.com'
+        ..atKey.key = 'email.wavi'
+        ..atKey.sharedBy = '@alice'
+        ..atKey.sharedWith = '@bob'
+        ..atKey.metadata.appMetadata = appMetadata;
+
+      var command = builder.buildCommand();
+      expect(command, startsWith('update:json:'));
+
+      var verbParams = getVerbParams(VerbSyntax.update, command.trim());
+      var json = jsonDecode(verbParams['json']!);
+      var updateParams = UpdateParams.fromJson(json);
+
+      expect(updateParams.metadata!.appMetadata, appMetadata);
+    });
+
+    test('getBuilder round-trips noCommit on the metadata-fragment form', () {
+      String command = 'update:nc:ttl:5000:@bob:phone@alice 1234\n';
+      var builder = UpdateVerbBuilder.getBuilder(command.trim())!;
+      expect(builder.noCommit, true);
+      expect(builder.atKey.metadata.ttl, 5000);
+    });
+
+    test('getBuilder round-trips noCommit on the update:meta form', () {
+      String command = 'update:meta:nc:@bob:phone@alice:ttl:5000\n';
+      var builder = UpdateVerbBuilder.getBuilder(command.trim())!;
+      expect(builder.noCommit, true);
+      expect(builder.operation, AtConstants.updateMeta);
+      expect(builder.atKey.metadata.ttl, 5000);
+    });
+  });
+
+  group('A group of tests for UpdateVerbBuilder metadata timestamps', () {
+    final cAt = DateTime.utc(2026, 5, 5, 11, 59, 44, 123, 456);
+    final uAt = DateTime.utc(2026, 5, 5, 11, 59, 45, 0, 0);
+    final eAt = DateTime.utc(2026, 5, 5, 11, 59, 46, 999, 0);
+    final aAt = DateTime.utc(2026, 5, 5, 11, 59, 47, 500, 0);
+    const cAtIso = '2026-05-05T11:59:44.123456Z';
+    const uAtIso = '2026-05-05T11:59:45.000000Z';
+    const eAtIso = '2026-05-05T11:59:46.999000Z';
+    const aAtIso = '2026-05-05T11:59:47.500000Z';
+
+    test(
+        'toAtProtocolFragment emits cAt/uAt/eAt/aAt as ISO 8601 UTC microseconds',
+        () {
+      var metadata = Metadata()
+        ..createdAt = cAt
+        ..updatedAt = uAt
+        ..expiresAt = eAt
+        ..availableAt = aAt;
+      var fragment = metadata.toAtProtocolFragment();
+      expect(fragment, contains(':cAt:$cAtIso'));
+      expect(fragment, contains(':uAt:$uAtIso'));
+      expect(fragment, contains(':eAt:$eAtIso'));
+      expect(fragment, contains(':aAt:$aAtIso'));
+    });
+
+    test('toAtProtocolFragment emits timestamps in regex order (after ccd)',
+        () {
+      var metadata = Metadata()
+        ..ttl = 1000
+        ..ccd = true
+        ..createdAt = cAt
+        ..updatedAt = uAt
+        ..expiresAt = eAt
+        ..availableAt = aAt;
+      var fragment = metadata.toAtProtocolFragment();
+      expect(
+          fragment,
+          startsWith(':ttl:1000:ccd:true'
+              ':cAt:$cAtIso'
+              ':uAt:$uAtIso'
+              ':eAt:$eAtIso'
+              ':aAt:$aAtIso'));
+    });
+
+    test('toAtProtocolFragment omits unset timestamps', () {
+      var metadata = Metadata()..ttl = 1000;
+      expect(metadata.toAtProtocolFragment(), isNot(contains(':cAt:')));
+      expect(metadata.toAtProtocolFragment(), isNot(contains(':uAt:')));
+      expect(metadata.toAtProtocolFragment(), isNot(contains(':eAt:')));
+      expect(metadata.toAtProtocolFragment(), isNot(contains(':aAt:')));
+    });
+
+    test('toAtProtocolFragment always emits 6 fractional-second digits', () {
+      var metadata = Metadata()
+        ..createdAt = DateTime.utc(2026, 1, 1, 0, 0, 0); // zero fractional
+      var fragment = metadata.toAtProtocolFragment();
+      expect(fragment, contains(':cAt:2026-01-01T00:00:00.000000Z'));
+    });
+
+    test('UpdateVerbBuilder full round-trip preserves all four timestamps', () {
+      var builder = UpdateVerbBuilder()
+        ..value = 'v'
+        ..atKey.key = 'phone'
+        ..atKey.sharedBy = '@alice'
+        ..atKey.sharedWith = '@bob'
+        ..atKey.metadata.createdAt = cAt
+        ..atKey.metadata.updatedAt = uAt
+        ..atKey.metadata.expiresAt = eAt
+        ..atKey.metadata.availableAt = aAt;
+      var command = builder.buildCommand();
+      var rebuilt = UpdateVerbBuilder.getBuilder(command.trim())!;
+      expect(rebuilt.atKey.metadata.createdAt, cAt);
+      expect(rebuilt.atKey.metadata.updatedAt, uAt);
+      expect(rebuilt.atKey.metadata.expiresAt, eAt);
+      expect(rebuilt.atKey.metadata.availableAt, aAt);
+    });
+
+    test('UpdateVerbBuilder converts a non-UTC source DateTime to UTC on emit',
+        () {
+      var localCAt = DateTime(2026, 5, 5, 11, 59, 44, 123, 456);
+      var builder = UpdateVerbBuilder()
+        ..value = 'v'
+        ..atKey.key = 'phone'
+        ..atKey.sharedBy = '@alice'
+        ..atKey.metadata.createdAt = localCAt;
+      var command = builder.buildCommand();
+      var rebuilt = UpdateVerbBuilder.getBuilder(command.trim())!;
+      expect(rebuilt.atKey.metadata.createdAt!.isUtc, true);
+      expect(rebuilt.atKey.metadata.createdAt!.microsecondsSinceEpoch,
+          localCAt.microsecondsSinceEpoch);
     });
   });
 }

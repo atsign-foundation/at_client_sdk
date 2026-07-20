@@ -1,23 +1,115 @@
+## 3.14.1
+- fix: `AtCollection` — resolve received (shared-in) items in the id-scoped
+  read path. `Query.watch()` (delta path), `getOrNull` / `get(id, owner)` and
+  `exists(id, owner)` missed items stored locally as
+  `cached:@<self>:<id>.<ns>@<owner>` because the scan regex allowed only one
+  key-wrapper segment; it now allows the two a received copy carries (#2032).
+- fix: `AtCollection` — end-anchor owner-scoped scans and deletes so a concrete
+  owner (`@bob`) can't prefix-match a longer atSign (`@bobby`), which could
+  return another atSign's items or delete a same-id received copy.
+- fix: `AtCollection.cleanupOrphans()` no longer deletes a live self-owned item
+  under a received parent when offline — the ancestor presence check reads the
+  local cached copy instead of routing to a remote lookup.
+- fix: `AtCollection` rejects a top-level item id containing `.` at write time
+  (it was stored intact but read back truncated at the first dot).
+- fix: `AtCollection` — a reader's own `markReadByMe` no longer emits a spurious
+  self `CReadReceipt` on the data-event path.
+- fix: `AtCollection.availableEvents` now fires `CItemAvailable` for an item
+  whose `availableAt` is still in the future when its create/update event
+  arrives (the scheduler read filtered them out, and the value-less placeholder
+  crashed for a non-nullable item type).
+- fix: `AtCollection` reads no longer duplicate the preceding item when a key
+  expires or is deleted between the scan and its per-key read.
+
+## 3.14.0
+- feat (experimental): per-APKAM same-atSign secret-sharing substrate —
+  `AtClientSecretSharing` / `PairwiseSecretSharing` (mixins `KeyPackageRegistration`,
+  `EnvelopeSigning`), `SecretStore`, `KeyPackage`, `SecretEnvelope`, and the
+  `EnrollmentDirectory` seam. Secrets travel in X-Wing-sealed (`pqSeal`),
+  APKAM-signed `__ssenv` envelopes addressed by `kpid`; key packages are
+  enrollment-internal (conveyed via `enroll:request`, discovered via the gated
+  `enroll:listns` verb) and never published. The whole surface is
+  `@experimental` — the wire shape is subject to change pending the atServer
+  verb work — and requires `at_chops ^3.3.0` (`pqSeal`/`pqOpen`).
+
 ## 3.13.0
+- feat: add `AtClientPreference.networkTimeout` — when set on the preference used
+  to create an `AtClient`, it becomes the process-wide network-timeout default
+  (`AtNetworkTimeouts.defaultTimeout`, capped at 60s), bounding every atServer
+  connect / atDirectory lookup / operation so a dead network can't hang the SDK.
+  Supersedes the misnamed `outboundConnectionTimeout` (a socket idle time).
+  Requires `at_commons ^5.13.0` (#1923).
+- chore(deps): `at_lookup: ^3.6.0`, `at_auth: ^3.2.0` — the bounded socket
+  connects and the deadline-driven `validateAtServer` live in those versions;
+  with older ones resolved, `networkTimeout` would set a policy nothing reads.
+- refactor: migrate the local keystore to `at_persistence_secondary_server`
+  5.0.0 — the client is now commit-log-free. The client no longer maintains a
+  local commit log or runs commit-log compaction; sync tracks its progress
+  with a persisted pull cursor, and key-expiry processing is driven by the
+  keystore's `nextExpiresAt` / `peekNewlyAvailable` surface. Requires
+  `at_persistence_secondary_server ^5.0.0`.
+- deprecated: `AtClient.startCompactionJob` and `AtClient.stopCompactionJob`
+  are retained for source compatibility but are now no-ops (a commit-log-free
+  client has no commit log to compact); they will be removed in a future
+  major release.
+- deprecated: `FileTransferService` and `FileTransferObject` are now marked
+  `@Deprecated`. The SDK file-sharing API (`uploadFile` / `downloadFile` /
+  `shareFiles` / `reuploadFiles`) has moved to the app layer and will be
+  removed, along with the `archive` dependency, in the next major version
+  (#1113).
+- chore(deps): remove the unused `cron` dependency — it was only used by the
+  commit-log compaction that the `at_persistence_secondary_server` 5.0.0
+  migration removed, and nothing in the client imports it (#1378). `uuid` is
+  already on `^4.0.0`.
+
+## 3.12.0
 
 Several significant enhancements to the API to make it much easier to use.
 - feat: New feature - Collections - a clean API for storing, sharing, 
   unsharing and deleting objects in named collections, with sub-collections, 
-  event streams, built-in support for read receipts, and more
+  event streams, built-in support for read receipts, live queries with 
+  incremental delta maintenance, and more. For detail, see the READMEs, 
+  dartdocs and examples
 - feat: added a new method, `send`, to NotificationService which is much 
   easier to use than the old (still fine to use) `notify` method.
 - feat: added `factory AtRpc.server` to make it much simpler to create AtRpc 
   servers. 
+- feat: added preference-time crypto provider configuration via
+  `AtClientPreference.crypto`, `CryptoConfig`, and
+  `CryptoProvider`.
+- feat: added `CryptoStorage` to provider context for provider-owned local /
+  remote state, plus `CryptoPolicy.onProviderNotFound` for lazy
+  provider registration with a single retry.
+- fix(AtCollection): notification-path sub-item dispatch now recovers
+  ancestor owners directly from the decrypted notification payload
+  (which IS the envelope) instead of round-tripping through the local
+  keystore. Eliminates a class of null-owner `CSubItemUpdated` events
+  that surfaced under `EventSource.notifs` (and `EventSource.both`)
+  when the keystore mirror landed under a key shape the readback
+  couldn't resolve, or raced ahead of sync writing the bare key.
+
+Major documentation uplift
 - docs: Rewrote the main README
 - docs: Added many examples in the [example](example/README.md) directory
 
-## 3.12.0
-
+And some tech debt cleanup
 - feat: explicit AtClient lifecycle control — cleanly stop and resume atClients without
   re-initialising storage or keys
 - feat: outgoing AtClient's sync and notification services will now be garbage collected
 - chore: deprecated `atClientManager` param in the factories of AtClient, NotificationService, and SyncService
 - fix: added null guards to AtClient service getters
+- perf(SyncServiceImpl): when a `sync:from:` request returns no entries because
+  the entire `(lastReceivedServerCommitId, serverCommitId]` range was filtered
+  out server-side (apkam namespace scope, syncRegex, or skipDeletesUntil),
+  advance the persisted server-commit cursor to the sync-start `serverCommitId`
+  snapshot instead of breaking out without advancing. Subsequent sync rounds
+  no-op until the server actually advances past it, rather than re-probing
+  the same filtered range every round.
+- perf(SyncServiceImpl): round 1 of fsync - push to server based on a simple 
+  queue mechanism. Also fixed a bunch of related bugs. Note that a follow-up 
+  PR will fully remove the use of the "Commit Log" part of the 
+  at_persistence package on the client side; commit log was never the 
+  appropriate vehicle mechanism to support client-side sync push
 
 ## 3.11.0     
 

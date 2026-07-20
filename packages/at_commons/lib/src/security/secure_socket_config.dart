@@ -9,4 +9,9 @@ class SecureSocketConfig {
 
   ///location of where the TLS keys file will be stored.
   String? tlsKeysSavePath;
+
+  /// Maximum time to wait for the TCP + TLS connect to complete. When null,
+  /// [AtNetworkTimeouts.effectiveDefault] is used. The resolved value is always
+  /// capped at [AtNetworkTimeouts.maxAllowed].
+  Duration? connectTimeout;
 }

@@ -48,9 +48,15 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
 
   bool isJson = false;
 
+  /// When true, the server is asked not to write a commit-log entry for this
+  /// update. Emitted on the wire as the `:nc` flag, valid for both the
+  /// metadata-fragment and the `update:json:...` forms.
+  bool noCommit = false;
+
   @override
   String buildCommand() {
     String atKeyName = buildKey();
+    var noCommitFragment = noCommit ? ':nc' : '';
     if (isJson) {
       var updateParams = UpdateParams()
         ..atKey = atKeyName
@@ -59,11 +65,12 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
         ..sharedWith = atKey.sharedWith
         ..metadata = atKey.metadata;
       var json = updateParams.toJson();
-      var command = 'update:json:${jsonEncode(json)}\n';
+      var command = 'update$noCommitFragment:json:${jsonEncode(json)}\n';
       return command;
     } else {
       var metadataFragment = atKey.metadata.toAtProtocolFragment();
-      var command = 'update$metadataFragment:$atKeyName $value\n';
+      var command =
+          'update$noCommitFragment$metadataFragment:$atKeyName $value\n';
       return command;
     }
   }
@@ -81,7 +88,8 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
   String buildCommandForMeta() {
     String atKeyName = buildKey();
     var metadataFragment = atKey.metadata.toAtProtocolFragment();
-    var command = 'update:meta:$atKeyName$metadataFragment\n';
+    var noCommitFragment = noCommit ? ':nc' : '';
+    var command = 'update:meta$noCommitFragment:$atKeyName$metadataFragment\n';
     return command;
   }
 
@@ -125,6 +133,23 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
       builder.atKey.metadata.ccd =
           _getBoolVerbParams(verbParams[AtConstants.ccd]!);
     }
+    builder.noCommit = verbParams['noCommit'] != null;
+    if (verbParams[AtConstants.createdAt] != null) {
+      builder.atKey.metadata.createdAt =
+          DateTime.parse(verbParams[AtConstants.createdAt]!);
+    }
+    if (verbParams[AtConstants.updatedAt] != null) {
+      builder.atKey.metadata.updatedAt =
+          DateTime.parse(verbParams[AtConstants.updatedAt]!);
+    }
+    if (verbParams['expiresAt'] != null) {
+      builder.atKey.metadata.expiresAt =
+          DateTime.parse(verbParams['expiresAt']!);
+    }
+    if (verbParams['availableAt'] != null) {
+      builder.atKey.metadata.availableAt =
+          DateTime.parse(verbParams['availableAt']!);
+    }
 
     builder.atKey.metadata.dataSignature =
         verbParams[AtConstants.publicDataSignature];
@@ -166,6 +191,8 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
       builder.atKey.metadata.immutable =
           _getBoolVerbParams(verbParams[AtConstants.immutable]!);
     }
+    builder.atKey.metadata.appMetadata =
+        Metadata.decodeAppMetadata(verbParams[AtConstants.appMetadata]);
     builder.value = verbParams[AtConstants.value];
 
     return builder;
@@ -207,6 +234,11 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
           atKey.metadata.ttb == other.atKey.metadata.ttb &&
           atKey.metadata.ttr == other.atKey.metadata.ttr &&
           atKey.metadata.ccd == other.atKey.metadata.ccd &&
+          atKey.metadata.createdAt == other.atKey.metadata.createdAt &&
+          atKey.metadata.updatedAt == other.atKey.metadata.updatedAt &&
+          atKey.metadata.expiresAt == other.atKey.metadata.expiresAt &&
+          atKey.metadata.availableAt == other.atKey.metadata.availableAt &&
+          noCommit == other.noCommit &&
           atKey.metadata.dataSignature == other.atKey.metadata.dataSignature &&
           atKey.metadata.sharedKeyStatus ==
               other.atKey.metadata.sharedKeyStatus &&
@@ -218,7 +250,8 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
           atKey.metadata.encAlgo == other.atKey.metadata.encAlgo &&
           atKey.metadata.ivNonce == other.atKey.metadata.ivNonce &&
           atKey.metadata.skeEncKeyName == other.atKey.metadata.skeEncKeyName &&
-          atKey.metadata.skeEncAlgo == other.atKey.metadata.skeEncAlgo;
+          atKey.metadata.skeEncAlgo == other.atKey.metadata.skeEncAlgo &&
+          atKey.metadata.appMetadata == other.atKey.metadata.appMetadata;
 
   @override
   int get hashCode =>
@@ -236,6 +269,11 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
       atKey.metadata.ttb.hashCode ^
       atKey.metadata.ttr.hashCode ^
       atKey.metadata.ccd.hashCode ^
+      atKey.metadata.createdAt.hashCode ^
+      atKey.metadata.updatedAt.hashCode ^
+      atKey.metadata.expiresAt.hashCode ^
+      atKey.metadata.availableAt.hashCode ^
+      noCommit.hashCode ^
       atKey.metadata.dataSignature.hashCode ^
       atKey.metadata.sharedKeyStatus.hashCode ^
       atKey.metadata.sharedKeyEnc.hashCode ^
@@ -246,5 +284,6 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
       atKey.metadata.encAlgo.hashCode ^
       atKey.metadata.ivNonce.hashCode ^
       atKey.metadata.skeEncKeyName.hashCode ^
-      atKey.metadata.skeEncAlgo.hashCode;
+      atKey.metadata.skeEncAlgo.hashCode ^
+      atKey.metadata.appMetadata.hashCode;
 }

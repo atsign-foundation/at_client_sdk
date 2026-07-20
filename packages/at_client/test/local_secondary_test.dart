@@ -5,12 +5,14 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:crypton/crypton.dart';
+import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'test_utils/test_utils.dart';
 
-class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {
+class MockSecondaryKeyStore extends Mock
+    implements AtKeyValueStore<String, AtData, AtMetaData?> {
   static const String hiddenKey1 = 'public:__location.wavi@alice';
   static const String hiddenKey2 = '_profilePic.wavi@alice';
   static const String nonHiddenKey1 = 'public:nickname.wavi@alice';
@@ -39,16 +41,35 @@ class MockSecondaryKeyStore extends Mock implements SecondaryKeyStore {
   ];
 
   @override
-  List<String> getKeys({String? regex}) {
+  Future<Stream<String>> getKeys({String? regex}) async {
     if (regex != null) {
       RegExp re = RegExp(regex);
-      return keysInKeyStore.where((key) {
-        return key.contains(re);
-      }).toList();
-    } else {
-      return keysInKeyStore.toList();
+      return Stream.fromIterable(
+          keysInKeyStore.where((key) => key.contains(re)));
     }
+    return Stream.fromIterable(keysInKeyStore);
   }
+
+  // The scan tests only exercise getKeys; reads (used incidentally by
+  // AtChops bootstrap during AtClientImpl.create) resolve to null.
+  @override
+  Future<AtData?> get(String key) async => null;
+
+  @override
+  Future<AtMetaData?> getMeta(String key) async => null;
+
+  // No TTL/TTB entries — the expiry/availability timer surfaces the
+  // AtClient bootstrap consults are all no-ops.
+  @override
+  Future<DateTime?> nextExpiresAt() async => null;
+
+  @override
+  Future<DateTime?> nextAvailableAt({DateTime? asOf}) async => null;
+
+  @override
+  Future<Stream<String>> peekNewlyAvailable(
+          {required DateTime since, DateTime? asOf, int? limit}) async =>
+      const Stream.empty();
 }
 
 class MockAtClientImpl extends Mock implements AtClientImpl {}
@@ -319,8 +340,84 @@ void main() {
     });
   });
 
+  group('writesInProgress tracker', () {
+    setUp(() async => await setupLocalStorage(storageDir, atSign));
+    tearDown(() async => await tearDownLocalStorage(storageDir));
+
+    /// Builds a fresh LocalSecondary against the test Hive store. Each
+    /// test gets its own AtClient instance (atClientInstanceMap is
+    /// cleared in the outer setUp).
+    Future<LocalSecondary> buildLocalSecondary() async {
+      AtClientImpl.atClientInstanceMap.remove(atSign);
+      final atClientManager = AtClientManager(atSign);
+      final preference = AtClientPreference()
+        ..syncRegex = '.wavi'
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/commit';
+      final atClient = await AtClientImpl.create(atSign, 'wavi', preference,
+          atClientManager: atClientManager);
+      return LocalSecondary(atClient);
+    }
+
+    UpdateVerbBuilder updateBuilderFor(String keyName) => UpdateVerbBuilder()
+      ..atKey = (AtKey()
+        ..key = keyName
+        ..sharedBy = atSign
+        ..metadata = (Metadata()..isPublic = true))
+      ..value = 'v';
+
+    test('starts empty', () async {
+      final localSecondary = await buildLocalSecondary();
+      expect(localSecondary.writesInProgressForTest, isEmpty);
+    });
+
+    test('cleared after a successful update', () async {
+      final localSecondary = await buildLocalSecondary();
+      await localSecondary.executeVerb(updateBuilderFor('email'), sync: false);
+      expect(localSecondary.writesInProgressForTest, isEmpty);
+      expect(localSecondary.isWriteInProgress('public:email$atSign'), false);
+    });
+
+    test('cleared after an update that throws (finally branch fires)',
+        () async {
+      // Trigger the max-key-length DataStoreException path inside
+      // _update to exercise the catch-then-rethrow; the in-progress
+      // tracker must still empty out in `finally`.
+      final localSecondary = await buildLocalSecondary();
+      final tooLongKey = TestUtils.createRandomString(250);
+      final builder = UpdateVerbBuilder()
+        ..atKey = (AtKey()
+          ..key = tooLongKey
+          ..sharedBy = atSign
+          ..metadata = (Metadata()..isPublic = true))
+        ..value = 'v';
+      await expectLater(
+          () async => await localSecondary.executeVerb(builder, sync: false),
+          throwsA(isA<DataStoreException>()));
+      expect(localSecondary.writesInProgressForTest, isEmpty);
+    });
+
+    test('cleared after a delete', () async {
+      final localSecondary = await buildLocalSecondary();
+      await localSecondary.executeVerb(updateBuilderFor('email'), sync: false);
+      final deleteBuilder = DeleteVerbBuilder()
+        ..atKey = (AtKey()
+          ..key = 'email'
+          ..sharedBy = atSign
+          ..metadata = (Metadata()..isPublic = true));
+      await localSecondary.executeVerb(deleteBuilder, sync: false);
+      expect(localSecondary.writesInProgressForTest, isEmpty);
+    });
+
+    test('snapshot getter returns an unmodifiable view', () async {
+      final localSecondary = await buildLocalSecondary();
+      final snapshot = localSecondary.writesInProgressForTest;
+      expect(() => snapshot.add('xxx'), throwsUnsupportedError);
+    });
+  });
+
   group('A group of tests to validate getKeys and getAtKeys', () {
-    late SecondaryKeyStore mockSecondaryKeyStore;
+    late AtKeyValueStore<String, AtData, AtMetaData?> mockSecondaryKeyStore;
     late LocalSecondary localSecondary;
     late AtClient atClient;
     final String namespace = 'validate_get_keys';
@@ -784,20 +881,18 @@ void main() {
   });
 }
 
+// The AtClient owns its commit-log-free persistence bundle (created
+// by `AtClientImpl.create`, since `isLocalStoreRequired` defaults to
+// true). Tests build their own client, so setup only needs to evict
+// any cached instance so storage is reopened fresh.
 Future<void> setupLocalStorage(String storageDir, String atSign) async {
-  var commitLogInstance = await AtCommitLogManagerImpl.getInstance()
-      .getCommitLog(atSign, commitLogPath: storageDir);
-  var persistenceManager = SecondaryPersistenceStoreFactory.getInstance()
-      .getSecondaryPersistenceStore(atSign)!;
-  await persistenceManager.getHivePersistenceManager()!.init(storageDir);
-  persistenceManager.getSecondaryKeyStore()!.commitLog = commitLogInstance;
+  AtClientImpl.atClientInstanceMap.remove(atSign);
 }
 
 Future<void> tearDownLocalStorage(String storageDir) async {
   try {
-    // Close factories BEFORE deleting storage (prevents open file handles)
-    await SecondaryPersistenceStoreFactory.getInstance().close();
-    await AtCommitLogManagerImpl.getInstance().close();
+    // Close every Hive box BEFORE deleting storage (open file handles).
+    await Hive.close();
 
     var isExists = await Directory(storageDir).exists();
     if (isExists) {

@@ -96,6 +96,109 @@ To prepare your dedicated GitHub repository:
 1. Open a new Pull Request to the main repository using your `trunk` branch
 
 
+## Updating the AI Agent Skill
+
+The `packages/at_client_skills/` package ships an AI agent skill (`at_client_skills-sdk`)
+that works with any AI coding agent supporting the [agentskills.io](https://agentskills.io)
+spec — Claude Code, Cursor, GitHub Copilot, Cline, and others.
+It is maintained like any other package in this repo — with its own version and CHANGELOG.
+If your PR changes a public API in `at_client`, `at_client_flutter`, or `at_auth`,
+open a follow-up `at_client_skills` PR to keep the skill accurate.
+
+### Skill content location
+
+```
+packages/at_client_skills/skills/at_client_skills-sdk/
+  SKILL.md              ← main skill body (edit this for API changes)
+  references/           ← 10 reference files (one per topic area)
+  evals/evals.json      ← 14 eval definitions (add new ones when adding new guidance)
+```
+
+### End-to-end validation (maintainers)
+
+Beyond the per-prompt evals,
+[`packages/at_client_skills/validation/teamboard-skill-test.md`](packages/at_client_skills/validation/teamboard-skill-test.md)
+is a heavyweight integration check: have any AI agent build a comprehensive app
+(TeamBoard) from the installed skill alone — isolated, like a real consumer —
+and treat any build failure as a skill gap. Use it when making substantive skill
+changes. It is maintainer-only and excluded from the published package
+(see `.pubignore`).
+
+When a skill change adds coverage of a **new SDK capability** (a new API, auth
+flow, or platform concern), extend the TeamBoard prompt and its coverage table so
+that surface is actually exercised — otherwise a passing run doesn't prove the new
+guidance works. Minor wording or pitfall tweaks don't require a prompt change.
+
+### Running evals
+
+Evals measure how much the skill improves agent accuracy vs a no-skill baseline.
+Run them after any substantive change to `SKILL.md` or the reference files.
+
+The eval tooling used here is [skill-creator](https://github.com/anthropics/skills),
+which is a Claude Code skill. **Running evals therefore requires Claude Code**,
+regardless of which agent you normally use for development.
+
+**Prerequisites:**
+
+1. Install [Claude Code](https://docs.anthropic.com/claude-code) and sign in.
+2. Install the `skill-creator` skill (one-time per machine):
+   ```sh
+   npx skills add anthropics/skills --skill skill-creator
+   ```
+3. **Run evals from the Claude Code CLI — not the VSCode extension.** The VSCode
+   extension silently blocks background agents from writing files, which breaks
+   the eval runner. Open a terminal and launch Claude Code from the repo root:
+   ```sh
+   claude --version   # verify claude is in your PATH
+   claude             # start a session
+   ```
+   If `claude` is not found, follow the [CLI setup instructions](https://docs.anthropic.com/en/docs/claude-code/getting-started).
+4. Add the following to your `~/.claude/settings.json` (create the file if it
+   does not exist). This pre-approves the tools that background eval agents need
+   so they can write output files without requiring per-call approval:
+   ```json
+   {
+     "permissions": {
+       "allow": [
+         "Write(packages/at_client_skills/skills/at_client_skills-sdk-workspace/**)",
+         "Read(**)",
+         "Bash(python*)",
+         "Bash(python3*)"
+       ]
+     }
+   }
+   ```
+
+**Run evals** from the CLI session at the repo root by invoking skill-creator:
+
+```
+/skill-creator
+```
+
+Tell skill-creator: *"Run a full eval for the skill at
+`packages/at_client_skills/skills/at_client_skills-sdk`. Use the evals in
+`evals/evals.json`. This is iteration N."* (increment N each run to avoid
+overwriting previous results).
+
+skill-creator writes results to
+`packages/at_client_skills/skills/at_client_skills-sdk-workspace/iteration-N/`
+(gitignored — results stay local).
+
+**What to look for:**
+
+- `with_skill` pass rate should be ≥ 0.90 (v1 baseline: 1.00)
+- Delta (skill vs no-skill) should be ≥ +40 percentage points
+- Any eval where `with_skill < without_skill` is a regression — fix before merging
+
+### Adding new evals
+
+When you add new guidance, add a corresponding eval to `evals/evals.json`.
+Follow the existing format: `id`, `prompt` (a real developer question), and
+`expected_output` (prose description of what a correct answer looks like).
+skill-creator will prompt you to draft quantitative assertions during the run.
+
+---
+
 ## @‎library release process
 
 The Atsign Foundation produces several widgets and libraries that the app developer

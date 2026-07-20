@@ -9,7 +9,7 @@ import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
-import 'package:at_auth/src/keys/at_keys_io_impl.dart';
+import 'package:at_auth/src/keys/io/file_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -34,7 +34,8 @@ class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
 class FakeSecondaryAddressFinder extends Fake
     implements CacheableSecondaryAddressFinder {
   @override
-  Future<SecondaryAddress> findSecondary(String atSign) async {
+  Future<SecondaryAddress> findSecondary(String atSign,
+      {Duration? timeout}) async {
     return SecondaryAddress('abcd', 123);
   }
 }
@@ -94,6 +95,33 @@ void main() {
 
       expect(response.isSuccessful, true);
       expect(response.atAuthKeys!.enrollmentId, testEnrollmentId);
+    });
+
+    test(
+        'validateAtServer honours overallTimeout instead of running all retries',
+        () async {
+      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
+      // Every probe fails, so without a deadline validateAtServer would retry
+      // maxRetries(10) x retryDelay(2s) ~= 20s. A short overallTimeout must cut
+      // that short and surface an AtTimeoutException.
+      atAuth.probeSocket = (host, port) async {
+        throw Exception('simulated unreachable atServer');
+      };
+      final atAuthRequest = AtAuthRequest('@alice🛠', atKeysIo: fileAtKeysIo)
+        ..enrollmentId = testEnrollmentId
+        ..retryOptions = const RetryOptions(
+            maxRetries: 10,
+            retryDelay: Duration(seconds: 2),
+            overallTimeout: Duration(milliseconds: 300));
+
+      final sw = Stopwatch()..start();
+      await expectLater(
+        atAuth.validateAtServer(atAuthRequest),
+        throwsA(isA<AtTimeoutException>()),
+      );
+      sw.stop();
+      expect(sw.elapsed, lessThan(const Duration(seconds: 5)),
+          reason: 'should honour overallTimeout (300ms), not 10 x 2s retries');
     });
 
     test('Test authenticate() false with keys file', () async {

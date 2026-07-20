@@ -1,5 +1,5 @@
 import 'package:at_auth/src/keys/at_keys.dart';
-import 'package:at_auth/src/keys/at_keys_io.dart';
+import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -48,6 +48,7 @@ class AtOnboardingRequest extends AuthRequest {
   String appName = "firstApp";
   String deviceName = "firstDevice";
   AtKeysIo? atKeysIo;
+  @Deprecated('remove in v4')
   AtKeys? atKeys;
 }
 
@@ -85,9 +86,11 @@ class AtAuthRequest extends AuthRequest {
   String? enrollmentId;
 
   /// The keys for authentication of an atSign.
+  @Deprecated('remove in v4')
   AtKeys? atAuthKeys;
 
   /// The contents of .atKeys file which contains the encrypted atKeys.
+  @Deprecated('remove in v4')
   Map<String, dynamic>? encryptedKeysMap;
 }
 
@@ -98,5 +101,20 @@ class RetryOptions {
   final int maxRetries;
   final Duration retryDelay;
 
-  const RetryOptions({required this.maxRetries, required this.retryDelay});
+  /// The maximum total wall-clock to spend reaching/validating the atServer —
+  /// the whole retry/poll loop. When null, the default depends on the request:
+  /// authentication uses the short process-wide default
+  /// (`AtNetworkTimeouts.effectiveDefault`, 30s) so a dead network fails fast,
+  /// while ONBOARDING uses `AtNetworkTimeouts.defaultOnboardingTimeout` (5 min)
+  /// because a newly-registered atSign can take minutes to be provisioned. This
+  /// bounds the loop and is deliberately NOT clamped to
+  /// `AtNetworkTimeouts.maxAllowed` — that cap applies to individual network
+  /// operations. Note [maxRetries] no longer bounds this loop; this deadline
+  /// does (the loop retries every [retryDelay] until the budget is spent).
+  final Duration? overallTimeout;
+
+  const RetryOptions(
+      {required this.maxRetries,
+      required this.retryDelay,
+      this.overallTimeout});
 }

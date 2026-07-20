@@ -28,19 +28,19 @@ void main() async {
           .build();
       await atClientManager.atClient.put(atKey, 'dummy_value');
       expect(
-          atClientManager.atClient
+          await atClientManager.atClient
               .getLocalSecondary()!
               .keyStore!
-              .isKeyExists(atKey.toString()),
+              .exists(atKey.toString()),
           true);
 
       // Delete the key
       await atClientManager.atClient.delete(atKey);
       expect(
-          atClientManager.atClient
+          await atClientManager.atClient
               .getLocalSecondary()!
               .keyStore!
-              .isKeyExists(atKey.toString()),
+              .exists(atKey.toString()),
           false);
     });
 
@@ -58,10 +58,10 @@ void main() async {
       var deleteResponse = await atClient.delete(localKey);
       expect(deleteResponse, true);
       // Verify key is deleted
-      var isLocalKeyExist = atClient
+      var isLocalKeyExist = await atClient
           .getLocalSecondary()
           ?.keyStore
-          ?.isKeyExists(localKey.toString());
+          ?.exists(localKey.toString());
       expect(isLocalKeyExist, false);
     });
 
@@ -82,10 +82,10 @@ void main() async {
       var deleteResponse = await atClient.delete(localKey);
       expect(deleteResponse, true);
       // Verify key is deleted
-      var isLocalKeyExist = atClient
+      var isLocalKeyExist = await atClient
           .getLocalSecondary()
           ?.keyStore
-          ?.isKeyExists(localKey.toString());
+          ?.exists(localKey.toString());
       expect(isLocalKeyExist, false);
     });
   });

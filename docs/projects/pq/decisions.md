@@ -1,0 +1,974 @@
+# Key decisions & timeline — D1 nskey data path
+
+**Status:** decision record (binding). The WHY + decision-timeline lane for the
+D1 post-quantum work.
+**Scope:** the governing ADRs (0001 superseded, 0002 accepted), the ratified
+OQ1–OQ9 working-design table, the resolved/open execution decisions #A–#F, the
+verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
+**Companions (each in its own lane — this doc cross-references, never restates):**
+`roadmap.md` (the high-level WHY/WHAT and phase trajectory),
+`implementation-plan.md` (the project sequence + dependency graph),
+`design.md` (per-subsystem mechanics with file:line),
+`acceptance.md` (the given/when/then UC catalogue).
+
+## Table of contents
+
+- [0. Scope & how to read this doc](#0-scope--how-to-read-this-doc)
+- [1. ADR 0001 — D1 as two tiers (SUPERSEDED)](#1-adr-0001--d1-as-two-tiers-superseded)
+- [2. ADR 0002 — D1 is single-tier nskey; at/pqmls is D2 (ACCEPTED)](#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted)
+- [3. The OQ1–9 ratified design-decisions table](#3-the-oq19-ratified-design-decisions-table)
+- [4. The verb-wire-shape & 1:1:1 cardinality rulings](#4-the-verb-wire-shape--111-cardinality-rulings)
+- [5. Retrofit ruling — fresh, self-spawned, auto-approved enrollment](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)
+- [6. Resolved & open execution decisions (#A–#F)](#6-resolved--open-execution-decisions-af)
+- [7. Decision log / timeline (dated)](#7-decision-log--timeline-dated)
+- [8. Stale-source reconciliation note](#8-stale-source-reconciliation-note)
+- [9. APKAM keypair as key package: considered and rejected (2026-06-30)](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30)
+- [10. nskey derivation from a shared master seed: rejected (2026-06-30)](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30)
+- [11. Single nskey per namespace, lazily published (2026-06-30)](#11-single-nskey-per-namespace-lazily-published-2026-06-30)
+- [12. Advertised recipient keys are signed against `_apsk` (2026-07-02)](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)
+
+---
+
+## 0. Scope & how to read this doc
+
+This is the **decision-and-timeline** lane of the D1 doc set. It records *why*
+each choice was made and *when*, not *how* the mechanism works or *which project*
+ships it. Concretely it holds: (a) the two ADRs — 0001 (superseded) folded in as
+history, 0002 (accepted) as the governing ruling; (b) the ratified OQ1–OQ9
+working-design table; (c) the resolved/open execution decisions #A–#F; (d) the
+verb-wire-shape and 1:1:1 cardinality rulings; and (e) a dated decision log.
+
+The **current model**, stated up front so nothing below is read against the older
+framing:
+
+- **D1 is single-tier `nskey`** ([ADR 0002](#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted)).
+  The forward-secure `at/pqmls` group model is **D2**, not a D1 tier.
+- **Enrollment cardinality is 1:1:1** — `enrollmentId ↔ APKAM keypair ↔ key
+  package`, never more than one keypair per enrollment ([decision #F](#6-resolved--open-execution-decisions-af),
+  2026-06-30).
+- **Retrofit is a fresh, self-spawned, auto-approved enrollment** — not a
+  mutation of the existing one ([section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)).
+- **One `nskey` keypair per (atSign, namespace)** — lazily published; the former
+  self/public nskey pair is collapsed to one ([section 11](#11-single-nskey-per-namespace-lazily-published-2026-06-30),
+  2026-06-30).
+
+**Lane boundaries (do not restate here):**
+
+| Topic | Lives in |
+|---|---|
+| High-level WHY/WHAT, conceptual nskey shape, phase trajectory M0–M6 | `roadmap.md` |
+| Project sequence (P-1…D2-1, SS-*, RF-*), dependency graph, waves, effort, publish gates, critical path | `implementation-plan.md` |
+| Per-subsystem mechanics (key shapes, `__ssenv`, `enroll:listns`, the enrollment record, providers) with file:line | `design.md` |
+| The given/when/then UC catalogue (A1.x–A5.x, B0.x–B5.x) | `acceptance.md` |
+
+This doc does **not** restate concrete key shapes, project lists, or tests — it
+cross-references those docs by filename.
+
+---
+
+## 1. ADR 0001 — D1 as two tiers (SUPERSEDED)
+
+> **Superseded by [ADR 0002](#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted).**
+> Retained for history. The "no forward secrecy", "copyable shared key vs
+> non-copyable per-device key — you cannot have both", and two-tier claims below
+> are **history-only**; ADR 0002 dissolved them (see [section 2](#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted)).
+
+- **Status:** Superseded by ADR 0002 (2026-06-25) — was Accepted (2026-06-20).
+- **Source:** `adr/0001-d1-simplicity-tiers.md` (folded into this doc 2026-06-30; the standalone ADR file was deleted in the consolidation).
+
+**The original decision.** Deliver D1 in **two tiers** over the M0 pluggable
+`CryptoProvider` seam (the seam itself is in `design.md`):
+
+- **D1 Tier1 — `nskey` (default).** A per-`(atSign, namespace)` X-Wing keypair
+  replacing the atSign-wide RSA key, `selfEncryptionKey`, and `shared_key.*`.
+  Enrollment-granular and **copyable**, distributed at enrollment approval, so a
+  future client reads instantly/offline with full history (byte-for-byte legacy
+  semantics, now PQ-safe and namespace-scoped). No `SecureGroup`/`KeyPackage`/
+  single-owner lock in the app's face. Rotation opt-in, doubling as the
+  revocation primitive.
+- **D1 Tier2 — `group` (opt-in).** The per-APKAM group provider, declared by a
+  namespace needing per-device revocation or forward secrecy. Also the substrate
+  D2/MLS swaps its engine into.
+
+**The premise it rested on (since dissolved).** Two claims drove the split:
+
+- *"Instant, offline access for a future device fundamentally requires a*
+  ***copyable shared key***. *Non-copyable per-device keys force re-encryption to
+  each new device. You cannot have both."*
+- *Forward secrecy and per-device revocation* **require** *the group (MLS-style)
+  model.*
+
+Making per-APKAM groups mandatory for all of D1 would therefore tax every app
+with identity/membership machinery and regress "future device just works".
+
+**Alternatives it rejected** (still valid as rejections):
+
+| Alternative | Why rejected |
+|---|---|
+| Per-APKAM groups mandatory for all of D1 (the prior framing) | Taxes every app, regresses instant future-client access, over-buys per-device security for the common case. |
+| Server-stored per-APKAM leaf secrets (to recover convenience) | Makes cloning the default, opens a PQ harvest-now-decrypt-later hole, couples key/data blast radii. |
+| Keep one atSign-wide PQ keypair (simplest) | Leaves the crypto-broader-than-transport weakness (a `chess`-only enrollment would hold `banking` keys). Per-namespace is the minimum scope that mirrors enrollment authorization. |
+
+The *live* reasoning that replaced this is [section 2](#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted).
+
+---
+
+## 2. ADR 0002 — D1 is single-tier nskey; at/pqmls is D2 (ACCEPTED)
+
+- **Status:** **Accepted (2026-06-25). Supersedes [ADR 0001](#1-adr-0001--d1-as-two-tiers-superseded).**
+- **Source:** `adr/0002-d1-single-tier-nskey.md` (folded into this doc 2026-06-30; the standalone ADR file was deleted in the consolidation).
+
+This is the governing ADR for the shape of D1.
+
+**The context that dissolved 0001's premise.** Two decisions taken since 0001
+turned its two-tier rationale into a false dichotomy:
+
+- **Per-APKAM delivery + push** (the `enroll:listns` verb): a secret is
+  delivered to every authorised APKAM keypair, definitively and proactively. A
+  *future* device gets the key **pushed** to it — instant, offline — regardless
+  of tier. So "future device just works" no longer argues for a
+  copyable-shared-key tier.
+- **`nskey` is a KEM wrapper, not the data key.** Data is encrypted under a
+  symmetric content/epoch key (CK); the CK is X-Wing-encapsulated to an `nskey`.
+  *Neither* model encrypts data per-device — both use symmetric data keys
+  delivered per-APKAM. So 0001's "copyable shared key vs per-device keys" was a
+  **false dichotomy**.
+
+With those corrected, `nskey` already gives D1 **coarse forward secrecy** (CK
+rotation) and **post-compromise security** (nskey-keypair rotation). The genuine
+`at/pqmls`/MLS delta — robust/per-message FS, O(log n) scale, and membership
+decoupled from namespace authorisation — is entirely D2. **There is no
+D1-internal Tier-1/Tier-2 boundary left.**
+
+**The corrected key model** (stated explicitly so it is not re-derived wrongly;
+the concrete at-key strings live in `design.md`):
+
+- **`nskey` is an asymmetric X-Wing KEM keypair** — the thing we *encapsulate
+  symmetric keys to*, not the thing that encrypts data. Per namespace there are
+  **two**:
+  - a **self nskey** — *not published*; Alice encapsulates her *own* content keys
+    to it. It **is a self at-key**, `nskey.<ns>@alice`: the public half is synced
+    to Alice's clients that have `<ns>` access (it is *not* a `public:` key), and
+    its **private half is conveyed as a Secret over the substrate** ([section 4](#4-the-verb-wire-shape--111-cardinality-rulings)).
+  - a **public nskey** — *published world-readable*, `public:nskey.<ns>@alice`;
+    external senders encapsulate content keys to it. Alice's authorised clients
+    hold its private.
+  Both convey symmetric CKs; neither encrypts application data directly.
+
+> **Revised 2026-06-30 (see [section 11](#11-single-nskey-per-namespace-lazily-published-2026-06-30)):** collapsed to ONE X-Wing `nskey` keypair per (atSign, namespace), lazily published (owner-only self at-key → `public:` on first cross-atSign share). The two-nskey text below is retained as ADR history — the single-nskey model governs.
+
+- **Data is encrypted under a symmetric content/epoch key (CK)** with
+  AES-256-GCM. The CK is X-Wing-encapsulated to an `nskey`; holders of the nskey
+  private unwrap the CK.
+- **Two delivery levels, very different costs** (this difference *is* the FS
+  lever):
+  - *Convey the nskey private* to each authorised APKAM keypair — **per-APKAM,
+    O(n), rare** (the push + `enroll:listns` substrate; pull as
+    backstop).
+  - *Rotate the symmetric CK* — wrap the new CK **once** to the shared nskey;
+    every authorised client unwraps with the shared private — **O(1),
+    frequent.**
+
+**The decision.** **D1 ships as a single tier: `nskey`.** Forward secrecy is **in
+scope for D1 as a *policy*, not a tier**:
+
+- **Coarse FS = rotate + delete the symmetric content/epoch keys** over the
+  stable nskey KEMs. Routine rotation is cheap (O(1) wrap to the shared nskey).
+  FS strength is **coarse** and bounded by the stable shared nskey private
+  remaining a standing decryption capability for any wrapped-CK that persists —
+  so **deletion discipline is the FS TCB**.
+- **Per-APKAM future-data revocation = rotate excluding the revoked keypair**
+  (the expensive lever: a fresh nskey conveyed per-APKAM, since the shared-nskey
+  O(1) path can't exclude a holder of that private).
+
+**`at/pqmls` is D2, not a D1 tier.** Ratcheted per-APKAM leaves (no standing
+master key → robust/per-message FS), TreeKEM (O(log n) churn), and groups whose
+membership is decoupled from namespace authorisation are the MLS engine's job.
+The **same per-APKAM secret-sharing substrate** underpins both `nskey` (now) and
+MLS (later); only the labelling changes — what 0001 called "D1 Tier 2" is **D2's
+first increment**.
+
+**Consequences.**
+
+- *Positive.* One D1 data path — the `nskey` data path (`at/nskey` conveys the
+  CK, `at/symmetric/AES/GCM` encrypts the data) — plus `legacy`; no `SecureGroup`/
+  `KeyPackage`/membership commits/single-owner lock in the app's face for D1.
+  Legacy developer experience preserved (a future device "just works" via push;
+  PQ + namespace scoping + per-namespace blast radius by default). FS is
+  *available* in D1 (coarse, cheap) rather than withheld to D2 — a strict
+  improvement over legacy's none, for namespaces that opt into rotation.
+- *Negative / accepted.* D1 FS is **coarse** and rests on deletion discipline
+  over **all** CK conveyances (self and inbound alike) plus the stable shared
+  nskey private being a standing capability. Robust/per-message FS, large-group
+  O(log n) scale, and decoupled-membership groups require D2.
+- *Inbound (cross-atSign) FS is structurally identical to self but only
+  achievable **bilaterally**.* Inbound uses the same flow as self: the sender
+  (`@bob`) cuts a CK, delivers it once as a discrete `at/nskey` conveyance
+  (encapsulated to Alice's published public nskey), and writes data under
+  `at/symmetric/AES/GCM` by kid — there is no per-message inline-wrapped CK that
+  "persists with the message". The residual bilaterality: (1) the inbound CK is
+  cut by `@bob` on **his** cadence, so Alice cannot force an FS cut finer than the
+  sender's rotation; (2) the authoritative `at/nskey` conveyance lives in a record
+  **owned by `@bob` on bob's atServer** — Alice holds only a synced cached
+  replica, so she can purge her cache but **cannot unilaterally delete bob's
+  copy**, which her stable published-nskey private re-decapsulates. For **self**,
+  Alice is both endpoints, so FS is unilateral and complete. (This bilaterality
+  is normal for any FS system, not specific to nskey.)
+
+**Alternatives rejected.**
+
+| Alternative | Why rejected |
+|---|---|
+| Keep the two D1 tiers (ADR 0001) | The distinguishing property (FS) is a rotation *policy* of the single `nskey` data path, not a separate provider; the only genuine delta (fine FS, scale, decoupled membership) is D2. Two D1 tiers split on the wrong axis. |
+| Withhold forward secrecy entirely to D2 | `nskey` gives coarse FS cheaply (O(1) epoch-key rotation); no reason to deny D1 a strict improvement over legacy. |
+| The 0001 "copyable shared key vs per-device keys" framing | False dichotomy: data is encrypted under symmetric keys delivered per-APKAM; there are no per-device data keys, and a future device is served by push, so instant/offline access and per-APKAM revocation coexist. |
+
+**Cross-refs:** the conceptual two-layer nskey shape and mixed-scheme philosophy
+are in `roadmap.md`; the 3-layer/3-provider mechanics, concrete key shapes, and
+the forward-secrecy/rotation levers are in `design.md`; the A5.x
+rotation/revocation tests are in `acceptance.md`.
+
+---
+
+## 3. The OQ1–9 ratified design-decisions table
+
+The binding working-design record, pulled from the WP-SS rework audit (ratified
+**2026-06-25**) so it lives in the tracked corpus. OQ4 and OQ7 are **RATIFIED**;
+the rest were recommended answers adopted as the working design. On **2026-06-30**,
+the 1:1:1 ruling ([decision #F](#6-resolved--open-execution-decisions-af))
+revised OQ2/OQ3 and the verb wire shape and added OQ8/OQ9. The table below is the
+**current** form — it absorbs the 1:1:1 ruling, the wire-shape flattening, and
+the `enroll:metadata` removal directly, and does **not** restate the retired
+multi-APKAM forms.
+
+| # | Question | Decision |
+|---|---|---|
+| OQ1 | `to`/`toKpid` vs `kid` on the envelope redundant? | Keep `toKpid` as the routing token + a `sealKid` for which advertised key was sealed to (crypto-agility if a KeyPackage advertises >1 enc key); they coincide today. Collapse to one only if multi-enc-key KeyPackages are ruled out. |
+| OQ2 | Cardinality of enrollment ↔ APKAM keypair ↔ key package? | **RATIFIED 1:1:1.** Exactly one APKAM keypair + one key package per `enrollmentId`; never >1 keypair per enrollment. The record stores a **single** `apkamPublicKey` + a `signingAlgo` (`rsa2048` \| `mldsa65`) so PKAM verify selects RSA vs ML-DSA for that one key; multi-keypair verify-against-any is removed. (Supersedes the original OQ2 "multiple APKAM keypairs per enrollment" premise, which is moot once an enrollment holds exactly one keypair.) |
+| OQ3 | How does a client learn its own `kpid` + X-Wing private at runtime? | Generate **one** X-Wing keypair per enrollment/keyfile at enrollment, stored in the keyfile alongside the APKAM keypair; `kpid = computeKid(pub)`. Each cloned pre-PQ keyfile retrofits to its **own distinct enrollmentId** (per-keyfile == per-enrollment under 1:1:1). |
+| OQ4 | Key package generated at enrollment-**request** time or lazily? | **RATIFIED: request time** — public half in the record the approver reads (no-verb approve). *(The constraint behind D1 decision #B → Option A.)* |
+| OQ5 | `putIfNewer` ordering source — explicit version int or kid-in-name? | Explicit monotonic `version` orders rotations of the same logical secret; the kid identifies the key generation (different kid ≠ "newer"); `createdAt` is a tiebreak only. |
+| OQ6 | Facade Expando keyed on `AtClient` or `(AtClient, enrollmentId)`? | `(AtClient, enrollmentId)` — identity is the enrollment's APKAM keypair, not the process. |
+| OQ7 | Barrel: hard-break the replaced names or `@Deprecated` shims? | **RATIFIED: hard break** — WP-SS is pre-publication (not on trunk, not published), so the consumer sweep is clean; no shims. |
+| OQ8 | Legacy-enrollment retirement mechanism? | **RATIFIED 2026-06-30: enrollment-expiry timer + `enroll:revoke`.** There is **no per-APKAM-key delete** (a record holds one key). A self-retrofit creates a fresh **auto-approved** enrollment (authenticated `enroll:request`, requester-subset namespaces, expiry copied from the authenticating enrollment); the OLD enrollment is **capped** to `min(now + grace, its expiry)` and ages out — not deleted-by-key, not revoked-with-teardown. Sibling clones may still retrofit until the cap elapses. |
+| OQ9 | Post-enrollment metadata writes? | **RATIFIED 2026-06-30: NONE.** The `enroll:metadata` verb is **removed**; the key package rides `EnrollParams.metadata` (opaque map) on `enroll:request`, and the server stores/returns it. No post-approval metadata round-trip ever. |
+
+**Cross-refs:** the substrate mechanics each OQ rides (kpid addressing, the
+`__ssenv` envelope, `SecretStore`, the `enroll:listns` verb,
+`EnrollParams.metadata`, the enrollment record) are in `design.md`; *which*
+projects implement each (SS-1a/b/c, SS-3, RF-SRV) is in
+`implementation-plan.md`.
+
+---
+
+## 4. The verb-wire-shape & 1:1:1 cardinality rulings
+
+The authoritative wire-and-cardinality ruling, dated **2026-06-30**
+([decision #F](#6-resolved--open-execution-decisions-af)). This section is the
+rewrite target for the stale multi-APKAM sources ([section 8](#8-stale-source-reconciliation-note)).
+
+**Cardinality is 1:1:1.** `enrollmentId ↔ APKAM keypair ↔ key package`, **never
+more than one keypair per enrollment.** The enrollment record stores a **single**
+`apkamPublicKey` + a `signingAlgo` (`rsa2048` | `mldsa65`). PKAM verify selects
+RSA vs ML-DSA from the **record's** `signingAlgo` — **record-authoritative**, not
+the client-supplied wire value (`_validateSignature` must read the *stored* algo,
+not `verbParams[atPkamSigningAlgo]`; legacy null → `rsa2048`).
+
+**Verb wire shape** (ratified 2026-06-25; flattened 2026-06-30 for 1:1:1):
+
+- The key package rides an **opaque `Map<String,dynamic>` `EnrollParams.metadata`**
+  carried on `enroll:request` (JSON tail; **no grammar change**). **The
+  `enroll:metadata` verb is removed.** The server stores it on the enrollment
+  record and returns it verbatim, with **no opinion** on the contents. The
+  enrollment's single key package lives at a **singular `metadata.keyPackage`**
+  (1:1:1 — **no format-keyed `keyPackages` map**; suite/schema agility lives
+  *inside* the package via `keys[].alg` + `KeyPackage.v`). Its value is the
+  **APKAM-signed envelope** wrapping the key-package payload (see the
+  advertised-key-signing ruling in [section 6](#6-resolved--open-execution-decisions-af)).
+  **No post-enrollment metadata write ever.**
+- Because cardinality is 1:1:1, the discovery response is **flat** — no nested
+  `apkam[]` array:
+  `enroll:listns:<ns>` → `[{enrollmentId, access, apkamPubKey, metadata}]`,
+  gated `≥r`. The receiver decodes the one `metadata.keyPackage` and verifies its
+  APKAM signature against the enrolling atSign's `_apsk` before trusting it.
+
+**ML-DSA APKAM auth is retained** — at_chops `mldsa65` verify branch + at_commons
+pkam `signingAlgo` literal + server `_getSigningAlgoType` branch reading the
+**record's** `signingAlgo`.
+
+**Where `appMetadata` is mentioned:** it carries **no `ns` field**. (Full field
+definitions are in `design.md`; the only ruling recorded here is the no-`ns`
+decision.)
+
+**Cross-refs:** the `enroll:listns` verb mechanics,
+`EnrollParams.metadata`, and the enrollment record + authenticated self-retrofit
+flow + expiry copy/cap are in `design.md`; the projects (SS-1a/b/c, SS-3, RF-SRV,
+RF-2b/c) are in `implementation-plan.md`; the A2.x discovery, A3.x, and retrofit
+B-tests are in `acceptance.md`.
+
+**Retires (see [section 8](#8-stale-source-reconciliation-note)):** "multiple
+APKAM keypairs per enrollment" / verify-against-any / `ApkamPublicKey`-list
+(crypto_impl_plan D1-F, wp-ss P9/P12, pq-secret-push); per-APKAM-key delete
+(legacy retirement is the enrollment-expiry timer + `enroll:revoke`); the nested
+`apkam[]` array (now flat); the `enroll:metadata` verb (now `EnrollParams.metadata`).
+
+---
+
+## 5. Retrofit ruling — fresh, self-spawned, auto-approved enrollment
+
+Decision #F, 2026-06-30. **Retrofit is NOT a mutation of the existing
+enrollment** — it is a **fresh, self-spawned, auto-approved enrollment.**
+
+**The flow.** An authenticated pre-PQ client submits `enroll:request` with a
+**new `enrollmentId`** on its already-authenticated connection
+(`authType==apkam`, **no OTP**, not CRAM, not legacy PKAM). The server:
+
+1. validates the requested namespaces are a **subset** of the authenticating
+   enrollment's (reject escalation);
+2. **auto-approves** — modelled on the CRAM approved-state mechanics but
+   **without** the `__manage` + `*`:rw grant;
+3. **copies** the old enrollment's expiry (or `null` = never) to the new one;
+4. **caps** the old enrollment to `min(now + server-config grace, its existing
+   expiry)` **without removing it** (sibling clones may still retrofit until the
+   cap elapses).
+
+Each cloned pre-PQ keyfile retrofits to its **own distinct `enrollmentId`**
+(per-keyfile == per-enrollment under 1:1:1).
+
+**Why a fresh auto-approved enrollment, not a mutation.**
+
+- A *pending* enrollment cannot authenticate, so a key package **cannot be
+  written post-hoc**. The `enroll:request` payload is the only pre-approval
+  channel — this is exactly what forces [decision #B → Option A](#6-resolved--open-execution-decisions-af).
+- Under 1:1:1 there is **no "second keypair under the enrollment"** and **no
+  delete-after-ML-DSA-verifies ordering**. The old enrollment simply ages out via
+  the expiry cap (or an explicit `enroll:revoke`). The legacy **encryption** key
+  is kept for reads.
+
+**Cross-refs:** the authenticated self-retrofit flow + expiry copy/cap and the
+at_chops ML-DSA mint are in `design.md`; the projects (RF-SRV server half, RF-2b
+mint+request, RF-2c orchestration + readiness flip) are in
+`implementation-plan.md`; the retrofit e2e is in `acceptance.md`.
+
+**Rewrite target (see [section 8](#8-stale-source-reconciliation-note)):** the
+crypto-roadmap "Upgrading an existing client — the sequence" (step 4 "delete the
+legacy RSA APKAM public key after step 3 confirms PQ auth"), the
+"mint a SECOND keypair under the enrollment" / "atServer allows multiple APKAM
+keypairs per enrollment with auth against any" / "deletion of a specific public
+key" / "TTL/usage-based eviction" notes, and the wp-ss P12c "8-step upgrade +
+delete legacy RSA key after ML-DSA verifies" are **stale** — superseded by the
+fresh-auto-approved-enrollment model above.
+
+---
+
+## 6. Resolved & open execution decisions (#A–#F)
+
+The execution-decision ledger. This section is the authoritative execution-decision ledger; the
+WP-SS Open decisions 1–4 are folded in where they overlap.
+
+### Numbered rulings (#1–#4)
+
+The four numbered rulings referenced across the UC catalogue and project sequence,
+formalised here as binding entries (they already existed as scattered asides and
+timeline rows).
+
+- **Decision #1 — legacy-peer interop is opt-in.** A new PQ-native atSign onboards
+  PQ-only by default: no RSA `public:publickey` is published. A `legacy-interop`
+  config flag (default OFF) publishes the RSA pubkey so legacy peers can send
+  inbound. (Drives ON-1, UC-B4.2.)
+- **Decision #2 — PQ-readiness is marked per `(atSign, namespace)`.** The
+  capability marker and the readiness flip are scoped to a namespace of an atSign,
+  not the whole atSign; scheme selection is per-destination. (Drives R-1, UC-B3.2.)
+- **Decision #3 — PQ-APKAM keyfile storage: copyable AtKeys file by default
+  (2026-06-24).** The PQ APKAM signing keypair + X-Wing key-package private are
+  stored in the copyable `.atKeys` file by default (portable, dev/test-clean — a
+  reused keyfile does not re-mint); OS-keychain / hardware storage is opt-in
+  hardening (off by default). Revocation is per-keyfile-key; the atServer prunes
+  keys unused for N days via TTL/usage eviction. A labelled per-APKAM record
+  (hostname / install-UUID) drives a per-APKAM revocation UI (an administration
+  aid, not a security boundary). (Drives UC-B1.2, RF-2b.)
+- **Decision #4 — convergence is push-at-approve + pull backstop.** Steady-state
+  secret delivery is `pushSecretToNamespaceMembers` at mint/rotation and
+  `shareAllSecretsWithEnrollment` at approve time; `requestSecret` (pull) is the
+  correctness backstop for a client that missed a push. Push and pull are dual
+  facets of one substrate. (Drives UC-A2.x, UC-B5.1.)
+
+### Resolved
+
+- **#B — `register()` call-site / key-package conveyance — RESOLVED 2026-06-30:
+  Option A.** The new enrollment's X-Wing key package rides into `enroll:request`
+  as an **opaque blob** built by an at_client orchestrator *above* at_auth
+  (at_auth ferries it, **never interprets** it); the atServer stores it on the
+  enrollment record and returns it, so the approver reads it at approve time —
+  satisfying OQ4 with no dependency cycle. This is *forced* by the timing fact
+  that a pending enrollment cannot authenticate, so the key package cannot be
+  written via a post-approval verb; the `enroll:request` payload is the only
+  pre-approval channel.
+  **`approvedNamespaces`:** add the field to `EnrollmentRequestDecision.approved`
+  (self-describing) and have an at_client approve-wrapper fire
+  `shareAllSecretsWithEnrollment(enrollmentId, approvedNamespaces)` after
+  at_auth's `approve` returns.
+  **1:1:1 refinement (2026-06-30):** the `enroll:metadata` verb is **removed
+  entirely** — the key package rides `EnrollParams.metadata` on `enroll:request`,
+  and there is **no** post-enrollment metadata write (retrofit = a fresh
+  auto-approved enrollment, not a mutation; see #F). Cost: a new typed field on
+  `EnrollParams`/`EnrollVerbBuilder` (+ regen), the `Enrollment` read model gains
+  the field, and an atServer schema change (separate `at_server`/`java_at_server`
+  repos) to store/return it — must land in the same release or OQ4 isn't met.
+- **#F — Enrollment cardinality + retrofit shape — RESOLVED 2026-06-30: 1:1:1,
+  fresh-enrollment retrofit.** The master ruling above (sections [4](#4-the-verb-wire-shape--111-cardinality-rulings)
+  and [5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)).
+  `enrollmentId ↔ APKAM keypair ↔ key package` is **1:1:1** (never >1 keypair per
+  enrollment) — this **retires the prior "multiple APKAM keypairs per enrollment"
+  (DEP3) decision.** Retrofit = a fresh, self-spawned, auto-approved enrollment on
+  the pre-PQ-authenticated connection (RF-SRV), inheriting the old enrollment's
+  expiry; the old enrollment is capped to `min(now + grace, old expiry)` and ages
+  out — never deleted-by-key. **Cascade:** `enroll:metadata` verb **removed** (→
+  `EnrollParams.metadata`); `listns` **flattened**
+  (`[{enrollmentId, access, apkamPubKey, metadata}]`, no `apkam[]`); DEP3/P9
+  multi-APKAM list + verify-against-any **removed** (single `apkamPublicKey` +
+  `signingAlgo`); per-APKAM-key delete (RF-2a/P12b) **removed**. ML-DSA APKAM auth
+  and `enroll:listns` are otherwise unchanged.
+
+### Open / standing
+
+- **#A — `pqpublickey` interface freeze (P-3 vs SS-4).** P-3 publishes/prefers
+  `pqpublickey` in Wave 2, but its create/seed/serve/pull **lifecycle** is SS-4.
+  Freeze the **name + create-once contract** as an interface-first artifact before
+  P-3 starts; P-3's acceptance can only prove "published + fetchable", not
+  cold-start serve/pull (that's SS-4). (Lifecycle mechanics → `design.md`; project
+  gating → `implementation-plan.md`.)
+- **#C — keep D1 GA off the auth retrofit (B-2 dep).** B-2 needs RF-2 only for the
+  per-APKAM revocation/exclude fan-out — satisfy that with **RF-1 + SS-3**, not
+  the full RF-2c upgrade orchestration, or D1 GA waits on the retrofit
+  (contradicting the design). Confirm B6's fan-out is satisfiable from RF-1+SS-3
+  alone.
+- **#D — inherited WP-SS decisions** (the WP-SS Open decisions 1–4, folded here):
+  (1) fold the pkam ML-DSA literal into SS-1a's at_commons publish — **one publish,
+  not two**; (3) keep ML-DSA verify **algo-level** (P-2), revisiting the async
+  `AtChops.verify` path only if a high-level caller needs it; (4) re-confirm the
+  at_commons version floor at SS-1a (pub.dev / last release tag is authoritative,
+  not in-tree precedent); plus the at_auth version question in S-1 — **resolved
+  2026-07-17: 3.1.1 published, 3.2.0 taken by the network-timeout release, S-1
+  ships as 3.3.0** (see the 2026-07-17 rulings). (The WP-SS "where does
+  `register()` get called?" decision is resolved by #B above.)
+- **#E — S-2 scope / SoT conflict.** `crypto_impl_plan` §3-S5 ("migrate legacy to
+  `context.keys`") vs §7-WP3 ("legacy unchanged for now") conflict. This plan
+  takes the **additive-field-only** reading — add `CryptoContext.keys` but do not
+  migrate `LegacyCryptoProvider` to read from it (legacy pulls remote `plookup`s +
+  `atChops` cipher ops that the field's static keys can't supply). (The
+  `CryptoContext.keys` seam → `design.md`.)
+
+**Cross-refs:** the open-decisions pointer and which project each decision gates
+are in `implementation-plan.md`; the `pqpublickey` lifecycle and the
+`CryptoContext.keys` seam (#E) are in `design.md`.
+
+### Rulings — 2026-07-02
+
+Execution rulings from the plan-vs-code review (post-review); each is binding.
+
+- **Verb name: `enroll:listns`.** The gated enrollment-discovery verb's wire token
+  is `enroll:listns` (superseding the `listfornamespace` working name), matching the
+  in-flight at_commons (PR #2040) and at_server (PR #2685) work. The Dart client
+  method stays `listForNamespace`.
+- **D1 surface scope.** IN D1: `.atKeys`-at-rest protection (encrypt the PQ private
+  material in the keyfile; define backup/restore incl. the stale-backup-after-retrofit
+  case) — sequenced as KF-1. NON-GOALS for D1: the TLS session to the
+  atServer/atDirectory (post-D1 the payload is already E2E PQ-safe; residual
+  exposure is verb-level metadata the atServer sees anyway) and the atDirectory
+  itself (holds no ciphertext). Both may be revisited separately; neither gates D1.
+- **Readiness flip: operator-primary at GA, auto-detect fast-follow.** R-1 ships
+  operator-declared readiness as the primary lever (a recorded usability-bar
+  exemption: it is a one-time migration action, not a steady-state per-use task).
+  Auto-detect is a scheduled fast-follow with pinned criteria: readiness auto-flips
+  for an `(atSign, namespace)` when no legacy-client PKAM authentication has been
+  observed on any of that atSign's namespace-authorised enrollments for a configured
+  window (default N days), read from the atServer's APKAM auth records; the operator
+  can always flip manually.
+- **R-2 ecosystem-floor gate.** The floor is the set of downstream packages that
+  must have shipped a PQ-reading release before at_client 4.0 flips
+  `disallowLegacyEncryption` to true: `at_onboarding_cli`, `at_client_flutter`,
+  `at_cli_commons`, the NoPorts clients (`sshnoports`), and `at_talk`. The concrete
+  floor VERSION for each is pinned at R-2 execution time against pub.dev / release
+  tags (not now); the observable signal is that each has published a release that
+  reads `nskey`-path values.
+- **Crypto backend policy: FFI auto-resolve default.** Where a native crypto
+  library is present, at_chops' `AtPqc` auto-resolver selects the FFI backend as
+  the default (faster on mobile/desktop); the pure-Dart backend is the fallback and
+  the forced choice under WASM. PRs #2030 (`at_chops_ffi` barrel + auto-resolver)
+  and #2039 (AES-GCM FFI) are IN D1 scope on the at_chops 3.4.0 slot alongside P-2.
+  **Status (2026-07-20): closed.** #2030 merged to trunk 2026-07-03 (+ #2046
+  review-fixes), opening the at_chops 3.4.0 slot; #2039 merged 2026-07-09 and P-2's
+  `mldsa65` verify branch (#2056) merged 2026-07-06, both folded into that same slot
+  rather than a fresh minor; **at_chops 3.4.0 published 2026-07-17**. (Scope note → the 2026-07-03 rulings below: auto-resolve
+  applies to the `AtPqc` accessors; key generation through the web-safe barrel's
+  key pair classes is pure-Dart by construction.)
+- **`_apsk` is a pinned cross-tier property — present and write-restricted.** Envelope
+  sender-authentication and advertised-key authenticity (below) both depend on the
+  enrollment's `_apsk` published signing key. The atServer (1) **keeps `_apsk` present**,
+  populating `public:_apsk.<enrollmentId>.<perEnrollmentApproved>@<atSign>` from the
+  enrollment record's `apkamPublicKey` rather than relying on the client-side
+  `ApkamSigning.publishPublicSigningKey` (removes a race + a missing-key failure mode),
+  and (2) **restricts writes** to that key to the owning enrollment's own authenticated
+  connection. Recorded in design.md §2.4 and the atServer DEP list; e2e tests (an
+  approved enrollment's `_apsk` is fetchable without a client publish; a cross-enrollment
+  overwrite is refused) are required before WP-SS ships.
+- **Advertised recipient keys are signed against `_apsk` — the full ruling is
+  [section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02).**
+  Every advertised recipient/encapsulation key (the per-enrollment key package, the
+  published `nskey` public half, and `public:pqpublickey@<atSign>`) is APKAM-signed by
+  its generating enrollment and verified against that enrollment's `_apsk` — the same
+  way same-atSign and cross-atSign — superseding the "atServer vouches" stance. The
+  atServer keeps `_apsk` present **and** write-restricted. See section 12 for the
+  mechanism, the self-describing signature, the trust model, and the SS-1b/1c/2/4
+  implementation split.
+
+### Rulings — 2026-07-03 (PR #2030 review)
+
+Rulings from the two-pass review of PR #2030 (`at_chops_ffi` barrel + `AtPqc`);
+each is binding. The code-side alignment landed via #2046 (merged 2026-07-03 into
+#2030's `st/at_chops_ffi` branch, then folded to trunk when #2030 merged).
+
+- **`AtPqc` supersedes the `PqcFfi` working name.** The auto-resolver ships as
+  `abstract final class AtPqc`, exported from `at_chops_ffi.dart`; the PR's
+  public API, README, CHANGELOG, and tests all use `AtPqc`, and `PqcFfi` appears
+  nowhere in code. All doc mentions are updated in place (same supersession
+  pattern as `enroll:listns` over `listfornamespace`).
+- **`AtSignatureAlgorithm` recorded; `AtSigningAlgorithm` deprecation is staged,
+  not immediate.** at_chops 3.4.0 adds `AtSignatureAlgorithm` — a stateless
+  signing interface (`generateKeyPair`/`signBytes`/`verifyBytes`; `message` is
+  positional, key material is required-named so same-typed byte arguments cannot
+  be silently transposed). `AtSigningAlgorithm` is `@Deprecated` + `@sealed`
+  (package:meta — no new external subtypes) but **stays implemented** by
+  `MlDsa65PureDartAlgo`/`MlDsa65FfiAlgo` and every existing signing algo:
+  P-2's `_getVerificationAlgorithm` branch and the section-12
+  `wrapAndSign`/`AtSigningMode.pkam` machinery are typed against it, so P-2 and
+  SS-1c/SS-2/SS-4 proceed exactly as specified. Its removal is deferred to a
+  future at_chops major that is **not** in the D1 release ladder and requires a
+  successor ruling for the `wrapAndSign` path first.
+- **at_chops 3.4.0 semver exemption (one-time).** The coordinated 3.4.0 slot
+  stays a **minor** despite three technically-breaking changes to the 3.3.0
+  surface: (1) the FFI algorithm exports move from `at_chops.dart` to the new
+  `at_chops_ffi.dart` — required for the web-safe main barrel; no shim can keep
+  a `dart:ffi` export web-safe; (2) `AtKemAlgorithm` gains an abstract seedless
+  `generateKeyPair()`; (3) the ML-DSA-65 signing methods become instance methods
+  with named key-material parameters. Rationale mirrors OQ7's: 3.3.0 published
+  2026-06-23, the affected surface is days old, and the consumer sweep (this
+  workspace, sibling repos, pub-cache) found no external users. Every break is
+  declared under a `breaking:` label in the CHANGELOG. This exemption does not
+  set precedent — post-3.4.0 the surface is treated as stable and breaking
+  changes require a major.
+- **Conformance coverage for the FFI PRs.** #2030 and #2039 are covered under
+  P-2's coordinated 3.4.0 slot for the purposes of implementation-plan §10(e):
+  their PR descriptions cite "P-2 (coordinated 3.4.0 slot)"; no separate project
+  id is minted.
+- **Auto-resolve scope: accessors, not keygen helpers.** The FFI-auto-resolve
+  default applies to the `AtPqc` accessors (`AtPqc.xWing`, `AtPqc.mlDsa65`),
+  including their `generateKeyPair()`. Key generation through the web-safe
+  barrel's key pair classes (`XWingKeyPair.generate`, `MlDsa65KeyPair.generate`,
+  `AtChopsUtil.generate*KeyPair`) is **pure-Dart by construction** — those
+  exports must stay out of the `dart:ffi` import graph or `dart compile js`/wasm
+  breaks for web consumers. Both backends stay wire-compatible (pinned by
+  cross-backend interop tests), so keys generated pure-Dart are usable by the
+  FFI backends and vice versa.
+
+### Rulings — 2026-07-06 (planning day)
+
+- **AtKeys: extend in place, deprecate legacy — supersedes the `WritableAtKeys`
+  holder** ([#2045](https://github.com/atsign-foundation/at_client_sdk/issues/2045)).
+  Keep the existing `AtKeys` class hierarchy **as-is** and extend it
+  **additively** with PQ-safe methods; **deprecate** the legacy key
+  fields/methods (they stay for back-compat, so call sites migrate to the
+  PQ-safe methods over time). `AtKeysIo` is extended with **runtime
+  persistence** (`append()`, `save()`, … — method names superseded 2026-07-17
+  by the single `flush()`) and remains the single contact point
+  that keeps runtime `AtKeys` objects and the persisted keyfile in-line.
+  Providers are injected **(`AtClient`, `AtKeysIo`, `AtChops`)**. There is
+  **no** new `WritableAtKeys` holder class and **no** separate `WrittenAtKeysIo`
+  widening — `AtKeysIo` itself is widened. *Rationale:* much simpler migration —
+  the code contract stays the same (deprecated fields/methods remain), the
+  deprecation path is clear-cut, and the churn is far smaller than carving a new
+  holder hierarchy. *Affects:* **S-1** (reframed from "new `WritableAtKeys`
+  holder" to "extend `AtKeys`/`AtKeysIo` in place"), **S-2**, **S-3**, and
+  design §4. *Open question (not decided):* whether `AtClient` needs any concept
+  of `AtKeys` outside the provider seam at all (encrypt/decrypt and auth already
+  reach keys via the injected `AtKeysIo`).
+
+### Rulings — 2026-07-17 (PR #2047 / S-1 conformance review)
+
+Five rulings from the review of PR #2047 (the S-1 implementation) against this
+record:
+
+- **`flush()` supersedes the `append()`/`save()` working names.** `AtKeysIo`'s
+  runtime persistence is one whole-state operation: mutate the in-memory
+  `AtKeys` (`addKey`, `retireKey`, …), then `flush(atsign, atKeys)`. On an
+  existing target the flush is safety-checked by
+  `AtKeysAssurance.validateMapUpdate` (nothing lost; statuses forward-only;
+  additions fine) and is atomic (write-to-temp + rename) with the previous
+  state kept as `<file>.bak`. The default implementation throws
+  (compile-compat for pre-existing implementers; there are no runtime callers
+  of the new surface yet).
+- **Retire, never remove.** `AtKeys` has no key-removal operation:
+  `retireKey(keyId, {to})` moves status forward-only
+  (`active` → `retired` → `dead`) and material bytes are never deleted —
+  retired bytes are still needed to decrypt data they protected. Consistent
+  with OQ8's no-per-APKAM-key-delete ruling. (Supersedes the
+  `add`/`remove`/`write` working names in design §4 and S-1's
+  "add→read→remove" acceptance line.)
+- **The never-lose contract is scoped to bootstrap key stores.**
+  `WrittenAtKeysIo.flush`'s nothing-may-be-lost contract applies to stores of
+  bootstrap key material (the `.atKeys` file, keychain). It is **not** an
+  `AtKeysIo`-wide invariant: a store holding rotating/evictable material
+  defines its own retention — CK-class deletion is the B5a coarse-FS lever
+  (design §1.7), a feature, not data loss. Corollary: **`LocalKeystoreAtKeysIo`
+  is not needed at this time** — nskey-private / CK-class storage routing is
+  decided when S-3/SS-4 execute, and whatever store holds CK-class material
+  must support eviction rather than inherit the flush contract.
+- **`keyPartType` / `keyAlgorithmType` are open String tokens, not enums.**
+  Enums make every unknown value a whole-file parse failure, forcing lockstep
+  reader upgrades and breaking flush's round-trip-what-you-don't-understand
+  requirement. Known tokens live as static consts: `KeyAlgorithmType`
+  (`aes256`, `rsa2048`, `ecc_secp256r1`, `ed25519`, `x25519`, `mlkem768`,
+  `mldsa65`, `xwing` — parameter set in the token, matching the
+  pkam/enrollment `signingAlgo` literals) and `CryptographicKeyType`
+  (mechanical roles only: symmetric encryption/authentication and the
+  public/private halves of encryption, verification/signing,
+  encapsulation/decapsulation, key agreement). The classical/post-quantum/
+  hybrid axis is a property of the algorithm token (X-Wing material is
+  `xwing` + encapsulation/decapsulation), never a second role axis.
+  `KeyPartStatus` stays an enum (a closed state machine the format owns).
+  Unknown tokens are accepted, held, and re-emitted byte-identical.
+- **S-1 ships as at_auth 3.3.0.** The 3.2.0 slot was consumed by the
+  validateAtServer network-timeout release (published from trunk 2026-07-17),
+  resolving Open decision #D's at_auth version question: 3.1.1 published
+  first, then 3.2.0 (timeouts), and the `AtKeys`/`AtKeysIo` extension opens
+  3.3.0. S-5's breaking cut is unchanged (3.x → 4.0.0).
+
+---
+
+## 7. Decision log / timeline (dated)
+
+Chronological, **oldest-first**. Each entry gives the one-line *why*.
+
+| Date | Decision / event | Why |
+|---|---|---|
+| **2026-06-17** | **Known shape-risk assessment.** Cardinality and the connection model flagged as the hardest open shapes. | Surface the risks before committing to a key/connection design — they drove the eventual 1:1:1 ruling. |
+| **2026-06-20** | **ADR 0001 Accepted — two tiers** (`nskey` default + `group` opt-in). Structural target / component-responsibilities for the crypto layer settled. | Preserve the legacy developer experience while adding PQ; confine per-device machinery to an opt-in tier. *(Superseded 5 days later.)* |
+| **2026-06-22** | **Wave-0 baseline landed (merged to trunk).** #1930 — the M0 pluggable-crypto seam (`at_client`); #1993 — `pqSeal`/`pqOpen` HPKE primitive on at_chops in-tree **3.3.0**; PR #2035 — design fixes. | The seam routes put/get/notify/sync by `appMetadata.providerId`; `pqSeal`/`pqOpen` give X-Wing + HKDF + AES-256-GCM. Everything downstream pins these. (Wave-0 detail → `implementation-plan.md`.) |
+| **2026-06-24** | **Keyfile-storage decision (Decision #3).** PQ-APKAM material stored in the copyable `.atKeys` file by default; OS-keychain/hardware opt-in; revocation per-keyfile-key; server TTL/usage eviction. | Portability + dev/test-clean reuse; hardware storage is opt-in hardening, not the default. |
+| **2026-06-25** | **ADR 0002 Accepted — single-tier `nskey` supersedes 0001.** WP-SS rework audit ratified (OQ1–OQ7). Verb wire shape ratified. | Per-APKAM push + the KEM-wrapper realisation dissolved 0001's two claims (the false dichotomy); the only genuine MLS delta is D2. FS becomes a rotation *policy*, not a tier. |
+| **2026-06-30** | **Decision #F ratified — 1:1:1 + fresh-enrollment retrofit.** Decision #B resolved (Option A). OQ2/OQ3 revised, OQ8/OQ9 added. `listns` flattened. `enroll:metadata` verb removed (→ `EnrollParams.metadata`). Per-APKAM-key delete removed. The d1-execution-plan revision folded a 15-delta workflow (verified against the live `at_server`/at_commons/at_client trees). | One keypair per enrollment removes verify-against-any, the multi-key record reshape, and the delete-after-ML-DSA ordering; retrofit becomes a clean fresh auto-approved enrollment that ages the old one out. Simpler, smaller blast radius, no escalation path. |
+| **2026-06-30** | **APKAM keypair ≠ key package — kept two keypairs per enrollment.** Considered collapsing the enrollment's ML-DSA APKAM keypair and X-Wing key package into one (and single-seed derivation of the pair); both rejected. | ML-DSA (signature) and X-Wing (KEM) are distinct PQ primitives — one keypair can't both sign/auth and be encapsulated to. Two keypairs is the floor; single-seed derivation saves only keyfile bytes and adds a re-derivation-stability risk. See [9](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30). |
+| **2026-06-30** | **Shared-master-seed nskey derivation rejected; the `design.md` §1.3 derivation paragraph was removed.** nskey privates are minted as fresh random keypairs and conveyed per-APKAM over the substrate — never HKDF-derived from a shared seed. | A seed shared across an atSign's enrollments (required for the whole atSign to share one nskey per namespace) breaks post-compromise security, namespace compartmentalization, and rotation forward-secrecy; the namespace/epoch HKDF labels are public and don't gate who can derive. A full-corpus sweep confirmed this was the only insecure derivation. See [10](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30). |
+| **2026-06-30** | **Single nskey per namespace, lazily published — collapses the former self/public nskey pair.** One X-Wing keypair serves both self data and inbound shares; the public half is published lazily (owner-only self at-key → `public:` on first cross-atSign use). | Peer review: the two nskeys did the same KEM job with the same private-holders, so the split bought no real compartmentalization or authenticity, and one key simplifies the read path and rotation. Lazy publication preserves namespace-existence privacy for self-only namespaces. See [11](#11-single-nskey-per-namespace-lazily-published-2026-06-30). |
+| **2026-07-02** | **Six execution rulings** (post-review): verb name `enroll:listns`; D1 surface scope (`.atKeys`-at-rest IN via KF-1; TLS + atDirectory non-goals); readiness operator-primary + auto-detect fast-follow; R-2 ecosystem-floor package set named; FFI auto-resolve default; `_apsk` write-restriction pinned + e2e-test-required. | Landed from the plan-vs-code review that found in-flight PRs implementing superseded rulings; the rulings + a conformance gate keep execution aligned to the record. |
+| **2026-07-02** | **Advertised-key signing + `_apsk` always-present** ([section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)). Advertised recipient keys (key package, `nskey` public, `pqpublickey`) are APKAM-signed by the generating enrollment and verified against its `_apsk` — same path same-atSign and cross-atSign; the atServer keeps `_apsk` present (populated from the record) as well as write-restricted. Supersedes "atServer vouches". Also: the key package is a **singular signed `metadata.keyPackage`** (no format-keyed map). | Authenticates the encapsulation target against a rogue *insider* enrollment under an honest server (not server-asserted); reuses the existing `wrapAndSign`/`_apsk` machinery. Does **not** remove a malicious atServer *operator* from the TCB — the operator is the `_apsk` anchor (see section 12 + design.md *Trust boundary*). The format-map was redundant with in-package `keys[].alg` + `v` agility. |
+
+| **2026-07-03** | **PR #2030 review rulings** (five, → [section 6](#6-resolved--open-execution-decisions-af)): `AtPqc` supersedes the `PqcFfi` working name; `AtSignatureAlgorithm` recorded with a **staged** `AtSigningAlgorithm` deprecation (stays implemented through D1 — P-2 and the section-12 `wrapAndSign` path are typed against it; removal deferred past the D1 ladder); at_chops 3.4.0 stays a minor under a recorded one-time semver exemption for the barrel-split breaks; #2030/#2039 conformance-covered under P-2's coordinated slot; auto-resolve scoped to the `AtPqc` accessors (web-safe-barrel keygen is pure-Dart by construction). | The two-pass review of #2030 found the PR shipping designs the record didn't yet name (`AtPqc`, `AtSignatureAlgorithm`) and removals the ladder didn't authorize; these rulings plus the stacked review-fixes PR align code and record. |
+| **2026-07-06** | **Planning-day reconciliation rulings** (two): (1) **inter-server PQ authentication is IN D1 scope** as new project **IS-1** ([implementation-plan.md §13](implementation-plan.md)) — the atServer FROM/POL X-Wing+ML-DSA-65 handshake (PR #2683), off the D1 GA critical path, gated on publishing the at_chops PQ-API surface (`XWingCert`/`resolveXWing`/`resolveMlDsa65`). (2) **P-2's `mldsa65` verify branch folds into the existing unpublished at_chops 3.4.0** (bumped on trunk by #2030) before it publishes — not a fresh minor. | Planning-day reconciliation of #1889 vs the plan vs merged/open PRs across at_client_sdk + at_server surfaced a whole untracked inter-server workstream and an at_chops 3.4.0 slot already opened on trunk; these two rulings place both in the record. |
+| **2026-07-06** | **P-2 satisfied on trunk** — the `mldsa65` `_getVerificationAlgorithm` branch merged (issue #2050 / PR #2056), folded into the unpublished at_chops 3.4.x slot per the ruling above; #2039 (AES-GCM FFI) merged into the same slot. | The one missing ML-DSA verify branch is now in the tree; P-2's residual is the 3.4.x publish itself. |
+| **2026-07-17** | **PR #2047 / S-1 conformance rulings** (five, → [section 6](#6-resolved--open-execution-decisions-af)): `flush()` supersedes `append()`/`save()`; retire-never-remove (`retireKey`, forward-only status); the never-lose flush contract scoped to bootstrap stores (`LocalKeystoreAtKeysIo` not needed at this time; CK-class stores must support eviction for B5a); `keyPartType`/`keyAlgorithmType` as open String tokens with known-token consts (X-Wing = `xwing` + encapsulation/decapsulation); S-1 ships as at_auth **3.3.0** (3.2.0 consumed by the network-timeout release). | The S-1 implementation review found the built shape better than the recorded working names in three places and a version-slot collision; these rulings align the record with the code before at_auth 3.3.0 publishes. |
+| **2026-07-17** | **Release train published:** `at_commons 5.13.0`, `at_chops 3.4.0`, `at_client 3.13.0` then `3.14.0`, `at_auth 3.3.0-rc1`, `at_lookup 3.6.0`, `at_onboarding_cli 1.16.0`. Same day, **SS-0 merged** (#2037) and **S-2 completed** (#2076, `AtKeysIo` threaded through `CryptoContext`). | Closes P-2's 3.4.x publish residual and the at_chops prerequisite for both S-1 and IS-1; `at_client 3.14.0` now carries the SS-0 substrate as an experimental surface, moving the D1 GA version slot off 3.14.x. |
+| **2026-07-20** | **Planning-day reconciliation** (#1889 vs the doc set vs merged/open PRs and branches). Recorded: SS-0, SS-1b, S-1 and S-2 are **satisfied**; P-2 is fully closed by the 3.4.0 publish; `SS-1c` is the next actionable critical-path project. Issues cut for the previously-untracked substrate tail — SS-1c [#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084), SS-2 [#2085](https://github.com/atsign-foundation/at_client_sdk/issues/2085), SS-3 [#2086](https://github.com/atsign-foundation/at_client_sdk/issues/2086), SS-4 [#2087](https://github.com/atsign-foundation/at_client_sdk/issues/2087) — and **two merged-but-unpublished residuals recorded as open gates**: the at_auth rc1 → stable 3.3.0 promotion (blocking S-6 and SS-2), and S-2's `CryptoContext.keys` (#2076), which merged at 18:20Z on 2026-07-17 — after `at_client 3.14.0` published at 16:02Z — so it awaits the next at_client release. IS-1 (at_server #2683) restated as in progress and off the critical path. | #2008 had been closed on the SS-0 merge, leaving `SS-1c → SS-2 → SS-3 → SS-4` — the whole run-up to the D1 GA gate — with no tracking issue; and the 2026-07-17 release train had closed several publish gates the docs still carried as open. |
+
+**Cross-refs:** the Wave-0 "already landed" detail and the project that follows
+each decision are in `implementation-plan.md`; the phase trajectory this timeline
+tracks is in `roadmap.md`.
+
+---
+
+## 8. Stale-source reconciliation note
+
+The earlier source/working docs (`crypto-roadmap.md`, `crypto_impl_plan.md`,
+`wp-ss-execution-plan.md`, `pq-secret-push.md`, …) were **consolidated away on
+2026-06-30**; they encoded the **retired** multi-APKAM / `enroll:metadata` model, and
+sections [4](#4-the-verb-wire-shape--111-cardinality-rulings) and
+[5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment) of this doc are
+the authority that retired them. This table records what each encoded and the
+authority that superseded it — for anyone reading their **git history**:
+
+| Stale source section | Encodes (retired) | Authority |
+|---|---|---|
+| `wp-ss-execution-plan.md` P0 | `enroll:metadata` grammar (op + `metadataEnrollmentId`/`metadataJson` groups) | SS-1a (`EnrollParams.metadata`, no `metadata` op) |
+| `wp-ss-execution-plan.md` P5 | client `registerKeyPackage` → `enroll:metadata` write | SS-1c (write path removed; package rides `enroll:request`) |
+| `wp-ss-execution-plan.md` P9 | multi-APKAM `ApkamPublicKey` list + verify-against-any + plural `apkam[]` | SS-3 (single `apkamPublicKey` + `signingAlgo`); flat `listns` |
+| `wp-ss-execution-plan.md` P12a/b/c | "second keypair under the enrollment" (P12a), per-APKAM-key delete (P12b), 8-step delete-after-ML-DSA (P12c) | RF-2b/RF-2c + RF-SRV (fresh auto-approved enrollment; old one ages out) |
+| `crypto_impl_plan.md` D1-F F3/F4/F5 | multi-APKAM auth, per-APKAM-key delete, TTL/usage eviction | sections 4–5 here; SS-3, RF-SRV |
+| `crypto-roadmap.md` "Cardinality, legacy-key deletion, and revocation" | "atServer allows multiple APKAM keypairs per enrollment", "delete a specific public key", "TTL/usage-based eviction", "auth against any" | section 4 here (1:1:1, record-authoritative `signingAlgo`) |
+| `crypto-roadmap.md` "Upgrading an existing client — the sequence" + "atServer support this requires (four new capabilities)" | step-4 legacy-RSA delete after PQ auth; "four new" capabilities incl. multi-key + per-key delete | section 5 here (fresh auto-approved enrollment) |
+| `pq-secret-push.md` P9/P12 | multi-APKAM list + per-APKAM delete | sections 4–5 here |
+
+All the files named above were **deleted** in the 2026-06-30 consolidation — none
+of them is a live document, and nothing in this table is an outstanding edit. At the
+point of deletion, `wp-ss-execution-plan.md`'s OQ table had been brought up to date
+(OQ2/OQ8/OQ9) while its project bodies (P0/P5/P9/P12) still lagged; that mismatch is
+recorded here only so anyone reading the file's **git history** knows which parts of
+it were already stale when it was removed.
+
+**Cross-ref:** the corrected mechanics live in `design.md`.
+
+---
+
+## 9. APKAM keypair as key package: considered and rejected (2026-06-30)
+
+**Question.** Each enrollment carries two PQ keypairs: the **ML-DSA APKAM keypair**
+(uses: PKAM auth to the atServer + envelope signing, its public published as `_apsk`)
+and the **X-Wing key package** (use: secret-sharing recipient — a sender encapsulates a
+CK to it). Could one keypair serve all three uses, collapsing the two into one?
+
+**Ruling — no. They are different primitives, not one key with two roles.** ML-DSA
+(FIPS 204) is a **signature** scheme; the key package is **X-Wing** (ML-KEM-768 + X25519,
+FIPS 203 + a classical KEM) — a **KEM**. You cannot encapsulate a secret to an ML-DSA
+public key (it has no KEM operation), and X-Wing cannot sign. The three uses split
+exactly along that line: *auth* and *envelope signing* need a signature; being a
+*secret-sharing recipient* needs a KEM. Key-separation hygiene independently forbids
+reusing one keypair across sign + KEM even where a dual-use primitive exists.
+
+**The signing side is already unified.** Both signature uses — PKAM auth and envelope
+signing — are served by the **single** ML-DSA APKAM keypair (its public is published as
+`_apsk` for envelope verification). So each enrollment is already at the floor a PQ
+design allows: **one signature keypair + one KEM keypair**, managed as a single bundled
+credential — minted, registered, rotated, and revoked together under the 1:1:1 model
+(section [4](#4-the-verb-wire-shape--111-cardinality-rulings)).
+
+**Single-seed derivation — considered, rejected.** Deriving *both* keypairs from one
+per-enrollment seed (`HKDF(seed, label) → {ML-DSA, X-Wing}`) was weighed as a further
+simplification. Rejected:
+
+- It saves only **keyfile bytes** (~6 KB of privates → a 32-byte seed) and changes
+  **nothing** else — still two keypairs, two published keys, the same enrollment record,
+  the same wire shapes, the same two crypto operations.
+- It is plausibly **net-negative**: it adds seeded-keygen code for two PQ primitives plus
+  a **re-derivation-stability dependency** — the derived keypairs must reproduce
+  byte-identically *forever*, across at_chops/OpenSSL versions and platforms, or a client
+  loses access to its own keys. Storing the privates directly avoids that risk entirely.
+- A `HKDF(seed, namespace) → nskey` derivation was *also* floated for the nskey keypairs
+  and **rejected outright** for an independent, more serious reason ([§10](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30)):
+  there the seed would be **shared across the atSign's enrollments**, which breaks
+  post-compromise security, namespace compartmentalization, and rotation forward-secrecy.
+  The **per-enrollment** seed considered here does **not** share that flaw — it is local
+  to one enrollment and never distributed — but it also yields no distribution saving
+  (the APKAM + key-package privates never leave the keyfile), so the only benefit on offer
+  was the keyfile bytes already discounted above.
+
+**Decision.** Leave it as-is. **Two keypairs per enrollment — one signature, one KEM — is
+the irreducible floor** for a PQ design that needs both authenticated/signed messaging and
+secret-sharing *to* a specific enrollment. No single-seed derivation for the enrollment
+keypairs.
+
+---
+
+## 10. nskey derivation from a shared master seed: rejected (2026-06-30)
+
+**Proposed (and briefly written into `design.md` §1.3).** Derive both nskey X-Wing KEM
+privates per namespace as `HKDF(master-seed, namespace [, epoch]) → X-Wing seed`, with the
+master seed held in `.atKeys`, so that "any client of the atSign derives both privates with
+no distribution." The pitch was eliminating the per-APKAM substrate conveyance of the nskey
+privates.
+
+**Rejected — it is a post-compromise security hole, and worse.** For the whole atSign to
+share one nskey per namespace, every authorised client must derive the **same** keypair, so
+the master seed must be **shared across all of the atSign's enrollments**. That shared,
+long-term secret breaks the three properties the nskey design exists to provide:
+
+1. **Post-compromise security / self-healing.** Exfiltrating one device's master seed yields
+   every nskey private the atSign will *ever* have. Revoking that enrollment doesn't heal —
+   the attacker keeps deriving future namespace keys offline. The only remediation is a
+   fleet-wide master-seed re-key (re-derive + republish every namespace's public nskey,
+   re-convey every CK), the exact event per-enrollment revocation exists to avoid.
+2. **Namespace compartmentalization / cryptographic access control.** The namespace is only a
+   **public** HKDF label, so a seed-holder can derive nskey privates for namespaces it was
+   never authorised for — authorization stops being cryptographically enforced. Under
+   conveyance, an enrollment only ever receives the privates sealed to it, for the namespaces
+   it was granted.
+3. **Forward secrecy of rotation.** The `epoch` term is likewise a public label, so every
+   epoch is derivable from the one seed — epoch rotation buys **zero** FS against a seed leak.
+   The `epoch` lever (`design.md` §1.7) only works when the underlying private is random per
+   epoch.
+
+The shared seed is **intrinsic** to the derivation: a per-enrollment seed would derive
+*different* keys and so couldn't produce the shared namespace nskey at all. There is no safe
+scoping — the optimization is rejected outright, not demoted to optional. It was also
+internally inconsistent: `design.md` §4's `.atKeys` store taxonomy holds no master seed.
+
+**Accepted model (already used everywhere else in the corpus).** nskey privates are **minted
+as fresh random keypairs and conveyed per-APKAM over the substrate** (sealed to each
+authorised enrollment's key package); rotation mints a fresh keypair and distributes it to
+the surviving enrollments, **excluding the revoked one** (`implementation-plan.md` B5b). The
+public nskey's public half is still published (a sender has no other way to obtain a peer's
+per-namespace public key — ML-KEM has no public child-derivation). Compromise is then bounded
+to what one enrollment holds; the system heals on revocation + rotation; a client holds keys
+only for the namespaces granted to it.
+
+**Scope of the ruling.** A full-corpus derivation sweep (all five docs, finder + independent
+adversarial verifier per doc) found this to be the **only** insecure key-derivation site —
+present only here (`design.md` §1.3) and in the [§9](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30)
+cross-reference that mis-framed it as a "win"; both are now corrected. Every other derivation
+in the design is secure by construction: the X-Wing/HPKE key schedule (ephemeral per-op
+shared secret), the MLS/D2 ratchet (epoch secrets advance and are deleted), CK/nskey rotation
+(fresh independent material), and `kid`/`kpid` identifiers (a hash of a *public* key, not a
+secret). This is **distinct** from §9's **per-enrollment** single-seed idea, which is
+*per-principal* and local-only — it lacks this flaw and was rejected on the separate ground
+that it saves only keyfile bytes.
+
+---
+
+## 11. Single nskey per namespace, lazily published (2026-06-30)
+
+**Decision.** Each `(atSign, namespace)` has **one** X-Wing KEM nskey keypair, not two. The
+single nskey is the recipient key for **both** directions — the owner encapsulates her own
+content keys (CKs) to it for self data, and external senders encapsulate CKs to it when sharing
+with her. Its public half is **published lazily**: it lives as the self at-key
+`nskey.<ns>@<owner>` (owner-only, synced to the owner's authorised clients) until the namespace
+is first used cross-atSign, at which point the *same* public half is promoted to the
+world-readable `public:nskey.<ns>@<owner>`. The private half is minted fresh and conveyed
+per-APKAM over the substrate ([§10](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30)),
+never derived. This came from peer review, which observed that a separate "self nskey" and
+"public nskey" were doing the same cryptographic job (X-Wing KEM wrapping a CK) for the same
+private-holders.
+
+**Why it is sound — no security loss.**
+
+1. **Confidentiality.** A KEM public key is meant to be public; the private is the secret. A
+   world-readable encapsulation target lets anyone *create* sealed CKs (useless without the
+   private) but exposes nothing. Self-encapsulation is just one more encapsulator against a key
+   built for many.
+2. **Compartmentalization was illusory.** Two keypairs appear to isolate self data from
+   inbound-shared data, but both privates were held by the same clients and conveyed over the
+   same substrate to the same key packages — never separable in practice. Compromise blast
+   radius is identical for one key or two.
+3. **Authenticity is independent of the split.** A KEM gives confidentiality, not
+   sender-authenticity. Provenance is carried by record ownership + write-authorisation
+   (`…__ck.<ns>@alice` written by an authorised Alice client vs `…__ck.<ns>@bob` cached from
+   Bob), unchanged by collapsing the keys.
+4. **Revocation simplifies.** Evicting a compromised client rotates every nskey private it
+   held — both, anyway. One key is one rotation, and the read path loses the self-vs-inbound
+   branch.
+
+**The one weakness, and the mitigation taken.** A single key whose public half is published
+advertises the *existence* of the namespace to anyone doing a public `plookup`/scan, and makes
+namespace usage correlatable across atSigns. For a namespace used purely for the owner's own
+data — which under two keys had only an owner-only self nskey — this would be a new metadata
+leak (existence only; no CK, content, or key material). **Mitigation, adopted: lazy
+publication.** The public half stays an owner-only self at-key until the namespace is first
+shared cross-atSign; a purely-self namespace therefore never advertises itself. Inbound that
+arrives before promotion is bridged by cold-start to the root `public:pqpublickey` (then a lazy
+upgrade promotes the nskey). This keeps the one-keypair simplification (one private, one
+rotation, one decapsulation path) while preserving namespace-existence privacy.
+
+**Foreclosed capability — accepted.** Two keypairs could have granted a client read access to
+inbound-shared data but not the owner's own self data (convey only one private). The single-key
+model cannot draw that boundary — a client either holds the nskey private (reads both) or does
+not. The design does not use this asymmetric access today, so nothing is lost now; the option
+is foreclosed going forward.
+
+**Consequences for the model.**
+
+- `appMetadata.recipientKind` on an `at/nskey` CK-conveyance record is `nskey` (self + inbound)
+  or `root-pqpublickey` (cold-start) — the former self-nskey/public-nskey distinction is gone.
+- The reader decapsulates every `__ck` record with the one nskey private.
+- HPKE `info` binds `(namespace, owner)` so self and inbound flows stay domain-separated under
+  the shared key.
+- The detailed mechanics live in `design.md` (key shapes, the data flow, rotation), the build
+  steps in `implementation-plan.md`, and the acceptance cases in `acceptance.md`.
+
+---
+
+## 12. Advertised recipient keys are signed against `_apsk` (2026-07-02)
+
+**Decision.** Every *advertised recipient/encapsulation key* is **signed by the
+generating enrollment's APKAM key** and verified by the fetcher against that
+enrollment's published `_apsk` — **the same way for a same-atSign and a
+cross-atSign verifier**. This **supersedes** the earlier "key packages are unsigned;
+the atServer vouches" stance ([section 4](#4-the-verb-wire-shape--111-cardinality-rulings),
+the substrate's original design): the encapsulation target is now
+**authenticated**, not merely server-asserted.
+
+**What is covered.** The three keys a party fetches in order to seal *to* someone:
+
+- the per-enrollment **key package** (the X-Wing recipient key at the singular
+  `metadata.keyPackage`, Layer 1 of the substrate);
+- the published **`nskey`** public half (`nskey.<ns>@<atSign>` → promoted
+  `public:nskey.<ns>@<atSign>`);
+- the atSign-level root **`public:pqpublickey@<atSign>`**.
+
+**Mechanism.** The generating enrollment wraps the advertised key in an
+**APKAM-signed envelope** — the *same* `wrapAndSign` / `AtSigningMode.pkam`
+construction already used for `__ssenv` messages (`envelope_signing.dart`). A
+verifier fetches the generating enrollment's `_apsk` public key from
+`public:_apsk.<enrollmentId>.<perEnrollmentApproved>@<atSign>` — the location the
+at_client **`ApkamSigning`** mixin defines — and verifies the signature. There is
+**one** verify path: a same-atSign client (another of the owner's enrollments) and a
+cross-atSign client (a peer atSign's enrollment) both do exactly this.
+
+**The signature self-describes enough to verify.** The signed envelope carries the
+**`signingAlgo`** (which implies *what sort of key* `_apsk` holds — RSA / ML-DSA /
+ECC) and the **`hashingAlgo`**, so the verifier selects the correct verification
+routine. Authenticity anchors on the `_apsk` key itself: a lie about `signingAlgo`
+simply fails the verify against the real key.
+
+**`_apsk` is a cross-tier property the atServer guarantees — present *and*
+write-restricted.** Because verification depends entirely on `_apsk`, the atServer:
+
+1. **keeps `_apsk` present** — it populates
+   `public:_apsk.<enrollmentId>.<perEnrollmentApproved>@<atSign>` from the enrollment
+   record's stored `apkamPublicKey` (on approval / first authenticated use), rather
+   than leaving it to the client-side `ApkamSigning.publishPublicSigningKey`
+   get-then-put (which races and can be absent when a verifier looks). A verifier can
+   always resolve a generator's `_apsk`.
+2. **write-restricts `_apsk`** — only the owning enrollment's own authenticated
+   connection may write it (verified empirically against the released atServer, June
+   2026).
+
+Both properties MUST be asserted by e2e tests (an approved enrollment's `_apsk` is
+fetchable without a client publish; a cross-enrollment overwrite is refused).
+
+**Trust model — what this does and does not remove from the confidentiality TCB.**
+The verification chain is only as strong as its anchor, and the anchor for `_apsk` is
+the atServer that serves it. So the signing separates two adversaries sharply:
+
+- **Against a malicious *insider* under an honest server** — a legitimately-enrolled
+  but rogue or lower-privileged client trying to inject a poisoned key package / secret
+  as if from another enrollment — signing **works**: the honest server serves each
+  enrollment's *real* `_apsk`, and the signature lets the receiver distinguish an
+  authorised minter from a rogue enrollment. This is the concrete win, and it holds
+  same-atSign **and** cross-atSign.
+- **Against a malicious atServer *operator*** — one that generates its own keypair,
+  serves the public half as the enrollment's `_apsk`, and serves a self-generated
+  advertised key signed by the matching private — signing gives **nothing**: the
+  operator controls both the signature key and the `_apsk` it is verified against, so
+  the chain is internally consistent but rooted in a key the operator chose. This is
+  true **same-atSign and cross-atSign alike** — do **not** claim signing removes the
+  operator from the TCB in either case.
+
+So the operator of an atSign's atServer is in the **confidentiality TCB for all data
+destined to that atSign** (inbound cross-atSign shares, and self-data where the client
+relies on server-served keys) — a transparent, split-view MITM that this signing does
+not, by itself, prevent. That is **not new** and **not introduced by the substrate**:
+classical Atsign has the same property (a sender fetches `public:publickey@alice` from
+@alice's atServer). Signing is *necessary infrastructure* toward operator-resistance —
+it chains advertised keys to `_apsk` — but becomes *sufficient* only once the anchor
+(the atSign's identity→key binding) is distributed through a channel the operator does
+not control. The full threat model, why it is undetectable to a targeted victim today,
+and the mitigation ladder (self-hosting, client self-audit, out-of-band fingerprints,
+atDirectory key transparency, root-anchored signatures, attestation) are in
+[`design.md`](design.md) → *Trust boundary & residual threats*.
+
+The public/private **correspondence check** for a conveyed keypair secret (`nskey` /
+`pqpublickey` privates) remains a useful **secondary** check, subordinate to the
+signature.
+
+**Why.** It reuses machinery that already exists (`wrapAndSign` + the `_apsk`
+resolution in `ApkamSigning` / `EnvelopeSigning`), needs no new key type (the ML-DSA
+APKAM signing key and the X-Wing encapsulation key are correctly distinct —
+[section 9](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30)), and
+raises the substrate's floor from "the atServer vouches" to "a non-operator adversary
+cannot forge advertised keys" — the remaining operator trust is addressed by the
+separate transparency work above, not by the substrate.
+
+**Implementation status.** Target, not yet built: sign in the mint paths
+(**SS-2** key package, **SS-4** nskey / pqpublickey), verify on read (**SS-1c**); the
+atServer `_apsk`-always-present + write-restriction is **SS-1b**. The current
+substrate advertises the key package **unsigned** — tracked as a gap in `design.md`
+§6. Mechanics: `design.md` §2.1 (*Advertised-key authenticity*) and §2.4; sequencing:
+`implementation-plan.md` SS-1b/SS-1c/SS-2/SS-4; acceptance: `acceptance.md` §13.

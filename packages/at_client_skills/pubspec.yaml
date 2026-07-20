@@ -1,0 +1,14 @@
+name: at_client_skills
+description: AI agent skill for the Atsign at_client SDK. Gives AI coding agents accurate, up-to-date knowledge of AtCollection<T>, auth flows, querying, sub-collections, testing patterns, and common pitfalls.
+
+version: 1.1.0
+
+repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client_skills
+homepage: https://atsign.com
+documentation: https://docs.atsign.com/
+
+environment:
+  sdk: ^3.6.0
+
+# No Dart code — this package contains only AI agent skill assets.
+# Install as a dev dependency and run `dart run skills get` to install the skill.

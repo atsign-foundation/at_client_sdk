@@ -95,16 +95,51 @@ String? getHomeDirectory({bool throwIfNull = false}) {
   return homeDir;
 }
 
-/// Get the local username or null if unknown
-String? getUserName({bool throwIfNull = false}) {
-  Map<String, String> envVars = Platform.environment;
-  if (Platform.isLinux || Platform.isMacOS) {
-    return envVars['USER'];
-  } else if (Platform.isWindows) {
-    return envVars['USERPROFILE'];
+/// Get the local username, or null if it cannot be determined.
+///
+/// Resolves in order: the `USER`, `LOGNAME`, then `USERNAME` environment
+/// variables, then an OS query (`whoami`). Process supervisors such as Docker,
+/// systemd without `User=`, and network-OS app managers often leave those
+/// variables unset, so the OS query is the reliable last resort. When
+/// [throwIfNull] is true and none of the sources yields a value, throws a
+/// message naming the variable to set rather than returning null (which
+/// crashes callers that use `!`).
+String? getUserName({bool throwIfNull = false}) =>
+    resolveUserName(Platform.environment, throwIfNull: throwIfNull);
+
+/// The testable core of [getUserName]: resolves a username from [environment]
+/// (`USER` → `LOGNAME` → `USERNAME`), then from [osLookup] (defaults to
+/// `whoami`). Empty values are treated as absent.
+@visibleForTesting
+String? resolveUserName(
+  Map<String, String> environment, {
+  bool throwIfNull = false,
+  String? Function()? osLookup,
+}) {
+  for (final name in const ['USER', 'LOGNAME', 'USERNAME']) {
+    final value = environment[name];
+    if (value != null && value.isNotEmpty) return value;
   }
+  final fromOs = (osLookup ?? _whoami)();
+  if (fromOs != null && fromOs.isNotEmpty) return fromOs;
   if (throwIfNull) {
-    throw ('\nUnable to determine your username: please set environment variable\n\n');
+    throw ('\nUnable to determine your username: '
+        'please set the USER (or LOGNAME) environment variable\n\n');
+  }
+  return null;
+}
+
+/// Ask the OS for the current username via `whoami`. Returns null if `whoami`
+/// is unavailable (e.g. a minimal container) or produces no output.
+String? _whoami() {
+  try {
+    final result = Process.runSync('whoami', const <String>[]);
+    if (result.exitCode == 0) {
+      final name = (result.stdout as String).trim();
+      if (name.isNotEmpty) return name;
+    }
+  } on ProcessException {
+    // `whoami` not on PATH — fall through to null.
   }
   return null;
 }

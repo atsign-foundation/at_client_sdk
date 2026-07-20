@@ -4,16 +4,17 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_chops/src/algorithm/aes_encryption_algo.dart';
 import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/at_iv.dart';
 import 'package:at_chops/src/algorithm/default_signing_algo.dart';
-import 'package:at_chops/src/algorithm/ecc_signing_algo.dart';
+import 'package:at_chops/src/algorithm/encryption/aes.dart';
+import 'package:at_chops/src/algorithm/encryption/rsa.dart';
+import 'package:at_chops/src/algorithm/signing/ecc.dart';
+import 'package:at_chops/src/algorithm/signing/ml_dsa_65_pure_dart.dart';
 import 'package:at_chops/src/algorithm/pkam_signing_algo.dart';
-import 'package:at_chops/src/algorithm/rsa_encryption_algo.dart';
 import 'package:at_chops/src/at_chops_base.dart';
-import 'package:at_chops/src/key/at_key_pair.dart';
+import 'package:at_chops/src/key/keys.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
 import 'package:at_chops/src/key/impl/at_encryption_key_pair.dart';
 import 'package:at_chops/src/key/key_names.dart';
@@ -28,6 +29,9 @@ import 'package:at_utils/at_logger.dart';
 
 import 'algorithm/default_hashing_algo.dart';
 
+@Deprecated(
+    'Use the algorithm classes directly instead. This compatibility API will '
+    'be removed in the next major release.')
 class AtChopsImpl extends AtChops {
   AtChopsImpl(super.atChopsKeys);
 
@@ -210,6 +214,9 @@ class AtChopsImpl extends AtChops {
     return atSigningResult;
   }
 
+  //TODO: when returning to do the work for open-ended atChopsKeys
+  // we should be removing anything related to keyNames from at_chops and allow
+  // at_client to handle provider-level crypto routing.
   AtEncryptionAlgorithm? _getEncryptionAlgorithm(
       EncryptionKeyType encryptionKeyType, String? keyName) {
     switch (encryptionKeyType) {
@@ -228,6 +235,9 @@ class AtChopsImpl extends AtChops {
     }
   }
 
+  //TODO: when returning to do the work for open-ended atChopsKeys
+  // we should be removing anything related to keyNames from at_chops and allow
+  // at_client to handle provider-level crypto routing.
   AtEncryptionKeyPair? _getEncryptionKeyPair(String? keyName) {
     if (keyName == null) {
       return atChopsKeys.atEncryptionKeyPair!;
@@ -237,6 +247,9 @@ class AtChopsImpl extends AtChops {
     return null;
   }
 
+  //TODO: when returning to do the work for open-ended atChopsKeys
+  // we should be removing anything related to keyNames from at_chops and allow
+  // at_client to handle provider-level crypto routing.
   SymmetricKey? _getSymmetricKey(String? keyName) {
     if (keyName == null || keyName == KeyNames.selfEncryptionKey) {
       return atChopsKeys.selfEncryptionKey!;
@@ -258,7 +271,7 @@ class AtChopsImpl extends AtChops {
           atChopsKeys.atPkamKeyPair!, signingInput.hashingAlgoType);
     } else if (signingInput.signingMode != null &&
         signingInput.signingMode == AtSigningMode.data) {
-      if (atChopsKeys.atEncryptionKeyPair == null){
+      if (atChopsKeys.atEncryptionKeyPair == null) {
         throw AtSigningException('Encryption keypair required for signing');
       }
       return DefaultSigningAlgo(
@@ -276,6 +289,8 @@ class AtChopsImpl extends AtChops {
     }
     if (verificationInput.signingAlgoType == SigningAlgoType.ecc_secp256r1) {
       return EccSigningAlgo();
+    } else if (verificationInput.signingAlgoType == SigningAlgoType.mldsa65) {
+      return MlDsa65PureDartAlgo();
     } else if (verificationInput.signingMode != null &&
         verificationInput.signingMode == AtSigningMode.pkam) {
       if (atChopsKeys.atPkamKeyPair != null) {

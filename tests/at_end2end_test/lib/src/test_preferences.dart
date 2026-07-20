@@ -23,6 +23,10 @@ class TestPreferences {
     atClientPreference.hiveStoragePath = 'test/hive/client';
     atClientPreference.commitLogPath = 'test/hive/client/commit';
     atClientPreference.rootDomain = ConfigUtil.getYaml()['root_server']['url'];
+    // Optional `root_server.port` (e.g. a base-port virtualenv run); defaults
+    // to the standard root port 64 when absent.
+    atClientPreference.rootPort =
+        ConfigUtil.getYaml()['root_server']['port'] ?? 64;
     atClientPreference.syncRegex = TestConstants.namespace;
     atClientPreferencesMap.putIfAbsent(atSign, () => atClientPreference);
     return atClientPreference;

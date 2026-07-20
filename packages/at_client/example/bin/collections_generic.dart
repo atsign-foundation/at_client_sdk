@@ -17,11 +17,12 @@ void main(List<String> args) async {
 
   c.atClient.getPreferences()!.remoteLocalPref = RemoteLocalPref.remoteOnly;
 
-  AtCollection.registerFactory<Dog>(Dog.fromJson);
-  AtCollection.registerFactory<Cat>(Cat.fromJson);
+  AtCollection.registerFactory<Dog>(Dog.fromJson, typeTag: 'Dog');
+  AtCollection.registerFactory<Cat>(Cat.fromJson, typeTag: 'Cat');
   final AtCollection generic = await c.atClient.collection(
     'generic.$applicationNamespace',
     exampleDefaultExpiration,
+    eventSource: EventSource.both,
   );
 
   switch (c.role) {
@@ -139,7 +140,7 @@ Future<void> receiver(
   progressSink.add('${DateTime.now().toString()} : Fetching');
 
   for (final item in await generic.getItems()) {
-    String msg = 'Fetched ${generic.prettyString(item)}';
+    String msg = 'Fetched ${item.prettyString}';
     if (item.type == 'binary') {
       msg = '$msg : ${String.fromCharCodes(item.obj)}';
     }

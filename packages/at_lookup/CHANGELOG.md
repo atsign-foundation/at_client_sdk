@@ -1,4 +1,21 @@
-## 3.5.0 (unreleased tech-debt-removal branch changes)
+## 3.6.0
+
+- feat: `CacheableSecondaryAddressFinder` takes an optional `cacheDuration` to override the default 1-hour cache TTL.
+- fix(deps): updated the `at_chops` constraint to `^3.3.0`, the actual minimum this package compiles against.
+- refactor: route PKAM/CRAM signing + hashing through at_chops
+  (`PkamSigningAlgo` / `SHA512HashingAlgo`); `crypton` and `crypto` are no
+  longer imported anywhere in the package and have been dropped from
+  `dependencies`. Byte-identical by construction.
+- feat: bound network operations with a timeout so a dead network cannot hang
+  the SDK. `SecureSocketUtil.createSecureSocket` now accepts an optional
+  `timeout` (and honours `SecureSocketConfig.connectTimeout`), passing it to
+  `SecureSocket.connect`. `SecondaryAddressFinder.findSecondary` takes an
+  optional `timeout` that bounds the entire atDirectory lookup — the retry loop
+  and the previously-fixed 30-second response busy-wait — as a single deadline.
+  Both default to `AtNetworkTimeouts.effectiveDefault` (30s) and are capped at
+  60s (#1909). Requires `at_commons ^5.13.0`.
+
+## 3.5.0
 
 - chore(deps): at_chops ^3.0.0
 

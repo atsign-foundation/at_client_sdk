@@ -48,6 +48,16 @@ class AtClientPreference {
   /// Idle time in milliseconds of connection to secondary server. Default to 10 minutes.
   int outboundConnectionTimeout = 600000;
 
+  /// The process-wide default network timeout: the maximum wall-clock the SDK
+  /// will spend reaching/using the atServer (connect + retries + waiting for a
+  /// response) before giving up. When set on the `AtClientPreference` used to
+  /// create an `AtClient`, it becomes `AtNetworkTimeouts.defaultTimeout` for the
+  /// whole process (capped at `AtNetworkTimeouts.maxAllowed`, 60s). When null,
+  /// the existing default (30s) applies. This supersedes the misleadingly-named
+  /// [outboundConnectionTimeout], which is a socket idle time, not an
+  /// operation/connect timeout, and does not bound onboarding/auth.
+  Duration? networkTimeout;
+
   /// The maximum size of the value that a secondary server can store.
   /// [BufferOverFlowException] is thrown when size of the value exceeds the [maxDataSize]
   int maxDataSize = 10230000;
@@ -112,7 +122,7 @@ class AtClientPreference {
   /// * Defaults to true, as applications should always be placing keys within a namespace
   @Deprecated(
       "namespace presence will become mandatory in next major version of the SDK")
-  bool enforceNamespace = true; // TODO Remove this in next major version
+  bool enforceNamespace = true;
 
   /// Fetch the notifications received when the client is offline. Defaults to true.
   /// Set to false to ignore the notifications received when device is offline.
@@ -140,6 +150,12 @@ class AtClientPreference {
   /// performed locally, we depend on sync to get eventual consistency between
   /// local and remote.
   RemoteLocalPref remoteLocalPref = RemoteLocalPref.localOnly;
+
+  /// Configures the crypto provider used for encrypted puts and reads.
+  ///
+  /// Defaults to the legacy Atsign encryption provider. Custom providers are
+  /// initialized by [AtClientImpl] before sync and notification services start.
+  CryptoConfig crypto = const CryptoConfig.legacy();
 }
 
 /// Default preference on how to handle get, put and delete requests with

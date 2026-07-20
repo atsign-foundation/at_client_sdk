@@ -225,5 +225,6 @@ enum Intent {
   fetchEncryptionPublicKey,
   fetchEncryptionPrivateKey,
   fetchEncryptionSharedKey,
-  fetchSelfEncryptionKey
+  fetchSelfEncryptionKey,
+  fetchCryptoProvider
 }

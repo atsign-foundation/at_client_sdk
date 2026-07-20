@@ -87,6 +87,44 @@ class AtClientManager {
     secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
         preference.rootDomain, preference.rootPort);
 
+    // Idempotency: if the caller is asking for the SAME atSign that's
+    // already current (with no caller-supplied override for atChops /
+    // atLookUp / enrollmentId), short-circuit. The stop+recreate path
+    // below is destructive: it stops the existing syncService and
+    // builds a fresh one against the same Hive store, producing a
+    // brief window where TWO syncService instances are alive against
+    // the same on-disk queue. If a user write enqueues during that
+    // window, the push can fire on the about-to-be-stopped sibling
+    // (whose progress-listener list is empty after its `stop()` ran),
+    // making the write invisible to any listener attached to the new
+    // syncService — observed in CI as `bypasscache_test` timing out
+    // with no `localToRemote` event.
+    //
+    // Callers needing a forced reset for a SAME-atSign change of
+    // preferences / atChops / enrollmentId still get one — we only
+    // skip when nothing in the request changed.
+    final currentAtSign = _currentAtClient?.getCurrentAtSign();
+    if (currentAtSign != null &&
+        currentAtSign == atSign &&
+        atChops == null &&
+        atLookUp == null &&
+        enrollmentId == null &&
+        _currentAtClient!.isStopped == false) {
+      // The full stop/recreate path below recreates via AtClientImpl.create(),
+      // which adopts the supplied preference's crypto config onto a re-used
+      // cached client. The short-circuit skips create(), so adopt it here too —
+      // otherwise a same-atSign call carrying a new crypto config silently drops
+      // it, surfacing as CryptoProviderNotRegistered on the next put.
+      final existing = _currentAtClient;
+      if (existing is AtClientImpl) {
+        existing.getPreferences()?.crypto = preference.crypto;
+      }
+      _logger
+          .info('setCurrentAtSign: already on $atSign with no override args; '
+              'returning existing atClient (no stop/recreate).');
+      return this;
+    }
+
     _logger.info(
         'Switching atSigns ${_currentAtClient?.getCurrentAtSign()} -> $atSign');
 
@@ -108,6 +146,16 @@ class AtClientManager {
     var syncService = await serviceFactory.syncService(
         _currentAtClient!, this, notificationService);
     _currentAtClient!.syncService = syncService;
+    // Do NOT call `syncService.sync()` here: `SyncServiceImpl.create()`
+    // already enqueues a one-shot warm-start sync request internally
+    // (see its `warmStartSync` parameter). A second sync at startup
+    // races the e2e harness — the first round can emit
+    // `SyncStatus.success` with no work to do and let the listener
+    // exit before the second round pulls the cross-server-notify
+    // entries that haven't yet arrived on the local atServer.
+    //
+    // TODO Clean up for the above; shouldn't matter when or how often
+    // code calls `sync()`
 
     EnrollmentService enrollmentService =
         serviceFactory.enrollmentService(_currentAtClient!);

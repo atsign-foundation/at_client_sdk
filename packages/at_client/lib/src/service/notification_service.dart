@@ -14,11 +14,11 @@ abstract class NotificationService {
   /// - When [shouldDecrypt] is true, then [AtNotification.value] is decrypted
   /// (if it was encrypted). [shouldDecrypt] defaults to false in order to
   /// preserve backwards compatibility.
-  /// - when [AtClientPreference.autoStartListening] is true, then the notifications listener
+  /// - when [AtClientPreference.monitorAutoStart] is true, the notifications listener
   /// will be started either the first time that [subscribe] is called by the
   /// application code, or 30 seconds after creation if there have been no
   /// subscriptions.
-  /// - when [autoStartListening] is false, then the notifications listener
+  /// - when [AtClientPreference.monitorAutoStart] is false, the notifications listener
   /// will not be started until explicitly requested to do so by the
   /// application, via [startListening]
   Stream<AtNotification> subscribe({String? regex, bool shouldDecrypt});
@@ -83,6 +83,7 @@ abstract class NotificationService {
     required String namespace,
     String body = '',
     bool shouldEncrypt = true,
+    String? cryptoProviderId,
     Duration expiration = NotificationService.defaultExpiration,
     bool cacheAtRecipient = false,
     DateTime? recipientCacheExpiration,
@@ -107,6 +108,8 @@ abstract class NotificationService {
   });
 
   /// Sends notification to [notificationParams.atKey.sharedWith] atSign.
+  ///
+  /// See [send] for the more recent, simpler way to do this.
   ///
   /// Returns [NotificationResult] when calling the method synchronously using `await`. Be aware that it could take
   /// many minutes before we get to a final delivery status when we run synchronously, so we advise against that.
@@ -182,12 +185,9 @@ abstract class NotificationService {
   ///   await notificationService.notify(NotificationParams.forText('Hello','@bob'));
   ///```
   Future<NotificationResult> notify(NotificationParams notificationParams,
-      {bool waitForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
-      bool checkForFinalDeliveryStatus =
-          true, // this was the behaviour before introducing this parameter
-      bool encryptValue =
-          true, // this was the behaviour before introducing this parameter
+      {bool waitForFinalDeliveryStatus = true,
+      bool checkForFinalDeliveryStatus = true,
+      bool encryptValue = true,
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary});
@@ -249,6 +249,7 @@ class NotificationParams {
   int _latestN = 1;
   String _notifier = AtConstants.system;
   Duration _notificationExpiry = Duration(hours: 24);
+  String? _cryptoProviderId;
 
   String get id => _id;
 
@@ -271,6 +272,8 @@ class NotificationParams {
 
   Duration get notificationExpiry => _notificationExpiry;
 
+  String? get cryptoProviderId => _cryptoProviderId;
+
   /// Returns [NotificationParams] to send an update notification.
   ///
   /// Optionally accepts the following
@@ -291,7 +294,8 @@ class NotificationParams {
       StrategyEnum strategy = StrategyEnum.all,
       int latestN = 1,
       String notifier = AtConstants.system,
-      Duration? notificationExpiry}) {
+      Duration? notificationExpiry,
+      String? cryptoProviderId}) {
     return NotificationParams()
       .._id = Uuid().v4()
       .._atKey = atKey
@@ -302,16 +306,18 @@ class NotificationParams {
       .._strategy = strategy
       .._latestN = latestN
       .._notifier = notifier
-      .._notificationExpiry = notificationExpiry ?? Duration(hours: 24);
+      .._notificationExpiry = notificationExpiry ?? Duration(hours: 24)
+      .._cryptoProviderId = cryptoProviderId;
   }
 
   /// Returns [NotificationParams] to send a delete notification.
-  static NotificationParams forDelete(AtKey atKey) {
+  static NotificationParams forDelete(AtKey atKey, {String? cryptoProviderId}) {
     return NotificationParams()
       .._id = Uuid().v4()
       .._atKey = atKey
       .._operation = OperationEnum.delete
-      .._messageType = MessageTypeEnum.key;
+      .._messageType = MessageTypeEnum.key
+      .._cryptoProviderId = cryptoProviderId;
   }
 
   /// Returns [NotificationParams] to send a text message to another atSign.
@@ -319,7 +325,7 @@ class NotificationParams {
   /// platform level lower case enforcement will not apply to forText notifications
   @Deprecated('No longer supported')
   static NotificationParams forText(String text, String whomToNotify,
-      {bool shouldEncrypt = false}) {
+      {bool shouldEncrypt = false, String? cryptoProviderId}) {
     var atKey = AtKey()
       ..key = text
       ..sharedWith = whomToNotify
@@ -328,7 +334,8 @@ class NotificationParams {
       .._id = Uuid().v4()
       .._atKey = atKey
       .._operation = OperationEnum.update
-      .._messageType = MessageTypeEnum.text;
+      .._messageType = MessageTypeEnum.text
+      .._cryptoProviderId = cryptoProviderId;
   }
 }
 

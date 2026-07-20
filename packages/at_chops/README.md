@@ -1,25 +1,196 @@
 Package for Cryptographic and Hashing Operations (CHOPS) such as encryption, decryption,
-data signing and hashing that can  be leveraged by client applications using the at protocol.
+data signing, key agreement, and hashing that can be leveraged by client applications using the Atsign Protocol.
 
 ## Features
 
-- Asymmetric public/private key encryption/decryption using RSA
-- Symmetric key encryption/decryption using AES
-- Digest signing and verification for PKAM authentication
-- Data signing and verification for public data in the at protocol
-- Hashing operations 
+- Asymmetric encryption/decryption using RSA-2048 and RSA-4096
+- Symmetric encryption/decryption using AES-128, AES-192, and AES-256 (CTR and GCM modes)
+- Digest signing and verification for PKAM authentication (RSA, ECC secp256r1, Ed25519)
+- Data signing and verification for public data in the Atsign Protocol
+- Post-quantum digital signatures: ML-DSA-65 (FIPS 204) — pure-Dart and OpenSSL FFI backends
+- Post-quantum key encapsulation: ML-KEM-768 (FIPS 203) — pure-Dart and OpenSSL FFI backends
+- Hybrid PQ/classical KEM: X-Wing (X25519 + ML-KEM-768, draft-connolly-cfrg-xwing-kem-10)
+- Elliptic-curve key agreement: X25519 — pure-Dart and OpenSSL FFI backends
+- Serializable key-pair generation helpers for RSA, X25519, ML-KEM-768, ML-DSA-65, and X-Wing
+- Hashing: SHA-256, SHA-512, MD5, Argon2id
+- HKDF key derivation
 
 ## Getting started
 
-- Developer should have a basic understanding on how asymmetric and symmetric encryption works.
-- Developers can use their own key pairs/keys to use this package or create new key pairs/keys using [AtChopsUtil]
+Developers should have a basic understanding of asymmetric and symmetric encryption, as well as key encapsulation mechanisms (KEMs) for the PQC APIs.
+
+Use the algorithm classes directly. Generate or load key material first, then
+pass it to the relevant encryption, signing, key agreement, KEM, or hashing
+class.
 
 ## Usage
 
+Examples assume `package:at_chops/at_chops.dart` is imported. Snippets using
+`utf8` or `Uint8List` also require `dart:convert` or `dart:typed_data`.
+
+### Serializable key generation
+
+Use these helpers when the key material needs to fit the SDK's string-backed key
+types (`AtPublicKey`, `AtPrivateKey`, and `SymmetricKey`). Byte-oriented key
+pairs are base64-encoded by the wrapper classes.
+
 ```dart
-final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, null);
-final atChops = AtChopsImpl(atChopsKeys);
-final data = 'Hello World';
-final encryptedString = atChops.encryptString(data, EncryptionKeyType.rsa_2048);
-final decryptedString = atChops.decryptString(encryptedString, EncryptionKeyType.rsa_2048);
+final aes128 = AESKey.generate(16);
+final aes192 = AESKey.generate(24);
+final aes256 = AESKey.generate(32);
+
+final rsa2048 = RsaKeyPair.generate();
+final rsa4096 = RsaKeyPair.generate(keySize: 4096);
+
+final x25519 = await X25519KeyPair.generate();
+final mlKem768 = await MlKem768KeyPair.generate();
+final mlDsa65 = await MlDsa65KeyPair.generate();
+final xWing = await XWingKeyPair.generate();
+```
+
+### RSA encryption
+
+```dart
+final keyPair = RsaKeyPair.generate();
+final rsa = RsaEncryptionAlgo.fromKeyPair(keyPair);
+final message = Uint8List.fromList(utf8.encode('Hello World'));
+
+final encrypted = rsa.encrypt(message);
+final decrypted = rsa.decrypt(encrypted);
+```
+
+### AES encryption
+
+```dart
+final aesKey = AESKey.generate(32);
+final iv = InitialisationVector.random(16);
+final aes = AESEncryptionAlgo(aesKey);
+final message = Uint8List.fromList(utf8.encode('Hello World'));
+
+final encrypted = await aes.encrypt(message, iv: iv);
+final decrypted = await aes.decrypt(encrypted, iv: iv);
+```
+
+### Signing and verification
+
+```dart
+final keyPair = RsaKeyPair.generate();
+final signing = RsaSigningAlgo(keyPair, HashingAlgoType.sha256);
+final message = Uint8List.fromList(utf8.encode('data to sign'));
+
+final signature = signing.sign(message);
+final valid = signing.verify(message, signature);
+```
+
+### ML-DSA-65 (post-quantum signing, pure-Dart)
+
+```dart
+final mlDsa65 = MlDsa65PureDartAlgo();
+final kp = await mlDsa65.generateKeyPair();
+// kp.publicKey — 1952 bytes; kp.secretKey — 4032 bytes
+
+final signature = await mlDsa65.signBytes(message, secretKey: kp.secretKey);
+final valid =
+    await mlDsa65.verifyBytes(message, signature: signature, publicKey: kp.publicKey);
+```
+
+### ML-KEM-768 (post-quantum KEM, pure-Dart)
+
+```dart
+final kem = MlKem768PureDartAlgo.instance;
+final kp = await kem.generateKeyPair();
+// kp.publicKey — 1184 bytes; kp.secretKey — 2400 bytes
+
+// Sender
+final (ciphertext: ct, sharedSecret: ss1) = await kem.encapsulate(kp.publicKey);
+
+// Receiver
+final ss2 = await kem.decapsulate(kp.secretKey, ct);
+// ss1 == ss2
+```
+
+### X-Wing (hybrid PQ/classical KEM)
+
+```dart
+final xwing = XWingPureDartAlgo.instance;
+final kp = await xwing.generateKeyPair();
+// kp.publicKey — 1216 bytes; kp.secretKey — 32 bytes (seed)
+
+// Sender
+final (ciphertext: ct, sharedSecret: ss1) = await xwing.encapsulate(kp.publicKey);
+
+// Receiver
+final ss2 = await xwing.decapsulate(kp.secretKey, ct);
+// ss1 == ss2
+```
+
+### AtPqc (auto-resolved PQ backends)
+
+`AtPqc` is the recommended entry point for PQ crypto — it auto-resolves the
+OpenSSL FFI backend when `libcrypto` supports it, falling back to pure-Dart
+otherwise, so callers don't need to pick a backend by hand. Import
+`package:at_chops/at_chops_ffi.dart` to access it.
+
+```dart
+import 'package:at_chops/at_chops_ffi.dart';
+
+// Signing — AtPqc.mlDsa65 is typed as AtSignatureAlgorithm
+final kp = await MlDsa65KeyPair.generate();
+final signature =
+    await AtPqc.mlDsa65.signBytes(message, secretKey: kp.privateKeyBytes);
+final valid = await AtPqc.mlDsa65.verifyBytes(message,
+    signature: signature, publicKey: kp.publicKeyBytes);
+
+// KEM — AtPqc.xWing is typed as AtKemAlgorithm
+final xwKp = await XWingKeyPair.generate();
+final (ciphertext: ct, sharedSecret: ss1) = await AtPqc.xWing.encapsulate(xwKp.publicKeyBytes);
+final ss2 = await AtPqc.xWing.decapsulate(xwKp.privateKeyBytes, ct);
+// ss1 == ss2
+```
+
+### X25519 (Diffie–Hellman, pure-Dart)
+
+```dart
+final x25519 = X25519PureDartAlgo.instance;
+final kpA = await x25519.generateKeyPair();
+final kpB = await x25519.generateKeyPair();
+
+final ssA = await x25519.dh(kpA.privateKey, kpB.publicKey);
+final ssB = await x25519.dh(kpB.privateKey, kpA.publicKey);
+// ssA == ssB
+```
+
+### Hashing
+
+```dart
+final hash = SHA512HashingAlgo().hash('some-data'.codeUnits);
+```
+
+## FFI backends
+
+ML-DSA-65, ML-KEM-768, and X25519 each have an OpenSSL FFI backend (`MlDsa65FfiAlgo`, `MlKem768FfiAlgo`, `X25519FfiAlgo`) that requires `libcrypto` to be installed. The pure-Dart backends (`*PureDartAlgo`) work on all platforms without native dependencies.
+
+X-Wing (`XWingFfiAlgo`) composes the FFI backends for maximum performance when `libcrypto` is available.
+
+AES-256-GCM also has an OpenSSL FFI backend (`AesGcm256FfiAlgo`) alongside its pure-Dart counterpart (`AesGcm256EncryptionAlgo`); the two are fully interoperable. `AtPqc.aesGcm256(key)` auto-selects FFI or pure-Dart when AAD is not needed. If you need AAD (e.g. for PQ-HPKE), construct `AesGcm256FfiAlgo.fromLib(lib, key)` or `AesGcm256EncryptionAlgo(key)` directly — both expose `encrypt`/`decrypt` with `{List<int> aad}`.
+
+FFI backends are exported from `package:at_chops/at_chops_ffi.dart`, not the
+main `at_chops.dart` barrel, so pure-Dart-only consumers aren't forced to
+carry FFI bindings. Use [AtPqc](#atpqc-auto-resolved-pq-backends) instead of
+picking an FFI/pure-Dart backend directly when possible.
+
+## Running Tests
+
+Some tests require `libcrypto.so` to be installed. Running `dart test` without it will fail those tests.
+
+To run all tests EXCEPT the FFI tests:
+
+```bash
+dart test --exclude-tags ffi
+```
+
+To run ONLY the FFI tests:
+
+```bash
+dart test --tags ffi
 ```

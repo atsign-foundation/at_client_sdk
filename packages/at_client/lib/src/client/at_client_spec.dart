@@ -1,11 +1,13 @@
 import 'dart:io';
 
+import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:meta/meta.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
@@ -21,10 +23,47 @@ abstract class AtClient {
 
   LocalSecondary? getLocalSecondary();
 
+  /// The local persistence bundle backing this client, or `null`
+  /// when local storage is not required or has not yet been
+  /// initialised. Commit-log-free: `persistenceBundle.keyValueStore.commitLog`
+  /// is always `null` on the client. Owned and torn down by the
+  /// client; callers must not close it.
+  AtPersistenceBundle? get persistenceBundle;
+
+  /// Stream of [DataEvent]s — `DataUpdated` for every successful local
+  /// keystore mutation that passes through the update path,
+  /// `DataDeleted` for every successful one that passes through the
+  /// delete path. Subscribers see local app writes AND sync-applied
+  /// remote changes via a single uniform stream. Internal-bookkeeping
+  /// writes (e.g. `putValue`) intentionally do NOT emit — see the
+  /// [DataEvent] dartdoc.
+  ///
+  /// Async (microtask-scheduled) by default; pair with
+  /// [pendingEmissions] when caller-side semantics need "all events
+  /// for my write have been delivered to listeners".
+  Stream<DataEvent> get dataEvents;
+
+  /// Resolves once every event currently in-flight on [dataEvents]
+  /// has been delivered to all listeners. Useful for callers that
+  /// just performed a write and want to observe the resulting event
+  /// before continuing — `await atClient.pendingEmissions` gives
+  /// "watch streams up-to-date" semantics without sync-emission's
+  /// re-entrancy / listener-stalls-writer hazards.
+  ///
+  /// Returns `Future.value()` immediately when there are no in-flight
+  /// emits.
+  Future<void> get pendingEmissions;
+
   /// Set an instance of [AtChops] for data encryption and signing operations
   set atChops(AtChops? atChops);
 
   AtChops? get atChops;
+
+  /// The client's key source (`package:at_auth`), injected at construction
+  /// via `AtClientImpl.create(atKeysIo:)`. `CryptoRuntime` threads it to
+  /// providers as `CryptoContext.io`. Null until injected — there is no
+  /// default source.
+  AtKeysIo? get atKeysIo;
 
   /// Enrollment id for apkam enrolled clients
   set enrollmentId(String? enrollmentId);
@@ -54,14 +93,14 @@ abstract class AtClient {
   /// and the instance has been removed from the internal cache.
   bool get isStopped;
 
-  /// Stops all background services (sync, notifications, monitor) and closes
-  /// local storage for this atSign.
+  /// Stops all background services for this atSign: cancels the
+  /// keystore-event timers, closes the data-event stream, and stops the sync
+  /// and notification services and the remote secondary connection.
   ///
-  /// After calling [stop], the instance remains in the internal cache and can
-  /// be resumed by calling [AtClientManager.setCurrentAtSign] for the same
-  /// atSign, which will reopen storage and wire up fresh services.
-  ///
-  /// To permanently discard this instance, call [dispose] instead.
+  /// Local storage is NOT closed. The instance remains in the internal cache
+  /// and reuses its still-open local keystore when resumed by calling
+  /// [AtClientManager.setCurrentAtSign] for the same atSign, which wires up
+  /// fresh services against the same store.
   Future<void> stop();
 
   /// Updates value of [AtKey.key] is if it is already present. Otherwise creates a new key. Set [AtKey.sharedWith] if the key
@@ -539,12 +578,12 @@ abstract class AtClient {
       {String? regex});
 
   /// Streams the file in [filePath] to [sharedWith] atSign.
-  @Deprecated("Obsolete, wil be removed in v4")
+  @Deprecated("Obsolete, will be removed in v4")
   Future<AtStreamResponse> stream(String sharedWith, String filePath,
       {String namespace});
 
   /// Sends stream acknowledgement
-  @Deprecated("Obsolete, wil be removed in v4")
+  @Deprecated("Obsolete, will be removed in v4")
   Future<void> sendStreamAck(
       String streamId,
       String fileName,
@@ -555,22 +594,26 @@ abstract class AtClient {
 
   static const defaultSppExpiry = Duration(minutes: 5);
 
-  /// Sets a Semi Permanent Passcode(SPP) in the secondary server key-store.
-  /// A Semi Permanent Passcode (SPP) is 6 character alpha-numeric for submitting
-  /// an enrollment request. Only the connections which have access to manage
-  /// namespace are allowed to set SPP
+  /// Sets a Semi Permanent Passcode (SPP) in the secondary server
+  /// key-store. An SPP is a 6-character alphanumeric code used when
+  /// submitting an enrollment request. Only connections with access
+  /// to the "__manage" namespace are allowed to set an SPP.
   ///
-  /// Returns "ok" when SPP is set successfully.
+  /// [expiry] caps how long the SPP is valid; defaults to
+  /// [defaultSppExpiry] (5 minutes) when omitted, with a warning
+  /// logged. Pass an explicit duration to opt into a different TTL.
   ///
-  /// Throws [InvalidPinException] when an invalid SPP is provided.
+  /// Returns an [AtResponse] whose `response` field is "ok" on
+  /// success.
   ///
-  /// Throws [AtClientException] when an enrollmentId does not exist.
+  /// Throws [InvalidPinException] when [otp] is not 6 alphanumeric
+  /// characters.
   ///
-  /// Throws [AtClientException] when an enrollmentId does not have access to "__manage"
-  /// namespace.
+  /// Throws [AtClientException] when the enrollmentId does not exist
+  /// or does not have access to the "__manage" namespace.
   ///
   /// ```dart
-  /// AtResponse sppResponse = await atClient.setSPP(ABC123);
+  /// AtResponse sppResponse = await atClient.setSPP('ABC123');
   /// ```
   Future<AtResponse> setSPP(String otp, {Duration? expiry});
 
@@ -584,18 +627,23 @@ abstract class AtClient {
   ///
   Future<AtResponse> getOTP();
 
-  /// Initiates a compaction job for the commit log.
+  /// No longer does anything; retained for source compatibility.
   ///
-  /// The [commitLogCompactionTimeIntervalInMins] parameter specifies the time interval,
-  /// in minutes, after which the commit log should be compacted. By default, it is set
-  /// to 11 minutes.
-  ///
-  /// The compaction job removes duplicate entries of a key from the commit log that are already synced
-  /// to the remote secondary. Only the latest commit entry of the key is retained.
-  /// Uncommitted entries that are duplicates will not be removed/compacted.
+  /// The client is commit-log-free, so there is no commit log to compact.
+  /// This is now a no-op and will be removed in a future major release.
+  @Deprecated(
+      'Commit-log compaction was removed with the commit-log-free keystore; '
+      'this is now a no-op and will be removed in a future major release')
   Future<void> startCompactionJob({Duration? commitLogCompactionDuration});
 
-  /// Stops the commit log compaction job
+  /// No longer does anything; retained for source compatibility.
+  ///
+  /// The client is commit-log-free, so there is no commit log compaction job
+  /// to stop. This is now a no-op and will be removed in a future major
+  /// release.
+  @Deprecated(
+      'Commit-log compaction was removed with the commit-log-free keystore; '
+      'this is now a no-op and will be removed in a future major release')
   Future<void> stopCompactionJob();
 
   /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
@@ -650,10 +698,18 @@ abstract class AtClient {
   /// **NOT** appended automatically — the caller must pass the complete
   /// namespace. Throws [ArgumentError] if [namespace] contains no dot.
   ///
-  /// If [fromJson] is supplied, it is registered as the factory for items
-  /// of type [T] (keyed by `T.toString()`), so they rehydrate correctly on
-  /// retrieval. For polymorphic collections, omit [fromJson] here and call
-  /// `collection.registerFactory<ConcreteType>(...)` per concrete type.
+  /// If [fromJson] is supplied it is registered as the factory for items
+  /// of type [T] under [typeTag] (the wire-format identifier), via
+  /// [AtCollection.registerFactory]. [fromJson] and [typeTag] travel
+  /// together — supplying one without the other throws [ArgumentError].
+  /// For polymorphic collections, omit both here and call
+  /// `AtCollection.registerFactory<ConcreteType>(fromJson, typeTag: ...)`
+  /// per concrete type.
+  ///
+  /// [typeTag] is required (whenever [fromJson] is supplied) because
+  /// deriving the tag from `T.toString()` is unsafe under Dart's
+  /// minifier / tree-shaker — see [AtCollection.registerFactory] for
+  /// the full rationale.
   ///
   /// When [cleanupOrphansOnCreation] is true, the returned collection runs
   /// a one-shot `cleanupOrphans()` sweep before the `Future` completes.
@@ -661,10 +717,27 @@ abstract class AtClient {
   /// regardless of how many times [collection] is invoked with the flag.
   /// Useful at app-startup to reclaim descendants whose parent was
   /// deleted on another atSign while this app was offline.
+  ///
+  /// [eventSource] selects which underlying source(s) feed the
+  /// collection's update / delete event streams. Defaults to
+  /// [EventSource.both]. See the [EventSource] enum dartdoc for the
+  /// per-value semantics.
+  ///
+  /// - [EventSource.data] subscribes to [AtClient.dataEvents] only.
+  ///   Sees ALL local keystore mutations — including locally-driven
+  ///   writes (which never generate notifications) and TTL expiry
+  ///   deletions. Recommended when a real `SyncService` is running.
+  /// - [EventSource.notifs] subscribes to `NotificationService` only.
+  ///   Locally-driven writes that don't generate notifications are
+  ///   NOT visible on the watch streams.
+  /// - [EventSource.both] subscribes to both and emits events from
+  ///   each as they arrive — no de-duplication.
   Future<AtCollection<T>> collection<T>(
     String namespace,
     Duration defaultExpiration, {
+    EventSource eventSource = EventSource.both,
     T Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
     bool cleanupOrphansOnCreation = false,
   });
 }

@@ -1,6 +1,9 @@
-import 'package:at_chops/src/key/at_key_pair.dart';
+import 'package:at_chops/src/key/impl/rsa_key_pair.dart';
 
-class AtEncryptionKeyPair extends AsymmetricKeyPair {
+@Deprecated(
+    'Use RsaKeyPair instead. This compatibility wrapper will be removed in '
+    'the next major release.')
+class AtEncryptionKeyPair extends RsaKeyPair {
   AtEncryptionKeyPair.create(super.publicKey, super.privateKey)
       : super.create();
 }
