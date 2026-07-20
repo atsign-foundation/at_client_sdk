@@ -34,9 +34,11 @@ final acp = AtClientPreference()
   ..hiveStoragePath = dir.path;
 ```
 
-The atServer always syncs **reserved keys** (pkam / encryption / public /
-`shared_key` / `cached:`) regardless of the regex, so scoping does **not** break
-sharing or decryption — it only excludes other apps' unrelated keys.
+The atServer always syncs a small set regardless of the regex: `shared_key`
+reserved keys, the encryption public key, and namespace-less `public:` keys.
+The regex match is also an unanchored substring test, so your own namespace's
+`cached:` copies match it anyway. Scoping therefore does **not** break sharing
+or decryption — it only excludes other apps' unrelated keys.
 
 ---
 
