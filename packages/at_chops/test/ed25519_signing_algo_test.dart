@@ -1,49 +1,29 @@
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:better_cryptography/better_cryptography.dart';
 import 'package:test/test.dart';
 
 void main() {
   group('A group of tests for ed25519 signing and verification', () {
-    test('Test data signing and verification using generated keypair',
+    test('Test data signing and verification using generated key pair',
         () async {
-      final ed25519KeyPair = await Ed25519().newKeyPair();
-      final dataToSign = 'Hello World@123!';
       final signingAlgo = Ed25519SigningAlgo();
-      signingAlgo.ed25519KeyPair = ed25519KeyPair;
-      final signature =
-          await signingAlgo.sign(Uint8List.fromList(dataToSign.codeUnits));
-      final publicKeyBytes = (await ed25519KeyPair.extractPublicKey()).bytes;
-      print(publicKeyBytes.length);
-      final verifyResult = await signingAlgo.verify(
-          Uint8List.fromList(dataToSign.codeUnits), signature,
-          publicKey: String.fromCharCodes(publicKeyBytes));
+      final (:publicKey, :secretKey) = await signingAlgo.generateKeyPair();
+      final message = Uint8List.fromList('Hello World@123!'.codeUnits);
+      final signature = await signingAlgo.signBytes(message, secretKey: secretKey);
+      final verifyResult = await signingAlgo.verifyBytes(message,
+          signature: signature, publicKey: publicKey);
       expect(verifyResult, true);
     });
-    test('Test data signing and verification - pass incorrect public key',
+    test('Test data signing and verification - verify with a different key',
         () async {
-      final ed25519KeyPair = await Ed25519().newKeyPair();
-      final dataToSign = 'Hello World@123!';
       final signingAlgo = Ed25519SigningAlgo();
-      signingAlgo.ed25519KeyPair = ed25519KeyPair;
-      final signature =
-          await signingAlgo.sign(Uint8List.fromList(dataToSign.codeUnits));
-      final publicKeyBytes = (await ed25519KeyPair.extractPublicKey()).bytes;
-      print(publicKeyBytes.length);
-      const characters =
-          'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-      final random = Random();
-      final wrongPublicKey = String.fromCharCodes(
-        Iterable.generate(
-          32,
-          (_) => characters.codeUnitAt(random.nextInt(characters.length)),
-        ),
-      );
-      final verifyResult = await signingAlgo.verify(
-          Uint8List.fromList(dataToSign.codeUnits), signature,
-          publicKey: wrongPublicKey);
+      final (:publicKey, :secretKey) = await signingAlgo.generateKeyPair();
+      final other = await signingAlgo.generateKeyPair();
+      final message = Uint8List.fromList('Hello World@123!'.codeUnits);
+      final signature = await signingAlgo.signBytes(message, secretKey: secretKey);
+      final verifyResult = await signingAlgo.verifyBytes(message,
+          signature: signature, publicKey: other.publicKey);
       expect(verifyResult, false);
     });
   });
