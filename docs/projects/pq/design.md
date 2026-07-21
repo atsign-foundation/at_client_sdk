@@ -645,6 +645,25 @@ bound to its stored algo.
   (**record-authoritative**), **not** the client-supplied wire value (`:164`).
   This prevents algorithm-confusion: a forger cannot down/upgrade the verify path
   by lying on the wire.
+- **at_client / at_lookup (the client-side signing swap — the piece the plan under-specified).**
+  PKAM auth is a challenge-response: `from:@alice` returns a per-connection challenge, the
+  client signs it (`PkamSigningAlgo`, RSA SHA-256 today — `at_lookup_impl.dart:454`), the
+  server verifies. The client change is to sign that challenge with **ML-DSA-65** when the
+  enrollment's APKAM key is ML-DSA — a one-line algorithm swap, selected off the same stored
+  `signingAlgo`. Exercised by RF-2b (a retrofitted client PKAM-auths under its new ML-DSA key)
+  and ON-1 (a PQ-native onboard authenticates ML-DSA from the start).
+
+**Scope — a signature swap, not a KEM. Do not over-build.** Client PKAM auth is
+**authentication, not key agreement**, exactly like the inter-server FROM/POL handshake
+([§8](#8-subsystem-f--inter-server-pq-authentication-is-1)): the server-issued per-connection
+challenge already provides freshness / anti-replay, and TLS already secures the channel. So the
+whole PQ change is the RSA→ML-DSA-65 **signature** swap above — client-side sign, server-side
+record-authoritative verify. There is **no KEM, no certificate, no per-connection key
+lifecycle**, and none should be added. The 1:1:1 single-key record (decision #F) is the minimal
+form; do not grow it into a keyring or a per-session negotiated handshake. **The one place a KEM
+legitimately appears in the enrollment path is the `apkamSymmetricKey` conveyance at
+enroll/approve (P-3): that is key *transport* of the approval bundle — genuine confidentiality —
+not authentication, and must not be conflated with the auth swap or removed as "over-engineering".**
 
 **Migration.** A legacy single-string record migrates to `signingAlgo=rsa2048` on
 `fromJson` (the historical default); the legacy `atPkamPublicKey` mirror is
@@ -1357,49 +1376,70 @@ client↔server data path). Project [IS-1](implementation-plan.md); tracking PR 
 
 ### 8.1 What it replaces
 
-Today the server-to-server FROM/POL handshake authenticates with a UUID challenge signed by
-RSA-2048 — the same Shor-vulnerable primitive #1889 exists to retire. IS-1 replaces it with a
-hybrid quantum-safe path and an automatic fallback so a mixed fleet needs no flag day:
+Today the server-to-server FROM/POL handshake authenticates with a random per-session UUID
+challenge signed by RSA-2048 — the same Shor-vulnerable primitive #1889 exists to retire. FROM/POL
+is **authentication, not confidentiality**: it proves the peer holds a private key, and the TLS
+session already secures the channel. So the only Shor-vulnerable part is the *signature*, and the
+only change IS-1 needs is to swap the signing primitive:
 
-- **X-Wing KEM** (ML-KEM-768 + X25519) for key encapsulation.
-- **ML-DSA-65** for signing the inter-server certificate.
-- **Fallback to legacy UUID/RSA** for any peer that advertises no PQ cert.
+- **ML-DSA-65** replaces RSA-2048 for signing the challenge.
+- **Fallback to legacy UUID/RSA** for any peer that publishes no PQ signing key (mixed-fleet safe,
+  no flag day).
+
+Everything else in the existing handshake is retained unchanged — crucially the **per-session UUID
+challenge**, which already provides the freshness / anti-replay property. A recorded ML-DSA
+signature is worthless once its key is retired (signatures are not harvest-now-decrypt-later
+material), so the adversary here is an *active* quantum computer forging a live authentication — a
+KEM buys nothing against it, and the swap alone closes the hole.
 
 ### 8.2 The handshake
 
-Certs and signing keys are looked up **live every handshake and never cached** (so cert rotation
-takes effect immediately):
+The FROM/POL flow, cookie handling, and UUID challenge are unchanged from today; only the signing
+and verifying algorithm moves from RSA to ML-DSA. The signing public key is looked up **live every
+handshake and never cached** (so a key change takes effect immediately):
 
 ```
 Alice → Bob   from:@alice
-Bob   → Alice lookup:pq_xwing_cert@alice          (live, never cached)
-Bob   → Alice lookup:pq_signing_publickey@alice
-Bob:  ML-DSA-65.verify(cert) → xwing.encaps(cert.pk) → tag = HKDF-SHA256(ss, info = sessionID‖@alice)
-Bob   → Alice proof:sessionID@alice:pq:<ciphertext_b64>
-Alice: xwing.decaps(ciphertext) → same tag → saveCookie pq:<tag>
+Bob   → Alice <random UUID challenge>              (existing behaviour, unchanged)
+Alice:  sign(challenge) with ML-DSA-65 instead of RSA — a one-line algorithm swap; save the cookie
 Alice → Bob   pol
-Bob   → Alice lookup:sessionID@alice → tags equal ⇒ isPolAuthenticated = true
+Bob   → Alice lookup:pq_signing_publickey@alice    (live, never cached)
+Bob:  AtPqc.mlDsa65.verifyBytes(challenge, signature, publicKey) instead of
+      RSAPublicKey.verifySHA256Signature(...) — a one-line swap ⇒ isPolAuthenticated = true
 ```
 
-The raw shared secret never crosses the wire and is never persisted — only the HKDF
-key-confirmation tag is exchanged. `AT_DISABLE_PQ_AUTH=true` forces UUID; self-auth is always
-UUID; a peer with no PQ cert falls back to the UUID/RSA path.
+There is **no** KEM, no ciphertext exchange, no shared-secret derivation, and no key-confirmation
+tag — the UUID cookie the two swapped lines already sign is the whole freshness mechanism.
+`AT_DISABLE_PQ_AUTH=true` forces the legacy UUID/RSA path; self-auth is always UUID; a peer that
+publishes no PQ signing key falls back to UUID/RSA.
 
-### 8.3 `PqKeyManager` (server-internal)
+### 8.3 The published signing key (`pq_signing_publickey`)
 
-A new `at_secondary_server` class — **not** an at_chops type — owns the ML-DSA-65 + X-Wing keypair
-lifecycle, cert generation and rotation (a 30-day grace window keeps the previous cert valid across
-a rotation), and the HKDF-SHA256 tag derivation. Its PQ secret keys join the protected-key set
-(delete/update verb protection).
+At boot a server generates an **ML-DSA-65 keypair** (the signing keypair it already needed — the
+X-Wing keypair is gone) and publishes the public half as a protected `pq_signing_publickey@<atSign>`
+record. For **crypto agility** the record is a JSON object rather than a bare key, initially with a
+single field naming the algorithm:
 
-### 8.4 at_chops dependency (the gating prerequisite)
+```json
+{ "ml-dsa-65": "<base64 ML-DSA-65 public key>" }
+```
 
-IS-1 needs an at_chops API surface **not yet on `at_chops` trunk**: `XWingCert`, the resolver
-functions `resolveXWing` / `resolveMlDsa65`, and `at_algorithm.dart` exports.
-(`generateXWingKeyPair` / `generateMlDsa65KeyPair` already ship on trunk 3.4.0.) That surface lives
-on branch `pq/st/at-chops-pq-api` and **must be published — as part of, or after, the 3.4.0 slot
-([P-2](implementation-plan.md)) — before IS-1 can land without a workspace path override.** This is
-the single hard cross-package gate for the track.
+so a future primitive is added as another field without a wire-shape change. The ML-DSA secret key
+joins the protected-key set (delete/update verb protection). That is the entire key story — **no
+certificate, no expiry, no rotation grace window, no confirmation-tag derivation**, so the heavy
+`PqKeyManager` lifecycle class the earlier design carried collapses to boot-time keygen plus a
+publish. There is no key-lifecycle state to manage because a signing key needs none here: a change
+is a re-publish, picked up live on the next handshake.
+
+### 8.4 at_chops dependency (no longer a gate)
+
+IS-1 needs only what **published `at_chops` 3.4.x already ships**: `AtPqc.mlDsa65.signBytes` /
+`verifyBytes` (the ML-DSA-65 sign/verify branch, [P-2](implementation-plan.md)) and
+`generateMlDsa65KeyPair`. The previously-required unpublished surface — `XWingCert`,
+`resolveXWing` / `resolveMlDsa65`, the `at_algorithm.dart` resolver exports on branch
+`pq/st/at-chops-pq-api` — is **dropped with the X-Wing KEM**. There is now **no cross-package
+publish gate** for this track: IS-1 can land against the published at_chops with no workspace path
+override.
 
 ### 8.5 Threat scope
 
