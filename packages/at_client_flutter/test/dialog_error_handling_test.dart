@@ -70,11 +70,14 @@ void main() {
         ),
       );
 
+      // PkamDialog kicks off authentication in initState, so opening the dialog
+      // is enough to drive the error path.
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
 
+      // The dialog pops with null and surfaces a fixed, non-timeout message.
       expect(result, isNull);
-      expect(find.textContaining('invalid or missing API key'), findsOneWidget);
+      expect(find.textContaining('Authentication failed'), findsOneWidget);
     });
 
     testWidgets('CramDialog dismisses and shows snackbar on onboarding error', (
@@ -111,15 +114,17 @@ void main() {
         ),
       );
 
+      // CramDialog kicks off onboarding in initState.
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
 
+      // The dialog pops with null and surfaces a fixed, non-timeout message.
       expect(result, isNull);
-      expect(find.textContaining('network error'), findsOneWidget);
+      expect(find.textContaining('Onboarding failed'), findsOneWidget);
     });
 
     testWidgets(
-      'ApkamActivationDialog dismisses and shows snackbar on enrollment error',
+      'ApkamActivationDialog shows snackbar on enrollment error',
       (tester) async {
         final mockEnrollmentService = MockFlutterEnrollmentService();
         when(
@@ -160,22 +165,25 @@ void main() {
           ),
         );
 
+        // pumpAndSettle can't be used with this dialog: the autofocused Pinput
+        // keeps a blinking cursor animating forever, so nothing ever "settles".
+        // Pump fixed frames instead.
         await tester.tap(find.text('open'));
-        await tester.pumpAndSettle();
+        await tester.pump(); // start the dialog route transition
+        await tester.pump(const Duration(milliseconds: 400)); // finish it
 
-        final textFields = find.byType(TextField);
-        expect(textFields, findsNWidgets(6));
-        for (int i = 0; i < 6; i++) {
-          await tester.enterText(textFields.at(i), '${i + 1}');
-        }
-        await tester.tap(find.widgetWithText(ElevatedButton, 'Activate APKAM'));
-        await tester.pumpAndSettle();
+        // The dialog uses a Pinput (single editable field), not six TextFields.
+        // Entering all six digits triggers Pinput.onCompleted -> _submitOtp.
+        await tester.enterText(find.byType(EditableText), '123456');
+        await tester.pump(); // run onCompleted -> _submitOtp (sets _isLoading)
+        await tester.pump(); // let the enrollment error path run and finish
+        await tester.pump(const Duration(milliseconds: 750)); // SnackBar entrance
 
+        // Unlike PKAM/CRAM, the APKAM dialog stays open on error so the user can
+        // retry, so `result` is still null only because showDialog hasn't
+        // returned — not because of a pop(null).
         expect(result, isNull);
-        expect(
-          find.textContaining('invalid or missing API key'),
-          findsOneWidget,
-        );
+        expect(find.textContaining('Activation failed'), findsOneWidget);
       },
     );
   });

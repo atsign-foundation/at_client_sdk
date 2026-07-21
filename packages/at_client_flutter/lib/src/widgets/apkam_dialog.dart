@@ -25,6 +25,8 @@ class ApkamActivationDialog extends StatefulWidget {
   final Map<String, String> namespaces;
 
   final ThemeData themeData;
+
+  /// Injection seam for tests; defaults to a real [FlutterEnrollmentService].
   final FlutterEnrollmentService? enrollmentService;
 
   ApkamActivationDialog({
@@ -377,18 +379,6 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
                   ),
             const SizedBox(height: 16),
           ],
-        ),
-      ),
-    );
-  }
-
-  void _showError(BuildContext context, String error) {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger == null) return;
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          error.isNotEmpty ? error : 'Enrollment failed. Please try again.',
         ),
       ),
     );

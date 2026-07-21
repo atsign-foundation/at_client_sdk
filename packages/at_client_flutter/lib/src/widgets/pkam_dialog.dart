@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/src/widgets/shared/loading.dart';
 import 'package:at_client_flutter/src/services/auth_service.dart';
@@ -36,6 +34,7 @@ class PkamDialog extends StatefulWidget {
     this.title,
     this.description,
     this.backupKeys,
+    this.authService,
   });
 
   final AtAuthRequest request;
@@ -44,6 +43,9 @@ class PkamDialog extends StatefulWidget {
   final String? title;
   final String? description;
   final List<WrittenAtKeysIo>? backupKeys;
+
+  /// Injection seam for tests; defaults to a real [AuthService].
+  final AuthService? authService;
 
   static Future<AtAuthResponse?> show(
     BuildContext context, {
@@ -72,12 +74,13 @@ class PkamDialog extends StatefulWidget {
 }
 
 class _PkamDialogState extends State<PkamDialog> {
-  final AuthService _auth = AuthService();
+  late final AuthService _auth;
   final AtSignLogger _logger = AtSignLogger('PkamDialog');
 
   @override
   void initState() {
     super.initState();
+    _auth = widget.authService ?? AuthService();
     // Kick off authentication exactly once. Starting it here rather than in
     // build() means a widget rebuild can't spawn a second authenticate() call.
     _authenticate();
@@ -137,18 +140,6 @@ class _PkamDialogState extends State<PkamDialog> {
               themeData: Theme.of(context),
             );
           },
-        ),
-      ),
-    );
-  }
-
-  void _showError(BuildContext context, String error) {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger == null) return;
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          error.isNotEmpty ? error : 'Authentication failed. Please try again.',
         ),
       ),
     );

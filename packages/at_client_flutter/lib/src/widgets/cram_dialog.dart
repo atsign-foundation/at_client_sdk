@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/src/services/auth_service.dart';
 import 'package:at_client_flutter/src/widgets/shared/loading.dart';
@@ -37,9 +35,8 @@ class CramDialog extends StatefulWidget {
     this.onOnboardingComplete,
     this.title,
     this.description,
-    this.operationTimeout = const Duration(seconds: 75),
-    AuthService? authService,
-  }) : _authService = authService ?? AuthService();
+    this.authService,
+  });
 
   final AtOnboardingRequest request;
   final String cramKey;
@@ -47,6 +44,9 @@ class CramDialog extends StatefulWidget {
   final void Function(AtOnboardingRequest)? onOnboardingComplete;
   final String? title;
   final String? description;
+
+  /// Injection seam for tests; defaults to a real [AuthService].
+  final AuthService? authService;
 
   static Future<AtOnboardingResponse?> show(
     BuildContext context, {
@@ -56,7 +56,6 @@ class CramDialog extends StatefulWidget {
     void Function(AtOnboardingRequest)? onOnboardingComplete,
     String? title,
     String? description,
-    Duration operationTimeout = const Duration(seconds: 75),
   }) async {
     return await showDialog<AtOnboardingResponse>(
       context: context,
@@ -67,7 +66,6 @@ class CramDialog extends StatefulWidget {
         onOnboardingComplete: onOnboardingComplete,
         title: title,
         description: description,
-        operationTimeout: operationTimeout,
       ),
     );
   }
@@ -77,12 +75,13 @@ class CramDialog extends StatefulWidget {
 }
 
 class _CramDialogState extends State<CramDialog> {
-  final AuthService _authService = AuthService();
+  late final AuthService _authService;
   final AtSignLogger _logger = AtSignLogger('CramDialog');
 
   @override
   void initState() {
     super.initState();
+    _authService = widget.authService ?? AuthService();
     // Kick off onboarding exactly once. Starting it here rather than in build()
     // means a widget rebuild — e.g. the parent repainting during the up-to-5-min
     // provisioning wait — can't spawn a second onboard() call.
@@ -145,18 +144,6 @@ class _CramDialogState extends State<CramDialog> {
             },
           ),
         ],
-      ),
-    );
-  }
-
-  void _showError(BuildContext context, String error) {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger == null) return;
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          error.isNotEmpty ? error : 'Onboarding failed. Please try again.',
-        ),
       ),
     );
   }
