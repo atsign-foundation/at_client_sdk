@@ -1,7 +1,7 @@
 name: at_client_skills
 description: AI agent skill for the Atsign at_client SDK. Gives AI coding agents accurate, up-to-date knowledge of AtCollection<T>, auth flows, querying, sub-collections, testing patterns, and common pitfalls.
 
-version: 1.1.0
+version: 1.2.0
 
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client_skills
 homepage: https://atsign.com
