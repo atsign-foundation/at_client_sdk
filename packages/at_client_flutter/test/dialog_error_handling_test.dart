@@ -123,68 +123,67 @@ void main() {
       expect(find.textContaining('Onboarding failed'), findsOneWidget);
     });
 
-    testWidgets(
-      'ApkamActivationDialog shows snackbar on enrollment error',
-      (tester) async {
-        final mockEnrollmentService = MockFlutterEnrollmentService();
-        when(
-          () => mockEnrollmentService.enroll(
-            any(),
-            waitForApproval: any(named: 'waitForApproval'),
-          ),
-        ).thenAnswer((_) async {
-          throw Exception(
-            'Registrar authentication failed: invalid or missing API key.',
-          );
-        });
+    testWidgets('ApkamActivationDialog shows snackbar on enrollment error', (
+      tester,
+    ) async {
+      final mockEnrollmentService = MockFlutterEnrollmentService();
+      when(
+        () => mockEnrollmentService.enroll(
+          any(),
+          waitForApproval: any(named: 'waitForApproval'),
+        ),
+      ).thenAnswer((_) async {
+        throw Exception(
+          'Registrar authentication failed: invalid or missing API key.',
+        );
+      });
 
-        AtEnrollmentResponse? result;
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: Builder(
-                builder: (context) => ElevatedButton(
-                  onPressed: () async {
-                    result = await showDialog<AtEnrollmentResponse>(
-                      context: context,
-                      builder: (context) => ApkamActivationDialog(
-                        atSign: '@alice',
-                        rootDomain: AtRootDomain.atsignDomain,
-                        appName: 'app',
-                        deviceName: 'device',
-                        namespaces: const {'*': 'rw'},
-                        themeData: Theme.of(context),
-                        enrollmentService: mockEnrollmentService,
-                      ),
-                    );
-                  },
-                  child: const Text('open'),
-                ),
+      AtEnrollmentResponse? result;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () async {
+                  result = await showDialog<AtEnrollmentResponse>(
+                    context: context,
+                    builder: (context) => ApkamActivationDialog(
+                      atSign: '@alice',
+                      rootDomain: AtRootDomain.atsignDomain,
+                      appName: 'app',
+                      deviceName: 'device',
+                      namespaces: const {'*': 'rw'},
+                      themeData: Theme.of(context),
+                      enrollmentService: mockEnrollmentService,
+                    ),
+                  );
+                },
+                child: const Text('open'),
               ),
             ),
           ),
-        );
+        ),
+      );
 
-        // pumpAndSettle can't be used with this dialog: the autofocused Pinput
-        // keeps a blinking cursor animating forever, so nothing ever "settles".
-        // Pump fixed frames instead.
-        await tester.tap(find.text('open'));
-        await tester.pump(); // start the dialog route transition
-        await tester.pump(const Duration(milliseconds: 400)); // finish it
+      // pumpAndSettle can't be used with this dialog: the autofocused Pinput
+      // keeps a blinking cursor animating forever, so nothing ever "settles".
+      // Pump fixed frames instead.
+      await tester.tap(find.text('open'));
+      await tester.pump(); // start the dialog route transition
+      await tester.pump(const Duration(milliseconds: 400)); // finish it
 
-        // The dialog uses a Pinput (single editable field), not six TextFields.
-        // Entering all six digits triggers Pinput.onCompleted -> _submitOtp.
-        await tester.enterText(find.byType(EditableText), '123456');
-        await tester.pump(); // run onCompleted -> _submitOtp (sets _isLoading)
-        await tester.pump(); // let the enrollment error path run and finish
-        await tester.pump(const Duration(milliseconds: 750)); // SnackBar entrance
+      // The dialog uses a Pinput (single editable field), not six TextFields.
+      // Entering all six digits triggers Pinput.onCompleted -> _submitOtp.
+      await tester.enterText(find.byType(EditableText), '123456');
+      await tester.pump(); // run onCompleted -> _submitOtp (sets _isLoading)
+      await tester.pump(); // let the enrollment error path run and finish
+      await tester.pump(const Duration(milliseconds: 750)); // SnackBar entrance
 
-        // Unlike PKAM/CRAM, the APKAM dialog stays open on error so the user can
-        // retry, so `result` is still null only because showDialog hasn't
-        // returned — not because of a pop(null).
-        expect(result, isNull);
-        expect(find.textContaining('Activation failed'), findsOneWidget);
-      },
-    );
+      // Unlike PKAM/CRAM, the APKAM dialog stays open on error so the user can
+      // retry, so `result` is still null only because showDialog hasn't
+      // returned — not because of a pop(null).
+      expect(result, isNull);
+      expect(find.textContaining('Activation failed'), findsOneWidget);
+    });
   });
 }
