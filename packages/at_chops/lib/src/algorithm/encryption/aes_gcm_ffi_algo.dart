@@ -324,7 +324,7 @@ final class AesGcm256FfiAlgo
     if (iv == null || iv.ivBytes.length != nonceLength) {
       throw AtEncryptionException(
           'AES-256-GCM requires an explicit $nonceLength-byte nonce; '
-          'use AtChopsUtil.generateRandomIV($nonceLength)');
+          'use InitialisationVector.random($nonceLength)');
     }
     return iv.ivBytes;
   }
@@ -333,7 +333,7 @@ final class AesGcm256FfiAlgo
     if (iv == null || iv.ivBytes.length != nonceLength) {
       throw AtDecryptionException(
           'AES-256-GCM requires an explicit $nonceLength-byte nonce; '
-          'use AtChopsUtil.generateRandomIV($nonceLength)');
+          'use InitialisationVector.random($nonceLength)');
     }
     return iv.ivBytes;
   }

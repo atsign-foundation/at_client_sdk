@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:crypto/crypto.dart';
 import 'package:ecdsa/ecdsa.dart' as ecdsa;
@@ -8,12 +7,11 @@ import 'package:elliptic/elliptic.dart' as elliptic;
 
 /// Data signing and verification for ECDSA - elliptic curve
 /// Uses sha256 hashing for data. Extend implementation for other hashing algorithm in the future.
-class EccSigningAlgo implements AtSigningAlgorithm {
+class EccSigningAlgo {
   elliptic.PrivateKey? _privateKey;
 
   EccSigningAlgo();
 
-  @override
   Uint8List sign(Uint8List data) {
     if (_privateKey == null) {
       throw AtSigningException(
@@ -26,7 +24,6 @@ class EccSigningAlgo implements AtSigningAlgorithm {
         ecdsa.signature(_privateKey!, hash).toCompactHex().codeUnits);
   }
 
-  @override
   bool verify(Uint8List signedData, Uint8List signature, {String? publicKey}) {
     if (publicKey == null && _privateKey == null) {
       throw AtSigningVerificationException(

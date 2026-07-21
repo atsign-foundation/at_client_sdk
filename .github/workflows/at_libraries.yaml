@@ -74,6 +74,23 @@ jobs:
         working-directory: packages/${{ matrix.package }}
         run: dart test --concurrency=1 --exclude-tags ffi
 
+  wasm_smoke:
+    # Proves at_chops's web-safe barrel (package:at_chops/at_chops.dart) compiles
+    # to WASM. It must never reach at_chops_ffi.dart, which carries dart:ffi/dart:io.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: ./actions/setup-flutter-and-dart
+
+      - name: Install dependencies in at_chops
+        working-directory: packages/at_chops
+        run: dart pub get
+
+      - name: Compile at_chops to WASM
+        working-directory: packages/at_chops
+        run: dart compile wasm tool/wasm_compat_check.dart -o /tmp/at_chops.wasm
+
   build_and_test_ffi:
     runs-on: ubuntu-latest
     env:

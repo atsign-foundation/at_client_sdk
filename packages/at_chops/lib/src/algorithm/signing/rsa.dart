@@ -1,20 +1,18 @@
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/algo_type.dart';
-import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/key/keys.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:crypton/crypton.dart';
 
 /// Data signing and verification using atsign encryption keypair
 /// Allowed algorithms are listed in [SigningAlgoType] and [HashingAlgoType]
-class RsaSigningAlgo implements AtSigningAlgorithm {
+class RsaSigningAlgo {
   final AsymmetricKeyPair? _encryptionKeyPair;
   final HashingAlgoType _hashingAlgoType;
 
   RsaSigningAlgo(this._encryptionKeyPair, this._hashingAlgoType);
 
-  @override
   Uint8List sign(Uint8List data) {
     if (_encryptionKeyPair == null) {
       throw AtSigningException(
@@ -33,7 +31,6 @@ class RsaSigningAlgo implements AtSigningAlgorithm {
     }
   }
 
-  @override
   bool verify(Uint8List signedData, Uint8List signature, {String? publicKey}) {
     RSAPublicKey? rsaPublicKey;
     if (publicKey != null) {
