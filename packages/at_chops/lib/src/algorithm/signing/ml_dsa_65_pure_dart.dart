@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:pqcrypto/pqcrypto.dart';
 
 /// ML-DSA-65 (FIPS 204) digital signature backed by pure-Dart
@@ -13,19 +11,8 @@ import 'package:pqcrypto/pqcrypto.dart';
 /// [AtSignatureAlgorithm] interface) — all key material is passed
 /// explicitly. Or use [AtPqc.mlDsa65] (typed [AtSignatureAlgorithm]) for
 /// auto-resolved FFI/pure dispatch without touching this class.
-///
-/// The stateful [AtSigningAlgorithm] path ([secretKey]/[sign]/[verify]) is
-/// retained for compatibility with the published 3.3.0 surface and for
-/// `AtChopsImpl`'s signing/verification dispatch; it is deprecated — new
-/// code should pass key material per call.
-final class MlDsa65PureDartAlgo
-    implements AtSigningAlgorithm, AtSignatureAlgorithm {
-  Uint8List? _secretKey;
-
+final class MlDsa65PureDartAlgo implements AtSignatureAlgorithm {
   MlDsa65PureDartAlgo();
-
-  @Deprecated('Pass the secret key to signBytes instead.')
-  set secretKey(Uint8List value) => _secretKey = value;
 
   /// Generate a fresh ML-DSA-65 key pair.
   ///
@@ -54,29 +41,5 @@ final class MlDsa65PureDartAlgo
   Future<bool> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
     return MlDsa.verify(publicKey, message, signature, DilithiumParams.mlDsa65);
-  }
-
-  // ── AtSigningAlgorithm (deprecated stateful path) ───────────────────────
-
-  @Deprecated('Use signBytes with explicit key material instead.')
-  @override
-  Future<Uint8List> sign(Uint8List data) async {
-    if (_secretKey == null) {
-      throw AtSigningException(
-          'ML-DSA-65 secret key must be set before signing');
-    }
-    return signBytes(data, secretKey: _secretKey!);
-  }
-
-  @Deprecated('Use verifyBytes with explicit key material instead.')
-  @override
-  Future<bool> verify(Uint8List signedData, Uint8List signature,
-      {String? publicKey}) async {
-    if (publicKey == null) {
-      throw AtSigningException(
-          'public key must be provided for ML-DSA-65 signature verification');
-    }
-    final Uint8List pkBytes = base64Decode(publicKey);
-    return verifyBytes(signedData, signature: signature, publicKey: pkBytes);
   }
 }

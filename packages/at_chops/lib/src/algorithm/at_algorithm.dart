@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:at_chops/src/algorithm/at_iv.dart';
 import 'package:at_chops/src/algorithm/hashing/types.dart';
 import 'package:at_chops/src/key/keys.dart';
-import 'package:meta/meta.dart';
 
 /// Interface for encrypting and decrypting data. Check [DefaultEncryptionAlgo] for sample implementation.
 abstract class AtEncryptionAlgorithm<T, V> {
@@ -41,27 +40,6 @@ abstract class ASymmetricEncryptionAlgorithm
   Uint8List decrypt(Uint8List encryptedData);
 }
 
-/// Interface for data signing. Data is signed using private key from a key pair.
-/// Signed data signature is verified with public key of the key pair.
-///
-/// **Do not implement for new code.** Implement [AtSignatureAlgorithm] instead —
-/// it is stateless (key material passed per call) and safe to share as a singleton.
-///
-/// Removed in v4. Will become `sealed` once all implementers move into this
-/// library, closing the hierarchy in favor of [AtSignatureAlgorithm].
-@Deprecated(
-  'Removed in v4. Use AtSignatureAlgorithm instead.',
-)
-@sealed
-abstract class AtSigningAlgorithm {
-  /// Signs the data using private key of asymmetric key pair
-  FutureOr<Uint8List> sign(Uint8List data);
-
-  /// Verifies the data signature using public key of asymmetric key pair or the passed [publicKey]
-  FutureOr<bool> verify(Uint8List signedData, Uint8List signature,
-      {String? publicKey});
-}
-
 /// Stateless signing interface — all key material passed per call.
 ///
 /// Safe to share as a singleton.
@@ -84,7 +62,7 @@ abstract interface class AtSignatureAlgorithm {
       {required Uint8List signature, required Uint8List publicKey});
 }
 
-/// Interface for hashing data. Refer [DefaultHash] for sample implementation.
+/// Interface for hashing data. Refer [Md5HashingAlgo] for sample implementation.
 abstract class AtHashingAlgorithm<K, V> {
   /// Hashes the passed data
   FutureOr<V> hash(K data, {covariant HashParams? hashParams});

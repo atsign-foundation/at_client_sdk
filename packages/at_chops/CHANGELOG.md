@@ -1,3 +1,13 @@
+## 4.0.0
+- breaking: remove the deprecated `AtChops`/`AtChopsImpl` facade, `AtChopsKeys`, `AtChopsUtil`, `AtEncrypted`, and `AtHashingAlgorithmFactory` — construct and call the algorithm classes directly (e.g. `RsaSigningAlgo`, `AesGcm256EncryptionAlgo`, `Sha256HashingAlgo`), and generate IVs with `InitialisationVector.random(length)`
+- breaking: remove the deprecated result/input/metadata types `AtSigningInput`, `AtSigningVerificationInput`, `AtSigningMode`, `AtSigningResult`, `AtSigningResultType`, `AtSigningMetaData`, `AtEncryptionResult`, `AtEncryptionResultType`, and `AtEncryptionMetaData` — use the algorithm result bytes directly with your own metadata
+- breaking: remove the deprecated `At*KeyPair` wrapper classes (`AtEncryptionKeyPair`, `AtPkamKeyPair`, `AtSigningKeyPair`, `AtX25519KeyPair`, `AtMlDsa65KeyPair`, `AtMlKem768KeyPair`, `AtXWingKeyPair`) — use `RsaKeyPair`, `X25519KeyPair`, `MlDsa65KeyPair`, `MlKem768KeyPair`, and `XWingKeyPair`
+- breaking: remove the deprecated `AtSigningAlgorithm` interface and the `DefaultHash`/`DefaultSigningAlgo`/`PkamSigningAlgo` compatibility wrappers — implement `AtSignatureAlgorithm`, or use `RsaSigningAlgo`/`EccSigningAlgo`/`Ed25519SigningAlgo`/`Md5HashingAlgo` directly. `RsaSigningAlgo`, `EccSigningAlgo`, and `Ed25519SigningAlgo` are now plain classes (they no longer implement a shared signing interface) and keep their `sign`/`verify` methods
+- breaking: remove the deprecated stateful `secretKey` setter, `sign`, and `verify` on `MlDsa65PureDartAlgo` and `MlDsa65FfiAlgo` — use `signBytes`/`verifyBytes` with explicit key material (or `AtPqc.mlDsa65` typed as `AtSignatureAlgorithm`)
+- breaking: remove `AtKeysCrypto` (atKeys-file encrypt/decrypt) — it now lives in `at_auth`
+- chore: `package:at_chops/at_chops.dart` (the web-safe barrel) now compiles to WASM (dart2wasm), enforced by a CI smoke test. FFI-backed algorithms remain in `package:at_chops/at_chops_ffi.dart`, which is not WASM-compatible by design
+- chore: drop the unused `dart_periphery` dependency
+
 ## 3.4.1
 - fix: export `Argon2idHashingAlgo` and `Md5HashingAlgo` from the main `at_chops.dart` barrel so callers can use all supported hashing algorithms through the public package import.
 

@@ -179,6 +179,14 @@ main `at_chops.dart` barrel, so pure-Dart-only consumers aren't forced to
 carry FFI bindings. Use [AtPqc](#atpqc-auto-resolved-pq-backends) instead of
 picking an FFI/pure-Dart backend directly when possible.
 
+## Web / WASM
+
+The main barrel `package:at_chops/at_chops.dart` is pure-Dart and compiles to
+WebAssembly (dart2wasm); a CI smoke test (`tool/wasm_compat_check.dart`) enforces
+this. `package:at_chops/at_chops_ffi.dart` carries `dart:ffi`/`dart:io` bindings
+and is **not** WASM/web compatible by design — web consumers must import only
+`at_chops.dart`.
+
 ## Running Tests
 
 Some tests require `libcrypto.so` to be installed. Running `dart test` without it will fail those tests.

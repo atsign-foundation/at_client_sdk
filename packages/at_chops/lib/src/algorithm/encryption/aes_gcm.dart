@@ -17,7 +17,7 @@ import 'package:cryptography/cryptography.dart' as crypto;
 /// Wire format: `ciphertext || tag(16)`. The 12-byte nonce is NOT included;
 /// callers convey it alongside (e.g. in metadata), exactly as with the
 /// existing CTR IVs. Generate one per encryption with
-/// `AtChopsUtil.generateRandomIV(12)` — never reuse a (key, nonce) pair.
+/// `InitialisationVector.random(12)` — never reuse a (key, nonce) pair.
 ///
 /// An optional [aad] (associated data) may be supplied: it is authenticated
 /// but NOT encrypted, and must be byte-identical at [encrypt] and [decrypt]
@@ -95,7 +95,7 @@ final class AesGcm256EncryptionAlgo
     if (iv == null || iv.ivBytes.length != nonceLength) {
       throw AtEncryptionException(
           'AES-256-GCM requires an explicit $nonceLength-byte nonce; '
-          'use AtChopsUtil.generateRandomIV($nonceLength)');
+          'use InitialisationVector.random($nonceLength)');
     }
     return iv.ivBytes;
   }
@@ -104,7 +104,7 @@ final class AesGcm256EncryptionAlgo
     if (iv == null || iv.ivBytes.length != nonceLength) {
       throw AtDecryptionException(
           'AES-256-GCM requires an explicit $nonceLength-byte nonce; '
-          'use AtChopsUtil.generateRandomIV($nonceLength)');
+          'use InitialisationVector.random($nonceLength)');
     }
     return iv.ivBytes;
   }

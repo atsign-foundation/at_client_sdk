@@ -91,7 +91,7 @@ void main() {
           throwsA(isA<ArgumentError>()));
     });
 
-    test('AtChopsUtil.generateXWingKeyPair round-trips via base64', () async {
+    test('XWingKeyPair.generate round-trips via base64', () async {
       final atKp = await XWingKeyPair.generate();
       final pub = base64Decode(atKp.atPublicKey.publicKey);
       final seed = base64Decode(atKp.atPrivateKey.privateKey);

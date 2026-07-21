@@ -131,7 +131,7 @@ void main() {
       test('round-trips when AAD matches', () async {
         final AESKey key = AESKey.generate(32);
         final AesGcm256FfiAlgo algo = makeAlgo(key);
-        final InitialisationVector iv = AtChopsUtil.generateRandomIV(12);
+        final InitialisationVector iv = InitialisationVector.random(12);
         final Uint8List plain = Uint8List.fromList(utf8.encode('secret body'));
         final List<int> aad = utf8.encode('authenticated header');
 
@@ -144,7 +144,7 @@ void main() {
       test('mismatched AAD throws AtDecryptionException', () async {
         final AESKey key = AESKey.generate(32);
         final AesGcm256FfiAlgo algo = makeAlgo(key);
-        final InitialisationVector iv = AtChopsUtil.generateRandomIV(12);
+        final InitialisationVector iv = InitialisationVector.random(12);
         final Uint8List plain = Uint8List.fromList(utf8.encode('secret body'));
 
         final Uint8List encrypted =
