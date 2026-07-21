@@ -125,6 +125,13 @@ Deletes the item and all recipient copies.
 - Throws `StateError` if `cascade: false` and self-owned descendants exist
 - With `cascade: true`: deletes self-owned descendants at any depth first
 
+**Ownership & collaboration.** `AtCollection` is owner-writes-only —
+`update` / `updateSharedWith` / `delete` reject items whose `owner` isn't this
+atSign. Collaboration is additive: each atSign owns what it creates, and
+`sharedWith` grants recipients a readable copy, not write access. For a peer to
+contribute, they create their own item and share it back — you never mutate
+theirs in place. (`self` / `atSign` is the ownership test.)
+
 ---
 
 ## Read Methods
