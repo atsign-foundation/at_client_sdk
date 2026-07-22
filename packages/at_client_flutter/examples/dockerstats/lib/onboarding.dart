@@ -108,7 +108,7 @@ Future<void> _setupAtClient(AuthResponse response) async {
   if (session != null) {
     // Preferred path: hand over the session; the client rebuilds its own
     // connection from the session's key source.
-    await AtClientManager.getInstance().setFromAuthSession(session, acp);
+    await AtClientManager.getInstance().fromAuthSession(session, acp);
   } else {
     // Transitional fallback for flows that hand back only atAuthKeys with no
     // AtKeysIo source (e.g. APKAM enrollment): adopt auth's already-

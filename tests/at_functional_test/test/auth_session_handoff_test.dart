@@ -22,7 +22,7 @@ void main() {
   });
 
   test(
-      'authenticate → session → setFromAuthSession rebuilds its own connection '
+      'authenticate → session → fromAuthSession rebuilds its own connection '
       'and round-trips a put/get', () async {
     // The .atKeys fixture is the key *source* — same file a real app would hold.
     final atKeysIo = FileAtKeysIo(
@@ -49,7 +49,7 @@ void main() {
     //    fresh socket.
     final preference = TestUtils.getPreference(atSign);
     final atClientManager = await AtClientManager.getInstance()
-        .setFromAuthSession(authResponse.session!, preference);
+        .fromAuthSession(authResponse.session!, preference);
     final atClient = atClientManager.atClient;
 
     // The client built its own crypto context (not one injected by auth).

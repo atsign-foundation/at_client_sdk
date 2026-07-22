@@ -141,7 +141,7 @@ Future<void> onboard(BuildContext context) async {
     _logger.info('Setting current atSign: ${response.atSign}');
     // Hand the client the session; it rebuilds its own authenticated connection
     // from the session's key source rather than adopting auth's.
-    await AtClientManager.getInstance().setFromAuthSession(
+    await AtClientManager.getInstance().fromAuthSession(
       response.session!,
       acp,
     );
@@ -399,7 +399,7 @@ Future<void> _setupAtClient(BuildContext context, AuthResponse response) async {
   if (session != null) {
     // Preferred path: hand over the session; the client rebuilds its own
     // authenticated connection from the session's key source.
-    await AtClientManager.getInstance().setFromAuthSession(session, acp);
+    await AtClientManager.getInstance().fromAuthSession(session, acp);
   } else {
     // Transitional fallback for flows that hand back only atAuthKeys with no
     // AtKeysIo source (e.g. APKAM enrollment): adopt auth's already-

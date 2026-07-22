@@ -110,7 +110,7 @@ class _SmokeBootstrapState extends State<_SmokeBootstrap> {
         ..hiveStoragePath = dir.path;
       // Hand the client the session; it rebuilds its own authenticated
       // connection from the session's key source rather than adopting auth's.
-      await AtClientManager.getInstance().setFromAuthSession(
+      await AtClientManager.getInstance().fromAuthSession(
         response.session!,
         acp,
       );

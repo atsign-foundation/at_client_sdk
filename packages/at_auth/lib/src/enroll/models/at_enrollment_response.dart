@@ -143,7 +143,7 @@ class AtEnrollmentResponse extends AtEnrollmentRecord {
   /// The hand-off session for the newly enrolled app, populated on the
   /// requesting-app success path once the enrollment is approved.
   ///
-  /// Pass it straight into `AtClientManager.setFromAuthSession(...)`; the client
+  /// Pass it straight into `AtClientManager.fromAuthSession(...)`; the client
   /// derives its own keys via [AtAuthSession.atKeysIo] rather than adopting the
   /// deprecated [atAuthKeys] material directly.
   AtAuthSession? session;

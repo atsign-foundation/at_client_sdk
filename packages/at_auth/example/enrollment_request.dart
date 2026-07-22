@@ -52,7 +52,7 @@ void main(List<String> args) async {
 
     // Once approved, waitForApproval persists the keys into session.atKeysIo and
     // populates atEnrollmentResponse.session — hand that straight to
-    // AtClientManager.setFromAuthSession(...) instead of touching atAuthKeys.
+    // AtClientManager.fromAuthSession(...) instead of touching atAuthKeys.
     // await atEnrollmentBase.waitForApproval(atEnrollmentResponse);
   } on Exception catch (e, trace) {
     print(trace);
