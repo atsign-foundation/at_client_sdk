@@ -141,10 +141,7 @@ Future<void> onboard(BuildContext context) async {
     _logger.info('Setting current atSign: ${response.atSign}');
     // Hand the client the session; it rebuilds its own authenticated connection
     // from the session's key source rather than adopting auth's.
-    await AtClientManager.getInstance().fromAuthSession(
-      response.session!,
-      acp,
-    );
+    await AtClientManager.getInstance().fromAuthSession(response.session!, acp);
 
     _logger.info('Navigation to HomePage');
     if (context.mounted) {
