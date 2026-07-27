@@ -37,7 +37,7 @@ class RegistrarCramDialog extends StatefulWidget {
     AtOnboardingRequest request, {
     required RegistrarService registrar,
   }) async {
-    if (!await registrar.sendActivationOtp(request.atSign)) {
+    if (!await registrar.sendActivationOtp(request.atsign)) {
       throw Exception('Failed to send activation OTP');
     }
     return showDialog<String>(
@@ -87,7 +87,7 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
 
   void _handleResendCode() {
     if (_canResend) {
-      widget.registrar.sendActivationOtp(widget.request.atSign);
+      widget.registrar.sendActivationOtp(widget.request.atsign);
       _startResendTimer(); // Restart the timer after resending
     }
   }
@@ -110,7 +110,7 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
         _isLoading = true;
       });
       var cram = await widget.registrar.verifyActivation(
-        atSign: widget.request.atSign,
+        atSign: widget.request.atsign,
         otp: otp,
       );
       if (!mounted) return;
@@ -208,7 +208,7 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
                     ),
                   ),
                   TextSpan(
-                    text: widget.request.atSign,
+                    text: widget.request.atsign,
                     style: TextStyle(
                       fontSize: 14,
                       color: widget.themeData.colorScheme.secondary,

@@ -51,7 +51,7 @@ AtContact? getCachedContactDetail(String atsign) {
   if (ContactService().cachedContactList.isNotEmpty) {
     var index = ContactService()
         .cachedContactList
-        .indexWhere((element) => element.atSign == atsign);
+        .indexWhere((element) => element.atsign == atsign);
     if (index > -1) return ContactService().cachedContactList[index];
   }
   return null;
@@ -60,12 +60,12 @@ AtContact? getCachedContactDetail(String atsign) {
 /// Adds [atsign] in contact list.
 /// If [nickName] is not null , it wll be set as nick name of the [atsign].
 Future<bool> addContact(String atsign, {String? nickName}) async {
-  return await ContactService().addAtSign(atSign: atsign, nickName: nickName);
+  return await ContactService().addAtSign(atsign: atsign, nickName: nickName);
 }
 
 /// deletes the given [atsign]
 Future<bool> deleteContact(String atsign) async {
-  return await ContactService().deleteAtSign(atSign: atsign);
+  return await ContactService().deleteAtSign(atsign: atsign);
 }
 
 /// blocks/unblocks [atContact] based on boolean [blockAction]

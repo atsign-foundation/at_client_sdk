@@ -85,7 +85,7 @@ class AuthService {
           atAuthResponse.atAuthKeys != null &&
           atAuthResponse.isSuccessful) {
         for (var atKeysIo in backupKeys) {
-          atKeysIo.write(atAuthRequest.atSign, atAuthResponse.atAuthKeys!);
+          atKeysIo.write(atAuthRequest.atsign, atAuthResponse.atAuthKeys!);
         }
       }
     } catch (e) {

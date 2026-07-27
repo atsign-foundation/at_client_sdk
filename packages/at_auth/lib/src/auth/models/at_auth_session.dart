@@ -10,7 +10,7 @@ import 'package:at_lookup/at_lookup.dart';
 /// own [AtKeys] via `atKeysIo.read(atSign)`, rather than adopting
 /// auth's live `AtChops`/`AtLookUp`.
 class AtAuthSession {
-  final String atSign;
+  final Atsign atsign;
   final AtRootDomain rootDomain;
   final String? namespace;
   final AtKeysIo atKeysIo;
@@ -23,7 +23,7 @@ class AtAuthSession {
   final AtLookUp? atLookUp;
 
   AtAuthSession({
-    required this.atSign,
+    required this.atsign,
     required this.rootDomain,
     required this.atKeysIo,
     this.namespace,

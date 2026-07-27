@@ -22,7 +22,7 @@ Future<bool> notifyText(
       sendToAtSign!,
       Notify(
         time: DateTime.now().millisecondsSinceEpoch,
-        atSign: atSign,
+        atsign: atSign,
         message: message,
       ),
       NotifyEnum.notifyText);

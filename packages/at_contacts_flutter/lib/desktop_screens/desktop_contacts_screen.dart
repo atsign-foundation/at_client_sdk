@@ -179,7 +179,7 @@ class _DesktopContactsScreenState extends State<DesktopContactsScreen> {
                               itemBuilder: (context, index) {
                                 var baseContact = snapshot.data![index]!;
 
-                                if (baseContact.contact!.atSign!
+                                if (baseContact.contact!.atsign!
                                     .contains(searchText)) {
                                   _filteredList.add(baseContact);
                                   return Container(
@@ -202,7 +202,7 @@ class _DesktopContactsScreenState extends State<DesktopContactsScreen> {
                               },
                               separatorBuilder: (context, index) {
                                 var baseContact = snapshot.data![index]!;
-                                if (baseContact.contact!.atSign!
+                                if (baseContact.contact!.atsign!
                                     .contains(searchText)) {
                                   return const Divider(
                                     thickness: 0.2,
@@ -263,7 +263,7 @@ class _DesktopContactsScreenState extends State<DesktopContactsScreen> {
                             itemBuilder: (context, index) {
                               var contact = snapshot.data![index]!;
 
-                              if (contact.contact!.atSign!
+                              if (contact.contact!.atsign!
                                   .contains(searchText)) {
                                 _filteredList.add(contact);
                                 return Container(
@@ -286,7 +286,7 @@ class _DesktopContactsScreenState extends State<DesktopContactsScreen> {
                             },
                             separatorBuilder: (context, index) {
                               var contact = snapshot.data![index]!;
-                              if (contact.contact!.atSign!
+                              if (contact.contact!.atsign!
                                   .contains(searchText)) {
                                 return const Divider(
                                   thickness: 0.2,
@@ -322,13 +322,13 @@ class _DesktopContactsScreenState extends State<DesktopContactsScreen> {
         children: [
           image != null
               ? CustomCircleAvatar(
-                  key: Key(contact.contact!.atSign ?? ''),
+                  key: Key(contact.contact!.atsign ?? ''),
                   byteImage: image,
                   nonAsset: true,
                   size: 50,
                 )
               : ContactInitial(
-                  initials: contact.contact!.atSign ?? '',
+                  initials: contact.contact!.atsign ?? '',
                   maxSize: 50,
                   minSize: 50,
                 ),
@@ -338,14 +338,14 @@ class _DesktopContactsScreenState extends State<DesktopContactsScreen> {
           SizedBox(
             width: 250,
             child: Text(
-              name ?? contact.contact!.atSign ?? '',
+              name ?? contact.contact!.atsign ?? '',
               style: CustomTextStyles.primaryNormal20,
             ),
           ),
           const SizedBox(
             width: 70,
           ),
-          Text(contact.contact!.atSign ?? '',
+          Text(contact.contact!.atsign ?? '',
               style: CustomTextStyles.desktopSecondaryRegular18),
           const Spacer(),
           ContactListTile(
@@ -439,7 +439,7 @@ class _ContactListTileState extends State<ContactListTile> {
                   _contactService!
                       .updateState(STATE_UPDATE.delete, contact, true);
                   await _contactService!
-                      .deleteAtSign(atSign: contact.atSign ?? '');
+                      .deleteAtSign(atsign: contact.atSign ?? '');
                   _contactService!
                       .updateState(STATE_UPDATE.delete, contact, false);
                 },

@@ -125,7 +125,7 @@ class _NotificationDialogState extends State<NotificationDialog> {
             ),
             SizedBox(height: 10.toHeight),
             (ContactService().contactList.indexWhere(
-                        (element) => element.atSign == widget.userName) ==
+                        (element) => element.atsign == widget.userName) ==
                     -1)
                 ? Text(
                     'NOTE: ${widget.userName} is not in your contacts list.',

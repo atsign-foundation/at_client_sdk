@@ -124,7 +124,7 @@ class _NotifyScreenState extends State<NotifyScreen>
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                        'Sender: ${snapshot.data?[index].atSign}'),
+                                        'Sender: ${snapshot.data?[index].atsign}'),
                                     const SizedBox(height: 5),
                                     snapshot.data![index].time != null
                                         ? Text(

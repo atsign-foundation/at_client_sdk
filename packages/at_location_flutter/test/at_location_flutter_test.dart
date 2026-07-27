@@ -93,7 +93,7 @@ void main() {
     var atSign = "@83apedistinct";
     KeyStreamService().contactList = [AtContact(atSign: atSign)];
     var res = getCachedContactDetail(atSign);
-    expect(res?.atSign, atSign);
+    expect(res?.atsign, atSign);
   });
 
   test("get_key_type", () async {

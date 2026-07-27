@@ -188,7 +188,7 @@ class ContactService {
   void compareContactListForUpdatedState() {
     for (var c in contactList) {
       var index =
-          baseContactList.indexWhere((e) => e.contact!.atSign == c.atSign);
+          baseContactList.indexWhere((e) => e.contact!.atsign == c.atSign);
       if (index > -1) {
         baseContactList[index] = BaseContact(
           c,
@@ -212,14 +212,14 @@ class ContactService {
     var atsignsToRemove = <String>[];
     for (var baseContact in baseContactList) {
       var index = contactList.indexWhere(
-        (e) => e.atSign == baseContact.contact!.atSign,
+        (e) => e.atSign == baseContact.contact!.atsign,
       );
       if (index == -1) {
-        atsignsToRemove.add(baseContact.contact!.atSign!);
+        atsignsToRemove.add(baseContact.contact!.atsign!);
       }
     }
     for (var e in atsignsToRemove) {
-      baseContactList.removeWhere((element) => element.contact!.atSign == e);
+      baseContactList.removeWhere((element) => element.contact!.atsign == e);
     }
   }
 
@@ -227,7 +227,7 @@ class ContactService {
   /// for contact [c].
   void compareContactListForUpdatedStateForOneContact(AtContact c) {
     var index =
-        baseContactList.indexWhere((e) => e.contact!.atSign == c.atSign);
+        baseContactList.indexWhere((e) => e.contact!.atsign == c.atSign);
     if (index > -1) {
       baseContactList[index] = BaseContact(
         c,
@@ -303,7 +303,7 @@ class ContactService {
   void compareBlockedContactListForUpdatedState() {
     for (var c in blockContactList) {
       var index =
-          baseBlockedList.indexWhere((e) => e.contact!.atSign == c.atSign);
+          baseBlockedList.indexWhere((e) => e.contact!.atsign == c.atSign);
       if (index > -1) {
         baseBlockedList[index] = BaseContact(
           c,
@@ -327,14 +327,14 @@ class ContactService {
     var atsignsToRemove = <String>[];
     for (var baseContact in baseBlockedList) {
       var index = blockContactList.indexWhere(
-        (e) => e.atSign == baseContact.contact!.atSign,
+        (e) => e.atSign == baseContact.contact!.atsign,
       );
       if (index == -1) {
-        atsignsToRemove.add(baseContact.contact!.atSign!);
+        atsignsToRemove.add(baseContact.contact!.atsign!);
       }
     }
     for (var e in atsignsToRemove) {
-      baseBlockedList.removeWhere((element) => element.contact!.atSign == e);
+      baseBlockedList.removeWhere((element) => element.contact!.atsign == e);
     }
   }
 
@@ -354,7 +354,7 @@ class ContactService {
   _removeContact(String atSign) {
     try {
       baseContactList.removeWhere((element) {
-        return compareAtSign(element.contact!.atSign!, atSign);
+        return compareAtSign(element.contact!.atsign!, atSign);
       });
       selectedContacts.removeWhere((element) {
         return compareAtSign(element.atSign!, atSign);
@@ -652,10 +652,10 @@ class ContactService {
     int indexToUpdate;
     if (stateToUpdate == STATE_UPDATE.unblock) {
       indexToUpdate = baseBlockedList
-          .indexWhere((element) => element.contact!.atSign == contact.atSign);
+          .indexWhere((element) => element.contact!.atsign == contact.atSign);
     } else {
       indexToUpdate = baseContactList
-          .indexWhere((element) => element.contact!.atSign == contact.atSign);
+          .indexWhere((element) => element.contact!.atsign == contact.atSign);
     }
 
     if (indexToUpdate == -1) {

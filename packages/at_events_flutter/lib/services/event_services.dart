@@ -112,7 +112,7 @@ class EventService {
       var allAtsignList = <String?>[];
       for (var element
           in EventService().eventNotificationModel!.group!.members!) {
-        allAtsignList.add(element.atSign);
+        allAtsignList.add(element.atsign);
       }
 
       var eventData = EventNotificationModel.convertEventNotificationToJson(
@@ -268,7 +268,7 @@ class EventService {
     for (var contact
         in EventService().eventNotificationModel!.group!.members!) {
       selectedContacts!.add(contact);
-      selectedContactsAtSigns.add(contact.atSign);
+      selectedContactsAtSigns.add(contact.atsign);
     }
   }
 
@@ -292,7 +292,7 @@ class EventService {
     if (eventNotificationModel!.group!.members!.length > index &&
         selectedContacts!.length > index) {
       eventNotificationModel!.group!.members!.removeWhere(
-          (element) => element.atSign == selectedContacts![index].atSign);
+          (element) => element.atsign == selectedContacts![index].atSign);
       selectedContacts!.removeAt(index);
       selectedContactsAtSigns.removeAt(index);
     }

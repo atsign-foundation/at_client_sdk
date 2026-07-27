@@ -82,7 +82,7 @@ Future<bool> createEvent(EventNotificationModel eventData) async {
       ..metadata = Metadata()
       ..metadata.ttr = -1
       ..key = eventData.key ?? ""
-      ..sharedWith = eventData.group!.members!.elementAt(0).atSign
+      ..sharedWith = eventData.group!.members!.elementAt(0).atsign
       ..sharedBy = eventData.atsignCreator;
     var eventJson =
         EventNotificationModel.convertEventNotificationToJson(eventData);

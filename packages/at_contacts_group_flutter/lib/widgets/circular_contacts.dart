@@ -55,7 +55,7 @@ class _CircularContactsState extends State<CircularContacts> {
     for (GroupContactsModel? el in _groupService.selectedGroupContacts) {
       if (el!.contact != null &&
           widget.groupContact!.contact != null &&
-          el.contact!.atSign == widget.groupContact!.contact!.atSign) {
+          el.contact!.atsign == widget.groupContact!.contact!.atsign) {
         isSelected = true;
       } else if (el.group != null &&
           widget.groupContact!.group != null &&
@@ -68,7 +68,7 @@ class _CircularContactsState extends State<CircularContacts> {
   getNameAndImage() {
     try {
       if (widget.groupContact?.contact != null) {
-        initials = widget.groupContact?.contact?.atSign;
+        initials = widget.groupContact?.contact?.atsign;
         if ((initials?[0] ?? 'not@') == '@') {
           initials = initials?.substring(1);
         }
@@ -194,7 +194,7 @@ class _CircularContactsState extends State<CircularContacts> {
                         borderRadius: BorderRadius.circular(8)),
                     textStyle: TextStyle(color: AllColors().WHITE),
                     message:
-                        '${widget.groupContact?.contact?.tags != null && widget.groupContact?.contact?.tags!['name'] != null ? widget.groupContact?.contact?.tags!['name'] : (widget.groupContact?.contact?.atSign?.substring(1) ?? widget.groupContact?.group?.groupName?.substring(0))!}\n${(widget.groupContact?.contact?.atSign ?? widget.groupContact?.group?.groupName)!}',
+                        '${widget.groupContact?.contact?.tags != null && widget.groupContact?.contact?.tags!['name'] != null ? widget.groupContact?.contact?.tags!['name'] : (widget.groupContact?.contact?.atsign?.substring(1) ?? widget.groupContact?.group?.groupName?.substring(0))!}\n${(widget.groupContact?.contact?.atsign ?? widget.groupContact?.group?.groupName)!}',
                     child: SizedBox(
                         child: Column(children: [
                       SizedBox(height: 10.toHeight),
@@ -205,7 +205,7 @@ class _CircularContactsState extends State<CircularContacts> {
                                   widget.groupContact?.contact?.tags!['name'] !=
                                       null
                               ? widget.groupContact?.contact?.tags!['name']
-                              : (widget.groupContact?.contact?.atSign
+                              : (widget.groupContact?.contact?.atsign
                                       ?.substring(1) ??
                                   widget.groupContact?.group?.groupName
                                       ?.substring(0))!,
@@ -222,7 +222,7 @@ class _CircularContactsState extends State<CircularContacts> {
                       SizedBox(
                         width: 60.toWidth,
                         child: Text(
-                          (widget.groupContact?.contact?.atSign ??
+                          (widget.groupContact?.contact?.atsign ??
                               widget.groupContact?.group?.groupName)!,
                           textAlign: TextAlign.center,
                           overflow: TextOverflow.ellipsis,

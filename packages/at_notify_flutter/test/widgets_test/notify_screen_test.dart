@@ -20,10 +20,10 @@ void main() {
 
   /// Functional test cases for Notify screen
   group('Notify Screen Tests:', () {
-    NotifyService notifyService=NotifyService();
+    NotifyService notifyService = NotifyService();
     final notifyScreen = NotifyScreen(
       notifyService: notifyService,
-      atSign: '@bluebellrelated86',
+      atsign: '@bluebellrelated86',
     );
     // Test case to check notify screen is displayed
     testWidgets('Notify Screen is used', (WidgetTester tester) async {
@@ -31,17 +31,19 @@ void main() {
           .pumpWidget(_wrapWidgetWithMaterialApp(notifyScreen: notifyScreen));
       expect(find.byType(NotifyScreen), findsOneWidget);
     });
-     // Test case to check atsign is given
-    testWidgets('Test case to check atsign is given', (WidgetTester tester) async {
+    // Test case to check atsign is given
+    testWidgets('Test case to check atsign is given',
+        (WidgetTester tester) async {
       await tester
           .pumpWidget(_wrapWidgetWithMaterialApp(notifyScreen: notifyScreen));
-      expect(notifyScreen.atSign,'@bluebellrelated86');
+      expect(notifyScreen.atsign, '@bluebellrelated86');
     });
-     // Test case to check notify service is given
-    testWidgets('Test case to check notify service is given', (WidgetTester tester) async {
+    // Test case to check notify service is given
+    testWidgets('Test case to check notify service is given',
+        (WidgetTester tester) async {
       await tester
           .pumpWidget(_wrapWidgetWithMaterialApp(notifyScreen: notifyScreen));
-      expect(notifyScreen.notifyService,notifyService);
+      expect(notifyScreen.notifyService, notifyService);
     });
   });
 }

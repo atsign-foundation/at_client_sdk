@@ -175,7 +175,7 @@ class _OverlappingContactsState extends State<OverlappingContacts> {
                                 ? widget.selectedList![index].tags!['name']
                                 : widget.selectedList![index].atSign!
                                     .substring(1),
-                            atSign: widget.selectedList![index].atSign,
+                            atsign: widget.selectedList![index].atSign,
                             image: (widget.selectedList![index].tags != null &&
                                     widget.selectedList![index]
                                             .tags!['image'] !=

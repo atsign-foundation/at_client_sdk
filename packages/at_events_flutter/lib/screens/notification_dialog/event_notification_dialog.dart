@@ -164,7 +164,7 @@ class _EventNotificationDialogState extends State<EventNotificationDialog> {
                   ),
                   SizedBox(height: widget.eventData != null ? 10.toHeight : 0),
                   (ContactService().contactList.indexWhere((element) =>
-                              element.atSign ==
+                              element.atsign ==
                               widget.eventData!.atsignCreator) ==
                           -1)
                       ? Text(
@@ -231,7 +231,7 @@ class _EventNotificationDialogState extends State<EventNotificationDialog> {
                                     onSelectionChanged: (dynamic startTime) {
                                       widget.eventData!.group!.members!
                                           .forEach((groupMember) {
-                                        if (groupMember.atSign ==
+                                        if (groupMember.atsign ==
                                             AtEventNotificationListener()
                                                 .currentAtSign) {
                                           groupMember.tags!['shareFrom'] =
@@ -253,7 +253,7 @@ class _EventNotificationDialogState extends State<EventNotificationDialog> {
 
                                               widget.eventData!.group!.members!
                                                   .forEach((groupMember) {
-                                                if (groupMember.atSign ==
+                                                if (groupMember.atsign ==
                                                     AtEventNotificationListener()
                                                         .currentAtSign) {
                                                   groupMember.tags!['shareTo'] =
