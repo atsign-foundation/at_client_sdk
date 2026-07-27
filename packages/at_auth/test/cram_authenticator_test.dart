@@ -18,20 +18,31 @@ void main() {
       cramAuthenticator = CramAuthenticator();
     });
 
-    test('authenticate() should return a successful AtAuthResponse', () async {
+    test('authenticate() completes normally on success', () async {
       when(() => mockAtLookup.cramAuthenticate(cramSecret))
           .thenAnswer((_) async => true);
 
-      final result = await cramAuthenticator.authenticate(
-          atSign, cramSecret, mockAtLookup);
-
-      expect(result, isTrue);
+      await expectLater(
+        cramAuthenticator.authenticate(atSign, cramSecret, mockAtLookup),
+        completes,
+      );
     });
 
     test('authenticate() should throw UnAuthenticatedException on failure',
         () async {
       when(() => mockAtLookup.cramAuthenticate(cramSecret))
           .thenThrow(UnAuthenticatedException('Unauthenticated'));
+
+      expect(
+          () async => await cramAuthenticator.authenticate(
+              atSign, cramSecret, mockAtLookup),
+          throwsA(isA<UnAuthenticatedException>()));
+    });
+
+    test('authenticate() should throw when lookup reports a soft failure',
+        () async {
+      when(() => mockAtLookup.cramAuthenticate(cramSecret))
+          .thenAnswer((_) async => false);
 
       expect(
           () async => await cramAuthenticator.authenticate(

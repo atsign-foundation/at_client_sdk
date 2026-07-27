@@ -32,7 +32,7 @@ void main(List<String> args) async {
     // The requesting app's session: its atSign, where to reach its atServer,
     // and the atKeysIo destination the newly enrolled keys are persisted into.
     final session = AtAuthSession(
-      atSign: argResults['atsign'],
+      atsign: argResults['atsign'],
       rootDomain: AtRootDomain(argResults['rootDomain'], 64),
       atKeysIo: FileAtKeysIo(),
     );

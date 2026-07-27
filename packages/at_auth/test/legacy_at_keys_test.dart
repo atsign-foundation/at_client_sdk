@@ -8,12 +8,40 @@ import 'test_utils/at_keys.dart';
 
 void main() {
   group('legacy AtKeys survival', () {
-    test('bare legacy json has no version field', () {
+    test('a legacy-only AtKeys upgrades to the typed shape on toJson', () {
       final legacyKeys = legacyAtKeys();
       final json = legacyKeys.toJson();
 
-      expect(json.containsKey('version'), isFalse);
+      // Upgrade, not a format swap: the typed envelope appears with empty
+      // keys, and the flat legacy fields still round-trip.
+      expect(json.containsKey('version'), isTrue);
+      expect(json['keys'], isEmpty);
       expectLegacyAtKeys(AtKeys.fromJson(json), legacyKeys);
+    });
+
+    test('fromJson takes the atsign from the reader for a legacy blob', () {
+      // A legacy .atKeys file is the flat shape with no version/atsign/keys.
+      final legacyBlob = Map<String, dynamic>.from(legacyAtKeys().toJson())
+        ..remove('version')
+        ..remove('atsign')
+        ..remove('keys');
+
+      final keys = AtKeys.fromJson(legacyBlob, atsign: '@bob'.toAtsign());
+      expect(keys.atsign, '@bob'.toAtsign());
+
+      // No atsign in the file and none supplied — nothing to build the model.
+      expect(
+        () => AtKeys.fromJson(legacyBlob),
+        throwsA(isA<AtKeysValidationException>()),
+      );
+    });
+
+    test('fromJson rejects an atsign that disagrees with a typed keyfile', () {
+      final typed = legacyAtKeys(atsign: '@alice'.toAtsign()).toJson();
+      expect(
+        () => AtKeys.fromJson(typed, atsign: '@bob'.toAtsign()),
+        throwsA(isA<AtKeysValidationException>()),
+      );
     });
 
     test('typed-keys document preserves legacy payload', () {

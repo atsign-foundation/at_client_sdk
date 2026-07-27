@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
+import 'package:at_auth/src/keys/serialization/auth_bootstrap.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -19,7 +19,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   }
 
   @override
-  Future<AtKeys> read(String atsign) async {
+  Future<AtKeys> read(Atsign atsign) async {
     final file = File(filePath!(atsign));
     if (!file.existsSync()) {
       throw AtException(
@@ -28,7 +28,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
 
     final json = await _readAtRestDocument(file);
     final plaintextJson = await _selfDecryptLegacyFields(json);
-    return AtKeys.fromJson(plaintextJson);
+    return AtKeys.fromJson(plaintextJson, atsign: atsign.toAtsign());
   }
 
   @override
@@ -65,11 +65,10 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   Future<Map<String, dynamic>> _encodeAtRest(
       AtKeys atKeys, String atsign) async {
     final normalized = atsign.toAtsign();
-    if (atKeys.atsign != null && atKeys.atsign != normalized) {
+    if (atKeys.atsign != normalized) {
       throw AtKeysValidationException(
           'AtKeys belongs to ${atKeys.atsign} but is being persisted for $normalized');
     }
-    atKeys.atsign ??= normalized;
     return _selfEncryptLegacyFields(atKeys.toJson());
   }
 
@@ -105,10 +104,10 @@ class FileAtKeysIo extends WrittenAtKeysIo {
 }
 
 const _selfEncryptedLegacyFields = [
-  auth_constants.apkamPublicKey,
-  auth_constants.apkamPrivateKey,
-  auth_constants.defaultEncryptionPublicKey,
-  auth_constants.defaultEncryptionPrivateKey,
+  KeyIds.apkamPublicKey,
+  KeyIds.apkamPrivateKey,
+  KeyIds.defaultEncryptionPublicKey,
+  KeyIds.defaultEncryptionPrivateKey,
 ];
 
 Future<Map<String, dynamic>> _selfEncryptLegacyFields(
@@ -142,7 +141,7 @@ Future<Map<String, dynamic>> _applyToLegacyFields(
     return document;
   }
   final selfEncryptionKey =
-      document[auth_constants.defaultSelfEncryptionKey] as String?;
+      document[KeyIds.defaultSelfEncryptionKey] as String?;
   if (selfEncryptionKey == null) {
     throw AtException(
         'selfEncryptionKey is required to process the self-encrypted legacy atKeys fields');

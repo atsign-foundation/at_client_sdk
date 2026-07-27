@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
+import 'package:at_auth/src/auth/pkam_signers.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
@@ -140,44 +142,43 @@ class AtEnrollmentImpl implements AtEnrollment {
   @override
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision enrollmentRequestDecision,
-      AtLookUp atLookUp) async {
-    if (atLookUp.atChops == null) {
+      AtLookUp atLookUp,
+      AtKeys atKeys) async {
+    // The approver's own encryption private key and self-encryption key —
+    // sourced from its AtKeys (previously read out of atLookUp.atChops).
+    // ignore: deprecated_member_use_from_same_package
+    final encryptionPrivateKey = atKeys.defaultEncryptionPrivateKey;
+    // ignore: deprecated_member_use_from_same_package
+    final selfEncryptionKey = atKeys.defaultSelfEncryptionKey;
+    if (encryptionPrivateKey == null || selfEncryptionKey == null) {
       throw AtAuthenticationException(
           'The authentication keys are not initialized');
     }
+
     // Decrypt the encrypted APKAM symmetric key with the encryption private key
-    // from the atChops instance, via at_chops (wraps crypton's
-    // RSAPrivateKey.decrypt: utf8.decode(decryptData(base64(msg)))).
+    // (RSA; wraps crypton's RSAPrivateKey.decrypt).
     String apkamSymmetricKey = utf8.decode((RsaEncryptionAlgo()
-          ..atPrivateKey = AtPrivateKey.fromString(atLookUp.atChops!.atChopsKeys
-              .atEncryptionKeyPair!.atPrivateKey.privateKey))
+          ..atPrivateKey =
+              AtPrivateKey.fromString(encryptionPrivateKey.toString()))
         .decrypt(base64Decode(
             enrollmentRequestDecision.encryptedAPKAMSymmetricKey)));
+    final apkamAesKey = AESKey(apkamSymmetricKey);
 
-    // Set the APKAM Symmetric key to the AtChops Instance.
-    atLookUp.atChops?.atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
-
+    // Re-encrypt the encryption private key and self-encryption key under the
+    // APKAM symmetric key (AES-256; byte-identical to the former
+    // AtChops.encryptString(aes256) path: base64(AES.encrypt(utf8(data), iv))).
     InitialisationVector encryptionPrivateKeyIV =
         AtChopsUtil.generateRandomIV(16);
-    // Fetch the encryptionPrivateKey from the atChops and encrypt with APKAM Symmetric key.
-    String encryptedDefaultEncryptionPrivateKey = (await atLookUp.atChops
-            ?.encryptString(
-                atLookUp.atChops!.atChopsKeys.atEncryptionKeyPair!.atPrivateKey
-                    .privateKey,
-                EncryptionKeyType.aes256,
-                keyName: 'apkamSymmetricKey',
-                iv: encryptionPrivateKeyIV))
-        ?.result;
+    String encryptedDefaultEncryptionPrivateKey = base64Encode(
+        await AESEncryptionAlgo(apkamAesKey).encrypt(
+            Uint8List.fromList(utf8.encode(encryptionPrivateKey.toString())),
+            iv: encryptionPrivateKeyIV));
 
     InitialisationVector selfEncryptionKeyIV = AtChopsUtil.generateRandomIV(16);
-    // Fetch the selfEncryptionKey from the atChops and encrypt with APKAM Symmetric key.
-    String encryptedDefaultSelfEncryptionKey = (await atLookUp.atChops
-            ?.encryptString(
-                atLookUp.atChops!.atChopsKeys.selfEncryptionKey!.key,
-                EncryptionKeyType.aes256,
-                keyName: 'apkamSymmetricKey',
-                iv: selfEncryptionKeyIV))
-        ?.result;
+    String encryptedDefaultSelfEncryptionKey = base64Encode(
+        await AESEncryptionAlgo(apkamAesKey).encrypt(
+            Uint8List.fromList(utf8.encode(selfEncryptionKey.toString())),
+            iv: selfEncryptionKeyIV));
 
     String command = 'enroll:approve:${jsonEncode({
           'enrollmentId': enrollmentRequestDecision.enrollmentId,
@@ -273,8 +274,17 @@ class AtEnrollmentImpl implements AtEnrollment {
       enrollmentResponse.rootDomain!.rootPort,
     );
 
-    AtChops atChops = enrollmentResponse.atAuthKeys!.toAtChops();
-    atLookup.atChops = atChops;
+    // PKAM-authenticate the newly enrolled keys. at_lookup signs with the
+    // strategy; RSA is the wired path.
+    // ignore: deprecated_member_use_from_same_package
+    final apkamPrivateKey = enrollmentResponse.atAuthKeys!.apkamPrivateKey;
+    if (apkamPrivateKey == null) {
+      throw AtAuthenticationException(
+          'No apkam private key available to sign PKAM for the enrollment');
+    }
+    atLookup
+      ..pkamSigner = RsaPkamSigner(apkamPrivateKey.toString())
+      ..enrollmentId = enrollmentResponse.enrollmentId;
 
     await _waitForPkamAuthSuccess(
       atLookup,
@@ -333,7 +343,7 @@ class AtEnrollmentImpl implements AtEnrollment {
       await keysIo.flush(enrollmentResponse.atSign!.toAtsign(),
           enrollmentResponse.atAuthKeys!);
       enrollmentResponse.session = AtAuthSession(
-        atSign: enrollmentResponse.atSign!,
+        atsign: enrollmentResponse.atSign!,
         rootDomain: enrollmentResponse.rootDomain!,
         atKeysIo: keysIo,
         enrollmentId: enrollmentResponse.enrollmentId,

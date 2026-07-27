@@ -5,7 +5,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
 AtKeys legacyAtKeys({Atsign? atsign}) {
-  return AtKeys(atsign: atsign)
+  return AtKeys(atsign: atsign ?? '@alice'.toAtsign())
     ..apkamPublicKey =
         AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
     ..apkamPrivateKey =
@@ -28,12 +28,10 @@ AtKeysMaterial symmetricKey(
   String value = 'c2VjcmV0',
   String algorithm = KeyAlgorithmType.aes256,
   List<String> operations = const [],
-  String? enrollmentId,
   DateTime? createdAt,
 }) {
   return AtKeysMaterial(
     keyId: keyId,
-    enrollmentId: enrollmentId,
     keyPartType: CryptographicKeyType.symmetricEncryption,
     keyAlgorithmType: algorithm,
     bytes: AtBytes.fromString(value),
@@ -48,14 +46,12 @@ List<AtKeysMaterial> rsaKeyPair(
   String keyId, {
   String publicValue = 'cHVibGlj',
   String privateValue = 'cHJpdmF0ZQ==',
-  String? enrollmentId,
   DateTime? createdAt,
 }) {
   final at = createdAt ?? _defaultCreatedAt;
   return [
     AtKeysMaterial(
       keyId: keyId,
-      enrollmentId: enrollmentId,
       keyPartType: CryptographicKeyType.publicEncryption,
       keyAlgorithmType: KeyAlgorithmType.rsa2048,
       bytes: AtBytes.fromString(publicValue),
@@ -63,7 +59,6 @@ List<AtKeysMaterial> rsaKeyPair(
     ),
     AtKeysMaterial(
       keyId: keyId,
-      enrollmentId: enrollmentId,
       keyPartType: CryptographicKeyType.privateDecryption,
       keyAlgorithmType: KeyAlgorithmType.rsa2048,
       bytes: AtBytes.fromString(privateValue),

@@ -2,12 +2,13 @@
 library;
 
 export 'src/at_auth.dart';
-export 'src/auth_constants.dart';
 
 // Contains models related to onboarding and authentication requests and responses.
 export 'src/auth/models/at_auth_requests.dart';
 export 'src/auth/models/at_auth_responses.dart';
 export 'src/auth/models/at_auth_session.dart';
+// PKAM signing strategies (AtPkamSigner implementations) for at_lookup.
+export 'src/auth/pkam_signers.dart';
 // Contains method related to submit, approve and deny an enrollment.
 export 'src/enroll/at_enrollment.dart';
 // Contains fields related to enrollment response received from the secondary server

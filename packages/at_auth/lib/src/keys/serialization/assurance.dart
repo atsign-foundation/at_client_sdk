@@ -10,8 +10,7 @@ class AtKeysAssuranceException extends AtKeysValidationException {
 
 /// Single home for all atKeys validation: low-level parsing/value checks
 /// (`expect*`/`optional*`, called by the models' `fromJson`) and cross-material
-/// structural invariants (`validateKeyMaterials`, `validateAddKey`,
-/// `validateMapUpdate`).
+/// structural invariants (`validateAddKey`, `validateMapUpdate`).
 class AtKeysAssurance {
   const AtKeysAssurance();
 
@@ -107,29 +106,8 @@ class AtKeysAssurance {
 
   // ---- cross-record structural invariants ----
 
-  /// An enrollment may not contribute more than one material of the same
-  /// `CryptographicKeyType` across all of its materials. (Duplicate `keyId`s
-  /// across document entries are rejected earlier, by [parseAtKeysDocument].)
-  void validateKeyMaterials(List<AtKeysMaterial> materials) {
-    final typesByEnrollment = <String, Set<String>>{};
-    for (final material in materials) {
-      final enrollmentId = material.enrollmentId;
-      if (enrollmentId == null) {
-        continue;
-      }
-      final types = typesByEnrollment.putIfAbsent(enrollmentId, () => {});
-      if (!types.add(material.keyPartType)) {
-        throw AtKeysEnrollmentException(
-            'Enrollment "$enrollmentId" has more than one ${material.keyPartType} key material');
-      }
-    }
-  }
-
-  /// All of `AtKeys.addKey`'s validation in one place. Rejects, in order:
-  /// a duplicate `(keyId, keyPartType)`, an enrollmentId that disagrees with
-  /// the candidate's keyId group, and a second material of the same
-  /// `keyPartType` for one enrollment across keyIds (the
-  /// [validateKeyMaterials] invariant, held incrementally).
+  /// All of `AtKeys.addKey`'s validation in one place. Rejects a duplicate
+  /// `(keyId, keyPartType)`.
   ///
   /// Throws [ArgumentError] rather than an [AtKeysValidationException]:
   /// addKey misuse is a caller programming error, not a malformed file.
@@ -138,20 +116,10 @@ class AtKeysAssurance {
     required AtKeysMaterial candidate,
   }) {
     for (final material in existing) {
-      if (material.keyId == candidate.keyId) {
-        if (material.keyPartType == candidate.keyPartType) {
-          throw ArgumentError.value(candidate.keyId, 'material',
-              'AtKeys already contains a ${candidate.keyPartType} material for this keyId');
-        }
-        if (material.enrollmentId != candidate.enrollmentId) {
-          throw ArgumentError.value(candidate.keyId, 'material',
-              'enrollmentId "${candidate.enrollmentId}" does not match "${material.enrollmentId}" already on this keyId');
-        }
-      } else if (candidate.enrollmentId != null &&
-          material.enrollmentId == candidate.enrollmentId &&
+      if (material.keyId == candidate.keyId &&
           material.keyPartType == candidate.keyPartType) {
-        throw ArgumentError.value(candidate.enrollmentId, 'material',
-            'Enrollment "${candidate.enrollmentId}" already has a ${candidate.keyPartType} key material');
+        throw ArgumentError.value(candidate.keyId, 'material',
+            'AtKeys already contains a ${candidate.keyPartType} material for this keyId');
       }
     }
   }
@@ -182,9 +150,7 @@ class AtKeysAssurance {
     if (!json.containsKey('version')) {
       return const [];
     }
-    final materials = parseAtKeysDocument(expectList(json['keys'], 'keys'));
-    validateKeyMaterials(materials);
-    return materials;
+    return parseAtKeysDocument(expectList(json['keys'], 'keys'));
   }
 
   /// Legacy fields are just "everything except the reserved typed-keys

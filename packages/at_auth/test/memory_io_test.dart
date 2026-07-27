@@ -6,9 +6,9 @@ import 'test_utils/at_keys.dart';
 
 void main() {
   group('InMemoryAtKeysIo', () {
-    late InMemoryAtKeysIo io;
+    late EphemeralAtKeysIo io;
 
-    setUp(() => io = InMemoryAtKeysIo());
+    setUp(() => io = EphemeralAtKeysIo());
 
     test('read throws when nothing is loaded for the atsign', () {
       expect(

@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:at_auth/src/keys/serialization/auth_bootstrap.dart';
 import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
-import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
@@ -14,8 +14,6 @@ import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
-import 'package:at_auth/src/keys/io/file_io.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -36,8 +34,28 @@ class AtAuthImpl implements AtAuth {
     _progressController.add(progressEvent);
   }
 
-  @override
-  AtChops? atChops;
+  /// Emits a single event to both channels: the [progressStream] and the
+  /// [AtSignLogger], so callers listening to either one see it. Errors and
+  /// warnings carry their [error]/[stackTrace] into the log record rather than
+  /// having them stringified into the message.
+  void _progress(
+    String group,
+    String message,
+    ProgressEventType type, {
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
+    _addProgress(group, message, type);
+    switch (type) {
+      case ProgressEventType.error:
+        _logger.severe(message, error, stackTrace);
+      case ProgressEventType.warning:
+        _logger.warning(message, error, stackTrace);
+      case ProgressEventType.info:
+      case ProgressEventType.success:
+        _logger.info(message);
+    }
+  }
 
   CramAuthenticator? cramAuthenticator;
 
@@ -59,7 +77,6 @@ class AtAuthImpl implements AtAuth {
 
   AtAuthImpl(
       {this.atLookUp,
-      this.atChops,
       this.cramAuthenticator,
       this.pkamAuthenticator,
       this.atServerStatus,
@@ -82,273 +99,270 @@ class AtAuthImpl implements AtAuth {
   ///    contains keys in encrypted format (LEGACY)
   ///
   /// returns an `AtAuthResponse` indicating success or failure of authentication
-  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
-    AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
+  Future<AtAuthSession> authenticate(AtAuthRequest atAuthRequest) async {
+    _progress(
+      "authentication",
+      "Authenticating atSign: ${atAuthRequest.atsign}",
+      ProgressEventType.info,
+    );
     await validateAtServer(atAuthRequest);
+    AtKeys atKeys;
     try {
-      atAuthKeys ??= await atAuthRequest.atKeysIo!.read(atAuthRequest.atSign);
-    } on AtKeyException catch (e) {
-      _addProgress(
+      atKeys = await atAuthRequest.atKeysIo.read(atAuthRequest.atsign);
+    } on AtKeyException catch (e, s) {
+      _progress(
         "authentication",
-        "Unable to read keys for atSign: ${atAuthRequest.atSign}",
+        "Unable to read keys for atSign: ${atAuthRequest.atsign}",
         ProgressEventType.error,
+        error: e,
+        stackTrace: s,
       );
-      throw AtAuthenticationException(
-        'Unable to read keys for atSign: ${atAuthRequest.atSign} | Cause: ${e.message}',
+      Error.throwWithStackTrace(
+        AtAuthenticationException(
+          'Unable to read keys for atSign: ${atAuthRequest.atsign} | Cause: ${e.message}',
+        ),
+        s,
       );
     }
 
-    atAuthRequest.enrollmentId ??= atAuthKeys.enrollmentId;
+    atAuthRequest.enrollmentId ??= atKeys.enrollmentId;
     atLookUp ??= AtLookupImpl(
-      atAuthRequest.atSign,
+      atAuthRequest.atsign,
       atAuthRequest.rootDomain.rootDomain,
       atAuthRequest.rootDomain.rootPort,
     );
-    // ??= to support mocking
-    atChops ??= atAuthKeys.toAtChops();
-    atLookUp!.atChops = atChops;
 
-    _logger.finer('Authenticating using PKAM');
+    _logger.finer('Authenticating atSign: ${atAuthRequest.atsign} using PKAM '
+        '(enrollmentId: ${atAuthRequest.enrollmentId})');
     pkamAuthenticator ??= PkamAuthenticator();
-    var pkamResponse = AtAuthResponse(atAuthRequest.atSign);
     try {
-      pkamResponse
-        ..isSuccessful = (await pkamAuthenticator!.authenticate(
-            atAuthRequest.atSign, atLookUp!,
-            enrollmentId: atAuthRequest.enrollmentId))
-        ..atAuthKeys = atAuthKeys
-        ..atLookUp = atLookUp
-        ..atChops = atChops;
-
-      // Build the explicit hand-off session from the request's confirmed
-      // subset — only when the request supplied an AtKeysIo source. The legacy
-      // atAuthKeys-only path has no source to hand across, so it gets no
-      // session.
-      if (pkamResponse.isSuccessful && atAuthRequest.atKeysIo != null) {
-        pkamResponse.session = AtAuthSession(
-          atSign: atAuthRequest.atSign,
-          rootDomain: atAuthRequest.rootDomain,
-          namespace: atAuthRequest.namespace,
-          atKeysIo: atAuthRequest.atKeysIo!,
-          enrollmentId: atAuthRequest.enrollmentId,
-          atLookUp: atLookUp,
-        );
-      }
-
-      if (!pkamResponse.isSuccessful) {
-        _addProgress(
-          "authentication",
-          "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
-          ProgressEventType.error,
-        );
-      } else {
-        _addProgress(
-          "authentication",
-          "PKAM authentication successful for atSign: ${atAuthRequest.atSign}",
-          ProgressEventType.success,
-        );
-      }
-    } catch (e, s) {
-      _addProgress(
-        "authentication",
-        "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
-        ProgressEventType.error,
+      // Throws UnAuthenticatedException on failure; reaching past this call
+      // means PKAM succeeded.
+      await pkamAuthenticator!.authenticate(
+        atAuthRequest.atsign,
+        atLookUp!,
+        atKeys,
+        enrollmentId: atAuthRequest.enrollmentId,
       );
-      throw AtAuthenticationException(
-          'Unable to authenticate | Cause: $e \n $s');
-    }
 
-    return pkamResponse;
+      _progress(
+        "authentication",
+        "PKAM authentication successful for atSign: ${atAuthRequest.atsign}",
+        ProgressEventType.success,
+      );
+    } catch (e, s) {
+      _progress(
+        "authentication",
+        "PKAM authentication failed for atSign: ${atAuthRequest.atsign}",
+        ProgressEventType.error,
+        error: e,
+        stackTrace: s,
+      );
+      // A throw here abandons the connection we opened — close it before the
+      // error propagates so a failed authenticate doesn't leak the AtLookup.
+      await _closeQuietly();
+      Error.throwWithStackTrace(
+        AtAuthenticationException('Unable to authenticate | Cause: $e'),
+        s,
+      );
+    }
+// Build the explicit hand-off session from the request's confirmed subset
+    final session = AtAuthSession(
+      atsign: atAuthRequest.atsign,
+      rootDomain: atAuthRequest.rootDomain,
+      namespace: atAuthRequest.namespace,
+      atKeysIo: atAuthRequest.atKeysIo,
+      enrollmentId: atAuthRequest.enrollmentId,
+      atLookUp: atLookUp,
+    );
+    return session;
   }
 
-  /// Keep some state so callers can call [completeActivation] later
-  late AtKeys _atAuthKeys;
-  late AtOnboardingRequest _atOnboardingRequest;
+  /// Best-effort teardown of [atLookUp] on a failure path, so a throw doesn't
+  /// leak the AtLookup we opened. A no-op when [atLookUp] isn't an
+  /// [AtLookupImpl] we can close.
+  Future<void> _closeQuietly() async {
+    if (atLookUp is! AtLookupImpl) {
+      return;
+    }
+    try {
+      await (atLookUp as AtLookupImpl).close();
+    } catch (_) {
+      // cleanup is best-effort
+    }
+  }
 
   /// Onboard a new atSign using CRAM
   /// Requires an AtOnboardingRequest and a cramSecret
   ///
   /// returns an `AtOnboardingResponse` indicating success or failure of onboarding
   @override
-  Future<AtOnboardingResponse> onboard(
+  Future<AtAuthSession> onboard(
     AtOnboardingRequest atOnboardingRequest,
     String cramSecret, {
     bool autoCompleteActivation = true,
     String? publicKeyId,
   }) async {
-    var atOnboardingResponse = AtOnboardingResponse(atOnboardingRequest.atSign);
+    _progress(
+      "onboarding",
+      "Onboarding atSign: ${atOnboardingRequest.atsign}",
+      ProgressEventType.info,
+    );
     atLookUp ??= AtLookupImpl(
-      atOnboardingRequest.atSign,
+      atOnboardingRequest.atsign,
       atOnboardingRequest.rootDomain.rootDomain,
       atOnboardingRequest.rootDomain.rootPort,
     );
 
-    //If the user is providing atKeysIo, they might be onboarding again or with a specific key implementation.
-    try {
-      atOnboardingRequest.atKeys = await atOnboardingRequest.atKeysIo?.read(
-        atOnboardingRequest.atSign,
-      );
-    } catch (e, _) {
-      _logger.info(
-        'Failed to read keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
-      ); //swallow the error, we just want to know if keys exist or not
-    }
-
-    if (atOnboardingRequest.atKeys != null) {
-      throw AtAuthenticationException(
-        'atSign: ${atOnboardingRequest.atSign} is already onboarded. Cannot perform onboarding again.',
-      );
-    }
-
-    await validateAtServer(atOnboardingRequest);
     //1. cram auth
-    cramAuthenticator ??= CramAuthenticator();
-    var cramAuthResult = await cramAuthenticator!.authenticate(
-      atOnboardingRequest.atSign,
-      cramSecret,
-      atLookUp!,
-    );
-    if (!cramAuthResult) {
-      _addProgress(
-        "onboarding",
-        "CRAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
-        ProgressEventType.error,
-      );
-      throw AtAuthenticationException(
-        'Cram authentication failed. Please check the cram key'
-        ' and try again (or) contact support@atsign.com',
-      );
-    }
-    //2. generate key pairs
-    if (atOnboardingRequest.atKeys != null) {
-      _atAuthKeys = atOnboardingRequest.atKeys!;
-    } else {
-      //2a. if there is no specified implementation we're defaulting to FileAtKeysIo with a default file path
-      atOnboardingRequest.atKeysIo ??= FileAtKeysIo();
-      switch (atOnboardingRequest.atKeysIo) {
-        case WrittenAtKeysIo writtenKeys:
-          _atAuthKeys = writtenKeys.generateKeyPairs();
-        default:
-          throw AtAuthenticationException(
-              'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');
-      }
-    }
-    atChops ??= _atAuthKeys.toAtChops();
-    atLookUp!.atChops = atChops;
-
-    //3. send onboarding enrollment
-    String? enrollmentIdFromServer;
-    // server will update the apkam public key during enrollment.
-    // So don't have to manually update apkam public key in this scenario.
-    enrollmentIdFromServer = await _sendOnboardingEnrollment(
-      atOnboardingRequest,
-      _atAuthKeys,
-      atLookUp!,
-    );
-    _atAuthKeys.enrollmentId = enrollmentIdFromServer;
-
-    //4. Close connection to server
     try {
-      await (atLookUp as AtLookupImpl).close();
-    } on Exception catch (e) {
-      _logger.severe('error while closing connection to server: $e');
-    }
-
-    //6. Do pkam auth
-    pkamAuthenticator ??= PkamAuthenticator();
-    try {
-      var pkamResponse = await pkamAuthenticator!.authenticate(
-          atOnboardingRequest.atSign, atLookUp!,
-          enrollmentId: enrollmentIdFromServer);
-      if (!pkamResponse) {
-        _addProgress(
-            "onboarding",
-            "PKAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
-            ProgressEventType.error);
-        throw AtAuthenticationException('Pkam auth returned false');
-      }
-    } on UnAuthenticatedException catch (e) {
-      _addProgress(
-          "onboarding",
-          "PKAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
-          ProgressEventType.error);
-      throw AtAuthenticationException('Pkam auth failed - $e ');
-    }
-
-    //6b. Store the keys
-    if (atOnboardingRequest.atKeysIo is WrittenAtKeysIo) {
+      await validateAtServer(atOnboardingRequest);
+      cramAuthenticator ??= CramAuthenticator();
       try {
-        await (atOnboardingRequest.atKeysIo as WrittenAtKeysIo).write(
-          atOnboardingRequest.atSign,
-          _atAuthKeys,
+        // Throws UnAuthenticatedException on failure.
+        await cramAuthenticator!.authenticate(
+          atOnboardingRequest.atsign,
+          cramSecret,
+          atLookUp!,
         );
-        _logger.info(
-          'Successfully stored keys for atSign: ${atOnboardingRequest.atSign}',
-        );
-      } on AtKeyException catch (e) {
-        _addProgress(
+      } on UnAuthenticatedException catch (e, s) {
+        _progress(
           "onboarding",
-          "Unable to store keys for atSign: ${atOnboardingRequest.atSign}",
+          "CRAM authentication failed for atSign: ${atOnboardingRequest.atsign}",
           ProgressEventType.error,
+          error: e,
+          stackTrace: s,
         );
-        throw AtAuthenticationException(
-          'Unable to store keys for atSign: ${atOnboardingRequest.atSign} | Cause: ${e.message}',
-        );
-      } catch (e) {
-        _addProgress(
-          "onboarding",
-          e.toString(),
-          ProgressEventType.error,
-        );
-        throw AtAuthenticationException(
-          'Unable to write keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
+        Error.throwWithStackTrace(
+          AtAuthenticationException(
+            'Cram authentication failed. Please check the cram key'
+            ' and try again (or) contact support@atsign.com',
+          ),
+          s,
         );
       }
-    }
+      _progress(
+        "onboarding",
+        "CRAM authentication successful for atSign: ${atOnboardingRequest.atsign}",
+        ProgressEventType.success,
+      );
 
-    //7. If so specified (default behaviour) then
-    // - set the public encryption key
-    // - delete the cram secret from the keystore
-    _atOnboardingRequest = atOnboardingRequest;
-    if (autoCompleteActivation) {
-      await completeActivation();
-    }
+      //2. generate key pairs
+      AtKeys atKeys = await AuthBootstrap.bootstrap(atOnboardingRequest.atsign);
 
-    atOnboardingResponse
-      ..isSuccessful = true
-      ..atAuthKeys = _atAuthKeys
-      ..atLookUp = atLookUp
-      ..atChops = atChops;
+      //3. send onboarding enrollment
+      String? enrollmentIdFromServer;
+      // server will update the apkam public key during enrollment.
+      // So don't have to manually update apkam public key in this scenario.
+      enrollmentIdFromServer = await _sendOnboardingEnrollment(
+        atOnboardingRequest,
+        atKeys,
+        atLookUp!,
+      );
+      atKeys.enrollmentId = enrollmentIdFromServer;
 
-    // Hand back the same explicit session as authenticate(), so a
-    // freshly-onboarded atSign flows straight into the client. atKeysIo is
-    // guaranteed set here (defaulted to FileAtKeysIo above); the guard mirrors
-    // authenticate() for parity.
-    if (atOnboardingRequest.atKeysIo != null) {
-      atOnboardingResponse.session = AtAuthSession(
-        atSign: atOnboardingRequest.atSign,
+      //4. Do pkam auth
+      pkamAuthenticator ??= PkamAuthenticator();
+      try {
+        // Throws UnAuthenticatedException on failure.
+        await pkamAuthenticator!.authenticate(
+            atOnboardingRequest.atsign, atLookUp!, atKeys,
+            enrollmentId: enrollmentIdFromServer);
+        _progress(
+            "onboarding",
+            "PKAM authentication successful for atSign: ${atOnboardingRequest.atsign}",
+            ProgressEventType.success);
+      } on UnAuthenticatedException catch (e, s) {
+        _progress(
+            "onboarding",
+            "PKAM authentication failed for atSign: ${atOnboardingRequest.atsign}",
+            ProgressEventType.error,
+            error: e,
+            stackTrace: s);
+        Error.throwWithStackTrace(
+          AtAuthenticationException('Pkam auth failed - $e '),
+          s,
+        );
+      }
+
+      //4b. Store the keys
+      try {
+        switch (atOnboardingRequest.atKeysIo) {
+          case WrittenAtKeysIo io:
+            await io.write(
+              atOnboardingRequest.atsign,
+              atKeys,
+            );
+          case InMemoryAtKeysIo io:
+            await io.write(
+              atOnboardingRequest.atsign,
+              atKeys,
+            );
+        }
+        _progress(
+          "onboarding",
+          "Successfully stored keys for atSign: ${atOnboardingRequest.atsign}",
+          ProgressEventType.success,
+        );
+      } catch (e, s) {
+        _progress(
+          "onboarding",
+          "Unable to store keys for atSign: ${atOnboardingRequest.atsign}",
+          ProgressEventType.error,
+          error: e,
+          stackTrace: s,
+        );
+        Error.throwWithStackTrace(
+          AtAuthenticationException(
+            'Unable to store keys for atSign: ${atOnboardingRequest.atsign} | Cause: ${e.toString()}',
+          ),
+          s,
+        );
+      }
+
+      // Hand back the same explicit session as authenticate(), so a
+      // freshly-onboarded atSign flows straight into the client. atKeysIo is
+      // guaranteed set here (defaulted to FileAtKeysIo above); the guard mirrors
+      // authenticate() for parity.
+      final session = AtAuthSession(
+        atsign: atOnboardingRequest.atsign,
         rootDomain: atOnboardingRequest.rootDomain,
         namespace: atOnboardingRequest.namespace,
-        atKeysIo: atOnboardingRequest.atKeysIo!,
+        atKeysIo: atOnboardingRequest.atKeysIo,
         enrollmentId: enrollmentIdFromServer,
         atLookUp: atLookUp,
       );
-    }
 
-    _addProgress(
-        "onboarding",
-        "Onboarding successful for atSign: ${atOnboardingRequest.atSign}",
-        ProgressEventType.success);
-    return atOnboardingResponse;
+      //5. If so specified (default behaviour) then
+      // - set the public encryption key
+      // - delete the cram secret from the keystore
+      if (autoCompleteActivation) {
+        await completeActivation(session);
+      }
+
+      _progress(
+          "onboarding",
+          "Onboarding successful for atSign: ${atOnboardingRequest.atsign}",
+          ProgressEventType.success);
+      return session;
+    } catch (e) {
+      // Any throw above abandons the AtLookup we opened (the inner catches
+      // rethrow into here) — close it before the error propagates so a failed
+      // onboard doesn't leak the AtLookup.
+      await _closeQuietly();
+      rethrow;
+    }
   }
 
   @override
-  Future<void> completeActivation() async {
-    final encryptionPublicKey = _atAuthKeys.defaultEncryptionPublicKey;
+  Future<void> completeActivation(AtAuthSession incompleteSession) async {
+    AtKeys atKeys =
+        await incompleteSession.atKeysIo.read(incompleteSession.atsign);
+    final encryptionPublicKey = atKeys.defaultEncryptionPublicKey;
     UpdateVerbBuilder updateBuilder = UpdateVerbBuilder()
       ..atKey = (AtKey()
         ..key = 'publickey'
-        ..sharedBy = _atOnboardingRequest.atSign
+        ..sharedBy = incompleteSession.atsign
         ..metadata = (Metadata()
           ..isPublic = true
           ..ttr = -1))
@@ -369,7 +383,7 @@ class AtAuthImpl implements AtAuth {
     _logger.finer('apkamPublicKey: ${atAuthKeys.apkamPublicKey}');
 
     FirstEnrollmentRequest firstEnrollmentRequest = FirstEnrollmentRequest(
-        atSign: atOnboardingRequest.atSign,
+        atSign: atOnboardingRequest.atsign,
         appName: atOnboardingRequest.appName,
         deviceName: atOnboardingRequest.deviceName,
         apkamPublicKey: atAuthKeys.apkamPublicKey!.toString());
@@ -378,8 +392,17 @@ class AtAuthImpl implements AtAuth {
     try {
       atEnrollmentResponse =
           await atEnrollment.submit(firstEnrollmentRequest, atLookUp!);
-    } on AtEnrollmentException catch (e) {
-      throw AtAuthenticationException('Enrollment error:${e.toString}');
+    } on AtEnrollmentException catch (e, s) {
+      _progress(
+          "onboarding",
+          "Enrollment failed for atSign: ${atOnboardingRequest.atsign}",
+          ProgressEventType.error,
+          error: e,
+          stackTrace: s);
+      Error.throwWithStackTrace(
+        AtAuthenticationException('Enrollment error: $e'),
+        s,
+      );
     }
     _logger.finer('enrollment response: ${atEnrollmentResponse.toString()}');
     var enrollmentIdFromServer = atEnrollmentResponse.enrollmentId;
@@ -412,10 +435,11 @@ class AtAuthImpl implements AtAuth {
   Future<void> validateAtServer(AuthRequest atRequest) async {
     // Floor the poll interval so a zero/tiny retryDelay can't hammer the network
     // for the whole (possibly minutes-long) onboarding budget.
-    final retryDelay =
-        atRequest.retryOptions.retryDelay < const Duration(milliseconds: 100)
-            ? const Duration(milliseconds: 100)
-            : atRequest.retryOptions.retryDelay;
+    final retryDelay = RetryOptions.cap(
+      atRequest.retryOptions.retryDelay,
+      RetryOptions.defaultRetryOptions.retryDelay,
+    );
+
     // Bound the TOTAL wall-clock of this poll with a single overall deadline.
     // The two paths need opposite budgets: authentication of an EXISTING atSign
     // must fail fast on a dead network (#1923), but ONBOARDING polls for a
@@ -444,7 +468,7 @@ class AtAuthImpl implements AtAuth {
       try {
         _addProgress(
             'Find',
-            '#[$attempt] : looking up ${atRequest.atSign} in atDirectory',
+            '#[$attempt] : looking up ${atRequest.atsign} in atDirectory',
             ProgressEventType.info);
 
         // Bound each network call by the budget remaining before the deadline,
@@ -452,7 +476,7 @@ class AtAuthImpl implements AtAuth {
         Duration remaining =
             AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
         var atStatus =
-            await atServerStatus!.get(atRequest.atSign).timeout(remaining);
+            await atServerStatus!.get(atRequest.atsign).timeout(remaining);
 
         // 3 Checks for onboarding:
         //   1. Root server should be found
@@ -466,12 +490,12 @@ class AtAuthImpl implements AtAuth {
           if (atStatus.serverStatus == ServerStatus.error ||
               atStatus.atSignStatus == AtSignStatus.notFound) {
             throw AtException(
-                'atSign: ${atRequest.atSign} secondary server is not running. '
+                'atSign: ${atRequest.atsign} secondary server is not running. '
                 'Cannot perform onboarding. ${atStatus.serverStatus} ${atStatus.atSignStatus}');
           }
           if (atStatus.atSignStatus == AtSignStatus.activated) {
             throw AtException(
-                'atSign: ${atRequest.atSign} is already onboarded. Cannot perform onboarding again.');
+                'atSign: ${atRequest.atsign} is already onboarded. Cannot perform onboarding again.');
           }
         }
 
@@ -489,19 +513,19 @@ class AtAuthImpl implements AtAuth {
               atStatus.serverStatus == ServerStatus.error ||
               atStatus.serverStatus == ServerStatus.unavailable) {
             throw AtException(
-                'atSign: ${atRequest.atSign} secondary server is not running. Cannot perform Authentication.');
+                'atSign: ${atRequest.atsign} secondary server is not running. Cannot perform Authentication.');
           }
           if (atStatus.atSignStatus == AtSignStatus.teapot ||
               atStatus.serverStatus == ServerStatus.teapot) {
             throw AtException(
-                'atSign: ${atRequest.atSign} has not been onboarded. Cannot perform Authentication.');
+                'atSign: ${atRequest.atsign} has not been onboarded. Cannot perform Authentication.');
           }
         }
 
         // AtServer availability probing
         _addProgress(
             'Connect',
-            '#[$attempt] : Connecting to ${atRequest.atSign} atServer',
+            '#[$attempt] : Connecting to ${atRequest.atsign} atServer',
             ProgressEventType.info);
 
         secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
@@ -510,7 +534,7 @@ class AtAuthImpl implements AtAuth {
         );
         remaining = AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
         SecondaryAddress secondaryAddress = await secondaryAddressFinder!
-            .findSecondary(atRequest.atSign, timeout: remaining);
+            .findSecondary(atRequest.atsign, timeout: remaining);
 
         remaining = AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
         await (probeSocket ?? _defaultProbeSocket)(
@@ -519,7 +543,7 @@ class AtAuthImpl implements AtAuth {
 
         _addProgress(
             'Connect',
-            '#[$attempt] : Connected to ${atRequest.atSign} atServer',
+            '#[$attempt] : Connected to ${atRequest.atsign} atServer',
             ProgressEventType.success);
 
         validated = true;
@@ -544,7 +568,7 @@ class AtAuthImpl implements AtAuth {
       // above). Surface a timeout with the last error seen.
       throw AtTimeoutException(
           'Timed out after ${overallTimeout.inSeconds}s while reaching '
-          '${atRequest.atSign} atServer'
+          '${atRequest.atsign} atServer'
           '${lastError == null ? '' : ' : $lastError'}');
     }
   }
