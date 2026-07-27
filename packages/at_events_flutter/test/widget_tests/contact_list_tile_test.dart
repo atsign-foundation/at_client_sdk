@@ -23,7 +23,7 @@ void main() {
         image: const Icon(Icons.add),
         onAdd: () {},
         onTileTap: () {},
-        atSign: '@bluebellralted86',
+        atsign: '@bluebellralted86',
       );
       await tester.pumpWidget(
           _wrapWidgetWithMaterialApp(contactListTile: contactListTile));

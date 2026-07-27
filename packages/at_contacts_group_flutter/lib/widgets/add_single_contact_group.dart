@@ -88,7 +88,7 @@ class _AddSingleContactState extends State<AddSingleContact> {
                           isLoading = true;
                         });
                         await ContactService()
-                            .addAtSign(atSign: widget.atSignName);
+                            .addAtSign(atsign: widget.atSignName);
                         setState(() {
                           isLoading = false;
                           Navigator.pop(context);

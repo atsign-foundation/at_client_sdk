@@ -203,7 +203,7 @@ class NotifyService {
   /// Show Local Notification in Device
   Future<void> showNotification(String decryptedMessage, String atSign) async {
     Notify notify = Notify.fromJson((decryptedMessage));
-    print('showNotification => ${notify.message} ${notify.atSign}');
+    print('showNotification => ${notify.message} ${notify.atsign}');
 
     var androidChannelSpecifics = const AndroidNotificationDetails(
       'notify_id',

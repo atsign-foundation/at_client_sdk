@@ -4,12 +4,14 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 
 sealed class AuthRequest {
-  String atSign;
+  Atsign atsign;
   AtRootDomain rootDomain;
+  AtKeysIo atKeysIo;
   String? namespace;
 
   AuthRequest(
-    this.atSign, {
+    this.atsign,
+    this.atKeysIo, {
     this.retryOptions = RetryOptions.defaultRetryOptions,
     this.rootDomain = AtRootDomain.atsignDomain,
     this.namespace,
@@ -37,68 +39,39 @@ class AtOnboardingRequest extends AuthRequest {
   /// [atKeys] are the keys for authentication of an atSign
 
   AtOnboardingRequest(
-    super.atSign, {
+    super.atSign,
+    super.atKeysIo, {
     super.rootDomain,
     super.retryOptions,
-    this.atKeysIo,
-    this.atKeys,
   });
 
   // Default root domain and port
   String appName = "firstApp";
   String deviceName = "firstDevice";
-  AtKeysIo? atKeysIo;
-  @Deprecated('remove in v4')
-  AtKeys? atKeys;
 }
 
 class AtAuthRequest extends AuthRequest {
   /// Constructor for [AtAuthRequest]
   /// [atSign] is the atSign for authentication
   ///
-  /// Must provide one of the following!
-  /// atKeysIo - method of authentication
-  ///    or
-  /// atAuthKeys - the actual keys themselves
-  ///
   /// [atKeysIo] controls how AtKeys are loaded and saved (e.g. file system, keychain, secure element)
-  /// [atAuthKeys] are the keys for authentication of an atSign
   ///
   /// optional:
   /// [rootDomain] is the default domain of the root server (e.g. root.atsign.org, 64)
   AtAuthRequest(
-    super.atSign, {
+    super.atSign,
+    super.atKeysIo, {
     super.rootDomain,
     super.retryOptions,
-    this.atKeysIo,
-    this.atAuthKeys,
-  }) {
-    if (atKeysIo == null && atAuthKeys == null) {
-      throw Exception(
-          "Either method of authentication(atKeysIo) or atAuthKeys need to be provided");
-    }
-  }
+  });
 
-  // Controls how the authentication is performed
-  AtKeysIo? atKeysIo;
-
-  /// The enrollmentId for APKAM authentication
   String? enrollmentId;
-
-  /// The keys for authentication of an atSign.
-  @Deprecated('remove in v4')
-  AtKeys? atAuthKeys;
-
-  /// The contents of .atKeys file which contains the encrypted atKeys.
-  @Deprecated('remove in v4')
-  Map<String, dynamic>? encryptedKeysMap;
 }
 
 class RetryOptions {
   static const defaultRetryOptions =
-      RetryOptions(maxRetries: 10, retryDelay: Duration(seconds: 2));
+      RetryOptions(retryDelay: Duration(milliseconds: 100));
 
-  final int maxRetries;
   final Duration retryDelay;
 
   /// The maximum total wall-clock to spend reaching/validating the atServer —
@@ -113,8 +86,7 @@ class RetryOptions {
   /// does (the loop retries every [retryDelay] until the budget is spent).
   final Duration? overallTimeout;
 
-  const RetryOptions(
-      {required this.maxRetries,
-      required this.retryDelay,
-      this.overallTimeout});
+  static Duration cap(Duration time, Duration cap) => time > cap ? cap : time;
+
+  const RetryOptions({required this.retryDelay, this.overallTimeout});
 }

@@ -105,7 +105,7 @@ void main() {
           .thenAnswer((invocation) async => true);
 
       ContactService().atContactImpl = mockAtcontactImpl;
-      var res = await ContactService().deleteAtSign(atSign: atSign);
+      var res = await ContactService().deleteAtSign(atsign: atSign);
 
       expect(res, true);
     });

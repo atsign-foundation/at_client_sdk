@@ -65,7 +65,7 @@ class _CustomListTileState extends State<CustomListTile> {
     for (GroupContactsModel? groupContact in selectedGroupContacts) {
       if (groupContact!.contact != null &&
           widget.item!.contact != null &&
-          groupContact.contact!.atSign == widget.item!.contact!.atSign) {
+          groupContact.contact!.atsign == widget.item!.contact!.atsign) {
         isSelected = true;
       } else if (groupContact.group != null &&
           widget.item!.group != null &&
@@ -78,18 +78,20 @@ class _CustomListTileState extends State<CustomListTile> {
   getNameAndImage() {
     try {
       if (widget.item?.contact != null) {
-        initials = widget.item?.contact?.atSign;
+        initials = widget.item?.contact?.atsign;
         if ((initials?[0] ?? 'not@') == '@') {
           initials = initials?.substring(1);
         }
 
-        if (widget.item?.contact?.tags != null && widget.item?.contact?.tags!['image'] != null) {
+        if (widget.item?.contact?.tags != null &&
+            widget.item?.contact?.tags!['image'] != null) {
           List<int> intList = widget.item?.contact?.tags!['image'].cast<int>();
           image = Uint8List.fromList(intList);
         }
       } else {
         if (widget.item?.group?.groupPicture != null) {
-          image = Uint8List.fromList(widget.item?.group?.groupPicture?.cast<int>());
+          image =
+              Uint8List.fromList(widget.item?.group?.groupPicture?.cast<int>());
         }
 
         initials = widget.item?.group?.displayName;
@@ -142,7 +144,7 @@ class _CustomListTileState extends State<CustomListTile> {
                       : widget.item!.group!.displayName
                   // ignore: prefer_if_null_operators
                   : widget.item!.contact!.tags!['name'] == null
-                      ? widget.item!.contact!.atSign!.substring(1)
+                      ? widget.item!.contact!.atsign!.substring(1)
                       : widget.item!.contact!.tags!['name'],
               style: TextStyle(
                 color: Colors.black,
@@ -151,7 +153,8 @@ class _CustomListTileState extends State<CustomListTile> {
               ),
             ),
             subtitle: Text(
-              widget.item?.contact?.atSign ?? '${widget.item?.group?.members?.length} Members',
+              widget.item?.contact?.atsign ??
+                  '${widget.item?.group?.members?.length} Members',
               style: TextStyle(
                 color: AllColors().FADED_TEXT,
                 fontSize: 14.toFont,
@@ -176,7 +179,8 @@ class _CustomListTileState extends State<CustomListTile> {
                             initials: (initials ?? 'UG'),
                           )),
             trailing: IconButton(
-              onPressed: (widget.asSelectionTile == false && widget.onTrailingPressed != null)
+              onPressed: (widget.asSelectionTile == false &&
+                      widget.onTrailingPressed != null)
                   ? widget.onTrailingPressed as void Function()?
                   : selectRemoveContact(),
               icon: (widget.asSelectionTile)

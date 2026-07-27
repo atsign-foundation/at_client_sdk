@@ -137,7 +137,7 @@ class EventKeyStreamService {
       notification.eventNotificationModel!.group!.members!
           // ignore: avoid_function_literals_in_foreach_calls
           .forEach((member) async {
-        if ((member.atSign == currentAtSign) &&
+        if ((member.atsign == currentAtSign) &&
             (member.tags!['isAccepted'] == false) &&
             (member.tags!['isExited'] == false)) {
           var atkeyMicrosecondId = notification.eventNotificationModel!.key!
@@ -229,7 +229,7 @@ class EventKeyStreamService {
               .eventNotificationModel!
               .group!
               .members!
-              .where((element) => element.atSign == tagOfAtsign)
+              .where((element) => element.atsign == tagOfAtsign)
               .forEach((element) {
             if (updateLatLng) {
               element.tags!['lat'] = tags['lat'];
@@ -372,7 +372,7 @@ class EventKeyStreamService {
       } else {
         List<String> atsignsToremove = [];
         for (var member in eventNotificationModel.group!.members!) {
-          atsignsToremove.add(member.atSign!);
+          atsignsToremove.add(member.atsign!);
         }
         SendLocationNotification().removeMember(
             eventNotificationModel.key!, atsignsToremove,
@@ -506,7 +506,7 @@ class EventKeyStreamService {
       // ignore: avoid_function_literals_in_foreach_calls
       eventData.group!.members!.forEach((groupMember) {
         // sending location to other group members
-        if (compareAtSign(groupMember.atSign!,
+        if (compareAtSign(groupMember.atsign!,
             AtEventNotificationListener().currentAtSign!)) {
           currentGroupMember = groupMember;
         }
@@ -578,7 +578,7 @@ class EventKeyStreamService {
     eventOne.group!.members!.forEach((groupOneMember) {
       // ignore: avoid_function_literals_in_foreach_calls
       eventTwo.group!.members!.forEach((groupTwoMember) {
-        if (groupOneMember.atSign == groupTwoMember.atSign) {
+        if (groupOneMember.atsign == groupTwoMember.atsign) {
           if (groupOneMember.tags!['isAccepted'] !=
                   groupTwoMember.tags!['isAccepted'] ||
               groupOneMember.tags!['isSharing'] !=
@@ -715,7 +715,7 @@ class EventKeyStreamService {
       // ignore: avoid_function_literals_in_foreach_calls
       eventData.group!.members!.forEach((groupMember) {
         // sending location to other group members
-        if (compareAtSign(groupMember.atSign!,
+        if (compareAtSign(groupMember.atsign!,
             AtEventNotificationListener().currentAtSign!)) {
           currentGroupMember = groupMember;
         }

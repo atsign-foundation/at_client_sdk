@@ -203,7 +203,7 @@ class AtClientManager {
           'authenticated AtLookUp; opening a fresh connection instead.');
     }
 
-    return setCurrentAtSign(session.atSign, session.namespace, preference,
+    return setCurrentAtSign(session.atsign, session.namespace, preference,
         serviceFactory: serviceFactory,
         atKeysIo: session.atKeysIo,
         atLookUp: reuse ? session.atLookUp : null,

@@ -32,7 +32,9 @@ class ContactsScreen extends StatefulWidget {
   const ContactsScreen(
       {Key? key,
       this.selectedList,
-      @Deprecated('context is no longer required and will be removed in upcoming version') this.context,
+      @Deprecated(
+          'context is no longer required and will be removed in upcoming version')
+      this.context,
       this.asSelectionScreen = false,
       this.asSingleSelectionScreen = false,
       this.saveGroup,
@@ -76,7 +78,8 @@ class _ContactsScreenState extends State<ContactsScreen> {
 
       if (widget.selectedContactsHistory != null) {
         _contactService.selectedContacts = widget.selectedContactsHistory!;
-        _contactService.selectedContactSink.add(_contactService.selectedContacts);
+        _contactService.selectedContactSink
+            .add(_contactService.selectedContacts);
       }
     });
 
@@ -132,7 +135,10 @@ class _ContactsScreenState extends State<ContactsScreen> {
           );
         },
         // ignore: unnecessary_null_comparison
-        showTrailingIcon: widget.asSelectionScreen == null || widget.asSelectionScreen == false ? true : false,
+        showTrailingIcon: widget.asSelectionScreen == null ||
+                widget.asSelectionScreen == false
+            ? true
+            : false,
         trailingIcon: const Center(
           child: Icon(
             Icons.add,
@@ -143,7 +149,8 @@ class _ContactsScreenState extends State<ContactsScreen> {
       body: errorOcurred
           ? const ErrorScreen()
           : Container(
-              padding: EdgeInsets.symmetric(horizontal: 16.toWidth, vertical: 16.toHeight),
+              padding: EdgeInsets.symmetric(
+                  horizontal: 16.toWidth, vertical: 16.toHeight),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
@@ -166,7 +173,8 @@ class _ContactsScreenState extends State<ContactsScreen> {
                     stream: _contactService.contactStream,
                     initialData: _contactService.baseContactList,
                     builder: (context, snapshot) {
-                      if ((snapshot.connectionState == ConnectionState.waiting)) {
+                      if ((snapshot.connectionState ==
+                          ConnectionState.waiting)) {
                         return const Center(
                           child: CircularProgressIndicator(),
                         );
@@ -178,7 +186,9 @@ class _ContactsScreenState extends State<ContactsScreen> {
                         } else {
                           var filteredList = <BaseContact?>[];
                           for (var c in snapshot.data!) {
-                            if (c!.contact!.atSign!.toUpperCase().contains(searchText.toUpperCase())) {
+                            if (c!.contact!.atsign!
+                                .toUpperCase()
+                                .contains(searchText.toUpperCase())) {
                               filteredList.add(c);
                             }
                           }
@@ -196,19 +206,22 @@ class _ContactsScreenState extends State<ContactsScreen> {
                             physics: const AlwaysScrollableScrollPhysics(),
                             itemBuilder: (context, alphabetIndex) {
                               var contactsForAlphabet = <AtContact?>[];
-                              var currentChar = String.fromCharCode(alphabetIndex + 65).toUpperCase();
+                              var currentChar =
+                                  String.fromCharCode(alphabetIndex + 65)
+                                      .toUpperCase();
                               if (alphabetIndex == 26) {
                                 currentChar = 'Others';
                                 for (var c in filteredList) {
                                   if (!RegExp(r'^[a-z]+$').hasMatch(
-                                    c!.contact!.atSign![1].toLowerCase(),
+                                    c!.contact!.atsign![1].toLowerCase(),
                                   )) {
                                     contactsForAlphabet.add(c.contact!);
                                   }
                                 }
                               } else {
                                 for (var c in filteredList) {
-                                  if (c!.contact!.atSign![1].toUpperCase() == currentChar) {
+                                  if (c!.contact!.atsign![1].toUpperCase() ==
+                                      currentChar) {
                                     contactsForAlphabet.add(c.contact!);
                                   }
                                 }
@@ -232,7 +245,8 @@ class _ContactsScreenState extends State<ContactsScreen> {
                                       SizedBox(width: 4.toWidth),
                                       Expanded(
                                         child: Divider(
-                                          color: ColorConstants.dividerColor.withValues(alpha: 0.2),
+                                          color: ColorConstants.dividerColor
+                                              .withValues(alpha: 0.2),
                                           height: 1.toHeight,
                                         ),
                                       ),
@@ -266,7 +280,8 @@ class _ContactsScreenState extends State<ContactsScreen> {
           return Padding(
             padding: const EdgeInsets.all(8.0),
             child: Slidable(
-              endActionPane: ActionPane(motion: const ScrollMotion(), children: [
+              endActionPane:
+                  ActionPane(motion: const ScrollMotion(), children: [
                 SlidableAction(
                   label: TextStrings().block,
                   backgroundColor: ColorConstants.inputFieldColor,
@@ -323,7 +338,8 @@ class _ContactsScreenState extends State<ContactsScreen> {
         ),
       ),
     );
-    await _contactService.blockUnblockContact(contact: contact, blockAction: true);
+    await _contactService.blockUnblockContact(
+        contact: contact, blockAction: true);
     setState(() {
       blockingContact = false;
       Navigator.pop(context);
@@ -349,7 +365,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
         ),
       ),
     );
-    await _contactService.deleteAtSign(atSign: contact.atSign!);
+    await _contactService.deleteAtSign(atsign: contact.atSign!);
     setState(() {
       deletingContact = false;
       Navigator.pop(context);

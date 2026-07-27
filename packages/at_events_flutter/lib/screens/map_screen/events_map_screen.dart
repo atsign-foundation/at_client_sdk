@@ -56,7 +56,7 @@ class EventsMapScreenData {
   void _calculateExitedAtsigns(EventNotificationModel _event) {
     _event.group!.members!.forEach((element) {
       if ((element.tags!['isExited']) && (!element.tags!['isAccepted'])) {
-        exitedAtSigns.add(element.atSign);
+        exitedAtSigns.add(element.atsign);
       }
     });
   }
@@ -141,7 +141,7 @@ class EventsMapScreenData {
     var groupMembers = <String>[];
     groupMembers.add(_event.atsignCreator!);
     _event.group?.members?.forEach((member) {
-      groupMembers.add(member.atSign!);
+      groupMembers.add(member.atsign!);
     });
     groupMembers.remove(AtEventNotificationListener().currentAtSign);
     var atkeyMicrosecondId = _event.key!.split('createevent-')[1].split('@')[0];
@@ -208,11 +208,11 @@ class _EventsMapScreenState extends State<_EventsMapScreen> {
               }
 
               for (var member in _event.group!.members!) {
-                if ((member.atSign!) !=
+                if ((member.atsign!) !=
                     AtClientManager.getInstance()
                         .atClient
                         .getCurrentAtSign()!) {
-                  atsignsToTrack.add(member.atSign!);
+                  atsignsToTrack.add(member.atsign!);
                 }
               }
 

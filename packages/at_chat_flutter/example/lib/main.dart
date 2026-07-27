@@ -38,7 +38,7 @@ class _MyAppState extends State<MyApp> {
   AtClientPreference? atClientPreference;
 
   final AtSignLogger _logger = AtSignLogger(namespace);
-	final KeychainStorage keychainStorage = KeychainStorage();
+  final KeychainStorage keychainStorage = KeychainStorage();
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -85,7 +85,7 @@ class _MyAppState extends State<MyApp> {
                         }
                         // b. Check keychain for keys, otherwise show File Picker
                         AtKeysIo? atKeysIo;
-                        if (keychain.contains(authRequest.atSign)) {
+                        if (keychain.contains(authRequest.atsign)) {
                           atKeysIo = KeychainAtKeysIo();
                         } else {
                           atKeysIo = await AtKeysFileDialog.show(context);
@@ -96,7 +96,7 @@ class _MyAppState extends State<MyApp> {
                           );
                         }
                         var request = AtAuthRequest(
-                          authRequest.atSign,
+                          authRequest.atsign,
                           atKeysIo: atKeysIo,
                         );
                         // c. Show PkamDialog to complete authentication
@@ -153,7 +153,7 @@ class _MyAppState extends State<MyApp> {
                               WidgetStateProperty.all<Color>(Colors.black12),
                         ),
                         onPressed: () {
-													keychainStorage.deleteAllAtKeysData();
+                          keychainStorage.deleteAllAtKeysData();
                         },
                         child: const Text('Clear paired atsigns',
                             style: TextStyle(color: Colors.black)))),

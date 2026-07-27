@@ -2,7 +2,8 @@
 import 'package:at_common_flutter/at_common_flutter.dart';
 import 'package:at_contacts_flutter/services/contact_service.dart';
 import 'package:at_contacts_flutter/utils/text_strings.dart' as contact_strings;
-import 'package:at_contacts_flutter/utils/text_styles.dart' as contact_text_styles;
+import 'package:at_contacts_flutter/utils/text_styles.dart'
+    as contact_text_styles;
 import 'package:at_contacts_group_flutter/services/group_service.dart';
 import 'package:flutter/material.dart';
 
@@ -36,8 +37,10 @@ class _AddContactDialogState extends State<AddContactDialog> {
       width: 100.toWidth,
       child: SingleChildScrollView(
         child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.toWidth)),
-          titlePadding: EdgeInsets.only(top: 20.toHeight, left: 25.toWidth, right: 25.toWidth),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10.toWidth)),
+          titlePadding: EdgeInsets.only(
+              top: 20.toHeight, left: 25.toWidth, right: 25.toWidth),
           title: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -108,24 +111,34 @@ class _AddContactDialogState extends State<AddContactDialog> {
                         ? const CircularProgressIndicator()
                         : CustomButton(
                             height: 50.toHeight * deviceTextFactor,
-                            buttonText: contact_strings.TextStrings().addtoContact,
+                            buttonText:
+                                contact_strings.TextStrings().addtoContact,
                             onPressed: () async {
                               setState(() {
                                 isLoading = true;
                               });
-                              var response = await _contactService.addAtSign(atSign: atsign);
+                              var response = await _contactService.addAtSign(
+                                  atsign: atsign);
                               var _groupService = GroupService();
                               _groupService.appendNewContact(atsign);
                               setState(() {
                                 isLoading = false;
                               });
-                              if (_contactService.checkAtSign != null && _contactService.checkAtSign! && response) {
+                              if (_contactService.checkAtSign != null &&
+                                  _contactService.checkAtSign! &&
+                                  response) {
                                 if (!context.mounted) return;
                                 Navigator.pop(context);
                               }
                             },
-                            buttonColor: Theme.of(context).brightness == Brightness.light ? Colors.black : Colors.white,
-                            fontColor: Theme.of(context).brightness == Brightness.light ? Colors.white : Colors.black,
+                            buttonColor:
+                                Theme.of(context).brightness == Brightness.light
+                                    ? Colors.black
+                                    : Colors.white,
+                            fontColor:
+                                Theme.of(context).brightness == Brightness.light
+                                    ? Colors.white
+                                    : Colors.black,
                           )
                   ],
                 ),
