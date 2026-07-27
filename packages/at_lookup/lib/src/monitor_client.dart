@@ -75,8 +75,8 @@ class MonitorClient {
     logger.info('fromResponse $fromResponse');
     // RSA SHA-256 sign via at_chops (wraps the same crypton
     // RSAPrivateKey.createSHA256Signature; only the private key is used).
-    var sha256signature = PkamSigningAlgo(
-            AtPkamKeyPair.create('', _privateKey), HashingAlgoType.sha256)
+    var sha256signature = RsaSigningAlgo(
+            RsaKeyPair.create('', _privateKey), HashingAlgoType.sha256)
         .sign(Uint8List.fromList(utf8.encode(fromResponse)));
     var signature = base64Encode(sha256signature);
     logger.info('Sending command pkam:$signature');

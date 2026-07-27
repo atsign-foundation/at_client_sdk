@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:mocktail/mocktail.dart';
@@ -32,7 +31,7 @@ class MockOutboundConnectionFactory extends Mock
 class MockOutboundMessageListener extends Mock
     implements OutboundMessageListener {}
 
-class MockAtChops extends Mock implements AtChopsImpl {}
+class MockPkamSigner extends Mock implements AtPkamSigner {}
 
 class MockOutboundConnectionImpl extends Mock
     implements OutboundConnectionImpl {}

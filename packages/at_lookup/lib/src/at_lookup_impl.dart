@@ -33,7 +33,6 @@ class AtLookupImpl implements AtLookUp {
 
   late int _rootPort;
 
-  @Deprecated("privateKey reference is no longer used")
   String? privateKey;
 
   String? cramSecret;
@@ -54,7 +53,7 @@ class AtLookupImpl implements AtLookUp {
   /// Represents the client configurations.
   late Map<String, dynamic> _clientConfig;
 
-  AtChops? _atChops;
+  AtPkamSigner? _pkamSigner;
 
   AtLookupImpl(String atSign, String rootDomain, int rootPort,
       {this.privateKey,
@@ -179,7 +178,7 @@ class AtLookupImpl implements AtLookUp {
       logger.finer('value: $value dataSignature:$dataSignature');
       // RSA SHA-256 verify via at_chops (wraps the same crypton
       // RSAPublicKey.verifySHA256Signature).
-      var isDataValid = PkamSigningAlgo(null, HashingAlgoType.sha256).verify(
+      var isDataValid = RsaSigningAlgo(null, HashingAlgoType.sha256).verify(
           Uint8List.fromList(utf8.encode(value)), base64Decode(dataSignature),
           publicKey: publicKeyResult);
       logger.finer('data verify result: $isDataValid');
@@ -451,8 +450,8 @@ class AtLookupImpl implements AtLookUp {
         logger.finer('fromResponse $fromResponse');
         // RSA SHA-256 sign via at_chops (wraps the same crypton
         // RSAPrivateKey.createSHA256Signature; only the private key is used).
-        var sha256signature = PkamSigningAlgo(
-                AtPkamKeyPair.create('', privateKey), HashingAlgoType.sha256)
+        var sha256signature = RsaSigningAlgo(
+                RsaKeyPair.create('', privateKey), HashingAlgoType.sha256)
             .sign(Uint8List.fromList(utf8.encode(fromResponse)));
         var signature = base64Encode(sha256signature);
         logger.finer('Sending command pkam:$signature');
@@ -474,6 +473,10 @@ class AtLookupImpl implements AtLookUp {
 
   @override
   Future<bool> pkamAuthenticate({String? enrollmentId}) async {
+    if (_pkamSigner == null) {
+      throw UnAuthenticatedException(
+          'Unable to perform pkam auth. pkamSigner is not set');
+    }
     await createConnection();
     try {
       await _pkamAuthenticationMutex.acquire();
@@ -489,18 +492,15 @@ class AtLookupImpl implements AtLookUp {
         }
         fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
         logger.finer('fromResponse $fromResponse');
-        logger.finer(
-            'signingAlgoType: $signingAlgoType hashingAlgoType:$hashingAlgoType');
-        final atSigningInput = AtSigningInput(fromResponse)
-          ..signingAlgoType = signingAlgoType
-          ..hashingAlgoType = hashingAlgoType
-          ..signingMode = AtSigningMode.pkam;
-        var signingResult = _atChops!.sign(atSigningInput);
+        logger.finer('signingAlgo: ${_pkamSigner!.signingAlgo} '
+            'hashingAlgo: ${_pkamSigner!.hashingAlgo}');
+        final signature = await _pkamSigner!
+            .sign(Uint8List.fromList(utf8.encode(fromResponse)));
         var pkamBuilder = PkamVerbBuilder()
-          ..signingAlgo = signingAlgoType.name
-          ..hashingAlgo = hashingAlgoType.name
+          ..signingAlgo = _pkamSigner!.signingAlgo.name
+          ..hashingAlgo = _pkamSigner!.hashingAlgo.name
           ..enrollmentlId = enrollmentId
-          ..signature = signingResult.result;
+          ..signature = base64Encode(signature);
         logger.finer('pkamCommand:${pkamBuilder.buildCommand()}');
         await _sendCommand(pkamBuilder.buildCommand());
 
@@ -600,17 +600,17 @@ class AtLookupImpl implements AtLookUp {
       await requestResponseMutex.acquire();
 
       if (auth && _isAuthRequired()) {
-        if (_atChops != null) {
-          logger.finer('calling pkam using atchops');
+        if (_pkamSigner != null) {
+          logger.finer('calling pkam using pkamSigner');
           await pkamAuthenticate(enrollmentId: enrollmentId);
         } else if (privateKey != null) {
-          logger.finer('calling pkam without atchops');
+          logger.finer('calling pkam using privateKey');
           await authenticate(privateKey);
         } else if (cramSecret != null) {
           await cramAuthenticate(cramSecret!);
         } else {
           throw UnAuthenticatedException(
-              'Unable to perform atLookup auth. atChops object is not set');
+              'Unable to perform atLookup auth. pkamSigner is not set');
         }
       }
       try {
@@ -668,19 +668,12 @@ class AtLookupImpl implements AtLookUp {
   }
 
   @override
-  set atChops(AtChops? atChops) {
-    _atChops = atChops;
+  set pkamSigner(AtPkamSigner? pkamSigner) {
+    _pkamSigner = pkamSigner;
   }
 
   @override
-  AtChops? get atChops => _atChops;
-
-  /// To use a specific signing algorithm other than default one for pkam auth, set the [SigningAlgoType] and [HashingAlgoType]
-  @override
-  HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
-
-  @override
-  SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
+  AtPkamSigner? get pkamSigner => _pkamSigner;
 
   @override
   String? enrollmentId;

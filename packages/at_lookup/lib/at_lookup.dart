@@ -1,5 +1,6 @@
 export 'src/at_lookup.dart';
 export 'src/at_lookup_impl.dart';
+export 'src/auth/at_pkam_signer.dart';
 export 'src/connection/outbound_connection.dart';
 export 'src/connection/outbound_connection_impl.dart';
 export 'src/exception/at_lookup_exception.dart';
