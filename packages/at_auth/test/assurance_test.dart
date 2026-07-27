@@ -174,12 +174,6 @@ void main() {
             _enrollMaterial(operations: const ['sign']),
           ],
         ),
-        _documentMap(
-          keys: [
-            _wrapperMaterial(),
-            _enrollMaterial(enrollmentId: 'changed-enroll'),
-          ],
-        ),
       ];
 
       for (final candidate in candidates) {
@@ -321,12 +315,10 @@ AtKeysMaterial _wrapperMaterial() {
 
 AtKeysMaterial _enrollMaterial({
   String keyId = 'enroll-priv',
-  String enrollmentId = 'enroll-1',
   List<String> operations = const ['decrypt'],
 }) {
   return AtKeysMaterial(
     keyId: keyId,
-    enrollmentId: enrollmentId,
     keyPartType: CryptographicKeyType.privateDecryption,
     keyAlgorithmType: KeyAlgorithmType.rsa2048,
     operations: operations,

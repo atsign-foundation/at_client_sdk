@@ -5,6 +5,7 @@ import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
 import 'package:at_auth/src/enroll/models/otp.dart';
+import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
@@ -87,6 +88,10 @@ abstract class AtEnrollment {
   ///
   /// The [atLookUp] parameter is used to perform lookups during approval management.
   ///
+  /// The [atKeys] parameter supplies the approver's own key material — its
+  /// encryption private key (to decrypt the enrollee's APKAM symmetric key) and
+  /// self-encryption key (re-encrypted under that symmetric key for the server).
+  ///
   /// Returns a [Future] containing an [AtEnrollmentResponse] representing the result of the approval/denial of an enrollment.
   ///
   /// ```dart
@@ -101,10 +106,12 @@ abstract class AtEnrollment {
   ///               encryptedAPKAMSymmetricKey: 'dummy-encrypted-apkam-symmetric-key'));
   ///
   /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.approve(
-  ///       enrollmentRequestDecision, atLookupImpl);
+  ///       enrollmentRequestDecision, atLookupImpl, atKeys);
   /// ```
   Future<AtEnrollmentResponse> approve(
-      EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp);
+      EnrollmentRequestDecision enrollmentRequestDecision,
+      AtLookUp atLookUp,
+      AtKeys atKeys);
 
   /// Denies an enrollment request.
   ///

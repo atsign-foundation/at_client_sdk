@@ -269,9 +269,9 @@ void main() {
   group('AtEnrollmentRequest session wiring', () {
     test('session is the source of atSign and rootDomain', () {
       final session = AtAuthSession(
-        atSign: '@alice🛠',
+        atsign: '@alice🛠',
         rootDomain: const AtRootDomain('root.atsign.org', 64),
-        atKeysIo: InMemoryAtKeysIo(),
+        atKeysIo: EphemeralAtKeysIo(),
       );
 
       final request = AtEnrollmentRequest(

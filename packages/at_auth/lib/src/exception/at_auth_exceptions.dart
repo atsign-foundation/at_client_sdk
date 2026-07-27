@@ -28,10 +28,6 @@ class AtKeysProtectionException extends AtKeysValidationException {
   AtKeysProtectionException(super.message);
 }
 
-class AtKeysEnrollmentException extends AtKeysValidationException {
-  AtKeysEnrollmentException(super.message);
-}
-
 class AtKeysNotInMemoryException extends AtException {
   AtKeysNotInMemoryException(super.message);
 }

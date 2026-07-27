@@ -65,7 +65,7 @@ class AtEnrollmentRequest extends EnrollmentRequest {
     this.encryptedAPKAMSymmetricKey,
     this.apkamKeysExpiryDuration,
   }) : super(
-          atSign: session?.atSign ??
+          atSign: session?.atsign ??
               atSign ??
               (throw ArgumentError(
                   'AtEnrollmentRequest requires a `session` (or the deprecated `atSign`)')),

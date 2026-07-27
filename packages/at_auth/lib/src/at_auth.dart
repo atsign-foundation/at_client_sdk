@@ -8,9 +8,10 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
 
+import 'auth/models/at_auth_session.dart';
+
 /// Interface for onboarding and authentication to a secondary server of an atsign
 abstract interface class AtAuth {
-  AtChops? atChops;
   AtLookUp? atLookUp;
   Stream<ProgressEvent> get progressStream;
 
@@ -22,7 +23,6 @@ abstract interface class AtAuth {
       AtEnrollment? atEnrollmentBase}) {
     return AtAuthImpl(
         atLookUp: atLookUp,
-        atChops: atChops,
         cramAuthenticator: cramAuthenticator,
         pkamAuthenticator: pkamAuthenticator,
         atEnrollment: atEnrollmentBase);
@@ -34,7 +34,7 @@ abstract interface class AtAuth {
   /// - Can also be brought via AtAuthRequest.atAuthKeys
   ///
   /// Step 2  Perform pkam authentication
-  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest);
+  Future<AtAuthSession> authenticate(AtAuthRequest atAuthRequest);
 
   /// Onboard method is invoked when an atsign is activated for the first time from a client app.
   /// - Connect, and perform cram auth
@@ -47,7 +47,7 @@ abstract interface class AtAuth {
   /// <p/>
   ///
   /// Set [atOnboardingRequest.publicKeyId] if pkam auth mode is [PkamAuthMode.sim]
-  Future<AtOnboardingResponse> onboard(
+  Future<AtAuthSession> onboard(
     AtOnboardingRequest atOnboardingRequest,
     String cramSecret, {
     bool autoCompleteActivation = true,
@@ -55,7 +55,7 @@ abstract interface class AtAuth {
 
   /// - Update encryption public key to server
   /// - Delete cram secret from server
-  Future<void> completeActivation();
+  Future<void> completeActivation(AtAuthSession incompleteSession);
 
   /// Validate atsign's secondary server status
   /// - Check if atsign's secondary server is reachable in atDirectory
