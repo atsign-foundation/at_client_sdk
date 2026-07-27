@@ -134,22 +134,14 @@ Future<void> onboard(BuildContext context) async {
     _logger.info('Application support directory: ${dir.path}');
 
     var acp = AtClientPreference()
-      ..rootDomain = authRequest.rootDomain.rootDomain
-      ..rootPort = authRequest.rootDomain.rootPort
       ..namespace = namespace
       ..commitLogPath = dir.path
       ..hiveStoragePath = dir.path;
 
     _logger.info('Setting current atSign: ${response.atSign}');
-    // make sure to use the atChops and atLookUp provided by the response as these are already authenticated.
-    await AtClientManager.getInstance().setCurrentAtSign(
-      response.atSign,
-      namespace,
-      enrollmentId: response.enrollmentId,
-      acp,
-      atChops: response.atChops,
-      atLookUp: response.atLookUp,
-    );
+    // Hand the client the session; it rebuilds its own authenticated connection
+    // from the session's key source rather than adopting auth's.
+    await AtClientManager.getInstance().fromAuthSession(response.session!, acp);
 
     _logger.info('Navigation to HomePage');
     if (context.mounted) {
@@ -213,7 +205,7 @@ Future<void> loginWithKeychain(BuildContext context) async {
     }
 
     _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, authRequest, response);
+    await _setupAtClient(context, response);
   }, context: context);
 }
 
@@ -251,7 +243,7 @@ Future<void> loginWithFile(BuildContext context) async {
     }
 
     _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, authRequest, response);
+    await _setupAtClient(context, response);
   }, context: context);
 }
 
@@ -304,7 +296,7 @@ Future<void> loginWithApkam(BuildContext context) async {
     }
 
     _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, authRequest, response);
+    await _setupAtClient(context, response);
   }, context: context);
 }
 
@@ -386,39 +378,38 @@ Future<String?> _openFileSaveDialog({
 }
 
 /// Helper method to set up the atClient instance and navigate to home page
-Future<void> _setupAtClient(
-  BuildContext context,
-  AtAuthRequest authRequest,
-  AuthResponse response,
-) async {
+Future<void> _setupAtClient(BuildContext context, AuthResponse response) async {
   _logger.info('Setting up atClient for ${response.atSign}');
 
   var dir = await getApplicationSupportDirectory();
   _logger.info('Using directory: ${dir.path}');
 
   var acp = AtClientPreference()
-    ..rootDomain = authRequest.rootDomain.rootDomain
-    ..rootPort = authRequest.rootDomain.rootPort
     ..namespace = namespace
     ..commitLogPath = dir.path
     ..hiveStoragePath = dir.path;
 
-  _logger.info('AtClientPreference configured:');
-  _logger.info('  - rootDomain: ${acp.rootDomain}');
-  _logger.info('  - rootPort: ${acp.rootPort}');
-  _logger.info('  - namespace: ${acp.namespace}');
   if (response.enrollmentId == null) {
     _logger.warning("EnrollmentId is null");
   }
-  // Make sure to use the atChops and atLookUp provided by the response
-  await AtClientManager.getInstance().setCurrentAtSign(
-    response.atSign,
-    namespace,
-    acp,
-    enrollmentId: response.enrollmentId,
-    atChops: response.atChops,
-    atLookUp: response.atLookUp,
-  );
+  final session = response.session;
+  if (session != null) {
+    // Preferred path: hand over the session; the client rebuilds its own
+    // authenticated connection from the session's key source.
+    await AtClientManager.getInstance().fromAuthSession(session, acp);
+  } else {
+    // Transitional fallback for flows that hand back only atAuthKeys with no
+    // AtKeysIo source (e.g. APKAM enrollment): adopt auth's already-
+    // authenticated AtChops/AtLookUp directly.
+    await AtClientManager.getInstance().setCurrentAtSign(
+      response.atSign,
+      namespace,
+      acp,
+      enrollmentId: response.enrollmentId,
+      atChops: response.atChops,
+      atLookUp: response.atLookUp,
+    );
+  }
 
   if (context.mounted) {
     _logger.info('Navigating to HomePage');
