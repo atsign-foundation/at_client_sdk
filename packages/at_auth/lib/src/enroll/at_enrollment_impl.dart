@@ -6,8 +6,10 @@ import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
 import 'package:at_auth/src/enroll/models/otp.dart';
+import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
+import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -128,7 +130,11 @@ class AtEnrollmentImpl implements AtEnrollment {
     return AtEnrollmentResponse(enrollmentIdFromServer, enrollStatus,
         atSign: atEnrollmentRequest.atSign,
         rootDomain: atEnrollmentRequest.rootDomain,
-        atAuthKeys: atAuthKeys);
+        atAuthKeys: atAuthKeys,
+        // Carry the requesting app's session forward so waitForApproval can
+        // persist the completed keys into its atKeysIo and hand it back. The
+        // session is only fully valid (keys persisted) after waitForApproval.
+        session: atEnrollmentRequest.session);
   }
 
   @override
@@ -317,6 +323,25 @@ class AtEnrollmentImpl implements AtEnrollment {
         AtBytes.fromString(decryptedSelfEncryptionKey);
     enrollmentResponse.atAuthKeys!.defaultEncryptionPrivateKey =
         AtBytes.fromString(decryptedDefaultEncryptionPrivateKey);
+
+    // If the requesting app supplied a session with a writable key destination,
+    // persist the completed keyset there and hand back a ready-to-use session.
+    // Otherwise this is the legacy path: leave atAuthKeys populated for the
+    // caller to persist and hand back no session.
+    final keysIo = enrollmentResponse.session?.atKeysIo;
+    if (keysIo is WrittenAtKeysIo) {
+      await keysIo.flush(enrollmentResponse.atSign!.toAtsign(),
+          enrollmentResponse.atAuthKeys!);
+      enrollmentResponse.session = AtAuthSession(
+        atSign: enrollmentResponse.atSign!,
+        rootDomain: enrollmentResponse.rootDomain!,
+        atKeysIo: keysIo,
+        enrollmentId: enrollmentResponse.enrollmentId,
+        atLookUp: atLookup,
+      );
+    } else {
+      enrollmentResponse.session = null;
+    }
   }
 
   @override

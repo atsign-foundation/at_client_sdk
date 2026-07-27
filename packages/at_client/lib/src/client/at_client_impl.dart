@@ -1141,6 +1141,15 @@ class AtClientImpl implements AtClient {
   }
 
   Future<AtChops> _createAtChops(String atSign) async {
+    // When the client was handed an AtKeysIo *source* (and no live
+    // AtChops/AtLookUp was injected by auth), derive our own PKAM+encryption
+    // AtChops from that source instead of reading key material out of the local
+    // secondary. This is what lets a freshly rebuilt connection PKAM on its own
+    // socket — parity with the AtChops auth used to inject.
+    if (_atKeysIo != null) {
+      final keys = await _atKeysIo!.read(atSign);
+      return keys.toAtChops();
+    }
     AtEncryptionKeyPair? atEncryptionKeyPair;
     AtPkamKeyPair? atPkamKeyPair;
     try {
