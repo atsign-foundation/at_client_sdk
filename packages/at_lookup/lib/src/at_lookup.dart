@@ -1,6 +1,5 @@
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 
 abstract interface class AtLookUp {
@@ -30,9 +29,8 @@ abstract interface class AtLookUp {
 
   /// Performs a PKAM authentication using private key on the client side and public key on secondary server
   ///
-  /// Pkam private key should be set in  [atChops.atChopsKeys]
-  ///
-  /// Default signing algorithm for pkam signature is [SigningAlgoType.rsa2048] and default hashing algorithm is [HashingAlgoType.sha256]
+  /// The [pkamSigner] must be set — it signs the `from` challenge and declares
+  /// the signing/hashing algorithm (defaults to rsa2048/sha256).
   ///
   /// Optionally pass enrollmentId if the client is enrolled using APKAM
   Future<bool> pkamAuthenticate({String? enrollmentId});
@@ -45,26 +43,17 @@ abstract interface class AtLookUp {
   /// used by this instance of AtLookup
   Future<void> close();
 
-  /// set an instance of  [AtChops] for signing and verification operations.
-  set atChops(AtChops? atChops);
+  /// The strategy used to sign the PKAM `from` challenge. Set by the consumer
+  /// (at_auth), which owns the key material and picks the signing algorithm.
+  set pkamSigner(AtPkamSigner? pkamSigner);
+
+  AtPkamSigner? get pkamSigner;
 
   OutboundConnection? get connection;
-
-  AtChops? get atChops;
 
   set secondaryAddressFinder(SecondaryAddressFinder secondaryAddressFinder);
 
   SecondaryAddressFinder get secondaryAddressFinder;
-
-  /// Signing algorithm for pkam signature
-  set signingAlgoType(SigningAlgoType signingAlgoType);
-
-  SigningAlgoType get signingAlgoType;
-
-  /// Hashing algorithm for pkam signature
-  set hashingAlgoType(HashingAlgoType hashingAlgoType);
-
-  HashingAlgoType get hashingAlgoType;
 
   /// EnrollmentId has to be set for clients that are enrolled through APKAM.
   set enrollmentId(String? enrollmentId);
