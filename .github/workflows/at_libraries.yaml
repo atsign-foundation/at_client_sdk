@@ -70,17 +70,45 @@ jobs:
         working-directory: packages/${{ matrix.package }}
         run: dart analyze
 
-      # at_auth's wasm-safe barrel must keep building for dart2wasm. Catches
-      # dart:ffi/dart:mirrors entering the graph; dart:io compiles to a stub, so
-      # keeping that out of at_auth.dart is on review, not this step.
-      - name: Compile wasm surface in ${{ matrix.package }}
-        if: matrix.package == 'at_auth'
-        working-directory: packages/${{ matrix.package }}
-        run: dart compile wasm tool/wasm_entry.dart -o "${RUNNER_TEMP}/at_auth.wasm"
-
       - name: run tests
         working-directory: packages/${{ matrix.package }}
         run: dart test --concurrency=1 --exclude-tags ffi
+
+  # Verifies a package's wasm-safe barrel still builds under dart2wasm.
+  #
+  # A package opts in by adding itself to the matrix below and committing a
+  # `tool/wasm_entry.dart` that imports its wasm-safe barrel (never its io/ffi
+  # one) and names enough entry points that the graph isn't tree-shaken away.
+  # See packages/at_auth/tool/wasm_entry.dart for the pattern.
+  #
+  # What this catches: `dart:ffi` and `dart:mirrors` reaching the barrel from
+  # anywhere in the transitive graph — both are hard errors under dart2wasm.
+  # What it does NOT catch: `dart:io`, which dart2wasm compiles to a stub that
+  # throws only when called. Keeping that out of a wasm-safe barrel is a review
+  # concern.
+  wasm_compile:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - at_auth
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./actions/setup-flutter-and-dart
+        with:
+          dart-channel: ${{ matrix.dart-channel}}
+
+      - name: Install dependencies in ${{ matrix.package }}
+        working-directory: packages/${{ matrix.package }}
+        run: dart pub get
+
+      - name: Compile ${{ matrix.package }} to wasm
+        working-directory: packages/${{ matrix.package }}
+        run: >-
+          dart compile wasm tool/wasm_entry.dart
+          -o "${RUNNER_TEMP}/${{ matrix.package }}.wasm"
 
   build_and_test_ffi:
     runs-on: ubuntu-latest
