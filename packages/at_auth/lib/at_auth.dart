@@ -4,6 +4,9 @@ library;
 export 'src/at_auth.dart';
 export 'src/auth_constants.dart';
 
+// AtPkamSigner implementations handed to at_lookup — at_auth owns the key
+// material and picks the signing algorithm, at_lookup only signs with it.
+export 'src/auth/pkam_signers.dart';
 // Contains models related to onboarding and authentication requests and responses.
 export 'src/auth/models/at_auth_requests.dart';
 export 'src/auth/models/at_auth_responses.dart';
