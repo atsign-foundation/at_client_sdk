@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## unreleased
+## 1.1.5
 - feat: `CramDialog` and `PkamDialog` take an optional `authService`, and
   `ApkamActivationDialog` an optional `enrollmentService`. Both default to the
   real service, so existing call sites are unaffected; passing one lets the
