@@ -376,8 +376,16 @@ class AtAuthImpl implements AtAuth {
       AtLookUp atLookup) async {
     _logger.finer('apkamPublicKey: ${atAuthKeys.apkamPublicKey}');
 
+    // The session onboarding is establishing. Nothing reads keys from it here —
+    // the keys are minted in memory and persisted after PKAM succeeds — but it
+    // carries the atsign, atServer and key destination the enrollment is for.
     FirstEnrollmentRequest firstEnrollmentRequest = FirstEnrollmentRequest(
-        atSign: atOnboardingRequest.atsign,
+        session: AtAuthSession(
+          atsign: atOnboardingRequest.atsign,
+          rootDomain: atOnboardingRequest.rootDomain,
+          namespace: atOnboardingRequest.namespace,
+          atKeysIo: atOnboardingRequest.atKeysIo,
+        ),
         appName: atOnboardingRequest.appName,
         deviceName: atOnboardingRequest.deviceName,
         apkamPublicKey: atAuthKeys.apkamPublicKey!.toString());

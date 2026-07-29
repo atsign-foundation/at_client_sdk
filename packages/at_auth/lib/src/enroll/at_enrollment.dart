@@ -1,11 +1,11 @@
 import 'dart:async';
 
+import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
 import 'package:at_auth/src/enroll/models/otp.dart';
-import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
@@ -106,12 +106,18 @@ abstract class AtEnrollment {
   ///               encryptedAPKAMSymmetricKey: 'dummy-encrypted-apkam-symmetric-key'));
   ///
   /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.approve(
-  ///       enrollmentRequestDecision, atLookupImpl, atKeys);
+  ///       enrollmentRequestDecision, atLookupImpl, session);
   /// ```
+  ///
+  /// [session] is the *approving* app's own session. Approval needs the
+  /// approver's encryption private key and self encryption key, to re-encrypt
+  /// them for the new enrollment; those are read from
+  /// [AtAuthSession.atKeysIo].
   Future<AtEnrollmentResponse> approve(
-      EnrollmentRequestDecision enrollmentRequestDecision,
-      AtLookUp atLookUp,
-      AtKeys atKeys);
+    EnrollmentRequestDecision enrollmentRequestDecision,
+    AtLookUp atLookUp,
+    AtAuthSession session,
+  );
 
   /// Denies an enrollment request.
   ///
@@ -127,10 +133,17 @@ abstract class AtEnrollment {
   /// AtLookup atLookup = AtLookupImpl('@alice', 'dummy-root-domain', 64);
   ///
   /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.denied('dummy-enrollment-id');
-  /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.deny(enrollmentRequestDecision, atLookupImpl);
+  /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.deny(
+  ///       enrollmentRequestDecision, atLookupImpl, session);
   /// ```
+  ///
+  /// [session] is the approving app's own session; denial needs no keys from it,
+  /// but the returned response is scoped to it.
   Future<AtEnrollmentResponse> deny(
-      EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp);
+    EnrollmentRequestDecision enrollmentRequestDecision,
+    AtLookUp atLookUp,
+    AtAuthSession session,
+  );
 
   /// Revokes an approved enrollment, closing any active connections and making it inactive for future use.
   ///
@@ -146,17 +159,23 @@ abstract class AtEnrollment {
   /// AtLookup atLookup = AtLookupImpl('@alice', 'dummy-root-domain', 64);
   ///
   /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.revoked('dummy-enrollment-id');
-  /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.revoke(enrollmentRequestDecision, atLookupImpl);
+  /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.revoke(
+  ///       enrollmentRequestDecision, atLookupImpl, session);
   /// ```
+  ///
+  /// [session] is the approving app's own session, as for [deny].
   Future<AtEnrollmentResponse> revoke(
-      EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp);
+    EnrollmentRequestDecision enrollmentRequestDecision,
+    AtLookUp atLookUp,
+    AtAuthSession session,
+  );
 
   /// Lists all enrollments.
   ///
   /// Accepts [EnrollmentStatus] inside the [statusFilters] parameter to filter enrollments with their current status.
   ///
   /// Returns a [Future] containing a [List<EnrollmentServerRequest>] representing all the enrollments.
-  Future<List<EnrollmentServerResponse>> list(
+  Future<List<ServerEnrollmentRequest>> list(
       List<EnrollmentStatus>? statusFilters, AtLookUp atLookUp,
       {String? arx, String? drx});
 
@@ -182,19 +201,26 @@ abstract class AtEnrollment {
   /// ```dart
   /// AtEnrollment atEnrollment = AtEnrollment.create();
   ///
-  /// AtEnrollmentResponse? atEnrollmentResponse =
-  ///         await atEnrollmentBase?.submit(dummyEnrollmentRequest, atLookUp!);
+  /// final pending = await atEnrollment.submit(enrollmentRequest, atLookUp)
+  ///     as PendingEnrollment;
   ///
-  /// try{
-  ///   await atEnrollment.waitForApproval(
-  ///     enrollmentResponse: atEnrollmentResponse!,
-  ///   );
-  /// }catch{
+  /// try {
+  ///   await atEnrollment.waitForApproval(pending);
+  ///   // pending.session is now authenticated and its keys are persisted.
+  ///   AtClientManager.fromAuthSession(pending.session);
+  /// } catch (e) {
   ///   // Handle errors
   /// }
   /// ```
+  ///
+  /// Takes the [PendingEnrollment] returned by [submit] — it carries both the
+  /// session to persist into and the APKAM keys minted at submit time, which
+  /// this call completes with the material fetched from the atServer.
+  ///
+  /// On success `pending.session` is replaced with a session carrying the
+  /// approved enrollmentId and the authenticated connection.
   Future<void> waitForApproval(
-    AtEnrollmentResponse enrollmentResponse, {
+    PendingEnrollment pending, {
     bool logProgress = false,
     int maxRetries = 48,
     Duration retryInterval = const Duration(minutes: 1),

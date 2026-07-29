@@ -6,6 +6,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -18,6 +19,7 @@ class MockLookupVerbBuilder extends Fake implements LookupVerbBuilder {}
 
 void main() {
   setUpAll(() {
+    AtSignLogger.root_level = 'shout';
     registerFallbackValue(MockLookupVerbBuilder());
   });
 
@@ -28,21 +30,16 @@ void main() {
     AtEnrollmentImpl atEnrollmentServiceImpl = AtEnrollmentImpl();
     AtLookUp mockAtLookUp = MockAtLookUp();
 
-    String? apkamPrivateKey = pkamPrivateKeyMap[atSign]!;
-    String? apkamPublicKey = pkamPublicKeyMap[atSign]!;
     String? encryptionPublicKey = encryptionPublicKeyMap[atSign]!;
     String? encryptionPrivateKey = encryptionPrivateKeyMap[atSign]!;
     String? selfEncryptionKey = aesKeyMap[atSign]!;
     String? apkamSymmetricKey = apkamSymmetricKeyMap[atSign]!;
 
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(
-        AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey),
-        AtPkamKeyPair.create(apkamPublicKey, apkamPrivateKey));
-    atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
-    atChopsKeys.selfEncryptionKey = AESKey(selfEncryptionKey);
-    final iv = AtChopsUtil.generateIVLegacy();
-
-    AtChopsImpl atChopsImpl = AtChopsImpl(atChopsKeys);
+    // Stands in for the atServer, which stores these two keys encrypted under
+    // the enrollment's APKAM symmetric key. This is the exact counterpart of
+    // what waitForApproval decrypts with.
+    final iv = InitialisationVector.legacy();
+    final apkamAes = StringAESEncryptor(AESKey(apkamSymmetricKey));
 
     when(() => mockAtLookUp.executeVerb(any(that: LookUpVerbBuilderMatcher())))
         .thenAnswer((_) async => 'data:$encryptionPublicKey');
@@ -53,29 +50,21 @@ void main() {
                   'status': 'pending'
                 })}'));
 
-    when(() =>
-        mockAtLookUp.executeCommand(
-            any(
-                that: startsWith(
-                    'keys:get:keyName:123.${AtConstants.defaultEncryptionPrivateKey}')),
-            auth: true)).thenAnswer((_) async => Future.value(jsonEncode({
-          'value': (await atChopsImpl.encryptString(
-                  encryptionPrivateKey, EncryptionKeyType.aes256,
-                  keyName: 'apkamSymmetricKey', iv: iv))
-              .result
-        })));
+    when(() => mockAtLookUp.executeCommand(
+        any(
+            that: startsWith(
+                'keys:get:keyName:123.${AtConstants.defaultEncryptionPrivateKey}')),
+        auth:
+            true)).thenAnswer((_) async => Future.value(
+        jsonEncode({'value': apkamAes.encrypt(encryptionPrivateKey, iv: iv)})));
 
-    when(() =>
-        mockAtLookUp.executeCommand(
-            any(
-                that: startsWith(
-                    'keys:get:keyName:123.${AtConstants.defaultSelfEncryptionKey}')),
-            auth: true)).thenAnswer((_) async => Future.value(jsonEncode({
-          'value': (await atChopsImpl.encryptString(
-                  selfEncryptionKey, EncryptionKeyType.aes256,
-                  keyName: 'apkamSymmetricKey', iv: iv))
-              .result
-        })));
+    when(() => mockAtLookUp.executeCommand(
+        any(
+            that: startsWith(
+                'keys:get:keyName:123.${AtConstants.defaultSelfEncryptionKey}')),
+        auth:
+            true)).thenAnswer((_) async => Future.value(
+        jsonEncode({'value': apkamAes.encrypt(selfEncryptionKey, iv: iv)})));
     when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: '123'))
         .thenAnswer((_) => Future.value(true));
 
@@ -83,7 +72,11 @@ void main() {
         .thenAnswer((_) async => ());
 
     AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
-        atSign: atSign,
+        session: AtAuthSession(
+          atsign: atSign.toAtsign(),
+          rootDomain: AtRootDomain.atsignDomain,
+          atKeysIo: EphemeralAtKeysIo(),
+        ),
         appName: 'wavi',
         deviceName: 'pixel',
         otp: 'A123FE',
@@ -99,8 +92,6 @@ void main() {
     test('A test to verify the approve enrollment', () async {
       String atSign = '@alice🛠';
 
-      String? apkamPrivateKey = pkamPrivateKeyMap[atSign]!;
-      String? apkamPublicKey = pkamPublicKeyMap[atSign]!;
       String? encryptionPublicKey = encryptionPublicKeyMap[atSign]!;
       String? encryptionPrivateKey = encryptionPrivateKeyMap[atSign]!;
       String? selfEncryptionKey = aesKeyMap[atSign]!;
@@ -110,19 +101,22 @@ void main() {
           RSAPublicKey.fromString(encryptionPublicKey)
               .encrypt(apkamSymmetricKey);
 
-      AtChopsKeys atChopsKeys = AtChopsKeys.create(
-          AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey),
-          AtPkamKeyPair.create(apkamPublicKey, apkamPrivateKey));
-      atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
-      atChopsKeys.selfEncryptionKey = AESKey(selfEncryptionKey);
-
-      AtChopsImpl atChopsImpl = AtChopsImpl(atChopsKeys);
+      // The approver's own keys, reached the way everything else reaches keys:
+      // through its session's AtKeysIo.
+      AtKeys approverKeys = AtKeys(atsign: atSign.toAtsign())
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(encryptionPrivateKey)
+        ..defaultSelfEncryptionKey = AtBytes.fromString(selfEncryptionKey);
+      final approverIo = EphemeralAtKeysIo();
+      await approverIo.write(atSign.toAtsign(), approverKeys);
+      final approverSession = AtAuthSession(
+        atsign: atSign.toAtsign(),
+        rootDomain: AtRootDomain.atsignDomain,
+        atKeysIo: approverIo,
+      );
 
       AtLookUp mockAtLookUp = MockAtLookUp();
 
       AtEnrollment atEnrollmentBase = AtEnrollmentImpl();
-
-      when(() => mockAtLookUp.atChops).thenReturn(atChopsImpl);
 
       when(() =>
           mockAtLookUp.executeCommand(any(that: startsWith('enroll:approve')),
@@ -139,7 +133,7 @@ void main() {
       );
 
       AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase
-          .approve(enrollmentRequestDecision, mockAtLookUp);
+          .approve(enrollmentRequestDecision, mockAtLookUp, approverSession);
 
       expect(atEnrollmentResponse.enrollmentId,
           '4be2d358-074d-4e3b-99f3-64c4da01532f');
@@ -149,26 +143,16 @@ void main() {
     test('A test to verify the deny enrollment', () async {
       String atSign = '@alice🛠';
 
-      String? apkamPrivateKey = pkamPrivateKeyMap[atSign]!;
-      String? apkamPublicKey = pkamPublicKeyMap[atSign]!;
-      String? encryptionPublicKey = encryptionPublicKeyMap[atSign]!;
-      String? encryptionPrivateKey = encryptionPrivateKeyMap[atSign]!;
-      String? selfEncryptionKey = aesKeyMap[atSign]!;
-      String? apkamSymmetricKey = apkamSymmetricKeyMap[atSign]!;
-
-      AtChopsKeys atChopsKeys = AtChopsKeys.create(
-          AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey),
-          AtPkamKeyPair.create(apkamPublicKey, apkamPrivateKey));
-      atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
-      atChopsKeys.selfEncryptionKey = AESKey(selfEncryptionKey);
-
-      AtChopsImpl atChopsImpl = AtChopsImpl(atChopsKeys);
-
+      // deny() only forwards the enrollmentId — no keys are read from the
+      // session, but the response is scoped to it.
+      final denySession = AtAuthSession(
+        atsign: atSign.toAtsign(),
+        rootDomain: AtRootDomain.atsignDomain,
+        atKeysIo: EphemeralAtKeysIo(),
+      );
       AtLookUp mockAtLookUp = MockAtLookUp();
 
       AtEnrollment atEnrollmentBase = AtEnrollmentImpl();
-
-      when(() => mockAtLookUp.atChops).thenReturn(atChopsImpl);
 
       when(() => mockAtLookUp
               .executeCommand(any(that: startsWith('enroll:deny')), auth: true))
@@ -181,8 +165,8 @@ void main() {
           EnrollmentRequestDecision.denied(
               '4be2d358-074d-4e3b-99f3-64c4da01532f', atSign);
 
-      AtEnrollmentResponse atEnrollmentResponse =
-          await atEnrollmentBase.deny(enrollmentRequestDecision, mockAtLookUp);
+      AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.deny(
+          enrollmentRequestDecision, mockAtLookUp, denySession);
 
       expect(atEnrollmentResponse.enrollmentId,
           '4be2d358-074d-4e3b-99f3-64c4da01532f');
@@ -191,36 +175,50 @@ void main() {
   });
 
   group('AtEnrollmentResponse toJson / fromJson', () {
-    test('toJson includes enrollmentId and enrollStatus', () {
+    AtAuthSession sessionFor(String atsign) => AtAuthSession(
+          atsign: atsign.toAtsign(),
+          rootDomain: AtRootDomain.atsignDomain,
+          atKeysIo: EphemeralAtKeysIo(),
+        );
+
+    test('toJson includes enrollmentId, enrollStatus and the session atsign',
+        () {
       final response = AtEnrollmentResponse(
         'enroll-123',
         EnrollmentStatus.approved,
+        session: sessionFor('@alice'),
       );
 
       final json = response.toJson();
 
       expect(json['enrollmentId'], 'enroll-123');
       expect(json['enrollStatus'], 'approved');
+      expect(json['atsign'], '@alice');
     });
 
-    test('toJson includes atSign when set', () {
-      final response = AtEnrollmentResponse(
-        'enroll-123',
-        EnrollmentStatus.pending,
-        atSign: '@alice',
-      );
-
-      expect(response.toJson()['atSign'], '@alice');
-    });
-
-    test('toJson does not include atAuthKeys', () {
+    test('toJson excludes the session itself', () {
+      // A session holds a live AtKeysIo (and later an open connection), so it
+      // cannot cross a process boundary — only its atsign does.
       final response = AtEnrollmentResponse(
         'enroll-123',
         EnrollmentStatus.approved,
-        atAuthKeys: AtKeys(),
+        session: sessionFor('@alice'),
       );
 
-      expect(response.toJson().containsKey('atAuthKeys'), false);
+      expect(response.toJson().containsKey('session'), isFalse);
+      expect(response.toJson().keys,
+          unorderedEquals(['enrollmentId', 'enrollStatus', 'atsign']));
+    });
+
+    test('toJson excludes the pending keys', () {
+      final pending = PendingEnrollment(
+        'enroll-123',
+        EnrollmentStatus.pending,
+        session: sessionFor('@alice'),
+        keys: AtKeys(atsign: '@alice'.toAtsign()),
+      );
+
+      expect(pending.toJson().containsKey('keys'), isFalse);
     });
 
     test('fromJson restores enrollmentId and enrollStatus', () {
@@ -229,19 +227,26 @@ void main() {
         'enrollStatus': 'denied',
       };
 
-      final response = AtEnrollmentResponse.fromJson(json);
+      final response =
+          AtEnrollmentResponse.fromJson(json, session: sessionFor('@alice'));
 
       expect(response.enrollmentId, 'enroll-456');
       expect(response.enrollStatus, EnrollmentStatus.denied);
     });
 
-    test('fromJson sets atAuthKeys to null when present', () {
+    test('fromJson takes the session from the caller, not the json', () {
+      final session = sessionFor('@alice');
       final json = {
         'enrollmentId': 'enroll-456',
         'enrollStatus': 'pending',
-        'atAuthKeys': AtKeys()
+        // Even a json that names a different atsign does not get a say.
+        'atsign': '@bob',
       };
-      expect(AtEnrollmentResponse.fromJson(json).atAuthKeys, isNull);
+
+      final response = AtEnrollmentResponse.fromJson(json, session: session);
+
+      expect(response.session, same(session));
+      expect(response.session.atsign, '@alice'.toAtsign());
     });
 
     test('fromJson throws when enrollStatus is unknown', () {
@@ -251,7 +256,8 @@ void main() {
       };
 
       expect(
-        () => AtEnrollmentResponse.fromJson(json),
+        () =>
+            AtEnrollmentResponse.fromJson(json, session: sessionFor('@alice')),
         throwsA(isA<StateError>()),
       );
     });
@@ -260,7 +266,8 @@ void main() {
       final json = {'enrollStatus': 'approved'};
 
       expect(
-        () => AtEnrollmentResponse.fromJson(json),
+        () =>
+            AtEnrollmentResponse.fromJson(json, session: sessionFor('@alice')),
         throwsA(anything),
       );
     });
@@ -269,7 +276,7 @@ void main() {
   group('AtEnrollmentRequest session wiring', () {
     test('session is the source of atSign and rootDomain', () {
       final session = AtAuthSession(
-        atsign: '@alice🛠',
+        atsign: '@alice🛠'.toAtsign(),
         rootDomain: const AtRootDomain('root.atsign.org', 64),
         atKeysIo: EphemeralAtKeysIo(),
       );
@@ -283,20 +290,8 @@ void main() {
       );
 
       expect(request.session, same(session));
-      expect(request.atSign, '@alice🛠');
+      expect(request.atsign, '@alice🛠');
       expect(request.rootDomain, same(session.rootDomain));
-    });
-
-    test('throws when neither session nor atSign is provided', () {
-      expect(
-        () => AtEnrollmentRequest(
-          appName: 'wavi',
-          deviceName: 'pixel',
-          otp: 'A123FE',
-          namespaces: {'wavi': 'rw'},
-        ),
-        throwsA(isA<ArgumentError>()),
-      );
     });
   });
 }
