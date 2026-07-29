@@ -35,6 +35,7 @@ class CramDialog extends StatefulWidget {
     this.onOnboardingComplete,
     this.title,
     this.description,
+    this.authService,
   });
 
   final AtOnboardingRequest request;
@@ -43,6 +44,9 @@ class CramDialog extends StatefulWidget {
   final void Function(AtOnboardingRequest)? onOnboardingComplete;
   final String? title;
   final String? description;
+
+  /// Injection seam for tests; defaults to a real [AuthService].
+  final AuthService? authService;
 
   static Future<AtOnboardingResponse?> show(
     BuildContext context, {
@@ -71,12 +75,13 @@ class CramDialog extends StatefulWidget {
 }
 
 class _CramDialogState extends State<CramDialog> {
-  final AuthService _authService = AuthService();
+  late final AuthService _authService;
   final AtSignLogger _logger = AtSignLogger('CramDialog');
 
   @override
   void initState() {
     super.initState();
+    _authService = widget.authService ?? AuthService();
     // Kick off onboarding exactly once. Starting it here rather than in build()
     // means a widget rebuild — e.g. the parent repainting during the up-to-5-min
     // provisioning wait — can't spawn a second onboard() call.

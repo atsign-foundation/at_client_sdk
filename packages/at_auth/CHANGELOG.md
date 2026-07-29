@@ -10,6 +10,14 @@
 - feat: add passphrase envelope support via `AtKeysPassphraseEnvelopeCodec` (`encode`/`decode`/`isEnvelope`, argon2id key derivation), and add `InMemoryAtKeysIo` for in-memory/test flows (both exported).
 - fix: `AtKeys.==`/`hashCode` now also cover `atsign`, `metadata` (compared structurally — nested maps/lists by value, not identity) and the typed key materials (order-insensitive).
 - chore(deps): require `at_chops` ^3.4.1 for hashing algorithm barrel exports used by AtKeys passphrase handling.
+- fix: `RegistrarService` now fails loudly on a bad API key instead of reporting
+  an ordinary negative result. The constructor throws `AtException` when `apiKey`
+  is empty or whitespace-only, and every registrar call that requires
+  authentication throws `AtException` naming the endpoint and status code when
+  the registrar answers 401/403. Previously a rejected key surfaced as
+  `sendActivationOtp()` returning `false` (or an empty atsign list), which is
+  indistinguishable from a legitimate "no" — callers that treated a falsy result
+  as an expected outcome will now see an exception (#1909).
 
 ## 3.2.0
 - feat: bound `AtAuthImpl.validateAtServer` with a single overall deadline so a
