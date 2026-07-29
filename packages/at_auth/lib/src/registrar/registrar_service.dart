@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:at_auth/src/registrar/registrar.dart';
 import 'package:at_auth/src/at_auth.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
 import 'package:http/http.dart' as http;
@@ -24,6 +25,9 @@ class RegistrarService implements Registrar {
     AtAuth? atAuth,
     http.Client? httpClient,
   }) {
+    if (apiKey.trim().isEmpty) {
+      throw AtException('Registrar API key is required and cannot be empty.');
+    }
     if (httpClient != null) {
       _http = httpClient;
     } else {
@@ -52,12 +56,30 @@ class RegistrarService implements Registrar {
       if (data.isNotEmpty) {
         url = url.replace(queryParameters: data);
       }
-      return _http.get(url, headers: headers);
+      final response = await _http.get(url, headers: headers);
+      _throwIfAuthFailure(response, endpoint, requiresAuth);
+      return response;
     } else {
-      return _http.post(
+      final response = await _http.post(
         url,
         body: jsonEncode(data),
         headers: headers,
+      );
+      _throwIfAuthFailure(response, endpoint, requiresAuth);
+      return response;
+    }
+  }
+
+  void _throwIfAuthFailure(
+    http.Response response,
+    RegistrarApiEndpoint endpoint,
+    bool requiresAuth,
+  ) {
+    if (!requiresAuth) return;
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw AtException(
+        'Registrar authentication failed: invalid or missing API key. '
+        'endpoint=${endpoint.path}, status=${response.statusCode}',
       );
     }
   }
@@ -141,6 +163,8 @@ class RegistrarService implements Registrar {
         'Content-Type': 'application/json',
       },
     );
+    _throwIfAuthFailure(
+        res, RegistrarApiEndpoint.getFreeAtsignByCategory, true);
 
     if (res.statusCode != 200) {
       _logger.shout('Failed to getFreeAtsignByCategory - ${res.body}');

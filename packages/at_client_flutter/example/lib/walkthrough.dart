@@ -20,10 +20,8 @@ final KeychainStorage keychainStorage = KeychainStorage();
 /// Helper function to safely execute async operations with comprehensive error logging
 Future<T?> _safeExecute<T>(
   String operationName,
-  Future<T> Function() operation, {
-  BuildContext? context,
-  bool showErrorDialog = true,
-}) async {
+  Future<T> Function() operation,
+) async {
   try {
     _logger.info('Starting operation: $operationName');
     final result = await operation();
@@ -32,62 +30,8 @@ Future<T?> _safeExecute<T>(
   } catch (e, stackTrace) {
     _logger.severe('ERROR in $operationName: $e');
     _logger.severe('Stack trace: $stackTrace');
-
-    if (context != null && context.mounted && showErrorDialog) {
-      _showErrorDialog(context, operationName, e, stackTrace);
-    }
-
     return null;
   }
-}
-
-/// Show a detailed error dialog
-void _showErrorDialog(
-  BuildContext context,
-  String operation,
-  Object error,
-  StackTrace stackTrace,
-) {
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Error Occurred'),
-      content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Operation: $operation'),
-            const SizedBox(height: 8),
-            Text('Error Type: ${error.runtimeType}'),
-            const SizedBox(height: 8),
-            const Text(
-              'Details:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(error.toString()),
-            const SizedBox(height: 8),
-            const Text(
-              'Stack Trace:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              stackTrace.toString(),
-              style: const TextStyle(fontSize: 10, fontFamily: 'monospace'),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('OK'),
-        ),
-      ],
-    ),
-  );
 }
 
 /// This method is an example of how an application creates their own customized onboarding flow
@@ -150,7 +94,7 @@ Future<void> onboard(BuildContext context) async {
         MaterialPageRoute(builder: (context) => const HomePage()),
       );
     }
-  }, context: context);
+  });
 }
 
 /// Login using an atSign stored in the keychain
@@ -338,7 +282,7 @@ Future<void> exportKeys(BuildContext context) async {
         context,
       ).showSnackBar(SnackBar(content: Text('Keys exported to $filePath')));
     }
-  }, context: context);
+  });
 }
 
 /// Opens a file save dialog and returns the selected file path.
@@ -491,5 +435,5 @@ Future<void> removeAtsign(BuildContext context) async {
     } else {
       _logger.info('User cancelled atSign removal');
     }
-  }, context: context);
+  });
 }
