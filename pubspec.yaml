@@ -6,7 +6,6 @@ environment:
   flutter: ^3.29.2 # Ships with Dart 3.7.2, ensuring pub workspace support
 
 workspace:
-  - packages/at_auth
   - packages/at_chops
   - packages/at_cli_commons
   - packages/at_client
@@ -119,3 +118,7 @@ dev_dependencies:
   plugin_platform_interface: ^2.1.6
   test: ^1.25.0
   test_process: ^2.1.0
+
+dependency_overrides:
+  at_auth:
+    path: packages/at_auth

@@ -1,3 +1,126 @@
+## 4.0.0
+
+### Breaking
+
+- **The whole `AtKeysIo` surface takes `Atsign`, not `String`.** `read`, `write`
+  and `WrittenAtKeysIo.flush` all take a normalized `Atsign`, and
+  `FileAtKeysIo.filePath` is now `String Function(Atsign)`. Previously `read`
+  took `Atsign` while `write` took `String`, and because `Atsign` is a subtype
+  of `String` the analyzer could never flag the drift.
+- **`write` moved from `WrittenAtKeysIo`/`InMemoryAtKeysIo` up to `AtKeysIo`.** A
+  caller holding a plain `AtKeysIo` can now persist a fresh keyset without
+  switching on the subtype (`AtAuthImpl.onboard` had a `switch` with two
+  identical branches). The tradeoff is explicit: there is no read-only
+  implementation. `flush` stays on `WrittenAtKeysIo`; `append`/`retire`/
+  `dispose` stay on `InMemoryAtKeysIo`.
+- **`AtOnboardingRequest.appName`/`deviceName` are now `final` constructor
+  parameters** (same `'firstApp'`/`'firstDevice'` defaults) instead of mutable
+  fields settable only by cascade after construction.
+- **`enrollmentId` is a structural field of the typed-keys document**, alongside
+  `version`/`atsign`/`keys` — read and written explicitly rather than carried in
+  the legacy flat payload. The on-disk bytes are unchanged; what changes is that
+  a keyfile field named `enrollmentId` (or `version`/`atsign`/`keys`) is never
+  captured into `AtKeys.metadata`. `KeyIds.reservedTopLevelKeys` and
+  `KeyIds.isMetadata` are the single source of truth for that split, replacing
+  two divergent private copies. `flush` now permits an `enrollmentId` to be set
+  once (`null` → value, which is what enrollment approval does) but rejects
+  repointing an existing one at a different enrollment.
+
+#### The enrollment models are session-scoped
+
+The session is now the single carrier of "which atsign, reached how, with keys
+read from where" throughout enrollment — replacing the loose `atSign` /
+`rootDomain` / `atAuthKeys` fields that were duplicated across request and
+response.
+
+- **`AtEnrollmentResponse` is now `{enrollmentId, enrollStatus, session}`.** The
+  deprecated `atSign`, `rootDomain` and `atAuthKeys` fields are gone; `session`
+  is required. `toJson` emits `enrollmentId`, `enrollStatus` and the session's
+  atsign; `fromJson` takes the session from the caller, since a session holds a
+  live `AtKeysIo` and cannot round-trip through json.
+- **New `PendingEnrollment extends AtEnrollmentResponse`**, returned by `submit`
+  for an `AtEnrollmentRequest`. It adds `keys`: the APKAM keypair and symmetric
+  key minted at submit time, which `waitForApproval` completes with the material
+  the atServer was holding. They travel on the response because the partial
+  keyset is deliberately not persistable — it has no `defaultSelfEncryptionKey`
+  yet, which `FileAtKeysIo` requires to self-encrypt the APKAM fields at rest.
+- **`waitForApproval` takes a `PendingEnrollment`**, so it cannot be called
+  without the keys it needs. On success it persists the completed keyset through
+  the session's `atKeysIo` (`flush` for a durable store, `write` otherwise) and
+  replaces `session` with one carrying the approved enrollmentId and the
+  authenticated connection.
+- **`approve`/`deny`/`revoke` take the approving app's `AtAuthSession`** instead
+  of (for `approve`) a bare `AtKeys`. Approval reads the approver's encryption
+  private key and self encryption key via `session.atKeysIo.read(...)` — the same
+  path every other key consumer uses — and the returned response is scoped to
+  that session.
+- **`EnrollmentRequest.atSign` is now `atsign` and typed `Atsign`**, matching the
+  rest of the package. `FirstEnrollmentRequest` takes a `session` and derives
+  `atsign`/`rootDomain` from it, as `AtEnrollmentRequest` already did.
+
+#### Deprecated API removed
+
+A major version is the moment to settle these. The legacy `.atKeys` JSON format
+is untouched by all of it — it stays readable *and* writable, and the six legacy
+`AtKeys` key fields stay too (see Deprecations below).
+
+- **`AuthResponse`, `AtAuthResponse`, `AtOnboardingResponse` are gone** (the
+  whole `at_auth_responses.dart`). They were tagged "remove in v4" and had no
+  remaining references — `authenticate`/`onboard` return `AtAuthSession`, and
+  failure throws rather than returning `isSuccessful: false`.
+- **`AtAuth.create` no longer accepts `atChops`.** The parameter was accepted and
+  then never passed on, so supplying it did nothing.
+- **`AtEnrollmentRequest` requires `session`** and no longer accepts `atSign`,
+  `rootDomain`, `apkamPublicKey` or `encryptedAPKAMSymmetricKey`. `atSign` and
+  `rootDomain` come from the session; the other two were dead on this class —
+  `submit` generates its own APKAM keypair and encrypts its own symmetric key.
+  (`apkamPublicKey` remains on `FirstEnrollmentRequest`, which needs it.)
+- **`ActivateApiEndpoint` and `ActivateApiEndpointLegacy` are gone.** Use
+  `RegistrarApiEndpoint`; the legacy `login`/`validate` getters map to
+  `requestOtp`/`validateOtp` (their deprecation notices named replacements that
+  never existed).
+- **`EnrollmentBase`, `EnrollmentServerResponse` and
+  `ServerEnrollmentRequest.namespace` are gone.** Use `AtEnrollmentRecord`,
+  `ServerEnrollmentRequest` and `namespacePermissions` — one name per type.
+
+
+### Added
+
+- `AtKeys.generate(Atsign, {enrollmentId, mintLegacy})` — mints a fresh keyset
+  (ML-DSA-65 APKAM signing + X-Wing encryption always; the legacy RSA/AES fields
+  too unless `mintLegacy: false`). This is the onboarding key-minting entry
+  point, now a static factory on the type it returns rather than a separate
+  helper class. Note that `mintLegacy: false` cannot yet PKAM-authenticate:
+  PKAM signs with the RSA `apkamPrivateKey`, and `MlDsaPkamSigner` remains
+  experimental.
+
+### Migration
+
+- **Callers**: normalize once at the boundary — `atKeysIo.read(Atsign atsign)`
+  instead of `atKeysIo.read(String atsign)`. If you already hold an `Atsign`, nothing
+  changes.
+- **`AtOnboardingRequest`**: replace
+  `AtOnboardingRequest(a, io)..appName = 'wavi'` with
+  `AtOnboardingRequest(a, io, appName: 'wavi')`.
+- **Enrollment (requesting app)**: `submit` an `AtEnrollmentRequest` and narrow
+  the result, then hand it to `waitForApproval`:
+
+  ```dart
+  final pending = await atEnrollment.submit(request, atLookUp)
+      as PendingEnrollment;
+  await atEnrollment.waitForApproval(pending);
+  AtClientManager.fromAuthSession(pending.session);   // keys already persisted
+  ```
+
+  Reading keys off the response (`response.atAuthKeys`) is gone — after
+  `waitForApproval` they are in `pending.session.atKeysIo`.
+- **Enrollment (approving app)**: pass your own session where you used to pass
+  `AtKeys` (or nothing): `approve(decision, atLookUp, mySession)`, and likewise
+  for `deny`/`revoke`. The approver's keys are read from `mySession.atKeysIo`.
+- **`FirstEnrollmentRequest`**: pass `session:` instead of `atSign:`/`rootDomain:`.
+  `AtAuthImpl.onboard` builds that session from the onboarding request, so this
+  only affects callers constructing the request directly.
+
 ## 3.3.0-rc1
 - feat: add `AtKeysMaterial` — the only key type `AtKeys`'s API deals in (`addKey`, `getKey`, `keysForKeyId`, `keysForEnrollment`, `retireKey`, the `keysList` constructor param, ...). It's fully self-describing: `keyId`/`enrollmentId` plus `keyPartType` (an open `String` — the mechanical crypto role; known tokens in `CryptographicKeyType`: symmetric encryption/authentication and the public/private halves of encryption, verification/signing, encapsulation/decapsulation and key agreement), `keyAlgorithmType` (an open `String` — the algorithm family; known tokens in `KeyAlgorithmType`: `aes256`/`rsa2048`/`ecc_secp256r1`/`ed25519`/`x25519`/`mlkem768`/`mldsa65`/`xwing`, matching the pkam/enrollment `signingAlgo` literals), `bytes`, `operations`, `createdAt`, and `status` (`active`/`retired`/`dead`; `withStatus(...)` copies a material at a new status). Both token fields are deliberately Strings, not enums: unknown tokens are preserved and round-tripped, so a keyfile written by a newer client stays readable — and losslessly flushable — by an older one; whether an algorithm is classical, post-quantum or hybrid is carried by the algorithm token (e.g. `xwing`), not a separate role axis. The wire's nested `keys[].keyParts[]` document shape — grouping the materials sharing a `keyId` (e.g. the public+private halves of a keypair) — is produced/consumed by `encodeAtKeysDocument`/`parseAtKeysDocument` (also exported), not a separate model type. Keys produced by one enrollment are grouped by an optional `enrollmentId` and queried via `AtKeys.keysForEnrollment(...)`; at most one material of a given `CryptographicKeyType` may share an `enrollmentId`.
 - feat: `AtKeys.toJson()`/`.fromJson(...)` now produce/consume the versioned typed-keys document shape (`version`, `atsign`, `keys`, with legacy fields flat at the top level — upgrading a legacy file to the typed-keys document is additive, not a format swap), replacing the former codec/resolver/document layer. Backward compatible: `fromJson` accepts json without a `version` field as the legacy flat shape, and throws `AtKeysUnsupportedVersionException` on an unknown version. Typed materials are looked up via `AtKeys.getKey(keyId, type)` and `.keysForKeyId(keyId)`.
