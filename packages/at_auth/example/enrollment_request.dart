@@ -45,11 +45,9 @@ void main(List<String> args) async {
         namespaces: {'buzz': 'rw'},
         otp: argResults['otp']);
 
-    // Submitting an AtEnrollmentRequest yields a PendingEnrollment: the
-    // server's verdict plus the APKAM keys minted locally, which waitForApproval
-    // needs to finish the handshake.
-    final pending = await atEnrollmentBase.submit(enrollmentRequest, atLookUp)
-        as PendingEnrollment;
+    // submit yields a PendingEnrollment: the server's verdict plus the APKAM
+    // keys minted locally, which waitForApproval needs to finish the handshake.
+    final pending = await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
     print(pending);
 
     // Once the approving app approves, waitForApproval completes those keys with

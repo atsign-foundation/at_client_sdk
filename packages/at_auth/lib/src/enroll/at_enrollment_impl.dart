@@ -40,40 +40,21 @@ class AtEnrollmentImpl implements AtEnrollment {
   }
 
   @override
-  Future<AtEnrollmentResponse> submit(
-      EnrollmentRequest enrollmentRequest, AtLookUp atLookUp) async {
-    AtEnrollmentResponse atEnrollmentResponse;
-    switch (enrollmentRequest) {
-      case FirstEnrollmentRequest _:
-        atEnrollmentResponse =
-            await _handleFirstEnrollmentRequest(enrollmentRequest, atLookUp);
-        break;
-      case AtEnrollmentRequest _:
-        atEnrollmentResponse =
-            await _handleAtEnrollmentRequest(enrollmentRequest, atLookUp);
-      default:
-        _addProgress('enrollment', 'Invalid Enrollment request received',
-            ProgressEventType.error);
-        throw InvalidRequestException('Invalid Enrollment request received');
-    }
-    _addProgress('enrollment', 'Enrollment request submitted',
-        ProgressEventType.success);
-    return atEnrollmentResponse;
-  }
-
-  /// Handles the FirstEnrollmentRequest, which is submitted when an atsign is first onboarded.
-  Future<AtEnrollmentResponse> _handleFirstEnrollmentRequest(
+  Future<AtEnrollmentResponse> submitFirstEnrollment(
       FirstEnrollmentRequest enrollmentRequest, AtLookUp atLookUp) async {
     EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
       ..appName = enrollmentRequest.appName
-      ..deviceName = enrollmentRequest.deviceName;
-    enrollVerbBuilder.apkamPublicKey = enrollmentRequest.apkamPublicKey;
+      ..deviceName = enrollmentRequest.deviceName
+      ..apkamPublicKey = enrollmentRequest.apkamPublicKey;
 
     String? serverResponse =
         await _executeEnrollCommand(enrollVerbBuilder, atLookUp);
     var enrollJson = jsonDecode(serverResponse);
     var enrollmentIdFromServer = enrollJson[AtConstants.enrollmentId];
     var enrollStatus = getEnrollStatusFromString(enrollJson['status']);
+
+    _addProgress('enrollment', 'Enrollment request submitted',
+        ProgressEventType.success);
 
     return AtEnrollmentResponse(
       enrollmentIdFromServer,
@@ -82,8 +63,8 @@ class AtEnrollmentImpl implements AtEnrollment {
     );
   }
 
-  /// Handles the subsequent enrollment requests.
-  Future<AtEnrollmentResponse> _handleAtEnrollmentRequest(
+  @override
+  Future<PendingEnrollment> submit(
       AtEnrollmentRequest atEnrollmentRequest, AtLookUp atLookUp) async {
     // Generate required keys
     RsaKeyPair apkamKeyPair = RsaKeyPair.generate();
@@ -127,6 +108,9 @@ class AtEnrollmentImpl implements AtEnrollment {
       ..enrollmentId = enrollJson[AtConstants.enrollmentId]
       ..defaultEncryptionPublicKey =
           AtBytes.fromString(defaultEncryptionPublicKey);
+
+    _addProgress('enrollment', 'Enrollment request submitted',
+        ProgressEventType.success);
 
     // Carry the requesting app's session forward so waitForApproval can persist
     // the completed keys into its atKeysIo and hand it back, along with the

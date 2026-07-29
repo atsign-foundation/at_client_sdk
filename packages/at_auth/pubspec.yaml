@@ -24,3 +24,8 @@ dev_dependencies:
   lints: ^6.0.0
   test: ^1.25.0
   mocktail: ^1.0.4
+
+
+dependency_overrides:
+  at_lookup:
+    path: ../at_lookup

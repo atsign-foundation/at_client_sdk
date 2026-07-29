@@ -32,7 +32,8 @@ class FakeVerbBuilder extends Fake implements VerbBuilder {}
 
 class FakeAtLookUp extends Fake implements AtLookupImpl {}
 
-class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
+class FakeFirstEnrollmentRequest extends Fake
+    implements FirstEnrollmentRequest {}
 
 class FakeSecondaryAddressFinder extends Fake
     implements CacheableSecondaryAddressFinder {
@@ -60,7 +61,7 @@ void main() {
     // with a stack trace. Quieten it so a green run reads as green.
     AtSignLogger.root_level = 'shout';
     registerFallbackValue(FakeVerbBuilder());
-    registerFallbackValue(FakeEnrollmentRequest());
+    registerFallbackValue(FakeFirstEnrollmentRequest());
     registerFallbackValue(FakeAtLookUp());
     registerFallbackValue(legacyAtKeys());
   });
@@ -233,12 +234,12 @@ void main() {
           Future.value('data:{"enrollmentId":"abc123", "status":"approved"}'));
       when(() => mockPkamAuthenticator.authenticate(any(), any(), any(),
           enrollmentId: 'abc123')).thenAnswer((_) async {});
-      when(() => mockAtEnrollment.submit(any(), mockAtLookUp))
+      when(() => mockAtEnrollment.submitFirstEnrollment(any(), mockAtLookUp))
           .thenAnswer((invocation) {
         // The first-enrollment response is scoped to the session onboarding is
         // establishing, which AtAuthImpl builds from the request.
         final request =
-            invocation.positionalArguments.first as EnrollmentRequest;
+            invocation.positionalArguments.first as FirstEnrollmentRequest;
         return Future.value(AtEnrollmentResponse(
           'abc123',
           EnrollmentStatus.approved,

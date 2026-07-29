@@ -82,10 +82,17 @@ void main() {
         otp: 'A123FE',
         namespaces: {'wavi': 'rw'});
 
-    AtEnrollmentResponse atEnrollmentResponse =
+    PendingEnrollment pending =
         await atEnrollmentServiceImpl.submit(enrollmentRequest, mockAtLookUp);
-    expect(atEnrollmentResponse.enrollmentId, '123');
-    expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
+    expect(pending.enrollmentId, '123');
+    expect(pending.enrollStatus, EnrollmentStatus.pending);
+    // submit's return type guarantees the keys waitForApproval needs: the APKAM
+    // keypair it signs with and the symmetric key it decrypts the server's
+    // material with, both minted here.
+    expect(pending.keys.apkamPrivateKey, isNotNull);
+    expect(pending.keys.apkamPublicKey, isNotNull);
+    expect(pending.keys.apkamSymmetricKey, isNotNull);
+    expect(pending.keys.enrollmentId, '123');
   });
 
   group('A group of tests related EnrollmentRequestDecision', () {

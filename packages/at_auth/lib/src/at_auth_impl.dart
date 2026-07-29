@@ -392,8 +392,8 @@ class AtAuthImpl implements AtAuth {
 
     AtEnrollmentResponse? atEnrollmentResponse;
     try {
-      atEnrollmentResponse =
-          await atEnrollment.submit(firstEnrollmentRequest, atLookUp!);
+      atEnrollmentResponse = await atEnrollment.submitFirstEnrollment(
+          firstEnrollmentRequest, atLookUp!);
     } on AtEnrollmentException catch (e, s) {
       _progress(
           "onboarding",

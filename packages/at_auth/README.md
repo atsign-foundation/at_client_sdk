@@ -110,8 +110,13 @@ Why this matters:
   `deviceName`, namespace permissions, and status (`pending`,
   `approved`, `denied`, `revoked`, `expired`).
 
-See [`example/enrollment_request.dart`](example/enrollment_request.dart)
-for the submitting side; the approve/deny side is demonstrated in
+On the submitting side that is two calls: `AtEnrollment.submit` returns a
+`PendingEnrollment` carrying the locally minted APKAM keys, and
+`AtEnrollment.waitForApproval` polls until the request is approved, then completes
+those keys with the material the atServer was holding and persists them through
+the session's `atKeysIo`. See
+[`example/enrollment_request.dart`](example/enrollment_request.dart)
+for that side; the approve/deny side is demonstrated in
 [`at_onboarding_cli/example/apkam_examples/enroll_app_listen.dart`](../at_onboarding_cli/example/apkam_examples/enroll_app_listen.dart).
 
 ## The `.atKeys` file format

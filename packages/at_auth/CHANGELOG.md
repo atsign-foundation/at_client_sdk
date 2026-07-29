@@ -38,12 +38,27 @@ response.
   is required. `toJson` emits `enrollmentId`, `enrollStatus` and the session's
   atsign; `fromJson` takes the session from the caller, since a session holds a
   live `AtKeysIo` and cannot round-trip through json.
-- **New `PendingEnrollment extends AtEnrollmentResponse`**, returned by `submit`
-  for an `AtEnrollmentRequest`. It adds `keys`: the APKAM keypair and symmetric
-  key minted at submit time, which `waitForApproval` completes with the material
-  the atServer was holding. They travel on the response because the partial
-  keyset is deliberately not persistable — it has no `defaultSelfEncryptionKey`
-  yet, which `FileAtKeysIo` requires to self-encrypt the APKAM fields at rest.
+- **New `PendingEnrollment extends AtEnrollmentResponse`**, the declared return
+  type of `submit`. It adds `keys`: the APKAM keypair and symmetric key minted at
+  submit time, which `waitForApproval` completes with the material the atServer
+  was holding. They travel on the response because the partial keyset is
+  deliberately not persistable — it has no `defaultSelfEncryptionKey` yet, which
+  `FileAtKeysIo` requires to self-encrypt the APKAM fields at rest.
+- **`submit` is now the app-enrollment method alone: `Future<PendingEnrollment>
+  submit(AtEnrollmentRequest, AtLookUp)`.** The first enrollment moves to
+  `submitFirstEnrollment(FirstEnrollmentRequest, AtLookUp)`, which still returns
+  a plain `AtEnrollmentResponse`. `submit` previously took the abstract
+  `EnrollmentRequest`, dispatched on its runtime subtype and declared the base
+  return type, so callers had to write `as PendingEnrollment` to reach the keys —
+  and passing anything else threw `InvalidRequestException` at runtime. Splitting
+  the two makes both illegal at compile time instead: the request type picks the
+  method, and the method's return type is exactly what that path produces.
+  Only the first enrollment can mint no keys — it is auto-approved and receives
+  only an `apkamPublicKey` — which is why the two return types differ.
+- **`apkamPublicKey` moved from `EnrollmentRequest` down to
+  `FirstEnrollmentRequest`, and is non-nullable there.** It was inherited but
+  permanently `null` on `AtEnrollmentRequest`, whose `submit` mints its own
+  keypair.
 - **`waitForApproval` takes a `PendingEnrollment`**, so it cannot be called
   without the keys it needs. On success it persists the completed keyset through
   the session's `atKeysIo` (`flush` for a durable store, `write` otherwise) and
@@ -74,7 +89,7 @@ is untouched by all of it — it stays readable *and* writable, and the six lega
   `rootDomain`, `apkamPublicKey` or `encryptedAPKAMSymmetricKey`. `atSign` and
   `rootDomain` come from the session; the other two were dead on this class —
   `submit` generates its own APKAM keypair and encrypts its own symmetric key.
-  (`apkamPublicKey` remains on `FirstEnrollmentRequest`, which needs it.)
+  (`apkamPublicKey` now lives on `FirstEnrollmentRequest`, which needs it.)
 - **`ActivateApiEndpoint` and `ActivateApiEndpointLegacy` are gone.** Use
   `RegistrarApiEndpoint`; the legacy `login`/`validate` getters map to
   `requestOtp`/`validateOtp` (their deprecation notices named replacements that
@@ -102,18 +117,21 @@ is untouched by all of it — it stays readable *and* writable, and the six lega
 - **`AtOnboardingRequest`**: replace
   `AtOnboardingRequest(a, io)..appName = 'wavi'` with
   `AtOnboardingRequest(a, io, appName: 'wavi')`.
-- **Enrollment (requesting app)**: `submit` an `AtEnrollmentRequest` and narrow
-  the result, then hand it to `waitForApproval`:
+- **Enrollment (requesting app)**: `submit` an `AtEnrollmentRequest` and hand the
+  result to `waitForApproval` — no cast, `submit` returns the `PendingEnrollment`:
 
   ```dart
-  final pending = await atEnrollment.submit(request, atLookUp)
-      as PendingEnrollment;
+  final pending = await atEnrollment.submit(request, atLookUp);
   await atEnrollment.waitForApproval(pending);
   AtClientManager.fromAuthSession(pending.session);   // keys already persisted
   ```
 
   Reading keys off the response (`response.atAuthKeys`) is gone — after
   `waitForApproval` they are in `pending.session.atKeysIo`.
+- **First enrollment**: `submit(firstEnrollmentRequest, atLookUp)` becomes
+  `submitFirstEnrollment(firstEnrollmentRequest, atLookUp)`. `AtAuthImpl.onboard`
+  does this internally, so it only affects callers driving the first enrollment
+  themselves — or mocking `AtEnrollment`, where the stubbed method name changes.
 - **Enrollment (approving app)**: pass your own session where you used to pass
   `AtKeys` (or nothing): `approve(decision, atLookUp, mySession)`, and likewise
   for `deny`/`revoke`. The approver's keys are read from `mySession.atKeysIo`.
