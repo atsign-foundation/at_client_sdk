@@ -1,6 +1,6 @@
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
-import 'package:at_commons/at_commons.dart' show AtRootDomain;
+import 'package:at_commons/at_commons.dart' show AtRootDomain, AtsignString;
 import 'package:at_utils/at_progress.dart';
 
 /// Perform authentication for an onboarded atsign
@@ -20,12 +20,17 @@ void main(List<String> args) async {
     atAuth.progressStream.listen((ProgressEvent event) {
       print('Progress: ${event.group} : ${event.msg}');
     });
-    final atSign = argResults['atsign'];
-    final atAuthRequest = AtAuthRequest(atSign,
-        atKeysIo: FileAtKeysIo(filePath: (_) => argResults['keysFilePath']),
-        rootDomain: AtRootDomain('root.atsign.org', 64));
-    final atAuthResponse = await atAuth.authenticate(atAuthRequest);
-    print('atAuthResponse: $atAuthResponse');
+    final atsign = (argResults['atsign'] as String).toAtsign();
+    final atAuthRequest = AtAuthRequest(
+      atsign,
+      FileAtKeysIo(filePath: (_) => argResults['keysFilePath']),
+      rootDomain: AtRootDomain('root.atsign.org', 64),
+    );
+    // Throws AtAuthenticationException on failure; reaching here means the
+    // atsign is authenticated. The session is what you hand to client creation.
+    final session = await atAuth.authenticate(atAuthRequest);
+    print('authenticated ${session.atsign} '
+        '(enrollmentId: ${session.enrollmentId})');
   } on Exception catch (e, trace) {
     print(trace);
   } on ArgumentError catch (e, trace) {

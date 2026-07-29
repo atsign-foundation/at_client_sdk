@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
+import 'package:at_commons/at_commons.dart' show AtRootDomain, AtsignString;
 
 /// Perform initial onboarding for an atsign
 /// 1. CRAM authentication
@@ -23,12 +24,18 @@ void main(List<String> args) async {
     final argResults = parser.parse(args);
 
     final atAuth = AtAuth.create();
-    final atSign = argResults['atsign'];
-    final atOnboardingRequest = AtOnboardingRequest(atSign)
-      ..rootDomain = argResults['rootDomain'];
-    final atOnboardingResponse =
+    final atsign = (argResults['atsign'] as String).toAtsign();
+    final atOnboardingRequest = AtOnboardingRequest(
+      atsign,
+      FileAtKeysIo(filePath: (_) => argResults['keysFilePath']),
+      rootDomain: AtRootDomain(argResults['rootDomain'], 64),
+    );
+    // Mints the keys, enrolls them, authenticates, and writes the .atKeys file
+    // through the AtKeysIo above. Throws on failure.
+    final session =
         await atAuth.onboard(atOnboardingRequest, argResults['cramsecret']);
-    print('atOnboardingResponse: $atOnboardingResponse');
+    print('onboarded ${session.atsign} '
+        '(enrollmentId: ${session.enrollmentId})');
   } on Exception catch (e, trace) {
     print(trace);
   } on ArgumentError catch (e, trace) {
