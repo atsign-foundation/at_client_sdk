@@ -13,15 +13,29 @@ abstract interface class AtAuth {
   AtLookUp? atLookUp;
   Stream<ProgressEvent> get progressStream;
 
+  /// [probeSocket] verifies the atServer is reachable before onboarding or
+  /// authenticating, in [validateAtServer]. Opening a socket is `dart:io`, so
+  /// the wasm-safe core has no implementation of its own — VM and Flutter
+  /// callers should pass `defaultProbeSocket` from `at_auth_io.dart`:
+  ///
+  /// ```dart
+  /// AtAuth.create(probeSocket: defaultProbeSocket);
+  /// ```
+  ///
+  /// Left null, the reachability probe is skipped (the atDirectory lookup still
+  /// runs, so an unreachable atServer surfaces later, from the connection
+  /// attempt rather than from validation).
   factory AtAuth.create(
       {AtLookUp? atLookUp,
       CramAuthenticator? cramAuthenticator,
       PkamAuthenticator? pkamAuthenticator,
+      Future<void> Function(String host, int port)? probeSocket,
       AtEnrollment? atEnrollmentBase}) {
     return AtAuthImpl(
         atLookUp: atLookUp,
         cramAuthenticator: cramAuthenticator,
         pkamAuthenticator: pkamAuthenticator,
+        probeSocket: probeSocket,
         atEnrollment: atEnrollmentBase);
   }
 

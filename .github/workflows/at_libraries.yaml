@@ -70,6 +70,14 @@ jobs:
         working-directory: packages/${{ matrix.package }}
         run: dart analyze
 
+      # at_auth's wasm-safe barrel must keep building for dart2wasm. Catches
+      # dart:ffi/dart:mirrors entering the graph; dart:io compiles to a stub, so
+      # keeping that out of at_auth.dart is on review, not this step.
+      - name: Compile wasm surface in ${{ matrix.package }}
+        if: matrix.package == 'at_auth'
+        working-directory: packages/${{ matrix.package }}
+        run: dart compile wasm tool/wasm_entry.dart -o "${RUNNER_TEMP}/at_auth.wasm"
+
       - name: run tests
         working-directory: packages/${{ matrix.package }}
         run: dart test --concurrency=1 --exclude-tags ffi

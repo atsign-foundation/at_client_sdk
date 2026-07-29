@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:args/args.dart';
-import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_commons/at_commons.dart' show AtRootDomain, AtsignString;
 
 /// Perform initial onboarding for an atsign
@@ -23,7 +23,7 @@ void main(List<String> args) async {
           defaultsTo: 'root.atsign.org');
     final argResults = parser.parse(args);
 
-    final atAuth = AtAuth.create();
+    final atAuth = AtAuth.create(probeSocket: defaultProbeSocket);
     final atsign = (argResults['atsign'] as String).toAtsign();
     final atOnboardingRequest = AtOnboardingRequest(
       atsign,

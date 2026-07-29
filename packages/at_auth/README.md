@@ -22,6 +22,49 @@ See [`example/onboard.dart`](example/onboard.dart),
 [`example/enrollment_request.dart`](example/enrollment_request.dart) for
 end-to-end usage.
 
+## Two barrels: `at_auth.dart` and `at_auth_io.dart`
+
+`at_auth.dart` is the wasm-safe surface — none of at_auth's own sources
+reachable from it import `dart:io`. The VM-only pieces live in
+`at_auth_io.dart`, which re-exports `at_auth.dart`, so **VM, CLI and
+Flutter callers just import `at_auth_io.dart`** and get everything:
+
+| Symbol                                 | Barrel            |
+| -------------------------------------- | ----------------- |
+| `AtAuth`, `AtEnrollment`, `AtKeys`, …  | `at_auth.dart`    |
+| `AtKeysIo`, `EphemeralAtKeysIo`        | `at_auth.dart`    |
+| `RegistrarService`                     | `at_auth.dart`    |
+| `FileAtKeysIo`, `getHomeDirectory`     | `at_auth_io.dart` |
+| `defaultProbeSocket`                   | `at_auth_io.dart` |
+
+`defaultProbeSocket` is the TLS reachability check `validateAtServer`
+performs before onboarding or authenticating. Because it opens a socket it
+cannot live in the wasm-safe core, so pass it in — otherwise the probe is
+skipped (with a `warning` log) and an unreachable atServer surfaces later,
+from the connection attempt:
+
+```dart
+final atAuth = AtAuth.create(probeSocket: defaultProbeSocket);
+```
+
+**How this is checked.** CI compiles
+[`tool/wasm_entry.dart`](tool/wasm_entry.dart) — which imports `at_auth.dart`,
+never `at_auth_io.dart` — for wasm:
+
+```bash
+dart compile wasm tool/wasm_entry.dart -o /tmp/at_auth.wasm
+```
+
+That catches `dart:ffi` or `dart:mirrors` entering the dependency graph, which
+are hard errors under dart2wasm. It does **not** catch `dart:io`: dart2wasm
+compiles it to a stub that throws only when called, so keeping it out of
+`at_auth.dart` is on review. Adding a `dart:io` import to the wasm-safe half is
+the mistake to watch for in a diff.
+
+**Honest scope.** at_auth still only *runs* where `at_lookup`, `at_utils` and
+`at_server_status` run, and all three use `dart:io`. Porting them is a separate
+effort.
+
 ## The atSign lifecycle
 
 The full journey from "I don't own an atSign yet" to "my app is talking
@@ -121,7 +164,7 @@ for that side; the approve/deny side is demonstrated in
 
 ## The `.atKeys` file format
 
-`FileAtKeysIo` reads and writes `.atKeys` files (default path
+`FileAtKeysIo` (from `at_auth_io.dart`) reads and writes `.atKeys` files (default path
 `~/.atsign/keys/<atsign>_key.atKeys`; pass `filePath` to put them
 anywhere else, composing `getDefaultAtKeysFilePath(home, atsign)` if you
 want that same layout under a different home). A file has up to three

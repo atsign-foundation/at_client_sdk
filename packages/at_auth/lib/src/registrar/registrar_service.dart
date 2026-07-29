@@ -1,12 +1,9 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:at_auth/src/registrar/registrar.dart';
-import 'package:at_auth/src/at_auth.dart';
 import 'package:at_utils/at_logger.dart';
 
 import 'package:http/http.dart' as http;
-import 'package:http/io_client.dart';
 
 const apiBase = '/api/app/v4';
 
@@ -15,24 +12,19 @@ class RegistrarService implements Registrar {
   final String registrarUrl;
   @override
   final String apiKey;
-  late final http.Client _http;
+  final http.Client _http;
   final AtSignLogger _logger = AtSignLogger('RegistrarService');
 
+  /// [httpClient] defaults to `http.Client()`, which validates the registrar's
+  /// certificate and resolves to the right implementation per platform
+  /// (`IOClient` on the VM, `BrowserClient` on the web) — keeping this class
+  /// off `dart:io`. To reach a registrar with a self-signed certificate, pass
+  /// an `IOClient` over an `HttpClient` with your own `badCertificateCallback`.
   RegistrarService({
     required this.registrarUrl,
     required this.apiKey,
-    AtAuth? atAuth,
     http.Client? httpClient,
-  }) {
-    if (httpClient != null) {
-      _http = httpClient;
-    } else {
-      var innerClient = HttpClient();
-      innerClient.badCertificateCallback =
-          (X509Certificate cert, String host, int port) => true;
-      _http = IOClient(innerClient);
-    }
-  }
+  }) : _http = httpClient ?? http.Client();
 
   @override
   Future<http.Response> registrarApiRequest(

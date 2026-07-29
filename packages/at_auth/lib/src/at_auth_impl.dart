@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
@@ -68,7 +67,10 @@ class AtAuthImpl implements AtAuth {
   @visibleForTesting
   SecondaryAddressFinder? secondaryAddressFinder;
 
-  @visibleForTesting
+  /// Verifies the atServer accepts TLS connections, called by
+  /// [validateAtServer]. Opening a socket is `dart:io`, so at_auth's wasm-safe
+  /// core does not carry an implementation: pass `defaultProbeSocket` from
+  /// `at_auth_io.dart`. When left null, [validateAtServer] skips the probe.
   Future<void> Function(String host, int port)? probeSocket;
 
   @override
@@ -79,6 +81,7 @@ class AtAuthImpl implements AtAuth {
       this.cramAuthenticator,
       this.pkamAuthenticator,
       this.atServerStatus,
+      this.probeSocket,
       AtEnrollment? atEnrollment})
       : atEnrollment = atEnrollment ?? AtEnrollment.create();
 
@@ -315,9 +318,8 @@ class AtAuthImpl implements AtAuth {
       }
 
       // Hand back the same explicit session as authenticate(), so a
-      // freshly-onboarded atSign flows straight into the client. atKeysIo is
-      // guaranteed set here (defaulted to FileAtKeysIo above); the guard mirrors
-      // authenticate() for parity.
+      // freshly-onboarded atSign flows straight into the client. atKeysIo came
+      // in on the request — it is the caller's choice, never defaulted here.
       final session = AtAuthSession(
         atsign: atOnboardingRequest.atsign,
         rootDomain: atOnboardingRequest.rootDomain,
@@ -414,12 +416,6 @@ class AtAuthImpl implements AtAuth {
           'initial enrollment is not approved. Status from server: $enrollmentStatus \n with $atEnrollmentResponse');
     }
     return enrollmentIdFromServer;
-  }
-
-  Future<void> _defaultProbeSocket(String host, int port) async {
-    final socket =
-        await SecureSocket.connect(host, port, timeout: Duration(seconds: 5));
-    socket.destroy();
   }
 
   /// Validates the atSign server status depending on whether it's onboarding or authentication.
@@ -538,10 +534,17 @@ class AtAuthImpl implements AtAuth {
         SecondaryAddress secondaryAddress = await secondaryAddressFinder!
             .findSecondary(atRequest.atsign, timeout: remaining);
 
-        remaining = AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
-        await (probeSocket ?? _defaultProbeSocket)(
-                secondaryAddress.host, secondaryAddress.port)
-            .timeout(remaining);
+        if (probeSocket == null) {
+          _logger.warning(
+              'No probeSocket injected: skipping the atServer reachability '
+              'probe for ${atRequest.atsign}. Pass defaultProbeSocket from '
+              'at_auth_io.dart to restore it.');
+        } else {
+          remaining =
+              AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
+          await probeSocket!(secondaryAddress.host, secondaryAddress.port)
+              .timeout(remaining);
+        }
 
         _addProgress(
             'Connect',
@@ -552,11 +555,10 @@ class AtAuthImpl implements AtAuth {
         break; // Exit loop if no exception occurs
       } catch (e) {
         lastError = e;
-        if (e is SocketException) {
-          _logger.warning('Attempt #[$attempt] Probe socket failed: $e');
-        } else {
-          _logger.severe('Attempt #[$attempt] failed: $e');
-        }
+        // Every attempt here is retried until the deadline, and the terminal
+        // failure rethrows as an AtTimeoutException carrying lastError — so a
+        // single attempt failing is a warning, not a severe.
+        _logger.warning('Attempt #[$attempt] failed: $e');
         _addProgress('Connect', '#[$attempt] : $e', ProgressEventType.error);
         // Don't sleep past the overall deadline before the next attempt.
         if (!DateTime.now().add(retryDelay).isBefore(deadline)) {

@@ -88,9 +88,9 @@ void main() {
         atLookUp: mockAtLookUp,
         pkamAuthenticator: mockPkamAuthenticator,
         atEnrollment: mockAtEnrollment,
-        atServerStatus: mockAtServerStatus);
+        atServerStatus: mockAtServerStatus,
+        probeSocket: (host, port) async {});
     atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
-    atAuth.probeSocket = (host, port) async {};
   }
 
   group('AtAuthImpl authentication tests', () {

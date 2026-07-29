@@ -97,6 +97,38 @@ response.
   is where the value comes from. One spelling now, too — the getter used to be
   `encryptedAPKAMSymmetricKey` while the parameter was `apkamSymmetricKey`.
 
+#### The wasm-safe barrel split
+
+The running client — including web — authenticates through at_auth; only
+onboarding/setup is desktop/CLI. So at_auth's own sources reachable from
+`at_auth.dart` no longer import `dart:io`, and the VM-only pieces move behind a
+new barrel. CI compiles `tool/wasm_entry.dart` for wasm to keep the surface
+building.
+
+- **New `at_auth_io.dart` barrel carries the VM-only surface: `FileAtKeysIo`
+  (with `getDefaultAtKeysFilePath`/`getHomeDirectory`) and the new
+  `defaultProbeSocket`.** It re-exports `at_auth.dart`, so importing it is
+  enough — the same shape as `at_chops_ffi.dart`. `FileAtKeysIo` itself is
+  unchanged and stays in at_auth; only the barrel that exports it moved.
+  `EphemeralAtKeysIo` and the `AtKeysIo` interfaces stay on `at_auth.dart`.
+- **`AtAuthImpl` no longer has a built-in socket probe.** `validateAtServer`'s
+  TLS reachability check was a `SecureSocket` call in the core; it is now
+  `defaultProbeSocket` in `at_auth_io.dart`, injected via
+  `AtAuth.create(probeSocket: ...)`. `probeSocket` was already an
+  injectable field (`@visibleForTesting`) — it is now the only implementation
+  route, and a constructor parameter. **Left unset, the reachability probe is
+  skipped** with a `warning` log; the atDirectory lookup still runs, so an
+  unreachable atServer surfaces from the connection attempt instead of from
+  validation.
+- **`RegistrarService` no longer defaults to an HTTP client that accepts every
+  certificate.** It defaulted to an `IOClient` whose `badCertificateCallback`
+  returned `true` unconditionally, for a client carrying an API key and CRAM
+  secrets; the default is now `http.Client()`, which validates certificates and
+  resolves per platform. To reach a registrar with a self-signed certificate,
+  pass your own `IOClient` as `httpClient` — that injection point is unchanged.
+- **`RegistrarService`'s unused `atAuth` constructor parameter is gone.** It was
+  never read, and it was the class's only path to at_lookup, i.e. to `dart:io`.
+
 #### Deprecated API removed
 
 A major version is the moment to settle these. The legacy `.atKeys` JSON format
@@ -189,6 +221,38 @@ is untouched by all of it — it stays readable *and* writable, and the six lega
 - **`FirstEnrollmentRequest`**: pass `session:` instead of `atSign:`/`rootDomain:`.
   `AtAuthImpl.onboard` builds that session from the onboarding request, so this
   only affects callers constructing the request directly.
+- **`FileAtKeysIo`**: swap the import. `at_auth_io.dart` re-exports everything
+  `at_auth.dart` has, so this is one line, not two:
+
+  ```dart
+  // before
+  import 'package:at_auth/at_auth.dart';
+  // after — VM and Flutter callers
+  import 'package:at_auth/at_auth_io.dart';
+  ```
+
+- **The socket probe**: every `AtAuth.create()` on the VM or in Flutter should
+  become `AtAuth.create(probeSocket: defaultProbeSocket)`, or it loses the
+  atServer reachability check. This compiles either way, so it needs a sweep —
+  the bare call sites in this repo are
+  `at_onboarding_cli/lib/src/onboard/at_onboarding_service_impl.dart:184,708`,
+  `at_client_flutter/lib/src/services/auth_service.dart:14`,
+  `at_client_flutter/examples/dockerstats/lib/main_smoke.dart:100`,
+  `tests/at_functional_test/test/enrollment_test.dart`,
+  `tests/at_functional_test/test/auth_session_handoff_test.dart` and
+  `tests/at_end2end_test/lib/src/test_initializers.dart:106`.
+- **`RegistrarService`**: drop the `atAuth:` argument if you passed one. If you
+  relied on the old default to talk to a registrar with a self-signed
+  certificate, inject the permissive client explicitly:
+
+  ```dart
+  RegistrarService(
+    registrarUrl: url,
+    apiKey: key,
+    httpClient: IOClient(HttpClient()
+      ..badCertificateCallback = (cert, host, port) => true),
+  );
+  ```
 
 ## 3.3.0-rc1
 - feat: add `AtKeysMaterial` — the only key type `AtKeys`'s API deals in (`addKey`, `getKey`, `keysForKeyId`, `keysForEnrollment`, `retireKey`, the `keysList` constructor param, ...). It's fully self-describing: `keyId`/`enrollmentId` plus `keyPartType` (an open `String` — the mechanical crypto role; known tokens in `CryptographicKeyType`: symmetric encryption/authentication and the public/private halves of encryption, verification/signing, encapsulation/decapsulation and key agreement), `keyAlgorithmType` (an open `String` — the algorithm family; known tokens in `KeyAlgorithmType`: `aes256`/`rsa2048`/`ecc_secp256r1`/`ed25519`/`x25519`/`mlkem768`/`mldsa65`/`xwing`, matching the pkam/enrollment `signingAlgo` literals), `bytes`, `operations`, `createdAt`, and `status` (`active`/`retired`/`dead`; `withStatus(...)` copies a material at a new status). Both token fields are deliberately Strings, not enums: unknown tokens are preserved and round-tripped, so a keyfile written by a newer client stays readable — and losslessly flushable — by an older one; whether an algorithm is classical, post-quantum or hybrid is carried by the algorithm token (e.g. `xwing`), not a separate role axis. The wire's nested `keys[].keyParts[]` document shape — grouping the materials sharing a `keyId` (e.g. the public+private halves of a keypair) — is produced/consumed by `encodeAtKeysDocument`/`parseAtKeysDocument` (also exported), not a separate model type. Keys produced by one enrollment are grouped by an optional `enrollmentId` and queried via `AtKeys.keysForEnrollment(...)`; at most one material of a given `CryptographicKeyType` may share an `enrollmentId`.

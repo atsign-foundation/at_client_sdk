@@ -1,4 +1,9 @@
 /// The [AtAuth] package contains common logic for onboarding/authenticating an atSign to a secondary server
+///
+/// This is the wasm-safe surface: none of at_auth's own sources reachable from
+/// here import `dart:io`. The VM-only pieces — `FileAtKeysIo` and
+/// `defaultProbeSocket` — live in `at_auth_io.dart`, which re-exports this
+/// barrel. `test/wasm_surface_test.dart` enforces the split.
 library;
 
 export 'src/at_auth.dart';
@@ -37,7 +42,6 @@ export 'src/keys/serialization/atkey_material.dart';
 export 'src/keys/serialization/assurance.dart';
 export 'src/keys/serialization/passphrase_envelope.dart';
 export 'src/keys/io/at_keys_io.dart';
-export 'src/keys/io/file_io.dart';
 export 'src/keys/io/ephemeral_io.dart';
 
 /// Classes for registrar services
