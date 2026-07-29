@@ -132,15 +132,13 @@ void main() {
                 'enrollmentId': '4be2d358-074d-4e3b-99f3-64c4da01532f'
               })}'));
 
-      EnrollmentRequestDecision enrollmentRequestDecision =
-          EnrollmentRequestDecision.approved(
+      EnrollmentApproval approval = EnrollmentRequestDecision.approved(
         enrollmentId: '4be2d358-074d-4e3b-99f3-64c4da01532f',
-        apkamSymmetricKey: AtBytes.fromString(encryptedAPKAMSymmetricKey),
-        atSign: atSign,
+        encryptedApkamSymmetricKey: encryptedAPKAMSymmetricKey,
       );
 
       AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase
-          .approve(enrollmentRequestDecision, mockAtLookUp, approverSession);
+          .approve(approval, mockAtLookUp, approverSession);
 
       expect(atEnrollmentResponse.enrollmentId,
           '4be2d358-074d-4e3b-99f3-64c4da01532f');
@@ -168,12 +166,11 @@ void main() {
                     'enrollmentId': '4be2d358-074d-4e3b-99f3-64c4da01532f'
                   })}'));
 
-      EnrollmentRequestDecision enrollmentRequestDecision =
-          EnrollmentRequestDecision.denied(
-              '4be2d358-074d-4e3b-99f3-64c4da01532f', atSign);
+      EnrollmentDenial denial = EnrollmentRequestDecision.denied(
+          '4be2d358-074d-4e3b-99f3-64c4da01532f');
 
-      AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.deny(
-          enrollmentRequestDecision, mockAtLookUp, denySession);
+      AtEnrollmentResponse atEnrollmentResponse =
+          await atEnrollmentBase.deny(denial, mockAtLookUp, denySession);
 
       expect(atEnrollmentResponse.enrollmentId,
           '4be2d358-074d-4e3b-99f3-64c4da01532f');

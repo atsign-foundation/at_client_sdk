@@ -80,96 +80,90 @@ abstract class AtEnrollment {
 
   /// Approves an enrollment request.
   ///
-  /// Accepts [EnrollmentRequestDecision] which encapsulates the necessary enrollment request details for approving the
-  /// enrollment request.
+  /// Takes an [EnrollmentApproval] — build it with
+  /// [EnrollmentRequestDecision.approved] from the enrollmentId and
+  /// encryptedApkamSymmetricKey the atServer notified, or from the
+  /// [ServerEnrollmentRequest] that [list] returned.
   ///
-  /// To approve the request, the "enrollmentId" and its corresponding "encryptedAPKAMSymmetricKey,"
-  /// received through the notification, must be provided using the "AuthenticationRequestDecisionBuilder."
-  ///
-  /// Upon approval, the encryptedAPKAMSymmetricKey undergoes decryption using the default encryption public key to
-  /// retrieve the original APKAM Symmetric key. Subsequently, the default encryption key pair and the self-encryption
-  /// key are encrypted with the APKAM symmetric key and transmitted to the server.
+  /// Upon approval, the encryptedApkamSymmetricKey is decrypted with the
+  /// approver's default encryption *private* key to retrieve the original APKAM
+  /// symmetric key. The default encryption private key and the self-encryption key
+  /// are then encrypted under that symmetric key and transmitted to the atServer
+  /// for the requesting app.
   ///
   /// The [atLookUp] parameter is used to perform lookups during approval management.
   ///
-  /// The [atKeys] parameter supplies the approver's own key material — its
-  /// encryption private key (to decrypt the enrollee's APKAM symmetric key) and
-  /// self-encryption key (re-encrypted under that symmetric key for the server).
+  /// [session] is the *approving* app's own session — the source of the atsign
+  /// being administered. Approval needs the approver's encryption private key and
+  /// self encryption key, to re-encrypt them for the new enrollment; those are
+  /// read from [AtAuthSession.atKeysIo].
   ///
-  /// Returns a [Future] containing an [AtEnrollmentResponse] representing the result of the approval/denial of an enrollment.
+  /// Returns a [Future] containing an [AtEnrollmentResponse] representing the result of the approval.
   ///
   /// ```dart
-  ///  To approve an enrollment request
+  /// AtEnrollment atEnrollment = AtEnrollment.create();
   ///
-  /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
-  /// AtLookup atLookup = AtLookupImpl('@alice', 'dummy-root-domain', 64);
-  ///
-  /// EnrollmentRequestDecision enrollmentRequestDecision =
-  ///           EnrollmentRequestDecision.approved(ApprovedRequestDecisionBuilder(
-  ///               enrollmentId: 'dummy-enrollment-id',
-  ///               encryptedAPKAMSymmetricKey: 'dummy-encrypted-apkam-symmetric-key'));
-  ///
-  /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.approve(
-  ///       enrollmentRequestDecision, atLookupImpl, session);
+  /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollment.approve(
+  ///     EnrollmentRequestDecision.approved(
+  ///       enrollmentId: request.enrollmentId,
+  ///       encryptedApkamSymmetricKey: request.encryptedAPKAMSymmetricKey!,
+  ///     ),
+  ///     atLookUp,
+  ///     mySession);
   /// ```
-  ///
-  /// [session] is the *approving* app's own session. Approval needs the
-  /// approver's encryption private key and self encryption key, to re-encrypt
-  /// them for the new enrollment; those are read from
-  /// [AtAuthSession.atKeysIo].
   Future<AtEnrollmentResponse> approve(
-    EnrollmentRequestDecision enrollmentRequestDecision,
+    EnrollmentApproval approval,
     AtLookUp atLookUp,
     AtAuthSession session,
   );
 
-  /// Denies an enrollment request.
+  /// Denies an enrollment request, preventing the requesting app from
+  /// authenticating to the atServer.
   ///
-  /// Accepts [EnrollmentRequestDecision] which encapsulates the enrollment request details necessary to deny an enrollment.
+  /// Takes an [EnrollmentDenial] — build it with
+  /// [EnrollmentRequestDecision.denied].
   /// The [atLookUp] parameter is used to perform lookups during approval management.
-  ///
-  /// Returns a [Future] containing an [AtEnrollmentResponse] representing the result of the approval/denial of an enrollment.
-  ///
-  /// ```dart
-  ///  To deny an enrollment request
-  ///
-  /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
-  /// AtLookup atLookup = AtLookupImpl('@alice', 'dummy-root-domain', 64);
-  ///
-  /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.denied('dummy-enrollment-id');
-  /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.deny(
-  ///       enrollmentRequestDecision, atLookupImpl, session);
-  /// ```
   ///
   /// [session] is the approving app's own session; denial needs no keys from it,
   /// but the returned response is scoped to it.
+  ///
+  /// Returns a [Future] containing an [AtEnrollmentResponse] representing the result of the denial.
+  ///
+  /// ```dart
+  /// AtEnrollment atEnrollment = AtEnrollment.create();
+  ///
+  /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollment.deny(
+  ///     EnrollmentRequestDecision.denied('dummy-enrollment-id'),
+  ///     atLookUp,
+  ///     mySession);
+  /// ```
   Future<AtEnrollmentResponse> deny(
-    EnrollmentRequestDecision enrollmentRequestDecision,
+    EnrollmentDenial denial,
     AtLookUp atLookUp,
     AtAuthSession session,
   );
 
   /// Revokes an approved enrollment, closing any active connections and making it inactive for future use.
   ///
-  /// Accepts [EnrollmentRequestDecision] which encapsulates the enrollment request details necessary to revoke an enrollment.
+  /// Takes an [EnrollmentRevocation] — build it with
+  /// [EnrollmentRequestDecision.revoked]. Pass `force: true` there to revoke the
+  /// enrollment the current client is itself authenticated under.
   /// The [atLookUp] parameter is used to perform lookups during approval management.
   ///
-  /// Returns a [Future] containing an [AtEnrollmentResponse] representing the result of the revoke of an enrollment.
+  /// [session] is the approving app's own session, as for [deny].
+  ///
+  /// Returns a [Future] containing an [AtEnrollmentResponse] representing the result of the revoke.
   ///
   /// ```dart
-  ///  To revoke an enrollment request
+  /// AtEnrollment atEnrollment = AtEnrollment.create();
   ///
-  /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
-  /// AtLookup atLookup = AtLookupImpl('@alice', 'dummy-root-domain', 64);
-  ///
-  /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.revoked('dummy-enrollment-id');
-  /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.revoke(
-  ///       enrollmentRequestDecision, atLookupImpl, session);
+  /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollment.revoke(
+  ///     EnrollmentRequestDecision.revoked('dummy-enrollment-id'),
+  ///     atLookUp,
+  ///     mySession);
   /// ```
-  ///
-  /// [session] is the approving app's own session, as for [deny].
   Future<AtEnrollmentResponse> revoke(
-    EnrollmentRequestDecision enrollmentRequestDecision,
+    EnrollmentRevocation revocation,
     AtLookUp atLookUp,
     AtAuthSession session,
   );

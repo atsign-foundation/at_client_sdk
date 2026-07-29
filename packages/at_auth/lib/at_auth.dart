@@ -22,11 +22,11 @@ export 'src/enroll/models/otp.dart';
 /// an application with restricted access to the namespaces.
 export 'src/enroll/models/at_enrollment_request.dart';
 
-/// This class serves as the entity responsible for either approving or denying an enrollment request
+// The approving app's decision on an enrollment request: EnrollmentApproval,
+// EnrollmentDenial or EnrollmentRevocation, built via the
+// EnrollmentRequestDecision factories.
 export 'src/enroll/models/enrollment_request_decision.dart';
 
-/// The class stores enrollment request details. It notifies the approving app upon receiving a
-/// request from the requesting app, for approval or denial.
 export 'src/exception/at_auth_exceptions.dart';
 export 'src/keys/at_keys.dart';
 // AtKeysMaterial is the API-level typed key material — the only type

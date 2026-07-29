@@ -1,124 +1,110 @@
-import 'dart:core';
-
-import 'package:at_commons/at_commons.dart';
-
-/// This class serves as the entity responsible for either approving or denying an enrollment request.
-/// The enrollment request is received through a notification from the server. The approving app has
-/// the authority to either grant or deny the request, with approval resulting in authentication and
-/// authorization to the requested namespaces.
+/// The approving app's decision on an enrollment request: approve it, deny it,
+/// or revoke one already approved.
 ///
-/// To approve the request, the "enrollmentId" and its corresponding "encryptedAPKAMSymmetricKey,"
-/// received through the notification, must be provided using the "AuthenticationRequestDecisionBuilder."
+/// The request arrives as a notification from the atServer. The approving app —
+/// any app whose keys include the "__manage" namespace — decides, and approval
+/// grants the requesting app authentication plus authorization to the namespaces
+/// it asked for.
 ///
-/// Upon approval, the encryptedAPKAMSymmetricKey undergoes decryption using the default encryption public key to
-/// retrieve the original APKAM Symmetric key. Subsequently, the default encryption key pair and the self-encryption
-/// key are encrypted with the APKAM symmetric key and transmitted to the server for the requesting app. The requesting
-/// app, then decrypts the encrypted default encryption private key and self encryption key. These keys are used for
-/// decryption of shared data and self data respectively..
+/// This type is sealed and there is one subtype per operation, each carrying only
+/// what its operation needs. `AtEnrollment.approve`/`deny`/`revoke` accept their
+/// own subtype, so a decision cannot be handed to the wrong operation:
 ///
-/// ```dart
-///  To approve an enrollment request
-///
-/// EnrollmentRequestDecision enrollmentRequestDecision =
-///           EnrollmentRequestDecision.approved(ApprovedRequestDecisionBuilder(
-///               enrollmentId: 'dummy-enrollment-id',
-///               encryptedAPKAMSymmetricKey: 'dummy-encrypted-apkam-symmetric-key'));
-/// ```
-///
-/// If the request is denied, the requester is prevented from logging into the application.
-///
-/// To deny an enrollment request
+/// | operation | type                    | beyond [enrollmentId]         |
+/// | --------- | ----------------------- | ----------------------------- |
+/// | approve   | [EnrollmentApproval]    | `encryptedApkamSymmetricKey`  |
+/// | deny      | [EnrollmentDenial]      | —                             |
+/// | revoke    | [EnrollmentRevocation]  | `force`                       |
 ///
 /// ```dart
-///  EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.denied('dummy-enrollment-id');
+/// // Approve — the encryptedApkamSymmetricKey comes from the notification or
+/// // from `AtEnrollment.list`, on ServerEnrollmentRequest.
+/// await atEnrollment.approve(
+///     EnrollmentRequestDecision.approved(
+///       enrollmentId: request.enrollmentId,
+///       encryptedApkamSymmetricKey: request.encryptedAPKAMSymmetricKey!,
+///     ),
+///     atLookUp,
+///     mySession);
+///
+/// // Deny — the requesting app is prevented from authenticating to the atServer.
+/// await atEnrollment.deny(
+///     EnrollmentRequestDecision.denied(request.enrollmentId),
+///     atLookUp,
+///     mySession);
+///
+/// // Revoke an already-approved enrollment.
+/// await atEnrollment.revoke(
+///     EnrollmentRequestDecision.revoked(enrollmentId),
+///     atLookUp,
+///     mySession);
 /// ```
 ///
-/// To revoke an enrollment request. Optionally, set "force" parameter to true to revoke the enrollment permission of the current client
-/// which defaults to false.
-///
-/// Example:
-/// ```dart
-/// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.revoked('enrollment123', force: false);
-/// ```
-class EnrollmentRequestDecision {
-  late final String _enrollmentId;
-  late final String _atSign;
-  late final String _encryptedAPKAMSymmetricKey;
-  late final EnrollOperationEnum _enrollOperationEnum;
-  bool force = false;
+/// The atsign the decision concerns is not on the decision — it comes from the
+/// approving app's own `AtAuthSession`, which `approve`/`deny`/`revoke` take
+/// alongside it.
+sealed class EnrollmentRequestDecision {
+  /// The enrollment being decided on, as notified by the atServer.
+  final String enrollmentId;
 
-  String get enrollmentId => _enrollmentId;
+  const EnrollmentRequestDecision(this.enrollmentId);
 
-  String get atSign => _atSign;
-
-  String get encryptedAPKAMSymmetricKey => _encryptedAPKAMSymmetricKey;
-
-  EnrollOperationEnum get enrollOperationEnum => _enrollOperationEnum;
-
-  // Private constructor to prevent creating object.
-  // Use static factory methods to get instance of EnrollmentRequestDecision
-  EnrollmentRequestDecision._();
-
-  /// To approve the request, the "enrollmentId" and its corresponding "encryptedAPKAMSymmetricKey,"
-  /// received through the notification, must be provided using the "AuthenticationRequestDecisionBuilder."
+  /// Approves the enrollment [enrollmentId].
   ///
-  /// Upon approval, the encryptedAPKAMSymmetricKey undergoes decryption using the default encryption private key to
-  /// retrieve the original APKAM Symmetric key. Subsequently, default encryption private key and self-encryption key
-  /// are encrypted with the APKAM symmetric key and transmitted to server for the requesting app. The requesting app,
-  /// then decrypts the encrypted default encryption private key and self encryption key. These keys are used for
-  /// decryption of shared data and self data respectively..
-  ///
-  /// ```dart
-  ///  To approve an enrollment request
-  ///
-  /// EnrollmentRequestDecision enrollmentRequestDecision =
-  ///           EnrollmentRequestDecision.approved(ApprovedRequestDecisionBuilder(
-  ///               enrollmentId: 'dummy-enrollment-id',
-  ///               encryptedAPKAMSymmetricKey: 'dummy-encrypted-apkam-symmetric-key'));
-  static EnrollmentRequestDecision approved({
+  /// [encryptedApkamSymmetricKey] is the requesting app's APKAM symmetric key as
+  /// held by the atServer — encrypted with the approver's default encryption
+  /// public key at submit time. `AtEnrollment.approve` decrypts it with the
+  /// approver's encryption *private* key, then re-encrypts the default encryption
+  /// private key and the self encryption key under it and sends those to the
+  /// atServer. The requesting app decrypts them to read shared and self data.
+  static EnrollmentApproval approved({
     required String enrollmentId,
-    required AtBytes apkamSymmetricKey,
-    required String atSign,
-  }) {
-    EnrollmentRequestDecision enrollmentRequestDecision =
-        EnrollmentRequestDecision._()
-          .._enrollmentId = enrollmentId
-          .._atSign = atSign
-          .._encryptedAPKAMSymmetricKey = apkamSymmetricKey.toString()
-          .._enrollOperationEnum = EnrollOperationEnum.approve;
+    required String encryptedApkamSymmetricKey,
+  }) =>
+      EnrollmentApproval(
+        enrollmentId,
+        encryptedApkamSymmetricKey: encryptedApkamSymmetricKey,
+      );
 
-    return enrollmentRequestDecision;
-  }
+  /// Denies the enrollment [enrollmentId], preventing the requesting app from
+  /// authenticating to the atServer.
+  static EnrollmentDenial denied(String enrollmentId) =>
+      EnrollmentDenial(enrollmentId);
 
-  /// If the request is denied, the requester application is prevented from authenticating to the atServer.
+  /// Revokes the approved enrollment [enrollmentId], closing its active
+  /// connections and making it unusable.
   ///
-  /// ```dart
-  ///  EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.denied('dummy-enrollment-id');
-  /// ```
-  static EnrollmentRequestDecision denied(String enrollmentId, String atSign) {
-    return EnrollmentRequestDecision._()
-      .._enrollmentId = enrollmentId
-      .._atSign = atSign
-      .._enrollOperationEnum = EnrollOperationEnum.deny;
-  }
+  /// A client cannot revoke the enrollment it is itself authenticated under
+  /// unless [force] is true.
+  static EnrollmentRevocation revoked(String enrollmentId,
+          {bool force = false}) =>
+      EnrollmentRevocation(enrollmentId, force: force);
+}
 
-  /// Revokes an approved enrollment, closing any active connections and making it inactive for future use.
-  ///
-  /// Creates an [EnrollmentRequestDecision] to revoke an enrollment. This method generates an [EnrollmentRequestDecision]
-  /// instance configured to revoke the enrollment specified by the provided [enrollmentId].
-  /// By default, the current client cannot revoke its own enrollment permission. To allow the current client to revoke
-  /// its own enrollment, set the force parameter to true.
-  ///
-  /// Example:
-  /// ```dart
-  /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.revoked('enrollment123', force: false);
-  /// ```
-  static EnrollmentRequestDecision revoked(String enrollmentId, String atSign,
-      {bool force = false}) {
-    return EnrollmentRequestDecision._()
-      .._enrollmentId = enrollmentId
-      .._atSign = atSign
-      .._enrollOperationEnum = EnrollOperationEnum.revoke
-      ..force = force;
-  }
+/// A decision to approve an enrollment. Build with
+/// [EnrollmentRequestDecision.approved].
+final class EnrollmentApproval extends EnrollmentRequestDecision {
+  /// The requesting app's APKAM symmetric key, encrypted with the approver's
+  /// default encryption public key — base64, exactly as the atServer supplies it
+  /// on the enrollment record (`ServerEnrollmentRequest.encryptedAPKAMSymmetricKey`).
+  final String encryptedApkamSymmetricKey;
+
+  const EnrollmentApproval(super.enrollmentId,
+      {required this.encryptedApkamSymmetricKey});
+}
+
+/// A decision to deny an enrollment. Build with
+/// [EnrollmentRequestDecision.denied].
+final class EnrollmentDenial extends EnrollmentRequestDecision {
+  const EnrollmentDenial(super.enrollmentId);
+}
+
+/// A decision to revoke an approved enrollment. Build with
+/// [EnrollmentRequestDecision.revoked].
+final class EnrollmentRevocation extends EnrollmentRequestDecision {
+  /// Permits revoking the enrollment the current client is authenticated under.
+  /// The atServer rejects that revocation unless this is set.
+  final bool force;
+
+  const EnrollmentRevocation(super.enrollmentId, {this.force = false});
 }

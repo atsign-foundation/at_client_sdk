@@ -126,10 +126,8 @@ class AtEnrollmentImpl implements AtEnrollment {
   }
 
   @override
-  Future<AtEnrollmentResponse> approve(
-      EnrollmentRequestDecision enrollmentRequestDecision,
-      AtLookUp atLookUp,
-      AtAuthSession session) async {
+  Future<AtEnrollmentResponse> approve(EnrollmentApproval approval,
+      AtLookUp atLookUp, AtAuthSession session) async {
     // The approver's own encryption private key and self-encryption key, read
     // from its session's key source — the same way every other consumer gets
     // keys across a boundary.
@@ -148,8 +146,7 @@ class AtEnrollmentImpl implements AtEnrollment {
     String apkamSymmetricKey = utf8.decode((RsaEncryptionAlgo()
           ..atPrivateKey =
               AtPrivateKey.fromString(encryptionPrivateKey.toString()))
-        .decrypt(base64Decode(
-            enrollmentRequestDecision.encryptedAPKAMSymmetricKey)));
+        .decrypt(base64Decode(approval.encryptedApkamSymmetricKey)));
     final apkamAesKey = AESKey(apkamSymmetricKey);
 
     // Re-encrypt the encryption private key and self-encryption key under the
@@ -169,7 +166,7 @@ class AtEnrollmentImpl implements AtEnrollment {
             iv: selfEncryptionKeyIV));
 
     String command = 'enroll:approve:${jsonEncode({
-          'enrollmentId': enrollmentRequestDecision.enrollmentId,
+          'enrollmentId': approval.enrollmentId,
           'encryptedDefaultEncryptionPrivateKey':
               encryptedDefaultEncryptionPrivateKey,
           AtConstants.apkamEncryptionPrivateKeyIV:
@@ -193,12 +190,10 @@ class AtEnrollmentImpl implements AtEnrollment {
 
   @override
   Future<AtEnrollmentResponse> deny(
-      EnrollmentRequestDecision enrollmentRequestDecision,
-      AtLookUp atLookUp,
-      AtAuthSession session) async {
+      EnrollmentDenial denial, AtLookUp atLookUp, AtAuthSession session) async {
     EnrollVerbBuilder denyEnrollmentBuilder = EnrollVerbBuilder()
-      ..enrollmentId = enrollmentRequestDecision.enrollmentId
-      ..operation = enrollmentRequestDecision.enrollOperationEnum;
+      ..enrollmentId = denial.enrollmentId
+      ..operation = EnrollOperationEnum.deny;
 
     String? enrollResponse = await atLookUp
         .executeCommand(denyEnrollmentBuilder.buildCommand(), auth: true);
@@ -213,14 +208,12 @@ class AtEnrollmentImpl implements AtEnrollment {
   }
 
   @override
-  Future<AtEnrollmentResponse> revoke(
-      EnrollmentRequestDecision enrollmentRequestDecision,
-      AtLookUp atLookUp,
-      AtAuthSession session) async {
+  Future<AtEnrollmentResponse> revoke(EnrollmentRevocation revocation,
+      AtLookUp atLookUp, AtAuthSession session) async {
     EnrollVerbBuilder revokeEnrollVerbBuilder = EnrollVerbBuilder()
-      ..enrollmentId = enrollmentRequestDecision.enrollmentId
+      ..enrollmentId = revocation.enrollmentId
       ..operation = EnrollOperationEnum.revoke
-      ..force = enrollmentRequestDecision.force;
+      ..force = revocation.force;
 
     String? enrollmentResponseStr = await atLookUp
         .executeCommand(revokeEnrollVerbBuilder.buildCommand(), auth: true);

@@ -72,6 +72,30 @@ response.
 - **`EnrollmentRequest.atSign` is now `atsign` and typed `Atsign`**, matching the
   rest of the package. `FirstEnrollmentRequest` takes a `session` and derives
   `atsign`/`rootDomain` from it, as `AtEnrollmentRequest` already did.
+- **`EnrollmentRequestDecision` is sealed, with one subtype per operation:
+  `EnrollmentApproval`, `EnrollmentDenial`, `EnrollmentRevocation`.** Each of
+  `approve`/`deny`/`revoke` takes its own subtype, so handing a decision to the
+  wrong operation is a compile error — previously `deny(EnrollmentRequestDecision
+  .revoked(id, atSign))` compiled and sent `enroll:revoke` from `deny`. The
+  `approved`/`denied`/`revoked` factories keep their names and now statically
+  return the narrow type, so existing construction sites keep working. Each field
+  lives on the operation that reads it: `encryptedApkamSymmetricKey` on the
+  approval, `force` on the revocation, `enrollmentId` on the base.
+- **`EnrollmentRequestDecision.atSign` and `.enrollOperationEnum` are gone.** The
+  atsign now comes from the `AtAuthSession` these methods already take — at_auth
+  read `session.atsign` and ignored the decision's copy, so the two were rival
+  sources of truth for whose enrollment was being decided. `enrollOperationEnum`
+  was a discriminator nothing dispatched on: `approve` hand-builds its command and
+  `revoke` hardcoded its own operation, leaving `deny` the only reader; `deny` now
+  hardcodes `EnrollOperationEnum.deny` as `revoke` always did. `force` is also
+  `final` now, rather than a public mutable field settable on an approval.
+- **`EnrollmentRequestDecision.approved` takes
+  `String encryptedApkamSymmetricKey`** instead of `AtBytes apkamSymmetricKey`.
+  Callers were building an `AtBytes` from the base64 string the atServer gave them,
+  only for the factory to `toString()` it and `approve` to `base64Decode` it. The
+  `String` also matches `ServerEnrollmentRequest.encryptedAPKAMSymmetricKey`, which
+  is where the value comes from. One spelling now, too — the getter used to be
+  `encryptedAPKAMSymmetricKey` while the parameter was `apkamSymmetricKey`.
 
 #### Deprecated API removed
 
@@ -135,6 +159,33 @@ is untouched by all of it — it stays readable *and* writable, and the six lega
 - **Enrollment (approving app)**: pass your own session where you used to pass
   `AtKeys` (or nothing): `approve(decision, atLookUp, mySession)`, and likewise
   for `deny`/`revoke`. The approver's keys are read from `mySession.atKeysIo`.
+
+  The decision factories keep their names; drop the `atSign` argument (the session
+  supplies it) and pass the encrypted APKAM symmetric key as the base64 `String`
+  the atServer gave you:
+
+  ```dart
+  // before
+  approve(EnrollmentRequestDecision.approved(
+      enrollmentId: request.enrollmentId,
+      apkamSymmetricKey: AtBytes.fromString(request.encryptedAPKAMSymmetricKey!),
+      atSign: atSign), atLookUp);
+  deny(EnrollmentRequestDecision.denied(id, atSign), atLookUp);
+  revoke(EnrollmentRequestDecision.revoked(id, atSign, force: true), atLookUp);
+
+  // after
+  approve(EnrollmentRequestDecision.approved(
+      enrollmentId: request.enrollmentId,
+      encryptedApkamSymmetricKey: request.encryptedAPKAMSymmetricKey!),
+      atLookUp, mySession);
+  deny(EnrollmentRequestDecision.denied(id), atLookUp, mySession);
+  revoke(EnrollmentRequestDecision.revoked(id, force: true), atLookUp, mySession);
+  ```
+
+  If you were storing a decision in a variable typed `EnrollmentRequestDecision`
+  and passing it to one of the three methods, narrow the variable's type (or use
+  `final`/`var`) — the methods now take `EnrollmentApproval`, `EnrollmentDenial`
+  and `EnrollmentRevocation` respectively.
 - **`FirstEnrollmentRequest`**: pass `session:` instead of `atSign:`/`rootDomain:`.
   `AtAuthImpl.onboard` builds that session from the onboarding request, so this
   only affects callers constructing the request directly.
