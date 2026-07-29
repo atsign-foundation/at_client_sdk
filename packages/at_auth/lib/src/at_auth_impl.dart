@@ -248,7 +248,7 @@ class AtAuthImpl implements AtAuth {
       );
 
       //2. generate key pairs
-      AtKeys atKeys = await AuthBootstrap.bootstrap(atOnboardingRequest.atsign);
+      AtKeys atKeys = await AtKeys.generate(atOnboardingRequest.atsign);
 
       //3. send onboarding enrollment
       String? enrollmentIdFromServer;

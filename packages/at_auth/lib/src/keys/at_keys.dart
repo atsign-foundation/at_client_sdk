@@ -1,6 +1,7 @@
 import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
-import 'package:at_auth/src/keys/serialization/auth_bootstrap.dart';
+import 'package:at_auth/src/keys/serialization/key_ids.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 
@@ -14,11 +15,23 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 /// removed) with [retireKey]. The whole [AtKeys] belongs to a single
 /// enrollment ([enrollmentId]); every material under it belongs to that
 /// enrollment.
+///
+/// [atsign], [enrollmentId] and the typed materials are the document's
+/// structural content ([KeyIds.reservedTopLevelKeys]); anything else a keyfile
+/// carries at its top level is kept verbatim in [metadata] and round-trips
+/// untouched. The two never mix: a metadata key that collides with a structural
+/// or key-material field is dropped rather than allowed to shadow it.
 final class AtKeys {
   static const supportedVersion = 1;
-  static const _reservedTopLevelKeys = {'version', 'atsign', 'keys'};
 
   Atsign atsign;
+
+  /// The enrollment this keyset belongs to.
+  ///
+  /// Set once — when the atServer allocates it during onboarding or enrollment
+  /// approval. `WrittenAtKeysIo.flush` will accept setting it on a keyfile that
+  /// carried none, but rejects repointing an existing one at a different
+  /// enrollment (see `AtKeysAssurance.validateMapUpdate`).
   String? enrollmentId;
 
   // Inner map keyed by keyPartType (see CryptographicKeyType for the known
@@ -31,11 +44,97 @@ final class AtKeys {
   AtKeys({
     required this.atsign,
     List<AtKeysMaterial> keysList = const [],
-    String? enrollmentId,
+    this.enrollmentId,
   }) {
     for (final key in keysList) {
       addKey(key);
     }
+  }
+
+  /// Mints a brand-new key set for [atsign] — the post-quantum material
+  /// (ML-DSA-65 for APKAM signing, X-Wing for encryption) always, and the
+  /// legacy RSA/AES fields too unless [mintLegacy] is false.
+  ///
+  /// Nothing here touches the atServer: the caller is responsible for
+  /// enrolling the generated public keys and for setting [enrollmentId] if
+  /// the server allocates it.
+  ///
+  /// **`mintLegacy: false` is not yet usable for authentication.** PKAM signs
+  /// with the RSA `apkamPrivateKey`, so a post-quantum-only keyset makes
+  /// `PkamAuthenticator` throw [AtAuthenticationException]; ML-DSA PKAM
+  /// (`MlDsaPkamSigner`) is experimental and the wire semantics are not
+  /// settled. `FileAtKeysIo` will persist such a keyset happily — it just
+  /// cannot authenticate with it. Leave [mintLegacy] at its default unless you
+  /// are specifically exercising the PQ material.
+  static Future<AtKeys> generate(
+    Atsign atsign, {
+    String? enrollmentId,
+    bool mintLegacy = true,
+  }) async {
+    final keys = AtKeys(
+      atsign: atsign,
+      keysList: await _generatePqKeys(),
+      enrollmentId: enrollmentId,
+    );
+    if (mintLegacy) {
+      keys._mintLegacyKeys();
+    }
+    return keys;
+  }
+
+  static Future<List<AtKeysMaterial>> _generatePqKeys() async {
+    List<AtKeysMaterial> list = [];
+    final mldsa = await MlDsa65PureDartAlgo().generateKeyPair();
+    list.add(AtKeysMaterial(
+      keyId: KeyIds.apkamPQ,
+      keyPartType: CryptographicKeyType.publicVerification,
+      keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+      bytes: AtBytes(mldsa.publicKey),
+      createdAt: DateTime.timestamp(),
+    ));
+    list.add(AtKeysMaterial(
+      keyId: KeyIds.apkamPQ,
+      keyPartType: CryptographicKeyType.privateSigning,
+      keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+      bytes: AtBytes(mldsa.secretKey),
+      createdAt: DateTime.timestamp(),
+    ));
+
+    final xwing = await XWingPureDartAlgo.instance.generateKeyPair();
+    list.add(AtKeysMaterial(
+      keyId: KeyIds.globalXWing,
+      keyPartType: CryptographicKeyType.publicEncryption,
+      keyAlgorithmType: KeyAlgorithmType.xWing,
+      bytes: AtBytes(xwing.publicKey),
+      createdAt: DateTime.timestamp(),
+    ));
+    list.add(AtKeysMaterial(
+      keyId: KeyIds.globalXWing,
+      keyPartType: CryptographicKeyType.privateDecryption,
+      keyAlgorithmType: KeyAlgorithmType.xWing,
+      bytes: AtBytes(xwing.secretKey),
+      createdAt: DateTime.timestamp(),
+    ));
+    return list;
+  }
+
+  void _mintLegacyKeys() {
+    var apkamRsaKeypair = RsaKeyPair.generate();
+    var atEncryptionKeyPair = RsaKeyPair.generate();
+    // AESKey.generate takes a length in BYTES: AES-256 is 32, not 256.
+    var selfEncryptionAesKey = AESKey.generate(32);
+    var apkamSymmetricAesKey = AESKey.generate(32);
+
+    apkamPublicKey =
+        AtBytes.fromString(apkamRsaKeypair.atPublicKey.publicKey.toString());
+    apkamPrivateKey =
+        AtBytes.fromString(apkamRsaKeypair.atPrivateKey.privateKey.toString());
+    defaultEncryptionPublicKey = AtBytes.fromString(
+        atEncryptionKeyPair.atPublicKey.publicKey.toString());
+    defaultEncryptionPrivateKey = AtBytes.fromString(
+        atEncryptionKeyPair.atPrivateKey.privateKey.toString());
+    defaultSelfEncryptionKey = AtBytes.fromString(selfEncryptionAesKey.key);
+    apkamSymmetricKey = AtBytes.fromString(apkamSymmetricAesKey.key);
   }
 
   /// Looks up one material by its `(keyId, keyPartType)` — [type] is a
@@ -88,10 +187,18 @@ final class AtKeys {
   /// [AtKeysMaterial]s that are actually stored.
   factory AtKeys.fromJson(Map<String, dynamic> json, {Atsign? atsign}) {
     const assurance = AtKeysAssurance();
+    // enrollmentId is a structural field that sits at the top level of both the
+    // legacy and the typed shape, so it is read once here for either path.
+    final enrollmentId = assurance.optionalString(
+        json[AtConstants.enrollmentId], AtConstants.enrollmentId);
     // Legacy files have no version field - accept them as legacy. A legacy
     // file doesn't store the atsign, so the reader supplies it.
     if (!json.containsKey('version')) {
-      return AtKeys._fromLegacyJson(json, atsign: atsign);
+      return AtKeys._fromLegacyJson(
+        json,
+        atsign: atsign,
+        enrollmentId: enrollmentId,
+      );
     }
     final version = assurance.expectInt(json['version'], 'version');
     if (version != supportedVersion) {
@@ -111,13 +218,15 @@ final class AtKeys {
 
     final legacyJson = {
       for (final entry in json.entries)
-        if (!_reservedTopLevelKeys.contains(entry.key)) entry.key: entry.value,
+        if (!KeyIds.reservedTopLevelKeys.contains(entry.key))
+          entry.key: entry.value,
     };
 
     //form the new AtKeys
     AtKeys atKeys = AtKeys(
       atsign: atsignFromDoc,
       keysList: materials,
+      enrollmentId: enrollmentId,
     );
 
     // join them with the legacy format
@@ -125,16 +234,20 @@ final class AtKeys {
   }
 
   /// Encodes this [AtKeys] to the typed-keys document shape. Legacy fields
-  /// merge flatly into the top level alongside `version`/`atsign`/`keys` —
-  /// upgrading a legacy file is additive, not a format swap.
+  /// merge flatly into the top level alongside the structural fields
+  /// (`version`/`atsign`/`enrollmentId`/`keys`) — upgrading a legacy file is
+  /// additive, not a format swap.
   ///
   /// All values are emitted plaintext; at-rest self-encryption of the legacy
   /// portion (and the optional passphrase envelope) is `FileAtKeysIo`'s job.
   Map<String, dynamic> toJson() {
     return {
-      ..._toLegacyJson(),
+      for (final entry in metadata.entries)
+        if (KeyIds.isMetadata(entry.key)) entry.key: entry.value,
+      ..._legacySchemaJson(),
       'version': supportedVersion,
       'atsign': atsign.toString(),
+      AtConstants.enrollmentId: enrollmentId,
       'keys': encodeAtKeysDocument(keys),
     };
   }
@@ -186,24 +299,45 @@ final class AtKeys {
   // enrollmentId and arbitrary metadata. They stay readable/writable (and
   // merge flatly into the typed-keys document) so existing files keep working.
 
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  /// Deprecated in favour of typed material ([AtKeysMaterial] via [addKey] /
+  /// [getKey]), but **still required** and therefore not removable yet: PKAM
+  /// signs with [apkamPrivateKey] (`PkamAuthenticator`), `FileAtKeysIo`
+  /// self-encrypts four of these fields at rest, and enrollment reads
+  /// [apkamSymmetricKey] / [defaultEncryptionPrivateKey] /
+  /// [defaultSelfEncryptionKey]. They can only go once ML-DSA PKAM is wired
+  /// (`MlDsaPkamSigner` is experimental) — until then the deprecation marks
+  /// direction of travel, not an available replacement.
+  static const _legacyFieldDeprecation =
+      'legacy flat-file key material: prefer typed AtKeysMaterial (addKey/'
+      'getKey) for new material. Still load-bearing for PKAM signing, at-rest '
+      'self-encryption and enrollment, so it cannot be removed yet.';
+
+  @Deprecated(_legacyFieldDeprecation)
   AtBytes? apkamPublicKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated(_legacyFieldDeprecation)
   AtBytes? apkamPrivateKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated(_legacyFieldDeprecation)
   AtBytes? defaultEncryptionPublicKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated(_legacyFieldDeprecation)
   AtBytes? defaultEncryptionPrivateKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated(_legacyFieldDeprecation)
   AtBytes? defaultSelfEncryptionKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated(_legacyFieldDeprecation)
   AtBytes? apkamSymmetricKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+
+  /// Top-level keyfile fields this version does not recognise, kept verbatim
+  /// so a file written by a newer client survives a read-modify-flush here.
+  ///
+  /// Not deprecated: this is the supported forward-compatibility escape hatch,
+  /// and it has no replacement. What counts as metadata is decided solely by
+  /// [KeyIds.isMetadata] — a structural or key-material field is never copied
+  /// in here, so metadata can never shadow one.
   Map<String, dynamic> metadata = {};
 
-  /// Encodes just the legacy flat shape — the hard-coded fields plus
-  /// [metadata] — with no `version`/`atsign`/`keys`.
-  Map<String, dynamic> _toLegacyJson() {
+  /// Encodes just the legacy flat key material — exactly
+  /// [KeyIds.keySchemaList], each field emitted even when null. Carries no
+  /// structural field and no [metadata]; [toJson] assembles those around it.
+  Map<String, dynamic> _legacySchemaJson() {
     return {
       KeyIds.apkamPublicKey: apkamPublicKey?.toString(),
       KeyIds.apkamPrivateKey: apkamPrivateKey?.toString(),
@@ -212,20 +346,24 @@ final class AtKeys {
           defaultEncryptionPrivateKey?.toString(),
       KeyIds.defaultSelfEncryptionKey: defaultSelfEncryptionKey?.toString(),
       KeyIds.apkamSymmetricKey: apkamSymmetricKey?.toString(),
-      AtConstants.enrollmentId: enrollmentId,
-      for (var entry in metadata.entries)
-        if (!KeyIds.keySchemaList.contains(entry.key)) entry.key: entry.value
     };
   }
 
+  /// Reads the legacy flat key material out of [json] onto [existing] (the
+  /// typed path) or onto a fresh [AtKeys] for [atsign] (the legacy path).
+  ///
+  /// [enrollmentId] is supplied by [fromJson], which reads it structurally for
+  /// both shapes; nothing here touches it. Anything in [json] that
+  /// [KeyIds.isMetadata] accepts is kept verbatim as [metadata].
   static AtKeys _fromLegacyJson(Map<String, dynamic> json,
-      {AtKeys? existing, Atsign? atsign}) {
+      {AtKeys? existing, Atsign? atsign, String? enrollmentId}) {
     var keys = existing ??
         AtKeys(
             atsign: atsign ??
                 (throw AtKeysValidationException(
                     'atsign is required to read a legacy .atKeys file '
-                    '(it is not stored in the file)')));
+                    '(it is not stored in the file)')),
+            enrollmentId: enrollmentId);
     keys
       ..apkamPublicKey = _existsAndNotNull(json, KeyIds.apkamPublicKey)
           ? AtBytes.fromString(json[KeyIds.apkamPublicKey])
@@ -247,11 +385,9 @@ final class AtKeys {
               : null
       ..apkamSymmetricKey = _existsAndNotNull(json, KeyIds.apkamSymmetricKey)
           ? AtBytes.fromString(json[KeyIds.apkamSymmetricKey])
-          : null
-      ..enrollmentId =
-          _existsAndNotNull(json, 'enrollmentId') ? json['enrollmentId'] : null;
+          : null;
     for (var entry in json.entries) {
-      if (!KeyIds.keySchemaList.contains(entry.key)) {
+      if (KeyIds.isMetadata(entry.key)) {
         keys.metadata[entry.key] = entry.value;
       }
     }
