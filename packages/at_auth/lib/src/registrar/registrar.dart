@@ -20,21 +20,6 @@ enum RegistrarApiEndpoint {
   const RegistrarApiEndpoint(this.path, this.method);
 }
 
-/// Legacy enum name for backward compatibility
-@Deprecated('Use RegistrarApiEndpoint instead')
-typedef ActivateApiEndpoint = RegistrarApiEndpoint;
-
-/// Backward compatibility extension for legacy enum values
-extension ActivateApiEndpointLegacy on RegistrarApiEndpoint {
-  /// Legacy alias for authenticateAtSign
-  @Deprecated('Use RegistrarApiEndpoint.authenticateAtSign instead')
-  static RegistrarApiEndpoint get login => RegistrarApiEndpoint.requestOtp;
-
-  /// Legacy alias for validateAtSignActivation
-  @Deprecated('Use RegistrarApiEndpoint.validateAtSignActivation instead')
-  static RegistrarApiEndpoint get validate => RegistrarApiEndpoint.validateOtp;
-}
-
 abstract interface class Registrar {
   String get registrarUrl;
   String get apiKey;

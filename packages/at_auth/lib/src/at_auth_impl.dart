@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:at_auth/src/keys/serialization/auth_bootstrap.dart';
 import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
@@ -85,20 +84,19 @@ class AtAuthImpl implements AtAuth {
 
   @override
 
-  /// Authenticate using PKAM
-  /// The AtAuthRequest must contain either:
-  /// - 1. atAuthRequest.atKeysIo - An implementation of AtKeysIo to read the keys
-  /// - 2. atAuthRequest.atAuthKeys - An instance of AtKeys containing the keys
+  /// Authenticate using PKAM.
   ///
-  /// If both are provided, atAuthRequest.atAuthKeys will be used.
+  /// The keys always come from `atAuthRequest.atKeysIo` — an [AtKeysIo]
+  /// implementation over a file, keychain, or memory. To authenticate with keys
+  /// you already hold, put them in an [InMemoryAtKeysIo].
   ///
-  /// The AtAuthRequest may optionally contain:
-  /// - atAuthRequest.enrollmentId - The enrollmentId to use for authentication.
-  ///   If not provided, the enrollmentId in the AtAuthKeys will be used.
-  /// - atAuthRequest.encryptedKeysMap - Provide the contents of atKeys file which
-  ///    contains keys in encrypted format (LEGACY)
+  /// Optionally, `atAuthRequest.enrollmentId` selects the enrollment to
+  /// authenticate as; when it is null the enrollmentId stored in the keys is
+  /// used.
   ///
-  /// returns an `AtAuthResponse` indicating success or failure of authentication
+  /// Returns the [AtAuthSession] to hand to client creation. On failure this
+  /// throws [AtAuthenticationException] and closes any connection it opened —
+  /// there is no unsuccessful return value.
   Future<AtAuthSession> authenticate(AtAuthRequest atAuthRequest) async {
     _progress(
       "authentication",
@@ -192,10 +190,14 @@ class AtAuthImpl implements AtAuth {
     }
   }
 
-  /// Onboard a new atSign using CRAM
-  /// Requires an AtOnboardingRequest and a cramSecret
+  /// Onboard a new atSign using CRAM.
   ///
-  /// returns an `AtOnboardingResponse` indicating success or failure of onboarding
+  /// Requires an [AtOnboardingRequest] and its one-time [cramSecret]. Mints a
+  /// fresh keyset, enrolls it, PKAM-authenticates, and persists the keys
+  /// through the request's [AtKeysIo].
+  ///
+  /// Returns the [AtAuthSession] to hand to client creation. Failure throws —
+  /// there is no unsuccessful return value.
   @override
   Future<AtAuthSession> onboard(
     AtOnboardingRequest atOnboardingRequest,
