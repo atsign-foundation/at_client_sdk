@@ -1,4 +1,4 @@
-## 3.3.1
+## 3.3.0
 - feat: add `AtPkamSigner` implementations for at_lookup's PKAM handshake — at_auth owns the key material and chooses the algorithm, at_lookup only signs with what it is given. `RsaPkamSigner(privateKey)` signs with RSA-2048 / SHA-256, the algorithm atServers verify by default; hand it to `AtLookUp.pkamSigner` in place of the now-deprecated `AtLookUp.atChops`.
 - feat: add `MlDsaPkamSigner(secretKey)` — ML-DSA-65 (post-quantum, FIPS 204), marked `@experimental` and **not yet wired into authentication**. Signing works, but the PKAM wire semantics are unfinished: the pkam verb's `hashingAlgo` field has no meaningful value for ML-DSA (hashing is intrinsic) and the RSA-vs-ML-DSA selection policy is undecided, so `hashingAlgo` throws `UnimplementedError` rather than letting the signer be wired up by accident.
 - chore(deps): require `at_lookup` ^3.7.0 for `AtPkamSigner`, and `at_chops` ^3.4.1 — the actual minimum this package compiles against (`MlDsa65PureDartAlgo.signBytes` became an instance method in at_chops 3.4.0, and the hashing algorithm barrel exports used by `AtKeys` passphrase handling landed in 3.4.1).
