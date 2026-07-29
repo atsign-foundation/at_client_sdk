@@ -15,6 +15,9 @@ import 'package:at_utils/at_logger.dart';
 
 import 'at_lookup_test_utils.dart';
 
+// ignore: deprecated_member_use
+class FakeAtSigningInput extends Fake implements AtSigningInput {}
+
 void main() {
   AtSignLogger.root_level = 'finest';
   late OutboundConnection mockOutBoundConnection;
@@ -40,8 +43,7 @@ void main() {
     mockPkamSigner = MockPkamSigner();
     registerFallbackValue(SecureSocketConfig());
     registerFallbackValue(Uint8List(0));
-    when(() => mockPkamSigner.signingAlgo)
-        .thenReturn(SigningAlgoType.rsa2048);
+    when(() => mockPkamSigner.signingAlgo).thenReturn(SigningAlgoType.rsa2048);
     when(() => mockPkamSigner.hashingAlgo).thenReturn(HashingAlgoType.sha256);
     mockSecureSocket = createMockAtServerSocket(atServerHost, atServerPort);
 
@@ -198,6 +200,97 @@ void main() {
           throwsA(predicate((e) =>
               e is UnAuthenticatedException && e.message.contains('AT0401'))));
     });
+
+    test('pkam auth fails when neither pkamSigner nor atChops is set',
+        () async {
+      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
+          secondaryAddressFinder: mockSecondaryAddressFinder,
+          secureSocketFactory: mockSocketFactory,
+          socketListenerFactory: mockSecureSocketListenerFactory,
+          outboundConnectionFactory: mockOutboundConnectionFactory);
+      expect(() async => await atLookup.pkamAuthenticate(),
+          throwsA(predicate((e) => e is UnAuthenticatedException)));
+    });
+  });
+
+  group('A group of tests to verify the deprecated atChops pkam path', () {
+    final pkamSignature =
+        'MbNbIwCSxsHxm4CHyakSE2yLqjjtnmzpSLPcGG7h+4M/GQAiJkklQfd/x9z58CSJfuSW8baIms26SrnmuYePZURfp5oCqtwRpvt+l07Gnz8aYpXH0k5qBkSR34SBk4nb+hdAjsXXgfWWC56gROPMwpOEbuDS6esU7oku+a7Rdr10xrFlk1Tf2eRwPOMWyuKwOvLwSgyq/INAFRYav5RmLFiecQhPME6ssc1jW92wztylKBtuZT4rk8787b6Z9StxT4dPZzWjfV1+oYDLaqu2PcQS2ZthH+Wj8NgoogDxSP+R7BE1FOVJKnavpuQWeOqNWeUbKkSVP0B0DN6WopAdsg==';
+    late MockAtChops mockAtChops;
+
+    setUp(() {
+      mockAtChops = MockAtChops();
+      registerFallbackValue(FakeAtSigningInput());
+      // ignore: deprecated_member_use
+      when(() => mockAtChops.sign(any()))
+          // ignore: deprecated_member_use
+          .thenReturn(AtSigningResult()..result = pkamSignature);
+      when(() => mockOutboundListener.read())
+          .thenAnswer((_) => Future.value('data:success'));
+      when(() => mockOutBoundConnection.getMetaData())
+          .thenReturn(OutboundConnectionMetadata()..isAuthenticated = false);
+      when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
+    });
+
+    test(
+        'atChops signs when no pkamSigner is set, honouring the deprecated '
+        'signingAlgoType / hashingAlgoType', () async {
+      final expectedCommand =
+          'pkam:signingAlgo:ecc_secp256r1:hashingAlgo:sha512:$pkamSignature\n';
+      when(() => mockOutBoundConnection.write(expectedCommand))
+          .thenAnswer((invocation) {
+        mockSecureSocket.write(expectedCommand);
+        return Future.value();
+      });
+
+      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
+          secondaryAddressFinder: mockSecondaryAddressFinder,
+          secureSocketFactory: mockSocketFactory,
+          socketListenerFactory: mockSecureSocketListenerFactory,
+          outboundConnectionFactory: mockOutboundConnectionFactory);
+      // ignore: deprecated_member_use
+      atLookup.signingAlgoType = SigningAlgoType.ecc_secp256r1;
+      // ignore: deprecated_member_use
+      atLookup.hashingAlgoType = HashingAlgoType.sha512;
+      // ignore: deprecated_member_use
+      atLookup.atChops = mockAtChops;
+
+      expect(await atLookup.pkamAuthenticate(), true);
+      verify(() => mockOutBoundConnection.write(expectedCommand)).called(1);
+    });
+
+    test('pkamSigner takes precedence over atChops when both are set',
+        () async {
+      final signerSignature = base64Encode(List.filled(256, 7));
+      final signerCommand =
+          'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:$signerSignature\n';
+      final atChopsCommand =
+          'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:$pkamSignature\n';
+      when(() => mockPkamSigner.sign(any()))
+          .thenAnswer((_) => base64Decode(signerSignature));
+      for (final command in [signerCommand, atChopsCommand]) {
+        when(() => mockOutBoundConnection.write(command))
+            .thenAnswer((invocation) {
+          mockSecureSocket.write(command);
+          return Future.value();
+        });
+      }
+
+      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
+          secondaryAddressFinder: mockSecondaryAddressFinder,
+          secureSocketFactory: mockSocketFactory,
+          socketListenerFactory: mockSecureSocketListenerFactory,
+          outboundConnectionFactory: mockOutboundConnectionFactory);
+      // ignore: deprecated_member_use
+      atLookup.atChops = mockAtChops;
+      atLookup.pkamSigner = mockPkamSigner;
+
+      expect(await atLookup.pkamAuthenticate(), true);
+      verify(() => mockOutBoundConnection.write(signerCommand)).called(1);
+      verifyNever(() => mockOutBoundConnection.write(atChopsCommand));
+      // ignore: deprecated_member_use
+      verifyNever(() => mockAtChops.sign(any()));
+    });
   });
 
   group('A group of tests to verify executeCommand method', () {
@@ -231,7 +324,7 @@ void main() {
           throwsA(predicate((e) => e is UnAuthenticatedException)));
     });
 
-    test('executeCommand -llookup verb - auth true - at_chops set', () async {
+    test('executeCommand -llookup verb - auth true - pkamSigner set', () async {
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
           secureSocketFactory: mockSocketFactory,

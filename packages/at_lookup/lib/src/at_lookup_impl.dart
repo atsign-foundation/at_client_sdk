@@ -33,6 +33,7 @@ class AtLookupImpl implements AtLookUp {
 
   late int _rootPort;
 
+  @Deprecated("privateKey reference is no longer used")
   String? privateKey;
 
   String? cramSecret;
@@ -54,6 +55,8 @@ class AtLookupImpl implements AtLookUp {
   late Map<String, dynamic> _clientConfig;
 
   AtPkamSigner? _pkamSigner;
+
+  AtChops? _atChops;
 
   AtLookupImpl(String atSign, String rootDomain, int rootPort,
       {this.privateKey,
@@ -473,7 +476,8 @@ class AtLookupImpl implements AtLookUp {
 
   @override
   Future<bool> pkamAuthenticate({String? enrollmentId}) async {
-    if (_pkamSigner == null) {
+    final signer = _effectivePkamSigner;
+    if (signer == null) {
       throw UnAuthenticatedException(
           'Unable to perform pkam auth. pkamSigner is not set');
     }
@@ -492,13 +496,13 @@ class AtLookupImpl implements AtLookUp {
         }
         fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
         logger.finer('fromResponse $fromResponse');
-        logger.finer('signingAlgo: ${_pkamSigner!.signingAlgo} '
-            'hashingAlgo: ${_pkamSigner!.hashingAlgo}');
-        final signature = await _pkamSigner!
-            .sign(Uint8List.fromList(utf8.encode(fromResponse)));
+        logger.finer('signingAlgo: ${signer.signingAlgo} '
+            'hashingAlgo: ${signer.hashingAlgo}');
+        final signature =
+            await signer.sign(Uint8List.fromList(utf8.encode(fromResponse)));
         var pkamBuilder = PkamVerbBuilder()
-          ..signingAlgo = _pkamSigner!.signingAlgo.name
-          ..hashingAlgo = _pkamSigner!.hashingAlgo.name
+          ..signingAlgo = signer.signingAlgo.name
+          ..hashingAlgo = signer.hashingAlgo.name
           ..enrollmentlId = enrollmentId
           ..signature = base64Encode(signature);
         logger.finer('pkamCommand:${pkamBuilder.buildCommand()}');
@@ -600,7 +604,7 @@ class AtLookupImpl implements AtLookUp {
       await requestResponseMutex.acquire();
 
       if (auth && _isAuthRequired()) {
-        if (_pkamSigner != null) {
+        if (_effectivePkamSigner != null) {
           logger.finer('calling pkam using pkamSigner');
           await pkamAuthenticate(enrollmentId: enrollmentId);
         } else if (privateKey != null) {
@@ -675,8 +679,64 @@ class AtLookupImpl implements AtLookUp {
   @override
   AtPkamSigner? get pkamSigner => _pkamSigner;
 
+  /// The signer [pkamAuthenticate] actually uses: an explicitly set
+  /// [pkamSigner], else the [atChops] bridge, else null.
+  AtPkamSigner? get _effectivePkamSigner {
+    if (_pkamSigner != null) {
+      return _pkamSigner;
+    }
+    return _atChops == null ? null : _AtChopsPkamSigner(this);
+  }
+
+  @override
+  set atChops(AtChops? atChops) {
+    _atChops = atChops;
+  }
+
+  @override
+  AtChops? get atChops => _atChops;
+
+  /// To use a specific signing algorithm other than default one for pkam auth, set the [SigningAlgoType] and [HashingAlgoType]
+  @override
+  HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
+
+  @override
+  SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
+
   @override
   String? enrollmentId;
+}
+
+/// Bridges the deprecated [AtLookupImpl.atChops] surface onto [AtPkamSigner],
+/// so PKAM has a single signing path while `atChops` is still supported.
+///
+/// Reads [AtLookupImpl.atChops], [AtLookupImpl.signingAlgoType] and
+/// [AtLookupImpl.hashingAlgoType] at signing time rather than capturing them,
+/// because callers set them in either order. Goes away with the deprecated
+/// members.
+class _AtChopsPkamSigner implements AtPkamSigner {
+  final AtLookupImpl _atLookup;
+
+  _AtChopsPkamSigner(this._atLookup);
+
+  @override
+  Uint8List sign(Uint8List challenge) {
+    // The challenge is passed as a String, as it was before AtPkamSigner
+    // existed — a custom AtChops may care which type it receives.
+    final atSigningInput = AtSigningInput(utf8.decode(challenge))
+      ..signingAlgoType = signingAlgo
+      ..hashingAlgoType = hashingAlgo
+      ..signingMode = AtSigningMode.pkam;
+    // AtChops returns the signature base64-encoded; AtPkamSigner deals in raw
+    // bytes and at_lookup re-encodes it onto the pkam verb.
+    return base64Decode(_atLookup.atChops!.sign(atSigningInput).result);
+  }
+
+  @override
+  SigningAlgoType get signingAlgo => _atLookup.signingAlgoType;
+
+  @override
+  HashingAlgoType get hashingAlgo => _atLookup.hashingAlgoType;
 }
 
 class AtLookupSecureSocketFactory {
