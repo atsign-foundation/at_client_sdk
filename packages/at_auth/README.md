@@ -116,9 +116,11 @@ for the submitting side; the approve/deny side is demonstrated in
 
 ## The `.atKeys` file format
 
-`FileAtKeysIo` reads and writes `.atKeys` files
-(default path `~/.atsign/keys/<atsign>_key.atKeys`). A file has up to
-three layers, outermost first:
+`FileAtKeysIo` reads and writes `.atKeys` files (default path
+`~/.atsign/keys/<atsign>_key.atKeys`; pass `filePath` to put them
+anywhere else, composing `getDefaultAtKeysFilePath(home, atsign)` if you
+want that same layout under a different home). A file has up to three
+layers, outermost first:
 
 1. **Optional passphrase envelope** — when a `passPhrase` is configured,
    the whole document is AES-encrypted with a key derived from the
@@ -144,17 +146,25 @@ three layers, outermost first:
 In memory, `AtKeys` always holds plaintext; all three layers are applied
 and peeled exclusively by `FileAtKeysIo`.
 
-Persistence has two verbs:
+Persistence has two verbs, both taking a normalized `Atsign` (call
+`String.toAtsign()` at the boundary, so one identity is always one file):
 
 - `write(atsign, atKeys)` — create-only initial persist (fresh onboard);
-  throws if the file already exists.
+  throws if the file already exists. Declared on `AtKeysIo`, so every
+  implementation supports it.
 - `flush(atsign, atKeys)` — persist the current in-memory state (e.g.
-  after `AtKeys.addKey` or `AtKeys.retireKey`). If the file exists,
-  `flush` first validates that nothing it holds would be lost (key
-  material is never removed — a key's `status` may only move forward,
-  `active` → `retired` → `dead`), then rewrites it; flushing a legacy
+  after `AtKeys.addKey` or `AtKeys.retireKey`). Declared on
+  `WrittenAtKeysIo`, i.e. only for durably-stored keys. If the file
+  exists, `flush` first validates that nothing it holds would be lost
+  (key material is never removed — a key's `status` may only move
+  forward, `active` → `retired` → `dead`, and an `enrollmentId` may be
+  set once but never repointed), then rewrites it; flushing a legacy
   file upgrades it in place to a typed-keys document. If the file does
   not exist, `flush` creates it.
+
+In-memory keys (`EphemeralAtKeysIo`) mutate per material instead —
+`append` / `retire` / `dispose` — because such a store defines its own
+retention policy rather than promising never to lose anything.
 
 Both verbs write atomically (write-to-temp + rename), so a crash mid-write
 can never truncate the keyfile, and a `flush` over an existing file first

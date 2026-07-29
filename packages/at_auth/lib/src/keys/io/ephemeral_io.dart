@@ -9,20 +9,19 @@ import 'package:at_commons/atsign.dart';
 /// have already been loaded or generated elsewhere. It does not encrypt,
 /// serialize, or persist keys beyond the lifetime of this object.
 class EphemeralAtKeysIo extends InMemoryAtKeysIo {
-  /// Keys are indexed by normalized [Atsign] (via `toAtsign()`), so the
-  /// `String`-typed [read]/[write] and the [Atsign]-typed [append]/[retire]/
-  /// [flush] all resolve to the same entry.
+  /// Keys are indexed by [Atsign], which the whole [AtKeysIo] surface takes, so
+  /// every method resolves to the same entry for a given identity.
   final Map<Atsign, AtKeys> _internal = {};
 
   /// Returns the keys for [atsign], or throws if nothing has been loaded into
   /// memory for that atsign.
   @override
-  FutureOr<AtKeys> read(String atsign) => _requireLoaded(atsign.toAtsign());
+  FutureOr<AtKeys> read(Atsign atsign) => _requireLoaded(atsign);
 
   /// Replaces any existing in-memory keys for [atsign].
   @override
-  Future<void> write(String atsign, AtKeys atKeys) async {
-    _internal[atsign.toAtsign()] = atKeys;
+  Future<void> write(Atsign atsign, AtKeys atKeys) async {
+    _internal[atsign] = atKeys;
   }
 
   /// Adds a single [key] to the keys already loaded for [atsign] and returns

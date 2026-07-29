@@ -287,18 +287,10 @@ class AtAuthImpl implements AtAuth {
 
       //4b. Store the keys
       try {
-        switch (atOnboardingRequest.atKeysIo) {
-          case WrittenAtKeysIo io:
-            await io.write(
-              atOnboardingRequest.atsign,
-              atKeys,
-            );
-          case InMemoryAtKeysIo io:
-            await io.write(
-              atOnboardingRequest.atsign,
-              atKeys,
-            );
-        }
+        await atOnboardingRequest.atKeysIo.write(
+          atOnboardingRequest.atsign,
+          atKeys,
+        );
         _progress(
           "onboarding",
           "Successfully stored keys for atSign: ${atOnboardingRequest.atsign}",
