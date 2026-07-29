@@ -11,7 +11,7 @@ import 'package:at_commons/at_commons.dart';
 /// authorization to access the specified namespaces in the request. Conversely, if the request is disapproved, the requesting
 /// app is denied login access.
 abstract class EnrollmentRequest {
-  String atSign;
+  Atsign atsign;
   String appName;
   String deviceName;
   final EnrollOperationEnum enrollOperation = EnrollOperationEnum.request;
@@ -19,7 +19,7 @@ abstract class EnrollmentRequest {
   AtRootDomain rootDomain;
 
   EnrollmentRequest(
-      {required this.atSign,
+      {required this.atsign,
       required this.appName,
       required this.deviceName,
       this.apkamPublicKey,
@@ -38,39 +38,26 @@ abstract class EnrollmentRequest {
 class AtEnrollmentRequest extends EnrollmentRequest {
   /// The authenticated session of the app submitting this enrollment request.
   ///
-  /// When supplied, it is the source of the request's [atSign] and [rootDomain],
-  /// and its [AtAuthSession.atKeysIo] is where the newly enrolled app's keys are
+  /// It is the source of the request's [atSign] and [rootDomain], and its
+  /// [AtAuthSession.atKeysIo] is where the newly enrolled app's keys are
   /// persisted and handed back on the [AtEnrollmentResponse.session] after
-  /// approval. Prefer this over the deprecated `atSign`/`rootDomain` params.
-  final AtAuthSession? session;
+  /// approval.
+  final AtAuthSession session;
 
   Map<String, String> namespaces;
-  String? encryptedAPKAMSymmetricKey;
   String otp;
   Duration? apkamKeysExpiryDuration;
 
   AtEnrollmentRequest({
-    this.session,
-    @Deprecated('Provide `session` instead; its atSign is used.')
-    String? atSign,
-    @Deprecated('Provide `session` instead; its rootDomain is used.')
-    AtRootDomain? rootDomain,
+    required this.session,
     required super.appName,
     required super.deviceName,
-    @Deprecated('Provide `session` instead; it contains a AtKeysIo to use.')
-    super.apkamPublicKey,
     required this.otp,
     required this.namespaces,
-    @Deprecated('Provide `session` instead; it contains a AtKeysIo to use.')
-    this.encryptedAPKAMSymmetricKey,
     this.apkamKeysExpiryDuration,
   }) : super(
-          atSign: session?.atsign ??
-              atSign ??
-              (throw ArgumentError(
-                  'AtEnrollmentRequest requires a `session` (or the deprecated `atSign`)')),
-          rootDomain:
-              session?.rootDomain ?? rootDomain ?? AtRootDomain.atsignDomain,
+          atsign: session.atsign,
+          rootDomain: session.rootDomain,
         );
 }
 
@@ -96,9 +83,20 @@ class AtEnrollmentRequest extends EnrollmentRequest {
 /// encrypted with the APKAM symmetric key and stored into the server.
 
 class FirstEnrollmentRequest extends EnrollmentRequest {
-  FirstEnrollmentRequest(
-      {required super.atSign,
-      required super.appName,
-      required super.deviceName,
-      required super.apkamPublicKey});
+  /// The session being established by onboarding: the atsign, its atServer, and
+  /// the destination its freshly minted keys are persisted to. Unlike
+  /// [AtEnrollmentRequest]'s session this one is not yet authenticated — nothing
+  /// reads keys from it during the first enrollment — but it is the source of
+  /// [atsign]/[rootDomain] and it scopes the resulting response.
+  final AtAuthSession session;
+
+  FirstEnrollmentRequest({
+    required this.session,
+    required super.appName,
+    required super.deviceName,
+    required super.apkamPublicKey,
+  }) : super(
+          atsign: session.atsign,
+          rootDomain: session.rootDomain,
+        );
 }

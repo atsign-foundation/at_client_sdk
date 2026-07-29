@@ -45,15 +45,19 @@ void main(List<String> args) async {
         namespaces: {'buzz': 'rw'},
         otp: argResults['otp']);
 
-    // Contains the response from the server.
-    final atEnrollmentResponse =
-        await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
-    print(atEnrollmentResponse);
+    // Submitting an AtEnrollmentRequest yields a PendingEnrollment: the
+    // server's verdict plus the APKAM keys minted locally, which waitForApproval
+    // needs to finish the handshake.
+    final pending = await atEnrollmentBase.submit(enrollmentRequest, atLookUp)
+        as PendingEnrollment;
+    print(pending);
 
-    // Once approved, waitForApproval persists the keys into session.atKeysIo and
-    // populates atEnrollmentResponse.session — hand that straight to
-    // AtClientManager.fromAuthSession(...) instead of touching atAuthKeys.
-    // await atEnrollmentBase.waitForApproval(atEnrollmentResponse);
+    // Once the approving app approves, waitForApproval completes those keys with
+    // the material held by the atServer, persists them into session.atKeysIo,
+    // and replaces pending.session with an authenticated one — hand that
+    // straight to AtClientManager.fromAuthSession(...).
+    // await atEnrollmentBase.waitForApproval(pending);
+    // print(pending.session.enrollmentId);
   } on Exception catch (e, trace) {
     print(trace);
   } on ArgumentError catch (e, trace) {

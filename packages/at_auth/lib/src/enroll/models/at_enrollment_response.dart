@@ -13,9 +13,6 @@ abstract class AtEnrollmentRecord {
   EnrollmentStatus get enrollmentStatus;
 }
 
-/// Backward compatibility for [AtEnrollmentRecord]
-typedef EnrollmentBase = AtEnrollmentRecord;
-
 /// Holds details of an enrollment request received from the server.
 ///
 /// The server notifies the approving app when a requesting app submits
@@ -32,9 +29,6 @@ class ServerEnrollmentRequest extends AtEnrollmentRecord {
 
   @override
   EnrollmentStatus get enrollmentStatus => status;
-
-  /// Backwards-compatible alias for [namespacePermissions].
-  List<NamespacePermission> get namespace => namespacePermissions;
 
   ServerEnrollmentRequest({
     required this.enrollmentId,
@@ -104,9 +98,6 @@ class ServerEnrollmentRequest extends AtEnrollmentRecord {
   }
 }
 
-/// Backwards-compatible alias for [ServerEnrollmentRequest].
-typedef EnrollmentServerResponse = ServerEnrollmentRequest;
-
 bool _listEquals<T>(List<T> a, List<T> b) {
   if (a.length != b.length) return false;
   for (int i = 0; i < a.length; i++) {
@@ -128,53 +119,88 @@ class AtEnrollmentResponse extends AtEnrollmentRecord {
   @override
   EnrollmentStatus get enrollmentStatus => enrollStatus;
 
-  /// Optional atSign associated with the enrollment.
-  @Deprecated('Use `session.atSign` instead.')
-  String? atSign;
-
-  /// Optional root domain associated with the enrollment.
-  @Deprecated('Use `session.rootDomain` instead.')
-  AtRootDomain? rootDomain;
-
-  /// The authentication keys associated with the enrollment.
-  @Deprecated('Use `session` instead; the keys are sourced via `session.atKeysIo`.')
-  AtKeys? atAuthKeys;
-
-  /// The hand-off session for the newly enrolled app, populated on the
-  /// requesting-app success path once the enrollment is approved.
+  /// The session this enrollment operation belongs to — the atsign it concerns,
+  /// how to reach that atServer, and the [AtAuthSession.atKeysIo] its keys are
+  /// read from or written to.
   ///
-  /// Pass it straight into `AtClientManager.fromAuthSession(...)`; the client
-  /// derives its own keys via [AtAuthSession.atKeysIo] rather than adopting the
-  /// deprecated [atAuthKeys] material directly.
-  AtAuthSession? session;
+  /// On the requesting-app path this is replaced during
+  /// `AtEnrollment.waitForApproval` with a session carrying the approved
+  /// [enrollmentId] and the authenticated connection — pass that straight into
+  /// `AtClientManager.fromAuthSession(...)`.
+  AtAuthSession session;
 
   /// Creates an instance of [AtEnrollmentResponse].
   ///
   /// The [enrollmentId] is the unique identifier for the enrollment.
   /// The [enrollStatus] represents the status of the enrollment operation.
-  /// The [session] is the hand-off session for the newly enrolled app.
+  /// The [session] is the session the operation was performed under.
   AtEnrollmentResponse(this.enrollmentId, this.enrollStatus,
-      {this.atSign, this.rootDomain, this.atAuthKeys, this.session});
+      {required this.session});
 
   @override
   String toString() {
     return 'AtEnrollmentResponse{enrollmentId: $enrollmentId, enrollStatus: $enrollStatus}';
   }
 
+  /// Serializes only the wire-safe identity of the enrollment: [enrollmentId],
+  /// [enrollStatus] and the session's atsign.
+  ///
+  /// [session] itself cannot round-trip — it holds a live [AtKeysIo] and,
+  /// after approval, an open connection. [fromJson] therefore takes the session
+  /// from the caller rather than reconstructing one.
   Map<String, dynamic> toJson() {
     return {
       'enrollmentId': enrollmentId,
       'enrollStatus': enrollStatus.name,
-      if (atSign != null) 'atSign': atSign,
+      'atsign': session.atsign,
     };
   }
 
-  factory AtEnrollmentResponse.fromJson(Map<String, dynamic> json) {
+  /// Rehydrates a response from [toJson] output. [session] must be supplied by
+  /// the caller — see [toJson] for why it is not in the json.
+  factory AtEnrollmentResponse.fromJson(Map<String, dynamic> json,
+      {required AtAuthSession session}) {
     String enrollmentId = json['enrollmentId'];
     EnrollmentStatus enrollmentStatus = EnrollmentStatus.values
         .firstWhere((es) => es.name == json['enrollStatus']);
-    String? atSign = json['atSign'];
 
-    return AtEnrollmentResponse(enrollmentId, enrollmentStatus, atSign: atSign);
+    return AtEnrollmentResponse(
+      enrollmentId,
+      enrollmentStatus,
+      session: session,
+    );
+  }
+}
+
+/// The result of submitting an [AtEnrollmentRequest]: the server's verdict plus
+/// the key material that `AtEnrollment.waitForApproval` needs to finish the
+/// handshake.
+///
+/// [keys] holds only what `submit` could mint locally — the APKAM keypair and
+/// the APKAM symmetric key. The rest (the default encryption private key and
+/// the self encryption key) exists on the atServer, encrypted under that
+/// symmetric key, and is fetched and merged in by `waitForApproval`, which then
+/// persists the completed set through [session]'s `atKeysIo`.
+///
+/// Until then the keyset is deliberately **not** persistable: it has no
+/// `defaultSelfEncryptionKey`, which `FileAtKeysIo` requires in order to
+/// self-encrypt the APKAM fields at rest. That is why the keys travel on this
+/// object rather than through the keystore.
+class PendingEnrollment extends AtEnrollmentResponse {
+  /// The APKAM keypair and symmetric key minted by `submit`, completed in place
+  /// by `waitForApproval`.
+  final AtKeys keys;
+
+  PendingEnrollment(
+    super.enrollmentId,
+    super.enrollStatus, {
+    required super.session,
+    required this.keys,
+  });
+
+  @override
+  String toString() {
+    return 'PendingEnrollment{enrollmentId: $enrollmentId, '
+        'enrollStatus: $enrollStatus}';
   }
 }
