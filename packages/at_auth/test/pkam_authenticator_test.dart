@@ -1,5 +1,6 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
+import 'package:at_auth/src/keys/serialization/key_ids.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
@@ -80,6 +81,26 @@ void main() {
                 atSign,
                 mockAtLookup,
                 atKeys,
+                enrollmentId: testEnrollmentId,
+              ),
+          throwsA(isA<AtAuthenticationException>()));
+    });
+
+    test('authenticate() cannot yet sign with a post-quantum-only keyset',
+        () async {
+      // Pins the documented limitation of AtKeys.generate(mintLegacy: false):
+      // PKAM signs with the RSA apkamPrivateKey, and MlDsaPkamSigner is
+      // experimental. When ML-DSA PKAM lands and this starts passing, that is
+      // the signal to wire the PQ signer here and update AtKeys.generate's doc.
+      final pqOnly =
+          await AtKeys.generate(atSign.toAtsign(), mintLegacy: false);
+      expect(pqOnly.keysForKeyId(KeyIds.apkamPQ), isNotEmpty);
+
+      expect(
+          () async => await pkamAuthenticator.authenticate(
+                atSign,
+                mockAtLookup,
+                pqOnly,
                 enrollmentId: testEnrollmentId,
               ),
           throwsA(isA<AtAuthenticationException>()));

@@ -137,11 +137,18 @@ layers, outermost first:
    - **Legacy flat** (no `version` field): a flat JSON object of the
      fields above plus `selfEncryptionKey`, `apkamSymmetricKey`, and
      `enrollmentId`.
-   - **Typed-keys** (`"version": 1`): adds `atSign` and a `keys` array
+   - **Typed-keys** (`"version": 1`): adds `atsign` and a `keys` array
      of typed key materials (grouped by `keyId` with their `keyParts`),
      while the legacy fields stay flat at the top level — a typed-keys
      file's legacy portion is byte-identical to a legacy-only file, so
      legacy readers can still use it.
+
+`version`, `atsign`, `keys` and `enrollmentId` are the document's
+**structural** fields: `AtKeys` reads and writes each one explicitly, and
+never treats them as key material or as caller metadata. Any *other*
+top-level field is kept verbatim in `AtKeys.metadata` and round-trips
+untouched. `KeyIds` is the single source of truth for that split — see
+`KeyIds.isMetadata`.
 
 In memory, `AtKeys` always holds plaintext; all three layers are applied
 and peeled exclusively by `FileAtKeysIo`.

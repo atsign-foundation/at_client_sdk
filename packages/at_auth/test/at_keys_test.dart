@@ -3,9 +3,8 @@ import 'dart:io';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
-import 'package:at_chops/at_chops.dart';
+import 'package:at_auth/src/keys/serialization/key_ids.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:test/test.dart';
 
 import 'test_utils/at_keys.dart';
@@ -14,57 +13,124 @@ void main() {
   String filePath = 'test/data/@alice🛠_key.atKeys';
   final atKeysString = File(filePath).readAsStringSync();
   Map<String, dynamic> encryptedAtKeysMap = jsonDecode(atKeysString);
+  // A legacy .atKeys file doesn't store the atsign, so the reader supplies it.
+  final fixtureAtsign = '@alice🛠'.toAtsign();
 
   // Factory function to always produce a fresh AtKeys instance
-  AtKeys createKeys() => AtKeys()
+  AtKeys createKeys() => AtKeys(atsign: fixtureAtsign)
     ..apkamPublicKey =
-        AtBytes.fromString(encryptedAtKeysMap[auth_constants.apkamPublicKey])
+        AtBytes.fromString(encryptedAtKeysMap[KeyIds.apkamPublicKey])
     ..apkamPrivateKey =
-        AtBytes.fromString(encryptedAtKeysMap[auth_constants.apkamPrivateKey])
+        AtBytes.fromString(encryptedAtKeysMap[KeyIds.apkamPrivateKey])
     ..defaultEncryptionPublicKey = AtBytes.fromString(
-        encryptedAtKeysMap[auth_constants.defaultEncryptionPublicKey])
+        encryptedAtKeysMap[KeyIds.defaultEncryptionPublicKey])
     ..defaultEncryptionPrivateKey = AtBytes.fromString(
-        encryptedAtKeysMap[auth_constants.defaultEncryptionPrivateKey])
-    ..defaultSelfEncryptionKey = AtBytes.fromString(
-        encryptedAtKeysMap[auth_constants.defaultSelfEncryptionKey])
+        encryptedAtKeysMap[KeyIds.defaultEncryptionPrivateKey])
+    ..defaultSelfEncryptionKey =
+        AtBytes.fromString(encryptedAtKeysMap[KeyIds.defaultSelfEncryptionKey])
     ..apkamSymmetricKey =
-        AtBytes.fromString(encryptedAtKeysMap[auth_constants.apkamSymmetricKey])
-    ..enrollmentId = encryptedAtKeysMap['enrollmentId']
+        AtBytes.fromString(encryptedAtKeysMap[KeyIds.apkamSymmetricKey])
+    ..enrollmentId = encryptedAtKeysMap[AtConstants.enrollmentId]
     // The fixture's non-schema trailer entry lands in metadata.
     ..metadata = {'@alice🛠': encryptedAtKeysMap['@alice🛠']};
 
   group('AtKeys legacy json transformers', () {
-    test('toJson -> emits the legacy flat shape for a legacy-only AtKeys',
-        () async {
-      expect(createKeys().toJson(), equals(encryptedAtKeysMap));
+    test('toJson -> keeps every legacy field from the on-disk fixture', () {
+      // An upgrade, not a format swap: the typed envelope is added and the
+      // flat legacy fields are emitted byte-for-byte as the fixture holds them.
+      expect(
+        createKeys().toJson(),
+        equals({
+          ...encryptedAtKeysMap,
+          'version': AtKeys.supportedVersion,
+          'atsign': fixtureAtsign.toString(),
+          'keys': isEmpty,
+        }),
+      );
     });
 
-    test('toJson -> legacy fields are nullable', () async {
-      AtKeys nulledKeys = AtKeys();
-      var map = nulledKeys.toJson();
+    test('toJson -> legacy fields are nullable', () {
+      var map = AtKeys(atsign: fixtureAtsign).toJson();
+      map.remove('version');
+      map.remove('atsign');
+      map.remove('keys');
+
+      expect(map, isNotEmpty);
       for (var entry in map.entries) {
-        expect(entry.value, isNull);
+        expect(entry.value, isNull, reason: '${entry.key} should be null');
       }
     });
 
-    test('toJson -> passes legacy metadata through', () async {
+    test('toJson -> passes legacy metadata through', () {
       AtKeys keys = createKeys();
-      keys.metadata = {'atsign': "@vforreal"};
-      var json = keys.toJson();
-      var metadata = json['atsign'];
-      expect(metadata, equals('@vforreal'));
+      keys.metadata = {'@vforreal': 'trailing-metadata'};
+
+      expect(keys.toJson()['@vforreal'], equals('trailing-metadata'));
     });
 
-    test('fromJson -> populates legacy metadata', () async {
+    test('toJson -> the schema always wins over colliding metadata', () {
+      // Metadata is emitted first and filtered through KeyIds.isMetadata, so a
+      // key colliding with a structural or key-material field can never be
+      // written in its place. A stale metadata copy shadowing the real field is
+      // what silently persisted an out-of-date enrollmentId.
+      AtKeys keys = createKeys();
+      keys.metadata = {
+        'atsign': '@vforreal',
+        'version': 99,
+        'keys': 'garbage',
+        AtConstants.enrollmentId: 'stale-enrollment',
+        KeyIds.apkamPublicKey: 'stale-key-material',
+      };
+      var json = keys.toJson();
+
+      expect(json['atsign'], equals(fixtureAtsign.toString()));
+      expect(json['version'], equals(AtKeys.supportedVersion));
+      expect(json['keys'], isEmpty);
+      expect(json[AtConstants.enrollmentId], equals(keys.enrollmentId));
+      expect(json[KeyIds.apkamPublicKey],
+          equals(encryptedAtKeysMap[KeyIds.apkamPublicKey]));
+    });
+
+    test('toJson -> a changed enrollmentId is not shadowed by a stale copy',
+        () {
+      // The original bug, end to end: read a keyfile, change the enrollmentId,
+      // re-encode. The value written must be the new one.
+      final keys = AtKeys.fromJson(encryptedAtKeysMap, atsign: fixtureAtsign);
+      keys.enrollmentId = 'e-NEW';
+
+      expect(keys.toJson()[AtConstants.enrollmentId], 'e-NEW');
+    });
+
+    test('fromJson -> populates legacy metadata', () {
       // Copy the map so we don't pollute the shared encryptedAtKeysMap
       final localMap = Map<String, dynamic>.from(encryptedAtKeysMap);
-      localMap['atsign'] = "@shabonaganmcsideburns";
-      var atKeys = AtKeys.fromJson(localMap);
-      expect(atKeys.metadata, isNotEmpty);
+      localMap['@shabonaganmcsideburns'] = 'trailer';
+
+      var atKeys = AtKeys.fromJson(localMap, atsign: fixtureAtsign);
+
+      expect(atKeys.metadata['@shabonaganmcsideburns'], 'trailer');
+    });
+
+    test('fromJson -> never captures a structural field as metadata', () {
+      // 'version'/'atsign'/'keys'/'enrollmentId' are owned by the schema. A
+      // legacy file carrying one of those names must not have it copied into
+      // metadata, or a stale copy would shadow the real field on the next
+      // write.
+      final localMap = Map<String, dynamic>.from(encryptedAtKeysMap)
+        ..['atsign'] = '@shabonaganmcsideburns';
+
+      var atKeys = AtKeys.fromJson(localMap, atsign: fixtureAtsign);
+
+      expect(atKeys.metadata.containsKey('atsign'), isFalse);
+      expect(atKeys.metadata.containsKey(AtConstants.enrollmentId), isFalse);
+      expect(atKeys.atsign, fixtureAtsign);
+      // The real enrollmentId still comes off the document.
+      expect(atKeys.enrollmentId, encryptedAtKeysMap[AtConstants.enrollmentId]);
     });
 
     test('fromJson falls back to legacy for json without a version field', () {
-      expect(AtKeys.fromJson(encryptedAtKeysMap), equals(createKeys()));
+      expect(AtKeys.fromJson(encryptedAtKeysMap, atsign: fixtureAtsign),
+          equals(createKeys()));
     });
 
     test('fromJson throws on an unsupported version', () {
@@ -75,63 +141,70 @@ void main() {
     });
   });
 
-  group('AtKeys AtChops transformers', () {
-    late AtKeys apkam;
-    late AtKeys mpkam;
+  group('AtKeys.generate', () {
+    test('mints the post-quantum materials and the legacy fields', () async {
+      final keys = await AtKeys.generate('@alice'.toAtsign());
 
-    setUp(() {
-      apkam = createKeys();
-      mpkam = createKeys()..apkamSymmetricKey = null;
+      expect(keys.atsign, '@alice'.toAtsign());
+      expect(keys.enrollmentId, isNull);
+      expect(
+        keys.keys.map((m) => (m.keyId, m.keyPartType)).toSet(),
+        {
+          (KeyIds.apkamPQ, CryptographicKeyType.publicVerification),
+          (KeyIds.apkamPQ, CryptographicKeyType.privateSigning),
+          (KeyIds.globalXWing, CryptographicKeyType.publicEncryption),
+          (KeyIds.globalXWing, CryptographicKeyType.privateDecryption),
+        },
+      );
+      expect(keys.apkamPublicKey, isNotNull);
+      expect(keys.apkamPrivateKey, isNotNull);
+      expect(keys.defaultEncryptionPublicKey, isNotNull);
+      expect(keys.defaultEncryptionPrivateKey, isNotNull);
+      expect(keys.defaultSelfEncryptionKey, isNotNull);
+      expect(keys.apkamSymmetricKey, isNotNull);
     });
 
-    test('Preapproval state for APKAM AtKeys to AtChopsImpl', () {
-      apkam.defaultEncryptionPrivateKey = null;
-      apkam.defaultSelfEncryptionKey = null;
-      var chops = apkam.toAtChops();
-      expect(chops, isNotNull);
+    test('mintLegacy: false leaves every legacy field null', () async {
+      final keys =
+          await AtKeys.generate('@alice'.toAtsign(), mintLegacy: false);
+
+      expect(keys.keys, hasLength(4));
+      expect(keys.apkamPublicKey, isNull);
+      expect(keys.apkamPrivateKey, isNull);
+      expect(keys.defaultEncryptionPublicKey, isNull);
+      expect(keys.defaultEncryptionPrivateKey, isNull);
+      expect(keys.defaultSelfEncryptionKey, isNull);
+      expect(keys.apkamSymmetricKey, isNull);
     });
 
-    test('Postapproval state for APKAM AtKeys to AtChopsImpl', () {
-      apkam = createKeys();
-      expect(apkam.toAtChops(), isA<AtChopsImpl>());
+    test('carries the enrollmentId and generates fresh material each call',
+        () async {
+      final first = await AtKeys.generate('@alice'.toAtsign(),
+          enrollmentId: 'enroll-1', mintLegacy: false);
+      final second = await AtKeys.generate('@alice'.toAtsign(),
+          enrollmentId: 'enroll-1', mintLegacy: false);
+
+      expect(first.enrollmentId, 'enroll-1');
+      expect(first, isNot(second));
     });
 
-    test('MPKAM AtKeys to AtChopsImpl', () {
-      expect(mpkam.toAtChops(), isA<AtChopsImpl>());
+    test('round-trips through toJson', () async {
+      final keys = await AtKeys.generate('@alice'.toAtsign());
+
+      expect(AtKeys.fromJson(keys.toJson()), keys);
     });
 
-    test('MPKAM AtKeys to AtChopsImpl -> throws', () {
-      mpkam.defaultEncryptionPrivateKey = null;
-      expect(() => mpkam.toAtChops(), throwsA(isA<AtException>()));
-    });
+    test('the enrollmentId survives a typed-document round-trip', () async {
+      // enrollmentId is a reserved top-level key rather than legacy payload,
+      // so the typed read path has to carry it across itself.
+      final keys = await AtKeys.generate('@alice'.toAtsign(),
+          enrollmentId: 'enroll-1', mintLegacy: false);
 
-    test('APKAM AtKeys to AtChopsImpl -> throws', () {
-      apkam.apkamPublicKey = null;
-      apkam.defaultEncryptionPrivateKey = null;
-      apkam.apkamSymmetricKey = null;
-      expect(() => apkam.toAtChops(), throwsA(isA<AtException>()));
-    });
+      final reread = AtKeys.fromJson(keys.toJson());
 
-    test('APKAM AtKeys with a null apkamPublicKey -> throws', () {
-      // apkamSymmetricKey is set, so this routes through the APKAM path, which
-      // must throw (not fall through to a null-deref) when apkamPublicKey is null.
-      apkam.apkamPublicKey = null;
-      expect(() => apkam.toAtChops(), throwsA(isA<AtException>()));
-    });
-
-    test('MPKAM AtKeys with a null apkamPublicKey -> throws', () {
-      mpkam.apkamPublicKey = null;
-      expect(() => mpkam.toAtChops(), throwsA(isA<AtException>()));
-    });
-
-    test('MPKAM AtKeys with a null defaultEncryptionPublicKey -> throws', () {
-      mpkam.defaultEncryptionPublicKey = null;
-      expect(() => mpkam.toAtChops(), throwsA(isA<AtException>()));
-    });
-
-    test('MPKAM AtKeys with a null defaultSelfEncryptionKey -> throws', () {
-      mpkam.defaultSelfEncryptionKey = null;
-      expect(() => mpkam.toAtChops(), throwsA(isA<AtException>()));
+      expect(reread.enrollmentId, 'enroll-1');
+      expect(reread.metadata, isEmpty);
+      expect(reread, keys);
     });
   });
 
@@ -170,11 +243,11 @@ void main() {
 
     test('equality compares metadata structurally, not by identity', () {
       // Two jsonDecode calls produce distinct nested map instances.
-      final first = AtKeys()
+      final first = AtKeys(atsign: '@alice'.toAtsign())
         ..metadata = jsonDecode('{"nested": {"a": 1, "list": [1, 2]}}');
-      final same = AtKeys()
+      final same = AtKeys(atsign: '@alice'.toAtsign())
         ..metadata = jsonDecode('{"nested": {"a": 1, "list": [1, 2]}}');
-      final different = AtKeys()
+      final different = AtKeys(atsign: '@alice'.toAtsign())
         ..metadata = jsonDecode('{"nested": {"a": 2, "list": [1, 2]}}');
 
       expect(first, same);
@@ -199,7 +272,7 @@ void main() {
 
     test('getKey disambiguates materials of the same keyId by type', () {
       final pair = rsaKeyPair('shared-pair');
-      final atKeys = AtKeys(keysList: pair);
+      final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: pair);
       final publicMaterial = pair.firstWhere(
           (m) => m.keyPartType == CryptographicKeyType.publicEncryption);
       final privateMaterial = pair.firstWhere(
@@ -216,7 +289,8 @@ void main() {
     });
 
     test('getKey returns null when the keyId has no material of that type', () {
-      final atKeys = AtKeys(keysList: [symmetricKey('shared-id')]);
+      final atKeys = AtKeys(
+          atsign: '@alice'.toAtsign(), keysList: [symmetricKey('shared-id')]);
 
       expect(
         atKeys.getKey('shared-id', CryptographicKeyType.privateDecryption),
@@ -225,13 +299,14 @@ void main() {
     });
 
     test('keysForKeyId returns empty for an unknown keyId', () {
-      final atKeys = AtKeys(keysList: [symmetricKey('shared-id')]);
+      final atKeys = AtKeys(
+          atsign: '@alice'.toAtsign(), keysList: [symmetricKey('shared-id')]);
 
       expect(atKeys.keysForKeyId('nope'), isEmpty);
     });
 
     test('addKey rejects a duplicate keyId', () {
-      final atKeys = AtKeys();
+      final atKeys = AtKeys(atsign: '@alice'.toAtsign());
       atKeys.addKey(symmetricKey('dupe'));
 
       expect(
@@ -245,7 +320,8 @@ void main() {
       // enrollmentId of their own, so the only per-add guard is a duplicate
       // (keyId, keyPartType). Two symmetric keys under different keyIds are
       // fine.
-      final atKeys = AtKeys(keysList: [symmetricKey('first')]);
+      final atKeys = AtKeys(
+          atsign: '@alice'.toAtsign(), keysList: [symmetricKey('first')]);
 
       atKeys.addKey(symmetricKey('second', value: 'b3RoZXI='));
 
@@ -281,7 +357,8 @@ void main() {
 
   group('AtKeys retireKey', () {
     test('marks every material of the group, leaving other fields intact', () {
-      final atKeys = AtKeys(keysList: [...rsaKeyPair('pair')]);
+      final atKeys = AtKeys(
+          atsign: '@alice'.toAtsign(), keysList: [...rsaKeyPair('pair')]);
 
       atKeys.retireKey('pair');
 
@@ -298,7 +375,8 @@ void main() {
     });
 
     test('is idempotent for the same status', () {
-      final atKeys = AtKeys(keysList: [symmetricKey('solo')]);
+      final atKeys =
+          AtKeys(atsign: '@alice'.toAtsign(), keysList: [symmetricKey('solo')]);
 
       atKeys.retireKey('solo');
       atKeys.retireKey('solo');
@@ -310,7 +388,8 @@ void main() {
     });
 
     test('moves a retired key forward to dead', () {
-      final atKeys = AtKeys(keysList: [symmetricKey('solo')]);
+      final atKeys =
+          AtKeys(atsign: '@alice'.toAtsign(), keysList: [symmetricKey('solo')]);
 
       atKeys.retireKey('solo');
       atKeys.retireKey('solo', to: KeyPartStatus.dead);
@@ -319,7 +398,8 @@ void main() {
     });
 
     test('throws on a backward transition', () {
-      final atKeys = AtKeys(keysList: [symmetricKey('solo')]);
+      final atKeys =
+          AtKeys(atsign: '@alice'.toAtsign(), keysList: [symmetricKey('solo')]);
       atKeys.retireKey('solo', to: KeyPartStatus.dead);
 
       expect(
@@ -330,7 +410,8 @@ void main() {
     });
 
     test('throws for an unknown keyId', () {
-      final atKeys = AtKeys(keysList: [symmetricKey('solo')]);
+      final atKeys =
+          AtKeys(atsign: '@alice'.toAtsign(), keysList: [symmetricKey('solo')]);
 
       expect(
         () => atKeys.retireKey('nope'),
@@ -339,7 +420,8 @@ void main() {
     });
 
     test('rejects KeyPartStatus.active as a target', () {
-      final atKeys = AtKeys(keysList: [symmetricKey('solo')]);
+      final atKeys =
+          AtKeys(atsign: '@alice'.toAtsign(), keysList: [symmetricKey('solo')]);
 
       expect(
         () => atKeys.retireKey('solo', to: KeyPartStatus.active),

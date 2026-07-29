@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
+import 'package:at_auth/src/keys/serialization/key_ids.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -16,7 +16,7 @@ void main() {
     test('rejects map update when any legacy field value changes', () {
       final existing = _fixtureLegacyJson();
 
-      for (final key in auth_constants.keySchemaList) {
+      for (final key in KeyIds.keySchemaList) {
         final changedLegacy = Map<String, dynamic>.from(existing);
         changedLegacy[key] = 'changed-${changedLegacy[key]}';
         final candidate = _candidateWithLegacy(changedLegacy);
@@ -35,7 +35,7 @@ void main() {
     test('rejects map update when a legacy field is missing', () {
       final existing = _fixtureLegacyJson();
 
-      for (final key in auth_constants.keySchemaList) {
+      for (final key in KeyIds.keySchemaList) {
         final changedLegacy = Map<String, dynamic>.from(existing)..remove(key);
         final candidate = _candidateWithLegacy(changedLegacy);
 
@@ -85,7 +85,7 @@ void main() {
     test('rejects map update when legacy value types change', () {
       final existing = _fixtureLegacyJson();
 
-      for (final key in auth_constants.keySchemaList) {
+      for (final key in KeyIds.keySchemaList) {
         final changedLegacy = Map<String, dynamic>.from(existing);
         changedLegacy[key] = const [];
         final candidate = _candidateWithLegacy(changedLegacy);
@@ -244,6 +244,67 @@ void main() {
       );
     });
 
+    test('accepts map update setting the enrollmentId for the first time', () {
+      // An approval landing on a keyfile that carried no enrollmentId yet: the
+      // flush in AtEnrollmentImpl.waitForApproval does exactly this.
+      final existing = _documentMap(keys: [_symmetricMaterial()]);
+      final candidate = _documentMap(
+        keys: [_symmetricMaterial()],
+        enrollmentId: 'enroll-1',
+      );
+
+      assurance.validateMapUpdate(existing: existing, candidate: candidate);
+    });
+
+    test('accepts map update leaving the enrollmentId unchanged', () {
+      final existing = _documentMap(
+        keys: [_symmetricMaterial()],
+        enrollmentId: 'enroll-1',
+      );
+      final candidate = _documentMap(
+        keys: [_symmetricMaterial(), _wrapperMaterial()],
+        enrollmentId: 'enroll-1',
+      );
+
+      assurance.validateMapUpdate(existing: existing, candidate: candidate);
+    });
+
+    test('rejects map update repointing an existing enrollmentId', () {
+      // An AtKeys belongs to a single enrollment; a rewrite must never move it.
+      final existing = _documentMap(
+        keys: [_symmetricMaterial()],
+        enrollmentId: 'enroll-1',
+      );
+      final candidate = _documentMap(
+        keys: [_symmetricMaterial()],
+        enrollmentId: 'enroll-2',
+      );
+
+      expect(
+        () => assurance.validateMapUpdate(
+          existing: existing,
+          candidate: candidate,
+        ),
+        throwsA(isA<AtKeysAssuranceException>()),
+      );
+    });
+
+    test('rejects map update dropping an existing enrollmentId', () {
+      final existing = _documentMap(
+        keys: [_symmetricMaterial()],
+        enrollmentId: 'enroll-1',
+      );
+      final candidate = _documentMap(keys: [_symmetricMaterial()]);
+
+      expect(
+        () => assurance.validateMapUpdate(
+          existing: existing,
+          candidate: candidate,
+        ),
+        throwsA(isA<AtKeysAssuranceException>()),
+      );
+    });
+
     test('rejects map update when a versioned document has a non-list keys',
         () {
       // A corrupted keys field must not silently skip material preservation.
@@ -331,11 +392,13 @@ Map<String, dynamic> _documentMap({
   required List<AtKeysMaterial> keys,
   Map<String, dynamic> legacyJson = const {},
   String atsign = '@alice',
+  String? enrollmentId,
 }) {
   return {
     ...legacyJson,
     'version': AtKeys.supportedVersion,
     'atsign': atsign,
+    if (enrollmentId != null) AtConstants.enrollmentId: enrollmentId,
     'keys': encodeAtKeysDocument(keys),
   };
 }

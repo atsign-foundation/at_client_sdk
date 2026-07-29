@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
+import 'package:at_auth/src/keys/serialization/key_ids.dart';
 import 'package:at_commons/at_commons.dart';
 
 class AtKeysAssuranceException extends AtKeysValidationException {
@@ -13,8 +14,6 @@ class AtKeysAssuranceException extends AtKeysValidationException {
 /// structural invariants (`validateAddKey`, `validateMapUpdate`).
 class AtKeysAssurance {
   const AtKeysAssurance();
-
-  static const _reservedTopLevelKeys = {'version', 'atsign', 'keys'};
 
   // ---- low-level parsing/value primitives, called by the models' fromJson ----
 
@@ -138,6 +137,7 @@ class AtKeysAssurance {
       _assertSame(existing['atsign'], candidate['atsign'], 'map.atsign');
       _assertSame(existing['version'], candidate['version'], 'map.version');
     }
+    _assertEnrollmentIdNotRepointed(existing, candidate);
     _assertLegacyPreserved(
       _legacyJsonOf(existing),
       _legacyJsonOf(candidate),
@@ -153,15 +153,35 @@ class AtKeysAssurance {
     return parseAtKeysDocument(expectList(json['keys'], 'keys'));
   }
 
-  /// Legacy fields are just "everything except the reserved typed-keys
-  /// top-level keys" — no separate nested blob to unwrap.
-  Map<String, dynamic> _legacyJsonOf(Map<String, dynamic> json) {
-    if (!json.containsKey('version')) {
-      return json;
+  /// An `AtKeys` belongs to a single enrollment, so a rewrite may set the
+  /// enrollmentId for the first time (an approval landing on a keyfile that
+  /// carried none) but may never repoint an existing one at a different
+  /// enrollment.
+  void _assertEnrollmentIdNotRepointed(
+    Map<String, dynamic> existing,
+    Map<String, dynamic> candidate,
+  ) {
+    final before = existing[AtConstants.enrollmentId];
+    final after = candidate[AtConstants.enrollmentId];
+    if (before != null && before != after) {
+      throw AtKeysAssuranceException(
+          'map.${AtConstants.enrollmentId} cannot change once set '
+          '($before -> $after)');
     }
+  }
+
+  /// Legacy fields are just "everything except the structural top-level keys"
+  /// (see [KeyIds.reservedTopLevelKeys]) — no separate nested blob to unwrap.
+  /// `enrollmentId` is structural, so it is checked by
+  /// [_assertEnrollmentIdNotRepointed] rather than pinned as legacy payload.
+  /// Filtered for both shapes, not just the typed one: a legacy file carries
+  /// `enrollmentId` flat at the top level too, and it must be governed by the
+  /// same rule either way.
+  Map<String, dynamic> _legacyJsonOf(Map<String, dynamic> json) {
     return {
       for (final entry in json.entries)
-        if (!_reservedTopLevelKeys.contains(entry.key)) entry.key: entry.value,
+        if (!KeyIds.reservedTopLevelKeys.contains(entry.key))
+          entry.key: entry.value,
     };
   }
 
