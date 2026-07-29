@@ -1,10 +1,8 @@
 import 'package:at_auth/src/at_auth_impl.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
-import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -17,7 +15,6 @@ abstract interface class AtAuth {
 
   factory AtAuth.create(
       {AtLookUp? atLookUp,
-      AtChops? atChops,
       CramAuthenticator? cramAuthenticator,
       PkamAuthenticator? pkamAuthenticator,
       AtEnrollment? atEnrollmentBase}) {
@@ -28,12 +25,15 @@ abstract interface class AtAuth {
         atEnrollment: atEnrollmentBase);
   }
 
-  /// Authenticate method is invoked when an atsign wants to authenticate to secondary server with an .atKeys file
+  /// Authenticates an atsign to its atServer with PKAM.
   ///
-  /// Step 1. Read the keys from AtKeysIo implementation
-  /// - Can also be brought via AtAuthRequest.atAuthKeys
+  /// Step 1. Read the keys from the request's [AtKeysIo] — that is the only
+  /// way keys enter authentication.
   ///
-  /// Step 2  Perform pkam authentication
+  /// Step 2. Perform pkam authentication.
+  ///
+  /// Returns the [AtAuthSession] to hand to client creation. Failure throws
+  /// [AtAuthenticationException]; there is no unsuccessful return value.
   Future<AtAuthSession> authenticate(AtAuthRequest atAuthRequest);
 
   /// Onboard method is invoked when an atsign is activated for the first time from a client app.

@@ -1,4 +1,3 @@
-import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
@@ -28,62 +27,85 @@ sealed class AuthRequest {
 }
 
 class AtOnboardingRequest extends AuthRequest {
+  /// The app this atSign is being onboarded from; recorded on the first
+  /// enrollment so later enrollments can be attributed.
+  final String appName;
+
+  /// The device this atSign is being onboarded on.
+  final String deviceName;
+
   /// Constructor for [AtOnboardingRequest]
-  /// [atSign] is the atSign for onboarding
+  ///
+  /// [atsign] is the atSign to onboard, and [atKeysIo] is where its freshly
+  /// minted keys are persisted (e.g. file system, keychain, secure element).
   ///
   /// optional:
-  /// [rootDomain] is the default domain of the root server (e.g. root.atsign.org, 64)
-  /// [appName] is the name of the app
-  /// [deviceName] is the name of the device
-  /// [atKeysIo] controls how AtKeys are loaded and saved (e.g. file system, keychain, secure element)
-  /// [atKeys] are the keys for authentication of an atSign
-
+  /// [rootDomain] is the domain and port of the atDirectory
+  ///   (default: root.atsign.org, 64)
+  /// [appName]/[deviceName] name the first enrollment
+  /// [retryOptions] bounds atServer reachability checks — see [RetryOptions],
+  ///   which defaults to a 5 minute budget for onboarding
   AtOnboardingRequest(
-    super.atSign,
+    super.atsign,
     super.atKeysIo, {
     super.rootDomain,
     super.retryOptions,
+    this.appName = 'firstApp',
+    this.deviceName = 'firstDevice',
   });
-
-  // Default root domain and port
-  String appName = "firstApp";
-  String deviceName = "firstDevice";
 }
 
 class AtAuthRequest extends AuthRequest {
   /// Constructor for [AtAuthRequest]
-  /// [atSign] is the atSign for authentication
   ///
-  /// [atKeysIo] controls how AtKeys are loaded and saved (e.g. file system, keychain, secure element)
+  /// [atsign] is the atSign to authenticate, and [atKeysIo] is where its keys
+  /// are read from (e.g. file system, keychain, secure element).
   ///
   /// optional:
-  /// [rootDomain] is the default domain of the root server (e.g. root.atsign.org, 64)
+  /// [rootDomain] is the domain and port of the atDirectory
+  ///   (default: root.atsign.org, 64)
+  /// [retryOptions] bounds atServer reachability checks — see [RetryOptions],
+  ///   which defaults to a 30 second budget for authentication
   AtAuthRequest(
-    super.atSign,
+    super.atsign,
     super.atKeysIo, {
     super.rootDomain,
     super.retryOptions,
   });
 
+  /// The enrollment to authenticate as. When null, `AtAuth.authenticate` falls
+  /// back to the enrollmentId stored in the keys it reads.
   String? enrollmentId;
 }
 
+/// Bounds `AtAuth.validateAtServer`'s reach-the-atServer loop, which retries
+/// every [retryDelay] until [overallTimeout] is spent and then throws
+/// `AtTimeoutException`. There is no retry *count*: the deadline is the only
+/// bound.
+///
+/// **Leaving [overallTimeout] null does not mean "no deadline" — it means the
+/// deadline depends on which request this is attached to:**
+///
+/// | Request                | Default budget | Why |
+/// |------------------------|----------------|-----|
+/// | [AtAuthRequest]        | 30s            | a dead network should fail fast |
+/// | [AtOnboardingRequest]  | 5 min          | a newly-registered atSign can take minutes to be provisioned |
+///
+/// (30s is `AtNetworkTimeouts.effectiveDefault`; 5 min is
+/// `AtNetworkTimeouts.defaultOnboardingTimeout`.) Set [overallTimeout]
+/// explicitly to override either.
 class RetryOptions {
   static const defaultRetryOptions =
       RetryOptions(retryDelay: Duration(milliseconds: 100));
 
+  /// How long to wait between attempts.
   final Duration retryDelay;
 
-  /// The maximum total wall-clock to spend reaching/validating the atServer —
-  /// the whole retry/poll loop. When null, the default depends on the request:
-  /// authentication uses the short process-wide default
-  /// (`AtNetworkTimeouts.effectiveDefault`, 30s) so a dead network fails fast,
-  /// while ONBOARDING uses `AtNetworkTimeouts.defaultOnboardingTimeout` (5 min)
-  /// because a newly-registered atSign can take minutes to be provisioned. This
-  /// bounds the loop and is deliberately NOT clamped to
-  /// `AtNetworkTimeouts.maxAllowed` — that cap applies to individual network
-  /// operations. Note [maxRetries] no longer bounds this loop; this deadline
-  /// does (the loop retries every [retryDelay] until the budget is spent).
+  /// The total wall-clock budget for reaching the atServer. See the class doc
+  /// for what null means — it is request-dependent, not unbounded.
+  ///
+  /// Deliberately NOT clamped to `AtNetworkTimeouts.maxAllowed`: that cap
+  /// applies to individual network operations, not to this overall loop.
   final Duration? overallTimeout;
 
   static Duration cap(Duration time, Duration cap) => time > cap ? cap : time;

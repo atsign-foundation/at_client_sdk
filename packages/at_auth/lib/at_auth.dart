@@ -3,9 +3,9 @@ library;
 
 export 'src/at_auth.dart';
 
-// Contains models related to onboarding and authentication requests and responses.
+// Contains models related to onboarding and authentication requests, and the
+// AtAuthSession that authenticate/onboard hand back.
 export 'src/auth/models/at_auth_requests.dart';
-export 'src/auth/models/at_auth_responses.dart';
 export 'src/auth/models/at_auth_session.dart';
 // PKAM signing strategies (AtPkamSigner implementations) for at_lookup.
 export 'src/auth/pkam_signers.dart';
