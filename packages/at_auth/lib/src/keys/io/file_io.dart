@@ -5,15 +5,26 @@ import 'dart:typed_data';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
-import 'package:at_auth/src/keys/serialization/auth_bootstrap.dart';
+import 'package:at_auth/src/keys/serialization/key_ids.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 
 /// File-backed `.atKeys` storage.
 class FileAtKeysIo extends WrittenAtKeysIo {
-  String Function(String)? filePath;
+  /// Resolves the keyfile path for an atsign. Receives a normalized [Atsign],
+  /// so the same identity always maps to the same path regardless of how the
+  /// caller spelled it.
+  String Function(Atsign)? filePath;
   String? passPhrase;
 
+  /// When [filePath] is omitted, keys resolve to
+  /// `<home>/.atsign/keys/<atsign>_key.atKeys`. To put them anywhere else —
+  /// including under a different home — supply [filePath], composing it with
+  /// [getDefaultAtKeysFilePath] to keep the same layout:
+  ///
+  /// ```dart
+  /// FileAtKeysIo(filePath: (atsign) => getDefaultAtKeysFilePath(myHome, atsign));
+  /// ```
   FileAtKeysIo({this.filePath, this.passPhrase}) {
     filePath ??=
         (atsign) => getDefaultAtKeysFilePath(getHomeDirectory()!, atsign);
@@ -29,11 +40,11 @@ class FileAtKeysIo extends WrittenAtKeysIo {
 
     final json = await _readAtRestDocument(file);
     final plaintextJson = await _selfDecryptLegacyFields(json);
-    return AtKeys.fromJson(plaintextJson, atsign: atsign.toAtsign());
+    return AtKeys.fromJson(plaintextJson, atsign: atsign);
   }
 
   @override
-  Future write(String atsign, AtKeys atKeys) async {
+  Future<void> write(Atsign atsign, AtKeys atKeys) async {
     final file = File(filePath!(atsign));
     if (file.existsSync()) {
       throw AtKeysFileOverwriteException(
@@ -64,11 +75,10 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   }
 
   Future<Map<String, dynamic>> _encodeAtRest(
-      AtKeys atKeys, String atsign) async {
-    final normalized = atsign.toAtsign();
-    if (atKeys.atsign != normalized) {
+      AtKeys atKeys, Atsign atsign) async {
+    if (atKeys.atsign != atsign) {
       throw AtKeysValidationException(
-          'AtKeys belongs to ${atKeys.atsign} but is being persisted for $normalized');
+          'AtKeys belongs to ${atKeys.atsign} but is being persisted for $atsign');
     }
     return _selfEncryptLegacyFields(atKeys.toJson());
   }

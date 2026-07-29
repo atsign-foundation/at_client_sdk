@@ -71,8 +71,8 @@ void main() {
         );
         final legacyKeys = legacyAtKeys();
 
-        await fileAtKeysIo.write('@alice', legacyKeys);
-        final readKeys = await fileAtKeysIo.read('@alice');
+        await fileAtKeysIo.write('@alice'.toAtsign(), legacyKeys);
+        final readKeys = await fileAtKeysIo.read('@alice'.toAtsign());
 
         expectLegacyAtKeys(readKeys, legacyKeys);
       });
@@ -94,9 +94,9 @@ void main() {
         );
         final legacyKeys = legacyAtKeys();
 
-        await fileAtKeysIo.write('@alice', legacyKeys);
+        await fileAtKeysIo.write('@alice'.toAtsign(), legacyKeys);
 
-        final keys = await fileAtKeysIo.read('@alice');
+        final keys = await fileAtKeysIo.read('@alice'.toAtsign());
         keys.addKey(symmetricKey('appended', value: 'YXBwZW5kZWQ='));
         await fileAtKeysIo.flush('@alice'.toAtsign(), keys);
 
@@ -106,7 +106,7 @@ void main() {
           {path, '$path.bak'},
         );
 
-        final readKeys = await fileAtKeysIo.read('@alice');
+        final readKeys = await fileAtKeysIo.read('@alice'.toAtsign());
         expectLegacyAtKeys(readKeys, legacyKeys);
         expect(readKeys.keysForKeyId('appended'), isNotEmpty);
       });

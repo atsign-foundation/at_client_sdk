@@ -38,7 +38,7 @@ export 'src/keys/serialization/assurance.dart';
 export 'src/keys/serialization/passphrase_envelope.dart';
 export 'src/keys/io/at_keys_io.dart';
 export 'src/keys/io/file_io.dart';
-export 'src/keys/io/memory_io.dart';
+export 'src/keys/io/ephemeral_io.dart';
 
 /// Classes for registrar services
 export 'src/registrar/registrar.dart';
