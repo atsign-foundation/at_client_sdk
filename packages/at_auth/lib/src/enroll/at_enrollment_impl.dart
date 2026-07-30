@@ -126,8 +126,10 @@ class AtEnrollmentImpl implements AtEnrollment {
   }
 
   @override
-  Future<AtEnrollmentResponse> approve(EnrollmentApproval approval,
-      AtLookUp atLookUp, AtAuthSession session) async {
+  Future<AtEnrollmentResponse> approve(
+    EnrollmentApproval approval,
+    AtAuthSession session,
+  ) async {
     // The approver's own encryption private key and self-encryption key, read
     // from its session's key source — the same way every other consumer gets
     // keys across a boundary.
@@ -176,7 +178,11 @@ class AtEnrollmentImpl implements AtEnrollment {
           AtConstants.apkamSelfEncryptionKeyIV:
               base64Encode(selfEncryptionKeyIV.ivBytes)
         })}';
-
+    final atLookUp = AtLookupImpl(
+      session.atsign,
+      session.rootDomain.rootDomain,
+      session.rootDomain.rootPort,
+    );
     String? enrollResponse =
         await atLookUp.executeCommand('$command\n', auth: true);
     enrollResponse = enrollResponse?.replaceFirst(RegExp(r'^data:'), '');
@@ -190,11 +196,17 @@ class AtEnrollmentImpl implements AtEnrollment {
 
   @override
   Future<AtEnrollmentResponse> deny(
-      EnrollmentDenial denial, AtLookUp atLookUp, AtAuthSession session) async {
+    EnrollmentDenial denial,
+    AtAuthSession session,
+  ) async {
     EnrollVerbBuilder denyEnrollmentBuilder = EnrollVerbBuilder()
       ..enrollmentId = denial.enrollmentId
       ..operation = EnrollOperationEnum.deny;
-
+    final atLookUp = AtLookupImpl(
+      session.atsign,
+      session.rootDomain.rootDomain,
+      session.rootDomain.rootPort,
+    );
     String? enrollResponse = await atLookUp
         .executeCommand(denyEnrollmentBuilder.buildCommand(), auth: true);
 
@@ -208,13 +220,19 @@ class AtEnrollmentImpl implements AtEnrollment {
   }
 
   @override
-  Future<AtEnrollmentResponse> revoke(EnrollmentRevocation revocation,
-      AtLookUp atLookUp, AtAuthSession session) async {
+  Future<AtEnrollmentResponse> revoke(
+    EnrollmentRevocation revocation,
+    AtAuthSession session,
+  ) async {
     EnrollVerbBuilder revokeEnrollVerbBuilder = EnrollVerbBuilder()
       ..enrollmentId = revocation.enrollmentId
       ..operation = EnrollOperationEnum.revoke
       ..force = revocation.force;
-
+    final atLookUp = AtLookupImpl(
+      session.atsign,
+      session.rootDomain.rootDomain,
+      session.rootDomain.rootPort,
+    );
     String? enrollmentResponseStr = await atLookUp
         .executeCommand(revokeEnrollVerbBuilder.buildCommand(), auth: true);
 
@@ -237,7 +255,7 @@ class AtEnrollmentImpl implements AtEnrollment {
   /// carrying the approved enrollmentId and the authenticated connection —
   /// ready for `AtClientManager.fromAuthSession(...)`.
   @override
-  Future<void> waitForApproval(
+  Future<AtEnrollmentResponse> waitForApproval(
     PendingEnrollment pending, {
     Duration retryInterval = const Duration(seconds: 2),
     bool logProgress = true,
@@ -333,13 +351,18 @@ class AtEnrollmentImpl implements AtEnrollment {
     } else {
       await keysIo.write(atsign, pending.keys);
     }
-    pending.session = AtAuthSession(
+    final qualifiedSession = AtAuthSession(
       atsign: atsign,
       rootDomain: rootDomain,
       namespace: pending.session.namespace,
       atKeysIo: keysIo,
       enrollmentId: pending.enrollmentId,
       atLookUp: atLookup,
+    );
+    return AtEnrollmentResponse(
+      pending.enrollmentId,
+      pending.enrollStatus,
+      session: qualifiedSession,
     );
   }
 

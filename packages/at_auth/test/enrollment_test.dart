@@ -137,8 +137,8 @@ void main() {
         encryptedApkamSymmetricKey: encryptedAPKAMSymmetricKey,
       );
 
-      AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase
-          .approve(approval, mockAtLookUp, approverSession);
+      AtEnrollmentResponse atEnrollmentResponse =
+          await atEnrollmentBase.approve(approval, approverSession);
 
       expect(atEnrollmentResponse.enrollmentId,
           '4be2d358-074d-4e3b-99f3-64c4da01532f');
@@ -170,7 +170,7 @@ void main() {
           '4be2d358-074d-4e3b-99f3-64c4da01532f');
 
       AtEnrollmentResponse atEnrollmentResponse =
-          await atEnrollmentBase.deny(denial, mockAtLookUp, denySession);
+          await atEnrollmentBase.deny(denial, denySession);
 
       expect(atEnrollmentResponse.enrollmentId,
           '4be2d358-074d-4e3b-99f3-64c4da01532f');

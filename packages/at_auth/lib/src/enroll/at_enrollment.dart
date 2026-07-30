@@ -113,7 +113,6 @@ abstract class AtEnrollment {
   /// ```
   Future<AtEnrollmentResponse> approve(
     EnrollmentApproval approval,
-    AtLookUp atLookUp,
     AtAuthSession session,
   );
 
@@ -139,7 +138,6 @@ abstract class AtEnrollment {
   /// ```
   Future<AtEnrollmentResponse> deny(
     EnrollmentDenial denial,
-    AtLookUp atLookUp,
     AtAuthSession session,
   );
 
@@ -164,7 +162,6 @@ abstract class AtEnrollment {
   /// ```
   Future<AtEnrollmentResponse> revoke(
     EnrollmentRevocation revocation,
-    AtLookUp atLookUp,
     AtAuthSession session,
   );
 
@@ -214,9 +211,8 @@ abstract class AtEnrollment {
   /// session to persist into and the APKAM keys minted at submit time, which
   /// this call completes with the material fetched from the atServer.
   ///
-  /// On success `pending.session` is replaced with a session carrying the
-  /// approved enrollmentId and the authenticated connection.
-  Future<void> waitForApproval(
+  /// On success a fully qualified `AtEnrollmentResponse` is created.
+  Future<AtEnrollmentResponse> waitForApproval(
     PendingEnrollment pending, {
     bool logProgress = false,
     int maxRetries = 48,
