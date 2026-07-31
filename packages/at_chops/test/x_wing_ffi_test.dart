@@ -26,7 +26,8 @@ void main() {
       }
     });
 
-    test('FFI key generation matches the pure-Dart public key for the same seed',
+    test(
+        'FFI key generation matches the pure-Dart public key for the same seed',
         () async {
       if (lib == null) {
         fail('libcrypto not available on this host');
@@ -89,8 +90,8 @@ void main() {
       final ffi = XWingFfiAlgo.fromLib(lib);
       final kp = await ffi.generateKeyPair();
       final enc = await ffi.encapsulate(kp.publicKey);
-      final ss =
-          await XWingPureDartAlgo.instance.decapsulate(kp.secretKey, enc.ciphertext);
+      final ss = await XWingPureDartAlgo.instance
+          .decapsulate(kp.secretKey, enc.ciphertext);
       expect(ss, equals(enc.sharedSecret));
     });
 
@@ -109,7 +110,8 @@ void main() {
       expect(ss, equals(enc.sharedSecret));
     });
 
-    test('a tampered ciphertext decapsulates to a different secret, not an error',
+    test(
+        'a tampered ciphertext decapsulates to a different secret, not an error',
         () async {
       if (lib == null) {
         fail('libcrypto not available on this host');

@@ -43,8 +43,10 @@ void main() {
     test(
         'Test invalid rsa verification - sign with sha256 and verify with sha512',
         () async {
-      final sha256Algo = RsaSigningAlgo(hashingAlgoType: HashingAlgoType.sha256);
-      final sha512Algo = RsaSigningAlgo(hashingAlgoType: HashingAlgoType.sha512);
+      final sha256Algo =
+          RsaSigningAlgo(hashingAlgoType: HashingAlgoType.sha256);
+      final sha512Algo =
+          RsaSigningAlgo(hashingAlgoType: HashingAlgoType.sha512);
       final (:publicKey, :secretKey) = await sha256Algo.generateKeyPair();
       final signature =
           await sha256Algo.signBytes(message, secretKey: secretKey);
@@ -52,9 +54,7 @@ void main() {
           signature: signature, publicKey: publicKey);
       expect(verifyResult, false);
     });
-    test(
-        'Test rsa signing - md5 hashing algo not supported',
-        () async {
+    test('Test rsa signing - md5 hashing algo not supported', () async {
       final rsaSigningAlgo =
           RsaSigningAlgo(hashingAlgoType: HashingAlgoType.md5);
       final (:secretKey, :publicKey) = await rsaSigningAlgo.generateKeyPair();
