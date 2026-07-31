@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
 import 'package:at_commons/at_commons.dart';
@@ -122,6 +123,9 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
   }
 
   // ── AtSignatureAlgorithm ────────────────────────────────────────────────
+
+  @override
+  SigningAlgoType get signingAlgoType => SigningAlgoType.mldsa65;
 
   /// Sign [message] with the raw 4032-byte [secretKey].
   ///

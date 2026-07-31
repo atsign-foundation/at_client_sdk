@@ -74,13 +74,24 @@ final decrypted = await aes.decrypt(encrypted, iv: iv);
 ### Signing and verification
 
 ```dart
-final keyPair = RsaKeyPair.generate();
-final signing = RsaSigningAlgo(keyPair, HashingAlgoType.sha256);
+final signing = RsaSignatureAlgo.rsa2048(); // or .rsa4096(), or hashing: sha512
+final kp = await signing.generateKeyPair();
 final message = Uint8List.fromList(utf8.encode('data to sign'));
 
-final signature = signing.sign(message);
-final valid = signing.verify(message, signature);
+final signature = await signing.signBytes(message, secretKey: kp.secretKey);
+final valid = await signing.verifyBytes(message,
+    signature: signature, publicKey: kp.publicKey);
+
+// Both halves of the wire identifier come off the algorithm itself
+signing.signingAlgoType.name; // 'rsa2048'
+signing.hashingAlgoType.name; // 'sha256'
 ```
+
+The modulus size is fixed per instance because `signingAlgoType` has to answer
+before any key is in scope; `signBytes` rejects a key whose size contradicts it
+rather than signing under the wrong label. Note `rsa4096` is not in the
+atServer's `pkam:` grammar, so `.rsa4096()` is for data and envelope signing
+only.
 
 ### ML-DSA-65 (post-quantum signing, pure-Dart)
 
@@ -140,6 +151,10 @@ final signature =
     await AtPqc.mlDsa65.signBytes(message, secretKey: kp.privateKeyBytes);
 final valid = await AtPqc.mlDsa65.verifyBytes(message,
     signature: signature, publicKey: kp.publicKeyBytes);
+
+// Every AtSignatureAlgorithm reports its own wire identifier, so you don't
+// have to track which backend resolved in order to label the signature.
+AtPqc.mlDsa65.signingAlgoType.name; // 'mldsa65'
 
 // KEM — AtPqc.xWing is typed as AtKemAlgorithm
 final xwKp = await XWingKeyPair.generate();
