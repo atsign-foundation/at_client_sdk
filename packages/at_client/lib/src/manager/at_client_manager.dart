@@ -190,7 +190,7 @@ class AtClientManager {
   /// Set [reuse] to adopt auth's already-authenticated connection
   /// ([session.atLookUp]) and skip the second handshake — the perf escape hatch.
   /// When false (default) the client opens its own fresh socket.
-  Future<AtClientManager> setFromAuthSession(
+  Future<AtClientManager> fromAuthSession(
       AtAuthSession session, AtClientPreference preference,
       {AtServiceFactory? serviceFactory, bool reuse = false}) async {
     // Destructure rootDomain onto the preference for now. A follow-up will add
@@ -199,9 +199,8 @@ class AtClientManager {
     preference.rootPort = session.rootDomain.rootPort;
 
     if (reuse && session.atLookUp == null) {
-      _logger
-          .warning('setFromAuthSession(reuse: true) but the session carries no '
-              'authenticated AtLookUp; opening a fresh connection instead.');
+      _logger.warning('fromAuthSession(reuse: true) but the session carries no '
+          'authenticated AtLookUp; opening a fresh connection instead.');
     }
 
     return setCurrentAtSign(session.atSign, session.namespace, preference,

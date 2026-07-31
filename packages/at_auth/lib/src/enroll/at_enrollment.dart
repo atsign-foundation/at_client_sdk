@@ -62,7 +62,7 @@ abstract class AtEnrollment {
   ///     AtEnrollmentResponse atEnrollmentResponse =
   ///         await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
   ///     await atEnrollmentBase.waitForApproval(atEnrollmentResponse);
-  ///     // atEnrollmentResponse.session -> AtClientManager.setFromAuthSession(...)
+  ///     // atEnrollmentResponse.session -> AtClientManager.fromAuthSession(...)
   ///```
   ///
   /// The [atLookUp] parameter is used to perform lookups to secondary server to submit an enrollment request.

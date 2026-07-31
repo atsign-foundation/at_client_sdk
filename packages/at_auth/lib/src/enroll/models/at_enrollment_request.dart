@@ -51,14 +51,17 @@ class AtEnrollmentRequest extends EnrollmentRequest {
 
   AtEnrollmentRequest({
     this.session,
-    @Deprecated('Provide `session` instead; its atSign is used.') String? atSign,
+    @Deprecated('Provide `session` instead; its atSign is used.')
+    String? atSign,
     @Deprecated('Provide `session` instead; its rootDomain is used.')
     AtRootDomain? rootDomain,
     required super.appName,
     required super.deviceName,
+    @Deprecated('Provide `session` instead; it contains a AtKeysIo to use.')
     super.apkamPublicKey,
     required this.otp,
     required this.namespaces,
+    @Deprecated('Provide `session` instead; it contains a AtKeysIo to use.')
     this.encryptedAPKAMSymmetricKey,
     this.apkamKeysExpiryDuration,
   }) : super(

@@ -17,7 +17,7 @@ class AtAuthSession {
   final String? enrollmentId;
 
   /// Auth's already-authenticated connection, carried so the client can *opt in*
-  /// to reusing it (`setFromAuthSession(..., reuse: true)`) and skip a second
+  /// to reusing it (`fromAuthSession(..., reuse: true)`) and skip a second
   /// PKAM handshake. The default hand-off ignores this and rebuilds a fresh
   /// connection from [atKeysIo]; this is only the perf escape hatch.
   final AtLookUp? atLookUp;
