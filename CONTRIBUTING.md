@@ -98,7 +98,7 @@ To prepare your dedicated GitHub repository:
 ## Package Documentation
 
 Some critical packages will contain a docs/ directory to document critical decisions / future direction. All these
-documents should follow the [`docs/packages/devdocs_template.md`](docs/packages/devdoc_template.md).
+documents should follow the [`docs/packages/devdoc_template.md`](docs/packages/devdoc_template.md).
 
 ## Updating the AI Agent Skill
 
