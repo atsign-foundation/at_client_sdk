@@ -89,7 +89,32 @@
     {
       "id": 18,
       "prompt": "My Flutter app fails to authenticate an atSign with SecondaryNotFoundException: 'No entry in atDirectory for @alice'. What does this mean and how do I fix it?",
-      "expected_output": "Explains the atSign isn't activated/registered — its atServer address isn't in the atDirectory yet (or the atSign string is mistyped). An atSign must be activated once (via CRAM onboarding / Flow 1, an onboarding app, or the registrar) before existing-keys / keychain / APKAM login can resolve it. Fix: activate the atSign first, then authenticate; also verify the atSign is spelled correctly."
+      "expected_output": "Explains the atsign isn't activated/registered — its atServer address isn't in the atDirectory yet (or the atsign string is mistyped). An atsign must be activated once (via CRAM onboarding / Flow 1, an onboarding app, or the registrar) before existing-keys / keychain / APKAM login can resolve it. Fix: activate the atsign first, then authenticate; also verify the atsign is spelled correctly."
+    },
+    {
+      "id": 19,
+      "prompt": "Process A writes a coordination value with atClient.put() and process B (a different atsign) immediately reads it with get() but sees nothing. How do I make the write and the read hit the atServer directly instead of waiting for sync?",
+      "expected_output": "Identifies the WRITE as the problem: with the default AtClientPreference.remoteLocalPref = RemoteLocalPref.localOnly, put lands on the local secondary and reaches the atServer later via background sync. Fix: put with putRequestOptions: PutRequestOptions()..useRemoteAtServer = true. Notes B's read of another atsign's (non-cached:) key is already a remote lookup by definition; if a stale cached: copy interferes, GetRequestOptions()..bypassCache = true forces a fresh read from the owner's atServer (and GetRequestOptions()..useRemoteAtServer = true covers same-atsign read-your-write). May mention the client-wide alternative remoteLocalPref = RemoteLocalPref.remoteOnly. Notes remote ops cost a round-trip / fail offline and are for coordination or read-your-write cases — AtCollection data stays on the default synced path (collections take no per-operation options; they follow the client-wide preference)."
+    },
+    {
+      "id": 20,
+      "prompt": "I'm generating the pubspec.yaml for a new atPlatform Flutter app. What version should I pin at_client and at_client_flutter to?",
+      "expected_output": "Advises NOT to hardcode a version constraint. Says to run `dart pub add at_client_flutter` (which re-exports at_client) and let pub resolve the latest compatible release. Explains pinned constraints go stale and cause resolution conflicts, and that stability comes from a fixed typeTag string literal, not a pinned SDK version."
+    },
+    {
+      "id": 21,
+      "prompt": "I have an agent running as @server and apps running as other atsigns that need to send it a request and get a computed answer back. What's the right way to build this request/response flow?",
+      "expected_output": "Recommends AtRpc/AtRpcClient (exported from at_client) rather than hand-rolled notification plumbing or raw put/get polling. Client side: AtRpcClient(serverAtsign:, atClient:, baseNameSpace:, domainNameSpace:) and await client.call(payload) which returns the success response payload. Server side: AtRpc.server(..., requestHandler:, allowList:, allowAll:, enableRequestMutex:) then rpc.start(). Mentions allowList filtering, that AtRpcResp has only ack/nack static helpers (success/error use the main constructor), and that durable results belong in an AtCollection."
+    },
+    {
+      "id": 22,
+      "prompt": "I run three instances of the same agent under one atsign for redundancy, and every task gets processed three times. How do I make exactly one instance handle each task?",
+      "expected_output": "Shows the immutable-mutex race: an AtKey with Metadata()..immutable = true and a ttl, written with PutRequestOptions()..useRemoteAtServer = true. States that the LOSING put() THROWS (it does not return false) with no typed exception — detect contention by checking the error text for 'immutable', as AtRpc._tryAcquireSessionMutex does. Mentions TTL auto-release, that AtRpc.server(enableRequestMutex: true) packages this for RPC responders, the stateless alternative (ServiceFactoryWithNoOpSyncService from at_cli_commons, NOT at_client), and that each instance needs its own hiveStoragePath/commitLogPath."
+    },
+    {
+      "id": 23,
+      "prompt": "I'm writing a headless Dart daemon (no Flutter, no UI) that authenticates with a .atKeys file and then uses collections and notifications. What's the simplest way to set up the AtClient?",
+      "expected_output": "Recommends CLIBase.fromCommandLineArgs(args) from at_cli_commons — one line that handles arg parsing, .atKeys loading, and PKAM auth, returning a ready AtClient. Shows adding at_client and at_cli_commons. May cite the collections_todos.dart example (packages/at_client/example/bin/). Does NOT hand-roll AtOnboardingService/keyfile parsing or use Flutter dialog classes."
     }
   ]
 }
