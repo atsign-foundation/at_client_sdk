@@ -119,7 +119,7 @@ void main() async {
         () async {
       var atSign = 'registeredAtSign1';
       final customCache = CacheableSecondaryAddressFinder(
-        rootDomain, rootPort,
+          rootDomain, rootPort,
           secondaryFinder: mockSecondaryFinder,
           cacheDuration: Duration(minutes: 1));
       await customCache.findSecondary(atSign);
@@ -128,7 +128,7 @@ void main() async {
       expect(customCache.getCacheExpiryTime(atSign), isNotNull);
       expect(
           (approxExpiry - customCache.getCacheExpiryTime(atSign)!) < 100,
-        true);
+          true);
     });
 
     // TODO Why are these tests commented out?
