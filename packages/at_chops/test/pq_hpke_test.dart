@@ -14,8 +14,9 @@ final class _FixedKem implements AtKemAlgorithm {
   final Uint8List _ct;
   _FixedKem(this._ss, this._ct);
   @override
-  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair() async =>
-      throw UnsupportedError('not used in this test');
+  Future<({Uint8List publicKey, Uint8List secretKey})>
+      generateKeyPair() async =>
+          throw UnsupportedError('not used in this test');
   @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
           Uint8List publicKey) async =>
@@ -28,8 +29,8 @@ final class _FixedKem implements AtKemAlgorithm {
 
 Uint8List _utf8(String s) => Uint8List.fromList(utf8.encode(s));
 
-Matcher _opensWith(PqOpenFailure reason) => throwsA(isA<PqOpenException>()
-    .having((e) => e.reason, 'reason', reason));
+Matcher _opensWith(PqOpenFailure reason) =>
+    throwsA(isA<PqOpenException>().having((e) => e.reason, 'reason', reason));
 
 void main() {
   final xwing = XWingPureDartAlgo.instance;
@@ -115,7 +116,9 @@ void main() {
       final kp = await xwing.generateKeyPair();
       final envelope = await pqSeal(xwing, kp.publicKey, _utf8('payload'),
           info: _utf8('context-seal'));
-      expect(() => pqOpen(xwing, kp.secretKey, envelope, info: _utf8('context-open')),
+      expect(
+          () => pqOpen(xwing, kp.secretKey, envelope,
+              info: _utf8('context-open')),
           _opensWith(PqOpenFailure.authFailure));
     });
 
@@ -123,7 +126,8 @@ void main() {
       final kp = await xwing.generateKeyPair();
       final envelope = await pqSeal(xwing, kp.publicKey, _utf8('payload'),
           aad: _utf8('aad-seal'));
-      expect(() => pqOpen(xwing, kp.secretKey, envelope, aad: _utf8('aad-open')),
+      expect(
+          () => pqOpen(xwing, kp.secretKey, envelope, aad: _utf8('aad-open')),
           _opensWith(PqOpenFailure.authFailure));
     });
   });
@@ -158,7 +162,8 @@ void main() {
     // seal with a _FixedKem double (see below) and print the envelope hex.
 
     test('fixed-KEM construction KAT: seal is deterministic + opens', () async {
-      final ss = Uint8List.fromList(List<int>.generate(32, (i) => i)); // [0x00..0x1f]
+      final ss =
+          Uint8List.fromList(List<int>.generate(32, (i) => i)); // [0x00..0x1f]
       final ct = fromHex('aabbccddeeff0011');
       final pt = _utf8('hpke-style seal KAT v1');
       final info = _utf8('kat-info');
@@ -223,7 +228,8 @@ void main() {
 
       final envelope = fromHex(goldenHex);
       // sanity: kemCt slice equals the published X-Wing vector ciphertext.
-      expect(toHex(Uint8List.sublistView(envelope, 3, 3 + XWingVector1.ct.length)),
+      expect(
+          toHex(Uint8List.sublistView(envelope, 3, 3 + XWingVector1.ct.length)),
           equals(toHex(XWingVector1.ct)));
 
       final opened = await pqOpen(xwing, XWingVector1.seed, envelope,

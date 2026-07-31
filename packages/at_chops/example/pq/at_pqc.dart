@@ -12,15 +12,15 @@ Future<void> main() async {
 }
 
 Future<void> _xWingRoundTrip() async {
-  // Generate a fresh key pair for Alice.
-  final XWingKeyPair kp = await XWingKeyPair.generate();
+  // Generate a fresh key pair for Alice, straight off the resolved backend.
+  final kp = await AtPqc.xWing.generateKeyPair();
 
   // Bob encapsulates using Alice's public key.
-  final enc = await AtPqc.xWing.encapsulate(kp.publicKeyBytes);
+  final enc = await AtPqc.xWing.encapsulate(kp.publicKey);
 
   // Alice decapsulates using her secret key and Bob's ciphertext.
   final Uint8List aliceSharedSecret =
-      await AtPqc.xWing.decapsulate(kp.privateKeyBytes, enc.ciphertext);
+      await AtPqc.xWing.decapsulate(kp.secretKey, enc.ciphertext);
 
   final String aliceSsString = base64Encode(aliceSharedSecret);
   final String bobSsString = base64Encode(enc.sharedSecret);
@@ -29,13 +29,13 @@ Future<void> _xWingRoundTrip() async {
 }
 
 Future<void> _mlDsa65RoundTrip() async {
-  final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
+  final kp = await AtPqc.mlDsa65.generateKeyPair();
 
   final Uint8List message = Uint8List.fromList(utf8.encode('hello pqc'));
   final Uint8List signature =
-      await AtPqc.mlDsa65.signBytes(message, secretKey: kp.privateKeyBytes);
-  final bool ok =
-      await AtPqc.mlDsa65.verifyBytes(message, signature: signature, publicKey: kp.publicKeyBytes);
+      await AtPqc.mlDsa65.signBytes(message, secretKey: kp.secretKey);
+  final bool ok = await AtPqc.mlDsa65
+      .verifyBytes(message, signature: signature, publicKey: kp.publicKey);
 
   print('ML-DSA-65 signature verified: $ok');
 }
