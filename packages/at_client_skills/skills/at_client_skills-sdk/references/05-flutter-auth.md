@@ -119,6 +119,13 @@ Future<void> loginWithFile(BuildContext context) async {
 > file-access entitlement `AtKeysFileDialog` throws
 > `PlatformException(ENTITLEMENT_NOT_FOUND, ...)` when picking the file.
 > macOS only — iOS and Android need neither.
+>
+> Add `com.apple.security.network.server` (to **both** Debug and Release) only
+> when the app opens a *listening* socket — e.g. it embeds NoPorts/`npt`
+> tunnels, which bind a local port. Plain `at_client` traffic is outbound-only
+> and needs just `network.client`. (Flutter's default
+> `DebugProfile.entitlements` already includes `network.server` for the debug
+> VM service — that alone doesn't mean your app needs it in Release.)
 
 ---
 

@@ -80,8 +80,39 @@ internally.
 dart pub add at_client at_cli_commons
 ```
 
-`at_cli_commons` provides helpers for Dart CLI/server apps: flag parsing, key
-loading, `AtClient` setup for headless environments. Not needed in Flutter apps.
+`at_cli_commons` provides helpers for Dart CLI/server apps: `CLIBase`
+(one-line arg parsing + `.atKeys` loading + PKAM auth — see
+[14-multi-agent.md](14-multi-agent.md)) and
+`ServiceFactoryWithNoOpSyncService` for stateless no-sync instances. Not
+needed in Flutter apps.
+
+---
+
+### Zero-open-port TCP tunnels
+
+```sh
+dart pub add noports_core
+```
+
+NoPorts creates end-to-end encrypted TCP tunnels through the Atsign Platform
+with **no open listening ports** on either side — no firewall changes needed
+to reach a remote device. CLI: the `npt` binary; programmatic: the `Npt`
+class. Docs: <https://docs.noports.com/>. Add only when the app needs raw
+TCP/socket connectivity to remote machines; ordinary data exchange belongs in
+`AtCollection<T>` / notifications.
+
+---
+
+### Streaming (pre-release)
+
+```sh
+dart pub add at_stream
+```
+
+`at_stream` streams data over the Atsign Platform through Dart's async stream
+interfaces. **Pre-release** (`0.1.0-dev.x`) — expect API churn; for most
+continuous-update cases, `notificationService.subscribe()` or a collection
+`watch()` is the stable choice.
 
 ---
 
