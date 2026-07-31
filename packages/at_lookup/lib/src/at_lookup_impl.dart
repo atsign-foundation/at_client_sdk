@@ -54,8 +54,6 @@ class AtLookupImpl implements AtLookUp {
   /// Represents the client configurations.
   late Map<String, dynamic> _clientConfig;
 
-  AtPkamSigner? _pkamSigner;
-
   AtChops? _atChops;
 
   AtLookupImpl(String atSign, String rootDomain, int rootPort,
@@ -181,7 +179,7 @@ class AtLookupImpl implements AtLookUp {
       logger.finer('value: $value dataSignature:$dataSignature');
       // RSA SHA-256 verify via at_chops (wraps the same crypton
       // RSAPublicKey.verifySHA256Signature).
-      var isDataValid = RsaSigningAlgo(null, HashingAlgoType.sha256).verify(
+      var isDataValid = PkamSigningAlgo(null, HashingAlgoType.sha256).verify(
           Uint8List.fromList(utf8.encode(value)), base64Decode(dataSignature),
           publicKey: publicKeyResult);
       logger.finer('data verify result: $isDataValid');
@@ -453,8 +451,8 @@ class AtLookupImpl implements AtLookUp {
         logger.finer('fromResponse $fromResponse');
         // RSA SHA-256 sign via at_chops (wraps the same crypton
         // RSAPrivateKey.createSHA256Signature; only the private key is used).
-        var sha256signature = RsaSigningAlgo(
-                RsaKeyPair.create('', privateKey), HashingAlgoType.sha256)
+        var sha256signature = PkamSigningAlgo(
+                AtPkamKeyPair.create('', privateKey), HashingAlgoType.sha256)
             .sign(Uint8List.fromList(utf8.encode(fromResponse)));
         var signature = base64Encode(sha256signature);
         logger.finer('Sending command pkam:$signature');
@@ -476,11 +474,6 @@ class AtLookupImpl implements AtLookUp {
 
   @override
   Future<bool> pkamAuthenticate({String? enrollmentId}) async {
-    final signer = _effectivePkamSigner;
-    if (signer == null) {
-      throw UnAuthenticatedException(
-          'Unable to perform pkam auth. pkamSigner is not set');
-    }
     await createConnection();
     try {
       await _pkamAuthenticationMutex.acquire();
@@ -496,15 +489,18 @@ class AtLookupImpl implements AtLookUp {
         }
         fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
         logger.finer('fromResponse $fromResponse');
-        logger.finer('signingAlgo: ${signer.signingAlgo} '
-            'hashingAlgo: ${signer.hashingAlgo}');
-        final signature =
-            await signer.sign(Uint8List.fromList(utf8.encode(fromResponse)));
+        logger.finer(
+            'signingAlgoType: $signingAlgoType hashingAlgoType:$hashingAlgoType');
+        final atSigningInput = AtSigningInput(fromResponse)
+          ..signingAlgoType = signingAlgoType
+          ..hashingAlgoType = hashingAlgoType
+          ..signingMode = AtSigningMode.pkam;
+        var signingResult = _atChops!.sign(atSigningInput);
         var pkamBuilder = PkamVerbBuilder()
-          ..signingAlgo = signer.signingAlgo.name
-          ..hashingAlgo = signer.hashingAlgo.name
+          ..signingAlgo = signingAlgoType.name
+          ..hashingAlgo = hashingAlgoType.name
           ..enrollmentlId = enrollmentId
-          ..signature = base64Encode(signature);
+          ..signature = signingResult.result;
         logger.finer('pkamCommand:${pkamBuilder.buildCommand()}');
         await _sendCommand(pkamBuilder.buildCommand());
 
@@ -604,17 +600,17 @@ class AtLookupImpl implements AtLookUp {
       await requestResponseMutex.acquire();
 
       if (auth && _isAuthRequired()) {
-        if (_effectivePkamSigner != null) {
-          logger.finer('calling pkam using pkamSigner');
+        if (_atChops != null) {
+          logger.finer('calling pkam using atchops');
           await pkamAuthenticate(enrollmentId: enrollmentId);
         } else if (privateKey != null) {
-          logger.finer('calling pkam using privateKey');
+          logger.finer('calling pkam without atchops');
           await authenticate(privateKey);
         } else if (cramSecret != null) {
           await cramAuthenticate(cramSecret!);
         } else {
           throw UnAuthenticatedException(
-              'Unable to perform atLookup auth. pkamSigner is not set');
+              'Unable to perform atLookup auth. atChops object is not set');
         }
       }
       try {
@@ -672,23 +668,6 @@ class AtLookupImpl implements AtLookUp {
   }
 
   @override
-  set pkamSigner(AtPkamSigner? pkamSigner) {
-    _pkamSigner = pkamSigner;
-  }
-
-  @override
-  AtPkamSigner? get pkamSigner => _pkamSigner;
-
-  /// The signer [pkamAuthenticate] actually uses: an explicitly set
-  /// [pkamSigner], else the [atChops] bridge, else null.
-  AtPkamSigner? get _effectivePkamSigner {
-    if (_pkamSigner != null) {
-      return _pkamSigner;
-    }
-    return _atChops == null ? null : _AtChopsPkamSigner(this);
-  }
-
-  @override
   set atChops(AtChops? atChops) {
     _atChops = atChops;
   }
@@ -705,38 +684,6 @@ class AtLookupImpl implements AtLookUp {
 
   @override
   String? enrollmentId;
-}
-
-/// Bridges the deprecated [AtLookupImpl.atChops] surface onto [AtPkamSigner],
-/// so PKAM has a single signing path while `atChops` is still supported.
-///
-/// Reads [AtLookupImpl.atChops], [AtLookupImpl.signingAlgoType] and
-/// [AtLookupImpl.hashingAlgoType] at signing time rather than capturing them,
-/// because callers set them in either order. Goes away with the deprecated
-/// members.
-class _AtChopsPkamSigner implements AtPkamSigner {
-  final AtLookupImpl _atLookup;
-
-  _AtChopsPkamSigner(this._atLookup);
-
-  @override
-  Uint8List sign(Uint8List challenge) {
-    // The challenge is passed as a String, as it was before AtPkamSigner
-    // existed — a custom AtChops may care which type it receives.
-    final atSigningInput = AtSigningInput(utf8.decode(challenge))
-      ..signingAlgoType = signingAlgo
-      ..hashingAlgoType = hashingAlgo
-      ..signingMode = AtSigningMode.pkam;
-    // AtChops returns the signature base64-encoded; AtPkamSigner deals in raw
-    // bytes and at_lookup re-encodes it onto the pkam verb.
-    return base64Decode(_atLookup.atChops!.sign(atSigningInput).result);
-  }
-
-  @override
-  SigningAlgoType get signingAlgo => _atLookup.signingAlgoType;
-
-  @override
-  HashingAlgoType get hashingAlgo => _atLookup.hashingAlgoType;
 }
 
 class AtLookupSecureSocketFactory {

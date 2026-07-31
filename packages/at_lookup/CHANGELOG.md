@@ -1,24 +1,3 @@
-## 3.7.0
-- feat: add the `AtPkamSigner` strategy so at_lookup no longer needs to own key
-  material; consumers supply the signer (RSA legacy / ML-DSA-65 post-quantum) and
-  at_lookup only concerns itself with *that* the pkam challenge is signed, not
-  *how*. `AtPkamSigner.sign` returns raw signature bytes and is `FutureOr`, so an
-  async or hardware-backed signer needs no further interface. Set it via
-  `AtLookUp.pkamSigner`.
-- deprecate: `AtLookUp.atChops`, `AtLookUp.signingAlgoType` and
-  `AtLookUp.hashingAlgoType` — use `pkamSigner`, whose `signingAlgo`/`hashingAlgo`
-  declare what the pkam verb is stamped with. Behaviour is unchanged for existing
-  callers: when `pkamSigner` is null and `atChops` is set, signing is bridged
-  onto at_chops using the deprecated algorithm types, so `atChops`-based clients
-  keep working. An explicitly set `pkamSigner` takes precedence over `atChops`.
-- refactor: replace the deprecated at_chops wrappers used for the legacy
-  `authenticate(privateKey)` / `MonitorClient` / data-signature-verification
-  paths with their current equivalents (`PkamSigningAlgo` → `RsaSigningAlgo`,
-  `AtPkamKeyPair.create` → `RsaKeyPair.create`). Byte-identical — both delegate to
-  the same RSA SHA-256 primitives.
-- fix: `pkamAuthenticate` now throws `UnAuthenticatedException` up front when no
-  signer is available, instead of failing mid-handshake.
-
 ## 3.6.0
 
 - feat: `CacheableSecondaryAddressFinder` takes an optional `cacheDuration` to override the default 1-hour cache TTL.

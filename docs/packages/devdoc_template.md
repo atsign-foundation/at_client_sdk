@@ -13,7 +13,7 @@ question or "fix" something deliberate.
 ## Authoring rules
 
 1. **One topic per file**, named for the question it answers
-   (`pkam-signing.md`, `atkeys-file-format.md`). Split rather than nest.
+   (`auth-key-material.md`, `atkeys-file-format.md`). Split rather than nest.
 2. **Short.** If it runs past ~100 lines, it's restating the source. Link
    to the code instead; dartdoc is the place for per-method contracts.
 3. **Decisions carry their reasoning, and their rejected alternative**
@@ -30,7 +30,7 @@ question or "fix" something deliberate.
    silently. One short usage snippet is worth it; a walkthrough is not.
 8. **Cite real paths** — `lib/src/keys/io/file_io.dart`, not "the file IO
    class". Cross-package links are relative:
-   `../../at_lookup/docs/pkam-signing.md`.
+   `../../at_lookup/docs/auth-key-material.md`.
 9. **Own the split when a change spans packages.** Each package's `docs/`
    covers its own side; state shared rationale once, in the package that
    owns the thing, and link from the other.

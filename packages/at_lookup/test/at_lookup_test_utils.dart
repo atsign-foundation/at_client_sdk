@@ -32,9 +32,6 @@ class MockOutboundConnectionFactory extends Mock
 class MockOutboundMessageListener extends Mock
     implements OutboundMessageListener {}
 
-class MockPkamSigner extends Mock implements AtPkamSigner {}
-
-// ignore: deprecated_member_use
 class MockAtChops extends Mock implements AtChopsImpl {}
 
 class MockOutboundConnectionImpl extends Mock
