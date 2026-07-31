@@ -34,6 +34,11 @@ The skill will be installed to your IDE's skills directory (`.claude/skills/`,
 - Domain-object patterns (`toJson`/`fromJson`, `registerFactory`, `typeTag`)
 - Unit testing without a live atServer (`collections_test_hooks.dart`)
 - Architecture decision guide: `AtCollection<T>` vs Notifications + SQLite
+- RPC between atsigns (`AtRpc` / `AtRpcClient` request/response)
+- Headless agents and multi-instance coordination (`CLIBase`, immutable-mutex,
+  no-sync scaling)
+- Remote vs local atServer operations (`remoteLocalPref`, `useRemoteAtServer`,
+  `bypassCache`)
 - Deprecation guide: `AtCollectionModel`, `at_common_flutter`,
   `at_backupkey_flutter`
 
