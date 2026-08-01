@@ -1,3 +1,8 @@
+## 3.4.2
+- fix: `MlDsa65FfiAlgo`/`MlDsa65PureDartAlgo.signBytes` now throw `AtSigningException` for a wrong-length secret key on both backends — previously the pure-Dart backend silently truncated an over-long key and signed with the wrong material. `verifyBytes` now returns `false` (never throws) on both backends for a wrong-length public key/signature. `MlDsa65KeyPair.create` also validates key lengths at construction time.
+- fix: `MlKem768FfiAlgo.encapsulate`/`decapsulate` now throw `ArgumentError` for a wrong-length public key/ciphertext, matching the pure-Dart backend's existing behavior instead of surfacing a generic OpenSSL `StateError`.
+- refactor: consolidate X-Wing's size constants (`seedLength`/`publicKeyLength`/`ciphertextLength`/`sharedSecretLength`, previously duplicated in `XWingFfiAlgo` and `XWingPureDartAlgo`) into a single `XWingSizes` source of truth. No behavior change.
+
 ## 3.4.1
 - fix: export `Argon2idHashingAlgo` and `Md5HashingAlgo` from the main `at_chops.dart` barrel so callers can use all supported hashing algorithms through the public package import.
 
