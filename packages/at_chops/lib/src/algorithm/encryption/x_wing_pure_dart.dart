@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/encryption/ml_kem_768_pure_dart.dart';
 import 'package:at_chops/src/algorithm/encryption/x25519_pure_dart_algo.dart';
+import 'package:at_chops/src/algorithm/encryption/x_wing_sizes.dart';
 import 'package:cryptography/cryptography.dart' as crypto;
 import 'package:meta/meta.dart';
 import 'package:pointycastle/digests/sha3.dart';
@@ -33,10 +34,10 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
 
   const XWingPureDartAlgo._();
 
-  static const int seedLength = 32;
-  static const int publicKeyLength = 1216;
-  static const int ciphertextLength = 1120;
-  static const int sharedSecretLength = 32;
+  static const int seedLength = XWingSizes.seedLength;
+  static const int publicKeyLength = XWingSizes.publicKeyLength;
+  static const int ciphertextLength = XWingSizes.ciphertextLength;
+  static const int sharedSecretLength = XWingSizes.sharedSecretLength;
 
   static const int _mlKemPublicKeyLength = 1184;
   static const int _mlKemCiphertextLength = 1088;
