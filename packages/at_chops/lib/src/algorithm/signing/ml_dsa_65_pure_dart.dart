@@ -25,6 +25,9 @@ final class MlDsa65PureDartAlgo
 
   MlDsa65PureDartAlgo();
 
+  @override
+  String get name => mlDsa65AlgorithmName;
+
   @Deprecated('Pass the secret key to signBytes instead.')
   set secretKey(Uint8List value) => _secretKey = value;
 

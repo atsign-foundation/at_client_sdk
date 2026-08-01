@@ -31,6 +31,9 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
 
   Uint8List? _secretKey;
 
+  @override
+  String get name => mlDsa65AlgorithmName;
+
   @Deprecated('Pass the secret key to signBytes instead.')
   set secretKey(Uint8List value) => _secretKey = value;
 

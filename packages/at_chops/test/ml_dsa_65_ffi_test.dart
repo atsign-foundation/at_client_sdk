@@ -32,6 +32,9 @@ void main() {
       }
 
       final algo = MlDsa65FfiAlgo.fromLib(lib);
+      expect(algo.name, equals('ml-dsa-65'),
+          reason: 'must match MlDsa65PureDartAlgo.name — a downstream '
+              'protocol sees one identifier regardless of backend');
       final kp = await algo.generateKeyPair();
 
       expect(kp.publicKey.length, equals(1952));

@@ -71,6 +71,16 @@ abstract class AtSigningAlgorithm {
 /// backend took `(secretKey, data)`; a positional reorder would keep
 /// compiling while binding arguments to the wrong slots).
 abstract interface class AtSignatureAlgorithm {
+  /// Stable identifier for this algorithm — a downstream protocol's wire,
+  /// record, or keystore identifier for this signature type (e.g. at_server's
+  /// FROM/POL handshake tags its cookie and published-key record with this).
+  ///
+  /// Not [SigningAlgoType.name]: that enum is the deprecated `AtChops`
+  /// compatibility path's vocabulary and is unrelated to this interface —
+  /// `SigningAlgoType.mldsa65.name` is `'mldsa65'`, not this algorithm's
+  /// [name] here, and the two must not be assumed interchangeable.
+  String get name;
+
   /// Generate a fresh signing key pair.
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair();
 

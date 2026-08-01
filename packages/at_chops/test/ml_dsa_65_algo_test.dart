@@ -9,6 +9,13 @@ import 'package:test/test.dart';
 
 void main() {
   group('ML-DSA-65 pure-Dart', () {
+    test('name is the wire identifier, independent of SigningAlgoType', () {
+      expect(MlDsa65PureDartAlgo().name, equals('ml-dsa-65'),
+          reason: 'a downstream protocol keys its wire/record/keystore '
+              'format on this literal, not on SigningAlgoType.mldsa65.name '
+              '(which is "mldsa65", a different, unrelated vocabulary)');
+    });
+
     test('instance generateKeyPair produces FIPS 204 key sizes', () async {
       // Pins the generateKeyPair conversion from a static method to an
       // instance method (required to implement AtSignatureAlgorithm).
