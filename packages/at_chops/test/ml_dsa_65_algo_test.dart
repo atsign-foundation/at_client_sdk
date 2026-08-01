@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_chops/src/algorithm/signing/ml_dsa_65_validation.dart';
+import 'package:at_commons/at_commons.dart';
+import 'package:pqcrypto/pqcrypto.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -101,6 +104,85 @@ void main() {
       );
 
       expect(ok, isTrue);
+    });
+
+    test('MlDsa65Sizes matches pqcrypto\'s own FIPS 204 sizes', () {
+      expect(MlDsa65Sizes.publicKeyBytes,
+          equals(DilithiumParams.mlDsa65.publicKeyBytes));
+      expect(MlDsa65Sizes.secretKeyBytes,
+          equals(DilithiumParams.mlDsa65.secretKeyBytes));
+      expect(MlDsa65Sizes.signatureBytes,
+          equals(DilithiumParams.mlDsa65.signatureBytes));
+    });
+
+    test('signBytes throws AtSigningException for a short secret key',
+        () async {
+      final algo = MlDsa65PureDartAlgo();
+      final Uint8List message = Uint8List.fromList('data'.codeUnits);
+      final Uint8List shortSk = Uint8List(MlDsa65Sizes.secretKeyBytes - 1);
+
+      expect(
+          () => algo.signBytes(message, secretKey: shortSk),
+          throwsA(isA<AtSigningException>()));
+    });
+
+    test(
+        'signBytes throws AtSigningException for an over-long secret key '
+        '(previously: silently truncated and signed the wrong key material)',
+        () async {
+      final algo = MlDsa65PureDartAlgo();
+      final Uint8List message = Uint8List.fromList('data'.codeUnits);
+      final Uint8List longSk = Uint8List(MlDsa65Sizes.secretKeyBytes + 1);
+
+      expect(
+          () => algo.signBytes(message, secretKey: longSk),
+          throwsA(isA<AtSigningException>()));
+    });
+
+    test('verifyBytes returns false (never throws) for a wrong-length public key',
+        () async {
+      final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
+      final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
+      final algo = MlDsa65PureDartAlgo();
+      final Uint8List message = Uint8List.fromList('data'.codeUnits);
+      final Uint8List sig = await algo.signBytes(message, secretKey: sk);
+
+      final Uint8List badPub = Uint8List(MlDsa65Sizes.publicKeyBytes - 1);
+      final bool ok =
+          await algo.verifyBytes(message, signature: sig, publicKey: badPub);
+
+      expect(ok, isFalse);
+    });
+
+    test('verifyBytes returns false (never throws) for a wrong-length signature',
+        () async {
+      final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
+      final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
+      final Uint8List message = Uint8List.fromList('data'.codeUnits);
+
+      final Uint8List badSig = Uint8List(MlDsa65Sizes.signatureBytes + 1);
+      final bool ok = await MlDsa65PureDartAlgo()
+          .verifyBytes(message, signature: badSig, publicKey: pub);
+
+      expect(ok, isFalse);
+    });
+
+    test('MlDsa65KeyPair.create throws AtSigningException for a wrong-length public key',
+        () {
+      final String badPub = base64Encode(Uint8List(MlDsa65Sizes.publicKeyBytes - 1));
+      final String sk = base64Encode(Uint8List(MlDsa65Sizes.secretKeyBytes));
+
+      expect(() => MlDsa65KeyPair.create(badPub, sk),
+          throwsA(isA<AtSigningException>()));
+    });
+
+    test('MlDsa65KeyPair.create throws AtSigningException for a wrong-length secret key',
+        () {
+      final String pub = base64Encode(Uint8List(MlDsa65Sizes.publicKeyBytes));
+      final String badSk = base64Encode(Uint8List(MlDsa65Sizes.secretKeyBytes + 1));
+
+      expect(() => MlDsa65KeyPair.create(pub, badSk),
+          throwsA(isA<AtSigningException>()));
     });
   });
 }

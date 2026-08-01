@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/algorithm/signing/ml_dsa_65_validation.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:ffi/ffi.dart';
 
@@ -130,6 +131,7 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
   @override
   Future<Uint8List> signBytes(Uint8List message,
       {required Uint8List secretKey}) async {
+    validateSecretKey(secretKey);
     final Pointer<EVP_PKEY> pkey = _loadPrivateKey(secretKey);
     try {
       return _sign(pkey, message);
@@ -139,14 +141,23 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
   }
 
   /// Verify [signature] over [message] against the raw 1952-byte [publicKey].
+  ///
+  /// Never throws — returns `false` for malformed or attacker-controlled
+  /// input (wrong-length key/signature, or any lower-level OpenSSL failure
+  /// while loading/verifying), matching the pure-Dart backend's contract.
   @override
   Future<bool> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
-    final Pointer<EVP_PKEY> pkey = _loadPublicKey(publicKey);
+    if (!hasValidVerifyLengths(publicKey, signature)) return false;
     try {
-      return _verify(pkey, message, signature);
-    } finally {
-      _pkeyFree(pkey);
+      final Pointer<EVP_PKEY> pkey = _loadPublicKey(publicKey);
+      try {
+        return _verify(pkey, message, signature);
+      } finally {
+        _pkeyFree(pkey);
+      }
+    } catch (_) {
+      return false;
     }
   }
 
