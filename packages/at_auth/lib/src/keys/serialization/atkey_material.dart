@@ -13,6 +13,16 @@ import 'package:at_commons/at_commons.dart';
 /// the literals the Atsign Protocol already uses elsewhere (the
 /// pkam/enrollment `signingAlgo` values `rsa2048`/`mldsa65`/
 /// `ecc_secp256r1`). Values are case-sensitive.
+///
+/// **Do not change any existing value below.** These strings are persisted
+/// in `.atKeys` files and enrollment payloads already sitting on disk and on
+/// the wire across the atProtocol ecosystem (this client, other at_client
+/// implementations, atServer). Renaming or re-casing one — even to fix a
+/// typo — orphans every key material that was already written with the old
+/// value: readers keyed on the old string stop recognizing it, and it fails
+/// [known]'s membership check used by warn-level tooling. New algorithms get
+/// a new token appended; existing tokens are permanent once shipped. See
+/// `test/atkey_material_test.dart` for the tripwire test that pins these.
 abstract final class KeyAlgorithmType {
   static const String aes256 = 'aes256';
   static const String rsa2048 = 'rsa2048';
@@ -49,6 +59,11 @@ abstract final class KeyAlgorithmType {
 /// algorithm is classical, post-quantum or hybrid is a property of the
 /// [KeyAlgorithmType] token, and deployment purpose belongs in the keyId
 /// and [AtKeysMaterial.operations].
+///
+/// **Do not change any existing value below** — same rationale as
+/// [KeyAlgorithmType]: these strings are already persisted on disk and on
+/// the wire, so renaming one orphans existing key material. See
+/// `test/atkey_material_test.dart` for the tripwire test that pins these.
 abstract final class CryptographicKeyType {
   static const String symmetricEncryption = 'symmetricEncryption';
   static const String symmetricAuthentication = 'symmetricAuthentication';
