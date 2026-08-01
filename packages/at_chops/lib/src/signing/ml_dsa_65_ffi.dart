@@ -22,6 +22,9 @@ import 'package:ffi/ffi.dart';
 final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
   final DynamicLibrary _lib;
 
+  @override
+  String get name => mlDsa65AlgorithmName;
+
   late final EvpPkeyCtxNewFromNameDart _ctxNewFromName;
   late final EvpPkeyCtxFreeDart _ctxFree;
   late final EvpPkeyFreeDart _pkeyFree;

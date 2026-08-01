@@ -16,6 +16,7 @@
 - breaking: remove the misnamed `Ed25519Key` class (it was an AES symmetric key, not an Ed25519 key) — use `AESKey`
 - breaking: remove the deprecated stateful `secretKey` setter, `sign`, and `verify` on `MlDsa65PureDartAlgo` and `MlDsa65FfiAlgo` — use `signBytes`/`verifyBytes` with explicit key material (or `AtPqc.mlDsa65` typed as `AtSignatureAlgorithm`)
 - breaking: remove `AtKeysCrypto` (atKeys-file encrypt/decrypt) — it now lives in `at_auth`
+- breaking: `AtSignatureAlgorithm` gains an abstract `String get name` — external `implements` users must add it. `MlDsa65FfiAlgo`/`MlDsa65PureDartAlgo.name` both return `'ml-dsa-65'` (`mlDsa65AlgorithmName`), so a downstream protocol keying on it sees one stable identifier regardless of backend.
 - chore: `package:at_chops/at_chops.dart` (the web-safe barrel) now compiles to WASM (dart2wasm), enforced by a CI smoke test. FFI-backed algorithms remain in `package:at_chops/at_chops_ffi.dart`, which is not WASM-compatible by design
 - chore: drop the unused `dart_periphery` dependency
 
