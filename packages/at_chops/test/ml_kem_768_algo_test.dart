@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_chops/src/algorithm/encryption/ml_kem_768_validation.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -43,6 +44,23 @@ void main() {
       final Uint8List bad = await algo.decapsulate(priv, tampered);
       expect(bad, isNot(equals(enc.sharedSecret)));
       expect(bad.length, equals(32));
+    });
+
+    test('encapsulate throws ArgumentError for a wrong-length public key',
+        () async {
+      final Uint8List badPub = Uint8List(MlKem768Sizes.publicKeyBytes - 1);
+      expect(() => MlKem768PureDartAlgo.instance.encapsulate(badPub),
+          throwsA(isA<ArgumentError>()));
+    });
+
+    test('decapsulate throws ArgumentError for a wrong-length ciphertext',
+        () async {
+      final MlKem768KeyPair kp = await MlKem768KeyPair.generate();
+      final Uint8List priv = base64Decode(kp.atPrivateKey.privateKey);
+      final Uint8List badCt = Uint8List(MlKem768Sizes.ciphertextBytes + 1);
+
+      expect(() => MlKem768PureDartAlgo.instance.decapsulate(priv, badCt),
+          throwsA(isA<ArgumentError>()));
     });
   });
 }

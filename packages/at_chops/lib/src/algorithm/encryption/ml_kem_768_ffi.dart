@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
+import 'package:at_chops/src/algorithm/encryption/ml_kem_768_validation.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
 import 'package:ffi/ffi.dart';
 
@@ -188,6 +189,10 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
   @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
       Uint8List publicKey) async {
+    if (publicKey.length != MlKem768Sizes.publicKeyBytes) {
+      throw ArgumentError.value(publicKey.length, 'publicKey',
+          'ML-KEM-768 public key must be ${MlKem768Sizes.publicKeyBytes} bytes');
+    }
     final Pointer<EVP_PKEY> pubKeyPtr = _importPublicKey(publicKey);
     try {
       final Pointer<EVP_PKEY_CTX> ctx = _ctxNew(pubKeyPtr, nullptr);
@@ -236,6 +241,10 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
   @override
   Future<Uint8List> decapsulate(
       Uint8List secretKey, Uint8List ciphertext) async {
+    if (ciphertext.length != MlKem768Sizes.ciphertextBytes) {
+      throw ArgumentError.value(ciphertext.length, 'ciphertext',
+          'ML-KEM-768 ciphertext must be ${MlKem768Sizes.ciphertextBytes} bytes');
+    }
     final int handle = _decodeHandle(secretKey);
     final Pointer<EVP_PKEY>? pkey = _keys[handle];
     if (pkey == null) throw StateError('Unknown ML-KEM-768 key handle');

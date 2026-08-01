@@ -6,6 +6,7 @@ import 'dart:ffi';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops_ffi.dart';
+import 'package:at_chops/src/algorithm/encryption/ml_kem_768_validation.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -128,6 +129,40 @@ void main() {
           throwsA(isA<ArgumentError>()),
         );
       });
+    });
+
+    test('encapsulate throws ArgumentError for a wrong-length public key',
+        () async {
+      if (lib == null) {
+        fail('libcrypto not available on this host');
+      }
+      if (!mlKemSupported) {
+        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
+      }
+
+      final algo = MlKem768FfiAlgo.fromLib(lib);
+      final Uint8List badPub = Uint8List(MlKem768Sizes.publicKeyBytes - 1);
+      expect(() => algo.encapsulate(badPub), throwsA(isA<ArgumentError>()));
+    });
+
+    test('decapsulate throws ArgumentError for a wrong-length ciphertext',
+        () async {
+      if (lib == null) {
+        fail('libcrypto not available on this host');
+      }
+      if (!mlKemSupported) {
+        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
+      }
+
+      final algo = MlKem768FfiAlgo.fromLib(lib);
+      final kp = await algo.generateKeyPair();
+      try {
+        final Uint8List badCt = Uint8List(MlKem768Sizes.ciphertextBytes + 1);
+        expect(() => algo.decapsulate(kp.secretKey, badCt),
+            throwsA(isA<ArgumentError>()));
+      } finally {
+        algo.releaseKeyPair(kp);
+      }
     });
   });
 }
