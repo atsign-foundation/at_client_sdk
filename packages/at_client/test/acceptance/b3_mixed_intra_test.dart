@@ -9,7 +9,8 @@ import 'blockers.dart';
 
 void main() {
   group('B3 · mixed-PQ within one atSign', () {
-    test('UC-B3.1 · an upgraded enrollment still writes legacy for an '
+    test(
+        'UC-B3.1 · an upgraded enrollment still writes legacy for an '
         'un-upgraded sibling', () {
       // GIVEN alice1 is PQ (holds the nskey/pqpublickey privates), alice2 is
       //       still legacy-only; @alice readiness = n-r.

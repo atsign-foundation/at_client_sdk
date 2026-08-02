@@ -9,7 +9,8 @@ import 'blockers.dart';
 
 void main() {
   group('B0 · atServer upgrade prerequisite', () {
-    test('UC-B0.1 · a PQ-capable client cannot PQ-upgrade against a legacy '
+    test(
+        'UC-B0.1 · a PQ-capable client cannot PQ-upgrade against a legacy '
         'atServer', () {
       // GIVEN aliceS = legacy (no PQ verbs); alice1 is a PQ-capable build.
       // WHEN  alice1 attempts the upgrade sequence.
