@@ -51,7 +51,9 @@ final class MlDsa65PureDartAlgo
   Future<Uint8List> signBytes(Uint8List message,
       {required Uint8List secretKey}) async {
     validateSecretKey(secretKey);
-    return MlDsa.sign(secretKey, message, DilithiumParams.mlDsa65);
+    final Uint8List sig = MlDsa.sign(secretKey, message, DilithiumParams.mlDsa65);
+    assert(sig.length == MlDsa65Sizes.signatureBytes);
+    return sig;
   }
 
   /// Verify [signature] over [message] against [publicKey] (raw 1952 bytes).
