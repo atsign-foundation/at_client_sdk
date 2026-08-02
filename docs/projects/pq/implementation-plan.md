@@ -603,14 +603,21 @@ proceeds against a test fixture that supplies the nskey private directly (see th
   (via SS-4), and the sender's next `ensureCurrent` re-`plookup` upgrades to `recipientKind: nskey`.
   (Seal-and-hold is a per-namespace policy toggle delivered in **R-1**.)
 
-**Spike state (branch `gkc-pq-d1-spike`, 2026-08-02).** The data path is built and the
-**self-data direction works end to end against a live atServer**. Six commits, recut from
-the session's sixteen; `packages/at_client` green at 679 passing / 39 skipped.
+**Spike state (branch `gkc-pq-d1-spike`, 2026-08-02).** The data path is built, and
+**both the self-data and the cross-atSign directions work end to end against a live
+atServer**. Eight commits, recut from the session's sixteen; `packages/at_client` green
+at 686 passing / 39 skipped, `tests/at_end2end_test` green at 34 with no skips.
 
 *Proven live (functional suite, `tests/at_functional_test`):* self put/get round-trip
 through the whole pipeline including the pre-pass, the conveyance record, key validation
 and storage; content-key reuse across writes; byte-exact binary; and the `public:__` scan
 property that eager publication depends on.
+
+*Proven live (e2e suite, `tests/at_end2end_test`):* alice shares with bob and bob opens
+it with **his own** nskey private — the assertion the record-owner/nskey-owner split
+turns on, and the one self data cannot exercise because there the two atSigns coincide.
+Also that a sender cannot decapsulate a CK she sealed to her recipient, and that a
+self-copy takes a different CK.
 
 *Was blocked; cause found and fixed in this package.* Cross-atSign reads failed because
 the **sync push** dropped `appMetadata`: `SyncServiceImpl._metadataToString`, a
@@ -619,15 +626,14 @@ record reached the atServer without it and `CryptoRuntime` fell back to `legacy`
 ([decisions.md](decisions.md) section 17). This affected **every** provider's synced
 writes, including those shipped in `at_client` 3.14 — not PQ-specific. It was first
 recorded here as an atServer gap; that attribution was wrong, and section 17 records the
-probe that distinguishes *not returned* from *never stored*.
-`tests/at_end2end_test/test/nskey_cross_atsign_test.dart` is committed **skipped** and
-should be un-skipped and run once the fix lands.
+probe that distinguishes *not returned* from *never stored*. The duplicate serializer is
+deleted, `nskey_cross_atsign_test.dart` is un-skipped and green, and a
+`VerbSyntax.update` regex-match guard now fails if a field is ever emitted out of order.
 
 *Owed, in rough dependency order:*
 
 | Owed | Where it belongs |
 |---|---|
-| A `VerbSyntax.update` regex-match guard over the built fragment with every field populated — the serializer now has one canonical implementation, but nothing yet fails if a future field lands out of order | **at_client** |
 | Cold-start: seal the CK to `public:pqpublickey`; `NskeyProvider.encrypt` still throws | **B-1c** |
 | Advertised-key signature verification — `UnverifiedAdvertisedKeys` shouts on every use | **SS-1c** |
 | Real nskey minting + per-APKAM conveyance; `InMemoryNskeyKeyRing` and `mintAndPublish` are fixtures | **SS-4** |
