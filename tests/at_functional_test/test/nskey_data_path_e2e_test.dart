@@ -1,12 +1,8 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-// ignore: implementation_imports
-import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
-// ignore: implementation_imports
-import 'package:at_client/src/crypto/nskey/nskey_provider.dart';
-// ignore: implementation_imports
-import 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_functional_test/src/config_util.dart';
+import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
@@ -16,8 +12,14 @@ import 'test_utils.dart';
 /// Everything else covering this path runs against mocks: the providers in
 /// isolation, the CK manager with a stubbed `put`. None of it proves the pieces
 /// compose once the real put pipeline is in the loop — the pre-pass, a nested
-/// write for the conveyance record, key validation, storage and the read back.
-/// This does.
+/// write for the conveyance record, key validation and the read back.
+///
+/// `put`/`get` alone do **not** reach the atServer: they are local-first, so a
+/// test built only from them passes with the record never leaving the device.
+/// That is precisely the blind spot that let the sync push drop `appMetadata`
+/// unnoticed, and the same trap `underscore_public_key_hiding_test.dart`
+/// records as a lesson already learned. The last test here syncs and then asks
+/// the atServer itself what it stored.
 void main() {
   late AtClientManager atClientManager;
   late String atSign;
@@ -109,6 +111,61 @@ void main() {
         reason: 'a CK is long-lived per destination — re-cutting per write '
             'would multiply conveyance records for no benefit');
     expect((await atClient.get(named('second'))).value, 'two');
+  });
+
+  /// The one assertion the rest of this file structurally cannot make.
+  ///
+  /// Everything above reads back through local storage, so it would pass with
+  /// the record never synced — and would still pass with the hand-rolled
+  /// metadata serializer that dropped `appMetadata` from the push restored.
+  /// This asks the atServer what it actually holds: if the routing does not
+  /// survive the push, a reader on the other side has no `providerId` and
+  /// falls back to legacy, which is how the cross-atSign path failed.
+  test('the crypto routing survives the sync push to the atServer', () async {
+    final atClient = atClientManager.atClient;
+    final key = AtKey()
+      ..key = 'pushed'
+      ..namespace = namespace
+      ..sharedBy = atSign;
+
+    expect(await atClient.put(key, 'the treaty text'), true);
+    final localMeta = (await atClient.get(key)).metadata?.appMetadata;
+    final ckKid = localMeta?.additional?['ckKid'];
+    expect(ckKid, isNotNull);
+
+    await FunctionalTestSyncService.getInstance()
+        .syncData(syncSvc: atClient.syncService);
+
+    // Ask the atServer directly, rather than reading a locally reconstructed
+    // metadata object — that is the difference between "synced correctly" and
+    // "rebuilt by the client from what it already had".
+    Future<String> llookupAll(AtKey k) async =>
+        (await atClient.getRemoteSecondary()!.executeCommand(
+              'llookup:all:${k.toString()}\n',
+              auth: true,
+            )) ??
+        '';
+
+    final stored = await llookupAll(key);
+    expect(stored, contains(AtConstants.appMetadata),
+        reason: 'the atServer must have stored appMetadata — without it a '
+            'cross-atSign lookup returns a null providerId and the reader '
+            'falls back to legacy, hunting a shared_key that was never made');
+    expect(stored, contains(symmetricAesGcmCryptoProviderId),
+        reason: 'and the stored routing must name the data provider');
+    expect(stored, contains(ckKid),
+        reason: 'the stored value must still cite the content key it was '
+            'encrypted under');
+
+    // The conveyance record has to have made the same trip, or the CK the
+    // value cites is unreachable to anyone but this device.
+    final storedConveyance = await llookupAll(AtKey()
+      ..key = '$ckKid.__ck'
+      ..namespace = namespace
+      ..sharedBy = atSign);
+    expect(storedConveyance, contains(nskeyCryptoProviderId),
+        reason: 'the conveyance must reach the atServer carrying its own '
+            'provider id, not just the value that cites it');
   });
 
   test('binary round-trips byte-exact', () async {

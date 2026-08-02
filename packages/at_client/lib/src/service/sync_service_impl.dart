@@ -1056,7 +1056,7 @@ class SyncServiceImpl implements SyncService {
         return conflictInfo;
       }
       final serverAtKey = AtKey.fromString(clientAtKey.toString());
-      _setMetadataFromCommitEntry(serverAtKey.metadata, serverCommitEntry);
+      setMetadataFromCommitEntry(serverAtKey.metadata, serverCommitEntry);
       final serverEncryptedValue = serverCommitEntry['value'];
       final serverMetaData = serverCommitEntry['metadata'];
       if (serverMetaData != null &&
@@ -1273,7 +1273,7 @@ class SyncServiceImpl implements SyncService {
           ..atKey = AtKey.fromString(serverCommitEntry['atKey'])
           ..value = serverCommitEntry['value'];
         builder.operation = AtConstants.updateAll;
-        _setMetadataFromCommitEntry(builder.atKey.metadata, serverCommitEntry);
+        setMetadataFromCommitEntry(builder.atKey.metadata, serverCommitEntry);
         await _pullToLocal(builder);
         break;
       case '-':
@@ -1285,7 +1285,15 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
-  void _setMetadataFromCommitEntry(Metadata md, Map serverCommitEntry) {
+  /// The sync PULL's metadata deserializer — the mirror of [metadataToString].
+  ///
+  /// Still hand-rolled: the commit entry carries every value as a string, so
+  /// the canonical [Metadata.fromJson] (which expects typed values) cannot be
+  /// dropped in without changing what the atServer's wire shape means here.
+  /// `metadata_converter_sweep_test.dart` guards it against the drift that bit
+  /// the push side.
+  @visibleForTesting
+  static void setMetadataFromCommitEntry(Metadata md, Map serverCommitEntry) {
     var metaData = serverCommitEntry['metadata'];
     if (metaData != null && metaData.isNotEmpty) {
       if (metaData[AtConstants.ttl] != null) {
@@ -1349,6 +1357,12 @@ class SyncServiceImpl implements SyncService {
       if (metaData[AtConstants.appMetadata] != null) {
         md.appMetadata =
             Metadata.decodeAppMetadata(metaData[AtConstants.appMetadata]);
+      }
+      // The mirror of the push-side drop this branch fixed: without it a
+      // record pulled from the atServer loses `immutable` on the way in.
+      if (metaData[AtConstants.immutable] != null) {
+        md.immutable =
+            metaData[AtConstants.immutable].toString().toLowerCase() == 'true';
       }
 
       if (metaData[AtConstants.sharedWithPublicKeyHash] != null &&

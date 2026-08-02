@@ -36,6 +36,13 @@
   missing — a provider chooses its wire format from `isBinary`, so losing it made
   a binary notification decode as text. The server-derived timestamps and
   `sharedKeyStatus` stay out by design, as the sync push leaves them out.
+- fix: sweep the remaining hand-rolled metadata deserializers, the same defect
+  class as the sync-push drop below. `AtClientUtil.prepareMetadata` — behind
+  every remote get/lookup — and the sync **pull** both dropped `immutable`, so
+  it read back as a constant false for any record fetched from an atServer; and
+  `AtNotification.fromJson` dropped `isBinary`. `metadata_converter_sweep_test`
+  pins the `Metadata` field inventory, so a field added upstream now fails a
+  test rather than being silently absent on one side.
 - feat: `nskey` data path providers — `at/symmetric/AES/GCM` encrypts
   application data with AES-256-GCM under a symmetric content key (CK), and
   `at/nskey` conveys that CK by X-Wing-sealing it to the namespace's `nskey`

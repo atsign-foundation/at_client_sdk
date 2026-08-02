@@ -109,6 +109,10 @@ class AtClientUtil {
         metadataMap[AtConstants.sharedWithPublicKeyHash]);
     metadata.appMetadata =
         Metadata.decodeAppMetadata(metadataMap[AtConstants.appMetadata]);
+    // Without this, `immutable` reads back false for every record fetched from
+    // an atServer, whatever the server holds — so a client-side guard on it
+    // cannot distinguish an immutable record from an ordinary one.
+    metadata.immutable = metadataMap[AtConstants.immutable] ?? false;
 
     return metadata;
   }

@@ -605,13 +605,18 @@ proceeds against a test fixture that supplies the nskey private directly (see th
 
 **Spike state (branch `gkc-pq-d1-spike`, 2026-08-02).** The data path is built, and
 **both the self-data and the cross-atSign directions work end to end against a live
-atServer**. Eight commits, recut from the session's sixteen; `packages/at_client` green
-at 686 passing / 39 skipped, `tests/at_end2end_test` green at 34 with no skips.
+atServer**. `packages/at_client` green at 708 passing / 39 skipped,
+`tests/at_end2end_test` green at 34 with no skips.
 
 *Proven live (functional suite, `tests/at_functional_test`):* self put/get round-trip
-through the whole pipeline including the pre-pass, the conveyance record, key validation
-and storage; content-key reuse across writes; byte-exact binary; and the `public:__` scan
-property that eager publication depends on.
+through the whole pipeline including the pre-pass, the conveyance record and key
+validation; content-key reuse across writes; byte-exact binary; the `public:__` scan
+property that eager publication depends on; and — after a sync — an authenticated
+`llookup:all:` against the atServer confirming the stored record still carries its
+`appMetadata` routing and cites its content key. That last probe is the one that
+separates *stored on the server* from *reconstructed by the client*: `put`/`get` are
+local-first, so a suite built only from them passes with nothing ever leaving the
+device, which is exactly how the `appMetadata` drop below went unseen.
 
 *Proven live (e2e suite, `tests/at_end2end_test`):* alice shares with bob and bob opens
 it with **his own** nskey private — the assertion the record-owner/nskey-owner split
@@ -630,6 +635,31 @@ probe that distinguishes *not returned* from *never stored*. The duplicate seria
 deleted, `nskey_cross_atsign_test.dart` is un-skipped and green, and a
 `VerbSyntax.update` regex-match guard now fails if a field is ever emitted out of order.
 
+*Adversarial review of the branch (2026-08-02), and what it changed.* Six independent
+lenses over the eight commits, each finding put to two refuters, then a completeness
+critic. Seven findings survived; five were defects introduced here and are fixed on the
+branch: a CK promoted to *current* before its conveyance was durable (a failed write
+poisoned the destination permanently); the notify path selecting a crypto provider before
+the namespace was resolved, silently downgrading to legacy while `put` on the same key
+used nskey; a conveyance written local-first for a remote-only value; a bare `catch`
+reporting a tampered envelope as "not yet synced"; and `CryptoConfig.nskey`'s required
+`NskeyKeyRing` not being exported from the barrel. The critic also found that the notify
+*read* path built its `AtKey` without a namespace — so fixing the send half alone would
+have turned a silent downgrade into a hard receiver failure — and that four more
+hand-rolled metadata converters survived the one this branch deleted; all are swept, with
+`metadata_converter_sweep_test.dart` pinning the `Metadata` field inventory so a new field
+cannot be dropped by any of them unnoticed. Every defect but one came from code the unit
+suite covered and passed.
+
+The highest-severity *contested* finding was also acted on: the data layer called AES-GCM
+with an empty AAD, so a ciphertext was bound to its content key but not to its record —
+and a CK covers every record in its `(owner, namespace)` scope, so a valid ciphertext
+could be relocated between records by anyone able to write the store and would still
+authenticate. `at/symmetric/AES/GCM` now authenticates
+`providerId:sharedBy:sharedWith:namespace:key` as AAD, which is the layer-3 equivalent of
+the HPKE `info` binding the conveyance already had. It is a value wire-format change,
+taken now because nothing written under the old form exists outside the spike.
+
 *Owed, in rough dependency order:*
 
 | Owed | Where it belongs |
@@ -641,6 +671,10 @@ deleted, `nskey_cross_atsign_test.dart` is un-skipped and green, and a
 | The bench harness `acceptance.md` says lands with B-1 — not built, and not in this plan's deliverables | **B-1** |
 | `at_chops` `pqOpen` lets an `ArgumentError` escape its documented `PqOpenException` contract; worked around client-side | `at_chops` |
 | Revisit whether `CryptoConfig.nskey()` should default the *whole client* to the nskey path — it routes the SDK's own internal writes too, which is what surfaced four of the six defects | **B-1** |
+| The CK cache and the owner's own nskey privates are process memory only — a restart loses both, so the owner cannot re-read her own outbound shared records | **SS-4** |
+| A failed advertisement fetch serves the stale generation indefinitely (`currentPublic` returns the cached one on any error), so the stated "TTL + one CK lifetime" revocation bound does not hold | **B-2** |
+| Notify carries no nskey coverage at the live layer, and `B-1e` still lists "providerId on notification frames" as future work though both notify entry points have already changed | **B-1e** |
+| `_addMetadataToBuilder` on the notify path is still a hand-rolled copier — swept for the fields a reader needs, but not routed through a canonical converter, because none exists for `Metadata`→`Metadata` | `at_commons` |
 
 *Test runners:* use the committed `tests/*/runLocal.sh`. They pull the virtualenv image;
 ad-hoc copies that skip `docker compose pull` will silently test a stale atServer.
