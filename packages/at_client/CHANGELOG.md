@@ -24,6 +24,14 @@
   record. `sharedBy` binds the HPKE `info`; `sharedWith ?? sharedBy` selects the
   key and scopes the CK cache. Selecting by `sharedBy` made a recipient look up
   the *sender's* namespace private, so cross-atSign reads could not work.
+- fix: the sync push dropped `appMetadata` and `immutable`. `SyncServiceImpl`
+  built the `update:` command with its own hand-rolled metadata serializer,
+  which had fallen behind `Metadata.toAtProtocolFragment`; a synced record
+  therefore reached the atServer with no `appMetadata`, so a cross-atSign
+  `lookup` returned no `providerId` and the reader fell back to `legacy` and
+  hunted a `shared_key` the write never created. This affected **every**
+  provider's synced writes, not only the new ones. The duplicate is deleted —
+  the push now delegates to the one canonical serializer.
 - build: raise the `at_chops` floor to `^3.4.0` — the nskey providers name
   `AtKemAlgorithm` through the `at_chops` barrel, which only exports the
   algorithm interfaces from 3.4.0.

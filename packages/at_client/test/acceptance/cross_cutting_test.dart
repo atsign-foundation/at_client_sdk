@@ -34,10 +34,14 @@ void main() {
       // every algorithm a reader needs code for, so a scheme change is
       // rollable rather than a flag day.
       //
-      // "and frames" is not the whole story: it must also survive a LOOKUP.
-      // The atServer does not return appMetadata on a cross-atSign lookup
-      // today, so every cross-atSign read falls back to legacy — for every
-      // provider, not just the PQ ones (decisions.md section 17).
+      // "and frames" is not the whole story: it must also survive every hop
+      // that WRITES a record to the atServer. The sync push silently dropped
+      // appMetadata — a hand-rolled metadata serializer in SyncServiceImpl that
+      // had fallen behind Metadata.toAtProtocolFragment — so every cross-atSign
+      // read fell back to legacy, for every provider, not just the PQ ones
+      // (decisions.md section 17). Assert the round-trip through sync, not just
+      // the in-memory stamp: an out-of-order or missing field in that fragment
+      // is dropped without an error.
       fail('not implemented');
     }, skip: b1);
 

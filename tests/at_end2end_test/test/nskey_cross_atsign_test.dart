@@ -55,20 +55,16 @@ void main() {
   String uniqueKey(String prefix) =>
       '$prefix.${DateTime.now().microsecondsSinceEpoch}';
 
-  // BLOCKED on at_server: appMetadata is not returned in a cross-atSign lookup
-  // response, so CryptoRuntime sees a null providerId and falls back to legacy,
-  // which then hunts for a shared_key a PQ write never created. Measured, not
-  // inferred — @bob's `lookup:all:` for a key @alice stamped `{providerId:
-  // legacy}` comes back with sharedKeyEnc, pubKeyCS, ivNonce and pubKeyHash but
-  // no appMetadata at all. It survives sync; it does not survive lookup.
+  // This test was skipped for a defect in at_client, not the atServer: the sync
+  // PUSH dropped appMetadata, because SyncServiceImpl's hand-rolled metadata
+  // serializer never emitted it. The record therefore reached the atServer
+  // without a providerId, and @bob's lookup returned exactly what the server
+  // held. CryptoRuntime then fell back to legacy and hunted for a shared_key a
+  // PQ write never created. It affected EVERY provider's synced writes, not
+  // just the PQ ones — see decisions.md section 17.
   //
-  // This breaks the seam for EVERY provider cross-atSign, not just the PQ ones.
-  // See decisions.md section 17. Un-skip when the atServer carries appMetadata
-  // on lookup the way sync and notifications already do.
-  const blockedOnLookupMetadata =
-      'blocked: atServer does not return appMetadata on a cross-atSign lookup '
-      '(decisions.md section 17)';
-
+  // Keeping this test cross-atSign is the point: the serializer has a unit test,
+  // but only two atSigns prove the stamp survives the whole write path.
   test('alice shares with bob, and bob reads it with his own nskey private',
       () async {
     // Both sides mint and publish eagerly — no promotion step, so bob is
@@ -130,10 +126,12 @@ void main() {
     // And he opened it with the generation he had advertised — which is what
     // alice discovered by plookup rather than being told.
     expect(received.metadata?.appMetadata?.additional?['ckKid'], ckKid);
-  }, skip: blockedOnLookupMetadata);
+  });
 
   test('the sender keeps a self-copy under a different content key', () async {
-    final bobSide = await nskeyClient(bob);
+    // Bob must have published his nskey before alice can seal a CK to it; the
+    // handle itself is unused here.
+    await nskeyClient(bob);
     final aliceSide = await nskeyClient(alice);
 
     final shared = AtKey()

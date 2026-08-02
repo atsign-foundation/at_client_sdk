@@ -767,7 +767,7 @@ class SyncServiceImpl implements SyncService {
       case SyncQueueOp.updateMeta:
         final metaData = await keyStore.getMeta(atKey);
         final keyWithMeta =
-            metaData != null ? '$atKey${_metadataToString(metaData)}' : atKey;
+            metaData != null ? '$atKey${metadataToString(metaData)}' : atKey;
         return 'update:meta:$keyWithMeta';
       case SyncQueueOp.updateAll:
         final value = await keyStore.get(atKey);
@@ -778,7 +778,7 @@ class SyncServiceImpl implements SyncService {
           // catches [KeyNotFoundException] and removes it.
           throw KeyNotFoundException('$atKey not found in keystore');
         }
-        final keyGen = '${_metadataToString(value.metaData)}:$atKey';
+        final keyGen = '${metadataToString(value.metaData)}:$atKey';
         return 'update$keyGen ${value.data}';
     }
   }
@@ -1080,60 +1080,20 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
-  String _metadataToString(AtMetaData? metadata) {
-    if (metadata == null) {
-      return '';
-    }
-    var metadataStr = '';
-    if (metadata.ttl != null) metadataStr += ':ttl:${metadata.ttl}';
-    if (metadata.ttb != null) metadataStr += ':ttb:${metadata.ttb}';
-    if (metadata.ttr != null) metadataStr += ':ttr:${metadata.ttr}';
-    if (metadata.isCascade != null) {
-      metadataStr += ':ccd:${metadata.isCascade}';
-    }
-    if (metadata.dataSignature != null) {
-      metadataStr += ':dataSignature:${metadata.dataSignature}';
-    }
-    if (metadata.isBinary != null) {
-      metadataStr += ':isBinary:${metadata.isBinary}';
-    }
-    if (metadata.isEncrypted != null) {
-      metadataStr += ':isEncrypted:${metadata.isEncrypted}';
-    }
-
-    if (metadata.sharedKeyEnc != null) {
-      metadataStr += ':sharedKeyEnc:${metadata.sharedKeyEnc}';
-    }
-    if (metadata.pubKeyCS != null) {
-      metadataStr += ':pubKeyCS:${metadata.pubKeyCS}';
-    }
-    if (metadata.pubKeyHash != null) {
-      metadataStr +=
-          ':${AtConstants.sharedWithPublicKeyHash}:${metadata.pubKeyHash?.hash}';
-      metadataStr +=
-          ':${AtConstants.sharedWithPublicKeyHashingAlgo}:${metadata.pubKeyHash?.hashingAlgo}';
-    }
-
-    if (metadata.encoding != null) {
-      metadataStr += ':encoding:${metadata.encoding}';
-    }
-    if (metadata.encKeyName != null) {
-      metadataStr += ':encKeyName:${metadata.encKeyName}';
-    }
-    if (metadata.encAlgo != null) {
-      metadataStr += ':encAlgo:${metadata.encAlgo}';
-    }
-    if (metadata.ivNonce != null) {
-      metadataStr += ':ivNonce:${metadata.ivNonce}';
-    }
-    if (metadata.skeEncKeyName != null) {
-      metadataStr += ':skeEncKeyName:${metadata.skeEncKeyName}';
-    }
-    if (metadata.skeEncAlgo != null) {
-      metadataStr += ':skeEncAlgo:${metadata.skeEncAlgo}';
-    }
-
-    return metadataStr;
+  @visibleForTesting
+  static String metadataToString(AtMetaData? metadata) {
+    // Delegate to the single canonical metadata serializer —
+    // Metadata.toAtProtocolFragment, the same one UpdateVerbBuilder uses for
+    // direct writes — so this sync-push path can never again drift from it.
+    // That drift is exactly what silently dropped appMetadata (and immutable)
+    // from synced records: a cross-atSign lookup of the pushed record then saw
+    // a null providerId and CryptoRuntime fell back to legacy.
+    //
+    // AtMetaData.toCommonsMetadata intentionally omits the timestamp fields
+    // (createdAt/updatedAt/expiresAt/availableAt) and sharedKeyStatus, so — as
+    // this method did before — the sync push does not send them and the server
+    // re-derives them on receipt.
+    return metadata?.toCommonsMetadata().toAtProtocolFragment() ?? '';
   }
 
   ///Verifies if local secondary are cloud secondary are in sync.

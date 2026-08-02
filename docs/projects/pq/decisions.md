@@ -30,7 +30,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [14. Content keys are scoped per recipient (2026-08-02)](#14-content-keys-are-scoped-per-recipient-2026-08-02)
 - [15. The record owner and the nskey owner are different atSigns (2026-08-02)](#15-the-record-owner-and-the-nskey-owner-are-different-atsigns-2026-08-02)
 - [16. A provider id names every algorithm a reader needs code for (2026-08-02)](#16-a-provider-id-names-every-algorithm-a-reader-needs-code-for-2026-08-02)
-- [17. `appMetadata` is not returned on a cross-atSign lookup (2026-08-02, open)](#17-appmetadata-is-not-returned-on-a-cross-atsign-lookup-2026-08-02-open)
+- [17. The sync push dropped `appMetadata` (2026-08-02, fixed)](#17-the-sync-push-dropped-appmetadata-2026-08-02-fixed)
 
 ---
 
@@ -1227,37 +1227,70 @@ marker-as-a-set is **R-1**. Mechanics: `design.md` sections 1.2 and 1.5.
 
 ---
 
-## 17. `appMetadata` is not returned on a cross-atSign lookup (2026-08-02, open)
+## 17. The sync push dropped `appMetadata` (2026-08-02, fixed)
 
-**Finding, measured.** The atServer does **not** return `appMetadata` in a cross-atSign
-`lookup` response. It survives `sync` — the `__ck` conveyance round-trips intact — but
-not `lookup`. Since `CryptoRuntime` routes every read by `appMetadata.providerId`, a
-recipient reading a shared record sees `null` and falls back to `legacy`, which then
-hunts for a `shared_key` that a PQ write never created.
+**The defect is in this package, not the atServer.** `SyncServiceImpl._metadataToString`
+— a hand-rolled metadata serializer that builds the `update:` command for the sync
+**push** — never emitted `appMetadata`. So a record carried its `providerId` in local
+storage, sync stripped it on the way up, and the atServer stored the record without it.
+A recipient's `lookup` then returned exactly what the server held: nothing. Since
+`CryptoRuntime` routes every read by `appMetadata.providerId`, the recipient saw `null`
+and fell back to `legacy`, which hunted for a `shared_key` a PQ write never created.
 
-**This is not specific to the nskey path.** It breaks the pluggable-crypto seam for
-**every** provider in the cross-atSign direction, including those already shipped in
-`at_client` 3.14. Same-atSign reads are unaffected.
+**This is not specific to the nskey path.** Any provider's stamp was dropped on any
+synced write, including those shipped in `at_client` 3.14. Same-atSign reads were
+unaffected, because they never leave local storage.
 
-**Evidence.** `@alice` writes a shared value stamped `{providerId: legacy}`; `@bob`
-issues `lookup:all:` for it and receives a full metadata block — `sharedKeyEnc`,
-`pubKeyCS`, `ivNonce`, `pubKeyHash`, `isEncrypted`, `immutable` — with **no
-`appMetadata` field**. `AtValue.metadata.appMetadata` is correspondingly `null`.
+**How this was first recorded wrongly, and the probe that settles it.** This section
+previously asserted, as a *measured* finding, that the atServer does not return
+`appMetadata` on `lookup`. The wire observation behind it was accurate — `@bob`'s
+`lookup:all:` genuinely came back with `sharedKeyEnc`, `pubKeyCS`, `ivNonce`,
+`pubKeyHash` and no `appMetadata`. The **attribution** was not: *absent from the
+response* was read as *dropped by the responder*, when the record had never carried the
+field into the server at all. One probe separates the two, and it was never run — an
+authenticated `llookup:all:` against the **writer's own** atServer after sync, which
+distinguishes *not returned* from *never stored*. The superseded text also claimed
+`appMetadata` "survives `sync`"; the push direction is precisely where it died.
+
+The general rule: **an absent field indicts the writer before the reader.** Confirm the
+data reached the store before concluding the store withheld it.
+
+**Root cause was a duplicated serializer, and the fix deletes it.**
+`Metadata.toAtProtocolFragment` (`at_commons`) is the canonical builder of this wire
+fragment; `_metadataToString` was a second, hand-rolled copy that existed only because
+sync holds the persistence type `AtMetaData` rather than the commons type `Metadata`.
+The copy silently lagged the original — it had also fallen behind on **`immutable`**.
+It is now gone: the sync push calls
+`metadata.toCommonsMetadata().toAtProtocolFragment()`, so the two cannot drift again.
+(This needs `at_persistence_secondary_server` ≥ 5.1.0, where `toCommonsMetadata` carries
+`appMetadata`; the pubspec floor is already `^5.1.0`.)
+
+**Field order is not free.** `VerbSyntax.metadataFragment` is a sequence of optional
+groups, so a field emitted out of order silently fails to match and is dropped without
+an error — the same failure mode, one step later. Delegating to the canonical builder
+gets the order right by construction; a regex-match guard over a fully-populated
+fragment is still owed as the thing that would *fail* if that ever stopped being true.
+
+**Consequence for the `_nskeylock`** (specified in
+[section 13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02),
+owed by SS-4): a short-TTL **immutable** key used as a mutex must be written
+**direct-to-remote**, never via sync. Until this fix the sync push could not convey
+`immutable` at all; that is now repaired, but the requirement stands for a stronger
+reason that no serializer fix touches — **a mutex needs the atServer to arbitrate at the
+moment of acquisition.** A synced write is local-first and asynchronous, so two
+contending writers would each succeed locally and discover the conflict only at the next
+sync, long after both had acted as lock-holder. `AtRpc._tryAcquireSessionMutex` is the
+precedent to copy (`PutRequestOptions..useRemoteAtServer = true`); it is the same reason
+the nskey advertisement is written direct-to-remote.
 
 **Why it went unnoticed.** [Section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)
 and the cross-cutting invariants assert that `providerId` is present on *stored keys and
-notification frames*. Nobody wrote down the **lookup** path, and no test crossed two
-atSigns — so a hole in the read direction of a shipped seam sat open. The unit tests
-could not have found it: they mock the wire.
-
-**Consequence for D1.** **B-1d cannot go green from this repo.** Cross-atSign reads
-need the atServer to return `appMetadata` on `lookup`. The acceptance scenario and its
-e2e test stay in place, blocked and named, rather than being quietly dropped.
+notification frames*. Nobody wrote down the **sync push** path, and no test crossed two
+atSigns — so a hole in a shipped seam sat open. The unit tests could not have found it:
+they mock the wire.
 
 **Rejected: inferring the provider client-side** when `appMetadata` is absent — by key
 shape, or by trying providers in turn. It guesses which scheme opened a record, and a
 wrong guess is a silent mis-decrypt or a misleading error. Failing loudly is better than
-guessing at cryptography.
-
-**Owner.** `at_server` — the lookup handler must carry `appMetadata` the way the sync
-and notification paths already do.
+guessing at cryptography. (This stands on its own merits, and is unaffected by the
+misattribution above.)

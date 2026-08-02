@@ -733,10 +733,11 @@ These invariants are testable against **every** UC above:
 - **`appMetadata.providerId` is authoritative**, names every algorithm a reader needs
   code for ([`decisions.md`](decisions.md) section 16), and is present on **stored keys,
   notification frames and `lookup` responses alike**. The lookup clause is not
-  redundant: the atServer does **not** currently return `appMetadata` on a cross-atSign
-  `lookup`, so every cross-atSign read falls back to `legacy`
-  ([`decisions.md`](decisions.md) section 17). Until that is fixed, the seam works
-  same-atSign only, for **every** provider — not just the PQ ones. Present on stored keys
+  redundant: it must survive every hop that *writes* a record to the atServer, and the
+  sync push silently dropped it, so every cross-atSign read fell back to `legacy` for
+  **every** provider ([`decisions.md`](decisions.md) section 17). Any hand-rolled
+  serializer of the metadata wire fragment is a place this invariant can be lost without
+  an error. Present on stored keys
   **and** notification frames (with the no-`ns` shapes: `at/nskey` →
   `{providerId, recipientKind, ckKid}`; `at/symmetric/AES/GCM` →
   `{providerId, ckKid, iv}`).

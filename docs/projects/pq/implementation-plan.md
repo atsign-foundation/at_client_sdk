@@ -612,19 +612,22 @@ through the whole pipeline including the pre-pass, the conveyance record, key va
 and storage; content-key reuse across writes; byte-exact binary; and the `public:__` scan
 property that eager publication depends on.
 
-*Blocked, not broken:* **cross-atSign reads**. The atServer does not return `appMetadata`
-on a cross-atSign `lookup`, so `CryptoRuntime` sees a null `providerId` and falls back to
-`legacy` ([decisions.md](decisions.md) section 17). This breaks the pluggable-crypto seam's
-read direction for **every** provider, including those shipped in `at_client` 3.14 — it is
-not PQ-specific. `tests/at_end2end_test/test/nskey_cross_atsign_test.dart` is committed
-**skipped**, with the reproduction inline. Verified against the current `vip` image, not a
-stale one.
+*Was blocked; cause found and fixed in this package.* Cross-atSign reads failed because
+the **sync push** dropped `appMetadata`: `SyncServiceImpl._metadataToString`, a
+hand-rolled duplicate of `Metadata.toAtProtocolFragment`, never emitted the field, so the
+record reached the atServer without it and `CryptoRuntime` fell back to `legacy`
+([decisions.md](decisions.md) section 17). This affected **every** provider's synced
+writes, including those shipped in `at_client` 3.14 — not PQ-specific. It was first
+recorded here as an atServer gap; that attribution was wrong, and section 17 records the
+probe that distinguishes *not returned* from *never stored*.
+`tests/at_end2end_test/test/nskey_cross_atsign_test.dart` is committed **skipped** and
+should be un-skipped and run once the fix lands.
 
 *Owed, in rough dependency order:*
 
 | Owed | Where it belongs |
 |---|---|
-| atServer returns `appMetadata` on `lookup` — unblocks B-1d | `at_server` (not yet raised) |
+| A `VerbSyntax.update` regex-match guard over the built fragment with every field populated — the serializer now has one canonical implementation, but nothing yet fails if a future field lands out of order | **at_client** |
 | Cold-start: seal the CK to `public:pqpublickey`; `NskeyProvider.encrypt` still throws | **B-1c** |
 | Advertised-key signature verification — `UnverifiedAdvertisedKeys` shouts on every use | **SS-1c** |
 | Real nskey minting + per-APKAM conveyance; `InMemoryNskeyKeyRing` and `mintAndPublish` are fixtures | **SS-4** |
