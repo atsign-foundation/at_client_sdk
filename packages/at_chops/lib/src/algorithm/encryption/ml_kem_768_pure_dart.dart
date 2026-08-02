@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
+import 'package:at_chops/src/algorithm/encryption/ml_kem_768_validation.dart';
 // ignore: implementation_imports
 import 'package:pqcrypto/src/algos/kyber/kem.dart' show KyberLevel;
 import 'package:pqcrypto/pqcrypto.dart';
@@ -36,17 +37,27 @@ final class MlKem768PureDartAlgo implements AtKemAlgorithm {
   ///
   /// Optionally accepts the 32-byte randomness [seed] (FIPS 203 `m`) for
   /// deterministic encapsulation — testing only.
+  ///
+  /// [publicKey] length is validated by `_kem.encapsulate` itself (throws
+  /// `ArgumentError` on mismatch) — see `pqcrypto`'s `KyberKem._validatePublicKey`.
   @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
       Uint8List publicKey,
       [Uint8List? seed]) async {
     final (Uint8List ct, Uint8List ss) = _kem.encapsulate(publicKey, seed);
+    assert(ct.length == MlKem768Sizes.ciphertextBytes);
+    assert(ss.length == MlKem768Sizes.sharedSecretBytes);
     return (ciphertext: ct, sharedSecret: ss);
   }
 
+  /// [secretKey]/[ciphertext] lengths are validated by `_kem.decapsulate`
+  /// itself (throws `ArgumentError` on mismatch) — see `pqcrypto`'s
+  /// `KyberKem._validateSecretKey`/`_validateCiphertext`.
   @override
   Future<Uint8List> decapsulate(
       Uint8List secretKey, Uint8List ciphertext) async {
-    return _kem.decapsulate(secretKey, ciphertext);
+    final Uint8List ss = _kem.decapsulate(secretKey, ciphertext);
+    assert(ss.length == MlKem768Sizes.sharedSecretBytes);
+    return ss;
   }
 }

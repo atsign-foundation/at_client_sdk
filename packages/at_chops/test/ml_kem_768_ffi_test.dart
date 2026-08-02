@@ -164,5 +164,32 @@ void main() {
         algo.releaseKeyPair(kp);
       }
     });
+
+    test(
+        'decapsulate throws ArgumentError for a wrong-length secret-key '
+        'handle (previously: an unguarded index read threw RangeError for '
+        'a too-short handle)', () async {
+      if (lib == null) {
+        fail('libcrypto not available on this host');
+      }
+      if (!mlKemSupported) {
+        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
+      }
+
+      final algo = MlKem768FfiAlgo.fromLib(lib);
+      final kp = await algo.generateKeyPair();
+      try {
+        final enc = await algo.encapsulate(kp.publicKey);
+        final Uint8List shortHandle = Uint8List(7);
+        final Uint8List longHandle = Uint8List(9);
+
+        expect(() => algo.decapsulate(shortHandle, enc.ciphertext),
+            throwsA(isA<ArgumentError>()));
+        expect(() => algo.decapsulate(longHandle, enc.ciphertext),
+            throwsA(isA<ArgumentError>()));
+      } finally {
+        algo.releaseKeyPair(kp);
+      }
+    });
   });
 }

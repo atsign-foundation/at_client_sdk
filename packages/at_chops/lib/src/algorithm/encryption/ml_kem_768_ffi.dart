@@ -28,6 +28,11 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
   final DynamicLibrary _lib;
   final Random _rng = Random.secure();
 
+  /// Byte length of the opaque handle [_encodeHandle]/[_decodeHandle]
+  /// produce/consume — not part of [MlKem768Sizes], since it describes this
+  /// backend's handle encoding, not an ML-KEM-768 key size.
+  static const int _handleLength = 8;
+
   // Registry of live EVP_PKEY* objects, keyed by a random 64-bit handle.
   final Map<int, Pointer<EVP_PKEY>> _keys = {};
 
@@ -214,6 +219,8 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
             if (_encapsulate(ctx, ctBuf, ctLen, ssBuf, ssLen) <= 0) {
               throw StateError('EVP_PKEY_encapsulate failed');
             }
+            assert(ctLen.value == MlKem768Sizes.ciphertextBytes);
+            assert(ssLen.value == MlKem768Sizes.sharedSecretBytes);
             return (
               ciphertext: Uint8List.fromList(ctBuf.asTypedList(ctLen.value)),
               sharedSecret: Uint8List.fromList(ssBuf.asTypedList(ssLen.value)),
@@ -268,6 +275,7 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
           if (_decapsulate(ctx, ssBuf, ssLen, ctBuf, ciphertext.length) <= 0) {
             throw StateError('EVP_PKEY_decapsulate failed');
           }
+          assert(ssLen.value == MlKem768Sizes.sharedSecretBytes);
           return Uint8List.fromList(ssBuf.asTypedList(ssLen.value));
         } finally {
           calloc.free(ssBuf);
@@ -359,16 +367,28 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
   }
 
   static Uint8List _encodeHandle(int handle) {
-    final Uint8List out = Uint8List(8);
-    for (int i = 0; i < 8; i++) {
+    final Uint8List out = Uint8List(_handleLength);
+    for (int i = 0; i < _handleLength; i++) {
       out[i] = (handle >> (8 * i)) & 0xff;
     }
     return out;
   }
 
+  /// Decodes a handle previously produced by [_encodeHandle].
+  ///
+  /// Guards every caller of this helper ([decapsulate], [releaseKeyPair])
+  /// against a wrong-length `secretKey` — without this check, a `secretKey`
+  /// shorter than [_handleLength] throws an uncontrolled `RangeError` from
+  /// the unguarded index read below (the same class of bug the pure-Dart
+  /// ML-DSA-65 backend had for its secret key before it was fixed).
   static int _decodeHandle(Uint8List bytes) {
+    if (bytes.length != _handleLength) {
+      throw ArgumentError.value(bytes.length, 'secretKey',
+          'ML-KEM-768 (FFI) secret key must be the $_handleLength-byte '
+          'handle returned by generateKeyPair');
+    }
     int h = 0;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < _handleLength; i++) {
       h |= bytes[i] << (8 * i);
     }
     return h;
