@@ -14,4 +14,9 @@ abstract final class XWingSizes {
 
   /// Shared secret size.
   static const int sharedSecretLength = 32;
+
+  /// X25519 sub-component size — `pk_X`, `ct_X` and `ss_X` are each this long.
+  /// Distinct from [sharedSecretLength], which is the SHA3-256 combiner's
+  /// output; these two are equal by coincidence, not by construction.
+  static const int x25519ComponentLength = 32;
 }

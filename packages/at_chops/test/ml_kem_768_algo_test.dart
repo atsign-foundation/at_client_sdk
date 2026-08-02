@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_chops/src/algorithm/encryption/ml_kem_768_validation.dart';
+import 'package:at_chops/src/algorithm/spec/ml_kem_768_spec.dart';
 import 'package:test/test.dart';
 
 void main() {

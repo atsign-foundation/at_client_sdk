@@ -5,10 +5,10 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/encryption/ml_kem_768_ffi.dart';
-import 'package:at_chops/src/algorithm/encryption/ml_kem_768_validation.dart';
 import 'package:at_chops/src/algorithm/encryption/x25519_ffi_algo.dart';
-import 'package:at_chops/src/algorithm/encryption/x_wing_sizes.dart';
-import 'package:at_chops/src/algorithm/pq_validation.dart';
+import 'package:at_chops/src/algorithm/spec/ml_kem_768_spec.dart';
+import 'package:at_chops/src/algorithm/spec/output_length.dart';
+import 'package:at_chops/src/algorithm/spec/x_wing_spec.dart';
 import 'package:pointycastle/digests/sha3.dart';
 import 'package:pointycastle/digests/shake.dart';
 
@@ -158,9 +158,9 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
   /// bytes; checking it here covers both call sites in one place.
   Uint8List _combine(
       Uint8List ssM, Uint8List ssX, Uint8List ctX, Uint8List pkX) {
-    checkOutputLength(ssM.length, 32,
+    checkOutputLength(ssM.length, MlKem768Sizes.sharedSecretBytes,
         operation: 'X-Wing', label: 'ML-KEM-768 shared secret component');
-    checkOutputLength(ssX.length, 32,
+    checkOutputLength(ssX.length, XWingSizes.x25519ComponentLength,
         operation: 'X-Wing', label: 'X25519 shared secret component');
     final Uint8List input =
         Uint8List(ssM.length + ssX.length + ctX.length + pkX.length + 6)
