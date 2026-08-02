@@ -89,7 +89,7 @@ per keyfile/install):
 | `aS`          | atServer: `pq` (new verbs) · `legacy`                                                                 |
 | `publickey`   | legacy RSA encryption pubkey published?                                                               |
 | `pqpublickey` | atSign-level PQ encryption pubkey published (immutable)?                                              |
-| `nskey.ns`    | namespace `ns` nskey publication state: `—` (none) · `self` (self at-key `nskey.<ns>@owner` minted, owner-only) · `public` (promoted to world-readable `public:nskey.<ns>@owner` on first cross-atSign share) |
+| `nskey.ns`    | namespace `ns` nskey state: `—` (never used, so no nskey) · `<kid>` (minted and published at `public:__nskey.<ns>@owner`; the kid names the current generation) |
 | `ready`       | PQ-readiness marker, **per (atSign, namespace)** (+ an atSign-level marker for the root `pqpublickey`): `n-r` · `ready` |
 
 **Key objects** (shapes defined in `design.md`; named here for test wiring):
@@ -105,17 +105,17 @@ per keyfile/install):
   Alice encapsulates her **own** CKs to it for self data, **and** external senders
   encapsulate CKs to it when sharing with her. Its private half is minted fresh
   and conveyed to each authorised enrollment as a Secret over the substrate (never
-  derived). The public half is **published lazily** — its *visibility* changes,
-  not the keypair:
-  - On first use it is the **self at-key** `nskey.<ns>@alice` — an at-key (**not**
-    a `public:` key) whose public half **syncs to Alice's clients with `<ns>`
-    access**, owner-only and not world-readable. This already suffices for self
-    data (Alice's own clients hold it).
-  - On the namespace's **first cross-atSign share**, the **same** public half is
-    promoted to the **world-readable** `public:nskey.<ns>@alice` (immutable
-    create-if-absent, signed by the publishing enrollment), so external senders
-    can fetch it via plookup. A namespace used only for Alice's own data keeps the
-    self at-key form and never publishes a `public:` key.
+  derived). The public half is **published eagerly** — written at mint, always:
+  - `public:__nskey.<ns>@alice`, an APKAM-signed envelope carrying
+    `{nskeyKid, publicKey}`. The leading underscore keeps it out of every scan
+    (`showhidden` reveals only `public:__`, and an unauthenticated scan ignores it
+    altogether) while `plookup` still serves it on an exact name, cross-atSign — so
+    the namespace's *existence* is not enumerable.
+  - The record is **mutable**: rotation overwrites it. Create and rotate serialise
+    behind the short-ttl immutable lock `_nskeylock.<ns>@alice`. Earlier generations
+    stay live on the private side, named by `nskeyKid` on each conveyance.
+  - There is no owner-only stage and no promotion step
+    ([`decisions.md`](decisions.md) section 13).
 - **X-Wing key package** — the per-enrollment X-Wing recipient keypair a sender
   `pqSeal`s to (`kpid` = the kid of its X-Wing public half). Registered in the
   enrollment record alongside the ML-DSA public key; **never published**;
@@ -123,7 +123,7 @@ per keyfile/install):
   keyfile.
 - **`appMetadata.providerId`** routes a reader to a provider; a value with **no**
   `providerId` defaults to **legacy**. `appMetadata` carries **no `ns` field**:
-  - `at/nskey` → `{providerId, recipientKind, ckKid}` — a CK-conveyance record (a
+  - `at/nskey/XWING/AES/GCM` → `{providerId, recipientKind, ckKid, nskeyKid}` — a CK-conveyance record (a
     CK X-Wing-sealed to the nskey, or to `pqpublickey` at cold-start). `recipientKind`
     is `nskey` (self and inbound both seal to the one nskey) or `root-pqpublickey`
     (cold-start).
@@ -270,15 +270,15 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
 
 ### 4.1 UC-A3.1 — Self write/read, namespace key already exists
 
-- **Given:** `@alice` pq-native; the nskey exists as the self at-key
-  `nskey.app_1.my_apps@alice` (no `public:` key — this namespace has not yet been
-  shared cross-atSign); `alice1`, `alice2` hold the nskey private.
+- **Given:** `@alice` pq-native; the `app_1.my_apps` nskey exists and is published at
+  `public:__nskey.app_1.my_apps@alice`; `alice1`, `alice2` hold its private.
 - **When:** `alice1` does `put <k>.app_1.my_apps@alice` (shouldEncrypt).
 - **Steps:**
   1. Cut a symmetric **content key (CK)**; encrypt the value with it (AES-256-GCM under the CK).
   2. **Convey the CK once** (`at/nskey`): X-Wing-seal the CK to @alice's **nskey**
-     (`recipientKind: nskey`) and write it as its own CK-conveyance record, cited by
-     `ckKid`. (Skip if the CK is already conveyed.)
+     and write it as its own CK-conveyance record, stamping
+     `appMetadata = {providerId: at/nskey/XWING/AES/GCM, recipientKind: nskey, ckKid, nskeyKid}`.
+     (Skip if the CK is already conveyed to that generation.)
   3. Write the **data** value (`at/symmetric/AES/GCM`): stamp
      `appMetadata = {providerId: at/symmetric/AES/GCM, ckKid, iv}`; the value carries
      **no** inline sealed CK. Write; sync.
@@ -290,18 +290,17 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
     cites `ckKid`; a client lacking the nskey private cannot decapsulate the CK
     and so cannot read. No legacy provider, no `selfEncryptionKey`.
 
-### 4.2 UC-A3.2 — First self write in a namespace mints the nskey (self at-key, no `public:`)
+### 4.2 UC-A3.2 — First self write in a namespace mints and publishes the nskey
 
-- **Given:** `@alice` pq-native; no `app_1.my_apps` nskey exists in any form (neither
-  the self at-key `nskey.app_1.my_apps@alice` nor `public:nskey.app_1.my_apps@alice`);
+- **Given:** `@alice` pq-native; no `app_1.my_apps` nskey exists;
   `alice1`, `alice2` PQ, both with registered key packages.
 - **When:** `alice1` does the first `put <k>.app_1.my_apps@alice`.
 - **Steps:**
-  1. `alice1` mints the **one** `app_1.my_apps` nskey X-Wing keypair, writes its public
-     half as the **self at-key** `nskey.app_1.my_apps@alice` (owner-only, synced to
-     `<ns>`-authorised clients — **not** `public:`), and holds the private. No
-     `public:` key is published: publication waits for the namespace's first
-     cross-atSign share.
+  1. `alice1` takes the `_nskeylock.app_1.my_apps@alice` lock (short-ttl, immutable
+     create — so a concurrent enrollment loses and re-reads), mints the **one**
+     `app_1.my_apps` nskey X-Wing keypair, publishes its public half **immediately**
+     as the APKAM-signed `public:__nskey.app_1.my_apps@alice` carrying
+     `{nskeyKid, publicKey}`, holds the private, and releases.
   2. Convey the CK once via the nskey data path (as A3.1): seal the CK to the nskey
      (`recipientKind: nskey`) in an `at/nskey` record; write the data under
      `at/symmetric/AES/GCM`.
@@ -310,20 +309,22 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
      APKAM signature against its `_apsk` (§13), `pqSeal` the private to each member's
      key package (addressed by `kpid`), put on
      `<msgId>.<kpid>.__ssenv.app_1.my_apps@alice`. `alice2` verifies the envelope
-     signature, then correspondence against the self at-key
-     `nskey.app_1.my_apps@alice`, and `putIfNewer`s.
+     signature, then correspondence against the published
+     `public:__nskey.app_1.my_apps@alice`, and `putIfNewer`s.
 - **Then:**
-  - The self at-key `nskey.app_1.my_apps@alice` syncs to authorised Alice clients;
-    **no** `public:nskey.app_1.my_apps@alice` exists (the namespace's existence is not
-    advertised). `alice2` obtains the nskey private and reads.
+  - `public:__nskey.app_1.my_apps@alice` exists and resolves on a `plookup`, and
+    `alice2` obtains the nskey private and reads.
+  - **The namespace is not enumerable**: an unauthenticated `scan` of `@alice`, with
+    and without `showhidden`, returns no `public:__nskey.…` key. A guaranteed protocol
+    property, covered here as a regression guard.
   - An `app_2.my_apps`-only client is refused the `app_1.my_apps` nskey private
     (server-gated on the `__ssenv` channel).
   - `requestSecret` is the pull backstop for an enrollment offline during the push.
 
 ### 4.3 UC-A3.3 — Self fallback to the atSign-level PQ key (no namespace key)
 
-- **Given:** `@alice` pq-native; `alice1` wants self data but no
-  `nskey.app_1.my_apps@alice` minted and "seal-and-hold" not chosen (send-now default).
+- **Given:** `@alice` pq-native; `alice1` wants self data but no `app_1.my_apps` nskey
+  has been minted and "seal-and-hold" not chosen (send-now default).
 - **When:** `alice1` writes self data.
 - **Then:** still the nskey data path, with the **CK** X-Wing-sealed to
   `public:pqpublickey@alice` (root cold-start target;
@@ -367,20 +368,25 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
 
 ### 5.1 UC-A4.1 — alice → bob, both PQ-native, bob has the namespace key
 
-- **Given:** `@alice`, `@bob` pq-native; `@bob` published `public:nskey.app_1.my_apps@bob`;
-  `bob1`, `bob2` hold `nskey.app_1.my_apps@bob⁻¹`; `@bob` readiness `ready`.
+- **Given:** `@alice`, `@bob` pq-native; `@bob` published
+  `public:__nskey.app_1.my_apps@bob` when he first used the namespace;
+  `bob1`, `bob2` hold its private; `@bob` readiness `ready`.
 - **When:** `alice1` does `put @bob:<k>.app_1.my_apps@alice` (shouldEncrypt).
 - **Steps:**
-  1. Cut a symmetric **CK**; encrypt the value with it (AES-256-GCM under the CK).
-  2. **Convey the CK once** (`at/nskey`, `recipientKind: nskey`): X-Wing-seal the CK to
-     **bob's published nskey** `public:nskey.app_1.my_apps@bob` (fetched from `@bob`),
-     as a discrete CK-conveyance record cited by `ckKid`.
+  1. `plookup` `public:__nskey.app_1.my_apps@bob`, verify its APKAM signature, and note
+     the advertised `nskeyKid`. Cut a symmetric **CK for @bob** — CKs are per
+     recipient — or reuse the current one if it was conveyed to that same generation.
+     Encrypt the value with it (AES-256-GCM under the CK).
+  2. **Convey the CK once** (`at/nskey`, `recipientKind: nskey`): X-Wing-seal it to
+     **bob's published nskey**, as a discrete CK-conveyance record stamping `ckKid`
+     and the `nskeyKid` it was sealed to.
   3. Write the **data** value (`at/symmetric/AES/GCM`, citing `ckKid`); sync (delivered to `@bob`).
-  4. Write the **self-copy** for alice's own clients: convey the CK once via an
-     `at/nskey` record sealed to **alice's own nskey** (`recipientKind: nskey`; this is
-     alice's `app_1.my_apps` nskey — addressed via its self at-key form on her clients,
-     the same keypair whether or not she has shared this namespace), plus the data value
-     under `at/symmetric/AES/GCM`.
+  4. Write the **self-copy** for alice's own clients, in her **own** scope: a
+     **second** CK, conveyed via an `at/nskey` record sealed to alice's own
+     `app_1.my_apps` nskey (`recipientKind: nskey`), plus its own data value under
+     `at/symmetric/AES/GCM`. It is a different CK and therefore a different
+     ciphertext — bob's CK never enters alice's own scope
+     ([`decisions.md`](decisions.md) section 14).
 - **Then:**
   - `bob1`, `bob2` decapsulate bob's CK record with bob's nskey private and read;
     alice's clients decapsulate the self-copy's CK with alice's nskey private and read.
@@ -393,19 +399,19 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
 
 ### 5.2 UC-A4.2 — alice → bob cold-start (bob has no namespace key) → pqpublickey fallback
 
-- **Given:** `@alice`, `@bob` pq-native; `@bob` has `public:pqpublickey@bob` but **no** `public:nskey.app_1.my_apps@bob`.
+- **Given:** `@alice`, `@bob` pq-native; `@bob` has `public:pqpublickey@bob` but **no** `public:__nskey.app_1.my_apps@bob` — he has never used that namespace.
 - **When:** `alice1` shares `@bob:<k>.app_1.my_apps@alice`.
 - **Then:** as A4.1 but X-Wing-seal the **CK** to bob's `public:pqpublickey@bob`
   (root cold-start target; `recipientKind: root-pqpublickey`) — application data is
   never encapsulated directly to it; the data value stays `at/symmetric/AES/GCM`.
   Every authorised bob enrollment decapsulates the CK and reads instantly. Subsequent
-  writes **upgrade** to `public:nskey.app_1.my_apps@bob` once a bob `app_1.my_apps`
+  writes **upgrade** to `public:__nskey.app_1.my_apps@bob` once a bob `app_1.my_apps`
   enrollment publishes it. (High-security `app_1.my_apps` may instead seal-and-hold —
   the per-namespace opt-in.)
 
 ### 5.3 UC-A4.3 — Multi-enrollment both ends
 
-- **Given:** alice (E:aE1, aE2) and bob (E:bE1, bE2) all PQ; bob has `public:nskey.app_1.my_apps@bob`.
+- **Given:** alice (E:aE1, aE2) and bob (E:bE1, bE2) all PQ; bob has `public:__nskey.app_1.my_apps@bob`.
 - **When:** `alice2` shares with `@bob`.
 - **Then:** all of bob's authorised enrollments read; all of alice's authorised
   enrollments read the self-copy; no authorised enrollment is left unable to decrypt.
@@ -419,7 +425,7 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
 
 ### 5.4 UC-A4.4 — Cross-atSign notification (encrypted value)
 
-- **Given:** `@alice`, `@bob` pq-native; `@bob` published `public:nskey.app_1.my_apps@bob`
+- **Given:** `@alice`, `@bob` pq-native; `@bob` published `public:__nskey.app_1.my_apps@bob`
   (or `public:pqpublickey@bob` fallback); `@bob` readiness `ready`; `bob1` running a monitor.
 - **When:** `alice1` `notify`s `@bob` with an encrypted value.
 - **Steps:**
@@ -455,16 +461,24 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
 - **Then (a):** old-CK-era data becomes undecryptable (the nskey private cannot help —
   no sealed copy of the old CK survives). Retaining the old conveyance instead =
   history access. This is the per-namespace FS retention knob.
-- **When (b) — revocation + PCS = rotate the nskey *keypair*:** `alice1` mints the next
-  nskey keypair **excluding the revoked enrollment**, re-publishes its public half —
-  updating the self at-key `nskey.app_1.my_apps@alice`, and re-promoting it to
-  `public:nskey.app_1.my_apps@alice` if that namespace had already been shared — and
-  pushes the successor private to the surviving enrollments per-enrollment — seal to
-  each surviving key package via `__ssenv`, dropping the revoked one.
-- **Then (b):** new CKs are sealed to the successor nskey; peers re-fetch and
-  encapsulate to the new published public half. This is the heavier, O(n)-per-enrollment
-  revocation + post-compromise-security lever — **not cheap**, and **distinct** from
-  CK rotation.
+- **When (b) — revocation + PCS = rotate the nskey *keypair*:** `alice1` takes the
+  `_nskeylock.app_1.my_apps@alice` lock, mints the next nskey keypair **excluding the
+  revoked enrollment**, **overwrites** `public:__nskey.app_1.my_apps@alice` with the new
+  APKAM-signed `{nskeyKid, publicKey}`, pushes the successor private to the surviving
+  enrollments — seal to each surviving key package via `__ssenv`, dropping the revoked
+  one — and releases the lock.
+- **Then (b):** new CKs are sealed to the successor nskey and their conveyances carry
+  the new `nskeyKid`; each surviving enrollment **retains** the prior private, so
+  retained history still opens. A peer notices at its next `ensureCurrent`: it
+  re-`plookup`s, sees the changed `nskeyKid`, and cuts a fresh CK to the successor.
+  **Without that re-fetch the revocation does not hold** — a peer still sealing to the
+  superseded generation hands the revoked enrollment a key it can open, so the
+  bounded-exposure assertion is part of this case, not an optimisation. This is the
+  heavier, O(n)-per-enrollment revocation + post-compromise-security lever — **not
+  cheap**, and **distinct** from CK rotation.
+- **Then (b), late joiner:** an enrollment approved *after* the rotation is pushed the
+  current generation only; on meeting a retained `__ck` naming an earlier `nskeyKid` it
+  pulls that generation via `requestSecret` and opens it.
 
 ### 6.2 UC-A5.2 — Per-enrollment auth revocation
 
@@ -716,7 +730,13 @@ These invariants are testable against **every** UC above:
 - **Writes gated by reader readiness.** A value/notification is only written in a
   scheme **every** required reader supports; otherwise legacy (3.x) or **refused**
   under `disallowLegacyEncryption = true`.
-- **`appMetadata.providerId` is authoritative** and present on **both** stored keys
+- **`appMetadata.providerId` is authoritative**, names every algorithm a reader needs
+  code for ([`decisions.md`](decisions.md) section 16), and is present on **stored keys,
+  notification frames and `lookup` responses alike**. The lookup clause is not
+  redundant: the atServer does **not** currently return `appMetadata` on a cross-atSign
+  `lookup`, so every cross-atSign read falls back to `legacy`
+  ([`decisions.md`](decisions.md) section 17). Until that is fixed, the seam works
+  same-atSign only, for **every** provider — not just the PQ ones. Present on stored keys
   **and** notification frames (with the no-`ns` shapes: `at/nskey` →
   `{providerId, recipientKind, ckKid}`; `at/symmetric/AES/GCM` →
   `{providerId, ckKid, iv}`).
@@ -727,11 +747,16 @@ These invariants are testable against **every** UC above:
   (`rsa2048` | `mldsa65`) — `_getSigningAlgoType` reads the record, never the
   client-supplied wire value (at_chops `mldsa65` verify branch + at_commons pkam
   `signingAlgo` literal).
-- **Immutability.** `pqpublickey` and the world-readable `public:nskey.<ns>@owner`
-  (the promoted form, published on first cross-atSign share) are create-once; a second
-  create is rejected, never an overwrite. (The owner-only self at-key
-  `nskey.<ns>@owner` is an ordinary at-key — it syncs and is re-written on
-  nskey-keypair rotation; only its promotion to `public:` is immutable.)
+- **Immutability, and where it does *not* apply.** `pqpublickey` is create-once: a
+  second create is rejected, never an overwrite — it is the root and never rotates.
+  `public:__nskey.<ns>@owner` is **mutable by design**, because nskey-keypair rotation
+  has to overwrite it; what stops two of the owner's enrollments racing is the
+  short-ttl immutable lock `_nskeylock.<ns>@owner`, and what stops substitution is the
+  APKAM signature over the advertised envelope, not the write mode.
+- **Published nskeys are fetchable but not enumerable.** `public:__nskey.<ns>@owner`
+  resolves on an exact `plookup`, cross-atSign, and appears in **no** scan — with or
+  without `showhidden`, authenticated or not. This is a guaranteed protocol property
+  (`_apsk` already relies on it); the test is a regression guard, not a proof obligation.
 - **Advertised recipient keys are signed and verified.** Every advertised
   encapsulation key — the per-enrollment key package (`metadata.keyPackage`), the
   published `nskey` public half, and `public:pqpublickey@owner` — is an **APKAM-signed

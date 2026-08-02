@@ -131,13 +131,13 @@ senders encapsulate CKs to it when sharing with her.
   conveyed per-APKAM as a secret over the shared substrate. It is a KEM private:
   it **decapsulates** CKs — both Alice's own and inbound ones — and never
   decrypts application data.
-- The **public half is published lazily**. On first use it is the **self at-key**
-  `nskey.<ns>@alice` — owner-only, synced to Alice's `<ns>`-authorised clients,
-  **not** a `public:` world-readable key; this alone suffices for self data. On
-  the namespace's **first cross-atSign share** the same public half is promoted
-  to the world-readable `public:nskey.<ns>@alice`, so external senders can fetch
-  it. A namespace used only for Alice's own data keeps the self at-key form and
-  never advertises a `public:` key.
+- The **public half is published eagerly** — written at mint, always, to
+  `public:__nskey.<ns>@alice`, so a sender never has to wonder whether a recipient
+  has published yet. The leading underscore keeps it out of every scan while an
+  exact `plookup` still resolves it, so publishing it does not advertise that the
+  namespace exists. The record is **mutable**: rotation overwrites it, serialised
+  by a short-lived lock key, and each conveyance names the generation it was
+  sealed to.
 
 So Alice's self data and a share to `@bob` both encapsulate the CK to the **same**
 `nskey`; the directions differ by *which atSign owns the CK record*, not by which
@@ -199,7 +199,7 @@ the negotiation layer, the flag semantics — lives in
 **The seam lets schemes coexist per value, so the sender encrypts in the scheme
 the recipient can decrypt** — discovered from what the recipient publishes:
 
-- a published **`public:nskey`** for the namespace → the `nskey` data path;
+- a published **`public:__nskey`** for the namespace → the `nskey` data path;
 - only an **RSA pubkey** → `legacy`;
 - **KeyPackages + a group advertised** → `at/pqmls` (in D2).
 
@@ -240,10 +240,10 @@ detail and the capabilities-by-code-change-level table live in
    routing on *read*, keeps *writing* legacy; a zero-risk, client-by-client
    deploy.
 2. **Publish the namespace `nskey` + capability marker** — the first upgraded
-   client mints the namespace `nskey` and publishes its public half (the
-   owner-only self at-key, promoted to `public:` on the first cross-atSign share),
-   its private conveyed per-APKAM over the substrate; the per-`(atSign, namespace)`
-   capability marker goes up **not-ready**; writes still legacy.
+   client mints the namespace `nskey` and publishes its public half immediately at
+   `public:__nskey.<ns>@alice`, its private conveyed per-APKAM over the substrate;
+   the per-`(atSign, namespace)` capability marker goes up **not-ready**; writes
+   still legacy.
 3. **Flip readiness** — once an atSign's namespace fleet is fully upgraded, mark
    it ready; new writes to/from that atSign's namespace switch to the `nskey`
    data path automatically, per-destination.

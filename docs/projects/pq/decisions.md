@@ -24,8 +24,13 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [8. Stale-source reconciliation note](#8-stale-source-reconciliation-note)
 - [9. APKAM keypair as key package: considered and rejected (2026-06-30)](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30)
 - [10. nskey derivation from a shared master seed: rejected (2026-06-30)](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30)
-- [11. Single nskey per namespace, lazily published (2026-06-30)](#11-single-nskey-per-namespace-lazily-published-2026-06-30)
+- [11. Single nskey per namespace, lazily published (2026-06-30)](#11-single-nskey-per-namespace-lazily-published-2026-06-30) — *publication superseded by [13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02)*
 - [12. Advertised recipient keys are signed against `_apsk` (2026-07-02)](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)
+- [13. The nskey is published eagerly, mutable, and generation-addressed (2026-08-02)](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02)
+- [14. Content keys are scoped per recipient (2026-08-02)](#14-content-keys-are-scoped-per-recipient-2026-08-02)
+- [15. The record owner and the nskey owner are different atSigns (2026-08-02)](#15-the-record-owner-and-the-nskey-owner-are-different-atsigns-2026-08-02)
+- [16. A provider id names every algorithm a reader needs code for (2026-08-02)](#16-a-provider-id-names-every-algorithm-a-reader-needs-code-for-2026-08-02)
+- [17. `appMetadata` is not returned on a cross-atSign lookup (2026-08-02, open)](#17-appmetadata-is-not-returned-on-a-cross-atsign-lookup-2026-08-02-open)
 
 ---
 
@@ -660,7 +665,7 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 | **2026-06-30** | **Decision #F ratified — 1:1:1 + fresh-enrollment retrofit.** Decision #B resolved (Option A). OQ2/OQ3 revised, OQ8/OQ9 added. `listns` flattened. `enroll:metadata` verb removed (→ `EnrollParams.metadata`). Per-APKAM-key delete removed. The d1-execution-plan revision folded a 15-delta workflow (verified against the live `at_server`/at_commons/at_client trees). | One keypair per enrollment removes verify-against-any, the multi-key record reshape, and the delete-after-ML-DSA ordering; retrofit becomes a clean fresh auto-approved enrollment that ages the old one out. Simpler, smaller blast radius, no escalation path. |
 | **2026-06-30** | **APKAM keypair ≠ key package — kept two keypairs per enrollment.** Considered collapsing the enrollment's ML-DSA APKAM keypair and X-Wing key package into one (and single-seed derivation of the pair); both rejected. | ML-DSA (signature) and X-Wing (KEM) are distinct PQ primitives — one keypair can't both sign/auth and be encapsulated to. Two keypairs is the floor; single-seed derivation saves only keyfile bytes and adds a re-derivation-stability risk. See [9](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30). |
 | **2026-06-30** | **Shared-master-seed nskey derivation rejected; the `design.md` §1.3 derivation paragraph was removed.** nskey privates are minted as fresh random keypairs and conveyed per-APKAM over the substrate — never HKDF-derived from a shared seed. | A seed shared across an atSign's enrollments (required for the whole atSign to share one nskey per namespace) breaks post-compromise security, namespace compartmentalization, and rotation forward-secrecy; the namespace/epoch HKDF labels are public and don't gate who can derive. A full-corpus sweep confirmed this was the only insecure derivation. See [10](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30). |
-| **2026-06-30** | **Single nskey per namespace, lazily published — collapses the former self/public nskey pair.** One X-Wing keypair serves both self data and inbound shares; the public half is published lazily (owner-only self at-key → `public:` on first cross-atSign use). | Peer review: the two nskeys did the same KEM job with the same private-holders, so the split bought no real compartmentalization or authenticity, and one key simplifies the read path and rotation. Lazy publication preserves namespace-existence privacy for self-only namespaces. See [11](#11-single-nskey-per-namespace-lazily-published-2026-06-30). |
+| **2026-06-30** | **Single nskey per namespace, lazily published — collapses the former self/public nskey pair.** One X-Wing keypair serves both self data and inbound shares; the public half is published lazily (owner-only self at-key → `public:` on first cross-atSign use). | Peer review: the two nskeys did the same KEM job with the same private-holders, so the split bought no real compartmentalization or authenticity, and one key simplifies the read path and rotation. Lazy publication preserves namespace-existence privacy for self-only namespaces. See [11](#11-single-nskey-per-namespace-lazily-published-2026-06-30) — the one-keypair half stands; **lazy publication superseded 2026-08-02** by [13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02). |
 | **2026-07-02** | **Six execution rulings** (post-review): verb name `enroll:listns`; D1 surface scope (`.atKeys`-at-rest IN via KF-1; TLS + atDirectory non-goals); readiness operator-primary + auto-detect fast-follow; R-2 ecosystem-floor package set named; FFI auto-resolve default; `_apsk` write-restriction pinned + e2e-test-required. | Landed from the plan-vs-code review that found in-flight PRs implementing superseded rulings; the rulings + a conformance gate keep execution aligned to the record. |
 | **2026-07-02** | **Advertised-key signing + `_apsk` always-present** ([section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)). Advertised recipient keys (key package, `nskey` public, `pqpublickey`) are APKAM-signed by the generating enrollment and verified against its `_apsk` — same path same-atSign and cross-atSign; the atServer keeps `_apsk` present (populated from the record) as well as write-restricted. Supersedes "atServer vouches". Also: the key package is a **singular signed `metadata.keyPackage`** (no format-keyed map). | Authenticates the encapsulation target against a rogue *insider* enrollment under an honest server (not server-asserted); reuses the existing `wrapAndSign`/`_apsk` machinery. Does **not** remove a malicious atServer *operator* from the TCB — the operator is the `_apsk` anchor (see section 12 + design.md *Trust boundary*). The format-map was redundant with in-package `keys[].alg` + `v` agility. |
 
@@ -672,6 +677,8 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 | **2026-07-20** | **Planning-day reconciliation** (#1889 vs the doc set vs merged/open PRs and branches). Recorded: SS-0, SS-1b, S-1 and S-2 are **satisfied**; P-2 is fully closed by the 3.4.0 publish; `SS-1c` is the next actionable critical-path project. Issues cut for the previously-untracked substrate tail — SS-1c [#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084), SS-2 [#2085](https://github.com/atsign-foundation/at_client_sdk/issues/2085), SS-3 [#2086](https://github.com/atsign-foundation/at_client_sdk/issues/2086), SS-4 [#2087](https://github.com/atsign-foundation/at_client_sdk/issues/2087) — and **two merged-but-unpublished residuals recorded as open gates**: the at_auth rc1 → stable 3.3.0 promotion (blocking S-6 and SS-2), and S-2's `CryptoContext.keys` (#2076), which merged at 18:20Z on 2026-07-17 — after `at_client 3.14.0` published at 16:02Z — so it awaits the next at_client release. IS-1 (at_server #2683) restated as in progress and off the critical path. | #2008 had been closed on the SS-0 merge, leaving `SS-1c → SS-2 → SS-3 → SS-4` — the whole run-up to the D1 GA gate — with no tracking issue; and the 2026-07-17 release train had closed several publish gates the docs still carried as open. |
 | **2026-07-21** | **Client PKAM auth is a signature swap only (guardrail + the under-specified client piece named).** PKAM PQ-safety = sign the server-issued per-connection `from:` challenge with ML-DSA-65 instead of RSA (`PkamSigningAlgo` → ML-DSA in at_lookup, selected off the stored `signingAlgo`), verified record-authoritatively server-side. **No KEM, no certificate, no per-connection key lifecycle; the 1:1:1 single-key record stays the minimal form.** The one legitimate KEM in the enrollment path is the `apkamSymmetricKey` conveyance at enroll/approve (P-3) — key *transport*, not auth. The client-side signing swap was previously unnamed in the plan; it now has a home (design.md §2.4), exercised by RF-2b + ON-1. | Same principle as the IS-1 pare-back: PKAM is authentication, not key agreement — the per-connection challenge gives freshness and TLS secures the channel, so only the signature is Shor-vulnerable. Recorded to pre-empt the same over-build (a KEM/cert/keyring on client auth) that IS-1 had carried, and to close the plan gap the client swap left. |
 | **2026-07-21** | **IS-1 pared back to a signature swap; X-Wing KEM + cert machinery dropped.** IS-1 becomes: publish an ML-DSA-65 `pq_signing_publickey` (JSON, one field, for agility), sign the existing FROM/POL UUID challenge with ML-DSA instead of RSA, verify with `AtPqc.mlDsa65.verifyBytes` instead of the RSA path — two one-line algorithm swaps in the existing branch. **Removed:** the X-Wing KEM, the inter-server certificate, expiry / 30-day rotation grace, the HKDF confirmation tag, the `PqKeyManager` lifecycle class, and the unpublished at_chops `XWingCert`/`resolveXWing` surface (so IS-1's cross-package publish gate **dissolves** — it builds on published at_chops 3.4.x only). Effort L→M. PR #2683 is over-built against this scope and is to be pared back. | FROM/POL is **authentication, not key agreement**: the per-session UUID challenge already gives freshness/anti-replay and TLS already secures the channel, so the only Shor-vulnerable element is the signature. A KEM establishes a shared secret nothing in the handshake needs; a signing key needs no cert/rotation lifecycle (a change is a re-publish, read live). Same PQ guarantee at a fraction of the surface — the "don't over-engineer PQ safety" principle applied. See design.md §8. |
+
+| **2026-08-02** | **Seven nskey data-path rulings** from walking an Alice↔Bob message end to end against the built providers ([13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02), [14](#14-content-keys-are-scoped-per-recipient-2026-08-02), [15](#15-the-record-owner-and-the-nskey-owner-are-different-atsigns-2026-08-02)): the nskey is published **eagerly** to `public:__nskey.<ns>@<owner>` (mutable, lock-serialised, generation-tagged), superseding lazy publication; content keys are scoped **per recipient**; and the record owner (`sharedBy`, for `info`) is separated from the nskey owner (`sharedWith ?? sharedBy`, for key selection). | The walk surfaced three defects the doc set had not caught: cross-atSign reads could not work, because the key ring was looked up under the sender's atSign; the promotion trigger fired on *sending* while the key a sender needs is the *recipient's*, so a receive-only atSign cold-started forever; and `design.md` called the published half immutable while B5b required re-publishing it, leaving the revocation lever unimplementable. Rotation additionally had no signal reaching senders — a silent B6 revocation failure — and a post-rotation joiner could not open retained history. |
 
 **Cross-refs:** the Wave-0 "already landed" detail and the project that follows
 each decision are in `implementation-plan.md`; the phase trajectory this timeline
@@ -817,6 +824,12 @@ that it saves only keyfile bytes.
 
 ## 11. Single nskey per namespace, lazily published (2026-06-30)
 
+> **Partly superseded (2026-08-02).** The *one keypair per `(atSign, namespace)`* ruling
+> below stands and is load-bearing. Its **publication** half — lazy publication as the
+> mitigation for namespace-existence leakage — is superseded by
+> [section 13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02),
+> which keeps the goal and changes the mechanism.
+
 **Decision.** Each `(atSign, namespace)` has **one** X-Wing KEM nskey keypair, not two. The
 single nskey is the recipient key for **both** directions — the owner encapsulates her own
 content keys (CKs) to it for self data, and external senders encapsulate CKs to it when sharing
@@ -890,8 +903,8 @@ the substrate's original design): the encapsulation target is now
 
 - the per-enrollment **key package** (the X-Wing recipient key at the singular
   `metadata.keyPackage`, Layer 1 of the substrate);
-- the published **`nskey`** public half (`nskey.<ns>@<atSign>` → promoted
-  `public:nskey.<ns>@<atSign>`);
+- the published **`nskey`** public half (`public:__nskey.<ns>@<atSign>`, written at
+  mint — [section 13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02));
 - the atSign-level root **`public:pqpublickey@<atSign>`**.
 
 **Mechanism.** The generating enrollment wraps the advertised key in an
@@ -974,3 +987,277 @@ atServer `_apsk`-always-present + write-restriction is **SS-1b**. The current
 substrate advertises the key package **unsigned** — tracked as a gap in `design.md`
 §6. Mechanics: `design.md` §2.1 (*Advertised-key authenticity*) and §2.4; sequencing:
 `implementation-plan.md` SS-1b/SS-1c/SS-2/SS-4; acceptance: `acceptance.md` §13.
+
+---
+
+## 13. The nskey is published eagerly, mutable, and generation-addressed (2026-08-02)
+
+**Decision.** Three parts, together replacing the lazy-publication half of
+[section 11](#11-single-nskey-per-namespace-lazily-published-2026-06-30):
+
+1. **Eager publication.** The nskey public half is written **at mint time, always**, to
+   `public:__nskey.<ns>@<owner>`. There is no owner-only self at-key stage, no promotion
+   step, and no first-cross-atSign-share trigger.
+2. **The advertisement is mutable.** That one record holds an APKAM-signed
+   `{nskeyKid, publicKey}` and is **overwritten** on rotation. Creation and rotation
+   serialise behind a short-TTL **immutable lock key** — a self key, since only the
+   owner's own enrollments can race for it.
+3. **Generations are addressed by `nskeyKid`.** Every `at/nskey` CK-conveyance record
+   carries the kid of the nskey it was sealed to, so a reader holding several
+   generations indexes straight to the right private.
+
+**Why eager — the promotion trigger was unsound.** Promotion fired on a namespace's first
+*outbound* share, but the key a sender needs is the **recipient's**. An atSign that only
+ever receives in a namespace therefore never published, so every sender cold-started to
+`public:pqpublickey@<recipient>` **forever** — permanently concentrating traffic on the
+one atSign-level root key that namespace scoping exists to avoid. Fixing the trigger
+(promote on first inbound too) would have kept a two-stage lifecycle whose only remaining
+job was privacy — which part 1's naming achieves outright.
+
+**Why the underscore — the privacy goal is kept, the mechanism changes.**
+[Section 11](#11-single-nskey-per-namespace-lazily-published-2026-06-30) adopted lazy
+publication to stop a published key advertising the *existence* of a namespace, since
+namespaces are app names and the set of them profiles an atSign. A `public:__` key is
+revealed only *by* `showhidden`, and an **unauthenticated scan ignores `showhidden`** —
+so the only scan an outsider can issue never returns it — while `plookup` still serves
+it on an exact name, cross-atSign. Fetchable by anyone who already knows the namespace;
+enumerable by nobody who matters. This is the same shape `_apsk` already relies on
+([section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)).
+
+**Why double and not single (2026-08-02, measured).** A *single*-underscore public key
+is hidden from every scan, the owner's own with `showhidden` included — strictly
+stronger, and the first choice. It is unusable: such a key is written with **commit id
+-1**, sits outside the commit log, and **sync can never push it**. An advertisement that
+cannot leave the device is no advertisement. Double underscore carries a real commit id
+and syncs. The advertisement is additionally written **direct to the atServer**, since
+it is only useful once a peer can fetch it and the local-first path would leave it
+unpublished until the next sync. Established against a live atServer after three
+successive attempts to verify it through client machinery each measured something other
+than what they claimed.
+The leak section 11 mitigated is closed at least as tightly, without the two-stage.
+
+**Why mutable — immutability was race control, and it made rotation impossible.**
+`design.md` simultaneously called the published half *immutable create-if-absent* and
+required B5b to *re-publish* it on rotation; those cannot both hold, so nskey-keypair
+rotation — the post-compromise-security and per-enrollment revocation lever — was
+unimplementable as specified. Immutability there is a **concurrency** control, not a
+confidentiality one: substitution is prevented by the APKAM signature verified against
+`_apsk` (section 12), which is unaffected. Taking the lock explicitly restores the race
+safety and leaves the record writable, which is what rotation needs. The root
+`public:pqpublickey@<atSign>` is **unchanged** — it never rotates, so it stays immutable
+create-if-absent.
+
+**Rotation signal — the sender re-fetches; there is no failure path back to it.**
+The design previously said a sender "re-fetches on a decapsulation-failure / rotation
+signal". No such signal can exist: the sender never decapsulates, and the recipient's
+failure is on the recipient's device. Left unfixed this is a **silent revocation
+failure** — a sender still holding a pre-rotation public half keeps sealing new content
+keys to a generation the revoked enrollment can still open, so B6 revocation does not
+hold for inbound cross-atSign data. The rule is therefore: the sender re-`plookup`s
+`public:__nskey.<ns>@<recipient>` whenever it mints or reuses a CK for that destination,
+and a `nskeyKid` mismatch forces a fresh CK conveyed to the new generation. Exposure is
+bounded by one CK lifetime rather than being unbounded.
+
+**Amended (2026-08-02, on building it).** "Re-`plookup` whenever it mints or reuses a
+CK" is a round trip to the recipient's atServer **on every `put`** — `ensureCurrent`
+runs per write, because comparing the advertised kid against the cached one is how
+rotation is detected at all. That is unusable, and it would break offline writes,
+which the SDK supports. The rule is therefore: the sender caches a fetched
+advertisement for a bounded **TTL** and re-fetches when it is stale. Total exposure is
+**TTL + one CK lifetime**, still statable and now tunable, and the steady-state write
+path costs no network. The original wording chose the tightest bound without costing
+it; this is the same mechanism with a lever on it.
+
+**Generation retention — current on join, older pulled on demand.** A new enrollment is
+pushed the **current** generation only, so join cost stays O(1). When a reader meets a
+`__ck` tagged with an `nskeyKid` it does not hold, it issues `requestSecret` for that
+generation over the substrate's existing pull backstop. History becomes pay-as-you-go and
+a device that never reads old data never pays. This is only possible *because* part 3
+tags the record; without the tag the alternative is trial decapsulation, which costs an
+X-Wing operation per generation and degrades silently with every rotation.
+
+**Consequences.**
+
+- `nskey.<ns>@<owner>` (the owner-only self at-key form) **no longer exists**. The key
+  shape is `public:__nskey.<ns>@<owner>` from mint onward.
+- `appMetadata` on an `at/nskey` record becomes
+  `{providerId, recipientKind, ckKid, nskeyKid}`.
+- The nskey key ring is keyed `(owner, namespace, nskeyKid)` with a current pointer —
+  structurally identical to the CK cache, and for the same reason.
+- **Cold-start survives but narrows sharply**: `recipientKind: root-pqpublickey` is now
+  reached only when the recipient has never used the namespace *at all*, rather than
+  whenever they have never sent in it.
+- Namespace-existence privacy rests on the `public:_` scan-hiding rule. That is a
+  **core, guaranteed property of the Atsign Protocol**, not an assumption this design
+  makes — `_apsk` already depends on it. An e2e regression test covers it so a server
+  change cannot quietly retire it under us.
+
+**Implementation status.** Target, not yet built: eager publish + the lock-key create /
+rotate path is **SS-4**; the sender-side re-`plookup` is **B-1d**; rotation and the
+generation pull are **B-2** + the substrate. The `nskeyKid` tag on the conveyance is
+**B-1b** — a wire-shape addition that is free before any record exists and expensive
+after. Mechanics: `design.md` sections 1.3–1.5 and 1.7; acceptance: `acceptance.md`
+sections 4, 5 and 6.
+
+---
+
+## 14. Content keys are scoped per recipient (2026-08-02)
+
+**Decision.** A content key belongs to a `(recipient, namespace)` pair, not to a
+`(sender, namespace)` pair. The CK cache and its *current* pointer are keyed by the
+**nskey owner** — the atSign whose nskey the CK is sealed to. Alice writing to Bob and
+Alice writing her own self-copy use **different** CKs, and therefore different
+ciphertexts.
+
+**Why.** Under a per-namespace CK, one key is conveyed to every recipient of that
+namespace, so any recipient who obtains the bytes of a message meant for another can
+decrypt it — separation would rest entirely on the atServer's `sharedWith` gate. Scoping
+per recipient puts that separation in the crypto, where a compromised or hostile
+recipient cannot reach it, and matches `design.md`'s own statement that whose nskey a CK
+is sealed to is "per recipient, not a group". It also makes the FS and PCS levers
+independent per destination: rotating for Bob leaves Carol's traffic untouched.
+
+**What it costs.** The message body is encrypted once per recipient. The number of
+conveyance records is unchanged — a CK has to be sealed separately to each recipient's
+nskey either way — so the cost is N ciphertexts rather than N conveyances, and it is
+paid only by a genuine multi-recipient write.
+
+**Consequences.**
+
+- `acceptance.md` UC-A4.1's self-copy step is **correct and stays**, but it conveys a
+  *second* CK from the sender's own scope, not the same CK sealed twice.
+- A CK is long-lived **per destination** and rotates on the forward-secrecy lever, not
+  per message.
+- Something above both providers must mint and convey a CK the first time a destination
+  is written to — see [section 15](#15-the-record-owner-and-the-nskey-owner-are-different-atsigns-2026-08-02)
+  for why the data provider cannot do it itself.
+
+**Implementation status.** The cache re-scope is **B-1a**; the per-destination mint
+trigger is **B-1**'s routing work.
+
+---
+
+## 15. The record owner and the nskey owner are different atSigns (2026-08-02)
+
+**Decision.** Every `at/nskey` and `at/symmetric/AES/GCM` operation resolves **two**
+distinct atSigns from the `AtKey`, and they must not be conflated:
+
+| Purpose | atSign | Derivation |
+|---|---|---|
+| HPKE `info` domain separation | the **record owner** | `sharedBy` |
+| Which nskey seals or opens it; CK cache scope | the **nskey owner** | `sharedWith ?? sharedBy` |
+
+**Why they differ.** On any inbound record — `@bob:<ckKid>.__ck.<ns>@alice` — the record
+is owned by the sender but the envelope is sealed to the **recipient's** nskey. Deriving
+the key from `sharedBy` makes Bob's client ask its ring for *Alice's* namespace private,
+which it will never hold, so cross-atSign reads fail with a misleading "not authorised
+for the namespace". `decisions.md`
+[section 11](#11-single-nskey-per-namespace-lazily-published-2026-06-30) is unambiguous
+that "the reader decapsulates every `__ck` record with the one nskey private" — its own.
+
+**Why `info` stays on the record owner.** The binding exists so that self and inbound
+flows stay domain-separated under one shared key. That separation only works if the bound
+value is what *differs* between them — the record owner. Binding the recipient instead
+would give `@bob` for both and separate nothing.
+
+**Consequences.**
+
+- `sharedWith` survives the `cached:` prefix, so the derivation is available on a
+  received record without consulting client identity.
+- Because the CK cache scope is the nskey owner
+  ([section 14](#14-content-keys-are-scoped-per-recipient-2026-08-02)), one derivation
+  serves both the key ring and the cache; `sharedBy` is used *only* for `info`.
+- The mistake is easy to reintroduce, so the two derivations are named separately in code
+  rather than sharing an `_ownerOf` helper.
+
+**Implementation status.** **B-1a**/**B-1b**. Behaviour-preserving for self data, where
+the two derivations coincide; it is what makes **B-1d** possible at all.
+
+
+---
+
+## 16. A provider id names every algorithm a reader needs code for (2026-08-02)
+
+**Decision.** A `providerId` is `at/<role>/<algorithms…>`. It names the role, then
+**every algorithm a reader needs an implementation of**. Anything a reader can
+discover from the value itself — the `pqSeal` envelope version, `iv`, `ckKid`,
+`nskeyKid` — stays out of the id.
+
+Concretely the CK-conveyance provider becomes **`at/nskey/XWING/AES/GCM`**, not the
+bare `at/nskey`. `at/symmetric/AES/GCM` was already compliant and is unchanged.
+`at/nskey` survives as the **family prefix**, so prose about "an `at/nskey` record"
+still means the family and `at/nskey/*` is the set.
+
+**Why the old form failed the test it set itself.** `design.md` justified the
+asymmetry — the data provider names its algorithm "because that is the layer that
+needs crypto-agility", while `at/nskey` named a role and deferred versioning to
+"the key's kid". But a kid is a hash of the public key: it identifies **which key**,
+not **which algorithm**. So layer 2 had no agility at the routing level at all. The
+only versioning was `pqSeal`'s envelope byte, which a reader cannot act on until it
+already has the code to parse the envelope — too late to be a routing decision.
+
+**What the rule buys.** Reads stay universal: a reader registers every scheme it has
+ever supported and values route by their own id, so records written under a retired
+scheme keep opening forever. What the id adds is that a **writer can decide** whether
+a recipient can read a scheme rather than guessing — which is what turns an algorithm
+change from a flag day into a rollable migration. `at/nskey/MLKEM1024/AES/GCM` can
+coexist with `at/nskey/XWING/AES/GCM` indefinitely.
+
+**Granularity, and why it is deliberately slightly over-specified.** `pqSeal` versions
+KEM, KDF and AEAD together as one suite, so naming both the KEM and the envelope AEAD
+says more than today's code can vary independently. That is the safe direction: if
+they ever decouple, the id already distinguishes them, whereas a suite-level token
+(`at/nskey/atPQv1`) would have to be re-cut. The cost is a longer string.
+
+**Consequence for negotiation — the capability marker becomes a set.** A boolean
+"ready / not-ready" per `(atSign, namespace)` cannot express *which* schemes a fleet
+supports, so it cannot survive a second PQ scheme. The B3 marker therefore advertises
+the **set of provider ids** the fleet supports, and a writer picks the best id present
+in **every** required reader's set. Ready/not-ready becomes the degenerate case —
+"is the PQ pair in the set". This is **R-1**'s to build; recorded here so it is not
+re-derived later.
+
+**Timing.** Free now and expensive later: nothing has been written under the bare
+`at/nskey`, so the rename costs a constant and a doc sweep. Once a record exists it
+costs a migration.
+
+**Implementation status.** The id and the family constant are **B-1b** (done). The
+marker-as-a-set is **R-1**. Mechanics: `design.md` sections 1.2 and 1.5.
+
+
+---
+
+## 17. `appMetadata` is not returned on a cross-atSign lookup (2026-08-02, open)
+
+**Finding, measured.** The atServer does **not** return `appMetadata` in a cross-atSign
+`lookup` response. It survives `sync` — the `__ck` conveyance round-trips intact — but
+not `lookup`. Since `CryptoRuntime` routes every read by `appMetadata.providerId`, a
+recipient reading a shared record sees `null` and falls back to `legacy`, which then
+hunts for a `shared_key` that a PQ write never created.
+
+**This is not specific to the nskey path.** It breaks the pluggable-crypto seam for
+**every** provider in the cross-atSign direction, including those already shipped in
+`at_client` 3.14. Same-atSign reads are unaffected.
+
+**Evidence.** `@alice` writes a shared value stamped `{providerId: legacy}`; `@bob`
+issues `lookup:all:` for it and receives a full metadata block — `sharedKeyEnc`,
+`pubKeyCS`, `ivNonce`, `pubKeyHash`, `isEncrypted`, `immutable` — with **no
+`appMetadata` field**. `AtValue.metadata.appMetadata` is correspondingly `null`.
+
+**Why it went unnoticed.** [Section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)
+and the cross-cutting invariants assert that `providerId` is present on *stored keys and
+notification frames*. Nobody wrote down the **lookup** path, and no test crossed two
+atSigns — so a hole in the read direction of a shipped seam sat open. The unit tests
+could not have found it: they mock the wire.
+
+**Consequence for D1.** **B-1d cannot go green from this repo.** Cross-atSign reads
+need the atServer to return `appMetadata` on `lookup`. The acceptance scenario and its
+e2e test stay in place, blocked and named, rather than being quietly dropped.
+
+**Rejected: inferring the provider client-side** when `appMetadata` is absent — by key
+shape, or by trying providers in turn. It guesses which scheme opened a record, and a
+wrong guess is a silent mis-decrypt or a misleading error. Failing loudly is better than
+guessing at cryptography.
+
+**Owner.** `at_server` — the lookup handler must carry `appMetadata` the way the sync
+and notification paths already do.

@@ -396,11 +396,12 @@ on trunk. It does **not** gate on S-1/S-2/S-3.
    (**record-authoritative**, not the client-supplied wire value); legacy null → `rsa2048`.
 4. **One nskey keypair per `(atSign, namespace)`** — the recipient key for both directions (Alice
    encapsulates her own CKs to it; external senders encapsulate CKs to it when sharing with her). Its
-   public half is **published lazily**: on first use it is the owner-only self at-key `nskey.<ns>@alice`
-   (synced to Alice's `<ns>`-authorised clients, **not** a `public:` key); on the namespace's first
-   cross-atSign share the **same** public half is promoted to the world-readable `public:nskey.<ns>@alice`
-   (immutable create-if-absent). Its private — a KEM private that **decapsulates** CKs, never decrypts
-   application data — is conveyed per-APKAM as a Secret over the substrate.
+   public half is **published eagerly** at mint to `public:__nskey.<ns>@alice` — an APKAM-signed
+   `{nskeyKid, publicKey}` envelope, **mutable** (rotation overwrites it, serialised by the short-ttl
+   immutable lock `_nskeylock.<ns>@alice`), and unscannable by virtue of the leading underscore while
+   still served on an exact `plookup` ([decisions.md](decisions.md) section 13). Its private — a KEM
+   private that **decapsulates** CKs, never decrypts application data — is conveyed per-APKAM as a
+   Secret over the substrate, and earlier generations are retained, addressed by `nskeyKid`.
 5. **appMetadata carries NO `ns` field** (see B-1 in [section 6](#6-phase-b--the-nskey-data-path-b-1-the-d1-centrepiece)).
 
 ### SS-0 — land the WP-SS substrate baseline · at_client · M — **SATISFIED (merged to trunk 2026-07-17)**
@@ -535,10 +536,10 @@ feeder into the data path.
 **Builds on:** SS-3 + **P-3** (pqpublickey name/cold-start target) + **S-3** (updatable local key
 storage for nskey privates).
 **Deliverables → [design.md](design.md)** (nskey minting + pqpublickey lifecycle): mint **one** nskey
-keypair per `(atSign, namespace)` and store its public half as the owner-only self at-key
-`nskey.<ns>@alice` (this alone suffices for self data — Alice's own clients hold it); publish the
-world-readable `public:nskey.<ns>@alice` **lazily**, on the namespace's first cross-atSign share
-(immutable create-if-absent, promoting the same public half). Both the `nskey` public half and
+keypair per `(atSign, namespace)` and publish its public half **eagerly at mint** to
+`public:__nskey.<ns>@alice`, taking the short-ttl immutable `_nskeylock.<ns>@alice` first so two of the
+owner's enrollments cannot race; the record is **mutable** so B-2 can overwrite it on rotation. Both the
+`nskey` public half and
 `public:pqpublickey@alice` are **advertised as APKAM-signed envelopes** (design.md §2.1 *Advertised-key
 authenticity*), so a fetching client verifies them against the publishing enrollment's `_apsk` — same path
 same-atSign and cross-atSign. `pqpublickey` create/seed/serve/pull under
@@ -547,8 +548,10 @@ signature is primary; correspondence is the secondary check). The
 nskey private is conveyed per-APKAM as a Secret over the substrate.
 **Acceptance → [acceptance.md](acceptance.md):** UC-A3.2 (2nd APKAM obtains the nskey private, decapsulates
 a test secret sealed to it; app_2 refused to an app_1-only client); a fetched `nskey` / `pqpublickey`
-advertisement verifies against the publisher's `_apsk` and a tampered one is rejected; UC-B5.1/B5.3 (offline
-pull; create-once race); pqpublickey create→seed→serve→pull + correspondence-mismatch rejection.
+advertisement verifies against the publisher's `_apsk` and a tampered one is rejected; **an unauthenticated
+scan of the atSign returns no `public:__nskey.…` key, with or without `showhidden`** — a guaranteed protocol
+property, covered as a regression guard; UC-B5.1/B5.3 (offline pull; `pqpublickey` create-once race,
+and the `_nskeylock` mint race); pqpublickey create→seed→serve→pull + correspondence-mismatch rejection.
 **Effort:** L–XL.
 **Watch-outs:** delivers **key material only** — the value-level providers are B-1. The **first convergence
 feeder** into the data path.
@@ -569,20 +572,36 @@ proceeds against a test fixture that supplies the nskey private directly (see th
 - **Layer 3 — `at/symmetric/AES/GCM`:** AES-256-GCM under a symmetric CK cited by `ckKid` only;
   `appMetadata{providerId, ckKid, iv}` (**no `ns` field**); binary-safe; CK cache keyed
   `(owner, namespace, ckKid)`.
-- **Layer 2 — `at/nskey`:** `pqSeal` the CK to the recipient's nskey public half, written once as
-  `<ckKid>.__ck.<ns>@<owner>`; `appMetadata{providerId, recipientKind, ckKid}` (**no `ns` field**). Self
-  data seals to the owner's own nskey (its self at-key); sharing seals to the recipient's nskey (fetched
-  via `plookup` once published to `public:`) — one keypair, same provider, uniform self/cross flow.
-- **Get/put routing:** out-of-order sync (decapsulate `<ckKid>.__ck` on demand with the one nskey
-  private — no self-vs-inbound branch — else deferred `Stream.error`); discover a recipient's published
-  `public:nskey` via `plookup`, re-fetch on decapsulation-failure/rotation.
-- **B3 capability marker:** per-`(atSign,namespace)`, initially not-ready; per-destination scheme
-  selection; `providerId` on stored values **and** notification frames.
-- **B4 cold-start:** when the recipient's namespace has no published `public:nskey`, seal **only the CK**
+- **Layer 2 — `at/nskey/XWING/AES/GCM`:** `pqSeal` the CK to the recipient's nskey public half, written once as
+  `<ckKid>.__ck.<ns>@<owner>`; `appMetadata{providerId, recipientKind, ckKid, nskeyKid}` (**no `ns`
+  field**). Self data seals to the owner's own nskey; sharing seals to the recipient's nskey (fetched via
+  `plookup` on `public:__nskey.<ns>@<recipient>`) — one keypair, same provider, uniform self/cross flow.
+  `nskeyKid` names the generation, so a reader holding several after a rotation indexes straight to it.
+- **Get/put routing + the CK manager:** `CkManager.ensureCurrent(dest, ns)` re-`plookup`s the
+  destination's advertised nskey and mints + conveys a CK when there is none for that destination or the
+  advertised `nskeyKid` has moved. CKs are **per recipient**, so a cross-atSign write runs it twice
+  (recipient scope, then the sender's own). The re-`plookup` is the **only** way a sender learns of a
+  rotation — there is no failure path back to it — so without it B6 revocation does not hold for inbound
+  data. Out-of-order sync: decapsulate `<ckKid>.__ck` on demand with the reader's **own** nskey private,
+  else a typed deferred state, not a hard failure.
+  ⚠️ **It cannot live inside `encrypt`.** Minting a CK means *writing the conveyance record*, and
+  `encrypt` is called from inside `PutRequestTransformer.transform` — issuing a `put` from there
+  re-enters the pipeline on a half-built verb builder. It runs as a preparation step in `_putInternal`
+  instead, reached through a **`PreparesWrites`** interface kept separate from `CryptoProvider` (adding a
+  member to that would break every external `implements CryptoProvider`, the shipped example included).
+  Recursion terminates because the conveyance is routed explicitly to `at/nskey`, which does not
+  implement `PreparesWrites` — pinned by a test, not left as an argument.
+- **B3 capability marker:** per-`(atSign,namespace)`, advertising the **set of provider ids** the
+  fleet supports rather than a boolean — a boolean cannot express *which* schemes are readable and so
+  cannot survive a second PQ scheme ([decisions.md](decisions.md) section 16). Initially the set holds
+  only `legacy`; per-destination selection picks the best id present in every required reader's set;
+  `providerId` on stored values **and** notification frames.
+- **B4 cold-start:** when the recipient has never used the namespace, so there is no
+  `public:__nskey.<ns>@<recipient>`, seal **only the CK**
   to `public:pqpublickey@<recipient>` (`recipientKind: root-pqpublickey`; data stays AES-GCM under the CK,
-  never encapsulated to root); the recipient's first cross-atSign share lazily promotes its nskey public
-  half to `public:` (via SS-4), and a later send upgrades to `recipientKind: nskey`. (Seal-and-hold is a
-  per-namespace policy toggle delivered in **R-1**.)
+  never encapsulated to root); the recipient's first *use* of the namespace mints and publishes its nskey
+  (via SS-4), and the sender's next `ensureCurrent` re-`plookup` upgrades to `recipientKind: nskey`.
+  (Seal-and-hold is a per-namespace policy toggle delivered in **R-1**.)
 
 **PR chunks (ordered).** B-1 is the plan's only flat-XL project, so it lands as up to five sequential PRs,
 `B-1a`…`B-1e`. `B-1a` is an enabler that closes no scenario of its own and may land in the same PR as
@@ -592,6 +611,7 @@ the chunk ids are its PR breakdown, not new projects.
 | Chunk  | Scope                                                                                                                                                     | Closes                    |
 |--------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------|
 | `B-1a` | **Layer 3** — the `at/symmetric/AES/GCM` provider + the CK cache keyed `(owner, namespace, ckKid)`                                                        | — (enabler)               |
+| `B-1a′`| **The CK manager** — `ensureCurrent` + the `PreparesWrites` seam. Pulled forward ahead of the substrate work: without it `put` cannot succeed at all, so every later chunk is blocked behind a provider that always throws | — (enabler)               |
 | `B-1b` | **Layer 2** — the `at/nskey` CK-conveyance provider, **self-data direction only**; the nskey private is supplied by a **test fixture**, not the substrate | UC-A3.1                   |
 | `B-1c` | **Cold-start** — seal the CK to `public:pqpublickey@<recipient>` with `recipientKind: root-pqpublickey`                                                   | UC-A3.3                   |
 | `B-1d` | **Cross-atSign** — `plookup` discovery of the recipient's published nskey; re-fetch on decapsulation failure                                              | UC-A4.1, UC-A4.2, UC-A4.3 |
@@ -615,8 +635,10 @@ carries the scenarios listed against it in the chunk table.
 **Effort:** XL — the one project above the ~1–3 PR norm, hence the five-chunk breakdown (~M each).
 **Watch-outs:** `recipientKind` is `nskey` (self + inbound, one key both ways) or `root-pqpublickey`
 (cold-start) — there is no self-vs-inbound `recipientKind`; `root-pqpublickey` is still an `at/nskey`
-conveyance, **not** a 3rd providerId; no bare `nskey` providerId. The nskey public half starts as the
-owner-only self at-key and is promoted to `public:` only on first cross-atSign share. Sweep
+conveyance, **not** a 3rd providerId; no bare `nskey` providerId. The record owner (`sharedBy`, which the
+HPKE `info` binds) and the nskey owner (`sharedWith ?? sharedBy`, which selects the key and scopes the CK
+cache) are **different atSigns** on any inbound record — conflating them is why cross-atSign reads fail
+([decisions.md](decisions.md) section 15). Sweep
 `expectAsync`/listener counts for the new notification-frame shape. The CK-conveyed-once rationale
 (decision (a)) and the recipientKind enumeration are in [design.md](design.md).
 **coversD1:** D1-B B1–B4.
@@ -742,9 +764,11 @@ Operator-declared readiness is the primary signal; auto-detect is optional. Don'
 on RF-1+SS-3, NOT the full RF-2** (Open decision #C) — so **D1 GA does not wait on the auth retrofit**.
 **Deliverables → [design.md](design.md)** (rotation/revocation levers): **B5a** CK rotation (O(1), on
 ordinary sync, delete old `__ck` + evict; default RETAIN, FS-mode is the delete+evict knob); **B5b**
-nskey-keypair rotation (O(n) PCS / per-APKAM revocation: mint a new nskey keypair, re-publish its public
-half — re-promoting to `public:` if it was published — and convey the new private per-APKAM via the
-substrate, excluding revoked; old privates retained = history-on, not per-message FS); **B6** revocation
+nskey-keypair rotation (O(n) PCS / per-APKAM revocation: take `_nskeylock.<ns>@<owner>`, mint a new nskey
+keypair, **overwrite** `public:__nskey.<ns>@<owner>` with the new `{nskeyKid, publicKey}`, convey the new
+private per-APKAM via the substrate excluding revoked, release; old privates retained = history-on, not
+per-message FS; a late joiner is pushed the current generation only and pulls older ones on demand via
+`requestSecret`, addressable because each `__ck` names its `nskeyKid`); **B6** revocation
 composition
 (auth-revoke + rotate-exclude + optional history re-encrypt [D2]); inbound cross-atSign FS is **bilateral**
 (documented trade-off).
