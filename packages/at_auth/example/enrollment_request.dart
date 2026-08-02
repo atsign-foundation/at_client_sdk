@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 
 /// Requests for an enrollment
@@ -28,9 +29,17 @@ void main(List<String> args) async {
 
     AtEnrollment atEnrollmentBase = AtEnrollment.create();
 
+    // The requesting app's session: its atSign, where to reach its atServer,
+    // and the atKeysIo destination the newly enrolled keys are persisted into.
+    final session = AtAuthSession(
+      atSign: argResults['atsign'],
+      rootDomain: AtRootDomain(argResults['rootDomain'], 64),
+      atKeysIo: FileAtKeysIo(),
+    );
+
     // New app sending enrollment request to server:
     AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
-        atSign: argResults['atsign'],
+        session: session,
         appName: 'buzz',
         deviceName: 'pixel',
         namespaces: {'buzz': 'rw'},
@@ -40,6 +49,11 @@ void main(List<String> args) async {
     final atEnrollmentResponse =
         await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
     print(atEnrollmentResponse);
+
+    // Once approved, waitForApproval persists the keys into session.atKeysIo and
+    // populates atEnrollmentResponse.session — hand that straight to
+    // AtClientManager.fromAuthSession(...) instead of touching atAuthKeys.
+    // await atEnrollmentBase.waitForApproval(atEnrollmentResponse);
   } on Exception catch (e, trace) {
     print(trace);
   } on ArgumentError catch (e, trace) {

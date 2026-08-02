@@ -1,6 +1,6 @@
 name: at_auth
 description: Package that implements common logic for onboarding/authenticating an atsign to a secondary server
-version: 3.3.0-rc1
+version: 3.3.0
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_auth
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
@@ -13,7 +13,7 @@ dependencies:
   at_server_status: ^1.1.0
   at_commons: ^5.13.0
   at_lookup: ^3.6.0
-  at_chops: ^3.0.0
+  at_chops: ^3.4.1
   at_utils: ^3.0.19
   http: ^1.2.1
   meta: ^1.16.0

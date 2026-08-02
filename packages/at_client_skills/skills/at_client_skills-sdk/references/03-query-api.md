@@ -93,18 +93,30 @@ Returns a **single-subscription** stream. Use `.asBroadcastStream()` for
 multi-listener UIs.
 
 ```dart
-// Flutter pattern
-@override
-Widget build(BuildContext context) {
-  return StreamBuilder<List<CItem<Todo>>>(
-    stream: todos.query().where((t) => !t.obj.done).watch(),
-    builder: (ctx, snap) {
-      if (!snap.hasData) return const CircularProgressIndicator();
-      return ListView(children: snap.data!.map((t) => TodoTile(t)).toList());
-    },
-  );
+// Flutter pattern — create the stream ONCE and hold it in State.
+// NEVER call watch() inside build(): each rebuild mints a new stream and tears
+// down the live subscription, so live updates silently stop arriving.
+class _TodoListState extends State<TodoList> {
+  late final Stream<List<CItem<Todo>>> _todos =
+      todos.query().where((t) => !t.obj.done).watch();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<CItem<Todo>>>(
+      stream: _todos,                        // held stream, not a fresh watch()
+      builder: (ctx, snap) {
+        if (!snap.hasData) return const CircularProgressIndicator();
+        return ListView(children: snap.data!.map((t) => TodoTile(t)).toList());
+      },
+    );
+  }
 }
 ```
+
+If the query depends on a runtime input (a filter, a parent id), recreate the
+held stream when that input changes — inside the `setState` that changes it —
+not on every build. Streams with fixed inputs are created once (`initState` or
+a `late final` field).
 
 ### `Future<int> count()`
 

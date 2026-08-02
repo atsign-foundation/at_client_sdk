@@ -129,7 +129,7 @@ The file-partition/track detail and the `CryptoConfig`/`CryptoRuntime` mechanics
      B-3 selfEncryptionKey retirement (phases 1-3, needs at_server)     ON-1 PQ-native onboarding + legacy-interop flag
      S-5 at_auth 4.0 WASM split → S-6 consumer bumps          D2-1 at/pqmls carve + D1-E (D2)
      KF-1 .atKeys-at-rest protection + backup/restore (builds on S-3)
-     IS-1 inter-server PQ auth (FROM/POL: X-Wing KEM + ML-DSA-65, PR #2683) — needs at_chops PQ API (XWingCert/resolvers) published
+     IS-1 inter-server PQ auth (FROM/POL: swap challenge signature RSA→ML-DSA-65, PR #2683) — no KEM, no cert; builds on published at_chops 3.4.x (ungated)
      R-2 at_client 4.0 (flip flag default true) — final, gated on the ecosystem floor
 ```
 
@@ -955,38 +955,44 @@ the atServer↔atServer handshake, orthogonal to the client-side `nskey` data pa
 inter-server channel and a compromised client channel are different threats, so this track ships on its own
 schedule and does **not** gate D1 GA.*
 
-### IS-1 — atServer FROM/POL handshake: X-Wing KEM + ML-DSA-65, RSA fallback · at_secondary_server (+ at_chops) · L
+### IS-1 — atServer FROM/POL handshake: swap the challenge signature RSA → ML-DSA-65, RSA fallback · at_secondary_server · M
 
-**Goal:** replace the RSA-only server-to-server FROM/POL handshake with a hybrid quantum-safe path, with
-automatic fallback to legacy UUID/RSA for non-PQ peers (zero flag day, mixed-fleet safe).
+**Goal:** make the server-to-server FROM/POL handshake quantum-safe by swapping only the challenge
+*signature* from RSA-2048 to ML-DSA-65, keeping the existing per-session UUID challenge (which already
+provides freshness / anti-replay) and the TLS session (which already provides confidentiality). Automatic
+fallback to legacy UUID/RSA for a peer that publishes no PQ signing key (zero flag day, mixed-fleet safe).
+FROM/POL is authentication, not key agreement — so there is **no KEM**.
 
-**Builds on:** the at_chops PQ primitives (P-1 `pqSeal`/X-Wing, P-2 ML-DSA verify) **plus a new at_chops
-API surface** — `XWingCert`, `resolveXWing` / `resolveMlDsa65`, and `at_algorithm.dart` exports — that is
-**not yet on `at_chops` trunk**. It lives on branch `pq/st/at-chops-pq-api` and **must be published before
-IS-1 can land without the workspace path override** — note the 3.4.0 slot has since published (2026-07-17),
-so this surface needs its own slot rather than folding into 3.4.0.
-(`generateXWingKeyPair` / `generateMlDsa65KeyPair` already exist on `at_chops` trunk 3.4.0.)
+**Builds on:** the **published** at_chops 3.4.x only — `AtPqc.mlDsa65.signBytes`/`verifyBytes` (the P-2
+ML-DSA-65 sign/verify branch) and `generateMlDsa65KeyPair`, both already shipped. **No unpublished at_chops
+surface, no cross-package publish gate** — the earlier `XWingCert` / `resolveXWing` / `resolveMlDsa65`
+requirement is dropped with the KEM.
 
-**Deliverables:** a `PqKeyManager` (server-internal, **not** an at_chops class) managing the ML-DSA-65 +
-X-Wing keypair lifecycle, cert generation/rotation (30-day grace window on the previous cert), and
-HKDF-SHA256 key-confirmation tag derivation — the raw shared secret never crosses the wire or is persisted.
-The handshake: `lookup:pq_xwing_cert@<peer>` + `lookup:pq_signing_publickey@<peer>` (live every handshake,
-never cached) → `ML-DSA-65.verify(cert)` → `xwing.encaps(cert.pk)` → `tag = HKDF(ss, info=sessionID‖@peer)`
-→ `proof:sessionID@<peer>:pq:<ciphertext_b64>` → decaps → matching tag ⇒ `isPolAuthenticated`. Env
-`AT_DISABLE_PQ_AUTH=true` forces UUID; self-auth always UUID; a peer with no PQ cert falls back to
-UUID/RSA.
+**Deliverables:** (1) at boot, generate an ML-DSA-65 keypair (the signing keypair already needed) and
+publish the public half as a protected `pq_signing_publickey@<atSign>` record — a **JSON object** for
+crypto agility, initially `{ "ml-dsa-65": "<b64 pubkey>" }`, so a future algorithm is another field, not a
+wire change. The ML-DSA secret key joins the protected-key set. (2) In A's outbound handshake, sign the
+UUID challenge with ML-DSA instead of RSA — a one-line algorithm swap in the existing branch. (3) In B's
+POL check, `lookup:pq_signing_publickey@<peer>` (live, never cached) → `AtPqc.mlDsa65.verifyBytes(...)`
+instead of `RSAPublicKey.verifySHA256Signature(...)` — a one-line swap. Env `AT_DISABLE_PQ_AUTH=true` forces
+UUID/RSA; self-auth always UUID; a peer publishing no PQ signing key falls back to UUID/RSA. **Explicitly
+NOT built:** no certificate, no X-Wing encaps/decaps, no HKDF confirmation tag, no key expiry / rotation /
+grace window, no `PqKeyManager` lifecycle class — a signing key needs no lifecycle state here (a change is a
+re-publish, read live on the next handshake).
 
-**Acceptance:** `PqKeyManager` unit suite (cert round-trip, verify valid/expired/wrong-key, KEM round-trip,
-rotate lifecycle, prev-cert expiry); FROM/POL PQ-proof + fallback paths; pure-Dart fallback (unset
-`AT_CHOPS_LIBCRYPTO_PATH`, ML-DSA resolves to pure-Dart without throwing); mixed-fleet (no-PQ-cert peer →
-UUID challenge, POL via RSA signing key). Existing delete/update verb tests still pass (protected-key count
-updated for the PQ secret keys).
+**Acceptance:** FROM/POL PQ path (ML-DSA sign → verify → `isPolAuthenticated`) + the RSA-fallback path;
+`pq_signing_publickey` published as the agility JSON and looked up live; pure-Dart fallback (unset
+`AT_CHOPS_LIBCRYPTO_PATH`, ML-DSA resolves to pure-Dart without throwing); mixed-fleet (a peer with no PQ
+signing key → UUID challenge, POL via the RSA signing key). Existing delete/update verb tests still pass
+(protected-key count updated for the ML-DSA secret key).
 
-**Tracking:** PR **#2683** (`at_server`, `pq/st/pq-interserver-comms`) — **in progress, not near merge**;
-off the D1 GA critical path. Sub-issue [#2049](https://github.com/atsign-foundation/at_client_sdk/issues/2049) under #1889. Design detail in [design.md](design.md) (§ inter-server PQ authentication).
+**Tracking:** PR **#2683** (`at_server`, `pq/st/pq-interserver-comms`) — **over-built against this scope;
+to be pared back to the signature swap** (see [decisions.md](decisions.md), 2026-07-21). Off the D1 GA
+critical path. Sub-issue [#2049](https://github.com/atsign-foundation/at_client_sdk/issues/2049) under
+#1889. Design detail in [design.md](design.md) (§8 inter-server PQ authentication).
 
-**Watch-outs:** (1) the at_chops PQ-API dependency above is the gating prerequisite — do not merge IS-1
-against the workspace path override. (2) `pq_xwing_cert`
-/ `pq_signing_publickey` are looked up live every handshake and never cached — keep it that way (cert
-rotation depends on it).
+**Watch-outs:** `pq_signing_publickey` is looked up live every handshake and never cached — keep it that
+way, so a re-published key takes effect on the next handshake with no rotation machinery. Do not
+re-introduce a KEM, cert, or tag: the UUID challenge the swapped signature covers is the entire freshness
+mechanism, and the TLS session already secures the channel.
 
