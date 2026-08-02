@@ -38,7 +38,7 @@ Future<bool> loginWithKeychain(BuildContext context) async {
   );
   if (response == null || !response.isSuccessful) return false;
 
-  await _setupAtClient(authRequest, response);
+  await _setupAtClient(response);
   return true;
 }
 
@@ -58,7 +58,7 @@ Future<bool> loginWithFile(BuildContext context) async {
   );
   if (response == null || !response.isSuccessful) return false;
 
-  await _setupAtClient(authRequest, response);
+  await _setupAtClient(response);
   return true;
 }
 
@@ -88,7 +88,7 @@ Future<bool> loginWithApkam(BuildContext context) async {
   );
   if (response == null || !response.isSuccessful) return false;
 
-  await _setupAtClient(authRequest, response);
+  await _setupAtClient(response);
   return true;
 }
 
@@ -96,27 +96,32 @@ Future<void> logout() async {
   AtClientManager.getInstance().reset();
 }
 
-Future<void> _setupAtClient(
-  AtAuthRequest authRequest,
-  AuthResponse response,
-) async {
+Future<void> _setupAtClient(AuthResponse response) async {
   final dir = await getApplicationSupportDirectory();
   final acp = AtClientPreference()
-    ..rootDomain = authRequest.rootDomain.rootDomain
-    ..rootPort = authRequest.rootDomain.rootPort
     ..namespace = _namespace
     ..commitLogPath = dir.path
     ..hiveStoragePath = dir.path
     ..fetchOfflineNotifications = false;
 
-  await AtClientManager.getInstance().setCurrentAtSign(
-    response.atSign,
-    _namespace,
-    acp,
-    enrollmentId: response.enrollmentId,
-    atChops: response.atChops,
-    atLookUp: response.atLookUp,
-  );
+  final session = response.session;
+  if (session != null) {
+    // Preferred path: hand over the session; the client rebuilds its own
+    // connection from the session's key source.
+    await AtClientManager.getInstance().fromAuthSession(session, acp);
+  } else {
+    // Transitional fallback for flows that hand back only atAuthKeys with no
+    // AtKeysIo source (e.g. APKAM enrollment): adopt auth's already-
+    // authenticated AtChops/AtLookUp directly.
+    await AtClientManager.getInstance().setCurrentAtSign(
+      response.atSign,
+      _namespace,
+      acp,
+      enrollmentId: response.enrollmentId,
+      atChops: response.atChops,
+      atLookUp: response.atLookUp,
+    );
+  }
   _log.info('atClient ready for ${response.atSign}');
 }
 

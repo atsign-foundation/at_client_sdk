@@ -16,8 +16,8 @@ license: BSD-3-Clause
 compatibility: Claude Code and any agentskills.io-compatible agent.
 user-invocable: true
 metadata:
-  version: "1.1.0"
-  last_modified: "Tue, 23 Jun 2026 00:00:00 GMT"
+  version: "1.2.0"
+  last_modified: "Tue, 07 Jul 2026 00:00:00 GMT"
 ---
 
 # atsign-dart-sdk Skill
@@ -139,6 +139,14 @@ await todos.delete(item);                    // throws StateError if has sub-ite
 await todos.delete(item, cascade: true);     // removes self-owned descendants first
 ```
 
+> **Ownership model:** `AtCollection` is **owner-writes-only** — an atSign can
+> only mutate items it owns. `update` / `updateSharedWith` / `delete` throw
+> `ArgumentError` on an item whose `owner` isn't you. Collaboration is
+> **additive**: sharing grants the recipient a *readable* copy, not write
+> access. For a peer to contribute, they create their own item and share it
+> back — you never edit theirs in place. (Reading a received item works;
+> mutating it doesn't.)
+
 ---
 
 ## 5. Reading Data
@@ -191,6 +199,11 @@ todos.query()
     .wherePath($Todo.done.eq(false).and($Todo.due.lt(DateTime.now())))
     .watch();
 ```
+
+> **Flutter rule:** create a `watch()` stream **once** and hold it in `State`
+> (a `late final` field or `initState`); never call `watch()` inside `build()`,
+> or each rebuild mints a new stream and drops live updates. Memoise the `Query`
+> and recreate the stream only when its inputs change.
 
 Read [references/03-query-api.md](references/03-query-api.md) for all terminals
 (`distinct`, `groupBy`, `watchWithSub`, `watchWithTree`) and the full
@@ -323,6 +336,11 @@ AtClientManager.getInstance().reset();  // logout
 Read [references/05-flutter-auth.md](references/05-flutter-auth.md) for all 4
 flows (including Flow 1: CRAM new-atSign and Flow 4: APKAM enrollment) with
 complete code.
+
+> **Sync setup:** set `AtClientPreference.syncRegex = '<your namespace>'` —
+> without it, sync covers the atSign's whole keystore and can wedge, so shares
+> and updates never propagate. Reads are local; writes sync in the background.
+> See [references/11-sync.md](references/11-sync.md).
 
 ---
 

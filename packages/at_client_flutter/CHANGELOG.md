@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 1.1.5
+- feat: `CramDialog` and `PkamDialog` take an optional `authService`, and
+  `ApkamActivationDialog` an optional `enrollmentService`. Both default to the
+  real service, so existing call sites are unaffected; passing one lets the
+  dialogs' error and timeout paths be widget-tested without a live atServer
+  (#1909).
+
 ## 1.1.4
 
 - feat: `AuthService.onboard` / `authenticate` accept an optional `timeout` that

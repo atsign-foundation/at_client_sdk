@@ -1,5 +1,14 @@
 # Changelog — at_client_skills
 
+## 1.2.0 — 2026-07-07
+
+- Document sync scoping (`syncRegex`) and the sync lifecycle
+  (new `references/11-sync.md`).
+- Document the rule to hold `watch()` streams in `State`, never in `build()`,
+  and fix the `StreamBuilder` snippets.
+- Document the owner-writes-only collaboration/ownership model.
+- Document the atSign activation / atDirectory prerequisite.
+
 ## 1.1.0 — 2026-06-23
 
 - Add `user-invocable: true` so the skill registers as a slash command.

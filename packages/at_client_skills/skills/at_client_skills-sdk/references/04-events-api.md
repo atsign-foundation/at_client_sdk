@@ -195,13 +195,13 @@ void dispose() {
 }
 ```
 
-For `watch()` in `StreamBuilder`:
+For `watch()` in `StreamBuilder`, hold the stream in `State` — never create it
+in `build()` (see [03-query-api.md](03-query-api.md)):
 
 ```dart
-StreamBuilder<List<CItem<Todo>>>(
-  stream: todos.query().where((t) => !t.obj.done).watch(),
-  builder: (ctx, snap) { ... },
-)
+late final _todos = todos.query().where((t) => !t.obj.done).watch();
+// ...
+StreamBuilder<List<CItem<Todo>>>(stream: _todos, builder: (ctx, snap) { ... })
 ```
 
 ---

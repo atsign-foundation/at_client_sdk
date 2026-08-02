@@ -105,18 +105,14 @@ class _SmokeBootstrapState extends State<_SmokeBootstrap> {
       _setStatus('Setting up AtClient...');
       final dir = await getApplicationSupportDirectory();
       final acp = AtClientPreference()
-        ..rootDomain = request.rootDomain.rootDomain
-        ..rootPort = request.rootDomain.rootPort
         ..namespace = applicationNamespace
         ..commitLogPath = dir.path
         ..hiveStoragePath = dir.path;
-      await AtClientManager.getInstance().setCurrentAtSign(
-        response.atSign,
-        applicationNamespace,
+      // Hand the client the session; it rebuilds its own authenticated
+      // connection from the session's key source rather than adopting auth's.
+      await AtClientManager.getInstance().fromAuthSession(
+        response.session!,
         acp,
-        enrollmentId: response.enrollmentId,
-        atChops: response.atChops,
-        atLookUp: response.atLookUp,
       );
       _setStatus('AtClient ready, navigating to dashboard');
       if (!mounted) return;

@@ -96,8 +96,9 @@ session** (no extra atSign context, no hints) and paste the prompt in §2.
 > 3. **Card details.** Each Card has a title, description, priority
 >    (low/med/high), a due date, and tags.
 > 4. **Sharing & collaboration.** A user can share a Board with another user by
->    their account identifier. The other person sees the shared Board appear and
->    can edit Cards on it.
+>    their account identifier; the other person sees the shared Board appear and
+>    can edit Cards on it. The owner can also **un-share** a Board (remove a
+>    collaborator) — the removed user no longer sees it.
 > 5. **Real-time updates.** When a collaborator changes a Card, the change shows
 >    up on the other person's screen automatically without a manual refresh.
 > 6. **Seen indicators.** When a collaborator opens/views a Card you shared, you
@@ -110,9 +111,9 @@ session** (no extra atSign context, no hints) and paste the prompt in §2.
 >    live backend/server.
 >
 > Build it end-to-end, then **actually run it on macOS desktop** and walk
-> through: create account → create a Board/List/Card → share it → filter → sign
-> out and back in. Fix any build or runtime errors you hit so it runs cleanly
-> start to finish.
+> through: create account → create a Board/List/Card → share it → un-share it →
+> filter → sign out and back in. Fix any build or runtime errors you hit so it
+> runs cleanly start to finish.
 
 After everything is built, paste this follow-up prompt:
 
@@ -129,6 +130,7 @@ After everything is built, paste this follow-up prompt:
 | Sign-in / import file / re-login / sign-out | all auth flows — **macOS file picker hits the entitlement step**           |
 | Boards → Lists → Cards → checklist          | sub-collections, `watchWithTree` deep hierarchies                          |
 | Share a board; collaborator edits           | sharing items + `NotificationService`                                      |
+| Un-share a board (remove a collaborator)    | `updateSharedWith` recipient removal (the unshare path)                    |
 | Real-time updates                           | event streams / `watch()`                                                  |
 | "Seen by" indicator                         | read receipts                                                              |
 | Filter by priority / tag / date / done      | `Query<T>`, `wherePath` typed predicates                                   |

@@ -5,6 +5,7 @@ import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
 import 'package:at_auth/src/auth/models/at_auth_responses.dart';
+import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
@@ -118,6 +119,21 @@ class AtAuthImpl implements AtAuth {
         ..atAuthKeys = atAuthKeys
         ..atLookUp = atLookUp
         ..atChops = atChops;
+
+      // Build the explicit hand-off session from the request's confirmed
+      // subset — only when the request supplied an AtKeysIo source. The legacy
+      // atAuthKeys-only path has no source to hand across, so it gets no
+      // session.
+      if (pkamResponse.isSuccessful && atAuthRequest.atKeysIo != null) {
+        pkamResponse.session = AtAuthSession(
+          atSign: atAuthRequest.atSign,
+          rootDomain: atAuthRequest.rootDomain,
+          namespace: atAuthRequest.namespace,
+          atKeysIo: atAuthRequest.atKeysIo!,
+          enrollmentId: atAuthRequest.enrollmentId,
+          atLookUp: atLookUp,
+        );
+      }
 
       if (!pkamResponse.isSuccessful) {
         _addProgress(
@@ -303,6 +319,21 @@ class AtAuthImpl implements AtAuth {
       ..atAuthKeys = _atAuthKeys
       ..atLookUp = atLookUp
       ..atChops = atChops;
+
+    // Hand back the same explicit session as authenticate(), so a
+    // freshly-onboarded atSign flows straight into the client. atKeysIo is
+    // guaranteed set here (defaulted to FileAtKeysIo above); the guard mirrors
+    // authenticate() for parity.
+    if (atOnboardingRequest.atKeysIo != null) {
+      atOnboardingResponse.session = AtAuthSession(
+        atSign: atOnboardingRequest.atSign,
+        rootDomain: atOnboardingRequest.rootDomain,
+        namespace: atOnboardingRequest.namespace,
+        atKeysIo: atOnboardingRequest.atKeysIo!,
+        enrollmentId: enrollmentIdFromServer,
+        atLookUp: atLookUp,
+      );
+    }
 
     _addProgress(
         "onboarding",

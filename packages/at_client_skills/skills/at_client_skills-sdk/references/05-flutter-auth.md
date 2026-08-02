@@ -15,6 +15,24 @@ dart pub add at_client_flutter at_auth path_provider
 
 ---
 
+## Prerequisite: the atSign must be activated
+
+Before any of these flows can authenticate, the atSign must be **activated** —
+its atServer must be registered in the **atDirectory** (the atServer address
+registry). Activation happens once, via Flow 1 (CRAM) below or an onboarding
+app / the registrar.
+
+Authenticating an atSign that isn't activated (or a typo) fails lookup with:
+
+```text
+SecondaryNotFoundException: No entry in atDirectory for @alice
+```
+
+That means the atSign has no atServer registered yet — activate it first (Flow
+1), then Flows 2–4 (existing keys / keychain / APKAM) will resolve it.
+
+---
+
 ## Flow 1: New atSign — CRAM Activation (first-time only)
 
 Use when a developer wants to activate a brand-new atSign for a user.
@@ -207,6 +225,7 @@ Future<void> _setupAtClient(
     ..rootDomain    = atRootDomain.rootDomain
     ..rootPort      = atRootDomain.rootPort
     ..namespace     = 'my_namespace'
+    ..syncRegex     = 'my_namespace'   // scope sync to this app (see references/11-sync.md)
     ..commitLogPath  = dir.path
     ..hiveStoragePath = dir.path;
 
@@ -230,6 +249,10 @@ Future<void> _setupAtClient(
 | `hiveStoragePath` | `String` | Path to Hive storage directory |
 | `rootDomain` | `String` | atServer root domain (from `authRequest.rootDomain.rootDomain`) |
 | `rootPort` | `int` | atServer root port (from `authRequest.rootDomain.rootPort`) |
+
+**Strongly recommended:** set `..syncRegex = '<your namespace>'` (shown above).
+Without it, sync covers the atSign's entire keystore and can wedge — see
+[references/11-sync.md](11-sync.md).
 
 **Important:** Use `atChops` and `atLookUp` from the `response` (not freshly
 created) — these are already authenticated instances.
@@ -256,8 +279,8 @@ final atClient = AtClientManager.getInstance().atClient;
 ## Canonical Examples
 
 <!-- pyml disable-num-lines 2 md013-->
-- [packages/at_client_flutter/examples/todos/lib/onboarding.dart](../../packages/at_client_flutter/examples/todos/lib/onboarding.dart) — Flows 2, 3, 4 with `_setupAtClient`
-- [packages/at_client_flutter/example/lib/walkthrough.dart](../../packages/at_client_flutter/example/lib/walkthrough.dart) — All 4 flows in one file
+- [packages/at_client_flutter/examples/todos/lib/onboarding.dart](../../../../at_client_flutter/examples/todos/lib/onboarding.dart) — Flows 2, 3, 4 with `_setupAtClient`
+- [packages/at_client_flutter/example/lib/walkthrough.dart](../../../../at_client_flutter/example/lib/walkthrough.dart) — All 4 flows in one file
 
 ---
 
