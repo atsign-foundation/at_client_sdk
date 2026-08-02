@@ -1,4 +1,32 @@
 ## 3.14.1
+- feat: `nskey` data path providers — `at/symmetric/AES/GCM` encrypts
+  application data with AES-256-GCM under a symmetric content key (CK), and
+  `at/nskey` conveys that CK by X-Wing-sealing it to the namespace's `nskey`
+  and writing it as a discrete `<ckKid>.__ck` record. Data values cite the CK
+  by `ckKid` and carry no sealed key inline; the CK cache is keyed
+  `(owner, namespace, ckKid)`, and only the client that cut a CK makes it the
+  key new writes use. Binary values honour `isBinary` and round-trip byte-exact.
+  A cited CK that has not arrived yet raises `ContentKeyUnavailableException`,
+  which a caller can distinguish from a hard decryption failure and retry.
+  `NskeyKeyRing` is the seam the secret-sharing substrate lands behind — an
+  experimental surface, not yet routed by `CryptoRuntime` (#2089, #2090).
+- feat: crypto agility on both layers. A `providerId` now names the role and then
+  every algorithm a reader needs code for, so the CK-conveyance provider is
+  `at/nskey/XWING/AES/GCM` rather than the bare `at/nskey` (`at/nskey` remains the
+  family prefix). Reads stay universal; what the id adds is that a writer can decide
+  whether a recipient can read a scheme, which makes an algorithm change rollable.
+- feat: `nskey` generations. `public:__nskey.<ns>@<owner>` is published at mint and
+  overwritten on rotation, so a client holds several nskey privates at once; every
+  `at/nskey` conveyance names the one it was sealed to in `appMetadata.nskeyKid`.
+  `NskeyKeyRing` becomes `currentPublic(owner, ns)` + `privateHalf(owner, ns,
+  nskeyKid)`.
+- fix: the record owner and the nskey owner are different atSigns on any inbound
+  record. `sharedBy` binds the HPKE `info`; `sharedWith ?? sharedBy` selects the
+  key and scopes the CK cache. Selecting by `sharedBy` made a recipient look up
+  the *sender's* namespace private, so cross-atSign reads could not work.
+- build: raise the `at_chops` floor to `^3.4.0` — the nskey providers name
+  `AtKemAlgorithm` through the `at_chops` barrel, which only exports the
+  algorithm interfaces from 3.4.0.
 - fix: `AtCollection` — resolve received (shared-in) items in the id-scoped
   read path. `Query.watch()` (delta path), `getOrNull` / `get(id, owner)` and
   `exists(id, owner)` missed items stored locally as

@@ -1,0 +1,128 @@
+import 'package:at_chops/at_chops.dart';
+import 'package:at_client/at_client.dart';
+// ignore: implementation_imports
+import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
+// ignore: implementation_imports
+import 'package:at_client/src/crypto/nskey/nskey_provider.dart';
+// ignore: implementation_imports
+import 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
+import 'package:at_functional_test/src/config_util.dart';
+import 'package:test/test.dart';
+
+import 'test_utils.dart';
+
+/// The nskey data path driven through a real `AtClient` against a live atServer.
+///
+/// Everything else covering this path runs against mocks: the providers in
+/// isolation, the CK manager with a stubbed `put`. None of it proves the pieces
+/// compose once the real put pipeline is in the loop — the pre-pass, a nested
+/// write for the conveyance record, key validation, storage and the read back.
+/// This does.
+void main() {
+  late AtClientManager atClientManager;
+  late String atSign;
+  const namespace = 'wavi';
+
+  setUpAll(() async {
+    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+
+    // Stands in for the secret-sharing substrate, which is what will supply this
+    // for real. Everything above it is the production path.
+    final nskeyPair = await XWingKeyPair.generate();
+    final ring = InMemoryNskeyKeyRing()
+      ..seedKeypair(atSign, namespace,
+          publicKey: nskeyPair.publicKeyBytes,
+          privateKey: nskeyPair.privateKeyBytes);
+
+    final preference = TestUtils.getPreference(atSign)
+      ..crypto = CryptoConfig.nskey(keyRing: ring);
+
+    atClientManager = await TestUtils.initAtClient(
+      atSign,
+      namespace,
+      preference: preference,
+    );
+  });
+
+  test('a self value round-trips through the nskey data path', () async {
+    final atClient = atClientManager.atClient;
+    final key = AtKey()
+      ..key = 'treaty'
+      ..namespace = namespace
+      ..sharedBy = atSign;
+    const plaintext = 'the treaty text';
+
+    // No content key exists for this destination, so the write only succeeds if
+    // the pre-pass mints one and writes its conveyance first.
+    expect(await atClient.put(key, plaintext), true);
+
+    final read = await atClient.get(key);
+    expect(read.value, plaintext, reason: 'round-trip must equal plaintext');
+
+    // The value is tagged with the data provider and cites a CK it does not
+    // carry.
+    final valueMeta = read.metadata?.appMetadata;
+    expect(valueMeta?.providerId, symmetricAesGcmCryptoProviderId);
+    final ckKid = valueMeta?.additional?['ckKid'];
+    expect(ckKid, isNotNull);
+    expect(valueMeta?.additional?['iv'], isNotNull);
+    expect(valueMeta?.additional?.containsKey('sealedKey'), isFalse,
+        reason: 'the CK is conveyed once, never inline');
+
+    // …and the conveyance the pre-pass wrote is a real, separate record.
+    final conveyance = await atClient.get(AtKey()
+      ..key = '$ckKid.__ck'
+      ..namespace = namespace
+      ..sharedBy = atSign);
+    final conveyanceMeta = conveyance.metadata?.appMetadata;
+    expect(conveyanceMeta?.providerId, nskeyCryptoProviderId,
+        reason: 'the conveyance routes to the CK-conveyance provider, and its '
+            'id names the algorithms a reader needs');
+    expect(conveyanceMeta?.additional?['ckKid'], ckKid);
+    expect(conveyanceMeta?.additional?['nskeyKid'], isNotNull,
+        reason: 'a conveyance names the nskey generation it was sealed to');
+    expect(
+        conveyanceMeta?.additional?['recipientKind'], NskeyRecipientKind.nskey);
+  });
+
+  test('a second write reuses the content key rather than cutting a new one',
+      () async {
+    final atClient = atClientManager.atClient;
+    AtKey named(String k) => AtKey()
+      ..key = k
+      ..namespace = namespace
+      ..sharedBy = atSign;
+
+    expect(await atClient.put(named('first'), 'one'), true);
+    final firstCk = (await atClient.get(named('first')))
+        .metadata
+        ?.appMetadata
+        ?.additional?['ckKid'];
+
+    expect(await atClient.put(named('second'), 'two'), true);
+    final secondCk = (await atClient.get(named('second')))
+        .metadata
+        ?.appMetadata
+        ?.additional?['ckKid'];
+
+    expect(secondCk, firstCk,
+        reason: 'a CK is long-lived per destination — re-cutting per write '
+            'would multiply conveyance records for no benefit');
+    expect((await atClient.get(named('second'))).value, 'two');
+  });
+
+  test('binary round-trips byte-exact', () async {
+    final atClient = atClientManager.atClient;
+    final key = AtKey()
+      ..key = 'blob'
+      ..namespace = namespace
+      ..sharedBy = atSign;
+    // Every byte value, at a length that does not fall on a 15-bit boundary.
+    final bytes = [for (var i = 0; i < 256; i++) i, 0x00, 0xff, 0x7f];
+
+    expect(await atClient.put(key, bytes), true);
+    final read = await atClient.get(key);
+    expect(read.value, bytes,
+        reason: 'isBinary must survive the round-trip byte for byte');
+  });
+}

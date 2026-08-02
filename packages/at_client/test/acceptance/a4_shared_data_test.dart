@@ -12,13 +12,13 @@ void main() {
     test('UC-A4.1 · alice to bob, both PQ-native, bob has the namespace key',
         () {
       // GIVEN @alice, @bob pq-native; @bob published
-      //       public:nskey.app_1.my_apps@bob; bob1, bob2 hold its private;
-      //       @bob readiness = ready.
+      //       public:__nskey.app_1.my_apps@bob when he first used the namespace;
+      //       bob1, bob2 hold its private; @bob readiness = ready.
       // WHEN  alice1 does put @bob:<k>.app_1.my_apps@alice (shouldEncrypt).
       // THEN  bob's clients decapsulate bob's CK record with bob's nskey private
-      //       and read; alice's clients decapsulate the self-copy's CK with
-      //       alice's nskey private and read. The two reads differ by
-      //       record-owner, not by key. PQ end to end — no RSA on any path. An
+      //       and read; alice's clients decapsulate the self-copy's CK — a
+      //       SECOND CK in her own scope, since CKs are per recipient — with
+      //       alice's nskey private. PQ end to end — no RSA on any path. An
       //       unauthorised @bob enrollment can neither fetch the ciphertext
       //       (server-gated) nor decrypt it.
       fail('not implemented');
@@ -26,18 +26,20 @@ void main() {
 
     test('UC-A4.2 · alice to bob cold-start, pqpublickey fallback', () {
       // GIVEN @alice, @bob pq-native; @bob has public:pqpublickey@bob but NO
-      //       public:nskey.app_1.my_apps@bob.
+      //       public:__nskey.app_1.my_apps@bob — he has never used that
+      //       namespace at all.
       // WHEN  alice1 shares @bob:<k>.app_1.my_apps@alice.
       // THEN  as A4.1 but the CK is sealed to public:pqpublickey@bob
       //       (recipientKind: root-pqpublickey); data stays AES-GCM under the
       //       CK. Every authorised bob enrollment reads instantly. Subsequent
-      //       writes UPGRADE to the nskey once bob publishes it.
+      //       writes UPGRADE to the nskey once bob first uses the namespace and
+      //       alice's next ensureCurrent re-plookup sees it.
       fail('not implemented');
     }, skip: b1CrossAtSign);
 
     test('UC-A4.3 · multi-enrollment both ends', () {
       // GIVEN alice (aE1, aE2) and bob (bE1, bE2) all PQ; bob has
-      //       public:nskey.app_1.my_apps@bob.
+      //       public:__nskey.app_1.my_apps@bob.
       // WHEN  alice2 shares with @bob.
       // THEN  all of bob's authorised enrollments read; all of alice's
       //       authorised enrollments read the self-copy; no authorised

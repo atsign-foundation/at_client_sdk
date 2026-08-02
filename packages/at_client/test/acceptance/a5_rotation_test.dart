@@ -28,13 +28,19 @@ void main() {
 
     test('UC-A5.1(b) · revocation + PCS by rotating the nskey keypair', () {
       // GIVEN the nskey exists and an enrollment must be excluded.
-      // WHEN  alice1 mints the next nskey keypair EXCLUDING the revoked
-      //       enrollment, re-publishes its public half (updating the self at-key
-      //       and re-promoting to public: if already shared), and pushes the
-      //       successor private to surviving enrollments via __ssenv.
-      // THEN  new CKs seal to the successor nskey; peers re-fetch and
-      //       encapsulate to the new public half. Heavy, O(n)-per-enrollment,
-      //       and DISTINCT from CK rotation.
+      // WHEN  alice1 takes the _nskeylock lock, mints the next nskey keypair
+      //       EXCLUDING the revoked enrollment, OVERWRITES
+      //       public:__nskey.<ns>@alice with the new {nskeyKid, publicKey}, and
+      //       pushes the successor private to surviving enrollments via __ssenv.
+      // THEN  new CKs seal to the successor nskey and their conveyances carry
+      //       the new nskeyKid; survivors retain the prior private so retained
+      //       history still opens. A peer notices only at its next
+      //       ensureCurrent re-plookup — WITHOUT that the revocation does not
+      //       hold, since a peer still sealing to the superseded generation
+      //       hands the revoked enrollment a key it can open. A joiner approved
+      //       after the rotation gets the current generation and pulls older
+      //       ones on demand. Heavy, O(n)-per-enrollment, DISTINCT from CK
+      //       rotation.
       fail('not implemented');
     }, skip: b2);
 
