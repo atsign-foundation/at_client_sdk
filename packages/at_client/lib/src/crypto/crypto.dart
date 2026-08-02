@@ -97,3 +97,41 @@ abstract class CryptoProvider {
   /// subclass (e.g. [AtDecryptionException]) on failure.
   Future<String> decrypt(CryptoContext context, AtKey atKey, String ciphertext);
 }
+
+/// Implemented by a [CryptoProvider] that needs to do work — including writing
+/// records of its own — *before* the write pipeline starts.
+///
+/// [CryptoProvider.encrypt] runs inside the request transformer, part-way
+/// through building a verb builder, so a provider cannot issue its own `put`
+/// from there without re-entering the pipeline on a half-built request. The SDK
+/// calls [prepareForWrite] ahead of that, with the fully resolved [AtKey] and
+/// nothing yet in flight.
+///
+/// This is a separate interface rather than a method on [CryptoProvider] so that
+/// adding it does not break existing `implements CryptoProvider` code. The SDK
+/// checks for it with `is` and skips providers that do not need it.
+abstract interface class PreparesWrites {
+  /// Prepare for a write of [atKey].
+  ///
+  /// A provider issuing a write from here must ensure that write does not
+  /// itself need preparing, or the recursion will not terminate.
+  Future<void> prepareForWrite(CryptoContext context, AtKey atKey);
+}
+
+/// Implemented by a [CryptoProvider] that can only handle some keys.
+///
+/// `defaultProviderId` applies to *every* encrypted write, including the SDK's
+/// own internal keys — which carry no namespace. A scheme scoped to
+/// `(owner, namespace)`, as the nskey data path is, genuinely cannot serve those,
+/// and silently writing something it cannot read back is worse than declining.
+///
+/// A provider that declines is skipped **at write-time selection only**: a record
+/// already stamped with its id always routes back to it on read, because that is
+/// the only thing that can open it.
+///
+/// Separate from [CryptoProvider] so adding it breaks no existing
+/// `implements CryptoProvider`.
+abstract interface class HandlesSelectively {
+  /// Whether this provider can encrypt [atKey].
+  bool canHandle(AtKey atKey);
+}

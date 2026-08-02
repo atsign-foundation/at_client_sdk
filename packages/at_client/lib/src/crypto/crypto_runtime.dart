@@ -2,15 +2,66 @@ import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart';
 
 /// Routes encryption/decryption to the [CryptoProvider] named by an [AtKey]'s
 /// `appMetadata.providerId`.
+final AtSignLogger _logger = AtSignLogger('CryptoRuntime');
+
 class CryptoRuntime {
   static const String legacyProviderId = legacyCryptoProviderId;
 
   final AtClient _atClient;
 
   CryptoRuntime(this._atClient);
+
+  /// Give the provider that will handle this write a chance to act *before* the
+  /// pipeline starts — see [PreparesWrites]. Providers that do not implement it
+  /// are skipped, which is nearly all of them.
+  ///
+  /// [providerId] is resolved from the request options rather than from the
+  /// key's `appMetadata`, because at this point nothing has stamped it yet.
+  Future<void> prepareForPut(AtKey atKey, String providerId) async {
+    final config =
+        _atClient.getPreferences()?.crypto ?? const CryptoConfig.legacy();
+    final provider = config.lookup(providerId);
+    if (provider is PreparesWrites) {
+      await (provider as PreparesWrites).prepareForWrite(_context(), atKey);
+    }
+  }
+
+  /// The provider id a write will use, before anything has stamped the key.
+  ///
+  /// When [atKey] is supplied and the selected provider declines it
+  /// ([HandlesSelectively]), a *defaulted* id falls back to legacy — the nskey
+  /// data path is `(owner, namespace)`-scoped and cannot serve the SDK's
+  /// namespace-less internal keys, and writing something it could not read back
+  /// is worse than declining. An *explicitly requested* id does not fall back:
+  /// the caller asked for a scheme that cannot handle this key, and quietly
+  /// doing something else is how you end up thinking data is PQ when it is not.
+  static String providerIdFor(AtClient atClient, String? requested,
+      {AtKey? atKey}) {
+    final id = requested ??
+        atClient.getPreferences()?.crypto.defaultProviderId ??
+        legacyProviderId;
+    if (atKey == null || id == legacyProviderId) return id;
+
+    final config =
+        atClient.getPreferences()?.crypto ?? const CryptoConfig.legacy();
+    final provider = config.lookup(id);
+    if (provider is HandlesSelectively &&
+        !(provider as HandlesSelectively).canHandle(atKey)) {
+      if (requested != null) {
+        throw AtEncryptionException(
+            'Crypto provider "$id" cannot handle ${atKey.key} — it was '
+            'requested explicitly, so no fallback was applied.');
+      }
+      _logger.finer(
+          'default provider "$id" declined ${atKey.key}; using $legacyProviderId');
+      return legacyProviderId;
+    }
+    return id;
+  }
 
   Future<String> encryptForPut(AtKey atKey, dynamic value) async {
     try {
