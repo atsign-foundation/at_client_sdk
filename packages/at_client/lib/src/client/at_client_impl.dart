@@ -7,6 +7,7 @@ import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
+import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/response/response.dart';
@@ -1019,6 +1020,19 @@ class AtClientImpl implements AtClient {
     if (!validationResult.isValid) {
       throw AtKeyException(validationResult.failureReason);
     }
+    // Give the provider that will encrypt this write a chance to act before the
+    // pipeline starts. The nskey data path needs it: minting a content key means
+    // writing a conveyance record, and that cannot happen once the transformer
+    // is mid-way through building a verb builder.
+    final options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
+    if (!atKey.metadata.isPublic && options.shouldEncrypt) {
+      await CryptoRuntime(this).prepareForPut(
+        atKey,
+        CryptoRuntime.providerIdFor(this, options.cryptoProviderId,
+            atKey: atKey),
+      );
+    }
+
     var tuple = Tuple<AtKey, dynamic>()
       ..one = atKey
       ..two = value;

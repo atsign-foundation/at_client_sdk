@@ -330,11 +330,13 @@ class NotificationServiceImpl extends NotificationService {
     final String notifPayload;
     body = body.trim();
     if (body.isNotEmpty && shouldEncrypt) {
-      atKey.metadata.appMetadata ??= AppMetadata(
-        providerId: cryptoProviderId ??
-            atClient.getPreferences()?.crypto.defaultProviderId ??
-            CryptoRuntime.legacyProviderId,
-      );
+      // Resolve through the runtime so a provider that cannot serve this key —
+      // the nskey path declines anything without a namespace — is not selected
+      // for it, and so the same preparation step runs as on any other write.
+      final providerId =
+          CryptoRuntime.providerIdFor(atClient, cryptoProviderId, atKey: atKey);
+      atKey.metadata.appMetadata ??= AppMetadata(providerId: providerId);
+      await CryptoRuntime(atClient).prepareForPut(atKey, providerId);
       notifPayload =
           await CryptoRuntime(atClient).encryptForNotification(atKey, body);
       atKey.metadata.isEncrypted = true;

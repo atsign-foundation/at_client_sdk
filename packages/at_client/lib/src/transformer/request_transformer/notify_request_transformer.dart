@@ -24,9 +24,17 @@ class NotificationRequestTransformer
   Future<NotifyVerbBuilder> transform(
       NotificationParams notificationParams) async {
     if (_shouldRouteThroughProvider(notificationParams)) {
-      notificationParams.atKey.metadata.appMetadata ??= AppMetadata(
-          providerId: notificationParams.cryptoProviderId ??
-              atClientPreference.crypto.defaultProviderId);
+      final providerId = CryptoRuntime.providerIdFor(
+          _atClient, notificationParams.cryptoProviderId,
+          atKey: notificationParams.atKey);
+      notificationParams.atKey.metadata.appMetadata ??=
+          AppMetadata(providerId: providerId);
+      // Same preparation step the put path runs, and for the same reason: a
+      // provider that has to write a record of its own — a key conveyance —
+      // cannot do it from inside encrypt, which is called part-way through
+      // building the verb builder below.
+      await CryptoRuntime(_atClient)
+          .prepareForPut(notificationParams.atKey, providerId);
     }
     // prepares notification builder
     NotifyVerbBuilder builder = await _prepareNotificationBuilder(

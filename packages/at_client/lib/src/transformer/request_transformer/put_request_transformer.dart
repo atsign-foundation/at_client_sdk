@@ -43,7 +43,7 @@ class PutRequestTransformer
     if (!_isPublicKey(metadata) && options.shouldEncrypt) {
       // Add metadata for the crypto provider used to route future decrypts.
       updateVerbBuilder.atKey.metadata.appMetadata =
-          AppMetadata(providerId: _cryptoProviderIdFor(options));
+          AppMetadata(providerId: _cryptoProviderIdFor(options, atKey));
       await _encryptData(updateVerbBuilder);
     } else {
       // Sign the data for public keys
@@ -64,11 +64,9 @@ class PutRequestTransformer
         .encryptForPut(updateVerbBuilder.atKey, updateVerbBuilder.value);
   }
 
-  String _cryptoProviderIdFor(PutRequestOptions options) {
-    return options.cryptoProviderId ??
-        _atClient.getPreferences()?.crypto.defaultProviderId ??
-        CryptoRuntime.legacyProviderId;
-  }
+  String _cryptoProviderIdFor(PutRequestOptions options, AtKey atKey) =>
+      CryptoRuntime.providerIdFor(_atClient, options.cryptoProviderId,
+          atKey: atKey);
 
   void _signPublicData(
       UpdateVerbBuilder updateVerbBuilder, String? encryptionPrivateKey) {
