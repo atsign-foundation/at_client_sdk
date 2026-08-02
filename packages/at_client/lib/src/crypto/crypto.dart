@@ -1,5 +1,10 @@
 import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/crypto/nskey/ck_manager.dart';
+import 'package:at_client/src/crypto/nskey/content_key.dart';
+import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
+import 'package:at_client/src/crypto/nskey/nskey_provider.dart';
+import 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
 import 'package:at_commons/at_commons.dart';
 
 /// The id of the built-in legacy (pre-pluggable) encryption scheme — the
@@ -28,6 +33,35 @@ class CryptoConfig {
   const CryptoConfig.legacy()
       : defaultProviderId = legacyCryptoProviderId,
         providers = const [];
+
+  /// The nskey data path: application data under `at/symmetric/AES/GCM`, content
+  /// keys conveyed by `at/nskey`, and the CK manager that mints one the first
+  /// time a destination is written to.
+  ///
+  /// The SDK assembles it because the parts are not independent — the manager
+  /// and both providers must share **one** [ContentKeyCache], or a conveyance
+  /// caches a CK the data provider then cannot find. Leaving that to callers
+  /// makes a silent misconfiguration easy and a working one boilerplate.
+  ///
+  /// Returns a **fresh set per call**, so give each atSign its own: these
+  /// providers hold per-atSign state, which is the case
+  /// [CryptoConfig.providers] documents as needing a per-atSign instance.
+  ///
+  /// [keyRing] supplies the namespace key material. Until the secret-sharing
+  /// substrate delivers it, that is a fixture.
+  factory CryptoConfig.nskey({required NskeyKeyRing keyRing}) {
+    final cache = ContentKeyCache();
+    return CryptoConfig(
+      defaultProviderId: symmetricAesGcmCryptoProviderId,
+      providers: [
+        NskeyProvider(keyRing: keyRing, cache: cache),
+        SymmetricAesGcmProvider(
+          cache: cache,
+          ckManager: CkManager(cache: cache, keyRing: keyRing),
+        ),
+      ],
+    );
+  }
 
   /// The configured provider with [id], or null if none matches.
   ///
