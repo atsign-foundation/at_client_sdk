@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/encryption/ml_kem_768_validation.dart';
-import 'package:at_chops/src/algorithm/pq_output_length.dart';
+import 'package:at_chops/src/algorithm/pq_validation.dart';
 // ignore: implementation_imports
 import 'package:pqcrypto/src/algos/kyber/kem.dart' show KyberLevel;
 import 'package:pqcrypto/pqcrypto.dart';

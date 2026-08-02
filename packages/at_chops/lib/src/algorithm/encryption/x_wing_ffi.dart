@@ -8,7 +8,7 @@ import 'package:at_chops/src/algorithm/encryption/ml_kem_768_ffi.dart';
 import 'package:at_chops/src/algorithm/encryption/ml_kem_768_validation.dart';
 import 'package:at_chops/src/algorithm/encryption/x25519_ffi_algo.dart';
 import 'package:at_chops/src/algorithm/encryption/x_wing_sizes.dart';
-import 'package:at_chops/src/algorithm/pq_output_length.dart';
+import 'package:at_chops/src/algorithm/pq_validation.dart';
 import 'package:pointycastle/digests/sha3.dart';
 import 'package:pointycastle/digests/shake.dart';
 

@@ -7,7 +7,7 @@ import 'package:at_chops/src/algorithm/encryption/ml_kem_768_pure_dart.dart';
 import 'package:at_chops/src/algorithm/encryption/ml_kem_768_validation.dart';
 import 'package:at_chops/src/algorithm/encryption/x25519_pure_dart_algo.dart';
 import 'package:at_chops/src/algorithm/encryption/x_wing_sizes.dart';
-import 'package:at_chops/src/algorithm/pq_output_length.dart';
+import 'package:at_chops/src/algorithm/pq_validation.dart';
 import 'package:cryptography/cryptography.dart' as crypto;
 import 'package:meta/meta.dart';
 import 'package:pointycastle/digests/sha3.dart';

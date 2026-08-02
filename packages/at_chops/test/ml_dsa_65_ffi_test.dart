@@ -6,7 +6,7 @@ import 'dart:ffi';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops_ffi.dart';
-import 'package:at_chops/src/algorithm/signing/ml_dsa_65_validation.dart';
+import 'package:at_chops/src/algorithm/pq_validation.dart';
 import 'package:at_commons/at_commons.dart' show AtSigningException;
 import 'package:test/test.dart';
 
