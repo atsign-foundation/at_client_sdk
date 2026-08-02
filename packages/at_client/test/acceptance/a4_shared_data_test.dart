@@ -18,7 +18,9 @@ void main() {
       // THEN  bob's clients decapsulate bob's CK record with bob's nskey private
       //       and read; alice's clients decapsulate the self-copy's CK with
       //       alice's nskey private and read. The two reads differ by
-      //       record-owner, not by key. PQ end to end — no RSA on any path.
+      //       record-owner, not by key. PQ end to end — no RSA on any path. An
+      //       unauthorised @bob enrollment can neither fetch the ciphertext
+      //       (server-gated) nor decrypt it.
       fail('not implemented');
     }, skip: b1CrossAtSign);
 
@@ -50,7 +52,8 @@ void main() {
       // THEN  the value decrypts on every authorised bob enrollment with the
       //       same routing as a shared put; negotiation gates the notification
       //       scheme on BOB's readiness; offline-then-online bob still decrypts
-      //       the queued notification; appMetadata is present on the frame.
+      //       the queued notification; appMetadata is present on the frame;
+      //       signal-only notifications are unaffected.
       fail('not implemented');
     }, skip: b1CrossAtSign);
   });

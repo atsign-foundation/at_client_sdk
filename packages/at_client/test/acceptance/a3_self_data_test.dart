@@ -1,9 +1,5 @@
 /// A3 · E2EE within one atSign (self data) + self notification.
 ///
-/// UC-A3.1 is the natural walking-skeleton target: with the nskey private
-/// supplied by a test fixture instead of the substrate, it needs only the two
-/// providers and a round-trip — so it can go green well before SS-4 lands.
-///
 /// Catalogue: `docs/projects/pq/acceptance.md` section 4.
 library;
 

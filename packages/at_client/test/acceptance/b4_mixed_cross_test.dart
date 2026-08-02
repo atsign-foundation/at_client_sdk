@@ -19,7 +19,7 @@ void main() {
       //       alice's own enrollments is allowed INDEPENDENTLY. No write bob
       //       can't read.
       fail('not implemented');
-    }, skip: r1);
+    }, skip: r1CrossAtSign);
 
     test('UC-B4.2 · legacy @alice receives from PQ @bob (the interop question)',
         () {
@@ -31,7 +31,7 @@ void main() {
       //       atSign is PQ-only by default, so a legacy-peer send to it is
       //       UNSUPPORTED unless that flag is on.
       fail('not implemented');
-    }, skip: on1);
+    }, skip: on1CrossAtSign);
 
     test('UC-B4.3 · partially-upgraded @alice shares with @bob', () {
       // GIVEN @alice mixed (alice1 PQ, alice2 legacy); @bob PQ-ready.
@@ -41,7 +41,7 @@ void main() {
       //       until @alice readiness flips. Two directions, two schemes, one
       //       put/notify.
       fail('not implemented');
-    }, skip: r1);
+    }, skip: r1CrossAtSign);
 
     test('UC-B4.4 · @bob finishes upgrading, shared flips to PQ', () {
       // GIVEN @bob was legacy; now all bob enrollments are PQ and bob
@@ -50,6 +50,6 @@ void main() {
       // THEN  alice writes via the nskey data path to bob; the legacy path is no
       //       longer used toward bob.
       fail('not implemented');
-    }, skip: r1);
+    }, skip: r1CrossAtSign);
   });
 }

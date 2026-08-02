@@ -57,7 +57,10 @@ void main() {
       // published nskey public half, and public:pqpublickey@owner — is an
       // APKAM-signed envelope verified against the enrollment's _apsk THE SAME
       // WAY same-atSign and cross-atSign, BEFORE encapsulating to it. A
-      // tampered, unsigned, or wrong-signer advertised key is REJECTED.
+      // tampered, unsigned, or wrong-signer advertised key is REJECTED. The
+      // atServer keeps every approved enrollment's _apsk present (fetchable
+      // without a client publish) and write-restricted (a cross-enrollment
+      // overwrite is refused).
       fail('not implemented');
     }, skip: ss4);
 
@@ -68,6 +71,6 @@ void main() {
       // key-shape change. The ceiling is pinned when the harness lands — a
       // measured budget, not a guessed number.
       fail('not implemented');
-    }, skip: vectors);
+    }, skip: b1);
   });
 }

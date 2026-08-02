@@ -27,8 +27,9 @@ void main() {
       // WHEN  the copy first runs.
       // THEN  the copy SHARES E1's one APKAM keypair and key package — the two
       //       hosts are the same enrollment, one recipient. Secrets already
-      //       sealed to that key package open on both. Revocation is
-      //       per-enrollment, so revoking E1 cuts every host sharing the copy.
+      //       sealed to that key package open on both, and both hosts share the
+      //       pqpublickey private and E1's namespace authorisations. Revocation
+      //       is per-enrollment, so revoking E1 cuts every host sharing the copy.
       fail('not implemented');
     }, skip: ss2);
 
@@ -38,7 +39,8 @@ void main() {
       // THEN  alice3 gets the root pqpublickey private and, by approval-time
       //       push, only the app_1.my_apps nskey private; app_2's is never
       //       delivered. The boundary is enforced at the atServer __ssenv
-      //       namespace-delivery gate, not by a client-side refusal alone.
+      //       namespace-delivery gate, not by a client-side refusal alone, so
+      //       alice3 can read/write app_1.my_apps but not app_2.my_apps.
       fail('not implemented');
     }, skip: ss4);
   });
