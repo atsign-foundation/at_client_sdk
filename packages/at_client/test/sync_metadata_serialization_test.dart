@@ -67,5 +67,66 @@ void main() {
     test('null metadata serializes to empty string', () {
       expect(SyncServiceImpl.metadataToString(null), '');
     });
+
+    /// The guard for the defect class rather than the field.
+    ///
+    /// `VerbSyntax.metadataFragment` is a sequence of OPTIONAL groups, so a
+    /// field emitted in the wrong order does not error — the regex stops
+    /// matching at that point and the atServer silently drops everything after
+    /// it. Neither a `contains` assertion nor comparing against
+    /// `toAtProtocolFragment` can see that: the latter agrees with the canonical
+    /// builder even if the canonical builder itself is the one out of order.
+    /// Only parsing the built command with the verb the atServer actually uses
+    /// closes it. Every field is populated so a new one added out of order here
+    /// fails.
+    test('a fully-populated fragment parses as a valid update command', () {
+      final appMetadata = AppMetadata(
+          providerId: 'at/nskey/XWING/AES/GCM',
+          additional: {'ckKid': 'k1', 'nskeyKid': 'n1'});
+      final metadata = AtMetaData()
+        ..ttl = 1000
+        ..ttb = 2000
+        ..ttr = 3000
+        ..isCascade = true
+        ..dataSignature = 'a-signature'
+        ..isBinary = true
+        ..isEncrypted = true
+        ..sharedKeyEnc = 'enc-shared-key'
+        ..pubKeyCS = 'a-checksum'
+        ..pubKeyHash = PublicKeyHash('a-hash', 'sha512')
+        ..encoding = 'base64'
+        ..encKeyName = 'enc-key-name'
+        ..encAlgo = 'AES/GCM'
+        ..ivNonce = 'an-iv'
+        ..skeEncKeyName = 'ske-key-name'
+        ..skeEncAlgo = 'RSA'
+        ..immutable = true
+        ..appMetadata = appMetadata;
+
+      final command = 'update'
+          '${SyncServiceImpl.metadataToString(metadata)}'
+          ':@bob:test.unit@alice a-value';
+      final match = RegExp(VerbSyntax.update).firstMatch(command);
+
+      expect(match, isNotNull,
+          reason: 'the atServer parses the sync push with VerbSyntax.update, '
+              'and a fragment it cannot match is truncated rather than '
+              'rejected. Command was: $command');
+
+      // Assert through to the tail: those are the groups a mis-ordered field
+      // strands, and the key/value pair is what silently goes missing.
+      expect(match!.namedGroup('atKey'), 'test.unit');
+      expect(match.namedGroup('forAtSign'), 'bob');
+      expect(match.namedGroup('atSign'), 'alice');
+      expect(match.namedGroup('value'), 'a-value');
+      expect(match.namedGroup('immutable'), 'true');
+      expect(match.namedGroup('appMetadata'),
+          Metadata.encodeAppMetadata(appMetadata));
+
+      final decoded =
+          Metadata.decodeAppMetadata(match.namedGroup('appMetadata'));
+      expect(decoded?.providerId, 'at/nskey/XWING/AES/GCM');
+      expect(decoded?.additional?['ckKid'], 'k1');
+    });
   });
 }
