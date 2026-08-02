@@ -35,6 +35,10 @@ void main() {
   /// A client whose `put` routes through the real providers, the way the put
   /// pipeline does: the conveyance record is encrypted by `at/nskey`, which
   /// seals the CK and marks it current.
+  ///
+  /// [failWrites] makes the first N conveyance writes fail *after* the record
+  /// has been encrypted — the real shape of the hazard, since encryption
+  /// happens in the put transformer and the write is issued after it.
   ({
     CkManager manager,
     CryptoContext context,
@@ -42,13 +46,16 @@ void main() {
     ContentKeyCache cache,
     List<AtKey> written,
     List<String?> providerIds,
-  }) client() {
+    List<bool?> routings,
+  }) client({int failWrites = 0}) {
+    var writesLeftToFail = failWrites;
     final cache = ContentKeyCache();
     final ring = InMemoryNskeyKeyRing();
     final nskey = NskeyProvider(keyRing: ring, cache: cache);
     final manager = CkManager(cache: cache, keyRing: ring);
     final written = <AtKey>[];
     final providerIds = <String?>[];
+    final routings = <bool?>[];
 
     final mockAtClient = MockAtClient();
     when(() => mockAtClient.getCurrentAtSign()).thenReturn(owner);
@@ -63,7 +70,12 @@ void main() {
           inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
       written.add(key);
       providerIds.add(options?.cryptoProviderId);
+      routings.add(options?.useRemoteAtServer);
       await nskey.encrypt(context, key, value);
+      if (writesLeftToFail > 0) {
+        writesLeftToFail--;
+        throw SecondaryConnectException('conveyance write failed');
+      }
       return true;
     });
 
@@ -74,6 +86,7 @@ void main() {
       cache: cache,
       written: written,
       providerIds: providerIds,
+      routings: routings,
     );
   }
 
@@ -169,6 +182,79 @@ void main() {
       final toBob = c.written.last;
       expect(toBob.sharedWith, bob);
       expect(toBob.sharedBy, owner);
+    });
+
+    /// A CK is only usable if the record conveying it exists. Marking one
+    /// current before that write lands means a failure leaves the cache
+    /// claiming a key nobody was ever sent — and `ensureCurrent`'s
+    /// already-current guard then short-circuits forever, so every later value
+    /// encrypts under it and is silently undecryptable.
+    test('a failed conveyance write leaves no current CK', () async {
+      final c = client(failWrites: 1);
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+
+      await expectLater(c.manager.ensureCurrent(c.context, selfValue('treaty')),
+          throwsA(isA<SecondaryConnectException>()));
+
+      expect(c.cache.current(owner, namespace), isNull,
+          reason: 'the conveyance record does not exist, so nothing may claim '
+              'to be the key new writes encrypt under');
+    });
+
+    test('a retry after a failed conveyance write conveys a fresh CK',
+        () async {
+      final c = client(failWrites: 1);
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+
+      await expectLater(c.manager.ensureCurrent(c.context, selfValue('treaty')),
+          throwsA(isA<SecondaryConnectException>()));
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+
+      expect(c.written, hasLength(2),
+          reason: 'the first conveyance never landed, so the retry must cut '
+              'and convey another rather than reuse the orphan');
+      expect(c.cache.current(owner, namespace), isNotNull);
+      expect(c.cache.current(owner, namespace)!.ckKid,
+          c.written.last.key.replaceAll('.__ck', ''),
+          reason: 'the current CK must be the one whose conveyance landed');
+    });
+
+    /// The conveyance carries the key the value cites, so it must not be
+    /// slower than the value. A per-call `useRemoteAtServer: true` sends the
+    /// value straight to the atServer; leaving the conveyance on the default
+    /// local-first route means the recipient can see a value whose key is
+    /// still sitting on the sender's device — until the next sync, or forever
+    /// if the process exits first.
+    test('the conveyance follows the outer write to the remote atServer',
+        () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'),
+          useRemoteAtServer: true);
+
+      expect(c.routings.single, isTrue,
+          reason: 'a value written remote-only must not cite a conveyance that '
+              'only exists locally');
+    });
+
+    test('the conveyance follows a local-first outer write too', () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+
+      expect(c.routings.single, isFalse,
+          reason: 'with no override the conveyance takes the same default '
+              'route the value takes');
     });
 
     test('stays out of the way when the destination has no nskey at all',

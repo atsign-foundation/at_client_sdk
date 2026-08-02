@@ -37,15 +37,22 @@ void main() {
       final nskeyPair = await XWingKeyPair.generate();
       final context = CryptoContext(atClient: MockAtClient());
 
-      ({NskeyProvider nskey, SymmetricAesGcmProvider data}) client() {
+      ({
+        NskeyProvider nskey,
+        SymmetricAesGcmProvider data,
+        ContentKeyCache cache,
+        String nskeyKid,
+      }) client() {
         final cache = ContentKeyCache();
-        final ring = InMemoryNskeyKeyRing()
-          ..seedKeypair(owner, namespace,
-              publicKey: nskeyPair.publicKeyBytes,
-              privateKey: nskeyPair.privateKeyBytes);
+        final ring = InMemoryNskeyKeyRing();
+        final kid = ring.seedKeypair(owner, namespace,
+            publicKey: nskeyPair.publicKeyBytes,
+            privateKey: nskeyPair.privateKeyBytes);
         return (
           nskey: NskeyProvider(keyRing: ring, cache: cache),
           data: SymmetricAesGcmProvider(cache: cache),
+          cache: cache,
+          nskeyKid: kid,
         );
       }
 
@@ -62,6 +69,9 @@ void main() {
       final conveyanceKey = key('${ck.ckKid}.__ck');
       final sealedCk =
           await alice1.nskey.encrypt(context, conveyanceKey, ck.toBase64());
+      // Sealing a CK does not promote it — CkManager does that once the
+      // conveyance write lands. Driving the providers directly means saying so.
+      alice1.cache.putAsCurrent(owner, namespace, ck, alice1.nskeyKid);
       final valueKey = key('treaty');
       final ciphertext =
           await alice1.data.encrypt(context, valueKey, plaintext);

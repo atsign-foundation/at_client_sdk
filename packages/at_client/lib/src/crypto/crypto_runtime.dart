@@ -21,12 +21,17 @@ class CryptoRuntime {
   ///
   /// [providerId] is resolved from the request options rather than from the
   /// key's `appMetadata`, because at this point nothing has stamped it yet.
-  Future<void> prepareForPut(AtKey atKey, String providerId) async {
+  ///
+  /// [useRemoteAtServer] carries how this write is being routed, so a provider
+  /// writing a record the write will depend on can route it the same way.
+  Future<void> prepareForPut(AtKey atKey, String providerId,
+      {bool? useRemoteAtServer}) async {
     final config =
         _atClient.getPreferences()?.crypto ?? const CryptoConfig.legacy();
     final provider = config.lookup(providerId);
     if (provider is PreparesWrites) {
-      await (provider as PreparesWrites).prepareForWrite(_context(), atKey);
+      await (provider as PreparesWrites).prepareForWrite(_context(), atKey,
+          useRemoteAtServer: useRemoteAtServer);
     }
   }
 

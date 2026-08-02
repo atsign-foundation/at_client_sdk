@@ -68,8 +68,10 @@ class SymmetricAesGcmProvider
   /// Runs before the write pipeline starts, which is the only place a CK can be
   /// conveyed — see [PreparesWrites].
   @override
-  Future<void> prepareForWrite(CryptoContext context, AtKey atKey) async =>
-      await ckManager?.ensureCurrent(context, atKey);
+  Future<void> prepareForWrite(CryptoContext context, AtKey atKey,
+          {bool? useRemoteAtServer}) async =>
+      await ckManager?.ensureCurrent(context, atKey,
+          useRemoteAtServer: useRemoteAtServer);
 
   @override
   Future<String> encrypt(
@@ -87,7 +89,7 @@ class SymmetricAesGcmProvider
     // A fresh 12-byte nonce per value — never reuse a (key, nonce) pair.
     final iv = InitialisationVector.random(AesGcm256EncryptionAlgo.nonceLength);
     final ciphertext = await AesGcm256EncryptionAlgo(AESKey(ck.toBase64()))
-        .encrypt(_toBytes(atKey, plaintext), iv: iv);
+        .encrypt(_toBytes(atKey, plaintext), iv: iv, aad: _aad(atKey));
 
     // The runtime re-stamps providerId after this returns; setting it here just
     // keeps the record self-describing for callers that drive the provider
@@ -145,16 +147,47 @@ class SymmetricAesGcmProvider
     final plain = await AesGcm256EncryptionAlgo(AESKey(ck.toBase64())).decrypt(
       Uint8List.fromList(base64Decode(ciphertext)),
       iv: InitialisationVector(Uint8List.fromList(base64Decode(ivB64))),
+      aad: _aad(atKey),
     );
     return _fromBytes(atKey, plain);
   }
+
+  /// Binds a value's ciphertext to the record it was written under.
+  ///
+  /// A content key is scoped to `(nskey owner, namespace)` and covers many
+  /// records, so the key alone says nothing about *which* record a ciphertext
+  /// belongs to. Without this, anyone who can write the store — an atServer
+  /// operator, or a sync path — can move a valid ciphertext from one record to
+  /// another in the same scope and it still authenticates: yesterday's `no`
+  /// reappears as today's `yes`, with the AEAD tag intact.
+  ///
+  /// The HPKE `info` at layer 2 binds the *conveyance* to its owner and
+  /// namespace; it does not reach the values. This is the equivalent binding
+  /// one layer down, over the record's full address.
+  ///
+  /// Composed from the AtKey's fields rather than `toString()` deliberately:
+  /// the writer and the reader must derive byte-identical AAD or nothing
+  /// decrypts, and the field accessors are stable where the string form varies
+  /// with `cached:`/`public:` prefixes and metadata state.
+  static List<int> _aad(AtKey atKey) => utf8.encode([
+        symmetricAesGcmCryptoProviderId,
+        atKey.sharedBy ?? '',
+        atKey.sharedWith ?? '',
+        atKey.namespace ?? '',
+        atKey.key,
+      ].join(':'));
 
   /// Second chance on a cache miss: the conveyance record may already be in
   /// local storage, just never opened by this process. Reading it routes back
   /// through the `at/nskey` provider, which decapsulates and caches as a side
   /// effect — so the CK is looked up again rather than taken from the read.
   ///
-  /// Failure here is not an error: the record genuinely may not have synced.
+  /// A record that simply is not there is not an error — that is the ordinary
+  /// out-of-order-sync case, and the caller retries. A record that *is* there
+  /// and will not open is the opposite, and is re-thrown: a failed AEAD, a
+  /// malformed envelope or a kid collision means tampering or corruption, and
+  /// this is the only place the key layer can raise that alarm. Reporting it
+  /// as "not yet synced" would hide it behind advice to keep polling.
   Future<ContentKey?> _resolveFromLocalConveyance(
     CryptoContext context,
     AtKey value,
@@ -164,6 +197,11 @@ class SymmetricAesGcmProvider
   ) async {
     try {
       await context.atClient.get(conveyanceKeyFor(value, ckKid));
+    } on AtDecryptionException {
+      rethrow;
+    } on StateError {
+      // ContentKeyCache.put refuses two distinct CKs claiming one kid.
+      rethrow;
     } catch (_) {
       return null;
     }

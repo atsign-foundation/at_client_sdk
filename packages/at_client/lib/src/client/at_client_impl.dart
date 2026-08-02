@@ -1030,6 +1030,9 @@ class AtClientImpl implements AtClient {
         atKey,
         CryptoRuntime.providerIdFor(this, options.cryptoProviderId,
             atKey: atKey),
+        // Any record the provider writes here is one this write will cite, so
+        // it has to travel the same route this write does.
+        useRemoteAtServer: options.useRemoteAtServer,
       );
     }
 

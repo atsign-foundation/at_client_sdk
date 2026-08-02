@@ -36,7 +36,8 @@ class CkManager {
   /// the only way it learns of a rotation; without it a peer keeps sealing to a
   /// generation a revoked enrollment can still open, and revocation silently
   /// fails for everything inbound.
-  Future<void> ensureCurrent(CryptoContext context, AtKey valueKey) async {
+  Future<void> ensureCurrent(CryptoContext context, AtKey valueKey,
+      {bool? useRemoteAtServer}) async {
     final owner = valueKey.sharedWith ?? valueKey.sharedBy;
     final namespace = valueKey.namespace;
     if (owner == null || owner.isEmpty || namespace == null) return;
@@ -57,16 +58,28 @@ class CkManager {
 
     // Either there is no CK for this destination, or the one we have was sealed
     // to a generation the destination has since rotated away from.
+    //
+    // The conveyance routes to at/nskey, whose encrypt seals the CK and caches
+    // it. That write needs no preparation of its own, which is what stops this
+    // recursing.
     final ck = ContentKey(_freshKeyBytes());
     await context.atClient.put(
       SymmetricAesGcmProvider.conveyanceKeyFor(valueKey, ck.ckKid),
       ck.toBase64(),
       putRequestOptions: PutRequestOptions()
-        ..cryptoProviderId = nskeyCryptoProviderId,
+        ..cryptoProviderId = nskeyCryptoProviderId
+        // The value about to be written cites this record, so it must not
+        // outrun it. A remote-only value paired with a local-first conveyance
+        // reaches the recipient before its key does.
+        ..useRemoteAtServer = useRemoteAtServer ?? false,
     );
-    // The conveyance routes to at/nskey, whose encrypt seals the CK and marks it
-    // current — so nothing is cached here directly. That write needs no
-    // preparation of its own, which is what stops this recursing.
+
+    // Only now — the record carrying this CK is durable, so a reader can get
+    // it. Promoting before the write returns would leave a failed conveyance
+    // as the current key: the guard above would then skip conveying on every
+    // retry, and every value written afterwards would cite a CK that was never
+    // sent. The write throws on failure, so this is not reached.
+    cache.putAsCurrent(owner, namespace, ck, advertised.nskeyKid);
   }
 
   static Uint8List _freshKeyBytes() =>

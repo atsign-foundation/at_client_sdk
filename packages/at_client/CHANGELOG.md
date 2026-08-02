@@ -1,4 +1,41 @@
 ## 3.14.1
+- fix: `at/symmetric/AES/GCM` binds a value's ciphertext to the record it was
+  written under, as AES-GCM additional authenticated data over
+  `providerId:sharedBy:sharedWith:namespace:key`. A content key covers every
+  record in its `(owner, namespace)` scope, so without this a valid ciphertext
+  could be moved between records in that scope by anyone able to write the
+  store and would still authenticate — the AEAD tag proves the key, not the
+  address. The HPKE `info` binding on the conveyance layer does not reach
+  values. Values written by an earlier build of this unreleased path do not
+  decrypt under it.
+- fix: a content key is made *current* only once its conveyance record is
+  durable. It was promoted inside `encrypt`, which runs in the put transformer
+  with the write still to come — so a failed conveyance write left a current CK
+  whose record did not exist, `CkManager.ensureCurrent`'s already-current guard
+  then skipped conveying on every retry, and every value written afterwards
+  cited a key nobody was ever sent.
+- fix: the notify path resolves the key's namespace *before* selecting a crypto
+  provider. Selection is namespace-sensitive — the nskey path declines a key
+  without one — so a key relying on the preference default silently fell back to
+  legacy, while `put` on the identical key used `nskey`. A received
+  notification's `AtKey` now also carries its namespace, without which the nskey
+  providers refuse the value outright.
+- fix: a content-key conveyance follows the routing of the write it serves.
+  `PreparesWrites.prepareForWrite` takes `useRemoteAtServer`, so a value written
+  remote-only can no longer cite a conveyance that exists only on the device.
+- fix: a conveyance record that is present but will not open — a failed AEAD, a
+  malformed envelope, a `ckKid` collision — is reported as the integrity failure
+  it is. A bare `catch` folded all of them into `ContentKeyUnavailableException`,
+  whose documented contract tells the caller to retry later.
+- fix: the nskey types are exported from the package barrel. `CryptoConfig.nskey`
+  takes a **required** `NskeyKeyRing`, and this entry tells callers to catch
+  `ContentKeyUnavailableException` — none of which could be named through
+  `package:at_client/at_client.dart`.
+- fix: the notify request builder carries `isBinary`, `immutable`, `encoding` and
+  `dataSignature`. It copies metadata field by field, and those four were
+  missing — a provider chooses its wire format from `isBinary`, so losing it made
+  a binary notification decode as text. The server-derived timestamps and
+  `sharedKeyStatus` stay out by design, as the sync push leaves them out.
 - feat: `nskey` data path providers — `at/symmetric/AES/GCM` encrypts
   application data with AES-256-GCM under a symmetric content key (CK), and
   `at/nskey` conveys that CK by X-Wing-sealing it to the namespace's `nskey`

@@ -1090,12 +1090,18 @@ X-Wing operation per generation and degrades silently with every rotation.
   whenever they have never sent in it.
 - Namespace-existence privacy rests on the `public:_` scan-hiding rule. That is a
   **core, guaranteed property of the Atsign Protocol**, not an assumption this design
-  makes — `_apsk` already depends on it. An e2e regression test covers it so a server
-  change cannot quietly retire it under us.
+  makes — `_apsk` already depends on it. A **functional**-suite regression test covers it
+  (`tests/at_functional_test/test/underscore_public_key_hiding_test.dart`) so a server
+  change cannot quietly retire it under us. Note the layer: that suite runs against
+  `at_virtual_env:local`, not the `vip` image CI drives, so it is not a CI gate.
 
-**Implementation status.** Target, not yet built: eager publish + the lock-key create /
-rotate path is **SS-4**; the sender-side re-`plookup` is **B-1d**; rotation and the
-generation pull are **B-2** + the substrate. The `nskeyKid` tag on the conveyance is
+**Implementation status.** Eager publish itself **is built** as of the
+`gkc-pq-d1-spike` branch (`PublishedNskeyKeyRing`), and the sender-side re-`plookup`
+(**B-1d**) with it — but **without either of its two safety mechanisms**: there is no
+`_nskeylock` serialising mint/rotate, and advertisements are accepted unverified
+(`UnverifiedAdvertisedKeys`, which shouts on every use). Both are owed: the lock and real
+minting are **SS-4**, the signature check is **SS-1c**. Rotation and the generation pull
+are **B-2** + the substrate. The `nskeyKid` tag on the conveyance is
 **B-1b** — a wire-shape addition that is free before any record exists and expensive
 after. Mechanics: `design.md` sections 1.3–1.5 and 1.7; acceptance: `acceptance.md`
 sections 4, 5 and 6.

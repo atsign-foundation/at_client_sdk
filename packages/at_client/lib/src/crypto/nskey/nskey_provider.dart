@@ -111,10 +111,14 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
       },
     );
 
-    // Cache on write too: the writer encrypts subsequent data values under this
-    // CK without re-opening its own conveyance record. This is the one place a
-    // CK becomes *current* — the client that cut it says so.
-    cache.putAsCurrent(nskeyOwner, namespace, ck, advertised.nskeyKid);
+    // Cache on write too, so the writer can re-open its own conveyance without
+    // a round trip — but do *not* make it current here. Sealing a CK is not the
+    // same event as its conveyance record reaching storage: this runs inside
+    // the put transformer, with the write still to come. Promoting it now would
+    // survive a failed write as a current CK whose conveyance does not exist,
+    // and `CkManager.ensureCurrent`'s already-current guard would then skip
+    // conveying forever. The manager promotes it once the write returns.
+    cache.put(nskeyOwner, namespace, ck);
 
     return base64Encode(envelope);
   }

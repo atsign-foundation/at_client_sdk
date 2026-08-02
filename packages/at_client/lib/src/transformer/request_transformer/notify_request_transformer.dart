@@ -23,6 +23,14 @@ class NotificationRequestTransformer
   @override
   Future<NotifyVerbBuilder> transform(
       NotificationParams notificationParams) async {
+    // Before anything looks at the key, give it its namespace. Provider
+    // selection is namespace-sensitive — the nskey path is (owner, namespace)
+    // scoped and declines a key without one — so choosing a provider first
+    // would silently pick legacy for every key that relies on the preference
+    // default, and the put path (which resolves the namespace first) would
+    // then encrypt the very same key differently.
+    _resolveNamespace(notificationParams);
+
     if (_shouldRouteThroughProvider(notificationParams)) {
       final providerId = CryptoRuntime.providerIdFor(
           _atClient, notificationParams.cryptoProviderId,
@@ -86,15 +94,9 @@ class NotificationRequestTransformer
     } else {
       AtKey ak = notificationParams.atKey;
 
-      if (notificationParams.messageType == MessageTypeEnum.key &&
-          ak.metadata.namespaceAware) {
-        ak.namespace ??= atClientPreference.namespace;
-        if (atClientPreference.namespace != null &&
-            !'${ak.key}.${ak.namespace}'
-                .endsWith('.${atClientPreference.namespace!}')) {
-          ak.key = '${ak.key}.${ak.namespace}';
-          ak.namespace = atClientPreference.namespace;
-        }
+      // The namespace was resolved in transform(); this only re-parses the key
+      // so the builder gets a normalised copy.
+      if (_isNamespaceAware(notificationParams)) {
         ak = AtKey.fromString(ak.toString());
       }
 
@@ -112,8 +114,51 @@ class NotificationRequestTransformer
     }
   }
 
+  bool _isNamespaceAware(NotificationParams notificationParams) =>
+      notificationParams.messageType == MessageTypeEnum.key &&
+      notificationParams.atKey.metadata.namespaceAware;
+
+  /// Fill in the preference's namespace, and fold a key that already carries a
+  /// different one into the app namespace — in place, on the caller's AtKey.
+  ///
+  /// This ran inside the builder step until provider selection moved ahead of
+  /// it. Both need the namespace, and the builder needs it *after* whatever
+  /// encryption chose, so it has to happen before either.
+  void _resolveNamespace(NotificationParams notificationParams) {
+    if (!_isNamespaceAware(notificationParams)) return;
+    final ak = notificationParams.atKey;
+    ak.namespace ??= atClientPreference.namespace;
+    if (atClientPreference.namespace != null &&
+        !'${ak.key}.${ak.namespace}'
+            .endsWith('.${atClientPreference.namespace!}')) {
+      ak.key = '${ak.key}.${ak.namespace}';
+      ak.namespace = atClientPreference.namespace;
+    }
+  }
+
+  /// Copy the record's own metadata onto the builder.
+  ///
+  /// Everything a *reader* needs to interpret the value has to travel: the
+  /// crypto routing, and the fields that decide how the payload is decoded.
+  /// `isBinary`, `encoding` and `dataSignature` were missing, which is the same
+  /// silent-drop shape as the sync push that dropped `appMetadata` — a
+  /// provider branches on `isBinary` to choose its wire format, so losing it
+  /// makes a binary notification decode as text.
+  ///
+  /// The timestamps and `sharedKeyStatus` are deliberately *not* copied: the
+  /// atServer derives those on receipt, exactly as the sync push leaves them
+  /// out. Sending a client's idea of `createdAt` would be the client asserting
+  /// something the server owns.
   void _addMetadataToBuilder(
       NotifyVerbBuilder builder, NotificationParams notificationParams) {
+    builder.atKey.metadata.isBinary =
+        notificationParams.atKey.metadata.isBinary;
+    builder.atKey.metadata.immutable =
+        notificationParams.atKey.metadata.immutable;
+    builder.atKey.metadata.encoding =
+        notificationParams.atKey.metadata.encoding;
+    builder.atKey.metadata.dataSignature =
+        notificationParams.atKey.metadata.dataSignature;
     builder.atKey.metadata.ttl = notificationParams.atKey.metadata.ttl;
     builder.atKey.metadata.ttb = notificationParams.atKey.metadata.ttb;
     builder.atKey.metadata.ttr = notificationParams.atKey.metadata.ttr;

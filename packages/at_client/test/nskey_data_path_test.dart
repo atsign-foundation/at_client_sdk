@@ -14,6 +14,15 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 
+/// One client's half of the data path: the two providers and the cache they
+/// share, plus the nskey generation it was seeded with.
+typedef _Client = ({
+  NskeyProvider nskey,
+  SymmetricAesGcmProvider data,
+  ContentKeyCache cache,
+  String nskeyKid,
+});
+
 /// The nskey data path, driven end to end with the namespace key supplied by a
 /// fixture instead of the secret-sharing substrate.
 ///
@@ -29,12 +38,7 @@ void main() {
   late XWingKeyPair nskeyPair;
 
   /// A client of @alice authorised for the namespace: holds both halves.
-  ({
-    NskeyProvider nskey,
-    SymmetricAesGcmProvider data,
-    ContentKeyCache cache,
-    String nskeyKid,
-  }) authorisedClient() {
+  _Client authorisedClient() {
     final cache = ContentKeyCache();
     final ring = InMemoryNskeyKeyRing();
     final kid = ring.seedKeypair(owner, namespace,
@@ -57,6 +61,20 @@ void main() {
     ..sharedBy = written.sharedBy
     ..sharedWith = written.sharedWith
     ..metadata = (Metadata()..appMetadata = written.metadata.appMetadata);
+
+  /// Seal a CK into its conveyance record and then promote it, which is what
+  /// `CkManager` does around that write.
+  ///
+  /// Sealing alone deliberately does not promote: a CK becomes the key new
+  /// writes use only once the record conveying it is durable, so these tests —
+  /// which drive the providers without a manager — have to say so themselves.
+  Future<String> conveyAsCurrent(
+      _Client client, AtKey conveyanceKey, ContentKey ck) async {
+    final sealed =
+        await client.nskey.encrypt(context, conveyanceKey, ck.toBase64());
+    client.cache.putAsCurrent(owner, namespace, ck, client.nskeyKid);
+    return sealed;
+  }
 
   AtKey ckConveyanceKey(String ckKid) => AtKey()
     ..key = '$ckKid.__ck'
@@ -98,8 +116,7 @@ void main() {
       // 2. Convey the CK once: sealed to @alice's own nskey, written as its own
       //    <ckKid>.__ck record.
       final conveyanceKey = ckConveyanceKey(ck.ckKid);
-      final sealedCk =
-          await alice1.nskey.encrypt(context, conveyanceKey, ck.toBase64());
+      final sealedCk = await conveyAsCurrent(alice1, conveyanceKey, ck);
 
       // 3. Write the data value under that CK.
       final valueKey = dataKey('treaty');
@@ -131,8 +148,7 @@ void main() {
         () async {
       final alice1 = authorisedClient();
       final ck = ContentKey(_randomKeyBytes());
-      await alice1.nskey
-          .encrypt(context, ckConveyanceKey(ck.ckKid), ck.toBase64());
+      await conveyAsCurrent(alice1, ckConveyanceKey(ck.ckKid), ck);
 
       final valueKey = dataKey('treaty');
       await alice1.data.encrypt(context, valueKey, 'the treaty text');
@@ -220,8 +236,7 @@ void main() {
         'failing silently', () async {
       final alice1 = authorisedClient();
       final ck = ContentKey(_randomKeyBytes());
-      await alice1.nskey
-          .encrypt(context, ckConveyanceKey(ck.ckKid), ck.toBase64());
+      await conveyAsCurrent(alice1, ckConveyanceKey(ck.ckKid), ck);
       final valueKey = dataKey('treaty');
       final ciphertext =
           await alice1.data.encrypt(context, valueKey, 'the treaty text');
@@ -251,8 +266,7 @@ void main() {
       final alice1 = authorisedClient();
       final ck = ContentKey(_randomKeyBytes());
       final conveyanceKey = ckConveyanceKey(ck.ckKid);
-      final sealedCk =
-          await alice1.nskey.encrypt(context, conveyanceKey, ck.toBase64());
+      final sealedCk = await conveyAsCurrent(alice1, conveyanceKey, ck);
       final valueKey = dataKey('treaty');
       final ciphertext =
           await alice1.data.encrypt(context, valueKey, 'the treaty text');
@@ -282,6 +296,52 @@ void main() {
           'the treaty text');
     });
 
+    /// "Has not synced yet" and "is there but will not open" are different
+    /// answers, and the class doc promises callers they can tell them apart:
+    /// the first says retry, the second says give up. Folding a tampered or
+    /// corrupt envelope into the first hides the key layer's only integrity
+    /// alarm and tells the caller to keep polling.
+    test('a conveyance that will not open is an integrity failure, not a wait',
+        () async {
+      final alice1 = authorisedClient();
+      final ck = ContentKey(_randomKeyBytes());
+      final conveyanceKey = ckConveyanceKey(ck.ckKid);
+      final sealedCk = await conveyAsCurrent(alice1, conveyanceKey, ck);
+      final valueKey = dataKey('treaty');
+      final ciphertext =
+          await alice1.data.encrypt(context, valueKey, 'the treaty text');
+
+      // The conveyance record is present, but a byte of its envelope was
+      // flipped in storage.
+      final tampered = base64Decode(sealedCk);
+      tampered[tampered.length - 1] ^= 0x01;
+      final corruptCk = base64Encode(tampered);
+
+      final alice2 = authorisedClient();
+      final mockAtClient = MockAtClient();
+      when(() => mockAtClient.getCurrentAtSign()).thenReturn(owner);
+      when(() => mockAtClient.get(any())).thenAnswer((invocation) async {
+        final requested = invocation.positionalArguments.first as AtKey;
+        requested.metadata.appMetadata = conveyanceKey.metadata.appMetadata;
+        await alice2.nskey.decrypt(context, requested, corruptCk);
+        return AtValue();
+      });
+      final localContext = CryptoContext(atClient: mockAtClient);
+
+      final syncedValueKey = dataKey('treaty')
+        ..metadata.appMetadata = valueKey.metadata.appMetadata;
+
+      await expectLater(
+        alice2.data.decrypt(localContext, syncedValueKey, ciphertext),
+        throwsA(isA<AtDecryptionException>().having(
+            (e) => e,
+            'not a wait-and-retry',
+            isNot(isA<ContentKeyUnavailableException>()))),
+        reason: 'a failed AEAD on the conveyance must not be reported as a '
+            'conveyance that has not arrived',
+      );
+    });
+
     test('an older conveyance opened later does not become the write key',
         () async {
       final alice1 = authorisedClient();
@@ -289,11 +349,9 @@ void main() {
       final newCk = ContentKey(_randomKeyBytes());
 
       // alice1 cuts and conveys two CKs in order; the second is current.
-      await alice1.nskey
-          .encrypt(context, ckConveyanceKey(oldCk.ckKid), oldCk.toBase64());
+      await conveyAsCurrent(alice1, ckConveyanceKey(oldCk.ckKid), oldCk);
       final resealOld = await _seal(alice1, oldCk);
-      await alice1.nskey
-          .encrypt(context, ckConveyanceKey(newCk.ckKid), newCk.toBase64());
+      await conveyAsCurrent(alice1, ckConveyanceKey(newCk.ckKid), newCk);
       expect(alice1.cache.current(owner, namespace)!.ckKid, newCk.ckKid);
 
       // Sync has no order, so the older conveyance can arrive afterwards.
@@ -397,11 +455,61 @@ void main() {
       }
     });
 
+    /// A content key covers every record in its `(owner, namespace)` scope, so
+    /// the key alone cannot say which record a ciphertext belongs to. Without
+    /// the record address bound as AAD, anyone who can write the store can move
+    /// a valid ciphertext between records in that scope and it still
+    /// authenticates — yesterday's answer reappearing under today's question,
+    /// tag intact.
+    test('a ciphertext cannot be relocated to another record in the same scope',
+        () async {
+      final alice = authorisedClient();
+      final ck = ContentKey(_randomKeyBytes());
+      await conveyAsCurrent(alice, ckConveyanceKey(ck.ckKid), ck);
+
+      final yes = dataKey('answer-a');
+      final ciphertext = await alice.data.encrypt(context, yes, 'yes');
+
+      // Same CK, same namespace, same owner — only the key name differs.
+      final relocated = dataKey('answer-b')
+        ..metadata.appMetadata = yes.metadata.appMetadata;
+
+      await expectLater(
+        alice.data.decrypt(context, relocated, ciphertext),
+        throwsA(isA<AtDecryptionException>()),
+        reason: 'the record address is authenticated, so a value lifted into '
+            'another record must not open',
+      );
+
+      // The control: in its own record it still opens, so the rejection above
+      // is the binding and not a broken round-trip.
+      expect(await alice.data.decrypt(context, yes, ciphertext), 'yes');
+    });
+
+    test('a value shared with one recipient cannot be re-read as another\'s',
+        () async {
+      final alice = authorisedClient();
+      final ck = ContentKey(_randomKeyBytes());
+      await conveyAsCurrent(alice, ckConveyanceKey(ck.ckKid), ck);
+
+      final toSelf = dataKey('treaty');
+      final ciphertext = await alice.data.encrypt(context, toSelf, 'the text');
+
+      final readdressed = dataKey('treaty')
+        ..sharedWith = '@bob'
+        ..metadata.appMetadata = toSelf.metadata.appMetadata;
+
+      await expectLater(
+        alice.data.decrypt(context, readdressed, ciphertext),
+        throwsA(isA<AtException>()),
+        reason: 'sharedWith is part of the record address and is bound too',
+      );
+    });
+
     test('a binary value round-trips byte-exact', () async {
       final alice1 = authorisedClient();
       final ck = ContentKey(_randomKeyBytes());
-      await alice1.nskey
-          .encrypt(context, ckConveyanceKey(ck.ckKid), ck.toBase64());
+      await conveyAsCurrent(alice1, ckConveyanceKey(ck.ckKid), ck);
 
       // Every byte value, plus a length that does not fall on a 15-bit boundary.
       final bytes = Uint8List.fromList(

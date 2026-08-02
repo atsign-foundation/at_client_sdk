@@ -7,6 +7,18 @@ import 'package:at_client/src/crypto/nskey/nskey_provider.dart';
 import 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
 import 'package:at_commons/at_commons.dart';
 
+// The nskey data path is part of this library's public surface: it is what
+// `CryptoConfig.nskey` takes and returns, and what a caller catches and names.
+// Importing without re-exporting left `NskeyKeyRing` — a *required* parameter
+// on an exported factory — and `ContentKeyUnavailableException`, which the
+// CHANGELOG tells callers to catch, unreachable through the package barrel.
+export 'package:at_client/src/crypto/nskey/ck_manager.dart';
+export 'package:at_client/src/crypto/nskey/content_key.dart';
+export 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
+export 'package:at_client/src/crypto/nskey/nskey_provider.dart';
+export 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
+export 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
+
 /// The id of the built-in legacy (pre-pluggable) encryption scheme — the
 /// default provider and the fallback for records with no `appMetadata`.
 const String legacyCryptoProviderId = 'legacy';
@@ -149,7 +161,14 @@ abstract interface class PreparesWrites {
   ///
   /// A provider issuing a write from here must ensure that write does not
   /// itself need preparing, or the recursion will not terminate.
-  Future<void> prepareForWrite(CryptoContext context, AtKey atKey);
+  ///
+  /// [useRemoteAtServer] is how the *outer* write is being routed. A provider
+  /// writing a record the outer value will depend on must route it the same
+  /// way: a local-first record cannot satisfy a value that went straight to
+  /// the atServer, because it does not arrive until the next sync. Null means
+  /// the caller expressed no preference and the client default applies.
+  Future<void> prepareForWrite(CryptoContext context, AtKey atKey,
+      {bool? useRemoteAtServer});
 }
 
 /// Implemented by a [CryptoProvider] that can only handle some keys.
