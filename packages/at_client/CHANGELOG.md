@@ -4,9 +4,15 @@
   `at/nskey` conveys that CK by X-Wing-sealing it to the namespace's `nskey`
   and writing it as a discrete `<ckKid>.__ck` record. Data values cite the CK
   by `ckKid` and carry no sealed key inline; the CK cache is keyed
-  `(owner, namespace, ckKid)`. `NskeyKeyRing` is the seam the secret-sharing
-  substrate lands behind — an experimental surface, not yet routed by
-  `CryptoRuntime` (#2089, #2090).
+  `(owner, namespace, ckKid)`, and only the client that cut a CK makes it the
+  key new writes use. Binary values honour `isBinary` and round-trip byte-exact.
+  A cited CK that has not arrived yet raises `ContentKeyUnavailableException`,
+  which a caller can distinguish from a hard decryption failure and retry.
+  `NskeyKeyRing` is the seam the secret-sharing substrate lands behind — an
+  experimental surface, not yet routed by `CryptoRuntime` (#2089, #2090).
+- build: raise the `at_chops` floor to `^3.4.0` — the nskey providers name
+  `AtKemAlgorithm` through the `at_chops` barrel, which only exports the
+  algorithm interfaces from 3.4.0.
 - fix: `AtCollection` — resolve received (shared-in) items in the id-scoped
   read path. `Query.watch()` (delta path), `getOrNull` / `get(id, owner)` and
   `exists(id, owner)` missed items stored locally as

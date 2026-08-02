@@ -46,7 +46,7 @@ below), plus 8 cross-cutting invariants.
 |-------------------------------|----------------------------------|--------------|
 | A1 · PQ-native onboard        | A1.1                             | ON-1         |
 | A2 · enrollments              | A2.1, A2.2, A2.3                 | SS-2, SS-4   |
-| A3 · self data                | A3.1, A3.2, A3.3, A3.4           | B-1, SS-4    |
+| A3 · self data                | A3.1 ✅, A3.2, A3.3, A3.4         | B-1, SS-4    |
 | A4 · shared data              | A4.1, A4.2, A4.3, A4.4           | B-1          |
 | A5 · rotation & revocation    | A5.1(a), A5.1(b), A5.2, A5.3     | B-2          |
 | B0 · atServer prerequisite    | B0.1                             | RF-SRV       |
@@ -66,7 +66,7 @@ separately.
 
 ## The shape of the problem this exposes
 
-Sorting by blocker shows why D1 has felt slow. B-1 alone gates **12 of the 39**
+Sorting by blocker shows why D1 has felt slow. B-1 alone gates **11 of the 39**
 rows, and no data-path row goes green until **B-1** (XL) and **SS-4** (L–XL)
 land, so the programme had no demonstrable increment in its centre. (The rows
 rooted on RF-SRV — B0 and B2 — do not depend on either, and can move in

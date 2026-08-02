@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/content_key.dart';
@@ -59,6 +60,7 @@ void main() {
     // directions. Minted once for the whole suite; minting is not what this
     // exercises.
     nskeyPair = await XWingKeyPair.generate();
+    registerFallbackValue(AtKey());
   });
 
   setUp(() {
@@ -81,8 +83,8 @@ void main() {
       // 2. Convey the CK once: sealed to @alice's own nskey, written as its own
       //    <ckKid>.__ck record.
       final conveyanceKey = ckConveyanceKey(ck.ckKid);
-      final sealedCk = await alice1.nskey
-          .encrypt(context, conveyanceKey, ck.toBase64());
+      final sealedCk =
+          await alice1.nskey.encrypt(context, conveyanceKey, ck.toBase64());
 
       // 3. Write the data value under that CK.
       final valueKey = dataKey('treaty');
@@ -139,7 +141,8 @@ void main() {
 
       final appMetadata = conveyanceKey.metadata.appMetadata!;
       expect(appMetadata.providerId, nskeyCryptoProviderId);
-      expect(appMetadata.additional!['recipientKind'], NskeyRecipientKind.nskey);
+      expect(
+          appMetadata.additional!['recipientKind'], NskeyRecipientKind.nskey);
       expect(appMetadata.additional!['ckKid'], ck.ckKid);
       expect(appMetadata.additional!.containsKey('iv'), isFalse,
           reason: 'the pqSeal envelope carries its own kemCt and nonce');
@@ -171,8 +174,10 @@ void main() {
       final sealedCk = await alice1.nskey
           .encrypt(context, ckConveyanceKey(ck.ckKid), ck.toBase64());
 
-      // A different nskey keypair seeded under the same namespace name — the
-      // HPKE info binding plus the KEM must both refuse it.
+      // A different nskey keypair under the same namespace name, so the info
+      // bytes match on both sides and it is the KEM alone that refuses it.
+      // The info binding is covered separately, one keypair across two
+      // namespaces.
       final wrongPair = await XWingKeyPair.generate();
       final wrongRing = InMemoryNskeyKeyRing()
         ..seedKeypair(owner, namespace,
@@ -189,7 +194,8 @@ void main() {
   });
 
   group('CK resolution & ordering', () {
-    test('a data value arriving before its conveyance defers rather than '
+    test(
+        'a data value arriving before its conveyance defers rather than '
         'failing silently', () async {
       final alice1 = authorisedClient();
       final ck = ContentKey(_randomKeyBytes());
@@ -206,8 +212,10 @@ void main() {
 
       await expectLater(
         alice2.data.decrypt(context, syncedValueKey, ciphertext),
-        throwsA(isA<AtDecryptionException>()),
-        reason: 'a cache miss is the deferred state, not a wrong plaintext',
+        throwsA(isA<ContentKeyUnavailableException>()
+            .having((e) => e.ckKid, 'ckKid', ck.ckKid)),
+        reason: 'a cache miss is the deferred state, not a wrong plaintext — '
+            'and it is typed, so a caller can tell retry-later from give-up',
       );
 
       // Once the conveyance syncs, the same read succeeds.
@@ -217,7 +225,64 @@ void main() {
           'the treaty text');
     });
 
-    test('the CK cache is keyed by (owner, namespace, ckKid), never ckKid alone',
+    test('a conveyance already in local storage is opened on demand', () async {
+      final alice1 = authorisedClient();
+      final ck = ContentKey(_randomKeyBytes());
+      final sealedCk = await alice1.nskey
+          .encrypt(context, ckConveyanceKey(ck.ckKid), ck.toBase64());
+      final valueKey = dataKey('treaty');
+      final ciphertext =
+          await alice1.data.encrypt(context, valueKey, 'the treaty text');
+
+      // alice2 has the __ck record locally but has never opened it, so its
+      // cache is cold. Reading the record routes back through at/nskey.
+      final alice2 = authorisedClient();
+      final mockAtClient = MockAtClient();
+      when(() => mockAtClient.getCurrentAtSign()).thenReturn(owner);
+      when(() => mockAtClient.get(any())).thenAnswer((invocation) async {
+        final requested = invocation.positionalArguments.first as AtKey;
+        expect(requested.key, '${ck.ckKid}.__ck');
+        expect(requested.namespace, namespace);
+        expect(requested.sharedBy, owner);
+        await alice2.nskey.decrypt(context, requested, sealedCk);
+        return AtValue();
+      });
+      final localContext = CryptoContext(atClient: mockAtClient);
+
+      final syncedValueKey = dataKey('treaty')
+        ..metadata.appMetadata = valueKey.metadata.appMetadata;
+      expect(
+          await alice2.data.decrypt(localContext, syncedValueKey, ciphertext),
+          'the treaty text');
+    });
+
+    test('an older conveyance opened later does not become the write key',
+        () async {
+      final alice1 = authorisedClient();
+      final oldCk = ContentKey(_randomKeyBytes());
+      final newCk = ContentKey(_randomKeyBytes());
+
+      // alice1 cuts and conveys two CKs in order; the second is current.
+      await alice1.nskey
+          .encrypt(context, ckConveyanceKey(oldCk.ckKid), oldCk.toBase64());
+      final sealedOld = await _seal(alice1, oldCk);
+      await alice1.nskey
+          .encrypt(context, ckConveyanceKey(newCk.ckKid), newCk.toBase64());
+      expect(alice1.cache.current(owner, namespace)!.ckKid, newCk.ckKid);
+
+      // Sync has no order, so the older conveyance can arrive afterwards.
+      await alice1.nskey
+          .decrypt(context, ckConveyanceKey(oldCk.ckKid), sealedOld);
+
+      expect(alice1.cache.current(owner, namespace)!.ckKid, newCk.ckKid,
+          reason: 'an arriving conveyance is cached, never made current — '
+              'otherwise new writes silently roll back onto a superseded CK');
+      expect(alice1.cache.get(owner, namespace, oldCk.ckKid), isNotNull,
+          reason: 'the old CK still resolves for data written under it');
+    });
+
+    test(
+        'the CK cache is keyed by (owner, namespace, ckKid), never ckKid alone',
         () {
       final cache = ContentKeyCache();
       final ck = ContentKey(_randomKeyBytes());
@@ -230,22 +295,133 @@ void main() {
           reason: 'identity is (owner, id), never id alone');
     });
 
-    test('evicting a rotated CK makes its data undecryptable, by design', () {
+    test('two different CKs claiming one kid is refused, not silently merged',
+        () {
       final cache = ContentKeyCache();
       final ck = ContentKey(_randomKeyBytes());
       cache.put(owner, namespace, ck);
+
+      // Re-delivery of the same CK is ordinary and must stay idempotent.
+      cache.put(owner, namespace, ContentKey(Uint8List.fromList(ck.bytes)));
+      expect(cache.get(owner, namespace, ck.ckKid), isNotNull);
+
+      // A genuine kid collision would make the displaced CK's data
+      // undecryptable, so it fails loudly instead.
+      expect(() => cache.put(owner, namespace, _CollidingKey(ck.ckKid)),
+          throwsA(isA<StateError>()));
+    });
+
+    test('evicting a rotated CK makes its data undecryptable, by design', () {
+      final cache = ContentKeyCache();
+      final ck = ContentKey(_randomKeyBytes());
+      cache.putAsCurrent(owner, namespace, ck);
+      expect(cache.current(owner, namespace), isNotNull);
+
       cache.evict(owner, namespace, ck.ckKid);
 
       expect(cache.get(owner, namespace, ck.ckKid), isNull);
       expect(cache.current(owner, namespace), isNull);
     });
   });
+
+  group('envelope and payload handling', () {
+    test('the same nskey cannot open a conveyance sealed for another namespace',
+        () async {
+      // One keypair, two namespaces — isolating the HPKE info binding from the
+      // KEM, which a wrong-keypair test cannot do.
+      final ring = InMemoryNskeyKeyRing()
+        ..seedKeypair(owner, namespace,
+            publicKey: nskeyPair.publicKeyBytes,
+            privateKey: nskeyPair.privateKeyBytes)
+        ..seedKeypair(owner, 'app_2.my_apps',
+            publicKey: nskeyPair.publicKeyBytes,
+            privateKey: nskeyPair.privateKeyBytes);
+      final provider = NskeyProvider(keyRing: ring, cache: ContentKeyCache());
+
+      final ck = ContentKey(_randomKeyBytes());
+      final sealedForApp1 = await provider.encrypt(
+          context, ckConveyanceKey(ck.ckKid), ck.toBase64());
+
+      final asApp2 = AtKey()
+        ..key = '${ck.ckKid}.__ck'
+        ..namespace = 'app_2.my_apps'
+        ..sharedBy = owner
+        ..metadata = Metadata();
+
+      await expectLater(
+        provider.decrypt(context, asApp2, sealedForApp1),
+        throwsA(isA<AtDecryptionException>()),
+        reason: 'info binds the key schedule to (owner, namespace), so the '
+            'same private cannot reinterpret the envelope as another namespace',
+      );
+    });
+
+    test('a malformed envelope surfaces as AtDecryptionException', () async {
+      final alice = authorisedClient();
+      for (final bad in [
+        'not base64 at all!',
+        base64Encode([1, 2, 3])
+      ]) {
+        await expectLater(
+          alice.nskey
+              .decrypt(context, ckConveyanceKey('deadbeefdeadbeef'), bad),
+          throwsA(isA<AtDecryptionException>()),
+          reason: 'the provider contract holds whatever the envelope is',
+        );
+      }
+    });
+
+    test('a binary value round-trips byte-exact', () async {
+      final alice1 = authorisedClient();
+      final ck = ContentKey(_randomKeyBytes());
+      await alice1.nskey
+          .encrypt(context, ckConveyanceKey(ck.ckKid), ck.toBase64());
+
+      // Every byte value, plus a length that does not fall on a 15-bit boundary.
+      final bytes = Uint8List.fromList(
+          [for (var i = 0; i < 256; i++) i, 0x00, 0xff, 0x7f]);
+      final asString = Base2e15.encode(bytes);
+
+      final valueKey = dataKey('blob')..metadata.isBinary = true;
+      final ciphertext = await alice1.data.encrypt(context, valueKey, asString);
+
+      final alice2 = authorisedClient();
+      await alice2.nskey
+          .decrypt(context, ckConveyanceKey(ck.ckKid), await _seal(alice1, ck));
+      final synced = dataKey('blob')
+        ..metadata.isBinary = true
+        ..metadata.appMetadata = valueKey.metadata.appMetadata;
+
+      final recovered = await alice2.data.decrypt(context, synced, ciphertext);
+      expect(Base2e15.decode(recovered), bytes,
+          reason: 'binary must survive the round-trip byte for byte');
+      expect(recovered, asString);
+    });
+  });
+}
+
+/// A [ContentKey] forced to claim a kid it did not derive, so the cache's
+/// collision guard can be exercised — a real 64-bit collision is unreachable.
+class _CollidingKey implements ContentKey {
+  @override
+  final String ckKid;
+
+  @override
+  final Uint8List bytes = _randomKeyBytes();
+
+  _CollidingKey(this.ckKid);
+
+  @override
+  String toBase64() => base64Encode(bytes);
 }
 
 /// Re-seal [ck] so a second client can consume its own copy of the conveyance.
 Future<String> _seal(
-  ({NskeyProvider nskey, SymmetricAesGcmProvider data, ContentKeyCache cache})
-      client,
+  ({
+    NskeyProvider nskey,
+    SymmetricAesGcmProvider data,
+    ContentKeyCache cache
+  }) client,
   ContentKey ck,
 ) async {
   final key = AtKey()

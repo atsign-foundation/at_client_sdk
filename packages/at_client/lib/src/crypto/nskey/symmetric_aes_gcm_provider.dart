@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/content_key.dart';
@@ -12,6 +13,20 @@ import 'package:at_commons/at_commons.dart';
 /// crypto-agility. A future `at/symmetric/AES/SIV` coexists with it, and values
 /// written under this id keep their tag forever.
 const String symmetricAesGcmCryptoProviderId = 'at/symmetric/AES/GCM';
+
+/// The value cites a CK this client cannot resolve *yet*.
+///
+/// Distinct from a hard decryption failure on purpose: sync is unordered, so a
+/// data value routinely arrives before the conveyance record carrying its CK.
+/// A caller seeing this should re-attempt the read once the conveyance syncs —
+/// where a plain [AtDecryptionException] means give up. A CK deleted for
+/// forward secrecy also surfaces here, and stays unresolvable by design.
+class ContentKeyUnavailableException extends AtDecryptionException {
+  /// The kid the value cited, as it appears in `appMetadata`.
+  final String ckKid;
+
+  ContentKeyUnavailableException(this.ckKid, String message) : super(message);
+}
 
 /// Layer 3 of the nskey data path: application data, AES-256-GCM under a
 /// content key.
@@ -42,11 +57,13 @@ class SymmetricAesGcmProvider implements CryptoProvider {
     }
 
     // A fresh 12-byte nonce per value — never reuse a (key, nonce) pair.
-    final iv =
-        InitialisationVector.random(AesGcm256EncryptionAlgo.nonceLength);
+    final iv = InitialisationVector.random(AesGcm256EncryptionAlgo.nonceLength);
     final ciphertext = await AesGcm256EncryptionAlgo(AESKey(ck.toBase64()))
-        .encrypt(Uint8List.fromList(utf8.encode(plaintext)), iv: iv);
+        .encrypt(_toBytes(atKey, plaintext), iv: iv);
 
+    // The runtime re-stamps providerId after this returns; setting it here just
+    // keeps the record self-describing for callers that drive the provider
+    // directly. `additional` is the part only this provider can supply.
     atKey.metadata.appMetadata = AppMetadata(
       providerId: id,
       additional: {
@@ -57,6 +74,20 @@ class SymmetricAesGcmProvider implements CryptoProvider {
 
     return base64Encode(ciphertext);
   }
+
+  /// Plaintext reaches a provider as an opaque String: `Base2e15` for a binary
+  /// record, ordinary text otherwise. Round-tripping binary through UTF-8 is
+  /// lossless (Base2e15 emits only U+3400–U+D7A3, clear of the surrogates) but
+  /// costs 3 bytes per 15 bits, so honour `isBinary` and carry the real bytes.
+  static Uint8List _toBytes(AtKey atKey, String plaintext) =>
+      atKey.metadata.isBinary == true
+          ? Base2e15.decode(plaintext)
+          : Uint8List.fromList(utf8.encode(plaintext));
+
+  static String _fromBytes(AtKey atKey, Uint8List bytes) =>
+      atKey.metadata.isBinary == true
+          ? Base2e15.encode(bytes)
+          : utf8.decode(bytes);
 
   @override
   Future<String> decrypt(
@@ -73,13 +104,11 @@ class SymmetricAesGcmProvider implements CryptoProvider {
           'in appMetadata');
     }
 
-    final ck = cache.get(owner, namespace, ckKid);
+    final ck = cache.get(owner, namespace, ckKid) ??
+        await _resolveFromLocalConveyance(context, owner, namespace, ckKid);
     if (ck == null) {
-      // Sync is not ordered, so a data value can arrive before its conveyance
-      // record. This is the deferred case, not a hard failure: the read is
-      // re-attempted once the CK arrives. A CK deleted for forward secrecy
-      // stays unresolvable by design.
-      throw AtDecryptionException(
+      throw ContentKeyUnavailableException(
+          ckKid,
           'content key $ckKid not yet available for $owner:$namespace — its '
           'conveyance record has not synced, or the key was rotated away');
     }
@@ -88,8 +117,36 @@ class SymmetricAesGcmProvider implements CryptoProvider {
       Uint8List.fromList(base64Decode(ciphertext)),
       iv: InitialisationVector(Uint8List.fromList(base64Decode(ivB64))),
     );
-    return utf8.decode(plain);
+    return _fromBytes(atKey, plain);
   }
+
+  /// Second chance on a cache miss: the conveyance record may already be in
+  /// local storage, just never opened by this process. Reading it routes back
+  /// through the `at/nskey` provider, which decapsulates and caches as a side
+  /// effect — so the CK is looked up again rather than taken from the read.
+  ///
+  /// Failure here is not an error: the record genuinely may not have synced.
+  Future<ContentKey?> _resolveFromLocalConveyance(
+    CryptoContext context,
+    String owner,
+    String namespace,
+    String ckKid,
+  ) async {
+    try {
+      await context.atClient.get(conveyanceKeyFor(owner, namespace, ckKid));
+    } catch (_) {
+      return null;
+    }
+    return cache.get(owner, namespace, ckKid);
+  }
+
+  /// The at-key a CK is conveyed under: `<ckKid>.__ck.<ns>@<owner>`.
+  static AtKey conveyanceKeyFor(String owner, String namespace, String ckKid) =>
+      AtKey()
+        ..key = '$ckKid.__ck'
+        ..namespace = namespace
+        ..sharedBy = owner
+        ..metadata = Metadata();
 
   static const String nskeyProviderHint = 'at/nskey';
 

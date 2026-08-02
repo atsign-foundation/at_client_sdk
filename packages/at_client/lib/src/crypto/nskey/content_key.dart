@@ -13,7 +13,13 @@ class ContentKey {
   final Uint8List bytes;
 
   /// The content key's id — a SHA-256 prefix of the key material, so identical
-  /// keys dedupe. Unique within `(owner, namespace)`.
+  /// keys dedupe. Must be unique within `(owner, namespace)`;
+  /// [ContentKeyCache.put] refuses a second CK claiming a kid already held.
+  ///
+  /// The id is public — it rides plaintext `appMetadata` and the conveyance
+  /// record's name — so it is only safe while CKs are high-entropy: publishing
+  /// 64 bits of a hash turns any guessable CK into an offline check. Mint CKs
+  /// from a CSPRNG, never derive them from a label, counter or passphrase.
   final String ckKid;
 
   ContentKey._(this.bytes, this.ckKid);
@@ -21,7 +27,8 @@ class ContentKey {
   /// Derive the id for [bytes] and pair them.
   factory ContentKey(Uint8List bytes) {
     if (bytes.length != 32) {
-      throw ArgumentError('a content key must be 32 bytes, got ${bytes.length}');
+      throw ArgumentError(
+          'a content key must be 32 bytes, got ${bytes.length}');
     }
     final digest = sha256.convert(bytes).toString();
     return ContentKey._(bytes, digest.substring(0, 16));
@@ -49,11 +56,39 @@ class ContentKeyCache {
   static String _key(String owner, String namespace, String ckKid) =>
       '${_scope(owner, namespace)}|$ckKid';
 
-  /// Cache [ck] for `(owner, namespace)` and make it the namespace's current
-  /// key — the one new writes encrypt under.
+  /// Cache [ck] for `(owner, namespace)` so values citing its `ckKid` resolve.
+  ///
+  /// This does **not** make it the namespace's current key. Conveyance records
+  /// arrive in sync order, which is no order at all, so a CK opened now may be
+  /// older than the one already in use — letting an arriving record set the
+  /// write key would silently roll new writes back onto a superseded CK.
+  /// Only the client that cut the CK calls [putAsCurrent].
   void put(String owner, String namespace, ContentKey ck) {
-    _byKid[_key(owner, namespace, ck.ckKid)] = ck;
+    final slot = _key(owner, namespace, ck.ckKid);
+    final existing = _byKid[slot];
+    if (existing != null && !_sameKey(existing.bytes, ck.bytes)) {
+      // A kid is a truncated hash, so this is a collision, not a re-delivery.
+      // Overwriting would make the displaced CK's data silently undecryptable.
+      throw StateError(
+          'content key ${ck.ckKid} in $owner:$namespace already holds different '
+          'key material — two distinct CKs share one kid');
+    }
+    _byKid[slot] = ck;
+  }
+
+  /// Cache [ck] and make it the key new writes in `(owner, namespace)` encrypt
+  /// under. Called by the writer that cut the CK and conveyed it.
+  void putAsCurrent(String owner, String namespace, ContentKey ck) {
+    put(owner, namespace, ck);
     _currentKidByNamespace[_scope(owner, namespace)] = ck.ckKid;
+  }
+
+  static bool _sameKey(Uint8List a, Uint8List b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   /// The CK cited by [ckKid], or null on a cache miss.

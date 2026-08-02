@@ -55,18 +55,18 @@ void main() {
         ..sharedBy = owner
         ..metadata = Metadata();
 
-      final ck = ContentKey(
-          Uint8List.fromList(base64Decode(AESKey.generate(32).key)));
+      final ck =
+          ContentKey(Uint8List.fromList(base64Decode(AESKey.generate(32).key)));
 
       final alice1 = client();
-      final sealedCk =
-          await alice1.nskey.encrypt(context, key('${ck.ckKid}.__ck'), ck.toBase64());
+      final sealedCk = await alice1.nskey
+          .encrypt(context, key('${ck.ckKid}.__ck'), ck.toBase64());
       final valueKey = key('treaty');
-      final ciphertext = await alice1.data.encrypt(context, valueKey, plaintext);
+      final ciphertext =
+          await alice1.data.encrypt(context, valueKey, plaintext);
 
       final alice2 = client();
-      await alice2.nskey
-          .decrypt(context, key('${ck.ckKid}.__ck'), sealedCk);
+      await alice2.nskey.decrypt(context, key('${ck.ckKid}.__ck'), sealedCk);
       final synced = key('treaty')
         ..metadata.appMetadata = valueKey.metadata.appMetadata;
 

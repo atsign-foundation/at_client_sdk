@@ -50,8 +50,8 @@ class NskeyProvider implements CryptoProvider {
 
   /// Binds the HPKE key schedule to the conveyance's owner and namespace, so an
   /// envelope sealed for one namespace cannot be opened as another's.
-  static Uint8List _info(String owner, String namespace) =>
-      Uint8List.fromList(utf8.encode('$nskeyCryptoProviderId:$owner:$namespace'));
+  static Uint8List _info(String owner, String namespace) => Uint8List.fromList(
+      utf8.encode('$nskeyCryptoProviderId:$owner:$namespace'));
 
   @override
   Future<String> encrypt(
@@ -83,8 +83,9 @@ class NskeyProvider implements CryptoProvider {
     );
 
     // Cache on write too: the writer encrypts subsequent data values under this
-    // CK without re-opening its own conveyance record.
-    cache.put(owner, namespace, ck);
+    // CK without re-opening its own conveyance record. This is the one place a
+    // CK becomes *current* — the client that cut it says so.
+    cache.putAsCurrent(owner, namespace, ck);
 
     return base64Encode(envelope);
   }
@@ -112,8 +113,17 @@ class NskeyProvider implements CryptoProvider {
       );
     } on PqOpenException catch (e) {
       throw AtDecryptionException('could not decapsulate the content key: $e');
+    } on ArgumentError catch (e) {
+      // pqOpen documents PqOpenException, but its KEM decapsulate call sits
+      // outside that guard, so a wrong-length envelope escapes as a raw
+      // ArgumentError. Keep the provider's contract whatever the envelope is.
+      throw AtDecryptionException('malformed at/nskey envelope: $e');
+    } on FormatException catch (e) {
+      throw AtDecryptionException('at/nskey value is not valid base64: $e');
     }
 
+    // Cache, but do not make current: sync is unordered, so this conveyance may
+    // be older than the CK new writes are already using.
     final ck = ContentKey(ckBytes);
     cache.put(owner, namespace, ck);
     return ck.toBase64();
