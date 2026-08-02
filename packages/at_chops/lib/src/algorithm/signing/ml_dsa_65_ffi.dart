@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/algorithm/pq_output_length.dart';
 import 'package:at_chops/src/algorithm/signing/ml_dsa_65_validation.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:ffi/ffi.dart';
@@ -138,10 +139,8 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
     final Pointer<EVP_PKEY> pkey = _loadPrivateKey(secretKey);
     try {
       final Uint8List sig = _sign(pkey, message);
-      if (sig.length != MlDsa65Sizes.signatureBytes) {
-        throw StateError('EVP_DigestSign produced a ${sig.length}-byte '
-            'signature, expected ${MlDsa65Sizes.signatureBytes}');
-      }
+      checkOutputLength(sig.length, MlDsa65Sizes.signatureBytes,
+          operation: 'EVP_DigestSign', label: 'signature');
       return sig;
     } finally {
       _pkeyFree(pkey);

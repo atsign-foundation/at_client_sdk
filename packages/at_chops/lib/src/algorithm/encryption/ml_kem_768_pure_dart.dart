@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/encryption/ml_kem_768_validation.dart';
+import 'package:at_chops/src/algorithm/pq_output_length.dart';
 // ignore: implementation_imports
 import 'package:pqcrypto/src/algos/kyber/kem.dart' show KyberLevel;
 import 'package:pqcrypto/pqcrypto.dart';
@@ -45,14 +46,10 @@ final class MlKem768PureDartAlgo implements AtKemAlgorithm {
       Uint8List publicKey,
       [Uint8List? seed]) async {
     final (Uint8List ct, Uint8List ss) = _kem.encapsulate(publicKey, seed);
-    if (ct.length != MlKem768Sizes.ciphertextBytes) {
-      throw StateError('ML-KEM-768 encapsulate produced a ${ct.length}-byte '
-          'ciphertext, expected ${MlKem768Sizes.ciphertextBytes}');
-    }
-    if (ss.length != MlKem768Sizes.sharedSecretBytes) {
-      throw StateError('ML-KEM-768 encapsulate produced a ${ss.length}-byte '
-          'shared secret, expected ${MlKem768Sizes.sharedSecretBytes}');
-    }
+    checkOutputLength(ct.length, MlKem768Sizes.ciphertextBytes,
+        operation: 'ML-KEM-768 encapsulate', label: 'ciphertext');
+    checkOutputLength(ss.length, MlKem768Sizes.sharedSecretBytes,
+        operation: 'ML-KEM-768 encapsulate', label: 'shared secret');
     return (ciphertext: ct, sharedSecret: ss);
   }
 
@@ -63,10 +60,8 @@ final class MlKem768PureDartAlgo implements AtKemAlgorithm {
   Future<Uint8List> decapsulate(
       Uint8List secretKey, Uint8List ciphertext) async {
     final Uint8List ss = _kem.decapsulate(secretKey, ciphertext);
-    if (ss.length != MlKem768Sizes.sharedSecretBytes) {
-      throw StateError('ML-KEM-768 decapsulate produced a ${ss.length}-byte '
-          'shared secret, expected ${MlKem768Sizes.sharedSecretBytes}');
-    }
+    checkOutputLength(ss.length, MlKem768Sizes.sharedSecretBytes,
+        operation: 'ML-KEM-768 decapsulate', label: 'shared secret');
     return ss;
   }
 }

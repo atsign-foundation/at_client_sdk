@@ -7,6 +7,7 @@ import 'package:at_chops/src/algorithm/encryption/ml_kem_768_pure_dart.dart';
 import 'package:at_chops/src/algorithm/encryption/ml_kem_768_validation.dart';
 import 'package:at_chops/src/algorithm/encryption/x25519_pure_dart_algo.dart';
 import 'package:at_chops/src/algorithm/encryption/x_wing_sizes.dart';
+import 'package:at_chops/src/algorithm/pq_output_length.dart';
 import 'package:cryptography/cryptography.dart' as crypto;
 import 'package:meta/meta.dart';
 import 'package:pointycastle/digests/sha3.dart';
@@ -60,11 +61,8 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
       [Uint8List? seed]) async {
     seed ??= _randomSeed();
     final _Expanded expanded = await _expand(seed);
-    if (expanded.mlKemPublicKey.length != _mlKemPublicKeyLength) {
-      throw StateError('ML-KEM-768 generateKeyPair produced a '
-          '${expanded.mlKemPublicKey.length}-byte public key, expected '
-          '$_mlKemPublicKeyLength');
-    }
+    checkOutputLength(expanded.mlKemPublicKey.length, _mlKemPublicKeyLength,
+        operation: 'ML-KEM-768 generateKeyPair', label: 'public key');
     final Uint8List publicKey = Uint8List(publicKeyLength)
       ..setRange(0, _mlKemPublicKeyLength, expanded.mlKemPublicKey)
       ..setRange(_mlKemPublicKeyLength, publicKeyLength, expanded.x25519Public);
@@ -109,10 +107,8 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
     final (ciphertext: ctM, sharedSecret: ssM) = await MlKem768PureDartAlgo
         .instance
         .encapsulate(mlKemPublic, mlKemRandomness);
-    if (ctM.length != _mlKemCiphertextLength) {
-      throw StateError('ML-KEM-768 encapsulate produced a ${ctM.length}-byte '
-          'ciphertext, expected $_mlKemCiphertextLength');
-    }
+    checkOutputLength(ctM.length, _mlKemCiphertextLength,
+        operation: 'ML-KEM-768 encapsulate', label: 'ciphertext');
 
     final crypto.SimpleKeyPair ephemeral =
         await _x25519.newKeyPairFromSeed(ephemeralX25519Secret);
@@ -184,17 +180,13 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
   ///
   /// Shared choke point for both [_encapsulateWith] and [decapsulate] — the
   /// fixed offsets below (`0..32`, `32..64`) assume `ssM`/`ssX` are each
-  /// exactly 32 bytes; asserting it here covers both call sites in one place.
+  /// exactly 32 bytes; checking it here covers both call sites in one place.
   Uint8List _combine(
       Uint8List ssM, Uint8List ssX, Uint8List ctX, Uint8List pkX) {
-    if (ssM.length != 32) {
-      throw StateError(
-          'ML-KEM-768 shared secret is ${ssM.length} bytes, expected 32');
-    }
-    if (ssX.length != 32) {
-      throw StateError(
-          'X25519 shared secret is ${ssX.length} bytes, expected 32');
-    }
+    checkOutputLength(ssM.length, 32,
+        operation: 'X-Wing', label: 'ML-KEM-768 shared secret component');
+    checkOutputLength(ssX.length, 32,
+        operation: 'X-Wing', label: 'X25519 shared secret component');
     final Uint8List input =
         Uint8List(ssM.length + ssX.length + ctX.length + pkX.length + 6)
           ..setRange(0, 32, ssM)

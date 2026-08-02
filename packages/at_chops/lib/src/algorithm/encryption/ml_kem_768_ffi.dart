@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/encryption/ml_kem_768_validation.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/algorithm/pq_output_length.dart';
 import 'package:ffi/ffi.dart';
 
 /// ML-KEM-768 (FIPS 203) KEM backed by OpenSSL 3 via Dart FFI.
@@ -219,16 +220,10 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
             if (_encapsulate(ctx, ctBuf, ctLen, ssBuf, ssLen) <= 0) {
               throw StateError('EVP_PKEY_encapsulate failed');
             }
-            if (ctLen.value != MlKem768Sizes.ciphertextBytes) {
-              throw StateError('EVP_PKEY_encapsulate produced a '
-                  '${ctLen.value}-byte ciphertext, expected '
-                  '${MlKem768Sizes.ciphertextBytes}');
-            }
-            if (ssLen.value != MlKem768Sizes.sharedSecretBytes) {
-              throw StateError('EVP_PKEY_encapsulate produced a '
-                  '${ssLen.value}-byte shared secret, expected '
-                  '${MlKem768Sizes.sharedSecretBytes}');
-            }
+            checkOutputLength(ctLen.value, MlKem768Sizes.ciphertextBytes,
+                operation: 'EVP_PKEY_encapsulate', label: 'ciphertext');
+            checkOutputLength(ssLen.value, MlKem768Sizes.sharedSecretBytes,
+                operation: 'EVP_PKEY_encapsulate', label: 'shared secret');
             return (
               ciphertext: Uint8List.fromList(ctBuf.asTypedList(ctLen.value)),
               sharedSecret: Uint8List.fromList(ssBuf.asTypedList(ssLen.value)),
@@ -283,11 +278,8 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
           if (_decapsulate(ctx, ssBuf, ssLen, ctBuf, ciphertext.length) <= 0) {
             throw StateError('EVP_PKEY_decapsulate failed');
           }
-          if (ssLen.value != MlKem768Sizes.sharedSecretBytes) {
-            throw StateError('EVP_PKEY_decapsulate produced a '
-                '${ssLen.value}-byte shared secret, expected '
-                '${MlKem768Sizes.sharedSecretBytes}');
-          }
+          checkOutputLength(ssLen.value, MlKem768Sizes.sharedSecretBytes,
+              operation: 'EVP_PKEY_decapsulate', label: 'shared secret');
           return Uint8List.fromList(ssBuf.asTypedList(ssLen.value));
         } finally {
           calloc.free(ssBuf);

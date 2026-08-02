@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
+import 'package:at_chops/src/algorithm/pq_output_length.dart';
 import 'package:at_chops/src/algorithm/signing/ml_dsa_65_validation.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:pqcrypto/pqcrypto.dart';
@@ -52,10 +53,8 @@ final class MlDsa65PureDartAlgo
       {required Uint8List secretKey}) async {
     validateSecretKey(secretKey);
     final Uint8List sig = MlDsa.sign(secretKey, message, DilithiumParams.mlDsa65);
-    if (sig.length != MlDsa65Sizes.signatureBytes) {
-      throw StateError('ML-DSA-65 sign produced a ${sig.length}-byte '
-          'signature, expected ${MlDsa65Sizes.signatureBytes}');
-    }
+    checkOutputLength(sig.length, MlDsa65Sizes.signatureBytes,
+        operation: 'ML-DSA-65 sign', label: 'signature');
     return sig;
   }
 
