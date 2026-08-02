@@ -60,6 +60,7 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
     seed ??= _randomSeed();
     final _Expanded e = await _expand(seed);
     try {
+      assert(e.mlKemKeyPair.publicKey.length == _mlKemPublicKeyLength);
       final Uint8List publicKey = Uint8List(publicKeyLength)
         ..setRange(0, _mlKemPublicKeyLength, e.mlKemKeyPair.publicKey)
         ..setRange(_mlKemPublicKeyLength, publicKeyLength, e.x25519Public);
@@ -81,6 +82,7 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
 
     final (ciphertext: ctM, sharedSecret: ssM) =
         await _mlKem.encapsulate(mlKemPublic);
+    assert(ctM.length == _mlKemCiphertextLength);
 
     final ephemeral = await _x25519.generateKeyPair();
     final Uint8List ctX = ephemeral.publicKey;
@@ -146,8 +148,14 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
   }
 
   /// `SHA3-256(ss_M || ss_X || ct_X || pk_X || XWingLabel)`.
+  ///
+  /// Shared choke point for both [encapsulate] and [decapsulate] — the
+  /// fixed offsets below (`0..32`, `32..64`) assume `ssM`/`ssX` are each
+  /// exactly 32 bytes; asserting it here covers both call sites in one place.
   Uint8List _combine(
       Uint8List ssM, Uint8List ssX, Uint8List ctX, Uint8List pkX) {
+    assert(ssM.length == 32);
+    assert(ssX.length == 32);
     final Uint8List input =
         Uint8List(ssM.length + ssX.length + ctX.length + pkX.length + 6)
           ..setRange(0, 32, ssM)

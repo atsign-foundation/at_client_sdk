@@ -59,6 +59,7 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
       [Uint8List? seed]) async {
     seed ??= _randomSeed();
     final _Expanded expanded = await _expand(seed);
+    assert(expanded.mlKemPublicKey.length == _mlKemPublicKeyLength);
     final Uint8List publicKey = Uint8List(publicKeyLength)
       ..setRange(0, _mlKemPublicKeyLength, expanded.mlKemPublicKey)
       ..setRange(_mlKemPublicKeyLength, publicKeyLength, expanded.x25519Public);
@@ -103,6 +104,7 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
     final (ciphertext: ctM, sharedSecret: ssM) = await MlKem768PureDartAlgo
         .instance
         .encapsulate(mlKemPublic, mlKemRandomness);
+    assert(ctM.length == _mlKemCiphertextLength);
 
     final crypto.SimpleKeyPair ephemeral =
         await _x25519.newKeyPairFromSeed(ephemeralX25519Secret);
@@ -171,8 +173,14 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
   }
 
   /// `SHA3-256(ss_M || ss_X || ct_X || pk_X || XWingLabel)`.
+  ///
+  /// Shared choke point for both [_encapsulateWith] and [decapsulate] — the
+  /// fixed offsets below (`0..32`, `32..64`) assume `ssM`/`ssX` are each
+  /// exactly 32 bytes; asserting it here covers both call sites in one place.
   Uint8List _combine(
       Uint8List ssM, Uint8List ssX, Uint8List ctX, Uint8List pkX) {
+    assert(ssM.length == 32);
+    assert(ssX.length == 32);
     final Uint8List input =
         Uint8List(ssM.length + ssX.length + ctX.length + pkX.length + 6)
           ..setRange(0, 32, ssM)
