@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/encryption/ml_kem_768_ffi.dart';
+import 'package:at_chops/src/algorithm/encryption/ml_kem_768_validation.dart';
 import 'package:at_chops/src/algorithm/encryption/x25519_ffi_algo.dart';
 import 'package:at_chops/src/algorithm/encryption/x_wing_sizes.dart';
 import 'package:pointycastle/digests/sha3.dart';
@@ -41,8 +42,8 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
   static const int ciphertextLength = XWingSizes.ciphertextLength;
   static const int sharedSecretLength = XWingSizes.sharedSecretLength;
 
-  static const int _mlKemPublicKeyLength = 1184;
-  static const int _mlKemCiphertextLength = 1088;
+  static const int _mlKemPublicKeyLength = MlKem768Sizes.publicKeyBytes;
+  static const int _mlKemCiphertextLength = MlKem768Sizes.ciphertextBytes;
 
   /// `XWingLabel`: the ASCII bytes of `\.//^\`.
   static final Uint8List _label =
@@ -60,7 +61,11 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
     seed ??= _randomSeed();
     final _Expanded e = await _expand(seed);
     try {
-      assert(e.mlKemKeyPair.publicKey.length == _mlKemPublicKeyLength);
+      if (e.mlKemKeyPair.publicKey.length != _mlKemPublicKeyLength) {
+        throw StateError('ML-KEM-768 generateKeyPair produced a '
+            '${e.mlKemKeyPair.publicKey.length}-byte public key, expected '
+            '$_mlKemPublicKeyLength');
+      }
       final Uint8List publicKey = Uint8List(publicKeyLength)
         ..setRange(0, _mlKemPublicKeyLength, e.mlKemKeyPair.publicKey)
         ..setRange(_mlKemPublicKeyLength, publicKeyLength, e.x25519Public);
@@ -82,7 +87,10 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
 
     final (ciphertext: ctM, sharedSecret: ssM) =
         await _mlKem.encapsulate(mlKemPublic);
-    assert(ctM.length == _mlKemCiphertextLength);
+    if (ctM.length != _mlKemCiphertextLength) {
+      throw StateError('ML-KEM-768 encapsulate produced a ${ctM.length}-byte '
+          'ciphertext, expected $_mlKemCiphertextLength');
+    }
 
     final ephemeral = await _x25519.generateKeyPair();
     final Uint8List ctX = ephemeral.publicKey;
@@ -154,8 +162,14 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
   /// exactly 32 bytes; asserting it here covers both call sites in one place.
   Uint8List _combine(
       Uint8List ssM, Uint8List ssX, Uint8List ctX, Uint8List pkX) {
-    assert(ssM.length == 32);
-    assert(ssX.length == 32);
+    if (ssM.length != 32) {
+      throw StateError(
+          'ML-KEM-768 shared secret is ${ssM.length} bytes, expected 32');
+    }
+    if (ssX.length != 32) {
+      throw StateError(
+          'X25519 shared secret is ${ssX.length} bytes, expected 32');
+    }
     final Uint8List input =
         Uint8List(ssM.length + ssX.length + ctX.length + pkX.length + 6)
           ..setRange(0, 32, ssM)

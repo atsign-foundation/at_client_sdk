@@ -219,8 +219,16 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
             if (_encapsulate(ctx, ctBuf, ctLen, ssBuf, ssLen) <= 0) {
               throw StateError('EVP_PKEY_encapsulate failed');
             }
-            assert(ctLen.value == MlKem768Sizes.ciphertextBytes);
-            assert(ssLen.value == MlKem768Sizes.sharedSecretBytes);
+            if (ctLen.value != MlKem768Sizes.ciphertextBytes) {
+              throw StateError('EVP_PKEY_encapsulate produced a '
+                  '${ctLen.value}-byte ciphertext, expected '
+                  '${MlKem768Sizes.ciphertextBytes}');
+            }
+            if (ssLen.value != MlKem768Sizes.sharedSecretBytes) {
+              throw StateError('EVP_PKEY_encapsulate produced a '
+                  '${ssLen.value}-byte shared secret, expected '
+                  '${MlKem768Sizes.sharedSecretBytes}');
+            }
             return (
               ciphertext: Uint8List.fromList(ctBuf.asTypedList(ctLen.value)),
               sharedSecret: Uint8List.fromList(ssBuf.asTypedList(ssLen.value)),
@@ -275,7 +283,11 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
           if (_decapsulate(ctx, ssBuf, ssLen, ctBuf, ciphertext.length) <= 0) {
             throw StateError('EVP_PKEY_decapsulate failed');
           }
-          assert(ssLen.value == MlKem768Sizes.sharedSecretBytes);
+          if (ssLen.value != MlKem768Sizes.sharedSecretBytes) {
+            throw StateError('EVP_PKEY_decapsulate produced a '
+                '${ssLen.value}-byte shared secret, expected '
+                '${MlKem768Sizes.sharedSecretBytes}');
+          }
           return Uint8List.fromList(ssBuf.asTypedList(ssLen.value));
         } finally {
           calloc.free(ssBuf);

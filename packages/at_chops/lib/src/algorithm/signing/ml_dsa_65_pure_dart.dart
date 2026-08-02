@@ -52,7 +52,10 @@ final class MlDsa65PureDartAlgo
       {required Uint8List secretKey}) async {
     validateSecretKey(secretKey);
     final Uint8List sig = MlDsa.sign(secretKey, message, DilithiumParams.mlDsa65);
-    assert(sig.length == MlDsa65Sizes.signatureBytes);
+    if (sig.length != MlDsa65Sizes.signatureBytes) {
+      throw StateError('ML-DSA-65 sign produced a ${sig.length}-byte '
+          'signature, expected ${MlDsa65Sizes.signatureBytes}');
+    }
     return sig;
   }
 

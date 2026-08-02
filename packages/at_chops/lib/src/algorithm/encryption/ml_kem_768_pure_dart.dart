@@ -45,8 +45,14 @@ final class MlKem768PureDartAlgo implements AtKemAlgorithm {
       Uint8List publicKey,
       [Uint8List? seed]) async {
     final (Uint8List ct, Uint8List ss) = _kem.encapsulate(publicKey, seed);
-    assert(ct.length == MlKem768Sizes.ciphertextBytes);
-    assert(ss.length == MlKem768Sizes.sharedSecretBytes);
+    if (ct.length != MlKem768Sizes.ciphertextBytes) {
+      throw StateError('ML-KEM-768 encapsulate produced a ${ct.length}-byte '
+          'ciphertext, expected ${MlKem768Sizes.ciphertextBytes}');
+    }
+    if (ss.length != MlKem768Sizes.sharedSecretBytes) {
+      throw StateError('ML-KEM-768 encapsulate produced a ${ss.length}-byte '
+          'shared secret, expected ${MlKem768Sizes.sharedSecretBytes}');
+    }
     return (ciphertext: ct, sharedSecret: ss);
   }
 
@@ -57,7 +63,10 @@ final class MlKem768PureDartAlgo implements AtKemAlgorithm {
   Future<Uint8List> decapsulate(
       Uint8List secretKey, Uint8List ciphertext) async {
     final Uint8List ss = _kem.decapsulate(secretKey, ciphertext);
-    assert(ss.length == MlKem768Sizes.sharedSecretBytes);
+    if (ss.length != MlKem768Sizes.sharedSecretBytes) {
+      throw StateError('ML-KEM-768 decapsulate produced a ${ss.length}-byte '
+          'shared secret, expected ${MlKem768Sizes.sharedSecretBytes}');
+    }
     return ss;
   }
 }

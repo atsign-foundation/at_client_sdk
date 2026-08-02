@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/encryption/ml_kem_768_pure_dart.dart';
+import 'package:at_chops/src/algorithm/encryption/ml_kem_768_validation.dart';
 import 'package:at_chops/src/algorithm/encryption/x25519_pure_dart_algo.dart';
 import 'package:at_chops/src/algorithm/encryption/x_wing_sizes.dart';
 import 'package:cryptography/cryptography.dart' as crypto;
@@ -39,8 +40,8 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
   static const int ciphertextLength = XWingSizes.ciphertextLength;
   static const int sharedSecretLength = XWingSizes.sharedSecretLength;
 
-  static const int _mlKemPublicKeyLength = 1184;
-  static const int _mlKemCiphertextLength = 1088;
+  static const int _mlKemPublicKeyLength = MlKem768Sizes.publicKeyBytes;
+  static const int _mlKemCiphertextLength = MlKem768Sizes.ciphertextBytes;
 
   /// `XWingLabel`: the ASCII bytes of `\.//^\`.
   static final Uint8List _label =
@@ -59,7 +60,11 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
       [Uint8List? seed]) async {
     seed ??= _randomSeed();
     final _Expanded expanded = await _expand(seed);
-    assert(expanded.mlKemPublicKey.length == _mlKemPublicKeyLength);
+    if (expanded.mlKemPublicKey.length != _mlKemPublicKeyLength) {
+      throw StateError('ML-KEM-768 generateKeyPair produced a '
+          '${expanded.mlKemPublicKey.length}-byte public key, expected '
+          '$_mlKemPublicKeyLength');
+    }
     final Uint8List publicKey = Uint8List(publicKeyLength)
       ..setRange(0, _mlKemPublicKeyLength, expanded.mlKemPublicKey)
       ..setRange(_mlKemPublicKeyLength, publicKeyLength, expanded.x25519Public);
@@ -104,7 +109,10 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
     final (ciphertext: ctM, sharedSecret: ssM) = await MlKem768PureDartAlgo
         .instance
         .encapsulate(mlKemPublic, mlKemRandomness);
-    assert(ctM.length == _mlKemCiphertextLength);
+    if (ctM.length != _mlKemCiphertextLength) {
+      throw StateError('ML-KEM-768 encapsulate produced a ${ctM.length}-byte '
+          'ciphertext, expected $_mlKemCiphertextLength');
+    }
 
     final crypto.SimpleKeyPair ephemeral =
         await _x25519.newKeyPairFromSeed(ephemeralX25519Secret);
@@ -179,8 +187,14 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
   /// exactly 32 bytes; asserting it here covers both call sites in one place.
   Uint8List _combine(
       Uint8List ssM, Uint8List ssX, Uint8List ctX, Uint8List pkX) {
-    assert(ssM.length == 32);
-    assert(ssX.length == 32);
+    if (ssM.length != 32) {
+      throw StateError(
+          'ML-KEM-768 shared secret is ${ssM.length} bytes, expected 32');
+    }
+    if (ssX.length != 32) {
+      throw StateError(
+          'X25519 shared secret is ${ssX.length} bytes, expected 32');
+    }
     final Uint8List input =
         Uint8List(ssM.length + ssX.length + ctX.length + pkX.length + 6)
           ..setRange(0, 32, ssM)

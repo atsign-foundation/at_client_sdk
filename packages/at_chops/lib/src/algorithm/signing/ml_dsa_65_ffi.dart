@@ -138,7 +138,10 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
     final Pointer<EVP_PKEY> pkey = _loadPrivateKey(secretKey);
     try {
       final Uint8List sig = _sign(pkey, message);
-      assert(sig.length == MlDsa65Sizes.signatureBytes);
+      if (sig.length != MlDsa65Sizes.signatureBytes) {
+        throw StateError('EVP_DigestSign produced a ${sig.length}-byte '
+            'signature, expected ${MlDsa65Sizes.signatureBytes}');
+      }
       return sig;
     } finally {
       _pkeyFree(pkey);
