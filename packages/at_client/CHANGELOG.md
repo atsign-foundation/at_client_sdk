@@ -8,6 +8,15 @@
   address. The HPKE `info` binding on the conveyance layer does not reach
   values. Values written by an earlier build of this unreleased path do not
   decrypt under it.
+- fix: a failed advertisement re-fetch no longer serves the cached nskey
+  generation forever. `PublishedNskeyKeyRing` gains `advertisementStaleGrace`
+  (15 minutes by default): inside it, a blip does not cost a working key; past
+  it, the ring answers with nothing and the write fails rather than sealing to a
+  generation the recipient may have rotated away from. Re-fetching is the only
+  way a sender learns of a rotation, so failing open here made the stated "one
+  TTL plus one content key" exposure unbounded — in exactly the case that
+  matters, since a peer that rotated because of a revocation is the peer a
+  sender most needs to stop sealing to.
 - fix: a content key is made *current* only once its conveyance record is
   durable. It was promoted inside `encrypt`, which runs in the put transformer
   with the write still to come — so a failed conveyance write left a current CK

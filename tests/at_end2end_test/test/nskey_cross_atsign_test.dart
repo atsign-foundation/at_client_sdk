@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
@@ -121,6 +123,69 @@ void main() {
     // alice discovered by plookup rather than being told.
     expect(received.metadata?.appMetadata?.additional?['ckKid'], ckKid);
   });
+
+  /// Notify, on the nskey path, across two atSigns.
+  ///
+  /// Both notify entry points pick a provider, and both got it wrong in a way
+  /// no unit test saw: the provider was selected before the namespace was
+  /// filled in from the preference, so a key relying on that default was
+  /// declined by the nskey providers and quietly fell back to legacy — while
+  /// `put` on the identical key used nskey. The receiving half was worse: it
+  /// built its AtKey without a namespace at all, so the moment the sender was
+  /// fixed the reader would have thrown instead.
+  ///
+  /// The failure mode is that the *wrong thing succeeds*: a legacy-encrypted
+  /// notification is delivered and decrypted perfectly well, so no ordinary
+  /// notify test can see the downgrade. Only the provider id distinguishes it.
+  test('a notification to bob is nskey-encrypted, not silently legacy',
+      () async {
+    final bobSide = await nskeyClient(bob);
+    final aliceSide = await nskeyClient(alice);
+
+    final keyName = uniqueKey('alert');
+    const plaintext = 'the treaty is signed';
+
+    // Deliberately namespace-less: the preference supplies it. That is exactly
+    // the shape that fell back to legacy, and the shape most callers use.
+    final notifyKey = AtKey()
+      ..key = keyName
+      ..sharedWith = bob
+      ..sharedBy = alice;
+
+    // A live subscription on the receiving side is not expressible here:
+    // AtClientManager is a singleton, and `setCurrentAtSign` tears down the
+    // previous atSign's monitor *and* unsets its notificationService. Bob
+    // cannot hold a subscription while alice sends, in either order. So the
+    // send half is asserted on the wire, and the receive half is covered by
+    // `notify_request_transformer_test` and the response transformer's own
+    // namespace handling at unit level.
+    final result = await aliceSide.client.notificationService
+        .notify(NotificationParams.forUpdate(notifyKey, value: plaintext));
+    expect(result.notificationStatusEnum, NotificationStatusEnum.delivered);
+
+    // The preference namespace was applied before the provider was chosen —
+    // this is the data provider and not `legacy`. That is the whole defect:
+    // a legacy-encrypted notification is delivered and decrypted perfectly
+    // well, so nothing except the provider id distinguishes the downgrade.
+    expect(notifyKey.namespace, namespace,
+        reason: 'the preference namespace must be applied to the key');
+    expect(notifyKey.metadata.appMetadata?.providerId,
+        symmetricAesGcmCryptoProviderId,
+        reason: 'a notification must reach the same provider a put would for '
+            'this key — falling back to legacy here is a silent downgrade');
+
+    // And on the wire: the recipient's atServer holds the frame, and the value
+    // it holds is ciphertext, not the plaintext alice passed.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        bob, namespace, TestPreferences.getInstance().getPreference(bob));
+    final listed = (await bobSide.client.notifyList(regex: keyName))
+        .replaceFirst('data:', '');
+    final frames = jsonDecode(listed) as List;
+    expect(frames, isNotEmpty, reason: 'the notification must have arrived');
+    expect(frames.first['from'], alice);
+    expect(frames.first['value'], isNot(plaintext),
+        reason: 'the delivered value must be encrypted');
+  }, timeout: Timeout(const Duration(minutes: 2)));
 
   test('the sender keeps a self-copy under a different content key', () async {
     // Bob must have published his nskey before alice can seal a CK to it; the

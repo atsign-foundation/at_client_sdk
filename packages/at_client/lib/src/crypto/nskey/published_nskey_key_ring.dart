@@ -82,10 +82,25 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
   /// recipient's atServer on the write path and break offline writes.
   final Duration advertisementTtl;
 
+  /// How far past [advertisementTtl] a *failed* re-fetch may keep serving the
+  /// advertisement it already has, before this stops answering for the
+  /// destination at all.
+  ///
+  /// Without a bound this fails open: a re-fetch that keeps erroring — an
+  /// unreachable atServer, a network partition — would serve the cached
+  /// generation forever, and the stated exposure of "one TTL plus one content
+  /// key" would be unbounded in exactly the case that matters, since a peer
+  /// that has rotated *because of a revocation* is the peer a sender most needs
+  /// to stop sealing to. A short grace absorbs an ordinary blip; past it, the
+  /// write fails rather than silently handing a revoked enrollment a key it can
+  /// still open.
+  final Duration advertisementStaleGrace;
+
   PublishedNskeyKeyRing(
     this._atClient, {
     AdvertisedKeyVerifier? verifier,
     this.advertisementTtl = const Duration(minutes: 15),
+    this.advertisementStaleGrace = const Duration(minutes: 15),
   }) : verifier = verifier ?? UnverifiedAdvertisedKeys();
 
   final Map<String, NskeyAdvertisement> _ownCurrent = {};
@@ -157,18 +172,38 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     try {
       final value =
           await _atClient.get(nskeyAdvertisementKey(owner, namespace));
-      if (value.value == null) return cached?.advertisement;
+      if (value.value == null) return _staleOrNothing(cached);
       payload = value.value as String;
     } catch (_) {
       // No advertisement: under eager publication that means the recipient has
       // never used this namespace, which is the cold-start case. Keep any
-      // previously-fetched one rather than losing a working key to a blip.
-      return cached?.advertisement;
+      // previously-fetched one rather than losing a working key to a blip —
+      // but only for as long as the grace allows.
+      return _staleOrNothing(cached);
     }
 
     final advertisement = await verifier.verify(owner, payload);
     _remote[scope] = (advertisement: advertisement, fetchedAt: DateTime.now());
     return advertisement;
+  }
+
+  /// Serve a cached advertisement whose re-fetch just failed, but only inside
+  /// the grace window — beyond it, answer with nothing so the write fails
+  /// loudly rather than sealing to a generation that may have been rotated
+  /// away from.
+  NskeyAdvertisement? _staleOrNothing(
+      ({NskeyAdvertisement advertisement, DateTime fetchedAt})? cached) {
+    if (cached == null) return null;
+    final age = DateTime.now().difference(cached.fetchedAt);
+    if (age <= advertisementTtl + advertisementStaleGrace) {
+      return cached.advertisement;
+    }
+    _logger.warning(
+        'the advertised nskey last fetched ${age.inMinutes}m ago cannot be '
+        'refreshed and is past its stale grace — refusing to keep sealing to '
+        'it, because a peer that rotated on a revocation is exactly the peer '
+        'this must stop trusting');
+    return null;
   }
 
   @override

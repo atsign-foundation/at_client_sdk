@@ -672,8 +672,8 @@ taken now because nothing written under the old form exists outside the spike.
 | `at_chops` `pqOpen` lets an `ArgumentError` escape its documented `PqOpenException` contract; worked around client-side | `at_chops` |
 | Revisit whether `CryptoConfig.nskey()` should default the *whole client* to the nskey path — it routes the SDK's own internal writes too, which is what surfaced four of the six defects | **B-1** |
 | The CK cache and the owner's own nskey privates are process memory only — a restart loses both, so the owner cannot re-read her own outbound shared records | **SS-4** |
-| A failed advertisement fetch serves the stale generation indefinitely (`currentPublic` returns the cached one on any error), so the stated "TTL + one CK lifetime" revocation bound does not hold | **B-2** |
-| Notify carries no nskey coverage at the live layer, and `B-1e` still lists "providerId on notification frames" as future work though both notify entry points have already changed | **B-1e** |
+| `B-1e` ("`providerId` on notification frames") is listed as future work, but both notify entry points have already changed and the send half is now covered live — the chunk needs re-scoping to whatever actually remains | **B-1e** |
+| The notify **receive** half has no live coverage, and cannot get any in `at_end2end_test` as it stands: `AtClientManager` is a singleton, and `setCurrentAtSign` both stops the previous atSign's monitor and unsets its `notificationService`, so no test can hold a subscription on one atSign while another sends. Covered at unit level only. Closing this needs the harness to support two concurrent clients, not a new test | `at_end2end_test` |
 | `_addMetadataToBuilder` on the notify path is still a hand-rolled copier — swept for the fields a reader needs, but not routed through a canonical converter, because none exists for `Metadata`→`Metadata` | `at_commons` |
 
 *Test runners:* use the committed `tests/*/runLocal.sh`. They pull the virtualenv image;
