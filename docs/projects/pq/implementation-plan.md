@@ -603,6 +603,39 @@ proceeds against a test fixture that supplies the nskey private directly (see th
   (via SS-4), and the sender's next `ensureCurrent` re-`plookup` upgrades to `recipientKind: nskey`.
   (Seal-and-hold is a per-namespace policy toggle delivered in **R-1**.)
 
+**Spike state (branch `gkc-pq-d1-spike`, 2026-08-02).** The data path is built and the
+**self-data direction works end to end against a live atServer**. Six commits, recut from
+the session's sixteen; `packages/at_client` green at 679 passing / 39 skipped.
+
+*Proven live (functional suite, `tests/at_functional_test`):* self put/get round-trip
+through the whole pipeline including the pre-pass, the conveyance record, key validation
+and storage; content-key reuse across writes; byte-exact binary; and the `public:__` scan
+property that eager publication depends on.
+
+*Blocked, not broken:* **cross-atSign reads**. The atServer does not return `appMetadata`
+on a cross-atSign `lookup`, so `CryptoRuntime` sees a null `providerId` and falls back to
+`legacy` ([decisions.md](decisions.md) section 17). This breaks the pluggable-crypto seam's
+read direction for **every** provider, including those shipped in `at_client` 3.14 — it is
+not PQ-specific. `tests/at_end2end_test/test/nskey_cross_atsign_test.dart` is committed
+**skipped**, with the reproduction inline. Verified against the current `vip` image, not a
+stale one.
+
+*Owed, in rough dependency order:*
+
+| Owed | Where it belongs |
+|---|---|
+| atServer returns `appMetadata` on `lookup` — unblocks B-1d | `at_server` (not yet raised) |
+| Cold-start: seal the CK to `public:pqpublickey`; `NskeyProvider.encrypt` still throws | **B-1c** |
+| Advertised-key signature verification — `UnverifiedAdvertisedKeys` shouts on every use | **SS-1c** |
+| Real nskey minting + per-APKAM conveyance; `InMemoryNskeyKeyRing` and `mintAndPublish` are fixtures | **SS-4** |
+| The `_nskeylock` mint/rotate race — specified here, neither implemented nor tested | **SS-4** |
+| The bench harness `acceptance.md` says lands with B-1 — not built, and not in this plan's deliverables | **B-1** |
+| `at_chops` `pqOpen` lets an `ArgumentError` escape its documented `PqOpenException` contract; worked around client-side | `at_chops` |
+| Revisit whether `CryptoConfig.nskey()` should default the *whole client* to the nskey path — it routes the SDK's own internal writes too, which is what surfaced four of the six defects | **B-1** |
+
+*Test runners:* use the committed `tests/*/runLocal.sh`. They pull the virtualenv image;
+ad-hoc copies that skip `docker compose pull` will silently test a stale atServer.
+
 **PR chunks (ordered).** B-1 is the plan's only flat-XL project, so it lands as up to five sequential PRs,
 `B-1a`…`B-1e`. `B-1a` is an enabler that closes no scenario of its own and may land in the same PR as
 `B-1b`; every other chunk merges only with its own green acceptance scenario. `B-1` stays the project id —

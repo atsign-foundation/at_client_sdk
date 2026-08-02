@@ -13,7 +13,7 @@ String nskeyKidOf(Uint8List publicKey) =>
 /// Where the `at/nskey` provider gets namespace key material.
 ///
 /// Per `(atSign, namespace)` there is exactly **one live** X-Wing nskey keypair,
-/// published at `public:_nskey.<ns>@<owner>` from the moment it is minted. It is
+/// published at `public:__nskey.<ns>@<owner>` from the moment it is minted. It is
 /// the recipient key for both directions: the owner encapsulates her own CKs to it
 /// for self data, and external senders encapsulate CKs to it when sharing with her.
 /// The private half decapsulates CKs — it never decrypts application data.
@@ -30,7 +30,7 @@ abstract class NskeyKeyRing {
   /// The generation new conveyances seal to for `(owner, namespace)`.
   ///
   /// For self data this is the owner's own; for a share it is the recipient's,
-  /// fetched from `public:_nskey.<ns>@<recipient>` via `plookup` and verified
+  /// fetched from `public:__nskey.<ns>@<recipient>` via `plookup` and verified
   /// against the publisher's `_apsk`.
   ///
   /// Null when the namespace has no nskey at all, which under eager publication
