@@ -140,6 +140,11 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
         'recipientKind': NskeyRecipientKind.nskey,
         'ckKid': ck.ckKid,
         'nskeyKid': advertised.nskeyKid,
+        // A conveyance lives at the namespace the nskey resolved to, and no
+        // reader can recover that from the wire string — AtKey.fromString cuts
+        // at the last dot, so `<ckKid>.__ck.app_1.my_apps` parses back with
+        // namespace `my_apps`. The record therefore states it.
+        'ns': namespace,
       },
     );
 
@@ -159,9 +164,14 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
   Future<String> decrypt(
       CryptoContext context, AtKey atKey, String ciphertext) async {
     final nskeyOwner = _nskeyOwnerOf(atKey);
-    final namespace = _namespaceOf(atKey);
+    final additional = atKey.metadata.appMetadata?.additional;
+    // The record states its own namespace, because a conveyance key re-parsed
+    // from the wire mis-splits a multi-segment one: `<ckKid>.__ck.app_1.my_apps`
+    // comes back as namespace `my_apps`, and both the private lookup and the
+    // HPKE binding would then be wrong.
+    final namespace = additional?['ns'] as String? ?? _namespaceOf(atKey);
 
-    final nskeyKid = atKey.metadata.appMetadata?.additional?['nskeyKid'];
+    final nskeyKid = additional?['nskeyKid'];
     if (nskeyKid is! String) {
       throw AtDecryptionException(
           'an $nskeyCryptoProviderId record must name the nskey generation it '

@@ -322,10 +322,11 @@ walk mirrors the atServer's own suffix authorisation, so the crypto gate never w
 past the transport gate, and it is what makes AtCollection viable: sub-collection
 namespaces embed a per-**item** id, so an exact-match rule would need a keypair and a
 per-enrollment conveyance per item. Senders remember which namespaces an owner holds
-keys at, so a later namespace ending in `.todos` resolves with no probing; that memo is
-the set of namespaces with a live cached advertisement, so it inherits
-`advertisementTtl` rather than adding a lifetime. Full ruling and its accepted exposure:
-[`decisions.md`](decisions.md) §19.
+levels it has found **empty**, so a repeated write re-probes nothing; a namespace never seen
+before still probes its own levels once, which is the irreducible cost. Remembering *hits*
+instead is unsafe and was rejected: it lets a resolution skip the deeper probes entirely, so
+a key at `medical.notes` goes unseen because some earlier write warmed `notes`. Full ruling,
+its cost floor and its accepted exposure: [`decisions.md`](decisions.md) §19.
 
 **CK cache.** Keyed by `(owner, ckNs, ckKid)` where `owner` is the **nskey
 owner** — so a CK is scoped to the recipient it was cut for, not to the sender

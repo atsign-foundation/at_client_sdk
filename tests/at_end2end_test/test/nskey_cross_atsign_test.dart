@@ -223,6 +223,58 @@ void main() {
             'would open the other');
   });
 
+  /// A **nested** namespace across two atSigns.
+  ///
+  /// The sender resolves against the recipient's *published* advertisements, so
+  /// the walk here is real `plookup` traffic rather than a local ring lookup —
+  /// and the recipient reads the record back through sync, where the key
+  /// arrives as a wire string and `AtKey.fromString` mis-splits it. The app
+  /// namespace is deliberately multi-segment: a composed `__rr.<id>.app_1.<ns>`
+  /// splits to `<ns>`, so a single-segment app namespace would let the split
+  /// land on the right answer by coincidence and prove nothing.
+  test('alice shares with bob under a composed namespace', () async {
+    final appNs = 'app_1.$namespace';
+    final composed = '__rr.item123.app_1.$namespace';
+
+    // Both mint at the multi-segment app namespace; neither mints per item,
+    // which is the point.
+    final bobSide = await nskeyClient(bob);
+    await bobSide.ring.mintAndPublish(appNs);
+    final aliceSide = await nskeyClient(alice);
+    await aliceSide.ring.mintAndPublish(appNs);
+
+    final shared = AtKey()
+      ..key = uniqueKey('memo')
+      ..namespace = composed
+      ..sharedWith = bob
+      ..sharedBy = alice;
+
+    expect(await aliceSide.client.put(shared, 'the treaty text'), true);
+    await E2ESyncService.getInstance().syncData(aliceSide.client.syncService);
+
+    final asWritten = await aliceSide.client.get(shared);
+    final meta = asWritten.metadata?.appMetadata?.additional;
+    expect(meta?['ns'], composed,
+        reason: 'the value states its own namespace; the wire string would '
+            'have reported "$namespace"');
+    expect(meta?['ckNs'], appNs,
+        reason: 'the walk found bob\'s key one level up, and the content key '
+            'lives there');
+
+    await AtClientManager.getInstance().setCurrentAtSign(
+        bob, namespace, TestPreferences.getInstance().getPreference(bob));
+    await E2ESyncService.getInstance().syncData(bobSide.client.syncService);
+
+    final received = await bobSide.client.get(AtKey()
+      ..key = shared.key
+      ..namespace = composed
+      ..sharedWith = bob
+      ..sharedBy = alice);
+    expect(received.value, 'the treaty text',
+        reason: 'bob opens the CK with the private for the namespace the '
+            'record names, not the one its key string implies');
+  }, timeout: Timeout(const Duration(minutes: 2)));
+
   /// The advertised key is what an attacker wants to substitute: a sender that
   /// seals to the wrong nskey hands its content key to whoever minted that key,
   /// and — because a sender never sees a decapsulation fail — nothing

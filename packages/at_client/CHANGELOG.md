@@ -1,4 +1,23 @@
 ## 3.14.1
+- **breaking**: the nskey data path resolves a nested namespace by walking up,
+  and its records now state their namespaces. A sender writing to
+  `someid.d.c.b.a@alice` tries `d.c.b.a`, `c.b.a`, `b.a`, `a` and seals to the
+  first published nskey; the content key and its conveyance live at *that*
+  namespace, so one `<ckKid>.__ck.<ckNs>@<owner>` record serves everything
+  beneath it. This is required rather than an optimisation: `AtCollection`
+  composes sub-collection namespaces with a per-**item** id, so an exact-match
+  rule would need a keypair and a per-enrollment conveyance per item. Walking up
+  cannot cross an authorisation boundary, because it goes the same direction as
+  the atServer's own suffix rule.
+  - `appMetadata` gains **`ns`** on every record of this path — the record's own
+    namespace — because `AtKey.fromString` splits at the last dot and a
+    multi-segment namespace cannot be recovered from the wire string at all. A
+    data value additionally carries **`ckNs`**, the namespace its content key
+    lives at. Neither is derivable from the other.
+  - The AAD now binds the record's full address rather than namespace and key as
+    two fields, so it no longer depends on where that split fell.
+  - Values and conveyances written by an earlier build of this unreleased path do
+    not decrypt under it.
 - feat: an advertised key package is APKAM-signed, and verified before anything
   is sealed to it. `KeyPackageRegistration.signedKeyPackagePayload()` produces
   the value to store at `metadata.keyPackage`, and `VerbEnrollmentDirectory`
@@ -66,7 +85,7 @@
   secret store and envelope listener.
 - fix: `at/symmetric/AES/GCM` binds a value's ciphertext to the record it was
   written under, as AES-GCM additional authenticated data over
-  `providerId:sharedBy:sharedWith:namespace:key`. A content key covers every
+  `providerId:sharedBy:sharedWith:<full at-key name>`. A content key covers every
   record in its `(owner, namespace)` scope, so without this a valid ciphertext
   could be moved between records in that scope by anyone able to write the
   store and would still authenticate — the AEAD tag proves the key, not the

@@ -8,6 +8,7 @@ import 'package:at_client/src/crypto/nskey/ck_manager.dart';
 import 'package:at_client/src/crypto/nskey/content_key.dart';
 import 'package:at_client/src/crypto/nskey/nskey_provider.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:meta/meta.dart' show visibleForTesting;
 
 /// Wire id of the application-data provider.
 ///
@@ -90,18 +91,22 @@ class SymmetricAesGcmProvider
   Future<bool> isReadyFor(
           CryptoContext context, String atSign, String namespace) async =>
       ckManager == null ||
-      await ckManager!.keyRing.currentPublic(atSign, namespace) != null;
+      await ckManager!.resolver.resolve(atSign, namespace) != null;
 
   @override
   Future<String> encrypt(
       CryptoContext context, AtKey atKey, String plaintext) async {
     final owner = _nskeyOwnerOf(atKey);
     final namespace = _namespaceOf(atKey);
+    // Where the nskey — and therefore the content key — actually lives. For a
+    // flat namespace this is `namespace` itself; for a composed one it is
+    // whichever level the walk landed on.
+    final ckNs = await _ckNamespaceOf(owner, namespace);
 
-    final ck = cache.current(owner, namespace);
+    final ck = cache.current(owner, ckNs);
     if (ck == null) {
       throw AtEncryptionException(
-          'no content key established for $owner:$namespace — convey a CK via '
+          'no content key established for $owner:$ckNs — convey a CK via '
           'an $nskeyCryptoProviderId record before writing data');
     }
 
@@ -118,6 +123,15 @@ class SymmetricAesGcmProvider
       additional: {
         'ckKid': ck.ckKid,
         'iv': base64Encode(iv.ivBytes),
+        // The record's own namespace, which no reader can recover from the
+        // wire string: AtKey.fromString splits at the last dot, so a
+        // multi-segment namespace is unrecoverable. Already plaintext in the
+        // key name, so this discloses nothing new.
+        'ns': namespace,
+        // And where its content key lives, which differs whenever resolution
+        // walked up. Without it a reader would hunt for the conveyance at the
+        // wrong level and report "not yet synced" for an intact record.
+        'ckNs': ckNs,
       },
     );
 
@@ -142,8 +156,11 @@ class SymmetricAesGcmProvider
   Future<String> decrypt(
       CryptoContext context, AtKey atKey, String ciphertext) async {
     final owner = _nskeyOwnerOf(atKey);
-    final namespace = _namespaceOf(atKey);
     final additional = atKey.metadata.appMetadata?.additional ?? const {};
+
+    // The record says where its content key lives; falling back to the key's
+    // own namespace keeps a flat record readable if the field is absent.
+    final namespace = additional['ckNs'] as String? ?? _namespaceOf(atKey);
 
     final ckKid = additional['ckKid'];
     final ivB64 = additional['iv'];
@@ -188,13 +205,36 @@ class SymmetricAesGcmProvider
   /// the writer and the reader must derive byte-identical AAD or nothing
   /// decrypts, and the field accessors are stable where the string form varies
   /// with `cached:`/`public:` prefixes and metadata state.
+  ///
+  /// The name and namespace are joined back together rather than bound as two
+  /// fields, because *where* they split is not stable: `AtKey.fromString` cuts
+  /// at the last dot, so a reader that parsed the key from the wire sees
+  /// `someid.d.c.b` + `a` where the writer had `someid` + `d.c.b.a`. Two fields
+  /// would disagree; the joined name is identical either way, and it is the
+  /// record's actual address — which is what this is binding.
   static List<int> _aad(AtKey atKey) => utf8.encode([
         symmetricAesGcmCryptoProviderId,
         atKey.sharedBy ?? '',
         atKey.sharedWith ?? '',
-        atKey.namespace ?? '',
-        atKey.key,
+        fullNameOf(atKey),
       ].join(':'));
+
+  /// `<key>.<namespace>` — the record's address below the owner, independent of
+  /// where the two were split.
+  @visibleForTesting
+  static String fullNameOf(AtKey atKey) {
+    final ns = atKey.namespace;
+    return (ns == null || ns.isEmpty) ? atKey.key : '${atKey.key}.$ns';
+  }
+
+  /// Where the content key for `(owner, namespace)` lives.
+  ///
+  /// Without a [ckManager] this provider does no resolution — the caller
+  /// conveys content keys itself and addresses them at the value's own
+  /// namespace, which is the shape the provider-level tests drive.
+  Future<String> _ckNamespaceOf(String owner, String namespace) async =>
+      (await ckManager?.resolver.resolve(owner, namespace))?.namespace ??
+      namespace;
 
   /// Second chance on a cache miss: the conveyance record may already be in
   /// local storage, just never opened by this process. Reading it routes back
@@ -215,7 +255,7 @@ class SymmetricAesGcmProvider
     String ckKid,
   ) async {
     try {
-      await context.atClient.get(conveyanceKeyFor(value, ckKid));
+      await context.atClient.get(conveyanceKeyFor(value, ckKid, namespace));
     } on AtDecryptionException {
       rethrow;
     } on StateError {
@@ -229,17 +269,23 @@ class SymmetricAesGcmProvider
 
   /// The at-key the CK for [value] was conveyed under.
   ///
-  /// A conveyance sits in the same scope as the values citing it, so it mirrors
-  /// the value's own addressing: `<ckKid>.__ck.<ns>@<owner>` for self data, and
-  /// `@<recipient>:<ckKid>.__ck.<ns>@<sender>` for a share. Deriving it from the
-  /// value rather than from the nskey owner alone is what keeps the inbound case
-  /// addressable — there, sender and recipient are different atSigns.
-  static AtKey conveyanceKeyFor(AtKey value, String ckKid) => AtKey()
-    ..key = '$ckKid.__ck'
-    ..namespace = value.namespace
-    ..sharedBy = value.sharedBy
-    ..sharedWith = value.sharedWith
-    ..metadata = Metadata();
+  /// A conveyance mirrors the value's own addressing —
+  /// `<ckKid>.__ck.<ckNs>@<owner>` for self data,
+  /// `@<recipient>:<ckKid>.__ck.<ckNs>@<sender>` for a share. Deriving it from
+  /// the value rather than from the nskey owner alone is what keeps the inbound
+  /// case addressable, since there sender and recipient are different atSigns.
+  ///
+  /// [ckNs] is the namespace the nskey resolved to, **not** the value's own. One
+  /// conveyance therefore serves every namespace beneath it — which is what
+  /// makes an AtCollection sub-collection viable, since its namespace carries a
+  /// per-item id and would otherwise need a conveyance record per item.
+  static AtKey conveyanceKeyFor(AtKey value, String ckKid, String ckNs) =>
+      AtKey()
+        ..key = '$ckKid.__ck'
+        ..namespace = ckNs
+        ..sharedBy = value.sharedBy
+        ..sharedWith = value.sharedWith
+        ..metadata = Metadata();
 
   /// The CK cache's scope: whose nskey the CK was conveyed under. On an inbound
   /// value this is the recipient, matching how the conveyance was cached.

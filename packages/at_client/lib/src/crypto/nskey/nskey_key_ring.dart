@@ -96,6 +96,11 @@ class InMemoryNskeyKeyRing implements NskeyKeyRing {
     return kid;
   }
 
+  /// Drop the current generation for `(owner, namespace)` without touching the
+  /// privates — what a ring looks like once an advertisement has aged out.
+  void forget(String owner, String namespace) =>
+      _current.remove(_scope(owner, namespace));
+
   @override
   Future<NskeyAdvertisement?> currentPublic(
           String owner, String namespace) async =>

@@ -7,6 +7,7 @@ import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/content_key.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 import 'package:at_client/src/crypto/nskey/nskey_provider.dart';
+import 'package:at_client/src/crypto/nskey/nskey_resolver.dart';
 import 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -26,7 +27,14 @@ class CkManager {
   final ContentKeyCache cache;
   final NskeyKeyRing keyRing;
 
-  CkManager({required this.cache, required this.keyRing});
+  /// Finds which level of a nested namespace holds the nskey to seal to. Shared
+  /// with the data provider so both ends of a write agree on where the content
+  /// key lives, and so the walk's miss-memory is warmed once rather than twice.
+  final NskeyResolver resolver;
+
+  CkManager(
+      {required this.cache, required this.keyRing, NskeyResolver? resolver})
+      : resolver = resolver ?? NskeyResolver(keyRing);
 
   /// Ensure `(destination, namespace)` has a current CK sealed to the
   /// destination's *live* nskey generation, minting and conveying one if not.
@@ -42,20 +50,23 @@ class CkManager {
     final namespace = valueKey.namespace;
     if (owner == null || owner.isEmpty || namespace == null) return;
 
-    final advertised = await keyRing.currentPublic(owner, namespace);
+    // Most-specific-first: a composed namespace resolves to whichever level
+    // actually holds a key, and everything below is scoped to that level.
+    final advertised = await resolver.resolve(owner, namespace);
     if (advertised == null) {
-      // The destination has never used this namespace, so there is no nskey to
-      // seal to and nothing at the atSign level to fall back to. Failing here,
-      // in the pre-pass, is what makes the cold start recoverable: the caller
-      // has not yet committed to a scheme, so it can still route the write to
-      // legacy if the app opted into that. Discovering it mid-pipeline would
-      // leave only a hard failure.
+      // No level of the namespace has an nskey, so the destination has never
+      // used or authorised it and there is nothing at the atSign level to fall
+      // back to. Failing here, in the pre-pass, is what makes the cold start
+      // recoverable: the caller has not yet committed to a scheme, so it can
+      // still route the write to legacy if the app opted into that.
+      // Discovering it mid-pipeline would leave only a hard failure.
       throw NamespaceKeyUnavailableException(owner, namespace);
     }
+    final ckNs = advertised.namespace;
 
-    final current = cache.current(owner, namespace);
+    final current = cache.current(owner, ckNs);
     if (current != null &&
-        cache.currentNskeyKid(owner, namespace) == advertised.nskeyKid) {
+        cache.currentNskeyKid(owner, ckNs) == advertised.nskeyKid) {
       return;
     }
 
@@ -67,7 +78,7 @@ class CkManager {
     // recursing.
     final ck = ContentKey(_freshKeyBytes());
     await context.atClient.put(
-      SymmetricAesGcmProvider.conveyanceKeyFor(valueKey, ck.ckKid),
+      SymmetricAesGcmProvider.conveyanceKeyFor(valueKey, ck.ckKid, ckNs),
       ck.toBase64(),
       putRequestOptions: PutRequestOptions()
         ..cryptoProviderId = nskeyCryptoProviderId
@@ -82,7 +93,7 @@ class CkManager {
     // as the current key: the guard above would then skip conveying on every
     // retry, and every value written afterwards would cite a CK that was never
     // sent. The write throws on failure, so this is not reached.
-    cache.putAsCurrent(owner, namespace, ck, advertised.nskeyKid);
+    cache.putAsCurrent(owner, ckNs, ck, advertised.nskeyKid);
   }
 
   static Uint8List _freshKeyBytes() =>

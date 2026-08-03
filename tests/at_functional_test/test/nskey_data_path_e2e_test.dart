@@ -31,10 +31,16 @@ void main() {
     // Stands in for the secret-sharing substrate, which is what will supply this
     // for real. Everything above it is the production path.
     final nskeyPair = await XWingKeyPair.generate();
+    final appNsPair = await XWingKeyPair.generate();
     final ring = InMemoryNskeyKeyRing()
       ..seedKeypair(atSign, namespace,
           publicKey: nskeyPair.publicKeyBytes,
-          privateKey: nskeyPair.privateKeyBytes);
+          privateKey: nskeyPair.privateKeyBytes)
+      // A *multi-segment* app namespace, so the nested-namespace group can tell
+      // a real resolution apart from the last-dot split landing on it by luck.
+      ..seedKeypair(atSign, 'app_1.$namespace',
+          publicKey: appNsPair.publicKeyBytes,
+          privateKey: appNsPair.privateKeyBytes);
 
     final preference = TestUtils.getPreference(atSign)
       ..crypto = CryptoConfig.nskey(keyRing: ring);
@@ -181,6 +187,87 @@ void main() {
     final read = await atClient.get(key);
     expect(read.value, bytes,
         reason: 'isBinary must survive the round-trip byte for byte');
+  });
+
+  /// A **nested** namespace, driven through the real pipeline against a live
+  /// atServer.
+  ///
+  /// Every other test here uses a single-segment namespace, which is exactly why
+  /// the ambiguity went unseen: `AtKey.fromString` splits at the last dot, so a
+  /// multi-segment namespace cannot be recovered from the wire string and the
+  /// records have to state their own. AtCollection composes sub-collection
+  /// namespaces with a per-item id, so this is the ordinary shape, not an
+  /// exotic one.
+  ///
+  /// The fixture seeds a key at `app_1.wavi` as well as at `wavi`. That matters:
+  /// a composed `__rr.<id>.app_1.wavi` splits to `wavi`, so if the app namespace
+  /// were single-segment the split would land on it by coincidence and the test
+  /// would prove nothing.
+  group('nested namespace', () {
+    const appNs = 'app_1.wavi';
+    const composed = '__rr.item123.app_1.wavi';
+
+    test('a value under a composed namespace round-trips via the app key',
+        () async {
+      final atClient = atClientManager.atClient;
+      final key = AtKey()
+        ..key = 'memo'
+        ..namespace = composed
+        ..sharedBy = atSign;
+
+      expect(await atClient.put(key, 'the treaty text'), true);
+
+      final read = await atClient.get(key);
+      expect(read.value, 'the treaty text');
+      final meta = read.metadata?.appMetadata?.additional;
+      expect(meta?['ns'], composed,
+          reason: 'the value states its own namespace, which the last-dot '
+              'split would have reported as "wavi"');
+      expect(meta?['ckNs'], appNs,
+          reason: 'and the CK lives at the namespace the walk found');
+    });
+
+    test('a second item shares the content key', () async {
+      final atClient = atClientManager.atClient;
+      AtKey item(String id) => AtKey()
+        ..key = 'memo'
+        ..namespace = '__rr.$id.app_1.wavi'
+        ..sharedBy = atSign;
+
+      expect(await atClient.put(item('itemA'), 'one'), true);
+      expect(await atClient.put(item('itemB'), 'two'), true);
+
+      final a = (await atClient.get(item('itemA'))).metadata?.appMetadata;
+      final b = (await atClient.get(item('itemB'))).metadata?.appMetadata;
+      expect(a?.additional?['ckKid'], b?.additional?['ckKid'],
+          reason: 'a key per item would mean a conveyance record per item, '
+              'which is what walking up exists to avoid');
+    });
+
+    test('the namespace fields survive the sync push to the atServer',
+        () async {
+      // put/get are local-first, so only the atServer's own answer separates
+      // "stored" from "reconstructed by the client from what it already had".
+      final atClient = atClientManager.atClient;
+      final key = AtKey()
+        ..key = 'synced_memo'
+        ..namespace = composed
+        ..sharedBy = atSign;
+      expect(await atClient.put(key, 'for the server'), true);
+      await FunctionalTestSyncService.getInstance()
+          .syncData(syncSvc: atClient.syncService);
+
+      final stored = (await atClient.getRemoteSecondary()!.executeCommand(
+                'llookup:all:${key.toString()}\n',
+                auth: true,
+              )) ??
+          '';
+      expect(stored, contains(composed),
+          reason: 'the stored record must carry its own namespace, not the '
+              'last-dot guess');
+      expect(stored, contains(appNs),
+          reason: 'and the namespace its content key lives at');
+    });
   });
 
   /// Cold start, driven through the real put pipeline.

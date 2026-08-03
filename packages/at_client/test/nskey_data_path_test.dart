@@ -159,8 +159,13 @@ void main() {
       expect(appMetadata.additional!['iv'], isNotNull);
       expect(appMetadata.additional!.containsKey('sealedKey'), isFalse,
           reason: 'decision (a): the CK is conveyed once, never inline');
-      expect(appMetadata.additional!.containsKey('ns'), isFalse,
-          reason: 'appMetadata carries no ns field');
+      expect(appMetadata.additional!['ns'], namespace,
+          reason: 'the record states its own namespace — AtKey.fromString cuts '
+              'at the last dot, so a reader can never recover a multi-segment '
+              'one from the wire string (decisions.md 19)');
+      expect(appMetadata.additional!['ckNs'], namespace,
+          reason: 'nothing to walk up to here, so the CK lives at the value\'s '
+              'own namespace');
     });
 
     test('the CK conveyance record is tagged at/nskey with recipientKind nskey',

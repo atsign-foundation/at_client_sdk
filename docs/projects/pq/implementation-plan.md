@@ -578,8 +578,9 @@ proceeds against a test fixture that supplies the nskey private directly (see th
   `plookup` on `public:__nskey.<ns>@<recipient>`) — one keypair, same provider, uniform self/cross flow.
   `nskeyKid` names the generation, so a reader holding several after a rotation indexes straight to it.
 - **Namespace resolution:** a sender walks the value's namespace most-specific-first and seals to the first
-  published nskey; that namespace is `ckNs`, and an exhausted walk is cold start. Senders remember which
-  namespaces an owner holds keys at, so a composed sub-collection namespace costs no extra round trips.
+  published nskey; that namespace is `ckNs`, and an exhausted walk is cold start. Senders remember the
+  levels they have found **empty**, so a composed sub-collection namespace pays its probes once rather
+  than per write; remembering *hits* instead is unsafe and rejected, since it skips the deeper probes.
   Required for AtCollection, whose sub-collection namespaces embed a per-**item** id.
 - **Get/put routing + the CK manager:** `CkManager.ensureCurrent(dest, ns)` re-`plookup`s the
   destination's advertised nskey and mints + conveys a CK when there is none for that destination or the
@@ -610,10 +611,13 @@ proceeds against a test fixture that supplies the nskey private directly (see th
 
 **Spike state (branch `gkc-pq-d1-spike`, 2026-08-03).** The data path is built, and
 **both the self-data and the cross-atSign directions work end to end against a live
-atServer**. Advertised nskeys are signed and verified, and cold start fails cleanly with
-a pre-flight query and an opt-in legacy escape hatch. `packages/at_client` green at
-731 passing / 39 skipped, `tests/at_functional_test` at 91, `tests/at_end2end_test` at
-36 with no skips.
+atServer**. Advertised nskeys and key packages are signed and verified, cold start fails
+cleanly with a pre-flight query and an opt-in legacy escape hatch, and nested namespaces
+resolve by walking up with `appMetadata.ns` / `ckNs` on the wire — covered multi-segment in
+both live suites, which previously used single-segment namespaces only.
+`packages/at_client` green at
+753 passing / 39 skipped, `tests/at_functional_test` at 94, `tests/at_end2end_test` at
+37 with no skips.
 
 *Proven live (functional suite, `tests/at_functional_test`):* self put/get round-trip
 through the whole pipeline including the pre-pass, the conveyance record and key
@@ -672,7 +676,6 @@ taken now because nothing written under the old form exists outside the spike.
 | Owed | Where it belongs |
 |---|---|
 | ~~Cold-start fails by design, with an exception, a fallback and a query~~ — **done on the spike branch.** `NamespaceKeyUnavailableException` carries the atSign and namespace and is raised by the *pre-pass*, so nothing is in flight when it fires; `CryptoRuntime.isReadyFor` answers the same question in advance via the `ReportsReadiness` seam; `AtClientPreference.allowLegacyCryptoFallback` (default false) reroutes the write to legacy, per write, so the fallback is forward-only. Covered live in `nskey_data_path_e2e_test`'s cold-start group ([decisions.md 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)) | **B-1c** |
-| Nested-namespace resolution: the walk-up, the per-owner memo, `appMetadata.ns` + `ckNs`, and moving the conveyance to the resolved namespace ([decisions.md 19](decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)). **Wire-format change — free only until a fleet seeds.** Needs a multi-segment namespace in both live suites, which today use single-segment ones | **B-1** |
 | ~~Advertised-key signature verification~~ — **done on the spike branch, both halves.** `PublishedNskeyKeyRing` signs its own nskey advertisement and `ApkamSignedAdvertisedKeys` verifies a peer's; `KeyPackageRegistration.signedKeyPackagePayload` signs the key package and `VerbEnrollmentDirectory` verifies it against the advertising enrollment's `_apsk`, rejecting unsigned, tampered, wrong-signer and forged-claim packages. No unverified advertised-key path is left. **Owed:** the key-package half has no live coverage — `enroll:listns` is unit-only until SS-2 wires the production path | **SS-1c** / **SS-2** |
 | Real nskey minting + per-APKAM conveyance; `InMemoryNskeyKeyRing` and `mintAndPublish` are fixtures. **Gates the final 3.x release** — the rollout seeds the fleet, and a key published without its private durably conveyed leaves the far end undecryptable | **SS-4** |
 | Mint and publish `public:pq_signing_root@<atSign>`, immutable, `{v, keys[], successor}`, conveyed to fully privileged enrollments. Also gates final 3.x | **SS-4** |
@@ -699,7 +702,7 @@ per-owner resolution memo of
 cost. What is still unanswered is the *first* contact with a recipient, which remains one
 round trip per `(recipient, namespace)`.
 
-**Ruled 2026-08-03, not yet built: nskey resolution in nested namespaces**
+**Ruled and built 2026-08-03: nskey resolution in nested namespaces**
 ([decisions.md 19](decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)).
 A sender resolves **most-specific first and walks up** — `d.c.b.a`, then `c.b.a`, then
 `b.a`, then `a` — sealing to the first published nskey and failing only when the walk is
@@ -708,17 +711,18 @@ boundary the server would have held: `rw` on `a` *does* imply access to `d.c.b.a
 the direction the walk goes. It is required rather than optional, because AtCollection
 composes sub-collection namespaces with a per-**item** id.
 
-Nothing implements it yet, and four things must agree on which level answered:
-`NskeyKeyRing.currentPublic` (exact match today), the CK cache scope (`(owner, namespace)`
-on the same exact string), `SymmetricAesGcmProvider.conveyanceKeyFor` (addresses under the
-value's own namespace), and `CryptoRuntime.isReadyFor`. The wire carries the answer:
-`appMetadata.ns` on every nskey-path record, plus `ckNs` on a data value. A prerequisite
-finding is that `AtKey.fromString` splits at the **last** dot, so a multi-segment namespace
-is unrecoverable from the wire string at all — which is why `ns` exists.
+`NskeyResolver` owns the walk and its miss-memory; `CkManager` shares one with the data
+provider so both ends of a write agree on where the content key lives, and
+`CryptoRuntime.isReadyFor` inherits it. The wire carries the answer: `appMetadata.ns` on
+every nskey-path record, plus `ckNs` on a data value. A prerequisite finding is that
+`AtKey.fromString` splits at the **last** dot, so a multi-segment namespace is
+unrecoverable from the wire string at all — which is why `ns` exists, and why the AAD now
+binds the record's full address rather than namespace and key separately.
 
-⚠️ **No live coverage exists for any of this**: `tests/at_functional_test` and
-`tests/at_end2end_test` both use single-segment namespaces (`wavi`, `e2e_test`), which is
-exactly why the ambiguity went unnoticed. A multi-segment case belongs in both.
+Both live suites gained multi-segment coverage, seeded at a **multi-segment app namespace**
+on purpose: with a single-segment one the last-dot split lands on the right answer by
+coincidence. That trap is not hypothetical — it made the first version of the unit test
+pass against a deliberately broken build.
 
 *Test runners:* use the committed `tests/*/runLocal.sh`. They pull the virtualenv image;
 ad-hoc copies that skip `docker compose pull` will silently test a stale atServer.

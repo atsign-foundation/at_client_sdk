@@ -1608,30 +1608,47 @@ gate says no.
 string never seen before, so a naive walk costs one round trip per level **per item,
 forever** — the cache never warms, because the misses never repeat.
 
-**A sender therefore remembers which namespaces an owner holds keys at.** A later namespace
-ending in `.todos` resolves straight there with no probing, so a new sub-collection item
-costs zero extra round trips.
+**A sender therefore remembers the levels it has found *empty*, and only those.**
+A repeated write to the same namespace re-probes nothing; a namespace never seen before
+still probes its own levels once.
 
-That memo is **not a new lifetime**. It is defined as *the set of namespaces for which a
-live cached advertisement is held*, so it expires with `advertisementTtl` and adds no knob.
-Stating the three lifetimes once, because they are easy to conflate:
+**Remembering *hits* was tried first and is unsafe** — recorded here because it is the
+obvious design and it is wrong. If a sender remembers "alice holds a key at `notes`", then
+a later `y.medical.notes` matches that suffix and resolves straight to `notes` **without
+ever probing `medical.notes`** — so a deeper key that existed all along is invisible, on a
+cold path, permanently. That is not the bounded window
+[19.4](#194-cost-and-the-three-lifetimes) accepts; it defeats most-specific-wins outright.
+The asymmetry is the point: skipping a probe for a level we were just told is empty cannot
+lose a key, while skipping one for a level we never asked about can. Caught by
+`nskey_resolver_test`'s "a deeper key is never skipped because a broader one was seen".
+
+**The real cost floor**, therefore: one probe per level of a namespace never seen before,
+paid **once per namespace** rather than once per write. For an AtCollection sub-collection
+that is two extra round trips the first time an item is written, and none thereafter. Zero
+is not reachable while deeper keys are permitted
+([19.3](#193-the-ruling)) — the probes that cost are exactly the probes that find them.
+
+Stating the lifetimes once, because they are easy to conflate:
 
 | # | What | Where | Bound |
 |---|------|-------|-------|
 | 1 | `advertisementTtl` — how long a fetched advertisement is reused before re-fetching | sender's memory | 15 min default |
 | 2 | `advertisementStaleGrace` — how long past (1) a *failed* re-fetch may keep serving what it has | sender's memory | 15 min default |
-| 3 | The remembered resolution — "this owner holds a key at `todos`" | sender's memory | **inherits (1)** |
+| 3 | `missMemory` — how long a level found **empty** is not re-probed | sender's memory | 15 min, matching (1) |
 
 There is **no TTL on the published record**: `nskeyAdvertisementKey` sets only
 `isPublic = true`, so `public:__nskey.<ns>@<owner>` lives on the atServer until overwritten.
 The only record-level ttl in the design is on `_nskeylock`, a different key.
 
-**The accepted exposure.** Within one (1)-window a sender may still resolve to the broader
-key after a deeper one is minted, so exactly the enrollments the deeper key was minted to
-exclude can read those writes. This is *not* the same risk as rotation staleness — there, a
-revocation event lies behind it; here the sender's own memo causes it. It is accepted
-knowingly, without a signalling flag on the parent advertisement, on the grounds that
-deeper keys are rare and the window is short.
+**The accepted exposure.** A level probed and found empty stays empty to that sender for one
+`missMemory` window, so a key minted at that level inside the window is missed and the write
+seals to the broader one — letting exactly the enrollments the deeper key was minted to
+exclude read it. This is *not* the same risk as rotation staleness: there a revocation event
+lies behind it, whereas here the sender's own memory causes it. Accepted knowingly, without
+a signalling flag on the parent advertisement, on the grounds that deeper keys are rare and
+the window is short. Note this is strictly narrower than the exposure the rejected
+remember-hits design carried, which had no bound at all for a namespace whose deeper level
+was never probed.
 
 ### 19.5 The wire
 
