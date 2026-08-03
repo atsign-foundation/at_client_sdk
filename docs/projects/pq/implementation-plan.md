@@ -605,8 +605,8 @@ proceeds against a test fixture that supplies the nskey private directly (see th
 
 **Spike state (branch `gkc-pq-d1-spike`, 2026-08-02).** The data path is built, and
 **both the self-data and the cross-atSign directions work end to end against a live
-atServer**. `packages/at_client` green at 708 passing / 39 skipped,
-`tests/at_end2end_test` green at 34 with no skips.
+atServer**. `packages/at_client` green at 716 passing / 39 skipped,
+`tests/at_functional_test` at 87, `tests/at_end2end_test` at 35 with no skips.
 
 *Proven live (functional suite, `tests/at_functional_test`):* self put/get round-trip
 through the whole pipeline including the pre-pass, the conveyance record and key
@@ -675,7 +675,17 @@ taken now because nothing written under the old form exists outside the spike.
 | The CK cache and the owner's own nskey privates are process memory only — a restart loses both, so the owner cannot re-read her own outbound shared records | **SS-4** |
 | `B-1e` ("`providerId` on notification frames") is listed as future work, but both notify entry points have already changed and the send half is now covered live — the chunk needs re-scoping to whatever actually remains | **B-1e** |
 | The notify **receive** half has no live coverage, and cannot get any in `at_end2end_test` as it stands: `AtClientManager` is a singleton, and `setCurrentAtSign` both stops the previous atSign's monitor and unsets its `notificationService`, so no test can hold a subscription on one atSign while another sends. Covered at unit level only. Closing this needs the harness to support two concurrent clients, not a new test | `at_end2end_test` |
+| Rename the atSign-level key to `public:pq_signing_root@<atSign>` in code, and delete the `root-pqpublickey` `recipientKind` variant | **B-1c** |
+| Enrollment approval reverses direction: the approver generates `apkamSymmetricKey` and encapsulates to the enrollee's key-package public half from the `enroll:request` tail. Multi-repo seam — client and at_server together | **SS-2** |
+| `_apsk`'s published value becomes a root-signed envelope rather than a bare key, carried in the enrollment record the atServer already copies. Verifiers accept a bare key as unsigned during transition | **SS-1c** |
+| Open an in-progress version in `at_chops` and `at_commons` (both currently sit at their published versions, so neither has a heading to fold an entry under). Authorised 2026-08-03; blocks the two rows below | `at_chops` / `at_commons` |
 | `_addMetadataToBuilder` on the notify path is still a hand-rolled copier — swept for the fields a reader needs, but not routed through a canonical converter, because none exists for `Metadata`→`Metadata` | `at_commons` |
+
+**Open, not yet grilled.** Three threads the 2026-08-03 session raised and did not
+settle: what the signing root signs beyond `_apsk`; the key-transparency publication
+mechanics (when a root is submitted, and what a client does if the log is unreachable at
+mint); and how a 4.x client discovers a peer's PQ capability cheaply enough to answer the
+pre-flight query without a round trip per recipient.
 
 **Open, needs a ruling: nskey resolution in nested namespaces.** A namespace is
 dotted and hierarchical, so `someid.d.c.b.a@alice` sits under `d.c.b.a`, which sits

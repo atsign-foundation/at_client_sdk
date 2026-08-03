@@ -105,3 +105,8 @@ poetry.lock
 # Claude/AI coding stuff
 .serena
 .claude
+
+# Working/scaffolding docs — audits, migration plans, drafts.
+# packages/at_client/CLAUDE.md documents this directory as gitignored; this is the rule
+# that makes that true.
+/untracked/
