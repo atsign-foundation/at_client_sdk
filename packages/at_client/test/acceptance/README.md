@@ -7,6 +7,32 @@ inline, skipped with the project that must land before it can go green.
 **This is the progress bar for D1.** The catalogue is the target; this directory
 is how far we've got.
 
+> ⚠️ **The count is currently wrong, in two fixable ways — audited 2026-08-03,
+> not yet acted on.** Treat the number as a floor, not a measure.
+>
+> 1. **This suite cannot see the layers that prove most of the scenarios.**
+>    `catalogue_test.dart` runs inside `at_client`'s unit suite, so it can never
+>    observe `tests/at_functional_test` or `tests/at_end2end_test` — and roughly
+>    half the rows target those. A scenario proven live can never turn its own
+>    row green.
+> 2. **`blockers.dart` has gone stale.** Three rows still read
+>    `blocked: SS-2`, which is complete; seven read `blocked: SS-4`, which is
+>    about half done. The mechanism for this is documented in `blockers.dart`
+>    itself — delete a constant when its project lands and the analyzer points
+>    at everything it unblocked — but nobody has run it.
+>
+> Against the branch as of 2026-08-03 the suite reads **4 of 43**, while the
+> live packs actually prove around **8–9 rows plus 2 invariants**: A3.1, A3.3,
+> A4.1, A4.4, partial A5, advertised-keys-signed-and-verified,
+> nskey-not-enumerable, the SS-2 key-package chain, and substrate delivery.
+>
+> **And one row is worse than mis-counted: UC-A2.1 is *not* met even though its
+> blocking project reads complete.** It claims nothing in the conveyance path is
+> RSA-wrapped. The key package and secret conveyance landed, but the reversed
+> approval direction did not — the approver still does not encapsulate
+> `apkamSymmetricKey` to the enrollee's key package, so that wrap is still RSA.
+> A stale blocker is exactly how a gap like that stays invisible.
+
 ```
 dart test test/acceptance --concurrency=1
 ```
