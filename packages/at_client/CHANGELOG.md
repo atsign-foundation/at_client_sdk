@@ -1,4 +1,14 @@
 ## 3.14.1
+- feat: `PqSigningRoot` mints this atSign's user-owned root of trust,
+  `public:pq_signing_root@<atSign>` — ML-DSA-65, a signer only, with nothing
+  ever encapsulated to it. Written **immutable**, so the atServer refuses a
+  second create and exactly one root is ever published; that matters more here
+  than anywhere else, because the root never rotates and two roots would leave
+  half an atSign's enrollments chaining to one the other half rejects, with no
+  later event able to reconcile them. Only a fully privileged (`rw *` plus
+  `__manage`) enrollment mints it. The private is filed before the record is
+  published — an immutable record cannot be retried with a different key — and
+  losing the create is not an error but the guarantee working.
 - feat: `AtClientPreference.seedNamespaceKeys` (default **false**) makes a
   client mint and publish its namespace keys at start. It is its own knob
   rather than following `crypto` because seeding is a rollout action, not a

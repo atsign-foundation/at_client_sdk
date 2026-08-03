@@ -1954,6 +1954,26 @@ the APKAM algorithm swapped later without the chain changing at all. Note also t
 ML-DSA-65 regardless — it is a new key with no migration story of its own, which is why it does not
 have to wait.
 
+### 22.2b Publishing a chain signature: the parent signs, the child publishes
+
+A conflict the chain model has to resolve, found by reading the two ends together. In the
+approval-graph chain **E2 signs E3's key** — but `_apsk` writes are restricted to *the owning
+enrollment's own* authenticated connection. The signer is the parent; the only permitted writer is
+the child.
+
+**Ruling 7: the parent conveys the signature and the child publishes it.** The approver signs the
+child's APKAM public key and sends the signature over the substrate — the conveyance that already
+fires at approval — and the child writes it onto its own `_apsk`'s `appMetadata` on first run. No
+atServer change, and no widening of who may write a record whose entire purpose is to be one
+enrollment's authenticated identity.
+
+Until the child runs, verifiers see a bare key. The transition rule already tolerates exactly that:
+an unsigned `_apsk` is accepted during the changeover.
+
+Checked rather than assumed: the atServer writes `_apsk` in exactly two places — at first-enrollment
+creation and on **approve** — not on every authenticated use, so it will not clobber the
+`appMetadata` the child adds afterwards.
+
 ### 22.3 What this leaves SS-4
 
 Mint (locked, init-triggered, durable-before-publish); convey the private per-APKAM as a `Secret` —
