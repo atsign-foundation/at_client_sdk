@@ -1,4 +1,14 @@
 ## 3.14.1
+- feat: an arriving nskey private is checked against the published public half
+  before it is filed. An X-Wing secret key **is** its seed, so the public
+  derives from it exactly — the check is precise, not heuristic. It is
+  subordinate to the signature that already authenticated the envelope, and
+  catches what a signature cannot: a private genuinely from this atSign and
+  genuinely an nskey private, but the wrong one — a stale generation, or a
+  truncation. Filing that would leave the client believing it can open a
+  namespace it cannot, with the failure surfacing later on data as corruption
+  rather than as a bad key. With no lookup supplied, or one that throws, the
+  private is filed on the signature alone rather than refused.
 - feat: minting a namespace key takes a lock and makes its private durable
   before publishing. `NskeyMintLock` is a short-ttl immutable self key taken
   **remote-first** — the atomicity is the atServer refusing a second immutable

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:test/test.dart';
@@ -91,6 +92,52 @@ void main() {
         reason: 'without a kid there is no way to tell which generation it '
             'opens, and filing it under a guess would be worse than refusing');
     expect((await io.read(atSign)).keys, isEmpty);
+  });
+
+  test('a private that does not derive the published public half is refused',
+      () async {
+    final real = await XWingKeyPair.generate();
+    final other = await XWingKeyPair.generate();
+    final io = InMemoryAtKeysIo();
+    await io.write(atSign, AtKeys());
+    final filer = NskeyPrivateFiling(
+      keysIo: io,
+      atSign: atSign,
+      publishedPublicKey: (_, __) async => real.publicKeyBytes,
+    );
+
+    // Genuinely signed by this atSign, and genuinely an nskey private — just
+    // not the one peers are sealing to. Only correspondence catches that.
+    expect(
+        await filer.file(Secret(
+            namespace: namespace,
+            name: '${NskeyPrivateFiling.secretNamePrefix}kid-x',
+            value: base64Encode(other.privateKeyBytes))),
+        isFalse,
+        reason: 'filing it would leave this client believing it can open a '
+            'namespace it cannot, and the failure would surface later on data '
+            'as corruption rather than as a bad key');
+    expect((await io.read(atSign)).keys, isEmpty);
+  });
+
+  test('the matching private is accepted', () async {
+    final real = await XWingKeyPair.generate();
+    final io = InMemoryAtKeysIo();
+    await io.write(atSign, AtKeys());
+    final filer = NskeyPrivateFiling(
+      keysIo: io,
+      atSign: atSign,
+      publishedPublicKey: (_, __) async => real.publicKeyBytes,
+    );
+
+    expect(
+        await filer.file(Secret(
+            namespace: namespace,
+            name: '${NskeyPrivateFiling.secretNamePrefix}kid-x',
+            value: base64Encode(real.privateKeyBytes))),
+        isTrue,
+        reason: 'an X-Wing secret key is its seed, so the public half derives '
+            'from it exactly — the check is precise, not heuristic');
   });
 
   test('only nskey privates are filed; other secrets pass through', () async {

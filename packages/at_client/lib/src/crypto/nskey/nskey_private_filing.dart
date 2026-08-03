@@ -2,6 +2,7 @@ import 'dart:async' show StreamSubscription;
 import 'dart:convert' show base64Decode;
 import 'dart:typed_data' show Uint8List;
 
+import 'package:at_chops/at_chops.dart' show XWingPureDartAlgo;
 import 'package:at_auth/at_auth.dart'
     show
         AtKeys,
@@ -56,10 +57,25 @@ class NskeyPrivateFiling {
   final AtKeysIo keysIo;
   final String atSign;
 
+  /// The published public half for `(namespace, nskeyKid)`, used to check that
+  /// an arriving private actually corresponds to the key peers are sealing to.
+  ///
+  /// A secondary check, subordinate to the signature that already
+  /// authenticated the envelope — but a cheap one, and the only thing that
+  /// catches a private that is genuinely from this atSign and simply wrong:
+  /// the wrong generation, or a truncation. Filing that would leave the client
+  /// believing it can open a namespace it cannot, and the failure would
+  /// surface later, on data, as corruption rather than as a bad key.
+  final Future<Uint8List?> Function(String namespace, String nskeyKid)?
+      publishedPublicKey;
+
   StreamSubscription<ReceivedSecret>? _subscription;
 
-  NskeyPrivateFiling({required this.keysIo, required String atSign})
-      : atSign = atSign.toAtsign();
+  NskeyPrivateFiling({
+    required this.keysIo,
+    required String atSign,
+    this.publishedPublicKey,
+  }) : atSign = atSign.toAtsign();
 
   /// Files every nskey private arriving on [receivedSecrets].
   ///
@@ -88,12 +104,56 @@ class NskeyPrivateFiling {
           'it opens');
       return false;
     }
+    final private = Uint8List.fromList(base64Decode(secret.value));
+    if (!await _corresponds(secret.namespace, nskeyKid, private)) return false;
+
     return store(
       namespace: secret.namespace,
       nskeyKid: nskeyKid,
-      private: Uint8List.fromList(base64Decode(secret.value)),
+      private: private,
       createdAt: secret.createdAt,
     );
+  }
+
+  /// Whether [private] derives the public half published for
+  /// `(namespace, nskeyKid)`. True when no lookup was supplied — the check is
+  /// secondary, and refusing everything for want of it would be worse than
+  /// not making it.
+  Future<bool> _corresponds(
+      String namespace, String nskeyKid, Uint8List private) async {
+    final lookup = publishedPublicKey;
+    if (lookup == null) return true;
+
+    final Uint8List? published;
+    try {
+      published = await lookup(namespace, nskeyKid);
+    } catch (e) {
+      _logger.info('Could not fetch the published nskey for '
+          '$namespace:$nskeyKid to check correspondence, so filing on the '
+          'signature alone: $e');
+      return true;
+    }
+    if (published == null) return true;
+
+    // An X-Wing secret key IS its seed, so the public half derives from it
+    // exactly.
+    final derived =
+        (await XWingPureDartAlgo.instance.generateKeyPair(private)).publicKey;
+    if (_sameBytes(derived, published)) return true;
+
+    _logger.severe('Refusing the nskey private for $namespace:$nskeyKid — it '
+        'does not derive the published public half, so filing it would leave '
+        'this client believing it can open a namespace it cannot, and the '
+        'failure would surface later on data as corruption');
+    return false;
+  }
+
+  static bool _sameBytes(Uint8List a, Uint8List b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   /// The nskey private for `(namespace, nskeyKid)`, or null if this client
