@@ -281,12 +281,18 @@ in [§2.5](#25-the-authenticated-self-retrofit-flow-fresh-auto-approved-enrollme
 
 ### 1.5 The CK model, cache, ckKid & appMetadata encoding
 
-**`appMetadata` encoding — carries no `ns` field** (namespace comes from the
-at-key name and the HPKE `info`, not from `appMetadata`):
+**`appMetadata` encoding — carries `ns`, and on a data value `ckNs` too**
+([`decisions.md`](decisions.md) §19, which supersedes this section's former
+"carries no `ns` field"). The namespace cannot come from the at-key name:
+`AtKey.fromString` splits at the **last** dot, so `someid.d.c.b.a@alice` parses back
+as `key = someid.d.c.b`, `namespace = a`, and a multi-segment namespace is
+unrecoverable from the wire. Every record therefore states its own. This is not a new
+disclosure — the namespace is already plaintext in the key name.
 
 - On an `at/nskey/*` **CK-conveyance record**:
-  `{ providerId: "at/nskey/XWING/AES/GCM", recipientKind, ckKid, nskeyKid }` where
-  `recipientKind` has one member, `"nskey"`. `nskeyKid` names the
+  `{ providerId: "at/nskey/XWING/AES/GCM", recipientKind, ckKid, nskeyKid, ns }` where
+  `recipientKind` has one member, `"nskey"`, and `ns` is the resolved namespace the
+  conveyance lives at. `nskeyKid` names the
   **generation** the CK was sealed to, so a reader holding several after a rotation
   indexes straight to the right private instead of trial-decapsulating each in turn
   ([§1.7](#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation)).
@@ -297,14 +303,31 @@ at-key name and the HPKE `info`, not from `appMetadata`):
   `appMetadata.ckKid`. The value is the `pqSeal` envelope wrapping the CK (KEM ct +
   AEAD body) — **no separate `iv`/`kemCt`** on the conveyance.
 - On an `at/symmetric/AES/GCM` **data value**:
-  `{ providerId: "at/symmetric/AES/GCM", ckKid, iv }`. `iv` is the base64 12-byte
-  GCM nonce, per value. **No sealed key is present** (decision (a)).
+  `{ providerId: "at/symmetric/AES/GCM", ckKid, iv, ns, ckNs }`. `iv` is the base64
+  12-byte GCM nonce, per value. **No sealed key is present** (decision (a)). `ns` is
+  the value's **own** full namespace — it is what the AAD binds, so two items under
+  different sub-collections cannot have their ciphertexts swapped. `ckNs` is the
+  namespace the CK and its conveyance live at, which differs from `ns` whenever
+  resolution walked up: every AtCollection sub-collection item, and the stale-sender
+  window of [`decisions.md`](decisions.md) §19.4. Neither is derivable from the other.
 
 **`ckKid`** is the content key's id — a SHA-256 prefix of the CK (deterministic;
-dedupes identical keys) or a random id. It must be unique within `(owner, namespace)`
+dedupes identical keys) or a random id. It must be unique within `(owner, ckNs)`
 and is the CK cache key alongside them.
 
-**CK cache.** Keyed by `(owner, namespace, ckKid)` where `owner` is the **nskey
+**Namespace resolution.** A sender walks the value's namespace **most-specific-first**
+— `d.c.b.a`, `c.b.a`, `b.a`, `a` — and seals to the first published nskey it finds; the
+namespace it lands on is `ckNs`, and cold start is the whole walk coming up empty. The
+walk mirrors the atServer's own suffix authorisation, so the crypto gate never widens
+past the transport gate, and it is what makes AtCollection viable: sub-collection
+namespaces embed a per-**item** id, so an exact-match rule would need a keypair and a
+per-enrollment conveyance per item. Senders remember which namespaces an owner holds
+keys at, so a later namespace ending in `.todos` resolves with no probing; that memo is
+the set of namespaces with a live cached advertisement, so it inherits
+`advertisementTtl` rather than adding a lifetime. Full ruling and its accepted exposure:
+[`decisions.md`](decisions.md) §19.
+
+**CK cache.** Keyed by `(owner, ckNs, ckKid)` where `owner` is the **nskey
 owner** — so a CK is scoped to the recipient it was cut for, not to the sender
 ([`decisions.md`](decisions.md) §14). Populated by the `at/nskey` provider when a
 `<ckKid>.__ck` record syncs (decapsulate-then-cache); read by the

@@ -136,13 +136,19 @@ per keyfile/install):
   discovered only via `enroll:listns`. Private half never leaves the
   keyfile.
 - **`appMetadata.providerId`** routes a reader to a provider; a value with **no**
-  `providerId` defaults to **legacy**. `appMetadata` carries **no `ns` field**:
-  - `at/nskey/XWING/AES/GCM` → `{providerId, recipientKind, ckKid, nskeyKid}` — a
+  `providerId` defaults to **legacy**. `appMetadata` **states its record's namespace**
+  ([decisions.md section 19](decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)),
+  because `AtKey.fromString` splits at the last dot and a multi-segment namespace
+  cannot be recovered from the wire string:
+  - `at/nskey/XWING/AES/GCM` → `{providerId, recipientKind, ckKid, nskeyKid, ns}` — a
     CK-conveyance record: a CK X-Wing-sealed to the nskey. `recipientKind` is
     `nskey` and nothing else; self and inbound both seal to the one nskey. The
-    `root-pqpublickey` variant is withdrawn along with the cold-start KEM.
-  - `at/symmetric/AES/GCM` → `{providerId, ckKid, iv}` — application data
-    AES-256-GCM under a CK, cited by `ckKid`.
+    `root-pqpublickey` variant is withdrawn along with the cold-start KEM. `ns` is the
+    resolved namespace the conveyance lives at.
+  - `at/symmetric/AES/GCM` → `{providerId, ckKid, iv, ns, ckNs}` — application data
+    AES-256-GCM under a CK, cited by `ckKid`. `ns` is the value's own full namespace
+    and is what the AAD binds; `ckNs` is where the CK lives, and differs from `ns`
+    whenever resolution walked up.
   The umbrella for `at/nskey` + `at/symmetric/AES/GCM` is the **nskey data path**.
 
 **atServer PQ capabilities** (Part A and B both assume `aS = pq` unless stated):

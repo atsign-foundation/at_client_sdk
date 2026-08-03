@@ -32,6 +32,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [16. A provider id names every algorithm a reader needs code for (2026-08-02)](#16-a-provider-id-names-every-algorithm-a-reader-needs-code-for-2026-08-02)
 - [17. The sync push dropped `appMetadata` (2026-08-02, fixed)](#17-the-sync-push-dropped-appmetadata-2026-08-02-fixed)
 - [18. `pqpublickey` becomes the user-owned signing root (2026-08-03)](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) — *supersedes the KEM role in [design.md](design.md) section 1.4*
+- [19. Nested namespaces: the nskey is resolved by walking up (2026-08-03)](#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03) — *adds `appMetadata.ns` / `ckNs`; supersedes the no-`ns` statement in [design.md](design.md) section 1.5*
 
 ---
 
@@ -302,9 +303,11 @@ not `verbParams[atPkamSigningAlgo]`; legacy null → `rsa2048`).
 pkam `signingAlgo` literal + server `_getSigningAlgoType` branch reading the
 **record's** `signingAlgo`.
 
-**Where `appMetadata` is mentioned:** it carries **no `ns` field**. (Full field
-definitions are in `design.md`; the only ruling recorded here is the no-`ns`
-decision.)
+**Where `appMetadata` is mentioned:** it carried **no `ns` field** — a ruling
+[section 19](#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)
+reversed on 2026-08-03, once it turned out the namespace it was supposed to be
+redundant with cannot be recovered from the wire string. (Full field definitions are
+in `design.md`.)
 
 **Cross-refs:** the `enroll:listns` verb mechanics,
 `EnrollParams.metadata`, and the enrollment record + authenticated self-retrofit
@@ -686,6 +689,7 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 | **2026-08-02** | **The sync push dropped `appMetadata`, and the fix deletes the duplicate serializer that dropped it** ([17](#17-the-sync-push-dropped-appmetadata-2026-08-02-fixed)). `SyncServiceImpl` now delegates to `Metadata.toAtProtocolFragment` instead of hand-rolling the metadata fragment, and a guard parses a fully-populated fragment with `VerbSyntax.update`. Cross-atSign reads work; the e2e test is un-skipped. | This was first recorded as an atServer defect — that attribution was wrong, and the correction is the durable lesson: **an absent field indicts the writer before the reader.** The wire observation (a `lookup` returning no `appMetadata`) was accurate, but *absent from the response* was read as *withheld by the responder* when the field had never been stored. The probe that separates them is an authenticated `llookup:all:` against the **writer's own** atServer after sync. Blast radius was every provider's synced writes, including shipped 3.14 — not PQ-specific — because a duplicated wire serializer had silently lagged the canonical one. |
 
 | **2026-08-03** | **`pqpublickey` stops being a KEM and becomes `public:pq_signing_root@<atSign>`, the user-owned signing root** ([18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)). Cold-start has no PQ target and therefore **fails**, with legacy RSA reachable only by explicit opt-in; the release sequence makes that safe, since a final 3.x rebuild-and-rollout seeds the fleet with nskeys and roots before 4.x turns PQ on by default. SS-4 gates that 3.x release, `AtClientPreference.crypto` becomes nullable so the SDK owns the era default, and the root is written immutable with a `{v, keys[], successor}` payload. | A prove-possession step needs a signature, not a KEM, and one key doing both was the conflation to remove. Handing the root to the atServer was rejected: key transparency over an operator-held key records the operator's own signatures, so an auditor has nothing to catch, and the anchoring gap [12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02) records would become structural. Publishing a key whose private is not durably conveyed is worse than not publishing, because the far end gets undecryptable data instead of a fast sender-side failure — hence publish-after-convey and SS-4 as a 3.x blocker. `keys[]` and `successor` ship on day one because the record is immutable and the whole fleet mints during the rollout, so mint time is the only chance to allow a second algorithm or any revocation at all. |
+| **2026-08-03** | **Nested-namespace nskey resolution walks up, most-specific-first** ([19](#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)). A sender writing to `someid.d.c.b.a@alice` tries `d.c.b.a` … `a` and seals to the first nskey found; the CK is scoped to *that* namespace, so one conveyance serves every namespace beneath it. `appMetadata` gains `ns` (the record's own namespace) on every nskey-path record and `ckNs` (where the CK lives) on data values. Senders remember which namespaces an owner holds keys at, and that memo inherits `advertisementTtl` rather than adding a lifetime. | `AtKey.fromString` splits at the **last** dot, so a multi-segment namespace cannot be recovered from the wire string — measured, not inferred. It never mattered because the legacy provider references `namespace` zero times; the nskey path references it 56, which is what makes the ambiguity newly critical. Exact-match was unavailable: AtCollection composes `<subName>.<parentId>.<ns>` per **item**, so it would need a keypair, an advertisement and a per-enrollment conveyance per item. Walking up is safe because it mirrors the atServer's own suffix authorisation, so the crypto gate never widens past the transport gate. `ckNs` is not redundant with `ns`: in the stale-sender window the reader would otherwise hunt for the conveyance in the wrong namespace and report "not yet synced" for an intact record, forever. |
 
 **Cross-refs:** the Wave-0 "already landed" detail and the project that follows
 each decision are in `implementation-plan.md`; the phase trajectory this timeline
@@ -1527,3 +1531,155 @@ The invitation case therefore has no PQ answer: sending someone something in an 
 have never installed works in final 3.x only through the opt-in legacy fallback, and stops
 working at 4.x. We should document that as a property rather than solve it by
 reintroducing an atSign-level KEM under a different name.
+
+---
+
+## 19. Nested namespaces: the nskey is resolved by walking up (2026-08-03)
+
+**Status:** accepted. Adds `appMetadata.ns` and `appMetadata.ckNs`, and moves the CK
+conveyance record from the value's namespace to the resolved one. Supersedes the
+"`appMetadata` carries no `ns` field" statement in
+[design.md](design.md) section 1.5.
+
+A namespace can nest — `d.c.b.a` — and the nskey data path scopes its keys, its content-key
+cache, its HPKE `info` and its AAD by namespace. So a sender writing to
+`someid.d.c.b.a@alice` has to decide *which* namespace's nskey to seal to, and both ends
+have to agree on the answer. This section is that ruling.
+
+### 19.1 The finding that reframed the question
+
+`AtKey.fromString` splits a key at the **last** dot. `someid.d.c.b.a@alice` parses back as
+`key = someid.d.c.b`, `namespace = a`: **a multi-segment namespace does not survive the
+round trip.** The wire string is genuinely ambiguous about where the identifier ends and the
+namespace begins, and nothing in it resolves that.
+
+This was measured, not inferred — encrypting under `d.c.b.a` and reading with the key
+re-parsed from its own wire string fails at the CK lookup (`content key … not yet available
+for @alice:a`), and the AAD and HPKE `info` would disagree too.
+
+**It has never mattered before.** `legacy_crypto_provider.dart` and
+`legacy_encryption.dart` reference `namespace` **zero** times; the nskey providers reference
+it 56 times. That is why AtCollection has composed nested namespaces for sub-collections all
+along without trouble: nothing downstream of the split ever depended on it. The nskey data
+path is the first thing that does, which makes the ambiguity newly critical rather than
+newly introduced.
+
+Every re-parsing path inherits it: sync pull, both notify directions,
+`notification_service_impl`, and AtCollection's own key composition.
+
+### 19.2 Exact-match resolution is not available
+
+`AtCollection` composes a sub-collection's namespace as `<subName>.<parentId>.<namespace>`,
+and `parentId` is a **per-item** id — so the namespace space below an app namespace is
+unbounded and grows with every item, and sub-collections nest. Requiring an exact-match
+nskey would mean an X-Wing keypair, a published advertisement and a private conveyed to
+every enrollment **per item**. That is not a trade-off, it is a wall, and it would exclude
+the SDK's flagship API from ever being post-quantum.
+
+### 19.3 The ruling
+
+**Resolution walks up, most-specific-first.** A sender writing to `someid.d.c.b.a@alice`
+tries `d.c.b.a`, then `c.b.a`, then `b.a`, then `a`, and seals to the first nskey it finds.
+If none exists that is cold start, and it fails as
+[section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) requires.
+
+The walk is safe because it mirrors the atServer's own authorisation rule — an enrollment
+approved for `a` may access `d.c.b.a` (`SecretStore.namespaceAuthorizes`, and the server
+rule it mirrors). Sealing to a *broader* key therefore cannot let an enrollment read
+something the atServer would have withheld: the crypto gate never widens past the transport
+gate. In the ordinary case the first hit **is** the app-namespace boundary, and the walk is
+how a sender finds it — the only thing that tells an app namespace apart from an item id in
+a composed key.
+
+**The CK is scoped to the namespace where the nskey was found**, not to the value's own
+namespace. One content key, and one `<ckKid>.__ck.<resolvedNs>@<owner>` conveyance record,
+serves every item beneath it. This is what keeps AtCollection viable.
+
+**Deeper keys are allowed.** An atSign may mint at `medical.notes` while holding a key at
+`notes`, and most-specific-first means the deeper key wins. This is a real capability rather
+than a hypothetical: authorisation is suffix-based, so an enrollment approved for `notes`
+can already *fetch* `medical.notes` records — a tighter nskey is the only way to say
+"authorised, but still cannot decrypt", with the server gate saying yes while the crypto
+gate says no.
+
+### 19.4 Cost, and the three lifetimes
+
+`ensureCurrent` runs on every put, and each new AtCollection item produces a namespace
+string never seen before, so a naive walk costs one round trip per level **per item,
+forever** — the cache never warms, because the misses never repeat.
+
+**A sender therefore remembers which namespaces an owner holds keys at.** A later namespace
+ending in `.todos` resolves straight there with no probing, so a new sub-collection item
+costs zero extra round trips.
+
+That memo is **not a new lifetime**. It is defined as *the set of namespaces for which a
+live cached advertisement is held*, so it expires with `advertisementTtl` and adds no knob.
+Stating the three lifetimes once, because they are easy to conflate:
+
+| # | What | Where | Bound |
+|---|------|-------|-------|
+| 1 | `advertisementTtl` — how long a fetched advertisement is reused before re-fetching | sender's memory | 15 min default |
+| 2 | `advertisementStaleGrace` — how long past (1) a *failed* re-fetch may keep serving what it has | sender's memory | 15 min default |
+| 3 | The remembered resolution — "this owner holds a key at `todos`" | sender's memory | **inherits (1)** |
+
+There is **no TTL on the published record**: `nskeyAdvertisementKey` sets only
+`isPublic = true`, so `public:__nskey.<ns>@<owner>` lives on the atServer until overwritten.
+The only record-level ttl in the design is on `_nskeylock`, a different key.
+
+**The accepted exposure.** Within one (1)-window a sender may still resolve to the broader
+key after a deeper one is minted, so exactly the enrollments the deeper key was minted to
+exclude can read those writes. This is *not* the same risk as rotation staleness — there, a
+revocation event lies behind it; here the sender's own memo causes it. It is accepted
+knowingly, without a signalling flag on the parent advertisement, on the grounds that
+deeper keys are rare and the window is short.
+
+### 19.5 The wire
+
+`appMetadata` gains **`ns`** on every record of the nskey path: **the record's own full
+namespace**. This is what makes a multi-segment namespace work at all — a reader can never
+recover it from the key string ([section 19.1](#191-the-finding-that-reframed-the-question)),
+so the record has to say. It is not a new disclosure: the namespace is already plaintext in
+the key name. This supersedes design.md section 1.5's "carries no `ns` field", whose reason
+was redundancy with the key name — a redundancy that never actually held.
+
+A **data value** additionally carries **`ckNs`**: the namespace its content key and
+conveyance live at. On a conveyance record the two are always equal, so they diverge only on
+a data value, and only in two situations:
+
+| Value | nskey at | `ns` | `ckNs` | |
+|---|---|---|---|---|
+| `phone.wavi@alice` | `wavi` | `wavi` | `wavi` | same |
+| `phone.app_1.my_apps@alice` | `app_1.my_apps` | `app_1.my_apps` | `app_1.my_apps` | same |
+| `x.medical.notes@alice` | `medical.notes` | `medical.notes` | `medical.notes` | same |
+| `someid.__rr.item123.todos@alice` | `todos` | `__rr.item123.todos` | `todos` | **differ** |
+| `x.medical.notes@alice`, stale sender | `medical.notes` | `medical.notes` | `notes` | **differ** |
+
+So: every AtCollection sub-collection item, and the [19.4](#194-cost-and-the-three-lifetimes)
+window.
+
+**Neither field is derivable from the other.** `ns` cannot be recovered from `ckNs` plus the
+key string — knowing the namespace ends in `todos` still leaves `todos`, `item123.todos` and
+`__rr.item123.todos` as candidates. And `ckNs` cannot be re-derived by the reader walking its
+own ring, because in the stale row the sender's view (the owner's *published* advertisements,
+cached) and the reader's view (the owner's *held* privates) disagree: the reader would look
+under `medical.notes`, the CK is under `notes`, and a perfectly intact record reports
+"conveyance not yet synced" forever. Carrying `ckNs` is what degrades that case to "a broader
+key was used" instead of "undecryptable".
+
+**The AAD keeps binding the value's own namespace** (`ns`, not `ckNs`). Binding the resolved
+namespace instead would give `someid` under `__rr.item1.todos` and `someid` under
+`__rr.item999.todos` an identical AAD, reopening the record-relocation attack the AAD exists
+to close.
+
+### 19.6 Consequences
+
+- `CryptoRuntime.isReadyFor` inherits the walk, so a recipient holding `todos` correctly
+  reports ready for `x.y.todos`.
+- A rotation of the `todos` nskey covers every namespace beneath it automatically, since
+  they all resolve to `todos`.
+- `NamespaceKeyUnavailableException` is raised only when the **whole walk** is exhausted.
+- **This is a wire-format change, free only until a fleet seeds** — the same argument that
+  applied to the AAD addition and the signed advertisement.
+- **The functional and e2e suites use single-segment namespaces** (`wavi`, `e2e_test`),
+  which is exactly why none of this surfaced. A multi-segment case belongs in both, or the
+  design stays unit-only.

@@ -563,20 +563,24 @@ feeder** into the data path.
 
 ### B-1 — at/nskey + at/symmetric/AES/GCM providers, capability marker, negotiation, cold-start · at_client · XL
 **Goal:** the value-level data path — the **D1 GA convergence point**.
-**Builds on:** #1930 (seam) + P-1 (`pqSeal`) + S-2 (`CryptoContext.keys`) + **SS-4** (nskey key material +
-pqpublickey cold-start target) + P-3. *The substrate delivers the privates; this delivers the providers.*
+**Builds on:** #1930 (seam) + P-1 (`pqSeal`) + S-2 (`CryptoContext.keys`) + **SS-4** (nskey key material) + P-3. *The substrate delivers the privates; this delivers the providers.*
 ⚠️ **The SS-4 prerequisite holds for `B-1c` onward** — `B-1a` needs no nskey material at all, and `B-1b`
 proceeds against a test fixture that supplies the nskey private directly (see the chunk table below). B-1
 **as a whole still requires SS-4**; the dependency is not dropped, only deferred past the first two chunks.
 **Deliverables (plan-altitude headings; full mechanics → [design.md](design.md), D1 nskey data path):**
-- **Layer 3 — `at/symmetric/AES/GCM`:** AES-256-GCM under a symmetric CK cited by `ckKid` only;
-  `appMetadata{providerId, ckKid, iv}` (**no `ns` field**); binary-safe; CK cache keyed
-  `(owner, namespace, ckKid)`.
+- **Layer 3 — `at/symmetric/AES/GCM`:** AES-256-GCM under a symmetric CK cited by `ckKid`;
+  `appMetadata{providerId, ckKid, iv, ns, ckNs}`; binary-safe; CK cache keyed
+  `(owner, ckNs, ckKid)`. `ns` is the value's own namespace and is what the AAD binds; `ckNs` is where
+  the CK lives ([decisions.md 19](decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)).
 - **Layer 2 — `at/nskey/XWING/AES/GCM`:** `pqSeal` the CK to the recipient's nskey public half, written once as
-  `<ckKid>.__ck.<ns>@<owner>`; `appMetadata{providerId, recipientKind, ckKid, nskeyKid}` (**no `ns`
-  field**). Self data seals to the owner's own nskey; sharing seals to the recipient's nskey (fetched via
+  `<ckKid>.__ck.<ckNs>@<owner>`; `appMetadata{providerId, recipientKind, ckKid, nskeyKid, ns}`.
+  Self data seals to the owner's own nskey; sharing seals to the recipient's nskey (fetched via
   `plookup` on `public:__nskey.<ns>@<recipient>`) — one keypair, same provider, uniform self/cross flow.
   `nskeyKid` names the generation, so a reader holding several after a rotation indexes straight to it.
+- **Namespace resolution:** a sender walks the value's namespace most-specific-first and seals to the first
+  published nskey; that namespace is `ckNs`, and an exhausted walk is cold start. Senders remember which
+  namespaces an owner holds keys at, so a composed sub-collection namespace costs no extra round trips.
+  Required for AtCollection, whose sub-collection namespaces embed a per-**item** id.
 - **Get/put routing + the CK manager:** `CkManager.ensureCurrent(dest, ns)` re-`plookup`s the
   destination's advertised nskey and mints + conveys a CK when there is none for that destination or the
   advertised `nskeyKid` has moved. CKs are **per recipient**, so a cross-atSign write runs it twice
@@ -668,6 +672,7 @@ taken now because nothing written under the old form exists outside the spike.
 | Owed | Where it belongs |
 |---|---|
 | ~~Cold-start fails by design, with an exception, a fallback and a query~~ — **done on the spike branch.** `NamespaceKeyUnavailableException` carries the atSign and namespace and is raised by the *pre-pass*, so nothing is in flight when it fires; `CryptoRuntime.isReadyFor` answers the same question in advance via the `ReportsReadiness` seam; `AtClientPreference.allowLegacyCryptoFallback` (default false) reroutes the write to legacy, per write, so the fallback is forward-only. Covered live in `nskey_data_path_e2e_test`'s cold-start group ([decisions.md 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)) | **B-1c** |
+| Nested-namespace resolution: the walk-up, the per-owner memo, `appMetadata.ns` + `ckNs`, and moving the conveyance to the resolved namespace ([decisions.md 19](decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)). **Wire-format change — free only until a fleet seeds.** Needs a multi-segment namespace in both live suites, which today use single-segment ones | **B-1** |
 | ~~Advertised-key signature verification~~ — **done on the spike branch, both halves.** `PublishedNskeyKeyRing` signs its own nskey advertisement and `ApkamSignedAdvertisedKeys` verifies a peer's; `KeyPackageRegistration.signedKeyPackagePayload` signs the key package and `VerbEnrollmentDirectory` verifies it against the advertising enrollment's `_apsk`, rejecting unsigned, tampered, wrong-signer and forged-claim packages. No unverified advertised-key path is left. **Owed:** the key-package half has no live coverage — `enroll:listns` is unit-only until SS-2 wires the production path | **SS-1c** / **SS-2** |
 | Real nskey minting + per-APKAM conveyance; `InMemoryNskeyKeyRing` and `mintAndPublish` are fixtures. **Gates the final 3.x release** — the rollout seeds the fleet, and a key published without its private durably conveyed leaves the far end undecryptable | **SS-4** |
 | Mint and publish `public:pq_signing_root@<atSign>`, immutable, `{v, keys[], successor}`, conveyed to fully privileged enrollments. Also gates final 3.x | **SS-4** |
@@ -684,24 +689,36 @@ taken now because nothing written under the old form exists outside the spike.
 | ~~Open an in-progress version in `at_chops` and `at_commons`~~ — **done.** at_chops **3.4.2** and at_commons **5.14.0** are open and unpublished; fold further entries under those headings | `at_chops` / `at_commons` |
 | ~~`_addMetadataToBuilder` is a hand-rolled copier~~ — **done.** `Metadata.copy()` (at_commons 5.14.0) is the canonical converter; the notify path copies wholesale and then clears the few fields a sender must not assert, so a field added upstream travels by default. at_client's floor is `^5.14.0` | `at_commons` |
 
-**Open, not yet grilled.** Three threads the 2026-08-03 session raised and did not
-settle: what the signing root signs beyond `_apsk`; the key-transparency publication
+**Open, not yet grilled.** Two threads the 2026-08-03 session raised and did not
+settle: what the signing root signs beyond `_apsk`; and the key-transparency publication
 mechanics (when a root is submitted, and what a client does if the log is unreachable at
-mint); and how a 4.x client discovers a peer's PQ capability cheaply enough to answer the
-pre-flight query without a round trip per recipient.
+mint). A third — cheap PQ-capability discovery — is now half-answered:
+`CryptoRuntime.isReadyFor` exists and shares the write path's advertisement cache, and the
+per-owner resolution memo of
+[decisions.md 19.4](decisions.md#194-cost-and-the-three-lifetimes) removes the per-item
+cost. What is still unanswered is the *first* contact with a recipient, which remains one
+round trip per `(recipient, namespace)`.
 
-**Open, needs a ruling: nskey resolution in nested namespaces.** A namespace is
-dotted and hierarchical, so `someid.d.c.b.a@alice` sits under `d.c.b.a`, which sits
-under `c.b.a`, `b.a` and `a`. An nskey may exist at any of those levels. The intent is
-that a sender resolves **most-specific first and walks up** — `d.c.b.a`, then `c.b.a`,
-then `b.a`, then `a` — and only abandons when none is found. Nothing implements that
-today: `NskeyKeyRing.currentPublic(owner, namespace)` is an exact match on the whole
-dotted string, the CK cache is scoped `(owner, namespace)` on that same exact string,
-and `SymmetricAesGcmProvider.conveyanceKeyFor` addresses the conveyance under the
-value's own namespace. Each of those needs to agree on which level answered, or a
-reader will look for a content key under a different level than the writer used.
-Related: whether a walk-up crosses an authorisation boundary, since `rw` on `d.c.b.a`
-does not imply anything about `a`.
+**Ruled 2026-08-03, not yet built: nskey resolution in nested namespaces**
+([decisions.md 19](decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)).
+A sender resolves **most-specific first and walks up** — `d.c.b.a`, then `c.b.a`, then
+`b.a`, then `a` — sealing to the first published nskey and failing only when the walk is
+exhausted. The walk mirrors the atServer's own suffix authorisation, so it cannot cross a
+boundary the server would have held: `rw` on `a` *does* imply access to `d.c.b.a`, which is
+the direction the walk goes. It is required rather than optional, because AtCollection
+composes sub-collection namespaces with a per-**item** id.
+
+Nothing implements it yet, and four things must agree on which level answered:
+`NskeyKeyRing.currentPublic` (exact match today), the CK cache scope (`(owner, namespace)`
+on the same exact string), `SymmetricAesGcmProvider.conveyanceKeyFor` (addresses under the
+value's own namespace), and `CryptoRuntime.isReadyFor`. The wire carries the answer:
+`appMetadata.ns` on every nskey-path record, plus `ckNs` on a data value. A prerequisite
+finding is that `AtKey.fromString` splits at the **last** dot, so a multi-segment namespace
+is unrecoverable from the wire string at all — which is why `ns` exists.
+
+⚠️ **No live coverage exists for any of this**: `tests/at_functional_test` and
+`tests/at_end2end_test` both use single-segment namespaces (`wavi`, `e2e_test`), which is
+exactly why the ambiguity went unnoticed. A multi-segment case belongs in both.
 
 *Test runners:* use the committed `tests/*/runLocal.sh`. They pull the virtualenv image;
 ad-hoc copies that skip `docker compose pull` will silently test a stale atServer.
