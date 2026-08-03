@@ -5,11 +5,13 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/content_key.dart';
+import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 import 'package:at_client/src/crypto/nskey/nskey_provider.dart';
 import 'package:at_client/src/crypto/nskey/nskey_resolver.dart';
 import 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart' show AtSignLogger;
 
 /// Keeps a current content key in place for each destination a client writes to.
 ///
@@ -23,6 +25,8 @@ import 'package:at_commons/at_commons.dart';
 /// conveyance record*, and that cannot happen inside `encrypt` — by then the put
 /// pipeline is mid-flight building a verb builder. So it runs as a preparation
 /// step before the pipeline starts, via [CryptoProvider.prepareForWrite].
+final _logger = AtSignLogger('CkManager');
+
 class CkManager {
   final ContentKeyCache cache;
   final NskeyKeyRing keyRing;
@@ -32,8 +36,17 @@ class CkManager {
   /// key lives, and so the walk's miss-memory is warmed once rather than twice.
   final NskeyResolver resolver;
 
+  /// Remembers which CK is current for each destination, so a cold write
+  /// resumes it rather than cutting another. Null disables that — every cold
+  /// write then mints, which is correct but leaves a permanent conveyance
+  /// record behind each time.
+  final CurrentCkPointer? pointer;
+
   CkManager(
-      {required this.cache, required this.keyRing, NskeyResolver? resolver})
+      {required this.cache,
+      required this.keyRing,
+      NskeyResolver? resolver,
+      this.pointer = const CurrentCkPointer()})
       : resolver = resolver ?? NskeyResolver(keyRing);
 
   /// Ensure `(destination, namespace)` has a current CK sealed to the
@@ -70,6 +83,16 @@ class CkManager {
       return;
     }
 
+    // Nothing cached — but this process may simply have restarted. Recovering
+    // the CK it was already writing under, from the conveyance record it wrote
+    // itself, is what stops every restart cutting a fresh key and leaving one
+    // more record that can never be cleaned up.
+    if (current == null) {
+      final resumed = await _resumeCurrent(
+          context, valueKey, owner, ckNs, advertised.nskeyKid);
+      if (resumed) return;
+    }
+
     // Either there is no CK for this destination, or the one we have was sealed
     // to a generation the destination has since rotated away from.
     //
@@ -94,6 +117,38 @@ class CkManager {
     // retry, and every value written afterwards would cite a CK that was never
     // sent. The write throws on failure, so this is not reached.
     cache.putAsCurrent(owner, ckNs, ck, advertised.nskeyKid);
+    await pointer?.write(
+        context.atClient, owner, ckNs, ck.ckKid, advertised.nskeyKid);
+  }
+
+  /// Re-adopts the CK this sender was last writing under for `(owner, ckNs)`,
+  /// if the pointer names one and it is still sealed to [nskeyKid].
+  ///
+  /// Returns whether the cache now holds a current CK. A pointer to a stale
+  /// generation is ignored rather than repaired: the destination has rotated,
+  /// so a fresh CK is exactly what should be cut.
+  Future<bool> _resumeCurrent(CryptoContext context, AtKey valueKey,
+      String owner, String ckNs, String nskeyKid) async {
+    final remembered = await pointer?.read(context.atClient, owner, ckNs);
+    if (remembered == null || remembered.nskeyKid != nskeyKid) return false;
+
+    // Reading the conveyance record routes back through the at/nskey provider,
+    // which decapsulates and caches the CK as a side effect.
+    try {
+      await context.atClient.get(SymmetricAesGcmProvider.conveyanceKeyFor(
+          valueKey, remembered.ckKid, ckNs));
+    } catch (e) {
+      // The record is gone or will not open. Minting is the right answer, and
+      // the caller does that next.
+      _logger.info('Could not resume content key ${remembered.ckKid} for '
+          '$owner:$ckNs, so cutting a fresh one: $e');
+      return false;
+    }
+
+    final resumed = cache.get(owner, ckNs, remembered.ckKid);
+    if (resumed == null) return false;
+    cache.putAsCurrent(owner, ckNs, resumed, nskeyKid);
+    return true;
   }
 
   static Uint8List _freshKeyBytes() =>

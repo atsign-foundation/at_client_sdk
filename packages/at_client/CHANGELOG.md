@@ -1,4 +1,13 @@
 ## 3.14.1
+- fix: a restart no longer cuts a fresh content key for every destination. The
+  sender records which `ckKid` is current per `(recipient, namespace)` — the id
+  only, never key material, so it needs no protection at rest — and a cold
+  write recovers that CK from its own conveyance record instead of minting.
+  Previously each restart left one more permanent `<ckKid>.__ck.<ns>@<owner>`
+  record, each protecting only the values written between two restarts, and
+  none of them ever removable because old data still needs them. The pointer is
+  an ordinary self key, so an atSign's devices converge on one CK per
+  destination rather than one each.
 - fix: `SecretStore` serialises its calls into `SecretStorePersistence.save`.
   Every mutation persists the whole list and the save is async, so two
   concurrent puts could each snapshot and then land in either order — leaving

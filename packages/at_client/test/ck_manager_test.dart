@@ -3,6 +3,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/crypto/nskey/ck_manager.dart';
 import 'package:at_client/src/crypto/nskey/content_key.dart';
+import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 import 'package:at_client/src/crypto/nskey/nskey_provider.dart';
 import 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
@@ -18,6 +19,24 @@ import 'test_utils/mocks.dart';
 /// whenever that destination rotates. Minting one means *writing a conveyance
 /// record*, which is why this runs before the write pipeline rather than inside
 /// `encrypt`.
+/// A [CurrentCkPointer] backed by a plain map, standing in for the self key
+/// the real one writes. Survives a simulated restart, which is the whole
+/// point of the thing under test.
+class InMemoryCkPointer extends CurrentCkPointer {
+  final Map<String, CurrentCk> _remembered = {};
+
+  InMemoryCkPointer() : super();
+
+  @override
+  Future<CurrentCk?> read(AtClient atClient, String owner, String ckNs) async =>
+      _remembered['$owner|$ckNs'];
+
+  @override
+  Future<void> write(AtClient atClient, String owner, String ckNs, String ckKid,
+          String nskeyKid) async =>
+      _remembered['$owner|$ckNs'] = (ckKid: ckKid, nskeyKid: nskeyKid);
+}
+
 void main() {
   const owner = '@alice';
   const bob = '@bob';
@@ -47,12 +66,27 @@ void main() {
     List<AtKey> written,
     List<String?> providerIds,
     List<bool?> routings,
+    InMemoryCkPointer pointer,
+    CkManager Function(ContentKeyCache) coldManager,
   }) client({int failWrites = 0}) {
     var writesLeftToFail = failWrites;
     final cache = ContentKeyCache();
     final ring = InMemoryNskeyKeyRing();
     final nskey = NskeyProvider(keyRing: ring, cache: cache);
-    final manager = CkManager(cache: cache, keyRing: ring);
+    final pointer = InMemoryCkPointer();
+    final manager = CkManager(cache: cache, keyRing: ring, pointer: pointer);
+    // A restart replaces the whole config — provider and manager share one
+    // cache in production, so a cold manager needs a cold provider with it.
+    // Reads must decrypt through whichever is live, or the recovered CK lands
+    // in a cache nobody is looking at.
+    var activeNskey = nskey;
+    // Conveyance ciphertexts, so a read can be served the way sync would.
+    final conveyed = <String, String>{};
+    // The KEY as well as the value: encrypt stamps appMetadata onto it
+    // (the nskey generation the CK was sealed to), and a real get returns
+    // that stored metadata with the record. Handing decrypt a freshly built
+    // key instead would leave it unable to tell which generation to open.
+    final conveyedKeys = <String, AtKey>{};
     final written = <AtKey>[];
     final providerIds = <String?>[];
     final routings = <bool?>[];
@@ -68,10 +102,19 @@ void main() {
       final value = inv.positionalArguments[1] as String;
       final options =
           inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
+      // The current-CK pointer writes an ordinary self key through the same
+      // client. It is not a conveyance and does not go through the nskey
+      // provider, so it is ignored here entirely — these assertions are about
+      // how many CKs were cut, and counting unrelated puts would make every
+      // one of them a coincidence.
+      if (key.key?.startsWith('__ckcur') == true) {
+        return true;
+      }
       written.add(key);
       providerIds.add(options?.cryptoProviderId);
       routings.add(options?.useRemoteAtServer);
-      await nskey.encrypt(context, key, value);
+      conveyed[key.toString()] = await nskey.encrypt(context, key, value);
+      conveyedKeys[key.toString()] = key;
       if (writesLeftToFail > 0) {
         writesLeftToFail--;
         throw SecondaryConnectException('conveyance write failed');
@@ -79,11 +122,38 @@ void main() {
       return true;
     });
 
+    when(() => mockAtClient.get(any(),
+        getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((inv) {
+      final key = inv.positionalArguments[0] as AtKey;
+      final ciphertext = conveyed[key.toString()];
+      if (ciphertext == null) throw AtKeyNotFoundException('$key not found');
+      // Routes back through at/nskey, which decapsulates and caches the CK as
+      // a side effect — exactly what the production read path relies on.
+      return activeNskey
+          .decrypt(CryptoContext(atClient: mockAtClient),
+              conveyedKeys[key.toString()]!, ciphertext)
+          .then((plain) => AtValue()..value = plain);
+    });
+    when(() => mockAtClient.get(any())).thenAnswer((inv) {
+      final key = inv.positionalArguments[0] as AtKey;
+      final ciphertext = conveyed[key.toString()];
+      if (ciphertext == null) throw AtKeyNotFoundException('$key not found');
+      return activeNskey
+          .decrypt(CryptoContext(atClient: mockAtClient),
+              conveyedKeys[key.toString()]!, ciphertext)
+          .then((plain) => AtValue()..value = plain);
+    });
+
     return (
       manager: manager,
       context: context,
       ring: ring,
       cache: cache,
+      pointer: pointer,
+      coldManager: (ContentKeyCache c) {
+        activeNskey = NskeyProvider(keyRing: ring, cache: c);
+        return CkManager(cache: c, keyRing: ring, pointer: pointer);
+      },
       written: written,
       providerIds: providerIds,
       routings: routings,
@@ -229,6 +299,36 @@ void main() {
     /// local-first route means the recipient can see a value whose key is
     /// still sitting on the sender's device — until the next sync, or forever
     /// if the process exits first.
+    test(
+        'a restart resumes the CK it was writing under rather than cutting '
+        'another', () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      final valueKey = selfValue('treaty');
+
+      await c.manager.ensureCurrent(c.context, valueKey);
+      expect(c.written, hasLength(1), reason: 'the first write cuts a CK');
+      final firstKid = c.cache.current(owner, namespace)!.ckKid;
+
+      // Same durable state, empty cache — a restart. Without the pointer this
+      // finds nothing and mints, leaving a second conveyance record that can
+      // never be cleaned up, because data written under the first still needs
+      // it.
+      final cold = c.coldManager(ContentKeyCache());
+      final resumed =
+          await c.pointer.read(c.context.atClient, owner, namespace);
+      await cold.ensureCurrent(c.context, valueKey);
+
+      expect(c.written, hasLength(1),
+          reason: 'the CK it was already writing under is recovered from its '
+              'own conveyance record, so no second record is written');
+      expect(cold.cache.current(owner, namespace)!.ckKid, firstKid,
+          reason: 'and it is the same key, so readers of data written before '
+              'the restart and after it need only the one');
+    });
+
     test('the conveyance follows the outer write to the remote atServer',
         () async {
       final c = client();
@@ -333,6 +433,9 @@ void main() {
         final key = inv.positionalArguments[0] as AtKey;
         final options =
             inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
+        // The current-CK pointer writes an ordinary self key through this
+        // same client; it is not a conveyance, so it is not counted here.
+        if (key.key?.startsWith('__ckcur') == true) return true;
         written.add(key);
         // Mirror the pipeline: route the conveyance through the runtime, which
         // resolves at/nskey out of the very config under test.
