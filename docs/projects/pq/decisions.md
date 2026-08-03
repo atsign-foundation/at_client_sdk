@@ -1974,6 +1974,30 @@ Checked rather than assumed: the atServer writes `_apsk` in exactly two places �
 creation and on **approve** — not on every authenticated use, so it will not clobber the
 `appMetadata` the child adds afterwards.
 
+### 22.2c Revocation: the chain inherits what the atServer already does
+
+**Ruling 8: a revoked signer breaks the chain below it, and the chain does not work around
+that.**
+
+This was ruled on a corrected reading. The first pass concluded revocation was non-retroactive,
+because `revoke` appeared only to set the record's state and drop live connections. It does more:
+`updateEnrollmentStatus` calls `movePerEnrollmentData(enId, to: perEnrollmentRevoked)`, which
+rewrites **every** per-enrollment key from `<enId>.a.__e@` to `<enId>.r.__e@` — `_apsk` included.
+
+So a verifier fetching `public:_apsk.<enId>.a.__e@alice` for a revoked enrollment finds *nothing*.
+Verification already fails, not by policy but because the key moved out from under the address the
+verifier looks up. The chain inherits that rather than inventing a second, conflicting meaning for
+revocation — and it is reversible, since `unrevoke` moves the data back.
+
+Consequences worth stating rather than discovering later:
+
+- **Revoking an admin enrollment breaks the chain for everything it vouched for**, until those are
+  re-vouched or it is unrevoked. That is a real cost, and it is the cost of revocation meaning one
+  thing rather than two.
+- Reading the revoked location to rescue past signatures was rejected: the atServer moved the key
+  precisely to take it out of the approved set, and a verifier that looks there anyway is
+  overriding the only revocation signal there is.
+
 ### 22.3 What this leaves SS-4
 
 Mint (locked, init-triggered, durable-before-publish); convey the private per-APKAM as a `Secret` —
