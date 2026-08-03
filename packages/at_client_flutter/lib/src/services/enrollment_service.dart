@@ -101,7 +101,11 @@ class FlutterEnrollmentService {
       if (!await _keychainStorage.validateEnrollment(request.atSign)) {
         throw Exception('Invalid enrollment');
       }
-      atEnrollmentResponse = await _atEnrollment.approve(request, atLookUp);
+      // Routed through at_client's EnrollmentService rather than at_auth
+      // directly: approving is also when this atSign's secrets are sealed to
+      // the new device's key package, and calling at_auth straight would
+      // approve an enrollment that can authenticate and decrypt nothing.
+      atEnrollmentResponse = await atClient.enrollmentService!.approve(request);
       _keychainAtKeysIo.write(request.atSign, atEnrollmentResponse.atAuthKeys!);
       _keychainStorage.deleteEnrollmentData(request.atSign);
     } catch (e) {

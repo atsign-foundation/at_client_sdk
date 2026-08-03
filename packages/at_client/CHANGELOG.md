@@ -1,4 +1,20 @@
 ## 3.14.1
+- feat: approving an enrollment now shares this atSign's secrets with it.
+  `EnrollmentServiceImpl.approve` seals every secret the new enrollment's
+  namespaces authorise to the key package it advertised on its
+  `enroll:request`, so an approved device can read what it was just authorised
+  for. It runs after the approval, because the atServer publishes the
+  enrollment's `_apsk` at that point and the package cannot be verified before
+  it exists. A package that was advertised and **refused** throws — the
+  approver should learn it has approved a device that can decrypt nothing, and
+  can revoke; one that was never advertised, or that this version cannot read,
+  is left alone. `Enrollment.metadata` carries the advertised package, which
+  the read path previously discarded.
+- **behaviour change**: `at_client_flutter` and `at_onboarding_cli` now approve
+  through at_client's `EnrollmentService` rather than calling at_auth directly.
+  Approving is also when secrets are conveyed, so the direct calls would have
+  produced enrollments that authenticate normally and decrypt nothing, with
+  nothing in the code saying so.
 - feat: `NamespaceMember.keyPackageStatus` says **why** a member has no usable
   key package — `present` / `absent` / `rejected` / `unsupported`. A null
   `keyPackage` alone could not be acted on, because these call for opposite

@@ -823,8 +823,11 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
       apkamSymmetricKey: AtBytes.fromString(er['encryptedAPKAMSymmetricKey']),
     );
 
-    // Finally call approve method via an AtEnrollment object
-    final response = await AtEnrollment.create().approve(decision, atLookup);
+    // Approve through at_client's EnrollmentService, not at_auth directly:
+    // approving is also when this atSign's secrets are sealed to the new
+    // device's key package, so the direct call would approve an enrollment
+    // that can authenticate and decrypt nothing.
+    final response = await atClient.enrollmentService!.approve(decision);
 
     stdout.writeln('Server response: $response');
 
@@ -909,8 +912,11 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
         apkamSymmetricKey: AtBytes.fromString(er['encryptedAPKAMSymmetricKey']),
       );
 
-      // Finally call approve method via an AtEnrollment object
-      final response = await AtEnrollment.create().approve(decision, atLookup);
+      // Approve through at_client's EnrollmentService, not at_auth directly:
+      // approving is also when this atSign's secrets are sealed to the new
+      // device's key package, so the direct call would approve an
+      // enrollment that can authenticate and decrypt nothing.
+      final response = await atClient.enrollmentService!.approve(decision);
       stdout.writeln('Approval successful.\n'
           '\tResponse: $response');
 

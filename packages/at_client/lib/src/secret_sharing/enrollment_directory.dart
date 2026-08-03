@@ -186,69 +186,98 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
     Object? advertised, {
     required String enrollmentId,
     String? apkamId,
-  }) async {
-    if (advertised == null) return (null, KeyPackageStatus.absent);
-    if (advertised is! Map) {
-      _logger.severe('enrollment $enrollmentId advertised a key package that '
-          'is not a map; not sealing to it');
-      return (null, KeyPackageStatus.rejected);
-    }
-
-    // The record names whose enrollment this is, and that is what the _apsk
-    // lookup goes on. A package may also name its own signer; if it does and
-    // the two disagree, one enrollment is offering a key package as another's
-    // — which would hand it every secret meant for that other enrollment.
-    //
-    // A package that names nobody is not suspicious: one riding
-    // `enroll:request` is signed before the atServer has assigned an id, so
-    // there is nothing truthful to stamp. Its authority is the signature
-    // checking out against this record's own _apsk, plus the record binding
-    // the package to the request that created it.
-    final signer = advertised['enrollmentId'];
-    if (signer != null && signer != enrollmentId) {
-      _logger.severe('enrollment $enrollmentId advertised a key package signed '
-          'by $signer; not sealing to it');
-      return (null, KeyPackageStatus.rejected);
-    }
-
-    try {
-      await _signer.verifyEnvelopeSignature(advertised,
-          signerAtSign: atClient.getCurrentAtSign()!,
-          signerEnrollmentId: enrollmentId);
-    } catch (e) {
-      _logger.severe('the key package advertised by enrollment $enrollmentId '
-          'does not verify against its _apsk, so the key it offers is only as '
-          'trustworthy as whatever served it; not sealing to it: $e');
-      return (null, KeyPackageStatus.rejected);
-    }
-
-    try {
-      return (
-        KeyPackage.fromPayload(
-          advertised['payload'],
-          enrollmentId: enrollmentId,
-          apkamId: apkamId,
-        ),
-        KeyPackageStatus.present
+  }) =>
+      verifyAdvertisedKeyPackage(
+        advertised,
+        signer: _signer,
+        signerAtSign: atClient.getCurrentAtSign()!,
+        enrollmentId: enrollmentId,
+        apkamId: apkamId,
       );
-    } catch (e) {
-      // Signed, so genuinely this enrollment's, but shaped in a way this
-      // version cannot read — most likely written by a newer client. Nobody
-      // here can fix that, so it is not a refusal.
-      _logger.info('enrollment $enrollmentId advertised a signed key package '
-          'this version cannot parse: $e');
-      return (null, KeyPackageStatus.unsupported);
-    }
+}
+
+/// Verifies an advertised key package against the `_apsk` of the enrollment
+/// whose record carries it, and says why if it is unusable.
+///
+/// Shared by the discovery verb and the approval path, which see the same
+/// advertisement from different directions — the roster, and the enrollment
+/// request being approved. One copy, because two would be two chances to
+/// disagree about which key is authoritative.
+///
+/// A rejection concerns **this advertisement only** and never throws, so a
+/// caller listing a roster can drop one member and keep the rest: the
+/// alternative would let a single bad record deny every other enrollment its
+/// secrets.
+@experimental
+Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
+  Object? advertised, {
+  required AtClientEnvelopeSigner signer,
+  required String signerAtSign,
+  required String enrollmentId,
+  String? apkamId,
+}) async {
+  if (advertised == null) return (null, KeyPackageStatus.absent);
+  if (advertised is! Map) {
+    _logger.severe('enrollment $enrollmentId advertised a key package that '
+        'is not a map; not sealing to it');
+    return (null, KeyPackageStatus.rejected);
   }
 
-  /// Strips the at-protocol `data:` prefix and JSON-decodes a verb response.
-  static Object? _data(String? raw) {
-    if (raw == null) return null;
-    final trimmed = raw.trim();
-    final body = trimmed.startsWith('data:')
-        ? trimmed.substring('data:'.length)
-        : trimmed;
-    if (body.isEmpty) return null;
-    return jsonDecode(body);
+  // The record names whose enrollment this is, and that is what the _apsk
+  // lookup goes on. A package may also name its own signer; if it does and
+  // the two disagree, one enrollment is offering a key package as another's
+  // — which would hand it every secret meant for that other enrollment.
+  //
+  // A package that names nobody is not suspicious: one riding
+  // `enroll:request` is signed before the atServer has assigned an id, so
+  // there is nothing truthful to stamp. Its authority is the signature
+  // checking out against this record's own _apsk, plus the record binding
+  // the package to the request that created it.
+  // Named `claimedSigner`, not `signer`: that is the AtClientEnvelopeSigner
+  // parameter, and a Map lookup is dynamic, so shadowing it compiles happily
+  // and then fails at runtime on every verification.
+  final claimedSigner = advertised['enrollmentId'];
+  if (claimedSigner != null && claimedSigner != enrollmentId) {
+    _logger.severe('enrollment $enrollmentId advertised a key package signed '
+        'by $claimedSigner; not sealing to it');
+    return (null, KeyPackageStatus.rejected);
   }
+
+  try {
+    await signer.verifyEnvelopeSignature(advertised,
+        signerAtSign: signerAtSign, signerEnrollmentId: enrollmentId);
+  } catch (e) {
+    _logger.severe('the key package advertised by enrollment $enrollmentId '
+        'does not verify against its _apsk, so the key it offers is only as '
+        'trustworthy as whatever served it; not sealing to it: $e');
+    return (null, KeyPackageStatus.rejected);
+  }
+
+  try {
+    return (
+      KeyPackage.fromPayload(
+        advertised['payload'],
+        enrollmentId: enrollmentId,
+        apkamId: apkamId,
+      ),
+      KeyPackageStatus.present
+    );
+  } catch (e) {
+    // Signed, so genuinely this enrollment's, but shaped in a way this
+    // version cannot read — most likely written by a newer client. Nobody
+    // here can fix that, so it is not a refusal.
+    _logger.info('enrollment $enrollmentId advertised a signed key package '
+        'this version cannot parse: $e');
+    return (null, KeyPackageStatus.unsupported);
+  }
+}
+
+/// Strips the at-protocol `data:` prefix and JSON-decodes a verb response.
+Object? _data(String? raw) {
+  if (raw == null) return null;
+  final trimmed = raw.trim();
+  final body =
+      trimmed.startsWith('data:') ? trimmed.substring('data:'.length) : trimmed;
+  if (body.isEmpty) return null;
+  return jsonDecode(body);
 }

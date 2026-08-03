@@ -150,6 +150,48 @@ void main() {
       expect(requests[2].namespace, jsonDecode(enrollValue3)['namespace']);
     });
 
+    test('fetchEnrollmentRequests carries the advertised key package',
+        () async {
+      // The metadata the enrolling app put on its enroll:request, stored
+      // verbatim by the atServer. It was being dropped on the floor here,
+      // which is why conveyance used to re-discover the package over
+      // enroll:listns instead of reading the request it was approving.
+      // A distinct atSign: AtClientImpl.create caches per atSign, so reusing
+      // one another test already built would hand back that test's client and
+      // its mock secondary, and this stub would never fire.
+      const currentAtsign = '@apkammeta';
+      const enrollKey =
+          'abcdef01-1a2e-43e4-93bd-378f1d366ea7.new.enrollments.__manage$currentAtsign';
+      const enrollValue = '{"appName":"buzz","deviceName":"pixel",'
+          '"namespace":{"buzz":"rw"},'
+          '"metadata":{"keyPackage":{"payload":{"v":1},"signature":"sig"}}}';
+      final listCommand = (EnrollVerbBuilder()
+            ..operation = EnrollOperationEnum.list)
+          .buildCommand();
+      final secondary = MockRemoteSecondary();
+      when(() => secondary.executeCommand(listCommand, auth: true))
+          .thenAnswer((_) async => 'data:{"$enrollKey":$enrollValue}');
+
+      final client = await AtClientImpl.create(
+          currentAtsign,
+          'buzz',
+          AtClientPreference()
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/commit',
+          remoteSecondary: secondary);
+      client.enrollmentService =
+          EnrollmentServiceImpl(client, AtEnrollment.create());
+
+      final request =
+          (await client.enrollmentService!.fetchEnrollmentRequests()).single;
+
+      expect(request.metadata?['keyPackage'], isNotNull,
+          reason: 'an approver reads the encapsulation target from here — the '
+              'metadata is only ever written by the request that creates the '
+              'record, so there is nowhere else to read it from');
+      expect((request.metadata!['keyPackage'] as Map)['signature'], 'sig');
+    });
+
     test(
         'verify behaviour of fetchEnrollmentRequests() with enrollmentStatusFilter: [pending, approved]',
         () async {
