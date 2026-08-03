@@ -1,4 +1,12 @@
 ## 3.14.1
+- feat: `NskeyPrivateFiling` moves an arriving nskey private out of the
+  secret-sharing transit buffer and into `AtKeys`, keyed by namespace **and**
+  kid — kids are truncated hashes and are not unique across namespaces. Losing
+  an nskey private is unrecoverable: every conveyance record sealed to it
+  becomes unopenable, and with it every value those content keys protect. That
+  is what separates it from a content key, which is only ever a cache. It has
+  no producer until nskey minting conveys one; the `Secret` name it consumes is
+  `__nskey.<nskeyKid>` in the key's own namespace.
 - fix: a restart no longer cuts a fresh content key for every destination. The
   sender records which `ckKid` is current per `(recipient, namespace)` — the id
   only, never key material, so it needs no protection at rest — and a cold

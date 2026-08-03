@@ -572,7 +572,34 @@ optimisation with no correctness argument behind it, and the client `sendWakeUpN
 default stays **true** until it lands.
 **coversD1:** D1-F DEP4 + production wiring (new-device conveyance).
 
-### SS-3 — substrate hardening (durable store + jitter) + single `apkamPublicKey` + `signingAlgo` verify · at_secondary_server, at_client · L — [#2086](https://github.com/atsign-foundation/at_client_sdk/issues/2086)
+### SS-3 — substrate hardening + `signingAlgo` verify · at_secondary_server, at_client · M — [#2086](https://github.com/atsign-foundation/at_client_sdk/issues/2086) — **LANDED on `gkc-pq-d1-spike`** (client) **/ PR [at_server#2736](https://github.com/atsign-foundation/at_server/pull/2736)** (server)
+
+⚠️ **Re-scoped by [decisions.md 21](decisions.md#21-ss-3-where-key-material-lives-and-what-the-substrate-stops-storing-2026-08-03), which shrank this rather than growing it.** Three of the
+deliverables below turned out to be already done, unnecessary, or built on a false premise:
+
+- **"a single `apkamPublicKey`"** was already true — `EnrollDataStoreValue` declares
+  `late String apkamPublicKey`, not a list.
+- **The durable `SecretStorePersistence` backend is not built, on purpose.** Key material that must
+  survive a restart is filed into `AtKeys` instead (ruling 1), which keeps this atSign's private keys
+  out of whatever backend an app supplies and puts them under `AtKeysIo`'s never-lose contract. The
+  SDK ships no implementation of the seam.
+- **"a restart loses the CK cache" was wrong.** Content keys are a genuine cache: the read path
+  re-fetches the conveyance record and re-opens it, so a restart costs a round trip, not data. What
+  a restart *did* cost was a fresh CK and a permanent conveyance record per destination — fixed by
+  recording the current `ckKid` (ruling 2), never the key.
+
+**Landed:** the `mldsa65` branch and record-authoritative APKAM verify (legacy PKAM keeps the wire
+value — the functional suite authenticates over that path with an `ecc_secp256r1` key, so pinning it
+would have broken working behaviour); serialised `SecretStore` saves; jitter plus
+suppress-on-observed for the pull thundering herd; the current-`ckKid` pointer; and
+`NskeyPrivateFiling`, which moves an arriving nskey private out of the transit buffer into `AtKeys`.
+
+**Owed:** parity across every atServer implementation before a PQ client can rely on the verify
+change — at least one rejects `signingAlgo:mldsa65` while *parsing*, so a PQ client meets an
+invalid-syntax error rather than an auth failure, and it carries no ML-DSA support to add a branch
+to. And `NskeyPrivateFiling` has no producer until **SS-4** conveys a private, so the `Secret` name
+it consumes (`__nskey.<nskeyKid>`, in the key's namespace) is a contract SS-4 must write to.
+
 **Goal:** durable secret storage + smoothed anti-storm + the single-key record-authoritative verify.
 **Builds on:** SS-2 ◀ P-2 (satisfied — at_chops 3.4.0 published 2026-07-17).
 **Deliverables → [design.md](design.md)** (SecretStore durability + single-key verify): the enrollment record keeps a **single** `apkamPublicKey`; PKAM verify selects RSA vs
@@ -1069,7 +1096,7 @@ build.
 ### (b) Critical path to D1 GA
 `#1930(done) → P-1 + S-2 → SS-1a → SS-1b → SS-1c → SS-2 → SS-3 → SS-4 (+ P-3) → B-1 → R-1 → B-2`
 (D1 GA: rebuild = universal reader, one flag = PQ writer, opt-in rotation).
-**Everything up to and including SS-1b is satisfied as of 2026-07-17** — `SS-1c` ([#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084)) is the next actionable project on the path.
+**Everything up to and including SS-3 is landed as of 2026-08-03** (SS-1c/SS-2/SS-3 on `gkc-pq-d1-spike`, plus [at_server#2736](https://github.com/atsign-foundation/at_server/pull/2736) for SS-3's server half) — **`SS-4` is the next actionable project on the path**, and it gates the final 3.x release.
 **Off-path (parallel):** `RF-SRV → RF-2b → RF-2c` (RF-1 confirm), `B-3`, `ON-1`, `S-5 → S-6`, `D2-1`, `KF-1`
 (builds on S-3), and the final `R-2`.
 
