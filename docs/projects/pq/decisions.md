@@ -35,6 +35,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [19. Nested namespaces: the nskey is resolved by walking up (2026-08-03)](#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03) — *adds `appMetadata.ns` / `ckNs`; supersedes the no-`ns` statement in [design.md](design.md) section 1.5*
 - [20. SS-2: how the key package reaches an enrollment, and how conveyance fires (2026-08-03)](#20-ss-2-how-the-key-package-reaches-an-enrollment-and-how-conveyance-fires-2026-08-03) — *resolves two blockers that made the SS-2 design unimplementable as written*
 - [21. SS-3: where key material lives, and what the substrate stops storing (2026-08-03)](#21-ss-3-where-key-material-lives-and-what-the-substrate-stops-storing-2026-08-03) — *removes SS-3's durable `SecretStorePersistence` backend rather than building it*
+- [22. SS-4: when a namespace key is minted, and what must be true first (2026-08-03)](#22-ss-4-when-a-namespace-key-is-minted-and-what-must-be-true-first-2026-08-03) — *mint at init, publish once the private is durable; builds the signing chain but defers the APKAM keypair swap*
 
 ---
 
@@ -1914,3 +1915,53 @@ serialising the saves. Two concurrent puts each snapshot and then land in either
 the store can persist an **older** snapshot after a newer one and silently lose a secret. In
 -memory fakes never show it; any real async backend will. Ruling 3 means the SDK ships no
 such backend, but the seam stays public, so the saves are serialised regardless.
+
+---
+
+## 22. SS-4: when a namespace key is minted, and what must be true first (2026-08-03)
+
+**Status:** accepted. Six rulings. One of them **defers the signing root out of SS-4**, which is
+most of what made the project XL.
+
+### 22.1 The rulings
+
+| # | Ruling |
+|---|---|
+| 1 | **Publish the public half once the private is durable locally — not once it is conveyed.** The ledger's "publish-after-convey, never before" is unachievable as written: at mint there may be no other enrollment, and one enrolling later needs the private conveyed *then* anyway, so "conveyed to all" is never a stable state to gate on. Durability is the achievable invariant, and it is the one that matters: a crash after publishing must not strand a key nobody can open |
+| 2 | **Take the mint lock with a remote-first immutable create.** Its atomicity is the atServer refusing a second write to an immutable record (`abstract_update_verb_handler`: *"Immutable records may not be updated"*), so a local-first put would let both enrollments believe they won and collide only at sync. The loser does **not** wait: it re-reads the advertisement and, if one now exists, adopts it and waits for the private over the substrate. Release by force-delete — deleting an immutable record needs `force:` — with the short ttl as the crash backstop |
+| 3 | **The signing chain is built; only the APKAM keypair's *algorithm* is deferred.** The root and the chain are in scope; APKAM keypairs stay **RSA** for now, because migrating `_apsk` has complications that need thinking through first. See [22.2](#222-the-signing-root-chain-follows-the-approval-graph) |
+| 4 | **Conveyance reads the filed privates from `AtKeys`, not the `SecretStore`.** Otherwise a real hole: `shareAllSecretsWith` iterates `secretStore.listSecrets()`, and [decisions.md 21](#21-ss-3-where-key-material-lives-and-what-the-substrate-stops-storing-2026-08-03) ruling 3 keeps that store in-memory — so after a restart an approver would convey **nothing** to a newly approved enrollment, including the nskey private without which it can read nothing at all. One durable home, and the sender reads from it |
+| 5 | **Mint at client init, for every namespace the client is authorised for.** Not on first write: the 3.x rebuild-and-rollout mints and publishes *while still writing legacy*, so the fleet seeds before the PQ flag flips anywhere. It is also what makes the sender-side rule honest — if a recipient has ever run a PQ-capable client for a namespace, the key is there |
+| 6 | **Legacy PKAM mints for `preference.namespace`; a `*` enrollment mints nothing at init.** Legacy clients hold no enrollment record and can name exactly one namespace — and they are most of the fleet during the rollout, so that is where seeding coverage actually comes from. `*` is not enumerable, so a wildcard enrollment mints on demand when it writes into a specific namespace instead; conveyance discovery already skips `*` for the same reason |
+
+### 22.2 The signing root: chain follows the approval graph
+
+The chain is **not** fixed-depth, and not "root signs every `_apsk`". It follows **who approved
+whom**: the root signs enrollment E2's signing key; E2 holds `__manage` (but not `*`) so it may
+approve enrollments; E2 then signs E3's signing key. The trust edge is the approval edge, which is
+the relationship that already exists.
+
+The signature rides **`_apsk`'s `appMetadata`**, so the record's value stays a bare key and every
+existing verifier is undisturbed — the same additive shape used elsewhere.
+
+**What is deferred is narrower than it first looks, and the distinction matters.** The chain is
+built. What waits is changing the **APKAM keypair itself** from RSA to ML-DSA, because migrating
+`_apsk` carries complications worth thinking through before committing to them.
+
+The two are separable precisely because the root signs an enrollment's *public key* whatever
+algorithm that key happens to be. So the chain can be built now over today's RSA APKAM keys, and
+the APKAM algorithm swapped later without the chain changing at all. Note also that the root is
+ML-DSA-65 regardless — it is a new key with no migration story of its own, which is why it does not
+have to wait.
+
+### 22.3 What this leaves SS-4
+
+Mint (locked, init-triggered, durable-before-publish); convey the private per-APKAM as a `Secret` —
+the producer for `NskeyPrivateFiling`'s `__nskey.<nskeyKid>` contract from
+[21](#21-ss-3-where-key-material-lives-and-what-the-substrate-stops-storing-2026-08-03); the
+public/private correspondence check; and the signing root with its approval-graph chain, published
+into `_apsk`'s `appMetadata`.
+
+Out of scope: changing APKAM keypairs to ML-DSA, and the key-transparency publication mechanics
+(when a root is submitted, and what a client does if the log is unreachable at mint), which remain
+un-grilled.
