@@ -31,8 +31,9 @@ const _e2e = 'layer: tests/at_end2end_test';
 // Critical path to D1 GA
 // ---------------------------------------------------------------------------
 
-/// nskey minting + pqpublickey lifecycle. Delivers key *material* only.
-const ss4 = 'blocked: SS-4 (nskey mint + pqpublickey lifecycle) · $_functional';
+/// nskey minting + signing-root lifecycle. Delivers key *material* only.
+const ss4 =
+    'blocked: SS-4 (nskey mint + signing-root lifecycle) · $_functional';
 
 /// The value-level data path — the D1 GA convergence point.
 const b1 = 'blocked: B-1 (nskey data path providers) · $_unit';

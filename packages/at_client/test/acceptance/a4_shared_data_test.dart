@@ -24,16 +24,21 @@ void main() {
       fail('not implemented');
     }, skip: b1CrossAtSign);
 
-    test('UC-A4.2 · alice to bob cold-start, pqpublickey fallback', () {
-      // GIVEN @alice, @bob pq-native; @bob has public:pqpublickey@bob but NO
-      //       public:__nskey.app_1.my_apps@bob — he has never used that
-      //       namespace at all.
+    test('UC-A4.2 · alice to bob where bob has no namespace key, share fails',
+        () {
+      // GIVEN @alice, @bob pq-native; @bob has public:pq_signing_root@bob but
+      //       NO public:__nskey.app_1.my_apps@bob — he has never used or
+      //       authorised that namespace.
       // WHEN  alice1 shares @bob:<k>.app_1.my_apps@alice.
-      // THEN  as A4.1 but the CK is sealed to public:pqpublickey@bob
-      //       (recipientKind: root-pqpublickey); data stays AES-GCM under the
-      //       CK. Every authorised bob enrollment reads instantly. Subsequent
-      //       writes UPGRADE to the nskey once bob first uses the namespace and
-      //       alice's next ensureCurrent re-plookup sees it.
+      // THEN  the share FAILS, with an exception naming @bob and the namespace
+      //       so the app can say the recipient has not enabled it rather than
+      //       report an encryption error. Bob's signing root is not a KEM
+      //       target and cannot stand in. A pre-flight capability query answers
+      //       the same question before the user composes anything. With the
+      //       legacy fallback opted in (final 3.x only) the share proceeds
+      //       under legacy — the invitation path, which ends at 4.x. Once bob
+      //       uses or authorises the namespace his nskey is published and
+      //       alice's next ensureCurrent picks it up by plookup.
       fail('not implemented');
     }, skip: b1CrossAtSign);
 
@@ -48,8 +53,8 @@ void main() {
     }, skip: b1CrossAtSign);
 
     test('UC-A4.4 · cross-atSign notification carrying an encrypted value', () {
-      // GIVEN @alice, @bob pq-native; @bob published its nskey (or the
-      //       pqpublickey fallback); @bob readiness ready; bob1 on a monitor.
+      // GIVEN @alice, @bob pq-native; @bob published his nskey for the
+      //       namespace; @bob readiness ready; bob1 on a monitor.
       // WHEN  alice1 notifies @bob with an encrypted value.
       // THEN  the value decrypts on every authorised bob enrollment with the
       //       same routing as a shared put; negotiation gates the notification

@@ -1,3 +1,11 @@
+## 3.4.2
+- fix: `pqOpen` honours its documented contract when the KEM rejects the input.
+  A wrong-length recipient secret key or KEM ciphertext reaches `decapsulate`,
+  which raises an `ArgumentError` — that sat outside the guard, so a caller
+  told to catch `PqOpenException` got an uncaught error on nothing worse than
+  a malformed envelope. It now arrives as
+  `PqOpenException(PqOpenFailure.malformedEnvelope, ...)`.
+
 ## 3.4.1
 - fix: export `Argon2idHashingAlgo` and `Md5HashingAlgo` from the main `at_chops.dart` barrel so callers can use all supported hashing algorithms through the public package import.
 

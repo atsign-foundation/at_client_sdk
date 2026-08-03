@@ -12,7 +12,7 @@ void main() {
     test(
         'UC-B3.1 · an upgraded enrollment still writes legacy for an '
         'un-upgraded sibling', () {
-      // GIVEN alice1 is PQ (holds the nskey/pqpublickey privates), alice2 is
+      // GIVEN alice1 is PQ (holds the nskey and signing-root privates), alice2 is
       //       still legacy-only; @alice readiness = n-r.
       // WHEN  alice1 puts or notifies a self key both must read.
       // THEN  alice1 writes/notifies LEGACY — the scheme alice2 can read — until
@@ -27,7 +27,7 @@ void main() {
       // WHEN  alice1 writes/notifies self data.
       // THEN  self data goes via the nskey data path — at/nskey conveys the CK
       //       and at/symmetric/AES/GCM encrypts the data; the data is never
-      //       encapsulated directly to the nskey/pqpublickey. No @alice
+      //       encapsulated directly to the nskey. No @alice
       //       enrollment loses access.
       fail('not implemented');
     }, skip: r1);

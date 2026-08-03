@@ -34,8 +34,10 @@ abstract class NskeyKeyRing {
   /// against the publisher's `_apsk`.
   ///
   /// Null when the namespace has no nskey at all, which under eager publication
-  /// means exactly one thing: that atSign has never used the namespace. The caller
-  /// falls back to sealing the CK to `public:pqpublickey@<recipient>`.
+  /// means exactly one thing: that atSign has never used the namespace. There is
+  /// no atSign-level key to fall back to — `public:pq_signing_root@<atSign>` is
+  /// a signing root and cannot receive an encapsulation — so the caller has no
+  /// post-quantum target and the write fails unless legacy is opted into.
   Future<NskeyAdvertisement?> currentPublic(String owner, String namespace);
 
   /// The private half this client holds for a *named generation* of

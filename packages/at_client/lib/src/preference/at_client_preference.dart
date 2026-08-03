@@ -151,11 +151,44 @@ class AtClientPreference {
   /// local and remote.
   RemoteLocalPref remoteLocalPref = RemoteLocalPref.localOnly;
 
-  /// Configures the crypto provider used for encrypted puts and reads.
+  /// Configures the crypto providers used for encrypted puts and reads.
   ///
-  /// Defaults to the legacy Atsign encryption provider. Custom providers are
-  /// initialized by [AtClientImpl] before sync and notification services start.
-  CryptoConfig crypto = const CryptoConfig.legacy();
+  /// **Leave this null** unless the app genuinely needs its own providers.
+  /// Null means "whatever this SDK release encrypts with by default", which is
+  /// what almost every app wants: the default is the SDK's to move as the
+  /// post-quantum migration proceeds, and an app that pinned
+  /// `CryptoConfig.legacy()` only because it had to name something would find
+  /// itself pinned to the old scheme after the release that changed it.
+  /// [CryptoConfig.forClient] is where that resolution happens.
+  ///
+  /// Set it to opt out — to register a custom provider, or to hold a specific
+  /// scheme deliberately. Custom providers are initialised by [AtClientImpl]
+  /// before sync and notification services start.
+  CryptoConfig? crypto;
+
+  /// Whether a write that cannot go out under [crypto]'s scheme may fall back
+  /// to legacy encryption instead of failing.
+  ///
+  /// This exists for one case: a post-quantum write to a destination that has
+  /// never used or authorised the namespace, so has no key to seal to. There is
+  /// no post-quantum fallback — the only atSign-level key is a signing root,
+  /// which cannot receive an encapsulation — so the alternatives are legacy or
+  /// [NamespaceKeyUnavailableException].
+  ///
+  /// **Off by default, and deliberately awkward to turn on.** A silent
+  /// downgrade to RSA is what the post-quantum work exists to prevent: the
+  /// write succeeds, the app looks healthy, and the data is harvestable. Only
+  /// an app that knowingly accepts that — an invitation flow reaching a
+  /// first-contact recipient, during the migration — should set it.
+  ///
+  /// The fallback is **forward-only**, because the check runs per write: the
+  /// first write after the destination publishes a key is post-quantum, with no
+  /// flag to flip. Records already written under the fallback stay legacy;
+  /// re-encrypting them is an explicit migration, never a side effect of a put.
+  ///
+  /// It ends with the post-quantum-by-default release, where cold start throws
+  /// whatever this says.
+  bool allowLegacyCryptoFallback = false;
 }
 
 /// Default preference on how to handle get, put and delete requests with

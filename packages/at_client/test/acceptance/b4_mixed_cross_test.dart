@@ -23,7 +23,7 @@ void main() {
 
     test('UC-B4.2 · legacy @alice receives from PQ @bob (the interop question)',
         () {
-      // GIVEN @alice legacy (no pqpublickey); @bob PQ-native.
+      // GIVEN @alice legacy (no pq_signing_root, no nskey); @bob PQ-native.
       // WHEN  bob1 shares with @alice.
       // THEN  bob must encapsulate in a scheme alice can read — legacy RSA to
       //       alice's public:publickey@alice, which exists ONLY if alice enabled

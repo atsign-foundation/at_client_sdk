@@ -404,13 +404,21 @@ void main() {
         remoteSecondary: mockRemoteSecondary,
         atChops: chops,
       );
-      // No crypto config => the legacy default. The built-in legacy provider is
-      // the runtime's fallback (resolution itself is covered in
-      // crypto_runtime_test), so it is intentionally not in the config list.
-      final config = ac.getPreferences()?.crypto;
-      expect(config?.defaultProviderId, 'legacy');
-      expect(config?.lookup('legacy'), isNull);
-      expect(config?.lookup('bubblesort'), isNull);
+      // No crypto config => the SDK's default for this release, which is
+      // legacy. The built-in legacy provider is the runtime's fallback
+      // (resolution itself is covered in crypto_runtime_test), so it is
+      // intentionally not in the config list.
+      final config = CryptoConfig.forClient(ac);
+      expect(config.defaultProviderId, 'legacy');
+      expect(config.lookup('legacy'), isNull);
+      expect(config.lookup('bubblesort'), isNull);
+
+      // And the app's preference is left alone. Resolving into it would hand
+      // the next atSign built from the same preference object whatever this
+      // one resolved — harmless while the default is a const, and a leak the
+      // moment it holds per-atSign state.
+      expect(ac.getPreferences()?.crypto, isNull,
+          reason: 'the SDK resolves the default; it does not write it back');
     });
 
     test('registers configured crypto providers during at_client creation',
@@ -433,7 +441,7 @@ void main() {
         atChops: chops,
       );
 
-      expect(ac.getPreferences()?.crypto.lookup('test-provider'),
+      expect(CryptoConfig.forClient(ac).lookup('test-provider'),
           isA<CryptoProvider>());
     });
 
@@ -475,7 +483,7 @@ void main() {
         remoteSecondary: mockRemoteSecondary,
         atChops: chops,
       );
-      expect(ac1.getPreferences()?.crypto.lookup('late-provider'), isNull);
+      expect(CryptoConfig.forClient(ac1).lookup('late-provider'), isNull);
 
       // Re-creating the same atSign re-uses the cached instance; the new
       // preference's crypto config is adopted onto it (no rebuild).
@@ -495,7 +503,7 @@ void main() {
       );
 
       expect(identical(ac1, ac2), true);
-      expect(ac2.getPreferences()?.crypto.lookup('late-provider'),
+      expect(CryptoConfig.forClient(ac2).lookup('late-provider'),
           isA<CryptoProvider>());
     });
 

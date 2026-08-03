@@ -75,6 +75,23 @@ class CryptoConfig {
     );
   }
 
+  /// The config [atClient] encrypts under — the app's if it named one, else
+  /// the SDK's default for this release.
+  ///
+  /// **The single place the era default lives.** `AtClientPreference.crypto` is
+  /// nullable precisely so this decision belongs to the SDK: an app that had to
+  /// name a config just to have one would be pinned to whatever was current on
+  /// the day it was written, and would sit out the migration it was supposed to
+  /// ride. Moving the default is therefore an edit here and nowhere else.
+  ///
+  /// Today that default is [CryptoConfig.legacy]. When it becomes the nskey
+  /// data path, this stops being a constant: [CryptoConfig.nskey] holds
+  /// per-atSign state and must be built once per client, so the resolution
+  /// moves to client construction and this becomes a lookup of what was built.
+  /// It is written as a function now so that change lands in one place.
+  static CryptoConfig forClient(AtClient? atClient) =>
+      atClient?.getPreferences()?.crypto ?? const CryptoConfig.legacy();
+
   /// The configured provider with [id], or null if none matches.
   ///
   /// The built-in legacy provider is not in [providers]; the SDK supplies it as
@@ -187,4 +204,25 @@ abstract interface class PreparesWrites {
 abstract interface class HandlesSelectively {
   /// Whether this provider can encrypt [atKey].
   bool canHandle(AtKey atKey);
+}
+
+/// Implemented by a [CryptoProvider] whose ability to encrypt for a destination
+/// depends on something that destination must have published.
+///
+/// Without this, an app finds out only when the write fails — after the user
+/// has composed and sent. A scheme that seals to a recipient-published key has
+/// a real, answerable precondition, so it should be askable *before* the user
+/// starts rather than reported as an error afterwards.
+///
+/// Separate from [CryptoProvider] so adding it breaks no existing
+/// `implements CryptoProvider`.
+abstract interface class ReportsReadiness {
+  /// Whether this provider could encrypt for [atSign] in [namespace] right now.
+  ///
+  /// Throws rather than answering false when the answer cannot be established —
+  /// an unreachable atServer is not the same as a recipient who has not enabled
+  /// the namespace, and reporting one as the other would send an app down the
+  /// wrong path.
+  Future<bool> isReadyFor(
+      CryptoContext context, String atSign, String namespace);
 }

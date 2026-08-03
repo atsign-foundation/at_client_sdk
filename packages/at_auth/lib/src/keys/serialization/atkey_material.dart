@@ -23,7 +23,8 @@ abstract final class KeyAlgorithmType {
   static const String mlDsa65 = 'mldsa65';
 
   /// X-Wing hybrid KEM (ML-KEM-768 + X25519) — the KEM used for APKAM key
-  /// packages, nskey keypairs and `pqpublickey`.
+  /// packages and nskey keypairs. The atSign-level `pq_signing_root` is not on
+  /// this list: it is ML-DSA-65, a signing key with nothing to encapsulate to.
   static const String xWing = 'xwing';
 
   /// The tokens this version knows about. For warn-level tooling only —

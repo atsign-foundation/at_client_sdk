@@ -1,3 +1,12 @@
+## 5.14.0
+- feat: add `Metadata.copy()` — a field-for-field copy, so callers handing
+  metadata from one object to another stop hand-rolling the field list. A
+  hand-rolled copier silently drops any field added to `Metadata` later: the
+  value still round-trips and only the missing field is absent at the far end,
+  which is how `immutable` and `appMetadata` went astray on several paths in
+  `at_client`. A caller that must not carry a field clears it after copying, so
+  the exception is written where it applies rather than being the default.
+
 ## 5.13.0
 
 - feat: add `AtNetworkTimeouts` — the process-wide network-timeout policy:

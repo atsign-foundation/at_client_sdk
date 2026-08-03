@@ -57,9 +57,11 @@ void main() {
       fail('not implemented');
     }, skip: ss2);
 
-    test('pqpublickey is create-once; the published nskey is not', () {
-      // A second pqpublickey create is rejected, never an overwrite — it is the
-      // root and never rotates. public:__nskey.<ns>@owner is mutable BY DESIGN,
+    test('pq_signing_root is create-once; the published nskey is not', () {
+      // A second public:pq_signing_root@<atSign> create is rejected, never an
+      // overwrite — it is the root and never rotates, so two enrollments
+      // minting two roots would be unrecoverable. public:__nskey.<ns>@owner is
+      // mutable BY DESIGN,
       // because nskey-keypair rotation has to overwrite it; two of the owner's
       // enrollments are kept apart by the short-ttl immutable lock
       // _nskeylock.<ns>@owner, and substitution is prevented by the APKAM
@@ -76,14 +78,19 @@ void main() {
     }, skip: ss4);
 
     test('advertised recipient keys are signed and verified', () {
-      // Every advertised encapsulation key — the per-enrollment key package, the
-      // published nskey public half, and public:pqpublickey@owner — is an
-      // APKAM-signed envelope verified against the enrollment's _apsk THE SAME
-      // WAY same-atSign and cross-atSign, BEFORE encapsulating to it. A
-      // tampered, unsigned, or wrong-signer advertised key is REJECTED. The
-      // atServer keeps every approved enrollment's _apsk present (fetchable
-      // without a client publish) and write-restricted (a cross-enrollment
-      // overwrite is refused).
+      // Every advertised encapsulation key — the per-enrollment key package and
+      // the published nskey public half — is an APKAM-signed envelope verified
+      // against the enrollment's _apsk THE SAME WAY same-atSign and
+      // cross-atSign, BEFORE encapsulating to it. A tampered, unsigned, or
+      // wrong-signer advertised key is REJECTED. The atServer keeps every
+      // approved enrollment's _apsk present (fetchable without a client
+      // publish) and write-restricted (a cross-enrollment overwrite is
+      // refused). The signing root is not on this list: it is a verification
+      // key, so nothing is ever encapsulated to it.
+      //
+      // The published nskey half holds today — published_nskey_key_ring_test
+      // covers the rejections, and nskey_cross_atsign_test drives the whole
+      // fetch-and-verify on the live wire. What remains is the key package.
       fail('not implemented');
     }, skip: ss4);
 

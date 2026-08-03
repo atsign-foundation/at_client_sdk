@@ -148,6 +148,25 @@ void main() {
       expect(() => pqOpen(xwing, XWingVector1.seed, bad),
           _opensWith(PqOpenFailure.malformedEnvelope));
     });
+
+    test('a KEM ciphertext of the wrong length → malformedEnvelope', () async {
+      // Well-formed header, valid secret key, but a KEM ciphertext the KEM
+      // itself rejects. This reaches decapsulate, which raises an ArgumentError
+      // — and a caller told to catch PqOpenException would otherwise get an
+      // uncaught error on nothing worse than a bad input.
+      final ctLen = 8;
+      final bad = Uint8List.fromList(
+          [0x01, 0x00, ctLen, ...List.filled(ctLen + 16 + 4, 0)]);
+      expect(() => pqOpen(xwing, XWingVector1.seed, bad),
+          _opensWith(PqOpenFailure.malformedEnvelope));
+    });
+
+    test('a secret key of the wrong length → malformedEnvelope', () async {
+      final kp = await xwing.generateKeyPair();
+      final envelope = await pqSeal(xwing, kp.publicKey, _utf8('payload'));
+      expect(() => pqOpen(xwing, Uint8List(7), envelope),
+          _opensWith(PqOpenFailure.malformedEnvelope));
+    });
   });
 
   group('known-answer vectors (byte-exact)', () {

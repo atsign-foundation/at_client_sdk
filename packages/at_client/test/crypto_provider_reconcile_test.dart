@@ -47,8 +47,7 @@ void main() {
       // First set: create() configures providerA during _init.
       await manager.setCurrentAtSign(atSign, 'wavi', prefWith('providerA'));
       final firstClient = manager.atClient as AtClientImpl;
-      expect(
-          firstClient.getPreferences()?.crypto.lookup('providerA'), isNotNull,
+      expect(CryptoConfig.forClient(firstClient).lookup('providerA'), isNotNull,
           reason: 'first create() must adopt the preference provider');
 
       // Second set: SAME atSign, no override -> idempotency short-circuit.
@@ -58,8 +57,7 @@ void main() {
       // adopt the new crypto config onto it.
       expect(identical(manager.atClient, firstClient), isTrue,
           reason: 'short-circuit should reuse the cached client');
-      expect(
-          firstClient.getPreferences()?.crypto.lookup('providerB'), isNotNull,
+      expect(CryptoConfig.forClient(firstClient).lookup('providerB'), isNotNull,
           reason: 'short-circuit must adopt the new preference crypto config');
     });
   });

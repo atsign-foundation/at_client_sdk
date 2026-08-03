@@ -44,7 +44,7 @@ void main() {
     final config = CryptoConfig.nskey(keyRing: ring);
     final atClient = MockAtClient();
     when(() => atClient.getCurrentAtSign()).thenReturn(owner);
-    atClient.getPreferences()!
+    atClient.getPreferences()
       ..namespace = namespace
       ..crypto = config;
 

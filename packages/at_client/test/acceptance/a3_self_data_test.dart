@@ -105,17 +105,21 @@ void main() {
       fail('not implemented');
     }, skip: ss4);
 
-    test('UC-A3.3 · self fallback to the atSign-level PQ key', () {
+    test('UC-A3.3 · self write with no namespace key has no PQ fallback', () {
       // GIVEN @alice pq-native; alice1 wants self data but no
       //       nskey.app_1.my_apps@alice is minted and seal-and-hold is not
       //       chosen (send-now default).
       // WHEN  alice1 writes self data.
-      // THEN  still the nskey data path, with the CK sealed to
-      //       public:pqpublickey@alice (recipientKind: root-pqpublickey); the
-      //       data value stays at/symmetric/AES/GCM citing ckKid — application
-      //       data is NEVER encapsulated directly to pqpublickey. Any authorised
-      //       enrollment reads; self-heals to the nskey on the first namespaced
-      //       write.
+      // THEN  the write FAILS. There is no atSign-level KEM to fall back on —
+      //       the signing root signs and never receives an encapsulation — so a
+      //       namespace with no nskey has no PQ path at all. The failure is a
+      //       distinct exception naming the namespace, not a generic encryption
+      //       error. With the legacy fallback opted in (final 3.x only) the
+      //       write proceeds under legacy, and every SUBSEQUENT write uses the
+      //       nskey once it exists; records already written stay legacy, and
+      //       re-encrypting them is R-1's explicit migration. Rare in practice:
+      //       a client mints for its preference namespace and its rw namespaces
+      //       at init.
       fail('not implemented');
     }, skip: b1);
 

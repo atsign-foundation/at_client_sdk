@@ -26,13 +26,32 @@ class CryptoRuntime {
   /// writing a record the write will depend on can route it the same way.
   Future<void> prepareForPut(AtKey atKey, String providerId,
       {bool? useRemoteAtServer}) async {
-    final config =
-        _atClient.getPreferences()?.crypto ?? const CryptoConfig.legacy();
+    final config = CryptoConfig.forClient(_atClient);
     final provider = config.lookup(providerId);
     if (provider is PreparesWrites) {
       await (provider as PreparesWrites).prepareForWrite(_context(), atKey,
           useRemoteAtServer: useRemoteAtServer);
     }
+  }
+
+  /// Whether a write to [atSign] in [namespace] can go out under this client's
+  /// default scheme, asked *before* anything is composed.
+  ///
+  /// A post-quantum share needs the recipient to have published a key for the
+  /// namespace, and there is no fallback that keeps it post-quantum. An app
+  /// that asks first can say "@bob hasn't enabled this yet" up front, instead
+  /// of discovering it when the send fails. Schemes with no such precondition —
+  /// legacy among them — answer true.
+  ///
+  /// Throws if the answer cannot be established (an unreachable atServer is not
+  /// the same as an unready recipient), and — like every other read of a peer's
+  /// advertised key — if what came back cannot be verified as theirs.
+  Future<bool> isReadyFor(String atSign, String namespace) async {
+    final config = CryptoConfig.forClient(_atClient);
+    final provider = config.lookup(config.defaultProviderId);
+    if (provider is! ReportsReadiness) return true;
+    return await (provider as ReportsReadiness)
+        .isReadyFor(_context(), atSign, namespace);
   }
 
   /// The provider id a write will use, before anything has stamped the key.
@@ -46,13 +65,10 @@ class CryptoRuntime {
   /// doing something else is how you end up thinking data is PQ when it is not.
   static String providerIdFor(AtClient atClient, String? requested,
       {AtKey? atKey}) {
-    final id = requested ??
-        atClient.getPreferences()?.crypto.defaultProviderId ??
-        legacyProviderId;
+    final config = CryptoConfig.forClient(atClient);
+    final id = requested ?? config.defaultProviderId;
     if (atKey == null || id == legacyProviderId) return id;
 
-    final config =
-        atClient.getPreferences()?.crypto ?? const CryptoConfig.legacy();
     final provider = config.lookup(id);
     if (provider is HandlesSelectively &&
         !(provider as HandlesSelectively).canHandle(atKey)) {
@@ -140,8 +156,7 @@ class CryptoRuntime {
   CryptoProvider _provider(AtKey atKey, String operation) {
     final providerId =
         atKey.metadata.appMetadata?.providerId ?? legacyProviderId;
-    final config =
-        _atClient.getPreferences()?.crypto ?? const CryptoConfig.legacy();
+    final config = CryptoConfig.forClient(_atClient);
     final provider = config.lookup(providerId);
     if (provider != null) return provider;
     if (providerId == legacyProviderId) return _legacy;

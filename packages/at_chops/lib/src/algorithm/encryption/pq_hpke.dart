@@ -136,7 +136,18 @@ Future<Uint8List> pqOpen(
   // gcmBody = gcmCipherText || tag(16); AesGcm256EncryptionAlgo splits the tag.
   final Uint8List gcmBody = Uint8List.sublistView(envelope, 3 + ctLen);
 
-  final Uint8List ss = await xwing.decapsulate(recipientSecretKey, kemCt);
+  // Decapsulation rejects a wrong-length secret key or KEM ciphertext with an
+  // ArgumentError. That is still a malformed envelope from the caller's side,
+  // and letting it escape would break the documented contract that every
+  // failure arrives as a PqOpenException — leaving a caller who catches the
+  // documented type with an uncaught error on a bad input.
+  final Uint8List ss;
+  try {
+    ss = await xwing.decapsulate(recipientSecretKey, kemCt);
+  } on ArgumentError catch (e) {
+    throw PqOpenException(PqOpenFailure.malformedEnvelope,
+        'decapsulation rejected the input: $e');
+  }
   final _DerivedKey dk = _deriveKeyAndNonce(ss, ver, info);
 
   try {

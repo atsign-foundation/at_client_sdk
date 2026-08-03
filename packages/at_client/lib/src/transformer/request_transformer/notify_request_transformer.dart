@@ -149,40 +149,32 @@ class NotificationRequestTransformer
   /// atServer derives those on receipt, exactly as the sync push leaves them
   /// out. Sending a client's idea of `createdAt` would be the client asserting
   /// something the server owns.
+  /// Carries the caller's metadata onto the builder, minus what the sender has
+  /// no business asserting.
+  ///
+  /// Copying wholesale and then clearing is the deliberate polarity: a field
+  /// added to [Metadata] later travels by default, and only the exclusions —
+  /// which are the atServer's to set, not a client's to claim — have to be
+  /// maintained. The hand-rolled inclusion list this replaces dropped
+  /// `immutable` and `appMetadata` for exactly as long as nobody noticed.
   void _addMetadataToBuilder(
       NotifyVerbBuilder builder, NotificationParams notificationParams) {
-    builder.atKey.metadata.isBinary =
-        notificationParams.atKey.metadata.isBinary;
-    builder.atKey.metadata.immutable =
-        notificationParams.atKey.metadata.immutable;
-    builder.atKey.metadata.encoding =
-        notificationParams.atKey.metadata.encoding;
-    builder.atKey.metadata.dataSignature =
-        notificationParams.atKey.metadata.dataSignature;
-    builder.atKey.metadata.ttl = notificationParams.atKey.metadata.ttl;
-    builder.atKey.metadata.ttb = notificationParams.atKey.metadata.ttb;
-    builder.atKey.metadata.ttr = notificationParams.atKey.metadata.ttr;
-    builder.atKey.metadata.ccd = notificationParams.atKey.metadata.ccd;
-    builder.atKey.metadata.isPublic =
-        notificationParams.atKey.metadata.isPublic;
-    builder.atKey.metadata.isEncrypted =
-        notificationParams.atKey.metadata.isEncrypted;
-    builder.atKey.metadata.sharedKeyEnc =
-        notificationParams.atKey.metadata.sharedKeyEnc;
-    builder.atKey.metadata.pubKeyCS =
-        notificationParams.atKey.metadata.pubKeyCS;
-    builder.atKey.metadata.encKeyName =
-        notificationParams.atKey.metadata.encKeyName;
-    builder.atKey.metadata.encAlgo = notificationParams.atKey.metadata.encAlgo;
-    builder.atKey.metadata.ivNonce = notificationParams.atKey.metadata.ivNonce;
-    builder.atKey.metadata.skeEncKeyName =
-        notificationParams.atKey.metadata.skeEncKeyName;
-    builder.atKey.metadata.skeEncAlgo =
-        notificationParams.atKey.metadata.skeEncAlgo;
-    builder.atKey.metadata.pubKeyHash =
-        notificationParams.atKey.metadata.pubKeyHash;
-    builder.atKey.metadata.appMetadata =
-        notificationParams.atKey.metadata.appMetadata;
+    builder.atKey.metadata = notificationParams.atKey.metadata.copy()
+      // Derived on the receiving atServer from ttb/ttl/ttr, and stamped there
+      // on write. A sender asserting them would be describing a record it does
+      // not own the clock for.
+      ..availableAt = null
+      ..expiresAt = null
+      ..refreshAt = null
+      ..createdAt = null
+      ..updatedAt = null
+      // Set by the atServer as it resolves the shared key, not by the sender.
+      ..sharedKeyStatus = null
+      // Local read-model flags. They describe how *this* client holds the
+      // record, and mean nothing to the receiver.
+      ..isCached = false
+      ..isHidden = false
+      ..namespaceAware = true;
   }
 
   Future<String> _encryptNotificationValue(AtKey atKey, String value) async {

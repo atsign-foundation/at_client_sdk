@@ -1024,16 +1024,28 @@ class AtClientImpl implements AtClient {
     // pipeline starts. The nskey data path needs it: minting a content key means
     // writing a conveyance record, and that cannot happen once the transformer
     // is mid-way through building a verb builder.
-    final options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
+    var options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
     if (!atKey.metadata.isPublic && options.shouldEncrypt) {
-      await CryptoRuntime(this).prepareForPut(
-        atKey,
-        CryptoRuntime.providerIdFor(this, options.cryptoProviderId,
-            atKey: atKey),
-        // Any record the provider writes here is one this write will cite, so
-        // it has to travel the same route this write does.
-        useRemoteAtServer: options.useRemoteAtServer,
-      );
+      try {
+        await CryptoRuntime(this).prepareForPut(
+          atKey,
+          CryptoRuntime.providerIdFor(this, options.cryptoProviderId,
+              atKey: atKey),
+          // Any record the provider writes here is one this write will cite, so
+          // it has to travel the same route this write does.
+          useRemoteAtServer: options.useRemoteAtServer,
+        );
+      } on NamespaceKeyUnavailableException catch (e) {
+        if (!(_preference?.allowLegacyCryptoFallback ?? false)) rethrow;
+        // The destination has no post-quantum key, and this app has said it
+        // would rather reach it under legacy than not at all. Nothing is in
+        // flight yet — that is why the pre-pass raises this — so the write can
+        // still be routed, and the transformer resolves the provider from these
+        // options rather than from the preference.
+        _logger.warning(
+            'falling back to legacy encryption for ${atKey.key}: ${e.message}');
+        options = _copyOptionsForLegacyFallback(options);
+      }
     }
 
     var tuple = Tuple<AtKey, dynamic>()
@@ -1050,7 +1062,10 @@ class AtClientImpl implements AtClient {
     UpdateVerbBuilder putBuilder = await putRequestTransformer.transform(
       tuple,
       encryptionPrivateKey: encryptionPrivateKey,
-      requestOptions: putRequestOptions,
+      // `options`, not `putRequestOptions`: a cold-start legacy fallback is
+      // expressed by rewriting the options, and the transformer is where the
+      // provider is finally selected.
+      requestOptions: options,
     );
     // Validate the size of the value after encryption/encoding
     // Since AtClientPreference is mandatory argument in create method, _preference
@@ -1208,8 +1223,18 @@ class AtClientImpl implements AtClient {
   /// built-in legacy provider. Crypto resolution itself is done by
   /// [CryptoRuntime] against the live `preference.crypto`, so there is no
   /// per-client registry to populate.
+  /// [options] with the crypto provider pinned to legacy, leaving the caller's
+  /// object untouched — it may be a shared instance, and one write's fallback
+  /// must not become every later write's default.
+  static PutRequestOptions _copyOptionsForLegacyFallback(
+          PutRequestOptions options) =>
+      PutRequestOptions()
+        ..useRemoteAtServer = options.useRemoteAtServer
+        ..shouldEncrypt = options.shouldEncrypt
+        ..cryptoProviderId = legacyCryptoProviderId;
+
   void _validateDefaultCryptoProvider() {
-    final config = _preference!.crypto;
+    final config = CryptoConfig.forClient(this);
     final id = config.defaultProviderId;
     if (config.lookup(id) == null && id != legacyCryptoProviderId) {
       throw CryptoProviderNotRegistered(
