@@ -495,6 +495,16 @@ seam to a 1:1:1 seeding seam; a client-driven functional round-trip.
 #2037) — don't duplicate it. Clear the test's own `.atKeys` and gitignore it.
 **coversD1:** D1-F DEP1 (client parser) + DEP2 (write path removed).
 
+**Progress (2026-08-03, `gkc-pq-d1-spike`).** Two of the six implementation steps are landed:
+the keys-sourced envelope signer (`signEnvelope` / `verifyEnvelope` take key material as an
+argument, both signing mixins moved onto it, all five D1 consumers migrated), and
+`AtEnrollmentRequest.metadataBuilder` in at_auth 3.4.0. Still to do: build and sign the key
+package inside the callback; the four-way key-package status on `NamespaceMember`;
+`Enrollment.metadata` plus conveyance in `EnrollmentServiceImpl.approve` with the Flutter and
+CLI paths routed through it; and the live functional test over the whole chain
+([decisions.md 20](decisions.md#20-ss-2-how-the-key-package-reaches-an-enrollment-and-how-conveyance-fires-2026-08-03)
+ruling 10).
+
 ### SS-2 — substrate wired into AtClient + server wake-up; key-package-in-request (new-device conveyance only) · at_secondary_server, at_client, at_auth, at_commons · L — [#2085](https://github.com/atsign-foundation/at_client_sdk/issues/2085)
 **Goal:** the first production call sites + the server-side wake-up + the new-device conveyance path.
 **Builds on:** SS-1c.
