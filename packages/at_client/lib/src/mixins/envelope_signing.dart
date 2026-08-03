@@ -1,14 +1,6 @@
 import 'dart:async' show FutureOr, Timer;
-import 'dart:convert' show base64Decode, jsonEncode;
+import 'dart:convert' show jsonEncode;
 
-import 'package:at_chops/at_chops.dart'
-    show
-        AtSigningInput,
-        AtSigningMode,
-        AtSigningResult,
-        AtSigningVerificationInput,
-        HashingAlgoType,
-        SigningAlgoType;
 import 'package:at_client/at_client.dart'
     show
         AtKey,
@@ -17,6 +9,8 @@ import 'package:at_client/at_client.dart'
         GetRequestOptions,
         IllegalStateException;
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show signEnvelope, verifyEnvelope;
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
@@ -53,33 +47,25 @@ mixin EnvelopeSigning on ApkamSigning {
     Object? payload, {
     Object? Function(Object? nonEncodable)? toEncodable,
   }) {
-    Map<String, Object?> envelope = {'payload': payload};
-
-    String signableText;
     try {
-      signableText = _signableText(payload, toEncodable: toEncodable);
-    } catch (e, st) {
+      // Sign with the APKAM (PKAM) keypair: its public half is what
+      // [ApkamSigning.publishPublicSigningKey] publishes, so verifiers can
+      // check the signature against the per-enrollment _apsk key. (Signing
+      // with the atSign-wide encryption keypair would use a key that is NOT
+      // the published one.)
+      return signEnvelope(
+        payload,
+        keys: signingKeys,
+        enrollmentId: enrollmentId,
+        toEncodable: toEncodable,
+      );
+    } on Object catch (e, st) {
       logger.severe(
         "Failed to encode payload for signing (you may need to pass "
         "toEncodable to wrapAndSign): $e, $st",
       );
       rethrow;
     }
-
-    // Sign with the APKAM (PKAM) keypair: its public half is what
-    // [ApkamSigning.publishPublicSigningKey] publishes, so verifiers can
-    // check the signature against the per-enrollment _apsk key.
-    // (AtSigningMode.data would sign with the atSign-wide encryption keypair,
-    // which is NOT the published key.)
-    final AtSigningInput signingInput = AtSigningInput(signableText)
-      ..signingMode = AtSigningMode.pkam;
-    final AtSigningResult sr = atClient.atChops!.sign(signingInput);
-
-    envelope['signature'] = sr.result.toString();
-    envelope['hashingAlgo'] = sr.atSigningMetaData.hashingAlgoType!.name;
-    envelope['signingAlgo'] = sr.atSigningMetaData.signingAlgoType!.name;
-    envelope['enrollmentId'] = enrollmentId;
-    return envelope;
   }
 
   /// Same as [wrapAndSign] but we also call jsonEncode for you :)
@@ -105,21 +91,12 @@ mixin EnvelopeSigning on ApkamSigning {
     Map envelope, {
     required String signerAtSign,
   }) async {
-    final String signature = envelope['signature'];
     final String signerEnrollmentId = envelope['enrollmentId'];
-    final hashingAlgo = HashingAlgoType.values.byName(envelope['hashingAlgo']);
-    final signingAlgo = SigningAlgoType.values.byName(envelope['signingAlgo']);
-    final String signableText = _signableText(envelope['payload']);
 
     final pk = await getApkamPublicKey(signerAtSign, signerEnrollmentId);
-    AtSigningVerificationInput input =
-        AtSigningVerificationInput(signableText, base64Decode(signature), pk)
-          ..signingMode = AtSigningMode.pkam
-          ..signingAlgoType = signingAlgo
-          ..hashingAlgoType = hashingAlgo;
-
-    AtSigningResult svr = atClient.atChops!.verify(input);
-    if (svr.result != true) {
+    try {
+      verifyEnvelope(envelope, signerPublicKey: pk);
+    } on AtSigningVerificationException {
       throw AtSigningVerificationException(
           'Signature verification failed using public key for '
           '$signerAtSign enrollment $signerEnrollmentId : $pk');
@@ -186,19 +163,5 @@ mixin EnvelopeSigning on ApkamSigning {
       pubKeyCache[_cacheKey(atSign, enrollmentId)] = (cacheValue.$1, timer);
     }
     return cacheValue.$1;
-  }
-
-  /// The exact text that is signed and verified. Strings are signed as-is;
-  /// everything else is signed as its json encoding. Verification re-derives
-  /// this from the decoded envelope, which is stable because Dart maps
-  /// preserve insertion order through a jsonEncode/jsonDecode round trip.
-  String _signableText(
-    Object? payload, {
-    Object? Function(Object? nonEncodable)? toEncodable,
-  }) {
-    if (payload is String) {
-      return payload;
-    }
-    return jsonEncode(payload, toEncodable: toEncodable);
   }
 }

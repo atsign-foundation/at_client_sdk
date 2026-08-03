@@ -136,7 +136,7 @@ The file-partition/track detail and the `CryptoConfig`/`CryptoRuntime` mechanics
 **Hosted-publish ordering (stated once).** `at_chops` (`P-1`, `P-2`) and `at_commons` (`SS-1a`) are
 **hosted** → publish before `at_server`/consumers bump pins. `at_commons`, `at_chops`, and `at_auth` all
 live in this monorepo as workspace packages (`packages/at_commons`, `packages/at_chops`, `packages/at_auth`);
-only `at_server` / `java_at_server` are separate repos. ⚠️ **Caution:** workspace resolution wires these as
+only the atServer implementations are separate repos. ⚠️ **Caution:** workspace resolution wires these as
 path deps locally and in CI, so a hosted dependency-floor violation (a consumer pinning an unpublished
 `at_chops`/`at_auth`/`at_commons` version) is **masked** — it resolves fine against the workspace source but
 would fail a real `pub get` off pub.dev. Publish/floor checks must validate the floors explicitly, not lean
@@ -528,7 +528,8 @@ What the atServer genuinely still lacks is **behaviour, not shape**, and it is t
 (`pkam_verb_handler.dart`) branches on **ecc and rsa2048 only** and falls through to `rsa2048` for anything
 else, `mldsa65` included — so a PQ-APKAM would be verified as RSA and fail. Note that method also reads
 `verbParams[atPkamSigningAlgo]`, i.e. the *client-supplied* algo, not the stored record; making it
-record-authoritative is SS-3's, and both server changes need `java_at_server` parity in the same sweep.
+record-authoritative is SS-3's, and both server changes need parity across every atServer
+implementation in the same sweep.
 Also: ~1KB blob size limit; listener-before-trigger for the wake-up subscription.
 **DEP4 is now deferred, not owed by SS-2** (ruled 2026-08-03). Investigating whether the
 client-side wake-up is sufficient turned up the reason it *wasn't*: `sendEnvelope` put the
@@ -1070,7 +1071,7 @@ type/shape change (separate packages, invisible to at_client's own `dart test`/`
 per-UC harness and given/when/then live in [acceptance.md](acceptance.md).
 
 ### (e) Conformance
-Every PQ-touching PR — in **at_client_sdk** OR **at_server** / **java_at_server** — must cite a **project id**
+Every PQ-touching PR — in **at_client_sdk** OR any **atServer implementation** — must cite a **project id**
 from this plan (`P-1`, `P-2`, `P-3`, `S-*`, `SS-*`, `KF-1`, `B-*`, `R-*`, `RF-*`, `ON-1`, `D2-1`) **or** a
 documented out-of-program status (e.g. "tracked in the NoPorts repo, out of this plan's lane"). Each PR must
 also conform to the **current** [decisions.md](decisions.md) rulings: reviewers **reject** a PR that
@@ -1128,7 +1129,7 @@ knows where the sequencing assumptions come from:
 
 **Verification.** This plan is verified against the live trees: the `at_client_sdk` monorepo — which
 **contains** `at_chops`, `at_auth`, and `at_commons` as workspace packages (`packages/at_chops`,
-`packages/at_auth`, `packages/at_commons`) — plus the separate `at_server` / `java_at_server` repos.
+`packages/at_auth`, `packages/at_commons`) — plus the separate atServer implementation repos.
 
 ---
 

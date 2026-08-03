@@ -1,4 +1,15 @@
 ## 3.14.1
+- refactor: envelope signing and verification are now functions taking the key
+  material as an argument (`signEnvelope` / `verifyEnvelope`), instead of
+  reaching through a client's `AtChops` object. Key state belongs in `AtKeys`,
+  held by an `AtKeysIo`; `AtChops` is a collection of stateless operations over
+  material handed in per call. The at_chops surface this uses —
+  `RsaSigningAlgo` and `RsaKeyPair` — is the one its own deprecations on
+  `PkamSigningAlgo` and `AtPkamKeyPair` point at. Verification needs no keypair
+  at all: the signer's public key is the whole input, so it works on a client
+  holding no keys. `ApkamSigning` exposes the material as `signingKeys` and no
+  longer publishes `privateSigningKey`, which had no callers. Behaviour is
+  unchanged — the envelope bytes, algorithms and failure modes are identical.
 - feat: `PairwiseSecretSharing.clientRunsSync` (default true) decides where
   `startListening`'s initial and periodic sweeps read from. Envelopes reach the
   local store only via sync, so on a client that does not sync those sweeps were

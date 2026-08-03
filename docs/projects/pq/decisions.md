@@ -423,7 +423,7 @@ timeline rows).
   and there is **no** post-enrollment metadata write (retrofit = a fresh
   auto-approved enrollment, not a mutation; see #F). Cost: a new typed field on
   `EnrollParams`/`EnrollVerbBuilder` (+ regen), the `Enrollment` read model gains
-  the field, and an atServer schema change (separate `at_server`/`java_at_server`
+  the field, and an atServer schema change (a separate repo per atServer implementation
   repos) to store/return it — must land in the same release or OQ4 isn't met.
 - **#F — Enrollment cardinality + retrofit shape — RESOLVED 2026-06-30: 1:1:1,
   fresh-enrollment retrofit.** The master ruling above (sections [4](#4-the-verb-wire-shape--111-cardinality-rulings)
@@ -1788,7 +1788,7 @@ experimental surface for a case SS-2 never reaches.
 
 | # | Ruling |
 |---|---|
-| 8 | **The atServer's `mldsa65` verify branch stays in SS-3, with its record-authoritative sibling.** `_getSigningAlgoType` branches on `ecc` and `rsa2048` and falls through to `rsa2048` for everything else, so a PQ APKAM would be verified as RSA and fail. But that method also reads the *client-supplied* algo rather than the stored one, and fixing both at once is one change to one method — splitting them means touching it twice and living with a window where a client selects its own verification algorithm. Nothing in SS-2's client half authenticates with an ML-DSA APKAM. Needs `java_at_server` parity in the same sweep |
+| 8 | **The atServer's `mldsa65` verify branch stays in SS-3, with its record-authoritative sibling.** `_getSigningAlgoType` branches on `ecc` and `rsa2048` and falls through to `rsa2048` for everything else, so a PQ APKAM would be verified as RSA and fail. But that method also reads the *client-supplied* algo rather than the stored one, and fixing both at once is one change to one method — splitting them means touching it twice and living with a window where a client selects its own verification algorithm. Nothing in SS-2's client half authenticates with an ML-DSA APKAM. Needs parity across every atServer implementation in the same sweep |
 | 9 | **at_auth opens 3.4.0 before the work starts.** Verified against pub.dev 2026-08-03: at_auth 3.3.0 is **published**, so unlike at_commons, at_chops and at_client it has no in-progress heading to fold into. Ruling 7's callback is additive and optional, so a minor. at_client's floor rises to `^3.4.0` in the same commit as the first use |
 | 10 | **The whole chain gets a live functional test with a real second enrollment.** Key package rides `enroll:request` → the server stores it → approve → `listns` returns it → the signature verifies against the server-published `_apsk` → conveyance seals to it. `at_functional_test`'s `enrollment_test.dart` already drives live `getOTP` / `submit` / `approve` against `apkamFirstAtSign`, so the harness exists. This is the test that would have caught [20.1](#201-two-blockers-found-before-writing-any-code)'s first blocker |
 

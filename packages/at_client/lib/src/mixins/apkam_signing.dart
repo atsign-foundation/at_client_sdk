@@ -6,6 +6,8 @@ import 'package:at_client/at_client.dart'
         AtKey,
         GetRequestOptions,
         PutRequestOptions;
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show ApkamSigningKeys;
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
 mixin ApkamSigning {
@@ -48,14 +50,25 @@ mixin ApkamSigning {
     }
   }
 
-  /// the public key which can be used to verify signatures made using
-  /// [privateSigningKey]
-  String get publicSigningKey {
-    return atClient.atChops!.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
+  /// This client's APKAM key material, as an argument for the signing
+  /// functions rather than state reached out of a crypto object.
+  ///
+  /// The material is still read from `atClient.atChops` here. That is a
+  /// derived cache, not the source: when an `AtKeysIo` is injected, the
+  /// client already builds its `AtChops` from the `AtKeys` that `AtKeysIo`
+  /// reads. Sourcing this from `AtKeys` directly is the remaining half of the
+  /// move, and it cannot land until every client has an `AtKeysIo` — today it
+  /// is nullable and most apps supply none, so reading through it would break
+  /// them.
+  ApkamSigningKeys get signingKeys {
+    final keyPair = atClient.atChops!.atChopsKeys.atPkamKeyPair!;
+    return ApkamSigningKeys(
+      publicKey: keyPair.atPublicKey.publicKey,
+      privateKey: keyPair.atPrivateKey.privateKey,
+    );
   }
 
-  /// the private key used to sign things this application sends
-  String get privateSigningKey {
-    return atClient.atChops!.atChopsKeys.atPkamKeyPair!.atPrivateKey.privateKey;
-  }
+  /// the public key which can be used to verify signatures made using
+  /// [signingKeys]
+  String get publicSigningKey => signingKeys.publicKey;
 }
