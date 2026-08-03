@@ -1891,7 +1891,23 @@ answers **every** matching secret in one pass, so any single answer is already c
 that request. "Someone answered this requester in this namespace since the request" is
 therefore a correct suppression signal.
 
-### 21.5 A defect found while reading
+### 21.5 Ruling 4, as built
+
+Landed in `at_server` on `gkc-pq-ss3-signing-algo`: the `mldsa65` branch, and an
+APKAM-authenticated connection taking its algorithm from the enrollment record rather than
+from the wire. Legacy PKAM keeps the wire value — and that is not merely conservative. The
+functional suite authenticates over the legacy path with an **`ecc_secp256r1`** key, so
+pinning legacy to `rsa2048`, which is what I first recommended, would have broken working
+behaviour rather than tightened anything.
+
+**Parity is owed from the other atServer implementations before a PQ client can rely on
+this.** At least one rejects `signingAlgo:mldsa65` while *parsing* the command, so a PQ
+client meets an invalid-syntax error rather than an authentication failure — a confusing
+failure mode for the thing hardest to debug. That implementation already stores `signingAlgo`
+on its enrollment record but never reads it for verification, and carries no ML-DSA support
+to add a branch to yet, so parity there is a dependency decision rather than an edit.
+
+### 21.6 A defect found while reading
 
 `putSecret` mutates the map and then `await persistence?.save(listSecrets())`, with nothing
 serialising the saves. Two concurrent puts each snapshot and then land in either order, so
