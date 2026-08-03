@@ -9,6 +9,7 @@ import 'package:at_chops/src/algorithm/encryption/x25519_ffi_algo.dart';
 import 'package:at_chops/src/algorithm/spec/ml_kem_768_spec.dart';
 import 'package:at_chops/src/algorithm/spec/output_length.dart';
 import 'package:at_chops/src/algorithm/spec/x_wing_spec.dart';
+import 'package:meta/meta.dart';
 import 'package:pointycastle/digests/sha3.dart';
 import 'package:pointycastle/digests/shake.dart';
 
@@ -171,6 +172,13 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
           ..setRange(128, 134, _label);
     return SHA3Digest(256).process(input);
   }
+
+  /// Exposes [_combine] to prove its `ssM`/`ssX` length guards are wired to
+  /// the correct constants — not a production entry point.
+  @visibleForTesting
+  Uint8List combineForTesting(
+          Uint8List ssM, Uint8List ssX, Uint8List ctX, Uint8List pkX) =>
+      _combine(ssM, ssX, ctX, pkX);
 
   Uint8List _randomSeed() {
     final Random random = Random.secure();

@@ -191,5 +191,21 @@ void main() {
       expect(() => MlDsa65KeyPair.create(pub, badSk),
           throwsA(isA<AtSigningException>()));
     });
+
+    test('MlDsa65KeyPair.create throws AtSigningException for invalid base64 public key',
+        () {
+      final String validSk = base64Encode(Uint8List(MlDsa65Sizes.secretKeyBytes));
+
+      expect(() => MlDsa65KeyPair.create('!!!invalid-base64!!!', validSk),
+          throwsA(isA<AtSigningException>()));
+    });
+
+    test('MlDsa65KeyPair.create throws AtSigningException for invalid base64 secret key',
+        () {
+      final String validPub = base64Encode(Uint8List(MlDsa65Sizes.publicKeyBytes));
+
+      expect(() => MlDsa65KeyPair.create(validPub, '!!!invalid-base64!!!'),
+          throwsA(isA<AtSigningException>()));
+    });
   });
 }

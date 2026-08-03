@@ -127,5 +127,33 @@ void main() {
       expect(ss.length, 32);
       expect(ss, isNot(equals(enc.sharedSecret)));
     });
+
+    // Pins each checkOutputLength call in _combine to its own constant and
+    // label — MlKem768Sizes.sharedSecretBytes and
+    // XWingSizes.x25519ComponentLength are both 32 today, so a round-trip
+    // test alone can't tell them apart; these prove the wiring directly.
+    test('wrong-length ssM is rejected against the ML-KEM-768 label', () {
+      if (lib == null) {
+        fail('libcrypto not available on this host');
+      }
+      final ffi = XWingFfiAlgo.fromLib(lib);
+      expect(
+          () => ffi.combineForTesting(
+              Uint8List(31), Uint8List(32), Uint8List(32), Uint8List(1216)),
+          throwsA(isA<StateError>().having((e) => e.message, 'message',
+              contains('ML-KEM-768 shared secret component'))));
+    });
+
+    test('wrong-length ssX is rejected against the X25519 label', () {
+      if (lib == null) {
+        fail('libcrypto not available on this host');
+      }
+      final ffi = XWingFfiAlgo.fromLib(lib);
+      expect(
+          () => ffi.combineForTesting(
+              Uint8List(32), Uint8List(33), Uint8List(32), Uint8List(1216)),
+          throwsA(isA<StateError>().having((e) => e.message, 'message',
+              contains('X25519 shared secret component'))));
+    });
   });
 }

@@ -135,7 +135,7 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
   @override
   Future<Uint8List> signBytes(Uint8List message,
       {required Uint8List secretKey}) async {
-    validateSecretKey(secretKey);
+    MlDsa65Sizes.validateSecretKey(secretKey);
     final Pointer<EVP_PKEY> pkey = _loadPrivateKey(secretKey);
     try {
       final Uint8List sig = _sign(pkey, message);
@@ -155,7 +155,9 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
   @override
   Future<bool> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
-    if (!hasValidVerifyLengths(publicKey, signature)) return false;
+    if (!MlDsa65Sizes.hasValidVerifyLengths(publicKey, signature)) {
+      return false;
+    }
     try {
       final Pointer<EVP_PKEY> pkey = _loadPublicKey(publicKey);
       try {

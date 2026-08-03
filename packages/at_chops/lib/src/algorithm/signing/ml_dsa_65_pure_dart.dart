@@ -51,7 +51,7 @@ final class MlDsa65PureDartAlgo
   @override
   Future<Uint8List> signBytes(Uint8List message,
       {required Uint8List secretKey}) async {
-    validateSecretKey(secretKey);
+    MlDsa65Sizes.validateSecretKey(secretKey);
     final Uint8List sig = MlDsa.sign(secretKey, message, DilithiumParams.mlDsa65);
     checkOutputLength(sig.length, MlDsa65Sizes.signatureBytes,
         operation: 'ML-DSA-65 sign', label: 'signature');
@@ -65,7 +65,9 @@ final class MlDsa65PureDartAlgo
   @override
   Future<bool> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
-    if (!hasValidVerifyLengths(publicKey, signature)) return false;
+    if (!MlDsa65Sizes.hasValidVerifyLengths(publicKey, signature)) {
+      return false;
+    }
     return MlDsa.verify(publicKey, message, signature, DilithiumParams.mlDsa65);
   }
 

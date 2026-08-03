@@ -1,5 +1,5 @@
-/// FIPS 203 ML-KEM-768 fixed byte sizes shared by [MlKem768FfiAlgo] and
-/// [MlKem768PureDartAlgo] so both enforce identical public-key and
+/// FIPS 203 ML-KEM-768 fixed byte sizes shared by `MlKem768FfiAlgo` and
+/// `MlKem768PureDartAlgo` so both enforce identical public-key and
 /// ciphertext lengths.
 ///
 /// Deliberately no `secretKeyBytes`: a ML-KEM-768 secret key means different

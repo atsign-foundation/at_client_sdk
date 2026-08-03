@@ -1,5 +1,5 @@
 /// X-Wing hybrid KEM (draft-connolly-cfrg-xwing-kem-10) fixed byte sizes,
-/// shared by [XWingFfiAlgo] and [XWingPureDartAlgo] so both enforce
+/// shared by `XWingFfiAlgo` and `XWingPureDartAlgo` so both enforce
 /// identical lengths.
 abstract final class XWingSizes {
   /// Secret (decapsulation) key size — the 32-byte seed everything else is
