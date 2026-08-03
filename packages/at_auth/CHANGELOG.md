@@ -1,4 +1,21 @@
 ## 3.4.0
+- feat: `AtEnrollmentRequest.metadataBuilder` — an optional callback, invoked
+  once after this request's APKAM keypair has been generated and before the
+  request is sent, with an `AtKeysIo` holding that keypair. Whatever it returns
+  is attached to the request as `EnrollParams.metadata` unchanged; at_auth
+  ferries it and never inspects it. It exists because some material must be
+  **signed by the new APKAM key** — the secret-sharing key package is the first
+  such case — and that is impossible for the caller to do alone: the keypair
+  does not exist until the request is being assembled, and the metadata is only
+  ever written by the request that creates the enrollment record, so it cannot
+  be added afterwards either. The keys the callback receives carry **no
+  `enrollmentId`**, because the atServer assigns that in its response to this
+  very request; anything the callback builds must be valid without one. A
+  callback that returns null or throws is logged and the request proceeds
+  without metadata — the payload is opaque and additive, so failing an
+  enrollment over it would be the worse outcome. Internally the `AtKeys` object
+  is now assembled before the request is sent rather than after, since
+  everything but the `enrollmentId` is already known at that point.
 
 ## 3.3.0
 - feat: add `AtAuthSession` (exported) — the explicit auth→client hand-off artifact: the confirmed subset of an auth request that client creation actually needs (`atSign`, `rootDomain`, `namespace`, `atKeysIo`, `enrollmentId`), promoted to its own type so "request" no longer doubles as "session". Keys cross the boundary as an `AtKeysIo` *source*, not as live crypto state: the client derives its own `AtKeys` via `atKeysIo.read(atSign)` rather than adopting auth's `AtChops`/`AtLookUp`. The session also carries auth's already-authenticated `atLookUp` so a caller can *opt in* to reusing that connection (`AtClientManager.fromAuthSession(session, reuse: true)`) and skip a second PKAM handshake; the default hand-off rebuilds a fresh connection.

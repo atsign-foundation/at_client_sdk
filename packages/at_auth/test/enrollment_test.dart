@@ -1,3 +1,4 @@
+import 'dart:async' show FutureOr;
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
@@ -297,6 +298,108 @@ void main() {
         ),
         throwsA(isA<ArgumentError>()),
       );
+    });
+  });
+
+  group('metadataBuilder', () {
+    const atSign = '@alice🛠';
+
+    /// Mocks just enough for a request to reach the atServer and come back
+    /// pending, and records the enroll command that was sent.
+    (AtLookUp, List<String>) mockLookUpRecordingEnrollCommands() {
+      final AtLookUp mockAtLookUp = MockAtLookUp();
+      final sent = <String>[];
+      when(() =>
+              mockAtLookUp.executeVerb(any(that: LookUpVerbBuilderMatcher())))
+          .thenAnswer((_) async => 'data:${encryptionPublicKeyMap[atSign]!}');
+      when(() => mockAtLookUp.executeCommand(any(that: startsWith('enroll:'))))
+          .thenAnswer((inv) {
+        sent.add(inv.positionalArguments[0] as String);
+        return Future.value('data:${jsonEncode({
+              'enrollmentId': '123',
+              'status': 'pending',
+            })}');
+      });
+      return (mockAtLookUp, sent);
+    }
+
+    AtEnrollmentRequest requestWith(
+            FutureOr<Map<String, dynamic>?> Function(AtKeysIo)? builder) =>
+        AtEnrollmentRequest(
+          session: AtAuthSession(
+              atSign: atSign,
+              rootDomain: AtRootDomain.atsignDomain,
+              atKeysIo: InMemoryAtKeysIo()),
+          appName: 'wavi',
+          deviceName: 'pixel',
+          namespaces: {'wavi': 'rw'},
+          otp: 'A123FE',
+          metadataBuilder: builder,
+        );
+
+    test(
+        'receives the APKAM keypair this request will enroll, and no '
+        'enrollmentId', () async {
+      final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
+      AtKeys? seen;
+      // Read at CALL time, not after: the builder is handed the live AtKeys
+      // the request goes on to complete, so the enrollmentId the atServer
+      // assigns does appear on that object — just not until after the builder
+      // has run and signed whatever it signed.
+      Object? enrollmentIdWhenCalled;
+
+      await AtEnrollmentImpl().submit(requestWith((keysIo) async {
+        seen = await keysIo.read(atSign);
+        enrollmentIdWhenCalled = seen!.enrollmentId;
+        return {'keyPackage': 'built-by-the-caller'};
+      }), mockAtLookUp);
+
+      expect(seen, isNotNull, reason: 'the builder must actually be called');
+      expect(seen!.apkamPrivateKey, isNotNull,
+          reason: 'the private half is the whole point — the caller has to be '
+              'able to sign with the key this enrollment will use, and that '
+              'keypair does not exist before the request is assembled');
+      // The public half sent to the atServer must be the same keypair the
+      // builder signed with, or a verifier fetching _apsk would check the
+      // signature against a different key.
+      expect(sent.single, contains(seen!.apkamPublicKey!.toString()));
+
+      expect(enrollmentIdWhenCalled, isNull,
+          reason: 'the atServer assigns it in the response to this very '
+              'request, so anything the builder signs must be valid without '
+              'one');
+    });
+
+    test('its result rides the enroll command', () async {
+      final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
+
+      await AtEnrollmentImpl().submit(
+          requestWith((_) async => {'keyPackage': 'opaque-to-at-auth'}),
+          mockAtLookUp);
+
+      expect(sent.single, contains('opaque-to-at-auth'));
+    });
+
+    test('a builder that throws costs a log line, not the enrollment',
+        () async {
+      final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
+
+      final response = await AtEnrollmentImpl().submit(
+          requestWith((_) => throw StateError('no keys')), mockAtLookUp);
+
+      expect(response.enrollmentId, '123',
+          reason: 'the metadata is opaque and additive, so a request without '
+              'it is still a valid request — failing the enrollment over an '
+              'optional payload would be the worse outcome');
+      expect(sent.single, isNot(contains('metadata')));
+    });
+
+    test('no builder means no metadata on the wire', () async {
+      final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
+
+      await AtEnrollmentImpl().submit(requestWith(null), mockAtLookUp);
+
+      expect(sent.single, isNot(contains('metadata')));
     });
   });
 }

@@ -10,6 +10,7 @@ import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
+import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -81,6 +82,30 @@ class AtEnrollmentImpl implements AtEnrollment {
     );
   }
 
+  /// Runs [AtEnrollmentRequest.metadataBuilder], if the caller supplied one,
+  /// over an [AtKeysIo] holding this request's freshly generated keys.
+  ///
+  /// The result is attached to the request unchanged — at_auth ferries the
+  /// metadata, it does not interpret it. A builder that returns null, or
+  /// throws, must not cost the caller its enrollment: the metadata is opaque
+  /// and additive, so a request without it is a valid request, and the
+  /// alternative is failing an enrollment over an optional payload.
+  Future<Map<String, dynamic>?> _buildMetadata(
+      AtEnrollmentRequest request, AtKeys keys) async {
+    final builder = request.metadataBuilder;
+    if (builder == null) return null;
+
+    final keysIo = InMemoryAtKeysIo();
+    await keysIo.write(request.atSign, keys);
+    try {
+      return await builder(keysIo);
+    } catch (e, st) {
+      _logger.severe('metadataBuilder threw; submitting the enrollment request '
+          'without metadata: $e, $st');
+      return null;
+    }
+  }
+
   /// Handles the subsequent enrollment requests.
   Future<AtEnrollmentResponse> _handleAtEnrollmentRequest(
       AtEnrollmentRequest atEnrollmentRequest, AtLookUp atLookUp) async {
@@ -103,6 +128,18 @@ class AtEnrollmentImpl implements AtEnrollment {
           ..atPublicKey = AtPublicKey.fromString(defaultEncryptionPublicKey))
         .encrypt(utf8.encode(apkamSymmetricKey.key)));
 
+    // Built before the request rather than after it, so a metadataBuilder can
+    // be handed the APKAM keypair it must sign with. Only enrollmentId is
+    // missing at this point, and only the atServer can supply it — it assigns
+    // one in its response below.
+    AtKeys atAuthKeys = AtKeys()
+      ..apkamPrivateKey =
+          AtBytes.fromString(apkamKeyPair.atPrivateKey.privateKey)
+      ..apkamPublicKey = AtBytes.fromString(apkamKeyPair.atPublicKey.publicKey)
+      ..apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey.key)
+      ..defaultEncryptionPublicKey =
+          AtBytes.fromString(defaultEncryptionPublicKey);
+
     EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
       ..appName = atEnrollmentRequest.appName
       ..deviceName = atEnrollmentRequest.deviceName
@@ -110,7 +147,8 @@ class AtEnrollmentImpl implements AtEnrollment {
       ..apkamPublicKey = apkamKeyPair.atPublicKey.publicKey
       ..otp = atEnrollmentRequest.otp
       ..namespaces = atEnrollmentRequest.namespaces
-      ..apkamKeysExpiryDuration = atEnrollmentRequest.apkamKeysExpiryDuration;
+      ..apkamKeysExpiryDuration = atEnrollmentRequest.apkamKeysExpiryDuration
+      ..metadata = await _buildMetadata(atEnrollmentRequest, atAuthKeys);
 
     String? serverResponse =
         await _executeEnrollCommand(enrollVerbBuilder, atLookUp);
@@ -118,14 +156,7 @@ class AtEnrollmentImpl implements AtEnrollment {
     var enrollmentIdFromServer = enrollJson[AtConstants.enrollmentId];
     var enrollStatus = getEnrollStatusFromString(enrollJson['status']);
 
-    AtKeys atAuthKeys = AtKeys()
-      ..apkamPrivateKey =
-          AtBytes.fromString(apkamKeyPair.atPrivateKey.privateKey)
-      ..apkamPublicKey = AtBytes.fromString(apkamKeyPair.atPublicKey.publicKey)
-      ..apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey.key)
-      ..enrollmentId = enrollJson[AtConstants.enrollmentId]
-      ..defaultEncryptionPublicKey =
-          AtBytes.fromString(defaultEncryptionPublicKey);
+    atAuthKeys.enrollmentId = enrollmentIdFromServer;
 
     return AtEnrollmentResponse(enrollmentIdFromServer, enrollStatus,
         atSign: atEnrollmentRequest.atSign,
