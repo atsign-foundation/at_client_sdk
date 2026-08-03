@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show Random;
 import 'dart:convert'
     show base64Decode, base64Encode, jsonDecode, jsonEncode, utf8;
 import 'dart:typed_data' show Uint8List;
@@ -23,7 +24,7 @@ import 'package:at_client/src/secret_sharing/key_package_registration.dart';
 import 'package:at_client/src/secret_sharing/secret_envelope.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:uuid/uuid.dart' show Uuid;
-import 'package:meta/meta.dart' show experimental;
+import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
 /// A decrypted, signature-verified payload received from another APKAM
 /// keypair of the same atSign.
@@ -160,6 +161,21 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// `'<requesterKpid>:<secretName>' → last answered at`. In-memory; the
   /// cap is best-effort anti-storm, not a security control.
   final Map<String, DateTime> _lastAnsweredRequest = {};
+
+  /// How long a responder waits, uniformly at random within this window,
+  /// before answering a pull request.
+  ///
+  /// Every authorised holder sees the same request and would otherwise answer
+  /// at once: N holders, N seals, N writes, for one secret the requester only
+  /// needs once. [requestAnswerMinInterval] does not help — it is per
+  /// responder, so it stops one holder repeating itself and says nothing about
+  /// the crowd. The wait spreads them out so that [_answerAlreadySent] has
+  /// something to observe. Set to [Duration.zero] to answer immediately.
+  Duration requestAnswerJitter = const Duration(seconds: 2);
+
+  /// Source of the jitter, injectable so a test can make it deterministic.
+  @visibleForTesting
+  Random requestAnswerRandom = Random();
 
   /// The secrets this client holds: what it created via
   /// [SecretStore.putSecret], plus what other APKAM keypairs shared with it
@@ -566,6 +582,18 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       return;
     }
 
+    if (requestAnswerJitter > Duration.zero) {
+      await Future.delayed(Duration(
+          microseconds:
+              requestAnswerRandom.nextInt(requestAnswerJitter.inMicroseconds)));
+    }
+
+    if (await _answerAlreadySent(received.fromKpid, received.appNamespace)) {
+      logger.info('Not answering kpid ${received.fromKpid}: another holder '
+          'already did');
+      return;
+    }
+
     final want = (received.payload['want'] as List?)?.cast<String>().toSet();
     final namePrefix = received.payload['namePrefix'] as String?;
     final now = DateTime.now();
@@ -583,6 +611,48 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       await shareSecretWith(requester, secret);
     }
   }
+
+  /// Envelope keys currently addressed to [kpid] in [appNamespace], read from
+  /// the atServer — which is where [sendEnvelope] writes them, and where a
+  /// holder that does not sync would look.
+  Future<Set<String>> _envelopeKeysFor(String kpid, String appNamespace) async {
+    try {
+      final keys = await atClient.getAtKeys(
+          regex: '.*\\.$kpid\\.$envelopeKeyMarker\\.$appNamespace.*',
+          useRemoteAtServer: true);
+      return keys.map((k) => k.toString()).toSet();
+    } catch (e) {
+      // Observation is an optimisation. If it fails, answering anyway costs a
+      // duplicate the requester merges away; staying quiet could cost it the
+      // secret entirely.
+      logger.info('Could not check whether kpid $kpid was already answered, '
+          'so answering: $e');
+      return const {};
+    }
+  }
+
+  /// Whether an answer is already waiting for [kpid] in [appNamespace].
+  ///
+  /// Deliberately coarse on two axes, both sound here.
+  ///
+  /// It cannot see *what* was answered — the envelope key carries no secret
+  /// name and the payload is sealed to the requester. That does not matter,
+  /// because a responder answers every matching secret in one pass, so any
+  /// single answer is already complete for the request.
+  ///
+  /// It also cannot tell an answer to *this* request from an unconsumed one
+  /// left over from an earlier exchange, because nothing in the key orders it
+  /// against the request. Diffing against a snapshot taken when this responder
+  /// picked the request up does not help and is strictly worse: a holder that
+  /// starts late sees the earlier answer in its own baseline and concludes
+  /// nothing has happened, so exactly the responders that should stay quiet
+  /// are the ones that answer. Presence alone is the better rule — the
+  /// requester deletes each envelope as it consumes it, and it is
+  /// demonstrably online, having just sent the request, so anything still
+  /// waiting for it is almost certainly a fresh answer. Over-suppressing costs
+  /// a retry; under-suppressing costs the storm this exists to stop.
+  Future<bool> _answerAlreadySent(String kpid, String appNamespace) async =>
+      (await _envelopeKeysFor(kpid, appNamespace)).isNotEmpty;
 
   /// Returns the secret `(namespace, name)` as soon as this client holds
   /// it: immediately from [secretStore] when already present, otherwise the

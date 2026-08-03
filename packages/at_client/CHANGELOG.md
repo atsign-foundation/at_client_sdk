@@ -1,4 +1,22 @@
 ## 3.14.1
+- fix: `SecretStore` serialises its calls into `SecretStorePersistence.save`.
+  Every mutation persists the whole list and the save is async, so two
+  concurrent puts could each snapshot and then land in either order — leaving
+  an older snapshot on top of a newer one and silently dropping a secret the
+  store still believed it held. An in-memory backend never shows this; any real
+  async one would. The seam's dartdoc now also states that the SDK ships no
+  implementation on purpose: key material that must survive a restart is filed
+  into `AtKeys`, so an app-supplied backend never holds this atSign's private
+  keys.
+- feat: pull requests are answered after a random wait
+  (`PairwiseSecretSharing.requestAnswerJitter`, default 2s, `Duration.zero` to
+  disable), and a responder stays quiet if an answer is already waiting for the
+  requester. Every authorised holder sees the same request, so previously N
+  holders meant N seals and N writes for a secret the requester needs once;
+  `requestAnswerMinInterval` did not help, being per responder. Suppression is
+  deliberately coarse — the envelope names no secret and its payload is sealed
+  to the requester — which is sound because a responder answers every matching
+  secret in one pass, so any single answer is already complete.
 - feat: approving an enrollment now shares this atSign's secrets with it.
   `EnrollmentServiceImpl.approve` seals every secret the new enrollment's
   namespaces authorise to the key package it advertised on its

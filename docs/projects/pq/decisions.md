@@ -34,6 +34,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [18. `pqpublickey` becomes the user-owned signing root (2026-08-03)](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) — *supersedes the KEM role in [design.md](design.md) section 1.4*
 - [19. Nested namespaces: the nskey is resolved by walking up (2026-08-03)](#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03) — *adds `appMetadata.ns` / `ckNs`; supersedes the no-`ns` statement in [design.md](design.md) section 1.5*
 - [20. SS-2: how the key package reaches an enrollment, and how conveyance fires (2026-08-03)](#20-ss-2-how-the-key-package-reaches-an-enrollment-and-how-conveyance-fires-2026-08-03) — *resolves two blockers that made the SS-2 design unimplementable as written*
+- [21. SS-3: where key material lives, and what the substrate stops storing (2026-08-03)](#21-ss-3-where-key-material-lives-and-what-the-substrate-stops-storing-2026-08-03) — *removes SS-3's durable `SecretStorePersistence` backend rather than building it*
 
 ---
 
@@ -1827,3 +1828,73 @@ first thing the callback needs; doing the mixins with it is what stops the old s
 **Out of scope:** `put_request_transformer` and `monitor` also sign through `atChops`. Both
 predate D1 and neither is on this path; migrating them would put the put and monitor paths in
 scope, which pulls the integration suite into every commit boundary for no D1 benefit.
+
+---
+
+## 21. SS-3: where key material lives, and what the substrate stops storing (2026-08-03)
+
+**Status:** accepted. Six rulings. Between them they **remove SS-3's largest listed
+deliverable** — a durable `SecretStorePersistence` backend — rather than build it.
+
+### 21.1 What the plan asked for versus what is there
+
+Three findings, all checked against the code rather than the docs:
+
+- **"The enrollment record keeps a single `apkamPublicKey`" is already true.**
+  `enroll_datastore_value.dart` declares `late String apkamPublicKey`, not a list, and
+  `signingAlgo` already sits beside it carrying the dartdoc "Recorded so PKAM verification
+  can be record-authoritative." Nothing to do.
+- **`SecretStorePersistence` has no production implementation anywhere** — two test fakes
+  and nothing else — and it appears **zero times** in both design.md and acceptance.md. The
+  one-line plan entry was its entire specification.
+- **Content keys are genuinely a cache.** `SymmetricAesGcmProvider.decrypt` falls back to
+  re-fetching the `<ckKid>.__ck.<ckNs>@<owner>` conveyance record and re-opening it with the
+  nskey private. Losing the CK cache costs a round trip, not data — so the owed-item claim
+  that a restart leaves the owner unable to re-read her own records is **wrong for CKs**. It
+  is right for the nskey private, which is what ruling 1 addresses.
+
+### 21.2 The rulings
+
+| # | Ruling |
+|---|---|
+| 1 | **An nskey private lives in `AtKeys`, filed on arrival.** "Conveyed as a Secret" says how it travels, not where it lives — the APKAM key package already arrives one way and is filed another. Losing an nskey private makes every conveyance record sealed to it unopenable, so it belongs under `AtKeysIo`'s never-lose contract, alongside durable at-rest-protected implementations that already exist |
+| 2 | **The sender persists the current `ckKid`, never the key.** On a cold write it re-fetches that CK from its own conveyance record, exactly as the read path already does. A `ckKid` is not secret, so this needs no at-rest protection at all and sidesteps durable key storage entirely |
+| 3 | **The crypto layer subscribes to `receivedSecrets` and files its own material; `SecretStore` stays in-memory.** The substrate keeps moving opaque secrets and `putIfNewer` stays the convergence point. No app-supplied backend then ever holds this atSign's namespace private keys — which it silently would have, with whatever at-rest properties that app happened to have |
+| 4 | **The APKAM path reads the record's `signingAlgo`; legacy PKAM keeps the wire value; `mldsa65` gets its branch.** Legacy PKAM has no enrollment record to be authoritative about, and may legitimately present `ecc_secp256r1` |
+| 5 | **Jitter, then suppress on any observed answer** ([21.4](#214-what-the-anti-storm-cap-actually-protects)) |
+| 6 | **The current-`ckKid` pointer is an ordinary synced self key**, so an atSign's devices converge on one CK per `(recipient, namespace)` — which is what a CK is scoped to — instead of one per device. Concurrent mints are benign: both CKs are valid and readers open either |
+
+### 21.3 Why record-authoritative verification is hardening, not a fix
+
+Worth stating plainly so it is not oversold. The signature is checked against the **stored
+public key** on both paths, so a client that lies about its algorithm only causes its own
+verification to fail — claiming `rsa2048` against an ML-DSA key does not verify, so there is
+no downgrade to be had. What it defends against is cross-algorithm confusion, where one key
+blob parses under two algorithms. The functionally necessary half is the `mldsa65` branch:
+without it `_getSigningAlgoType` falls through to `rsa2048` for every unrecognised value, so
+a PQ APKAM cannot authenticate at all.
+
+### 21.4 What the anti-storm cap actually protects
+
+`requestAnswerMinInterval` is keyed `'<requesterKpid>:<secretName>'` in **each responder's
+own** memory. It stops one responder repeating itself; it does nothing about N responders
+answering the same request at once, which is the actual thundering herd. Of the design's
+three mechanisms only `putIfNewer` dedup exists — making duplicates correct, but not cheap:
+N holders means N seals and N writes per request.
+
+Suppression can only ever be **coarse**: the envelope key is
+`<msgId>.<requesterKpid>.__ssenv.<ns>`, carrying no secret name, and its payload is sealed to
+the requester. A responder can see *that* someone answered, not *what* they answered.
+
+That turns out to be sound rather than approximate, for a non-obvious reason: a responder
+answers **every** matching secret in one pass, so any single answer is already complete for
+that request. "Someone answered this requester in this namespace since the request" is
+therefore a correct suppression signal.
+
+### 21.5 A defect found while reading
+
+`putSecret` mutates the map and then `await persistence?.save(listSecrets())`, with nothing
+serialising the saves. Two concurrent puts each snapshot and then land in either order, so
+the store can persist an **older** snapshot after a newer one and silently lose a secret. In
+-memory fakes never show it; any real async backend will. Ruling 3 means the SDK ships no
+such backend, but the seam stays public, so the saves are serialised regardless.

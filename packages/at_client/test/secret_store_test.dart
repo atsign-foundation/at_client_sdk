@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:test/test.dart';
 
@@ -15,7 +17,69 @@ class InMemoryPersistence implements SecretStorePersistence {
   }
 }
 
+/// Completes its saves out of the order they were started — the behaviour any
+/// real async backend can exhibit and an in-memory fake never does.
+class ReorderingPersistence implements SecretStorePersistence {
+  List<Secret>? stored;
+  final List<Completer<void>> _pending = [];
+
+  @override
+  Future<List<Secret>> load() async => stored ?? [];
+
+  @override
+  Future<void> save(List<Secret> secrets) {
+    final completer = Completer<void>();
+    _pending.add(completer);
+    return completer.future.then((_) => stored = secrets);
+  }
+
+  int get pendingCount => _pending.length;
+
+  /// Finishes the queued saves newest-first, so an unserialised store would
+  /// leave the OLDEST snapshot on top.
+  void completeInReverse() {
+    for (final c in _pending.reversed) {
+      c.complete();
+    }
+    _pending.clear();
+  }
+}
+
 void main() {
+  group('save ordering', () {
+    test(
+        'never more than one save is in flight, so a reordering backend '
+        'cannot lose the newest state', () async {
+      final persistence = ReorderingPersistence();
+      final store = SecretStore(persistence: persistence);
+
+      // Three puts, none awaited: each mutates the map and queues a save.
+      final puts = [
+        store.putSecret(Secret(namespace: 'myapp', name: 'a', value: '1')),
+        store.putSecret(Secret(namespace: 'myapp', name: 'b', value: '2')),
+        store.putSecret(Secret(namespace: 'myapp', name: 'c', value: '3')),
+      ];
+
+      // Drain and release one save at a time. If saves were fired
+      // concurrently, more than one would be waiting here — and whichever
+      // finished last would decide what is stored, regardless of age.
+      var released = 0;
+      while (released < 3) {
+        await pumpEventQueue();
+        expect(persistence.pendingCount, 1,
+            reason: 'serialising the saves is what makes reordering '
+                'impossible rather than merely unlikely');
+        persistence.completeInReverse();
+        released++;
+      }
+      await Future.wait(puts);
+
+      expect(persistence.stored!.map((s) => s.name).toSet(), {'a', 'b', 'c'},
+          reason: 'an older snapshot landing last would silently drop a '
+              'secret the store still believes it holds');
+    });
+  });
+
   group('SecretStore CRUD', () {
     test('put, get, list, remove', () async {
       final store = SecretStore();

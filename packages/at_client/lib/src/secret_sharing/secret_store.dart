@@ -1,4 +1,7 @@
+import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
+
+final _logger = AtSignLogger('SecretStore');
 
 /// A named secret, scoped to an application namespace.
 ///
@@ -58,6 +61,18 @@ class Secret {
 /// Supplied by the app to persist the [SecretStore] beyond the process
 /// lifetime (platform keystore, biometric storage, etc. — the app's
 /// concern). Without one, the store is in-memory only.
+///
+/// The SDK deliberately ships no implementation. Key material the SDK itself
+/// needs to survive a restart — an APKAM keypair, a key package's X-Wing
+/// private half, an nskey private — is filed into `AtKeys` instead, where the
+/// `AtKeysIo` implementations already handle at-rest protection. That keeps
+/// this store free of anything whose loss would be unrecoverable, and keeps
+/// the atSign's private keys out of whatever backend an app happens to supply.
+///
+/// [save] receives the complete secret list and replaces whatever was stored.
+/// It is never called concurrently: [SecretStore] serialises saves, because a
+/// backend that completed them out of order would persist an older snapshot
+/// over a newer one and silently lose a secret.
 @experimental
 abstract class SecretStorePersistence {
   Future<List<Secret>> load();
@@ -74,6 +89,27 @@ class SecretStore {
   SecretStorePersistence? persistence;
 
   SecretStore({this.persistence});
+
+  /// Serialises calls into [SecretStorePersistence.save].
+  ///
+  /// Every mutation persists the whole list, and the mutation itself is
+  /// synchronous while the save is not — so without this, two puts could each
+  /// snapshot and then land in either order, leaving an older snapshot on top
+  /// of a newer one. Chaining them means the last save to *start* is also the
+  /// last to finish, and it always carries the newest state.
+  Future<void> _saves = Future.value();
+
+  Future<void> _persist() {
+    final persistence = this.persistence;
+    if (persistence == null) return Future.value();
+    // Snapshot now, on the caller's turn, so the queued save cannot pick up a
+    // later mutation and reorder relative to its own trigger.
+    final snapshot = listSecrets();
+    _saves = _saves.then((_) => persistence.save(snapshot)).catchError((e, st) {
+      _logger.severe('Persisting the secret store failed: $e, $st');
+    });
+    return _saves;
+  }
 
   String _key(String namespace, String name) => '$namespace:$name';
 
@@ -102,7 +138,7 @@ class SecretStore {
           'Secret names beginning "__" are reserved for system use');
     }
     _secrets[_key(secret.namespace, secret.name)] = secret;
-    await persistence?.save(listSecrets());
+    await _persist();
   }
 
   /// Stores [secret] only if it is newer than any existing `(namespace, name)`
@@ -142,7 +178,7 @@ class SecretStore {
   Future<bool> removeSecret(String namespace, String name) async {
     final removed = _secrets.remove(_key(namespace, name)) != null;
     if (removed) {
-      await persistence?.save(listSecrets());
+      await _persist();
     }
     return removed;
   }

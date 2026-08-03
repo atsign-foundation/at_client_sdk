@@ -194,7 +194,11 @@ void main() {
       {MockSyncService? syncService}) {
     final sharer =
         TestSharer(buildMockClient(enrollmentId, syncService: syncService))
-          ..directory = directory;
+          ..directory = directory
+          // Deterministic and instant: the jitter exists to spread real
+          // responders apart, and a test that waits for it is only testing
+          // Future.delayed. The suppression it enables is asserted directly.
+          ..requestAnswerJitter = Duration.zero;
     sharer.loadApkamKeys =
         () async => PersistedApkamKeys(xWingSeed: base64Encode(seed));
     return sharer;
@@ -607,6 +611,51 @@ void main() {
       // A consumes the answer and now holds the secret.
       expect(await sharerA.sweepOnce(), 1);
       expect(sharerA.secretStore.getSecret('myapp', '__rk.1.deadbeef')!.value,
+          'KEYBYTES');
+    });
+
+    test('a second holder stays quiet once another has answered', () async {
+      // Two holders of the same secret, both authorized, both seeing the same
+      // request. Without suppression each seals and writes its own answer, so
+      // the cost of a pull scales with the number of holders.
+      final sharerC = buildSharer('enroll-c', seedC)..directory = directory;
+      directory.authorize('myapp', 'enroll-c');
+      directory.seed('enroll-c', await sharerC.register());
+      for (final holder in [sharerB, sharerC]) {
+        await holder.secretStore.putSecret(
+            Secret(namespace: 'myapp', name: '__rk.1.dupe', value: 'KEYBYTES'),
+            allowReservedName: true);
+      }
+
+      expect(
+          await sharerA
+              .requestSecretsFromNamespace('myapp', names: ['__rk.1.dupe']),
+          2,
+          reason: 'both holders are asked');
+
+      // B answers first.
+      expect(await sharerB.sweepOnce(), 1);
+      final afterB = remoteData.keys
+          .where((k) => k.contains('.${sharerA.kpid}.__ssenv.'))
+          .length;
+      expect(afterB, 1);
+
+      // C sees the same request, observes B's answer, and adds nothing.
+      expect(await sharerC.sweepOnce(), 1,
+          reason: 'C still consumes the '
+              'request envelope — it just declines to answer it');
+      expect(
+          remoteData.keys
+              .where((k) => k.contains('.${sharerA.kpid}.__ssenv.'))
+              .length,
+          afterB,
+          reason: 'a duplicate answer is merged away by putIfNewer, so this '
+              'is about cost rather than correctness — N holders should not '
+              'mean N seals and N writes');
+
+      // And the requester still gets the secret.
+      expect(await sharerA.sweepOnce(), 1);
+      expect(sharerA.secretStore.getSecret('myapp', '__rk.1.dupe')!.value,
           'KEYBYTES');
     });
 
