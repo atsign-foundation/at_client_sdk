@@ -102,9 +102,26 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// How long an unconsumed envelope lives on the atServer.
   Duration envelopeTtl = Duration(days: 7);
 
-  /// How often [startListening] sweeps the local store for envelopes, in
-  /// addition to sweeping when sync delivers one.
+  /// How often [startListening] sweeps for envelopes, in addition to sweeping
+  /// when sync delivers one. Whether that sweep reads the local store or the
+  /// atServer is decided by [clientRunsSync].
   Duration sweepInterval = Duration(minutes: 1);
+
+  /// Whether this client runs sync (default true).
+  ///
+  /// It decides where [startListening]'s initial and periodic sweeps read
+  /// from, and it is not cosmetic: envelopes reach the local store *only* via
+  /// sync, so on a client that does not sync, a local sweep is guaranteed to
+  /// find nothing every time it runs. Such a client would be left with the
+  /// wake-up notification as its only automatic path to an envelope — and a
+  /// wake-up missed past its expiry would strand a message that is still
+  /// sitting on the atServer, readable, for the rest of [envelopeTtl].
+  ///
+  /// Set false and the periodic sweep reads the atServer instead, which is the
+  /// lazy-fetch path for those clients. Leave it true when sync is running:
+  /// sync already delivers envelopes locally, so remote sweeps would be
+  /// traffic for nothing.
+  bool clientRunsSync = true;
 
   /// Whether [sendEnvelope] also fires a best-effort wake-up notification
   /// (default on) after the put. Clients that run sync receive envelopes via
@@ -273,11 +290,13 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     }
   }
 
-  /// Starts watching for envelopes addressed to this client: sweeps the local
-  /// store now, after every sync that delivers an envelope key, and every
-  /// [sweepInterval]; and subscribes to wake-up notifications, doing a remote
-  /// sweep on each (which is how a sync-less client receives envelopes at
-  /// all). Requires [register] to have completed.
+  /// Starts watching for envelopes addressed to this client: sweeps now, after
+  /// every sync that delivers an envelope key, and every [sweepInterval]; and
+  /// subscribes to wake-up notifications, doing a remote sweep on each.
+  ///
+  /// The initial and periodic sweeps read wherever [clientRunsSync] says
+  /// envelopes arrive — the local store when sync is running, the atServer
+  /// when it is not. Requires [register] to have completed.
   Future<void> startListening() async {
     if (_sweepTimer != null) {
       return;
@@ -296,8 +315,14 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         .subscribe(
             regex: '\\.$kpid\\.$envelopeKeyMarker\\.', shouldDecrypt: false)
         .listen((_) => unawaited(sweepOnce(fromRemote: true)));
-    _sweepTimer = Timer.periodic(sweepInterval, (_) => unawaited(sweepOnce()));
-    await sweepOnce();
+    // Envelopes only reach the local store via sync, so a client that does
+    // not sync must sweep the atServer or its periodic sweep can never find
+    // anything — leaving a missed wake-up as an unrecoverable loss of a
+    // message that is still sitting on the atServer.
+    final bool sweepRemote = !clientRunsSync;
+    _sweepTimer = Timer.periodic(
+        sweepInterval, (_) => unawaited(sweepOnce(fromRemote: sweepRemote)));
+    await sweepOnce(fromRemote: sweepRemote);
   }
 
   /// Stops watching. The [receivedEnvelopes] stream stays open; a later

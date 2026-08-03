@@ -65,6 +65,11 @@ void main() {
   /// be asserted where [remoteData] alone is blind to it.
   late Map<String, PutRequestOptions> putOptions;
 
+  /// One entry per envelope scan: whether it was routed to the atServer. Same
+  /// reason as [putOptions] — the merged store makes a local scan and a remote
+  /// one indistinguishable by their results.
+  late List<bool> scanRoutedRemote;
+
   /// Simulates the atServer fanning self-notifications to every one of the
   /// atSign's monitors: a notify() on any client adds to this bus, and every
   /// client's subscribe() reads from it (filtered by regex).
@@ -163,6 +168,7 @@ void main() {
         showHiddenKeys: any(named: 'showHiddenKeys'),
         useRemoteAtServer: any(named: 'useRemoteAtServer'))).thenAnswer((inv) {
       final regex = RegExp(inv.namedArguments[#regex] as String);
+      scanRoutedRemote.add(inv.namedArguments[#useRemoteAtServer] == true);
       return Future.value(remoteData.keys
           .where((k) => regex.hasMatch(k))
           .map(AtKey.fromString)
@@ -200,6 +206,7 @@ void main() {
   setUp(() async {
     remoteData = {};
     putOptions = {};
+    scanRoutedRemote = [];
     notificationBus = StreamController<AtNotification>.broadcast();
     directory = FakeEnrollmentDirectory();
     sharerA = buildSharer('enroll-a', seedA);
@@ -399,6 +406,28 @@ void main() {
   });
 
   group('startListening', () {
+    test('a syncing client sweeps locally — sync is what fills that store',
+        () async {
+      await sharerB.startListening();
+      expect(scanRoutedRemote, isNotEmpty,
+          reason: 'startListening does an initial sweep');
+      expect(scanRoutedRemote, everyElement(isFalse),
+          reason: 'sync already delivers envelopes to the local store, so '
+              'remote sweeps would be traffic for nothing');
+    });
+
+    test('a client that does not sync sweeps the atServer instead', () async {
+      sharerB.clientRunsSync = false;
+      await sharerB.startListening();
+      expect(scanRoutedRemote, isNotEmpty);
+      expect(scanRoutedRemote, everyElement(isTrue),
+          reason: 'envelopes reach the local store only via sync, so on a '
+              'sync-less client a local sweep can never find anything — the '
+              'wake-up would be its only automatic path, and one missed past '
+              'its expiry would strand an envelope still readable on the '
+              'atServer');
+    });
+
     test('sync delivery of an envelope key triggers a sweep', () async {
       final syncService = MockSyncService();
       SyncProgressListener? registeredListener;

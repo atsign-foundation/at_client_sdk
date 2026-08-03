@@ -672,6 +672,19 @@ verify precedes open at `pairwise_secret_sharing.dart:366`); kpid addressing
   costs the *sender's* offline tolerance on this write (an offline sender fails
   rather than queueing); delivery stays offline-tolerant for the **recipient**,
   which is what the property is for, and `requestSecret` remains the backstop.
+  That trade exists only because nothing today preserves ordering across a
+  keystore write and a notification —
+  [#2116](https://github.com/atsign-foundation/at_client_sdk/issues/2116) would
+  remove it and let this go back to a local-first put with both properties
+  intact; [#2117](https://github.com/atsign-foundation/at_client_sdk/issues/2117)
+  is the broader intent-based framing. Both are outside the D1 program.
+  On the read side the mirror of this is `clientRunsSync` (default true): the
+  periodic sweep reads the local store when sync fills it and the atServer when
+  nothing does, so a sync-less client that misses a wake-up still picks the
+  envelope up lazily rather than only via `requestSecret`. Missed wake-ups are
+  already partly covered by the atServer's offline-notification replay, and the
+  wake-up carries the **same expiry as the envelope**, so a replayed nudge can
+  never point at a value that has already expired.
   (Future: the atServer auto-notifies on `__ssenv` puts — see DEP4 in
   [§6](#6-implementation-notes--file-level-pointers-consolidated); DEP4 is delivered
   inside SS-2 per the implementation plan — the auto-notify is additive and could ship

@@ -1,4 +1,14 @@
 ## 3.14.1
+- feat: `PairwiseSecretSharing.clientRunsSync` (default true) decides where
+  `startListening`'s initial and periodic sweeps read from. Envelopes reach the
+  local store only via sync, so on a client that does not sync those sweeps were
+  reading a store that could never contain anything — leaving the wake-up
+  notification as its only automatic path to an envelope, and a wake-up missed
+  past its expiry stranding a message that was still sitting readable on the
+  atServer for the rest of its ttl. Set it false and the sweeps read the
+  atServer, which is the lazy-fetch path for those clients. Left true, behaviour
+  is unchanged: sync already delivers envelopes locally, so remote sweeps would
+  be traffic for nothing.
 - fix: the secret-sharing substrate writes its `__ssenv` envelope to the
   atServer directly rather than local-first. The wake-up notification that
   follows the put is a direct remote call, so a local-first envelope was still
