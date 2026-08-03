@@ -615,7 +615,34 @@ rsa2048; both functional + e2e.
 by SS-1a.
 **coversD1:** D1-F DEP3 (single-key + signingAlgo).
 
-### SS-4 — nskey minting + pqpublickey lifecycle + correspondence check · at_client · L–XL — [#2087](https://github.com/atsign-foundation/at_client_sdk/issues/2087)
+### SS-4 — nskey minting + signing-root lifecycle + correspondence check · at_client · L — [#2087](https://github.com/atsign-foundation/at_client_sdk/issues/2087) — **ABOUT HALF LANDED on `gkc-pq-d1-spike`**
+
+⚠️ **Re-scoped by [decisions.md 22](decisions.md#22-ss-4-when-a-namespace-key-is-minted-and-what-must-be-true-first-2026-08-03).** Read that first; the deliverables below
+predate it and describe `pqpublickey` as a KEM, which [decisions.md 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) already replaced.
+
+**Landed.** Minting under a remote-first immutable `_nskeylock`, with the private made durable in
+`AtKeys` **before** the public half is published — and a mint that cannot store its private
+publishing nothing at all. Seeding at client init across the namespaces a client is authorised for,
+behind `AtClientPreference.seedNamespaceKeys` (default **off**), with legacy clients seeding
+`preference.namespace` and `*` enrollments seeding nothing. Conveyance of every held generation,
+read from `AtKeys` rather than the in-memory secret store. The public/private correspondence check
+on an arriving private — exact, because an X-Wing secret key is its seed. And
+`PqSigningRoot.mintIfAbsent`, immutable create-once, privileged enrollments only.
+
+**Owed — the chain's plumbing, which is the larger half:**
+
+- the parent signing a child's APKAM public key at approval and **conveying** the signature
+  (ruling 7), and the child publishing it onto its own `_apsk`'s `appMetadata` on first run;
+- chain **verification** — walk `_apsk` to `_apsk` up to the root. It is self-describing, so no
+  approval graph need be published, and a forged parent claim fails the signature check;
+- a losing enrollment **pulling** the root private from a privileged holder;
+- **key-transparency publication mechanics** — when a root is submitted, and what a client does if
+  the log is unreachable at mint. Still un-grilled.
+
+**Explicitly out of scope:** changing APKAM keypairs from RSA to ML-DSA. The chain is built over
+today's RSA keys and the algorithm swaps later without the chain changing, because the root signs an
+enrollment's public key whatever algorithm it is. `_apsk` migration needs thinking through first.
+
 **Goal:** mint the per-namespace key material and the atSign-level root PQ key — the first convergence
 feeder into the data path.
 **Builds on:** SS-3 + **P-3** (pqpublickey name/cold-start target) + **S-3** (updatable local key
@@ -701,8 +728,9 @@ cleanly with a pre-flight query and an opt-in legacy escape hatch, and nested na
 resolve by walking up with `appMetadata.ns` / `ckNs` on the wire — covered multi-segment in
 both live suites, which previously used single-segment namespaces only.
 `packages/at_client` green at
-754 passing / 39 skipped, `tests/at_functional_test` at 99, `tests/at_end2end_test` at
-41 with no skips.
+**789 passing / 39 skipped**, `tests/at_functional_test` at **104**,
+`tests/at_end2end_test` at 41 with no skips (2026-08-03). Also green: `at_auth` 142,
+`at_chops` 211, `at_commons` 505.
 
 *Proven live (functional suite, `tests/at_functional_test`):* self put/get round-trip
 through the whole pipeline including the pre-pass, the conveyance record and key
@@ -762,13 +790,19 @@ taken now because nothing written under the old form exists outside the spike.
 |---|---|
 | ~~Cold-start fails by design, with an exception, a fallback and a query~~ — **done on the spike branch.** `NamespaceKeyUnavailableException` carries the atSign and namespace and is raised by the *pre-pass*, so nothing is in flight when it fires; `CryptoRuntime.isReadyFor` answers the same question in advance via the `ReportsReadiness` seam; `AtClientPreference.allowLegacyCryptoFallback` (default false) reroutes the write to legacy, per write, so the fallback is forward-only. Covered live in `nskey_data_path_e2e_test`'s cold-start group ([decisions.md 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)) | **B-1c** |
 | ~~Advertised-key signature verification~~ — **done on the spike branch, both halves.** `PublishedNskeyKeyRing` signs its own nskey advertisement and `ApkamSignedAdvertisedKeys` verifies a peer's; `KeyPackageRegistration.signedKeyPackagePayload` signs the key package and `VerbEnrollmentDirectory` verifies it against the advertising enrollment's `_apsk`, rejecting unsigned, tampered, wrong-signer and forged-claim packages. No unverified advertised-key path is left. **Owed:** the key-package half has no live coverage — `enroll:listns` is unit-only until SS-2 wires the production path | **SS-1c** / **SS-2** |
+| **The functional rails are pointed away from CI's image and must be reverted before any PR.** `tests/at_functional_test/test/docker-compose.yaml` uses a locally built `at_virtual_env:local` and `runLocal.sh`'s `docker compose pull` is disabled — **uncommitted, deliberate**. The published `virtualenv:vip` does **not** store `EnrollParams.metadata`, so the key-package path cannot be tested against it at all. Before opening a client PR: confirm vip has been promoted, revert both files, and re-run the pack against it | `at_functional_test` |
+| **A PQ-capable client cannot tell a legacy atServer from an old peer.** Against an atServer that drops `EnrollParams.metadata`, the key package vanishes silently and the approver reads absence — which [decisions.md 20](decisions.md#20-ss-2-how-the-key-package-reaches-an-enrollment-and-how-conveyance-fires-2026-08-03) ruling 2 treats as *ordinary*, because it also means "an older client". So conveyance no-ops fleet-wide with nothing saying why. UC-B0.1 requires aborting cleanly and logging the reason; `info` returns only a version string, with no feature list to check | **RF-SRV** / UC-B0.1 |
+| **Parity across every atServer implementation for the `mldsa65` verify branch.** At least one rejects `signingAlgo:mldsa65` while *parsing* the command, so a PQ client meets an invalid-syntax error rather than an authentication failure. It already stores `signingAlgo` but never reads it, and carries no ML-DSA support — a dependency decision, not an edit | **SS-3** |
+| **`at_auth` 3.4.0 is open and unpublished**, and at_client now depends on `AtEnrollmentRequest.metadataBuilder`. Same masking as the at_commons row below: workspace resolution hides it, so a green build says nothing | `at_auth` |
+| **The substrate's unit fixture cannot see routing** — one map backs local storage and the atServer, so a local-first write and a remote-first one are indistinguishable by results. Routing is asserted directly instead (`putOptions`, `scanRoutedRemote`). Closing it properly means modelling sync in the fixture | `at_client` tests |
 | **`at_client` cannot publish until `at_commons` 5.14.0 does.** Its floor was raised to `^5.14.0` in the same commit as the first use of `Metadata.copy()`, and 5.14.0 is open but unpublished — workspace resolution masks this exactly as the publish-ordering caution warns, so a green build says nothing. `at_chops` 3.4.2 is in the same state, though nothing pins it yet | `at_commons` / `at_chops` |
 | ~~The secret-sharing substrate has no live coverage in either pack~~ — **opened, not closed.** `secret_sharing_delivery_test.dart` now drives it live: the envelope is on the atServer by the time `sendEnvelope` returns, and a client that has never synced fetches and decrypts it from there. Both fail against the pre-fix build and nothing else does, so they detect the defect rather than merely passing. **Still owed:** everything beyond envelope delivery — `pushSecretToNamespaceMembers`, the `requestSecret`/`waitForSecret` pull flow, and anything needing two real enrollments, which waits on SS-2 | `at_functional_test` |
 | **The substrate's unit fixture backs local storage and the atServer with one map**, so it cannot see a local-first-vs-remote-first defect on the read side at all — which is how the `__ssenv` wake-up ordering bug survived. Fixed for the write side by asserting the put's routing directly and for the sweep by asserting the scan's, but the blind spot itself remains: any future substrate read that depends on routing is untested unless someone remembers to assert the routing rather than the result. Closing it properly means modelling sync in the fixture, so local and remote diverge and a wrong route fails on its results. The live pack now covers the two paths that matter today | `at_client` tests |
-| Real nskey minting + per-APKAM conveyance; `InMemoryNskeyKeyRing` and `mintAndPublish` are fixtures. **Gates the final 3.x release** — the rollout seeds the fleet, and a key published without its private durably conveyed leaves the far end undecryptable | **SS-4** |
-| Mint and publish `public:pq_signing_root@<atSign>`, immutable, `{v, keys[], successor}`, conveyed to fully privileged enrollments. Also gates final 3.x | **SS-4** |
+| ~~Real nskey minting + per-APKAM conveyance~~ — **done.** `mintAndPublish` takes a remote-first immutable `_nskeylock`, files the private into `AtKeys` **before** publishing, and publishes nothing at all if it cannot. `NskeySeeding` mints at client init across a client's authorised namespaces and conveys every held generation, reading from `AtKeys` rather than the in-memory store. `InMemoryNskeyKeyRing` remains for tests only | **SS-4** |
+| **Mint** of `public:pq_signing_root@<atSign>` is **done** — `PqSigningRoot`, immutable create-once, privileged enrollments only, private filed before publish. **Owed:** conveying it to the other privileged enrollments, and a losing enrollment pulling it | **SS-4** |
+| **Wire the nskey `CryptoConfig` at init** so the data path is the default rather than app-assembled — the other half of the nullable-`crypto` change. Seeding is already wired (`AtClientPreference.seedNamespaceKeys`, default off) but the *provider* set still is not | **SS-4** |
 | ~~`AtClientPreference.crypto` becomes nullable~~ — **done.** It is `CryptoConfig?`, null meaning "whatever this release encrypts with", and every reader goes through `CryptoConfig.forClient(atClient)` — the one place the era default lives. The SDK deliberately does *not* resolve into the app's preference object: harmless while the default is a const, a per-atSign leak the moment it is not. What SS-4 still owes is the *other* half — building the key ring at init once the default becomes the nskey path | **SS-4** |
-| The `_nskeylock` mint/rotate race — specified here, neither implemented nor tested | **SS-4** |
+| ~~The `_nskeylock` mint/rotate race~~ — **done.** `NskeyMintLock` takes it remote-first, because the atomicity is the atServer refusing a second immutable create; a local-first put would let both enrollments believe they won and collide only at sync. The loser re-reads and adopts rather than waiting | **SS-4** |
 | The bench harness `acceptance.md` says lands with B-1 — not built, and not in this plan's deliverables | **B-1** |
 | ~~`at_chops` `pqOpen` lets an `ArgumentError` escape~~ — **fixed in at_chops 3.4.2** (unpublished): a wrong-length secret key or KEM ciphertext now arrives as `PqOpenException(malformedEnvelope)`. `NskeyProvider`'s client-side guard stays until at_client's floor rises past 3.4.1 | `at_chops` |
 | ~~The CK cache and the owner's own nskey privates are process memory only~~ — **half of this was wrong.** Content keys are a genuine cache: the read path re-fetches the `__ck` conveyance record and re-opens it, so a restart costs a round trip, not data. The nskey private is the real exposure, and [decisions.md 21](decisions.md#21-ss-3-where-key-material-lives-and-what-the-substrate-stops-storing-2026-08-03) ruling 1 files it into `AtKeys` on arrival. **Owed:** implement that filing, plus the current-`ckKid` pointer (ruling 2) so a restart stops minting a fresh CK per destination | **SS-3** / **SS-4** |
