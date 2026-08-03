@@ -1,5 +1,6 @@
 import 'dart:async' show StreamSubscription;
 import 'dart:convert' show base64Decode;
+import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart'
     show
@@ -87,18 +88,54 @@ class NskeyPrivateFiling {
           'it opens');
       return false;
     }
+    return store(
+      namespace: secret.namespace,
+      nskeyKid: nskeyKid,
+      private: Uint8List.fromList(base64Decode(secret.value)),
+      createdAt: secret.createdAt,
+    );
+  }
 
+  /// The nskey private for `(namespace, nskeyKid)`, or null if this client
+  /// does not hold it.
+  ///
+  /// Read from `AtKeys` rather than from memory, so it survives the restart
+  /// that is the whole reason for filing it there.
+  Future<Uint8List?> read(String namespace, String nskeyKid) async {
+    try {
+      final keys = await keysIo.read(atSign);
+      final material = keys.getKey(keyIdFor(namespace, nskeyKid),
+          CryptographicKeyType.privateDecapsulation);
+      if (material == null) return null;
+      return Uint8List.fromList(material.bytes.bytes);
+    } catch (e) {
+      _logger.finer('No nskey private for $namespace:$nskeyKid ($e)');
+      return null;
+    }
+  }
+
+  /// Stores an nskey private this client either minted or was conveyed.
+  ///
+  /// The minting path calls this **before publishing the public half**: a
+  /// published key whose private did not survive leaves every sender sealing
+  /// to something nobody can open, and no later repair recovers the data
+  /// written in between.
+  Future<bool> store({
+    required String namespace,
+    required String nskeyKid,
+    required Uint8List private,
+    DateTime? createdAt,
+  }) async {
     final AtKeys keys;
     try {
       keys = await keysIo.read(atSign);
     } catch (e) {
       _logger.severe('Cannot file the nskey private for '
-          '${secret.namespace}:$nskeyKid — this atSign has no readable AtKeys: '
-          '$e');
+          '$namespace:$nskeyKid — this atSign has no readable AtKeys: $e');
       return false;
     }
 
-    final keyId = keyIdFor(secret.namespace, nskeyKid);
+    final keyId = keyIdFor(namespace, nskeyKid);
     if (keys.getKey(keyId, CryptographicKeyType.privateDecapsulation) != null) {
       // Re-delivery is expected: the substrate converges by re-sending, and
       // putIfNewer already made arrival idempotent upstream.
@@ -109,8 +146,8 @@ class NskeyPrivateFiling {
       keyId: keyId,
       keyPartType: CryptographicKeyType.privateDecapsulation,
       keyAlgorithmType: KeyAlgorithmType.xWing,
-      bytes: AtBytes(base64Decode(secret.value)),
-      createdAt: secret.createdAt,
+      bytes: AtBytes(private),
+      createdAt: createdAt ?? DateTime.now().toUtc(),
     ));
 
     if (keysIo is WrittenAtKeysIo) {
@@ -118,10 +155,9 @@ class NskeyPrivateFiling {
     } else {
       // Read-only key storage: the private is usable for this process and
       // gone at restart, which is exactly the failure this exists to prevent.
-      _logger.severe('Filed the nskey private for ${secret.namespace}:'
-          '$nskeyKid in memory only — this AtKeysIo cannot persist, so a '
-          'restart will lose it and every value its content keys protect '
-          'becomes unreadable');
+      _logger.severe('Filed the nskey private for $namespace:$nskeyKid in '
+          'memory only — this AtKeysIo cannot persist, so a restart will lose '
+          'it and every value its content keys protect becomes unreadable');
     }
     return true;
   }

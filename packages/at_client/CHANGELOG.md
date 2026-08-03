@@ -1,4 +1,16 @@
 ## 3.14.1
+- feat: minting a namespace key takes a lock and makes its private durable
+  before publishing. `NskeyMintLock` is a short-ttl immutable self key taken
+  **remote-first** — the atomicity is the atServer refusing a second immutable
+  create, so a local-first put would let two of an atSign's enrollments each
+  believe they had won and collide only at sync. The loser does not wait: it
+  re-reads and adopts the winner's advertisement, because minting a second key
+  would rotate the first out from under every peer that had already fetched it.
+  The private is filed into `AtKeys` first, and a mint that cannot store it
+  **publishes nothing** — the advertisement is the promise that a private
+  exists, and rotation replaces a key rather than decrypting what was written
+  while none existed. `privateHalf` reads the durable copy, so a restart
+  recovers rather than losing the namespace.
 - feat: `NskeyPrivateFiling` moves an arriving nskey private out of the
   secret-sharing transit buffer and into `AtKeys`, keyed by namespace **and**
   kid — kids are truncated hashes and are not unique across namespaces. Losing

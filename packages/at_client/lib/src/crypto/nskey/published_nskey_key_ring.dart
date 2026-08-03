@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
+import 'package:at_client/src/crypto/nskey/nskey_mint_lock.dart';
+import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -150,8 +152,20 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     AdvertisedKeyVerifier? verifier,
     this.advertisementTtl = const Duration(minutes: 15),
     this.advertisementStaleGrace = const Duration(minutes: 15),
+    NskeyMintLock? mintLock,
+    this.privateFiling,
   })  : verifier = verifier ?? ApkamSignedAdvertisedKeys(_atClient),
+        mintLock = mintLock ?? NskeyMintLock(_atClient),
         _signer = AtClientEnvelopeSigner(_atClient);
+
+  /// Serialises minting between this atSign's own enrollments.
+  final NskeyMintLock mintLock;
+
+  /// Where a minted private is made durable **before** its public half is
+  /// published. Null keeps privates in memory only — a fixture posture, since
+  /// a published key whose private did not survive the process leaves senders
+  /// sealing to something nobody can open.
+  final NskeyPrivateFiling? privateFiling;
 
   /// Signs this atSign's own advertisements. A recipient that cannot check who
   /// generated the key it is about to seal to has no protection left but the
@@ -185,6 +199,22 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
   /// conveyances sealed to it still open.
   Future<NskeyAdvertisement> mintAndPublish(String namespace) async {
     final owner = _atClient.getCurrentAtSign()!;
+    final minted = await mintLock.withLock(
+        owner, namespace, () => _mint(owner, namespace));
+    if (minted != null) return minted;
+
+    // Another enrollment is minting. Re-read rather than wait: whatever it is
+    // doing ends with an advertisement published, and this client needs that
+    // one — minting a second would rotate the first out from under any peer
+    // that had already fetched it.
+    final published = await currentPublic(owner, namespace);
+    if (published != null) return published;
+    throw StateError(
+        'another enrollment holds the mint lock for $owner:$namespace but has '
+        'published no advertisement yet');
+  }
+
+  Future<NskeyAdvertisement> _mint(String owner, String namespace) async {
     final pair = await XWingKeyPair.generate();
     final advertisement = (
       nskeyKid: nskeyKidOf(pair.publicKeyBytes),
@@ -196,6 +226,24 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     // from an enrollment of this atSign rather than from whoever served it.
     // The APKAM public half must already be published, or the peer has nothing
     // to check the signature against.
+    // Durable BEFORE the advertisement goes out. A key published ahead of its
+    // private leaves every sender sealing to something nobody can open, and no
+    // later repair recovers what was written in between — rotation replaces the
+    // key, it does not decrypt the past.
+    final filing = privateFiling;
+    if (filing != null) {
+      final stored = await filing.store(
+        namespace: namespace,
+        nskeyKid: advertisement.nskeyKid,
+        private: pair.privateKeyBytes,
+      );
+      if (!stored) {
+        throw StateError(
+            'could not store the nskey private for $owner:$namespace, so its '
+            'public half is deliberately not published');
+      }
+    }
+
     await _signer.publishPublicSigningKey();
     final payload = await _signer.wrapAndSignAndJsonEncode({
       'nskeyKid': advertisement.nskeyKid,
@@ -287,6 +335,20 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
 
   @override
   Future<Uint8List?> privateHalf(
-          String owner, String namespace, String nskeyKid) async =>
-      _ownPrivates[_generation(owner, namespace, nskeyKid)];
+      String owner, String namespace, String nskeyKid) async {
+    // Memory first — this process minted it, or has already read it once.
+    final held = _ownPrivates[_generation(owner, namespace, nskeyKid)];
+    if (held != null) return held;
+
+    // Then the durable copy, which is what a restart or another of this
+    // atSign's enrollments actually has. `owner` is the nskey owner, and only
+    // this atSign's own privates are ever filed, so a request for a peer's
+    // private has nothing to find here and correctly returns null.
+    if (owner != _atClient.getCurrentAtSign()) return null;
+    final filed = await privateFiling?.read(namespace, nskeyKid);
+    if (filed != null) {
+      _ownPrivates[_generation(owner, namespace, nskeyKid)] = filed;
+    }
+    return filed;
+  }
 }
