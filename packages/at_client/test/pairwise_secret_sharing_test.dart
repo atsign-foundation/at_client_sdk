@@ -51,7 +51,19 @@ void main() {
   /// Simulates the atServer's keystore: full key string -> value. The same
   /// map backs every mocked client's put/get/scan/delete, modelling the
   /// post-sync state in which sender writes are visible to recipients.
+  ///
+  /// Because one map serves as both the local store and the atServer, this
+  /// fixture **cannot** tell a local-first write from a remote-first one on
+  /// the read side. That distinction matters — a local-first envelope waits
+  /// for a sync cycle while its wake-up notify goes straight out, so a
+  /// sync-less recipient can remote-sweep before the value lands — so the
+  /// options each put was made with are recorded in [putOptions] and asserted
+  /// directly instead.
   late Map<String, String> remoteData;
+
+  /// Full key string -> the [PutRequestOptions] that wrote it, so routing can
+  /// be asserted where [remoteData] alone is blind to it.
+  late Map<String, PutRequestOptions> putOptions;
 
   /// Simulates the atServer fanning self-notifications to every one of the
   /// atSign's monitors: a notify() on any client adds to this bus, and every
@@ -121,8 +133,12 @@ void main() {
 
     when(() => atClient.put(any(), any(),
         putRequestOptions: any(named: 'putRequestOptions'))).thenAnswer((inv) {
-      remoteData[inv.positionalArguments[0].toString()] =
-          inv.positionalArguments[1];
+      final keyString = inv.positionalArguments[0].toString();
+      remoteData[keyString] = inv.positionalArguments[1];
+      final options = inv.namedArguments[#putRequestOptions];
+      if (options is PutRequestOptions) {
+        putOptions[keyString] = options;
+      }
       return Future.value(true);
     });
     when(() => atClient.get(any(),
@@ -183,6 +199,7 @@ void main() {
 
   setUp(() async {
     remoteData = {};
+    putOptions = {};
     notificationBus = StreamController<AtNotification>.broadcast();
     directory = FakeEnrollmentDirectory();
     sharerA = buildSharer('enroll-a', seedA);
@@ -230,6 +247,21 @@ void main() {
       expect(envKey!.toString(), envelopeKeys.single);
       expect(envKey.metadata.ttl, Duration(hours: 1).inMilliseconds);
       expect(envOpts!.shouldEncrypt, isFalse);
+    });
+
+    test('writes the envelope remote-first, so the wake-up cannot outrun it',
+        () async {
+      await sharerA
+          .sendEnvelope(sharerB.myKeyPackage, 'myapp', {'hello': 'bob'});
+
+      final envelopeKey = putOptions.keys
+          .singleWhere((k) => k.contains('.${sharerB.kpid}.__ssenv.'));
+      expect(putOptions[envelopeKey]!.useRemoteAtServer, isTrue,
+          reason: 'the wake-up notify is a direct remote call, so a '
+              'local-first envelope would still be waiting for a sync cycle '
+              'when a sync-less recipient remote-sweeps — and the wake-up is '
+              'one-shot. This fixture backs local and remote with one map, so '
+              'the routing has to be asserted here or nothing sees it');
     });
 
     test('throws StateError when the recipient package has no supported key',

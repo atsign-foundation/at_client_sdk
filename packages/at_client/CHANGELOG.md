@@ -1,4 +1,16 @@
 ## 3.14.1
+- fix: the secret-sharing substrate writes its `__ssenv` envelope to the
+  atServer directly rather than local-first. The wake-up notification that
+  follows the put is a direct remote call, so a local-first envelope was still
+  waiting for a sync cycle when a sync-less recipient — the only kind the
+  wake-up exists to serve — woke and swept the atServer for it. The sweep found
+  nothing, and the wake-up is one-shot, so that client fell back to the pull
+  path and the notification bought it nothing. Writing remote-first orders the
+  two by construction. An offline sender now fails this write instead of
+  queueing it; delivery remains offline-tolerant for the recipient, and
+  `requestSecret` is still the backstop. The unit fixture backs local and
+  remote storage with one map and so cannot see this class of defect on the
+  read side, so the write's routing is now asserted directly.
 - fix: `PublishedNskeyKeyRing` no longer reports its own atSign's published
   namespace as cold start. It short-circuited to an in-memory map that only
   `mintAndPublish` populates, so another enrollment — or the same one after a

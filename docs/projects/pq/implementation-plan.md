@@ -516,8 +516,29 @@ delete; survives an enqueue throw); `forClient` distinct per `(AtClient, enrollm
 `enroll:request` carries the opaque key package, the approver reads it and `approve` seals an `__ssenv`
 envelope + fires `shareAllSecretsWithEnrollment`; **no `enroll:metadata` command ever issued**; both suites.
 **Effort:** L.
-**Watch-outs:** ⚠️ the atServer-schema change (separate `at_server`/`java_at_server`) must land in the same
-release; ~1KB blob size limit; listener-before-trigger for the wake-up subscription.
+**Watch-outs:** ⚠️ **there is no atServer *schema* change left in SS-2** — that watch-out was inherited from
+SS-1b, where it was true, and is stale here (verified against `at_server` @ `3f77a3a0`, 2026-08-03). The key
+package rides inside `EnrollDataStoreValue.metadata`, which SS-1b already stores verbatim and returns from
+`listns`; the field's own dartdoc already names `metadata['keyPackage']` and the 1:1:1 model, and
+`enroll_verb_handler.dart` already persists `signingAlgo`. So the **key-package-in-request half is
+client-only** and runs against today's atServer unchanged.
+What the atServer genuinely still lacks is **behaviour, not shape**, and it is the smaller half:
+(1) **`__ssenv` does not exist server-side at all** — the only occurrence in `at_server` is a comment in
+`enroll_verb_handler.dart`, so DEP4's update-put auto-notify is unbuilt; (2) `_getSigningAlgoType`
+(`pkam_verb_handler.dart`) branches on **ecc and rsa2048 only** and falls through to `rsa2048` for anything
+else, `mldsa65` included — so a PQ-APKAM would be verified as RSA and fail. Note that method also reads
+`verbParams[atPkamSigningAlgo]`, i.e. the *client-supplied* algo, not the stored record; making it
+record-authoritative is SS-3's, and both server changes need `java_at_server` parity in the same sweep.
+Also: ~1KB blob size limit; listener-before-trigger for the wake-up subscription.
+**DEP4 is now deferred, not owed by SS-2** (ruled 2026-08-03). Investigating whether the
+client-side wake-up is sufficient turned up the reason it *wasn't*: `sendEnvelope` put the
+envelope local-first while the notify went straight out remote, so the nudge could outrun the
+value and a sync-less recipient would sweep an atServer that did not hold the envelope yet.
+That is fixed client-side by writing the envelope remote-first, which orders the two by
+construction and needs no atServer change. DEP4 remains a genuine improvement — a server-side
+auto-notify fires independently of the sender's SDK version or config — but it is now a pure
+optimisation with no correctness argument behind it, and the client `sendWakeUpNotification`
+default stays **true** until it lands.
 **coversD1:** D1-F DEP4 + production wiring (new-device conveyance).
 
 ### SS-3 — substrate hardening (durable store + jitter) + single `apkamPublicKey` + `signingAlgo` verify · at_secondary_server, at_client · L — [#2086](https://github.com/atsign-foundation/at_client_sdk/issues/2086)
@@ -684,6 +705,8 @@ taken now because nothing written under the old form exists outside the spike.
 | ~~Cold-start fails by design, with an exception, a fallback and a query~~ — **done on the spike branch.** `NamespaceKeyUnavailableException` carries the atSign and namespace and is raised by the *pre-pass*, so nothing is in flight when it fires; `CryptoRuntime.isReadyFor` answers the same question in advance via the `ReportsReadiness` seam; `AtClientPreference.allowLegacyCryptoFallback` (default false) reroutes the write to legacy, per write, so the fallback is forward-only. Covered live in `nskey_data_path_e2e_test`'s cold-start group ([decisions.md 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)) | **B-1c** |
 | ~~Advertised-key signature verification~~ — **done on the spike branch, both halves.** `PublishedNskeyKeyRing` signs its own nskey advertisement and `ApkamSignedAdvertisedKeys` verifies a peer's; `KeyPackageRegistration.signedKeyPackagePayload` signs the key package and `VerbEnrollmentDirectory` verifies it against the advertising enrollment's `_apsk`, rejecting unsigned, tampered, wrong-signer and forged-claim packages. No unverified advertised-key path is left. **Owed:** the key-package half has no live coverage — `enroll:listns` is unit-only until SS-2 wires the production path | **SS-1c** / **SS-2** |
 | **`at_client` cannot publish until `at_commons` 5.14.0 does.** Its floor was raised to `^5.14.0` in the same commit as the first use of `Metadata.copy()`, and 5.14.0 is open but unpublished — workspace resolution masks this exactly as the publish-ordering caution warns, so a green build says nothing. `at_chops` 3.4.2 is in the same state, though nothing pins it yet | `at_commons` / `at_chops` |
+| **The secret-sharing substrate has no live coverage in either pack** — `grep -rl 'PairwiseSecretSharing\|AtClientSecretSharing\|sendEnvelope\|shareSecretWith' tests/` returns nothing, so every claim about it rests on a fixture that merges local and remote storage. This is why the `__ssenv` wake-up ordering bug reached the branch. A functional test driving a genuinely sync-less recipient against a live atServer is the one that would have caught it | `at_functional_test` |
+| **The substrate's unit fixture backs local storage and the atServer with one map**, so it cannot see a local-first-vs-remote-first defect on the read side at all — which is how the `__ssenv` wake-up ordering bug survived. Fixed for the write side by asserting the put's routing directly, but the blind spot itself remains: any future substrate read that depends on routing is untested. Closing it properly means modelling sync in the fixture | `at_client` tests |
 | Real nskey minting + per-APKAM conveyance; `InMemoryNskeyKeyRing` and `mintAndPublish` are fixtures. **Gates the final 3.x release** — the rollout seeds the fleet, and a key published without its private durably conveyed leaves the far end undecryptable | **SS-4** |
 | Mint and publish `public:pq_signing_root@<atSign>`, immutable, `{v, keys[], successor}`, conveyed to fully privileged enrollments. Also gates final 3.x | **SS-4** |
 | ~~`AtClientPreference.crypto` becomes nullable~~ — **done.** It is `CryptoConfig?`, null meaning "whatever this release encrypts with", and every reader goes through `CryptoConfig.forClient(atClient)` — the one place the era default lives. The SDK deliberately does *not* resolve into the app's preference object: harmless while the default is a const, a per-atSign leak the moment it is not. What SS-4 still owes is the *other* half — building the key ring at init once the default becomes the nskey path | **SS-4** |

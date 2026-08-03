@@ -110,9 +110,12 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// (default on) after the put. Clients that run sync receive envelopes via
   /// sync without it; sync-less clients rely on it (their [startListening]
   /// monitors for it and does a remote sweep). It is best-effort: the
-  /// envelope is already durably stored, so a failed wake-up never fails the
-  /// send. A future atServer enhancement will emit this notification itself
-  /// on a put to an `__ssenv` key, at which point senders can leave it off.
+  /// envelope is already on the atServer when this fires — [sendEnvelope]
+  /// writes it remote-first for exactly that reason — so a failed wake-up
+  /// never fails the send, and a wake-up that arrives never points at a value
+  /// that has not landed. A future atServer enhancement will emit this
+  /// notification itself on a put to an `__ssenv` key, at which point senders
+  /// can leave it off.
   bool sendWakeUpNotification = true;
 
   final StreamController<ReceivedEnvelope> _receivedController =
@@ -217,10 +220,22 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     // recipient; self-key encryption would only obscure that the payload is
     // our own ciphertext. The value is raw JSON (never whole-value base64) so
     // that pre-fix readers' legacy decrypt fallback also returns it untouched.
+    //
+    // useRemoteAtServer=true: the envelope is a remote-only value — every
+    // reader but the writer fetches it from the atServer, and the writer never
+    // reads its own. A local-first put would also let the wake-up below
+    // outrun it: the notify is a direct remote call while a local-first value
+    // waits for a sync cycle, so a sync-less recipient would remote-sweep an
+    // atServer that does not hold the envelope yet, and the wake-up is
+    // one-shot. Writing remote-first makes the ordering correct by
+    // construction. The cost is that an offline sender fails here rather than
+    // queueing; the pull path (requestSecret) is the backstop for that.
     await atClient.put(
       atKey,
       signedJson,
-      putRequestOptions: PutRequestOptions()..shouldEncrypt = false,
+      putRequestOptions: PutRequestOptions()
+        ..shouldEncrypt = false
+        ..useRemoteAtServer = true,
     );
     logger.info('Stored secret envelope $atKey for kpid ${recipientKey.kid}');
 

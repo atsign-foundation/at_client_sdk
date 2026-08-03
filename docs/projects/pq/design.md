@@ -661,10 +661,17 @@ verify precedes open at `pairwise_secret_sharing.dart:366`); kpid addressing
   still serves a missed client later (pull is the correctness backstop).
   (`secret_store.dart:117,126,98`.)
 - **Transport** = `atClient.put` of the `__ssenv` key + a **sync** delivery path
-  (sync-progress listener + periodic local sweep → `receivedSecrets`), so it is
-  offline-tolerant by construction; **plus an optional wake-up `notify`**
+  (sync-progress listener + periodic local sweep → `receivedSecrets`);
+  **plus an optional wake-up `notify`**
   (default on) per put, so sync-less clients wake on their notification monitor
   and `get` the key (`useRemoteAtServer`). Applies to both request and response.
+  The envelope put is **remote-first** (`useRemoteAtServer = true`): the wake-up
+  is a direct remote call, so a local-first envelope would still be waiting on a
+  sync cycle when a sync-less recipient remote-swept, and the wake-up is
+  one-shot — that client would then fall back to the pull path. Remote-first
+  costs the *sender's* offline tolerance on this write (an offline sender fails
+  rather than queueing); delivery stays offline-tolerant for the **recipient**,
+  which is what the property is for, and `requestSecret` remains the backstop.
   (Future: the atServer auto-notifies on `__ssenv` puts — see DEP4 in
   [§6](#6-implementation-notes--file-level-pointers-consolidated); DEP4 is delivered
   inside SS-2 per the implementation plan — the auto-notify is additive and could ship
