@@ -1,4 +1,18 @@
 ## 3.14.1
+- feat: `NskeySeeding` mints and publishes this atSign's namespace keys and
+  conveys each private to its other enrollments. It seeds at client start
+  rather than on first write, because the rollout mints while clients are
+  still writing legacy — minting on first write would seed only as traffic
+  happened, leaving early senders cold-starting against recipients who simply
+  had not written yet. A legacy client seeds the one namespace it can name
+  (`preference.namespace`); those clients are most of the fleet during the
+  rollout. A `*` enrollment seeds nothing at start, since "every namespace" is
+  not a list that can be minted, and mints on demand instead. Conveyance sends
+  **every** generation a client holds, not just the current one: data written
+  under a superseded key is opened only by the private it was sealed under.
+  Reads come from `AtKeys` rather than the secret store, which is in-memory by
+  design — an approver relying on it would convey a newly approved enrollment
+  nothing at all after a restart. Not yet called at startup.
 - feat: an arriving nskey private is checked against the published public half
   before it is filed. An X-Wing secret key **is** its seed, so the public
   derives from it exactly — the check is precise, not heuristic. It is

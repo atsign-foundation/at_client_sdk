@@ -174,6 +174,31 @@ class NskeyPrivateFiling {
     }
   }
 
+  /// Every nskey private this client holds for [namespace], keyed by its
+  /// `nskeyKid`.
+  ///
+  /// All generations, not just the current one: data written under a
+  /// superseded key is still readable, and only its own private opens it. A
+  /// client given the current generation alone could read nothing written
+  /// before the last rotation.
+  Future<Map<String, Uint8List>> readAllFor(String namespace) async {
+    final prefix = keyIdFor(namespace, '');
+    try {
+      final keys = await keysIo.read(atSign);
+      return {
+        for (final material in keys.keys)
+          if (material.keyPartType ==
+                  CryptographicKeyType.privateDecapsulation &&
+              material.keyId.startsWith(prefix))
+            material.keyId.substring(prefix.length):
+                Uint8List.fromList(material.bytes.bytes)
+      };
+    } catch (e) {
+      _logger.finer('No nskey privates for $namespace ($e)');
+      return const {};
+    }
+  }
+
   /// Stores an nskey private this client either minted or was conveyed.
   ///
   /// The minting path calls this **before publishing the public half**: a
