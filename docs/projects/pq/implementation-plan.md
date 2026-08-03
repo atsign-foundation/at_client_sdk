@@ -677,6 +677,19 @@ taken now because nothing written under the old form exists outside the spike.
 | The notify **receive** half has no live coverage, and cannot get any in `at_end2end_test` as it stands: `AtClientManager` is a singleton, and `setCurrentAtSign` both stops the previous atSign's monitor and unsets its `notificationService`, so no test can hold a subscription on one atSign while another sends. Covered at unit level only. Closing this needs the harness to support two concurrent clients, not a new test | `at_end2end_test` |
 | `_addMetadataToBuilder` on the notify path is still a hand-rolled copier — swept for the fields a reader needs, but not routed through a canonical converter, because none exists for `Metadata`→`Metadata` | `at_commons` |
 
+**Open, needs a ruling: nskey resolution in nested namespaces.** A namespace is
+dotted and hierarchical, so `someid.d.c.b.a@alice` sits under `d.c.b.a`, which sits
+under `c.b.a`, `b.a` and `a`. An nskey may exist at any of those levels. The intent is
+that a sender resolves **most-specific first and walks up** — `d.c.b.a`, then `c.b.a`,
+then `b.a`, then `a` — and only abandons when none is found. Nothing implements that
+today: `NskeyKeyRing.currentPublic(owner, namespace)` is an exact match on the whole
+dotted string, the CK cache is scoped `(owner, namespace)` on that same exact string,
+and `SymmetricAesGcmProvider.conveyanceKeyFor` addresses the conveyance under the
+value's own namespace. Each of those needs to agree on which level answered, or a
+reader will look for a content key under a different level than the writer used.
+Related: whether a walk-up crosses an authorisation boundary, since `rw` on `d.c.b.a`
+does not imply anything about `a`.
+
 *Test runners:* use the committed `tests/*/runLocal.sh`. They pull the virtualenv image;
 ad-hoc copies that skip `docker compose pull` will silently test a stale atServer.
 

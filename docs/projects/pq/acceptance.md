@@ -6,24 +6,11 @@ post-quantum work — the full use-case list **A1.x–A5.x** (PQ-native greenfie
 and **B0.x–B5.x** (retrofit / mixed), each as **Given / When / Then** with
 concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
-> **Not yet reconciled with the 2026-08-03 ruling.** Every scenario below that
-> treats `pqpublickey` as a PQ **encryption** key or a KEM target is stale:
-> the key signs and verifies only, and it is renamed
-> `public:pq_signing_root@<atSign>`. See
-> [decisions.md section 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).
->
-> The rulings it needs are all made; what is owed is the rewrite, which is
-> tracked against **B-1c**. It is left standing rather than half-corrected. The
-> two clusters that change most:
->
-> 1. **A2 enrollment approval reverses direction.** Step 2 of UC-A2.1 has the
->    joining enrollment encapsulate `apkamSymmetricKey` to `pqpublickey`; instead
->    the **approver** generates it and encapsulates to the enrollee's X-Wing
->    key-package public half, which the `enroll:request` tail already carries. No
->    atSign-level KEM anywhere.
-> 2. **The A1 cold-start scenarios** assume a PQ fallback that no longer exists.
->    Cold-start fails unless legacy is opted into, and PQ sharing now requires the
->    recipient to have used or authorised the namespace.
+> **Reconciled with the 2026-08-03 ruling.** `pqpublickey` is gone: the
+> atSign-level key is `public:pq_signing_root@<atSign>`, it signs and verifies
+> only, and no scenario encapsulates to it. Cold-start has no PQ target and fails,
+> so PQ sharing requires the recipient to have used or authorised the namespace.
+> See [decisions.md section 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).
 
 ## Table of contents
 
@@ -96,7 +83,7 @@ per keyfile/install):
 |-----------|-----------------------------------------------------------------------------------------------------------|
 | `enr`     | the enrollment id (`E1`, `E2`, …) — one APKAM keypair                                                      |
 | `APKAM`   | auth keypair held: `rsa` (legacy) · `pq` (ML-DSA / `mldsa65`) · `both`                                     |
-| `pqpk⁻¹`  | holds the atSign-level `pqpublickey` **private** half?                                                     |
+| `root⁻¹`  | holds the atSign-level **signing root** private half? Only fully privileged (`rw *` + `__manage`) enrollments do |
 | `nskey⁻¹` | holds the namespace's **one** nskey private; it **decapsulates content keys (CKs)** for both the owner's own data and inbound shares — it does not decrypt application data |
 | `KP`      | its X-Wing **key package** (`kid` = `kpid`) is registered in the enrollment record? (**one key package per enrollment**, never published) |
 
@@ -107,15 +94,23 @@ per keyfile/install):
 | atSign        | `legacy` · `pq-native` · `mixed`                                                                      |
 | `aS`          | atServer: `pq` (new verbs) · `legacy`                                                                 |
 | `publickey`   | legacy RSA encryption pubkey published?                                                               |
-| `pqpublickey` | atSign-level PQ encryption pubkey published (immutable)?                                              |
+| `pq_signing_root` | atSign-level user-owned **signing** root published (immutable)?                                   |
 | `nskey.ns`    | namespace `ns` nskey state: `—` (never used, so no nskey) · `<kid>` (minted and published at `public:__nskey.<ns>@owner`; the kid names the current generation) |
-| `ready`       | PQ-readiness marker, **per (atSign, namespace)** (+ an atSign-level marker for the root `pqpublickey`): `n-r` · `ready` |
+| `ready`       | PQ-readiness marker, **per (atSign, namespace)** (+ an atSign-level marker for the signing root): `n-r` · `ready` |
 
 **Key objects** (shapes defined in `design.md`; named here for test wiring):
 
-- `public:pqpublickey@alice` — atSign-level PQ encryption pubkey (X-Wing =
-  ML-KEM-768 + X25519); root, no namespace; **immutable** once written. Private
-  half = the root secret `pqid:<kid>`.
+- `public:pq_signing_root@alice` — the atSign-level, **user-owned signing root**
+  (ML-DSA-65); no namespace; **immutable** once written, which is what stops two
+  privileged enrollments minting two roots. It signs and verifies only, and never
+  appears in a key-transport path. Value is
+  `{"v": 1, "keys": [{"alg": "ml-dsa-65", "pub": "<base64>"}], "successor": null}`;
+  `keys` is a list because the record cannot be updated, and `successor` reserves a
+  revocation chain that D1 does not implement. Only an enrollment with `rw` on `*`
+  and `__manage` may create it; the private rides that app's `.atKeys` and is
+  conveyed to the other fully privileged enrollments over the substrate. Published
+  plain (not `_`-hidden) because it is meant to be found and audited. See
+  [`decisions.md` section 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).
 - **PQ APKAM keypair** — ML-DSA (`mldsa65`) signing key for auth; one per
   enrollment; its public half is the enrollment record's single `apkamPublicKey`.
 - **Namespace key (`nskey`)** — **one** X-Wing KEM keypair per
@@ -142,10 +137,10 @@ per keyfile/install):
   keyfile.
 - **`appMetadata.providerId`** routes a reader to a provider; a value with **no**
   `providerId` defaults to **legacy**. `appMetadata` carries **no `ns` field**:
-  - `at/nskey/XWING/AES/GCM` → `{providerId, recipientKind, ckKid, nskeyKid}` — a CK-conveyance record (a
-    CK X-Wing-sealed to the nskey, or to `pqpublickey` at cold-start). `recipientKind`
-    is `nskey` (self and inbound both seal to the one nskey) or `root-pqpublickey`
-    (cold-start).
+  - `at/nskey/XWING/AES/GCM` → `{providerId, recipientKind, ckKid, nskeyKid}` — a
+    CK-conveyance record: a CK X-Wing-sealed to the nskey. `recipientKind` is
+    `nskey` and nothing else; self and inbound both seal to the one nskey. The
+    `root-pqpublickey` variant is withdrawn along with the cold-start KEM.
   - `at/symmetric/AES/GCM` → `{providerId, ckKid, iv}` — application data
     AES-256-GCM under a CK, cited by `ckKid`.
   The umbrella for `at/nskey` + `at/symmetric/AES/GCM` is the **nskey data path**.
@@ -185,55 +180,71 @@ once in `design.md`; UCs below reference them by name.
   1. CRAM-authenticate with the activation secret.
   2. Mint the **PQ APKAM** keypair (ML-DSA / `mldsa65`); register its public half
      as enrollment E1's single `apkamPublicKey` + `signingAlgo = mldsa65`.
-  3. Mint the atSign-level **X-Wing** keypair; **immutable-create**
-     `public:pqpublickey@alice`; hold the private half locally, seeded as `pqid:<kid>`.
+  3. Mint the atSign-level **ML-DSA-65 signing root**; **immutable-create**
+     `public:pq_signing_root@alice` carrying
+     `{"v": 1, "keys": [{"alg": "ml-dsa-65", "pub": "…"}], "successor": null}`;
+     hold the private half locally. E1 is a first enrollment and so fully
+     privileged, which is what entitles it to create the root at all.
   4. Mint E1's **X-Wing key package** and register it in E1's enrollment record
      (private half stays in the keyfile; **not** published).
-  5. Persist AtKeys (PQ APKAM private + `pqpublickey@alice⁻¹` + key-package private).
+  5. Persist AtKeys (PQ APKAM private + signing-root private + key-package private).
   6. **Verify**: re-authenticate using the PQ APKAM key (proves the server accepts PQ auth).
   7. Legacy interop (config flag, **default off**): publish `public:publickey@alice`
      (RSA) **only if enabled**, for legacy-peer inbound.
 - **Then:**
   - `alice1.APKAM = pq` and it authenticates via PQ APKAM; no RSA APKAM key required.
-  - `public:pqpublickey@alice` exists, is immutable (a second create is rejected),
-    `alice1.pqpk⁻¹ = ✓`.
+  - `public:pq_signing_root@alice` exists, is immutable (a second create is
+    **rejected**, which is what prevents two privileged enrollments minting two
+    roots), and `alice1.root⁻¹ = ✓`.
+  - The root is a **signing** key. Nothing encapsulates to it, at onboarding or
+    ever.
   - `alice1.KP = ✓`, registered in E1's record (not published; discoverable only via
     `enroll:listns`).
-  - **No `selfEncryptionKey` minted** (self data uses the nskey data path; cold-start
-    seals the CK to `pqpublickey`).
+  - **No `selfEncryptionKey` minted** — self data uses the nskey data path. There is
+    no cold-start fallback to an atSign-level key; a namespace with no nskey simply
+    has no PQ path.
   - Readiness may be `ready` (no legacy enrollments exist).
   - **Legacy `publickey@alice` is absent by default** (flag off → a legacy peer's
     send is unsupported, see [UC-B4.2](#112-uc-b42--legacy-alice-receives-from-pq-bob-the-interop-question)).
     With the flag on it is present.
 
-| enr | APKAM | pqpk⁻¹ | nskey⁻¹ | KP |
+| enr | APKAM | root⁻¹ | nskey⁻¹ | KP |
 |-----|-------|--------|---------|----|
 | E1  | pq    | ✓      | —       | ✓  |
 
-- **Cross-ref:** `design.md` (cold-start, `pqpublickey` root lifecycle);
+- **Cross-ref:** [`decisions.md` section 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)
+  (the signing root, and why there is no cold-start KEM);
   `decisions.md` ([Decision #1](decisions.md#numbered-rulings-14), legacy-peer interop flag).
 - **Impl/verify:** project **ON-1** (see `implementation-plan.md`); harness
   `tests/at_functional_test` runLocal.sh (live CRAM onboard).
 
 ## 3. A2 · Enrollments (a new enrollment joins)
 
-Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) online.
+Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E1) online and fully privileged.
 
 ### 3.1 UC-A2.1 — New enrollment, approved by an online enrollment (PQ-safe enroll/approve)
 
-- **Given:** `@alice` pq-native; `pqpublickey` published; `alice1` enrolled (E1) & online.
+- **Given:** `@alice` pq-native; `pq_signing_root` published; `alice1` enrolled (E1), fully privileged & online.
 - **When:** `alice2` requests a new enrollment (E2) for namespaces `[app_1.my_apps]`; `alice1` approves.
 - **Steps:**
-  1. `alice2` mints its own **PQ APKAM** keypair and an `apkamSymmetricKey`; it
-     puts its X-Wing **key-package** public half and any descriptive
-     `EnrollParams.metadata` on the `enroll:request` JSON tail (single keypair, single key package).
-  2. `alice2` **encapsulates** `apkamSymmetricKey` to `@alice`'s `pqpublickey`
-     (X-Wing) — **not** RSA — and sends `enroll:request`.
-  3. `alice1` (approver) decapsulates with `pqpublickey@alice⁻¹`; approves E2; the
-     server records `alice2`'s single `apkamPublicKey` + `signingAlgo` + key
-     package + metadata for E2.
+  1. `alice2` mints its own **PQ APKAM** keypair; it puts its X-Wing
+     **key-package** public half and any descriptive `EnrollParams.metadata` on the
+     `enroll:request` JSON tail (single keypair, single key package), and sends
+     `enroll:request`.
+  2. `alice1` (approver) generates the `apkamSymmetricKey` and **encapsulates it to
+     `alice2`'s key-package public half** taken from the request tail (X-Wing) —
+     **not** RSA, and **not** to any atSign-level key. The direction is
+     approver → enrollee precisely so that no atSign-level KEM has to exist; the
+     approver is encapsulating to a key that arrived unauthenticated, which is
+     trust-on-first-use gated by a person approving a named device.
+  3. `alice1` approves E2; the server records `alice2`'s single `apkamPublicKey` +
+     `signingAlgo` + key package + metadata for E2, and populates E2's `_apsk` from
+     the enrollment record — where the value is a **root-signed envelope** rather
+     than a bare key, signed by `alice1` with the signing root at approval time.
   4. `alice1` conveys the secrets E2 is authorised for:
-     - `pqpublickey@alice⁻¹` (root) rides the approval bundle (wrapped under `apkamSymmetricKey`);
+     - the **signing-root private** rides the approval bundle (wrapped under
+       `apkamSymmetricKey`) **only if E2 is itself fully privileged**; a
+       namespace-scoped enrollment never receives it;
      - `nskey.app_1.my_apps@alice⁻¹` (authorised namespace only) is delivered by the
        **substrate push** — sealed (`pqSeal`) to E2's key package and put to
        `<msgId>.<kpid>.__ssenv.app_1.my_apps@alice`
@@ -243,8 +254,12 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
 - **Then:**
   - Nothing in the conveyance path is RSA-wrapped (`apkamSymmetricKey` rides X-Wing),
     so the enrollment conveyance is not harvestable-now.
-  - `alice2.APKAM = pq`, `pqpk⁻¹ = ✓`, `nskey.app_1.my_apps@alice⁻¹ = ✓`,
-    `nskey.app_2.my_apps@alice⁻¹ = ✗`, key package registered.
+  - `alice2.APKAM = pq`, `nskey.app_1.my_apps@alice⁻¹ = ✓`,
+    `nskey.app_2.my_apps@alice⁻¹ = ✗`, key package registered. `root⁻¹ = ✗` for a
+    namespace-scoped E2 — the root is held only by fully privileged enrollments.
+  - E2's `_apsk` value verifies against the signing root, so a reader can chain an
+    advertised key back to the atSign's own anchor rather than to whatever the
+    atServer served.
   - `alice2` authenticates PQ and decrypts `@alice`'s `app_1.my_apps` self data; an
     `app_2.my_apps` key request is refused.
   - E2's APKAM key is a distinct, individually-revocable record.
@@ -257,14 +272,14 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
   1. `alice1b` authenticates with E1's existing APKAM private (from the copied keyfile).
   2. It **reuses** the copied keyfile's PQ APKAM keypair and key package — it does
      **not** mint its own.
-  3. Obtain `pqpublickey@alice⁻¹` — present in the copied keyfile, else `requestSecret`.
+  3. Obtain `pq_signing_root@alice⁻¹` — present in the copied keyfile, else `requestSecret`.
 - **Then:**
   - A copied keyfile **shares** its one APKAM keypair (and the key package's private
     half); the two hosts are the **same** enrollment = **one** recipient. Secrets
     already sealed to that key package are openable on both. (Never two keypairs
     under one enrollment — a *separate install* would be a distinct enrollment, not a
     second keypair under E1.)
-  - Both hosts share `pqpublickey@alice⁻¹` and E1's namespace authorisations.
+  - Both hosts share `pq_signing_root@alice⁻¹` and E1's namespace authorisations.
   - Revocation is per-enrollment (`enroll:revoke`), so revoking E1 cuts every host
     sharing the copy at once.
 - **Cross-ref:** `decisions.md` ([Decision #3](decisions.md#numbered-rulings-14) PQ-APKAM copyable-keyfile placement,
@@ -274,7 +289,7 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
 
 - **Given:** `@alice` pq-native; `alice1` (E1, `*`) approves `alice3` for namespace `app_1.my_apps` only (E3).
 - **When:** `alice3` enrolls (as A2.1).
-- **Then:** `alice3` gets `pqpublickey@alice⁻¹` (root — universal) and, by
+- **Then:** `alice3` gets `pq_signing_root@alice⁻¹` (root — universal) and, by
   **approval-time push** (sealed to E3's key package via `__ssenv`), only `nskey⁻¹`
   for the granted `app_1.my_apps`; the `app_2.my_apps` nskey is never delivered. The
   boundary is enforced at the atServer `__ssenv` namespace-delivery gate (it will not
@@ -345,15 +360,19 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
 - **Given:** `@alice` pq-native; `alice1` wants self data but no `app_1.my_apps` nskey
   has been minted and "seal-and-hold" not chosen (send-now default).
 - **When:** `alice1` writes self data.
-- **Then:** still the nskey data path, with the **CK** X-Wing-sealed to
-  `public:pqpublickey@alice` (root cold-start target;
-  `appMetadata.recipientKind = root-pqpublickey`) instead of an nskey; the data value
-  stays `at/symmetric/AES/GCM` citing `ckKid` — application data is **never**
-  encapsulated directly to `pqpublickey`. Any authorised `@alice` enrollment
-  decapsulates the CK and decrypts; self-heals to the namespace's nskey on the first
-  namespaced write.
+- **Then:** the write **fails**. There is no atSign-level KEM to fall back on: the
+  signing root signs and never receives an encapsulation, so a namespace with no
+  nskey has no PQ path at all. The failure is a distinct exception naming the
+  namespace, not a generic encryption error.
+  - With the legacy fallback opted in (final 3.x only), the write proceeds under
+    `legacy` instead, and once the namespace's nskey exists every **subsequent**
+    write uses it. Records already written under the fallback stay legacy; re-encrypting
+    them is R-1's explicit migration, never a side effect of a `put`.
+  - In practice this case is rare, because a client mints for its preference namespace
+    and its `rw` namespaces at init — so a namespace it writes to normally has a key
+    before the first write.
 
-| enr | APKAM | pqpk⁻¹ | nskey⁻¹ | KP |
+| enr | APKAM | root⁻¹ | nskey⁻¹ | KP |
 |-----|-------|--------|---------|----|
 | E1  | pq    | ✓      | ✓       | ✓  |
 | E2  | pq    | ✓      | ✓       | ✓  |
@@ -365,7 +384,7 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
 - **Steps:**
   1. Encrypt the notification value exactly as a self put: AES-256-GCM under a CK
      (`at/symmetric/AES/GCM`, cited by `ckKid`); convey the CK once via an `at/nskey`
-     record sealed to the nskey (`recipientKind: nskey`, or `pqpublickey` cold-start).
+     record sealed to the nskey (`recipientKind: nskey`, the only kind).
   2. Stamp `appMetadata.providerId` on the **notification** payload; send `notify:`.
   3. atServer queues/delivers; `alice2`'s monitor receives the notification frame.
   4. `alice2` reads `providerId` from the notification, decapsulates, decrypts.
@@ -376,7 +395,7 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
   - A signal-only notification (no value) needs no decryption and is unaffected.
 
 - **Cross-ref:** `design.md` (nskey data path: 3 layers / 3 providers, CK model, the
-  nskey + its lazy publication, `pqpublickey` cold-start).
+  nskey + its eager publication).
 - **Impl/verify (A3.x):** **SS-4** (mints) + **B-1** (data path); harness at_chops
   vectors (KEM/seal) + at_client `dart test` round-trip for the data path, **plus**
   `tests/at_functional_test` runLocal.sh for UC-A3.2's per-enrollment nskey push and
@@ -416,17 +435,19 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
   - Every authorised reader on both atSigns decrypts; an unauthorised `@bob`
     enrollment cannot fetch the ciphertext (server-gated) nor decrypt.
 
-### 5.2 UC-A4.2 — alice → bob cold-start (bob has no namespace key) → pqpublickey fallback
+### 5.2 UC-A4.2 — alice → bob where bob has no namespace key → the share fails
 
-- **Given:** `@alice`, `@bob` pq-native; `@bob` has `public:pqpublickey@bob` but **no** `public:__nskey.app_1.my_apps@bob` — he has never used that namespace.
+- **Given:** `@alice`, `@bob` pq-native; `@bob` has `public:pq_signing_root@bob` but **no** `public:__nskey.app_1.my_apps@bob` — he has never used or authorised that namespace.
 - **When:** `alice1` shares `@bob:<k>.app_1.my_apps@alice`.
-- **Then:** as A4.1 but X-Wing-seal the **CK** to bob's `public:pqpublickey@bob`
-  (root cold-start target; `recipientKind: root-pqpublickey`) — application data is
-  never encapsulated directly to it; the data value stays `at/symmetric/AES/GCM`.
-  Every authorised bob enrollment decapsulates the CK and reads instantly. Subsequent
-  writes **upgrade** to `public:__nskey.app_1.my_apps@bob` once a bob `app_1.my_apps`
-  enrollment publishes it. (High-security `app_1.my_apps` may instead seal-and-hold —
-  the per-namespace opt-in.)
+- **Then:** the share **fails**, with an exception naming `@bob` and the namespace so
+  the app can say that the recipient has not enabled it rather than reporting an
+  encryption error. Bob's signing root is not a KEM target and cannot stand in.
+  - A **pre-flight capability query** answers the same question before the user
+    composes anything, so an app need not discover this at write time.
+  - With the legacy fallback opted in (final 3.x only), the share proceeds under
+    `legacy`. That is the invitation path, and it ends at 4.x.
+  - Once bob uses or authorises the namespace, his nskey is published and alice's next
+    `ensureCurrent` picks it up by `plookup`; from then on the share is PQ.
 
 ### 5.3 UC-A4.3 — Multi-enrollment both ends
 
@@ -435,7 +456,7 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
 - **Then:** all of bob's authorised enrollments read; all of alice's authorised
   enrollments read the self-copy; no authorised enrollment is left unable to decrypt.
 
-| enr | APKAM | pqpk⁻¹ | nskey⁻¹ | KP |
+| enr | APKAM | root⁻¹ | nskey⁻¹ | KP |
 |-----|-------|--------|---------|----|
 | aE1 | pq    | ✓      | ✓       | ✓  |
 | aE2 | pq    | ✓      | ✓       | ✓  |
@@ -445,12 +466,12 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
 ### 5.4 UC-A4.4 — Cross-atSign notification (encrypted value)
 
 - **Given:** `@alice`, `@bob` pq-native; `@bob` published `public:__nskey.app_1.my_apps@bob`
-  (or `public:pqpublickey@bob` fallback); `@bob` readiness `ready`; `bob1` running a monitor.
+  (or `public:pq_signing_root@bob` fallback); `@bob` readiness `ready`; `bob1` running a monitor.
 - **When:** `alice1` `notify`s `@bob` with an encrypted value.
 - **Steps:**
   1. Encrypt the value under a CK (`at/symmetric/AES/GCM`, cited by `ckKid`); convey
      the CK once via an `at/nskey` record sealed to bob's published nskey
-     (`recipientKind: nskey`, or `public:pqpublickey@bob` cold-start) — same CK→nskey
+     (`recipientKind: nskey`) — same CK→nskey
      conveyance as A4.1/A4.2.
   2. Stamp `appMetadata.providerId` on the notification; `notify:@bob…`.
   3. `bobS` queues; on `bob1` reconnect the monitor delivers the notification frame.
@@ -463,7 +484,7 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
     pulled if it arrived meanwhile).
   - `appMetadata` is present on the notification frame; signal-only notifications are unaffected.
 
-- **Cross-ref:** `design.md` (the nskey + its lazy publication, cold-start, bilateral
+- **Cross-ref:** `design.md` (the nskey + its eager publication, bilateral
   inbound forward-secrecy); `decisions.md` (forward-secrecy rationale).
 - **Impl/verify (A4.x):** **B-1** + **SS-4**; harness `tests/at_end2end_test` (cross-atSign).
 
@@ -542,9 +563,9 @@ Start state for A2: `@alice` pq-native; `pqpublickey` published; `alice1` (E1) o
 ## 8. B1 · Upgrade an existing (pre-PQ) atSign — the retrofit scenarios
 
 Start state for B1: `@alice = legacy` (RSA `publickey`, RSA APKAM per enrollment),
-`aliceS = pq`, no `pqpublickey`.
+`aliceS = pq`, no `pq_signing_root`.
 
-| enr | APKAM | pqpk⁻¹ | KP | note                              |
+| enr | APKAM | root⁻¹ | KP | note                              |
 |-----|-------|--------|----|-----------------------------------|
 | E1  | rsa   | —      | —  | first to retrofit (B1.1)          |
 | E1c | rsa   | —      | —  | copied keyfile, separate retrofit (B1.2) |
@@ -564,7 +585,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 
 ### 8.1 UC-B1.1 — First client retrofit (`alice1`)
 
-- **Given:** above; `pqpublickey` absent.
+- **Given:** above; `pq_signing_root` absent.
 - **When:** `alice1` runs the retrofit.
 - **Steps:**
   1. Authenticate legacy (RSA APKAM).
@@ -574,32 +595,35 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
      on the authenticated connection. The server validates the namespace subset,
      **auto-approves**, copies the old expiry, and caps the old (legacy) enrollment.
   4. **Verify** PQ APKAM auth succeeds (record-authoritative `signingAlgo`).
-  5. **Immutable-create** `public:pqpublickey@alice` → **wins** → generate X-Wing
-     keypair, hold `pqpublickey@alice⁻¹`, seed `pqid:<kid>`, serve on request.
+  5. If this enrollment is **fully privileged** (`rw` on `*` and `__manage`),
+     generate the ML-DSA-65 root keypair and **immutable-create**
+     `public:pq_signing_root@alice` → **wins** → hold the private and convey it to the
+     other fully privileged enrollments. A namespace-scoped enrollment skips this step
+     entirely and proceeds without a root ([UC-B5.3](#123-uc-b53--two-enrollments-race-to-create-pq_signing_root)).
   6. When the roster holds the key, flip readiness (or leave `n-r` until siblings retrofit).
 - **Then:**
   - `alice1.APKAM = pq` on the fresh auto-approved enrollment; PQ auth works.
-  - `public:pqpublickey@alice` created; `alice1.pqpk⁻¹ = ✓`; `alice1` serves the private on request.
+  - `public:pq_signing_root@alice` created; `alice1.root⁻¹ = ✓`; `alice1` serves the private to other fully privileged enrollments on request.
   - The legacy enrollment is **capped** to `min(now + grace, expiry)` and ages out — **not** deleted-by-key.
   - Legacy *encryption* key retained (history still readable). No re-onboarding.
 
 ### 8.2 UC-B1.2 — Second install on a copied keyfile (`alice1c`)
 
-- **Given:** after B1.1; `pqpublickey` exists. `alice1c` is a clone of E1's pre-PQ keyfile.
+- **Given:** after B1.1; `pq_signing_root` exists. `alice1c` is a clone of E1's pre-PQ keyfile.
 - **When:** `alice1c` runs the retrofit.
 - **Then:** identical to B1.1 except step 5 is **request**, not create: it mints its
   **own** PQ APKAM keypair + key package and self-spawns its **own distinct fresh
   auto-approved enrollment** (never a second keypair under E1); then **requests**
-  `pqpublickey@alice⁻¹` (exists → does not create), verifies public/private
+  `pq_signing_root@alice⁻¹` (exists → does not create), verifies public/private
   correspondence, stores. Each cloned pre-PQ keyfile thus becomes its own enrollment.
 
 ### 8.3 UC-B1.3 — Third client, different enrollment (`alice3`, E2)
 
-- **Given:** after B1.1; `alice3` on E2 (its own legacy RSA APKAM); `pqpublickey` exists.
+- **Given:** after B1.1; `alice3` on E2 (its own legacy RSA APKAM); `pq_signing_root` exists.
 - **When:** `alice3` runs the retrofit.
 - **Then:** identical to B1.2 for the bootstrap (mints its own PQ APKAM keypair + key
   package, self-spawns a fresh auto-approved enrollment, requests root
-  `pqpublickey@alice⁻¹`). The distinction appears only for **namespaced** secrets — a
+  `pq_signing_root@alice⁻¹`). The distinction appears only for **namespaced** secrets — a
   restricted E2 receives only its authorised subset of `nskey` keys.
 
 - **Cross-ref:** `design.md` (authenticated self-retrofit flow + expiry copy/cap,
@@ -636,7 +660,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 
 ### 10.1 UC-B3.1 — Upgraded enrollment must still write legacy for an un-upgraded sibling
 
-- **Given:** `alice1` is PQ (`APKAM = pq`, holds the nskey/`pqpublickey` privates),
+- **Given:** `alice1` is PQ (`APKAM = pq`, holds the nskey/`pq_signing_root` privates),
   `alice2` still legacy-only; `@alice` readiness `n-r`.
 - **When:** `alice1` puts or notifies a self key both must read.
 - **Then:** `alice1` writes/notifies **legacy** (the scheme `alice2` can read) until
@@ -648,9 +672,9 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 - **Given:** all `@alice` enrollments now PQ; operator (or auto-detect) flips readiness `ready`.
 - **When:** `alice1` writes/notifies self data.
 - **Then:** self data goes via the **nskey data path** — `at/nskey` conveys the CK
-  (sealed to the nskey, `recipientKind: nskey`, or to `public:pqpublickey@alice` as the
-  cold-start CK target) and `at/symmetric/AES/GCM` encrypts the data; the data is never
-  encapsulated directly to the nskey/`pqpublickey`. No `@alice` enrollment loses access.
+  sealed to the nskey (`recipientKind: nskey`) and `at/symmetric/AES/GCM` encrypts the
+  data; the data is never encapsulated directly to the nskey. No `@alice` enrollment
+  loses access.
 
 | enr | APKAM | data-reads                 | data-writes                            |
 |-----|-------|----------------------------|----------------------------------------|
@@ -675,7 +699,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 
 ### 11.2 UC-B4.2 — Legacy `@alice` receives from PQ `@bob` (the interop question)
 
-- **Given:** `@alice` legacy (no `pqpublickey`); `@bob` PQ-native.
+- **Given:** `@alice` legacy (no `pq_signing_root`); `@bob` PQ-native.
 - **When:** `bob1` shares with `@alice`.
 - **Then:** bob must encapsulate in a scheme alice can read → **legacy RSA to alice's
   `public:publickey@alice`**, which exists only if alice enabled the legacy-interop
@@ -695,10 +719,9 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 
 - **Given:** `@bob` was legacy; now all bob enrollments PQ and bob readiness `ready`.
 - **When:** `alice1` next shares/notifies `@bob`.
-- **Then:** alice writes via the **nskey data path** to bob (`at/nskey` conveys the CK
-  sealed to bob's published nskey, `recipientKind: nskey`, or `public:pqpublickey@bob`
-  cold-start; `at/symmetric/AES/GCM` encrypts the data); the legacy path is no longer
-  used toward bob.
+- **Then:** alice writes via the **nskey data path** to bob — `at/nskey` conveys the CK
+  sealed to bob's published nskey (`recipientKind: nskey`) and `at/symmetric/AES/GCM`
+  encrypts the data; the legacy path is no longer used toward bob.
 
 - **Cross-ref:** `decisions.md` ([Decision #1](decisions.md#numbered-rulings-14) legacy interop); `roadmap.md`
   (mixed-scheme + migration philosophy).
@@ -706,13 +729,13 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 
 ## 12. B5 · Retrofit edge cases
 
-### 12.1 UC-B5.1 — Offline enrollment pulls `pqpublickey` later
+### 12.1 UC-B5.1 — Offline enrollment pulls `pq_signing_root` later
 
 - **Given:** `alice2` (an enrollment) was offline during the retrofit wave;
-  `pqpublickey` created by `alice1`.
+  `pq_signing_root` created by `alice1`.
 - **When:** `alice2` next comes online and retrofits.
-- **Then:** `pqpublickey` is root (no namespace), so it has **no**
-  `enroll:listns` push — its `requestSecret` for `pqpublickey@alice⁻¹` is
+- **Then:** `pq_signing_root` is root (no namespace), so it has **no**
+  `enroll:listns` push — its `requestSecret` for `pq_signing_root@alice⁻¹` is
   the steady-state path, answered by any online holder (persists until one answers).
   Namespaced `nskey` privates `alice2` missed during its offline window arrive by the
   **push** primary path once a holder is online (`enroll:listns` + `__ssenv`),
@@ -728,12 +751,15 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 - **Then:** decrypts via the legacy provider (reads are universal); `providerId` routes
   per value. PQ retrofit never makes old data unreadable.
 
-### 12.3 UC-B5.3 — Two enrollments race to create `pqpublickey`
+### 12.3 UC-B5.3 — Two enrollments race to create `pq_signing_root`
 
-- **Given:** `alice1` and `alice3` both reach the create step with `pqpublickey` absent.
+- **Given:** `alice1` and `alice3` both reach the create step with `pq_signing_root` absent.
 - **When:** both attempt the immutable create.
 - **Then:** exactly one wins; the other gets "already exists" and falls through to
-  *request*. No orphaned data (readiness not yet flipped).
+  *request*, discarding the key material it generated rather than retrying the create.
+  No orphaned data (readiness not yet flipped). The root never rotates, so a split
+  root would be unrecoverable — immutability is what makes this a benign race rather
+  than a permanent fork of the trust chain.
 
 - **Cross-ref:** `design.md` (push/pull duality — substrate facts stated once there).
 - **Impl/verify:** **RF-1** (`requestSecret` confirm) + **B-1** (provider routing).
@@ -767,7 +793,7 @@ These invariants are testable against **every** UC above:
   (`rsa2048` | `mldsa65`) — `_getSigningAlgoType` reads the record, never the
   client-supplied wire value (at_chops `mldsa65` verify branch + at_commons pkam
   `signingAlgo` literal).
-- **Immutability, and where it does *not* apply.** `pqpublickey` is create-once: a
+- **Immutability, and where it does *not* apply.** `pq_signing_root` is create-once: a
   second create is rejected, never an overwrite — it is the root and never rotates.
   `public:__nskey.<ns>@owner` is **mutable by design**, because nskey-keypair rotation
   has to overwrite it; what stops two of the owner's enrollments racing is the
@@ -778,8 +804,8 @@ These invariants are testable against **every** UC above:
   without `showhidden`, authenticated or not. This is a guaranteed protocol property
   (`_apsk` already relies on it); the test is a regression guard, not a proof obligation.
 - **Advertised recipient keys are signed and verified.** Every advertised
-  encapsulation key — the per-enrollment key package (`metadata.keyPackage`), the
-  published `nskey` public half, and `public:pqpublickey@owner` — is an **APKAM-signed
+  encapsulation key — the per-enrollment key package (`metadata.keyPackage`) and the
+  published `nskey` public half — is an **APKAM-signed
   envelope** produced by the generating enrollment (`wrapAndSign`). A fetcher verifies
   it against that enrollment's `_apsk` **the same way same-atSign and cross-atSign**
   (fetch `public:_apsk.<eid>.a.__e@owner`, verify using the envelope's `signingAlgo` /
