@@ -616,8 +616,8 @@ cleanly with a pre-flight query and an opt-in legacy escape hatch, and nested na
 resolve by walking up with `appMetadata.ns` / `ckNs` on the wire — covered multi-segment in
 both live suites, which previously used single-segment namespaces only.
 `packages/at_client` green at
-753 passing / 39 skipped, `tests/at_functional_test` at 94, `tests/at_end2end_test` at
-37 with no skips.
+754 passing / 39 skipped, `tests/at_functional_test` at 99, `tests/at_end2end_test` at
+41 with no skips.
 
 *Proven live (functional suite, `tests/at_functional_test`):* self put/get round-trip
 through the whole pipeline including the pre-pass, the conveyance record and key
@@ -685,6 +685,7 @@ taken now because nothing written under the old form exists outside the spike.
 | ~~`at_chops` `pqOpen` lets an `ArgumentError` escape~~ — **fixed in at_chops 3.4.2** (unpublished): a wrong-length secret key or KEM ciphertext now arrives as `PqOpenException(malformedEnvelope)`. `NskeyProvider`'s client-side guard stays until at_client's floor rises past 3.4.1 | `at_chops` |
 | The CK cache and the owner's own nskey privates are process memory only — a restart loses both, so the owner cannot re-read her own outbound shared records | **SS-4** |
 | `B-1e` ("`providerId` on notification frames") is listed as future work, but both notify entry points have already changed and the send half is now covered live — the chunk needs re-scoping to whatever actually remains | **B-1e** |
+| An enrollment authorised for one namespace must be unable to **decrypt** another's nskey data, not merely unable to fetch it. Not testable yet and deliberately not written: nskey privates are per-ring in-memory until the substrate conveys them, so a second enrollment cannot decapsulate anything at all — the crypto half of the assertion would pass vacuously while the test read as covering it | **SS-4** |
 | The notify **receive** half has no live coverage, and cannot get any in `at_end2end_test` as it stands: `AtClientManager` is a singleton, and `setCurrentAtSign` both stops the previous atSign's monitor and unsets its `notificationService`, so no test can hold a subscription on one atSign while another sends. Covered at unit level only. Closing this needs the harness to support two concurrent clients, not a new test | `at_end2end_test` |
 | ~~Rename the atSign-level key in code, delete the `root-pqpublickey` variant~~ — **done.** `NskeyRecipientKind` has one member; no Dart source says `pqpublickey`; the cold-start throw now states why there is no PQ target rather than promising a fallback | **B-1c** |
 | Enrollment approval reverses direction: the approver generates `apkamSymmetricKey` and encapsulates to the enrollee's key-package public half from the `enroll:request` tail. Multi-repo seam — client and at_server together | **SS-2** |

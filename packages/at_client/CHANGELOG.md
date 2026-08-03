@@ -1,4 +1,14 @@
 ## 3.14.1
+- fix: `PublishedNskeyKeyRing` no longer reports its own atSign's published
+  namespace as cold start. It short-circuited to an in-memory map that only
+  `mintAndPublish` populates, so another enrollment — or the same one after a
+  restart — saw nothing while the advertisement sat on the owner's atServer, and
+  a client that "fixed" that by minting would have rotated the key out from
+  under every peer that had already fetched it. The owner's own advertisement is
+  now served by the same lookup a peer uses, **signature check included**, which
+  is what makes the design's "one verify path, same-atSign and cross-atSign"
+  true rather than aspirational. What this client minted itself still costs no
+  lookup.
 - **breaking**: the nskey data path resolves a nested namespace by walking up,
   and its records now state their namespaces. A sender writing to
   `someid.d.c.b.a@alice` tries `d.c.b.a`, `c.b.a`, `b.a`, `a` and seals to the

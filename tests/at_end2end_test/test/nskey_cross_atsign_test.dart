@@ -275,6 +275,139 @@ void main() {
             'record names, not the one its key string implies');
   }, timeout: Timeout(const Duration(minutes: 2)));
 
+  /// The mechanism revocation rests on, and the one with no live coverage
+  /// until now.
+  ///
+  /// A sender never sees a recipient's decapsulation fail, so re-`plookup`ing
+  /// the advertisement is the **only** way it learns the recipient rotated.
+  /// Without it a peer keeps sealing to a generation a revoked enrollment can
+  /// still open, and revocation silently fails for everything inbound.
+  test('bob rotates, and alice\'s next write seals to the new generation',
+      () async {
+    final bobSide = await nskeyClient(bob);
+    final aliceSide = await nskeyClient(alice);
+
+    final before = AtKey()
+      ..key = uniqueKey('before')
+      ..namespace = namespace
+      ..sharedWith = bob
+      ..sharedBy = alice;
+    expect(await aliceSide.client.put(before, 'first'), true);
+    final firstCk =
+        (await aliceSide.client.get(before)).metadata?.appMetadata?.additional;
+
+    // Bob rotates. Alice is told nothing — the whole point.
+    await AtClientManager.getInstance().setCurrentAtSign(
+        bob, namespace, TestPreferences.getInstance().getPreference(bob));
+    final rotated = await bobSide.ring.mintAndPublish(namespace);
+    expect(rotated.nskeyKid, isNotNull);
+
+    // Alice writes again with a ring that has never seen the new generation.
+    final aliceAfter = await nskeyClient(alice);
+    final after = AtKey()
+      ..key = uniqueKey('after')
+      ..namespace = namespace
+      ..sharedWith = bob
+      ..sharedBy = alice;
+    expect(await aliceAfter.client.put(after, 'second'), true);
+
+    final secondCk =
+        (await aliceAfter.client.get(after)).metadata?.appMetadata?.additional;
+    expect(secondCk?['ckKid'], isNot(firstCk?['ckKid']),
+        reason: 'the advertised generation moved, so a fresh content key must '
+            'be cut and conveyed — reusing the old one would keep handing the '
+            'superseded key to whoever still holds it');
+  }, timeout: Timeout(const Duration(minutes: 2)));
+
+  /// The reverse direction. The defect that started this redesign was
+  /// direction-specific — a reader keying its ring by `sharedBy` looked up the
+  /// *sender's* private — so proving one direction proves only half.
+  test('bob shares with alice, and alice reads it', () async {
+    final aliceSide = await nskeyClient(alice);
+    final bobSide = await nskeyClient(bob);
+
+    final keyName = uniqueKey('from_bob');
+    final shared = AtKey()
+      ..key = keyName
+      ..namespace = namespace
+      ..sharedWith = alice
+      ..sharedBy = bob;
+
+    expect(await bobSide.client.put(shared, 'bob wrote this'), true);
+    await E2ESyncService.getInstance().syncData(bobSide.client.syncService);
+
+    await AtClientManager.getInstance().setCurrentAtSign(
+        alice, namespace, TestPreferences.getInstance().getPreference(alice));
+    await E2ESyncService.getInstance().syncData(aliceSide.client.syncService);
+
+    final received = await aliceSide.client.get(AtKey()
+      ..key = keyName
+      ..namespace = namespace
+      ..sharedWith = alice
+      ..sharedBy = bob);
+    expect(received.value, 'bob wrote this',
+        reason: 'the nskey owner is sharedWith on an inbound record, whichever '
+            'atSign is sending');
+  }, timeout: Timeout(const Duration(minutes: 2)));
+
+  /// The pre-flight query's lifecycle rather than a static answer: an app asks
+  /// before the user composes, so what matters is that the answer *changes*
+  /// when the recipient enables the namespace.
+  test('isReadyFor goes from false to true when bob mints', () async {
+    // Top-level on purpose: a namespace *under* one bob has a key for is
+    // reachable by walking up, and would correctly report ready. Only a
+    // namespace with no ancestor key is genuinely unready.
+    final unusedNs = 'unused${DateTime.now().microsecondsSinceEpoch}';
+    final bobSide = await nskeyClient(bob);
+    final aliceSide = await nskeyClient(alice);
+    final runtime = CryptoRuntime(aliceSide.client);
+
+    expect(await runtime.isReadyFor(bob, unusedNs), isFalse,
+        reason: 'bob has no key at this namespace nor at any ancestor of it');
+
+    await AtClientManager.getInstance().setCurrentAtSign(
+        bob, namespace, TestPreferences.getInstance().getPreference(bob));
+    await bobSide.ring.mintAndPublish(unusedNs);
+
+    // A fresh sender, so the answer comes from bob's atServer rather than a
+    // remembered miss.
+    final aliceAgain = await nskeyClient(alice);
+    expect(await CryptoRuntime(aliceAgain.client).isReadyFor(bob, unusedNs),
+        isTrue,
+        reason: 'once bob publishes, the same question answers differently');
+  }, timeout: Timeout(const Duration(minutes: 2)));
+
+  /// The negative alongside the per-recipient CK test: distinct keys are only
+  /// meaningful if the other party genuinely cannot open the wrong one.
+  test('bob cannot open the content key alice cut for herself', () async {
+    await nskeyClient(bob);
+    final aliceSide = await nskeyClient(alice);
+
+    final selfKey = AtKey()
+      ..key = uniqueKey('private_note')
+      ..namespace = namespace
+      ..sharedBy = alice;
+    expect(await aliceSide.client.put(selfKey, 'for me alone'), true);
+    await E2ESyncService.getInstance().syncData(aliceSide.client.syncService);
+
+    final selfCk =
+        (await aliceSide.client.get(selfKey)).metadata?.appMetadata?.additional;
+
+    await AtClientManager.getInstance().setCurrentAtSign(
+        bob, namespace, TestPreferences.getInstance().getPreference(bob));
+
+    // Bob asks alice's atServer for the conveyance carrying her self CK. It is
+    // a self key of alice's, so he is not a party to it at all.
+    await expectLater(
+      AtClientManager.getInstance().atClient.get(AtKey()
+        ..key = '${selfCk?['ckKid']}.__ck'
+        ..namespace = namespace
+        ..sharedBy = alice),
+      throwsA(isA<AtException>()),
+      reason: 'per-recipient scoping is only real if the other side fails',
+    );
+  }, timeout: Timeout(const Duration(minutes: 2)));
+
   /// The advertised key is what an attacker wants to substitute: a sender that
   /// seals to the wrong nskey hands its content key to whoever minted that key,
   /// and — because a sender never sees a decapsulation fail — nothing

@@ -171,14 +171,37 @@ void main() {
           reason: 'that is the cold-start case, which belongs to the provider');
     });
 
-    test('the ring answers for its own atSign from what it minted', () async {
+    test('the ring fetches its own atSign\'s advertisement when it minted none',
+        () async {
+      // Another of alice's enrollments, or this one after a restart, holds
+      // nothing in memory while the advertisement sits on her own atServer.
+      // Reporting that as cold start would be wrong twice over: the namespace
+      // is published, and a client that "fixed" it by minting would rotate the
+      // key out from under every peer that had already fetched it.
+      final c = client(payload: await signedPayloadFor(bobKey));
+
+      final own = await PublishedNskeyKeyRing(c.atClient)
+          .currentPublic(alice, namespace);
+
+      expect(own, isNotNull);
+      expect(c.fetches, hasLength(1),
+          reason: 'served by the same lookup a peer would use, signature '
+              'check included — which is what makes "one verify path, '
+              'same-atSign and cross-atSign" true rather than aspirational');
+    });
+
+    test('what it minted itself costs no lookup', () async {
       final c = client(payload: await signedPayloadFor(bobKey));
       final ring = PublishedNskeyKeyRing(c.atClient);
+      // Stand in for mintAndPublish, which needs a remote secondary.
+      ring.rememberOwn(alice, namespace, (
+        nskeyKid: nskeyKidOf(bobKey.publicKeyBytes),
+        publicKey: bobKey.publicKeyBytes
+      ));
 
-      expect(await ring.currentPublic(alice, namespace), isNull,
-          reason: 'nothing minted yet');
-      expect(c.fetches, isEmpty,
-          reason: 'the owner never looks up her own advertisement');
+      expect((await ring.currentPublic(alice, namespace))?.nskeyKid,
+          nskeyKidOf(bobKey.publicKeyBytes));
+      expect(c.fetches, isEmpty, reason: 'the common case stays free');
     });
   });
 

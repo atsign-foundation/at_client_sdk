@@ -8,6 +8,7 @@ import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:meta/meta.dart' show visibleForTesting;
 
 final _logger = AtSignLogger('PublishedNskeyKeyRing');
 
@@ -158,6 +159,15 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
   final AtClientEnvelopeSigner _signer;
 
   final Map<String, NskeyAdvertisement> _ownCurrent = {};
+
+  /// Record a generation as this client's own, without minting one.
+  ///
+  /// [mintAndPublish] is the production caller; this exists so a test can put a
+  /// ring into the "already minted" state without a remote secondary.
+  @visibleForTesting
+  void rememberOwn(
+          String owner, String namespace, NskeyAdvertisement advertisement) =>
+      _ownCurrent[_scope(owner, namespace)] = advertisement;
   final Map<String, Uint8List> _ownPrivates = {};
   final Map<String, ({NskeyAdvertisement advertisement, DateTime fetchedAt})>
       _remote = {};
@@ -215,10 +225,20 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
   @override
   Future<NskeyAdvertisement?> currentPublic(
       String owner, String namespace) async {
-    // The owner's own key never needs looking up — her clients hold it.
-    if (owner == _atClient.getCurrentAtSign()) {
-      return _ownCurrent[_scope(owner, namespace)];
-    }
+    // What this client minted itself, if anything — held in memory so the
+    // common case costs nothing. Falling through when it has minted *nothing*
+    // is the point: another of the owner's enrollments, or this one after a
+    // restart, holds no `_ownCurrent` entry while the advertisement sits on the
+    // owner's own atServer. Returning null here would report a published
+    // namespace as cold start, and a client that "fixed" that by minting would
+    // rotate the key out from under every peer that had already fetched it.
+    //
+    // The lookup below serves the owner's own advertisement exactly as it
+    // serves a peer's, signature check included — which is what makes the
+    // design's "one verify path, same-atSign and cross-atSign" true rather than
+    // aspirational.
+    final own = _ownCurrent[_scope(owner, namespace)];
+    if (own != null) return own;
 
     final scope = _scope(owner, namespace);
     final cached = _remote[scope];

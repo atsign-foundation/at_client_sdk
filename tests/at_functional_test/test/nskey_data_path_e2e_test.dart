@@ -244,6 +244,21 @@ void main() {
               'which is what walking up exists to avoid');
     });
 
+    test('binary round-trips byte-exact under a composed namespace', () async {
+      // isBinary crossed with the new namespace fields: the value is Base2e15
+      // on the way through the provider, and the AAD binds an address whose
+      // split the reader cannot reproduce.
+      final atClient = atClientManager.atClient;
+      final key = AtKey()
+        ..key = 'blob'
+        ..namespace = composed
+        ..sharedBy = atSign;
+      final bytes = [for (var i = 0; i < 256; i++) i, 0x00, 0xff, 0x7f];
+
+      expect(await atClient.put(key, bytes), true);
+      expect((await atClient.get(key)).value, bytes);
+    });
+
     test('the namespace fields survive the sync push to the atServer',
         () async {
       // put/get are local-first, so only the atServer's own answer separates
