@@ -6,6 +6,25 @@ post-quantum work — the full use-case list **A1.x–A5.x** (PQ-native greenfie
 and **B0.x–B5.x** (retrofit / mixed), each as **Given / When / Then** with
 concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
+> **Not yet reconciled with the 2026-08-03 ruling.** Every scenario below that
+> treats `pqpublickey` as a PQ **encryption** key or a KEM target is stale:
+> the key signs and verifies only, and it is renamed
+> `public:pq_signing_root@<atSign>`. See
+> [decisions.md section 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).
+>
+> The rulings it needs are all made; what is owed is the rewrite, which is
+> tracked against **B-1c**. It is left standing rather than half-corrected. The
+> two clusters that change most:
+>
+> 1. **A2 enrollment approval reverses direction.** Step 2 of UC-A2.1 has the
+>    joining enrollment encapsulate `apkamSymmetricKey` to `pqpublickey`; instead
+>    the **approver** generates it and encapsulates to the enrollee's X-Wing
+>    key-package public half, which the `enroll:request` tail already carries. No
+>    atSign-level KEM anywhere.
+> 2. **The A1 cold-start scenarios** assume a PQ fallback that no longer exists.
+>    Cold-start fails unless legacy is opted into, and PQ sharing now requires the
+>    recipient to have used or authorised the namespace.
+
 ## Table of contents
 
 - [0. Purpose, scope & how to read this doc](#0-purpose-scope--how-to-read-this-doc)

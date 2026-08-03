@@ -31,6 +31,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [15. The record owner and the nskey owner are different atSigns (2026-08-02)](#15-the-record-owner-and-the-nskey-owner-are-different-atsigns-2026-08-02)
 - [16. A provider id names every algorithm a reader needs code for (2026-08-02)](#16-a-provider-id-names-every-algorithm-a-reader-needs-code-for-2026-08-02)
 - [17. The sync push dropped `appMetadata` (2026-08-02, fixed)](#17-the-sync-push-dropped-appmetadata-2026-08-02-fixed)
+- [18. `pqpublickey` becomes the user-owned signing root (2026-08-03)](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) — *supersedes the KEM role in [design.md](design.md) section 1.4*
 
 ---
 
@@ -681,6 +682,8 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 | **2026-08-02** | **Seven nskey data-path rulings** from walking an Alice↔Bob message end to end against the built providers ([13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02), [14](#14-content-keys-are-scoped-per-recipient-2026-08-02), [15](#15-the-record-owner-and-the-nskey-owner-are-different-atsigns-2026-08-02)): the nskey is published **eagerly** to `public:__nskey.<ns>@<owner>` (mutable, lock-serialised, generation-tagged), superseding lazy publication; content keys are scoped **per recipient**; and the record owner (`sharedBy`, for `info`) is separated from the nskey owner (`sharedWith ?? sharedBy`, for key selection). | The walk surfaced three defects the doc set had not caught: cross-atSign reads could not work, because the key ring was looked up under the sender's atSign; the promotion trigger fired on *sending* while the key a sender needs is the *recipient's*, so a receive-only atSign cold-started forever; and `design.md` called the published half immutable while B5b required re-publishing it, leaving the revocation lever unimplementable. Rotation additionally had no signal reaching senders — a silent B6 revocation failure — and a post-rotation joiner could not open retained history. |
 | **2026-08-02** | **The sync push dropped `appMetadata`, and the fix deletes the duplicate serializer that dropped it** ([17](#17-the-sync-push-dropped-appmetadata-2026-08-02-fixed)). `SyncServiceImpl` now delegates to `Metadata.toAtProtocolFragment` instead of hand-rolling the metadata fragment, and a guard parses a fully-populated fragment with `VerbSyntax.update`. Cross-atSign reads work; the e2e test is un-skipped. | This was first recorded as an atServer defect — that attribution was wrong, and the correction is the durable lesson: **an absent field indicts the writer before the reader.** The wire observation (a `lookup` returning no `appMetadata`) was accurate, but *absent from the response* was read as *withheld by the responder* when the field had never been stored. The probe that separates them is an authenticated `llookup:all:` against the **writer's own** atServer after sync. Blast radius was every provider's synced writes, including shipped 3.14 — not PQ-specific — because a duplicated wire serializer had silently lagged the canonical one. |
 
+| **2026-08-03** | **`pqpublickey` stops being a KEM and becomes `public:pq_signing_root@<atSign>`, the user-owned signing root** ([18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)). Cold-start has no PQ target and therefore **fails**, with legacy RSA reachable only by explicit opt-in; the release sequence makes that safe, since a final 3.x rebuild-and-rollout seeds the fleet with nskeys and roots before 4.x turns PQ on by default. SS-4 gates that 3.x release, `AtClientPreference.crypto` becomes nullable so the SDK owns the era default, and the root is written immutable with a `{v, keys[], successor}` payload. | A prove-possession step needs a signature, not a KEM, and one key doing both was the conflation to remove. Handing the root to the atServer was rejected: key transparency over an operator-held key records the operator's own signatures, so an auditor has nothing to catch, and the anchoring gap [12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02) records would become structural. Publishing a key whose private is not durably conveyed is worse than not publishing, because the far end gets undecryptable data instead of a fast sender-side failure — hence publish-after-convey and SS-4 as a 3.x blocker. `keys[]` and `successor` ship on day one because the record is immutable and the whole fleet mints during the rollout, so mint time is the only chance to allow a second algorithm or any revocation at all. |
+
 **Cross-refs:** the Wave-0 "already landed" detail and the project that follows
 each decision are in `implementation-plan.md`; the phase trajectory this timeline
 tracks is in `roadmap.md`.
@@ -1306,3 +1309,207 @@ shape, or by trying providers in turn. It guesses which scheme opened a record, 
 wrong guess is a silent mis-decrypt or a misleading error. Failing loudly is better than
 guessing at cryptography. (This stands on its own merits, and is unaffected by the
 misattribution above.)
+
+---
+
+## 18. `pqpublickey` becomes the user-owned signing root (2026-08-03)
+
+**Status:** accepted, supersedes the `pqpublickey`-as-KEM model throughout
+[design.md](design.md) section 1.4 and every site that describes a cold-start
+encapsulation to it.
+
+`public:pqpublickey@<atSign>` was the atSign-level root **KEM** target: the universal
+cold-start recipient a sender encapsulated a content key to when the recipient's
+namespace had no published nskey. That role is withdrawn. The key is now
+`public:pq_signing_root@<atSign>`, it signs and verifies only, and it never appears in
+a key-transport path.
+
+This follows the rule the inter-server work already settled: a prove-possession step
+needs a PQ **signature**, and a KEM belongs only where there is a secret to convey.
+Giving one key both jobs is the conflation this removes.
+
+### 18.1 What the root is for
+
+The root is the **user-owned** anchor of the trust chain, and the intent is for the SDK
+to publish it to a key transparency system at mint.
+
+Everything advertised by an atSign is verified against a per-enrollment `_apsk`
+([section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)), and
+`_apsk` is served by the atServer, so an operator who can rewrite it can substitute any
+advertised key. That is recorded there as a known limit. The root closes it: approvers
+sign enrollees' key packages, so the chain runs root → key package → `_apsk` →
+advertised keys, and the anchor is something the operator cannot produce.
+
+Handing the root to the atServer was considered and rejected. Key transparency over an
+operator-held key records the operator's own signatures, correctly signed, so an auditor
+has nothing to catch. It would make the operator's position structural rather than a gap
+to close. Self-hosting makes operator and user the same party for some deployments, and
+the design should not assume it for the rest.
+
+`public:signing_publickey@<atSign>` is atServer-to-atServer auth and unrelated to
+clients; the `public:pq_signing_publickey@<atSign>` that joins it is the atServer's, not
+the user's.
+
+### 18.2 Custody
+
+Only an enrollment with full privileges (`rw` on `*` and `__manage`) may create the root.
+That app writes the private into its own `.atKeys` and conveys it to the other fully
+privileged enrollments over the secret-sharing substrate. Namespace-scoped enrollments
+never hold it; they get `_apsk` and nskey privates. There is precedent for the class:
+`default_enc_private_key.__manage` and `default_self_enc_key.__manage` already travel
+this way (`at_auth/lib/src/enroll/at_enrollment_impl.dart:427,442`).
+
+The record is written **immutable**, which is what prevents a split root. Several
+`__manage` apps updating on independent schedules could each find no root and each mint
+one, and because the root never rotates there would be no way to reconcile two chains or
+two transparency-log entries. The first create wins and later creates are refused. The
+atServer guard restricting namespace-less-key writes to fully privileged enrollments
+covers the same record from the other side.
+
+### 18.3 Shape
+
+Named `public:pq_signing_root@<atSign>`, plain `public:` rather than `_` or `__`.
+Namespace hiding exists to stop outsiders enumerating which apps an atSign uses; an
+identity root published to a transparency log wants the opposite, since being found and
+audited is the mechanism.
+
+The payload mirrors the key package's ratified agility shape
+([section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)):
+
+```json
+{ "v": 1,
+  "keys": [ { "alg": "ml-dsa-65", "pub": "<base64>" } ],
+  "successor": null }
+```
+
+`keys` is a list rather than a single algorithm because the record is immutable, so mint
+time is the only moment a root can be made verifiable under more than one algorithm; a
+single-algorithm shape would foreclose hybrid or transitional verification permanently,
+for every atSign, at rollout. Readers skip entries whose `alg` they have no code for, as
+they already do for key packages.
+
+`successor` reserves the revocation chain. Revocation is not implemented in D1, and the
+slot ships anyway: the whole fleet mints roots during the 3.x rollout and publishes them,
+so the shape is fixed for every atSign from that moment. A root that can neither rotate
+nor be revoked has no answer to compromise at all, and transparency gives detection
+rather than recovery.
+
+### 18.4 Cold-start, and the two-release upgrade path
+
+With the root out of the key-transport business, cold-start has no PQ target. The ruling
+is that it **fails**, and legacy RSA is reached only by explicit opt-in. Once an nskey is
+available it is used from then on, forward-only; re-encrypting records already written
+under the legacy fallback is R-1's explicit migration and never a side effect of a `put`,
+which would put an unbounded scan-and-rewrite inside a write pre-pass.
+
+The hard failure is safe because of the release sequence, which is the point of the whole
+design:
+
+1. **Final 3.x** is a rebuild and rollout with no app code changes. The client reads PQ
+   records, mints and publishes its nskeys and its root, and still writes legacy.
+2. **4.x** makes PQ the default, and cold-start always throws.
+
+Step 2 is only tolerable because step 1 has already seeded the fleet. That places two
+constraints on the final 3.x release.
+
+**SS-4 gates it.** Privates are held in memory today
+(`published_nskey_key_ring.dart:106-107`), so a key minted in 3.x evaporates on restart
+and leaves a published public half nobody holds. A 4.x sender would encapsulate to it and
+the recipient could never decrypt, which is worse than not publishing at all, since that
+case at least fails fast at the sender. The ordering is publish-after-convey, never
+before: nothing advertises a key it cannot open.
+
+**Apps do not choose providers.** Most apps never name a `CryptoConfig`, so the era
+default has to be the SDK's, not a factory an app remembers to call.
+`AtClientPreference.crypto` becomes nullable, where null means SDK-managed and a value
+means the app has overridden it, and `AtClientImpl` resolves the effective config at init
+by constructing the key ring itself. Today that wiring exists only in the e2e test, by
+hand, after client creation, which is the boilerplate this removes.
+
+An atSign whose `__manage` app never ran a final 3.x build cannot be shared with from a
+4.x client. That surfaces as a distinct exception naming the recipient and namespace, plus
+a pre-flight capability query, so an app can say that a peer has not upgraded rather than
+reporting a generic encryption failure after the user has already done the work.
+
+### 18.5 Enrollment approval no longer needs an atSign-level KEM
+
+A joining enrollment used to encapsulate its `apkamSymmetricKey` to `pqpublickey`, since
+at that moment it has no `_apsk` and no registered key package and the root was the only
+thing it could reach. That is a real secret conveyance, so removing the KEM leaves a hole.
+
+The direction reverses instead. `enroll:request` already carries the enrollee's X-Wing
+key-package public half on its tail, so the **approver** generates `apkamSymmetricKey` and
+encapsulates to that. No atSign-level KEM key needs to exist for enrollment either, which
+is the point of the ruling rather than an exception to it.
+
+The approver is encapsulating to a key that arrived on an unauthenticated request. That is
+trust-on-first-use gated by a person approving a named device, which is what enrollment
+already is, and it is no weaker than the flow it replaces.
+
+### 18.6 Signing `_apsk` without changing who writes it
+
+The atServer authors the `_apsk` record, populating
+`public:_apsk.<enrollmentId>.<perEnrollmentApproved>@<atSign>` from the enrollment record
+([section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)). A client
+holding the root cannot attach a signature to a record it does not write, and the key
+package is enrollment-internal and never published, so a cross-atSign verifier cannot
+reach a signature parked there.
+
+So the **value** changes rather than the authorship: `_apsk` becomes a root-signed envelope
+instead of a bare key, and the approver puts that envelope in the enrollment record the
+atServer already copies verbatim. No new server logic, no second record to fetch, and the
+signature is produced at the one moment the root is already in use.
+
+Every `_apsk` in the field today is a bare key, so a verifier accepts both shapes and reads
+a bare one as unsigned, the same skip-what-you-cannot-verify posture `keys[].alg` uses.
+
+### 18.7 When minting happens
+
+**At client init, non-blocking, and resumable.** Minting cannot hang off a namespace's
+first write: that is the promotion trigger
+[section 13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02)
+removed, because the key a sender needs is the recipient's and an atSign that only ever
+receives in a namespace would never publish.
+
+Publish-after-convey makes minting a short sequence rather than a single write: mint,
+convey the private to the other privileged enrollments, then advertise. None of it can
+complete offline, so the client checks persisted local state first, only touches the
+network on the first launch, and never blocks startup. The in-progress state is persisted
+so an interrupted attempt **resumes rather than re-generating** — a re-mint after a partial
+publish is the split-key case, and for the immutable root it is unrecoverable.
+
+An ordinary app that finds no root proceeds silently. It cannot create one, since only a
+fully privileged enrollment may, and blocking would strand the user behind an app they may
+not control. Data flows without a root; what an unanchored atSign lacks is a peer's ability
+to verify whose key it is encapsulating to, which is SS-1c's concern and unimplemented
+either way.
+
+Privileged apps also mint when an app is **authorised** for a namespace, not only when one
+runs, which closes the installed-but-never-launched gap.
+
+**Which namespaces a client mints for** is the union of two sets: the namespace in
+`AtClientPreference`, and the namespaces its enrollment holds **`rw`** on. The `rw`
+condition is an authorisation constraint rather than a policy choice — the advertisement
+is `public:__nskey.<ns>@<owner>`, a namespace-scoped public key, so only an enrollment
+allowed to write that namespace can publish it. An enrollment with read access still needs
+the nskey *private* to open inbound content keys, but it has no business minting the key
+itself; another enrollment will.
+
+A fully privileged enrollment holds `rw` on `*`, which is not an enumerable set, so it
+resolves the wildcard through `enroll:listns` to the namespaces the atSign's enrollments
+actually hold. It sweeps that list at init **and** mints on approval: the sweep catches
+namespaces authorised before the upgrade, and the approval hook catches the ones granted
+after. That is what makes a single `__manage` upgrade seed the whole atSign rather than
+only the apps that happen to have been rebuilt, which is the property the 3.x rollout
+depends on.
+
+### 18.8 The limit this accepts
+
+PQ sharing requires the recipient to have used or authorised the namespace. There is no
+longer any way to seal to an atSign that has never touched it, because that is exactly what
+the cold-start KEM did.
+
+The invitation case therefore has no PQ answer: sending someone something in an app they
+have never installed works in final 3.x only through the opt-in legacy fallback, and stops
+working at 4.x. We should document that as a property rather than solve it by
+reintroducing an atSign-level KEM under a different name.

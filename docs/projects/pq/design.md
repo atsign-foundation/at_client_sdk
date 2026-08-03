@@ -205,6 +205,15 @@ and no promotion step ([`decisions.md`](decisions.md) §13).
 
 ### 1.4 the nskey and the pqpublickey root
 
+> **Superseded in part, 2026-08-03.** Everything below about the **nskey** stands.
+> Everything about `pqpublickey` as a **KEM target** does not: the key signs and
+> verifies only, it is renamed `public:pq_signing_root@<atSign>`, and it is now the
+> user-owned root of trust rather than a cold-start encapsulation target. Cold-start
+> therefore has no PQ target and **fails**, with legacy RSA reachable only by explicit
+> opt-in. See
+> [decisions.md section 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).
+> The paragraphs below are kept as the record of what was replaced.
+
 **The nskey's public half is published eagerly.** Minting writes
 `public:__nskey.app_1.my_apps@alice` there and then — before any data, before any
 share. A sender never has to wonder whether a recipient has "published yet": if the

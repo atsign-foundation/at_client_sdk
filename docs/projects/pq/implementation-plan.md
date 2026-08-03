@@ -664,13 +664,14 @@ taken now because nothing written under the old form exists outside the spike.
 
 | Owed | Where it belongs |
 |---|---|
-| Cold-start: seal the CK to `public:pqpublickey`; `NskeyProvider.encrypt` still throws | **B-1c** |
+| Cold-start **fails by design** as of the 2026-08-03 ruling — `NskeyProvider.encrypt` already throws, which is now correct behaviour. What is owed is the *opt-in* legacy fallback, a distinct exception naming the recipient, and a pre-flight capability query ([decisions.md 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)) | **B-1c** |
 | Advertised-key signature verification — `UnverifiedAdvertisedKeys` shouts on every use | **SS-1c** |
-| Real nskey minting + per-APKAM conveyance; `InMemoryNskeyKeyRing` and `mintAndPublish` are fixtures | **SS-4** |
+| Real nskey minting + per-APKAM conveyance; `InMemoryNskeyKeyRing` and `mintAndPublish` are fixtures. **Gates the final 3.x release** — the rollout seeds the fleet, and a key published without its private durably conveyed leaves the far end undecryptable | **SS-4** |
+| Mint and publish `public:pq_signing_root@<atSign>`, immutable, `{v, keys[], successor}`, conveyed to fully privileged enrollments. Also gates final 3.x | **SS-4** |
+| `AtClientPreference.crypto` becomes nullable and `AtClientImpl` resolves the era default at init, constructing the key ring itself — most apps never name a `CryptoConfig`, so the default has to be the SDK's. Source-breaking; `CryptoRuntime` reads it in 4 places via `?? const CryptoConfig.legacy()` and must read the resolved config instead | **SS-4** |
 | The `_nskeylock` mint/rotate race — specified here, neither implemented nor tested | **SS-4** |
 | The bench harness `acceptance.md` says lands with B-1 — not built, and not in this plan's deliverables | **B-1** |
 | `at_chops` `pqOpen` lets an `ArgumentError` escape its documented `PqOpenException` contract; worked around client-side | `at_chops` |
-| Revisit whether `CryptoConfig.nskey()` should default the *whole client* to the nskey path — it routes the SDK's own internal writes too, which is what surfaced four of the six defects | **B-1** |
 | The CK cache and the owner's own nskey privates are process memory only — a restart loses both, so the owner cannot re-read her own outbound shared records | **SS-4** |
 | `B-1e` ("`providerId` on notification frames") is listed as future work, but both notify entry points have already changed and the send half is now covered live — the chunk needs re-scoping to whatever actually remains | **B-1e** |
 | The notify **receive** half has no live coverage, and cannot get any in `at_end2end_test` as it stands: `AtClientManager` is a singleton, and `setCurrentAtSign` both stops the previous atSign's monitor and unsets its `notificationService`, so no test can hold a subscription on one atSign while another sends. Covered at unit level only. Closing this needs the harness to support two concurrent clients, not a new test | `at_end2end_test` |
