@@ -232,7 +232,7 @@ new config (there is no `CryptoRegistry`).
 `P-1`/`pqSeal` publish gate is **already satisfied** (at_chops 3.3.0, published 2026-06-23), leaving the SS-0
 baseline (PR #2037) as its prerequisite (see [section 10](#10-cross-cutting-publish-gates-critical-path-wavesparallelism-testing)).
 
-### S-1 — at_auth: extend `AtKeys` in place (additive PQ methods, deprecate legacy) + `AtKeysIo` runtime persistence (API only); publish 3.3.0 · at_auth · M — **SATISFIED on trunk (2026-07-17); residual = the stable 3.3.0 publish**
+### S-1 — at_auth: extend `AtKeys` in place (additive PQ methods, deprecate legacy) + `AtKeysIo` runtime persistence (API only); publish 3.3.0 · at_auth · M — **SATISFIED and PUBLISHED — at_auth 3.3.0 is on pub.dev (verified 2026-08-03); no residual.** Consequence: at_auth has **no in-progress version open**, so the next change to it needs a new one opened
 **Goal:** extend the existing `AtKeys` in place so it holds every key (per-enrollment AND per-APKAM) via
 additive PQ-safe accessors while the legacy key fields deprecate; interface-first.
 **Builds on:** at_auth `AtKeys`. Additive only; gates nothing in Wave 2.

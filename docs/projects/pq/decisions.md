@@ -33,6 +33,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [17. The sync push dropped `appMetadata` (2026-08-02, fixed)](#17-the-sync-push-dropped-appmetadata-2026-08-02-fixed)
 - [18. `pqpublickey` becomes the user-owned signing root (2026-08-03)](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) — *supersedes the KEM role in [design.md](design.md) section 1.4*
 - [19. Nested namespaces: the nskey is resolved by walking up (2026-08-03)](#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03) — *adds `appMetadata.ns` / `ckNs`; supersedes the no-`ns` statement in [design.md](design.md) section 1.5*
+- [20. SS-2: how the key package reaches an enrollment, and how conveyance fires (2026-08-03)](#20-ss-2-how-the-key-package-reaches-an-enrollment-and-how-conveyance-fires-2026-08-03) — *resolves two blockers that made the SS-2 design unimplementable as written*
 
 ---
 
@@ -1700,3 +1701,95 @@ to close.
 - **The functional and e2e suites use single-segment namespaces** (`wavi`, `e2e_test`),
   which is exactly why none of this surfaced. A multi-segment case belongs in both, or the
   design stays unit-only.
+
+---
+
+## 20. SS-2: how the key package reaches an enrollment, and how conveyance fires (2026-08-03)
+
+**Status:** accepted. Seven rulings scoping SS-2's client half. Two of them resolve blockers
+that made the design as written **unimplementable**; both were found by reading the code, and
+neither is visible to any test today because nothing yet joins the two ends.
+
+### 20.1 Two blockers found before writing any code
+
+**The signed key package claims an `enrollmentId` its signer cannot know.** `wrapAndSign`
+stamps `envelope['enrollmentId'] = enrollmentId` (`envelope_signing.dart`), and that getter
+falls back to `'primary'` when there is no enrollment. At `enroll:request` time there is
+none — the **atServer** assigns it (`Uuid().v4()`, `enroll_verb_handler.dart`). The server
+then stores the metadata **verbatim**, because it is opaque. So the stale `'primary'` claim
+is frozen inside a signed blob that nobody can correct: not the enrollee (it signed too
+early), not the server (correcting it breaks the signature), not the approver (it can only
+verify). `VerbEnrollmentDirectory` rejects on claim ≠ record id — so **every** key package
+riding `enroll:request` would be rejected, for every enrollment.
+
+It is invisible today because the unit tests seed the directory with packages signed by an
+*already-enrolled* sharer, where the claim always matches.
+
+**The package must be signed by a key only at_auth holds, when no `AtClient` exists.** The
+design has an at_client orchestrator building the package "above at_auth", with at_auth
+ferrying it. But at `submit` time the enrollee has an `AtLookUp` and an `AtAuthSession` and
+**no `AtClient`** — that is built afterwards, from the approved session. The APKAM keypair it
+must sign with is generated *inside* at_auth (`at_enrollment_impl.dart`). `wrapAndSign` signs
+via `atClient.atChops`, so there is neither a client to sign through nor a key to sign with at
+the moment the package is needed.
+
+### 20.2 The rulings
+
+| # | Ruling |
+|---|---|
+| 1 | **Conveyance fires in at_client's `EnrollmentServiceImpl.approve`, and the other approve paths route through it.** `at_client_flutter` and `at_onboarding_cli` call at_auth's `approve` directly today; both already hold an `AtClient`. Leaving them would produce an enrollment that authenticates fine and can decrypt nothing, with nothing in the code saying so |
+| 2 | **An absent key package is not an error; a rejected one is.** Absent is expected during rollout and for the self-retrofit path, which needs no conveyance. Rejected — wrong signer, bad signature, malformed — throws, so the approver learns the device cannot decrypt and can revoke. A *signed but unparseable* package is neither: the enrollee is running a newer client, the approver cannot fix it, and throwing would block approvals across a version skew |
+| 3 | **`NamespaceMember` carries a four-way status: present / absent / rejected / unsupported.** `_verifiedKeyPackage` collapses five distinct outcomes into one `null`. The log severities already distinguish them; only the return type cannot. Ruling 2 is unimplementable without this |
+| 4 | **The approver takes the key package from the request it is approving, not a `listns` re-fetch.** The atServer already returns `metadata` on `enroll:list`; at_client's `Enrollment.fromJSON` discards it. Reading it there removes a round trip *and* a real hole: conveyance discovery iterates the approved namespaces and skips `*`, so an enrollment granted `*` alone finds no key package and conveys nothing, warning only |
+| 5 | **The `enrollmentId` claim is omitted when unknown, and an absent claim verifies.** Authority is the signature verifying against *that record's* `_apsk`, plus the server having bound the package to the record it created. A present-but-mismatched claim stays a hard rejection |
+| 6 | **The `(AtClient, enrollmentId)` Expando re-key is deferred to RF-2b.** See [20.3](#203-what-the-expando-re-key-is-actually-worth) |
+| 7 | **`AtEnrollmentRequest` gains a metadata-builder callback taking an `AtKeysIo`.** at_auth invokes it after generating the APKAM keypair and attaches the result to `EnrollVerbBuilder.metadata`, never inspecting it |
+
+### 20.3 What the Expando re-key is actually worth
+
+An `AtClient` is cached per atSign and reused (`AtClientImpl.create`), while
+`AtLookupImpl.enrollmentId` is a public mutable field read live by `ApkamSigning`. So a
+cached `AtClientSecretSharing` can outlive the enrollment it was built for, and
+`myKeyPackage` then composes a **live** `enrollmentId` with a **cached** X-Wing public key.
+
+This was first written up here as a cross-enrollment key confusion. **That was wrong**, and
+the correction is worth recording so it is not re-argued: the instance still holds the seed
+matching the key it advertises, so anything sealed to it opens, and nobody gains access they
+did not already have. The seed is not bound to the enrollment at all.
+
+What remains is **liveness**: the stale instance's `kpid` is the old one, so `startListening`
+watches the old envelope addresses and the new enrollment silently receives nothing. And it
+needs the enrollment to change under a live `AtClient` — not ordinary app behaviour, since an
+app is one enrollment fixed by the `.atKeys` it authenticated with. The one flow that does it
+is the **RF-2b self-retrofit**. Recorded against RF-2b rather than churning a published
+experimental surface for a case SS-2 never reaches.
+
+### 20.4 Consequences
+
+- **Ruling 7 moves `AtKeys` construction earlier in at_auth.** Everything but `enrollmentId`
+  is available before the request is sent; only that one field needs the response. The
+  callback therefore receives keys with **no** `enrollmentId` — so ruling 5 is not merely the
+  tidier option, it is forced by the order of operations. The two agree, which is
+  corroboration rather than coincidence.
+- **`enroll:listns` loses its production caller in SS-2** (ruling 4). Its first one becomes
+  `pushSecretToNamespaceMembers` at nskey mint, in **SS-4**. The verify path stays
+  unit-covered, and a live test can still drive the verb directly.
+- **`EnrollVerbBuilder.metadata` already exists** and drops an empty map before the wire, so
+  the passthrough is an attach, not a grammar change. There is **no atServer schema work in
+  SS-2** — that watch-out was inherited from SS-1b, where it was true.
+- **Rulings 1 and 4 touch published surfaces**: `Enrollment` gains `metadata`,
+  `NamespaceMember` gains a status, `AtEnrollmentRequest` gains a callback. All additive; the
+  at_auth one lands on its own publish gate.
+
+### 20.5 Scope boundaries and versioning
+
+| # | Ruling |
+|---|---|
+| 8 | **The atServer's `mldsa65` verify branch stays in SS-3, with its record-authoritative sibling.** `_getSigningAlgoType` branches on `ecc` and `rsa2048` and falls through to `rsa2048` for everything else, so a PQ APKAM would be verified as RSA and fail. But that method also reads the *client-supplied* algo rather than the stored one, and fixing both at once is one change to one method — splitting them means touching it twice and living with a window where a client selects its own verification algorithm. Nothing in SS-2's client half authenticates with an ML-DSA APKAM. Needs `java_at_server` parity in the same sweep |
+| 9 | **at_auth opens 3.4.0 before the work starts.** Verified against pub.dev 2026-08-03: at_auth 3.3.0 is **published**, so unlike at_commons, at_chops and at_client it has no in-progress heading to fold into. Ruling 7's callback is additive and optional, so a minor. at_client's floor rises to `^3.4.0` in the same commit as the first use |
+| 10 | **The whole chain gets a live functional test with a real second enrollment.** Key package rides `enroll:request` → the server stores it → approve → `listns` returns it → the signature verifies against the server-published `_apsk` → conveyance seals to it. `at_functional_test`'s `enrollment_test.dart` already drives live `getOTP` / `submit` / `approve` against `apkamFirstAtSign`, so the harness exists. This is the test that would have caught [20.1](#201-two-blockers-found-before-writing-any-code)'s first blocker |
+
+**Why ruling 10 is not optional.** Ruling 4 removes `enroll:listns` from the production
+conveyance path, so its first production caller is now SS-4. Without a live test the verify
+path would stay unit-only for another whole project — and its unit fixtures seed packages
+signed by an already-enrolled sharer, which is precisely the shape that hides the blocker.
