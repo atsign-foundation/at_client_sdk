@@ -500,7 +500,22 @@ seam to a 1:1:1 seeding seam; a client-driven functional round-trip.
 #2037) — don't duplicate it. Clear the test's own `.atKeys` and gitignore it.
 **coversD1:** D1-F DEP1 (client parser) + DEP2 (write path removed).
 
-**Progress (2026-08-03, `gkc-pq-d1-spike`).** Two of the six implementation steps are landed:
+**Progress (2026-08-03, `gkc-pq-d1-spike`).** **All six implementation steps are landed**, with the
+whole chain proven live in `tests/at_functional_test/test/enrollment_key_package_e2e_test.dart`:
+the key package rides `enroll:request`, comes back on the record, verifies against the `_apsk` the
+atServer publishes on approval — **carrying no `enrollmentId` claim**, which is ruling 5 proven on
+the wire rather than argued from code — and approving seals this atSign's secrets to it, checked by
+reading the `__ssenv` envelope remotely so a local-only pass cannot fake it.
+
+⚠️ **The published `atsigncompany/virtualenv:vip` image does not store `EnrollParams.metadata`**
+(verified 2026-08-03 with a probe whose marker appears only inside `metadata`). at_server trunk
+persists it — that landed with SS-1b on 2026-07-07 — but vip lags trunk until a canary→prod
+promotion, so the key package cannot reach the enrollment record against vip at all. The live tests
+therefore run against a locally built `at_virtual_env:local`. **Before SS-2 opens a PR**, confirm vip
+has been promoted and re-run the pack against it; CI uses vip, and the functional rails are
+temporarily pointed away from it.
+
+*Superseded progress note:* two of the six steps were landed at the time of writing:
 the keys-sourced envelope signer (`signEnvelope` / `verifyEnvelope` take key material as an
 argument, both signing mixins moved onto it, all five D1 consumers migrated), and
 `AtEnrollmentRequest.metadataBuilder` in at_auth 3.4.0. Still to do: build and sign the key
