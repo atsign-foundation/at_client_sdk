@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:mocktail/mocktail.dart';
@@ -329,6 +330,81 @@ void main() {
           await VerbEnrollmentDirectory(atClient).listForNamespace('myapp');
 
       expect(members.single.keyPackage, isNull);
+    });
+
+    test('each member says why it has no usable key package', () async {
+      final b = await registered('enroll-b');
+      final d = await registered('enroll-d');
+      // Registered so its OWN _apsk is published: the package below must
+      // genuinely verify and then fail to PARSE. Signed by another
+      // enrollment it would fail verification first and never reach the
+      // parse, which is a different outcome entirely.
+      final future = await registered('enroll-future');
+      final atClient = buildMockClient('enroll-self');
+      stubListns(atClient, [
+        record('enroll-b', await b.signedKeyPackagePayload()),
+        record('enroll-none', null),
+        // enroll-b's record carrying a package enroll-d signed: refused.
+        record('enroll-wrong', await d.signedKeyPackagePayload()),
+        // Signed by the right enrollment, but a payload this version cannot
+        // read — what a newer client's package looks like from here.
+        record(
+            'enroll-future',
+            signEnvelope({'shape': 'from a later version'},
+                keys: future.signingKeys, enrollmentId: 'enroll-future')),
+      ]);
+
+      final byId = {
+        for (final m in await VerbEnrollmentDirectory(atClient)
+            .listForNamespace('myapp'))
+          m.enrollmentId: m
+      };
+
+      expect(byId['enroll-b']!.keyPackageStatus, KeyPackageStatus.present);
+      expect(byId['enroll-none']!.keyPackageStatus, KeyPackageStatus.absent,
+          reason: 'an enrollment that advertised nothing is ordinary — an old '
+              'client, or the self-retrofit path, which needs no conveyance');
+      expect(byId['enroll-wrong']!.keyPackageStatus, KeyPackageStatus.rejected,
+          reason: 'a package offered under the wrong enrollment is the one '
+              'case a caller must refuse rather than skip');
+      expect(
+          byId['enroll-future']!.keyPackageStatus, KeyPackageStatus.unsupported,
+          reason: 'nobody here can fix a package written by a newer client, so '
+              'refusing would block work purely because the other end is '
+              'ahead of us');
+
+      // Only `present` carries a package; the rest are all null, which is
+      // exactly why the status is needed to tell them apart.
+      expect(
+          byId.values
+              .where((m) => m.keyPackage != null)
+              .map((m) => m.enrollmentId),
+          ['enroll-b']);
+    });
+
+    test(
+        'a package that names no enrollment still verifies — the record says '
+        'whose it is', () async {
+      // The enroll:request shape: signed before the atServer assigned an id,
+      // so there was nothing truthful to stamp. Rejecting it would refuse
+      // every key package that rides an enrollment request.
+      final b = await registered('enroll-b');
+      final atClient = buildMockClient('enroll-self');
+      stubListns(atClient, [
+        record(
+            'enroll-b',
+            signEnvelope(b.myKeyPackage.toJson(),
+                keys: b.signingKeys, enrollmentId: null)),
+      ]);
+
+      final member =
+          (await VerbEnrollmentDirectory(atClient).listForNamespace('myapp'))
+              .single;
+
+      expect(member.keyPackageStatus, KeyPackageStatus.present);
+      expect(member.keyPackage!.enrollmentId, 'enroll-b',
+          reason: 'injected from the record, which is where the id has always '
+              'lived — the payload never carried it');
     });
 
     test('one bad advertisement does not cost the other members theirs',

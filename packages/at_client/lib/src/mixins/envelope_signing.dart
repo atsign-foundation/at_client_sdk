@@ -87,19 +87,34 @@ mixin EnvelopeSigning on ApkamSigning {
   /// the envelope was created by a client of that (approved) enrollment.
   ///
   /// Throws an [Exception] on failed validation.
+  /// [signerEnrollmentId] overrides the envelope's own `enrollmentId` claim as
+  /// the address to fetch `_apsk` from. Supply it whenever something outside
+  /// the envelope already establishes whose it is — an enrollment record, say
+  /// — which is also the only way to verify an envelope that carries **no**
+  /// claim. A key package signed before its enrollment existed is exactly
+  /// that: the atServer had not assigned an id yet, so there was nothing
+  /// truthful to stamp.
   Future<void> verifyEnvelopeSignature(
     Map envelope, {
     required String signerAtSign,
+    String? signerEnrollmentId,
   }) async {
-    final String signerEnrollmentId = envelope['enrollmentId'];
+    final claimed = envelope['enrollmentId'];
+    final String? id =
+        signerEnrollmentId ?? (claimed is String ? claimed : null);
+    if (id == null) {
+      throw AtSigningVerificationException(
+          'Cannot verify an envelope that names no enrollment and was given '
+          'none: there is no _apsk to check the signature against');
+    }
 
-    final pk = await getApkamPublicKey(signerAtSign, signerEnrollmentId);
+    final pk = await getApkamPublicKey(signerAtSign, id);
     try {
       verifyEnvelope(envelope, signerPublicKey: pk);
     } on AtSigningVerificationException {
       throw AtSigningVerificationException(
           'Signature verification failed using public key for '
-          '$signerAtSign enrollment $signerEnrollmentId : $pk');
+          '$signerAtSign enrollment $id : $pk');
     }
   }
 

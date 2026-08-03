@@ -8,13 +8,44 @@ import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('VerbEnrollmentDirectory');
 
+/// Why a [NamespaceMember] has no usable key package — or that it has one.
+///
+/// A null `keyPackage` on its own cannot be acted on, because these outcomes
+/// call for opposite responses and only one of them is a problem anybody can
+/// fix. Distinguishing them is what lets a caller carry on quietly in the
+/// ordinary cases and refuse loudly in the one that matters.
+@experimental
+enum KeyPackageStatus {
+  /// Present and verified — safe to seal to.
+  present,
+
+  /// The enrollment advertised none. Expected: an older client, or the
+  /// self-retrofit path, which needs no conveyance at all. Not an error.
+  absent,
+
+  /// Advertised and **refused** — not a map, signed by a different enrollment
+  /// than the record it appears on, or a signature that does not verify
+  /// against that enrollment's `_apsk`. Either a bug or an attempt to make
+  /// this atSign's secrets readable by the wrong key, and in both cases
+  /// something a caller should refuse rather than skip.
+  rejected,
+
+  /// Signed, and genuinely this enrollment's, but shaped in a way this version
+  /// cannot read — almost always a package written by a **newer** client.
+  /// Nothing is wrong and nobody can fix it from here, so it behaves like
+  /// [absent] rather than [rejected]: refusing would block work purely because
+  /// the other end is ahead of us.
+  unsupported,
+}
+
 /// One enrollment authorised for a namespace, as returned by
 /// [EnrollmentDirectory.listForNamespace]: its access level and the key
 /// package of its APKAM keypair.
 ///
 /// Enrollment cardinality is **1:1:1** — one enrollment has exactly one APKAM
 /// keypair and therefore exactly one key package — so each member has exactly
-/// one [keyPackage] (null if the enrollment advertised none).
+/// one [keyPackage] (null unless [keyPackageStatus] is
+/// [KeyPackageStatus.present]).
 @experimental
 class NamespaceMember {
   final String enrollmentId;
@@ -24,15 +55,22 @@ class NamespaceMember {
   /// key — reading the data requires it.
   final String access;
 
-  /// This enrollment's single key package, or null if it advertised none
-  /// (1:1:1).
+  /// This enrollment's single key package, or null if there is no usable one
+  /// (1:1:1). [keyPackageStatus] says why.
   final KeyPackage? keyPackage;
+
+  /// Whether this member has a usable key package, and if not, why not.
+  final KeyPackageStatus keyPackageStatus;
 
   NamespaceMember({
     required this.enrollmentId,
     required this.access,
     this.keyPackage,
-  });
+    KeyPackageStatus? keyPackageStatus,
+  }) : keyPackageStatus = keyPackageStatus ??
+            (keyPackage == null
+                ? KeyPackageStatus.absent
+                : KeyPackageStatus.present);
 }
 
 /// The atServer-backed directory of per-enrollment key packages.
@@ -112,16 +150,18 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
       if (excludeEnrollmentIds.contains(enrollmentId)) continue;
       final apkamPubKey = e['apkamPubKey'];
       final metadata = e['metadata'];
+      final (keyPackage, status) = metadata is Map
+          ? await _verifiedKeyPackage(
+              metadata['keyPackage'],
+              enrollmentId: enrollmentId,
+              apkamId: apkamPubKey is String ? apkamPubKey : null,
+            )
+          : (null, KeyPackageStatus.absent);
       members.add(NamespaceMember(
         enrollmentId: enrollmentId,
         access: access,
-        keyPackage: metadata is Map
-            ? await _verifiedKeyPackage(
-                metadata['keyPackage'],
-                enrollmentId: enrollmentId,
-                apkamId: apkamPubKey is String ? apkamPubKey : null,
-              )
-            : null,
+        keyPackage: keyPackage,
+        keyPackageStatus: status,
       ));
     }
     return members;
@@ -142,51 +182,62 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
   /// second is shouted about, because it is either an attack on the
   /// encapsulation target or a bug, and neither should be inferred from a
   /// member that quietly stops receiving secrets.
-  Future<KeyPackage?> _verifiedKeyPackage(
+  Future<(KeyPackage?, KeyPackageStatus)> _verifiedKeyPackage(
     Object? advertised, {
     required String enrollmentId,
     String? apkamId,
   }) async {
-    if (advertised == null) return null;
+    if (advertised == null) return (null, KeyPackageStatus.absent);
     if (advertised is! Map) {
       _logger.severe('enrollment $enrollmentId advertised a key package that '
           'is not a map; not sealing to it');
-      return null;
+      return (null, KeyPackageStatus.rejected);
     }
 
-    // The envelope names its own signer, and the record names whose enrollment
-    // it is advertised under. If those disagree, one enrollment is offering a
-    // key package as another's — which would hand it every secret meant for
-    // that other enrollment.
+    // The record names whose enrollment this is, and that is what the _apsk
+    // lookup goes on. A package may also name its own signer; if it does and
+    // the two disagree, one enrollment is offering a key package as another's
+    // — which would hand it every secret meant for that other enrollment.
+    //
+    // A package that names nobody is not suspicious: one riding
+    // `enroll:request` is signed before the atServer has assigned an id, so
+    // there is nothing truthful to stamp. Its authority is the signature
+    // checking out against this record's own _apsk, plus the record binding
+    // the package to the request that created it.
     final signer = advertised['enrollmentId'];
-    if (signer != enrollmentId) {
+    if (signer != null && signer != enrollmentId) {
       _logger.severe('enrollment $enrollmentId advertised a key package signed '
-          'by ${signer ?? "nobody"}; not sealing to it');
-      return null;
+          'by $signer; not sealing to it');
+      return (null, KeyPackageStatus.rejected);
     }
 
     try {
       await _signer.verifyEnvelopeSignature(advertised,
-          signerAtSign: atClient.getCurrentAtSign()!);
+          signerAtSign: atClient.getCurrentAtSign()!,
+          signerEnrollmentId: enrollmentId);
     } catch (e) {
       _logger.severe('the key package advertised by enrollment $enrollmentId '
           'does not verify against its _apsk, so the key it offers is only as '
           'trustworthy as whatever served it; not sealing to it: $e');
-      return null;
+      return (null, KeyPackageStatus.rejected);
     }
 
     try {
-      return KeyPackage.fromPayload(
-        advertised['payload'],
-        enrollmentId: enrollmentId,
-        apkamId: apkamId,
+      return (
+        KeyPackage.fromPayload(
+          advertised['payload'],
+          enrollmentId: enrollmentId,
+          apkamId: apkamId,
+        ),
+        KeyPackageStatus.present
       );
     } catch (e) {
       // Signed, so genuinely this enrollment's, but shaped in a way this
-      // version cannot read — most likely written by a newer client.
+      // version cannot read — most likely written by a newer client. Nobody
+      // here can fix that, so it is not a refusal.
       _logger.info('enrollment $enrollmentId advertised a signed key package '
           'this version cannot parse: $e');
-      return null;
+      return (null, KeyPackageStatus.unsupported);
     }
   }
 

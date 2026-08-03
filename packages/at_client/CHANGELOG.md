@@ -1,4 +1,21 @@
 ## 3.14.1
+- feat: `NamespaceMember.keyPackageStatus` says **why** a member has no usable
+  key package — `present` / `absent` / `rejected` / `unsupported`. A null
+  `keyPackage` alone could not be acted on, because these call for opposite
+  responses: `absent` is ordinary (an older client, or the self-retrofit path,
+  which needs no conveyance), `rejected` is the one case a caller must refuse
+  rather than skip (not a map, signed by a different enrollment, or a signature
+  that fails against `_apsk`), and `unsupported` — signed and genuinely that
+  enrollment's, but shaped in a way this version cannot read — behaves like
+  `absent`, because it means the other end is running a newer client and
+  refusing would block work nobody here can fix.
+- **behaviour change**: a key package that carries **no** `enrollmentId` claim
+  now verifies, against the `_apsk` of the enrollment whose record it appears
+  on. A package riding `enroll:request` is signed before the atServer has
+  assigned an id, so there is nothing truthful to stamp; rejecting it would
+  refuse every such package. A claim that is present but disagrees with the
+  record stays a hard rejection. `verifyEnvelopeSignature` gained
+  `signerEnrollmentId` for callers that already know whose envelope it is.
 - feat: `enrollmentKeyPackageBuilder(atSign)` builds the signed X-Wing key
   package that rides an `enroll:request` — pass it to at_auth's
   `AtEnrollmentRequest.metadataBuilder`. It runs at the only moment this is
