@@ -402,7 +402,12 @@ on trunk. It does **not** gate on S-1/S-2/S-3.
    still served on an exact `plookup` ([decisions.md](decisions.md) section 13). Its private — a KEM
    private that **decapsulates** CKs, never decrypts application data — is conveyed per-APKAM as a
    Secret over the substrate, and earlier generations are retained, addressed by `nskeyKid`.
-5. **appMetadata carries NO `ns` field** (see B-1 in [section 6](#6-phase-b--the-nskey-data-path-b-1-the-d1-centrepiece)).
+5. **appMetadata carries `ns`** — the value's own namespace — **and `ckNs`** on a data value, naming where
+   the content key lives ([decisions.md](decisions.md) section 19). `ns` exists because `AtKey.fromString`
+   splits at the **last** dot, so a multi-segment namespace is unrecoverable from the wire string; it is
+   also what the layer-3 AAD binds. (This fact previously read "appMetadata carries NO `ns` field", which
+   the nested-namespace ruling reversed.) See B-1 in
+   [section 6](#6-phase-b--the-nskey-data-path-b-1-the-d1-centrepiece).
 
 ### SS-0 — land the WP-SS substrate baseline · at_client · M — **SATISFIED (merged to trunk 2026-07-17)**
 **Goal:** get the WP-SS secret-sharing substrate code onto trunk — the foundation SS-1c / SS-2 / RF-1
