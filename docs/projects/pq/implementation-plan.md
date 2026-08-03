@@ -597,16 +597,19 @@ proceeds against a test fixture that supplies the nskey private directly (see th
   only `legacy`; per-destination selection picks the best id present in every required reader's set;
   `providerId` on stored values **and** notification frames.
 - **B4 cold-start:** when the recipient has never used the namespace, so there is no
-  `public:__nskey.<ns>@<recipient>`, seal **only the CK**
-  to `public:pqpublickey@<recipient>` (`recipientKind: root-pqpublickey`; data stays AES-GCM under the CK,
-  never encapsulated to root); the recipient's first *use* of the namespace mints and publishes its nskey
-  (via SS-4), and the sender's next `ensureCurrent` re-`plookup` upgrades to `recipientKind: nskey`.
+  `public:__nskey.<ns>@<recipient>`, the write **fails** — the atSign-level key is a signing root and
+  cannot receive an encapsulation, so there is no PQ target to fall back to. The refusal names the
+  recipient and the namespace, and a pre-flight query answers the same question first; legacy is
+  reachable only by explicit opt-in. The recipient's first *use* of the namespace mints and publishes
+  its nskey (via SS-4), and the sender's next `ensureCurrent` re-`plookup` picks it up.
   (Seal-and-hold is a per-namespace policy toggle delivered in **R-1**.)
 
-**Spike state (branch `gkc-pq-d1-spike`, 2026-08-02).** The data path is built, and
+**Spike state (branch `gkc-pq-d1-spike`, 2026-08-03).** The data path is built, and
 **both the self-data and the cross-atSign directions work end to end against a live
-atServer**. `packages/at_client` green at 716 passing / 39 skipped,
-`tests/at_functional_test` at 87, `tests/at_end2end_test` at 35 with no skips.
+atServer**. Advertised nskeys are signed and verified, and cold start fails cleanly with
+a pre-flight query and an opt-in legacy escape hatch. `packages/at_client` green at
+731 passing / 39 skipped, `tests/at_functional_test` at 91, `tests/at_end2end_test` at
+36 with no skips.
 
 *Proven live (functional suite, `tests/at_functional_test`):* self put/get round-trip
 through the whole pipeline including the pre-pass, the conveyance record and key
@@ -664,22 +667,22 @@ taken now because nothing written under the old form exists outside the spike.
 
 | Owed | Where it belongs |
 |---|---|
-| Cold-start **fails by design** as of the 2026-08-03 ruling — `NskeyProvider.encrypt` already throws, which is now correct behaviour. What is owed is the *opt-in* legacy fallback, a distinct exception naming the recipient, and a pre-flight capability query ([decisions.md 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)) | **B-1c** |
-| Advertised-key signature verification — `UnverifiedAdvertisedKeys` shouts on every use | **SS-1c** |
+| ~~Cold-start fails by design, with an exception, a fallback and a query~~ — **done on the spike branch.** `NamespaceKeyUnavailableException` carries the atSign and namespace and is raised by the *pre-pass*, so nothing is in flight when it fires; `CryptoRuntime.isReadyFor` answers the same question in advance via the `ReportsReadiness` seam; `AtClientPreference.allowLegacyCryptoFallback` (default false) reroutes the write to legacy, per write, so the fallback is forward-only. Covered live in `nskey_data_path_e2e_test`'s cold-start group ([decisions.md 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)) | **B-1c** |
+| ~~Advertised-key signature verification~~ — **done on the spike branch.** `PublishedNskeyKeyRing` signs its own advertisement with `wrapAndSign` and `ApkamSignedAdvertisedKeys` verifies a peer's against the `_apsk` its enrollment published; there is no unverified path left. What remains under SS-1c is the **key package** half — the same treatment for the package `enroll:listns` returns | **SS-1c** |
 | Real nskey minting + per-APKAM conveyance; `InMemoryNskeyKeyRing` and `mintAndPublish` are fixtures. **Gates the final 3.x release** — the rollout seeds the fleet, and a key published without its private durably conveyed leaves the far end undecryptable | **SS-4** |
 | Mint and publish `public:pq_signing_root@<atSign>`, immutable, `{v, keys[], successor}`, conveyed to fully privileged enrollments. Also gates final 3.x | **SS-4** |
-| `AtClientPreference.crypto` becomes nullable and `AtClientImpl` resolves the era default at init, constructing the key ring itself — most apps never name a `CryptoConfig`, so the default has to be the SDK's. Source-breaking; `CryptoRuntime` reads it in 4 places via `?? const CryptoConfig.legacy()` and must read the resolved config instead | **SS-4** |
+| ~~`AtClientPreference.crypto` becomes nullable~~ — **done.** It is `CryptoConfig?`, null meaning "whatever this release encrypts with", and every reader goes through `CryptoConfig.forClient(atClient)` — the one place the era default lives. The SDK deliberately does *not* resolve into the app's preference object: harmless while the default is a const, a per-atSign leak the moment it is not. What SS-4 still owes is the *other* half — building the key ring at init once the default becomes the nskey path | **SS-4** |
 | The `_nskeylock` mint/rotate race — specified here, neither implemented nor tested | **SS-4** |
 | The bench harness `acceptance.md` says lands with B-1 — not built, and not in this plan's deliverables | **B-1** |
-| `at_chops` `pqOpen` lets an `ArgumentError` escape its documented `PqOpenException` contract; worked around client-side | `at_chops` |
+| ~~`at_chops` `pqOpen` lets an `ArgumentError` escape~~ — **fixed in at_chops 3.4.2** (unpublished): a wrong-length secret key or KEM ciphertext now arrives as `PqOpenException(malformedEnvelope)`. `NskeyProvider`'s client-side guard stays until at_client's floor rises past 3.4.1 | `at_chops` |
 | The CK cache and the owner's own nskey privates are process memory only — a restart loses both, so the owner cannot re-read her own outbound shared records | **SS-4** |
 | `B-1e` ("`providerId` on notification frames") is listed as future work, but both notify entry points have already changed and the send half is now covered live — the chunk needs re-scoping to whatever actually remains | **B-1e** |
 | The notify **receive** half has no live coverage, and cannot get any in `at_end2end_test` as it stands: `AtClientManager` is a singleton, and `setCurrentAtSign` both stops the previous atSign's monitor and unsets its `notificationService`, so no test can hold a subscription on one atSign while another sends. Covered at unit level only. Closing this needs the harness to support two concurrent clients, not a new test | `at_end2end_test` |
-| Rename the atSign-level key to `public:pq_signing_root@<atSign>` in code, and delete the `root-pqpublickey` `recipientKind` variant | **B-1c** |
+| ~~Rename the atSign-level key in code, delete the `root-pqpublickey` variant~~ — **done.** `NskeyRecipientKind` has one member; no Dart source says `pqpublickey`; the cold-start throw now states why there is no PQ target rather than promising a fallback | **B-1c** |
 | Enrollment approval reverses direction: the approver generates `apkamSymmetricKey` and encapsulates to the enrollee's key-package public half from the `enroll:request` tail. Multi-repo seam — client and at_server together | **SS-2** |
 | `_apsk`'s published value becomes a root-signed envelope rather than a bare key, carried in the enrollment record the atServer already copies. Verifiers accept a bare key as unsigned during transition | **SS-1c** |
-| Open an in-progress version in `at_chops` and `at_commons` (both currently sit at their published versions, so neither has a heading to fold an entry under). Authorised 2026-08-03; blocks the two rows below | `at_chops` / `at_commons` |
-| `_addMetadataToBuilder` on the notify path is still a hand-rolled copier — swept for the fields a reader needs, but not routed through a canonical converter, because none exists for `Metadata`→`Metadata` | `at_commons` |
+| ~~Open an in-progress version in `at_chops` and `at_commons`~~ — **done.** at_chops **3.4.2** and at_commons **5.14.0** are open and unpublished; fold further entries under those headings | `at_chops` / `at_commons` |
+| ~~`_addMetadataToBuilder` is a hand-rolled copier~~ — **done.** `Metadata.copy()` (at_commons 5.14.0) is the canonical converter; the notify path copies wholesale and then clears the few fields a sender must not assert, so a field added upstream travels by default. at_client's floor is `^5.14.0` | `at_commons` |
 
 **Open, not yet grilled.** Three threads the 2026-08-03 session raised and did not
 settle: what the signing root signs beyond `_apsk`; the key-transparency publication
@@ -713,7 +716,7 @@ the chunk ids are its PR breakdown, not new projects.
 | `B-1a` | **Layer 3** — the `at/symmetric/AES/GCM` provider + the CK cache keyed `(owner, namespace, ckKid)`                                                        | — (enabler)               |
 | `B-1a′`| **The CK manager** — `ensureCurrent` + the `PreparesWrites` seam. Pulled forward ahead of the substrate work: without it `put` cannot succeed at all, so every later chunk is blocked behind a provider that always throws | — (enabler)               |
 | `B-1b` | **Layer 2** — the `at/nskey` CK-conveyance provider, **self-data direction only**; the nskey private is supplied by a **test fixture**, not the substrate | UC-A3.1                   |
-| `B-1c` | **Cold-start** — seal the CK to `public:pqpublickey@<recipient>` with `recipientKind: root-pqpublickey`                                                   | UC-A3.3                   |
+| `B-1c` | **Cold-start fails cleanly** — a distinct exception naming the recipient and namespace, an opt-in legacy fallback, and a pre-flight capability query. There is no PQ target to fall back to. **Landed on the spike branch** | UC-A3.3                   |
 | `B-1d` | **Cross-atSign** — `plookup` discovery of the recipient's published nskey; re-fetch on decapsulation failure                                              | UC-A4.1, UC-A4.2, UC-A4.3 |
 | `B-1e` | **`providerId` on notification frames**                                                                                                                   | UC-A3.4, UC-A4.4          |
 
@@ -729,13 +732,13 @@ the notification frame with `B-1e`. The marker's own publish/not-ready/flip life
 B-1 chunk.
 
 **Acceptance → [acceptance.md](acceptance.md):** self + shared round-trips byte-exact for text and binary;
-UC-A3.1, UC-A3.3 (self cold-start self-heals), UC-A4.1/A4.2/A4.3; B3 mixed-fleet (nskey only when readers'
+UC-A3.1, UC-A3.3 (self cold-start fails, distinctly), UC-A4.1/A4.2/A4.3; B3 mixed-fleet (nskey only when readers'
 marker ready, else legacy); UC-A3.4 / UC-A4.4 (providerId travels on the notification frame). Each chunk
 carries the scenarios listed against it in the chunk table.
 **Effort:** XL — the one project above the ~1–3 PR norm, hence the five-chunk breakdown (~M each).
-**Watch-outs:** `recipientKind` is `nskey` (self + inbound, one key both ways) or `root-pqpublickey`
-(cold-start) — there is no self-vs-inbound `recipientKind`; `root-pqpublickey` is still an `at/nskey`
-conveyance, **not** a 3rd providerId; no bare `nskey` providerId. The record owner (`sharedBy`, which the
+**Watch-outs:** `recipientKind` has exactly one member, `nskey`, used for self and inbound alike — one key
+both ways, so there is no self-vs-inbound variant, and the atSign-level signing root is not a member because
+nothing is ever encapsulated to it; no bare `nskey` providerId. The record owner (`sharedBy`, which the
 HPKE `info` binds) and the nskey owner (`sharedWith ?? sharedBy`, which selects the key and scopes the CK
 cache) are **different atSigns** on any inbound record — conflating them is why cross-atSign reads fail
 ([decisions.md](decisions.md) section 15). Sweep

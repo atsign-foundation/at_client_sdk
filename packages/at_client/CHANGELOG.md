@@ -1,4 +1,55 @@
 ## 3.14.1
+- feat: cold start on the nskey path now fails by name and can be asked about
+  in advance. A destination that has never used or authorised a namespace has
+  no key to seal a content key to, and there is no post-quantum fallback — the
+  only atSign-level key is a signing root, which cannot receive an
+  encapsulation. Three parts:
+  - `NamespaceKeyUnavailableException` carries the `atSign` and `namespace`, so
+    an app can say "@bob hasn't enabled this yet" instead of surfacing an
+    encryption error for a case where nothing went wrong.
+  - `CryptoRuntime.isReadyFor(atSign, namespace)` answers the same question
+    before a user composes anything, via the new `ReportsReadiness` provider
+    seam. Schemes with no such precondition — legacy among them — answer true.
+  - `AtClientPreference.allowLegacyCryptoFallback` (default **false**) lets a
+    write fall back to legacy rather than fail. It is off by default because a
+    silent downgrade to RSA is what this work exists to prevent, and it is
+    forward-only: the check runs per write, so the first write after the
+    destination publishes a key is post-quantum again, with no flag to flip.
+    Records already written under the fallback stay legacy.
+- **breaking**: `AtClientPreference.crypto` is now `CryptoConfig?` and defaults
+  to null, meaning "whatever this SDK release encrypts with by default".
+  Almost every app should leave it null: the default is the SDK's to move as
+  the post-quantum migration proceeds, and an app that named
+  `CryptoConfig.legacy()` only because the field demanded a value would find
+  itself pinned to the old scheme after the release that changed it. Set it
+  only to register a custom provider or to hold a scheme deliberately. Reading
+  the field back no longer answers "what will this client encrypt with" —
+  `CryptoConfig.forClient(atClient)` does, and is the single place the era
+  default lives. The SDK does not write its resolution into the app's
+  preference object.
+- fix: the notify request path copies metadata through `Metadata.copy()`
+  (at_commons 5.14.0) instead of a hand-rolled field list, then clears the few
+  fields a sender has no business asserting — the atServer-derived timestamps,
+  `sharedKeyStatus`, and the local read-model flags. The polarity is the point:
+  a field added to `Metadata` later now travels by default rather than being
+  dropped until somebody notices, which is how `immutable` and `appMetadata`
+  went missing here. The bytes on the wire are unchanged.
+- feat: a published nskey advertisement is APKAM-signed, and a sender verifies
+  it before sealing anything to it. `PublishedNskeyKeyRing` wraps what it
+  publishes with `wrapAndSign`; `ApkamSignedAdvertisedKeys` — now the default
+  verifier — fetches the signing enrollment's `_apsk` from the owner's atServer
+  and checks the signature, rejecting an unsigned, tampered or wrong-signer
+  advertisement, and rejecting a `nskeyKid` that is not the digest of the key it
+  names. The advertised key is what an attacker most wants to substitute: a
+  sender never sees a recipient's decapsulation fail, so sealing a content key
+  to the wrong nskey would go unnoticed indefinitely. This replaces the
+  placeholder that accepted advertisements unverified. **The published value's
+  shape changes** — advertisements written by an earlier build of this
+  unreleased path are rejected, and must be re-minted.
+- feat: `AtClientEnvelopeSigner` composes `ApkamSigning` + `EnvelopeSigning` on
+  their own, so signing or verifying an advertised key no longer means
+  constructing a whole secret-sharing instance with its own X-Wing keypair,
+  secret store and envelope listener.
 - fix: `at/symmetric/AES/GCM` binds a value's ciphertext to the record it was
   written under, as AES-GCM additional authenticated data over
   `providerId:sharedBy:sharedWith:namespace:key`. A content key covers every

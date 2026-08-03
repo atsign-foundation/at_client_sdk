@@ -257,12 +257,20 @@ void main() {
               'route the value takes');
     });
 
-    test('stays out of the way when the destination has no nskey at all',
+    test('refuses, by name, when the destination has no nskey at all',
         () async {
       final c = client();
-      // No seeding: @bob has never used this namespace. That is the cold-start
-      // case, which belongs to the at/nskey provider, not here.
-      await c.manager.ensureCurrent(c.context, sharedValue('treaty'));
+      // No seeding: @bob has never used this namespace. Raising it here rather
+      // than mid-pipeline is what leaves the caller free to route the write to
+      // legacy instead — nothing has been committed to yet.
+      await expectLater(
+        c.manager.ensureCurrent(c.context, sharedValue('treaty')),
+        throwsA(isA<NamespaceKeyUnavailableException>()
+            .having((e) => e.atSign, 'atSign', bob)
+            .having((e) => e.namespace, 'namespace', namespace)),
+        reason: 'an app has to be able to say "@bob has not enabled this" '
+            'rather than surface an encryption error',
+      );
       expect(c.written, isEmpty);
     });
   });

@@ -438,11 +438,13 @@ timeline rows).
 
 ### Open / standing
 
-- **#A — `pqpublickey` interface freeze (P-3 vs SS-4).** P-3 publishes/prefers
-  `pqpublickey` in Wave 2, but its create/seed/serve/pull **lifecycle** is SS-4.
-  Freeze the **name + create-once contract** as an interface-first artifact before
-  P-3 starts; P-3's acceptance can only prove "published + fetchable", not
-  cold-start serve/pull (that's SS-4). (Lifecycle mechanics → `design.md`; project
+- **#A — signing-root interface freeze (P-3 vs SS-4).** ~~P-3 publishes/prefers
+  `pqpublickey` in Wave 2~~ — withdrawn by
+  [section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03): there is
+  no atSign-level KEM key for P-3 to prefer, and enrollment conveyance seals to the
+  enrollee's key package instead. What survives is the freeze itself, now over
+  `public:pq_signing_root@<atSign>`: its **name + create-once contract** ahead of SS-4's
+  create/seed/serve/pull lifecycle. (Lifecycle mechanics → `design.md`; project
   gating → `implementation-plan.md`.)
 - **#C — keep D1 GA off the auth retrofit (B-2 dep).** B-2 needs RF-2 only for the
   per-APKAM revocation/exclude fan-out — satisfy that with **RF-1 + SS-3**, not
@@ -521,9 +523,10 @@ Execution rulings from the plan-vs-code review (post-review); each is binding.
   overwrite is refused) are required before WP-SS ships.
 - **Advertised recipient keys are signed against `_apsk` — the full ruling is
   [section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02).**
-  Every advertised recipient/encapsulation key (the per-enrollment key package, the
-  published `nskey` public half, and `public:pqpublickey@<atSign>`) is APKAM-signed by
-  its generating enrollment and verified against that enrollment's `_apsk` — the same
+  Every advertised recipient/encapsulation key (the per-enrollment key package and the
+  published `nskey` public half — the signing root is not one, per
+  [section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03))
+  is APKAM-signed by its generating enrollment and verified against that enrollment's `_apsk` — the same
   way same-atSign and cross-atSign — superseding the "atServer vouches" stance. The
   atServer keeps `_apsk` present **and** write-restricted. See section 12 for the
   mechanism, the self-describing signature, the trust model, and the SS-1b/1c/2/4
@@ -871,8 +874,9 @@ data — which under two keys had only an owner-only self nskey — this would b
 leak (existence only; no CK, content, or key material). **Mitigation, adopted: lazy
 publication.** The public half stays an owner-only self at-key until the namespace is first
 shared cross-atSign; a purely-self namespace therefore never advertises itself. Inbound that
-arrives before promotion is bridged by cold-start to the root `public:pqpublickey` (then a lazy
-upgrade promotes the nskey). This keeps the one-keypair simplification (one private, one
+arrives before promotion was to be bridged by cold-start to the atSign-level root (a bridge
+[section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) withdrew, along
+with lazy publication itself — see section 13). This keeps the one-keypair simplification (one private, one
 rotation, one decapsulation path) while preserving namespace-existence privacy.
 
 **Foreclosed capability — accepted.** Two keypairs could have granted a client read access to
@@ -883,8 +887,10 @@ is foreclosed going forward.
 
 **Consequences for the model.**
 
-- `appMetadata.recipientKind` on an `at/nskey` CK-conveyance record is `nskey` (self + inbound)
-  or `root-pqpublickey` (cold-start) — the former self-nskey/public-nskey distinction is gone.
+- `appMetadata.recipientKind` on an `at/nskey` CK-conveyance record is `nskey`, for self and
+  inbound alike — the former self-nskey/public-nskey distinction is gone. (The cold-start
+  `root-pqpublickey` variant this once also listed went with
+  [section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).)
 - The reader decapsulates every `__ck` record with the one nskey private.
 - HPKE `info` binds `(namespace, owner)` so self and inbound flows stay domain-separated under
   the shared key.
@@ -903,13 +909,20 @@ the atServer vouches" stance ([section 4](#4-the-verb-wire-shape--111-cardinalit
 the substrate's original design): the encapsulation target is now
 **authenticated**, not merely server-asserted.
 
-**What is covered.** The three keys a party fetches in order to seal *to* someone:
+**What is covered.** The keys a party fetches in order to seal *to* someone:
 
 - the per-enrollment **key package** (the X-Wing recipient key at the singular
   `metadata.keyPackage`, Layer 1 of the substrate);
 - the published **`nskey`** public half (`public:__nskey.<ns>@<atSign>`, written at
-  mint — [section 13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02));
-- the atSign-level root **`public:pqpublickey@<atSign>`**.
+  mint — [section 13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02)).
+  **Built as of 2026-08-03**: `PublishedNskeyKeyRing` signs its own advertisement and
+  `ApkamSignedAdvertisedKeys` verifies a peer's, cross-atSign on the live wire. The key
+  package is still advertised unsigned.
+
+*(This list once carried a third entry, the atSign-level root as a KEM target.
+[Section 18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) withdrew it:
+the root is a signing key, so there is nothing to seal to it and nothing for a sender to
+authenticate before doing so. What anchors the root is key transparency, not an `_apsk`.)*
 
 **Mechanism.** The generating enrollment wraps the advertised key in an
 **APKAM-signed envelope** — the *same* `wrapAndSign` / `AtSigningMode.pkam`
@@ -1099,11 +1112,12 @@ X-Wing operation per generation and degrades silently with every rotation.
   `at_virtual_env:local`, not the `vip` image CI drives, so it is not a CI gate.
 
 **Implementation status.** Eager publish itself **is built** as of the
-`gkc-pq-d1-spike` branch (`PublishedNskeyKeyRing`), and the sender-side re-`plookup`
-(**B-1d**) with it — but **without either of its two safety mechanisms**: there is no
-`_nskeylock` serialising mint/rotate, and advertisements are accepted unverified
-(`UnverifiedAdvertisedKeys`, which shouts on every use). Both are owed: the lock and real
-minting are **SS-4**, the signature check is **SS-1c**. Rotation and the generation pull
+`gkc-pq-d1-spike` branch (`PublishedNskeyKeyRing`), the sender-side re-`plookup`
+(**B-1d**) with it, and **advertisements are signed and verified**: the ring signs its
+own with `wrapAndSign`, and `ApkamSignedAdvertisedKeys` checks a peer's against the
+`_apsk` the signing enrollment published, cross-atSign on the live wire. Still missing is
+the other safety mechanism — there is no `_nskeylock` serialising mint/rotate, which with
+real minting is **SS-4**. Rotation and the generation pull
 are **B-2** + the substrate. The `nskeyKid` tag on the conveyance is
 **B-1b** — a wire-shape addition that is free before any record exists and expensive
 after. Mechanics: `design.md` sections 1.3–1.5 and 1.7; acceptance: `acceptance.md`

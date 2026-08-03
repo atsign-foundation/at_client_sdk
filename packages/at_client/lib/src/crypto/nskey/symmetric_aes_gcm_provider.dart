@@ -38,7 +38,11 @@ class ContentKeyUnavailableException extends AtDecryptionException {
 /// resolved from the [ContentKeyCache], which the `at/nskey` provider populates
 /// when the matching conveyance record syncs.
 class SymmetricAesGcmProvider
-    implements CryptoProvider, PreparesWrites, HandlesSelectively {
+    implements
+        CryptoProvider,
+        PreparesWrites,
+        HandlesSelectively,
+        ReportsReadiness {
   final ContentKeyCache cache;
 
   /// Mints and conveys a content key when a destination has none, or when the
@@ -72,6 +76,21 @@ class SymmetricAesGcmProvider
           {bool? useRemoteAtServer}) async =>
       await ckManager?.ensureCurrent(context, atKey,
           useRemoteAtServer: useRemoteAtServer);
+
+  /// Answers the question a write would otherwise answer by failing: has
+  /// [atSign] published an nskey for [namespace]?
+  ///
+  /// The lookup is the same one a write makes and shares its cache, so asking
+  /// before writing costs nothing extra — and the freshness window means a
+  /// "yes" here is as current as the write's own would be.
+  ///
+  /// Without a [ckManager] this provider does not resolve keys at all; the
+  /// caller conveys content keys itself and is the one that knows.
+  @override
+  Future<bool> isReadyFor(
+          CryptoContext context, String atSign, String namespace) async =>
+      ckManager == null ||
+      await ckManager!.keyRing.currentPublic(atSign, namespace) != null;
 
   @override
   Future<String> encrypt(

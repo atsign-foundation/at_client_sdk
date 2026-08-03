@@ -182,4 +182,74 @@ void main() {
     expect(read.value, bytes,
         reason: 'isBinary must survive the round-trip byte for byte');
   });
+
+  /// Cold start, driven through the real put pipeline.
+  ///
+  /// A namespace with no nskey has no post-quantum target, and no fallback that
+  /// stays post-quantum. The unit tests prove the pre-pass raises it; only the
+  /// whole pipeline proves the refusal survives to the caller instead of being
+  /// swallowed or flattened into a generic encryption error on the way out —
+  /// and that the escape hatch, when opened, actually reroutes a write that had
+  /// already begun.
+  group('cold start', () {
+    AtKey unmintedNamespaceKey(String name) => AtKey()
+      ..key = name
+      ..namespace = 'never_used_ns'
+      ..sharedBy = atSign;
+
+    test('a write to a namespace with no nskey fails, saying which', () async {
+      await expectLater(
+        atClientManager.atClient.put(unmintedNamespaceKey('memo'), 'for me'),
+        throwsA(isA<AtClientException>().having((e) => e.message, 'message',
+            allOf(contains('never_used_ns'), contains(atSign)))),
+        reason: 'the app has to be able to name what is missing; a bare '
+            'encryption error tells it nothing it can act on',
+      );
+    });
+
+    test('the readiness query answers the same question first', () async {
+      final runtime = CryptoRuntime(atClientManager.atClient);
+
+      expect(await runtime.isReadyFor(atSign, 'never_used_ns'), isFalse);
+      expect(await runtime.isReadyFor(atSign, namespace), isTrue,
+          reason: 'the namespace this suite minted for is reachable');
+    });
+
+    test('with the escape hatch opened, the write goes out under legacy',
+        () async {
+      final atClient = atClientManager.atClient;
+      atClient.getPreferences()!.allowLegacyCryptoFallback = true;
+      addTearDown(
+          () => atClient.getPreferences()!.allowLegacyCryptoFallback = false);
+
+      final key = unmintedNamespaceKey('fallback_memo');
+      expect(await atClient.put(key, 'for me'), true);
+
+      final read = await atClient.get(key);
+      expect(read.value, 'for me');
+      expect(read.metadata?.appMetadata?.providerId, legacyCryptoProviderId,
+          reason: 'the fallback is legacy and says so on the record — a '
+              'downgrade nobody can see afterwards is the thing being guarded '
+              'against');
+    });
+
+    test('the fallback does not leak into the next write', () async {
+      final atClient = atClientManager.atClient;
+      atClient.getPreferences()!.allowLegacyCryptoFallback = true;
+      await atClient.put(unmintedNamespaceKey('leak_check'), 'for me');
+      atClient.getPreferences()!.allowLegacyCryptoFallback = false;
+
+      final key = AtKey()
+        ..key = 'still_pq'
+        ..namespace = namespace
+        ..sharedBy = atSign;
+      expect(await atClient.put(key, 'and this one is not'), true);
+
+      expect((await atClient.get(key)).metadata?.appMetadata?.providerId,
+          symmetricAesGcmCryptoProviderId,
+          reason: 'one write falling back must not pin the client to legacy — '
+              'the check runs per write, which is what makes the fallback '
+              'forward-only');
+    });
+  });
 }

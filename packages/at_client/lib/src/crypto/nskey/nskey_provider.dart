@@ -26,16 +26,48 @@ const String nskeyProviderFamily = 'at/nskey';
 
 /// Which key class a CK was sealed to.
 ///
-/// Cold-start is **not** a third provider id — a CK sealed to the atSign-level
-/// root key is still an `at/nskey` record, distinguished only by this field.
+/// There is only one, and the field exists so a future one can be told apart on
+/// a record already written. It is deliberately *not* a second provider id: an
+/// alternative recipient class would still be an `at/nskey` conveyance.
+///
+/// The atSign-level `public:pq_signing_root@<atSign>` is **not** a member and
+/// never will be. It is a signing root — ML-DSA-65, a verification key with no
+/// encapsulation capability — so there is nothing to seal to it. Cold start
+/// therefore has no PQ target at all, which is the design's intent rather than
+/// a gap; see [NskeyProvider.encrypt].
 class NskeyRecipientKind {
   /// The `(atSign, namespace)` nskey — the steady-state target for both the
   /// owner's own CKs and inbound ones.
   static const String nskey = 'nskey';
+}
 
-  /// `public:pqpublickey@<recipient>` — the cold-start target, used when the
-  /// recipient's namespace has no published nskey yet.
-  static const String rootPqpublickey = 'root-pqpublickey';
+/// [atSign] has no published nskey for [namespace], so nothing can be sealed to
+/// it under the post-quantum path.
+///
+/// Distinct from every other encryption failure because it is not one: nothing
+/// went wrong, the recipient simply has not used or authorised this namespace.
+/// An app that catches this can tell its user *"@bob hasn't enabled this yet"*
+/// instead of surfacing an encryption error for a situation neither side has
+/// done anything wrong in. [CryptoRuntime.isReadyFor] answers the same question
+/// before a user composes anything.
+///
+/// There is no post-quantum fallback to offer: the only atSign-level key is a
+/// signing root, which cannot receive an encapsulation. The escape hatch is the
+/// legacy path, and it is opt-in
+/// ([AtClientPreference.allowLegacyCryptoFallback]) because a silent downgrade
+/// to RSA is exactly what this design exists to stop.
+class NamespaceKeyUnavailableException extends AtEncryptionException {
+  /// The atSign whose namespace key is missing — the recipient for a share, or
+  /// the writer for self data.
+  final String atSign;
+
+  final String namespace;
+
+  NamespaceKeyUnavailableException(this.atSign, this.namespace)
+      : super('$atSign has no published nskey for "$namespace" — that '
+            'namespace has never been used or authorised there, so there is no '
+            'post-quantum key to seal a content key to. Reaching it needs the '
+            'legacy path, which must be opted into explicitly.');
 }
 
 /// Layer 2 of the nskey data path: conveys a symmetric content key.
@@ -88,10 +120,10 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
 
     final advertised = await keyRing.currentPublic(nskeyOwner, namespace);
     if (advertised == null) {
-      throw AtEncryptionException(
-          'no nskey published for $nskeyOwner:$namespace — under eager '
-          'publication that means the namespace has never been used, so this is '
-          'the cold-start case; sealing to public:pqpublickey is not yet wired');
+      // Cold start fails, by design — see the exception's own doc. Normally the
+      // pre-pass has already raised this, so reaching it here means a
+      // conveyance was routed directly rather than through a value write.
+      throw NamespaceKeyUnavailableException(nskeyOwner, namespace);
     }
 
     final ck = ContentKey.fromBase64(plaintext);
@@ -155,9 +187,11 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     } on PqOpenException catch (e) {
       throw AtDecryptionException('could not decapsulate the content key: $e');
     } on ArgumentError catch (e) {
-      // pqOpen documents PqOpenException, but its KEM decapsulate call sits
-      // outside that guard, so a wrong-length envelope escapes as a raw
-      // ArgumentError. Keep the provider's contract whatever the envelope is.
+      // at_chops 3.4.2 makes `pqOpen` honour its documented contract here; up
+      // to 3.4.1 its KEM decapsulate call sat outside the guard, so a
+      // wrong-length envelope escaped as a raw ArgumentError. This stays while
+      // the floor still admits those versions — the provider's contract must
+      // hold whatever the envelope is, and whichever at_chops resolves.
       throw AtDecryptionException('malformed at/nskey envelope: $e');
     } on FormatException catch (e) {
       throw AtDecryptionException('at/nskey value is not valid base64: $e');

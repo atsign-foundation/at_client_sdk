@@ -45,9 +45,12 @@ class CkManager {
     final advertised = await keyRing.currentPublic(owner, namespace);
     if (advertised == null) {
       // The destination has never used this namespace, so there is no nskey to
-      // seal to. Cold-start sealing to public:pqpublickey is not wired yet;
-      // leaving it alone lets the data provider raise the clearer error.
-      return;
+      // seal to and nothing at the atSign level to fall back to. Failing here,
+      // in the pre-pass, is what makes the cold start recoverable: the caller
+      // has not yet committed to a scheme, so it can still route the write to
+      // legacy if the app opted into that. Discovering it mid-pipeline would
+      // leave only a hard failure.
+      throw NamespaceKeyUnavailableException(owner, namespace);
     }
 
     final current = cache.current(owner, namespace);

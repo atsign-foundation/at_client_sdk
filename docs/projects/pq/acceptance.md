@@ -355,7 +355,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     (server-gated on the `__ssenv` channel).
   - `requestSecret` is the pull backstop for an enrollment offline during the push.
 
-### 4.3 UC-A3.3 — Self fallback to the atSign-level PQ key (no namespace key)
+### 4.3 UC-A3.3 — Self write with no namespace key has no PQ fallback
 
 - **Given:** `@alice` pq-native; `alice1` wants self data but no `app_1.my_apps` nskey
   has been minted and "seal-and-hold" not chosen (send-now default).
@@ -371,6 +371,13 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - In practice this case is rare, because a client mints for its preference namespace
     and its `rw` namespaces at init — so a namespace it writes to normally has a key
     before the first write.
+  - **Built, and green live** (spike branch): the exception is
+    `NamespaceKeyUnavailableException(atSign, namespace)`, raised by the CK-manager
+    pre-pass so nothing is in flight when it fires; the query is
+    `CryptoRuntime.isReadyFor(atSign, namespace)`; the opt-in is
+    `AtClientPreference.allowLegacyCryptoFallback`, applied per write, which is what
+    makes the fallback forward-only. Driven by the cold-start group in
+    `tests/at_functional_test/test/nskey_data_path_e2e_test.dart`.
 
 | enr | APKAM | root⁻¹ | nskey⁻¹ | KP |
 |-----|-------|--------|---------|----|
@@ -812,8 +819,10 @@ These invariants are testable against **every** UC above:
   `hashingAlgo`) **before** encapsulating to it; a **tampered, unsigned, or
   wrong-signer** advertised key is **rejected**. The atServer keeps every approved
   enrollment's `_apsk` **present** (fetchable without a client publish) and
-  **write-restricted** (a cross-enrollment overwrite is refused). *(Substrate work —
-  sign SS-2/SS-4, verify SS-1c; target-not-built on the current substrate.)*
+  **write-restricted** (a cross-enrollment overwrite is refused). *(Holds today for the
+  published `nskey` — signed at mint, verified before sealing, proven cross-atSign on the
+  live wire. Still target-not-built for the **key package**: sign SS-2/SS-4, verify
+  SS-1c.)*
 - **Performance is measured, not assumed.** The PQ primitives (ML-KEM / ML-DSA,
   X-Wing encap/decap, `pqSeal`) land on hot paths — PKAM auth and every put/get — that
   run on mobile/IoT hardware (the roadmap's NoPorts finish line). PKAM-auth latency and

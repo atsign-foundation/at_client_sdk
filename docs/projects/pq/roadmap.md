@@ -159,8 +159,8 @@ What D1 closes vs legacy, at **zero developer-visible change**:
 
 The concrete key shapes (the `nskey` strings and their lazy-publish lifecycle, the `<ckKid>.__ck`
 CK-conveyance record, the value shapes), the three layers and their
-`appMetadata`, the CK model, the `public:pqpublickey` root key and cold-start
-fallback, and the forward-secrecy / rotation levers all live in
+`appMetadata`, the CK model, the `public:pq_signing_root` signing root and the
+cold-start refusal, and the forward-secrecy / rotation levers all live in
 [`design.md`](design.md). The `at/pqmls` group provider — KeyPackages, ratcheted
 leaf keys, TreeKEM, membership decoupled from namespace authorisation — is
 **D2**, not a D1 tier; most apps never touch it. Crucially, the **per-APKAM

@@ -38,8 +38,22 @@ void main() {
 
     test('the published key ring and its verifier seam are nameable', () {
       expect(nskeyAdvertisementKey('@alice', 'wavi').key, '__nskey');
-      final AdvertisedKeyVerifier verifier = UnverifiedAdvertisedKeys();
-      expect(verifier, isNotNull);
+      // Named as types rather than constructed: the concrete verifier needs a
+      // live AtClient, and importing a mock would cost this file the
+      // barrel-only import that is the whole point of it.
+      expect(ApkamSignedAdvertisedKeys, isA<Type>());
+      expect(AdvertisedKeyVerifier, isA<Type>());
+    });
+
+    test('the cold-start surface is nameable', () {
+      // An app is told to catch this by name and to ask before composing, so
+      // both have to be reachable without an src/ import.
+      final e = NamespaceKeyUnavailableException('@bob', 'app_1.my_apps');
+      expect(e, isA<AtEncryptionException>());
+      expect(e.atSign, '@bob');
+      expect(e.namespace, 'app_1.my_apps');
+      expect(CryptoRuntime, isA<Type>());
+      expect(ReportsReadiness, isA<Type>());
     });
   });
 }
