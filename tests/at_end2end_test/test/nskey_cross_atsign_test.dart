@@ -1,6 +1,8 @@
 import 'dart:convert';
 
+import 'package:at_chops/at_chops.dart' show XWingKeyPair;
 import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_builders.dart' show UpdateVerbBuilder;
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
@@ -219,5 +221,57 @@ void main() {
         reason: 'content keys are scoped per recipient — bob\'s CK must never '
             'become the key alice encrypts her own data under, or holding one '
             'would open the other');
+  });
+
+  /// The advertised key is what an attacker wants to substitute: a sender that
+  /// seals to the wrong nskey hands its content key to whoever minted that key,
+  /// and — because a sender never sees a decapsulation fail — nothing
+  /// downstream would ever notice. So the sender verifies the advertisement's
+  /// APKAM signature against the `_apsk` the signing enrollment published, and
+  /// this is the only test that drives that whole path on the wire: bob's real
+  /// advertisement, bob's real `_apsk` fetched from bob's atServer, alice's
+  /// real verify.
+  ///
+  /// It is last in the file because it leaves bob's advertisement replaced; the
+  /// genuine one is republished at the end.
+  test('alice refuses to seal to an advertisement that is not signed',
+      () async {
+    final bobSide = await nskeyClient(bob);
+
+    // What a substitution looks like from alice's side: a well-formed
+    // advertisement for a key bob never minted, carrying no signature. Written
+    // straight to bob's atServer, which is where alice reads it from.
+    final substituted = await XWingKeyPair.generate();
+    await bobSide.client.getRemoteSecondary()!.executeVerb(
+        UpdateVerbBuilder()
+          ..atKey = nskeyAdvertisementKey(bob, namespace)
+          ..value = jsonEncode({
+            'nskeyKid': nskeyKidOf(substituted.publicKeyBytes),
+            'publicKey': base64Encode(substituted.publicKeyBytes),
+          }),
+        sync: true);
+
+    final aliceSide = await nskeyClient(alice);
+    await expectLater(
+      aliceSide.client.put(
+          AtKey()
+            ..key = uniqueKey('intercepted')
+            ..namespace = namespace
+            ..sharedWith = bob
+            ..sharedBy = alice,
+          'the treaty text'),
+      // Matched on the reason, not merely on AtException: `putText` rewrites
+      // every AtException through AtExceptionManager, so the thrown type says
+      // nothing, and a write that failed for some unrelated reason would let
+      // this pass while proving nothing about the verify.
+      throwsA(isA<AtClientException>().having((e) => e.message, 'message',
+          contains('carries no APKAM signature'))),
+      reason: 'the write must fail rather than seal a content key to a key '
+          'nobody proved bob minted',
+    );
+
+    // Put bob's genuine, signed advertisement back, so the atServer is not left
+    // holding the substituted one.
+    await nskeyClient(bob);
   });
 }

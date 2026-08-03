@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
+import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
@@ -28,34 +29,81 @@ AtKey nskeyAdvertisementKey(String owner, String namespace) => AtKey()
 /// Checks that a fetched advertisement really came from the atSign that claims
 /// it, before anything is encapsulated to it.
 ///
-/// The design requires every advertised encapsulation key to be an APKAM-signed
-/// envelope verified against the publishing enrollment's `_apsk`, the same way
-/// same-atSign and cross-atSign. That signing and verification is SS-2 / SS-1c.
+/// Every advertised encapsulation key is an APKAM-signed envelope, verified
+/// against the publishing enrollment's `_apsk` — the same path same-atSign and
+/// cross-atSign.
 abstract class AdvertisedKeyVerifier {
   /// Return the advertisement carried by [payload], or throw if it cannot be
   /// trusted as [owner]'s.
   Future<NskeyAdvertisement> verify(String owner, String payload);
 }
 
-/// Accepts advertisements **without checking any signature**.
+/// Verifies an advertisement's APKAM signature against the `_apsk` public key
+/// that the signing enrollment published under [owner]'s atSign.
 ///
-/// This exists so the discovery and rotation mechanics can be exercised before
-/// the signing work lands. It is not a trust decision anyone should ship: an
-/// atServer operator, or anyone who can write the owner's public keys, can
-/// substitute the key a sender encapsulates to. It shouts on every use so it
-/// cannot pass unnoticed, and it is replaced wholesale when SS-1c lands.
-class UnverifiedAdvertisedKeys implements AdvertisedKeyVerifier {
+/// Two gates stand between an attacker and the key a sender encapsulates to,
+/// and it takes both to place one:
+///
+/// - **The write gate.** `__nskey.<ns>` sits in `<ns>`, so the atServer accepts
+///   the write only from an enrollment authorised for that namespace.
+/// - **This signature.** The envelope names its signing enrollment, and the
+///   signature is checked against the `_apsk` only that enrollment may write.
+///
+/// So a rogue enrollment holding some other namespace can sign but not publish,
+/// and anything that reaches the record unsigned — or signed by an enrollment
+/// whose `_apsk` does not verify it — is rejected rather than sealed to.
+///
+/// What this does **not** defend against is the operator of [owner]'s atServer,
+/// which serves both the advertisement and the `_apsk` it is checked against
+/// and so can substitute a consistent pair. Removing that requires anchoring
+/// the key somewhere the operator does not control; see the trust boundary in
+/// `docs/projects/pq/design.md`.
+class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
+  final AtClientEnvelopeSigner _signer;
+
+  ApkamSignedAdvertisedKeys(AtClient atClient)
+      : _signer = AtClientEnvelopeSigner(atClient);
+
   @override
   Future<NskeyAdvertisement> verify(String owner, String payload) async {
-    _logger.shout(
-        'accepting the advertised nskey for $owner UNVERIFIED — no APKAM '
-        'signature was checked, so the key encapsulated to is only as '
-        'trustworthy as the server that served it (SS-1c)');
-    final json = jsonDecode(payload) as Map<String, dynamic>;
-    return (
-      nskeyKid: json['nskeyKid'] as String,
-      publicKey: Uint8List.fromList(base64Decode(json['publicKey'] as String)),
-    );
+    final Map<String, dynamic> envelope;
+    try {
+      envelope = jsonDecode(payload) as Map<String, dynamic>;
+    } on FormatException catch (e) {
+      throw AtSigningVerificationException(
+          'the advertised nskey for $owner is not JSON: ${e.message}');
+    }
+    // Every field the verify reads, checked up front: a missing one otherwise
+    // surfaces as a cast error, which reads like a bug rather than the refusal
+    // it is.
+    if (['signature', 'enrollmentId', 'signingAlgo', 'hashingAlgo']
+        .any((field) => envelope[field] is! String)) {
+      throw AtSigningVerificationException(
+          'the advertised nskey for $owner carries no APKAM signature, so the '
+          'key sealed to would be only as trustworthy as the server that '
+          'served it');
+    }
+
+    await _signer.verifyEnvelopeSignature(envelope, signerAtSign: owner);
+
+    final advertised = envelope['payload'];
+    if (advertised is! Map) {
+      throw AtSigningVerificationException(
+          'the advertised nskey for $owner has a signature over a payload that '
+          'is not an advertisement');
+    }
+    final publicKey =
+        Uint8List.fromList(base64Decode(advertised['publicKey'] as String));
+    final nskeyKid = advertised['nskeyKid'] as String;
+    if (nskeyKid != nskeyKidOf(publicKey)) {
+      // A kid that does not name its own key would let a rotation be reported
+      // as a generation the recipient never minted, so a conveyance sealed to
+      // it could never be opened.
+      throw AtSigningVerificationException(
+          'the advertised nskey for $owner names a kid that is not the digest '
+          'of the key it carries');
+    }
+    return (nskeyKid: nskeyKid, publicKey: publicKey);
   }
 }
 
@@ -101,7 +149,13 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     AdvertisedKeyVerifier? verifier,
     this.advertisementTtl = const Duration(minutes: 15),
     this.advertisementStaleGrace = const Duration(minutes: 15),
-  }) : verifier = verifier ?? UnverifiedAdvertisedKeys();
+  })  : verifier = verifier ?? ApkamSignedAdvertisedKeys(_atClient),
+        _signer = AtClientEnvelopeSigner(_atClient);
+
+  /// Signs this atSign's own advertisements. A recipient that cannot check who
+  /// generated the key it is about to seal to has no protection left but the
+  /// atServer's word, so publishing unsigned is not an option the ring offers.
+  final AtClientEnvelopeSigner _signer;
 
   final Map<String, NskeyAdvertisement> _ownCurrent = {};
   final Map<String, Uint8List> _ownPrivates = {};
@@ -128,7 +182,12 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     );
 
     final advertisementKey = nskeyAdvertisementKey(owner, namespace);
-    final payload = jsonEncode({
+    // Signed with this client's APKAM keypair, so a peer can tell the key came
+    // from an enrollment of this atSign rather than from whoever served it.
+    // The APKAM public half must already be published, or the peer has nothing
+    // to check the signature against.
+    await _signer.publishPublicSigningKey();
+    final payload = await _signer.wrapAndSignAndJsonEncode({
       'nskeyKid': advertisement.nskeyKid,
       'publicKey': base64Encode(advertisement.publicKey),
     });
