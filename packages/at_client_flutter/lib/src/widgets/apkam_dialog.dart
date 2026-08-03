@@ -26,6 +26,9 @@ class ApkamActivationDialog extends StatefulWidget {
 
   final ThemeData themeData;
 
+  /// Injection seam for tests; defaults to a real [FlutterEnrollmentService].
+  final FlutterEnrollmentService? enrollmentService;
+
   ApkamActivationDialog({
     super.key,
     required this.atSign,
@@ -34,6 +37,7 @@ class ApkamActivationDialog extends StatefulWidget {
     required this.deviceName,
     required this.namespaces,
     required this.themeData,
+    this.enrollmentService,
   });
 
   @override
@@ -73,7 +77,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   final FocusNode _otpFocusNode = FocusNode();
   final ScrollController _pinScrollController = ScrollController();
   bool _isLoading = false;
-  final enrollmentService = FlutterEnrollmentService();
+  late final FlutterEnrollmentService enrollmentService;
   final String atSign;
   final AtRootDomain rootDomain;
   final String appName;
@@ -91,6 +95,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   @override
   void initState() {
     super.initState();
+    enrollmentService = widget.enrollmentService ?? FlutterEnrollmentService();
   }
 
   Future<AtEnrollmentResponse> _sendEnrollment(String otp) async {

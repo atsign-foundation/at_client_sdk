@@ -265,6 +265,40 @@ void main() {
       );
     });
   });
+
+  group('AtEnrollmentRequest session wiring', () {
+    test('session is the source of atSign and rootDomain', () {
+      final session = AtAuthSession(
+        atSign: '@alice🛠',
+        rootDomain: const AtRootDomain('root.atsign.org', 64),
+        atKeysIo: InMemoryAtKeysIo(),
+      );
+
+      final request = AtEnrollmentRequest(
+        session: session,
+        appName: 'wavi',
+        deviceName: 'pixel',
+        otp: 'A123FE',
+        namespaces: {'wavi': 'rw'},
+      );
+
+      expect(request.session, same(session));
+      expect(request.atSign, '@alice🛠');
+      expect(request.rootDomain, same(session.rootDomain));
+    });
+
+    test('throws when neither session nor atSign is provided', () {
+      expect(
+        () => AtEnrollmentRequest(
+          appName: 'wavi',
+          deviceName: 'pixel',
+          otp: 'A123FE',
+          namespaces: {'wavi': 'rw'},
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+  });
 }
 
 class LookUpVerbBuilderMatcher extends Matcher {

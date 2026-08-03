@@ -20,10 +20,8 @@ final KeychainStorage keychainStorage = KeychainStorage();
 /// Helper function to safely execute async operations with comprehensive error logging
 Future<T?> _safeExecute<T>(
   String operationName,
-  Future<T> Function() operation, {
-  BuildContext? context,
-  bool showErrorDialog = true,
-}) async {
+  Future<T> Function() operation,
+) async {
   try {
     _logger.info('Starting operation: $operationName');
     final result = await operation();
@@ -32,62 +30,8 @@ Future<T?> _safeExecute<T>(
   } catch (e, stackTrace) {
     _logger.severe('ERROR in $operationName: $e');
     _logger.severe('Stack trace: $stackTrace');
-
-    if (context != null && context.mounted && showErrorDialog) {
-      _showErrorDialog(context, operationName, e, stackTrace);
-    }
-
     return null;
   }
-}
-
-/// Show a detailed error dialog
-void _showErrorDialog(
-  BuildContext context,
-  String operation,
-  Object error,
-  StackTrace stackTrace,
-) {
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Error Occurred'),
-      content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Operation: $operation'),
-            const SizedBox(height: 8),
-            Text('Error Type: ${error.runtimeType}'),
-            const SizedBox(height: 8),
-            const Text(
-              'Details:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(error.toString()),
-            const SizedBox(height: 8),
-            const Text(
-              'Stack Trace:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              stackTrace.toString(),
-              style: const TextStyle(fontSize: 10, fontFamily: 'monospace'),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('OK'),
-        ),
-      ],
-    ),
-  );
 }
 
 /// This method is an example of how an application creates their own customized onboarding flow
@@ -134,22 +78,14 @@ Future<void> onboard(BuildContext context) async {
     _logger.info('Application support directory: ${dir.path}');
 
     var acp = AtClientPreference()
-      ..rootDomain = authRequest.rootDomain.rootDomain
-      ..rootPort = authRequest.rootDomain.rootPort
       ..namespace = namespace
       ..commitLogPath = dir.path
       ..hiveStoragePath = dir.path;
 
     _logger.info('Setting current atSign: ${response.atSign}');
-    // make sure to use the atChops and atLookUp provided by the response as these are already authenticated.
-    await AtClientManager.getInstance().setCurrentAtSign(
-      response.atSign,
-      namespace,
-      enrollmentId: response.enrollmentId,
-      acp,
-      atChops: response.atChops,
-      atLookUp: response.atLookUp,
-    );
+    // Hand the client the session; it rebuilds its own authenticated connection
+    // from the session's key source rather than adopting auth's.
+    await AtClientManager.getInstance().fromAuthSession(response.session!, acp);
 
     _logger.info('Navigation to HomePage');
     if (context.mounted) {
@@ -158,7 +94,7 @@ Future<void> onboard(BuildContext context) async {
         MaterialPageRoute(builder: (context) => const HomePage()),
       );
     }
-  }, context: context);
+  });
 }
 
 /// Login using an atSign stored in the keychain
@@ -213,7 +149,7 @@ Future<void> loginWithKeychain(BuildContext context) async {
     }
 
     _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, authRequest, response);
+    await _setupAtClient(context, response);
   }, context: context);
 }
 
@@ -251,7 +187,7 @@ Future<void> loginWithFile(BuildContext context) async {
     }
 
     _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, authRequest, response);
+    await _setupAtClient(context, response);
   }, context: context);
 }
 
@@ -304,7 +240,7 @@ Future<void> loginWithApkam(BuildContext context) async {
     }
 
     _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, authRequest, response);
+    await _setupAtClient(context, response);
   }, context: context);
 }
 
@@ -346,7 +282,7 @@ Future<void> exportKeys(BuildContext context) async {
         context,
       ).showSnackBar(SnackBar(content: Text('Keys exported to $filePath')));
     }
-  }, context: context);
+  });
 }
 
 /// Opens a file save dialog and returns the selected file path.
@@ -386,39 +322,38 @@ Future<String?> _openFileSaveDialog({
 }
 
 /// Helper method to set up the atClient instance and navigate to home page
-Future<void> _setupAtClient(
-  BuildContext context,
-  AtAuthRequest authRequest,
-  AuthResponse response,
-) async {
+Future<void> _setupAtClient(BuildContext context, AuthResponse response) async {
   _logger.info('Setting up atClient for ${response.atSign}');
 
   var dir = await getApplicationSupportDirectory();
   _logger.info('Using directory: ${dir.path}');
 
   var acp = AtClientPreference()
-    ..rootDomain = authRequest.rootDomain.rootDomain
-    ..rootPort = authRequest.rootDomain.rootPort
     ..namespace = namespace
     ..commitLogPath = dir.path
     ..hiveStoragePath = dir.path;
 
-  _logger.info('AtClientPreference configured:');
-  _logger.info('  - rootDomain: ${acp.rootDomain}');
-  _logger.info('  - rootPort: ${acp.rootPort}');
-  _logger.info('  - namespace: ${acp.namespace}');
   if (response.enrollmentId == null) {
     _logger.warning("EnrollmentId is null");
   }
-  // Make sure to use the atChops and atLookUp provided by the response
-  await AtClientManager.getInstance().setCurrentAtSign(
-    response.atSign,
-    namespace,
-    acp,
-    enrollmentId: response.enrollmentId,
-    atChops: response.atChops,
-    atLookUp: response.atLookUp,
-  );
+  final session = response.session;
+  if (session != null) {
+    // Preferred path: hand over the session; the client rebuilds its own
+    // authenticated connection from the session's key source.
+    await AtClientManager.getInstance().fromAuthSession(session, acp);
+  } else {
+    // Transitional fallback for flows that hand back only atAuthKeys with no
+    // AtKeysIo source (e.g. APKAM enrollment): adopt auth's already-
+    // authenticated AtChops/AtLookUp directly.
+    await AtClientManager.getInstance().setCurrentAtSign(
+      response.atSign,
+      namespace,
+      acp,
+      enrollmentId: response.enrollmentId,
+      atChops: response.atChops,
+      atLookUp: response.atLookUp,
+    );
+  }
 
   if (context.mounted) {
     _logger.info('Navigating to HomePage');
@@ -500,5 +435,5 @@ Future<void> removeAtsign(BuildContext context) async {
     } else {
       _logger.info('User cancelled atSign removal');
     }
-  }, context: context);
+  });
 }

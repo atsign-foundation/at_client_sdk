@@ -18,6 +18,30 @@ MockClient _mockResponse(Object body, {int status = 200}) =>
     MockClient((_) async => http.Response(jsonEncode(body), status));
 
 void main() {
+  group('constructor validation', () {
+    test('throws when apiKey is empty', () {
+      expect(
+        () => RegistrarService(
+          registrarUrl: _registrarUrl,
+          apiKey: '',
+          httpClient: _mockResponse({}),
+        ),
+        throwsException,
+      );
+    });
+
+    test('throws when apiKey is whitespace', () {
+      expect(
+        () => RegistrarService(
+          registrarUrl: _registrarUrl,
+          apiKey: '   ',
+          httpClient: _mockResponse({}),
+        ),
+        throwsException,
+      );
+    });
+  });
+
   group('sendActivationOtp', () {
     test('returns true on success', () async {
       final service =
@@ -29,6 +53,36 @@ void main() {
       final service =
           _makeService(_mockResponse({'message': 'Server Error'}, status: 500));
       expect(await service.sendActivationOtp('@alice'), isFalse);
+    });
+
+    test('throws helpful exception on 401 auth failure', () async {
+      final service =
+          _makeService(_mockResponse({'message': 'Unauthorized'}, status: 401));
+      expect(
+        () => service.sendActivationOtp('@alice'),
+        throwsA(
+          predicate(
+            (e) =>
+                e.toString().contains('invalid or missing API key') &&
+                e.toString().contains('/authenticate/atsign'),
+          ),
+        ),
+      );
+    });
+
+    test('throws helpful exception on 403 auth failure', () async {
+      final service =
+          _makeService(_mockResponse({'message': 'Forbidden'}, status: 403));
+      expect(
+        () => service.sendActivationOtp('@alice'),
+        throwsA(
+          predicate(
+            (e) =>
+                e.toString().contains('invalid or missing API key') &&
+                e.toString().contains('/authenticate/atsign'),
+          ),
+        ),
+      );
     });
 
     test('returns false when message is not "Sent Successfully"', () async {
