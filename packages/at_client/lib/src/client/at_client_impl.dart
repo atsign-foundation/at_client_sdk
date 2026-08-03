@@ -7,6 +7,10 @@ import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/secondary.dart';
+import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
+import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
+import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
+import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
@@ -449,6 +453,33 @@ class AtClientImpl implements AtClient {
     putRequestTransformer.atClient = this;
 
     _cascadeSetTelemetryService();
+
+    // Seeding is deliberately not awaited. It publishes to the atServer, and a
+    // client's startup must not wait on — or fail because of — a rollout
+    // action; a namespace missed now is minted at the next start, and the
+    // write path already fails cold start by name.
+    if (_preference?.seedNamespaceKeys == true) {
+      unawaited(_seedNamespaceKeys());
+    }
+  }
+
+  /// Mints and publishes namespace keys for this client's authorised
+  /// namespaces, per [AtClientPreference.seedNamespaceKeys].
+  Future<void> _seedNamespaceKeys() async {
+    try {
+      final keysIo = _atKeysIo;
+      await NskeySeeding(
+        atClient: this,
+        ring: PublishedNskeyKeyRing(this),
+        privateFiling: keysIo == null
+            ? null
+            : NskeyPrivateFiling(keysIo: keysIo, atSign: _atSign),
+        sharing: AtClientSecretSharing.forClient(this),
+      ).seed();
+    } catch (e, st) {
+      _logger.warning('Seeding namespace keys failed for $_atSign; the next '
+          'start retries whatever is still missing: $e, $st');
+    }
   }
 
   /// Arms (or re-arms) the one-shot expiry [Timer] at the

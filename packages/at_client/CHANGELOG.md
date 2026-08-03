@@ -1,4 +1,13 @@
 ## 3.14.1
+- feat: `AtClientPreference.seedNamespaceKeys` (default **false**) makes a
+  client mint and publish its namespace keys at start. It is its own knob
+  rather than following `crypto` because seeding is a rollout action, not a
+  crypto-path one: the release sequence has clients minting while still
+  writing legacy, so gating it on the PQ path being active would seed nothing
+  until the moment seeding stopped being useful. Off by default because
+  minting publishes a permanent, discoverable record on the atSign. The work
+  is not awaited — a client's startup must not wait on, or fail because of, a
+  rollout action, and a namespace missed now is minted at the next start.
 - feat: `NskeySeeding` mints and publishes this atSign's namespace keys and
   conveys each private to its other enrollments. It seeds at client start
   rather than on first write, because the rollout mints while clients are

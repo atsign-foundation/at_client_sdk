@@ -189,6 +189,20 @@ class AtClientPreference {
   /// It ends with the post-quantum-by-default release, where cold start throws
   /// whatever this says.
   bool allowLegacyCryptoFallback = false;
+
+  /// Whether this client mints and publishes namespace keys at start.
+  ///
+  /// Seeding is a **rollout** action, not a crypto-path one, which is why it
+  /// is its own knob rather than following [crypto]. The release sequence has
+  /// clients minting and publishing *while still writing legacy*, so that by
+  /// the time post-quantum writes are switched on the keys are already
+  /// everywhere; gating it on the PQ path being active would seed nothing
+  /// until the very moment seeding stopped being useful.
+  ///
+  /// Off by default while the data path is experimental — minting publishes a
+  /// permanent, discoverable record on the atSign, which is not something to
+  /// start doing behind an app's back.
+  bool seedNamespaceKeys = false;
 }
 
 /// Default preference on how to handle get, put and delete requests with

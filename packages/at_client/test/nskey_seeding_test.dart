@@ -76,6 +76,14 @@ void main() {
             'it');
   });
 
+  test('seeding is off unless the preference asks for it', () async {
+    // Minting publishes a permanent, discoverable record on the atSign. That
+    // is not something to start doing behind an app's back while the data
+    // path is experimental, so the default is off and the release that wants
+    // fleet-wide seeding turns it on deliberately.
+    expect(AtClientPreference().seedNamespaceKeys, isFalse);
+  });
+
   test('a wildcard enrollment seeds nothing at start', () async {
     final s = seeding(
         enrollmentId: 'enroll-priv',
