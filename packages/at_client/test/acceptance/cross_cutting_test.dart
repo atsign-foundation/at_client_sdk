@@ -88,9 +88,12 @@ void main() {
       // refused). The signing root is not on this list: it is a verification
       // key, so nothing is ever encapsulated to it.
       //
-      // The published nskey half holds today — published_nskey_key_ring_test
-      // covers the rejections, and nskey_cross_atsign_test drives the whole
-      // fetch-and-verify on the live wire. What remains is the key package.
+      // Both halves hold today at unit level — published_nskey_key_ring_test
+      // and key_package_registration_test cover the rejections — and the nskey
+      // half is driven on the live wire by nskey_cross_atsign_test. What this
+      // still owes is the atServer side (_apsk present without a client
+      // publish, a cross-enrollment overwrite refused) plus a live
+      // enroll:listns, which needs SS-2's production wiring to drive.
       fail('not implemented');
     }, skip: ss4);
 

@@ -1,8 +1,12 @@
 import 'dart:convert' show jsonDecode;
 
 import 'package:at_client/at_client.dart' show AtClient;
+import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
+import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
+
+final _logger = AtSignLogger('VerbEnrollmentDirectory');
 
 /// One enrollment authorised for a namespace, as returned by
 /// [EnrollmentDirectory.listForNamespace]: its access level and the key
@@ -64,14 +68,28 @@ abstract class EnrollmentDirectory {
 /// directly under `metadata.keyPackage` (the payload itself — no format-id
 /// sub-key):
 ///
+/// **The key package is an APKAM-signed envelope**, so `metadata.keyPackage`
+/// holds `{payload, signature, signingAlgo, hashingAlgo, enrollmentId}` and the
+/// package itself is the `payload`. It is verified here, against the advertising
+/// enrollment's `_apsk`, before the key inside is ever treated as that
+/// enrollment's — a key package *is* an encapsulation target, so accepting one
+/// on the server's word alone would let whoever served the enrollment record
+/// choose who can read the atSign's secrets.
+///
 ///     enroll:listns:<ns>
 ///       -> data:[{"enrollmentId":..,"access":"rw","apkamPubKey":..,
-///                 "metadata":{"keyPackage":{"v":1,"createdAt":..,"keys":[..]}}}]
+///                 "metadata":{"keyPackage":{
+///                   "payload":{"v":1,"createdAt":..,"keys":[..]},
+///                   "signature":..,"signingAlgo":..,"hashingAlgo":..,
+///                   "enrollmentId":..}}}]
 @experimental
 class VerbEnrollmentDirectory implements EnrollmentDirectory {
   final AtClient atClient;
 
-  VerbEnrollmentDirectory(this.atClient);
+  final AtClientEnvelopeSigner _signer;
+
+  VerbEnrollmentDirectory(this.atClient)
+      : _signer = AtClientEnvelopeSigner(atClient);
 
   @override
   Future<List<NamespaceMember>> listForNamespace(
@@ -92,31 +110,84 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
       final access = e['access'];
       if (enrollmentId is! String || access is! String) continue;
       if (excludeEnrollmentIds.contains(enrollmentId)) continue;
-      KeyPackage? keyPackage;
       final apkamPubKey = e['apkamPubKey'];
       final metadata = e['metadata'];
-      if (metadata is Map) {
-        final pkg = metadata['keyPackage'];
-        if (pkg != null) {
-          try {
-            keyPackage = KeyPackage.fromPayload(
-              pkg,
-              enrollmentId: enrollmentId,
-              apkamId: apkamPubKey is String ? apkamPubKey : null,
-            );
-          } catch (_) {
-            // skip a malformed/unknown-format package; a newer client may
-            // have written one this version doesn't understand
-          }
-        }
-      }
       members.add(NamespaceMember(
         enrollmentId: enrollmentId,
         access: access,
-        keyPackage: keyPackage,
+        keyPackage: metadata is Map
+            ? await _verifiedKeyPackage(
+                metadata['keyPackage'],
+                enrollmentId: enrollmentId,
+                apkamId: apkamPubKey is String ? apkamPubKey : null,
+              )
+            : null,
       ));
     }
     return members;
+  }
+
+  /// The key package inside [advertised], if its APKAM signature checks out as
+  /// [enrollmentId]'s; null otherwise.
+  ///
+  /// A rejection drops **this member only**, rather than failing the whole
+  /// listing. The member is then simply never sealed to — fail-closed for the
+  /// enrollment whose advertisement is bad, and no worse for anyone else. The
+  /// alternative, throwing, would let a single unparseable record deny every
+  /// other enrollment its secrets.
+  ///
+  /// The distinction that matters is between an enrollment that advertised
+  /// **nothing** — ordinary, it has not registered — and one whose
+  /// advertisement is present but will not verify. The first is silent; the
+  /// second is shouted about, because it is either an attack on the
+  /// encapsulation target or a bug, and neither should be inferred from a
+  /// member that quietly stops receiving secrets.
+  Future<KeyPackage?> _verifiedKeyPackage(
+    Object? advertised, {
+    required String enrollmentId,
+    String? apkamId,
+  }) async {
+    if (advertised == null) return null;
+    if (advertised is! Map) {
+      _logger.severe('enrollment $enrollmentId advertised a key package that '
+          'is not a map; not sealing to it');
+      return null;
+    }
+
+    // The envelope names its own signer, and the record names whose enrollment
+    // it is advertised under. If those disagree, one enrollment is offering a
+    // key package as another's — which would hand it every secret meant for
+    // that other enrollment.
+    final signer = advertised['enrollmentId'];
+    if (signer != enrollmentId) {
+      _logger.severe('enrollment $enrollmentId advertised a key package signed '
+          'by ${signer ?? "nobody"}; not sealing to it');
+      return null;
+    }
+
+    try {
+      await _signer.verifyEnvelopeSignature(advertised,
+          signerAtSign: atClient.getCurrentAtSign()!);
+    } catch (e) {
+      _logger.severe('the key package advertised by enrollment $enrollmentId '
+          'does not verify against its _apsk, so the key it offers is only as '
+          'trustworthy as whatever served it; not sealing to it: $e');
+      return null;
+    }
+
+    try {
+      return KeyPackage.fromPayload(
+        advertised['payload'],
+        enrollmentId: enrollmentId,
+        apkamId: apkamId,
+      );
+    } catch (e) {
+      // Signed, so genuinely this enrollment's, but shaped in a way this
+      // version cannot read — most likely written by a newer client.
+      _logger.info('enrollment $enrollmentId advertised a signed key package '
+          'this version cannot parse: $e');
+      return null;
+    }
   }
 
   /// Strips the at-protocol `data:` prefix and JSON-decodes a verb response.

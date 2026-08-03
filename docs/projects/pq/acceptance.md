@@ -819,10 +819,13 @@ These invariants are testable against **every** UC above:
   `hashingAlgo`) **before** encapsulating to it; a **tampered, unsigned, or
   wrong-signer** advertised key is **rejected**. The atServer keeps every approved
   enrollment's `_apsk` **present** (fetchable without a client publish) and
-  **write-restricted** (a cross-enrollment overwrite is refused). *(Holds today for the
-  published `nskey` — signed at mint, verified before sealing, proven cross-atSign on the
-  live wire. Still target-not-built for the **key package**: sign SS-2/SS-4, verify
-  SS-1c.)*
+  **write-restricted** (a cross-enrollment overwrite is refused). *(Holds today for **both**: the
+  published `nskey`, signed at mint and verified before sealing, proven cross-atSign on
+  the live wire; and the **key package**, signed by
+  `KeyPackageRegistration.signedKeyPackagePayload` and verified by
+  `VerbEnrollmentDirectory` — unsigned, tampered, wrong-signer and forged-claim packages
+  are all rejected. The key-package half is unit-only until SS-2 wires `enroll:request`;
+  the atServer's `_apsk` present-and-write-restricted guarantee is still owed.)*
 - **Performance is measured, not assumed.** The PQ primitives (ML-KEM / ML-DSA,
   X-Wing encap/decap, `pqSeal`) land on hot paths — PKAM auth and every put/get — that
   run on mobile/IoT hardware (the roadmap's NoPorts finish line). PKAM-auth latency and

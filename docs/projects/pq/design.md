@@ -608,13 +608,16 @@ to that atSign until the anchor is distributed independently. See
 [§7 Trust boundary & residual threats](#7-trust-boundary--residual-threats) for the full
 model and the mitigation ladder — do **not** describe signing as removing the atServer
 from the TCB.
-*(Status: the **published `nskey`** is signed and verified as described —
-`PublishedNskeyKeyRing.mintAndPublish` wraps its advertisement with `wrapAndSign`, and
-`ApkamSignedAdvertisedKeys` fetches the signing enrollment's `_apsk` and verifies before
-the key is ever sealed to, cross-atSign on the live wire. Remaining gaps: the **key
-package** is still advertised unsigned [`pairwise_secret_sharing.dart:360-407`] — sign in
-the mint paths [SS-2 / SS-4], verify on read [SS-1c] — and the public/private
-correspondence check for a conveyed keypair secret is likewise pending.)*
+*(Status: **both advertised keys are signed and verified.** The published `nskey` —
+`PublishedNskeyKeyRing.mintAndPublish` wraps its advertisement with `wrapAndSign` and
+`ApkamSignedAdvertisedKeys` verifies a peer's, cross-atSign on the live wire. The **key
+package** — `KeyPackageRegistration.signedKeyPackagePayload` produces the signed value
+for `metadata.keyPackage`, and `VerbEnrollmentDirectory` verifies it against the
+advertising enrollment's `_apsk` before sealing, rejecting a package that is unsigned,
+tampered, signed by a different enrollment, or merely claiming to be that enrollment's.
+Remaining gaps: the key-package path has no **live** coverage until SS-2 wires
+`enroll:request`, and the public/private correspondence check for a conveyed keypair
+secret is still pending.)*
 
 `file:line` evidence: `pqSeal`/`pqOpen` of `__ssenv` (`pairwise_secret_sharing.dart:191,398,99`;
 `pq_hpke.dart:80`); sign + verify-before-decrypt (`envelope_signing.dart:74,152`;
@@ -1207,14 +1210,13 @@ all published.
 | `namespaceAuthorizes` (suffix/`*` match) | `secret_store.dart:169` |
 | Transport: put + sync listener + optional wake-up notify; `receivedSecrets` + `_consume` | `:220,724,239,360,601` |
 
-**Known client gaps** (within the substrate): **advertised-key signing + verify is not
-yet implemented** — the substrate signs `__ssenv` envelopes but advertises the key
-package **unsigned**, so the
-authenticity decision of [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify) is
-target-not-built for the key package (sign in the mint paths SS-2 [#2085] / SS-4
-[#2087], verify on read SS-1c [#2084]). It **is** built for the published `nskey`:
-`PublishedNskeyKeyRing` signs its advertisement and `ApkamSignedAdvertisedKeys`
-verifies a peer's, proven cross-atSign live. The
+**Known client gaps** (within the substrate): advertised-key signing + verify is **built**
+for both the published `nskey` (`PublishedNskeyKeyRing` / `ApkamSignedAdvertisedKeys`,
+proven cross-atSign live) and the key package
+(`KeyPackageRegistration.signedKeyPackagePayload` / `VerbEnrollmentDirectory`), so the
+authenticity decision of [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify) holds —
+but the key-package half is **unit-only** until SS-2 [#2085] wires `enroll:request`, so
+nothing has driven it against a live `enroll:listns`. The
 public/private correspondence check is likewise missing
 (`pairwise_secret_sharing.dart:360-407`); the signing root's
 no-namespace serve exception is missing (`grep pq_signing_root` = 0); durable storage

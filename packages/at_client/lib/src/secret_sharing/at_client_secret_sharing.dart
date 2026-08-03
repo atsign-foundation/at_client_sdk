@@ -27,13 +27,15 @@ import 'package:meta/meta.dart' show experimental;
 /// kpid-addressed envelopes converge idempotently via [SecretStore.putIfNewer]
 /// — but a single instance avoids redundant registration and double delivery.)
 ///
-/// > **⚠ Not yet suitable for production secrets.** The recipient key package
-/// > a sender seals to is discovered via the gated `enroll:listns` verb and is
-/// > not yet APKAM-signed or verified, so sealing currently trusts the
-/// > atServer to return the genuine key package — a tampering atServer could
-/// > substitute the encapsulation target and read the secret. This caveat
-/// > lifts once advertised key packages are signed by their generating
-/// > enrollment and verified against its `_apsk` before sealing.
+/// > **⚠ Experimental.** The recipient key package a sender seals to is
+/// > discovered via the gated `enroll:listns` verb, and is APKAM-signed by the
+/// > enrollment that generated it and verified against that enrollment's
+/// > `_apsk` before anything is sealed to it — so a tampering atServer cannot
+/// > substitute the encapsulation target under an honest `_apsk`. What remains
+/// > is that the atServer serves the `_apsk` too, so the **operator** of the
+/// > atSign's own atServer is still in the confidentiality boundary; removing
+/// > that needs an anchor the operator does not control (key transparency).
+/// > Durable storage of received secrets is also still an app-supplied hook.
 @experimental
 class AtClientSecretSharing
     with

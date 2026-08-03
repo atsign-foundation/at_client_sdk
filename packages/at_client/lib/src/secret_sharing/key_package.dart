@@ -66,16 +66,16 @@ class PackageKey {
 /// gated `enroll:listns` verb (see [EnrollmentDirectory]). They are **not**
 /// published as ordinary at-keys. Per the ratified design the advertised key
 /// package is wrapped in an APKAM-signed envelope by its generating enrollment
-/// and verified against that enrollment's `_apsk` — the same path same-atSign
-/// and cross-atSign — so the encapsulation target is authenticated, not merely
-/// server-vouched. *(Signing/verifying the advertised package is not yet
-/// implemented here — today it is advertised unsigned; per-envelope `__ssenv`
-/// messages are already APKAM-signed, see EnvelopeSigning.)*
+/// and verified against that enrollment's `_apsk`, so the encapsulation target
+/// is authenticated rather than merely server-vouched. The signed form is
+/// produced by `KeyPackageRegistration.signedKeyPackagePayload` and checked by
+/// [VerbEnrollmentDirectory]; a package that does not verify, or that is signed
+/// by an enrollment other than the one advertising it, is not sealed to.
 ///
-/// The wire form is the value stored at `metadata.keyPackage`
-/// in the enrollment record ([toJson] / [fromPayload]); [enrollmentId] and
-/// [apkamId] are carried by the enclosing verb structure, not duplicated in
-/// the payload.
+/// [toJson] / [fromPayload] are the **inner** payload — the value stored at
+/// `metadata.keyPackage` is that payload wrapped in the signed envelope.
+/// [enrollmentId] and [apkamId] are carried by the enclosing verb structure,
+/// not duplicated in the payload.
 @experimental
 class KeyPackage {
   static const int currentVersion = 1;

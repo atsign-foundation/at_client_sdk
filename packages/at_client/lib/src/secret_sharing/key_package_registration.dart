@@ -98,6 +98,20 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
         ],
       );
 
+  /// This key package wrapped in an APKAM-signed envelope — the value to store
+  /// at `metadata.keyPackage` when the package rides `enroll:request`.
+  ///
+  /// A key package *is* an encapsulation target: whoever's X-Wing public key
+  /// ends up here is who the atSign's other clients seal their secrets to. So
+  /// it is advertised signed, and [VerbEnrollmentDirectory] verifies the
+  /// signature against this enrollment's `_apsk` before treating the key as
+  /// this enrollment's. Without that, the target is only as trustworthy as
+  /// whatever served the enrollment record.
+  ///
+  /// Throws [StateError] until [register] has generated the enc keypair.
+  Future<Map<String, Object?>> signedKeyPackagePayload() async =>
+      await wrapAndSign(myKeyPackage.toJson());
+
   /// Generates (or loads, via [loadApkamKeys]) this APKAM keypair's X-Wing enc
   /// keypair and publishes its APKAM signing key (so peers can verify its
   /// envelopes), then returns this client's [KeyPackage]. Idempotent.

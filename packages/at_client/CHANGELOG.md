@@ -1,4 +1,18 @@
 ## 3.14.1
+- feat: an advertised key package is APKAM-signed, and verified before anything
+  is sealed to it. `KeyPackageRegistration.signedKeyPackagePayload()` produces
+  the value to store at `metadata.keyPackage`, and `VerbEnrollmentDirectory`
+  checks it against the advertising enrollment's `_apsk` — rejecting an
+  unsigned package, a tampered one, one signed by a different enrollment, and
+  one that merely *claims* to be the advertising enrollment's. A key package is
+  an encapsulation target: whoever's X-Wing key ends up in one is who this
+  atSign's other clients seal their secrets to, so accepting it on the server's
+  word alone would let whoever served the enrollment record choose who can read
+  the atSign's secrets. A rejection drops that member alone rather than failing
+  the whole listing — the member is then never sealed to, and one bad record
+  cannot deny every other enrollment its secrets. **The stored value's shape
+  changes**: `metadata.keyPackage` now holds the signed envelope, with the
+  package as its `payload`.
 - feat: cold start on the nskey path now fails by name and can be asked about
   in advance. A destination that has never used or authorised a namespace has
   no key to seal a content key to, and there is no post-quantum fallback — the

@@ -194,56 +194,164 @@ void main() {
     });
   });
 
+  /// A key package *is* an encapsulation target: whoever's X-Wing key ends up
+  /// in one is who this atSign's other clients seal their secrets to. So it is
+  /// advertised as an APKAM-signed envelope and verified against the
+  /// advertising enrollment's `_apsk` before the key inside is used. A package
+  /// that does not verify drops that member alone — the member is simply never
+  /// sealed to, which is fail-closed for them and no worse for anybody else.
   group('VerbEnrollmentDirectory', () {
-    test(
-        'listForNamespace parses members + per-APKAM key packages and honours '
-        'exclude', () async {
-      final atClient = buildMockClient('enroll-self');
+    /// A registered enrollment whose `_apsk` is published (into the shared
+    /// `remoteData`, which every mock client in this file reads).
+    Future<TestRegistrant> registered(String enrollmentId,
+        {Uint8List? seed}) async {
+      final r = buildRegistrant(enrollmentId, FakeEnrollmentDirectory(),
+          seed: seed ?? seedA);
+      await r.register();
+      return r;
+    }
+
+    void stubListns(AtClient atClient, List<Object?> records) {
+      // Resolve the secondary first: nesting the call inside `when` would
+      // register the stub against getRemoteSecondary itself.
       final secondary = atClient.getRemoteSecondary()!;
-      // Flat 1:1:1 shape: one record per enrollment, no nested apkam[] array;
-      // apkamPubKey + metadata sit directly on the record.
-      final response = jsonEncode([
-        {
-          'enrollmentId': 'enroll-b',
-          'access': 'rw',
-          'apkamPubKey': 'pkb',
-          'metadata': {
-            'keyPackage': {
-              'v': 1,
-              'createdAt': '2026-06-11T00:00:00.000Z',
-              'keys': [
-                {'kid': 'kb', 'use': 'enc', 'alg': 'x-wing', 'pub': 'pubb'}
-              ],
-            }
-          }
-        },
-        {
-          'enrollmentId': 'enroll-c',
-          'access': 'r',
-          'apkamPubKey': 'pkc',
-          'metadata': {}
-        },
-      ]);
       when(() => secondary.executeCommand('enroll:listns:myapp\n', auth: true))
-          .thenAnswer((_) async => 'data:$response');
+          .thenAnswer((_) async => 'data:${jsonEncode(records)}');
+    }
+
+    Map<String, Object?> record(String enrollmentId, Object? keyPackage,
+            {String access = 'rw'}) =>
+        {
+          'enrollmentId': enrollmentId,
+          'access': access,
+          'apkamPubKey': 'pk-$enrollmentId',
+          'metadata': keyPackage == null ? {} : {'keyPackage': keyPackage},
+        };
+
+    test(
+        'listForNamespace parses members + signed key packages and honours '
+        'exclude', () async {
+      final b = await registered('enroll-b');
+      final atClient = buildMockClient('enroll-self');
+      stubListns(atClient, [
+        record('enroll-b', await b.signedKeyPackagePayload()),
+        record('enroll-c', null, access: 'r'),
+      ]);
 
       final directory = VerbEnrollmentDirectory(atClient);
       final members = await directory.listForNamespace('myapp');
       expect(
           members.map((m) => m.enrollmentId).toSet(), {'enroll-b', 'enroll-c'});
-      final b = members.firstWhere((m) => m.enrollmentId == 'enroll-b');
-      expect(b.access, 'rw');
-      expect(b.keyPackage, isNotNull);
-      // apkamId is populated from the record's apkamPubKey
-      expect(b.keyPackage!.apkamId, 'pkb');
-      expect(
-          b.keyPackage!.bestKeyFor(SecretSharingAlgos.keyAlgos)!.pub, 'pubb');
-      final c = members.firstWhere((m) => m.enrollmentId == 'enroll-c');
-      expect(c.keyPackage, isNull);
+
+      final mb = members.firstWhere((m) => m.enrollmentId == 'enroll-b');
+      expect(mb.access, 'rw');
+      expect(mb.keyPackage, isNotNull);
+      // apkamId is populated from the record's apkamPubKey, not the payload
+      expect(mb.keyPackage!.apkamId, 'pk-enroll-b');
+      expect(mb.keyPackage!.bestKeyFor(SecretSharingAlgos.keyAlgos)!.pub,
+          base64Encode(publicKeyA));
+
+      // An enrollment that advertised nothing is ordinary, not an error: it
+      // is returned, simply without a package to seal to.
+      expect(members.firstWhere((m) => m.enrollmentId == 'enroll-c').keyPackage,
+          isNull);
 
       final excluded = await directory
           .listForNamespace('myapp', excludeEnrollmentIds: {'enroll-b'});
       expect(excluded.map((m) => m.enrollmentId), ['enroll-c']);
+    });
+
+    test('an unsigned key package is not sealed to', () async {
+      final b = await registered('enroll-b');
+      final atClient = buildMockClient('enroll-self');
+      // The bare payload, as it was advertised before signing landed.
+      stubListns(atClient, [record('enroll-b', b.myKeyPackage.toJson())]);
+
+      final members =
+          await VerbEnrollmentDirectory(atClient).listForNamespace('myapp');
+
+      expect(members.single.keyPackage, isNull,
+          reason: 'accepting a bare package would leave the encapsulation '
+              'target only as trustworthy as whatever served the record');
+    });
+
+    test('a key package signed by another enrollment is not sealed to',
+        () async {
+      // enroll-b's record, carrying a package enroll-d signed. Accepting it
+      // would hand enroll-d every secret meant for enroll-b.
+      final d = await registered('enroll-d');
+      final atClient = buildMockClient('enroll-self');
+      stubListns(
+          atClient, [record('enroll-b', await d.signedKeyPackagePayload())]);
+
+      final members =
+          await VerbEnrollmentDirectory(atClient).listForNamespace('myapp');
+
+      expect(members.single.keyPackage, isNull);
+    });
+
+    test('a key package that lies about who signed it is not sealed to',
+        () async {
+      // The attack the signature actually stops. Someone who can write the
+      // enrollment record makes the claim match — envelope enrollmentId,
+      // record enrollmentId, all "enroll-b" — and signs with their own key.
+      // Every structural check passes; only verifying against enroll-b's real
+      // _apsk catches it.
+      final d = await registered('enroll-d');
+      final forged = await d.signedKeyPackagePayload()
+        ..['enrollmentId'] = 'enroll-b';
+      final atClient = buildMockClient('enroll-self');
+      stubListns(atClient, [record('enroll-b', forged)]);
+
+      final members =
+          await VerbEnrollmentDirectory(atClient).listForNamespace('myapp');
+
+      expect(members.single.keyPackage, isNull,
+          reason: 'the claim is free to forge; the signature over it is not');
+    });
+
+    test('a tampered key package is not sealed to', () async {
+      final b = await registered('enroll-b');
+      final envelope = await b.signedKeyPackagePayload();
+      // Signature intact over the original body; only the advertised key is
+      // swapped, which is the substitution that matters.
+      envelope['payload'] = {
+        'v': 1,
+        'createdAt': '2026-06-11T00:00:00.000Z',
+        'keys': [
+          {'kid': 'evil', 'use': 'enc', 'alg': 'x-wing', 'pub': 'evil-pub'}
+        ],
+      };
+      final atClient = buildMockClient('enroll-self');
+      stubListns(atClient, [record('enroll-b', envelope)]);
+
+      final members =
+          await VerbEnrollmentDirectory(atClient).listForNamespace('myapp');
+
+      expect(members.single.keyPackage, isNull);
+    });
+
+    test('one bad advertisement does not cost the other members theirs',
+        () async {
+      final b = await registered('enroll-b');
+      final atClient = buildMockClient('enroll-self');
+      stubListns(atClient, [
+        record('enroll-bad', {'not': 'an envelope'}),
+        record('enroll-b', await b.signedKeyPackagePayload()),
+      ]);
+
+      final members =
+          await VerbEnrollmentDirectory(atClient).listForNamespace('myapp');
+
+      expect(members.map((m) => m.enrollmentId).toSet(),
+          {'enroll-bad', 'enroll-b'});
+      expect(
+          members.firstWhere((m) => m.enrollmentId == 'enroll-bad').keyPackage,
+          isNull);
+      expect(members.firstWhere((m) => m.enrollmentId == 'enroll-b').keyPackage,
+          isNotNull,
+          reason: 'throwing on a bad record would let one enrollment deny '
+              'every other one its secrets');
     });
   });
 }
