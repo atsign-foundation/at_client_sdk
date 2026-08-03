@@ -570,9 +570,11 @@ landed** too (at_server #2685, merged 2026-07-07, plus #2687 / #2696 / #2698 /
 #2710).
 
 Still absent: the substrate is **not yet wired into AtClient** (SS-2,
-[#2085](https://github.com/atsign-foundation/at_client_sdk/issues/2085)), the
-client is **not yet driving the live verbs** (SS-1c,
-[#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084)), and the
+[#2085](https://github.com/atsign-foundation/at_client_sdk/issues/2085)), and no
+production call site drives `enroll:listns` — so although the client-side parser and
+its advertised-key verification landed on the spike branch (SS-1c,
+[#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084)), nothing has
+exercised either against a live verb. The
 **consumer layers** — nskey minting, `pq_signing_root` lifecycle (SS-4,
 [#2087](https://github.com/atsign-foundation/at_client_sdk/issues/2087)), PQ APKAM
 mint + retrofit (RF-2b/RF-2c) — are unbuilt. The full built/gap inventory with
