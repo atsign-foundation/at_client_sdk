@@ -596,7 +596,10 @@ each is binding. The code-side alignment landed via #2046 (merged 2026-07-03 int
   persistence** (`append()`, `save()`, … — method names superseded 2026-07-17
   by the single `flush()`) and remains the single contact point
   that keeps runtime `AtKeys` objects and the persisted keyfile in-line.
-  Providers are injected **(`AtClient`, `AtKeysIo`, `AtChops`)**. There is
+  Providers are injected **(`AtClient`, `AtKeysIo`)** — *corrected 2026-08-03: this line
+  previously also listed `AtChops`, which never matched the code. `CryptoContext` is
+  `{atClient, atKeysIo}` with no `atChops` field, and key state belongs in `AtKeys` held by
+  an `AtKeysIo`; see [20.6](#206-atchops-is-not-a-key-holder).* There is
   **no** new `WritableAtKeys` holder class and **no** separate `WrittenAtKeysIo`
   widening — `AtKeysIo` itself is widened. *Rationale:* much simpler migration —
   the code contract stays the same (deprecated fields/methods remain), the
@@ -1793,3 +1796,34 @@ experimental surface for a case SS-2 never reaches.
 conveyance path, so its first production caller is now SS-4. Without a live test the verify
 path would stay unit-only for another whole project — and its unit fixtures seed packages
 signed by an already-enrolled sharer, which is precisely the shape that hides the blocker.
+
+### 20.6 `AtChops` is not a key holder
+
+**Status:** accepted 2026-08-03. `AtChops` is being reduced to a collection of **stateless**
+functions; key state lives in `AtKeys`, held by an `AtKeysIo`. Anything that reaches into an
+`AtChops` *object* for key material is on the wrong side of that line.
+
+A sweep of this branch found the new code clean and the foundation it stands on not:
+
+- **Nothing new reaches for `AtChops` in production.** Every added reference on the branch is
+  in one test file's mock setup. `CryptoContext` is `{atClient, atKeysIo}` with **no**
+  `atChops` field, so the D1 provider seam was already right.
+- **Two mixins are the whole problem.** `ApkamSigning`'s `publicSigningKey` /
+  `privateSigningKey` read `atClient.atChops!.atChopsKeys.atPkamKeyPair!` — pulling key state
+  out of `AtChops` — and `EnvelopeSigning` signs and verifies through `atChops!.sign` /
+  `.verify`. Five D1 features now depend on those four lines: `PublishedNskeyKeyRing`,
+  `AtClientEnvelopeSigner`, `KeyPackageRegistration.signedKeyPackagePayload`,
+  `VerbEnrollmentDirectory`, and `PairwiseSecretSharing`. The branch did not create the
+  dependency, but it added five consumers to it.
+
+**Ruling.** Signing and verification are factored to take key material directly, sourced from
+`AtKeys` via `AtKeysIo`, and both mixins move onto it — migrating all five consumers in one
+pass rather than leaving two shapes side by side.
+
+**This is not optional for SS-2.** Ruling 7's callback takes an `AtKeysIo` and runs when there
+is no `AtClient` at all, so it cannot use `wrapAndSign` as written. The extraction is the
+first thing the callback needs; doing the mixins with it is what stops the old shape spreading.
+
+**Out of scope:** `put_request_transformer` and `monitor` also sign through `atChops`. Both
+predate D1 and neither is on this path; migrating them would put the put and monitor paths in
+scope, which pulls the integration suite into every commit boundary for no D1 benefit.
