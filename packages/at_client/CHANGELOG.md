@@ -1,4 +1,19 @@
 ## 3.14.1
+- feat: `enrollmentKeyPackageBuilder(atSign)` builds the signed X-Wing key
+  package that rides an `enroll:request` — pass it to at_auth's
+  `AtEnrollmentRequest.metadataBuilder`. It runs at the only moment this is
+  possible: the APKAM keypair exists and the enrollment record does not, so it
+  is the sole opportunity to put anything on that record (metadata is written
+  by the request that creates it and never afterwards). The X-Wing private half
+  is recorded as typed material on the very `AtKeys` at_auth flushes into the
+  app's keyfile on approval, so it lands beside the APKAM key — publishing an
+  encapsulation target whose private half nobody kept would leave every sender
+  sealing to a key that can never be opened. The envelope carries **no**
+  `enrollmentId` claim, because the atServer has not assigned one yet and the
+  payload never carried it anyway; a verifier's authority is the signature
+  checking out against that record's own `_apsk`. `KeyPackage.payloadFor(...)`
+  exposes the same payload `toJson()` produces, for a package whose enrollment
+  does not exist yet.
 - refactor: envelope signing and verification are now functions taking the key
   material as an argument (`signEnvelope` / `verifyEnvelope`), instead of
   reaching through a client's `AtChops` object. Key state belongs in `AtKeys`,

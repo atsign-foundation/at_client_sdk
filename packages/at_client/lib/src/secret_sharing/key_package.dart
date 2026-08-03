@@ -124,7 +124,22 @@ class KeyPackage {
   /// The value stored at `metadata.keyPackage` — the payload
   /// only. [enrollmentId] / [apkamId] are carried by the enclosing verb
   /// structure (the enrollment and its APKAM-keypair entry), not repeated here.
-  Map<String, Object?> toJson() => {
+  Map<String, Object?> toJson() =>
+      payloadFor(createdAt: createdAt, keys: keys, v: v);
+
+  /// The same payload as [toJson], for a package whose enrollment does not
+  /// exist yet.
+  ///
+  /// A key package riding `enroll:request` is built before the atServer has
+  /// assigned an enrollment id, so there is no [KeyPackage] to build it from.
+  /// Nothing is lost by that: the id was never part of the payload — the
+  /// enrollment record carries it, and [fromPayload] injects it back on read.
+  static Map<String, Object?> payloadFor({
+    required DateTime createdAt,
+    required List<PackageKey> keys,
+    int v = currentVersion,
+  }) =>
+      {
         'v': v,
         'createdAt': createdAt.toUtc().toIso8601String(),
         'keys': keys.map((k) => k.toJson()).toList(),
