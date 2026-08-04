@@ -87,6 +87,25 @@ class EnrollmentServiceImpl implements EnrollmentService {
 
     final sharing = AtClientSecretSharing.forClient(_atClient);
 
+    // Sealing stamps this approver's own key package id on the envelope, so it
+    // must hold one. Checked here rather than left to fail inside the
+    // substrate: an approver that has never registered otherwise meets a bare
+    // `Bad state: register() has not been called` three frames down, having
+    // just approved an enrollment that will now never receive its key.
+    //
+    // Deliberately not registered on its behalf. Registering publishes a key
+    // package, and with no persistence wired it mints a fresh seed — so an
+    // implicit call could rotate the advertised package underneath the
+    // approver and orphan anything already sealed to the old one. When to
+    // mint is the caller's decision.
+    if (mintedApkamSymmetricKey != null && !sharing.isRegistered) {
+      throw AtEnrollmentException(
+          'Enrollment ${enrollment.enrollmentId} expects this approver to '
+          'convey its symmetric key, but this client has not registered a key '
+          'package to seal it from. Call register() on '
+          'AtClientSecretSharing.forClient(atClient) before approving.');
+    }
+
     // The symmetric key goes first. Everything else this enrollment is about
     // to receive is useless until it holds the key that unwraps its own
     // encryption private key, and it is blocked in waitForApproval polling for

@@ -61,10 +61,17 @@ Future<String> Function(AtKeys, AtLookUp) enrollmentApkamSymmetricKeyResolver(
   return (AtKeys keys, AtLookUp atLookUp) async {
     final (kpid, seed) = _keyPackageHalves(keys);
 
-    // The approver writes the envelope after the atServer has approved the
-    // enrollment, and this enrollment's PKAM can start succeeding the instant
-    // that approval lands — so arriving here before the envelope exists is
-    // ordinary, not an error. Poll rather than fail on the first empty scan.
+    // This never waits for the human. By the time it runs, waitForApproval's
+    // PKAM loop has already succeeded, which means the approval has happened —
+    // however many minutes or hours that took is behind us.
+    //
+    // What is left is a mechanical race inside the approver's single approve()
+    // call: the atServer marks the enrollment approved, which is what lets
+    // PKAM start succeeding, a moment before at_client finishes writing the
+    // envelope. That is one or two round trips, so arriving here before the
+    // envelope exists is ordinary rather than an error. [timeout] is headroom
+    // over that race, not a latency budget — if nothing has arrived by then
+    // the approver did not convey, and waiting longer recovers nothing.
     final DateTime deadline = DateTime.now().toUtc().add(timeout);
     while (true) {
       for (final envelopeKey in await _envelopeKeys(atLookUp, kpid)) {

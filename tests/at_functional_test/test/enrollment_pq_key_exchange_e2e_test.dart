@@ -6,6 +6,12 @@
 import 'dart:convert' show base64Decode;
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart'
+    show
+        AtChopsImpl,
+        AtChopsKeys,
+        AtEncryptionKeyPair,
+        AtPkamKeyPair;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_functional_test/src/config_util.dart';
@@ -114,20 +120,40 @@ void main() {
       apkamSymmetricKey: AtBytes.fromString(''),
     ));
 
-    // Drive the enrollee's own resolver — the code waitForApproval runs once
-    // PKAM succeeds. It scans for the envelope, verifies its APKAM signature
-    // against the _apsk the atServer published on approval, and opens it with
-    // the key package private half minted before the request was sent.
+    // Authenticate as the NEW enrollment and resolve over its own connection,
+    // which is what waitForApproval does. Running this over the approver's
+    // connection would prove the envelope is discoverable, authentic and
+    // openable, but not the part that only the enrolling side can show: that
+    // the atServer's namespace gating lets a connection scoped to
+    // {buzz: rw} scan for and read a self key sitting in buzz. If it did not,
+    // every pq enrollment would fail here in production while a test driven
+    // from the approver stayed green.
     //
-    // Run over the approver's authenticated connection rather than a second
-    // PKAM session: this proves the envelope is discoverable, authentic and
-    // openable by the key package. What it does not prove is the atServer's
-    // namespace gating letting the *enrolling* connection read it, which
-    // needs a test that authenticates as the new enrollment.
+    // The chops are built from the APKAM keypair alone, deliberately. PKAM
+    // needs nothing else, and this enrollment has nothing else — the symmetric
+    // key is the thing it is about to fetch, and AtKeys.toAtChops reads its
+    // absence as "PKAM keys" and then demands the encryption private key that
+    // is equally not there yet.
+    final enrolleeLookup = AtLookupImpl(
+        atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort)
+      ..enrollmentId = enrolled.enrollmentId
+      ..atChops = AtChopsImpl(AtChopsKeys.create(
+        AtEncryptionKeyPair.create(
+            enrolled.keys.defaultEncryptionPublicKey!.toString(), ''),
+        AtPkamKeyPair.create(enrolled.keys.apkamPublicKey!.toString(),
+            enrolled.keys.apkamPrivateKey!.toString()),
+      ));
+
+    expect(
+        await enrolleeLookup.pkamAuthenticate(
+            enrollmentId: enrolled.enrollmentId),
+        true,
+        reason: 'the enrollment is approved, so its APKAM keypair must '
+            'authenticate before it can collect anything');
+
     final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
         timeout: Duration(seconds: 20));
-    final symmetricKey = await resolve(
-        enrolled.keys, atClient.getRemoteSecondary()!.atLookUp);
+    final symmetricKey = await resolve(enrolled.keys, enrolleeLookup);
 
     expect(symmetricKey, isNotEmpty,
         reason: 'without this the enrollment authenticates and then cannot '
