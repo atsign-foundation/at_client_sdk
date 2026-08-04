@@ -50,7 +50,8 @@ void main() {
       final onBoardingRequest = AtOnboardingRequest(apkamAtSign)
         ..appName = 'wavi'
         ..deviceName = 'pixel1'
-        ..rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort)
+        ..rootDomain =
+            AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort)
         ..atKeysIo =
             FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys');
       // onboard with enable enrollment set
@@ -66,7 +67,8 @@ void main() {
         apkamAtSign,
         atKeysIo:
             FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
-      )..rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort));
+      )..rootDomain =
+          AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort));
       expect(atAuthResponse.isSuccessful, true);
       expect(atAuthResponse.atAuthKeys, isNotNull);
 
@@ -182,9 +184,10 @@ void main() {
           namespaces: {'buzz': 'rw'},
           otp: 'a1b2c3'); //random invalid OTP
       var atEnrollment = AtEnrollment.create();
-      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      var newAtLookup =
+          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       expect(
-          () async => atEnrollment.submit(enrollmentRequest, newAtLookup),
+          () async => atEnrollment.enroll(enrollmentRequest, newAtLookup),
           throwsA(predicate((dynamic e) =>
               e is AtLookUpException &&
               e.errorCode == 'AT0022' &&
@@ -204,14 +207,15 @@ void main() {
           namespaces: {'buzz': 'rw'},
           otp: otp);
       var atEnrollment = AtEnrollment.create();
-      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      var newAtLookup =
+          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       var enrollmentResponse =
-          await atEnrollment.submit(enrollmentRequest, newAtLookup);
+          await atEnrollment.enroll(enrollmentRequest, newAtLookup);
       expect(enrollmentResponse.enrollmentId, isNotEmpty);
       expect(enrollmentResponse.enrollStatus, EnrollmentStatus.pending);
       // submit another enrollment with same OTP
       expect(
-          () async => atEnrollment.submit(enrollmentRequest, newAtLookup),
+          () async => atEnrollment.enroll(enrollmentRequest, newAtLookup),
           throwsA(predicate((dynamic e) =>
               e is AtLookUpException &&
               e.errorCode == 'AT0022' &&
@@ -311,7 +315,7 @@ void main() {
           otp: (await atClientManager.atClient.getOTP()).response,
           namespaces: {'wavi': 'rw'});
       AtEnrollmentResponse? atEnrollmentResponse =
-          await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
+          await atEnrollmentBase.enroll(enrollmentRequest, atLookUp);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
 
       // Use enroll fetch to get the encryptedAPKAMSymmetricKey
@@ -367,7 +371,8 @@ void main() {
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
           AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
+      atAuthRequest.rootDomain =
+          AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);
@@ -416,7 +421,7 @@ void main() {
           otp: (await atClientManager.atClient.getOTP()).response,
           namespaces: {'wavi': 'rw'});
       AtEnrollmentResponse? atEnrollmentResponse =
-          await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
+          await atEnrollmentBase.enroll(enrollmentRequest, atLookUp);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
 
       // Use enroll fetch to get the encryptedAPKAMSymmetricKey
@@ -464,7 +469,8 @@ void main() {
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
           AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
+      atAuthRequest.rootDomain =
+          AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       expect(
           () async => await atAuth.authenticate(atAuthRequest),
@@ -492,7 +498,7 @@ void main() {
           otp: (await atClientManager.atClient.getOTP()).response,
           namespaces: {'wavi': 'r'});
       AtEnrollmentResponse? atEnrollmentResponse =
-          await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
+          await atEnrollmentBase.enroll(enrollmentRequest, atLookUp);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
 
       // Use enroll fetch to get the encryptedAPKAMSymmetricKey
@@ -561,7 +567,8 @@ void main() {
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
           AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
+      atAuthRequest.rootDomain =
+          AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);
@@ -615,7 +622,8 @@ void main() {
         () async {
       String random = Uuid().v4().hashCode.toString();
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
-      AtLookUp atLookUp = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      AtLookUp atLookUp =
+          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       AtClientManager atClientManager =
           await TestUtils.initAtClient(atSign, namespace);
@@ -644,7 +652,7 @@ void main() {
         received[enId] = enData;
       });
 
-      AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.submit(
+      AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.enroll(
         AtEnrollmentRequest(
             atSign: atSign,
             appName: 'wavi',
@@ -739,9 +747,9 @@ void main() {
       // generates a fresh APKAM keypair and wraps its apkamSymmetricKey with
       // the atSign's default encryption public key.
       final random = Uuid().v4().hashCode;
-      final enrolleeLookup =
-          AtLookupImpl(cramAtSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
-      final enrollResponse = await AtEnrollment.create().submit(
+      final enrolleeLookup = AtLookupImpl(
+          cramAtSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      final enrollResponse = await AtEnrollment.create().enroll(
         AtEnrollmentRequest(
           atSign: cramAtSign,
           appName: 'buzz-$random',

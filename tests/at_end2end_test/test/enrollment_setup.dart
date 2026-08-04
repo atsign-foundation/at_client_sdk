@@ -60,7 +60,7 @@ void main() {
           otp: otp,
           namespaces: {TestConstants.namespace: 'rw', '__config': 'rw'});
       AtEnrollmentResponse? atEnrollmentResponse =
-          await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
+          await atEnrollmentBase.enroll(enrollmentRequest, atLookUp);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
 
       // Use enroll fetch to get the encryptedAPKAMSymmetricKey
