@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
 import 'blockers.dart';
+import 'proven_elsewhere.dart';
 
 void main() {
   group('B5 · retrofit edge cases', () {
@@ -100,8 +101,14 @@ void main() {
       // WHEN  both attempt the immutable create.
       // THEN  exactly one wins; the other gets "already exists" and falls
       //       through to REQUEST. No orphaned data (readiness not yet flipped).
-      fail('not implemented');
-    }, skip: owedFunctional);
+      provenIn(
+        'tests/at_functional_test/test/pq_signing_root_create_once_test.dart',
+        'the enrollment that loses the create does not mint a second root',
+        proves: 'the loser returns null rather than publishing or retrying, '
+            'leaves the published record untouched, and a namespace-scoped '
+            'enrollment declines to attempt the mint at all',
+      );
+    });
   });
 }
 

@@ -88,19 +88,35 @@ void main() {
           symmetricAesGcmCryptoProviderId);
     });
 
-    test('UC-A3.2 · first self write in a namespace mints the nskey', () {
+    test('UC-A3.2 · a client mints the nskey for each authorised namespace',
+        () {
       // GIVEN @alice pq-native; no app_1.my_apps nskey exists in any form;
       //       alice1, alice2 PQ with registered key packages.
-      // WHEN  alice1 does the first put <k>.app_1.my_apps@alice.
+      // WHEN  alice1 starts and seeds its authorised namespaces.
       // THEN  alice1 takes the _nskeylock mint lock, and
       //       public:__nskey.app_1.my_apps@alice is published immediately and
       //       resolves on a plookup — but an unauthenticated scan of @alice
       //       returns it under no circumstances, showhidden or not, which is
       //       what makes eager publication safe; alice2 obtains the private via
       //       the __ssenv push and reads; an app_2-only client is refused the
-      //       app_1 private (server-gated); requestSecret is the pull backstop.
-      fail('not implemented');
-    }, skip: owedFunctional);
+      //       app_1 private (server-gated); requestSecret is the pull backstop;
+      //       and seeding is idempotent across starts.
+      //
+      // The catalogue used to trigger this on the first put. That was never
+      // built and contradicted UC-A3.3 above, which requires a write to a
+      // keyless namespace to FAIL and is proven live. Ruled 2026-08-04 that the
+      // code was right — a put that minted would hide a lock, a keygen, a
+      // publish and a conveyance behind one write — and acceptance.md 4.2 was
+      // amended. See decisions.md 29.
+      provenIn(
+        'tests/at_functional_test/test/nskey_seeding_live_test.dart',
+        'seeding publishes an advertisement the owner can then resolve',
+        proves: 'against a namespace nothing has minted for, seed() reports '
+            'minting it, the advertisement then resolves by the exact lookup a '
+            'sender uses, the client holds the private for that generation, '
+            'and a second seed is a no-op rather than a rotation',
+      );
+    });
 
     test('UC-A3.3 · self write with no namespace key has no PQ fallback', () {
       // GIVEN @alice pq-native; alice1 wants self data but no

@@ -223,8 +223,23 @@ void main() {
       // enrollments are kept apart by the short-ttl immutable lock
       // _nskeylock.<ns>@owner, and substitution is prevented by the APKAM
       // signature over the advertised envelope, not by the write mode.
-      fail('not implemented');
-    }, skip: owedFunctional);
+      provenIn(
+        'tests/at_functional_test/test/pq_signing_root_create_once_test.dart',
+        'a second signing-root create is refused, and changes nothing',
+        proves: 'the atServer refuses the second create WITH the immutability '
+            'error, the stored value is byte-identical afterwards, and a '
+            'mutable public key written twice by the same client is the '
+            'control that the refusal is about immutability',
+      );
+      provenIn(
+        'tests/at_functional_test/test/pq_signing_root_create_once_test.dart',
+        'the published nskey is mutable, because rotation depends on it',
+        proves: 'a second mintAndPublish on one namespace produces a new '
+            'nskeyKid and the advertisement resolves to it — the opposite '
+            'requirement, on the same atSign, so "immutable" landing on the '
+            'wrong record of the two would fail here',
+      );
+    });
 
     test('a published nskey is fetchable but not enumerable', () {
       // public:__nskey.<ns>@owner resolves on an exact plookup, cross-atSign, and

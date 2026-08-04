@@ -2445,3 +2445,49 @@ pinning a ceiling to a number measured on one machine would fail on somebody els
 no defensible reason. What is pinned is the **harness**: it is the durable artefact, re-run on
 every key-shape change, and `cross_cutting_test.dart` fails if it goes missing or if this section
 stops recording a budget.
+
+## 29. UC-A3.2 describes a mint trigger that was never built (2026-08-04)
+
+Writing the owed functional scenarios surfaced a divergence between `acceptance.md` and the
+code. It is recorded rather than fixed, because which side is wrong is a design call.
+
+**What the catalogue says.** UC-A3.2's WHEN is *"alice1 does the first put
+`<k>.app_1.my_apps@alice`"* and its THEN is *"alice1 takes the `_nskeylock` mint lock, and
+`public:__nskey.app_1.my_apps@alice` is published immediately"*. Read plainly: a write to a
+namespace with no key mints one on the way through.
+
+**What is built.** Nothing mints on the write path. Minting happens at client construction, in
+`AtClientImpl._init` → `_seedNamespaceKeys()` → `NskeySeeding.seed()`, and it is:
+
+- **opt-in** — gated on `AtClientPreference.seedNamespaceKeys`, which defaults to **false**; and
+- **fire-and-forget** — the call is `unawaited`, so construction does not wait for it and a
+  failure only reaches a `warning` log.
+
+A put to a namespace with no key does not mint; it **fails**, with
+`NamespaceKeyUnavailableException` naming the atSign and namespace. That behaviour is deliberate
+and is itself an acceptance row — UC-A3.3 — proven live in `nskey_data_path_e2e_test.dart`. So
+the two rows as written contradict each other: A3.3 requires the cold-namespace write to fail,
+while A3.2 requires it to mint and succeed.
+
+**Why the built shape is probably the right one.** Minting inside a write means a put can
+silently take a distributed lock, generate a keypair, publish a public record and convey a
+private to every sibling enrollment — a lot of consequence hidden behind one `put`, and all of it
+on the latency path of a user action. Doing it at start, once, keeps the write path honest about
+what it can and cannot do.
+
+**Ruled the same day: the code is right and the catalogue was wrong.** `acceptance.md` 4.2 has
+been amended to describe start-time seeding, and carries a note saying so. The reasoning is the
+one above — a `put` that mints would hide a distributed lock, a keypair generation, a public
+record publish and a per-enrollment conveyance behind a single write, all on the latency path of
+a user action, and it would contradict a proven row. Two clauses were added while the text was
+open: that seeding is idempotent across starts (re-minting per launch would rotate the namespace
+key out from under every peer that had already fetched it), and that a later `put` uses the
+existing key rather than minting.
+
+The row is now proven by `nskey_seeding_live_test.dart`, which asserts the outcome on the
+atServer rather than that a method was called.
+
+`nskey_seeding_live_test.dart` now covers what *does* exist, and it exists because seeding had
+unit coverage only. The unit tests cannot see whether the path runs at all, and an `unawaited`
+call behind a default-false flag is precisely the shape that passes every unit assertion while
+never executing — the failure mode that has already bitten this branch twice.

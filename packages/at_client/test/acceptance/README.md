@@ -7,9 +7,9 @@ inline, skipped with the project that must land before it can go green.
 **This is the progress bar for D1.** The catalogue is the target; this directory
 is how far we've got.
 
-> **The two counting faults audited 2026-08-03 were fixed 2026-08-04**, and six
-> owed rows have since been written. The suite now reads **11 of 40** scenario
-> rows green, up from 1 before the repair and 5 after it. (The runner's own count
+> **The two counting faults audited 2026-08-03 were fixed 2026-08-04**, and
+> nine owed rows have since been written. The suite now reads **14 of 40**
+> scenario rows green, up from 1 before the repair and 5 after it. (The runner's own count
 > is higher — it includes `catalogue_test.dart`'s three guards, which are not
 > scenarios. That gap is why the old "4 of 43" figure was itself wrong in the
 > optimistic direction while everything else under-counted.)
@@ -26,7 +26,7 @@ is how far we've got.
 >    `owed: scenario not yet written`. Conflating "the project owes this" with
 >    "we owe this a test" is what made the old number misleading in both
 >    directions at once.
-> 3. **Six of those owed rows are now written**, leaving **11**. Four are
+> 3. **Nine of those owed rows are now written**, leaving **8**. Four are
 >    cross-cutting invariants — reads-are-universal, appMetadata-is-authoritative,
 >    the published nskey's fetchable-not-enumerable property (cited, not
 >    duplicated: `underscore_public_key_hiding_test` already proves it with
@@ -34,8 +34,11 @@ is how far we've got.
 >    [`decisions.md` section 28](../../../../docs/projects/pq/decisions.md)
 >    written first: the B-1 harness had been run when it was built, but its
 >    numbers were never recorded, so the row was asking for a budget that
->    existed nowhere a reader could find it. The other two are UC-A3.4 and
->    UC-B5.2.
+>    existed nowhere a reader could find it. Then UC-A3.4 and UC-B5.2 as unit
+>    rows, and two more proven live once a functional test for the immutable
+>    signing-root create existed: the cross-cutting create-once invariant and
+>    UC-B5.3's race. UC-A3.2 followed once its catalogue text was corrected —
+>    it had described a mint trigger that was never built.
 
 > **The number is still a floor, and now says why.** A row is green only when
 > something in this repo asserts it — inline, or by citation.
@@ -79,7 +82,7 @@ below), plus 9 cross-cutting invariants.
 |-------------------------------|----------------------------------|--------------|
 | A1 · PQ-native onboard        | A1.1                             | ON-1         |
 | A2 · enrollments              | A2.1 ✅, A2.2, A2.3               | owed         |
-| A3 · self data                | A3.1 ✅, A3.3 ✅, A3.4 ✅, A3.2     | owed         |
+| A3 · self data                | A3.1 ✅, A3.2 ✅, A3.3 ✅, A3.4 ✅  | —            |
 | A4 · shared data              | A4.1 ✅, A4.4 ✅, A4.2, A4.3       | owed         |
 | A5 · rotation & revocation    | A5.1(a), A5.1(b), A5.2, A5.3     | B-2          |
 | B0 · atServer prerequisite    | B0.1                             | RF-SRV       |
@@ -87,8 +90,8 @@ below), plus 9 cross-cutting invariants.
 | B2 · retirement & lockout     | B2.1, B2.2                       | RF-SRV       |
 | B3 · mixed-PQ intra-atSign    | B3.1, B3.2                       | R-1          |
 | B4 · mixed-PQ cross-atSign    | B4.1, B4.2, B4.3, B4.4           | R-1, ON-1    |
-| B5 · retrofit edge cases      | B5.2 ✅, B5.1, B5.3               | owed         |
-| cross-cutting invariants      | 9 (4 ✅)                          | owed, R-1    |
+| B5 · retrofit edge cases      | B5.2 ✅, B5.3 ✅, B5.1             | owed         |
+| cross-cutting invariants      | 9 (5 ✅)                          | owed, R-1    |
 
 Note that **A5.1 is split into (a) and (b)** here where the catalogue writes it
 as one use case with two When/Then pairs. They are different levers with
@@ -102,14 +105,21 @@ separately.
 Sorting by blocker showed why D1 felt slow for so long: B-1 alone gated **11 of
 the 40** rows, and no data-path row could go green until **B-1** (XL) and
 **SS-4** (L–XL) landed, so the programme had no demonstrable increment in its
-centre. Both have now landed, and owed rows gate **11 of the 40** — the same
+centre. Both have now landed, and owed rows gate **8 of the 40** — the same
 rows, re-labelled from "waiting on a project" to "waiting on a test", and then
 worked down. That is a smaller problem with a different owner, and it is the
 honest description of where the burn-down now stands. What remains owed is
-almost entirely *live* work: **10 of the 11** need a running atServer (8
+almost entirely *live* work: **7 of the 8** need a running atServer (5
 functional, 2 e2e), and exactly one is a unit row. That is not a coincidence —
-the rows that could be written against mocked state were the ones written
-first, so the residual is by construction the part that needs infrastructure.
+the rows writable against mocked state were the ones written first, so the
+residual is by construction the part that needs infrastructure.
+
+**UC-A3.2 was the one row whose catalogue text was wrong rather than untested.**
+Its WHEN described a mint triggered by the first put — never built, and in
+direct contradiction with UC-A3.3, which requires a cold-namespace write to fail
+and is proven live. Ruled 2026-08-04 that the code was right; `acceptance.md`
+4.2 now describes start-time seeding, and the row is proven. See
+[`decisions.md` section 29](../../../../docs/projects/pq/decisions.md).
 (The rows rooted on RF-SRV — B0 and B2 — never depended on either, and can
 still move in parallel.)
 

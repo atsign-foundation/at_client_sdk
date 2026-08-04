@@ -330,11 +330,24 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     cites `ckKid`; a client lacking the nskey private cannot decapsulate the CK
     and so cannot read. No legacy provider, no `selfEncryptionKey`.
 
-### 4.2 UC-A3.2 — First self write in a namespace mints and publishes the nskey
+### 4.2 UC-A3.2 — A client mints and publishes the nskey for each namespace it is authorised for
+
+> **Amended 2026-08-04.** This use case previously read *"first self write in a namespace mints
+> and publishes the nskey"*, with the mint triggered by `put`. That was never built and it
+> contradicted [UC-A3.3](#43-uc-a33--self-write-with-no-namespace-key-has-no-pq-fallback), which
+> requires a write to a keyless namespace to **fail** and is proven live. The ruling was that the
+> code is right and this text was wrong: minting inside a `put` would hide a distributed lock, a
+> keypair generation, a public record publish and a per-enrollment conveyance behind one write,
+> all on the latency path of a user action. Minting is therefore a **start-time** step, and the
+> write path stays honest about what it cannot do. See
+> [decisions 29](decisions.md#29-uc-a32-describes-a-mint-trigger-that-was-never-built-2026-08-04).
 
 - **Given:** `@alice` pq-native; no `app_1.my_apps` nskey exists;
   `alice1`, `alice2` PQ, both with registered key packages.
-- **When:** `alice1` does the first `put <k>.app_1.my_apps@alice`.
+- **When:** `alice1` starts and seeds its authorised namespaces
+  (`AtClientImpl._init` → `NskeySeeding.seed()`, opt-in via
+  `AtClientPreference.seedNamespaceKeys`). An APKAM client learns its namespaces from its own
+  enrollment record; a legacy PKAM client has exactly one, its `preference.namespace`.
 - **Steps:**
   1. `alice1` takes the `_nskeylock.app_1.my_apps@alice` lock (short-ttl, immutable
      create — so a concurrent enrollment loses and re-reads), mints the **one**
@@ -360,6 +373,11 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - An `app_2.my_apps`-only client is refused the `app_1.my_apps` nskey private
     (server-gated on the `__ssenv` channel).
   - `requestSecret` is the pull backstop for an enrollment offline during the push.
+  - Seeding is **idempotent**: a later start adopts the published advertisement rather than
+    minting over it. Re-minting per start would rotate the namespace key on every launch and
+    strand every peer that had already fetched the previous generation.
+  - A subsequent `put` into the namespace uses the key that already exists; it does not mint,
+    and a `put` into a namespace that was never seeded still fails per UC-A3.3.
 
 ### 4.3 UC-A3.3 — Self write with no namespace key has no PQ fallback
 
