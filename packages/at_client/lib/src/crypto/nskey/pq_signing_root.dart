@@ -210,6 +210,77 @@ class PqSigningRoot {
     return stored;
   }
 
+  /// Asks the atSign's other enrollments for the root private, when this one
+  /// is entitled to hold it and does not. Returns how many key packages were
+  /// asked — 0 when nothing was needed or nobody could be asked.
+  ///
+  /// **This is the only route left for an enrollment that missed the
+  /// approval-time conveyance.** The root is atSign-level and carries no
+  /// namespace, so it is excluded from the `enroll:listns` fan-out by
+  /// construction; and it is immutable and never rotates, so no later event
+  /// can mint a replacement. Without a pull, such an enrollment stays without
+  /// it forever.
+  ///
+  /// **Broadcast, not a wait.** This deliberately does not block on an answer.
+  /// It runs during client start, where a timeout would be paid by every
+  /// launch — including the overwhelming majority that need nothing — and a
+  /// holder may not be online at this instant anyway. The request persists as
+  /// an envelope on the atServer, any holder that comes online answers it, and
+  /// the answer arrives as an ordinary secret that [filePendingPrivate] files
+  /// at this or a later start. That is what "answered by any online holder and
+  /// persisting until one answers" means in practice.
+  ///
+  /// Two guards, and both matter. Only a **fully privileged** enrollment asks,
+  /// because only that class may hold the key that vouches for every
+  /// enrollment on the atSign — asking would be refused, and asking anyway
+  /// would tell every holder that something unentitled is looking for it. And
+  /// only an enrollment that does **not already hold** it asks, because this
+  /// is a fan-out to every key package in [namespace]: firing it on each start
+  /// regardless would put a broadcast on the wire per launch per device, for
+  /// nothing.
+  Future<int> requestPrivateIfAbsent({
+    required Future<bool> Function() isFullyPrivileged,
+    required PairwiseSecretSharing sharing,
+    required String namespace,
+  }) async {
+    final atSign = atClient.getCurrentAtSign()?.toAtsign();
+    if (atSign == null) return 0;
+
+    // Cheapest check first: holding it settles the question without a round
+    // trip, and that is the common case for every enrollment that was online
+    // when it was approved.
+    if (await privateHalf(atSign) != null) return 0;
+
+    // A client with no enrollment id is authenticating with the atSign's own
+    // keys. It cannot ask even if it wanted to — enumerating the holders goes
+    // through `enroll:listns`, which the atServer refuses without APKAM
+    // authentication — and it has no reason to: it is the atSign, so its route
+    // to a missing root is to mint one, not to request it. Without this guard
+    // every legacy PKAM client would broadcast, be refused, and log a warning
+    // on each start.
+    //
+    // Read off the lookup rather than `sharing.enrollmentId`, which substitutes
+    // the sentinel `'primary'` when there is none and so is never null — a
+    // guard written against it would be dead code that always fell through.
+    if (atClient.getRemoteSecondary()?.atLookUp.enrollmentId == null) return 0;
+
+    if (!await isFullyPrivileged()) {
+      _logger.info('Not requesting the signing root for $atSign: this '
+          'enrollment is not fully privileged, so it is not entitled to hold '
+          'it');
+      return 0;
+    }
+
+    final asked = await sharing
+        .requestSecretsFromNamespace(namespace, names: [secretName]);
+    _logger.info(asked == 0
+        ? 'Wanted the signing root private for $atSign but found no other key '
+            'package in $namespace to ask; the next start retries'
+        : 'Asked $asked key package(s) in $namespace for the signing root '
+            'private for $atSign; the answer is filed when it arrives');
+    return asked;
+  }
+
   /// Files a conveyed root private waiting in the secret store, if there is
   /// one this client does not already hold. Returns whether it filed.
   ///

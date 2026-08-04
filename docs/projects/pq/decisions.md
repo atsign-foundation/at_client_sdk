@@ -2531,3 +2531,78 @@ privileged enough to hold one, issuing the request and waiting. The primitive un
 sound and tested, so this is wiring rather than design. Until then UC-B5.1 carries
 `rootPullNotBuilt` rather than an `owed` label, because calling it "owed a test" would say the
 code is finished when it is not — the same conflation the burn-down repair removed.
+
+## 31. The root-pull initiator, and what it did not settle (2026-08-04)
+
+[Section 30](#30-uc-b51s-pull-backstop-has-no-initiator-2026-08-04) recorded that the pull
+backstop had no caller. `PqSigningRoot.requestPrivateIfAbsent` is that caller, wired into
+`AtClientImpl` start between collecting conveyed material and anchoring — before anchoring
+rather than after, because anchoring needs the private, so on the rare start where an answer is
+already waiting both succeed in one pass.
+
+### 31.1 Broadcast, not a wait
+
+It does not block on an answer. This runs at every client start, so a timeout would be paid by
+every launch including the overwhelming majority that need nothing, and a holder may not be
+online at that instant regardless. The request persists as an envelope, any holder that comes
+online answers it, and the answer is filed by the arrival path at this or a later start. That is
+what "answered by any online holder and persisting until one answers" means in practice.
+
+### 31.2 Three guards, in cost order
+
+Cheapest first, because the common case must not pay for the rare one.
+
+1. **Already holds it** → return. Settles the question with no round trip, and is true for every
+   enrollment that was online when it was approved.
+2. **No enrollment id** → return. Such a client authenticates with the atSign's own keys. It
+   *cannot* ask — enumerating holders goes through `enroll:listns`, which the atServer refuses
+   without APKAM authentication (observed, not inferred) — and has no reason to: it is the
+   atSign, so its route to a missing root is to mint one. This guard was added after the first
+   live run, where its absence made every legacy PKAM client broadcast and be refused.
+
+   **The first version of this guard was dead code.** It tested
+   `sharing.enrollmentId == null`, but `ApkamSigning.enrollmentId` is non-nullable and
+   substitutes the sentinel `'primary'` when there is none — so the comparison was always false
+   and the guard never fired. It now reads
+   `atClient.getRemoteSecondary()?.atLookUp.enrollmentId`, the same source
+   `AtClientImpl._resolveFullPrivilege` uses, which is genuinely null for a non-APKAM client.
+   Caught because a unit test written against a `Fake` failed on the missing override; the
+   analyzer had nothing to say, since a comparison that is always false is legal Dart. Worth
+   remembering as a shape: a null-check against a getter that manufactures a sentinel is a guard
+   that reads correct and does nothing.
+
+   In the run carrying the dead guard, `at_lookup_race_test` failed and was green again with the
+   guard working. That is consistent with the doomed per-start broadcast perturbing a
+   timing-sensitive test, but it is one run each on a test built around a race, so it is recorded
+   as consistent-with rather than as an established cause.
+3. **Not fully privileged** → return. Only that class may hold the key that vouches for every
+   enrollment on the atSign. Asking would be refused, and the asking itself announces to every
+   holder that something unentitled is looking for it.
+
+Ordering matters beyond tidiness: resolving privilege costs a round trip to the enrollment
+record, and guard 1 avoids it on essentially every start of every client. There is a unit test
+asserting the privilege callback is *not* consulted when the private is already held.
+
+### 31.3 What is still unproven, stated as such
+
+The full round trip is **not** demonstrated live, and UC-B5.1 stays blocked. Two observations,
+both direct:
+
+- `requestPrivateIfAbsent`'s enumeration fails in the functional harness with *"enroll:listns
+  requires APKAM authentication"*, because that harness authenticates with the atSign's own keys.
+- Addressing a request envelope straight at a holder, bypassing the enumeration, puts the
+  envelope on the atServer — but the holder produces no answer and the seeker never receives the
+  root. A plain envelope on the same wire between the same two parties sweeps normally, so the
+  difference is the request payload, not the transport.
+
+**The cause of the second has not been established.** It may be the responder's
+requester-authorization step needing the same APKAM-backed enumeration, or something else
+entirely; the "Ignoring request … not an authorized key package" log did not appear, so the
+early-return path is not confirmed either. It is recorded as an open question rather than
+asserted, because a plausible-sounding cause written down as fact is how the last three
+diagnoses on this branch went wrong.
+
+**What UC-B5.1 now needs:** a fixture with two real APKAM enrollments, which no test package
+here has yet, and then either a passing round trip or a diagnosis of the above. The blocker is
+re-labelled from *the initiator does not exist* to *the live round trip is unproven* — the
+initiator now exists and its guards are unit-covered.

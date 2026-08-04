@@ -23,18 +23,23 @@ void main() {
       //       primary path once a holder is online, with requestSecret as the
       //       backstop.
       //
-      // The row splits, and only one half is built. Namespaced nskey privates
-      // DO arrive by the push path (NskeySeeding's conveyance). The headline
-      // half does not: requestSecret and requestSecretsFromNamespace have zero
-      // call sites in lib/, so nothing ever asks for the root, and
-      // PqSigningRoot.mintIfAbsent says so in its own dartdoc. The primitive
-      // underneath is complete, on by default and unit-covered — what is
-      // missing is an initiator, which is wiring rather than design.
+      // The row splits. Namespaced nskey privates DO arrive by the push path
+      // (NskeySeeding's conveyance). The headline half — requestSecret as the
+      // steady-state route to the root — had no initiator at all until
+      // PqSigningRoot.requestPrivateIfAbsent was built and wired into client
+      // start; its guards are unit-covered.
+      //
+      // What is still missing is the live round trip, and it needs a fixture
+      // with two real APKAM enrollments. The functional harness authenticates
+      // with the atSign's own keys, so the enumeration is refused outright
+      // ("enroll:listns requires APKAM authentication"), and addressing a
+      // holder directly lands the envelope but yields no answer — for reasons
+      // not yet established and not guessed at. See decisions 30 and 31.
       //
       // This matters more than a missing convenience path: the root is
       // atSign-level and carries no namespace, so it is excluded from the
       // enroll:listns fan-out by construction. An enrollment that missed the
-      // approval-time conveyance has no other route to it. See decisions 30.
+      // approval-time conveyance has no other route to it.
       fail('not implemented');
     }, skip: rootPullNotBuilt);
 

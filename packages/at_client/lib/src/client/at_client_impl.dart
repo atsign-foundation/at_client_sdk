@@ -526,6 +526,34 @@ class AtClientImpl implements AtClient {
       }
     }
     try {
+      // Ask for the root private if this enrollment should have one and does
+      // not — an enrollment that was offline when it was approved has no other
+      // way to get it, since the root carries no namespace and so never rides
+      // the enroll:listns fan-out. The call broadcasts and returns; the answer
+      // is filed by the collection step above at this or a later start.
+      //
+      // Placed before anchoring rather than after because anchoring needs the
+      // private, so on the rare start where an answer is already waiting, both
+      // succeed in one pass.
+      // The request rides the client's own namespace, because that is where
+      // its key package is registered and so where holders can be enumerated.
+      // A client with no namespace has nowhere to ask and is skipped rather
+      // than force-unwrapped — this runs on every start, and a null here would
+      // turn a missing preference into a failed client construction.
+      final askIn = _preference?.namespace;
+      if (askIn != null && askIn.isNotEmpty) {
+        await PqSigningRoot(this, keysIo: _atKeysIo).requestPrivateIfAbsent(
+          isFullyPrivileged: _resolveFullPrivilege,
+          sharing: AtClientSecretSharing.forClient(this),
+          namespace: askIn,
+        );
+      }
+    } catch (e, st) {
+      _logger.warning('Could not ask for the signing root private for '
+          '$_atSign; this enrollment stays unanchored and the next start '
+          'retries: $e, $st');
+    }
+    try {
       // Anchoring is attempted before the chain link because it is the better
       // outcome of the two: an enrollment that can reach the root directly has
       // no need of a hop through whoever approved it.

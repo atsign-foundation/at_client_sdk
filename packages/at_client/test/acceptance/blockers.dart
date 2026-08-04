@@ -54,16 +54,19 @@ const owedFunctional = 'owed: scenario not yet written · $_functional';
 /// The project landed; this scenario still needs writing, cross-atSign.
 const owedE2e = 'owed: scenario not yet written · $_e2e';
 
-/// The pull backstop exists as a primitive but nothing initiates it.
+/// The initiator now exists; the live round trip is still unproven.
 ///
-/// Not an `owed` label, deliberately. The substrate's request/answer round
-/// trip is complete, on by default and unit-covered — but `requestSecret` has
-/// zero call sites in `lib/`, so no client ever asks, and
-/// `PqSigningRoot.mintIfAbsent` says as much in its own dartdoc. Calling this
-/// "owed a test" would claim the code is finished; it is not.
-/// See [decisions 30](../../../../docs/projects/pq/decisions.md).
+/// `PqSigningRoot.requestPrivateIfAbsent` is wired into client start and its
+/// three guards are unit-covered, so this is no longer "nothing initiates it".
+/// What is missing is a fixture with two real APKAM enrollments: the
+/// functional harness authenticates with the atSign's own keys, so the
+/// enumeration is refused with "enroll:listns requires APKAM authentication",
+/// and addressing a holder directly puts the envelope on the atServer but
+/// produces no answer — for reasons not yet established, and deliberately not
+/// guessed at.
+/// See [decisions 31](../../../../docs/projects/pq/decisions.md).
 const rootPullNotBuilt =
-    'blocked: the signing-root pull has no initiator · $_functional';
+    'blocked: the signing-root pull round trip is unproven · $_functional';
 
 /// Migration machinery + disallowLegacyEncryption flag.
 const r1 = 'blocked: R-1 (scheme negotiation + flag) · $_unit';

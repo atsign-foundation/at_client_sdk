@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart';
+import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
@@ -11,6 +13,8 @@ import 'package:test/test.dart';
 class MockAtClient extends Mock implements AtClient {}
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
+
+class MockAtLookUp extends Mock implements AtLookUp {}
 
 class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
 
@@ -28,9 +32,14 @@ void main() {
   });
 
   ({MockAtClient client, List<UpdateVerbBuilder> published}) client(
-      {bool createRefused = false}) {
+      {bool createRefused = false, String? enrollmentId = 'enrollment-1'}) {
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
+    // The signing-root pull reads the enrollment id off the lookup to tell an
+    // APKAM enrollment from a client using the atSign's own keys.
+    final lookup = MockAtLookUp();
+    when(() => secondary.atLookUp).thenReturn(lookup);
+    when(() => lookup.enrollmentId).thenReturn(enrollmentId);
     final published = <UpdateVerbBuilder>[];
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
@@ -118,4 +127,135 @@ void main() {
             'guarantee working — this client waits to be given the root '
             'rather than treating it as a failure');
   });
+
+  group('requesting the private when this enrollment has none', () {
+    /// Records what was broadcast without doing any real sharing.
+    _RecordingSharing sharing() => _RecordingSharing();
+
+    test('a privileged enrollment that holds nothing asks the namespace',
+        () async {
+      final io = await keysIo();
+      final broadcast = sharing();
+
+      final asked = await PqSigningRoot(client().client, keysIo: io)
+          .requestPrivateIfAbsent(
+        isFullyPrivileged: () async => true,
+        sharing: broadcast,
+        namespace: 'buzz',
+      );
+
+      expect(asked, 2,
+          reason: 'it must reach the holders in the namespace; '
+              'the root carries no namespace of its own, so this broadcast is the '
+              'only route left to an enrollment that missed the conveyance');
+      expect(broadcast.requests, hasLength(1));
+      expect(broadcast.requests.single.namespace, 'buzz');
+      expect(broadcast.requests.single.names, [PqSigningRoot.secretName],
+          reason: 'it asks for the root by name rather than pulling whatever '
+              'holders happen to have');
+    });
+
+    test('an enrollment that already holds it asks nobody', () async {
+      final io = await keysIo();
+      final atClient = client().client;
+      final root = PqSigningRoot(atClient, keysIo: io);
+      await root.store(atSign, Uint8List.fromList(List<int>.filled(32, 3)));
+
+      final broadcast = sharing();
+      expect(
+          await root.requestPrivateIfAbsent(
+            isFullyPrivileged: () async => true,
+            sharing: broadcast,
+            namespace: 'buzz',
+          ),
+          0);
+      expect(broadcast.requests, isEmpty,
+          reason: 'this runs on every start; a client that broadcast each time '
+              'regardless would put a fan-out on the wire per launch per '
+              'device, asking for something it is already holding');
+    });
+
+    test('a restricted enrollment asks nobody', () async {
+      final io = await keysIo();
+      final broadcast = sharing();
+
+      expect(
+          await PqSigningRoot(client().client, keysIo: io)
+              .requestPrivateIfAbsent(
+            isFullyPrivileged: () async => false,
+            sharing: broadcast,
+            namespace: 'buzz',
+          ),
+          0);
+      expect(broadcast.requests, isEmpty,
+          reason: 'only a fully privileged enrollment may hold the key that '
+              'vouches for every enrollment on the atSign. Asking would be '
+              'refused anyway, and asking announces to every holder that '
+              'something unentitled is looking for it');
+    });
+
+    test('a client authenticating with the atSign\'s own keys asks nobody',
+        () async {
+      final io = await keysIo();
+      // No enrollment id on the lookup: the atSign itself, not an enrollment.
+      final broadcast = _RecordingSharing();
+
+      expect(
+          await PqSigningRoot(client(enrollmentId: null).client, keysIo: io)
+              .requestPrivateIfAbsent(
+            isFullyPrivileged: () async => true,
+            sharing: broadcast,
+            namespace: 'buzz',
+          ),
+          0);
+      expect(broadcast.requests, isEmpty,
+          reason: 'such a client CANNOT ask — enumerating holders goes through '
+              'enroll:listns, which the atServer refuses without APKAM '
+              'authentication — and has no reason to: it is the atSign, so its '
+              'route to a missing root is to mint one. Without this guard '
+              'every legacy PKAM client broadcasts, is refused, and logs a '
+              'warning on each start');
+    });
+
+    test('the privilege check is not consulted before the cheaper one',
+        () async {
+      final io = await keysIo();
+      final atClient = client().client;
+      final root = PqSigningRoot(atClient, keysIo: io);
+      await root.store(atSign, Uint8List.fromList(List<int>.filled(32, 3)));
+
+      var privilegeChecked = false;
+      await root.requestPrivateIfAbsent(
+        isFullyPrivileged: () async {
+          privilegeChecked = true;
+          return true;
+        },
+        sharing: sharing(),
+        namespace: 'buzz',
+      );
+
+      expect(privilegeChecked, isFalse,
+          reason: 'resolving privilege costs a round trip to the enrollment '
+              'record. Holding the private already settles the question, and '
+              'that is the case on essentially every start of every client');
+    });
+  });
+}
+
+/// Captures broadcasts instead of sending them, so the guards can be asserted
+/// on what reached the wire rather than on a return value the method could
+/// produce without doing anything.
+class _RecordingSharing extends Fake implements PairwiseSecretSharing {
+  final List<({String namespace, List<String>? names})> requests = [];
+
+  @override
+  Future<int> requestSecretsFromNamespace(
+    String namespace, {
+    List<String>? names,
+    String? namePrefix,
+    Set<String> excludeEnrollmentIds = const {},
+  }) async {
+    requests.add((namespace: namespace, names: names));
+    return 2;
+  }
 }
