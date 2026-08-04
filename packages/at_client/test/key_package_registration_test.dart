@@ -5,18 +5,14 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/mocks.dart';
+import 'test_utils/remote_backed_client.dart';
+
 import 'fake_enrollment_directory.dart';
-
-class MockAtClient extends Mock implements AtClient {}
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
-class MockAtLookupImpl extends Mock implements AtLookUp {}
 
 class TestRegistrant
     with ApkamSigning, EnvelopeSigning, KeyPackageRegistration {
@@ -46,41 +42,11 @@ void main() {
         (await XWingPureDartAlgo.instance.generateKeyPair(seedA)).publicKey;
   });
 
-  MockAtClient buildMockClient(String enrollmentId) {
-    final atClient = MockAtClient();
-    final atChops = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
-    when(() => atClient.atChops).thenReturn(atChops);
-    when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
-    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
-
-    final remoteSecondary = MockRemoteSecondary();
-    final atLookUp = MockAtLookupImpl();
-    when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
-    when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
-    when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
-
-    when(() => atClient.put(any(), any(),
-        putRequestOptions: any(named: 'putRequestOptions'))).thenAnswer((inv) {
-      remoteData[inv.positionalArguments[0].toString()] =
-          inv.positionalArguments[1];
-      return Future.value(true);
-    });
-    Future<AtValue> getFromRemoteData(Invocation inv) {
-      final keyString = inv.positionalArguments[0].toString();
-      final value = remoteData[keyString];
-      if (value == null) {
-        throw AtKeyNotFoundException('$keyString not found');
-      }
-      return Future.value(AtValue()..value = value);
-    }
-
-    when(() => atClient.get(any(),
-            getRequestOptions: any(named: 'getRequestOptions')))
-        .thenAnswer(getFromRemoteData);
-    when(() => atClient.get(any())).thenAnswer(getFromRemoteData);
-    return atClient;
-  }
+  MockAtClient buildMockClient(String enrollmentId) =>
+      buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: enrollmentId,
+          remoteData: remoteData);
 
   TestRegistrant buildRegistrant(
       String enrollmentId, FakeEnrollmentDirectory directory,

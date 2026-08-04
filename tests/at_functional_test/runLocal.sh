@@ -49,6 +49,16 @@ dart test --concurrency=1 -r expanded
 TEST_EXIT=$?
 set -e
 
+# This can block. The virtualenv container has been seen refusing to stop
+# ("Error while Stopping"), and compose then waits on it indefinitely — so a
+# run invoked under an outer wall-clock bound is killed HERE, after the tests
+# have already finished and reported. The exit code you get back is then the
+# timeout's, not the suite's.
+#
+# So when a bounded run returns non-zero, read the test output before
+# concluding anything failed: the suite prints its own "All tests passed!"
+# line before this point. Clear a stuck container with
+# `docker rm -f test-virtualenv-1`.
 echo "*** docker compose down" && (cd test && docker compose down)
 
 exit "$TEST_EXIT"
