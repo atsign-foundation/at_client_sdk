@@ -636,14 +636,22 @@ on an arriving private — exact, because an X-Wing secret key is its seed. And
   — **done**, both halves, and covered live: `PqSigningChain` signs at approval and conveys
   over the substrate, `publishPendingLink` stamps it at client start behind three refusals,
   and `enrollment_chain_link_e2e_test` watches a link survive a real `_apsk` round trip;
-- chain **verification** — walk `_apsk` to `_apsk` up to the root. It is self-describing, so no
-  approval graph need be published, and a forged parent claim fails the signature check.
-  **Ruled 2026-08-04** ([decisions.md 24](decisions.md#24-how-the-approval-chain-terminates-at-the-root-2026-08-04)):
-  a root link lives in its own `apskRootLink` field, the root signs every fully privileged
-  enrollment rather than one, and the walk returns a graded result. Not yet built;
-- a losing enrollment **pulling** the root private from a privileged holder;
+- ~~chain **verification** — walk `_apsk` to `_apsk` up to the root~~ — **ruled and built**
+  ([decisions.md 24](decisions.md#24-how-the-approval-chain-terminates-at-the-root-2026-08-04)).
+  `PqSigningChain.verifyChain` returns a `ChainResult` — `anchored` / `chained` / `unsigned` /
+  `broken`. The fourth is an addition to ruling 3's three and deliberate: an absent link means
+  nobody has vouched yet, a *bad* one means something claimed to and the claim fails, and folding
+  the second into the first would report an attack as a rollout artefact. Every hop checks the
+  signature, that the link vouches for the enrollment it is attached to, and that it covers that
+  enrollment's published key — a signature alone proves only that the parent said *something*.
+  Cycles and over-long chains end as `broken` rather than being treated as impossible;
+- ~~a losing enrollment **pulling** the root private from a privileged holder~~ — **superseded by
+  push, not built as a pull.** A fully privileged enrollment is *conveyed* the private when it is
+  approved, and anchors itself from it. A pull would still be the answer for a privileged
+  enrollment that predates its holder's ability to send, which no current flow produces;
 - **key-transparency publication mechanics** — when a root is submitted, and what a client does if
-  the log is unreachable at mint. Still un-grilled.
+  the log is unreachable at mint. Still un-grilled, and [decisions.md 24](decisions.md#244-owed)
+  scopes it out deliberately: it concerns what the root *is*, not how a chain terminates at it.
 
 **Explicitly out of scope:** changing APKAM keypairs from RSA to ML-DSA. The chain is built over
 today's RSA keys and the algorithm swaps later without the chain changing, because the root signs an
@@ -807,7 +815,7 @@ taken now because nothing written under the old form exists outside the spike.
 | ~~The secret-sharing substrate has no live coverage in either pack~~ — **opened, not closed.** `secret_sharing_delivery_test.dart` now drives it live: the envelope is on the atServer by the time `sendEnvelope` returns, and a client that has never synced fetches and decrypts it from there. Both fail against the pre-fix build and nothing else does, so they detect the defect rather than merely passing. **Still owed:** everything beyond envelope delivery — `pushSecretToNamespaceMembers`, the `requestSecret`/`waitForSecret` pull flow, and anything needing two real enrollments, which waits on SS-2 | `at_functional_test` |
 | **The substrate's unit fixture backs local storage and the atServer with one map**, so it cannot see a local-first-vs-remote-first defect on the read side at all — which is how the `__ssenv` wake-up ordering bug survived. Fixed for the write side by asserting the put's routing directly and for the sweep by asserting the scan's, but the blind spot itself remains: any future substrate read that depends on routing is untested unless someone remembers to assert the routing rather than the result. Closing it properly means modelling sync in the fixture, so local and remote diverge and a wrong route fails on its results. The live pack now covers the two paths that matter today | `at_client` tests |
 | ~~Real nskey minting + per-APKAM conveyance~~ — **done.** `mintAndPublish` takes a remote-first immutable `_nskeylock`, files the private into `AtKeys` **before** publishing, and publishes nothing at all if it cannot. `NskeySeeding` mints at client init across a client's authorised namespaces and conveys every held generation, reading from `AtKeys` rather than the in-memory store. `InMemoryNskeyKeyRing` remains for tests only | **SS-4** |
-| **Mint** of `public:pq_signing_root@<atSign>` is **done** — `PqSigningRoot`, immutable create-once, privileged enrollments only, private filed before publish. **Owed:** conveying it to the other privileged enrollments, and a losing enrollment pulling it | **SS-4** |
+| ~~**Mint** of `public:pq_signing_root@<atSign>`~~ — **done, and so is its conveyance.** `PqSigningRoot` mints immutable create-once with the private filed before publish; the private is conveyed to fully privileged enrollments at approval under a per-enrollment name, filed into `AtKeys` at start, and `PqSigningChain.publishOwnRootLink` anchors the holder to it at mint and at every start. Live-covered end to end, including that the atServer really does grant `*` + `__manage` — without which the privilege gate would have been tested against two identical cases | **SS-4** |
 | **Wire the nskey `CryptoConfig` at init** so the data path is the default rather than app-assembled — the other half of the nullable-`crypto` change. Seeding is already wired (`AtClientPreference.seedNamespaceKeys`, default off) but the *provider* set still is not | **SS-4** |
 | ~~`AtClientPreference.crypto` becomes nullable~~ — **done.** It is `CryptoConfig?`, null meaning "whatever this release encrypts with", and every reader goes through `CryptoConfig.forClient(atClient)` — the one place the era default lives. The SDK deliberately does *not* resolve into the app's preference object: harmless while the default is a const, a per-atSign leak the moment it is not. What SS-4 still owes is the *other* half — building the key ring at init once the default becomes the nskey path | **SS-4** |
 | ~~The `_nskeylock` mint/rotate race~~ — **done.** `NskeyMintLock` takes it remote-first, because the atomicity is the atServer refusing a second immutable create; a local-first put would let both enrollments believe they won and collide only at sync. The loser re-reads and adopts rather than waiting | **SS-4** |
@@ -1138,7 +1146,7 @@ build.
 ### (b) Critical path to D1 GA
 `#1930(done) → P-1 + S-2 → SS-1a → SS-1b → SS-1c → SS-2 → SS-3 → SS-4 (+ P-3) → B-1 → R-1 → B-2`
 (D1 GA: rebuild = universal reader, one flag = PQ writer, opt-in rotation).
-**Everything up to and including SS-3 is landed as of 2026-08-03** (SS-1c/SS-2/SS-3 on `gkc-pq-d1-spike`, plus [at_server#2736](https://github.com/atsign-foundation/at_server/pull/2736) for SS-3's server half) — **`SS-4` is the next actionable project on the path**, and it gates the final 3.x release.
+**Everything up to and including SS-3 is landed as of 2026-08-03** (SS-1c/SS-2/SS-3 on `gkc-pq-d1-spike`, plus [at_server#2736](https://github.com/atsign-foundation/at_server/pull/2736) for SS-3's server half). **`SS-4`'s signing chain landed 2026-08-04** — mint, root-private conveyance, self-anchoring and the graded walk, all live-covered. What remains of SS-4 is the nskey `CryptoConfig` wiring at init and key-transparency publication, so **`B-1` is what the path now waits on**, and it gates the final 3.x release.
 **Off-path (parallel):** `RF-SRV → RF-2b → RF-2c` (RF-1 confirm), `B-3`, `ON-1`, `S-5 → S-6`, `D2-1`, `KF-1`
 (builds on S-3), and the final `R-2`.
 
