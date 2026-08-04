@@ -17,6 +17,11 @@ import 'package:at_commons/at_commons.dart';
 /// into metadata (where a stale copy then shadowed the real field on write) and
 /// later dropped from reads entirely.
 abstract final class KeyIds {
+  // structural top-level field names of the typed-keys document
+  static const String version = 'version';
+  static const String atsign = 'atsign';
+  static const String keys = 'keys';
+
   // pq id's
   static const String apkamPQ = 'apkam/mldsa65';
   static const String globalXWing = 'atsign/xwing';
@@ -40,10 +45,11 @@ abstract final class KeyIds {
 
   /// The structural fields of the typed-keys document.
   static const reservedTopLevelKeys = {
-    'version',
-    'atsign',
-    'keys',
+    version,
+    atsign,
+    keys,
     AtConstants.enrollmentId,
+    AtConstants.apkamNamespaces,
   };
 
   /// A field owned by the schema must never be copied into `AtKeys.metadata`.

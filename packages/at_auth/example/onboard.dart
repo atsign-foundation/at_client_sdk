@@ -25,18 +25,23 @@ void main(List<String> args) async {
 
     final atAuth = AtAuth.create();
     final atsign = (argResults['atsign'] as String).toAtsign();
-    final atOnboardingRequest = AtOnboardingRequest(
-      atsign,
-      FileAtKeysIo(filePath: (_) => argResults['keysFilePath']),
-      rootDomain: AtRootDomain(argResults['rootDomain'], 64),
-    );
+
     // Mints the keys, enrolls them, authenticates, and writes the .atKeys file
-    // through the AtKeysIo above. Throws on failure.
-    final session =
-        await atAuth.onboard(atOnboardingRequest, argResults['cramsecret']);
-    print('onboarded ${session.atsign} '
-        '(enrollmentId: ${session.enrollmentId})');
+    // through the AtKeysIo. Returns nothing: completing without throwing is the
+    // success signal.
+    await atAuth.onboard(
+      atsign,
+      AtRootDomain(argResults['rootDomain'], 64),
+      FileAtKeysIo(filePath: (_) => argResults['keysFilePath']),
+      argResults['cramsecret'],
+    );
+
+    // atAuth.atLookUp is the PKAM-authenticated connection onboarding ended on,
+    // ready to hand to client creation instead of opening a second one.
+    print('onboarded $atsign '
+        '(enrollmentId: ${atAuth.atLookUp?.enrollmentId})');
   } on Exception catch (e, trace) {
+    print(e);
     print(trace);
   } on ArgumentError catch (e, trace) {
     print(e.message);

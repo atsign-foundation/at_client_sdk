@@ -1,9 +1,6 @@
-import 'package:at_auth/src/keys/serialization/assurance.dart';
-import 'package:at_auth/src/keys/serialization/atkey_material.dart';
-import 'package:at_auth/src/keys/serialization/key_ids.dart';
+import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 
 /// The in-memory model of an atsign's cryptographic keys.
 ///
@@ -24,7 +21,8 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 final class AtKeys {
   static const supportedVersion = 1;
 
-  Atsign atsign;
+  final Atsign atsign;
+  List<NamespacePermission>? namespaces;
 
   /// The enrollment this keyset belongs to.
   ///
@@ -44,6 +42,7 @@ final class AtKeys {
   AtKeys({
     required this.atsign,
     List<AtKeysMaterial> keysList = const [],
+    this.namespaces,
     this.enrollmentId,
   }) {
     for (final key in keysList) {
@@ -59,13 +58,13 @@ final class AtKeys {
   /// enrolling the generated public keys and for setting [enrollmentId] if
   /// the server allocates it.
   ///
-  /// **`mintLegacy: false` is not yet usable for authentication.** PKAM signs
-  /// with the RSA `apkamPrivateKey`, so a post-quantum-only keyset makes
-  /// `PkamAuthenticator` throw [AtAuthenticationException]; ML-DSA PKAM
-  /// (`MlDsaPkamSigner`) is experimental and the wire semantics are not
-  /// settled. `FileAtKeysIo` will persist such a keyset happily — it just
-  /// cannot authenticate with it. Leave [mintLegacy] at its default unless you
-  /// are specifically exercising the PQ material.
+  /// **`mintLegacy: false` is not yet proven end to end.** A post-quantum-only
+  /// keyset authenticates as far as this package is concerned — under
+  /// `ApkamSigning.postQuantum` it signs PKAM with ML-DSA-65 — but whether the
+  /// atServer verifies that signature is a server-side question, not settled
+  /// here. It also cannot authenticate at all under the default
+  /// `ApkamSigning.legacy`. Leave [mintLegacy] at its default unless you are
+  /// specifically exercising the PQ material.
   static Future<AtKeys> generate(
     Atsign atsign, {
     String? enrollmentId,
@@ -77,7 +76,7 @@ final class AtKeys {
       enrollmentId: enrollmentId,
     );
     if (mintLegacy) {
-      keys._mintLegacyKeys();
+      await keys._mintLegacyKeys();
     }
     return keys;
   }
@@ -89,14 +88,14 @@ final class AtKeys {
       keyId: KeyIds.apkamPQ,
       keyPartType: CryptographicKeyType.publicVerification,
       keyAlgorithmType: KeyAlgorithmType.mlDsa65,
-      bytes: AtBytes(mldsa.publicKey),
+      bytes: mldsa.publicKey,
       createdAt: DateTime.timestamp(),
     ));
     list.add(AtKeysMaterial(
       keyId: KeyIds.apkamPQ,
       keyPartType: CryptographicKeyType.privateSigning,
       keyAlgorithmType: KeyAlgorithmType.mlDsa65,
-      bytes: AtBytes(mldsa.secretKey),
+      bytes: mldsa.secretKey,
       createdAt: DateTime.timestamp(),
     ));
 
@@ -105,36 +104,33 @@ final class AtKeys {
       keyId: KeyIds.globalXWing,
       keyPartType: CryptographicKeyType.publicEncryption,
       keyAlgorithmType: KeyAlgorithmType.xWing,
-      bytes: AtBytes(xwing.publicKey),
+      bytes: xwing.publicKey,
       createdAt: DateTime.timestamp(),
     ));
     list.add(AtKeysMaterial(
       keyId: KeyIds.globalXWing,
       keyPartType: CryptographicKeyType.privateDecryption,
       keyAlgorithmType: KeyAlgorithmType.xWing,
-      bytes: AtBytes(xwing.secretKey),
+      bytes: xwing.secretKey,
       createdAt: DateTime.timestamp(),
     ));
     return list;
   }
 
-  void _mintLegacyKeys() {
-    var apkamRsaKeypair = RsaKeyPair.generate();
-    var atEncryptionKeyPair = RsaKeyPair.generate();
-    // AESKey.generate takes a length in BYTES: AES-256 is 32, not 256.
-    var selfEncryptionAesKey = AESKey.generate(32);
-    var apkamSymmetricAesKey = AESKey.generate(32);
+  Future<void> _mintLegacyKeys() async {
+    // RSA-2048 keypairs, DER-encoded exactly as an .atKeys file carries them.
+    final rsa = RsaSigningAlgo();
+    final apkamRsaKeypair = await rsa.generateKeyPair();
+    final atEncryptionKeyPair = await rsa.generateKeyPair();
+    // The constructor argument is a length in BYTES: AES-256 is 32, not 256.
+    final aes = AesCtrEncryptionAlgo(32);
 
-    apkamPublicKey =
-        AtBytes.fromString(apkamRsaKeypair.atPublicKey.publicKey.toString());
-    apkamPrivateKey =
-        AtBytes.fromString(apkamRsaKeypair.atPrivateKey.privateKey.toString());
-    defaultEncryptionPublicKey = AtBytes.fromString(
-        atEncryptionKeyPair.atPublicKey.publicKey.toString());
-    defaultEncryptionPrivateKey = AtBytes.fromString(
-        atEncryptionKeyPair.atPrivateKey.privateKey.toString());
-    defaultSelfEncryptionKey = AtBytes.fromString(selfEncryptionAesKey.key);
-    apkamSymmetricKey = AtBytes.fromString(apkamSymmetricAesKey.key);
+    apkamPublicKey = AtBytes(apkamRsaKeypair.publicKey);
+    apkamPrivateKey = AtBytes(apkamRsaKeypair.secretKey);
+    defaultEncryptionPublicKey = AtBytes(atEncryptionKeyPair.publicKey);
+    defaultEncryptionPrivateKey = AtBytes(atEncryptionKeyPair.secretKey);
+    defaultSelfEncryptionKey = AtBytes(aes.generateKey());
+    apkamSymmetricKey = AtBytes(aes.generateKey());
   }
 
   /// Looks up one material by its `(keyId, keyPartType)` — [type] is a
@@ -206,6 +202,13 @@ final class AtKeys {
           'Unsupported atKeys version: $version');
     }
 
+    final namespacesJson =
+        assurance.optionalStringList(json['namespaces'], 'namespaces');
+    final List<NamespacePermission> namespaces = [];
+    for (var namespace in namespacesJson) {
+      namespaces.add(NamespacePermission.fromString(namespace));
+    }
+
     final atsignFromDoc =
         assurance.expectNonEmptyString(json['atsign'], 'atsign').toAtsign();
     if (atsign != null && atsign != atsignFromDoc) {
@@ -225,6 +228,7 @@ final class AtKeys {
     //form the new AtKeys
     AtKeys atKeys = AtKeys(
       atsign: atsignFromDoc,
+      namespaces: namespaces,
       keysList: materials,
       enrollmentId: enrollmentId,
     );
@@ -245,10 +249,14 @@ final class AtKeys {
       for (final entry in metadata.entries)
         if (KeyIds.isMetadata(entry.key)) entry.key: entry.value,
       ..._legacySchemaJson(),
-      'version': supportedVersion,
-      'atsign': atsign.toString(),
+      KeyIds.version: supportedVersion,
+      KeyIds.atsign: atsign.toString(),
       AtConstants.enrollmentId: enrollmentId,
-      'keys': encodeAtKeysDocument(keys),
+      // A JSON array of "ns:rw" tokens — [fromJson] reads it back with
+      // AtKeysAssurance.optionalStringList, which rejects anything else.
+      AtConstants.apkamNamespaces:
+          namespaces?.map((n) => n.toString()).toList(),
+      KeyIds.keys: encodeAtKeysDocument(keys),
     };
   }
 
@@ -301,12 +309,13 @@ final class AtKeys {
 
   /// Deprecated in favour of typed material ([AtKeysMaterial] via [addKey] /
   /// [getKey]), but **still required** and therefore not removable yet: PKAM
-  /// signs with [apkamPrivateKey] (`PkamAuthenticator`), `FileAtKeysIo`
+  /// signs with [apkamPrivateKey] under the default `ApkamSigning.legacy`,
+  /// `FileAtKeysIo`
   /// self-encrypts four of these fields at rest, and enrollment reads
   /// [apkamSymmetricKey] / [defaultEncryptionPrivateKey] /
-  /// [defaultSelfEncryptionKey]. They can only go once ML-DSA PKAM is wired
-  /// (`MlDsaPkamSigner` is experimental) — until then the deprecation marks
-  /// direction of travel, not an available replacement.
+  /// [defaultSelfEncryptionKey]. They can only go once ML-DSA PKAM is verified
+  /// against the atServer — until then the deprecation marks direction of
+  /// travel, not an available replacement.
   static const _legacyFieldDeprecation =
       'legacy flat-file key material: prefer typed AtKeysMaterial (addKey/'
       'getKey) for new material. Still load-bearing for PKAM signing, at-rest '

@@ -44,6 +44,9 @@ void main() {
           ...encryptedAtKeysMap,
           'version': AtKeys.supportedVersion,
           'atsign': fixtureAtsign.toString(),
+          // Structural fields are emitted even when null, as the legacy schema
+          // fields are.
+          'namespaces': null,
           'keys': isEmpty,
         }),
       );
@@ -338,7 +341,7 @@ void main() {
         keyId: 'from-the-future',
         keyPartType: 'somethingNotInventedYet',
         keyAlgorithmType: 'slhdsa128s',
-        bytes: AtBytes.fromString('ZnV0dXJl'),
+        bytes: base64Decode('ZnV0dXJl'),
         createdAt: DateTime.utc(2024, 1, 1),
       );
       final atKeys = AtKeys(
@@ -366,11 +369,8 @@ void main() {
       expect(retired, hasLength(2));
       expect(retired.map((m) => m.status), everyElement(KeyPartStatus.retired));
       expect(
-        atKeys
-            .getKey('pair', CryptographicKeyType.publicEncryption)!
-            .bytes
-            .toString(),
-        rsaKeyPair('pair').first.bytes.toString(),
+        atKeys.getKey('pair', CryptographicKeyType.publicEncryption)!.bytes,
+        rsaKeyPair('pair').first.bytes,
       );
     });
 

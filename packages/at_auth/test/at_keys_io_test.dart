@@ -290,21 +290,18 @@ void main() {
         expect(
             readKeys
                 .getKey('sym', CryptographicKeyType.symmetricEncryption)
-                ?.bytes
-                .toString(),
-            'c2VjcmV0');
+                ?.bytes,
+            base64Decode('c2VjcmV0'));
         expect(
             readKeys
                 .getKey('pair', CryptographicKeyType.publicEncryption)
-                ?.bytes
-                .toString(),
-            'cHVibGlj');
+                ?.bytes,
+            base64Decode('cHVibGlj'));
         expect(
             readKeys
                 .getKey('pair', CryptographicKeyType.privateDecryption)
-                ?.bytes
-                .toString(),
-            'cHJpdmF0ZQ==');
+                ?.bytes,
+            base64Decode('cHJpdmF0ZQ=='));
       } finally {
         await tempDir.delete(recursive: true);
       }

@@ -21,17 +21,21 @@ void main(List<String> args) async {
       print('Progress: ${event.group} : ${event.msg}');
     });
     final atsign = (argResults['atsign'] as String).toAtsign();
-    final atAuthRequest = AtAuthRequest(
-      atsign,
-      FileAtKeysIo(filePath: (_) => argResults['keysFilePath']),
-      rootDomain: AtRootDomain('root.atsign.org', 64),
-    );
+
     // Throws AtAuthenticationException on failure; reaching here means the
-    // atsign is authenticated. The session is what you hand to client creation.
-    final session = await atAuth.authenticate(atAuthRequest);
-    print('authenticated ${session.atsign} '
-        '(enrollmentId: ${session.enrollmentId})');
+    // atsign is authenticated.
+    await atAuth.authenticate(
+      atsign,
+      AtRootDomain.atsignDomain,
+      FileAtKeysIo(filePath: (_) => argResults['keysFilePath']),
+    );
+
+    // atAuth.atLookUp is the connection that just authenticated — hand it to
+    // client creation rather than opening and PKAMing a second one.
+    print('authenticated $atsign '
+        '(enrollmentId: ${atAuth.atLookUp?.enrollmentId})');
   } on Exception catch (e, trace) {
+    print(e);
     print(trace);
   } on ArgumentError catch (e, trace) {
     print(e.message);

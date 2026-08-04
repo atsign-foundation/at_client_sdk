@@ -9,18 +9,42 @@ rather than consuming `at_auth` directly.
 
 ## What `at_auth` does
 
-| Capability                      | Entry point                                            |
-| ------------------------------- | ------------------------------------------------------ |
-| CRAM-based initial onboarding   | `AtAuth.onboard(AtOnboardingRequest, cramSecret)`      |
-| PKAM authentication             | `AtAuth.authenticate(AtAuthRequest)`                   |
-| APKAM enrollment (request side) | `AtEnrollment.submit(...)`                             |
-| APKAM enrollment (approve side) | `AtEnrollment.approve(...)` / `AtEnrollment.deny(...)` |
-| Free atSign registration        | `RegistrarService` (fetches CRAM key by email)         |
+| Capability                      | Entry point                                                  |
+| ------------------------------- | ------------------------------------------------------------ |
+| CRAM-based initial onboarding   | `AtAuth.onboard(atsign, rootDomain, atKeysIo, cramSecret)`   |
+| PKAM authentication             | `AtAuth.authenticate(atsign, rootDomain, atKeysIo)`          |
+| APKAM enrollment (request side) | `AtEnrollment.enroll(...)` / `AtEnrollment.waitForApproval(...)` |
+| APKAM enrollment (approve side) | `AtEnrollment.approve(...)` / `AtEnrollment.deny(...)`       |
+| Free atSign registration        | `RegistrarService` (fetches CRAM key by email)               |
 
 See [`example/onboard.dart`](example/onboard.dart),
 [`example/authenticate.dart`](example/authenticate.dart), and
 [`example/enrollment_request.dart`](example/enrollment_request.dart) for
 end-to-end usage.
+
+Every `AtAuth` method takes the atsign, its atServer and the key source
+directly, and returns `void`: **completing without throwing is the success
+signal**, and failure throws `AtAuthenticationException`. After a successful
+call, `AtAuth.atLookUp` is the connection that was authenticated — hand it to
+client creation rather than opening and PKAM-ing a second one.
+
+`at_auth` builds that connection itself. at_lookup binds its PKAM key and
+signing algorithm at construction and keeps them immutable, so the connection
+cannot exist until the keys have been read or minted.
+
+Which scheme it signs with is the **caller's** choice, passed once:
+
+```dart
+AtAuth.create(signing: ApkamSigning.postQuantum);   // default: ApkamSigning.legacy
+```
+
+`ApkamSigning.legacy` is RSA-2048/SHA-256 (`AtLookUp.legacy`) and
+`ApkamSigning.postQuantum` is ML-DSA-65 (`AtLookUp.pq`). It is deliberately not
+inferred from the keys: `AtKeys.generate` mints both a classical and a
+post-quantum APKAM key, so the material cannot express which one an atServer
+expects — that is a property of the deployment. A keyset that cannot satisfy the
+chosen scheme is an error, not a silent fall back to the other one.
+`AtEnrollment.create(atLookUp, signing:)` takes the same option.
 
 ## The atSign lifecycle
 

@@ -34,7 +34,7 @@ AtKeysMaterial symmetricKey(
     keyId: keyId,
     keyPartType: CryptographicKeyType.symmetricEncryption,
     keyAlgorithmType: algorithm,
-    bytes: AtBytes.fromString(value),
+    bytes: base64Decode(value),
     operations: operations,
     createdAt: createdAt ?? _defaultCreatedAt,
   );
@@ -54,14 +54,14 @@ List<AtKeysMaterial> rsaKeyPair(
       keyId: keyId,
       keyPartType: CryptographicKeyType.publicEncryption,
       keyAlgorithmType: KeyAlgorithmType.rsa2048,
-      bytes: AtBytes.fromString(publicValue),
+      bytes: base64Decode(publicValue),
       createdAt: at,
     ),
     AtKeysMaterial(
       keyId: keyId,
       keyPartType: CryptographicKeyType.privateDecryption,
       keyAlgorithmType: KeyAlgorithmType.rsa2048,
-      bytes: AtBytes.fromString(privateValue),
+      bytes: base64Decode(privateValue),
       createdAt: at,
     ),
   ];

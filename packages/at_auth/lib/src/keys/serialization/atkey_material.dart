@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_commons/at_commons.dart';
@@ -97,7 +100,14 @@ final class AtKeysMaterial {
   /// tokens. Unknown values are preserved, never rejected.
   final String keyAlgorithmType;
 
-  final AtBytes bytes;
+  /// The raw key material.
+  ///
+  /// Held as bytes, not as a base64 [AtBytes] wrapper: base64 is a property of
+  /// how a keyfile stores this, so it belongs at the JSON boundary
+  /// ([toJson]/[fromJson]) and nowhere else. Note that [operator ==] and
+  /// [hashCode] therefore compare it element-wise — `Uint8List ==` is identity.
+  final Uint8List bytes;
+
   final List<String> operations;
   final DateTime createdAt;
   final KeyPartStatus status;
@@ -153,7 +163,8 @@ final class AtKeysMaterial {
       if (operations.isNotEmpty) 'operations': operations,
       'createdAt': createdAt.toIso8601String(),
       'status': status.name,
-      'bytes': bytes.toString(),
+      // base64 is the keyfile's framing, applied here and nowhere else.
+      'bytes': base64Encode(bytes),
     };
   }
 
@@ -164,7 +175,7 @@ final class AtKeysMaterial {
     return keyId == other.keyId &&
         keyPartType == other.keyPartType &&
         keyAlgorithmType == other.keyAlgorithmType &&
-        bytes.toString() == other.bytes.toString() &&
+        _listEquals(bytes, other.bytes) &&
         _listEquals(operations, other.operations) &&
         createdAt == other.createdAt &&
         status == other.status;
@@ -175,7 +186,7 @@ final class AtKeysMaterial {
         keyId,
         keyPartType,
         keyAlgorithmType,
-        bytes.toString(),
+        Object.hashAll(bytes),
         Object.hashAll(operations),
         createdAt,
         status,

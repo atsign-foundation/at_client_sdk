@@ -1,15 +1,7 @@
 import 'dart:io';
 
+import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/at_auth_impl.dart';
-import 'package:at_auth/src/auth/models/at_auth_requests.dart';
-import 'package:at_auth/src/auth/models/at_auth_session.dart';
-import 'package:at_auth/src/auth/pkam_authenticator.dart';
-import 'package:at_auth/src/enroll/at_enrollment.dart';
-import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
-import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
-import 'package:at_auth/src/exception/at_auth_exceptions.dart';
-import 'package:at_auth/src/keys/io/file_io.dart';
-import 'package:at_auth/src/keys/io/ephemeral_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -20,7 +12,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/at_keys.dart';
 
-class MockAtLookUp extends Mock implements AtLookupImpl {}
+class MockAtLookUp extends Mock implements AtLookUp {}
 
 class MockAtEnrollment extends Mock implements AtEnrollment {}
 
@@ -30,7 +22,7 @@ class MockAtServerStatus extends Mock implements AtServerStatus {}
 
 class FakeVerbBuilder extends Fake implements VerbBuilder {}
 
-class FakeAtLookUp extends Fake implements AtLookupImpl {}
+class FakeAtLookUp extends Fake implements AtLookUp {}
 
 class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
 
@@ -54,6 +46,11 @@ void main() {
   final alice = '@alice🛠'.toAtsign();
   late FakeSecondaryAddressFinder fakeSecondaryAddressFinder;
 
+  /// Every AtLookUp the factory handed out, in construction order, paired with
+  /// the keys it was built from. Onboarding builds two, and which keys each one
+  /// got is the thing worth asserting.
+  late List<({AtKeys? keys, String? enrollmentId})> builtLookUps;
+
   // mocktail's fallback registry is process-global; registering once is enough.
   setUpAll(() {
     // Several tests assert a failure path, and AtAuthImpl logs those at SEVERE
@@ -73,21 +70,31 @@ void main() {
   });
 
   /// Fresh mocks plus the stubs every test in either group needs: a reachable
-  /// atServer of [serverStatus] and a closeable AtLookup.
-  void buildAtAuth({required AtStatus atStatus}) {
+  /// atServer of [atStatus] and a closeable AtLookup.
+  ///
+  /// [AtAuthImpl.lookUpOverride] is the test seam: at_auth builds its own
+  /// AtLookUp from the keys it reads, so a test substitutes the construction
+  /// rather than injecting a connection.
+  void buildAtAuth({required AtStatus atStatus, RetryOptions? retryOptions}) {
     mockAtLookUp = MockAtLookUp();
     mockPkamAuthenticator = MockPkamAuthenticator();
     mockAtServerStatus = MockAtServerStatus();
     mockAtEnrollment = MockAtEnrollment();
     fakeSecondaryAddressFinder = FakeSecondaryAddressFinder();
+    builtLookUps = [];
     when(() => mockAtServerStatus.get(any()))
         .thenAnswer((_) => Future.value(atStatus));
     when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
     atAuth = AtAuthImpl(
-        atLookUp: mockAtLookUp,
-        pkamAuthenticator: mockPkamAuthenticator,
-        atEnrollment: mockAtEnrollment,
-        atServerStatus: mockAtServerStatus);
+      retryOptions: retryOptions ?? RetryOptions.defaultRetryOptions,
+      pkamAuthenticator: mockPkamAuthenticator,
+      atServerStatus: mockAtServerStatus,
+      enrollmentFactory: (_) => mockAtEnrollment,
+    );
+    atAuth.lookUpOverride = (keys, enrollmentId) {
+      builtLookUps.add((keys: keys, enrollmentId: enrollmentId));
+      return mockAtLookUp;
+    };
     atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
     atAuth.probeSocket = (host, port) async {};
   }
@@ -101,78 +108,81 @@ void main() {
               atSignStatus: AtSignStatus.activated));
     });
 
-    test('Test authenticate() with keys file returns the auth session',
+    test('Test authenticate() with keys file exposes the connection it used',
         () async {
-      when(() => mockPkamAuthenticator.authenticate(any(), any(), any(),
+      when(() => mockPkamAuthenticator.authenticate(any(), any(),
           enrollmentId: testEnrollmentId)).thenAnswer((_) async {});
 
-      final atAuthRequest = AtAuthRequest(alice, fileAtKeysIo)
-        ..enrollmentId = testEnrollmentId;
+      await atAuth.authenticate(alice, AtRootDomain.atsignDomain, fileAtKeysIo,
+          enrollmentId: testEnrollmentId);
 
-      final session = await atAuth.authenticate(atAuthRequest);
-
-      expect(session.atsign, alice);
-      expect(session.enrollmentId, testEnrollmentId);
-      expect(session.rootDomain, AtRootDomain.atsignDomain);
-      // The keys cross the boundary as a source, not as live AtChops: the
-      // client re-reads them from the same AtKeysIo the request supplied.
-      expect(session.atKeysIo, same(fileAtKeysIo));
-      expect(session.atLookUp, same(mockAtLookUp));
+      // Completing without throwing IS the success signal; the connection it
+      // authenticated is what a client adopts to skip a second handshake.
+      expect(atAuth.atLookUp, same(mockAtLookUp));
+      // The keys read from the io were bound into that connection.
+      expect(builtLookUps, hasLength(1));
+      expect(builtLookUps.single.enrollmentId, testEnrollmentId);
+      expect(builtLookUps.single.keys!.atsign, alice);
     });
 
     test('Test authenticate() takes the enrollmentId from the keys file',
         () async {
-      when(() => mockPkamAuthenticator.authenticate(any(), any(), any(),
+      when(() => mockPkamAuthenticator.authenticate(any(), any(),
           enrollmentId: any(named: 'enrollmentId'))).thenAnswer((_) async {});
 
-      // The fixture keyfile carries this enrollmentId; the request leaves it
-      // unset, so authenticate must fall back to the one in the keys.
-      final session =
-          await atAuth.authenticate(AtAuthRequest(alice, fileAtKeysIo));
+      // The fixture keyfile carries this enrollmentId and the caller leaves it
+      // unset, so authenticate must fall back to the one in the keys — and it
+      // must reach the connection, which is what the pkam verb is stamped with.
+      await atAuth.authenticate(alice, AtRootDomain.atsignDomain, fileAtKeysIo);
 
-      expect(session.enrollmentId, testEnrollmentId);
+      expect(builtLookUps.single.enrollmentId, testEnrollmentId);
+      verify(() => mockPkamAuthenticator.authenticate(alice, mockAtLookUp,
+          enrollmentId: testEnrollmentId)).called(1);
     });
 
     test('Test authenticate() with an in-memory AtKeysIo', () async {
-      when(() => mockPkamAuthenticator.authenticate(any(), any(), any(),
+      when(() => mockPkamAuthenticator.authenticate(any(), any(),
           enrollmentId: testEnrollmentId)).thenAnswer((_) async {});
 
-      // The modern replacement for handing AtKeys to the request directly:
-      // supply them through an in-memory AtKeysIo.
+      // The modern replacement for handing AtKeys over directly: supply them
+      // through an in-memory AtKeysIo.
       final memoryIo = EphemeralAtKeysIo();
-      await memoryIo.write(alice, legacyAtKeys(atsign: alice));
+      final keys = legacyAtKeys(atsign: alice);
+      await memoryIo.write(alice, keys);
 
-      final session = await atAuth.authenticate(
-        AtAuthRequest(alice, memoryIo)..enrollmentId = testEnrollmentId,
-      );
+      await atAuth.authenticate(alice, AtRootDomain.atsignDomain, memoryIo,
+          enrollmentId: testEnrollmentId);
 
-      expect(session.atKeysIo, same(memoryIo));
-      expect(session.enrollmentId, testEnrollmentId);
+      expect(atAuth.atLookUp, same(mockAtLookUp));
+      expect(builtLookUps.single.keys!.apkamPrivateKey, keys.apkamPrivateKey);
     });
 
     test('Test authenticate() invalid keys file path', () async {
-      final atAuthRequest = AtAuthRequest(
-        alice,
-        FileAtKeysIo(filePath: (_) => 'test/hello/data/@alice🛠_key.atKeys'),
-      )..enrollmentId = testEnrollmentId;
+      final missingIo =
+          FileAtKeysIo(filePath: (_) => 'test/hello/data/@alice🛠_key.atKeys');
 
-      expect(() async => await atAuth.authenticate(atAuthRequest),
+      expect(
+          () async => await atAuth.authenticate(
+              alice, AtRootDomain.atsignDomain, missingIo,
+              enrollmentId: testEnrollmentId),
           throwsA(isA<AtException>()));
     });
 
     test('Test authenticate() wraps a failed PKAM in AtAuthenticationException',
         () async {
-      when(() => mockPkamAuthenticator.authenticate(any(), any(), any(),
+      when(() => mockPkamAuthenticator.authenticate(any(), any(),
               enrollmentId: testEnrollmentId))
           .thenThrow(UnAuthenticatedException('Unauthenticated'));
 
-      final atAuthRequest = AtAuthRequest(alice, fileAtKeysIo)
-        ..enrollmentId = testEnrollmentId;
-
-      await expectLater(() async => await atAuth.authenticate(atAuthRequest),
+      await expectLater(
+          () async => await atAuth.authenticate(
+              alice, AtRootDomain.atsignDomain, fileAtKeysIo,
+              enrollmentId: testEnrollmentId),
           throwsA(isA<AtAuthenticationException>()));
-      // The connection we opened must not leak when authenticate throws.
+      // The connection we opened must not leak when authenticate throws, and
+      // must not be left exposed as though it were usable.
       verify(() => mockAtLookUp.close()).called(1);
+      expect(atAuth.atLookUp, isNull);
     });
 
     test(
@@ -181,18 +191,22 @@ void main() {
       // Every probe fails, so without a deadline validateAtServer would keep
       // retrying every retryDelay(2s). A short overallTimeout must cut that
       // short and surface an AtTimeoutException.
+      buildAtAuth(
+        atStatus: AtStatus(
+            serverStatus: ServerStatus.ready,
+            rootStatus: RootStatus.found,
+            atSignStatus: AtSignStatus.activated),
+        retryOptions: const RetryOptions(
+            retryDelay: Duration(seconds: 2),
+            overallTimeout: Duration(milliseconds: 300)),
+      );
       atAuth.probeSocket = (host, port) async {
         throw Exception('simulated unreachable atServer');
       };
-      final atAuthRequest = AtAuthRequest(alice, fileAtKeysIo)
-        ..enrollmentId = testEnrollmentId
-        ..retryOptions = const RetryOptions(
-            retryDelay: Duration(seconds: 2),
-            overallTimeout: Duration(milliseconds: 300));
 
       final sw = Stopwatch()..start();
       await expectLater(
-        atAuth.validateAtServer(atAuthRequest),
+        atAuth.validateAtServer(alice, AtRootDomain.atsignDomain),
         throwsA(isA<AtTimeoutException>()),
       );
       sw.stop();
@@ -227,68 +241,85 @@ void main() {
     void stubSuccessfulOnboarding() {
       when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
           .thenAnswer((_) => Future.value(true));
-      when(() =>
-          mockAtLookUp.executeCommand(
-              any(that: startsWith('enroll:request')))).thenAnswer((_) =>
-          Future.value('data:{"enrollmentId":"abc123", "status":"approved"}'));
-      when(() => mockPkamAuthenticator.authenticate(any(), any(), any(),
+      when(() => mockPkamAuthenticator.authenticate(any(), any(),
           enrollmentId: 'abc123')).thenAnswer((_) async {});
-      when(() => mockAtEnrollment.submit(any(), mockAtLookUp))
-          .thenAnswer((invocation) {
-        // The first-enrollment response is scoped to the session onboarding is
-        // establishing, which AtAuthImpl builds from the request.
-        final request =
-            invocation.positionalArguments.first as EnrollmentRequest;
-        return Future.value(AtEnrollmentResponse(
-          'abc123',
-          EnrollmentStatus.approved,
-          session: AtAuthSession(
-            atsign: request.atsign,
-            rootDomain: request.rootDomain,
-            atKeysIo: onboardingKeysIo,
-          ),
-        ));
-      });
+      when(() => mockAtEnrollment.enroll(any())).thenAnswer((_) => Future.value(
+          AtEnrollmentResponse('abc123', EnrollmentStatus.approved)));
     }
 
     test('Test onboard - cramAuthenticate returns false', () async {
       when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
           .thenAnswer((_) => Future.value(false));
 
-      final atOnboardingRequest =
-          AtOnboardingRequest('@aaron🛠'.toAtsign(), onboardingKeysIo);
-
       expect(
-          () async => await atAuth.onboard(atOnboardingRequest, testCramSecret),
+          () async => await atAuth.onboard('@aaron🛠'.toAtsign(),
+              AtRootDomain.atsignDomain, onboardingKeysIo, testCramSecret),
           throwsA(isA<AtAuthenticationException>()));
     });
 
-    test('Test onboard with appName and deviceName set in onboarding request',
-        () async {
+    test('Test onboard with appName and deviceName supplied', () async {
       stubSuccessfulOnboarding();
       final bob = '@bob🛠'.toAtsign();
-      final atOnboardingRequest = AtOnboardingRequest(bob, onboardingKeysIo,
+
+      await atAuth.onboard(
+          bob, AtRootDomain.atsignDomain, onboardingKeysIo, testCramSecret,
           appName: 'wavi', deviceName: 'iphone');
 
-      final session = await atAuth.onboard(atOnboardingRequest, testCramSecret);
-
-      expect(session.atsign, bob);
-      expect(session.enrollmentId, 'abc123');
-      // Onboarding persisted the freshly minted keys through the request's io.
-      expect(session.atKeysIo, same(onboardingKeysIo));
+      final request = verify(() => mockAtEnrollment.enroll(captureAny()))
+          .captured
+          .single as FirstEnrollmentRequest;
+      expect(request.appName, 'wavi');
+      expect(request.deviceName, 'iphone');
+      // Onboarding persisted the freshly minted keys through the io it was
+      // given, and the connection it ends on is the PKAM-authenticated one.
       expect(File('${keysDir.path}/@bob🛠_key.atKeys').existsSync(), isTrue);
+      expect(atAuth.atLookUp, same(mockAtLookUp));
     });
 
     test('Test onboard with default appName and deviceName', () async {
       stubSuccessfulOnboarding();
       final colin = '@colin🛠'.toAtsign();
-      final atOnboardingRequest = AtOnboardingRequest(colin, onboardingKeysIo);
 
-      final session = await atAuth.onboard(atOnboardingRequest, testCramSecret);
+      await atAuth.onboard(
+          colin, AtRootDomain.atsignDomain, onboardingKeysIo, testCramSecret);
 
-      expect(atOnboardingRequest.appName, 'firstApp');
-      expect(atOnboardingRequest.deviceName, 'firstDevice');
-      expect(session.enrollmentId, 'abc123');
+      final request = verify(() => mockAtEnrollment.enroll(captureAny()))
+          .captured
+          .single as FirstEnrollmentRequest;
+      expect(request.appName, FirstEnrollmentRequest.defaultAppName);
+      expect(request.deviceName, FirstEnrollmentRequest.defaultDeviceName);
+    });
+
+    test(
+        'Test onboard CRAMs on a keyless connection and PKAMs on one built '
+        'from the minted keys', () async {
+      stubSuccessfulOnboarding();
+
+      await atAuth.onboard('@colin🛠'.toAtsign(), AtRootDomain.atsignDomain,
+          onboardingKeysIo, testCramSecret);
+
+      // at_lookup binds its PKAM key at construction, so activation cannot run
+      // on one connection: the first has no keys to sign with, and the second
+      // carries the keypair that did not exist when the first was built.
+      expect(builtLookUps, hasLength(2));
+      expect(builtLookUps.first.keys, isNull);
+      expect(builtLookUps.first.enrollmentId, isNull);
+      expect(builtLookUps.last.keys, isNotNull);
+      expect(builtLookUps.last.keys!.apkamPrivateKey, isNotNull);
+      expect(builtLookUps.last.enrollmentId, 'abc123');
+    });
+
+    test('Test onboard leaves no connection exposed when it fails', () async {
+      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+          .thenAnswer((_) => Future.value(false));
+
+      await expectLater(
+          () async => await atAuth.onboard('@aaron🛠'.toAtsign(),
+              AtRootDomain.atsignDomain, onboardingKeysIo, testCramSecret),
+          throwsA(isA<AtAuthenticationException>()));
+
+      expect(atAuth.atLookUp, isNull);
+      verify(() => mockAtLookUp.close()).called(greaterThanOrEqualTo(1));
     });
   });
 }

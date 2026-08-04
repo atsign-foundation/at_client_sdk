@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_chops/at_chops.dart';
@@ -31,11 +32,13 @@ class AtKeysPassphraseEnvelopeCodec {
     HashingAlgoType hashingAlgoType = HashingAlgoType.argon2id,
     HashParams? hashParams,
   }) async {
-    final aes = await _encryptorForPassphrase(passPhrase, hashingAlgoType,
+    final key = await _keyForPassphrase(passPhrase, hashingAlgoType,
         hashParams: hashParams);
     final iv = InitialisationVector.random(16);
+    final ciphertext = await AesCtrEncryptionAlgo(key.length)
+        .encrypt(Uint8List.fromList(utf8.encode(plaintext)), key, iv: iv);
     return jsonEncode({
-      'content': aes.encrypt(plaintext, iv: iv),
+      'content': base64Encode(ciphertext),
       'iv': base64Encode(iv.ivBytes),
       'hashingAlgoType': hashingAlgoType.name,
     });
@@ -71,10 +74,11 @@ class AtKeysPassphraseEnvelopeCodec {
     }
 
     try {
-      final aes = await _encryptorForPassphrase(
+      final key = await _keyForPassphrase(
           passPhrase!, HashingAlgoType.fromString(hashingAlgoName));
-      final plaintext =
-          aes.decrypt(content, iv: InitialisationVector(base64Decode(iv)));
+      final plaintext = utf8.decode(await AesCtrEncryptionAlgo(key.length)
+          .decrypt(base64Decode(content), key,
+              iv: InitialisationVector(base64Decode(iv))));
       // jsonDecode must stay inside the try: the cipher is unauthenticated,
       // so an incorrect passphrase does not fail decrypt() -- it yields
       // arbitrary bytes. Whether those bytes parse as a JSON object is
@@ -94,8 +98,12 @@ class AtKeysPassphraseEnvelopeCodec {
     }
   }
 
-  /// Derives the AES key by hashing [passPhrase] with [hashingAlgoType].
-  Future<StringAESEncryptor> _encryptorForPassphrase(
+  /// Derives the AES key bytes by hashing [passPhrase] with [hashingAlgoType].
+  ///
+  /// The hash length decides the AES strength: a 32-byte digest gives AES-256.
+  /// A digest that is not 16, 24 or 32 bytes is rejected by
+  /// [AesCtrEncryptionAlgo] at the call site.
+  Future<Uint8List> _keyForPassphrase(
     String passPhrase,
     HashingAlgoType hashingAlgoType, {
     HashParams? hashParams,
@@ -118,7 +126,7 @@ class AtKeysPassphraseEnvelopeCodec {
           hashParams: hashParams,
         ),
     };
-    return StringAESEncryptor(AESKey(hashKey));
+    return base64Decode(hashKey);
   }
 
   ArgonHashParams? _expectArgonHashParams(HashParams? hashParams) {

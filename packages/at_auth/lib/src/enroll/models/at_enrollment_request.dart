@@ -1,5 +1,6 @@
-import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_commons/at_commons.dart';
+
+import 'namespace_permission.dart';
 
 /// The BaseEnrollmentRequest class encapsulates shared fields between the InitialEnrollmentRequest and EnrollmentRequest.
 ///
@@ -15,15 +16,13 @@ abstract class EnrollmentRequest {
   String appName;
   String deviceName;
   final EnrollOperationEnum enrollOperation = EnrollOperationEnum.request;
-  String? apkamPublicKey;
   AtRootDomain rootDomain;
 
   EnrollmentRequest(
       {required this.atsign,
       required this.appName,
       required this.deviceName,
-      this.apkamPublicKey,
-      this.rootDomain = const AtRootDomain("root.atsign.org", 64)});
+      this.rootDomain = AtRootDomain.atsignDomain});
 }
 
 /// The [EnrollmentRequest] is used by the apps to submit enrollment request for APKAM keys which provides .atKeys specific to
@@ -36,29 +35,22 @@ abstract class EnrollmentRequest {
 /// authorization to access the specified namespaces in the request. Conversely, if the request is disapproved, the requesting
 /// app is denied login access.
 class AtEnrollmentRequest extends EnrollmentRequest {
-  /// The authenticated session of the app submitting this enrollment request.
-  ///
-  /// It is the source of the request's [atSign] and [rootDomain], and its
-  /// [AtAuthSession.atKeysIo] is where the newly enrolled app's keys are
-  /// persisted and handed back on the [AtEnrollmentResponse.session] after
-  /// approval.
-  final AtAuthSession session;
-
-  Map<String, String> namespaces;
+  List<NamespacePermission> namespaces;
   String otp;
   Duration? apkamKeysExpiryDuration;
 
+  /// The APKAM keypair for a subsequent enrollment is minted while the request
+  /// is submitted, so this request carries no public key of its own — only
+  /// [FirstEnrollmentRequest], whose keypair is minted during activation, does.
   AtEnrollmentRequest({
-    required this.session,
+    required super.atsign,
     required super.appName,
     required super.deviceName,
     required this.otp,
     required this.namespaces,
+    super.rootDomain,
     this.apkamKeysExpiryDuration,
-  }) : super(
-          atsign: session.atsign,
-          rootDomain: session.rootDomain,
-        );
+  });
 }
 
 /// The FirstEnrollmentRequest represents an enrollment request when onboarding (activating) an atSign.
@@ -83,20 +75,19 @@ class AtEnrollmentRequest extends EnrollmentRequest {
 /// encrypted with the APKAM symmetric key and stored into the server.
 
 class FirstEnrollmentRequest extends EnrollmentRequest {
-  /// The session being established by onboarding: the atsign, its atServer, and
-  /// the destination its freshly minted keys are persisted to. Unlike
-  /// [AtEnrollmentRequest]'s session this one is not yet authenticated — nothing
-  /// reads keys from it during the first enrollment — but it is the source of
-  /// [atsign]/[rootDomain] and it scopes the resulting response.
-  final AtAuthSession session;
+  /// The app and device names the atServer records for the auto-approved
+  /// enrollment an activation creates.
+  static const String defaultAppName = 'firstApp';
+  static const String defaultDeviceName = 'firstDevice';
+
+  /// The APKAM public key minted during activation, base64-encoded.
+  String apkamPublicKey;
 
   FirstEnrollmentRequest({
-    required this.session,
-    required super.appName,
-    required super.deviceName,
-    required super.apkamPublicKey,
-  }) : super(
-          atsign: session.atsign,
-          rootDomain: session.rootDomain,
-        );
+    required super.atsign,
+    required this.apkamPublicKey,
+    super.appName = defaultAppName,
+    super.deviceName = defaultDeviceName,
+    super.rootDomain,
+  });
 }

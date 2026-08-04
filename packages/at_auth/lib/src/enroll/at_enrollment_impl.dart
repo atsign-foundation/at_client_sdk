@@ -2,13 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_auth/src/auth/pkam_signers.dart';
+import 'package:meta/meta.dart';
+
+import 'package:at_auth/src/auth/apkam_signing.dart';
+import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
 import 'package:at_auth/src/enroll/models/otp.dart';
-import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
@@ -24,8 +26,18 @@ import 'package:at_utils/at_progress.dart';
 /// This class provides functionality to submit and manage enrollment requests.
 class AtEnrollmentImpl implements AtEnrollment {
   final AtSignLogger _logger = AtSignLogger('AtEnrollmentImpl');
+  @override
+  final AtLookUp atLookUp;
 
-  AtEnrollmentImpl();
+  @override
+  final ApkamSigning signing;
+
+  /// Substitutes the connection [waitForApproval] would otherwise build, so a
+  /// test can exercise the flow without a network.
+  @visibleForTesting
+  AtLookUp Function(AtKeys keys, String enrollmentId)? lookUpOverride;
+
+  AtEnrollmentImpl(this.atLookUp, {this.signing = ApkamSigning.legacy});
 
   final StreamController<ProgressEvent> _progressStreamController =
       StreamController<ProgressEvent>.broadcast();
@@ -40,8 +52,8 @@ class AtEnrollmentImpl implements AtEnrollment {
   }
 
   @override
-  Future<AtEnrollmentResponse> submit(
-      EnrollmentRequest enrollmentRequest, AtLookUp atLookUp) async {
+  Future<AtEnrollmentResponse> enroll(
+      EnrollmentRequest enrollmentRequest) async {
     AtEnrollmentResponse atEnrollmentResponse;
     switch (enrollmentRequest) {
       case FirstEnrollmentRequest _:
@@ -78,7 +90,6 @@ class AtEnrollmentImpl implements AtEnrollment {
     return AtEnrollmentResponse(
       enrollmentIdFromServer,
       enrollStatus,
-      session: enrollmentRequest.session,
     );
   }
 
@@ -86,9 +97,12 @@ class AtEnrollmentImpl implements AtEnrollment {
   Future<AtEnrollmentResponse> _handleAtEnrollmentRequest(
       AtEnrollmentRequest atEnrollmentRequest, AtLookUp atLookUp) async {
     // Generate required keys
-    RsaKeyPair apkamKeyPair = RsaKeyPair.generate();
-    // AESKey.generate takes a length in BYTES: AES-256 is 32, not 256.
-    SymmetricKey apkamSymmetricKey = AESKey.generate(32);
+    final apkamKeyPair = await RsaSigningAlgo().generateKeyPair();
+    // The constructor argument is a length in BYTES: AES-256 is 32, not 256.
+    final apkamSymmetricKey = AesCtrEncryptionAlgo(32).generateKey();
+    // The wire form of the symmetric key is its base64 string, and that string
+    // — not the raw bytes — is what gets RSA-wrapped for the approver.
+    final apkamSymmetricKeyStr = base64Encode(apkamSymmetricKey);
 
     //Fetch required keys from atServer
     String defaultEncryptionPublicKey = await _getDefaultEncryptionPublicKey(
@@ -98,19 +112,18 @@ class AtEnrollmentImpl implements AtEnrollment {
 
     // encrypting the following APKAM keys:
     // apkamSymmetricKey for the enroll verb
-    // RSA encrypt via at_chops (wraps crypton's RSAPublicKey.encrypt:
-    // base64(encryptData(utf8(msg)))).
-    String encryptedAPKAMSymmetricKey = base64Encode((RsaEncryptionAlgo()
-          ..atPublicKey = AtPublicKey.fromString(defaultEncryptionPublicKey))
-        .encrypt(utf8.encode(apkamSymmetricKey.key)));
+    String encryptedAPKAMSymmetricKey = base64Encode(RsaEncryptionAlgo()
+        .encrypt(Uint8List.fromList(utf8.encode(apkamSymmetricKeyStr)),
+            base64Decode(defaultEncryptionPublicKey)));
 
     EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
       ..appName = atEnrollmentRequest.appName
       ..deviceName = atEnrollmentRequest.deviceName
       ..encryptedAPKAMSymmetricKey = encryptedAPKAMSymmetricKey
-      ..apkamPublicKey = apkamKeyPair.atPublicKey.publicKey
+      ..apkamPublicKey = base64Encode(apkamKeyPair.publicKey)
       ..otp = atEnrollmentRequest.otp
-      ..namespaces = atEnrollmentRequest.namespaces
+      ..namespaces = Map.fromEntries(atEnrollmentRequest.namespaces
+          .map((p) => MapEntry(p.namespace, p.toString())))
       ..apkamKeysExpiryDuration = atEnrollmentRequest.apkamKeysExpiryDuration;
 
     String? serverResponse =
@@ -120,53 +133,53 @@ class AtEnrollmentImpl implements AtEnrollment {
     var enrollStatus = getEnrollStatusFromString(enrollJson['status']);
 
     AtKeys pendingKeys = AtKeys(atsign: atEnrollmentRequest.atsign)
-      ..apkamPrivateKey =
-          AtBytes.fromString(apkamKeyPair.atPrivateKey.privateKey)
-      ..apkamPublicKey = AtBytes.fromString(apkamKeyPair.atPublicKey.publicKey)
-      ..apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey.key)
+      ..apkamPrivateKey = AtBytes(apkamKeyPair.secretKey)
+      ..apkamPublicKey = AtBytes(apkamKeyPair.publicKey)
+      ..apkamSymmetricKey = AtBytes(apkamSymmetricKey)
       ..enrollmentId = enrollJson[AtConstants.enrollmentId]
       ..defaultEncryptionPublicKey =
           AtBytes.fromString(defaultEncryptionPublicKey);
 
-    // Carry the requesting app's session forward so waitForApproval can persist
-    // the completed keys into its atKeysIo and hand it back, along with the
-    // keys minted here — they are not yet persistable (no selfEncryptionKey
-    // until the server hands one over at approval), so they travel with the
-    // response. The session is only fully valid after waitForApproval.
+    // The keys minted here are not yet persistable (no selfEncryptionKey until
+    // the server hands one over at approval), so they travel on the response
+    // for waitForApproval to complete and persist.
     return PendingEnrollment(
       enrollmentIdFromServer,
       enrollStatus,
-      session: atEnrollmentRequest.session,
-      keys: pendingKeys,
+      atKeys: pendingKeys,
     );
   }
 
   @override
   Future<AtEnrollmentResponse> approve(
-      EnrollmentRequestDecision enrollmentRequestDecision,
-      AtLookUp atLookUp,
-      AtAuthSession session) async {
+    Atsign atsign,
+    AtKeysIo atKeysIo,
+    EnrollmentRequestDecision enrollmentRequestDecision,
+  ) async {
     // The approver's own encryption private key and self-encryption key, read
-    // from its session's key source — the same way every other consumer gets
-    // keys across a boundary.
-    final atKeys = await session.atKeysIo.read(session.atsign);
+    // from its key source — the same way every other consumer gets keys across
+    // a boundary.
+    final atKeys = await atKeysIo.read(atsign);
     // ignore: deprecated_member_use_from_same_package
     final encryptionPrivateKey = atKeys.defaultEncryptionPrivateKey;
+    final encryptedAPKAMSymmetricKey =
+        enrollmentRequestDecision.encryptedAPKAMSymmetricKey;
     // ignore: deprecated_member_use_from_same_package
     final selfEncryptionKey = atKeys.defaultSelfEncryptionKey;
     if (encryptionPrivateKey == null || selfEncryptionKey == null) {
       throw AtAuthenticationException(
           'The authentication keys are not initialized');
     }
-
+    if (encryptedAPKAMSymmetricKey == null) {
+      throw AtAuthenticationException(
+          'The encryptedAPKAMSymmetricKey was never set');
+    }
     // Decrypt the encrypted APKAM symmetric key with the encryption private key
     // (RSA; wraps crypton's RSAPrivateKey.decrypt).
-    String apkamSymmetricKey = utf8.decode((RsaEncryptionAlgo()
-          ..atPrivateKey =
-              AtPrivateKey.fromString(encryptionPrivateKey.toString()))
-        .decrypt(base64Decode(
-            enrollmentRequestDecision.encryptedAPKAMSymmetricKey)));
-    final apkamAesKey = AESKey(apkamSymmetricKey);
+    String apkamSymmetricKey = utf8.decode(RsaEncryptionAlgo()
+        .decrypt(encryptedAPKAMSymmetricKey.bytes, encryptionPrivateKey.bytes));
+    final apkamAesKey = base64Decode(apkamSymmetricKey);
+    final apkamAes = AesCtrEncryptionAlgo(apkamAesKey.length);
 
     // Re-encrypt the encryption private key and self-encryption key under the
     // APKAM symmetric key (AES-256; byte-identical to the former
@@ -174,14 +187,16 @@ class AtEnrollmentImpl implements AtEnrollment {
     InitialisationVector encryptionPrivateKeyIV =
         InitialisationVector.random(16);
     String encryptedDefaultEncryptionPrivateKey = base64Encode(
-        await AESEncryptionAlgo(apkamAesKey).encrypt(
+        await apkamAes.encrypt(
             Uint8List.fromList(utf8.encode(encryptionPrivateKey.toString())),
+            apkamAesKey,
             iv: encryptionPrivateKeyIV));
 
     InitialisationVector selfEncryptionKeyIV = InitialisationVector.random(16);
     String encryptedDefaultSelfEncryptionKey = base64Encode(
-        await AESEncryptionAlgo(apkamAesKey).encrypt(
+        await apkamAes.encrypt(
             Uint8List.fromList(utf8.encode(selfEncryptionKey.toString())),
+            apkamAesKey,
             iv: selfEncryptionKeyIV));
 
     String command = 'enroll:approve:${jsonEncode({
@@ -201,17 +216,16 @@ class AtEnrollmentImpl implements AtEnrollment {
     enrollResponse = enrollResponse?.replaceFirst(RegExp(r'^data:'), '');
     var enrollmentJsonMap = jsonDecode(enrollResponse!);
     AtEnrollmentResponse enrollmentResponse = AtEnrollmentResponse(
-        enrollmentJsonMap['enrollmentId'],
-        getEnrollStatusFromString(enrollmentJsonMap['status']),
-        session: session);
+      enrollmentJsonMap['enrollmentId'],
+      getEnrollStatusFromString(enrollmentJsonMap['status']),
+    );
     return enrollmentResponse;
   }
 
   @override
   Future<AtEnrollmentResponse> deny(
-      EnrollmentRequestDecision enrollmentRequestDecision,
-      AtLookUp atLookUp,
-      AtAuthSession session) async {
+    EnrollmentRequestDecision enrollmentRequestDecision,
+  ) async {
     EnrollVerbBuilder denyEnrollmentBuilder = EnrollVerbBuilder()
       ..enrollmentId = enrollmentRequestDecision.enrollmentId
       ..operation = enrollmentRequestDecision.enrollOperationEnum;
@@ -222,17 +236,16 @@ class AtEnrollmentImpl implements AtEnrollment {
     enrollResponse = enrollResponse?.replaceFirst(RegExp(r'^data:'), '');
     var enrollmentJsonMap = jsonDecode(enrollResponse!);
     AtEnrollmentResponse enrollmentResponse = AtEnrollmentResponse(
-        enrollmentJsonMap['enrollmentId'],
-        getEnrollStatusFromString(enrollmentJsonMap['status']),
-        session: session);
+      enrollmentJsonMap['enrollmentId'],
+      getEnrollStatusFromString(enrollmentJsonMap['status']),
+    );
     return enrollmentResponse;
   }
 
   @override
   Future<AtEnrollmentResponse> revoke(
-      EnrollmentRequestDecision enrollmentRequestDecision,
-      AtLookUp atLookUp,
-      AtAuthSession session) async {
+    EnrollmentRequestDecision enrollmentRequestDecision,
+  ) async {
     EnrollVerbBuilder revokeEnrollVerbBuilder = EnrollVerbBuilder()
       ..enrollmentId = enrollmentRequestDecision.enrollmentId
       ..operation = EnrollOperationEnum.revoke
@@ -245,52 +258,47 @@ class AtEnrollmentImpl implements AtEnrollment {
         enrollmentResponseStr?.replaceFirst(RegExp(r'^data:'), '');
     var enrollmentJsonMap = jsonDecode(enrollmentResponseStr!);
     AtEnrollmentResponse enrollmentResponse = AtEnrollmentResponse(
-        enrollmentJsonMap['enrollmentId'],
-        getEnrollStatusFromString(enrollmentJsonMap['status']),
-        session: session);
+      enrollmentJsonMap['enrollmentId'],
+      getEnrollStatusFromString(enrollmentJsonMap['status']),
+    );
     return enrollmentResponse;
   }
 
   /// Waits for the atServer to approve `pending.enrollmentId`, then completes
   /// the APKAM handshake: the keys minted at submit time gain the material the
   /// server was holding, and the finished keyset is persisted through
-  /// `pending.session`'s key destination.
+  /// [atKeysIo].
   ///
-  /// On return, `pending.keys` is complete and `pending.session` is a session
-  /// carrying the approved enrollmentId and the authenticated connection —
-  /// ready for `AtClientManager.fromAuthSession(...)`.
+  /// On return, `pending.atKeys` is complete and has been written to
+  /// [atKeysIo], ready for client creation.
   @override
   Future<void> waitForApproval(
+    Atsign atsign,
+    AtRootDomain rootDomain,
+    AtKeysIo atKeysIo,
     PendingEnrollment pending, {
-    Duration retryInterval = const Duration(seconds: 2),
+    Duration retryInterval = AtEnrollment.defaultRetryInterval,
     bool logProgress = true,
-    int maxRetries = 15,
-    AtLookupImpl? atLookup,
+    int maxRetries = AtEnrollment.defaultMaxRetries,
   }) async {
-    final atsign = pending.session.atsign;
-    final rootDomain = pending.session.rootDomain;
-
-    atLookup ??= AtLookupImpl(
-      atsign,
-      rootDomain.rootDomain,
-      rootDomain.rootPort,
-    );
-
-    // PKAM-authenticate the newly enrolled keys. at_lookup signs with the
-    // strategy; RSA is the wired path.
     // ignore: deprecated_member_use_from_same_package
-    final apkamPrivateKey = pending.keys.apkamPrivateKey;
+    final apkamPrivateKey = pending.atKeys.apkamPrivateKey;
     if (apkamPrivateKey == null) {
       throw AtAuthenticationException(
           'No apkam private key available to sign PKAM for the enrollment');
     }
-    atLookup
-      ..pkamSigner = RsaPkamSigner(apkamPrivateKey.toString())
-      ..enrollmentId = pending.enrollmentId;
+
+    // PKAM as the pending enrollment, not as whoever owns [atLookUp]: this is
+    // the first connection that can sign with the APKAM key minted at submit.
+    final enrollmentLookUp =
+        lookUpOverride?.call(pending.atKeys, pending.enrollmentId) ??
+            buildAtLookUp(signing, atsign, rootDomain, pending.atKeys,
+                enrollmentId: pending.enrollmentId);
 
     await _waitForPkamAuthSuccess(
-      atLookup,
-      pending.enrollmentId,
+      atsign,
+      pending,
+      enrollmentLookUp,
       retryInterval,
       logProgress: logProgress,
       maxRetries: maxRetries,
@@ -302,13 +310,11 @@ class AtEnrollmentImpl implements AtEnrollment {
     // fetch the following keys from the atServer
     Map<String, dynamic> encPrivKeyResponse =
         await _getDefaultEncryptionPrivateKey(
-      atLookup,
       atsign,
       pending.enrollmentId,
     );
 
     Map<String, dynamic> selfEncKeyResponse = await _getSelfEncryptionKey(
-      atLookup,
       atsign,
       pending.enrollmentId,
     );
@@ -318,58 +324,45 @@ class AtEnrollmentImpl implements AtEnrollment {
     // defaultEncryptionPrivateKey (encrypted via apkamSymmetricKey from the enrollment)
 
     // ignore: deprecated_member_use_from_same_package
-    final apkamSymmetricKey = pending.keys.apkamSymmetricKey;
+    final apkamSymmetricKey = pending.atKeys.apkamSymmetricKey;
     if (apkamSymmetricKey == null) {
       throw AtAuthenticationException(
           'No apkam symmetric key available to decrypt the enrolled keys');
     }
-    final aesEncryption =
-        StringAESEncryptor(AESKey(apkamSymmetricKey.toString()));
+    final apkamAes = AesCtrEncryptionAlgo(apkamSymmetricKey.bytes.length);
+    Future<String> decryptUnderApkam(Map<String, dynamic> response) async =>
+        utf8.decode(await apkamAes.decrypt(
+            base64Decode(response['value']), apkamSymmetricKey.bytes,
+            iv: InitialisationVector.fromBase64(response['iv'])));
 
-    String decryptedSelfEncryptionKey = aesEncryption.decrypt(
-      selfEncKeyResponse['value'],
-      iv: InitialisationVector.fromBase64(selfEncKeyResponse['iv']),
-    );
+    String decryptedSelfEncryptionKey =
+        await decryptUnderApkam(selfEncKeyResponse);
 
-    String decryptedDefaultEncryptionPrivateKey = aesEncryption.decrypt(
-      encPrivKeyResponse['value'],
-      iv: InitialisationVector.fromBase64(encPrivKeyResponse['iv']),
-    );
+    String decryptedDefaultEncryptionPrivateKey =
+        await decryptUnderApkam(encPrivKeyResponse);
 
     // The keyset is only now complete: with a selfEncryptionKey it can finally
     // be persisted (FileAtKeysIo needs it to self-encrypt the APKAM fields).
     // ignore: deprecated_member_use_from_same_package
-    pending.keys.defaultSelfEncryptionKey =
+    pending.atKeys.defaultSelfEncryptionKey =
         AtBytes.fromString(decryptedSelfEncryptionKey);
     // ignore: deprecated_member_use_from_same_package
-    pending.keys.defaultEncryptionPrivateKey =
+    pending.atKeys.defaultEncryptionPrivateKey =
         AtBytes.fromString(decryptedDefaultEncryptionPrivateKey);
 
-    // Persist the completed keyset to the session's destination, then hand back
-    // a session that is actually usable: same atsign and key source, now with
-    // the approved enrollmentId and the authenticated connection. `flush` for a
-    // durable store (it may be upgrading an existing keyfile); `write` for
-    // anything else, which is a create/replace.
-    final keysIo = pending.session.atKeysIo;
-    if (keysIo is WrittenAtKeysIo) {
-      await keysIo.flush(atsign, pending.keys);
+    // Persist the completed keyset. `flush` for a durable store (it may be
+    // upgrading an existing keyfile); `write` for anything else, which is a
+    // create/replace.
+    if (atKeysIo is WrittenAtKeysIo) {
+      await atKeysIo.flush(atsign, pending.atKeys);
     } else {
-      await keysIo.write(atsign, pending.keys);
+      await atKeysIo.write(atsign, pending.atKeys);
     }
-    pending.session = AtAuthSession(
-      atsign: atsign,
-      rootDomain: rootDomain,
-      namespace: pending.session.namespace,
-      atKeysIo: keysIo,
-      enrollmentId: pending.enrollmentId,
-      atLookUp: atLookup,
-    );
   }
 
   @override
   Future<List<ServerEnrollmentRequest>> list(
-    List<EnrollmentStatus>? filters,
-    AtLookUp atLookup, {
+    List<EnrollmentStatus>? filters, {
     String? arx,
     String? drx,
   }) async {
@@ -387,7 +380,7 @@ class AtEnrollmentImpl implements AtEnrollment {
         command += ':{"enrollmentStatusFilter":["$statusFilter"]}';
       }
     }
-    String rawResponse = (await atLookup.executeCommand(
+    String rawResponse = (await atLookUp.executeCommand(
       '$command\n',
       auth: true,
     ))!;
@@ -444,7 +437,9 @@ class AtEnrollmentImpl implements AtEnrollment {
   }
 
   Future<Map<String, dynamic>> _getDefaultEncryptionPrivateKey(
-      AtLookUp atLookUp, String atsign, String enrollmentId) async {
+    String atsign,
+    String enrollmentId,
+  ) async {
     String cmd =
         "keys:get:keyName:$enrollmentId.default_enc_private_key.__manage$atsign\n";
     _logger.shout('cmd: $cmd');
@@ -459,7 +454,9 @@ class AtEnrollmentImpl implements AtEnrollment {
   }
 
   Future<Map<String, dynamic>> _getSelfEncryptionKey(
-      AtLookUp atLookUp, String atsign, String enrollmentId) async {
+    String atsign,
+    String enrollmentId,
+  ) async {
     String cmd =
         "keys:get:keyName:$enrollmentId.default_self_enc_key.__manage$atsign\n";
     _logger.shout('cmd: $cmd');
@@ -489,13 +486,15 @@ class AtEnrollmentImpl implements AtEnrollment {
 
   /// Pkam auth will be retried until server approves/denies/expires the enrollment
   Future<void> _waitForPkamAuthSuccess(
-    AtLookUp atLookUp,
-    String enrollmentIdFromServer,
+    Atsign atsign,
+    PendingEnrollment pending,
+    AtLookUp enrollmentLookUp,
     Duration retryInterval, {
     bool logProgress = true,
     required int maxRetries,
   }) async {
     int retryAttempt = 0;
+    PkamAuthenticator pkamAuthenticator = PkamAuthenticator();
     AtSignLogger logger = AtSignLogger('AtEnrollmentImpl');
     while (true) {
       retryAttempt++;
@@ -504,12 +503,18 @@ class AtEnrollmentImpl implements AtEnrollment {
         _addProgress('PKAM', 'attempting PKAM auth', ProgressEventType.info);
         await waitBriefly();
       }
-      bool pkamAuthSucceeded = false;
       try {
-        // _attemptPkamAuth returns boolean value true when authentication is successful.
-        // Returns UnAuthenticatedException when authentication fails.
-        pkamAuthSucceeded = await atLookUp.pkamAuthenticate(
-            enrollmentId: enrollmentIdFromServer);
+        await pkamAuthenticator.authenticate(atsign, enrollmentLookUp,
+            enrollmentId: pending.enrollmentId);
+        if (logProgress) {
+          _addProgress(
+              'PKAM',
+              'Enrollment has been approved'
+                  ' (PKAM auth success)',
+              ProgressEventType.success);
+        }
+        logger.info('Authentication succeeded - request was approved');
+        return;
       } on UnAuthenticatedException catch (e) {
         // Error codes AT0401 and AT0026 indicate authentication failure due to unapproved enrollment. Retry until the enrollment is approved.
         // The variable _pkamAuthSucceeded is false, allowing for PKAM authentication retries.
@@ -522,7 +527,7 @@ class AtEnrollmentImpl implements AtEnrollment {
         // Error code AT0025 represents Enrollment denied. Therefore, no need to retry; throw exception.
         else if (e.message.contains('error:AT0025')) {
           throw AtEnrollmentException(
-              'The enrollment: $enrollmentIdFromServer is denied');
+              'The enrollment: ${pending.enrollmentId} is denied');
         }
       } catch (e) {
         String message =
@@ -535,27 +540,8 @@ class AtEnrollmentImpl implements AtEnrollment {
         }
         logger.severe(message);
       }
-      if (pkamAuthSucceeded) {
-        if (logProgress) {
-          _addProgress(
-              'PKAM',
-              'Enrollment has been approved'
-                  ' (PKAM auth success)',
-              ProgressEventType.success);
-        }
-        logger.info('Authentication succeeded - request was approved');
-        return;
-      } else {
-        if (logProgress) {
-          _addProgress(
-              'PKAM',
-              'Auth failed, not yet approved.'
-                  ' Will retry in ${retryInterval.inSeconds} seconds',
-              ProgressEventType.info);
-        }
-        logger.info('Will retry pkam in ${retryInterval.inSeconds} seconds');
-        await Future.delayed(retryInterval); // Delay and retry
-      }
+      logger.info('Will retry pkam in ${retryInterval.inSeconds} seconds');
+      await Future.delayed(retryInterval); // Delay and retry
     }
   }
 
@@ -563,8 +549,7 @@ class AtEnrollmentImpl implements AtEnrollment {
   static const _defaultOtpExpiry = Duration(minutes: 5);
 
   @override
-  Future<Otp> generateOtp(AtLookUp atLookUp,
-      {Duration expiry = _defaultOtpExpiry}) async {
+  Future<Otp> generateOtp({Duration expiry = _defaultOtpExpiry}) async {
     final command = 'otp:get:ttl:${expiry.inMilliseconds}\n';
     final response = await atLookUp.executeCommand(command, auth: true);
     if (response != null && response.startsWith('data:')) {
@@ -575,8 +560,7 @@ class AtEnrollmentImpl implements AtEnrollment {
   }
 
   @override
-  Future<Otp> setSpp(String spp, AtLookUp atLookUp,
-      {Duration expiry = _defaultOtpExpiry}) async {
+  Future<Otp> setSpp(String spp, {Duration expiry = _defaultOtpExpiry}) async {
     if (!RegExp('^$_kSppRegex\$').hasMatch(spp)) {
       throw AtEnrollmentException(
           'SPP must be alphanumeric and exactly 6 characters');

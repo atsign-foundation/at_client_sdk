@@ -1,65 +1,118 @@
 import 'package:at_auth/src/at_auth_impl.dart';
-import 'package:at_auth/src/auth/models/at_auth_requests.dart';
+import 'package:at_auth/src/auth/apkam_signing.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
+import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
 
-import 'auth/models/at_auth_session.dart';
+import 'auth/retry_options.dart';
+import 'keys/at_keys.dart';
+import 'keys/io/at_keys_io.dart';
 
-/// Interface for onboarding and authentication to a secondary server of an atsign
+/// Interface for onboarding and authentication to a secondary server of an atsign.
+///
+/// Every method takes the atsign, its atServer and the key source directly, and
+/// returns nothing: completing normally *is* the success signal, and failure
+/// throws [AtAuthenticationException]. After a successful call, [atLookUp] is
+/// the connection that was authenticated, ready to hand to client creation.
 abstract interface class AtAuth {
-  AtLookUp? atLookUp;
+  /// The connection authenticated by the most recent successful call.
+  ///
+  /// Null until one succeeds, and null again after one fails. This is how a
+  /// void-returning call still hands its connection forward — a client built
+  /// from it skips a second PKAM handshake.
+  AtLookUp? get atLookUp;
+
+  RetryOptions get retryOptions;
+
   Stream<ProgressEvent> get progressStream;
 
-  factory AtAuth.create(
-      {AtLookUp? atLookUp,
-      CramAuthenticator? cramAuthenticator,
-      PkamAuthenticator? pkamAuthenticator,
-      AtEnrollment? atEnrollmentBase}) {
+  /// The APKAM signing scheme every connection this instance builds will
+  /// authenticate with.
+  ApkamSigning get signing;
+
+  /// Creates an [AtAuth].
+  ///
+  /// No connection is supplied: at_lookup binds its PKAM key at construction,
+  /// so the connection cannot exist until the keys have been read or minted.
+  /// Each call builds its own, signing with [signing] — the caller's choice,
+  /// not something inferred from the keys, since a keyset minted by
+  /// [AtKeys.generate] carries both a classical and a post-quantum APKAM key.
+  factory AtAuth.create({
+    RetryOptions? options,
+    ApkamSigning signing = ApkamSigning.legacy,
+    CramAuthenticator? cramAuthenticator,
+    PkamAuthenticator? pkamAuthenticator,
+    AtEnrollment Function(AtLookUp)? enrollmentFactory,
+  }) {
     return AtAuthImpl(
-        atLookUp: atLookUp,
-        cramAuthenticator: cramAuthenticator,
-        pkamAuthenticator: pkamAuthenticator,
-        atEnrollment: atEnrollmentBase);
+      retryOptions: options ?? RetryOptions.defaultRetryOptions,
+      signing: signing,
+      cramAuthenticator: cramAuthenticator,
+      pkamAuthenticator: pkamAuthenticator,
+      enrollmentFactory: enrollmentFactory,
+    );
   }
 
   /// Authenticates an atsign to its atServer with PKAM.
   ///
-  /// Step 1. Read the keys from the request's [AtKeysIo] — that is the only
-  /// way keys enter authentication.
+  /// The keys always come from [atKeysIo] — an [AtKeysIo] implementation over a
+  /// file, keychain, or memory. To authenticate with keys you already hold, put
+  /// them in an [InMemoryAtKeysIo].
   ///
-  /// Step 2. Perform pkam authentication.
+  /// [enrollmentId] selects the enrollment to authenticate as; when null the
+  /// enrollmentId stored in the keys is used.
   ///
-  /// Returns the [AtAuthSession] to hand to client creation. Failure throws
-  /// [AtAuthenticationException]; there is no unsuccessful return value.
-  Future<AtAuthSession> authenticate(AtAuthRequest atAuthRequest);
-
-  /// Onboard method is invoked when an atsign is activated for the first time from a client app.
-  /// - Connect, and perform cram auth
-  /// - Generate pkam, encryption keypairs and apkam symmetric key
-  /// - Update pkam public key to secondary
-  /// - Close connection
-  /// - Reconnect, and perform pkam auth
-  /// - If required (legacy behaviour, but not recommended), then call
-  /// [completeActivation]
-  /// <p/>
-  ///
-  /// Set [atOnboardingRequest.publicKeyId] if pkam auth mode is [PkamAuthMode.sim]
-  Future<AtAuthSession> onboard(
-    AtOnboardingRequest atOnboardingRequest,
-    String cramSecret, {
-    bool autoCompleteActivation = true,
+  /// Completing normally means authenticated, and [atLookUp] is the connection
+  /// it happened on. Failure throws [AtAuthenticationException] and closes any
+  /// connection opened along the way.
+  Future<void> authenticate(
+    Atsign atsign,
+    AtRootDomain rootDomain,
+    AtKeysIo atKeysIo, {
+    String? enrollmentId,
   });
 
-  /// - Update encryption public key to server
-  /// - Delete cram secret from server
-  Future<void> completeActivation(AtAuthSession incompleteSession);
+  /// Activates an atsign for the first time, using its one-time [cramSecret].
+  ///
+  /// - Connect, and perform CRAM auth
+  /// - Generate the PKAM and encryption keypairs and the APKAM symmetric key
+  /// - Submit the first enrollment over the CRAM connection, which the atServer
+  ///   auto-approves, and adopt the enrollmentId it issues
+  /// - Close that connection, reconnect with the new PKAM key, and PKAM auth
+  /// - Persist the keys through [atKeysIo]
+  /// - Unless [autoCompleteActivation] is false, call [completeActivation]
+  ///
+  /// [appName] and [deviceName] name the enrollment the atServer records for
+  /// this activation.
+  Future<void> onboard(
+    Atsign atsign,
+    AtRootDomain rootDomain,
+    AtKeysIo atKeysIo,
+    String cramSecret, {
+    bool autoCompleteActivation = true,
+    String appName = FirstEnrollmentRequest.defaultAppName,
+    String deviceName = FirstEnrollmentRequest.defaultDeviceName,
+  });
 
-  /// Validate atsign's secondary server status
-  /// - Check if atsign's secondary server is reachable in atDirectory
-  /// - AtOnboardingRequest: validates server for onboarding and looks for teapot
-  /// - AtAuthRequest: validates server for authentication
-  Future<void> validateAtServer(AuthRequest authRequest);
+  /// - Update the encryption public key on the atServer
+  /// - Delete the cram secret from the atServer
+  ///
+  /// Reuses [atLookUp] when a call has already authenticated on this instance;
+  /// otherwise authenticates first with the keys in [atKeysIo].
+  Future<void> completeActivation(
+    Atsign atsign,
+    AtRootDomain rootDomain,
+    AtKeysIo atKeysIo,
+  );
+
+  /// Validates the atsign's atServer status.
+  /// - Check that the atsign resolves in the atDirectory
+  /// - When [onboarding], require an atServer that is running and NOT yet
+  ///   activated (looks for the teapot); otherwise require one already activated
+  Future<void> validateAtServer(Atsign atsign, AtRootDomain rootDomain,
+      {bool onboarding = false});
 }

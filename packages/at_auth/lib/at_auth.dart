@@ -2,13 +2,16 @@
 library;
 
 export 'src/at_auth.dart';
+// The options AtAuth.create takes: the APKAM signing scheme, the two
+// authenticators, and the retry policy.
+export 'src/auth/apkam_signing.dart';
+export 'src/auth/cram_authenticator.dart';
+export 'src/auth/pkam_authenticator.dart';
+export 'src/auth/retry_options.dart';
+// KeyIds names the structural fields of an .atKeys document and the keyId
+// tokens this package writes — needed to look up typed material via AtKeys.getKey.
+export 'src/keys/serialization/key_ids.dart';
 
-// Contains models related to onboarding and authentication requests, and the
-// AtAuthSession that authenticate/onboard hand back.
-export 'src/auth/models/at_auth_requests.dart';
-export 'src/auth/models/at_auth_session.dart';
-// PKAM signing strategies (AtPkamSigner implementations) for at_lookup.
-export 'src/auth/pkam_signers.dart';
 // Contains method related to submit, approve and deny an enrollment.
 export 'src/enroll/at_enrollment.dart';
 // Contains fields related to enrollment response received from the secondary server

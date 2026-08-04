@@ -4,17 +4,17 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-class MockAtLookupImpl extends Mock implements AtLookupImpl {}
+class MockAtLookup extends Mock implements AtLookUp {}
 
 void main() {
   group('CramAuthenticator tests', () {
     late CramAuthenticator cramAuthenticator;
-    late MockAtLookupImpl mockAtLookup;
-    final String atSign = '@alice';
+    late MockAtLookup mockAtLookup;
+    final Atsign atSign = '@alice'.toAtsign();
     final String cramSecret = 'testCramSecret';
 
     setUp(() {
-      mockAtLookup = MockAtLookupImpl();
+      mockAtLookup = MockAtLookup();
       cramAuthenticator = CramAuthenticator();
     });
 

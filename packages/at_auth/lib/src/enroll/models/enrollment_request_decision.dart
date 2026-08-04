@@ -41,23 +41,20 @@ import 'package:at_commons/at_commons.dart';
 /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.revoked('enrollment123', force: false);
 /// ```
 class EnrollmentRequestDecision {
-  late final String _enrollmentId;
-  late final String _atSign;
-  late final String _encryptedAPKAMSymmetricKey;
-  late final EnrollOperationEnum _enrollOperationEnum;
+  final String enrollmentId;
+  final Atsign atsign;
+  final AtBytes? encryptedAPKAMSymmetricKey;
+  final EnrollOperationEnum enrollOperationEnum;
   bool force = false;
-
-  String get enrollmentId => _enrollmentId;
-
-  String get atSign => _atSign;
-
-  String get encryptedAPKAMSymmetricKey => _encryptedAPKAMSymmetricKey;
-
-  EnrollOperationEnum get enrollOperationEnum => _enrollOperationEnum;
 
   // Private constructor to prevent creating object.
   // Use static factory methods to get instance of EnrollmentRequestDecision
-  EnrollmentRequestDecision._();
+  EnrollmentRequestDecision._(
+    this.atsign,
+    this.enrollmentId,
+    this.enrollOperationEnum, {
+    this.encryptedAPKAMSymmetricKey,
+  });
 
   /// To approve the request, the "enrollmentId" and its corresponding "encryptedAPKAMSymmetricKey,"
   /// received through the notification, must be provided using the "AuthenticationRequestDecisionBuilder."
@@ -76,18 +73,16 @@ class EnrollmentRequestDecision {
   ///               enrollmentId: 'dummy-enrollment-id',
   ///               encryptedAPKAMSymmetricKey: 'dummy-encrypted-apkam-symmetric-key'));
   static EnrollmentRequestDecision approved({
+    required Atsign atsign,
     required String enrollmentId,
     required AtBytes apkamSymmetricKey,
-    required String atSign,
   }) {
-    EnrollmentRequestDecision enrollmentRequestDecision =
-        EnrollmentRequestDecision._()
-          .._enrollmentId = enrollmentId
-          .._atSign = atSign
-          .._encryptedAPKAMSymmetricKey = apkamSymmetricKey.toString()
-          .._enrollOperationEnum = EnrollOperationEnum.approve;
-
-    return enrollmentRequestDecision;
+    return EnrollmentRequestDecision._(
+      atsign,
+      enrollmentId,
+      EnrollOperationEnum.approve,
+      encryptedAPKAMSymmetricKey: apkamSymmetricKey,
+    );
   }
 
   /// If the request is denied, the requester application is prevented from authenticating to the atServer.
@@ -95,11 +90,12 @@ class EnrollmentRequestDecision {
   /// ```dart
   ///  EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.denied('dummy-enrollment-id');
   /// ```
-  static EnrollmentRequestDecision denied(String enrollmentId, String atSign) {
-    return EnrollmentRequestDecision._()
-      .._enrollmentId = enrollmentId
-      .._atSign = atSign
-      .._enrollOperationEnum = EnrollOperationEnum.deny;
+  static EnrollmentRequestDecision denied(String enrollmentId, Atsign atsign) {
+    return EnrollmentRequestDecision._(
+      atsign,
+      enrollmentId,
+      EnrollOperationEnum.deny,
+    );
   }
 
   /// Revokes an approved enrollment, closing any active connections and making it inactive for future use.
@@ -113,12 +109,12 @@ class EnrollmentRequestDecision {
   /// ```dart
   /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.revoked('enrollment123', force: false);
   /// ```
-  static EnrollmentRequestDecision revoked(String enrollmentId, String atSign,
+  static EnrollmentRequestDecision revoked(String enrollmentId, Atsign atsign,
       {bool force = false}) {
-    return EnrollmentRequestDecision._()
-      .._enrollmentId = enrollmentId
-      .._atSign = atSign
-      .._enrollOperationEnum = EnrollOperationEnum.revoke
-      ..force = force;
+    return EnrollmentRequestDecision._(
+      atsign,
+      enrollmentId,
+      EnrollOperationEnum.revoke,
+    )..force = force;
   }
 }

@@ -340,7 +340,7 @@ AtKeysMaterial _symmetricMaterial({String bytes = 'dmFsdWU='}) {
     keyId: 'symmetric',
     keyPartType: CryptographicKeyType.symmetricEncryption,
     keyAlgorithmType: KeyAlgorithmType.aes256,
-    bytes: AtBytes.fromString(bytes),
+    bytes: base64Decode(bytes),
     createdAt: _createdAt,
   );
 }
@@ -351,14 +351,14 @@ List<AtKeysMaterial> _rsaPairMaterials() {
       keyId: 'pair',
       keyPartType: CryptographicKeyType.publicEncryption,
       keyAlgorithmType: KeyAlgorithmType.rsa2048,
-      bytes: AtBytes.fromString('cHVibGlj'),
+      bytes: base64Decode('cHVibGlj'),
       createdAt: _createdAt,
     ),
     AtKeysMaterial(
       keyId: 'pair',
       keyPartType: CryptographicKeyType.privateDecryption,
       keyAlgorithmType: KeyAlgorithmType.rsa2048,
-      bytes: AtBytes.fromString('cHJpdmF0ZQ=='),
+      bytes: base64Decode('cHJpdmF0ZQ=='),
       createdAt: _createdAt,
     ),
   ];
@@ -369,7 +369,7 @@ AtKeysMaterial _wrapperMaterial() {
     keyId: 'wrapper',
     keyPartType: CryptographicKeyType.symmetricEncryption,
     keyAlgorithmType: KeyAlgorithmType.aes256,
-    bytes: AtBytes.fromString('d3JhcHBlcg=='),
+    bytes: base64Decode('d3JhcHBlcg=='),
     createdAt: _createdAt,
   );
 }
@@ -383,7 +383,7 @@ AtKeysMaterial _enrollMaterial({
     keyPartType: CryptographicKeyType.privateDecryption,
     keyAlgorithmType: KeyAlgorithmType.rsa2048,
     operations: operations,
-    bytes: AtBytes.fromString('c2VjcmV0'),
+    bytes: base64Decode('c2VjcmV0'),
     createdAt: _createdAt,
   );
 }

@@ -131,21 +131,24 @@ Future<Map<String, dynamic>> _selfEncryptLegacyFields(
     Map<String, dynamic> document) {
   return _applyToLegacyFields(
       document,
-      (algo, value) async => base64Encode(await algo
-          .encrypt(Uint8List.fromList(utf8.encode(value)), iv: _legacyIv)));
+      (algo, key, value) async => base64Encode(await algo.encrypt(
+          Uint8List.fromList(utf8.encode(value)), key,
+          iv: _legacyIv)));
 }
 
 Future<Map<String, dynamic>> _selfDecryptLegacyFields(
     Map<String, dynamic> document) {
   return _applyToLegacyFields(
       document,
-      (algo, value) async =>
-          utf8.decode(await algo.decrypt(base64Decode(value), iv: _legacyIv)));
+      (algo, key, value) async => utf8
+          .decode(await algo.decrypt(base64Decode(value), key, iv: _legacyIv)));
 }
 
 Future<Map<String, dynamic>> _applyToLegacyFields(
   Map<String, dynamic> document,
-  Future<String> Function(AESEncryptionAlgo algo, String value) transform,
+  Future<String> Function(
+          AesCtrEncryptionAlgo algo, Uint8List selfEncryptionKey, String value)
+      transform,
 ) async {
   final present = _selfEncryptedLegacyFields
       .where((field) => document[field] != null)
@@ -159,10 +162,13 @@ Future<Map<String, dynamic>> _applyToLegacyFields(
     throw AtException(
         'selfEncryptionKey is required to process the self-encrypted legacy atKeys fields');
   }
-  final algo = AESEncryptionAlgo(AESKey(selfEncryptionKey));
+  // AES-128/192/256 are all legal here — the strength is whatever the keyfile's
+  // selfEncryptionKey carries, not something this code picks.
+  final key = base64Decode(selfEncryptionKey);
+  final algo = AesCtrEncryptionAlgo(key.length);
   final result = Map<String, dynamic>.from(document);
   for (final field in present) {
-    result[field] = await transform(algo, document[field] as String);
+    result[field] = await transform(algo, key, document[field] as String);
   }
   return result;
 }

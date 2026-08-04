@@ -1,12 +1,8 @@
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/src/auth/pkam_authenticator.dart';
-import 'package:at_auth/src/keys/serialization/key_ids.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-
-import 'test_utils/at_keys.dart';
 
 class MockAtLookup extends Mock implements AtLookUp {}
 
@@ -14,14 +10,12 @@ void main() {
   group('PkamAuthenticator tests', () {
     late PkamAuthenticator pkamAuthenticator;
     late MockAtLookup mockAtLookup;
-    late AtKeys atKeys;
-    final String atSign = '@alice';
+    final Atsign atSign = '@alice'.toAtsign();
     final String testEnrollmentId = 'testEnrollmentId';
 
     setUp(() {
       mockAtLookup = MockAtLookup();
       pkamAuthenticator = PkamAuthenticator();
-      atKeys = legacyAtKeys();
     });
 
     test('authenticate() completes normally on success', () async {
@@ -29,29 +23,20 @@ void main() {
           .thenAnswer((_) async => true);
 
       await expectLater(
-        pkamAuthenticator.authenticate(
-          atSign,
-          mockAtLookup,
-          atKeys,
-          enrollmentId: testEnrollmentId,
-        ),
+        pkamAuthenticator.authenticate(atSign, mockAtLookup,
+            enrollmentId: testEnrollmentId),
         completes,
       );
     });
 
     test('authenticate() should throw UnAuthenticatedException on failure',
         () async {
-      when(() => mockAtLookup.pkamAuthenticate(
-              enrollmentId: AtConstants.enrollmentId))
+      when(() => mockAtLookup.pkamAuthenticate(enrollmentId: testEnrollmentId))
           .thenThrow(UnAuthenticatedException('Unauthenticated'));
 
       expect(
-          () async => await pkamAuthenticator.authenticate(
-                atSign,
-                mockAtLookup,
-                atKeys,
-                enrollmentId: AtConstants.enrollmentId,
-              ),
+          () async => await pkamAuthenticator.authenticate(atSign, mockAtLookup,
+              enrollmentId: testEnrollmentId),
           throwsA(isA<UnAuthenticatedException>()));
     });
 
@@ -61,49 +46,21 @@ void main() {
           .thenAnswer((_) async => false);
 
       expect(
-          () async => await pkamAuthenticator.authenticate(
-                atSign,
-                mockAtLookup,
-                atKeys,
-                enrollmentId: testEnrollmentId,
-              ),
+          () async => await pkamAuthenticator.authenticate(atSign, mockAtLookup,
+              enrollmentId: testEnrollmentId),
           throwsA(isA<UnAuthenticatedException>()));
     });
 
-    test(
-        'authenticate() should throw AtAuthenticationException when no apkam '
-        'private key is available to sign', () async {
-      // ignore: deprecated_member_use
-      atKeys.apkamPrivateKey = null;
-
-      expect(
-          () async => await pkamAuthenticator.authenticate(
-                atSign,
-                mockAtLookup,
-                atKeys,
-                enrollmentId: testEnrollmentId,
-              ),
-          throwsA(isA<AtAuthenticationException>()));
-    });
-
-    test('authenticate() cannot yet sign with a post-quantum-only keyset',
+    test('authenticate() passes a null enrollmentId straight through',
         () async {
-      // Pins the documented limitation of AtKeys.generate(mintLegacy: false):
-      // PKAM signs with the RSA apkamPrivateKey, and MlDsaPkamSigner is
-      // experimental. When ML-DSA PKAM lands and this starts passing, that is
-      // the signal to wire the PQ signer here and update AtKeys.generate's doc.
-      final pqOnly =
-          await AtKeys.generate(atSign.toAtsign(), mintLegacy: false);
-      expect(pqOnly.keysForKeyId(KeyIds.apkamPQ), isNotEmpty);
+      // A null enrollmentId means "use the one the connection was built with",
+      // which at_lookup resolves — the authenticator must not substitute one.
+      when(() => mockAtLookup.pkamAuthenticate(enrollmentId: null))
+          .thenAnswer((_) async => true);
 
-      expect(
-          () async => await pkamAuthenticator.authenticate(
-                atSign,
-                mockAtLookup,
-                pqOnly,
-                enrollmentId: testEnrollmentId,
-              ),
-          throwsA(isA<AtAuthenticationException>()));
+      await pkamAuthenticator.authenticate(atSign, mockAtLookup);
+
+      verify(() => mockAtLookup.pkamAuthenticate(enrollmentId: null)).called(1);
     });
   });
 }

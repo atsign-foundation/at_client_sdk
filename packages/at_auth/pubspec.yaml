@@ -8,11 +8,23 @@ documentation: https://docs.atsign.com/
 environment:
   sdk: ^3.6.0
 
+# Detached from the pub workspace until at_lookup 4.0.0 and at_chops 4.0.0 are
+# published: the rest of the repo keeps resolving hosted at_auth 3.x, so it is
+# unaffected by this break. Restore `resolution: workspace` and drop the
+# overrides once both are on pub.dev.
+dependency_overrides:
+  at_lookup:
+    path: ../at_lookup
+  at_chops:
+    path: ../at_chops
+  at_server_status:
+    path: ../at_server_status
+
 dependencies:
-  at_server_status: ^1.1.0
+  at_server_status: ^2.0.0
   at_commons: ^5.13.0
-  at_lookup: ^3.7.0
-  at_chops: ^3.0.0
+  at_lookup: ^4.0.0
+  at_chops: ^4.0.0
   at_utils: ^3.0.19
   http: ^1.2.1
   meta: ^1.16.0

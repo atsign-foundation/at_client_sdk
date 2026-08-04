@@ -38,6 +38,15 @@ class NamespacePermission {
 
   @override
   String toString() {
-    return 'NamespacePermission(namespace: $namespace, read: $read, write: $write)';
+    return '$namespace:${read ? 'r' : ''}${write ? 'w' : ''}';
+  }
+
+  static NamespacePermission fromString(String s) {
+    final split = s.split(':');
+    final namespace = split.first;
+    final permissions = split.last;
+    final read = permissions == 'rw' || permissions == 'r' ? true : false;
+    final write = permissions == 'rw' || permissions == 'w' ? true : false;
+    return NamespacePermission(namespace: namespace, read: read, write: write);
   }
 }
