@@ -1,4 +1,14 @@
 ## 3.14.1
+- feat: the SDK now supplies a crypto config when an app names none, and that
+  default reads the nskey data path while still writing legacy
+  (`CryptoConfig.readsNskeyWritesLegacy`). The asymmetry is the point: a record
+  arrives stamped with the provider that wrote it, so a client that cannot
+  resolve that id fails on data someone already sent it, whereas writing the new
+  scheme is a fleet-wide commitment — read support lands everywhere first, and
+  the write default flips once, later. `CryptoConfig.forClient` is
+  correspondingly no longer a constant: the nskey providers hold per-atSign
+  state, so the set is built once per client at construction and looked up.
+  An app that sets `AtClientPreference.crypto` still wins, unchanged.
 - fix: an encrypted notification no longer races the content key it needs. The
   conveyance was written local-first, so it reached the recipient's atServer
   only when the sender's sync got round to it — 31 seconds later in a captured

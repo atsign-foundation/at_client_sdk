@@ -2299,3 +2299,54 @@ Recorded as open; the warning-level log is what will make it visible next time.
 UC-A3.4 and UC-A4.4 are **met**, live-covered in `concurrent_notify_test.dart`, which asserts
 that `providerId` travels on the notification frame and that bob decrypts by it. Verified by
 reverting the fix: the test then fails, and passes with it.
+
+---
+
+## 27. The era default: read the new scheme everywhere, write it once (2026-08-04)
+
+SS-4 owed "wire the nskey `CryptoConfig` at init". The obvious reading — make
+`CryptoConfig.nskey` the default — would have been wrong, and the release sequence says why.
+
+### 27.1 The asymmetry
+
+`CryptoConfig.nskey` sets `defaultProviderId` to the AES-GCM data path, so adopting it wholesale
+flips **writes** to PQ. That is the 4.x step. Final 3.x "reads PQ records, mints and publishes
+its nskeys and its root, and **still writes legacy**" — so what init owes is the provider *set*,
+not the write default. `CryptoConfig.readsNskeyWritesLegacy` is that sentence in code: same
+providers, same shared `ContentKeyCache`, `defaultProviderId` left at `legacy`.
+
+The asymmetry is structural rather than transitional caution:
+
+- **Reading is additive.** A record arrives stamped with the provider that wrote it. A client
+  that cannot resolve that id fails on data someone has *already sent it* — the failure is
+  imposed from outside and cannot be avoided by not opting in.
+- **Writing is a fleet-wide commitment.** The first client to write PQ produces records every
+  other client must already be able to read.
+
+So the read side must land everywhere *before* the write side flips anywhere, which is exactly
+what makes the 3.x rollout a prerequisite for 4.x rather than a nicety.
+
+### 27.2 Why it stopped being a constant
+
+`CryptoConfig.forClient` returned `const CryptoConfig.legacy()`. It cannot return a shared nskey
+set, because those providers hold **per-atSign state** — a `ContentKeyCache` and a key ring bound
+to one client — so one instance would let two atSigns read each other's cached content keys. The
+set is therefore built once per client at construction and `forClient` became a lookup.
+
+Stored in an `Expando` keyed by `AtClient`, deliberately **not** written into
+`AtClientPreference.crypto`: a preference object is routinely shared across atSigns, and the
+moment this value stops being a const, resolving into it is a per-atSign leak. An app that named
+its own config still wins, and `adoptEraDefault` leaves it untouched.
+
+### 27.3 The part that only works because the arrival path landed
+
+The era ring is given the client's `AtKeys` as its `privateFiling`. Without that,
+`PublishedNskeyKeyRing` sees only what *this process* minted (`_ownPrivates`), so a conveyed
+private — or any private at all after a restart — is invisible and the atSign reads as unable to
+open its own namespace. The filing that makes it visible is the arrival path fixed earlier the
+same day (section 25). A client with no `AtKeysIo` still gets the providers, since reading is
+additive, but has no durable private source — the limitation it already had.
+
+**Owed:** the era ring is not reachable from a test, so a live inbound read *through the era
+default* cannot be driven end to end — the functional coverage asserts the wiring reached a real
+constructed client, which is what a mock cannot show, but stops short of decrypting through it.

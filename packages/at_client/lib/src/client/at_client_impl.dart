@@ -456,6 +456,8 @@ class AtClientImpl implements AtClient {
 
     _cascadeSetTelemetryService();
 
+    _adoptEraCryptoDefault();
+
     // Seeding is deliberately not awaited. It publishes to the atServer, and a
     // client's startup must not wait on — or fail because of — a rollout
     // action; a namespace missed now is minted at the next start, and the
@@ -470,6 +472,40 @@ class AtClientImpl implements AtClient {
     // something startup should wait on or fail for, and anything missed is
     // retried at the next start.
     unawaited(_fileConveyedKeysAndAnchor());
+  }
+
+  /// Gives this client the era's crypto default: the nskey providers wired for
+  /// reading, with writes still going out legacy.
+  ///
+  /// **Why the SDK builds this rather than the app.** An app that had to name a
+  /// `CryptoConfig` to have one would be pinned to whatever was current the day
+  /// it was written, and would sit out the migration it exists to ride. An app
+  /// that *does* name one still wins — `adoptEraDefault` leaves it alone.
+  ///
+  /// The key ring is given this client's `AtKeys` so it can find a private that
+  /// was **conveyed** to this enrollment or that survived a restart. Without
+  /// that the ring sees only what this process minted itself
+  /// (`published_nskey_key_ring.dart`'s `_ownPrivates`), so every restart would
+  /// read as "this atSign cannot open its own namespace". A client with no
+  /// `AtKeysIo` still gets the providers — reading is additive and costs a
+  /// client nothing that does not use it — but has no durable private source,
+  /// which is the same limitation it already had.
+  ///
+  /// Built once per client because these providers hold per-atSign state; a
+  /// shared instance would let two atSigns see each other's cached content keys.
+  void _adoptEraCryptoDefault() {
+    final keysIo = _atKeysIo;
+    CryptoConfig.adoptEraDefault(
+      this,
+      CryptoConfig.readsNskeyWritesLegacy(
+        keyRing: PublishedNskeyKeyRing(
+          this,
+          privateFiling: keysIo == null
+              ? null
+              : NskeyPrivateFiling(keysIo: keysIo, atSign: _atSign),
+        ),
+      ),
+    );
   }
 
   /// Files the key material conveyed to this enrollment, then publishes

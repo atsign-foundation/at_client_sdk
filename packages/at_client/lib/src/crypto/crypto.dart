@@ -4,9 +4,9 @@ import 'package:at_client/src/crypto/nskey/ck_manager.dart';
 import 'package:at_client/src/crypto/nskey/content_key.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 import 'package:at_client/src/crypto/nskey/nskey_provider.dart';
-import 'package:at_client/src/crypto/nskey/nskey_resolver.dart';
 import 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:meta/meta.dart' show visibleForTesting;
 
 // The nskey data path is part of this library's public surface: it is what
 // `CryptoConfig.nskey` takes and returns, and what a caller catches and names.
@@ -67,10 +67,33 @@ class CryptoConfig {
   ///
   /// [keyRing] supplies the namespace key material. Until the secret-sharing
   /// substrate delivers it, that is a fixture.
-  factory CryptoConfig.nskey({required NskeyKeyRing keyRing}) {
+  factory CryptoConfig.nskey({required NskeyKeyRing keyRing}) =>
+      _nskeySet(keyRing, symmetricAesGcmCryptoProviderId);
+
+  /// The nskey providers wired for **reading**, with writes still going out
+  /// under [legacyCryptoProviderId].
+  ///
+  /// This is the final-3.x era shape, and the release sequence is what makes it
+  /// the right one: a 3.x client *reads* PQ records, mints and publishes its
+  /// namespace keys and its signing root, and still writes legacy; 4.x is what
+  /// makes PQ the write default. Registering the provider set without moving
+  /// [defaultProviderId] is exactly that sentence in code.
+  ///
+  /// The asymmetry is deliberate rather than transitional sloppiness. Reading
+  /// is *additive* — a record arrives stamped with the provider that wrote it,
+  /// so a client that cannot resolve that id fails on data someone already
+  /// sent it. Writing is a fleet-wide commitment: the first client to write PQ
+  /// produces records every other client must already be able to read. So the
+  /// read side goes first everywhere, and the write side flips once.
+  factory CryptoConfig.readsNskeyWritesLegacy({required NskeyKeyRing keyRing}) =>
+      _nskeySet(keyRing, legacyCryptoProviderId);
+
+  /// One [ContentKeyCache] shared by the manager and both providers — the
+  /// coupling [CryptoConfig.nskey] exists to enforce.
+  static CryptoConfig _nskeySet(NskeyKeyRing keyRing, String defaultProviderId) {
     final cache = ContentKeyCache();
     return CryptoConfig(
-      defaultProviderId: symmetricAesGcmCryptoProviderId,
+      defaultProviderId: defaultProviderId,
       providers: [
         NskeyProvider(keyRing: keyRing, cache: cache),
         SymmetricAesGcmProvider(
@@ -90,13 +113,42 @@ class CryptoConfig {
   /// the day it was written, and would sit out the migration it was supposed to
   /// ride. Moving the default is therefore an edit here and nowhere else.
   ///
-  /// Today that default is [CryptoConfig.legacy]. When it becomes the nskey
-  /// data path, this stops being a constant: [CryptoConfig.nskey] holds
-  /// per-atSign state and must be built once per client, so the resolution
-  /// moves to client construction and this becomes a lookup of what was built.
-  /// It is written as a function now so that change lands in one place.
-  static CryptoConfig forClient(AtClient? atClient) =>
-      atClient?.getPreferences()?.crypto ?? const CryptoConfig.legacy();
+  /// The era default is now [CryptoConfig.readsNskeyWritesLegacy], built once
+  /// per client by [adoptEraDefault] at construction and looked up here. It
+  /// stopped being a constant because the nskey providers hold per-atSign state
+  /// (a [ContentKeyCache], a key ring bound to one client), so one shared
+  /// instance would let two atSigns read each other's cached content keys.
+  ///
+  /// A client that was never given an era default — one built before
+  /// [adoptEraDefault] ran, or a test double — falls back to
+  /// [CryptoConfig.legacy] rather than assembling a set here, because building
+  /// one needs the client and this is also called *during* construction.
+  static CryptoConfig forClient(AtClient? atClient) {
+    final named = atClient?.getPreferences()?.crypto;
+    if (named != null) return named;
+    if (atClient == null) return const CryptoConfig.legacy();
+    return _eraDefaults[atClient] ?? const CryptoConfig.legacy();
+  }
+
+  /// Per-client era defaults. An [Expando] rather than a field on the
+  /// preference object: the SDK must not resolve its own default *into* the
+  /// app's preference, because a preference is routinely shared across atSigns
+  /// and this value is per-atSign the moment it stops being a const.
+  static final Expando<CryptoConfig> _eraDefaults =
+      Expando('CryptoConfig.eraDefault');
+
+  /// Gives [atClient] the era's default config, unless the app named its own.
+  /// Idempotent — a re-used cached client keeps the set it was built with, so
+  /// its content-key cache and key ring survive re-creation.
+  static void adoptEraDefault(AtClient atClient, CryptoConfig config) {
+    if (atClient.getPreferences()?.crypto != null) return;
+    _eraDefaults[atClient] ??= config;
+  }
+
+  /// The era default [atClient] holds, or null if it was never given one.
+  @visibleForTesting
+  static CryptoConfig? eraDefaultFor(AtClient atClient) =>
+      _eraDefaults[atClient];
 
   /// The configured provider with [id], or null if none matches.
   ///
