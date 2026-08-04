@@ -18,6 +18,7 @@ export 'package:at_client/src/crypto/nskey/content_key.dart';
 export 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 export 'package:at_client/src/crypto/nskey/nskey_provider.dart';
 export 'package:at_client/src/crypto/nskey/nskey_resolver.dart';
+export 'package:at_client/src/crypto/nskey/pq_signing_chain.dart';
 export 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
 export 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
 

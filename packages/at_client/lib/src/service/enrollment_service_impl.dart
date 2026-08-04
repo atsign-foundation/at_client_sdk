@@ -5,6 +5,8 @@ import 'package:at_chops/at_chops.dart' show AtChopsUtil, EncryptionKeyType;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
+import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
+    show PqSigningChain;
 import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
     show enrollmentApkamSymmetricKeySecretName;
 import 'package:at_commons/at_builders.dart';
@@ -117,6 +119,28 @@ class EnrollmentServiceImpl implements EnrollmentService {
             namespace: _conveyanceNamespaceFor(enrollment),
             name: enrollmentApkamSymmetricKeySecretName,
             value: mintedApkamSymmetricKey,
+          ));
+    }
+
+    // Vouch for the enrollment this approver has just approved, so a verifier
+    // can walk from its key up to the atSign's signing root. Conveyed rather
+    // than published, because `_apsk` accepts writes only from its own
+    // enrollment's connection — this approver is the signer and the child is
+    // the only permitted writer, so the child stamps it on first run.
+    //
+    // Best-effort by design: an enrollment whose link never lands is simply
+    // unsigned, which verifiers already tolerate during the changeover, and
+    // that is a far better outcome than failing an approval that has already
+    // happened on the atServer.
+    final link = await PqSigningChain.signLinkFor(
+        _atClient, sharing, enrollment.enrollmentId!);
+    if (link != null) {
+      await sharing.shareSecretWith(
+          keyPackage,
+          Secret(
+            namespace: _conveyanceNamespaceFor(enrollment),
+            name: PqSigningChain.linkSecretName,
+            value: PqSigningChain.encodeLink(link),
           ));
     }
 

@@ -1,4 +1,25 @@
 ## 3.14.1
+- feat: `PqSigningChain` — the approval chain's link. The enrollment that
+  approves a device signs that device's APKAM public key, so a verifier can
+  walk upward from any key toward the atSign's signing root without an approval
+  graph being published anywhere: the link is an ordinary APKAM-signed envelope,
+  which already names its signer and is already verified against that signer's
+  published `_apsk`, so a forged parent claim fails against the parent it names.
+  **The parent signs and the child publishes**, because `_apsk` accepts writes
+  only from its own enrollment's connection — the approver conveys the link over
+  the substrate at approval and the child stamps it onto its own record's
+  `appMetadata` on first run. Until it does, verifiers see a bare key, which the
+  transition rule already tolerates. Signing is best-effort: an approval that has
+  already happened is never failed over an additive field.
+- fix: a secret conveyed to one enrollment is no longer forwarded to the next
+  one that enrollment approves. Received secrets are stored like any other —
+  `SecretStore.putIfNewer` accepts reserved names deliberately, so that system
+  secrets such as namespace rotation keys reach a newly approved device — and
+  `shareAllSecretsWith` iterates that same store. So an enrollment holding its
+  own conveyed `apkamSymmetricKey` would have handed it on. Secrets carrying the
+  new `PairwiseSecretSharing.perEnrollmentSecretPrefix` (`__en.`) are addressed
+  to exactly one enrollment and are never forwarded, while the rest of the
+  reserved `__` space keeps flowing as before.
 - feat: enrollment approval can convey the `apkamSymmetricKey` in the
   post-quantum direction, removing the last RSA wrap from the enrollment path.
   `EnrollmentServiceImpl.approve` now reads the pending record **before**
