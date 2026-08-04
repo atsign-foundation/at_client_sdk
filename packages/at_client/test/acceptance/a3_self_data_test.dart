@@ -7,12 +7,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/src/crypto/crypto.dart';
-import 'package:at_client/src/crypto/nskey/content_key.dart';
-import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
-import 'package:at_client/src/crypto/nskey/nskey_provider.dart';
-import 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
-import 'package:at_commons/at_commons.dart';
+import 'package:at_client/at_client.dart';
+import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
@@ -121,14 +117,15 @@ void main() {
       //       re-encrypting them is R-1's explicit migration. Rare in practice:
       //       a client mints for its preference namespace and its rw namespaces
       //       at init.
-          provenIn(
+      provenIn(
         'tests/at_functional_test/test/nskey_data_path_e2e_test.dart',
         'a write to a namespace with no nskey fails, saying which',
-        proves: 'cold start throws NamespaceKeyUnavailableException naming the atSign and namespace, with the readiness query and the opt-in legacy fallback covered alongside it',
+        proves:
+            'cold start throws NamespaceKeyUnavailableException naming the atSign and namespace, with the readiness query and the opt-in legacy fallback covered alongside it',
       );
-});
+    });
 
-    test('UC-A3.4 · self notification carrying an encrypted value', () {
+    test('UC-A3.4 · self notification carrying an encrypted value', () async {
       // GIVEN @alice pq-native; alice1, alice2 PQ; alice2 running a monitor.
       // WHEN  alice1 notifies @alice (self) with an encrypted value.
       // THEN  the notification value decrypts on alice2 with the same provider
@@ -136,7 +133,100 @@ void main() {
       //       not only on stored keys; an offline alice2 still decrypts the
       //       queued notification on later delivery; a signal-only notification
       //       needs no decryption and is unaffected.
-      fail('not implemented');
-    }, skip: owedUnit);
+      //
+      // The frame is the whole point of this row. A stored key carries its
+      // appMetadata in the record; a notification has to carry it in the
+      // notification itself, and if it does not, the receiver has no way to
+      // know which scheme opened the value it was just handed.
+      const providerId = symmetricAesGcmCryptoProviderId;
+      final provider = _RecordingProvider(providerId);
+      final client = MockAtClient();
+      client.getPreferences().crypto =
+          CryptoConfig(defaultProviderId: providerId, providers: [provider]);
+
+      Map<String, dynamic> frame({String? value}) => {
+            'id': 'abc-123',
+            'key': '@alice:treaty.app_1.my_apps@alice',
+            'from': '@alice',
+            'to': '@alice',
+            // Well in the past: an alice2 that was offline receives exactly
+            // this frame later, so a transform that consulted arrival time
+            // would be the thing that broke queued delivery.
+            'epochMillis': 1600000000000,
+            'messageType': 'MessageType.key',
+            'isEncrypted': value != null,
+            if (value != null) 'value': value,
+            'metadata': {
+              AtConstants.appMetadata: base64Encode(utf8.encode(jsonEncode({
+                'providerId': providerId,
+                'ckKid': 'a1b2c3d4e5f60718',
+                'iv': base64Encode(List<int>.filled(16, 7)),
+              }))),
+            },
+          };
+
+      // 1. providerId travels ON THE FRAME — decoded off the notification's
+      //    own metadata, not looked up from any stored record.
+      final parsed = AtNotification.fromJson(frame(value: 'ciphertext'));
+      expect(parsed.metadata?.appMetadata?.providerId, providerId,
+          reason: 'without this the receiver holds a value and no idea which '
+              'scheme opens it — stored keys would work and notifications '
+              'would not, which is exactly the shape of a silent data loss');
+      expect(parsed.metadata?.appMetadata?.additional,
+          containsPair('ckKid', 'a1b2c3d4e5f60718'),
+          reason: 'the per-record entries have to ride along too; a providerId '
+              'with no ckKid names a scheme that then cannot find its key');
+
+      // 2. Routed by that id, the same way a put is.
+      final delivered =
+          await NotificationResponseTransformer(client).transform(Tuple()
+            ..one = parsed
+            ..two = (NotificationConfig()
+              ..regex = '.*'
+              ..shouldDecrypt = true));
+
+      expect(provider.decryptCalls, 1,
+          reason: 'the notification value must reach the provider the FRAME '
+              'names, not the client\'s default and not legacy');
+      expect(delivered.value, '$providerId decrypted ciphertext');
+
+      // 3. A signal-only notification carries no value, so there is nothing to
+      //    decrypt and the provider must not be troubled. This is the control:
+      //    it shows the call count above tracks the value, not the transform.
+      final signal = AtNotification.fromJson(frame());
+      await NotificationResponseTransformer(client).transform(Tuple()
+        ..one = signal
+        ..two = (NotificationConfig()
+          ..regex = '.*'
+          ..shouldDecrypt = true));
+
+      expect(provider.decryptCalls, 1,
+          reason: 'a signal-only notification is unaffected — if this went to '
+              '2, every signal notification is attempting a decryption of '
+              'nothing');
+    });
   });
+}
+
+/// Names itself in its output, so a routing assertion cannot pass by reaching
+/// the wrong provider and getting a plausible-looking string back.
+class _RecordingProvider implements CryptoProvider {
+  @override
+  final String id;
+
+  int decryptCalls = 0;
+
+  _RecordingProvider(this.id);
+
+  @override
+  Future<String> encrypt(
+          CryptoContext context, AtKey atKey, String plaintext) async =>
+      '$id encrypted $plaintext';
+
+  @override
+  Future<String> decrypt(
+      CryptoContext context, AtKey atKey, String ciphertext) async {
+    decryptCalls++;
+    return '$id decrypted $ciphertext';
+  }
 }

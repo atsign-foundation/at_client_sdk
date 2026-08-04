@@ -22,12 +22,13 @@ void main() {
       //       alice's nskey private. PQ end to end — no RSA on any path. An
       //       unauthorised @bob enrollment can neither fetch the ciphertext
       //       (server-gated) nor decrypt it.
-          provenIn(
+      provenIn(
         'tests/at_end2end_test/test/nskey_cross_atsign_test.dart',
         'alice shares with bob, and bob reads it with his own nskey private',
-        proves: 'bob opens the CK with HIS nskey private on an alice-owned record, and the same test asserts alice cannot decapsulate the CK she sealed to him',
+        proves:
+            'bob opens the CK with HIS nskey private on an alice-owned record, and the same test asserts alice cannot decapsulate the CK she sealed to him',
       );
-});
+    });
 
     test('UC-A4.2 · alice to bob where bob has no namespace key, share fails',
         () {
@@ -66,11 +67,12 @@ void main() {
       //       scheme on BOB's readiness; offline-then-online bob still decrypts
       //       the queued notification; appMetadata is present on the frame;
       //       signal-only notifications are unaffected.
-          provenIn(
+      provenIn(
         'tests/at_end2end_test/test/concurrent_notify_test.dart',
         'UC-A4.4: providerId travels on the frame and bob decrypts by it',
-        proves: 'providerId is read off the notification frame bob\'s monitor delivered, and the value decrypts through the nskey route',
+        proves:
+            'providerId is read off the notification frame bob\'s monitor delivered, and the value decrypts through the nskey route',
       );
-});
+    });
   });
 }

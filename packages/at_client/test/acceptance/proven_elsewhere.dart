@@ -29,7 +29,7 @@ import 'package:test/test.dart';
 /// name in that file. [proves] states what in that test establishes this row —
 /// prose for a human, not matched against anything.
 void provenIn(String path, String testName, {required String proves}) {
-  final file = File('${_repoRoot().path}/$path');
+  final file = File('${repoRoot().path}/$path');
   expect(file.existsSync(), isTrue,
       reason: 'this row cites $path for its proof, and that file is gone — '
           'either restore it or the row is no longer proven');
@@ -44,7 +44,7 @@ void provenIn(String path, String testName, {required String proves}) {
 
 /// Walk up until the repo root is in reach, matching `catalogue_test.dart` so
 /// both behave the same from a package root, the workspace root, or an IDE.
-Directory _repoRoot() {
+Directory repoRoot() {
   for (var dir = Directory.current;; dir = dir.parent) {
     if (File('${dir.path}/docs/projects/pq/acceptance.md').existsSync()) {
       return dir;

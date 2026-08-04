@@ -7,17 +7,87 @@
 /// Catalogue: `docs/projects/pq/acceptance.md` section 13.
 library;
 
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:at_chops/at_chops.dart';
+import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
 
+import '../test_utils/mocks.dart';
 import 'blockers.dart';
+import 'proven_elsewhere.dart';
 
 void main() {
   group('cross-cutting invariants', () {
-    test('reads are universal', () {
+    test('reads are universal', () async {
       // A client decrypts anything ever written to it (all providers retained);
       // upgrading only ever ADDS read-capability.
-      fail('not implemented');
-    }, skip: owedUnit);
+      //
+      // The mechanism is that `legacy` is a *built-in* fallback rather than an
+      // entry in `providers` — so it survives a config that lists only the PQ
+      // set, and no upgrade can drop it by omission. That is asserted here as a
+      // differential: the only thing that varies between the two arms is the
+      // provider id stamped on the record, so a green result cannot come from
+      // both arms failing the same way.
+      final client = MockAtClient();
+      // The 4.x shape — PQ registered AND the write default. The most
+      // aggressive config a client will ever hold, and legacy reads must still
+      // route under it.
+      client.getPreferences().crypto =
+          CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing());
+      final runtime = CryptoRuntime(client);
+
+      AtKey stamped(String? providerId) => AtKey()
+        ..key = 'historic'
+        ..sharedBy = '@alice'
+        ..metadata = (Metadata()
+          ..appMetadata =
+              providerId == null ? null : AppMetadata(providerId: providerId));
+
+      // Arm 1: a legacy record. Routing must find the built-in provider. It
+      // then fails inside that provider on this bare mock, which is a
+      // *different* failure — the point is only that resolution succeeded.
+      await expectLater(
+          () => runtime.decryptForGet(stamped(legacyCryptoProviderId), 'c'),
+          throwsA(isNot(isA<CryptoProviderNotRegistered>())),
+          reason: 'a PQ-configured client must still ROUTE a legacy record; if '
+              'this is CryptoProviderNotRegistered then upgrading silently '
+              'dropped the ability to read everything written before it');
+
+      // Same, for a record predating appMetadata entirely.
+      await expectLater(() => runtime.decryptForGet(stamped(null), 'c'),
+          throwsA(isNot(isA<CryptoProviderNotRegistered>())),
+          reason: 'an unstamped record is legacy by definition and must route '
+              'the same way');
+
+      // Arm 2 — the control. An id genuinely absent resolves to nothing, so
+      // arm 1 above is a real resolution rather than a router that never
+      // rejects anything.
+      await expectLater(
+          () => runtime.decryptForGet(stamped('at/some/scheme/from/2030'), 'c'),
+          throwsA(isA<CryptoProviderNotRegistered>()),
+          reason: 'control: an unregistered id must fail loudly, or arm 1 '
+              'proves nothing about resolution');
+
+      // And the failure names what to add, because "reads are universal" is
+      // only true if a client meeting a newer scheme can be told which one.
+      await expectLater(
+          () => runtime.decryptForGet(stamped('at/some/scheme/from/2030'), 'c'),
+          throwsA(predicate((e) =>
+              '$e'.contains('at/some/scheme/from/2030') &&
+              '$e'.contains(legacyCryptoProviderId) &&
+              '$e'.contains(nskeyCryptoProviderId))),
+          reason: 'the error must name the missing id AND the registered set, '
+              'so an operator can see what this client is short of');
+
+      // The additive half, stated directly: the PQ config resolves the PQ ids,
+      // and resolving them did not cost it the legacy one above.
+      final config = CryptoConfig.forClient(client);
+      expect(config.lookup(nskeyCryptoProviderId), isNotNull);
+      expect(config.lookup(symmetricAesGcmCryptoProviderId), isNotNull);
+    });
 
     test('writes are gated by reader readiness', () {
       // A value/notification is only written in a scheme EVERY required reader
@@ -26,7 +96,8 @@ void main() {
       fail('not implemented');
     }, skip: r1);
 
-    test('appMetadata.providerId is authoritative on keys and frames', () {
+    test('appMetadata.providerId is authoritative on keys and frames',
+        () async {
       // Present on BOTH stored keys and notification frames, with the no-ns
       // shapes: at/nskey/XWING/AES/GCM ->
       //   {providerId, recipientKind, ckKid, nskeyKid};
@@ -42,8 +113,94 @@ void main() {
       // (decisions.md section 17). Assert the round-trip through sync, not just
       // the in-memory stamp: an out-of-order or missing field in that fragment
       // is dropped without an error.
-      fail('not implemented');
-    }, skip: owedUnit);
+      const owner = '@alice';
+      const namespace = 'app_1.my_apps';
+      final context = CryptoContext(atClient: MockAtClient());
+
+      final pair = await XWingKeyPair.generate();
+      final cache = ContentKeyCache();
+      final ring = InMemoryNskeyKeyRing();
+      final nskeyKid = ring.seedKeypair(owner, namespace,
+          publicKey: pair.publicKeyBytes, privateKey: pair.privateKeyBytes);
+      final nskey = NskeyProvider(keyRing: ring, cache: cache);
+      final data = SymmetricAesGcmProvider(cache: cache);
+
+      AtKey key(String name) => AtKey()
+        ..key = name
+        ..namespace = namespace
+        ..sharedBy = owner
+        ..metadata = Metadata();
+
+      final ck =
+          ContentKey(Uint8List.fromList(base64Decode(AESKey.generate(32).key)));
+
+      // The conveyance: at/nskey -> {providerId, recipientKind, ckKid,
+      // nskeyKid}. Read back off the key the provider stamped, not off a
+      // literal — a shape that drifts must fail here.
+      final conveyance = key('${ck.ckKid}.__ck');
+      await nskey.encrypt(context, conveyance, ck.toBase64());
+      cache.putAsCurrent(owner, namespace, ck, nskeyKid);
+      final conveyanceMeta = conveyance.metadata.appMetadata!;
+      expect(conveyanceMeta.providerId, nskeyCryptoProviderId);
+      expect(conveyanceMeta.additional, containsPair('ckKid', ck.ckKid));
+      expect(conveyanceMeta.additional, containsPair('nskeyKid', nskeyKid));
+      expect(conveyanceMeta.additional?['recipientKind'], isNotNull,
+          reason: 'the reader needs to know what kind of key this was sealed '
+              'to before it can pick one to open it with');
+
+      // The value: at/symmetric/AES/GCM -> {providerId, ckKid, iv}. No sealed
+      // key inline — it CITES a conveyance.
+      final value = key('treaty');
+      await data.encrypt(context, value, 'the treaty text');
+      final valueMeta = value.metadata.appMetadata!;
+      expect(valueMeta.providerId, symmetricAesGcmCryptoProviderId);
+      expect(valueMeta.additional, containsPair('ckKid', ck.ckKid));
+      expect(valueMeta.additional?['iv'], isNotNull,
+          reason: 'AES-GCM is unsafe under IV reuse, so the IV is per-record '
+              'and has to travel with the record');
+
+      // The round-trip that actually broke: appMetadata must survive the
+      // serializer on the way OUT to the atServer. A field the fragment drops
+      // is dropped silently, and every reader then falls back to legacy.
+      for (final stamped in [conveyance, value]) {
+        final fragment = stamped.metadata.toAtProtocolFragment();
+        // appMetadata rides the fragment base64-encoded, so decode it rather
+        // than substring-matching: a match on the raw fragment would pass on
+        // an accidental collision and fail on a legal re-encoding, and neither
+        // outcome says anything about what the reader will get.
+        final encoded =
+            RegExp(r'appMetadata:([A-Za-z0-9+/=]+)').firstMatch(fragment);
+        expect(encoded, isNotNull,
+            reason: 'appMetadata must reach the wire at all — when the sync '
+                'push dropped it, every cross-atSign read fell back to legacy '
+                'for every provider, with no error anywhere');
+        final decoded = jsonDecode(utf8.decode(base64Decode(encoded![1]!)))
+            as Map<String, dynamic>;
+
+        expect(decoded['providerId'], stamped.metadata.appMetadata!.providerId,
+            reason: 'the provider id is what routes the read; a record that '
+                'arrives without it is opened with the wrong scheme');
+        expect(decoded['ckKid'], ck.ckKid,
+            reason: 'and the additional entries travel with it, or the reader '
+                'routes to the right provider and still cannot find the key');
+      }
+
+      // "and frames" is the other half: one serializer serves both the stored
+      // key and the notification frame. The regression was a SECOND,
+      // hand-rolled serializer that fell behind this one, so the guard worth
+      // having is that neither call site has grown its own again.
+      final lib = Directory('${repoRoot().path}/packages/at_client/lib/src');
+      for (final path in const [
+        'service/sync_service_impl.dart',
+        'service/notification_service_impl.dart',
+      ]) {
+        expect(File('${lib.path}/$path').readAsStringSync(),
+            contains('toAtProtocolFragment'),
+            reason: '$path must serialize metadata through the shared '
+                'fragment builder; a private one beside it is how appMetadata '
+                'silently stopped reaching the atServer once already');
+      }
+    });
 
     test('no RSA in any confidentiality path for a fully-PQ interaction', () {
       // Auth, enrollment conveyance, self, shared, and notification paths.
@@ -74,8 +231,25 @@ void main() {
       // appears in NO scan — with or without showhidden, authenticated or not.
       // A guaranteed protocol property (_apsk already relies on it); this is a
       // regression guard against a server change retiring it.
-      fail('not implemented');
-    }, skip: owedFunctional);
+      //
+      // Two citations because the claim has two halves and no single test
+      // holds both: enumerability is an atServer property provable against one
+      // atSign, while "cross-atSign" needs a second one to do the fetching.
+      provenIn(
+        'tests/at_functional_test/test/underscore_public_key_hiding_test.dart',
+        'a public:__ key syncs, is served by plookup, and is not enumerable',
+        proves: 'the exact plookup returns it while neither the owner\'s '
+            'showhidden scan nor a genuinely unauthenticated outsider\'s can '
+            'enumerate it — with an ordinary public key and a second hidden '
+            'key as controls, so the absence is a real absence',
+      );
+      provenIn(
+        'tests/at_end2end_test/test/nskey_cross_atsign_test.dart',
+        'alice shares with bob, and bob reads it with his own nskey private',
+        proves: 'alice resolves bob\'s published nskey across atSigns before '
+            'she can seal to it, which is the cross-atSign fetch half',
+      );
+    });
 
     test('advertised recipient keys are signed and verified', () {
       // Every advertised encapsulation key — the per-enrollment key package and
@@ -103,7 +277,44 @@ void main() {
       // B-1. The harness is the durable artefact, re-run on every later
       // key-shape change. The ceiling is pinned when the harness lands — a
       // measured budget, not a guessed number.
-      fail('not implemented');
-    }, skip: owedUnit);
+      //
+      // What this asserts is the *instrument and the record*, not a threshold.
+      // A ceiling pinned to one machine's numbers would fail on somebody
+      // else's laptop for no defensible reason, and a benchmark that fails for
+      // an indefensible reason gets deleted. So: the harness must exist and
+      // still expose its measurement primitives, and the budget must be
+      // written down with the basis it was measured on.
+      final harness = File(
+          '${repoRoot().path}/packages/at_client/benchmark/crypto_bench.dart');
+      expect(harness.existsSync(), isTrue,
+          reason: 'the harness IS the deliverable for this row — without it '
+              'every performance claim about the PQ path is a guess again');
+
+      final harnessSource = harness.readAsStringSync();
+      for (final primitive in const ['prewarm', 'measure', 'median', 'p90']) {
+        expect(harnessSource, contains(primitive),
+            reason: 'the harness must keep reporting a distribution. A mean '
+                'over a total hides exactly the variance ML-DSA signing has, '
+                'and prewarm is what stopped a 256 B encrypt measuring slower '
+                'than a 4096 B one');
+      }
+
+      final decisions = File('${repoRoot().path}/docs/projects/pq/decisions.md')
+          .readAsStringSync();
+      expect(decisions, contains('The PQ performance budget, measured'),
+          reason: 'a harness nobody has run pins nothing; the measured budget '
+              'has to be recorded where the next reader will find it');
+      for (final basis in const [
+        'per record',
+        'per (owner, namespace)',
+        'per authentication',
+      ]) {
+        expect(decisions, contains(basis),
+            reason: 'the budget must state which basis each figure is on. '
+                'X-Wing seal is per-namespace and RSA wrap is per-recipient — '
+                'quoting the 19x ratio between them without saying so is the '
+                'single most misleading thing available in this data');
+      }
+    });
   });
 }

@@ -2370,3 +2370,78 @@ the suite moves.
 The lesson is the session's recurring one in a smaller key — an owed item asserted rather than
 verified is a false entry on the ledger, and false entries cost the next reader more than a
 missing one would.
+
+## 28. The PQ performance budget, measured (2026-08-04)
+
+`acceptance.md`'s cross-cutting row *"performance is measured, not assumed"* asks for a
+measured ceiling rather than a guessed one. The harness (`packages/at_client/benchmark/crypto_bench.dart`)
+landed with B-1; this is the first run recorded against it, so until now the row asked for a
+budget that did not exist.
+
+**Platform.** Dart 3.11.3 stable, macOS 26.5.2 arm64, 16 processors, 50 iterations, medians with
+p90. Harness overhead measured at 0 µs, so nothing below is instrument.
+
+**This is a desktop baseline, not the reference low-end device the row asks for.** The device
+figure is still owed and is tracked as such — do not read the numbers below as the device budget.
+
+### 28.1 Three bases, and they are not interchangeable
+
+The single most misleading thing that can be done with these numbers is to compare across bases.
+The PQ scheme deliberately moves cost from per-record to per-namespace, so a per-record
+comparison against a per-recipient one flatters or damns it arbitrarily.
+
+| Basis | What one unit is | How often it happens |
+|---------------------|-------------------------------------|-----------------------------------------|
+| per record | one value encrypted or decrypted | every put/get |
+| per (owner, namespace) | one content-key conveyance | once per namespace, then cached |
+| per authentication | one PKAM challenge signed/verified | once per connection |
+
+### 28.2 Per record — AES-256-GCM vs legacy AES-256-CTR
+
+| Size | GCM encrypt | CTR encrypt | GCM decrypt | CTR decrypt |
+|---------|------------:|------------:|------------:|------------:|
+| 256 B | 13 µs | 10 µs | 12 µs | 9 µs |
+| 4096 B | 124 µs | 38 µs | 131 µs | 32 µs |
+| 65536 B | 3055 µs | 724 µs | 2589 µs | 393 µs |
+
+At the size that dominates real traffic the delta is **3 µs**, which is nothing. The ratio grows
+with payload size — ~4× at 64 KB — because GCM computes an authentication tag over the whole
+message where CTR does not. That is a real cost buying a real property (integrity), not overhead.
+
+### 28.3 Per conveyance — X-Wing vs legacy RSA-2048
+
+| Operation | PQ | Legacy | Note |
+|-----------|-----:|-------:|------|
+| seal / wrap | 1540 µs | 80 µs | different bases — see below |
+| open / unwrap | 1484 µs | 1301 µs | 1.14× |
+| X-Wing keygen | 729 µs | — | once per namespace key |
+
+The seal ratio (19×) is the number most likely to be quoted and the most misleading one in this
+document. The two sides are not the same unit: an X-Wing seal is **per (owner, namespace)** and
+its result is cached, while an RSA wrap is **per (owner, recipient)**. A namespace shared with
+many recipients pays the PQ cost once and the legacy cost per recipient. On the operation that
+actually recurs — opening — PQ and legacy are within 14% of each other.
+
+### 28.4 Per authentication — ML-DSA-65 vs RSA-2048
+
+| Operation | PQ | Legacy | Who pays it |
+|-----------|-----:|-------:|-------------|
+| sign | 2711 µs (p90 6091) | 1301 µs | the client, once per connection |
+| verify | 1003 µs | 70 µs | the atServer |
+
+The client-side cost is the sign: **2.7 ms per authentication**, ~2× legacy, and imperceptible
+against the network round trip it accompanies. Verify is 14× legacy and lands on the atServer,
+which is where the fleet-scale question lives rather than the user-experience one.
+
+ML-DSA-65 signing has a **wide distribution by construction** — p90 is more than double the
+median because the algorithm uses rejection sampling and retries until a candidate signature is
+in range. A single sample of this operation is not a measurement; that is a property of the
+algorithm, not of the harness.
+
+### 28.5 What is pinned
+
+Nothing here is a regression gate yet — one desktop run is a baseline, not a threshold, and
+pinning a ceiling to a number measured on one machine would fail on somebody else's laptop for
+no defensible reason. What is pinned is the **harness**: it is the durable artefact, re-run on
+every key-shape change, and `cross_cutting_test.dart` fails if it goes missing or if this section
+stops recording a budget.

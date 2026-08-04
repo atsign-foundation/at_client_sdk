@@ -62,13 +62,6 @@ const r1CrossAtSign = 'blocked: R-1 (scheme negotiation + flag) · $_e2e';
 const b2 = 'blocked: B-2 (nskey rotation + revocation) · $_functional';
 
 // ---------------------------------------------------------------------------
-// Substrate
-// ---------------------------------------------------------------------------
-
-/// Substrate wired into AtClient + server wake-up + key-package-in-request.
-
-
-// ---------------------------------------------------------------------------
 // Off the critical path — retrofit, onboarding
 // ---------------------------------------------------------------------------
 
