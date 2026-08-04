@@ -2624,11 +2624,8 @@ at all — produced the transcript above immediately. And the failure is logged 
 naming the envelope, which is why it was findable at all; had it been `finer` this would have
 presented as "the sender never sent".
 
-**What UC-B5.1 now needs:** a fixture with two real APKAM enrollments — each approved, each with
-its own authenticated client carrying its own `enrollmentId` and `AtChops` — which no test
-package here has yet. `AtClientManager.setCurrentAtSign` already takes `enrollmentId`, `atChops`
-and `atKeysIo`, and a second `AtClientManager()` instance sidesteps the per-atSign singleton, so
-the pieces exist; assembling them is the work. With that in place the round trip should complete,
+**What UC-B5.1 now needs:** two APKAM enrollments of one atSign with genuinely distinct clients,
+which the per-atSign client cache currently prevents in a single process (see section 32). With that in place the round trip should complete,
 since the only thing observed blocking it is an authentication class the fixture would supply.
 The blocker is re-labelled from *the initiator does not exist* to *the live round trip is
 unproven* — the initiator now exists and its guards are unit-covered.
@@ -2653,14 +2650,32 @@ distinct advertised kpids, and clients are constructed from their sessions.
 
 **What does not, and neither is guessed at.**
 
-1. **The constructed client is not treated as APKAM-authenticated.** `listForNamespace` from an
-   enrolled client still meets *"enroll:listns requires APKAM authentication"*, so
-   `AtClientManager.fromAuthSession` is not threading the enrollment's authentication through in
-   the way this path needs. It passes `enrollmentId: session.enrollmentId`, so the likely
-   suspects are that field being unset on the returned session, or the connection authenticating
-   with the atSign's own keys regardless. **Not established** — and worth noting that the same
-   enumeration reached inside `requestPrivateIfAbsent` returned 0 rather than throwing, so two
-   paths that ought to behave identically do not. That discrepancy is the thread to pull.
+1. **The constructed client is not treated as APKAM-authenticated — because it is not a new
+   client at all.** Established, and the answer is structural. `AtClientImpl` caches instances
+   **keyed by atSign alone**, so every enrolled client handed back is the *same object* as the
+   approver's: `identical(enrolled.client, approver)` is `true`, and two enrollments of one
+   atSign are `identical` to each other. `setCurrentAtSign` reuses that instance and
+   `_remoteSecondary ??=` keeps the connection it was built with, so `enrollmentId` never reaches
+   the `AtLookUp` — hence the refusal.
+
+   The session itself was fine all along: `response.session` is non-null, carries the right
+   `enrollmentId`, and carries an already-authenticated `AtLookUp`. `fromAuthSession(reuse: true)`
+   asks for that connection and still changes nothing, because none of those arguments are
+   applied to a cached instance.
+
+   The "two paths behave differently" discrepancy dissolved too, and it was my own code:
+   `requestPrivateIfAbsent` returned 0 rather than throwing because its own
+   `atLookUp.enrollmentId == null` guard fired first and it never reached the enumeration. There
+   was no discrepancy to explain — one path exited early. Worth recording as a reminder that a
+   "mystery" is often a guard you wrote that morning.
+
+   **This is the `(owner, id)` rule missing from the client cache.** Identity there is the atSign,
+   not the atSign *and* the enrollment, and `ConcurrentClients` does not help: it solves two
+   different atSigns, and a second `AtClientManager` still resolves to the same cached client for
+   a matching atSign. Making the fixture work needs a cache scoped by `(atSign, enrollmentId)`,
+   or driving the second enrollment through `AtLookUp` alone, or a second process — a decision
+   about `AtClientImpl`, not a fixture detail. The earlier note here that "the pieces exist;
+   assembling them is the work" was wrong, and is withdrawn.
 2. **Key packages are not bound to their enrollments.** `register()` mints a fresh X-Wing keypair
    per process: a party's kpid came back `490de1fc0a10864e` where its enrollment had advertised
    `9520bb7abf3295ee`. A party in that state listens at an address no sender ever writes to.

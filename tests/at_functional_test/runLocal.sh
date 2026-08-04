@@ -29,7 +29,7 @@ echo "*** Getting dependencies" && dart pub get
 
 cd test
 echo "*** docker compose down" && docker compose down
-echo "*** docker compose pull" && docker compose pull
+echo "*** docker compose pull SKIPPED (local at_virtual_env:local image)"
 echo "*** docker compose up" && docker compose up -d
 cd ..
 
