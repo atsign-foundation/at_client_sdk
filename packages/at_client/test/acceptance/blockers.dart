@@ -45,9 +45,6 @@ const _e2e = 'layer: tests/at_end2end_test';
 // A row whose proof already exists in another package should cite it with
 // `provenIn` (see `proven_elsewhere.dart`) instead of carrying one of these.
 
-/// The project landed; this scenario still needs writing, as a unit test.
-const owedUnit = 'owed: scenario not yet written · $_unit';
-
 /// The project landed; this scenario still needs writing, live.
 const owedFunctional = 'owed: scenario not yet written · $_functional';
 

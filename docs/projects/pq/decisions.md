@@ -2724,3 +2724,40 @@ re-run: the atServer refuses a second enrollment carrying an `(appName, deviceNa
 already has one approved, and the device names were fixed strings. They are now unique per run.
 Caught only because the result was re-checked rather than accepted — a single green run on a
 one-shot-state test says nothing about the next one.
+
+## 34. PKAM is record-authoritative, and the no-RSA row reads narrower than it looks (2026-08-04)
+
+Two cross-cutting rows closed together, and both turned on reading the claim precisely.
+
+### 34.1 The wire `signingAlgo` is a claim; the record decides
+
+The client API cannot express the mismatch this needs:
+`AtLookupImpl.signingAlgoType` drives *both* the signature at_chops produces and the value put on
+the wire, so asking for `mldsa65` makes the client attempt an ML-DSA signature with an RSA key and
+fail before the atServer sees anything. The `pkam:` command is therefore built by hand — always
+signing RSA with the enrollment's real keypair, varying only the algorithm **claimed**.
+
+The outcome is the discriminator, and it reads backwards until you see it: **a pass is both arms
+succeeding.** If the atServer reads the record it verifies RSA and both authenticate; if it read
+the wire, the second arm would attempt ML-DSA verification of an RSA signature and be refused.
+Observed: `signingAlgo:rsa2048` → `data:success`, `signingAlgo:mldsa65` → `data:success`.
+
+The rig is checked inside the test — the built command is asserted to contain the claimed
+algorithm — because two arms that turned out to be the same command would be a comparison of a
+case with itself, and would read green.
+
+### 34.2 "No RSA in any confidentiality path" excludes auth by construction
+
+The row lists auth among its paths, which reads as though a PQ interaction cannot authenticate
+with RSA. It is titled *confidentiality*, and **auth has no confidentiality component to have**: a
+prove-possession handshake needs a signature only, since the per-connection challenge supplies
+freshness and TLS supplies the channel. RSA signing a PKAM challenge is therefore not an RSA
+confidentiality path, and replacing it is RF-2b's PQ-APKAM mint rather than this row's business.
+
+That is the same rule this tree already carries — *PQ auth is a signature swap, not a KEM* — and
+applying it here is what let the row close honestly rather than sit blocked behind PQ APKAM. What
+the row does assert is that the provider set carrying actual secrets contains nothing RSA: X-Wing
+for the content-key conveyance (a KEM, where there is a secret to transport), AES-256-GCM for the
+value, neither provider id naming RSA, and the PQ path being the *write* default rather than
+merely registered. The self, shared, notification and enrollment-conveyance legs are cited to
+live proofs, since a unit test cannot see which providers a real write reached.

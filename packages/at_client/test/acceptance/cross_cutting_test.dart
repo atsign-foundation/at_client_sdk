@@ -202,17 +202,91 @@ void main() {
       }
     });
 
-    test('no RSA in any confidentiality path for a fully-PQ interaction', () {
+    test('no RSA in any confidentiality path for a fully-PQ interaction',
+        () async {
       // Auth, enrollment conveyance, self, shared, and notification paths.
-      fail('not implemented');
-    }, skip: owedUnit);
+      //
+      // Read precisely: this row is about **confidentiality**, and auth has no
+      // confidentiality component to have. A prove-possession handshake needs a
+      // signature only — the per-connection challenge supplies freshness and
+      // TLS supplies the channel — so the PQ move there is a signature swap,
+      // not a KEM. RSA still being used to SIGN a PKAM challenge is therefore
+      // not an RSA confidentiality path, and swapping it is RF-2b's PQ-APKAM
+      // mint rather than this row's business. What auth does guarantee is
+      // covered by the record-authoritative row above.
+      //
+      // That leaves the paths that genuinely carry secrets, and the assertion
+      // is that the provider set the SDK assembles for them contains nothing
+      // RSA at all.
+      final config = CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing());
+
+      final nskey = config.lookup(nskeyCryptoProviderId);
+      final data = config.lookup(symmetricAesGcmCryptoProviderId);
+      expect(nskey, isA<NskeyProvider>(),
+          reason: 'the content key is conveyed under X-Wing — a KEM, where '
+              'there is a secret to transport');
+      expect(data, isA<SymmetricAesGcmProvider>(),
+          reason: 'and the value itself under AES-256-GCM');
+
+      // The ids are the wire contract, and each names every algorithm a reader
+      // needs code for. Neither may name RSA, on any casing.
+      for (final id in [
+        nskeyCryptoProviderId,
+        symmetricAesGcmCryptoProviderId
+      ]) {
+        expect(id.toLowerCase(), isNot(contains('rsa')),
+            reason: 'a provider id is what a reader routes on; RSA appearing '
+                'in one would mean records are being written to an RSA path');
+      }
+      expect(config.defaultProviderId, symmetricAesGcmCryptoProviderId,
+          reason: 'and a fully-PQ interaction WRITES that path — otherwise the '
+              'set is merely registered and the interaction is not PQ at all');
+
+      // Self, shared and notification all route through those two providers —
+      // proven live rather than asserted here, since a unit test cannot see
+      // which providers a real write actually reached.
+      provenIn(
+        'tests/at_functional_test/test/nskey_data_path_e2e_test.dart',
+        'a self value round-trips through the nskey data path',
+        proves: 'self data is sealed and opened through X-Wing + AES-GCM on a '
+            'live atServer, with no legacy provider involved',
+      );
+      provenIn(
+        'tests/at_end2end_test/test/nskey_cross_atsign_test.dart',
+        'alice shares with bob, and bob reads it with his own nskey private',
+        proves: 'the shared path is the same two providers across atSigns',
+      );
+      provenIn(
+        'tests/at_end2end_test/test/concurrent_notify_test.dart',
+        'UC-A4.4: providerId travels on the frame and bob decrypts by it',
+        proves: 'and the notification path routes by the same provider id',
+      );
+
+      // The enrollment conveyance — the one place a secret really is
+      // transported during onboarding — carries no RSA wrap in pq mode.
+      provenIn(
+        'tests/at_functional_test/test/enrollment_pq_key_exchange_e2e_test.dart',
+        'a pq enrollment reaches the atServer with no RSA-wrapped key',
+        proves: 'the enrol request carries no RSA-wrapped apkamSymmetricKey; '
+            'the approver mints it and seals it to the advertised X-Wing key '
+            'package instead',
+      );
+    });
 
     test('ML-DSA APKAM auth is record-authoritative', () {
       // PQ auth verifies against the enrollment record's single apkamPublicKey
       // using the RECORD signingAlgo — _getSigningAlgoType reads the record,
       // NEVER the client-supplied wire value.
-      fail('not implemented');
-    }, skip: owedFunctional);
+      provenIn(
+        'tests/at_functional_test/test/pkam_record_authoritative_test.dart',
+        'the wire signingAlgo is a claim, and the record decides',
+        proves: 'a pkam: command signed with the enrollment\'s real RSA key '
+            'but CLAIMING mldsa65 on the wire still authenticates, so the '
+            'atServer chose its verifier from the record and not from the '
+            'caller. The truthful claim is the control, and the built command '
+            'is asserted to actually carry the claim so the two arms differ',
+      );
+    });
 
     test('pq_signing_root is create-once; the published nskey is not', () {
       // A second public:pq_signing_root@<atSign> create is rejected, never an

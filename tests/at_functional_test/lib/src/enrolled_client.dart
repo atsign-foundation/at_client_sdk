@@ -55,6 +55,13 @@ class EnrolledClient {
   /// anything sealed to it is written under.
   final String kpid;
 
+  /// This enrollment's key material, as `waitForApproval` left it: its APKAM
+  /// keypair, its key-package private half, and the encryption keys unwrapped
+  /// from the approver's conveyance. Exposed because tests that drive
+  /// authentication by hand — signing a PKAM challenge to check what the
+  /// atServer verifies against — need the keypair the record names.
+  final AtKeys keys;
+
   /// The manager owning [client]. Its own instance rather than the singleton —
   /// `AtClientManager.getInstance()` is per-process and keyed by atSign, so a
   /// second enrollment of the SAME atSign would otherwise evict the first.
@@ -64,6 +71,7 @@ class EnrolledClient {
     required this.client,
     required this.enrollmentId,
     required this.kpid,
+    required this.keys,
     required this.manager,
   });
 }
@@ -148,6 +156,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
     client: manager.atClient,
     enrollmentId: response.enrollmentId,
     kpid: ((payload['keys'] as List).single as Map)['kid'] as String,
+    keys: await (response.session ?? session).atKeysIo!.read(atSign),
     manager: manager,
   );
 }

@@ -8,7 +8,7 @@ inline, skipped with the project that must land before it can go green.
 is how far we've got.
 
 > **The two counting faults audited 2026-08-03 were fixed 2026-08-04**, and
-> twelve owed rows have since been written. The suite now reads **17 of 40**
+> fourteen owed rows have since been written. The suite now reads **19 of 40**
 > scenario rows green, up from 1 before the repair and 5 after it. (The runner's own count
 > is higher — it includes `catalogue_test.dart`'s three guards, which are not
 > scenarios. That gap is why the old "4 of 43" figure was itself wrong in the
@@ -26,7 +26,9 @@ is how far we've got.
 >    `owed: scenario not yet written`. Conflating "the project owes this" with
 >    "we owe this a test" is what made the old number misleading in both
 >    directions at once.
-> 3. **Twelve of those owed rows are now written**, leaving **5**. Four are
+> 3. **Fourteen of those owed rows are now written**, leaving **3**, and every
+>    row that could be written against mocked state now is — the residual is
+>    entirely live work. Four of the fourteen are
 >    cross-cutting invariants — reads-are-universal, appMetadata-is-authoritative,
 >    the published nskey's fetchable-not-enumerable property (cited, not
 >    duplicated: `underscore_public_key_hiding_test` already proves it with
@@ -96,7 +98,7 @@ below), plus 9 cross-cutting invariants.
 | B3 · mixed-PQ intra-atSign    | B3.1, B3.2                       | R-1          |
 | B4 · mixed-PQ cross-atSign    | B4.1, B4.2, B4.3, B4.4           | R-1, ON-1    |
 | B5 · retrofit edge cases      | B5.1 ✅, B5.2 ✅, B5.3 ✅           | —            |
-| cross-cutting invariants      | 9 (5 ✅)                          | owed, R-1    |
+| cross-cutting invariants      | 9 (7 ✅)                          | owed, R-1    |
 
 Note that **A5.1 is split into (a) and (b)** here where the catalogue writes it
 as one use case with two When/Then pairs. They are different levers with
@@ -110,12 +112,12 @@ separately.
 Sorting by blocker showed why D1 felt slow for so long: B-1 alone gated **11 of
 the 40** rows, and no data-path row could go green until **B-1** (XL) and
 **SS-4** (L–XL) landed, so the programme had no demonstrable increment in its
-centre. Both have now landed, and owed rows gate **5 of the 40** — the same
+centre. Both have now landed, and owed rows gate **3 of the 40** — the same
 rows, re-labelled from "waiting on a project" to "waiting on a test", and then
 worked down. That is a smaller problem with a different owner, and it is the
 honest description of where the burn-down now stands. What remains owed is
-almost entirely *live* work: **4 of the 5** need a running atServer (2
-functional, 2 e2e), and exactly one is a unit row. That is not a coincidence —
+entirely *live* work: all **3** need a running atServer (1 functional,
+2 e2e); every row writable against mocked state is now written. That is not a coincidence —
 the rows writable against mocked state were the ones written first, so the
 residual is by construction the part that needs infrastructure.
 
