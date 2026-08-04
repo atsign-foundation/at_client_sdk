@@ -2632,3 +2632,41 @@ the pieces exist; assembling them is the work. With that in place the round trip
 since the only thing observed blocking it is an authentication class the fixture would supply.
 The blocker is re-labelled from *the initiator does not exist* to *the live round trip is
 unproven* — the initiator now exists and its guards are unit-covered.
+
+## 32. The two-enrollment fixture: what works and what does not (2026-08-04)
+
+[Section 31](#31-the-root-pull-initiator-and-what-it-did-not-settle-2026-08-04) established that
+the signing-root pull needs APKAM authentication on both sides, and that proving it needs a
+fixture with two real enrollments. That fixture is started, not finished, and this records the
+state precisely so the next attempt does not re-derive it.
+
+**`tests/at_functional_test/lib/src/enrolled_client.dart`** runs the real flow — submit, approve,
+`waitForApproval` — rather than assembling keys by hand, because `waitForApproval` is what
+unwraps the enrollment's encryption keys with the `apkamSymmetricKey` the approver sealed to its
+key package. Short-cutting it would produce a client whose keys never went through the conveyance
+these tests exist to exercise. Each enrollment gets its own `AtClientManager(atSign)` instance,
+since `getInstance()` is keyed by atSign and a second enrollment of the same atSign would evict
+the first.
+
+**What works.** Two enrollments are created and approved, with distinct enrollment ids and
+distinct advertised kpids, and clients are constructed from their sessions.
+
+**What does not, and neither is guessed at.**
+
+1. **The constructed client is not treated as APKAM-authenticated.** `listForNamespace` from an
+   enrolled client still meets *"enroll:listns requires APKAM authentication"*, so
+   `AtClientManager.fromAuthSession` is not threading the enrollment's authentication through in
+   the way this path needs. It passes `enrollmentId: session.enrollmentId`, so the likely
+   suspects are that field being unset on the returned session, or the connection authenticating
+   with the atSign's own keys regardless. **Not established** — and worth noting that the same
+   enumeration reached inside `requestPrivateIfAbsent` returned 0 rather than throwing, so two
+   paths that ought to behave identically do not. That discrepancy is the thread to pull.
+2. **Key packages are not bound to their enrollments.** `register()` mints a fresh X-Wing keypair
+   per process: a party's kpid came back `490de1fc0a10864e` where its enrollment had advertised
+   `9520bb7abf3295ee`. A party in that state listens at an address no sender ever writes to.
+   Production solves it with `bindKeyPackageToAtKeys` in `collectConveyedKeyMaterial`; the
+   fixture must do the same. Understood and mechanical.
+
+The test is committed **skipped**, carrying both points inline. A fixture that looks finished and
+is not costs more than an absent one, which is the same reason UC-B5.1 is labelled blocked rather
+than owed.
