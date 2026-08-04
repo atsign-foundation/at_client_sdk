@@ -1,3 +1,62 @@
+## 4.0.0
+
+at_lookup owns the wire protocol and makes no cryptographic choice of its own.
+Algorithms are supplied at construction, and the only key material it retains is
+the PKAM private key — which is what lets it keep re-authenticating a replaced
+connection by itself.
+
+- breaking: remove `AtLookUp.atChops`. at_chops 4.0.0 deletes the `AtChops`
+  facade, so there is no type left for it to be — and it carried encryption keys
+  the handshake never touched. Construct with the algorithms instead:
+  `signingAlgo` (an `AtSignatureAlgorithm`, which signs the `from` challenge),
+  `hashingAlgo` (the CRAM digest, defaulting to `SHA512HashingAlgo`) and
+  `dataAlgo` (data-signature verification, defaulting to `RsaSigningAlgo`)
+- breaking: remove `AtLookUp.signingAlgoType` and `hashingAlgoType`. The `pkam`
+  verb is now stamped from what `signingAlgo` declares, so it cannot claim one
+  algorithm while the signature was produced with another. An algorithm that
+  hashes intrinsically (ML-DSA-65) reports a null `hashingAlgoType` and the
+  `:hashingAlgo:` token is omitted
+- breaking: the PKAM private key is a constructor parameter, `pkamPrivateKey`,
+  and is **raw key bytes** — `base64Decode` of the string form an atKeys file
+  carries, so PKCS#8 DER for RSA. The deleted `privateKey` field took a PEM
+  `String`; the rename is deliberate, since this package deals with several
+  private keys. Omit `signingAlgo`/`pkamPrivateKey` for an instance that can only
+  `cramAuthenticate`, as activation does before a PKAM key exists;
+  `pkamAuthenticate` then throws before contacting the atServer
+- feat: `AtLookUp.legacy` and `AtLookUp.pq` construct an instance from just a
+  private key — the classical (RSA-2048/SHA-256 PKAM) and post-quantum
+  (ML-DSA-65 PKAM) algorithm sets. `AtLookUp.create` names each algorithm
+  individually. `pkamAuthenticate({String? enrollmentId})` and
+  `cramAuthenticate(String secret)` keep their 3.6.0 signatures
+- breaking: `AtLookupImpl` is no longer exported — construct via the factories
+  above. `isConnectionAvailable()` moves onto the `AtLookUp` interface, since it
+  was previously reachable only by downcasting
+- breaking: transparent re-authentication is now PKAM-only. The old
+  `cramSecret != null` fallback silently re-CRAMed a dropped connection, which
+  only ever made sense during activation. **This is a runtime change that no
+  compile error will surface**: a CRAM-only instance that loses its socket now
+  throws `UnAuthenticatedException`. The check happens before anything is
+  written, so no verb is left half-sent and the exception is safe to retry
+- breaking: remove the deprecated `authenticate(privateKey)` and the `privateKey`
+  field — use `pkamAuthenticate`
+- breaking: remove the deprecated `authenticate_cram(secret)` and the
+  `cramSecret` field — use `cramAuthenticate(secret)`
+- breaking: remove the deprecated `static AtLookupImpl.findSecondary` — use
+  `CacheableSecondaryAddressFinder`, which is still exported and, unlike the
+  static, keeps its cache across calls
+- breaking: remove `MonitorClient`. It had no callers anywhere, and it was a
+  second hard-coded RSA/SHA-256 `from`/`pkam` handshake built on at_chops types
+  4.0.0 deletes
+- breaking: `secondaryAddressFinder` and `enrollmentId` are constructor
+  parameters and lose their setters. A different key is a different authenticated
+  identity — construct a new `AtLookUp` rather than swapping one in
+- chore: `at_chops` constraint moves to `^4.0.0`.
+  `AtLookupSecureSocketFactory` and its two siblings move to
+  `src/connection/at_lookup_socket_factories.dart`, still exported
+
+See `docs/auth-key-material.md` for why the design landed here, and
+`example/bin/example.dart` for the intended wiring.
+
 ## 3.6.0
 
 - feat: `CacheableSecondaryAddressFinder` takes an optional `cacheDuration` to override the default 1-hour cache TTL.

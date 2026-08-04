@@ -3,6 +3,9 @@ import 'dart:io';
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+// AtLookupImpl is deliberately not exported from the barrel; these tests drive
+// its connection internals directly.
+import 'package:at_lookup/src/at_lookup_impl.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';

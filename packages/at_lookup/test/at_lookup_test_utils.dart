@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/src/connection/at_lookup_socket_factories.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -32,7 +34,52 @@ class MockOutboundConnectionFactory extends Mock
 class MockOutboundMessageListener extends Mock
     implements OutboundMessageListener {}
 
-class MockAtChops extends Mock implements AtChopsImpl {}
+/// An [AtSignatureAlgorithm] that returns a canned signature and records what it
+/// was asked to sign.
+///
+/// A fake rather than a mock so tests can assert the exact bytes at_lookup
+/// signed — the `from` challenge — and the exact key it was handed, without
+/// doing real RSA work.
+class FakeSignatureAlgo implements AtSignatureAlgorithm {
+  FakeSignatureAlgo({
+    required this.signature,
+    this.signingAlgoType = SigningAlgoType.rsa2048,
+    this.hashingAlgoType = HashingAlgoType.sha256,
+  });
+
+  /// Returned verbatim by [signBytes].
+  final Uint8List signature;
+
+  @override
+  final SigningAlgoType signingAlgoType;
+
+  @override
+  final HashingAlgoType? hashingAlgoType;
+
+  /// The message passed to the most recent [signBytes] call, or null if it has
+  /// not been called.
+  Uint8List? signedMessage;
+
+  /// The key passed to the most recent [signBytes] call.
+  Uint8List? secretKeyUsed;
+
+  @override
+  Future<Uint8List> signBytes(Uint8List message,
+      {required Uint8List secretKey}) async {
+    signedMessage = message;
+    secretKeyUsed = secretKey;
+    return signature;
+  }
+
+  @override
+  Future<bool> verifyBytes(Uint8List message,
+          {required Uint8List signature, required Uint8List publicKey}) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair() =>
+      throw UnimplementedError();
+}
 
 class MockOutboundConnectionImpl extends Mock
     implements OutboundConnectionImpl {}

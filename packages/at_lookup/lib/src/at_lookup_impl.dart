@@ -1,17 +1,15 @@
-// ignore_for_file: unused_field, deprecated_member_use_from_same_package
-
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/src/connection/at_lookup_socket_factories.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:mutex/mutex.dart';
-import 'package:at_chops/at_chops.dart';
 
 class AtLookupImpl implements AtLookUp {
   final logger = AtSignLogger('AtLookup');
@@ -25,71 +23,71 @@ class AtLookupImpl implements AtLookUp {
   OutboundConnection? get connection => _connection;
 
   @override
-  late SecondaryAddressFinder secondaryAddressFinder;
+  final SecondaryAddressFinder secondaryAddressFinder;
 
-  late String _currentAtSign;
+  final String _currentAtSign;
 
-  late String _rootDomain;
+  /// Signs the `from` challenge for PKAM and declares what the `pkam` verb is
+  /// stamped with. Null, along with [_pkamPrivateKey], when this instance cannot
+  /// PKAM-authenticate.
+  final AtSignatureAlgorithm? _signingAlgo;
 
-  late int _rootPort;
+  /// The only key material retained here, because a replaced connection is
+  /// re-authenticated without the caller being asked again.
+  final Uint8List? _pkamPrivateKey;
 
-  @Deprecated("privateKey reference is no longer used")
-  String? privateKey;
+  /// Digests the CRAM secret and challenge.
+  final AtHashingAlgorithm<List<int>, String> _hashingAlgo;
 
-  String? cramSecret;
+  /// Verifies data signatures for `lookup(verifyData: true)`.
+  final AtSignatureAlgorithm _dataAlgo;
 
   /// Permitted number of milliseconds before connection to atServer
   /// is deemed 'idle' and will be closed. The default is usually set to
   /// 10 minutes i.e. 600,000 milliseconds
   int? outboundConnectionTimeout;
 
-  late SecureSocketConfig _secureSocketConfig;
+  final SecureSocketConfig _secureSocketConfig;
 
-  late final AtLookupSecureSocketFactory socketFactory;
+  final AtLookupSecureSocketFactory socketFactory;
 
-  late final AtLookupSecureSocketListenerFactory socketListenerFactory;
+  final AtLookupSecureSocketListenerFactory socketListenerFactory;
 
-  late AtLookupOutboundConnectionFactory outboundConnectionFactory;
+  AtLookupOutboundConnectionFactory outboundConnectionFactory;
 
   /// Represents the client configurations.
-  late Map<String, dynamic> _clientConfig;
+  final Map<String, dynamic> _clientConfig;
 
-  AtChops? _atChops;
-
-  AtLookupImpl(String atSign, String rootDomain, int rootPort,
-      {this.privateKey,
-      this.cramSecret,
-      SecondaryAddressFinder? secondaryAddressFinder,
-      SecureSocketConfig? secureSocketConfig,
-      Map<String, dynamic>? clientConfig,
-      AtLookupSecureSocketFactory? secureSocketFactory,
-      AtLookupSecureSocketListenerFactory? socketListenerFactory,
-      AtLookupOutboundConnectionFactory? outboundConnectionFactory}) {
-    _currentAtSign = atSign;
-    _rootDomain = rootDomain;
-    _rootPort = rootPort;
-    this.secondaryAddressFinder = secondaryAddressFinder ??
-        CacheableSecondaryAddressFinder(rootDomain, rootPort);
-    _secureSocketConfig = secureSocketConfig ?? SecureSocketConfig();
-    // Stores the client configurations.
-    // If client configurations are not available, defaults to empty map
-    _clientConfig = clientConfig ?? {};
-    socketFactory = secureSocketFactory ?? AtLookupSecureSocketFactory();
-    this.socketListenerFactory =
-        socketListenerFactory ?? AtLookupSecureSocketListenerFactory();
-    this.outboundConnectionFactory =
-        outboundConnectionFactory ?? AtLookupOutboundConnectionFactory();
-  }
-
-  @Deprecated('use CacheableSecondaryAddressFinder')
-  static Future<String?> findSecondary(
-      String atsign, String? rootDomain, int rootPort) async {
-    // temporary change to preserve backward compatibility and change the callers later on to use
-    // SecondaryAddressFinder.findSecondary
-    return (await CacheableSecondaryAddressFinder(rootDomain!, rootPort)
-            .findSecondary(atsign))
-        .toString();
-  }
+  AtLookupImpl(
+    String atSign,
+    String rootDomain,
+    int rootPort, {
+    AtSignatureAlgorithm? signingAlgo,
+    Uint8List? pkamPrivateKey,
+    AtHashingAlgorithm<List<int>, String>? hashingAlgo,
+    AtSignatureAlgorithm? dataAlgo,
+    SecondaryAddressFinder? secondaryAddressFinder,
+    this.enrollmentId,
+    SecureSocketConfig? secureSocketConfig,
+    Map<String, dynamic>? clientConfig,
+    AtLookupSecureSocketFactory? secureSocketFactory,
+    AtLookupSecureSocketListenerFactory? socketListenerFactory,
+    AtLookupOutboundConnectionFactory? outboundConnectionFactory,
+  })  : _currentAtSign = atSign,
+        _signingAlgo = signingAlgo,
+        _pkamPrivateKey = pkamPrivateKey,
+        _hashingAlgo = hashingAlgo ?? SHA512HashingAlgo(),
+        _dataAlgo = dataAlgo ?? RsaSigningAlgo(),
+        secondaryAddressFinder = secondaryAddressFinder ??
+            CacheableSecondaryAddressFinder(rootDomain, rootPort),
+        _secureSocketConfig = secureSocketConfig ?? SecureSocketConfig(),
+        // If client configurations are not available, defaults to empty map
+        _clientConfig = clientConfig ?? {},
+        socketFactory = secureSocketFactory ?? AtLookupSecureSocketFactory(),
+        socketListenerFactory =
+            socketListenerFactory ?? AtLookupSecureSocketListenerFactory(),
+        outboundConnectionFactory =
+            outboundConnectionFactory ?? AtLookupOutboundConnectionFactory();
 
   @override
   Future<bool> delete(String key,
@@ -177,11 +175,12 @@ class AtLookupImpl implements AtLookUp {
       var value = resultJson['data'];
       value = VerbUtil.getFormattedValue(value);
       logger.finer('value: $value dataSignature:$dataSignature');
-      // RSA SHA-256 verify via at_chops (wraps the same crypton
-      // RSAPublicKey.verifySHA256Signature).
-      var isDataValid = PkamSigningAlgo(null, HashingAlgoType.sha256).verify(
-          Uint8List.fromList(utf8.encode(value)), base64Decode(dataSignature),
-          publicKey: publicKeyResult);
+      // The atServer serves the public key in the same base64 form the signature
+      // algorithms take as bytes.
+      var isDataValid = await _dataAlgo.verifyBytes(
+          Uint8List.fromList(utf8.encode(value)),
+          signature: base64Decode(dataSignature),
+          publicKey: base64Decode(publicKeyResult));
       logger.finer('data verify result: $isDataValid');
       return 'data:$value';
     } on Exception catch (e) {
@@ -427,53 +426,17 @@ class AtLookupImpl implements AtLookUp {
 
   final Mutex _pkamAuthenticationMutex = Mutex();
 
-  /// Generates digest using from verb response and [privateKey] and performs a PKAM authentication to
-  /// secondary server. This method is executed for all verbs that requires authentication.
-  /// @Deprecated('Use method pkamAuthenticate') Commenting deprecation since it causes issue in dart analyze in the caller
-  Future<bool> authenticate(String? privateKey) async {
-    if (privateKey == null) {
-      throw UnAuthenticatedException('Private key not passed');
-    }
-    await createConnection();
-    try {
-      await _pkamAuthenticationMutex.acquire();
-      if (!_connection!.getMetaData()!.isAuthenticated) {
-        await _sendCommand((FromVerbBuilder()
-              ..atSign = _currentAtSign
-              ..clientConfig = _clientConfig)
-            .buildCommand());
-        var fromResponse = await (messageListener.read());
-        logger.finer('from result:$fromResponse');
-        if (fromResponse.isEmpty) {
-          return false;
-        }
-        fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
-        logger.finer('fromResponse $fromResponse');
-        // RSA SHA-256 sign via at_chops (wraps the same crypton
-        // RSAPrivateKey.createSHA256Signature; only the private key is used).
-        var sha256signature = PkamSigningAlgo(
-                AtPkamKeyPair.create('', privateKey), HashingAlgoType.sha256)
-            .sign(Uint8List.fromList(utf8.encode(fromResponse)));
-        var signature = base64Encode(sha256signature);
-        logger.finer('Sending command pkam:$signature');
-        await _sendCommand('pkam:$signature\n');
-        var pkamResponse = await messageListener.read();
-        if (pkamResponse == 'data:success') {
-          logger.info('auth success');
-          _connection!.getMetaData()!.isAuthenticated = true;
-        } else {
-          throw UnAuthenticatedException(
-              'Failed connecting to $_currentAtSign. $pkamResponse');
-        }
-      }
-      return _connection!.getMetaData()!.isAuthenticated;
-    } finally {
-      _pkamAuthenticationMutex.release();
-    }
-  }
-
   @override
   Future<bool> pkamAuthenticate({String? enrollmentId}) async {
+    // Guarded before the connection is created, so a misconfigured instance
+    // fails without leaving a `from` challenge unanswered.
+    final signingAlgo = _signingAlgo;
+    final pkamPrivateKey = _pkamPrivateKey;
+    if (signingAlgo == null || pkamPrivateKey == null) {
+      throw UnAuthenticatedException(
+          'Cannot PKAM authenticate $_currentAtSign: no signingAlgo and '
+          'pkamPrivateKey were supplied at construction');
+    }
     await createConnection();
     try {
       await _pkamAuthenticationMutex.acquire();
@@ -489,18 +452,16 @@ class AtLookupImpl implements AtLookUp {
         }
         fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
         logger.finer('fromResponse $fromResponse');
-        logger.finer(
-            'signingAlgoType: $signingAlgoType hashingAlgoType:$hashingAlgoType');
-        final atSigningInput = AtSigningInput(fromResponse)
-          ..signingAlgoType = signingAlgoType
-          ..hashingAlgoType = hashingAlgoType
-          ..signingMode = AtSigningMode.pkam;
-        var signingResult = _atChops!.sign(atSigningInput);
+        logger.finer('signingAlgo: ${signingAlgo.signingAlgoType} '
+            'hashingAlgo: ${signingAlgo.hashingAlgoType}');
+        final signature = await signingAlgo.signBytes(
+            Uint8List.fromList(utf8.encode(fromResponse)),
+            secretKey: pkamPrivateKey);
         var pkamBuilder = PkamVerbBuilder()
-          ..signingAlgo = signingAlgoType.name
-          ..hashingAlgo = hashingAlgoType.name
-          ..enrollmentlId = enrollmentId
-          ..signature = signingResult.result;
+          ..signingAlgo = signingAlgo.signingAlgoType.name
+          ..hashingAlgo = signingAlgo.hashingAlgoType?.name
+          ..enrollmentlId = enrollmentId ?? this.enrollmentId
+          ..signature = base64Encode(signature);
         logger.finer('pkamCommand:${pkamBuilder.buildCommand()}');
         await _sendCommand(pkamBuilder.buildCommand());
 
@@ -540,8 +501,7 @@ class AtLookupImpl implements AtLookUp {
         fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
         var digestInput = '$secret$fromResponse';
         var bytes = utf8.encode(digestInput);
-        // SHA-512 hex digest via at_chops (= sha512.convert(bytes).toString()).
-        var digest = SHA512HashingAlgo().hash(bytes);
+        var digest = await _hashingAlgo.hash(bytes);
         await _sendCommand('cram:$digest\n');
         var cramResponse = await messageListener.read(
             transientWaitTimeMillis: 4000, maxWaitMilliSeconds: 10000);
@@ -556,16 +516,6 @@ class AtLookupImpl implements AtLookUp {
     } finally {
       _cramAuthenticationMutex.release();
     }
-  }
-
-  @Deprecated('use AtLookup().cramAuthenticate()')
-  // ignore: non_constant_identifier_names
-  Future<bool> authenticate_cram(String? secret) async {
-    secret ??= cramSecret;
-    if (secret == null) {
-      throw UnAuthenticatedException('Cram secret not passed');
-    }
-    return await cramAuthenticate(secret);
   }
 
   Future<String> _plookup(PLookupVerbBuilder builder) async {
@@ -599,19 +549,18 @@ class AtLookupImpl implements AtLookUp {
     try {
       await requestResponseMutex.acquire();
 
+      // A dropped connection is rebuilt by createConnection() and
+      // re-authenticated here — that is why the PKAM key is retained. Checked
+      // before anything is written, so a surfaced UnAuthenticatedException never
+      // leaves a verb half-sent.
       if (auth && _isAuthRequired()) {
-        if (_atChops != null) {
-          logger.finer('calling pkam using atchops');
-          await pkamAuthenticate(enrollmentId: enrollmentId);
-        } else if (privateKey != null) {
-          logger.finer('calling pkam without atchops');
-          await authenticate(privateKey);
-        } else if (cramSecret != null) {
-          await cramAuthenticate(cramSecret!);
-        } else {
+        if (_signingAlgo == null || _pkamPrivateKey == null) {
           throw UnAuthenticatedException(
-              'Unable to perform atLookup auth. atChops object is not set');
+              'Connection to $_currentAtSign is not authenticated and no PKAM '
+              'key was supplied at construction');
         }
+        logger.finer('connection needs authentication, running pkam');
+        await pkamAuthenticate(enrollmentId: enrollmentId);
       }
       try {
         await _sendCommand(command);
@@ -648,6 +597,7 @@ class AtLookupImpl implements AtLookUp {
     return true;
   }
 
+  @override
   bool isConnectionAvailable() {
     return _connection != null && !_connection!.isInValid();
   }
@@ -668,42 +618,5 @@ class AtLookupImpl implements AtLookUp {
   }
 
   @override
-  set atChops(AtChops? atChops) {
-    _atChops = atChops;
-  }
-
-  @override
-  AtChops? get atChops => _atChops;
-
-  /// To use a specific signing algorithm other than default one for pkam auth, set the [SigningAlgoType] and [HashingAlgoType]
-  @override
-  HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
-
-  @override
-  SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
-
-  @override
-  String? enrollmentId;
-}
-
-class AtLookupSecureSocketFactory {
-  Future<SecureSocket> createSocket(
-      String host, String port, SecureSocketConfig socketConfig,
-      {Duration? timeout}) async {
-    return await SecureSocketUtil.createSecureSocket(host, port, socketConfig,
-        timeout: timeout);
-  }
-}
-
-class AtLookupSecureSocketListenerFactory {
-  OutboundMessageListener createListener(
-      OutboundConnection outboundConnection) {
-    return OutboundMessageListener(outboundConnection);
-  }
-}
-
-class AtLookupOutboundConnectionFactory {
-  OutboundConnection createOutboundConnection(SecureSocket secureSocket) {
-    return OutboundConnectionImpl(secureSocket);
-  }
+  final String? enrollmentId;
 }

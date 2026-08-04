@@ -12,7 +12,6 @@ workspace:
   - packages/at_client_flutter
   - packages/at_commons
   - packages/at_contact
-  - packages/at_lookup
   - packages/at_onboarding_cli
   - packages/at_policy
   - packages/at_server_status
