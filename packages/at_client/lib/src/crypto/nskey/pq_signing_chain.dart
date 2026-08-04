@@ -469,7 +469,9 @@ class PqSigningChain {
 
       final parent = link['enrollmentId'];
       if (parent is! String || parent.isEmpty) {
-        return ChainResult(ChainVerdict.broken, path,
+        return ChainResult(
+            ChainVerdict.broken,
+            path,
             'enrollment $current names no signer, so there is nowhere to '
             'walk to');
       }
@@ -521,7 +523,9 @@ class PqSigningChain {
   ) async {
     final rootKey = await _rootPublicKey(atClient, atSign);
     if (rootKey == null) {
-      return ChainResult(ChainVerdict.broken, path,
+      return ChainResult(
+          ChainVerdict.broken,
+          path,
           'enrollment $enrollmentId claims a root link but $atSign publishes '
           'no signing root to check it against');
     }
@@ -530,7 +534,9 @@ class PqSigningChain {
         payload['childEnrollmentId'] != enrollmentId ||
         payload['apkamPublicKey'] !=
             await _publishedKey(atClient, atSign, enrollmentId)) {
-      return ChainResult(ChainVerdict.broken, path,
+      return ChainResult(
+          ChainVerdict.broken,
+          path,
           'the root link on $enrollmentId does not describe that '
           "enrollment's published key");
     }
@@ -547,7 +553,9 @@ class PqSigningChain {
     }
     return ok
         ? ChainResult(ChainVerdict.anchored, path, null)
-        : ChainResult(ChainVerdict.broken, path,
+        : ChainResult(
+            ChainVerdict.broken,
+            path,
             'the root link on $enrollmentId does not verify against the '
             "atSign's signing root");
   }

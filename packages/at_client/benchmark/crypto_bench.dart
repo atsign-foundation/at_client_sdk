@@ -100,7 +100,8 @@ Future<void> prewarm() async {
   final pair = await xwing.generateKeyPair();
   final ck = payload(32);
   for (var i = 0; i < 3; i++) {
-    await pqOpen(xwing, pair.secretKey, await pqSeal(xwing, pair.publicKey, ck));
+    await pqOpen(
+        xwing, pair.secretKey, await pqSeal(xwing, pair.publicKey, ck));
   }
 
   final mldsa = MlDsa65PureDartAlgo();
@@ -141,21 +142,17 @@ Future<List<Timing>> perRecord(int iterations) async {
     final sealed = await gcm.encrypt(data, iv: gcmIv);
     final legacySealed = await ctr.encrypt(data, iv: iv);
 
-    results.add(await measure(
-        'nskey  AES-256-GCM encrypt ${size}B', 'per record',
-        () async => gcm.encrypt(data, iv: gcmIv),
+    results.add(await measure('nskey  AES-256-GCM encrypt ${size}B',
+        'per record', () async => gcm.encrypt(data, iv: gcmIv),
         iterations: iterations));
-    results.add(await measure(
-        'legacy AES-256-CTR encrypt ${size}B', 'per record',
-        () async => ctr.encrypt(data, iv: iv),
+    results.add(await measure('legacy AES-256-CTR encrypt ${size}B',
+        'per record', () async => ctr.encrypt(data, iv: iv),
         iterations: iterations));
-    results.add(await measure(
-        'nskey  AES-256-GCM decrypt ${size}B', 'per record',
-        () async => gcm.decrypt(sealed, iv: gcmIv),
+    results.add(await measure('nskey  AES-256-GCM decrypt ${size}B',
+        'per record', () async => gcm.decrypt(sealed, iv: gcmIv),
         iterations: iterations));
-    results.add(await measure(
-        'legacy AES-256-CTR decrypt ${size}B', 'per record',
-        () async => ctr.decrypt(legacySealed, iv: iv),
+    results.add(await measure('legacy AES-256-CTR decrypt ${size}B',
+        'per record', () async => ctr.decrypt(legacySealed, iv: iv),
         iterations: iterations));
   }
   return results;
@@ -175,7 +172,8 @@ Future<List<Timing>> perConveyance(int iterations) async {
   results.add(await measure('nskey  X-Wing pqSeal (CK conveyance)',
       'per (owner, namespace)', () async => pqSeal(xwing, pair.publicKey, ck),
       iterations: iterations));
-  results.add(await measure('nskey  X-Wing pqOpen (CK conveyance)',
+  results.add(await measure(
+      'nskey  X-Wing pqOpen (CK conveyance)',
       'per (owner, namespace)',
       () async => pqOpen(xwing, pair.secretKey, envelope),
       iterations: iterations));
@@ -206,11 +204,13 @@ Future<List<Timing>> perAuth(int iterations) async {
   final keys = await mldsa.generateKeyPair();
   final mlSig = await mldsa.signBytes(challenge, secretKey: keys.secretKey);
 
-  results.add(await measure('pq     ML-DSA-65 sign (PKAM challenge)',
+  results.add(await measure(
+      'pq     ML-DSA-65 sign (PKAM challenge)',
       'per authentication',
       () async => mldsa.signBytes(challenge, secretKey: keys.secretKey),
       iterations: iterations));
-  results.add(await measure('pq     ML-DSA-65 verify (PKAM challenge)',
+  results.add(await measure(
+      'pq     ML-DSA-65 verify (PKAM challenge)',
       'per authentication',
       () async => mldsa.verifyBytes(challenge,
           signature: mlSig, publicKey: keys.publicKey),
@@ -222,7 +222,8 @@ Future<List<Timing>> perAuth(int iterations) async {
   results.add(await measure('legacy RSA-2048 sign (PKAM challenge)',
       'per authentication', () async => rsaAlgo.sign(challenge),
       iterations: iterations));
-  results.add(await measure('legacy RSA-2048 verify (PKAM challenge)',
+  results.add(await measure(
+      'legacy RSA-2048 verify (PKAM challenge)',
       'per authentication',
       () async => rsaAlgo.verify(challenge, rsaSig,
           publicKey: rsa.atPublicKey.publicKey),
@@ -243,9 +244,8 @@ void report(String heading, String basisNote, List<Timing> timings) {
   }
 }
 
-String _us(int micros) => micros >= 1000
-    ? '${(micros / 1000).toStringAsFixed(2)} ms'
-    : '$micros us';
+String _us(int micros) =>
+    micros >= 1000 ? '${(micros / 1000).toStringAsFixed(2)} ms' : '$micros us';
 
 Future<void> main(List<String> args) async {
   final iterations = args.contains('--iterations')
@@ -282,20 +282,16 @@ Future<void> main(List<String> args) async {
   stdout.writeln('  harness loop overhead: ${_us(overhead.median)} '
       '— subtract nothing below this that is not well clear of it');
 
-  report(
-      'PER RECORD — what every put/get pays once a content key exists',
-      'Compare within this group only. This is the steady-state cost.',
-      record);
+  report('PER RECORD — what every put/get pays once a content key exists',
+      'Compare within this group only. This is the steady-state cost.', record);
   report(
       'PER CONVEYANCE — what PQ costs, paid ONCE per (owner, namespace)',
       'Do NOT add these to the per-record figures: a content key is conveyed '
           'once and\n  then covers every record in its scope, so charging this '
           'per put overstates it\n  by the number of records in the scope.',
       conveyance);
-  report(
-      'PER AUTHENTICATION — the PKAM signature swap',
-      'Paid once per connection, not per operation.',
-      auth);
+  report('PER AUTHENTICATION — the PKAM signature swap',
+      'Paid once per connection, not per operation.', auth);
 
   stdout.writeln('');
   stdout.writeln('Three bases, never mixed. A single "PQ is N% slower" number '

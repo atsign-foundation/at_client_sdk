@@ -48,30 +48,28 @@ void main() {
 
   MockAtClient buildMockClient(String enrollmentId) =>
       buildRemoteBackedMockClient(
-          atSign: atSign,
-          enrollmentId: enrollmentId,
-          remoteData: remoteData);
+          atSign: atSign, enrollmentId: enrollmentId, remoteData: remoteData);
 
   /// Stubs `enroll:list` to return one pending enrollment carrying [keyPackage]
   /// and **no** `encryptedAPKAMSymmetricKey` — the shape that asks this
   /// approver to mint and convey.
   void stubPendingEnrollment(AtClient approver, Object keyPackage) {
-    final listCommand =
-        (EnrollVerbBuilder()..operation = EnrollOperationEnum.list)
-            .buildCommand();
+    final listCommand = (EnrollVerbBuilder()
+          ..operation = EnrollOperationEnum.list)
+        .buildCommand();
     final key = '$enrolleeId.new.enrollments.__manage$atSign';
     // Resolve the secondary first: nesting the call inside `when` would
     // register the stub against getRemoteSecondary itself.
     final secondary = approver.getRemoteSecondary()!;
     when(() => secondary.executeCommand(listCommand, auth: true))
         .thenAnswer((_) async => 'data:${jsonEncode({
-              key: {
-                'appName': 'buzz',
-                'deviceName': 'pixel',
-                'namespace': {'buzz': 'rw'},
-                'metadata': {'keyPackage': keyPackage},
-              }
-            })}');
+                  key: {
+                    'appName': 'buzz',
+                    'deviceName': 'pixel',
+                    'namespace': {'buzz': 'rw'},
+                    'metadata': {'keyPackage': keyPackage},
+                  }
+                })}');
   }
 
   /// An enrollee that has registered, so its `_apsk` is published and the
@@ -96,8 +94,8 @@ void main() {
 
     await expectLater(
         approveWith(approver),
-        throwsA(isA<AtEnrollmentException>().having(
-            (e) => e.message, 'message', contains('register()'))),
+        throwsA(isA<AtEnrollmentException>()
+            .having((e) => e.message, 'message', contains('register()'))),
         reason: 'the approver has just approved a device that cannot receive '
             'its key, so the error has to name the fix rather than surface a '
             'Bad state from inside the substrate');
@@ -138,8 +136,7 @@ void main() {
 
     final recipient =
         AtClientSecretSharing.forClient(buildMockClient('enrollee-2'));
-    final shared = await sharing.shareAllSecretsWith(
-        await recipient.register(),
+    final shared = await sharing.shareAllSecretsWith(await recipient.register(),
         approvedNamespaces: {'buzz': 'rw'});
 
     // The count is the observable, not the envelope bodies: those are sealed,
@@ -189,14 +186,14 @@ void main() {
       final secondary = approver.getRemoteSecondary()!;
       when(() => secondary.executeCommand(listCommand, auth: true))
           .thenAnswer((_) async => 'data:${jsonEncode({
-                key: {
-                  'appName': 'buzz',
-                  'deviceName': 'pixel',
-                  'namespace': namespaces,
-                  'encryptedAPKAMSymmetricKey': 'rsa-wrapped',
-                  'metadata': {'keyPackage': keyPackage},
-                }
-              })}');
+                    key: {
+                      'appName': 'buzz',
+                      'deviceName': 'pixel',
+                      'namespace': namespaces,
+                      'encryptedAPKAMSymmetricKey': 'rsa-wrapped',
+                      'metadata': {'keyPackage': keyPackage},
+                    }
+                  })}');
 
       await EnrollmentServiceImpl(approver, _RecordingAtEnrollment()).approve(
           EnrollmentRequestDecision.approved(
@@ -222,7 +219,8 @@ void main() {
 
     test('classifies privilege from the granted namespaces', () {
       expect(
-          EnrollmentServiceImpl.isFullyPrivileged({'*': 'rw', '__manage': 'rw'}),
+          EnrollmentServiceImpl.isFullyPrivileged(
+              {'*': 'rw', '__manage': 'rw'}),
           isTrue);
       expect(EnrollmentServiceImpl.isFullyPrivileged({'*': 'rw'}), isFalse,
           reason: 'approving is a __manage power; * alone is not the class '
@@ -239,20 +237,20 @@ void main() {
     final approver = buildMockClient('approver-1');
     // Same enrollment, except it wrapped its own key: the legacy path, where
     // this approver mints nothing and so needs no package of its own.
-    final listCommand =
-        (EnrollVerbBuilder()..operation = EnrollOperationEnum.list)
-            .buildCommand();
+    final listCommand = (EnrollVerbBuilder()
+          ..operation = EnrollOperationEnum.list)
+        .buildCommand();
     final key = '$enrolleeId.new.enrollments.__manage$atSign';
     final secondary = approver.getRemoteSecondary()!;
     when(() => secondary.executeCommand(listCommand, auth: true))
         .thenAnswer((_) async => 'data:${jsonEncode({
-              key: {
-                'appName': 'buzz',
-                'deviceName': 'pixel',
-                'namespace': {'buzz': 'rw'},
-                'encryptedAPKAMSymmetricKey': 'rsa-wrapped',
-              }
-            })}');
+                  key: {
+                    'appName': 'buzz',
+                    'deviceName': 'pixel',
+                    'namespace': {'buzz': 'rw'},
+                    'encryptedAPKAMSymmetricKey': 'rsa-wrapped',
+                  }
+                })}');
 
     await expectLater(approveWith(approver), completes,
         reason: 'an unregistered approver must still be able to approve a '

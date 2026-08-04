@@ -5,8 +5,7 @@ import 'package:at_auth/at_auth.dart'
     show AtKeys, AtKeysMaterial, CryptographicKeyType, KeyAlgorithmType;
 import 'package:at_chops/at_chops.dart' show XWingPureDartAlgo, pqOpen;
 import 'package:at_commons/at_builders.dart' show ScanVerbBuilder;
-import 'package:at_commons/at_commons.dart'
-    show AtSigningVerificationException;
+import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
@@ -76,8 +75,8 @@ Future<String> Function(AtKeys, AtLookUp) enrollmentApkamSymmetricKeyResolver(
     final DateTime deadline = DateTime.now().toUtc().add(timeout);
     while (true) {
       for (final envelopeKey in await _envelopeKeys(atLookUp, kpid)) {
-        final String? value =
-            await _openIfSymmetricKey(atLookUp, envelopeKey, atSign, kpid, seed);
+        final String? value = await _openIfSymmetricKey(
+            atLookUp, envelopeKey, atSign, kpid, seed);
         if (value != null) {
           _logger.info('Collected the conveyed apkamSymmetricKey from '
               '$envelopeKey');
@@ -157,8 +156,7 @@ Future<String?> _openIfSymmetricKey(
     final String? raw =
         await atLookUp.executeCommand('llookup:$envelopeKey\n', auth: true);
     if (raw == null) return null;
-    signedEnvelope =
-        jsonDecode(raw.replaceFirst(RegExp('^data:'), '')) as Map;
+    signedEnvelope = jsonDecode(raw.replaceFirst(RegExp('^data:'), '')) as Map;
   } catch (e) {
     _logger.info('Could not read envelope $envelopeKey: $e');
     return null;

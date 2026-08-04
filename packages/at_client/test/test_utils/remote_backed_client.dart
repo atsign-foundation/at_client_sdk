@@ -30,8 +30,8 @@ MockAtClient buildRemoteBackedMockClient({
   Map<String, Metadata>? remoteMetadata,
 }) {
   final atClient = MockAtClient();
-  when(() => atClient.atChops).thenReturn(
-      AtChopsImpl(AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
+  when(() => atClient.atChops).thenReturn(AtChopsImpl(
+      AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
   when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
   when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 

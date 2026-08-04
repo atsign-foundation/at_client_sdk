@@ -164,8 +164,8 @@ void main() {
     final (io, filer) = await filing();
 
     expect(
-        await filer.filePending(
-            [nskeySecret('gen-one'), nskeySecret('gen-two')]),
+        await filer
+            .filePending([nskeySecret('gen-one'), nskeySecret('gen-two')]),
         2,
         reason: 'data written under a superseded key is still readable, and '
             'only its own private opens it — a client given the current '

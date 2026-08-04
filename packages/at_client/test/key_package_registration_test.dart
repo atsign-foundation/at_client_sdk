@@ -44,9 +44,7 @@ void main() {
 
   MockAtClient buildMockClient(String enrollmentId) =>
       buildRemoteBackedMockClient(
-          atSign: atSign,
-          enrollmentId: enrollmentId,
-          remoteData: remoteData);
+          atSign: atSign, enrollmentId: enrollmentId, remoteData: remoteData);
 
   TestRegistrant buildRegistrant(
       String enrollmentId, FakeEnrollmentDirectory directory,

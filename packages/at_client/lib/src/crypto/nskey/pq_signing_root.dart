@@ -226,8 +226,7 @@ class PqSigningRoot {
   /// matters — an enrollment reads *chained but unanchored* until then.
   Future<bool> filePendingPrivate(
       String atSign, Iterable<Secret> heldSecrets) async {
-    final secret =
-        heldSecrets.where((s) => s.name == secretName).firstOrNull;
+    final secret = heldSecrets.where((s) => s.name == secretName).firstOrNull;
     if (secret == null) return false;
     return file(atSign, secret);
   }

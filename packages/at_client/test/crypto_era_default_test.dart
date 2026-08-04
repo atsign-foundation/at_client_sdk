@@ -77,12 +77,13 @@ void main() {
     expect(CryptoConfig.forClient(client).defaultProviderId,
         legacyCryptoProviderId);
     expect(CryptoConfig.forClient(client).providers, isEmpty);
-    expect(CryptoConfig.forClient(null).defaultProviderId,
-        legacyCryptoProviderId);
+    expect(
+        CryptoConfig.forClient(null).defaultProviderId, legacyCryptoProviderId);
   });
 
   test('the nskey factory is the 4.x shape: PQ writes', () {
-    expect(CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()).defaultProviderId,
+    expect(
+        CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()).defaultProviderId,
         symmetricAesGcmCryptoProviderId,
         reason: 'the two factories differ only in the write default, and that '
             'difference is the whole 3.x-to-4.x step');

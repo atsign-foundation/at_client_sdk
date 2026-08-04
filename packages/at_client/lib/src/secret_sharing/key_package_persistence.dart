@@ -1,7 +1,12 @@
 import 'dart:convert' show base64Encode;
 
 import 'package:at_auth/at_auth.dart'
-    show AtKeys, AtKeysIo, AtKeysMaterial, CryptographicKeyType, KeyAlgorithmType;
+    show
+        AtKeys,
+        AtKeysIo,
+        AtKeysMaterial,
+        CryptographicKeyType,
+        KeyAlgorithmType;
 import 'package:at_client/src/secret_sharing/key_package_registration.dart'
     show KeyPackageRegistration, PersistedApkamKeys;
 import 'package:at_commons/atsign.dart' show Atsign, AtsignString;

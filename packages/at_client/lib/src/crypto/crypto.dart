@@ -85,12 +85,14 @@ class CryptoConfig {
   /// sent it. Writing is a fleet-wide commitment: the first client to write PQ
   /// produces records every other client must already be able to read. So the
   /// read side goes first everywhere, and the write side flips once.
-  factory CryptoConfig.readsNskeyWritesLegacy({required NskeyKeyRing keyRing}) =>
+  factory CryptoConfig.readsNskeyWritesLegacy(
+          {required NskeyKeyRing keyRing}) =>
       _nskeySet(keyRing, legacyCryptoProviderId);
 
   /// One [ContentKeyCache] shared by the manager and both providers — the
   /// coupling [CryptoConfig.nskey] exists to enforce.
-  static CryptoConfig _nskeySet(NskeyKeyRing keyRing, String defaultProviderId) {
+  static CryptoConfig _nskeySet(
+      NskeyKeyRing keyRing, String defaultProviderId) {
     final cache = ContentKeyCache();
     return CryptoConfig(
       defaultProviderId: defaultProviderId,

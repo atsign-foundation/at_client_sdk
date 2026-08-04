@@ -217,7 +217,8 @@ class EnrollmentServiceImpl implements EnrollmentService {
     // still the one the enrollee wrote. Its advertised key package alone would
     // not do: every mode may carry one, because a package is also how existing
     // secrets are sealed to a new device.
-    final pending = await _enrollmentById(enrollmentRequestDecision.enrollmentId);
+    final pending =
+        await _enrollmentById(enrollmentRequestDecision.enrollmentId);
     final bool mintsSymmetricKey =
         (pending?.encryptedAPKAMSymmetricKey?.isEmpty ?? true) &&
             pending?.metadata?['keyPackage'] != null;

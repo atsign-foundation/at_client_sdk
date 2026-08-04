@@ -241,8 +241,7 @@ void main() {
 
       expect(
           await PqSigningChain.publishOwnRootLink(c,
-              isFullyPrivileged: () async => true,
-              keysIo: c.atKeysIo),
+              isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
           isTrue);
 
       final link = await PqSigningChain.readRootLink(c, 'priv-1');
@@ -261,8 +260,7 @@ void main() {
 
       expect(
           await PqSigningChain.publishOwnRootLink(c,
-              isFullyPrivileged: () async => true,
-              keysIo: c.atKeysIo),
+              isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
           isFalse,
           reason: 'this runs at every start, so an anchored enrollment must '
               'not rewrite its record each time');
@@ -274,8 +272,7 @@ void main() {
 
       expect(
           await PqSigningChain.publishOwnRootLink(c,
-              isFullyPrivileged: () async => false,
-              keysIo: c.atKeysIo),
+              isFullyPrivileged: () async => false, keysIo: c.atKeysIo),
           isFalse,
           reason: 'only the fully privileged class carries a root link; '
               'possession and privilege should never diverge, and if they do '
@@ -292,7 +289,8 @@ void main() {
 
       var privilegeChecked = false;
       expect(
-          await PqSigningChain.publishOwnRootLink(c, isFullyPrivileged: () async {
+          await PqSigningChain.publishOwnRootLink(c,
+              isFullyPrivileged: () async {
             privilegeChecked = true;
             return true;
           }, keysIo: io),
@@ -313,8 +311,7 @@ void main() {
           await PqSigningChain.signLinkFor(parentClient, parent, 'priv-1');
       await PqSigningChain.publishLink(c, 'priv-1', chain!);
       await PqSigningChain.publishOwnRootLink(c,
-          isFullyPrivileged: () async => true,
-          keysIo: c.atKeysIo);
+          isFullyPrivileged: () async => true, keysIo: c.atKeysIo);
 
       expect(await PqSigningChain.readLink(c, 'priv-1'), isNotNull,
           reason: 'writing one link must not drop the other — they are '
@@ -335,8 +332,11 @@ void main() {
     /// Publishes the atSign's signing root and returns its key pair.
     Future<({Uint8List publicKey, Uint8List secretKey})> publishRoot() async {
       final pair = await MlDsa65PureDartAlgo().generateKeyPair();
-      remoteData['public:${PqSigningRoot.recordName}$atSign'] =
-          jsonEncode({'v': 1, 'keys': [base64Encode(pair.publicKey)], 'successor': null});
+      remoteData['public:${PqSigningRoot.recordName}$atSign'] = jsonEncode({
+        'v': 1,
+        'keys': [base64Encode(pair.publicKey)],
+        'successor': null
+      });
       return pair;
     }
 
@@ -388,8 +388,8 @@ void main() {
       final c = client('lonely-1');
       await registered(c);
 
-      final result =
-          await PqSigningChain.verifyChain(verifierClient, verifier, 'lonely-1');
+      final result = await PqSigningChain.verifyChain(
+          verifierClient, verifier, 'lonely-1');
 
       expect(result.verdict, ChainVerdict.unsigned,
           reason: 'this is the ordinary state during the changeover, and it '
