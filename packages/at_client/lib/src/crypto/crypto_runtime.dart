@@ -1,6 +1,7 @@
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
+import 'package:at_client/src/crypto/rollout/scheme_negotiation.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -82,6 +83,28 @@ class CryptoRuntime {
       return legacyProviderId;
     }
     return id;
+  }
+
+  /// The provider id a write to [atKey] should go out under, once the
+  /// destination's advertised capabilities have been taken into account.
+  ///
+  /// This is [providerIdFor] plus the migration invariant: write only what
+  /// every required reader supports. It is asynchronous because deciding needs
+  /// the destination's capability marker, which is fetched and cached per
+  /// destination rather than per write.
+  ///
+  /// **An explicitly requested id is never negotiated.** The caller named a
+  /// scheme, and quietly substituting another is how you end up believing data
+  /// is post-quantum when it is not. It is also what keeps the data path
+  /// working: a content-key conveyance is routed explicitly to `at/nskey`, and
+  /// negotiating *that* record down to legacy would break the very write it
+  /// exists to serve.
+  Future<String> negotiatedProviderIdFor(String? requested,
+      {required AtKey atKey}) async {
+    final configured = providerIdFor(_atClient, requested, atKey: atKey);
+    if (requested != null) return configured;
+    return await SchemeNegotiation.forClient(_atClient)
+        .select(atKey, configured);
   }
 
   Future<String> encryptForPut(AtKey atKey, dynamic value) async {

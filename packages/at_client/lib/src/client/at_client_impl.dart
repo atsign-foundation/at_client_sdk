@@ -1211,10 +1211,17 @@ class AtClientImpl implements AtClient {
     var options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
     if (!atKey.metadata.isPublic && options.shouldEncrypt) {
       try {
+        // Decided once, here, and carried to the transformer on the options.
+        // Negotiation reads the destination's capability marker, so letting the
+        // transformer resolve the provider independently would both cost a
+        // second decision and allow the two to disagree — the pre-pass would
+        // convey a content key for a scheme the write then did not use.
+        final providerId = await CryptoRuntime(this)
+            .negotiatedProviderIdFor(options.cryptoProviderId, atKey: atKey);
+        options = _copyOptionsWithProvider(options, providerId);
         await CryptoRuntime(this).prepareForPut(
           atKey,
-          CryptoRuntime.providerIdFor(this, options.cryptoProviderId,
-              atKey: atKey),
+          providerId,
           // Any record the provider writes here is one this write will cite, so
           // it has to travel the same route this write does.
           useRemoteAtServer: options.useRemoteAtServer,
@@ -1412,10 +1419,19 @@ class AtClientImpl implements AtClient {
   /// must not become every later write's default.
   static PutRequestOptions _copyOptionsForLegacyFallback(
           PutRequestOptions options) =>
+      _copyOptionsWithProvider(options, legacyCryptoProviderId);
+
+  /// [options] with the scheme this write settled on, as a copy.
+  ///
+  /// A copy because the caller's own options object must not be rewritten, and
+  /// because the no-options case shares one static default instance across
+  /// every write in the process.
+  static PutRequestOptions _copyOptionsWithProvider(
+          PutRequestOptions options, String providerId) =>
       PutRequestOptions()
         ..useRemoteAtServer = options.useRemoteAtServer
         ..shouldEncrypt = options.shouldEncrypt
-        ..cryptoProviderId = legacyCryptoProviderId;
+        ..cryptoProviderId = providerId;
 
   void _validateDefaultCryptoProvider() {
     final config = CryptoConfig.forClient(this);

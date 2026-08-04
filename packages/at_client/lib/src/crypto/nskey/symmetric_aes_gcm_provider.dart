@@ -43,8 +43,17 @@ class SymmetricAesGcmProvider
         CryptoProvider,
         PreparesWrites,
         HandlesSelectively,
-        ReportsReadiness {
+        ReportsReadiness,
+        RequiresReaderSupport {
   final ContentKeyCache cache;
+
+  /// A value written here is openable only by a reader that can *also* resolve
+  /// the `at/nskey` conveyance carrying its content key — no sealed key travels
+  /// on the value itself. A fleet advertising only this id would be told it
+  /// could read records it can see but never decrypt.
+  @override
+  Set<String> get readerRequirements =>
+      {symmetricAesGcmCryptoProviderId, nskeyCryptoProviderId};
 
   /// Mints and conveys a content key when a destination has none, or when the
   /// one in hand was sealed to a generation the destination has rotated away
