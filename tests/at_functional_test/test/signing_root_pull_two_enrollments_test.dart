@@ -30,6 +30,12 @@ import 'test_utils.dart';
 /// connection. A client using the atSign's own keys is refused at either end,
 /// which is why the earlier single-client attempt could not reach this and why
 /// `enrolAndAuthenticate` exists.
+///
+/// This could not run at all until `AtClientImpl`'s instance cache was keyed by
+/// `(atSign, enrollmentId)` rather than the atSign alone. Before that, every
+/// "enrollment" here was `identical` to the approver's client and to the other
+/// enrollment, so the request was a client asking itself over a connection that
+/// carried no enrollment id.
 void main() {
   late AtClient approver;
   late String atSign;
@@ -45,6 +51,12 @@ void main() {
     await AtClientSecretSharing.forClient(approver).register();
   });
 
+  // Unique per run. The atServer refuses a second enrollment carrying an
+  // (appName, deviceName) pair that already has one approved, so fixed names
+  // pass on a fresh virtualenv and collide on every re-run against it — which
+  // is exactly what happened the first time this went green.
+  final runId = DateTime.now().microsecondsSinceEpoch;
+
   Future<EnrolledClient> enrol(String device) => enrolAndAuthenticate(
         approver: approver,
         atSign: atSign,
@@ -52,33 +64,9 @@ void main() {
         preference: TestUtils.getPreference(atSign),
         rootDomain: 'vip.ve.atsign.zone',
         rootPort: TestUtils.rootServerPort,
-        deviceName: device,
+        deviceName: '$device-$runId',
       );
 
-  // SKIPPED — the fixture is not finished, and the two open points are named
-  // rather than guessed at:
-  //
-  // 1. The enrolled client is not APKAM-authenticated because it is not a new
-  //    client at all. AtClientImpl caches instances keyed by atSign ALONE, so
-  //    every call returns the same object as the approver's client —
-  //    identical(enrolled.client, approver) is true, and two enrollments of
-  //    one atSign are identical to each other. enrollmentId therefore never
-  //    reaches the AtLookUp. The session was fine throughout: it carries the
-  //    right enrollmentId and an already-authenticated AtLookUp, and
-  //    fromAuthSession(reuse: true) still changes nothing, because none of
-  //    those arguments are applied to a cached instance. Fixing it is a
-  //    decision about AtClientImpl — a cache scoped by (atSign, enrollmentId),
-  //    or driving the second enrollment through AtLookUp alone, or a second
-  //    process — not a fixture detail.
-  //
-  // 2. Each party must bind its key package to its enrollment's, via
-  //    `bindKeyPackageToAtKeys`. `register()` mints a fresh X-Wing keypair per
-  //    process — observed: a party's kpid came back 490de1fc0a10864e where its
-  //    enrollment had advertised 9520bb7abf3295ee — so without binding, a
-  //    party listens at an address no sender ever writes to. Production does
-  //    this in `collectConveyedKeyMaterial`; this test does not yet.
-  //
-  // Point 2 is mechanical. Point 1 is structural and is the real blocker.
   test('a holder answers another enrollment and the private is filed',
       () async {
     final holder = await enrol('root-holder');
@@ -155,8 +143,5 @@ void main() {
         reason: 'byte-for-byte what the holder had. A private that arrived '
             'mangled would anchor this enrollment to a root the atSign does '
             'not have, which verifies as tampering rather than as an error');
-  },
-      skip: 'blocked: AtClientImpl caches clients by atSign alone, so two '
-          'enrollments of one atSign cannot have distinct clients in one '
-          'process — see the note above and decisions 32');
+  });
 }

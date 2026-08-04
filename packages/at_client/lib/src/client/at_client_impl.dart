@@ -251,6 +251,25 @@ class AtClientImpl implements AtClient {
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
 
+  /// The cache key for a client of [atSign] authenticated as [enrollmentId].
+  ///
+  /// **Identity here is `(atSign, enrollmentId)`, not the atSign alone.** A
+  /// client authenticated as one enrollment is a different principal from one
+  /// authenticated as another, or as the atSign's own keys: it holds a
+  /// different APKAM keypair, is granted different namespaces, and the atServer
+  /// answers `enroll:listns` for it and not for the others. Keying on the
+  /// atSign alone silently handed every caller the first client built for that
+  /// atSign, so a second enrollment of one atSign could not exist in a process
+  /// — `identical(second, first)` was true, and the enrollment id never reached
+  /// the connection because `_remoteSecondary ??=` kept the original.
+  ///
+  /// A null [enrollmentId] keeps the bare atSign as the key. That is the
+  /// overwhelmingly common case — a client using the atSign's own keys — and
+  /// leaving its key unchanged means no existing caller, cache eviction or
+  /// termination path has to learn a new shape.
+  static String instanceKey(String atSign, String? enrollmentId) =>
+      enrollmentId == null ? atSign : '$atSign|$enrollmentId';
+
   static final Finalizer<String> _finalizer = Finalizer((service) {
     _logger.finer('Outgoing $service has been garbage collected');
   });
@@ -321,10 +340,13 @@ class AtClientImpl implements AtClient {
   }) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
-    // Fetch cached AtClientImpl for re-use, or create a new one and init it
+    // Fetch cached AtClientImpl for re-use, or create a new one and init it.
+    // Keyed by (atSign, enrollmentId) — see [instanceKey]; two enrollments of
+    // one atSign are different principals and must not share a client.
+    final cacheKey = instanceKey(currentAtSign, enrollmentId);
     AtClientImpl? atClientImpl;
-    if (atClientInstanceMap.containsKey(currentAtSign)) {
-      atClientImpl = atClientInstanceMap[currentAtSign];
+    if (atClientInstanceMap.containsKey(cacheKey)) {
+      atClientImpl = atClientInstanceMap[cacheKey];
       await atClientImpl!.start();
       // Re-using a cached AtClient skips _init. Adopt the supplied preference's
       // crypto config so providers (and a changed defaultProviderId) added
@@ -351,8 +373,8 @@ class AtClientImpl implements AtClient {
       await atClientImpl._init(atLookUp: atLookUp);
     }
 
-    atClientInstanceMap[currentAtSign] = atClientImpl;
-    return atClientInstanceMap[currentAtSign];
+    atClientInstanceMap[cacheKey] = atClientImpl;
+    return atClientInstanceMap[cacheKey];
   }
 
   AtClientImpl._(

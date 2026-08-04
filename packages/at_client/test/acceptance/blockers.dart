@@ -54,20 +54,6 @@ const owedFunctional = 'owed: scenario not yet written · $_functional';
 /// The project landed; this scenario still needs writing, cross-atSign.
 const owedE2e = 'owed: scenario not yet written · $_e2e';
 
-/// The initiator now exists; the live round trip is still unproven.
-///
-/// `PqSigningRoot.requestPrivateIfAbsent` is wired into client start and its
-/// three guards are unit-covered, so this is no longer "nothing initiates it".
-/// What is missing is a fixture with two real APKAM enrollments. The pull needs
-/// APKAM on BOTH sides — the requester to enumerate holders, and the responder
-/// to authorize the requester — and both go through `enroll:listns`, which the
-/// atServer refuses for a client using the atSign's own keys. Observed on the
-/// wire, not inferred: the holder picks the request up and fails with
-/// "Client authentication failed : enroll:listns requires APKAM authentication".
-/// See [decisions 31](../../../../docs/projects/pq/decisions.md).
-const rootPullNotBuilt =
-    'blocked: the signing-root pull round trip is unproven · $_functional';
-
 /// Migration machinery + disallowLegacyEncryption flag.
 const r1 = 'blocked: R-1 (scheme negotiation + flag) · $_unit';
 const r1CrossAtSign = 'blocked: R-1 (scheme negotiation + flag) · $_e2e';

@@ -2685,3 +2685,42 @@ distinct advertised kpids, and clients are constructed from their sessions.
 The test is committed **skipped**, carrying both points inline. A fixture that looks finished and
 is not costs more than an absent one, which is the same reason UC-B5.1 is labelled blocked rather
 than owed.
+
+## 33. Keying the client cache by (atSign, enrollmentId) (2026-08-04)
+
+[Section 32](#32-the-two-enrollment-fixture-what-works-and-what-does-not-2026-08-04) found that
+two enrollments of one atSign could not have distinct clients in a process, because
+`AtClientImpl` cached instances **keyed by the atSign alone**. `identical(second, first)` was
+true, `_remoteSecondary ??=` kept whatever connection the first instance was built with, and the
+enrollment id therefore never reached the `AtLookUp` — so the atServer refused `enroll:listns`
+and the whole pull path was unreachable from a test.
+
+**The cache is now keyed by `(atSign, enrollmentId)`.** That is the `(owner, id)` rule the rest
+of this codebase already follows, applied to the one place that had missed it. A client
+authenticated as one enrollment is a different principal from one authenticated as another, or
+as the atSign's own keys: different APKAM keypair, different granted namespaces, and the atServer
+answers different verbs for it.
+
+**A null enrollment id keeps the bare atSign as the key.** That is the overwhelmingly common case
+— a client using the atSign's own keys — and leaving its key untouched means no existing caller,
+eviction path or termination test has to learn a new shape. The blast radius was checked before
+the edit rather than after: five sites inside `at_client_impl.dart` and a set of tests that
+`remove(atSign)` or `containsKey(atSign)`, all of which pass a null enrollment id and so are
+unaffected by construction.
+
+**UC-B5.1 is proven as a result** — the first row in this catalogue to need production code, not
+just a test, and then a second fix underneath that. The sequence is worth keeping as a shape: the
+row looked *owed a test*; writing the test showed the mechanism had **no initiator**
+([30](#30-uc-b51s-pull-backstop-has-no-initiator-2026-08-04)); building the initiator showed the
+path needed APKAM on both sides ([31](#31-the-root-pull-initiator-and-what-it-did-not-settle-2026-08-04));
+building that fixture showed the client cache made it impossible
+([32](#32-the-two-enrollment-fixture-what-works-and-what-does-not-2026-08-04)). Four layers, each
+only visible once the one above it was cleared, and none of them visible from reading the code.
+
+### 33.1 The test's own precondition
+
+`signing_root_pull_two_enrollments_test.dart` passed on a fresh virtualenv and failed on the
+re-run: the atServer refuses a second enrollment carrying an `(appName, deviceName)` pair that
+already has one approved, and the device names were fixed strings. They are now unique per run.
+Caught only because the result was re-checked rather than accepted — a single green run on a
+one-shot-state test says nothing about the next one.

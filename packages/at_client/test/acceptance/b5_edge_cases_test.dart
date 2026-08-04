@@ -7,7 +7,6 @@ import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
-import 'blockers.dart';
 import 'proven_elsewhere.dart';
 
 void main() {
@@ -23,26 +22,24 @@ void main() {
       //       primary path once a holder is online, with requestSecret as the
       //       backstop.
       //
-      // The row splits. Namespaced nskey privates DO arrive by the push path
-      // (NskeySeeding's conveyance). The headline half — requestSecret as the
-      // steady-state route to the root — had no initiator at all until
-      // PqSigningRoot.requestPrivateIfAbsent was built and wired into client
-      // start; its guards are unit-covered.
-      //
-      // What is still missing is the live round trip, and it needs a fixture
-      // with two real APKAM enrollments. The pull requires APKAM on BOTH
-      // sides: the requester to enumerate holders, and the responder to
-      // authorize the requester before answering. Both go through
-      // enroll:listns, which the atServer refuses for a client using the
-      // atSign's own keys — watched happening, with the holder picking the
-      // request up and failing on exactly that. See decisions 30 and 31.
-      //
-      // This matters more than a missing convenience path: the root is
-      // atSign-level and carries no namespace, so it is excluded from the
-      // enroll:listns fan-out by construction. An enrollment that missed the
-      // approval-time conveyance has no other route to it.
-      fail('not implemented');
-    }, skip: rootPullNotBuilt);
+      // The row splits, and both halves are now proven. Namespaced nskey
+      // privates arrive by the push path (NskeySeeding's conveyance). The
+      // headline half — requestSecret as the steady-state route to the root —
+      // had no initiator until PqSigningRoot.requestPrivateIfAbsent, and could
+      // not be driven until AtClientImpl's instance cache was keyed by
+      // (atSign, enrollmentId): before that every "enrollment" in a test was
+      // identical to the approver's client, so the request was a client asking
+      // itself over a connection carrying no enrollment id.
+      provenIn(
+        'tests/at_functional_test/test/signing_root_pull_two_enrollments_test.dart',
+        'a holder answers another enrollment and the private is filed',
+        proves: 'between two genuinely distinct approved APKAM enrollments, a '
+            'seeker holding no root private asks, a holder answers over the '
+            'envelope channel, and the private is filed into the seeker\'s '
+            'keyfile byte-for-byte — with the seeker asserted to start with '
+            'nothing and the two enrollments asserted to differ',
+      );
+    });
 
     test('UC-B5.2 · reading legacy history after retrofit', () async {
       // GIVEN alice1 retrofitted; the old legacy enrollment aged out; the legacy
