@@ -58,12 +58,12 @@ const owedE2e = 'owed: scenario not yet written · $_e2e';
 ///
 /// `PqSigningRoot.requestPrivateIfAbsent` is wired into client start and its
 /// three guards are unit-covered, so this is no longer "nothing initiates it".
-/// What is missing is a fixture with two real APKAM enrollments: the
-/// functional harness authenticates with the atSign's own keys, so the
-/// enumeration is refused with "enroll:listns requires APKAM authentication",
-/// and addressing a holder directly puts the envelope on the atServer but
-/// produces no answer — for reasons not yet established, and deliberately not
-/// guessed at.
+/// What is missing is a fixture with two real APKAM enrollments. The pull needs
+/// APKAM on BOTH sides — the requester to enumerate holders, and the responder
+/// to authorize the requester — and both go through `enroll:listns`, which the
+/// atServer refuses for a client using the atSign's own keys. Observed on the
+/// wire, not inferred: the holder picks the request up and fails with
+/// "Client authentication failed : enroll:listns requires APKAM authentication".
 /// See [decisions 31](../../../../docs/projects/pq/decisions.md).
 const rootPullNotBuilt =
     'blocked: the signing-root pull round trip is unproven · $_functional';

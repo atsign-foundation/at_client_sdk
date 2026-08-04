@@ -2595,14 +2595,40 @@ both direct:
   root. A plain envelope on the same wire between the same two parties sweeps normally, so the
   difference is the request payload, not the transport.
 
-**The cause of the second has not been established.** It may be the responder's
-requester-authorization step needing the same APKAM-backed enumeration, or something else
-entirely; the "Ignoring request … not an authorized key package" log did not appear, so the
-early-return path is not confirmed either. It is recorded as an open question rather than
-asserted, because a plausible-sounding cause written down as fact is how the last three
-diagnoses on this branch went wrong.
+**Resolved the same day, with the transcript.** The cause was first written here as an open
+question rather than a diagnosis, and then actually established. Under FINEST logging the
+holder's sweep shows:
 
-**What UC-B5.1 now needs:** a fixture with two real APKAM enrollments, which no test package
-here has yet, and then either a passing round trip or a diagnosis of the above. The blocker is
-re-labelled from *the initiator does not exist* to *the live round trip is unproven* — the
-initiator now exists and its guards are unit-covered.
+```
+RECEIVED error:{"errorCode":"AT0401","errorDescription":
+  "Client authentication failed : enroll:listns requires APKAM authentication"}
+WARNING|AtClientSecretSharing|Failed to process envelope <…>.__ssenv.wavi@alice🛠:
+  Exception: Client authentication failed …
+```
+
+So the holder **does** pick the request up. It then tries to authorize the requester — resolving
+the sender's kpid against the key packages registered for the namespace — and that resolution
+goes through `enroll:listns`, which the atServer refuses for a client authenticating with the
+atSign's own keys. The envelope is left unconsumed and no answer is produced.
+
+**The pull therefore requires APKAM on both sides:** the requester to enumerate holders, and the
+responder to authorize the requester. That is a property of the design rather than a defect —
+the authorization is deliberate defence in depth over the atServer's own delivery gate — but it
+means no harness using the atSign's own keys can exercise this path at either end.
+
+Two notes on how this was reached, both of which are the point. The first attempt concluded
+nothing from an absence of log lines; that absence turned out to be an artefact of raising
+`AtSignLogger.root_level` *after* the loggers were constructed, and a run with the level raised
+beforehand — plus a plain envelope as a positive control, to prove the logging reached the region
+at all — produced the transcript above immediately. And the failure is logged at **warning**,
+naming the envelope, which is why it was findable at all; had it been `finer` this would have
+presented as "the sender never sent".
+
+**What UC-B5.1 now needs:** a fixture with two real APKAM enrollments — each approved, each with
+its own authenticated client carrying its own `enrollmentId` and `AtChops` — which no test
+package here has yet. `AtClientManager.setCurrentAtSign` already takes `enrollmentId`, `atChops`
+and `atKeysIo`, and a second `AtClientManager()` instance sidesteps the per-atSign singleton, so
+the pieces exist; assembling them is the work. With that in place the round trip should complete,
+since the only thing observed blocking it is an authentication class the fixture would supply.
+The blocker is re-labelled from *the initiator does not exist* to *the live round trip is
+unproven* — the initiator now exists and its guards are unit-covered.

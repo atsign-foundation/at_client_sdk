@@ -30,11 +30,12 @@ void main() {
       // start; its guards are unit-covered.
       //
       // What is still missing is the live round trip, and it needs a fixture
-      // with two real APKAM enrollments. The functional harness authenticates
-      // with the atSign's own keys, so the enumeration is refused outright
-      // ("enroll:listns requires APKAM authentication"), and addressing a
-      // holder directly lands the envelope but yields no answer — for reasons
-      // not yet established and not guessed at. See decisions 30 and 31.
+      // with two real APKAM enrollments. The pull requires APKAM on BOTH
+      // sides: the requester to enumerate holders, and the responder to
+      // authorize the requester before answering. Both go through
+      // enroll:listns, which the atServer refuses for a client using the
+      // atSign's own keys — watched happening, with the holder picking the
+      // request up and failing on exactly that. See decisions 30 and 31.
       //
       // This matters more than a missing convenience path: the root is
       // atSign-level and carries no namespace, so it is excluded from the

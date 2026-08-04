@@ -21,22 +21,24 @@ import 'test_utils.dart';
 /// in `lib/`.
 ///
 /// **What is NOT proven here, and why.** The full round trip — seeker asks,
-/// holder answers, private reaches the keyfile — could not be driven from this
-/// harness. Two things were observed directly. `requestPrivateIfAbsent`'s own
-/// enumeration fails here with *"enroll:listns requires APKAM authentication"*,
-/// because this harness authenticates with the atSign's own keys rather than
-/// as an enrollment. And when the request envelope is addressed straight at a
-/// holder instead, bypassing that enumeration, the envelope reaches the
-/// atServer but the holder produces no answer and the seeker never receives
-/// the root.
+/// holder answers, private reaches the keyfile — cannot be driven from this
+/// harness, and the reason was established on the wire rather than guessed.
 ///
-/// The cause of that second observation has **not** been established — it may
-/// be the responder's requester-authorization step needing the same APKAM
-/// enumeration, or something else — and it is deliberately not asserted here
-/// as though it had been. What follows from it is only this: proving the round
-/// trip needs a fixture with two real APKAM enrollments, which does not exist
-/// in this package yet. UC-B5.1 stays blocked on that, and the reason is
-/// recorded in decisions.md 30.
+/// The pull needs APKAM authentication on **both** sides. The requester needs
+/// it to enumerate holders, and the responder needs it to authorize the
+/// requester before answering — that authorization resolves the sender's kpid
+/// against the key packages registered for the namespace, which is deliberate
+/// defence in depth over the atServer's own delivery gate. Both go through
+/// `enroll:listns`, and the atServer refuses it for a client authenticating
+/// with the atSign's own keys, which is what this harness does. Under FINEST
+/// logging the holder is seen picking the request up and failing with
+/// *"Client authentication failed : enroll:listns requires APKAM
+/// authentication"*, leaving the envelope unconsumed.
+///
+/// So proving the round trip needs a fixture with two real approved APKAM
+/// enrollments, each with its own authenticated client. That does not exist in
+/// this package yet; UC-B5.1 stays blocked on it, and decisions.md 30-31 carry
+/// the detail.
 ///
 /// What this file does prove live is the entitlement guard below.
 void main() {
