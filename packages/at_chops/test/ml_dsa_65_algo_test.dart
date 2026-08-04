@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
@@ -6,101 +5,72 @@ import 'package:test/test.dart';
 
 void main() {
   group('ML-DSA-65 pure-Dart', () {
-    test('instance generateKeyPair produces FIPS 204 key sizes', () async {
-      // Pins the generateKeyPair conversion from a static method to an
-      // instance method (required to implement AtSignatureAlgorithm).
+    test('generateKeyPair produces FIPS 204 key sizes', () async {
       final algo = MlDsa65PureDartAlgo();
       final kp = await algo.generateKeyPair();
       expect(kp.publicKey.length, equals(1952));
       expect(kp.secretKey.length, equals(4032));
 
       final Uint8List message = Uint8List.fromList('instance keygen'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, secretKey: kp.secretKey);
-      expect(await algo.verifyBytes(message, signature: sig, publicKey: kp.publicKey), isTrue);
+      final Uint8List sig =
+          await algo.signBytes(message, secretKey: kp.secretKey);
+      expect(
+          await algo.verifyBytes(message,
+              signature: sig, publicKey: kp.publicKey),
+          isTrue);
     });
 
     test('sign/verify round-trip yields true', () async {
-      final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
-      final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
-      final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
-
       final algo = MlDsa65PureDartAlgo();
+      final kp = await algo.generateKeyPair();
+
       final Uint8List message = Uint8List.fromList('Hello ML-DSA-65'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, secretKey: sk);
-      final bool ok = await algo.verifyBytes(message, signature: sig, publicKey: pub);
+      final Uint8List sig =
+          await algo.signBytes(message, secretKey: kp.secretKey);
+      final bool ok = await algo.verifyBytes(message,
+          signature: sig, publicKey: kp.publicKey);
 
       expect(ok, isTrue);
     });
 
-    test('Generated key pair has FIPS 204 sizes', () async {
-      final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
-      expect(base64Decode(kp.atPublicKey.publicKey).length, equals(1952));
-      expect(base64Decode(kp.atPrivateKey.privateKey).length, equals(4032));
-    });
-
     test('Signature has expected FIPS 204 length (3309 bytes)', () async {
-      final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
-      final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
+      final algo = MlDsa65PureDartAlgo();
+      final kp = await algo.generateKeyPair();
 
-      final Uint8List sig = await MlDsa65PureDartAlgo().signBytes(
+      final Uint8List sig = await algo.signBytes(
           Uint8List.fromList('test'.codeUnits),
-          secretKey: sk);
+          secretKey: kp.secretKey);
 
       expect(sig.length, equals(3309));
     });
 
     test('Verifying with wrong public key returns false', () async {
-      final MlDsa65KeyPair kp1 = await MlDsa65KeyPair.generate();
-      final MlDsa65KeyPair kp2 = await MlDsa65KeyPair.generate();
-      final Uint8List sk = base64Decode(kp1.atPrivateKey.privateKey);
-      final Uint8List wrongPub = base64Decode(kp2.atPublicKey.publicKey);
-
       final algo = MlDsa65PureDartAlgo();
+      final kp1 = await algo.generateKeyPair();
+      final kp2 = await algo.generateKeyPair();
+
       final Uint8List message = Uint8List.fromList('data'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, secretKey: sk);
-      final bool ok = await algo.verifyBytes(message, signature: sig, publicKey: wrongPub);
+      final Uint8List sig =
+          await algo.signBytes(message, secretKey: kp1.secretKey);
+      final bool ok = await algo.verifyBytes(message,
+          signature: sig, publicKey: kp2.publicKey);
 
       expect(ok, isFalse);
     });
 
     test('Verifying tampered message returns false', () async {
-      final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
-      final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
-      final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
-
       final algo = MlDsa65PureDartAlgo();
+      final kp = await algo.generateKeyPair();
+
       final Uint8List message = Uint8List.fromList('original'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, secretKey: sk);
+      final Uint8List sig =
+          await algo.signBytes(message, secretKey: kp.secretKey);
 
       final Uint8List tampered = Uint8List.fromList('tampered'.codeUnits);
-      final bool ok = await algo.verifyBytes(tampered, signature: sig, publicKey: pub);
+      final bool ok = await algo.verifyBytes(tampered,
+          signature: sig, publicKey: kp.publicKey);
 
       expect(ok, isFalse);
-    });
-
-    test('Deprecated stateful sign/verify via AtSigningAlgorithm still works',
-        () async {
-      // The stateful path shipped in 3.3.0 and AtChopsImpl's
-      // signing/verification dispatch is typed against AtSigningAlgorithm,
-      // so it must keep working until it is removed in a major release.
-      final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
-      final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
-
-      final algo = MlDsa65PureDartAlgo();
-      // ignore: deprecated_member_use_from_same_package
-      algo.secretKey = sk;
-
-      final Uint8List message = Uint8List.fromList('Hello'.codeUnits);
-      // ignore: deprecated_member_use_from_same_package
-      final Uint8List sig = await algo.sign(message);
-      // ignore: deprecated_member_use_from_same_package
-      final bool ok = await algo.verify(
-        message,
-        sig,
-        publicKey: kp.atPublicKey.publicKey,
-      );
-
-      expect(ok, isTrue);
     });
   });
 }

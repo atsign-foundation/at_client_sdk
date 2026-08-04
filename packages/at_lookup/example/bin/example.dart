@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -7,13 +10,26 @@ import 'package:at_lookup/at_lookup.dart';
 /// NOTE: Running this example would result in an exception. The At_lookup package would require
 /// a secondary running.
 void main() async {
-  var atLookupImpl = AtLookupImpl(
+  // The PKAM private key as PKCS#8 DER bytes — `base64Decode` of the string form
+  // an atKeys file carries.
+  Uint8List pkamPrivateKey = base64Decode('<pkam private key>');
+
+  // AtLookUp.legacy uses the algorithms every atServer verifies today:
+  // RSA-2048/SHA-256 PKAM, SHA-512 CRAM, RSA-2048/SHA-256 data-signature
+  // verification. Use AtLookUp.pq for a post-quantum APKAM key, or
+  // AtLookUp.create to name each algorithm yourself.
+  //
+  // The key is retained, and that is what keeps a long-lived instance usable:
+  // when the atServer or an idle timeout drops the socket, the next verb rebuilds
+  // the connection and re-authenticates without the caller noticing.
+  var atLookupImpl = AtLookUp.legacy(
     '@alice',
     'root.atsign.com',
     64,
-    privateKey: 'privateKey',
-    cramSecret: 'cramSecret',
+    pkamPrivateKey: pkamPrivateKey,
   );
+
+  await atLookupImpl.pkamAuthenticate();
 
   /// To update a key into secondary server
   //Build update verb builder

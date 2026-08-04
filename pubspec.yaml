@@ -6,13 +6,13 @@ environment:
   flutter: ^3.29.2 # Ships with Dart 3.7.2, ensuring pub workspace support
 
 workspace:
+  - packages/at_auth
   - packages/at_chops
   - packages/at_cli_commons
   - packages/at_client
   - packages/at_client_flutter
   - packages/at_commons
   - packages/at_contact
-  - packages/at_lookup
   - packages/at_onboarding_cli
   - packages/at_policy
   - packages/at_server_status

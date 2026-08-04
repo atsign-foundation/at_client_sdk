@@ -1,7 +1,6 @@
 @Tags(['ffi'])
 library;
 
-import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
@@ -52,16 +51,14 @@ void main() {
         fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
       }
 
-      final MlKem768KeyPair kp = await MlKem768KeyPair.generate();
-      final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
-      final Uint8List priv = base64Decode(kp.atPrivateKey.privateKey);
+      final kp = await MlKem768PureDartAlgo.instance.generateKeyPair();
 
       final ffiAlgo = MlKem768FfiAlgo.fromLib(lib);
-      final enc = await ffiAlgo.encapsulate(pub);
+      final enc = await ffiAlgo.encapsulate(kp.publicKey);
 
       // Recipient must use pure-Dart impl — FFI handles are non-serializable.
-      final Uint8List recovered =
-          await MlKem768PureDartAlgo.instance.decapsulate(priv, enc.ciphertext);
+      final Uint8List recovered = await MlKem768PureDartAlgo.instance
+          .decapsulate(kp.secretKey, enc.ciphertext);
       expect(recovered, equals(enc.sharedSecret));
     });
 
@@ -83,7 +80,8 @@ void main() {
 
         final ffiAlgo = MlKem768FfiAlgo.fromLib(lib);
         final ffiKp = await ffiAlgo.generateKeyPair(seed);
-        final pureKp = await MlKem768PureDartAlgo.instance.generateKeyPair(seed);
+        final pureKp =
+            await MlKem768PureDartAlgo.instance.generateKeyPair(seed);
         try {
           expect(ffiKp.publicKey, equals(pureKp.publicKey));
         } finally {

@@ -1,7 +1,6 @@
 @Tags(['ffi'])
 library;
 
-import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
@@ -37,10 +36,12 @@ void main() {
 
       final Uint8List message =
           Uint8List.fromList('Hello ML-DSA-65 FFI'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, secretKey: kp.secretKey);
+      final Uint8List sig =
+          await algo.signBytes(message, secretKey: kp.secretKey);
       expect(sig.length, equals(3309));
 
-      final bool ok = await algo.verifyBytes(message, signature: sig, publicKey: kp.publicKey);
+      final bool ok = await algo.verifyBytes(message,
+          signature: sig, publicKey: kp.publicKey);
       expect(ok, isTrue);
     });
 
@@ -52,17 +53,16 @@ void main() {
         fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
       }
 
-      final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
-      final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
-      final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
+      final kp = await MlDsa65PureDartAlgo().generateKeyPair();
 
       final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib);
       final Uint8List message =
           Uint8List.fromList('cross-backend signing'.codeUnits);
-      final Uint8List sig = await ffiAlgo.signBytes(message, secretKey: sk);
+      final Uint8List sig =
+          await ffiAlgo.signBytes(message, secretKey: kp.secretKey);
 
-      final bool ok =
-          await MlDsa65PureDartAlgo().verifyBytes(message, signature: sig, publicKey: pub);
+      final bool ok = await MlDsa65PureDartAlgo()
+          .verifyBytes(message, signature: sig, publicKey: kp.publicKey);
       expect(ok, isTrue);
     });
 
@@ -79,10 +79,11 @@ void main() {
 
       final Uint8List message =
           Uint8List.fromList('cross-backend verification'.codeUnits);
-      final Uint8List sig =
-          await MlDsa65PureDartAlgo().signBytes(message, secretKey: kp.secretKey);
+      final Uint8List sig = await MlDsa65PureDartAlgo()
+          .signBytes(message, secretKey: kp.secretKey);
 
-      final bool ok = await ffiAlgo.verifyBytes(message, signature: sig, publicKey: kp.publicKey);
+      final bool ok = await ffiAlgo.verifyBytes(message,
+          signature: sig, publicKey: kp.publicKey);
       expect(ok, isTrue);
     });
 
@@ -98,10 +99,12 @@ void main() {
       final kp = await algo.generateKeyPair();
 
       final Uint8List message = Uint8List.fromList('original'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, secretKey: kp.secretKey);
+      final Uint8List sig =
+          await algo.signBytes(message, secretKey: kp.secretKey);
 
       final Uint8List tampered = Uint8List.fromList('tampered'.codeUnits);
-      final bool ok = await algo.verifyBytes(tampered, signature: sig, publicKey: kp.publicKey);
+      final bool ok = await algo.verifyBytes(tampered,
+          signature: sig, publicKey: kp.publicKey);
       expect(ok, isFalse);
     });
   });

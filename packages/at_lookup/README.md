@@ -17,7 +17,7 @@ To add this package as the dependency, add it to your pubspec.yaml
 
 ```dart  
 dependencies:
-  at_lookup: ^3.0.5
+  at_lookup: ^4.0.0
 ```
 
 #### Add to your project
@@ -41,15 +41,37 @@ Feel free to fork a copy of the source from the [GitHub Repo](https://github.com
 ### To get the instance of at_lookup
 
 ```dart
-AtLookUp atLookUp = AtLookupImpl(
+AtLookUp atLookUp = AtLookUp.legacy(
   '@alice',
   'root.atsign.com',
   64,
-  privateKey: 'privateKey',
-  cramSecret: 'cramSecret',
+  pkamPrivateKey: pkamPrivateKey, // PKCS#8 DER bytes
 );
+
+await atLookUp.pkamAuthenticate();
 ```
-Please refer to [examples](https://github.com/atsign-foundation/at_libraries/blob/doc_at_lookup/at_lookup/example/bin/example.dart) for more details.
+
+at_lookup owns the wire protocol and makes no cryptographic choice of its own.
+Two factories cover every consumer:
+
+| Factory           | PKAM signing       | CRAM digest | Data signature verification |
+| ----------------- | ------------------ | ----------- | --------------------------- |
+| `AtLookUp.legacy` | RSA-2048 / SHA-256 | SHA-512     | RSA-2048 / SHA-256          |
+| `AtLookUp.pq`     | ML-DSA-65          | SHA-512     | RSA-2048 / SHA-256          |
+
+`AtLookUp.create` takes each algorithm individually — `signingAlgo`,
+`hashingAlgo`, `dataAlgo`, all stateless at_chops algorithms — for a custom mix.
+The `pkam` verb is stamped with what `signingAlgo` declares, so it cannot claim
+one algorithm while another produced the signature.
+
+`pkamPrivateKey` is the only key material at_lookup retains, and it is what keeps
+a long-lived instance usable: when the atServer or an idle timeout drops the
+connection, the next verb rebuilds it and re-authenticates without the caller
+noticing. Omit it for an instance that only `cramAuthenticate`s, which is where
+activation starts.
+
+See [example/bin/example.dart](example/bin/example.dart) for a walkthrough of the
+verbs.
 
 ## Open source usage and contributions
 
