@@ -471,8 +471,22 @@ class AtClientImpl implements AtClient {
     unawaited(_publishChainLink());
   }
 
-  /// Publishes the approval-chain link conveyed to this enrollment, if any.
+  /// Files any conveyed signing-root private, then publishes whichever
+  /// approval-chain link this enrollment can.
+  ///
+  /// Ordered: filing the root private first is what lets the same start also
+  /// self-sign a root link, rather than needing a second start to notice the
+  /// private had arrived.
   Future<void> _publishChainLink() async {
+    try {
+      final sharing = AtClientSecretSharing.forClient(this);
+      await PqSigningRoot(this, keysIo: _atKeysIo)
+          .filePendingPrivate(_atSign, sharing.secretStore.listSecrets());
+    } catch (e, st) {
+      _logger.warning('Filing a conveyed signing root private failed for '
+          '$_atSign; this enrollment cannot anchor itself until it lands, and '
+          'the next start retries: $e, $st');
+    }
     try {
       await PqSigningChain.publishPendingLink(this);
     } catch (e, st) {

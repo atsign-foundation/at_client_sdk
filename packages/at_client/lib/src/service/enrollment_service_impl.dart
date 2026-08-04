@@ -7,6 +7,8 @@ import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
     show PqSigningChain;
+import 'package:at_client/src/crypto/nskey/pq_signing_root.dart'
+    show PqSigningRoot;
 import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
     show enrollmentApkamSymmetricKeySecretName;
 import 'package:at_commons/at_builders.dart';
@@ -144,8 +146,45 @@ class EnrollmentServiceImpl implements EnrollmentService {
           ));
     }
 
+    // A fully privileged enrollment gets the signing root's private half, so
+    // it can anchor its own key and vouch for others. Only that class: the
+    // root vouches for every enrollment on the atSign, and a namespace-scoped
+    // one has no business holding it.
+    //
+    // Conveyed under a per-enrollment name so shareAllSecretsWith never
+    // forwards it on. Without that it would sit in the recipient's store like
+    // any other secret and reach the next enrollment that shared its
+    // namespace, privileged or not.
+    if (isFullyPrivileged(enrollment.namespace)) {
+      final root = PqSigningRoot(_atClient, keysIo: _atClient.atKeysIo);
+      final private = await root.privateHalf(atSign);
+      if (private != null) {
+        await sharing.shareSecretWith(
+            keyPackage,
+            Secret(
+              namespace: _conveyanceNamespaceFor(enrollment),
+              name: PqSigningRoot.secretName,
+              value: base64Encode(private),
+            ));
+      }
+    }
+
     await sharing.shareAllSecretsWith(keyPackage,
         approvedNamespaces: enrollment.namespace);
+  }
+
+  /// Whether [namespaces] grant `rw` on both `*` and `__manage` — the class
+  /// that may hold the signing root ([decisions.md 18.2][]).
+  ///
+  /// Read off the granted namespaces rather than trusted from the caller: this
+  /// decides who receives the key that vouches for every enrollment on the
+  /// atSign.
+  ///
+  /// [decisions.md 18.2]: ../../../../docs/projects/pq/decisions.md
+  static bool isFullyPrivileged(Map<String, dynamic>? namespaces) {
+    if (namespaces == null) return false;
+    bool grantsWrite(String ns) => '${namespaces[ns] ?? ''}'.contains('w');
+    return grantsWrite('*') && grantsWrite('__manage');
   }
 
   /// A namespace this enrollment is authorised to read, for the envelope

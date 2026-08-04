@@ -3,6 +3,7 @@
 // ignore_for_file: experimental_member_use
 
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
@@ -149,6 +150,89 @@ void main() {
             'material addressed to a single enrollment must not reach the '
             'next one it approves, and the namespace check alone would let it '
             'through since both live in buzz');
+  });
+
+  group('the signing root private', () {
+    /// An approver that genuinely holds a root private, so a test of the
+    /// privilege gate cannot pass merely because there was nothing to convey.
+    Future<MockAtClient> rootHoldingApprover() async {
+      final approver = buildMockClient('approver-1');
+      final io = InMemoryAtKeysIo();
+      await io.write(
+          atSign,
+          AtKeys()
+            ..addKey(AtKeysMaterial(
+              keyId: PqSigningRoot.keyId,
+              keyPartType: CryptographicKeyType.privateSigning,
+              keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+              bytes: AtBytes(Uint8List.fromList(List<int>.filled(32, 7))),
+              createdAt: DateTime.now().toUtc(),
+            )));
+      when(() => approver.atKeysIo).thenReturn(io);
+      await AtClientSecretSharing.forClient(approver).register();
+      return approver;
+    }
+
+    /// Approves an enrollment granted [namespaces] and returns how many
+    /// envelopes were sealed to it.
+    Future<int> envelopeCountFor(Map<String, String> namespaces) async {
+      remoteData.clear();
+      final approver = await rootHoldingApprover();
+      final listCommand = (EnrollVerbBuilder()
+            ..operation = EnrollOperationEnum.list)
+          .buildCommand();
+      final key = '$enrolleeId.new.enrollments.__manage$atSign';
+      // Built once: `enroll:list` is read twice per approval, and registering
+      // a fresh enrollee on each call would publish a different `_apsk` and
+      // sign the package with a different key each time.
+      final keyPackage = await advertisedKeyPackage();
+      final secondary = approver.getRemoteSecondary()!;
+      when(() => secondary.executeCommand(listCommand, auth: true))
+          .thenAnswer((_) async => 'data:${jsonEncode({
+                key: {
+                  'appName': 'buzz',
+                  'deviceName': 'pixel',
+                  'namespace': namespaces,
+                  'encryptedAPKAMSymmetricKey': 'rsa-wrapped',
+                  'metadata': {'keyPackage': keyPackage},
+                }
+              })}');
+
+      await EnrollmentServiceImpl(approver, _RecordingAtEnrollment()).approve(
+          EnrollmentRequestDecision.approved(
+              enrollmentId: enrolleeId,
+              apkamSymmetricKey:
+                  AtBytes.fromString(base64Encode(utf8.encode('wrapped'))),
+              atSign: atSign));
+
+      return remoteData.keys.where((k) => k.contains('.__ssenv.')).length;
+    }
+
+    test('reaches a fully privileged enrollment and no other', () async {
+      final privileged =
+          await envelopeCountFor({'*': 'rw', '__manage': 'rw', 'buzz': 'rw'});
+      final scoped = await envelopeCountFor({'buzz': 'rw'});
+
+      expect(privileged, scoped + 1,
+          reason: 'the root vouches for every enrollment on the atSign, so a '
+              'namespace-scoped one must never hold it — and the approver '
+              'held a private in both runs, so the difference is the privilege '
+              'gate rather than there having been nothing to send');
+    });
+
+    test('classifies privilege from the granted namespaces', () {
+      expect(
+          EnrollmentServiceImpl.isFullyPrivileged({'*': 'rw', '__manage': 'rw'}),
+          isTrue);
+      expect(EnrollmentServiceImpl.isFullyPrivileged({'*': 'rw'}), isFalse,
+          reason: 'approving is a __manage power; * alone is not the class '
+              'that holds the root');
+      expect(
+          EnrollmentServiceImpl.isFullyPrivileged({'*': 'r', '__manage': 'rw'}),
+          isFalse,
+          reason: 'read-only on * is not full privilege');
+      expect(EnrollmentServiceImpl.isFullyPrivileged(null), isFalse);
+    });
   });
 
   test('the guard does not fire when there is nothing to convey', () async {

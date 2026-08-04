@@ -1,4 +1,15 @@
 ## 3.14.1
+- feat: the signing root's private half reaches the enrollments entitled to it.
+  A **fully privileged** enrollment (`rw` on both `*` and `__manage`) is
+  conveyed the root private when it is approved, so it can anchor its own key
+  rather than waiting to be vouched for; a namespace-scoped one never is, since
+  the root vouches for every enrollment on the atSign. It travels under a
+  per-enrollment name so `shareAllSecretsWith` cannot forward it onward — the
+  case that would otherwise hand it to whichever enrollment happened to share
+  the envelope's namespace. `PqSigningRoot.filePendingPrivate` moves an arrived
+  private out of the secret store and into `AtKeys` at client start: the store
+  is an in-memory transit buffer, and a root that only ever lived there would be
+  lost on restart with no way back, the record being immutable and non-rotating.
 - feat: `PqSigningChain` — the approval chain's link. The enrollment that
   approves a device signs that device's APKAM public key, so a verifier can
   walk upward from any key toward the atSign's signing root without an approval
