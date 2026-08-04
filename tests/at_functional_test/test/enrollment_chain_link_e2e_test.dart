@@ -78,6 +78,36 @@ void main() {
             'copy of it');
   });
 
+  test('an atSign anchors itself to its own signing root, and the walk sees it',
+      () async {
+    final io = InMemoryAtKeysIo();
+    await io.write(atSign, AtKeys());
+
+    // Mints if this run's atServer has no root yet, and anchors this
+    // enrollment either way on the next call below.
+    await PqSigningRoot(atClient, keysIo: io)
+        .mintIfAbsent(isFullyPrivileged: true);
+
+    final sharing = AtClientSecretSharing.forClient(atClient);
+    await PqSigningChain.publishOwnRootLink(atClient,
+        isFullyPrivileged: () async => true, keysIo: io);
+
+    final link =
+        await PqSigningChain.readRootLink(atClient, sharing.enrollmentId);
+    expect(link, isNotNull,
+        reason: 'the anchor is metadata on a public record the atServer also '
+            'writes, so that it survives is the property worth watching '
+            'rather than assuming');
+
+    final result = await PqSigningChain.verifyChain(
+        atClient, sharing, sharing.enrollmentId);
+
+    expect(result.verdict, ChainVerdict.anchored,
+        reason: 'the walk fetches the published root and checks the ML-DSA '
+            'signature against it, so this exercises the real record rather '
+            'than an in-memory copy. Reason if not: ${result.reason}');
+  });
+
   test('approving conveys a chain link alongside the symmetric key', () async {
     final otp = (await atClient.getOTP()).response;
 
