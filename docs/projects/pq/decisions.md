@@ -2221,3 +2221,66 @@ invites implementing the fix without redoing it. Here the diagnosis was right ab
 and wrong about the depth. The cheap check that caught it was asking what would actually be in
 the store at the moment the prescribed code read it — a question the entry did not raise
 because the model it cited appeared to answer it.
+
+---
+
+## 26. UC-A4.4 does not work: the CK fetch deadlocks inside notification dispatch (2026-08-04)
+
+The two-client harness of `ConcurrentClients` was built to give the notify **receive** path its
+first live coverage. It did, and the first thing it found is that the nskey notification path
+does not work end to end — despite both halves being implemented and unit-covered. That is the
+harness earning its cost on day one, and it is worth recording precisely because every
+non-live signal said the feature was fine.
+
+### 26.1 What the evidence shows
+
+Alice's nskey notify is accepted (`notificationStatusEnum` is `delivered`). Bob's atServer
+delivers it and `NotificationServiceImpl` logs `Received @bob:nskeynotify….e2e_test@alice`. The
+`__ck` conveyance reaches bob too, as its own notification. Nothing ever reaches a subscriber,
+and the legacy path in the same file, with the same key shape and the same regex, delivers in
+about a second.
+
+Three candidate causes were eliminated by measurement rather than by reasoning:
+
+- **Not the regex.** `hasRegexMatch` is a plain `RegExp(regex).hasMatch(key)` and the pattern is
+  a literal substring of the delivered key. Instrumenting the dispatch confirmed the matching
+  branch is never reached at all.
+- **Not a thrown exception.** `notification_service_impl.dart`'s dispatch `catch` was
+  instrumented to log at `severe` with a stack. It never fires.
+- **Not a failure to dispatch.** The probe shows `enter` for the `shouldDecrypt: true` config,
+  and then nothing — no `transformed`, no `regex miss`, no `caught`. The sibling config with
+  `shouldDecrypt: false` completes normally in the same millisecond.
+
+The awaited call that never returns is
+`await context.atClient.get(conveyanceKeyFor(value, ckKid, namespace))` in
+`SymmetricAesGcmProvider._resolveFromLocalConveyance`. A probe either side of it logs `START`
+with **no matching `DONE`** anywhere in the run, while the same call taken from the ordinary
+get path logs both.
+
+### 26.2 Why it hangs is not yet established
+
+The mechanism is open. What is known is that the call runs *inside* the monitor's dispatch
+path — `_streamListeners.forEach`'s callback is `async` and awaits the transform — and that the
+same call completes normally off that path. The conveyance record has not synced to bob at that
+instant (the `__ck` notification arrives ~27ms *after* the data notification), so the `get`
+must go remote, which is the step that does not come back.
+
+This is the hazard the tree rule about `Stream.listen` `onData` staying synchronous describes,
+one level up: an `await` inside per-event processing that needs the network.
+
+### 26.3 Two things that made this invisible
+
+**The dispatch `catch` logs at `finer`.** Had the call thrown rather than hung, the notification
+would still never have been emitted and nothing would have said why at any normal log level — a
+receiver that cannot decrypt is indistinguishable from one that was never sent. That is a defect
+in its own right and does not depend on this one.
+
+**A hang is worse than a throw here, not better.** `ContentKeyUnavailableException` exists and is
+raised when the CK is genuinely absent; a caller can catch it and reroute. A pending future
+produces no error, no timeout and no log, and the subscriber simply waits.
+
+### 26.4 Status
+
+UC-A3.4 and UC-A4.4 are **not met** and must not be claimed. The legacy notification receive path
+*is* now live-covered (`concurrent_notify_test.dart`). The nskey half of that test reproduces the
+defect in about a second and is deliberately not committed, since it would land red.
