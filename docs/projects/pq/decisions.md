@@ -2009,3 +2009,60 @@ into `_apsk`'s `appMetadata`.
 Out of scope: changing APKAM keypairs to ML-DSA, and the key-transparency publication mechanics
 (when a root is submitted, and what a client does if the log is unreachable at mint), which remain
 un-grilled.
+
+---
+
+## 23. UC-A2.1: reversing the enrollment key exchange (2026-08-04)
+
+**Status:** accepted and built. Removes the last RSA wrap from the enrollment path —
+[at_server 0016b3e8](https://github.com/atsign-foundation/at_server), at_auth `84f93af70`,
+at_client `910288065`.
+
+### 23.1 What A2.1 actually objected to
+
+The enrollee generated `apkamSymmetricKey`, RSA-encrypted it to the atSign's long-lived
+default encryption public key, and sent it on `enroll:request`
+(`at_enrollment_impl.dart`). The approver unwrapped it and wrapped the encryption private
+key and the self-encryption key under it. So one RSA wrap protects the whole enrollment,
+and an adversary recording the request keeps it until a quantum computer opens it.
+
+Reversing the direction — the approver mints the key and encapsulates it to the key
+package the request advertised — is the fix. The corrected reading matters here: this is
+a **key transport** problem, so it is the one place a KEM genuinely belongs, unlike the
+FROM/POL and PKAM handshakes, which were pared back to a signature swap precisely because
+they convey no secret.
+
+### 23.2 The rulings
+
+| # | Ruling |
+|---|---|
+| 1 | **Delivery rides the secret-sharing substrate**, not a new `enroll:approve` field. `shareSecretWith(KeyPackage, Secret)` already seals to an advertised package and writes a remote-first envelope; the enrollee opens it with the key package private half it minted *before* sending the request, so it depends on nothing it is still trying to obtain |
+| 2 | **A direct per-enrollment write was rejected because the atServer forbids it.** `abstract_verb_handler.dart` `isForeignPerEnrollmentReservedKey` denies any enrollment writing a non-`public:` key into another enrollment's `<id>.a.__e` namespace, wildcard `*:rw` included. Only `public:` is exempt — which is how `public:_apsk.<id>.a.__e@` works, and is not a route for a KEM ciphertext we would rather not publish |
+| 3 | **The atServer's mandatory `encryptedAPKAMSymmetricKey` yields only to an advertised key package.** It stays mandatory otherwise, so a client sending neither a wrapped key nor a package fails at validation rather than enrolling into a state it cannot decrypt |
+| 4 | **Mode is explicit — `EnrollmentKeyExchangeMode {legacy, pq}` — and is *not* inferred from whether a key package is advertised.** SS-2 advertises a package in every mode, because a package is also how an approver seals this atSign's existing secrets to a new device. Inferring `pq` from its presence would have silently moved every existing SS-2 enrollment onto a path no published approver can complete |
+| 5 | **Default stays `legacy`; it flips to `pq` in the next at_auth major.** Existing callers keep their wire bytes while the atServer relaxation is unpublished and parity outstanding |
+| 6 | **A `pq` request missing its package or its resolver is refused before it reaches the atServer.** Both otherwise produce an enrollment that authenticates and then decrypts nothing — the failure mode with no diagnostic attached |
+| 7 | **The approver decides from the record's *absent* wrapped key, read before approving.** That is the only unambiguous signal, and it is only visible while the record is still the one the enrollee wrote |
+| 8 | **The enrollee verifies the envelope's APKAM signature against the signer's `_apsk` before opening it.** The key package is public, so anyone can seal to it; without the check an attacker injects a symmetric key of their choosing and the enrollment unwraps its own encryption private key into garbage. A revoked signer needs no separate case — [22's ruling 8](#22-ss-4-when-a-namespace-key-is-minted-and-what-must-be-true-first-2026-08-03) established that the atServer moves its `_apsk` out from under the address a verifier reads, so verification fails of its own accord |
+
+### 23.3 Two traps found by reading the code
+
+**`AtKeys.toAtChops` branches on the symmetric key to tell APKAM keys from PKAM keys.** A
+`pq` enrollment holds none at `waitForApproval`, so it was read as PKAM and then asked for
+the `defaultEncryptionPrivateKey` it is authenticating *in order to fetch* — an error
+naming the wrong thing entirely. PKAM needs only the APKAM keypair, so those chops are now
+built directly and the symmetric key filled in on arrival.
+
+**The request leg, not just the return leg, had to change.** The first pass concluded the
+whole reversal was client-only, having checked only how the approver's answer gets back.
+The atServer's `_validateParams` makes `encryptedAPKAMSymmetricKey` mandatory on any
+OTP-bearing `enroll:request`, so an enrollee that stops wrapping cannot send a valid
+request at all. Recorded because the wrong conclusion was reached confidently and from
+real evidence — the evidence was simply half the path.
+
+### 23.4 Owed
+
+The poll timeout in `enrollmentApkamSymmetricKeyResolver` is a guess, not a figure measured
+against a live approve-to-envelope round trip. Live coverage of the whole chain is owed, and
+until it exists this is unit-green only — which for a cross-tier change is explicitly not
+done.
