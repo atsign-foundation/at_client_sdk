@@ -15,6 +15,8 @@ import 'package:at_commons/at_commons.dart';
 // CHANGELOG tells callers to catch, unreachable through the package barrel.
 export 'package:at_client/src/crypto/nskey/ck_manager.dart';
 export 'package:at_client/src/crypto/nskey/content_key.dart';
+export 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart';
+export 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 export 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 export 'package:at_client/src/crypto/nskey/nskey_provider.dart';
 export 'package:at_client/src/crypto/nskey/nskey_resolver.dart';

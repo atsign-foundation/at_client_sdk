@@ -1,4 +1,23 @@
 ## 3.14.1
+- fix: key material conveyed to an enrollment now reaches its keyfile.
+  `collectConveyedKeyMaterial` runs at client start and is what
+  `NskeyPrivateFiling` was always missing: its only entry point was a
+  `receivedSecrets` subscription nothing subscribed. Two further gaps had to
+  close for that to mean anything, since either alone leaves the fix inert.
+  `bindKeyPackageToAtKeys` backs the registration mixin's enc keypair with
+  `AtKeys`, so a running client's `kpid` is the one its enrollment advertised
+  rather than a fresh keypair per process — a client whose address moves listens
+  where nobody writes. And the collection sweeps before it files, because the
+  `SecretStore` is in memory and the sweep is its only populator, so a client
+  that never swept read an empty store however much had been conveyed to it.
+  Adoption only — a keyfile holding no package is left untouched, since a
+  package is discovered from the enrollment record and one generated locally
+  would be an address nobody can learn. This also repairs
+  `PqSigningRoot.filePendingPrivate`,
+  which read the same empty store. `NskeyPrivateFiling.start`/`stop` are
+  replaced by `filePending`, matching the store-check shape the signing root
+  already used — no lifecycle to own, and no stream that has to still be
+  listening at the right moment.
 - feat: `PqSigningChain.verifyChain` walks the approval chain upward and reports
   how far it holds, as a `ChainResult` carrying a `ChainVerdict` and the path it
   walked. `anchored` reached a root link verified against the atSign's signing

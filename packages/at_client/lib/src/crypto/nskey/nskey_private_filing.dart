@@ -1,4 +1,3 @@
-import 'dart:async' show StreamSubscription;
 import 'dart:convert' show base64Decode;
 import 'dart:typed_data' show Uint8List;
 
@@ -12,7 +11,7 @@ import 'package:at_auth/at_auth.dart'
         KeyAlgorithmType,
         WrittenAtKeysIo;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
-    show ReceivedSecret;
+    show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:at_commons/atsign.dart' show AtsignString;
@@ -69,29 +68,33 @@ class NskeyPrivateFiling {
   final Future<Uint8List?> Function(String namespace, String nskeyKid)?
       publishedPublicKey;
 
-  StreamSubscription<ReceivedSecret>? _subscription;
-
   NskeyPrivateFiling({
     required this.keysIo,
     required String atSign,
     this.publishedPublicKey,
   }) : atSign = atSign.toAtsign();
 
-  /// Files every nskey private arriving on [receivedSecrets].
+  /// Files every conveyed nskey private waiting in the secret store. Returns
+  /// how many were filed.
   ///
-  /// Subscribe before the substrate starts listening: the stream is a
-  /// broadcast and does not replay what it emitted before subscription, so a
-  /// private conveyed in the gap would be filed nowhere.
-  void start(Stream<ReceivedSecret> receivedSecrets) {
-    _subscription ??= receivedSecrets.listen((received) {
-      if (!received.secret.name.startsWith(secretNamePrefix)) return;
-      file(received.secret);
-    });
-  }
-
-  void stop() {
-    _subscription?.cancel();
-    _subscription = null;
+  /// A store check rather than a subscription on `receivedSecrets`, matching
+  /// `PqSigningRoot.filePendingPrivate`: there is no lifecycle to own, and no
+  /// stream that has to still be listening at the right moment. The store is
+  /// the durable-enough intermediate — a private that arrives after this runs
+  /// is filed at the next start, and until then the namespace simply reads as
+  /// one this client cannot open, which is the same as never having been sent
+  /// it.
+  ///
+  /// The caller must have swept first. The store is in memory and its only
+  /// populator is [PairwiseSecretSharing.sweepOnce], so draining it before a
+  /// sweep drains nothing.
+  Future<int> filePending(Iterable<Secret> heldSecrets) async {
+    int filed = 0;
+    for (final secret
+        in heldSecrets.where((s) => s.name.startsWith(secretNamePrefix))) {
+      if (await file(secret)) filed++;
+    }
+    return filed;
   }
 
   /// Files one arriving [secret] as this atSign's nskey private for its

@@ -10,6 +10,7 @@ import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
+import 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart';
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
@@ -463,30 +464,30 @@ class AtClientImpl implements AtClient {
       unawaited(_seedNamespaceKeys());
     }
 
-    // Stamp the approval-chain link this enrollment was conveyed onto its own
-    // `_apsk`. Unlike seeding this needs no preference to gate it: it is
-    // self-gating, writing only when an approver actually vouched for this
-    // enrollment, so a client that will never have a link pays one in-memory
-    // lookup and no atServer traffic. Not awaited, for the same reason seeding
-    // is not — publishing is not something startup should wait on or fail for.
-    unawaited(_publishChainLink());
+    // Collect whatever key material other enrollments of this atSign have
+    // conveyed, and stamp the approval-chain link this enrollment was given
+    // onto its own `_apsk`. Not awaited: neither a round trip nor a publish is
+    // something startup should wait on or fail for, and anything missed is
+    // retried at the next start.
+    unawaited(_fileConveyedKeysAndAnchor());
   }
 
-  /// Files any conveyed signing-root private, then publishes whichever
-  /// approval-chain link this enrollment can.
+  /// Files the key material conveyed to this enrollment, then publishes
+  /// whichever approval-chain link it can.
   ///
   /// Ordered: filing the root private first is what lets the same start also
   /// self-sign a root link, rather than needing a second start to notice the
   /// private had arrived.
-  Future<void> _publishChainLink() async {
-    try {
-      final sharing = AtClientSecretSharing.forClient(this);
-      await PqSigningRoot(this, keysIo: _atKeysIo)
-          .filePendingPrivate(_atSign, sharing.secretStore.listSecrets());
-    } catch (e, st) {
-      _logger.warning('Filing a conveyed signing root private failed for '
-          '$_atSign; this enrollment cannot anchor itself until it lands, and '
-          'the next start retries: $e, $st');
+  Future<void> _fileConveyedKeysAndAnchor() async {
+    final keysIo = _atKeysIo;
+    if (keysIo != null) {
+      try {
+        await collectConveyedKeyMaterial(this, keysIo);
+      } catch (e, st) {
+        _logger.warning('Collecting conveyed key material failed for $_atSign; '
+            'this enrollment holds only what it already had, and the next '
+            'start retries: $e, $st');
+      }
     }
     try {
       // Anchoring is attempted before the chain link because it is the better

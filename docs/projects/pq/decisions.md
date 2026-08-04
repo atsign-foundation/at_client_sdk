@@ -2151,3 +2151,73 @@ Holding the private is still not sufficient — the granted namespaces decide.
 **Key-transparency publication mechanics remain un-grilled** (when a root is submitted, and
 what a client does if the log is unreachable at mint). Out of scope here: it concerns what
 the root *is*, not how a chain terminates at it.
+
+---
+
+## 25. The substrate's arrival path had never run (2026-08-04)
+
+Filing a conveyed nskey private into `AtKeys` was on the ledger as one missing call:
+`NskeyPrivateFiling.start` subscribes to `receivedSecrets`, and nothing subscribed it. The
+prescribed fix was to give it the shape `PqSigningRoot.filePendingPrivate` already used — a
+store check at client start, with no lifecycle to own.
+
+That fix would have been inert, and the investigation is worth recording because the shape of
+the mistake recurs: **the working model held up for copying was not working either.**
+
+### 25.1 Three defects, each hiding the next
+
+`SecretStore` is a plain in-memory map. Its only populator is `PairwiseSecretSharing.sweepOnce`,
+and no production code in `at_client` called `sweepOnce` or `startListening` — the only
+non-test callers were inside `pairwise_secret_sharing.dart` itself. `restore()` runs only
+against an app-supplied persistence hook. So at client start that store is empty, and
+`filePendingPrivate` had been filing nothing since it was written.
+
+One layer lower: `KeyPackageRegistration.register()` generates a fresh X-Wing keypair unless
+`loadApkamKeys` is supplied, and that hook was wired only in tests. A running client's `kpid`
+was therefore a per-process value, while a sender addresses an envelope to the kpid it read
+from the enrollment record. Sweeping would have scanned an address nobody writes to.
+
+The private half of the advertised package was in `AtKeys` the whole time —
+`enrollmentKeyPackageBuilder` files both halves there under `keyId == kpid` at enrollment. The
+client simply never looked.
+
+### 25.2 What was built
+
+`collectConveyedKeyMaterial` runs at client start, gated on the client having an `AtKeysIo`
+— without a keyfile there is nowhere to file anything, so a legacy client does none of this
+work. It binds, sweeps, then files, in that order because each step depends on the one before.
+
+`bindKeyPackageToAtKeys` distinguishes the key package from an nskey private by the matching
+`publicEncapsulation` entry under the same `keyId`: both are X-Wing `privateDecapsulation`
+material, and a client that adopted an nskey private as its recipient identity would lose the
+ability to open anything addressed to it. Adoption only: a keyfile holding no package is left
+untouched. Generating one and filing it was built first and then removed — a package is
+discovered from the enrollment record, it rides `enroll:request`, and there is no
+post-enrollment write path, so a locally generated one is an address no sender can learn. It
+bought nothing and cost a startup write to the user's keyfile, which the functional pack caught
+by showing a committed test keyfile as modified.
+
+`NskeyPrivateFiling.start`/`stop` are deleted in favour of `filePending`. The correspondence
+check the class describes is now wired for the first time, against the *current* advertised
+generation only: an older conveyed generation reads as "no opinion" rather than a rejection,
+which is the semantics the filer already had for an absent public half.
+
+### 25.3 Two consequences, stated rather than discovered later
+
+The sweep consumes and **deletes** the envelopes it finds, so an app subscribing to
+`receivedSecrets` after constructing its client sees no arrival event for anything that was
+waiting at start. The secret is in the store, which is where `waitForSecret` looks first, so
+the pull flow is unaffected — but a listener-only app is not.
+
+`register()` publishes `_apsk`, so this adds one publish and one remote scan to the start of
+every client that carries an `AtKeysIo`. For an enrollment the atServer already publishes
+`_apsk` on approval, so the write is redundant; for a legacy PKAM client it is how peers verify
+its envelopes at all.
+
+### 25.4 The rule this is an instance of
+
+A ledger entry that names both the defect and its fix has already done the diagnosis, and
+invites implementing the fix without redoing it. Here the diagnosis was right about the symptom
+and wrong about the depth. The cheap check that caught it was asking what would actually be in
+the store at the moment the prescribed code read it — a question the entry did not raise
+because the model it cited appeared to answer it.

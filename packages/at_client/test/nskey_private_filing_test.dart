@@ -142,24 +142,13 @@ void main() {
 
   test('only nskey privates are filed; other secrets pass through', () async {
     final (io, filer) = await filing();
-    final controller = StreamController<ReceivedSecret>.broadcast();
-    filer.start(controller.stream);
-    addTearDown(() {
-      filer.stop();
-      controller.close();
-    });
 
-    controller.add(ReceivedSecret(
-      secret: Secret(namespace: namespace, name: 'an-app-token', value: 'v'),
-      fromKpid: 'kpid',
-      fromEnrollmentId: 'enroll',
-    ));
-    controller.add(ReceivedSecret(
-      secret: nskeySecret('kid-two'),
-      fromKpid: 'kpid',
-      fromEnrollmentId: 'enroll',
-    ));
-    await Future.delayed(Duration(milliseconds: 20));
+    expect(
+        await filer.filePending([
+          Secret(namespace: namespace, name: 'an-app-token', value: 'v'),
+          nskeySecret('kid-two'),
+        ]),
+        1);
 
     final keys = await io.read(atSign);
     expect(keys.keys, hasLength(1),
@@ -169,5 +158,29 @@ void main() {
         keys.getKey(NskeyPrivateFiling.keyIdFor(namespace, 'kid-two'),
             CryptographicKeyType.privateDecapsulation),
         isNotNull);
+  });
+
+  test('every conveyed generation is filed, not just the newest', () async {
+    final (io, filer) = await filing();
+
+    expect(
+        await filer.filePending(
+            [nskeySecret('gen-one'), nskeySecret('gen-two')]),
+        2,
+        reason: 'data written under a superseded key is still readable, and '
+            'only its own private opens it — a client given the current '
+            'generation alone could read nothing written before the last '
+            'rotation');
+    expect(await filer.readAllFor(namespace), hasLength(2));
+  });
+
+  test('re-draining the same store files nothing twice', () async {
+    final (_, filer) = await filing();
+    final held = [nskeySecret('kid-three')];
+
+    expect(await filer.filePending(held), 1);
+    expect(await filer.filePending(held), 0,
+        reason: 'the substrate converges by re-sending, so the same secret is '
+            'drained at every start; filing is idempotent on the keyfile');
   });
 }
