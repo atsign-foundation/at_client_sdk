@@ -2044,6 +2044,7 @@ they convey no secret.
 | 6 | **A `pq` request missing its package or its resolver is refused before it reaches the atServer.** Both otherwise produce an enrollment that authenticates and then decrypts nothing — the failure mode with no diagnostic attached |
 | 7 | **The approver decides from the record's *absent* wrapped key, read before approving.** That is the only unambiguous signal, and it is only visible while the record is still the one the enrollee wrote |
 | 8 | **The enrollee verifies the envelope's APKAM signature against the signer's `_apsk` before opening it.** The key package is public, so anyone can seal to it; without the check an attacker injects a symmetric key of their choosing and the enrollment unwraps its own encryption private key into garbage. A revoked signer needs no separate case — [22's ruling 8](#22-ss-4-when-a-namespace-key-is-minted-and-what-must-be-true-first-2026-08-03) established that the atServer moves its `_apsk` out from under the address a verifier reads, so verification fails of its own accord |
+| 9 | **The approver must already hold a key package; `approve` refuses rather than registering one for it.** Sealing stamps the approver's own kpid, so conveyance needs one — but registering *publishes* a package and, with no persistence wired, mints a fresh seed. An implicit call could therefore rotate the advertised package underneath the approver and orphan anything already sealed to the old one. When to mint is the caller's decision; `approve` only makes the requirement legible instead of letting a bare `Bad state` surface from three frames down |
 
 ### 23.3 Two traps found by reading the code
 
@@ -2060,9 +2061,27 @@ OTP-bearing `enroll:request`, so an enrollee that stops wrapping cannot send a v
 request at all. Recorded because the wrong conclusion was reached confidently and from
 real evidence — the evidence was simply half the path.
 
-### 23.4 Owed
+### 23.4 What the live coverage does and does not prove
 
-The poll timeout in `enrollmentApkamSymmetricKeyResolver` is a guess, not a figure measured
-against a live approve-to-envelope round trip. Live coverage of the whole chain is owed, and
-until it exists this is unit-green only — which for a cross-tier change is explicitly not
-done.
+`enrollment_pq_key_exchange_e2e_test.dart` drives the whole chain against a live atServer:
+the request reaches it with no RSA-wrapped key, approval mints one, and the enrollee
+recovers it **over its own PKAM-authenticated connection**, scoped to the single namespace
+it was granted. That last part matters — running the resolver from the approver's
+connection would have proved the envelope authentic and openable while saying nothing
+about whether the atServer lets the enrolling connection scan for and read it, which is
+the link that would fail in production with the test still green.
+
+Not covered: the approver's own key package registration is asserted by a guard rather
+than exercised in both states by a unit test.
+
+**The poll timeout is not a latency budget, and sizing it as one was a mistake worth
+recording.** It never waits for the human — by the time the resolver runs, the PKAM loop
+has already succeeded, so the approval has happened, however long that took. What is left
+is a mechanical race inside the approver's single `approve()` call: the atServer marks the
+enrollment approved, which is what lets PKAM start succeeding, a moment before at_client
+finishes writing the envelope. 30s is headroom over one or two round trips. If nothing has
+arrived by then the approver did not convey, and waiting longer recovers nothing.
+
+**Still owed:** the functional rails point at a locally built image and must be reverted
+before any client PR, and the new test cannot pass against `vip` until the atServer
+relaxation is promoted.
