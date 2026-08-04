@@ -20,9 +20,14 @@ echo "*** Getting dependencies" && dart pub get
 
 cd test
 echo "*** docker compose down" && docker compose down
-# Use the published image; comment out and `docker tag` a local build to
-# at_virtual_env:local + edit docker-compose.yaml to use a local atServer.
-echo "*** docker compose pull" && docker compose pull
+# SWAPPED, DELIBERATELY, AND UNCOMMITTED. docker-compose.yaml points at a
+# locally built `at_virtual_env:local` instead of the published
+# `atsigncompany/virtualenv:vip`, and the pull is disabled to match. The
+# published image does not store `EnrollParams.metadata`, so the key-package
+# and two-enrollment paths cannot be exercised against it at all.
+# Revert this file AND test/docker-compose.yaml before opening a PR — the
+# functional pack carries the same pair of edits.
+echo "*** docker compose pull SKIPPED (local at_virtual_env:local image)"
 echo "*** docker compose up (base port ${BASE_PORT}, range ${BASE_PORT}-${VE_TOP_PORT})"
 docker compose up -d
 cd ..

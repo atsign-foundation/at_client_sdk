@@ -848,8 +848,13 @@ These invariants are testable against **every** UC above:
   the live wire; and the **key package**, signed by
   `KeyPackageRegistration.signedKeyPackagePayload` and verified by
   `VerbEnrollmentDirectory` — unsigned, tampered, wrong-signer and forged-claim packages
-  are all rejected. The key-package half is unit-only until SS-2 wires `enroll:request`;
-  the atServer's `_apsk` present-and-write-restricted guarantee is still owed.)*
+  are all rejected. **The atServer's `_apsk` guarantee is now proven live too** (2026-08-04,
+  `apsk_server_side_test.dart`): the record is fetchable without the enrolling client ever
+  publishing it, a cross-enrollment overwrite is refused as an authorization decision naming
+  both enrollments and leaves the record byte-identical, and the same connection *can* write
+  its own — so the restriction is per-enrollment rather than a blanket ban. `enroll:listns` is
+  driven live in the same file. All three needed two genuine APKAM enrollments, since the case
+  that matters is one enrollment reaching for another's record.)*
 - **Performance is measured, not assumed.** The PQ primitives (ML-KEM / ML-DSA,
   X-Wing encap/decap, `pqSeal`) land on hot paths — PKAM auth and every put/get — that
   run on mobile/IoT hardware (the roadmap's NoPorts finish line). PKAM-auth latency and
