@@ -125,6 +125,95 @@ void main() {
         completes);
   });
 
+  group('the child consuming a conveyed link', () {
+    /// Puts [link] into [child]'s store the way a substrate sweep would.
+    Future<void> convey(
+        AtClientSecretSharing child, Map<String, Object?> link) async {
+      await child.secretStore.putSecret(
+          Secret(
+              namespace: 'buzz',
+              name: PqSigningChain.linkSecretName,
+              value: PqSigningChain.encodeLink(link)),
+          allowReservedName: true);
+    }
+
+    test('publishes a link conveyed to it', () async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      final link =
+          await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
+      await convey(child, link!);
+
+      expect(await PqSigningChain.publishPendingLink(childClient), isTrue);
+      final published = await PqSigningChain.readLink(childClient, 'child-1');
+      expect(published?['signature'], link['signature']);
+    });
+
+    test('writes nothing when nobody vouched for it', () async {
+      final childClient = client('child-1');
+      await registered(childClient);
+
+      expect(await PqSigningChain.publishPendingLink(childClient), isFalse,
+          reason: 'this runs at every client start, so an enrollment that '
+              'will never have a link must cost nothing');
+      expect(await PqSigningChain.readLink(childClient, 'child-1'), isNull);
+    });
+
+    test('refuses a link conveyed for a different enrollment', () async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      await registered(client('sibling-1'));
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      // A link genuinely signed by the parent, but vouching for a sibling.
+      final link =
+          await PqSigningChain.signLinkFor(parentClient, parent, 'sibling-1');
+      await convey(child, link!);
+
+      expect(await PqSigningChain.publishPendingLink(childClient), isFalse,
+          reason: 'the link says which enrollment it vouches for, and '
+              'stamping it on another would advertise a chain hop that was '
+              'never made');
+      expect(await PqSigningChain.readLink(childClient, 'child-1'), isNull);
+    });
+
+    test('refuses a link whose signature does not verify', () async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      final link =
+          await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
+      await convey(child, {...link!, 'signature': 'not-the-signature'});
+
+      expect(await PqSigningChain.publishPendingLink(childClient), isFalse,
+          reason: 'publishing a link no verifier can follow would advertise '
+              'this enrollment as chained when it is not');
+      expect(await PqSigningChain.readLink(childClient, 'child-1'), isNull);
+    });
+
+    test('is idempotent across restarts', () async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      final link =
+          await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
+      await convey(child, link!);
+
+      expect(await PqSigningChain.publishPendingLink(childClient), isTrue);
+      expect(await PqSigningChain.publishPendingLink(childClient), isFalse,
+          reason: 'it runs at every start, and rewriting an unchanged record '
+              'each time would be traffic for nothing');
+    });
+  });
+
   test('a link forged onto another enrollment fails verification', () async {
     final impostorClient = client('impostor-1');
     final impostor = await registered(impostorClient);

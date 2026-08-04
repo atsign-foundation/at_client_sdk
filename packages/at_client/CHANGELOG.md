@@ -11,6 +11,16 @@
   `appMetadata` on first run. Until it does, verifiers see a bare key, which the
   transition rule already tolerates. Signing is best-effort: an approval that has
   already happened is never failed over an additive field.
+  The child half runs at client start via `PqSigningChain.publishPendingLink`,
+  and needs no preference to gate it because it is self-gating: an enrollment
+  nobody vouched for has no link waiting and writes nothing, so a client that
+  will never have one pays an in-memory lookup and no atServer traffic. It
+  refuses to publish a link that names a different enrollment, one whose
+  signature does not verify against the parent it names, or one vouching for a
+  key other than the one actually published — this record is the enrollment's
+  advertised identity, and a bad link on it is worse than no link. Idempotent,
+  so restarts do not rewrite it. A link arriving after start is published at
+  the next one.
 - fix: a secret conveyed to one enrollment is no longer forwarded to the next
   one that enrollment approves. Received secrets are stored like any other —
   `SecretStore.putIfNewer` accepts reserved names deliberately, so that system

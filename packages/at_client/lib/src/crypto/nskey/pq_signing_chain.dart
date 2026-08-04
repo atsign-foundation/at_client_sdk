@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show EnvelopeSigning;
+import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
+    show AtClientSecretSharing;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -158,6 +160,92 @@ class PqSigningChain {
       _logger.info('No _apsk readable for enrollment $enrollmentId: $e');
       return null;
     }
+  }
+
+  /// Publishes the chain link this enrollment was conveyed, if one is waiting
+  /// and its key does not already carry it. Returns whether it published.
+  ///
+  /// Self-gating: an enrollment nobody vouched for has no link in its store and
+  /// this writes nothing, so it costs a client that will never have one an
+  /// in-memory lookup at start and no atServer traffic at all.
+  ///
+  /// A link that arrives *after* this runs is published at the next start
+  /// rather than immediately — the same trade the namespace-key seeding makes,
+  /// and acceptable for the same reason: until it lands the enrollment is
+  /// simply unsigned, which verifiers tolerate during the changeover.
+  ///
+  /// Three things are checked before anything is written, because this record
+  /// is the enrollment's published identity and a bad link on it is worse than
+  /// no link:
+  ///
+  /// - the link names **this** enrollment, so one conveyed for a sibling is
+  ///   never stamped here;
+  /// - it verifies against the parent it names, so a link that could never be
+  ///   verified downstream is not published as though it could;
+  /// - the key it vouches for is the key actually published, so a link that
+  ///   silently covers something else is refused.
+  static Future<bool> publishPendingLink(AtClient atClient) async {
+    final sharing = AtClientSecretSharing.forClient(atClient);
+    final atSign = atClient.getCurrentAtSign()!;
+    final enrollmentId = sharing.enrollmentId;
+
+    final secret = sharing.secretStore
+        .listSecrets()
+        .where((s) => s.name == linkSecretName)
+        .firstOrNull;
+    if (secret == null) return false;
+
+    final Map<String, Object?> link;
+    final Map payload;
+    try {
+      link = decodeConveyedLink(secret.value);
+      payload = link['payload'] as Map;
+    } catch (e) {
+      _logger.warning('Conveyed chain link is malformed; not publishing: $e');
+      return false;
+    }
+
+    if (payload['childEnrollmentId'] != enrollmentId) {
+      _logger.warning('Conveyed chain link vouches for enrollment '
+          '${payload['childEnrollmentId']}, not for $enrollmentId; not '
+          'publishing it here');
+      return false;
+    }
+
+    try {
+      await sharing.verifyEnvelopeSignature(link, signerAtSign: atSign);
+    } catch (e) {
+      _logger.warning('Conveyed chain link does not verify against the '
+          'enrollment it names as signer, so publishing it would advertise a '
+          'link no verifier can follow: $e');
+      return false;
+    }
+
+    final AtValue current;
+    try {
+      current = await atClient.get(
+        AtKey.fromString(apskUri(atSign, enrollmentId)),
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
+      );
+    } catch (e) {
+      _logger.warning('This enrollment has no readable _apsk to publish a '
+          'chain link onto: $e');
+      return false;
+    }
+
+    if (payload['apkamPublicKey'] != current.value) {
+      _logger.warning('Conveyed chain link vouches for a key that is not the '
+          'one published for $enrollmentId; not publishing it');
+      return false;
+    }
+
+    final existing = await readLink(atClient, enrollmentId);
+    if (existing != null && existing['signature'] == link['signature']) {
+      return false;
+    }
+
+    await publishLink(atClient, enrollmentId, link);
+    return true;
   }
 
   /// Decodes a link that arrived over the substrate as a [Secret] value.

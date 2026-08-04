@@ -461,6 +461,25 @@ class AtClientImpl implements AtClient {
     if (_preference?.seedNamespaceKeys == true) {
       unawaited(_seedNamespaceKeys());
     }
+
+    // Stamp the approval-chain link this enrollment was conveyed onto its own
+    // `_apsk`. Unlike seeding this needs no preference to gate it: it is
+    // self-gating, writing only when an approver actually vouched for this
+    // enrollment, so a client that will never have a link pays one in-memory
+    // lookup and no atServer traffic. Not awaited, for the same reason seeding
+    // is not — publishing is not something startup should wait on or fail for.
+    unawaited(_publishChainLink());
+  }
+
+  /// Publishes the approval-chain link conveyed to this enrollment, if any.
+  Future<void> _publishChainLink() async {
+    try {
+      await PqSigningChain.publishPendingLink(this);
+    } catch (e, st) {
+      _logger.warning('Publishing the approval-chain link failed for $_atSign; '
+          'the enrollment stays unsigned, which verifiers tolerate, and the '
+          'next start retries: $e, $st');
+    }
   }
 
   /// Mints and publishes namespace keys for this client's authorised
