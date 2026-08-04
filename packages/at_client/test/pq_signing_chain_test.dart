@@ -2,7 +2,14 @@
 // be reshaped as the group surface matures.
 // ignore_for_file: experimental_member_use
 
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show signableTextOf;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -211,6 +218,108 @@ void main() {
       expect(await PqSigningChain.publishPendingLink(childClient), isFalse,
           reason: 'it runs at every start, and rewriting an unchanged record '
               'each time would be traffic for nothing');
+    });
+  });
+
+  group('anchoring to the signing root', () {
+    /// A client holding the root private, as a privileged enrollment does
+    /// once it has been conveyed one.
+    Future<MockAtClient> rootHolder(String enrollmentId, Uint8List secret,
+        {AtKeys? seedInto}) async {
+      final c = client(enrollmentId);
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, seedInto ?? AtKeys());
+      await PqSigningRoot(c, keysIo: io).store(atSign, secret);
+      when(() => c.atKeysIo).thenReturn(io);
+      await registered(c);
+      return c;
+    }
+
+    test('a privileged holder anchors itself, and only once', () async {
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c = await rootHolder('priv-1', pair.secretKey);
+
+      expect(
+          await PqSigningChain.publishOwnRootLink(c,
+              isFullyPrivileged: () async => true,
+              keysIo: c.atKeysIo),
+          isTrue);
+
+      final link = await PqSigningChain.readRootLink(c, 'priv-1');
+      expect(link, isNotNull);
+      expect(link!['alg'], PqSigningChain.rootLinkAlgo);
+
+      // The signature is over the same canonical text a verifier rebuilds,
+      // checked against the root's public half rather than merely present.
+      expect(
+          await MlDsa65PureDartAlgo().verifyBytes(
+            Uint8List.fromList(utf8.encode(signableTextOf(link['payload']))),
+            signature: base64Decode(link['signature'] as String),
+            publicKey: pair.publicKey,
+          ),
+          isTrue);
+
+      expect(
+          await PqSigningChain.publishOwnRootLink(c,
+              isFullyPrivileged: () async => true,
+              keysIo: c.atKeysIo),
+          isFalse,
+          reason: 'this runs at every start, so an anchored enrollment must '
+              'not rewrite its record each time');
+    });
+
+    test('holding the private is not enough without the privilege', () async {
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c = await rootHolder('priv-1', pair.secretKey);
+
+      expect(
+          await PqSigningChain.publishOwnRootLink(c,
+              isFullyPrivileged: () async => false,
+              keysIo: c.atKeysIo),
+          isFalse,
+          reason: 'only the fully privileged class carries a root link; '
+              'possession and privilege should never diverge, and if they do '
+              'the grant is what decides');
+      expect(await PqSigningChain.readRootLink(c, 'priv-1'), isNull);
+    });
+
+    test('an enrollment holding no root private anchors nothing', () async {
+      final c = client('scoped-1');
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, AtKeys());
+      when(() => c.atKeysIo).thenReturn(io);
+      await registered(c);
+
+      var privilegeChecked = false;
+      expect(
+          await PqSigningChain.publishOwnRootLink(c, isFullyPrivileged: () async {
+            privilegeChecked = true;
+            return true;
+          }, keysIo: io),
+          isFalse);
+      expect(privilegeChecked, isFalse,
+          reason: 'establishing privilege costs a round trip, so the local '
+              'possession check has to come first — otherwise every client '
+              'pays for it at every start');
+    });
+
+    test('a root link and a chain link coexist on one record', () async {
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c = await rootHolder('priv-1', pair.secretKey);
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+
+      final chain =
+          await PqSigningChain.signLinkFor(parentClient, parent, 'priv-1');
+      await PqSigningChain.publishLink(c, 'priv-1', chain!);
+      await PqSigningChain.publishOwnRootLink(c,
+          isFullyPrivileged: () async => true,
+          keysIo: c.atKeysIo);
+
+      expect(await PqSigningChain.readLink(c, 'priv-1'), isNotNull,
+          reason: 'writing one link must not drop the other — they are '
+              'separate fields on one record, and a walk may want either');
+      expect(await PqSigningChain.readRootLink(c, 'priv-1'), isNotNull);
     });
   });
 

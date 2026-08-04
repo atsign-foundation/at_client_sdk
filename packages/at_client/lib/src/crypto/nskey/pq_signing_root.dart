@@ -11,6 +11,8 @@ import 'package:at_auth/at_auth.dart'
         WrittenAtKeysIo;
 import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'package:at_client/at_client.dart' show AtClient, AtKey, Metadata;
+import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
+    show PqSigningChain;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
@@ -113,7 +115,6 @@ class PqSigningRoot {
               'successor': null,
             }),
           sync: true);
-      return pair.publicKey;
     } catch (e) {
       // Almost certainly the atServer refusing a second create — another
       // privileged enrollment got there first, which is the create-once
@@ -122,6 +123,23 @@ class PqSigningRoot {
           'exists already: $e');
       return null;
     }
+
+    // Anchor the minter immediately: it holds both the private and its own
+    // record at this moment, so waiting for the next start would leave a
+    // freshly minted root anchoring nothing at all.
+    //
+    // Outside the create's try, and swallowing its own failure, because the
+    // two outcomes must not be conflated. A failure here is not a lost create
+    // — the root IS published and this client's private IS filed — and
+    // reporting it as one would tell the caller the opposite of what happened.
+    try {
+      await PqSigningChain.publishOwnRootLink(atClient,
+          isFullyPrivileged: () async => true, keysIo: keysIo);
+    } catch (e) {
+      _logger.warning('Minted the signing root for $atSign but could not '
+          'anchor this enrollment to it; the next start retries: $e');
+    }
+    return pair.publicKey;
   }
 
   /// Files [private] into `AtKeys` under [keyId], leaving an existing one

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtKeysIo;
+import 'package:at_auth/at_auth.dart' show AtEnrollment, AtKeysIo;
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
@@ -16,6 +16,7 @@ import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
+import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -488,12 +489,44 @@ class AtClientImpl implements AtClient {
           'the next start retries: $e, $st');
     }
     try {
+      // Anchoring is attempted before the chain link because it is the better
+      // outcome of the two: an enrollment that can reach the root directly has
+      // no need of a hop through whoever approved it.
+      await PqSigningChain.publishOwnRootLink(this,
+          isFullyPrivileged: _resolveFullPrivilege, keysIo: _atKeysIo);
+    } catch (e, st) {
+      _logger.warning('Anchoring $_atSign to its signing root failed; the '
+          'enrollment falls back to its approval-chain link and the next '
+          'start retries: $e, $st');
+    }
+    try {
       await PqSigningChain.publishPendingLink(this);
     } catch (e, st) {
       _logger.warning('Publishing the approval-chain link failed for $_atSign; '
           'the enrollment stays unsigned, which verifiers tolerate, and the '
           'next start retries: $e, $st');
     }
+  }
+
+  /// Whether this client's enrollment holds `rw` on both `*` and `__manage`.
+  ///
+  /// Read off the enrollment record rather than anything this client asserts
+  /// about itself, so an enrollment cannot anchor itself to the signing root by
+  /// claiming a privilege it was never granted.
+  ///
+  /// Costs a round trip, which is why it is only ever called once the client is
+  /// known to hold the root private — almost no client reaches it.
+  ///
+  /// A client with no enrollment id is authenticating with the atSign's own
+  /// keys, which is full privilege by construction rather than by grant.
+  Future<bool> _resolveFullPrivilege() async {
+    final id = _remoteSecondary?.atLookUp.enrollmentId;
+    if (id == null) return true;
+    final mine = (await EnrollmentServiceImpl(this, AtEnrollment.create())
+            .fetchEnrollmentRequests())
+        .where((e) => e.enrollmentId == id)
+        .firstOrNull;
+    return EnrollmentServiceImpl.isFullyPrivileged(mine?.namespace);
   }
 
   /// Mints and publishes namespace keys for this client's authorised

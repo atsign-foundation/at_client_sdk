@@ -1,7 +1,12 @@
 import 'dart:convert';
+import 'dart:typed_data' show Uint8List;
 
 import 'package:at_client/at_client.dart';
+import 'package:at_auth/at_auth.dart' show AtKeysIo;
+import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'package:at_client/at_client_mixins.dart' show EnvelopeSigning;
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show signableTextOf;
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
@@ -38,6 +43,19 @@ class PqSigningChain {
 
   /// The `appMetadata.additional` field the child stamps the link into.
   static const String linkField = 'apskChainLink';
+
+  /// The `appMetadata.additional` field a **root** link lives in.
+  ///
+  /// Its own field rather than a variant of [linkField]. A root link is not
+  /// another link with a different signer: it is ML-DSA-65 verified against
+  /// `public:pq_signing_root@<atSign>`, where every other link is RSA verified
+  /// against an `_apsk`. Different algorithm, different key source, different
+  /// lookup — so the field name settles which of the two a verifier is holding
+  /// before it reads anything else.
+  static const String rootLinkField = 'apskRootLink';
+
+  /// Signature algorithm marker on a root link.
+  static const String rootLinkAlgo = 'mldsa65';
 
   static final AtSignLogger _logger = AtSignLogger('PqSigningChain');
 
@@ -113,6 +131,27 @@ class PqSigningChain {
     String enrollmentId,
     Map<String, Object?> link,
   ) async {
+    await _publishInto(atClient, enrollmentId, linkField, link);
+    _logger.info('Published chain link for $enrollmentId, signed by enrollment '
+        '${link['enrollmentId']}');
+  }
+
+  /// Adds [value] under [field] in this enrollment's `_apsk` `appMetadata`,
+  /// leaving the record's value and any other field alone.
+  ///
+  /// The value is re-read and re-sent because a put replaces the record;
+  /// sending back what is already there means the key published stays the one
+  /// every verifier resolves rather than one this client believes it should be.
+  ///
+  /// Existing `additional` entries are carried forward, so the chain link and
+  /// the root link coexist on the same record instead of overwriting each
+  /// other.
+  static Future<void> _publishInto(
+    AtClient atClient,
+    String enrollmentId,
+    String field,
+    Map<String, Object?> value,
+  ) async {
     final atSign = atClient.getCurrentAtSign()!;
     final uri = apskUri(atSign, enrollmentId);
 
@@ -125,8 +164,8 @@ class PqSigningChain {
     atKey.metadata.appMetadata = AppMetadata(
       providerId: CryptoRuntime.legacyProviderId,
       additional: {
-        ...?atKey.metadata.appMetadata?.additional,
-        linkField: link,
+        ...?current.metadata?.appMetadata?.additional,
+        field: value,
       },
     );
 
@@ -135,8 +174,6 @@ class PqSigningChain {
       current.value,
       putRequestOptions: PutRequestOptions()..useRemoteAtServer = true,
     );
-    _logger.info('Published chain link on $uri, signed by enrollment '
-        '${link['enrollmentId']}');
   }
 
   /// The chain link an enrollment has published, or null if it has none.
@@ -146,6 +183,13 @@ class PqSigningChain {
   static Future<Map<String, Object?>?> readLink(
     AtClient atClient,
     String enrollmentId,
+  ) async =>
+      _readField(atClient, enrollmentId, linkField);
+
+  static Future<Map<String, Object?>?> _readField(
+    AtClient atClient,
+    String enrollmentId,
+    String field,
   ) async {
     final atSign = atClient.getCurrentAtSign()!;
     try {
@@ -153,7 +197,7 @@ class PqSigningChain {
         AtKey.fromString(apskUri(atSign, enrollmentId)),
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
       );
-      final link = value.metadata?.appMetadata?.additional?[linkField];
+      final link = value.metadata?.appMetadata?.additional?[field];
       if (link is Map) return link.cast<String, Object?>();
       return null;
     } catch (e) {
@@ -161,6 +205,88 @@ class PqSigningChain {
       return null;
     }
   }
+
+  /// Signs and publishes this enrollment's **root** link, if it is entitled to
+  /// one and does not already have it. Returns whether it published.
+  ///
+  /// Self-signed rather than conveyed: [PqSigningRoot] puts the private in
+  /// every fully privileged enrollment, and those are exactly the enrollments
+  /// that get a root link — so the signer is always the record's own writer and
+  /// `_apsk`'s writes-only-from-its-own-connection rule never bites here. That
+  /// is the difference from a chain link, where the signer can never be the
+  /// writer.
+  ///
+  /// [isFullyPrivileged] is required rather than inferred from holding the
+  /// private. The two should never diverge, and checking keeps the invariant —
+  /// only that class carries a root link — true if they ever do.
+  ///
+  /// Runs at mint and at every start. That one rule covers the minter, a
+  /// privileged peer that predates the root, one approved afterwards, one
+  /// approved by a non-root-holding approver, and a root minted late: the retro
+  /// case needs no migration because it is not a special case.
+  static Future<bool> publishOwnRootLink(
+    AtClient atClient, {
+    required Future<bool> Function() isFullyPrivileged,
+    AtKeysIo? keysIo,
+  }) async {
+    final atSign = atClient.getCurrentAtSign()!;
+    final enrollmentId = AtClientSecretSharing.forClient(atClient).enrollmentId;
+
+    // Possession is checked first because it is a local `AtKeys` read, where
+    // establishing privilege costs a round trip. An enrollment holding no root
+    // private cannot anchor itself whatever its privileges, so the cheap gate
+    // is also the one that eliminates almost every client at start.
+    final private =
+        await PqSigningRoot(atClient, keysIo: keysIo).privateHalf(atSign);
+    if (private == null) return false;
+
+    if (!await isFullyPrivileged()) {
+      _logger.warning('This enrollment holds the signing root private but is '
+          'not fully privileged, so it is not anchoring itself. The two should '
+          'never diverge; that they have is worth investigating.');
+      return false;
+    }
+
+    final AtValue current;
+    try {
+      current = await atClient.get(
+        AtKey.fromString(apskUri(atSign, enrollmentId)),
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
+      );
+    } catch (e) {
+      _logger.info('No _apsk published for $enrollmentId yet, so there is '
+          'nothing to anchor: $e');
+      return false;
+    }
+
+    final existing = await readRootLink(atClient, enrollmentId);
+    if (existing != null) return false;
+
+    final payload = linkPayload(
+      childEnrollmentId: enrollmentId,
+      childApkamPublicKey: current.value as String,
+    );
+    final signature = await MlDsa65PureDartAlgo().signBytes(
+      Uint8List.fromList(utf8.encode(signableTextOf(payload))),
+      secretKey: private,
+    );
+
+    await _publishInto(atClient, enrollmentId, rootLinkField, {
+      'v': 1,
+      'alg': rootLinkAlgo,
+      'payload': payload,
+      'signature': base64Encode(signature),
+    });
+    _logger.info('Anchored $enrollmentId to the signing root');
+    return true;
+  }
+
+  /// The root link an enrollment has published, or null if it has none.
+  static Future<Map<String, Object?>?> readRootLink(
+    AtClient atClient,
+    String enrollmentId,
+  ) async =>
+      _readField(atClient, enrollmentId, rootLinkField);
 
   /// Publishes the chain link this enrollment was conveyed, if one is waiting
   /// and its key does not already carry it. Returns whether it published.

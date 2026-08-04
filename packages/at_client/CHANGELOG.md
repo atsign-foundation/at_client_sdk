@@ -1,4 +1,19 @@
 ## 3.14.1
+- feat: a fully privileged enrollment anchors itself to the signing root.
+  `PqSigningChain.publishOwnRootLink` signs its own `_apsk` with the held root
+  private and stamps the result under `apskRootLink` — its own field, because a
+  root link is ML-DSA-65 verified against `public:pq_signing_root@<atSign>`
+  where every other link is RSA verified against an `_apsk`, so the field name
+  settles which of the two a verifier holds before it reads anything. Self-signed
+  rather than conveyed: the signer is always the record's own writer here, which
+  is exactly what a chain link can never be. It runs at mint and at every start,
+  and that single rule covers the minter, a privileged peer predating the root,
+  one approved afterwards, one approved by a non-root-holding approver, and a
+  root minted late — the retro case needs no migration because it is not a
+  special case. Possession of the private is checked before privilege, since the
+  first is a local read and the second a round trip; holding the private is not
+  sufficient, because only the granted namespaces decide the class. Both link
+  kinds coexist on one record.
 - feat: the signing root's private half reaches the enrollments entitled to it.
   A **fully privileged** enrollment (`rw` on both `*` and `__manage`) is
   conveyed the root private when it is approved, so it can anchor its own key
