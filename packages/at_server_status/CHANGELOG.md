@@ -1,3 +1,15 @@
+## 2.0.0
+
+- breaking: requires `at_lookup: ^4.0.0`. `AtLookupImpl` is no longer exported
+  from at_lookup, and its static `findSecondary` is gone: `_getRootStatus` now
+  uses `SecondaryUrlFinder.findSecondaryUrl` and `_getServerStatus` builds its
+  probe connection with `AtLookUp.legacy`. No public API of this package
+  changes — `AtStatusImpl`, `AtStatus` and the three status enums are as they
+  were.
+- chore: detached from the pub workspace with path overrides on `at_lookup` and
+  `at_chops` until both 4.0.0 releases are published; the rest of the repo keeps
+  resolving hosted at_server_status 1.x.
+
 ## 1.1.1
 
 - fix: Make this work properly with atServer proxy services

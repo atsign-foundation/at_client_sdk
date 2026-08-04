@@ -68,8 +68,8 @@ class AtStatusImpl implements AtServerStatus {
     // ignore: omit_local_variable_types
     AtStatus atStatus = AtStatus();
     atStatus.atSign = atSign;
-    // ignore: deprecated_member_use
-    await AtLookupImpl.findSecondary(atSign, _rootUrl, _rootPort!)
+    await SecondaryUrlFinder(_rootUrl!, _rootPort!)
+        .findSecondaryUrl(atSign)
         .then((serverLocation) async {
       // enum RootStatus { running, stopped, unavailable, found, notFound }
       if (serverLocation != null && serverLocation.isNotEmpty) {
@@ -95,9 +95,7 @@ class AtStatusImpl implements AtServerStatus {
     if (serverLocation == null || serverLocation.isEmpty) {
       atStatus.rootStatus = RootStatus.notFound;
     } else {
-      // ignore: omit_local_variable_types
-      AtLookupImpl atLookupImpl =
-          AtLookupImpl(atSign!, _rootUrl!, _rootPort!);
+      AtLookUp atLookupImpl = AtLookUp.legacy(atSign!, _rootUrl!, _rootPort!);
       await atLookupImpl.executeCommand('from:$atSign\n');
       await atLookupImpl.scan(auth: false).then((keysList) async {
         if (keysList.isNotEmpty) {
