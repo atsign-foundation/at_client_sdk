@@ -3,6 +3,7 @@ import 'dart:convert' show base64Encode;
 import 'package:at_client/at_client.dart' show AtClient;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
+import 'package:at_client/src/crypto/rollout/crypto_rollout.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/key_package.dart' show KeyPackage;
@@ -40,12 +41,18 @@ class NskeySeeding {
   /// than a value held only in this call.
   final NskeyPrivateFiling? privateFiling;
 
+  /// Publishes the capability marker alongside the namespace key. Both are
+  /// rollout actions for the same namespace list, so they share the one round
+  /// trip that establishes it.
+  final CryptoRollout rollout;
+
   NskeySeeding({
     required this.atClient,
     required this.ring,
     this.sharing,
     this.privateFiling,
-  });
+    CryptoRollout? rollout,
+  }) : rollout = rollout ?? CryptoRollout(atClient);
 
   /// The namespaces this client should hold a key for.
   ///
@@ -84,8 +91,17 @@ class NskeySeeding {
   static bool _isSeedable(String namespace) =>
       namespace != '*' && namespace != '__manage' && namespace.isNotEmpty;
 
-  /// Mints and publishes for every authorised namespace that has no key yet,
-  /// then conveys each new private. Returns the namespaces minted.
+  /// Advertises this atSign as not-ready, then mints and publishes for every
+  /// authorised namespace that has no key yet, conveying each new private.
+  /// Returns the namespaces minted.
+  ///
+  /// The two halves are the same rollout step seen from the two sides of a
+  /// write: the key is what a *sender* seals to, the marker is what tells that
+  /// sender whether it may. Publishing the key without the marker leaves the
+  /// atSign readable-to but never negotiated-with; publishing the marker
+  /// without the key would advertise a scheme with nothing to seal to. They
+  /// also share the round trip that establishes which namespaces this client is
+  /// authorised for, which is the expensive part.
   Future<Set<String>> seed() async {
     final owner = atClient.getCurrentAtSign();
     if (owner == null) return const {};
@@ -93,6 +109,11 @@ class NskeySeeding {
     final minted = <String>{};
     for (final namespace in await authorisedNamespaces()) {
       try {
+        // Before the `continue` below, because a namespace whose key already
+        // exists may still have no marker — and an atSign nobody can negotiate
+        // with is one nobody ever writes post-quantum to.
+        await rollout.publishNotReadyIfAbsent(namespace);
+
         if (await ring.currentPublic(owner, namespace) != null) continue;
         final advertisement = await ring.mintAndPublish(namespace);
         minted.add(namespace);
