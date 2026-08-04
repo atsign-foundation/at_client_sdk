@@ -354,11 +354,34 @@ void main() {
       // Both halves hold today at unit level — published_nskey_key_ring_test
       // and key_package_registration_test cover the rejections — and the nskey
       // half is driven on the live wire by nskey_cross_atsign_test. What this
-      // still owes is the atServer side (_apsk present without a client
+      // still owed was the atServer side (_apsk present without a client
       // publish, a cross-enrollment overwrite refused) plus a live
-      // enroll:listns, which needs SS-2's production wiring to drive.
-      fail('not implemented');
-    }, skip: owedFunctional);
+      // enroll:listns. All three needed two genuine APKAM enrollments, since
+      // the interesting case is one enrollment reaching for another's record.
+      provenIn(
+        'tests/at_functional_test/test/apsk_server_side_test.dart',
+        'the atServer publishes _apsk itself, and refuses a cross-enrollment',
+        proves: 'the victim\'s _apsk is fetchable without that client ever '
+            'publishing it, an attacker enrollment\'s overwrite is refused as '
+            'an authorization decision naming both enrollments, the record is '
+            'byte-identical afterwards, and the same connection CAN write its '
+            'own _apsk — so the restriction is per-enrollment rather than a '
+            'blanket ban',
+      );
+      provenIn(
+        'tests/at_functional_test/test/apsk_server_side_test.dart',
+        'enroll:listns answers an APKAM connection with the namespace members',
+        proves: 'the live enumeration the substrate\'s push and pull both '
+            'depend on returns the enrollments authorised for the namespace',
+      );
+      provenIn(
+        'tests/at_end2end_test/test/nskey_cross_atsign_test.dart',
+        'alice shares with bob, and bob reads it with his own nskey private',
+        proves: 'and the nskey half of the same claim on the live wire — an '
+            'advertised encapsulation key verified against its signer before '
+            'anything is sealed to it, cross-atSign',
+      );
+    });
 
     test('performance is measured, not assumed', () {
       // PKAM-auth and put/get latency deltas vs the legacy RSA/AES path are

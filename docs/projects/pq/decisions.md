@@ -2761,3 +2761,51 @@ for the content-key conveyance (a KEM, where there is a secret to transport), AE
 value, neither provider id naming RSA, and the PQ path being the *write* default rather than
 merely registered. The self, shared, notification and enrollment-conveyance legs are cited to
 live proofs, since a unit test cannot see which providers a real write reached.
+
+## 35. The owed-a-test backlog reached zero (2026-08-04)
+
+The 17 rows that SS-2, SS-4 and B-1 left *owed a test* are discharged. The suite reads **22 of 40**
+green; every one of the remaining 18 skips names a project that has not landed, so `blockers.dart`
+is now purely a project ledger — grep a project id and you get exactly the scenarios it will turn
+green.
+
+**Four of the 17 needed something other than a test**, which is the finding worth keeping. Two
+were documentation problems in opposite directions: UC-A3.2 described a mint trigger that was
+never built ([29](#29-uc-a32-describes-a-mint-trigger-that-was-never-built-2026-08-04)), and
+UC-B5.1 described a pull mechanism that should exist and did not
+([30](#30-uc-b51s-pull-backstop-has-no-initiator-2026-08-04)). One needed a measured budget
+written down before it could assert anything ([28](#28-the-pq-performance-budget-measured-2026-08-04)).
+And one needed a fix underneath the fix — UC-B5.1 could not be driven until the client cache was
+keyed by `(atSign, enrollmentId)` ([33](#33-keying-the-client-cache-by-atsign-enrollmentid-2026-08-04)).
+
+That is the argument for making a catalogue executable rather than reasoning about whether the
+code satisfies it. None of those four was visible from reading the code; each surfaced only from
+trying to write the assertion, and two of them were layers under another one.
+
+### 35.1 The last two rows, and what they cost
+
+UC-A4.2 needed a namespace unique to the run, so `@bob` has genuinely never enabled it — against
+a shared namespace he already has a published key and the send simply succeeds. It asserts the
+readiness query answers **false** before anything is composed *and* **true** for a namespace he
+has enabled, because a query that always says no carries no information.
+
+UC-A4.3 took four attempts, each a real defect in the test rather than the code, and each worth
+noting for the next cross-atSign test:
+
+1. the approver must `register()` a key package before it can approve, since it seals the
+   enrollee's symmetric key to its own;
+2. alice cannot `get()` the conveyance — it is sealed to **@bob's** namespace key, and her being
+   unable to open it is the correct behaviour, not a bug;
+3. `getMeta()` does not help, because it delegates to `get()` and therefore decrypts. The
+   metadata is atServer-visible plaintext, so `llookup:meta:` reads it without decryption — and
+   returns `appMetadata` already decoded, where the update fragment carries it base64-encoded;
+4. bringing alice up through `AtClientManager.getInstance()` tore @bob's client down, unsetting
+   his `syncService`. `ConcurrentClients` exists for exactly this and is the right tool whenever
+   two atSigns must be live at once.
+
+### 35.2 The catalogue guard has been re-pointed twice
+
+It first tracked B-1's share of the rows, then the owed-a-test count. Both reached zero, and a
+guard pinned to a number that can no longer change silently stops guarding. It now tracks the
+rows blocked on a project, which is the figure that moves as projects land. Re-point it again
+when that one bottoms out rather than deleting it.

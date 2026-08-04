@@ -75,11 +75,13 @@ void main() {
   test('the README row counts match the scenarios', () {
     final source = allScenarioSource();
     final rows = RegExp(r'\btest\(').allMatches(source).length;
-    // Tracks the *owed* rows rather than a single project's. B-1 used to be
-    // the figure worth watching; it now gates nothing, and a guard pinned to a
-    // finished project silently stops guarding anything.
-    final owed =
-        RegExp(r'skip: owed(Unit|Functional|E2e)\)').allMatches(source).length;
+    // Tracks the rows still BLOCKED on a project. This has been re-pointed
+    // twice, each time at whatever number was actually moving: first B-1's
+    // share, then the owed-a-test backlog. Both reached zero, and a guard
+    // pinned to a number that cannot change silently stops guarding. Every
+    // remaining skip names a project, so this is the figure that moves as
+    // projects land.
+    final blocked = RegExp(r'skip: \w+\)').allMatches(source).length;
     final text = readme.readAsStringSync();
 
     final total = RegExp(r'\*\*(\d+) rows\*\*').firstMatch(text);
@@ -88,15 +90,16 @@ void main() {
     expect(int.parse(total![1]!), rows,
         reason: 'README.md says ${total[1]} rows; there are $rows');
 
-    final owedStated =
-        RegExp(r'owed rows gate \*\*(\d+) of the (\d+)\*\*').firstMatch(text);
-    expect(owedStated, isNotNull,
-        reason: 'README.md must state the owed share as '
-            '"owed rows gate **N of the M**"');
-    expect(int.parse(owedStated![1]!), owed,
-        reason: 'README.md says ${owedStated[1]} owed rows; there are $owed. '
-            'Writing one of them changes this — update the README with it');
-    expect(int.parse(owedStated[2]!), rows);
+    final blockedStated =
+        RegExp(r'\*\*(\d+) of the (\d+)\*\* rows are blocked').firstMatch(text);
+    expect(blockedStated, isNotNull,
+        reason: 'README.md must state the blocked share as '
+            '"**N of the M** rows are blocked on a project"');
+    expect(int.parse(blockedStated![1]!), blocked,
+        reason: 'README.md says ${blockedStated[1]} blocked rows; there are '
+            '$blocked. Landing a project changes this — update the README '
+            'with it');
+    expect(int.parse(blockedStated[2]!), rows);
   });
 }
 

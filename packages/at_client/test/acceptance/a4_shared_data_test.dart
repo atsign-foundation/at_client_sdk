@@ -45,8 +45,16 @@ void main() {
       //       under legacy — the invitation path, which ends at 4.x. Once bob
       //       uses or authorises the namespace his nskey is published and
       //       alice's next ensureCurrent picks it up by plookup.
-      fail('not implemented');
-    }, skip: owedE2e);
+      provenIn(
+        'tests/at_end2end_test/test/nskey_recipient_not_ready_test.dart',
+        'UC-A4.2: a share to a recipient with no namespace key fails, naming',
+        proves: 'against a namespace unique to the run — so @bob has genuinely '
+            'never used it — the send fails with an exception naming both @bob '
+            'and the namespace, the readiness query answers false BEFORE '
+            'anything is composed, and the same query answers true for a '
+            'namespace @bob has enabled, so the "no" carries information',
+      );
+    });
 
     test('UC-A4.3 · multi-enrollment both ends', () {
       // GIVEN alice (aE1, aE2) and bob (bE1, bE2) all PQ; bob has
@@ -55,8 +63,18 @@ void main() {
       // THEN  all of bob's authorised enrollments read; all of alice's
       //       authorised enrollments read the self-copy; no authorised
       //       enrollment is left unable to decrypt.
-      fail('not implemented');
-    }, skip: owedE2e);
+      provenIn(
+        'tests/at_end2end_test/test/nskey_multi_enrollment_test.dart',
+        'UC-A4.3: every authorised enrollment of the recipient reads the share',
+        proves: 'a second, genuinely distinct APKAM enrollment of @bob — its '
+            'own enrollment id, APKAM keypair and client, asserted not '
+            'identical to the first — reads the same record alice sealed '
+            'once. The conveyance metadata read off the atServer names '
+            'recipientKind nskey and the generation @bob advertised, which is '
+            'the structural reason enrollment count is irrelevant: the seal is '
+            'to (owner, namespace), not to a device',
+      );
+    });
 
     test('UC-A4.4 · cross-atSign notification carrying an encrypted value', () {
       // GIVEN @alice, @bob pq-native; @bob published his nskey for the

@@ -32,24 +32,19 @@ const _e2e = 'layer: tests/at_end2end_test';
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Owed a test, not a project (2026-08-04)
+// Owed a test, not a project — all discharged (2026-08-04)
 // ---------------------------------------------------------------------------
 //
-// SS-2, SS-4 and B-1 have landed. Their scenarios are therefore no longer
-// *blocked* — nobody is waiting on code — but most are not yet *proven*, and
-// conflating those two states is what made this burn-down misleading in the
-// first place. A row reading `blocked: B-1` said "the project owes this";
-// these say "we owe this a test", which is a different backlog with a
-// different owner.
+// SS-2, SS-4 and B-1's 21 scenarios were re-labelled from `blocked: <project>`
+// to `owed: <a test>` when those projects landed, because a project landing
+// makes its scenarios owed a test rather than proven — and conflating those is
+// what made this burn-down misleading in both directions at once.
 //
-// A row whose proof already exists in another package should cite it with
-// `provenIn` (see `proven_elsewhere.dart`) instead of carrying one of these.
-
-/// The project landed; this scenario still needs writing, live.
-const owedFunctional = 'owed: scenario not yet written · $_functional';
-
-/// The project landed; this scenario still needs writing, cross-atSign.
-const owedE2e = 'owed: scenario not yet written · $_e2e';
+// All 17 have since been discharged: fifteen written or cited, one (UC-A3.2)
+// found to be a catalogue error rather than a missing test, and one (UC-B5.1)
+// found to need production code that did not exist. The `owed*` constants are
+// therefore gone. Every remaining constant below names a project that has not
+// landed.
 
 /// Migration machinery + disallowLegacyEncryption flag.
 const r1 = 'blocked: R-1 (scheme negotiation + flag) · $_unit';
