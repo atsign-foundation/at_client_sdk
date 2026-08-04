@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:pqcrypto/pqcrypto.dart';
 
@@ -13,6 +14,14 @@ import 'package:pqcrypto/pqcrypto.dart';
 /// auto-resolved FFI/pure dispatch without touching this class.
 final class MlDsa65PureDartAlgo implements AtSignatureAlgorithm {
   MlDsa65PureDartAlgo();
+
+  @override
+  SigningAlgoType get signingAlgoType => SigningAlgoType.mldsa65;
+
+  /// Null — ML-DSA-65 hashes internally per FIPS 204; there is no separate
+  /// choice to declare.
+  @override
+  HashingAlgoType? get hashingAlgoType => null;
 
   /// Generate a fresh ML-DSA-65 key pair.
   ///

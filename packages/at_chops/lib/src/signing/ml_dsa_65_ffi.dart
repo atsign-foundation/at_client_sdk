@@ -1,6 +1,7 @@
 import 'dart:ffi';
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/ffi/openssl_ffi_bindings.dart';
 import 'package:ffi/ffi.dart';
@@ -21,6 +22,14 @@ import 'package:ffi/ffi.dart';
 /// (e.g. loaded via [tryLoadLibCrypto]).
 final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
   final DynamicLibrary _lib;
+
+  @override
+  SigningAlgoType get signingAlgoType => SigningAlgoType.mldsa65;
+
+  /// Null — ML-DSA-65 hashes internally per FIPS 204; there is no separate
+  /// choice to declare.
+  @override
+  HashingAlgoType? get hashingAlgoType => null;
 
   late final EvpPkeyCtxNewFromNameDart _ctxNewFromName;
   late final EvpPkeyCtxFreeDart _ctxFree;

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_iv.dart';
 import 'package:at_chops/src/hashing/types.dart';
 
@@ -61,6 +62,20 @@ abstract interface class AtSignatureAlgorithm {
   /// private key corresponding to [publicKey].
   Future<bool> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey});
+
+  /// How this algorithm names itself where a protocol carries the choice — the
+  /// `pkam` verb's `signingAlgo` field, an atKeys `keyAlgorithmType`.
+  ///
+  /// The declaration belongs to the implementation so that a protocol message
+  /// cannot claim one algorithm while the signature was produced with another.
+  SigningAlgoType get signingAlgoType;
+
+  /// The hashing algorithm this signer hashes [signBytes]'s message with, named
+  /// the same way — the `pkam` verb's `hashingAlgo` field.
+  ///
+  /// Null when hashing is intrinsic to the scheme and no separate choice
+  /// exists (ML-DSA-65 hashes internally per FIPS 204).
+  HashingAlgoType? get hashingAlgoType;
 }
 
 /// Interface for hashing data. Refer [Md5HashingAlgo] for sample implementation.

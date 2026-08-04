@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:better_cryptography/better_cryptography.dart';
 
@@ -15,6 +16,14 @@ class Ed25519SigningAlgo implements AtSignatureAlgorithm {
   final _algorithm = Ed25519();
 
   Ed25519SigningAlgo();
+
+  @override
+  SigningAlgoType get signingAlgoType => SigningAlgoType.ed25519;
+
+  /// Null — Ed25519 hashes internally with SHA-512 per RFC 8032; there is no
+  /// separate choice to declare.
+  @override
+  HashingAlgoType? get hashingAlgoType => null;
 
   /// Generate a fresh Ed25519 key pair.
   ///

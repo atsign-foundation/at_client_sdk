@@ -15,14 +15,27 @@ import 'package:crypton/crypton.dart';
 /// - `secretKey`: PKCS#8 DER-encoded private key
 /// - `publicKey`: X.509 SubjectPublicKeyInfo DER-encoded public key
 class RsaSigningAlgo implements AtSignatureAlgorithm {
-  final HashingAlgoType _hashingAlgoType;
+  @override
+  final HashingAlgoType hashingAlgoType;
+
   final int _keySize;
 
   RsaSigningAlgo(
-      {HashingAlgoType hashingAlgoType = HashingAlgoType.sha256,
-      int keySize = 2048})
-      : _hashingAlgoType = hashingAlgoType,
-        _keySize = keySize;
+      {this.hashingAlgoType = HashingAlgoType.sha256, int keySize = 2048})
+      : _keySize = keySize;
+
+  /// The RSA size this instance declares on the wire.
+  ///
+  /// Derived from the constructed key size rather than from the key, which
+  /// arrives per call and is never inspected. Throws for a key size the
+  /// protocol has no name for.
+  @override
+  SigningAlgoType get signingAlgoType => switch (_keySize) {
+        2048 => SigningAlgoType.rsa2048,
+        4096 => SigningAlgoType.rsa4096,
+        _ => throw AtSigningException(
+            'RSA key size $_keySize has no SigningAlgoType; use 2048 or 4096'),
+      };
 
   /// Generate a fresh RSA key pair of [keySize] bits.
   @override
@@ -39,14 +52,14 @@ class RsaSigningAlgo implements AtSignatureAlgorithm {
   Future<Uint8List> signBytes(Uint8List message,
       {required Uint8List secretKey}) async {
     final rsaPrivateKey = RSAPrivateKey.fromString(base64Encode(secretKey));
-    switch (_hashingAlgoType) {
+    switch (hashingAlgoType) {
       case HashingAlgoType.sha256:
         return rsaPrivateKey.createSHA256Signature(message);
       case HashingAlgoType.sha512:
         return rsaPrivateKey.createSHA512Signature(message);
       default:
         throw AtSigningException(
-            'Hashing algo $_hashingAlgoType is invalid/not supported');
+            'Hashing algo $hashingAlgoType is invalid/not supported');
     }
   }
 
@@ -55,14 +68,14 @@ class RsaSigningAlgo implements AtSignatureAlgorithm {
   Future<bool> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
     final rsaPublicKey = RSAPublicKey.fromString(base64Encode(publicKey));
-    switch (_hashingAlgoType) {
+    switch (hashingAlgoType) {
       case HashingAlgoType.sha256:
         return rsaPublicKey.verifySHA256Signature(message, signature);
       case HashingAlgoType.sha512:
         return rsaPublicKey.verifySHA512Signature(message, signature);
       default:
         throw AtSigningVerificationException(
-            'Invalid hashing algo $_hashingAlgoType provided');
+            'Invalid hashing algo $hashingAlgoType provided');
     }
   }
 }
