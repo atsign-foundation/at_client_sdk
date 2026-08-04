@@ -1,4 +1,18 @@
 ## 3.14.1
+- fix: an encrypted notification no longer races the content key it needs. The
+  conveyance was written local-first, so it reached the recipient's atServer
+  only when the sender's sync got round to it — 31 seconds later in a captured
+  reproduction — while the notification went out immediately over the monitor.
+  The recipient resolved the key inline on arrival, found nothing, and the
+  `ContentKeyUnavailableException` was swallowed at `finer`, dropping the
+  notification silently with nothing to retry it. Both notify entry points now
+  route the conveyance remote-first, as a `put` already did by passing its own
+  routing through: a notification is remote-only by construction, so anything it
+  cites must be too.
+- fix: a notification a subscriber cannot be given is now logged at `warning`,
+  naming the key and the subscriber's regex. At `finer` it was indistinguishable
+  from a notification that was never sent — which is how the race above survived
+  a green unit suite and a green e2e suite.
 - feat: `benchmark/crypto_bench.dart` — the durable perf instrument the PQ work
   is meant to be measured by, rather than reasoned about. Run it with
   `dart run benchmark/crypto_bench.dart [--iterations N] [--json]`. It reports

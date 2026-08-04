@@ -299,7 +299,14 @@ class NotificationServiceImpl extends NotificationService {
               streamController.add(transformedNotification);
             }
           } catch (e) {
-            logger.finer('Caught $e while dispatching to to subscribers');
+            // Warning, not finer. A notification that cannot be transformed is
+            // dropped here and never retried — nothing re-delivers it when the
+            // missing piece arrives. At finer the subscriber saw an absence
+            // indistinguishable from one that was never sent, which is how a
+            // conveyance racing its own announcement stayed invisible through
+            // a green unit suite and a green e2e suite alike.
+            logger.warning('Dropping notification ${n.key} for subscriber '
+                '(regex "${notificationConfig.regex}"): $e');
           }
         });
       }
@@ -336,7 +343,11 @@ class NotificationServiceImpl extends NotificationService {
       final providerId =
           CryptoRuntime.providerIdFor(atClient, cryptoProviderId, atKey: atKey);
       atKey.metadata.appMetadata ??= AppMetadata(providerId: providerId);
-      await CryptoRuntime(atClient).prepareForPut(atKey, providerId);
+      // Remote, unconditionally: a notification is remote-only by construction,
+      // so a conveyance left to reach the atServer by sync is announced before
+      // it exists and the recipient resolves the key inline with nothing there.
+      await CryptoRuntime(atClient)
+          .prepareForPut(atKey, providerId, useRemoteAtServer: true);
       notifPayload =
           await CryptoRuntime(atClient).encryptForNotification(atKey, body);
       atKey.metadata.isEncrypted = true;

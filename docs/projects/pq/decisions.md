@@ -2224,88 +2224,78 @@ because the model it cited appeared to answer it.
 
 ---
 
-## 26. UC-A4.4 does not work: the CK fetch deadlocks inside notification dispatch (2026-08-04)
+## 26. UC-A4.4: a conveyance that loses the race to its own announcement (2026-08-04)
 
-The two-client harness of `ConcurrentClients` was built to give the notify **receive** path its
-first live coverage. It did, and the first thing it found is that the nskey notification path
-does not work end to end — despite both halves being implemented and unit-covered. That is the
-harness earning its cost on day one, and it is worth recording precisely because every
-non-live signal said the feature was fine.
+The two-client harness of `ConcurrentClients` gave the notify **receive** path its first live
+coverage, and the first thing it found is that the nskey notification path did not work end to
+end — despite both halves being implemented and unit-covered. The diagnosis took three passes
+and two of them were wrong, so the wrong turns are recorded with the answer: each was a
+plausible reading of partial evidence, and each is the kind of mistake the next investigation
+will be tempted to repeat.
 
-### 26.1 What the evidence shows
+### 26.1 What actually happens
 
-Alice's nskey notify is accepted (`notificationStatusEnum` is `delivered`). Bob's atServer
-delivers it and `NotificationServiceImpl` logs `Received @bob:nskeynotify….e2e_test@alice`. The
-`__ck` conveyance reaches bob too, as its own notification. Nothing ever reaches a subscriber,
-and the legacy path in the same file, with the same key shape and the same regex, delivers in
-about a second.
-
-Three candidate causes were eliminated by measurement rather than by reasoning:
-
-- **Not the regex.** `hasRegexMatch` is a plain `RegExp(regex).hasMatch(key)` and the pattern is
-  a literal substring of the delivered key. Instrumenting the dispatch confirmed the matching
-  branch is never reached at all.
-- **Not a thrown exception.** `notification_service_impl.dart`'s dispatch `catch` was
-  instrumented to log at `severe` with a stack. It never fires.
-- **Not a failure to dispatch.** The probe shows `enter` for the `shouldDecrypt: true` config,
-  and then nothing — no `transformed`, no `regex miss`, no `caught`. The sibling config with
-  `shouldDecrypt: false` completes normally in the same millisecond.
-
-The awaited call that never returns is
-`await context.atClient.get(conveyanceKeyFor(value, ckKid, namespace))` in
-`SymmetricAesGcmProvider._resolveFromLocalConveyance`. A probe either side of it logs `START`
-with **no matching `DONE`** anywhere in the run, while the same call taken from the ordinary
-get path logs both.
-
-### 26.2 Where it stops, and the ordering that probably explains it
-
-Probing `AtLookupImpl._process` either side of both its blocking points separates lock
-contention from an unanswered read. It is the read:
+Alice's notify is accepted, bob's atServer delivers it, and no subscriber ever sees it. At
+`finest`, on a reproduction inside the full suite:
 
 ```
-14:38:57.003188  _process want-lock  lookup:all:6ed8bc85db4e7878.__ck.e2e_test@alice
-14:38:57.003245  _process got-lock   lookup:all:6ed8bc85db4e7878.__ck.e2e_test@alice
-14:38:57.003373  _process sent, reading …
-                 (no read-done, ever)
-14:38:57.022759  batch:[… update:…:@bob:6ed8bc85db4e7878.__ck.e2e_test@alice …]   ← alice, 19ms LATER
+15:28:29.563688  bob's monitor: Received @bob:f605dd47a25a52b3.__ck…@alice
+15:28:29.572715  server answers bob's CK lookup: AT0015 key not found       (9ms)
+15:28:29.573931  Caught ContentKeyUnavailableException … while dispatching  ← logged at FINER
+15:29:00.933728  the __ck record arrives via sync                           (31 SECONDS later)
 ```
 
-The lock is acquired immediately, so nothing is contending. The command goes out and
-`messageListener.read()` never returns.
+The content-key conveyance is written **local-first**, so it reaches bob's atServer only when
+alice's sync gets round to it. The notification goes out immediately, over a different
+transport. The receive path resolves the CK inline, finds nothing, and raises
+`ContentKeyUnavailableException` — correctly. That exception is then swallowed at `finer` by the
+dispatch loop, so the notification is dropped with nothing said, and **nothing retries it** when
+the conveyance lands half a minute later.
 
-The ordering in the last line is the thing to explain first. It is a `lookup:` — bob asking his
-own atServer to resolve a record owned by **alice** — and alice has not pushed that record yet.
-Her sync `batch:` carrying the very `__ck` bob is asking for goes out 19ms *after* he asks for
-it. So the most economical hypothesis is that the cross-server resolution of a record that does
-not exist yet does not fail promptly, and the client has no timeout of its own to fall back on.
+Two independent defects, and both are fixed:
 
-That is a hypothesis, not a conclusion. What is established is the exact call, that it is the
-read rather than the lock, and that the record is genuinely absent at that instant. What is not
-established is what the far side does with the request — that needs the atServer's view, not the
-client's.
+1. **The conveyance must not lose the race.** Both notify entry points now pass
+   `useRemoteAtServer: true` into `prepareForPut`, where a `put` passes its own routing through.
+   A notification is remote-only by construction, so its conveyance has to be too. This is the
+   same fix as the `__ssenv` wake-up ordering bug (section 17's sibling) and the same rule: any
+   value another party must read *now* goes remote-first.
+2. **A dropped notification must say so.** The dispatch `catch` logs at `warning` rather than
+   `finer`, naming the key and the subscriber's regex. At `finer` a subscriber saw an absence
+   indistinguishable from one that was never sent.
 
-The wider design point stands whatever the mechanism turns out to be: the notify path conveys a
-content key and announces the record that needs it **in the same instant**, over two independent
-transports — the conveyance rides sync, the announcement rides the monitor — with no ordering
-between them. The receive path then resolves the key inline, inside the monitor's dispatch. A
-receiver arriving before the conveyance is the ordinary case here, not the rare one.
+### 26.2 The two wrong answers, and why they were wrong
 
-This is the hazard the tree rule about `Stream.listen` `onData` staying synchronous describes,
-one level up: an `await` inside per-event processing that needs the network.
+**"The atServer hangs on a cross-server lookup for a record that does not exist."** Recorded
+first, from client-side evidence only: a probe either side of `AtLookupImpl._process` showed the
+lookup sent with no matching completion. Disproved by asking the atServer directly — every
+absent-key lookup, *including the exact failing shape*, answers in **12–24ms** with
+`KeyNotFoundException`. The atServer was never implicated; it had answered in 9ms while the
+client-side probe was being read as silence.
 
-### 26.3 Two things that made this invisible
+**"A remote read from inside notification dispatch deadlocks."** `monitor.dart` awaits
+`handleNotification` on its socket read handler, so re-entrancy was a fair guess. Disproved by
+measuring it: a remote lookup issued from inside a notification *listener* completes in **76ms**.
 
-**The dispatch `catch` logs at `finer`.** Had the call thrown rather than hung, the notification
-would still never have been emitted and nothing would have said why at any normal log level — a
-receiver that cannot decrypt is indistinguishable from one that was never sent. That is a defect
-in its own right and does not depend on this one.
+Both errors share one cause, and it is worth naming: **a conclusion drawn from truncated
+output.** The "no completion" and "no exception logged" readings both came from
+`grep … | head -12` output that was cut before the lines that would have contradicted them. The
+`Caught … while dispatching` line was there the whole time. `read()` is a polling loop with a
+90-second cap, so "it never returned" was never even the right shape of claim — and the elapsed
+time in the failing test (60s) was shorter than that cap, which should have been the tell.
 
-**A hang is worse than a throw here, not better.** `ContentKeyUnavailableException` exists and is
-raised when the CK is genuinely absent; a caller can catch it and reroute. A pending future
-produces no error, no timeout and no log, and the subscriber simply waits.
+### 26.3 What this says about the design, independent of the bug
+
+The notify path conveys a content key and announces the record needing it in the same instant,
+over two transports with no ordering between them, and the receive path then resolves the key
+inline. Routing the conveyance remote-first removes the race as it exists today. It does not make
+the receive path tolerant of a conveyance that has not arrived for any other reason — a slow
+recipient atServer, a rotation mid-flight — because there is still no retry: a notification whose
+transform throws is gone. Closing that properly means either re-delivering when the conveyance
+lands, or carrying enough with the notification that it does not need a second fetch at all.
+Recorded as open; the warning-level log is what will make it visible next time.
 
 ### 26.4 Status
 
-UC-A3.4 and UC-A4.4 are **not met** and must not be claimed. The legacy notification receive path
-*is* now live-covered (`concurrent_notify_test.dart`). The nskey half of that test reproduces the
-defect in about a second and is deliberately not committed, since it would land red.
+UC-A3.4 and UC-A4.4 are **met**, live-covered in `concurrent_notify_test.dart`, which asserts
+that `providerId` travels on the notification frame and that bob decrypts by it. Verified by
+reverting the fix: the test then fails, and passes with it.
