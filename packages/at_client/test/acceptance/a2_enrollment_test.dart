@@ -36,8 +36,17 @@ void main() {
       //       sealed to that key package open on both, and both hosts share the
       //       signing-root private and E1's namespace authorisations. Revocation
       //       is per-enrollment, so revoking E1 cuts every host sharing the copy.
-      fail('not implemented');
-    }, skip: owedFunctional);
+      provenIn(
+        'tests/at_functional_test/test/copied_keyfile_test.dart',
+        'a copied keyfile is the same enrollment and the same recipient',
+        proves: 'a keyfile round-tripped through its serialized form — which '
+            'is what copying it does — resolves to the same key package id, '
+            'that id is the one the enrollment advertised, and the copy '
+            'authenticates against the live atServer as the same enrollment '
+            'id. One enrollment and one recipient, so there is a single thing '
+            'to revoke and an operator cannot miss the second host',
+      );
+    });
 
     test('UC-A2.3 · namespace-restricted enrollment', () {
       // GIVEN alice1 (E1, *) approves alice3 for app_1.my_apps only (E3).
@@ -48,7 +57,34 @@ void main() {
       //       delivered. The boundary is enforced at the atServer __ssenv
       //       namespace-delivery gate, not by a client-side refusal alone, so
       //       alice3 can read/write app_1.my_apps but not app_2.my_apps.
-      fail('not implemented');
-    }, skip: owedFunctional);
+      //
+      // Three claims, three proofs, and they are deliberately at different
+      // layers: the boundary is asserted to hold at the atServer, *and* the
+      // sender is asserted not to send across it. Either alone would be a
+      // weaker guarantee than the row states.
+      provenIn(
+        'tests/at_functional_test/test/enrollment_namespace_gate_test.dart',
+        'a scoped enrollment cannot read the envelope channel of a namespace',
+        proves: 'the atServer refuses the scoped enrollment\'s llookup of an '
+            '__ssenv record in an ungranted namespace, naming the enrollment '
+            'and the key, while the same enrollment reads the granted '
+            'namespace on the same connection and the approver reads both — '
+            'so the refusal is a gate rather than an absent record',
+      );
+      provenIn(
+        'tests/at_functional_test/test/enrollment_chain_link_e2e_test.dart',
+        'the root private reaches a privileged enrollment and no other',
+        proves: 'the signing-root private is conveyed to a fully privileged '
+            'enrollment and withheld from a scoped one, with the grant '
+            'asserted to have actually differed between the two arms',
+      );
+      provenIn(
+        'packages/at_client/test/secret_sharing_approver_test.dart',
+        'shares namespace-authorized secrets with the approved enrollment',
+        proves: 'the sender-side half — shareAllSecretsWith forwards only the '
+            'secrets the approved namespaces authorize, so a private for an '
+            'ungranted namespace is never put on the wire in the first place',
+      );
+    });
   });
 }

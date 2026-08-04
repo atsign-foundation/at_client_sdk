@@ -8,7 +8,7 @@ inline, skipped with the project that must land before it can go green.
 is how far we've got.
 
 > **The two counting faults audited 2026-08-03 were fixed 2026-08-04**, and
-> nine owed rows have since been written. The suite now reads **14 of 40**
+> eleven owed rows have since been written. The suite now reads **16 of 40**
 > scenario rows green, up from 1 before the repair and 5 after it. (The runner's own count
 > is higher — it includes `catalogue_test.dart`'s three guards, which are not
 > scenarios. That gap is why the old "4 of 43" figure was itself wrong in the
@@ -26,7 +26,7 @@ is how far we've got.
 >    `owed: scenario not yet written`. Conflating "the project owes this" with
 >    "we owe this a test" is what made the old number misleading in both
 >    directions at once.
-> 3. **Nine of those owed rows are now written**, leaving **8**. Four are
+> 3. **Eleven of those owed rows are now written**, leaving **6**. Four are
 >    cross-cutting invariants — reads-are-universal, appMetadata-is-authoritative,
 >    the published nskey's fetchable-not-enumerable property (cited, not
 >    duplicated: `underscore_public_key_hiding_test` already proves it with
@@ -38,7 +38,10 @@ is how far we've got.
 >    rows, and two more proven live once a functional test for the immutable
 >    signing-root create existed: the cross-cutting create-once invariant and
 >    UC-B5.3's race. UC-A3.2 followed once its catalogue text was corrected —
->    it had described a mint trigger that was never built.
+>    it had described a mint trigger that was never built — and then UC-A2.2
+>    and UC-A2.3, the latter proven at two layers at once because the row
+>    insists the namespace boundary holds at the atServer and not by a
+>    client-side refusal alone.
 
 > **The number is still a floor, and now says why.** A row is green only when
 > something in this repo asserts it — inline, or by citation.
@@ -81,7 +84,7 @@ below), plus 9 cross-cutting invariants.
 | Cluster                       | Scenarios                        | Blocked on   |
 |-------------------------------|----------------------------------|--------------|
 | A1 · PQ-native onboard        | A1.1                             | ON-1         |
-| A2 · enrollments              | A2.1 ✅, A2.2, A2.3               | owed         |
+| A2 · enrollments              | A2.1 ✅, A2.2 ✅, A2.3 ✅           | —            |
 | A3 · self data                | A3.1 ✅, A3.2 ✅, A3.3 ✅, A3.4 ✅  | —            |
 | A4 · shared data              | A4.1 ✅, A4.4 ✅, A4.2, A4.3       | owed         |
 | A5 · rotation & revocation    | A5.1(a), A5.1(b), A5.2, A5.3     | B-2          |
@@ -105,11 +108,11 @@ separately.
 Sorting by blocker showed why D1 felt slow for so long: B-1 alone gated **11 of
 the 40** rows, and no data-path row could go green until **B-1** (XL) and
 **SS-4** (L–XL) landed, so the programme had no demonstrable increment in its
-centre. Both have now landed, and owed rows gate **8 of the 40** — the same
+centre. Both have now landed, and owed rows gate **6 of the 40** — the same
 rows, re-labelled from "waiting on a project" to "waiting on a test", and then
 worked down. That is a smaller problem with a different owner, and it is the
 honest description of where the burn-down now stands. What remains owed is
-almost entirely *live* work: **7 of the 8** need a running atServer (5
+almost entirely *live* work: **5 of the 6** need a running atServer (3
 functional, 2 e2e), and exactly one is a unit row. That is not a coincidence —
 the rows writable against mocked state were the ones written first, so the
 residual is by construction the part that needs infrastructure.
