@@ -81,11 +81,12 @@ abstract class AtSignatureAlgorithm {
   /// (e.g. at_server's FROM/POL handshake tags its cookie and published-key
   /// record with this). Not grammar-constrained: at_chops owns the spelling.
   ///
-  /// Not [signingAlgoType]: `SigningAlgoType.mldsa65.name` is `'mldsa65'`,
-  /// not this algorithm's [name] here — the two serve different wire
-  /// positions with different spellings and must not be assumed
-  /// interchangeable. [name] is free-form; [signingAlgoType] is constrained
-  /// to values the `pkam:` verb grammar accepts.
+  /// Implementations that have no reason to diverge should simply return
+  /// [signingAlgoType]'s `name` (see [MlDsa65FfiAlgo]). The getter stays
+  /// separate from [signingAlgoType] because enum member names are
+  /// Dart-identifier-constrained (no hyphens, can't start with a digit) — a
+  /// future backend needing a wire spelling the enum can't express can
+  /// override this one independently.
   String get name;
 
   /// The `pkam:`/envelope wire tuple's identifier for this algorithm.
@@ -94,8 +95,7 @@ abstract class AtSignatureAlgorithm {
   /// `at_client`'s signed-envelope `signingAlgo` field) accepts only the
   /// enum's `name` spellings — a free-form string would surface as an
   /// atServer syntax error at authentication time, or fail
-  /// `SigningAlgoType.values.byName` on the reading side. See [name] for the
-  /// free-form counterpart used outside that grammar.
+  /// `SigningAlgoType.values.byName` on the reading side.
   SigningAlgoType get signingAlgoType;
 
   /// Generate a fresh signing key pair.
@@ -113,6 +113,15 @@ abstract class AtSignatureAlgorithm {
 
 /// Interface for hashing data. Refer [DefaultHash] for sample implementation.
 abstract class AtHashingAlgorithm<K, V> {
+  /// The `pkam:`/envelope wire tuple's `hashingAlgo` identifier for this
+  /// algorithm (`envelope['hashingAlgo']` in `at_client`'s signed-envelope
+  /// format, `PublicKeyHash.hashingAlgo`) — the same spelling as
+  /// [HashingAlgoType.name] for the corresponding enum value (e.g.
+  /// `SHA256HashingAlgo().name == HashingAlgoType.sha256.name`), so an
+  /// algorithm instance can report the identifier a caller would otherwise
+  /// have to track separately.
+  String get name;
+
   /// Hashes the passed data
   FutureOr<V> hash(K data, {covariant HashParams? hashParams});
 }

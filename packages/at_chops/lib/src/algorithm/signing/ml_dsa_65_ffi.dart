@@ -35,7 +35,7 @@ final class MlDsa65FfiAlgo extends AtSignatureAlgorithm
   Uint8List? _secretKey;
 
   @override
-  String get name => mlDsa65AlgorithmName;
+  String get name => SigningAlgoType.mldsa65.name;
 
   @override
   SigningAlgoType get signingAlgoType => SigningAlgoType.mldsa65;

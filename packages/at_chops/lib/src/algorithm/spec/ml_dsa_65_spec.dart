@@ -2,11 +2,6 @@ import 'dart:typed_data';
 
 import 'package:at_commons/at_commons.dart';
 
-/// `AtSignatureAlgorithm.name` for ML-DSA-65 — one literal shared by
-/// `MlDsa65FfiAlgo` and `MlDsa65PureDartAlgo` so a downstream protocol sees
-/// the same identifier regardless of which backend is in play.
-const String mlDsa65AlgorithmName = 'ml-dsa-65';
-
 /// FIPS 204 ML-DSA-65 fixed byte sizes and input validators — the single
 /// source of truth shared by `MlDsa65FfiAlgo`, `MlDsa65PureDartAlgo`, and
 /// `MlDsa65KeyPair` so all three enforce identical lengths regardless of

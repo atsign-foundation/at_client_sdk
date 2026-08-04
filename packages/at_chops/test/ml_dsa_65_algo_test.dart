@@ -9,12 +9,10 @@ import 'package:test/test.dart';
 
 void main() {
   group('ML-DSA-65 pure-Dart', () {
-    test('name is the free-form wire identifier, independent of '
-        'signingAlgoType', () {
-      expect(MlDsa65PureDartAlgo().name, equals('ml-dsa-65'),
-          reason: 'a downstream protocol keys its wire/record/keystore '
-              'format on this literal, not on signingAlgoType.name '
-              '(which is "mldsa65", a different wire position)');
+    test('name mirrors signingAlgoType.name', () {
+      final algo = MlDsa65PureDartAlgo();
+      expect(algo.name, equals('mldsa65'));
+      expect(algo.name, equals(algo.signingAlgoType.name));
     });
 
     test('signingAlgoType is the pkam:/envelope wire tuple identifier', () {

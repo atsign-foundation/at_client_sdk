@@ -32,7 +32,7 @@ void main() {
       }
 
       final algo = MlDsa65FfiAlgo.fromLib(lib);
-      expect(algo.name, equals('ml-dsa-65'),
+      expect(algo.name, equals('mldsa65'),
           reason: 'must match MlDsa65PureDartAlgo.name — a downstream '
               'protocol sees one identifier regardless of backend');
       expect(algo.signingAlgoType, equals(SigningAlgoType.mldsa65),
