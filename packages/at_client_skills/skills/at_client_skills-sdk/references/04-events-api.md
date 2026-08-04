@@ -8,9 +8,9 @@ broadcast-style streams. There are two sources of events (controlled by
 
 | `EventSource`        | What fires events                                                                                                                            |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EventSource.data`   | All local keystore mutations via `AtClient.dataEvents` — locally-driven writes AND TTL expiry deletions AND sync-applied cross-atSign writes |
-| `EventSource.notifs` | Cross-atSign writes received via `NotificationService` — locally-driven writes are NOT visible                                               |
-| `EventSource.both`   | Both sources; the same cross-atSign write can fire **twice** (no dedup); default                                                             |
+| `EventSource.data`   | All local keystore mutations via `AtClient.dataEvents` — locally-driven writes AND TTL expiry deletions AND sync-applied cross-atsign writes |
+| `EventSource.notifs` | Cross-atsign writes received via `NotificationService` — locally-driven writes are NOT visible                                               |
+| `EventSource.both`   | Both sources; the same cross-atsign write can fire **twice** (no dedup); default                                                             |
 
 ---
 

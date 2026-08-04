@@ -13,7 +13,7 @@
     },
     {
       "id": 3,
-      "prompt": "My Flutter app needs to let users sign in with their atSign. What's the flow for an existing user who has a .atKeys file?",
+      "prompt": "My Flutter app needs to let users sign in with their atsign. What's the flow for an existing user who has a .atKeys file?",
       "expected_output": "Shows Flow 2: AtKeysFileDialog.show() then PkamDialog.show() with request and backupKeys. Includes _setupAtClient(AtRootDomain, AuthResponse) which calls AtClientManager.getInstance().setCurrentAtSign()."
     },
     {
@@ -28,7 +28,7 @@
     },
     {
       "id": 6,
-      "prompt": "I'm building a real-time dashboard that receives Docker container stats from another atSign every 2 seconds. Should I use AtCollection or something else?",
+      "prompt": "I'm building a real-time dashboard that receives Docker container stats from another atsign every 2 seconds. Should I use AtCollection or something else?",
       "expected_output": "Recommends Notifications + SQLite (not AtCollection) for high-frequency telemetry. Explains AtCollection is for discrete, addressable records. References the dockerstats pattern."
     },
     {
@@ -48,7 +48,7 @@
     },
     {
       "id": 10,
-      "prompt": "How do I set up APKAM enrollment so a user can add a new device to their existing atSign?",
+      "prompt": "How do I set up APKAM enrollment so a user can add a new device to their existing atsign?",
       "expected_output": "Shows Flow 4: AtSignSelectionDialog.show() then ApkamActivationDialog.show() with atSign, rootDomain, appName, deviceName, namespaces. Then PkamDialog.show(). Includes _setupAtClient() post-auth."
     },
     {
@@ -58,7 +58,7 @@
     },
     {
       "id": 12,
-      "prompt": "How do I send a notification to another atSign from my Dart app?",
+      "prompt": "How do I send a notification to another atsign from my Dart app?",
       "expected_output": "Shows atClient.notificationService.send(to:, namespace:, body:, expiration:); body is typically JSON-encoded and send returns the notification id. Mentions the recipient subscribes via notificationService.subscribe(regex:, shouldDecrypt:). May point to the packages/at_client/example/bin/notifications.dart example. Does NOT use raw atClient.put/get for messaging."
     },
     {
@@ -73,8 +73,8 @@
     },
     {
       "id": 15,
-      "prompt": "My Flutter app using AtCollection shares data with another atSign, but nothing syncs — SyncService stays inProgress and shared items never arrive. How do I debug this?",
-      "expected_output": "Treats a stuck-inProgress SyncService as a wedged sync and DIAGNOSES it rather than assuming a single cause. Explains the common cause is unscoped sync: with AtClientPreference.syncRegex unset, sync covers the atSign's ENTIRE keystore, so one unrelated/dangling key from another app or namespace can abort the whole round (e.g. 'key not found : <key> does not exist in keystore'). Recommends scoping syncRegex to the app's namespace. Notes the atServer always syncs a small set regardless of the regex (shared_key reserved keys, the encryption public key, and namespace-less public: keys), and that scoping still works because the sync regex is an unanchored substring match — so your own namespace's cached: copies match anyway; sharing and decryption are unaffected. Also frames that reads are local-only, writes sync in the background, and completion is observed via SyncProgressListener (not the deprecated sync(onDone:))."
+      "prompt": "My Flutter app using AtCollection shares data with another atsign, but nothing syncs — SyncService stays inProgress and shared items never arrive. How do I debug this?",
+      "expected_output": "Treats a stuck-inProgress SyncService as a wedged sync and DIAGNOSES it rather than assuming a single cause. Explains the common cause is unscoped sync: with AtClientPreference.syncRegex unset, sync covers the atsign's ENTIRE keystore, so one unrelated/dangling key from another app or namespace can abort the whole round (e.g. 'key not found : <key> does not exist in keystore'). Recommends scoping syncRegex to the app's namespace. Notes the atServer always syncs a small set regardless of the regex (shared_key reserved keys, the encryption public key, and namespace-less public: keys), and that scoping still works because the sync regex is an unanchored substring match — so your own namespace's cached: copies match anyway; sharing and decryption are unaffected. Also frames that reads are local-only, writes sync in the background, and completion is observed via SyncProgressListener (not the deprecated sync(onDone:))."
     },
     {
       "id": 16,
@@ -83,12 +83,12 @@
     },
     {
       "id": 17,
-      "prompt": "I want a user to edit an item that another atSign shared with them, but calling update() on it throws ArgumentError. How should collaborative editing work?",
+      "prompt": "I want a user to edit an item that another atsign shared with them, but calling update() on it throws ArgumentError. How should collaborative editing work?",
       "expected_output": "Explains AtCollection is owner-writes-only, naming ALL THREE enforcing methods — update, updateSharedWith, and delete — and that each throws ArgumentError when the item's owner is not the current atsign, so a received item cannot be edited in place. Explains that sharedWith grants a readable copy, not write access. Shows the additive pattern in current API terms: the contributing atsign calls create(obj: ..., sharedWith: {...}) on its OWN collection and the original owner reads that item; reading a received item works but mutating it does not. Must stay on the current AtCollection<T> API — an answer that is conceptually right about ownership but routes the contribution through the deprecated AtCollectionModel, a .save() call, or raw atClient.put() does NOT pass."
     },
     {
       "id": 18,
-      "prompt": "My Flutter app fails to authenticate an atSign with SecondaryNotFoundException: 'No entry in atDirectory for @alice'. What does this mean and how do I fix it?",
+      "prompt": "My Flutter app fails to authenticate an atsign with SecondaryNotFoundException: 'No entry in atDirectory for @alice'. What does this mean and how do I fix it?",
       "expected_output": "Explains that the atDirectory is the atServer address registry and this atsign has no atServer registered in it, so the lookup fails before authentication is attempted. Distinguishes TWO causes with different fixes: the atsign was never activated, or the atsign string is mistyped. States that activation happens ONCE and must precede the existing-keys, keychain, and APKAM login flows, none of which can resolve an unactivated atsign. For in-app activation, uses the CRAM flow this SDK ships — AtSignSelectionDialog from at_client_flutter plus a RegistrarService from at_auth configured with a registrar URL and API key — or defers activation to an onboarding app or the registrar. Recommending the discontinued at_onboarding_flutter package does NOT pass."
     },
     {

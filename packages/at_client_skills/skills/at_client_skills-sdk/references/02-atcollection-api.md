@@ -58,7 +58,7 @@ final pets = await atClient.collection<Pet>('pets.my_app', ttl);
 
 | Getter              | Type       | Description                                  |
 | ------------------- | ---------- | -------------------------------------------- |
-| `atSign`            | `Atsign`   | The atSign this `atClient` is acting as      |
+| `atSign`            | `Atsign`   | The atsign this `atClient` is acting as      |
 | `self`              | `Atsign`   | Alias for `atSign` — use for ownership tests |
 | `namespace`         | `String`   | The fully-qualified namespace                |
 | `defaultExpiration` | `Duration` | Default TTL for new items                    |
@@ -100,7 +100,7 @@ Use for re-runnable publishers that may restart within the TTL window.
 ### `Future<void> update(CItem<T> item, {bool unshareWithOthers = true})`
 
 Persists an existing item. With `unshareWithOthers: true` (default), deletes
-recipient copies for atSigns removed from `item.sharedWith`.
+recipient copies for atsigns removed from `item.sharedWith`.
 
 - Throws `ArgumentError` if `item.owner != self`
 - Throws `StateError` if self-key does not exist
@@ -127,7 +127,7 @@ Deletes the item and all recipient copies.
 
 **Ownership & collaboration.** `AtCollection` is owner-writes-only —
 `update` / `updateSharedWith` / `delete` reject items whose `owner` isn't this
-atSign. Collaboration is additive: each atSign owns what it creates, and
+atsign. Collaboration is additive: each atsign owns what it creates, and
 `sharedWith` grants recipients a readable copy, not write access. For a peer to
 contribute, they create their own item and share it back — you never mutate
 theirs in place. (`self` / `atSign` is the ownership test.)
@@ -264,4 +264,4 @@ enum EventSource {
 - `EventSource.notifs` — if app is primarily a notification receiver;
   locally-driven writes invisible to watch streams
 - `EventSource.both` — default; works without SyncService; watch streams see
-  everything but may fire twice for cross-atSign writes
+  everything but may fire twice for cross-atsign writes
