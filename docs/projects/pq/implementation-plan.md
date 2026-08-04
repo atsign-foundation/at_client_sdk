@@ -562,6 +562,9 @@ feeder** into the data path.
 **Goal:** the value-level data path — the **D1 GA convergence point**.
 **Builds on:** #1930 (seam) + P-1 (`pqSeal`) + S-2 (`CryptoContext.keys`) + **SS-4** (nskey key material +
 pqpublickey cold-start target) + P-3. *The substrate delivers the privates; this delivers the providers.*
+⚠️ **The SS-4 prerequisite holds for `B-1c` onward** — `B-1a` needs no nskey material at all, and `B-1b`
+proceeds against a test fixture that supplies the nskey private directly (see the chunk table below). B-1
+**as a whole still requires SS-4**; the dependency is not dropped, only deferred past the first two chunks.
 **Deliverables (plan-altitude headings; full mechanics → [design.md](design.md), D1 nskey data path):**
 - **Layer 3 — `at/symmetric/AES/GCM`:** AES-256-GCM under a symmetric CK cited by `ckKid` only;
   `appMetadata{providerId, ckKid, iv}` (**no `ns` field**); binary-safe; CK cache keyed
@@ -580,10 +583,36 @@ pqpublickey cold-start target) + P-3. *The substrate delivers the privates; this
   never encapsulated to root); the recipient's first cross-atSign share lazily promotes its nskey public
   half to `public:` (via SS-4), and a later send upgrades to `recipientKind: nskey`. (Seal-and-hold is a
   per-namespace policy toggle delivered in **R-1**.)
+
+**PR chunks (ordered).** B-1 is the plan's only flat-XL project, so it lands as up to five sequential PRs,
+`B-1a`…`B-1e`. `B-1a` is an enabler that closes no scenario of its own and may land in the same PR as
+`B-1b`; every other chunk merges only with its own green acceptance scenario. `B-1` stays the project id —
+the chunk ids are its PR breakdown, not new projects.
+
+| Chunk  | Scope                                                                                                                                                     | Closes                    |
+|--------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------|
+| `B-1a` | **Layer 3** — the `at/symmetric/AES/GCM` provider + the CK cache keyed `(owner, namespace, ckKid)`                                                        | — (enabler)               |
+| `B-1b` | **Layer 2** — the `at/nskey` CK-conveyance provider, **self-data direction only**; the nskey private is supplied by a **test fixture**, not the substrate | UC-A3.1                   |
+| `B-1c` | **Cold-start** — seal the CK to `public:pqpublickey@<recipient>` with `recipientKind: root-pqpublickey`                                                   | UC-A3.3                   |
+| `B-1d` | **Cross-atSign** — `plookup` discovery of the recipient's published nskey; re-fetch on decapsulation failure                                              | UC-A4.1, UC-A4.2, UC-A4.3 |
+| `B-1e` | **`providerId` on notification frames**                                                                                                                   | UC-A3.4, UC-A4.4          |
+
+**Why `B-1b` uses a fixture.** The fixture-supplied nskey private is what lets `B-1b` land **before SS-4**.
+It inverts the dependency order **for demonstration only**: the production path is unchanged — SS-4 delivers
+the nskey private over the substrate, and the fixture is deleted the moment SS-4 lands. This is the point of
+the split: it produces the program's **first green acceptance scenario** (UC-A3.1) without waiting for the
+substrate. Nothing downstream of `B-1b` may depend on the fixture.
+
+**Where the B3 capability marker lands.** `providerId` on stored values comes with `B-1a`/`B-1b`;
+per-destination scheme selection with `B-1d` (the first chunk with a non-self destination); `providerId` on
+the notification frame with `B-1e`. The marker's own publish/not-ready/flip lifecycle is **R-1** (C1), not a
+B-1 chunk.
+
 **Acceptance → [acceptance.md](acceptance.md):** self + shared round-trips byte-exact for text and binary;
 UC-A3.1, UC-A3.3 (self cold-start self-heals), UC-A4.1/A4.2/A4.3; B3 mixed-fleet (nskey only when readers'
-marker ready, else legacy); UC-A3.4 / UC-A4.4 (providerId travels on the notification frame).
-**Effort:** XL.
+marker ready, else legacy); UC-A3.4 / UC-A4.4 (providerId travels on the notification frame). Each chunk
+carries the scenarios listed against it in the chunk table.
+**Effort:** XL — the one project above the ~1–3 PR norm, hence the five-chunk breakdown (~M each).
 **Watch-outs:** `recipientKind` is `nskey` (self + inbound, one key both ways) or `root-pqpublickey`
 (cold-start) — there is no self-vs-inbound `recipientKind`; `root-pqpublickey` is still an `at/nskey`
 conveyance, **not** a 3rd providerId; no bare `nskey` providerId. The nskey public half starts as the
@@ -885,7 +914,7 @@ Single authoritative map of D1 items, workstreams, and use cases to projects.
 | D1-S S6 (consumer bumps) | S-6 |
 | D1-S keyfile-at-rest + backup/restore (new scope) | KF-1 |
 | D1-A (PQ primitives, enrollment key) | P-1, P-2, P-3 |
-| D1-B B1-B4 (data path) | B-1 (+ key material SS-4) |
+| D1-B B1-B4 (data path) | B-1, chunks B-1a…B-1e (+ key material SS-4) |
 | D1-B B5/B6 (rotation/revocation) | B-2 |
 | D1-B B7 (selfEncryptionKey retirement) | B-3 (phases 1-3), R-2 (phase 4) |
 | D1-C / D1-D (migration, flag, versioning) | R-1, R-2 |
