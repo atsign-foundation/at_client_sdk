@@ -323,6 +323,153 @@ void main() {
     });
   });
 
+  group('walking the chain', () {
+    late MockAtClient verifierClient;
+    late AtClientSecretSharing verifier;
+
+    setUp(() async {
+      verifierClient = client('verifier-1');
+      verifier = AtClientSecretSharing.forClient(verifierClient);
+    });
+
+    /// Publishes the atSign's signing root and returns its key pair.
+    Future<({Uint8List publicKey, Uint8List secretKey})> publishRoot() async {
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      remoteData['public:${PqSigningRoot.recordName}$atSign'] =
+          jsonEncode({'v': 1, 'keys': [base64Encode(pair.publicKey)], 'successor': null});
+      return pair;
+    }
+
+    Future<MockAtClient> anchored(String id, Uint8List secret) async {
+      final c = client(id);
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, AtKeys());
+      await PqSigningRoot(c, keysIo: io).store(atSign, secret);
+      when(() => c.atKeysIo).thenReturn(io);
+      await registered(c);
+      await PqSigningChain.publishOwnRootLink(c,
+          isFullyPrivileged: () async => true, keysIo: io);
+      return c;
+    }
+
+    test('reports anchored when the walk reaches a verified root link',
+        () async {
+      final pair = await publishRoot();
+      await anchored('priv-1', pair.secretKey);
+
+      final result =
+          await PqSigningChain.verifyChain(verifierClient, verifier, 'priv-1');
+
+      expect(result.verdict, ChainVerdict.anchored);
+      expect(result.path, ['priv-1']);
+    });
+
+    test('climbs a chain link to an anchored parent', () async {
+      final pair = await publishRoot();
+      final parentClient = await anchored('priv-1', pair.secretKey);
+      final parent = AtClientSecretSharing.forClient(parentClient);
+      final childClient = client('child-1');
+      await registered(childClient);
+
+      final link =
+          await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
+      await PqSigningChain.publishLink(childClient, 'child-1', link!);
+
+      final result =
+          await PqSigningChain.verifyChain(verifierClient, verifier, 'child-1');
+
+      expect(result.verdict, ChainVerdict.anchored);
+      expect(result.path, ['child-1', 'priv-1'],
+          reason: 'the walk is what makes the chain self-describing: nothing '
+              'published the fact that priv-1 approved child-1');
+    });
+
+    test('reports unsigned when the enrollment publishes nothing', () async {
+      final c = client('lonely-1');
+      await registered(c);
+
+      final result =
+          await PqSigningChain.verifyChain(verifierClient, verifier, 'lonely-1');
+
+      expect(result.verdict, ChainVerdict.unsigned,
+          reason: 'this is the ordinary state during the changeover, and it '
+              'must be distinguishable from a link that failed');
+    });
+
+    test('reports chained when the walk runs out below the root', () async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      final childClient = client('child-1');
+      await registered(childClient);
+
+      final link =
+          await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
+      await PqSigningChain.publishLink(childClient, 'child-1', link!);
+
+      final result =
+          await PqSigningChain.verifyChain(verifierClient, verifier, 'child-1');
+
+      expect(result.verdict, ChainVerdict.chained);
+      expect(result.path, ['child-1', 'parent-1']);
+    });
+
+    test('reports broken, not chained, for a link that does not verify',
+        () async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      final childClient = client('child-1');
+      await registered(childClient);
+
+      final link =
+          await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
+      await PqSigningChain.publishLink(childClient, 'child-1',
+          {...link!, 'signature': base64Encode(utf8.encode('forged'))});
+
+      final result =
+          await PqSigningChain.verifyChain(verifierClient, verifier, 'child-1');
+
+      expect(result.verdict, ChainVerdict.broken,
+          reason: 'an absent link means nobody vouched yet; a bad one means '
+              'something claimed to and the claim does not hold — folding the '
+              'second into the first would hide it');
+    });
+
+    test('reports broken for a root link that does not verify', () async {
+      await publishRoot();
+      // Anchored with a DIFFERENT root private than the one published.
+      final other = await MlDsa65PureDartAlgo().generateKeyPair();
+      await anchored('priv-1', other.secretKey);
+
+      final result =
+          await PqSigningChain.verifyChain(verifierClient, verifier, 'priv-1');
+
+      expect(result.verdict, ChainVerdict.broken,
+          reason: 'the anchor is only worth anything if it is checked against '
+              'the root the atSign actually published');
+    });
+
+    test('terminates on a cycle rather than walking forever', () async {
+      final a = client('loop-a');
+      final sharingA = await registered(a);
+      final b = client('loop-b');
+      final sharingB = await registered(b);
+
+      // Each vouches for the other: individually well-formed, jointly a ring.
+      final linkForB = await PqSigningChain.signLinkFor(a, sharingA, 'loop-b');
+      await PqSigningChain.publishLink(b, 'loop-b', linkForB!);
+      final linkForA = await PqSigningChain.signLinkFor(b, sharingB, 'loop-a');
+      await PqSigningChain.publishLink(a, 'loop-a', linkForA!);
+
+      final result =
+          await PqSigningChain.verifyChain(verifierClient, verifier, 'loop-a');
+
+      expect(result.verdict, ChainVerdict.broken,
+          reason: 'the chain is built from records a compromised enrollment '
+              'partly controls, so a ring is an input to expect');
+      expect(result.reason, contains('revisits'));
+    });
+  });
+
   test('a link forged onto another enrollment fails verification', () async {
     final impostorClient = client('impostor-1');
     final impostor = await registered(impostorClient);

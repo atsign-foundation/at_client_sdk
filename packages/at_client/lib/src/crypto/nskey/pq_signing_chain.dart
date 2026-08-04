@@ -32,6 +32,50 @@ import 'package:meta/meta.dart' show experimental;
 /// which the transition rule already tolerates.
 ///
 /// [decisions.md 22.2b]: ../../../../../docs/projects/pq/decisions.md
+/// How far up the approval chain a verifier got.
+///
+/// Graded rather than boolean because a bare `_apsk` is deliberately tolerated
+/// during the changeover: a boolean would force every caller either to reject
+/// enrollments that are valid today, or to lose the distinction that starts
+/// mattering the moment the changeover ends.
+@experimental
+enum ChainVerdict {
+  /// Reached a root link that verifies against the atSign's signing root.
+  anchored,
+
+  /// Every link walked verified, but the chain ran out before the root.
+  chained,
+
+  /// The starting enrollment publishes no link at all.
+  unsigned,
+
+  /// A link was present and wrong — a failed signature, a link describing
+  /// another enrollment or another key, a cycle, or a chain too long to walk.
+  ///
+  /// Deliberately not folded into [chained]. An absent link means nobody has
+  /// vouched yet; a bad one means something claimed to and the claim does not
+  /// hold, and reporting the second as the first would hide it.
+  broken,
+}
+
+/// What [PqSigningChain.verifyChain] found.
+@experimental
+class ChainResult {
+  final ChainVerdict verdict;
+
+  /// The enrollments walked, starting with the one asked about.
+  final List<String> path;
+
+  /// Why the walk stopped, when that is not self-evident.
+  final String? reason;
+
+  ChainResult(this.verdict, this.path, this.reason);
+
+  @override
+  String toString() => 'ChainResult(${verdict.name}, path: $path'
+      '${reason == null ? '' : ', $reason'})';
+}
+
 @experimental
 class PqSigningChain {
   /// Reserved [Secret] name for a conveyed chain link.
@@ -372,6 +416,168 @@ class PqSigningChain {
 
     await publishLink(atClient, enrollmentId, link);
     return true;
+  }
+
+  /// Walks upward from [enrollmentId] and reports how far the chain holds.
+  ///
+  /// Stops at a root link verified against `public:pq_signing_root@<atSign>`.
+  /// Failing that it follows chain links from parent to parent, and reports
+  /// where it ran out.
+  ///
+  /// [maxDepth] and the visited set are not defensive padding: the chain is
+  /// assembled from records that a compromised enrollment partly controls, so
+  /// a cycle or an absurdly long chain is an input to expect rather than an
+  /// impossibility. Either ends the walk as [ChainVerdict.broken] — a chain
+  /// that cannot be walked is not a chain that is merely unanchored.
+  static Future<ChainResult> verifyChain(
+    AtClient atClient,
+    EnvelopeSigning verifier,
+    String enrollmentId, {
+    int maxDepth = 16,
+  }) async {
+    final atSign = atClient.getCurrentAtSign()!;
+    final path = <String>[];
+    final seen = <String>{};
+    String current = enrollmentId;
+
+    while (true) {
+      if (!seen.add(current)) {
+        return ChainResult(ChainVerdict.broken, path,
+            'the chain revisits enrollment $current, so it does not terminate');
+      }
+      path.add(current);
+
+      final rootLink = await readRootLink(atClient, current);
+      if (rootLink != null) {
+        return await _checkRootLink(atClient, atSign, current, rootLink, path);
+      }
+
+      final link = await readLink(atClient, current);
+      if (link == null) {
+        return ChainResult(
+            path.length == 1 ? ChainVerdict.unsigned : ChainVerdict.chained,
+            path,
+            'enrollment $current publishes no link, so the walk stops below '
+            'the root');
+      }
+
+      final failure =
+          await _checkChainLink(atClient, verifier, atSign, current, link);
+      if (failure != null) {
+        return ChainResult(ChainVerdict.broken, path, failure);
+      }
+
+      final parent = link['enrollmentId'];
+      if (parent is! String || parent.isEmpty) {
+        return ChainResult(ChainVerdict.broken, path,
+            'enrollment $current names no signer, so there is nowhere to '
+            'walk to');
+      }
+      if (path.length >= maxDepth) {
+        return ChainResult(ChainVerdict.broken, path,
+            'the chain from $enrollmentId is longer than $maxDepth hops');
+      }
+      current = parent;
+    }
+  }
+
+  /// Null when [link] is sound for [enrollmentId]; otherwise why it is not.
+  static Future<String?> _checkChainLink(
+    AtClient atClient,
+    EnvelopeSigning verifier,
+    String atSign,
+    String enrollmentId,
+    Map<String, Object?> link,
+  ) async {
+    try {
+      await verifier.verifyEnvelopeSignature(link, signerAtSign: atSign);
+    } catch (e) {
+      return 'the link on $enrollmentId does not verify against the '
+          'enrollment it names as signer: $e';
+    }
+    final payload = link['payload'];
+    if (payload is! Map) return 'the link on $enrollmentId has no payload';
+    if (payload['childEnrollmentId'] != enrollmentId) {
+      return 'the link on $enrollmentId vouches for '
+          '${payload['childEnrollmentId']} instead';
+    }
+    // The signature proves the parent said something; this proves it said it
+    // about the key actually published. Without it a genuine link could sit
+    // over a key it never covered.
+    final published = await _publishedKey(atClient, atSign, enrollmentId);
+    if (published != payload['apkamPublicKey']) {
+      return 'the link on $enrollmentId vouches for a key other than the one '
+          'published for it';
+    }
+    return null;
+  }
+
+  static Future<ChainResult> _checkRootLink(
+    AtClient atClient,
+    String atSign,
+    String enrollmentId,
+    Map<String, Object?> link,
+    List<String> path,
+  ) async {
+    final rootKey = await _rootPublicKey(atClient, atSign);
+    if (rootKey == null) {
+      return ChainResult(ChainVerdict.broken, path,
+          'enrollment $enrollmentId claims a root link but $atSign publishes '
+          'no signing root to check it against');
+    }
+    final payload = link['payload'];
+    if (payload is! Map ||
+        payload['childEnrollmentId'] != enrollmentId ||
+        payload['apkamPublicKey'] !=
+            await _publishedKey(atClient, atSign, enrollmentId)) {
+      return ChainResult(ChainVerdict.broken, path,
+          'the root link on $enrollmentId does not describe that '
+          "enrollment's published key");
+    }
+    final bool ok;
+    try {
+      ok = await MlDsa65PureDartAlgo().verifyBytes(
+        Uint8List.fromList(utf8.encode(signableTextOf(payload))),
+        signature: base64Decode(link['signature'] as String),
+        publicKey: rootKey,
+      );
+    } catch (e) {
+      return ChainResult(ChainVerdict.broken, path,
+          'the root link on $enrollmentId could not be checked: $e');
+    }
+    return ok
+        ? ChainResult(ChainVerdict.anchored, path, null)
+        : ChainResult(ChainVerdict.broken, path,
+            'the root link on $enrollmentId does not verify against the '
+            "atSign's signing root");
+  }
+
+  static Future<String?> _publishedKey(
+      AtClient atClient, String atSign, String enrollmentId) async {
+    try {
+      final value = await atClient.get(
+        AtKey.fromString(apskUri(atSign, enrollmentId)),
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
+      );
+      return value.value as String?;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  static Future<Uint8List?> _rootPublicKey(
+      AtClient atClient, String atSign) async {
+    try {
+      final value = await atClient.get(
+        AtKey.fromString('public:${PqSigningRoot.recordName}$atSign'),
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
+      );
+      final record = jsonDecode(value.value as String) as Map;
+      return base64Decode((record['keys'] as List).first as String);
+    } catch (e) {
+      _logger.info('No readable signing root for $atSign: $e');
+      return null;
+    }
   }
 
   /// Decodes a link that arrived over the substrate as a [Secret] value.

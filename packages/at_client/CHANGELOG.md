@@ -1,4 +1,18 @@
 ## 3.14.1
+- feat: `PqSigningChain.verifyChain` walks the approval chain upward and reports
+  how far it holds, as a `ChainResult` carrying a `ChainVerdict` and the path it
+  walked. `anchored` reached a root link verified against the atSign's signing
+  root; `chained` verified every hop but ran out below the root; `unsigned` found
+  no link at all — the ordinary state during the changeover. A fourth,
+  `broken`, is deliberately **not** folded into `chained`: an absent link means
+  nobody has vouched yet, a bad one means something claimed to and the claim does
+  not hold, and reporting the second as the first would hide it. Every hop checks
+  three things, since a signature alone proves only that the parent said
+  something: that the link verifies against the enrollment it names as signer,
+  that it vouches for the enrollment it is attached to, and that it covers the
+  key actually published for it. Cycles and over-long chains end the walk as
+  `broken` rather than being treated as impossible — the chain is assembled from
+  records a compromised enrollment partly controls.
 - feat: a fully privileged enrollment anchors itself to the signing root.
   `PqSigningChain.publishOwnRootLink` signs its own `_apsk` with the held root
   private and stamps the result under `apskRootLink` — its own field, because a
