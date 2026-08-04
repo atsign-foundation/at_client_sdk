@@ -4,7 +4,6 @@
 library;
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 

@@ -26,11 +26,22 @@ final _logger = AtSignLogger('SchemeNegotiation');
 @experimental
 class SchemeNegotiation {
   final AtClient _atClient;
-  final PublishedCapabilities capabilities;
+  final PublishedCapabilities? _injectedCapabilities;
 
   SchemeNegotiation(this._atClient, {PublishedCapabilities? capabilities})
-      : capabilities =
-            capabilities ?? PublishedCapabilities.forClient(_atClient);
+      : _injectedCapabilities = capabilities;
+
+  /// Where the marker answers come from.
+  ///
+  /// Resolved per call rather than captured at construction. This object is
+  /// cached per client and outlives any single write, so capturing would pin it
+  /// to whichever [PublishedCapabilities] happened to exist when the client's
+  /// *first* write ran — and a client does several during start-up, before an
+  /// app or a test has had any chance to supply its own. The symptom is
+  /// exactly what it sounds like: `CryptoRollout` reads a fresh marker while
+  /// the write path keeps answering from an instance nobody can reach.
+  PublishedCapabilities get capabilities =>
+      _injectedCapabilities ?? PublishedCapabilities.forClient(_atClient);
 
   /// The negotiator [atClient] resolves its writes through.
   ///

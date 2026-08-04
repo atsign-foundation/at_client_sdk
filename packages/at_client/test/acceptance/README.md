@@ -9,7 +9,7 @@ is how far we've got.
 
 > **The two counting faults audited 2026-08-03 were fixed 2026-08-04**, and
 > all seventeen owed rows are now discharged, and **R-1** has since landed the
-> scheme-negotiation rows. The suite reads **25 of 40**
+> scheme-negotiation rows. The suite reads **28 of 40**
 > scenario rows green, up from 1 before the repair and 5 after it. (The runner's own count
 > is higher — it includes `catalogue_test.dart`'s three guards, which are not
 > scenarios. That gap is why the old "4 of 43" figure was itself wrong in the
@@ -98,7 +98,7 @@ below), plus 9 cross-cutting invariants.
 | B1 · retrofit                 | B1.1, B1.2, B1.3                 | RF-2b        |
 | B2 · retirement & lockout     | B2.1, B2.2                       | RF-SRV       |
 | B3 · mixed-PQ intra-atSign    | B3.1 ✅, B3.2 ✅                    | —            |
-| B4 · mixed-PQ cross-atSign    | B4.1, B4.2, B4.3, B4.4           | R-1, ON-1    |
+| B4 · mixed-PQ cross-atSign    | B4.1 ✅, B4.2, B4.3 ✅, B4.4 ✅     | ON-1         |
 | B5 · retrofit edge cases      | B5.1 ✅, B5.2 ✅, B5.3 ✅           | —            |
 | cross-cutting invariants      | 9 (9 ✅)                          | —            |
 
@@ -117,9 +117,8 @@ the 40** rows, and no data-path row could go green until **B-1** (XL) and
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**Nothing is owed a test any more.** **15 of the 40** rows are blocked on a
-project that has not landed — B-2, RF-SRV, RF-2b, ON-1, and RF-2c's e2e
-orchestration of the B4 cluster — and nothing else
+**Nothing is owed a test any more.** **12 of the 40** rows are blocked on a
+project that has not landed — B-2, RF-SRV, RF-2b, ON-1 — and nothing else
 is skipped, so
 `blockers.dart` now contains only real project gates. That is a much more
 useful ledger than the one this started as: grep a project id and you get

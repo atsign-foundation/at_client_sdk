@@ -6,8 +6,18 @@ library;
 import 'package:test/test.dart';
 
 import 'blockers.dart';
+import 'proven_elsewhere.dart';
 
 void main() {
+  /// The three rows below are one live scenario, because they are one *put*
+  /// sequence: what alice writes to bob, what she writes for herself in the
+  /// same breath, and what changes when bob declares readiness. Splitting them
+  /// across three live tests would mean three two-atSign set-ups proving the
+  /// same three decisions.
+  const crossAtSignFlip = 'tests/at_end2end_test/test/'
+      'capability_negotiation_test.dart';
+  const crossAtSignFlipTest = 'UC-B4.1/B4.3/B4.4';
+
   group('B4 · mixed-PQ across atSigns', () {
     test('UC-B4.1 · PQ-ready @alice shares with legacy @bob', () {
       // GIVEN @alice PQ-ready; @bob legacy (only RSA publickey), bob
@@ -18,8 +28,12 @@ void main() {
       //       bob's n-r readiness. A PQ self-copy via the nskey data path for
       //       alice's own enrollments is allowed INDEPENDENTLY. No write bob
       //       can't read.
-      fail('not implemented');
-    }, skip: r1CrossAtSign);
+      provenIn(crossAtSignFlip, crossAtSignFlipTest,
+          proves: 'bob publishes a namespace key AND a not-ready marker, so '
+              'alice could seal to him and does not: the record comes back '
+              'stamped legacy, and the marker is the only thing that made it '
+              'so');
+    });
 
     test('UC-B4.2 · legacy @alice receives from PQ @bob (the interop question)',
         () {
@@ -40,8 +54,12 @@ void main() {
       //       but alice's SELF-COPY must stay legacy (alice2 can't read PQ)
       //       until @alice readiness flips. Two directions, two schemes, one
       //       put/notify.
-      fail('not implemented');
-    }, skip: r1CrossAtSign);
+      provenIn(crossAtSignFlip, crossAtSignFlipTest,
+          proves: 'with bob ready and alice not, the same client writes the '
+              'nskey data path toward bob and legacy for its own self record — '
+              'the two negotiations are separate and only the record\'s own '
+              'readers decide it');
+    });
 
     test('UC-B4.4 · @bob finishes upgrading, shared flips to PQ', () {
       // GIVEN @bob was legacy; now all bob enrollments are PQ and bob
@@ -49,7 +67,12 @@ void main() {
       // WHEN  alice1 next shares/notifies @bob.
       // THEN  alice writes via the nskey data path to bob; the legacy path is no
       //       longer used toward bob.
-      fail('not implemented');
-    }, skip: r1CrossAtSign);
+      provenIn(crossAtSignFlip, crossAtSignFlipTest,
+          proves:
+              'bob declares readiness mid-test and alice\'s next put to him '
+              'is at/symmetric/AES/GCM citing a conveyed content key — which '
+              'bob then opens with his own nskey private, so the flip is '
+              'correct and not merely different');
+    });
   });
 }

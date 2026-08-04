@@ -176,6 +176,38 @@ void main() {
     });
   });
 
+  group('where the answers come from', () {
+    test(
+        'the client\'s current capability view, not the one that existed at '
+        'the first write', () async {
+      // A client does several writes during start-up, before an app — or a
+      // test — has had any chance to supply its own capability view. The
+      // negotiator is cached per client and outlives any one write, so
+      // capturing the view at construction pinned it to whatever existed then:
+      // CryptoRollout would read a fresh marker while the write path kept
+      // answering from an instance nobody could reach. Caught by a live
+      // two-atSign run, where a declared readiness never moved a single write.
+      final c = client();
+      c.markers.seed(alice, namespace, {legacyCryptoProviderId});
+      expect(
+          await CryptoRuntime(c.atClient)
+              .negotiatedProviderIdFor(null, atKey: selfKey()),
+          legacyCryptoProviderId,
+          reason: 'this first write is what creates the cached negotiator');
+
+      // Now the client's view is replaced — the shape of an operator flip seen
+      // through a fresh fetch.
+      final flipped = PublishedCapabilities(c.atClient)
+        ..seed(alice, namespace, {legacyCryptoProviderId, ...pqPair});
+      PublishedCapabilities.setForClient(c.atClient, flipped);
+
+      expect(
+          await CryptoRuntime(c.atClient)
+              .negotiatedProviderIdFor(null, atKey: selfKey()),
+          symmetricAesGcmCryptoProviderId);
+    });
+  });
+
   group('what is never negotiated', () {
     test('an explicitly requested scheme', () async {
       final c = client();

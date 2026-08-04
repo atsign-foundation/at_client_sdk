@@ -47,11 +47,10 @@ const _e2e = 'layer: tests/at_end2end_test';
 // found to need production code that did not exist. The `owed*` constants are
 // therefore gone. Every remaining constant below names a project that has not
 // landed.
-
-/// Migration machinery + disallowLegacyEncryption flag. R-1 has landed, so its
-/// unit constant is gone and the B3 and cross-cutting rows it guarded are
-/// green. What is left is the cross-atSign half, which needs two live atSigns.
-const r1CrossAtSign = 'blocked: R-1 (scheme negotiation + flag) · $_e2e';
+//
+// R-1 has landed too, and its constants are gone with it: the B3 and
+// cross-cutting rows are asserted here, and the B4 rows are cited to a live
+// two-atSign test in `tests/at_end2end_test`.
 
 /// The two rotation levers + revocation composition.
 const b2 = 'blocked: B-2 (nskey rotation + revocation) · $_functional';
