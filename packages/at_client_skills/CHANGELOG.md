@@ -19,6 +19,8 @@
 - Document that `at_onboarding_flutter` is discontinued — use `at_client_flutter`.
 - Add evals covering the new content, and tighten the owner-writes-only and
   activation evals.
+- Document the `skills` CLI prerequisite and the full install steps in the
+  README.
 
 ## 1.2.0 — 2026-07-07
 
