@@ -2085,3 +2085,57 @@ arrived by then the approver did not convey, and waiting longer recovers nothing
 **Still owed:** the functional rails point at a locally built image and must be reverted
 before any client PR, and the new test cannot pass against `vip` until the atServer
 relaxation is promoted.
+
+---
+
+## 24. How the approval chain terminates at the root (2026-08-04)
+
+**Status:** accepted. Settles the question [22's owed list](#22-ss-4-when-a-namespace-key-is-minted-and-what-must-be-true-first-2026-08-03)
+left open as *"what the signing root signs beyond `_apsk`"*. The enrollment-to-enrollment
+link is built ([23](#23-uc-a21-reversing-the-enrollment-key-exchange-2026-08-04) is its
+sibling ruling on conveyance); this is what the walk climbs *to*.
+
+[18.1](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) already states the
+shape — *root → key package → `_apsk` → advertised keys* — but not how a verifier knows it
+has arrived.
+
+### 24.1 Two things the design does not get to choose
+
+**The root link cannot be verified the way every other link is.** An enrollment link is an
+RSA APKAM signature resolved from that enrollment's `_apsk`. The root is ML-DSA-65 resolved
+from `public:pq_signing_root@<atSign>`. Different algorithm, different key source, different
+lookup. It is not "another link with a different signer", and code that models it as one is
+wrong before it is written.
+
+**Chains deeper than one hop genuinely exist.** Approving needs `__manage`; holding the root
+needs `rw` on `*` **and** `__manage` ([18.2](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)).
+So an approver that cannot produce a root signature is an ordinary configuration, not an
+edge case, and the walk must climb.
+
+### 24.2 The rulings
+
+| # | Ruling |
+|---|---|
+| 1 | **A root link lives in its own `appMetadata` field** (`apskRootLink`), beside `apskChainLink`. A verifier looks for it first and never disambiguates: the field name already determines which algorithm to verify with and where the key comes from. A discriminator inside one field would make one shape mean two things, and the two are not variants of each other — see [24.1](#241-two-things-the-design-does-not-get-to-choose) |
+| 2 | **The root signs every *fully privileged* enrollment's `_apsk`** — exactly the set that holds the root private, so exactly the set that could produce such a signature anyway. Not one anchor: [22's ruling 8](#22-ss-4-when-a-namespace-key-is-minted-and-what-must-be-true-first-2026-08-03) makes a revoked signer break the chain below it, so a single anchor means one revocation leaves every enrollment on the atSign unanchored until a holder re-signs. Redundancy here is cheap and the failure it prevents is total |
+| 3 | **The walk returns a graded result, not a boolean:** anchored to root / chained but unanchored / unsigned. A bare `_apsk` is explicitly tolerated during the changeover, so a boolean forces every caller either to reject enrollments that are valid today or to lose the distinction that will matter once the changeover ends. The caller owns the policy; the walk reports what it found |
+| 4 | **A root holder writes its own root link and conveys the others'** — the same parent-signs/child-publishes arrangement as [23](#23-uc-a21-reversing-the-enrollment-key-exchange-2026-08-04), and for the same reason: `_apsk` takes writes only from its own enrollment's connection. The minter can write its own immediately, because at mint it holds both the private and the record |
+
+### 24.3 No atSign is bound into a link payload, and why that is safe
+
+Considered and rejected as unnecessary rather than overlooked. A link lifted from alice and
+stamped onto bob's record is verified against **bob's** `_apsk` or **bob's** root, so a
+signature made under alice's keys fails there. Cross-atSign replay is already closed by
+where the verifier looks, and a field asserting what the lookup already establishes would
+be decoration that later reads as load-bearing.
+
+### 24.4 Owed
+
+**When a root link is produced is not settled here.** The minter signing itself at mint is
+obvious; what is not is the retro path — an enrollment that was fully privileged before the
+root existed, or a privileged peer that has never been conveyed one. Neither blocks the
+walk, which reports *chained but unanchored* for exactly that state.
+
+**Key-transparency publication mechanics remain un-grilled** (when a root is submitted, and
+what a client does if the log is unreachable at mint). Out of scope here: it concerns what
+the root *is*, not how a chain terminates at it.

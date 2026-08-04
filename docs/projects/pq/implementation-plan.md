@@ -631,10 +631,16 @@ on an arriving private — exact, because an X-Wing secret key is its seed. And
 
 **Owed — the chain's plumbing, which is the larger half:**
 
-- the parent signing a child's APKAM public key at approval and **conveying** the signature
-  (ruling 7), and the child publishing it onto its own `_apsk`'s `appMetadata` on first run;
+- ~~the parent signing a child's APKAM public key at approval and **conveying** the signature
+  (ruling 7), and the child publishing it onto its own `_apsk`'s `appMetadata` on first run~~
+  — **done**, both halves, and covered live: `PqSigningChain` signs at approval and conveys
+  over the substrate, `publishPendingLink` stamps it at client start behind three refusals,
+  and `enrollment_chain_link_e2e_test` watches a link survive a real `_apsk` round trip;
 - chain **verification** — walk `_apsk` to `_apsk` up to the root. It is self-describing, so no
-  approval graph need be published, and a forged parent claim fails the signature check;
+  approval graph need be published, and a forged parent claim fails the signature check.
+  **Ruled 2026-08-04** ([decisions.md 24](decisions.md#24-how-the-approval-chain-terminates-at-the-root-2026-08-04)):
+  a root link lives in its own `apskRootLink` field, the root signs every fully privileged
+  enrollment rather than one, and the walk returns a graded result. Not yet built;
 - a losing enrollment **pulling** the root private from a privileged holder;
 - **key-transparency publication mechanics** — when a root is submitted, and what a client does if
   the log is unreachable at mint. Still un-grilled.
