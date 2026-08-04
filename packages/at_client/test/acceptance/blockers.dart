@@ -23,7 +23,9 @@ library;
 // Layers (acceptance.md section 14)
 // ---------------------------------------------------------------------------
 
-const _unit = 'layer: at_client dart test';
+// `at_client dart test` is not among them any more: every scenario that lands
+// in this package's own unit suite is now written, so no constant names that
+// layer. The next project to block a unit row adds it back.
 const _functional = 'layer: tests/at_functional_test runLocal.sh';
 const _e2e = 'layer: tests/at_end2end_test';
 
@@ -46,8 +48,9 @@ const _e2e = 'layer: tests/at_end2end_test';
 // therefore gone. Every remaining constant below names a project that has not
 // landed.
 
-/// Migration machinery + disallowLegacyEncryption flag.
-const r1 = 'blocked: R-1 (scheme negotiation + flag) · $_unit';
+/// Migration machinery + disallowLegacyEncryption flag. R-1 has landed, so its
+/// unit constant is gone and the B3 and cross-cutting rows it guarded are
+/// green. What is left is the cross-atSign half, which needs two live atSigns.
 const r1CrossAtSign = 'blocked: R-1 (scheme negotiation + flag) · $_e2e';
 
 /// The two rotation levers + revocation composition.

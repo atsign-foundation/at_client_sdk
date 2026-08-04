@@ -1,8 +1,9 @@
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+
+import 'test_utils/mocks.dart';
 
 /// `disallowLegacyEncryption` — the flag that says never write new data under
 /// the legacy provider: take a post-quantum path or refuse.
@@ -171,17 +172,4 @@ void main() {
       expect(AtClientPreference().disallowLegacyEncryption, isFalse);
     });
   });
-}
-
-/// A mock whose preference refuses legacy encryption. The field is final, so it
-/// cannot be set with a cascade the way the other preferences are.
-class StrictMockAtClient extends Mock implements AtClient {
-  final AtClientPreference _preference =
-      AtClientPreference(disallowLegacyEncryption: true);
-
-  @override
-  AtClientPreference getPreferences() => _preference;
-
-  @override
-  AtChops? get atChops => null;
 }

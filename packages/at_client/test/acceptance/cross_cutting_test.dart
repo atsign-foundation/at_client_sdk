@@ -16,7 +16,6 @@ import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
-import 'blockers.dart';
 import 'proven_elsewhere.dart';
 
 void main() {
@@ -89,12 +88,66 @@ void main() {
       expect(config.lookup(symmetricAesGcmCryptoProviderId), isNotNull);
     });
 
-    test('writes are gated by reader readiness', () {
+    test('writes are gated by reader readiness', () async {
       // A value/notification is only written in a scheme EVERY required reader
       // supports; otherwise legacy (3.x), or REFUSED under
       // disallowLegacyEncryption = true.
-      fail('not implemented');
-    }, skip: r1);
+      //
+      // All three arms against one client, varying only what the destination
+      // advertises — so a green result cannot come from a fixture that could
+      // never have written the post-quantum path in the first place.
+      const bob = '@bob';
+      const namespace = 'app_1.my_apps';
+
+      AtKey toBob() => AtKey()
+        ..key = 'treaty'
+        ..namespace = namespace
+        ..sharedBy = '@alice'
+        ..sharedWith = bob;
+
+      final client = MockAtClient();
+      client.getPreferences()
+        ..namespace = namespace
+        ..crypto = CryptoConfig.readsNskeyWritesLegacy(
+            keyRing: InMemoryNskeyKeyRing());
+      final markers = PublishedCapabilities(client);
+      PublishedCapabilities.setForClient(client, markers);
+
+      markers.seed(bob, namespace, {legacyCryptoProviderId});
+      expect(
+          await CryptoRuntime(client)
+              .negotiatedProviderIdFor(null, atKey: toBob()),
+          legacyCryptoProviderId,
+          reason: 'a fleet that reads only legacy is written only legacy');
+
+      markers.seed(bob, namespace, {
+        legacyCryptoProviderId,
+        nskeyCryptoProviderId,
+        symmetricAesGcmCryptoProviderId
+      });
+      expect(
+          await CryptoRuntime(client)
+              .negotiatedProviderIdFor(null, atKey: toBob()),
+          symmetricAesGcmCryptoProviderId,
+          reason: 'and one that reads the post-quantum pair is written it — '
+              'the two arms differ only in the marker');
+
+      // The third arm: the same legacy-only destination, under a client that
+      // was told never to write legacy. Refused, not downgraded.
+      final strict = StrictMockAtClient();
+      strict.getPreferences()
+        ..namespace = namespace
+        ..crypto = CryptoConfig.readsNskeyWritesLegacy(
+            keyRing: InMemoryNskeyKeyRing());
+      final strictMarkers = PublishedCapabilities(strict);
+      PublishedCapabilities.setForClient(strict, strictMarkers);
+      strictMarkers.seed(bob, namespace, {legacyCryptoProviderId});
+
+      await expectLater(
+          () => CryptoRuntime(strict)
+              .negotiatedProviderIdFor(null, atKey: toBob()),
+          throwsA(isA<LegacyEncryptionRefusedException>()));
+    });
 
     test('appMetadata.providerId is authoritative on keys and frames',
         () async {
