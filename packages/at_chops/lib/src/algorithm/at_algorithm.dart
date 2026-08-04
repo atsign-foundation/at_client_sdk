@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_iv.dart';
 import 'package:at_chops/src/algorithm/hashing/types.dart';
 import 'package:at_chops/src/key/keys.dart';
@@ -70,16 +71,32 @@ abstract class AtSigningAlgorithm {
 /// silently transpose same-typed byte arguments (the published 3.3.0 FFI
 /// backend took `(secretKey, data)`; a positional reorder would keep
 /// compiling while binding arguments to the wrong slots).
-abstract interface class AtSignatureAlgorithm {
-  /// Stable identifier for this algorithm — a downstream protocol's wire,
-  /// record, or keystore identifier for this signature type (e.g. at_server's
-  /// FROM/POL handshake tags its cookie and published-key record with this).
+abstract class AtSignatureAlgorithm {
+  /// Const so `extends` subtypes (e.g. a `const`-constructed test double)
+  /// can chain a const super call.
+  const AtSignatureAlgorithm();
+
+  /// Stable, free-form identifier for this algorithm — a downstream
+  /// protocol's wire, record, or keystore identifier for this signature type
+  /// (e.g. at_server's FROM/POL handshake tags its cookie and published-key
+  /// record with this). Not grammar-constrained: at_chops owns the spelling.
   ///
-  /// Not [SigningAlgoType.name]: that enum is the deprecated `AtChops`
-  /// compatibility path's vocabulary and is unrelated to this interface —
-  /// `SigningAlgoType.mldsa65.name` is `'mldsa65'`, not this algorithm's
-  /// [name] here, and the two must not be assumed interchangeable.
+  /// Not [signingAlgoType]: `SigningAlgoType.mldsa65.name` is `'mldsa65'`,
+  /// not this algorithm's [name] here — the two serve different wire
+  /// positions with different spellings and must not be assumed
+  /// interchangeable. [name] is free-form; [signingAlgoType] is constrained
+  /// to values the `pkam:` verb grammar accepts.
   String get name;
+
+  /// The `pkam:`/envelope wire tuple's identifier for this algorithm.
+  ///
+  /// Typed as [SigningAlgoType] rather than [String] because that verb (and
+  /// `at_client`'s signed-envelope `signingAlgo` field) accepts only the
+  /// enum's `name` spellings — a free-form string would surface as an
+  /// atServer syntax error at authentication time, or fail
+  /// `SigningAlgoType.values.byName` on the reading side. See [name] for the
+  /// free-form counterpart used outside that grammar.
+  SigningAlgoType get signingAlgoType;
 
   /// Generate a fresh signing key pair.
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair();

@@ -9,11 +9,20 @@ import 'package:test/test.dart';
 
 void main() {
   group('ML-DSA-65 pure-Dart', () {
-    test('name is the wire identifier, independent of SigningAlgoType', () {
+    test('name is the free-form wire identifier, independent of '
+        'signingAlgoType', () {
       expect(MlDsa65PureDartAlgo().name, equals('ml-dsa-65'),
           reason: 'a downstream protocol keys its wire/record/keystore '
-              'format on this literal, not on SigningAlgoType.mldsa65.name '
-              '(which is "mldsa65", a different, unrelated vocabulary)');
+              'format on this literal, not on signingAlgoType.name '
+              '(which is "mldsa65", a different wire position)');
+    });
+
+    test('signingAlgoType is the pkam:/envelope wire tuple identifier', () {
+      final algo = MlDsa65PureDartAlgo();
+      expect(algo.signingAlgoType, equals(SigningAlgoType.mldsa65));
+      expect(algo.signingAlgoType.name, equals('mldsa65'),
+          reason: 'the pkam: verb and at_client envelope signingAlgo field '
+              'round-trip this through SigningAlgoType.values.byName');
     });
 
     test('instance generateKeyPair produces FIPS 204 key sizes', () async {

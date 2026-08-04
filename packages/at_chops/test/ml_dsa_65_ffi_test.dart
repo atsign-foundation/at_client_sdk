@@ -35,6 +35,9 @@ void main() {
       expect(algo.name, equals('ml-dsa-65'),
           reason: 'must match MlDsa65PureDartAlgo.name — a downstream '
               'protocol sees one identifier regardless of backend');
+      expect(algo.signingAlgoType, equals(SigningAlgoType.mldsa65),
+          reason: 'must match MlDsa65PureDartAlgo.signingAlgoType — both '
+              'backends report the same pkam:/envelope wire identifier');
       final kp = await algo.generateKeyPair();
 
       expect(kp.publicKey.length, equals(1952));

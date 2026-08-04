@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
 import 'package:at_chops/src/algorithm/spec/ml_dsa_65_spec.dart';
@@ -27,13 +28,17 @@ import 'package:ffi/ffi.dart';
 /// supports ML-DSA-65 and falls back to pure-Dart otherwise. Construct via
 /// [MlDsa65FfiAlgo.fromLib] only to pin a specific [DynamicLibrary]
 /// (e.g. loaded via [tryLoadLibCrypto]).
-final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
+final class MlDsa65FfiAlgo extends AtSignatureAlgorithm
+    implements AtSigningAlgorithm {
   final DynamicLibrary _lib;
 
   Uint8List? _secretKey;
 
   @override
   String get name => mlDsa65AlgorithmName;
+
+  @override
+  SigningAlgoType get signingAlgoType => SigningAlgoType.mldsa65;
 
   @Deprecated('Pass the secret key to signBytes instead.')
   set secretKey(Uint8List value) => _secretKey = value;
