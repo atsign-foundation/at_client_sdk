@@ -26,7 +26,8 @@ is how far we've got.
 >    `owed: scenario not yet written`. Conflating "the project owes this" with
 >    "we owe this a test" is what made the old number misleading in both
 >    directions at once.
-> 3. **Eleven of those owed rows are now written**, leaving **6**. Four are
+> 3. **Eleven of those owed rows are now written**, leaving **5** owed plus
+>    one re-classified as blocked. Four are
 >    cross-cutting invariants — reads-are-universal, appMetadata-is-authoritative,
 >    the published nskey's fetchable-not-enumerable property (cited, not
 >    duplicated: `underscore_public_key_hiding_test` already proves it with
@@ -41,7 +42,9 @@ is how far we've got.
 >    it had described a mint trigger that was never built — and then UC-A2.2
 >    and UC-A2.3, the latter proven at two layers at once because the row
 >    insists the namespace boundary holds at the atServer and not by a
->    client-side refusal alone.
+>    client-side refusal alone. UC-B5.1 went the other way: picking it up
+>    showed its headline mechanism is not built, so it is now *blocked* rather
+>    than owed — see below.
 
 > **The number is still a floor, and now says why.** A row is green only when
 > something in this repo asserts it — inline, or by citation.
@@ -93,7 +96,7 @@ below), plus 9 cross-cutting invariants.
 | B2 · retirement & lockout     | B2.1, B2.2                       | RF-SRV       |
 | B3 · mixed-PQ intra-atSign    | B3.1, B3.2                       | R-1          |
 | B4 · mixed-PQ cross-atSign    | B4.1, B4.2, B4.3, B4.4           | R-1, ON-1    |
-| B5 · retrofit edge cases      | B5.2 ✅, B5.3 ✅, B5.1             | owed         |
+| B5 · retrofit edge cases      | B5.2 ✅, B5.3 ✅, B5.1             | root pull    |
 | cross-cutting invariants      | 9 (5 ✅)                          | owed, R-1    |
 
 Note that **A5.1 is split into (a) and (b)** here where the catalogue writes it
@@ -108,14 +111,24 @@ separately.
 Sorting by blocker showed why D1 felt slow for so long: B-1 alone gated **11 of
 the 40** rows, and no data-path row could go green until **B-1** (XL) and
 **SS-4** (L–XL) landed, so the programme had no demonstrable increment in its
-centre. Both have now landed, and owed rows gate **6 of the 40** — the same
+centre. Both have now landed, and owed rows gate **5 of the 40** — the same
 rows, re-labelled from "waiting on a project" to "waiting on a test", and then
 worked down. That is a smaller problem with a different owner, and it is the
 honest description of where the burn-down now stands. What remains owed is
-almost entirely *live* work: **5 of the 6** need a running atServer (3
+almost entirely *live* work: **4 of the 5** need a running atServer (2
 functional, 2 e2e), and exactly one is a unit row. That is not a coincidence —
 the rows writable against mocked state were the ones written first, so the
 residual is by construction the part that needs infrastructure.
+
+**UC-B5.1 is blocked, not owed.** The substrate's request/answer round trip is
+complete, on by default and unit-covered — but `requestSecret` has zero call
+sites in `lib/`, so nothing ever asks for the signing root, and
+`PqSigningRoot.mintIfAbsent` says so in its own dartdoc. The root carries no
+namespace, so it is excluded from the `enroll:listns` fan-out by construction
+and the pull is its only remaining route. Labelling that "owed a test" would
+claim the code is finished, which is the exact conflation this burn-down was
+repaired to remove. See
+[`decisions.md` section 30](../../../../docs/projects/pq/decisions.md).
 
 **UC-A3.2 was the one row whose catalogue text was wrong rather than untested.**
 Its WHEN described a mint triggered by the first put — never built, and in

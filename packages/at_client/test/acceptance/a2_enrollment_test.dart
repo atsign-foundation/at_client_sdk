@@ -6,7 +6,6 @@ library;
 
 import 'package:test/test.dart';
 
-import 'blockers.dart';
 import 'proven_elsewhere.dart';
 
 void main() {

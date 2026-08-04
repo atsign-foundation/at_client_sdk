@@ -22,8 +22,21 @@ void main() {
       //       privates missed during the offline window arrive by the PUSH
       //       primary path once a holder is online, with requestSecret as the
       //       backstop.
+      //
+      // The row splits, and only one half is built. Namespaced nskey privates
+      // DO arrive by the push path (NskeySeeding's conveyance). The headline
+      // half does not: requestSecret and requestSecretsFromNamespace have zero
+      // call sites in lib/, so nothing ever asks for the root, and
+      // PqSigningRoot.mintIfAbsent says so in its own dartdoc. The primitive
+      // underneath is complete, on by default and unit-covered — what is
+      // missing is an initiator, which is wiring rather than design.
+      //
+      // This matters more than a missing convenience path: the root is
+      // atSign-level and carries no namespace, so it is excluded from the
+      // enroll:listns fan-out by construction. An enrollment that missed the
+      // approval-time conveyance has no other route to it. See decisions 30.
       fail('not implemented');
-    }, skip: owedFunctional);
+    }, skip: rootPullNotBuilt);
 
     test('UC-B5.2 · reading legacy history after retrofit', () async {
       // GIVEN alice1 retrofitted; the old legacy enrollment aged out; the legacy

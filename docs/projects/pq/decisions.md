@@ -2491,3 +2491,43 @@ atServer rather than that a method was called.
 unit coverage only. The unit tests cannot see whether the path runs at all, and an `unawaited`
 call behind a default-false flag is precisely the shape that passes every unit assertion while
 never executing — the failure mode that has already bitten this branch twice.
+
+## 30. UC-B5.1's pull backstop has no initiator (2026-08-04)
+
+Picking up UC-B5.1 — *"offline enrollment pulls the signing root later"* — found that the row
+cannot be tested because half of what it describes is not built. Recorded here rather than
+worked around, and the row is re-labelled from *owed a test* to *blocked*.
+
+**What is built.** The substrate's request/answer round trip is complete and on by default:
+`requestSecretsFromNamespace` broadcasts a `kind:'request'` envelope, `_handleRequestPayload`
+resolves and authorizes the requester and shares the matching secrets, and an unset
+`answerSecretRequests` means *answer* — the default policy admits any requester that resolves to
+an authorized key package of the request's namespace. It is unit-covered directly
+(`pairwise_secret_sharing_test.dart`: a holder answers a request and the requester receives the
+secret; the `requestSecret` convenience; `namePrefix` pulls; the suppression case). The answer
+loop does **not** exclude per-enrollment secret names, so a request naming the root would be
+answerable.
+
+**What is not.** Nothing ever asks. `requestSecret` and `requestSecretsFromNamespace` have
+**zero call sites in `lib/`** — the only references outside their own file are tests. For the
+signing root specifically, `PqSigningRoot.mintIfAbsent` says so in its own dartdoc: a loser of
+the create *"must be given the private half by a privileged enrollment that already has it, over
+the substrate. That pull is not built here yet."*
+
+**So the row splits.** Its second sentence — namespaced nskey privates arriving by the push path
+once a holder is online — **is** built, via `NskeySeeding`'s conveyance. Its first and headline
+sentence — that `requestSecret` is the steady-state path for the root, "answered by any online
+holder and persisting until one answers" — describes a mechanism whose initiator does not exist.
+An enrollment that genuinely missed the approval-time conveyance would today sit without the
+root and nothing would go and get it.
+
+**Why this is not merely cosmetic.** The root is atSign-level and never rotates, so an
+enrollment that misses it cannot be repaired by any later event that carries a namespace: it is
+excluded from the `enroll:listns` fan-out by construction, because it has no namespace to fan
+out over. The pull is not a convenience path, it is the only remaining route.
+
+**What is owed:** an initiator — a client that finds itself without the root private, and
+privileged enough to hold one, issuing the request and waiting. The primitive underneath it is
+sound and tested, so this is wiring rather than design. Until then UC-B5.1 carries
+`rootPullNotBuilt` rather than an `owed` label, because calling it "owed a test" would say the
+code is finished when it is not — the same conflation the burn-down repair removed.

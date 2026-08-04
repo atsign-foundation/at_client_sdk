@@ -12,7 +12,6 @@ import 'package:at_client/src/transformer/response_transformer/notification_resp
 import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
-import 'blockers.dart';
 import 'proven_elsewhere.dart';
 
 void main() {
