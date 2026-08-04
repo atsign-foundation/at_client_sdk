@@ -124,6 +124,14 @@ continuous-update cases, `notificationService.subscribe()` or a collection
 `at_client_flutter`. Do not add this to any new or existing app. Migrate to
 `at_client_flutter` equivalents.
 
+### `at_onboarding_flutter` ⛔
+
+**Discontinued.** pub.dev marks this package discontinued and names
+`at_client_flutter` as its replacement. Do not add it, and do not reach for it
+when a task calls for onboarding, activation, or sign-in — the
+`at_client_flutter` auth dialogs (`AtSignSelectionDialog`, `AtKeysFileDialog`,
+`ApkamActivationDialog`, `PkamDialog`) cover all of it.
+
 ### `at_backupkey_flutter` ⛔
 
 **Deleted.** The package has been removed from the repository. Copy the

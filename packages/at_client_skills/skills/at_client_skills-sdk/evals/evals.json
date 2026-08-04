@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "I'm building a Flutter app and want to store todos that can be shared with other users. Which packages do I need and how do I create a todo?",
-      "expected_output": "Recommends at_client and at_client_flutter. Shows atClient.collection<Todo>() with fromJson/typeTag, then collection.create(obj: todo, sharedWith: {'@bob'.toAtsign()}). Does NOT suggest AtCollectionModel. Ideally also points to the canonical Flutter todos example app (packages/at_client_flutter/examples/todos/)."
+      "expected_output": "Recommends at_client_flutter as the SINGLE dependency, noting it re-exports at_client so adding both is unnecessary. Shows atClient.collection<Todo>() with fromJson/typeTag, then collection.create(obj: todo, sharedWith: {'@bob'.toAtsign()}). Does NOT suggest AtCollectionModel. Ideally also points to the canonical Flutter todos example app (packages/at_client_flutter/examples/todos/)."
     },
     {
       "id": 2,
@@ -54,7 +54,7 @@
     {
       "id": 11,
       "prompt": "I'm using at_client in my app and I already have existing data stored with atClient.put() / atClient.get(). Can I migrate to AtCollection without breaking anything?",
-      "expected_output": "Acknowledges that migration guide is coming in skill v2.0. Explains that AtCollection and raw put/get use the same underlying atServer keystore but with different key naming conventions. Advises caution until migration guide is available."
+      "expected_output": "Acknowledges that no migration guide exists yet and that a future skill release will add one — a specific version number is NOT required. Explains that AtCollection and raw put/get use the same underlying atServer keystore but with different key naming conventions. Advises caution until a migration guide is available."
     },
     {
       "id": 12,
@@ -84,12 +84,12 @@
     {
       "id": 17,
       "prompt": "I want a user to edit an item that another atSign shared with them, but calling update() on it throws ArgumentError. How should collaborative editing work?",
-      "expected_output": "Explains AtCollection is owner-writes-only: update/updateSharedWith/delete throw ArgumentError when item.owner is not the current atSign, so you cannot edit another atSign's item in place. The model is additive: each atSign owns what it creates, and sharing grants a readable copy, not write access. To model contribution, the peer creates their own item and shares it back; reading a received item works but mutating it does not."
+      "expected_output": "Explains AtCollection is owner-writes-only, naming ALL THREE enforcing methods — update, updateSharedWith, and delete — and that each throws ArgumentError when the item's owner is not the current atsign, so a received item cannot be edited in place. Explains that sharedWith grants a readable copy, not write access. Shows the additive pattern in current API terms: the contributing atsign calls create(obj: ..., sharedWith: {...}) on its OWN collection and the original owner reads that item; reading a received item works but mutating it does not. Must stay on the current AtCollection<T> API — an answer that is conceptually right about ownership but routes the contribution through the deprecated AtCollectionModel, a .save() call, or raw atClient.put() does NOT pass."
     },
     {
       "id": 18,
       "prompt": "My Flutter app fails to authenticate an atSign with SecondaryNotFoundException: 'No entry in atDirectory for @alice'. What does this mean and how do I fix it?",
-      "expected_output": "Explains the atsign isn't activated/registered — its atServer address isn't in the atDirectory yet (or the atsign string is mistyped). An atsign must be activated once (via CRAM onboarding / Flow 1, an onboarding app, or the registrar) before existing-keys / keychain / APKAM login can resolve it. Fix: activate the atsign first, then authenticate; also verify the atsign is spelled correctly."
+      "expected_output": "Explains that the atDirectory is the atServer address registry and this atsign has no atServer registered in it, so the lookup fails before authentication is attempted. Distinguishes TWO causes with different fixes: the atsign was never activated, or the atsign string is mistyped. States that activation happens ONCE and must precede the existing-keys, keychain, and APKAM login flows, none of which can resolve an unactivated atsign. For in-app activation, uses the CRAM flow this SDK ships — AtSignSelectionDialog from at_client_flutter plus a RegistrarService from at_auth configured with a registrar URL and API key — or defers activation to an onboarding app or the registrar. Recommending the discontinued at_onboarding_flutter package does NOT pass."
     },
     {
       "id": 19,
@@ -115,6 +115,11 @@
       "id": 23,
       "prompt": "I'm writing a headless Dart daemon (no Flutter, no UI) that authenticates with a .atKeys file and then uses collections and notifications. What's the simplest way to set up the AtClient?",
       "expected_output": "Recommends CLIBase.fromCommandLineArgs(args) from at_cli_commons — one line that handles arg parsing, .atKeys loading, and PKAM auth, returning a ready AtClient. Shows adding at_client and at_cli_commons. May cite the collections_todos.dart example (packages/at_client/example/bin/). Does NOT hand-roll AtOnboardingService/keyfile parsing or use Flutter dialog classes."
+    },
+    {
+      "id": 24,
+      "prompt": "I'm adding atsign sign-in to my Flutter app and found at_onboarding_flutter on pub.dev. Is that the package I should be using for the onboarding screens?",
+      "expected_output": "Says no — at_onboarding_flutter is discontinued and at_client_flutter is its named replacement. Directs the developer to the at_client_flutter auth dialogs instead (AtSignSelectionDialog, AtKeysFileDialog, ApkamActivationDialog, PkamDialog), and notes at_client_flutter is the single dependency needed since it re-exports at_client. Does NOT present at_onboarding_flutter as usable, and does NOT hedge by suggesting either package would work."
     }
   ]
 }

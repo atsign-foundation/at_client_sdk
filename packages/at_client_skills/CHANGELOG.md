@@ -16,7 +16,9 @@
 - Clarify the macOS `network.server` entitlement is only needed when the app
   opens a listening socket (e.g. NoPorts tunnels).
 - Add `noports_core` and `at_stream` (pre-release) to the package map.
-- Add evals covering the new content.
+- Document that `at_onboarding_flutter` is discontinued — use `at_client_flutter`.
+- Add evals covering the new content, and tighten the owner-writes-only and
+  activation evals.
 
 ## 1.2.0 — 2026-07-07
 

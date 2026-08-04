@@ -73,7 +73,8 @@ Install with `dart pub add` — it resolves the latest compatible version:
 | APKAM / custom auth flows    | `at_client` or `at_client_flutter`, plus `at_auth`         |
 | Raw cryptographic operations | `at_client` or `at_client_flutter`, plus `at_chops`        |
 
-**Never add:** `at_common_flutter`, `at_backupkey_flutter`,
+**Never add:** `at_common_flutter`, `at_onboarding_flutter` (discontinued — use
+the `at_client_flutter` auth dialogs), `at_backupkey_flutter`,
 `at_invitation_flutter`, `at_sync_ui_flutter`, `at_theme_flutter`
 
 > **Never hardcode version constraints** for `at_client` / `at_client_flutter`
