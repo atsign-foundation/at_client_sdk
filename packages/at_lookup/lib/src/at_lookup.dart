@@ -118,7 +118,14 @@ abstract interface class AtLookUp {
   Future<bool> delete(String key, {String? sharedWith, bool isPublic = false});
 
   /// scan
-  Future<List<String>> scan({String? regex, String? sharedBy});
+  ///
+  /// Set [auth] to false to scan the atsign's public keys over an
+  /// unauthenticated connection.
+  Future<List<String>> scan(
+      {String? regex,
+      String? sharedBy,
+      bool auth = true,
+      bool showHiddenKeys = false});
 
   Future<String?> executeVerb(VerbBuilder builder, {bool sync = false});
 

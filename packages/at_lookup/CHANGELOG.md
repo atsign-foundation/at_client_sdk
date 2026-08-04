@@ -5,6 +5,11 @@ Algorithms are supplied at construction, and the only key material it retains is
 the PKAM private key — which is what lets it keep re-authenticating a replaced
 connection by itself.
 
+- fix: restore `auth` and `showHiddenKeys` on the `AtLookUp.scan` declaration.
+  `AtLookupImpl` had kept both, but the interface had narrowed to
+  `{regex, sharedBy}` — and since `AtLookupImpl` is no longer exported, a caller
+  holding an `AtLookUp` had no way to run the unauthenticated public-key scan
+  that an atServer status probe needs
 - breaking: remove `AtLookUp.atChops`. at_chops 4.0.0 deletes the `AtChops`
   facade, so there is no type left for it to be — and it carried encryption keys
   the handshake never touched. Construct with the algorithms instead:
