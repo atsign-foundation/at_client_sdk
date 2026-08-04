@@ -35,6 +35,25 @@ export 'package:at_client/src/crypto/rollout/scheme_negotiation.dart';
 /// default provider and the fallback for records with no `appMetadata`.
 const String legacyCryptoProviderId = 'legacy';
 
+/// A write would have been encrypted with the legacy provider, and this client
+/// was told never to do that ([AtClientPreference.disallowLegacyEncryption]).
+///
+/// Not a failure of anything: the data path worked, the destination is simply
+/// only reachable under a scheme a quantum computer will one day open. An app
+/// that catches this can tell its user the recipient cannot be reached
+/// securely — which is the whole point of asking to be refused rather than
+/// silently downgraded.
+class LegacyEncryptionRefusedException extends AtEncryptionException {
+  /// The record that would have been written legacy.
+  final String key;
+
+  LegacyEncryptionRefusedException(this.key, String reason)
+      : super('refusing to encrypt $key with the legacy provider: $reason. '
+            'This client sets disallowLegacyEncryption, so a destination no '
+            'post-quantum scheme can reach is refused rather than written in '
+            'one that can be harvested now and opened later.');
+}
+
 /// Selects and configures the crypto providers for an [AtClient].
 class CryptoConfig {
   /// Provider used when an [AtKey] carries no `appMetadata.providerId`.

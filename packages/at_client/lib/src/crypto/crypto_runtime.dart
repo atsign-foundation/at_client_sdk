@@ -102,14 +102,37 @@ class CryptoRuntime {
   Future<String> negotiatedProviderIdFor(String? requested,
       {required AtKey atKey}) async {
     final configured = providerIdFor(_atClient, requested, atKey: atKey);
-    if (requested != null) return configured;
-    return await SchemeNegotiation.forClient(_atClient)
-        .select(atKey, configured);
+    final selected = requested != null
+        ? configured
+        : await SchemeNegotiation.forClient(_atClient)
+            .select(atKey, configured);
+    refuseLegacyIfDisallowed(atKey, selected,
+        because: requested != null
+            ? 'it was requested explicitly'
+            : 'no post-quantum scheme reaches this destination');
+    return selected;
+  }
+
+  /// Throw if [providerId] is the legacy provider and this client set
+  /// [AtClientPreference.disallowLegacyEncryption].
+  ///
+  /// Called at selection time, where the error is actionable and nothing is in
+  /// flight, **and** again at encryption time. The second is not redundant: it
+  /// is the point every encrypting write passes through however the id was
+  /// chosen, so the guarantee does not depend on each call path having
+  /// remembered to ask.
+  void refuseLegacyIfDisallowed(AtKey atKey, String providerId,
+      {required String because}) {
+    if (providerId != legacyProviderId) return;
+    if (_atClient.getPreferences()?.disallowLegacyEncryption != true) return;
+    throw LegacyEncryptionRefusedException(atKey.key, because);
   }
 
   Future<String> encryptForPut(AtKey atKey, dynamic value) async {
     try {
       final provider = _provider(atKey, 'put');
+      refuseLegacyIfDisallowed(atKey, provider.id,
+          because: 'the write reached encryption still routed to legacy');
       final ciphertext =
           await provider.encrypt(_context(), atKey, _requireString(value));
       return _stampEncrypted(atKey, provider, ciphertext);
@@ -128,6 +151,9 @@ class CryptoRuntime {
   Future<String> encryptForNotification(AtKey atKey, dynamic value) async {
     try {
       final provider = _provider(atKey, 'notify');
+      refuseLegacyIfDisallowed(atKey, provider.id,
+          because: 'the notification reached encryption still routed to '
+              'legacy');
       final ciphertext =
           await provider.encrypt(_context(), atKey, _requireString(value));
       return _stampEncrypted(atKey, provider, ciphertext);

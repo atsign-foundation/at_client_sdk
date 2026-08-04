@@ -6,6 +6,39 @@ import 'package:version/version.dart';
 /// Class to hold attributes for client preferences.
 /// Set the preferences for your application and pass it to [AtClientManager.setCurrentAtSign].
 class AtClientPreference {
+  /// Never encrypt *new* data with the legacy (pre-post-quantum) provider:
+  /// take a post-quantum path, or refuse the write.
+  ///
+  /// **Default false in 3.x, true in 4.0.** Set it early to be certain nothing
+  /// this app writes is harvestable today and decryptable by a quantum
+  /// computer later; leave it alone to keep the SDK's own migration schedule.
+  ///
+  /// What it governs is exactly one thing: **legacy encryption of new data.**
+  /// - Legacy **reads** are always available. History has to keep opening, and
+  ///   upgrading only ever adds read capability.
+  /// - `shouldEncrypt = false` — the app-accessible no-crypto path — is
+  ///   unaffected. This is not a "must be encrypted" switch.
+  /// - Public keys are unaffected; they are signed, not encrypted.
+  ///
+  /// A destination that only legacy can reach is therefore **refused**, never
+  /// silently written legacy — which is also why
+  /// [allowLegacyCryptoFallback] does not survive this being set. The two
+  /// switches say opposite things ("reach this recipient however you can" and
+  /// "never write legacy") and this one wins.
+  ///
+  /// **Final at construction.** There is no setter, and the value cannot be
+  /// changed for a live client: a flag that governs what a client is allowed
+  /// to write must not be flippable mid-run, or "was that record written under
+  /// the guarantee?" has no answer.
+  ///
+  /// Expect refusals in 3.x. The SDK still writes several of its own records
+  /// under the legacy provider — a shared key for a legacy recipient most
+  /// obviously — and those are retired by the projects that follow, not by
+  /// this flag.
+  final bool disallowLegacyEncryption;
+
+  AtClientPreference({this.disallowLegacyEncryption = false});
+
   /// Local device path of hive storage
   String? hiveStoragePath;
 

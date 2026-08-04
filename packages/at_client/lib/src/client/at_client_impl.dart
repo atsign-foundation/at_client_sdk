@@ -480,6 +480,8 @@ class AtClientImpl implements AtClient {
 
     _adoptEraCryptoDefault();
 
+    _announceLegacyEncryptionPosture();
+
     // Seeding is deliberately not awaited. It publishes to the atServer, and a
     // client's startup must not wait on — or fail because of — a rollout
     // action; a namespace missed now is minted at the next start, and the
@@ -528,6 +530,35 @@ class AtClientImpl implements AtClient {
         ),
       ),
     );
+  }
+
+  /// Says out loud, at every client creation, whether this client may still
+  /// write legacy-encrypted data.
+  ///
+  /// At SHOUT because the default is the unsafe one and will be until 4.0.
+  /// Anything quieter is a default nobody discovers until the migration is
+  /// over — the whole failure mode this project exists to prevent is data
+  /// written today under a scheme that is harvestable today and openable
+  /// later, by an app whose author never knew it had a choice.
+  void _announceLegacyEncryptionPosture() {
+    if (_preference?.disallowLegacyEncryption == true) {
+      _logger.info('disallowLegacyEncryption is set: this client refuses to '
+          'encrypt new data with the legacy provider. Legacy reads are '
+          'unaffected.');
+      if (_preference?.allowLegacyCryptoFallback == true) {
+        _logger.shout(
+            'allowLegacyCryptoFallback is set alongside disallowLegacyEncryption '
+            'and has no effect — the cold-start fallback is a legacy write, so '
+            'a destination with no post-quantum key is refused rather than '
+            'reached.');
+      }
+      return;
+    }
+    _logger.shout(
+        'disallowLegacyEncryption is false, so this client may still encrypt '
+        'new data with the legacy (RSA/AES) provider — harvestable now, '
+        'openable by a quantum computer later. It becomes the default in '
+        'at_client 4.0; set it on AtClientPreference to opt in early.');
   }
 
   /// Files the key material conveyed to this enrollment, then publishes
@@ -1227,7 +1258,7 @@ class AtClientImpl implements AtClient {
           useRemoteAtServer: options.useRemoteAtServer,
         );
       } on NamespaceKeyUnavailableException catch (e) {
-        if (!(_preference?.allowLegacyCryptoFallback ?? false)) rethrow;
+        if (!mayFallBackToLegacy(_preference)) rethrow;
         // The destination has no post-quantum key, and this app has said it
         // would rather reach it under legacy than not at all. Nothing is in
         // flight yet — that is why the pre-pass raises this — so the write can
@@ -1417,6 +1448,20 @@ class AtClientImpl implements AtClient {
   /// [options] with the crypto provider pinned to legacy, leaving the caller's
   /// object untouched — it may be a shared instance, and one write's fallback
   /// must not become every later write's default.
+  /// Whether a write to a destination with no post-quantum key may go out
+  /// legacy instead of failing.
+  ///
+  /// Two switches, saying opposite things: `allowLegacyCryptoFallback` is
+  /// "reach this recipient however you can", `disallowLegacyEncryption` is
+  /// "never write legacy". The second wins. Refusing here, rather than letting
+  /// the fallback route the write and be refused at encryption, keeps the error
+  /// the one the caller can act on — the destination has no post-quantum key —
+  /// instead of a refusal that names a scheme the caller never chose.
+  @visibleForTesting
+  static bool mayFallBackToLegacy(AtClientPreference? preference) =>
+      (preference?.allowLegacyCryptoFallback ?? false) &&
+      preference?.disallowLegacyEncryption != true;
+
   static PutRequestOptions _copyOptionsForLegacyFallback(
           PutRequestOptions options) =>
       _copyOptionsWithProvider(options, legacyCryptoProviderId);
