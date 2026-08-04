@@ -1,4 +1,28 @@
 ## 3.14.1
+- feat: enrollment approval can convey the `apkamSymmetricKey` in the
+  post-quantum direction, removing the last RSA wrap from the enrollment path.
+  `EnrollmentServiceImpl.approve` now reads the pending record **before**
+  approving: an enrollment that sent no wrapped key is one whose enrollee
+  expects the approver to mint it, and that absence is the only signal — an
+  advertised key package is *not*, since every mode carries one for ordinary
+  secret conveyance. When it applies, the approver generates the symmetric key,
+  approves with it, and seals it to the enrollee's key package over the
+  secret-sharing substrate, ahead of the enrollment's other secrets because
+  nothing else is usable until it lands.
+- feat: `enrollmentApkamSymmetricKeyResolver` — the enrollee half, for
+  `AtEnrollmentRequest.apkamSymmetricKeyResolver` (at_auth 3.4.0). Built on
+  `AtLookUp` rather than an `AtClient`, because at that point in enrollment
+  there is no client and cannot be one: a client is constructed *from* the keys
+  this is fetching the last piece of. Polls for the envelope addressed to this
+  enrollment's key package, verifies its APKAM signature against the signing
+  enrollment's published `_apsk`, and opens it with the key package's private
+  half. A revoked signer needs no special case — the atServer has moved its
+  `_apsk` out from under the address, so verification fails of its own accord.
+- feat: `PairwiseSecretSharing.sealInfo` is public, so the same
+  domain-separation context binds envelopes opened outside an `AtClient`.
+- build: the `at_auth` floor rises to `^3.4.0` — the version that introduces
+  `EnrollmentRequestDecision.approvedWithMintedKey` and the request-side
+  conveyance seams this release first uses.
 - feat: `PqSigningRoot` mints this atSign's user-owned root of trust,
   `public:pq_signing_root@<atSign>` — ML-DSA-65, a signer only, with nothing
   ever encapsulated to it. Written **immutable**, so the atServer refuses a

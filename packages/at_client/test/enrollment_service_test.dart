@@ -5,6 +5,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -13,6 +14,21 @@ import 'test_utils/test_utils.dart';
 import 'test_utils/mocks.dart';
 
 class MockSyncService extends Mock implements SyncService {}
+
+/// Records the decision at_client hands down to at_auth, which is where the
+/// choice between minting a symmetric key and passing the enrollee's own one
+/// through becomes observable.
+class RecordingAtEnrollment extends Mock implements AtEnrollment {
+  final List<EnrollmentRequestDecision> approvals = [];
+
+  @override
+  Future<AtEnrollmentResponse> approve(
+      EnrollmentRequestDecision decision, AtLookUp atLookUp) async {
+    approvals.add(decision);
+    return AtEnrollmentResponse(
+        decision.enrollmentId, EnrollmentStatus.approved);
+  }
+}
 
 void main() {
   String currentAtSign = '@alice';
@@ -190,6 +206,81 @@ void main() {
               'metadata is only ever written by the request that creates the '
               'record, so there is nowhere else to read it from');
       expect((request.metadata!['keyPackage'] as Map)['signature'], 'sig');
+    });
+
+    /// What an approving app passes in on the RSA path: the wrapped key it
+    /// read off the enrollment notification. `AtBytes` holds base64.
+    final callerSuppliedKey = base64Encode(utf8.encode('from-the-enrollee'));
+
+    /// Drives `approve` against a pending record and returns the decision that
+    /// reached at_auth.
+    ///
+    /// The list stub answers twice with different records: the pending one on
+    /// the pre-approval read, and a metadata-less one afterwards, so
+    /// conveyance short-circuits and the assertion is about the minting
+    /// decision alone.
+    Future<EnrollmentRequestDecision> decisionFor(
+        String atSign, String pendingValue) async {
+      final enrollKey =
+          'abcdef01-1a2e-43e4-93bd-378f1d366ea7.new.enrollments.__manage$atSign';
+      final listCommand = (EnrollVerbBuilder()
+            ..operation = EnrollOperationEnum.list)
+          .buildCommand();
+      final secondary = MockRemoteSecondary();
+      when(() => secondary.atLookUp).thenReturn(MockAtLookup());
+      var calls = 0;
+      when(() => secondary.executeCommand(listCommand, auth: true))
+          .thenAnswer((_) async => calls++ == 0
+              ? 'data:{"$enrollKey":$pendingValue}'
+              : 'data:{"$enrollKey":{"appName":"buzz","deviceName":"pixel",'
+                  '"namespace":{"buzz":"rw"}}}');
+
+      final client = await AtClientImpl.create(
+          atSign,
+          'buzz',
+          AtClientPreference()
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/commit',
+          remoteSecondary: secondary);
+      final enrollment = RecordingAtEnrollment();
+      await EnrollmentServiceImpl(client, enrollment).approve(
+          EnrollmentRequestDecision.approved(
+              enrollmentId: 'abcdef01-1a2e-43e4-93bd-378f1d366ea7',
+              apkamSymmetricKey: AtBytes.fromString(callerSuppliedKey),
+              atSign: atSign));
+      return enrollment.approvals.single;
+    }
+
+    test('an enrollment that sent no wrapped key gets a minted one', () async {
+      final decision = await decisionFor(
+          '@apkamminted',
+          '{"appName":"buzz","deviceName":"pixel",'
+              '"namespace":{"buzz":"rw"},'
+              '"metadata":{"keyPackage":{"payload":{"v":1},"signature":"s"}}}');
+
+      expect(decision.mintedApkamSymmetricKey, isNotNull,
+          reason: 'the absent wrapped key is the whole signal that this '
+              'enrollee expects the approver to mint one — it is only visible '
+              'on the record the enrollee wrote, which is why the read '
+              'happens before the approval');
+      expect(decision.encryptedAPKAMSymmetricKey, isEmpty,
+          reason: 'there is nothing to RSA-decrypt on this path');
+    });
+
+    test('an enrollment that sent a wrapped key keeps it', () async {
+      final decision = await decisionFor(
+          '@apkamwrapped',
+          '{"appName":"buzz","deviceName":"pixel",'
+              '"namespace":{"buzz":"rw"},'
+              '"encryptedAPKAMSymmetricKey":"rsa-wrapped",'
+              '"metadata":{"keyPackage":{"payload":{"v":1},"signature":"s"}}}');
+
+      expect(decision.mintedApkamSymmetricKey, isNull,
+          reason: 'this enrollee advertised a key package for secret '
+              'conveyance but generated its own symmetric key, so minting a '
+              'second one would leave it unable to unwrap anything');
+      expect(decision.encryptedAPKAMSymmetricKey, callerSuppliedKey,
+          reason: "the caller's own decision must pass through untouched");
     });
 
     test(

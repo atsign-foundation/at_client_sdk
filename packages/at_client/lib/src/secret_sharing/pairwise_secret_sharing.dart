@@ -97,7 +97,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// schedule (the `info` argument to at_chops `pqSeal`/`pqOpen`). Ties a
   /// sealed payload to this substrate so it cannot be replayed into another
   /// `pqSeal`-based protocol, and vice versa.
-  static final Uint8List _sealInfo =
+  static final Uint8List sealInfo =
       Uint8List.fromList(utf8.encode('at_client/secret_sharing/v1'));
 
   /// How long an unconsumed envelope lives on the atServer.
@@ -228,7 +228,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       XWingPureDartAlgo.instance,
       base64Decode(recipientKey.pub),
       Uint8List.fromList(utf8.encode(jsonEncode(payload))),
-      info: _sealInfo,
+      info: sealInfo,
     );
 
     final envelope = SecretEnvelope(
@@ -455,7 +455,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         XWingPureDartAlgo.instance,
         xWingSeed,
         base64Decode(envelope.sealed),
-        info: _sealInfo,
+        info: sealInfo,
       );
     } on PqOpenException catch (e) {
       logger.warning('Envelope $envelopeKey failed to open ($e); skipping');
