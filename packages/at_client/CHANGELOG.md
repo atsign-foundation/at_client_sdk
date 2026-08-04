@@ -8,7 +8,9 @@
   the write default flips once, later. `CryptoConfig.forClient` is
   correspondingly no longer a constant: the nskey providers hold per-atSign
   state, so the set is built once per client at construction and looked up.
-  An app that sets `AtClientPreference.crypto` still wins, unchanged.
+  An app that sets `AtClientPreference.crypto` still wins, unchanged. Covered
+  cross-atSign: a client that names no config at all opens a record another
+  atSign sealed to its namespace key.
 - fix: an encrypted notification no longer races the content key it needs. The
   conveyance was written local-first, so it reached the recipient's atServer
   only when the sender's sync got round to it — 31 seconds later in a captured

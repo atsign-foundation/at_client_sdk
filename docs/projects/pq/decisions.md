@@ -2150,7 +2150,10 @@ Holding the private is still not sufficient — the granted namespaces decide.
 
 **Key-transparency publication mechanics remain un-grilled** (when a root is submitted, and
 what a client does if the log is unreachable at mint). Out of scope here: it concerns what
-the root *is*, not how a chain terminates at it.
+the root *is*, not how a chain terminates at it. **Parked 2026-08-04 until D1 is complete**
+— it is a design thread with no code and no D1 dependency, and the signing root already
+carries `{v, keys[], successor}` so a log can anchor it later without a record change. It is
+not on the critical path and should not be read as blocking SS-4.
 
 ---
 
@@ -2347,6 +2350,23 @@ open its own namespace. The filing that makes it visible is the arrival path fix
 same day (section 25). A client with no `AtKeysIo` still gets the providers, since reading is
 additive, but has no durable private source — the limitation it already had.
 
-**Owed:** the era ring is not reachable from a test, so a live inbound read *through the era
-default* cannot be driven end to end — the functional coverage asserts the wiring reached a real
-constructed client, which is what a mock cannot show, but stops short of decrypting through it.
+### 27.4 Closed the same day, and the "gap" was never real
+
+This section first recorded an owed item: that the era ring was unreachable from a test, so a
+live inbound read *through* the era default could not be driven. That was written without
+checking, and it was wrong — `NskeyProvider.keyRing` is a public field and `NskeyProvider` is
+exported, so the ring the read path will consult is reachable in two lines.
+
+`era_default_read_test.dart` now drives the whole claim cross-atSign: **bob is given no
+`CryptoConfig` at all**, mints through the ring the SDK built for him, and opens a record alice
+sealed to his namespace key. Alice has to opt in to `CryptoConfig.nskey` to *write* PQ, which is
+the asymmetry stated plainly in a test — the era default would have written legacy and there
+would have been nothing to read. Two rig assertions guard it: that alice's record really carries
+`at/symmetric/AES/GCM` (a legacy write would sail through the read and pass for the wrong
+reason), and that bob's own default really registered the provider. Negative control: with
+`_adoptEraCryptoDefault()` disabled the test fails on the second of those and nothing else in
+the suite moves.
+
+The lesson is the session's recurring one in a smaller key — an owed item asserted rather than
+verified is a false entry on the ledger, and false entries cost the next reader more than a
+missing one would.
