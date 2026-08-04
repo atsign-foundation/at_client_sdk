@@ -1,5 +1,8 @@
+import 'dart:async' show FutureOr;
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:meta/meta.dart';
 
 /// Base class for enrollment-related data objects.
@@ -148,13 +151,25 @@ class AtEnrollmentResponse extends AtEnrollmentRecord {
   /// deprecated [atAuthKeys] material directly.
   AtAuthSession? session;
 
+  /// Carried over from `AtEnrollmentRequest.apkamSymmetricKeyResolver` so
+  /// `waitForApproval` can collect the symmetric key the approver encapsulated
+  /// to this enrollment's key package. Non-null exactly when the request
+  /// advertised a key package, and therefore sent no RSA-wrapped key for the
+  /// approver to hand back.
+  FutureOr<String> Function(AtKeys keys, AtLookUp atLookUp)?
+      apkamSymmetricKeyResolver;
+
   /// Creates an instance of [AtEnrollmentResponse].
   ///
   /// The [enrollmentId] is the unique identifier for the enrollment.
   /// The [enrollStatus] represents the status of the enrollment operation.
   /// The [session] is the hand-off session for the newly enrolled app.
   AtEnrollmentResponse(this.enrollmentId, this.enrollStatus,
-      {this.atSign, this.rootDomain, this.atAuthKeys, this.session});
+      {this.atSign,
+      this.rootDomain,
+      this.atAuthKeys,
+      this.session,
+      this.apkamSymmetricKeyResolver});
 
   @override
   String toString() {

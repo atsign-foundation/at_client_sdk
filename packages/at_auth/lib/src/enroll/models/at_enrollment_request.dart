@@ -1,8 +1,38 @@
 import 'dart:async' show FutureOr;
 
 import 'package:at_auth/src/auth/models/at_auth_session.dart';
+import 'package:at_auth/src/keys/at_keys.dart' show AtKeys;
 import 'package:at_auth/src/keys/io/at_keys_io.dart' show AtKeysIo;
 import 'package:at_commons/at_commons.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookUp;
+
+/// How an enrollment's `apkamSymmetricKey` gets from one side to the other.
+///
+/// This is **not** the same question as whether the request advertises a key
+/// package: a package is also how an approver seals this atSign's existing
+/// secrets to a new device, which every mode does. This enum governs only the
+/// symmetric key that wraps the encryption private key and the self-encryption
+/// key.
+enum EnrollmentKeyExchangeMode {
+  /// The enrollee generates the symmetric key and RSA-encrypts it to the
+  /// atSign's default encryption public key, which the approver unwraps.
+  ///
+  /// The wrap is the one Shor-vulnerable step in enrollment, so this mode does
+  /// not survive a quantum adversary recording the request. It is the default
+  /// because it is the only mode every published approver and atServer
+  /// understands.
+  legacy,
+
+  /// The approver generates the symmetric key and encapsulates it to the key
+  /// package the request advertised; the enrollee collects it after approval.
+  ///
+  /// Nothing RSA-wrapped rides the request. Requires the request to advertise
+  /// a key package, to supply an [AtEnrollmentRequest.apkamSymmetricKeyResolver],
+  /// an approver that conveys, and an atServer that does not insist on the
+  /// wrapped key. Fails closed against any of those rather than degrading, so
+  /// an enrollment either has the property or does not reach the atServer.
+  pq,
+}
 
 /// The BaseEnrollmentRequest class encapsulates shared fields between the InitialEnrollmentRequest and EnrollmentRequest.
 ///
@@ -71,6 +101,31 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   /// therefore be valid without one.
   FutureOr<Map<String, dynamic>?> Function(AtKeysIo keysIo)? metadataBuilder;
 
+  /// Obtains this enrollment's `apkamSymmetricKey` once the approver has
+  /// delivered it, for a request whose [metadataBuilder] advertised a key
+  /// package.
+  ///
+  /// Such a request never generates the symmetric key and never RSA-wraps one:
+  /// the approver mints it and encapsulates it to the advertised public half,
+  /// so it has to be collected after approval rather than carried in. This
+  /// runs inside `waitForApproval`, after PKAM authentication succeeds — the
+  /// earliest point at which the enrollment can read anything — and is handed
+  /// the authenticated [AtLookUp] plus the [AtKeys] holding the key package's
+  /// private half.
+  ///
+  /// Required by [EnrollmentKeyExchangeMode.pq]; ignored otherwise. Without
+  /// one, a pq request would authenticate and then be unable to decrypt
+  /// anything, so at_auth refuses it rather than sending it.
+  FutureOr<String> Function(AtKeys keys, AtLookUp atLookUp)?
+      apkamSymmetricKeyResolver;
+
+  /// How this request conveys the enrollment's symmetric key.
+  ///
+  /// Defaults to [EnrollmentKeyExchangeMode.legacy] so existing callers keep
+  /// their present behaviour byte for byte. The default becomes
+  /// [EnrollmentKeyExchangeMode.pq] in the next major version of at_auth.
+  EnrollmentKeyExchangeMode keyExchangeMode;
+
   AtEnrollmentRequest({
     this.session,
     @Deprecated('Provide `session` instead; its atSign is used.')
@@ -87,6 +142,8 @@ class AtEnrollmentRequest extends EnrollmentRequest {
     this.encryptedAPKAMSymmetricKey,
     this.apkamKeysExpiryDuration,
     this.metadataBuilder,
+    this.apkamSymmetricKeyResolver,
+    this.keyExchangeMode = EnrollmentKeyExchangeMode.legacy,
   }) : super(
           atSign: session?.atSign ??
               atSign ??

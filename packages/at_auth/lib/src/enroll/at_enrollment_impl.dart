@@ -111,22 +111,12 @@ class AtEnrollmentImpl implements AtEnrollment {
       AtEnrollmentRequest atEnrollmentRequest, AtLookUp atLookUp) async {
     // Generate required keys
     AtPkamKeyPair apkamKeyPair = AtChopsUtil.generateAtPkamKeyPair();
-    SymmetricKey apkamSymmetricKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
 
     //Fetch required keys from atServer
     String defaultEncryptionPublicKey = await _getDefaultEncryptionPublicKey(
       atLookUp,
       atEnrollmentRequest.atSign,
     );
-
-    // encrypting the following APKAM keys:
-    // apkamSymmetricKey for the enroll verb
-    // RSA encrypt via at_chops (wraps crypton's RSAPublicKey.encrypt:
-    // base64(encryptData(utf8(msg)))).
-    String encryptedAPKAMSymmetricKey = base64Encode((RsaEncryptionAlgo()
-          ..atPublicKey = AtPublicKey.fromString(defaultEncryptionPublicKey))
-        .encrypt(utf8.encode(apkamSymmetricKey.key)));
 
     // Built before the request rather than after it, so a metadataBuilder can
     // be handed the APKAM keypair it must sign with. Only enrollmentId is
@@ -136,9 +126,53 @@ class AtEnrollmentImpl implements AtEnrollment {
       ..apkamPrivateKey =
           AtBytes.fromString(apkamKeyPair.atPrivateKey.privateKey)
       ..apkamPublicKey = AtBytes.fromString(apkamKeyPair.atPublicKey.publicKey)
-      ..apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey.key)
       ..defaultEncryptionPublicKey =
           AtBytes.fromString(defaultEncryptionPublicKey);
+
+    final Map<String, dynamic>? metadata =
+        await _buildMetadata(atEnrollmentRequest, atAuthKeys);
+
+    // A key package is advertised in every mode — it is also how an approver
+    // seals this atSign's existing secrets to the new device — so its presence
+    // says nothing about how the symmetric key travels. Only the declared mode
+    // does.
+    final bool isPq = atEnrollmentRequest.keyExchangeMode ==
+        EnrollmentKeyExchangeMode.pq;
+
+    if (isPq) {
+      if (metadata?['keyPackage'] == null) {
+        throw AtEnrollmentException(
+            'A pq enrollment request must advertise a key package, because '
+            'that is the public half the approver encapsulates the symmetric '
+            'key to. Supply a metadataBuilder that returns one, or use '
+            'EnrollmentKeyExchangeMode.legacy.');
+      }
+      if (atEnrollmentRequest.apkamSymmetricKeyResolver == null) {
+        throw AtEnrollmentException(
+            'A pq enrollment request must supply an '
+            'apkamSymmetricKeyResolver, or nothing would ever collect the '
+            'symmetric key the approver encapsulates to it. The enrollment '
+            'would authenticate and then be unable to decrypt anything.');
+      }
+    }
+
+    // A pq request generates no symmetric key and wraps nothing: the approver
+    // mints the key and encapsulates it to the advertised public half, which
+    // waitForApproval collects. A legacy request keeps the RSA wrap — it is
+    // what every published approver knows how to unwrap.
+    String? encryptedAPKAMSymmetricKey;
+    if (!isPq) {
+      final SymmetricKey apkamSymmetricKey =
+          AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+      atAuthKeys.apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey.key);
+      // encrypting the following APKAM keys:
+      // apkamSymmetricKey for the enroll verb
+      // RSA encrypt via at_chops (wraps crypton's RSAPublicKey.encrypt:
+      // base64(encryptData(utf8(msg)))).
+      encryptedAPKAMSymmetricKey = base64Encode((RsaEncryptionAlgo()
+            ..atPublicKey = AtPublicKey.fromString(defaultEncryptionPublicKey))
+          .encrypt(utf8.encode(apkamSymmetricKey.key)));
+    }
 
     EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
       ..appName = atEnrollmentRequest.appName
@@ -148,7 +182,7 @@ class AtEnrollmentImpl implements AtEnrollment {
       ..otp = atEnrollmentRequest.otp
       ..namespaces = atEnrollmentRequest.namespaces
       ..apkamKeysExpiryDuration = atEnrollmentRequest.apkamKeysExpiryDuration
-      ..metadata = await _buildMetadata(atEnrollmentRequest, atAuthKeys);
+      ..metadata = metadata;
 
     String? serverResponse =
         await _executeEnrollCommand(enrollVerbBuilder, atLookUp);
@@ -165,7 +199,11 @@ class AtEnrollmentImpl implements AtEnrollment {
         // Carry the requesting app's session forward so waitForApproval can
         // persist the completed keys into its atKeysIo and hand it back. The
         // session is only fully valid (keys persisted) after waitForApproval.
-        session: atEnrollmentRequest.session);
+        session: atEnrollmentRequest.session,
+        // Only a pq request has a symmetric key waiting to be collected; a
+        // legacy one already holds its own.
+        apkamSymmetricKeyResolver:
+            isPq ? atEnrollmentRequest.apkamSymmetricKeyResolver : null);
   }
 
   @override
@@ -176,14 +214,20 @@ class AtEnrollmentImpl implements AtEnrollment {
       throw AtAuthenticationException(
           'The authentication keys are not initialized');
     }
-    // Decrypt the encrypted APKAM symmetric key with the encryption private key
-    // from the atChops instance, via at_chops (wraps crypton's
-    // RSAPrivateKey.decrypt: utf8.decode(decryptData(base64(msg)))).
-    String apkamSymmetricKey = utf8.decode((RsaEncryptionAlgo()
-          ..atPrivateKey = AtPrivateKey.fromString(atLookUp.atChops!.atChopsKeys
-              .atEncryptionKeyPair!.atPrivateKey.privateKey))
-        .decrypt(base64Decode(
-            enrollmentRequestDecision.encryptedAPKAMSymmetricKey)));
+    // An enrollment that advertised a key package sent no wrapped key, because
+    // this approver minted it — there is nothing to unwrap, and the RSA step is
+    // skipped entirely rather than being fed an empty string. Every other
+    // enrollment still arrives RSA-wrapped to the atSign's encryption public
+    // key, and is decrypted here with the private half from the atChops
+    // instance, via at_chops (wraps crypton's RSAPrivateKey.decrypt:
+    // utf8.decode(decryptData(base64(msg)))).
+    String apkamSymmetricKey = enrollmentRequestDecision
+            .mintedApkamSymmetricKey ??
+        utf8.decode((RsaEncryptionAlgo()
+              ..atPrivateKey = AtPrivateKey.fromString(atLookUp.atChops!
+                  .atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey))
+            .decrypt(base64Decode(
+                enrollmentRequestDecision.encryptedAPKAMSymmetricKey)));
 
     // Set the APKAM Symmetric key to the AtChops Instance.
     atLookUp.atChops?.atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
@@ -304,7 +348,15 @@ class AtEnrollmentImpl implements AtEnrollment {
       enrollmentResponse.rootDomain!.rootPort,
     );
 
-    AtChops atChops = enrollmentResponse.atAuthKeys!.toAtChops();
+    // An enrollment that advertised a key package holds no symmetric key yet,
+    // and `toAtChops` reads its absence as "these are PKAM keys" — which then
+    // demands the encryption private key this enrollment is here to fetch. Its
+    // APKAM keypair is all PKAM authentication needs, so build the chops from
+    // that directly and fill the symmetric key in once it arrives.
+    AtChops atChops =
+        enrollmentResponse.atAuthKeys!.apkamSymmetricKey != null
+            ? enrollmentResponse.atAuthKeys!.toAtChops()
+            : _apkamChopsAwaitingSymmetricKey(enrollmentResponse.atAuthKeys!);
     atLookup.atChops = atChops;
 
     await _waitForPkamAuthSuccess(
@@ -317,6 +369,20 @@ class AtEnrollmentImpl implements AtEnrollment {
 
     // post approval:
     // after pkam authentication is accepted
+
+    // Collect the symmetric key the approver encapsulated to this enrollment's
+    // key package. PKAM has just succeeded, which is the earliest point the
+    // enrollment can read anything, and the key package's private half — the
+    // only thing that opens that envelope — was minted before the request was
+    // sent and has never left this device.
+    final resolver = enrollmentResponse.apkamSymmetricKeyResolver;
+    if (resolver != null) {
+      final String apkamSymmetricKey =
+          await resolver(enrollmentResponse.atAuthKeys!, atLookup);
+      enrollmentResponse.atAuthKeys!.apkamSymmetricKey =
+          AtBytes.fromString(apkamSymmetricKey);
+      atChops.atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
+    }
 
     // fetch the following keys from the atServer
     Map<String, dynamic> encPrivKeyResponse =
@@ -497,6 +563,24 @@ class AtEnrollmentImpl implements AtEnrollment {
   }
 
   /// Pkam auth will be retried until server approves/denies/expires the enrollment
+  /// APKAM chops for an enrollment that has not yet been handed its symmetric
+  /// key: enough to PKAM-authenticate, and nothing more.
+  ///
+  /// Deliberately not `AtKeys.toAtChops`, which branches on the symmetric key's
+  /// presence to tell APKAM keys from PKAM keys and so mis-reads this state.
+  AtChops _apkamChopsAwaitingSymmetricKey(AtKeys atKeys) {
+    return AtChopsImpl(AtChopsKeys.create(
+      AtEncryptionKeyPair.create(
+        atKeys.defaultEncryptionPublicKey!.toString(),
+        '',
+      ),
+      AtPkamKeyPair.create(
+        atKeys.apkamPublicKey!.toString(),
+        atKeys.apkamPrivateKey!.toString(),
+      ),
+    ));
+  }
+
   Future<void> _waitForPkamAuthSuccess(
     AtLookUp atLookUp,
     String enrollmentIdFromServer,

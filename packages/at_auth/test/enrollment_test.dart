@@ -13,6 +13,11 @@ import 'package:test/test.dart';
 
 import 'package:at_demo_data/at_demo_data.dart';
 
+/// Stands in for a real conveyance resolver where a request advertises a key
+/// package but the test stops before `waitForApproval` would collect one.
+Future<String> _unusedResolver(AtKeys keys, AtLookUp atLookUp) =>
+    throw StateError('the resolver should not run in this test');
+
 class MockAtLookUp extends Mock implements AtLookupImpl {}
 
 class MockLookupVerbBuilder extends Fake implements LookupVerbBuilder {}
@@ -324,7 +329,11 @@ void main() {
     }
 
     AtEnrollmentRequest requestWith(
-            FutureOr<Map<String, dynamic>?> Function(AtKeysIo)? builder) =>
+            FutureOr<Map<String, dynamic>?> Function(AtKeysIo)? builder,
+            {FutureOr<String> Function(AtKeys, AtLookUp)? resolver =
+                _unusedResolver,
+            EnrollmentKeyExchangeMode mode =
+                EnrollmentKeyExchangeMode.legacy}) =>
         AtEnrollmentRequest(
           session: AtAuthSession(
               atSign: atSign,
@@ -335,6 +344,11 @@ void main() {
           namespaces: {'wavi': 'rw'},
           otp: 'A123FE',
           metadataBuilder: builder,
+          // These tests stop at submit, so the resolver is never called; it is
+          // here to satisfy pq mode's precondition, and the conveyance it
+          // stands for is covered separately.
+          apkamSymmetricKeyResolver: resolver,
+          keyExchangeMode: mode,
         );
 
     test(
@@ -400,6 +414,79 @@ void main() {
       await AtEnrollmentImpl().submit(requestWith(null), mockAtLookUp);
 
       expect(sent.single, isNot(contains('metadata')));
+    });
+
+    test('pq mode sends no RSA-wrapped symmetric key', () async {
+      final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
+
+      await AtEnrollmentImpl().submit(
+          requestWith((_) async => {'keyPackage': 'advertised'},
+              mode: EnrollmentKeyExchangeMode.pq),
+          mockAtLookUp);
+
+      expect(sent.single, isNot(contains('encryptedAPKAMSymmetricKey')),
+          reason: 'a pq enrollment never generates the symmetric key — the '
+              'approver mints it and encapsulates it to the advertised public '
+              'half, so there is nothing to wrap and nothing an adversary '
+              'recording the request could harvest');
+    });
+
+    test('legacy mode keeps the RSA wrap even when a key package is advertised',
+        () async {
+      final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
+
+      await AtEnrollmentImpl().submit(
+          requestWith((_) async => {'keyPackage': 'advertised'}), mockAtLookUp);
+
+      expect(sent.single, contains('encryptedAPKAMSymmetricKey'),
+          reason: 'a key package is also how an approver seals existing '
+              'secrets to a new device, so advertising one must not silently '
+              'change how the symmetric key travels — only the mode does');
+      expect(sent.single, contains('advertised'),
+          reason: 'and the package still rides the request, because secret '
+              'conveyance needs it in every mode');
+    });
+
+    test('the default mode is legacy', () async {
+      final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
+
+      await AtEnrollmentImpl().submit(requestWith(null), mockAtLookUp);
+
+      expect(sent.single, contains('encryptedAPKAMSymmetricKey'),
+          reason: 'existing callers must keep their present behaviour byte '
+              'for byte until the default flips in the next major version');
+    });
+
+    test('pq mode without a resolver is refused, not silently enrolled',
+        () async {
+      final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
+
+      await expectLater(
+          AtEnrollmentImpl().submit(
+              requestWith((_) async => {'keyPackage': 'advertised'},
+                  resolver: null, mode: EnrollmentKeyExchangeMode.pq),
+              mockAtLookUp),
+          throwsA(isA<AtEnrollmentException>()));
+
+      expect(sent, isEmpty,
+          reason: 'the request must not reach the atServer at all: it would '
+              'be approved, authenticate, and then be unable to decrypt '
+              'anything, with nothing saying why');
+    });
+
+    test('pq mode without a key package is refused', () async {
+      final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
+
+      await expectLater(
+          AtEnrollmentImpl().submit(
+              requestWith(null, mode: EnrollmentKeyExchangeMode.pq),
+              mockAtLookUp),
+          throwsA(isA<AtEnrollmentException>()));
+
+      expect(sent, isEmpty,
+          reason: 'there would be no public half for the approver to '
+              'encapsulate the symmetric key to, so the enrollment could '
+              'never obtain one');
     });
   });
 }

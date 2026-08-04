@@ -1,4 +1,28 @@
 ## 3.4.0
+- feat: `AtEnrollmentRequest.keyExchangeMode` — an `EnrollmentKeyExchangeMode`
+  choosing how the enrollment's `apkamSymmetricKey` travels. `legacy` (the
+  default) is today's behaviour unchanged: the enrollee generates the key and
+  RSA-encrypts it to the atSign's default encryption public key. `pq` reverses
+  the direction — the approver mints the key and encapsulates it to the key
+  package the request advertised, so **nothing RSA-wrapped rides the request**
+  and an adversary recording it harvests no symmetric key. The default becomes
+  `pq` in the next major version.
+  Mode is deliberately explicit rather than inferred from whether a key package
+  is advertised: a package is *also* how an approver seals this atSign's
+  existing secrets to a new device, so every mode may carry one and its
+  presence says nothing about how the symmetric key travels.
+  `pq` additionally requires `AtEnrollmentRequest.apkamSymmetricKeyResolver`, a
+  callback run inside `waitForApproval` once PKAM authentication succeeds,
+  which collects the key the approver encapsulated. A `pq` request missing
+  either the package or the resolver is refused before it reaches the atServer,
+  rather than producing an enrollment that authenticates and can then decrypt
+  nothing. `pq` needs an approver that conveys and an atServer that does not
+  insist on the wrapped key, and fails closed against either.
+- feat: `EnrollmentRequestDecision.approvedWithMintedKey` — approves an
+  enrollment with a symmetric key the approver generated, for a request that
+  sent none. The encryption private key and the self-encryption key are wrapped
+  under it exactly as on the RSA path; only the key's origin and its route to
+  the enrollee differ.
 - feat: `AtEnrollmentRequest.metadataBuilder` — an optional callback, invoked
   once after this request's APKAM keypair has been generated and before the
   request is sent, with an `AtKeysIo` holding that keypair. Whatever it returns
