@@ -75,8 +75,11 @@ void main() {
   test('the README row counts match the scenarios', () {
     final source = allScenarioSource();
     final rows = RegExp(r'\btest\(').allMatches(source).length;
-    final gatedOnB1 =
-        RegExp(r'skip: b1(CrossAtSign)?\)').allMatches(source).length;
+    // Tracks the *owed* rows rather than a single project's. B-1 used to be
+    // the figure worth watching; it now gates nothing, and a guard pinned to a
+    // finished project silently stops guarding anything.
+    final owed =
+        RegExp(r'skip: owed(Unit|Functional|E2e)\)').allMatches(source).length;
     final text = readme.readAsStringSync();
 
     final total = RegExp(r'\*\*(\d+) rows\*\*').firstMatch(text);
@@ -85,15 +88,15 @@ void main() {
     expect(int.parse(total![1]!), rows,
         reason: 'README.md says ${total[1]} rows; there are $rows');
 
-    final b1 =
-        RegExp(r'B-1 alone gates \*\*(\d+) of the (\d+)\*\*').firstMatch(text);
-    expect(b1, isNotNull,
-        reason: 'README.md must state B-1\'s share as '
-            '"B-1 alone gates **N of the M**"');
-    expect(int.parse(b1![1]!), gatedOnB1,
-        reason: 'README.md says B-1 gates ${b1[1]} rows; it gates $gatedOnB1. '
-            'A scenario going green changes this — update the README with it');
-    expect(int.parse(b1[2]!), rows);
+    final owedStated =
+        RegExp(r'owed rows gate \*\*(\d+) of the (\d+)\*\*').firstMatch(text);
+    expect(owedStated, isNotNull,
+        reason: 'README.md must state the owed share as '
+            '"owed rows gate **N of the M**"');
+    expect(int.parse(owedStated![1]!), owed,
+        reason: 'README.md says ${owedStated[1]} owed rows; there are $owed. '
+            'Writing one of them changes this — update the README with it');
+    expect(int.parse(owedStated[2]!), rows);
   });
 }
 

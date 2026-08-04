@@ -6,6 +6,7 @@ library;
 import 'package:test/test.dart';
 
 import 'blockers.dart';
+import 'proven_elsewhere.dart';
 
 void main() {
   group('A4 · shared data', () {
@@ -21,8 +22,12 @@ void main() {
       //       alice's nskey private. PQ end to end — no RSA on any path. An
       //       unauthorised @bob enrollment can neither fetch the ciphertext
       //       (server-gated) nor decrypt it.
-      fail('not implemented');
-    }, skip: b1CrossAtSign);
+          provenIn(
+        'tests/at_end2end_test/test/nskey_cross_atsign_test.dart',
+        'alice shares with bob, and bob reads it with his own nskey private',
+        proves: 'bob opens the CK with HIS nskey private on an alice-owned record, and the same test asserts alice cannot decapsulate the CK she sealed to him',
+      );
+});
 
     test('UC-A4.2 · alice to bob where bob has no namespace key, share fails',
         () {
@@ -40,7 +45,7 @@ void main() {
       //       uses or authorises the namespace his nskey is published and
       //       alice's next ensureCurrent picks it up by plookup.
       fail('not implemented');
-    }, skip: b1CrossAtSign);
+    }, skip: owedE2e);
 
     test('UC-A4.3 · multi-enrollment both ends', () {
       // GIVEN alice (aE1, aE2) and bob (bE1, bE2) all PQ; bob has
@@ -50,7 +55,7 @@ void main() {
       //       authorised enrollments read the self-copy; no authorised
       //       enrollment is left unable to decrypt.
       fail('not implemented');
-    }, skip: b1CrossAtSign);
+    }, skip: owedE2e);
 
     test('UC-A4.4 · cross-atSign notification carrying an encrypted value', () {
       // GIVEN @alice, @bob pq-native; @bob published his nskey for the
@@ -61,7 +66,11 @@ void main() {
       //       scheme on BOB's readiness; offline-then-online bob still decrypts
       //       the queued notification; appMetadata is present on the frame;
       //       signal-only notifications are unaffected.
-      fail('not implemented');
-    }, skip: b1CrossAtSign);
+          provenIn(
+        'tests/at_end2end_test/test/concurrent_notify_test.dart',
+        'UC-A4.4: providerId travels on the frame and bob decrypts by it',
+        proves: 'providerId is read off the notification frame bob\'s monitor delivered, and the value decrypts through the nskey route',
+      );
+});
   });
 }

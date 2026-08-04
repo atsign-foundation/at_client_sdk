@@ -7,6 +7,7 @@ library;
 import 'package:test/test.dart';
 
 import 'blockers.dart';
+import 'proven_elsewhere.dart';
 
 void main() {
   group('A2 · enrollments', () {
@@ -18,8 +19,12 @@ void main() {
       //       but NOT app_2's; alice2 authenticates PQ and decrypts @alice's
       //       app_1.my_apps self data; an app_2 key request is refused; E2's
       //       APKAM key is a distinct, individually-revocable record.
-      fail('not implemented');
-    }, skip: ss2);
+          provenIn(
+        'tests/at_functional_test/test/enrollment_pq_key_exchange_e2e_test.dart',
+        'a pq enrollment reaches the atServer with no RSA-wrapped key',
+        proves: 'the enrol request carries no RSA-wrapped apkamSymmetricKey, and the companion test has the approver mint it and the enrollee recover it',
+      );
+});
 
     test('UC-A2.2 · second host using the same (copied) keyfile', () {
       // GIVEN @alice pq-native; alice1 on E1; a second host runs against a copy
@@ -31,7 +36,7 @@ void main() {
       //       signing-root private and E1's namespace authorisations. Revocation
       //       is per-enrollment, so revoking E1 cuts every host sharing the copy.
       fail('not implemented');
-    }, skip: ss2);
+    }, skip: owedFunctional);
 
     test('UC-A2.3 · namespace-restricted enrollment', () {
       // GIVEN alice1 (E1, *) approves alice3 for app_1.my_apps only (E3).
@@ -43,6 +48,6 @@ void main() {
       //       namespace-delivery gate, not by a client-side refusal alone, so
       //       alice3 can read/write app_1.my_apps but not app_2.my_apps.
       fail('not implemented');
-    }, skip: ss4);
+    }, skip: owedFunctional);
   });
 }

@@ -17,7 +17,7 @@ void main() {
       // A client decrypts anything ever written to it (all providers retained);
       // upgrading only ever ADDS read-capability.
       fail('not implemented');
-    }, skip: b1);
+    }, skip: owedUnit);
 
     test('writes are gated by reader readiness', () {
       // A value/notification is only written in a scheme EVERY required reader
@@ -43,19 +43,19 @@ void main() {
       // the in-memory stamp: an out-of-order or missing field in that fragment
       // is dropped without an error.
       fail('not implemented');
-    }, skip: b1);
+    }, skip: owedUnit);
 
     test('no RSA in any confidentiality path for a fully-PQ interaction', () {
       // Auth, enrollment conveyance, self, shared, and notification paths.
       fail('not implemented');
-    }, skip: b1);
+    }, skip: owedUnit);
 
     test('ML-DSA APKAM auth is record-authoritative', () {
       // PQ auth verifies against the enrollment record's single apkamPublicKey
       // using the RECORD signingAlgo — _getSigningAlgoType reads the record,
       // NEVER the client-supplied wire value.
       fail('not implemented');
-    }, skip: ss2);
+    }, skip: owedFunctional);
 
     test('pq_signing_root is create-once; the published nskey is not', () {
       // A second public:pq_signing_root@<atSign> create is rejected, never an
@@ -67,7 +67,7 @@ void main() {
       // _nskeylock.<ns>@owner, and substitution is prevented by the APKAM
       // signature over the advertised envelope, not by the write mode.
       fail('not implemented');
-    }, skip: ss4);
+    }, skip: owedFunctional);
 
     test('a published nskey is fetchable but not enumerable', () {
       // public:__nskey.<ns>@owner resolves on an exact plookup, cross-atSign, and
@@ -75,7 +75,7 @@ void main() {
       // A guaranteed protocol property (_apsk already relies on it); this is a
       // regression guard against a server change retiring it.
       fail('not implemented');
-    }, skip: ss4);
+    }, skip: owedFunctional);
 
     test('advertised recipient keys are signed and verified', () {
       // Every advertised encapsulation key — the per-enrollment key package and
@@ -95,7 +95,7 @@ void main() {
       // publish, a cross-enrollment overwrite refused) plus a live
       // enroll:listns, which needs SS-2's production wiring to drive.
       fail('not implemented');
-    }, skip: ss4);
+    }, skip: owedFunctional);
 
     test('performance is measured, not assumed', () {
       // PKAM-auth and put/get latency deltas vs the legacy RSA/AES path are
@@ -104,6 +104,6 @@ void main() {
       // key-shape change. The ceiling is pinned when the harness lands — a
       // measured budget, not a guessed number.
       fail('not implemented');
-    }, skip: b1);
+    }, skip: owedUnit);
   });
 }

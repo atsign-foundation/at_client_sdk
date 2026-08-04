@@ -31,13 +31,28 @@ const _e2e = 'layer: tests/at_end2end_test';
 // Critical path to D1 GA
 // ---------------------------------------------------------------------------
 
-/// nskey minting + signing-root lifecycle. Delivers key *material* only.
-const ss4 =
-    'blocked: SS-4 (nskey mint + signing-root lifecycle) · $_functional';
+// ---------------------------------------------------------------------------
+// Owed a test, not a project (2026-08-04)
+// ---------------------------------------------------------------------------
+//
+// SS-2, SS-4 and B-1 have landed. Their scenarios are therefore no longer
+// *blocked* — nobody is waiting on code — but most are not yet *proven*, and
+// conflating those two states is what made this burn-down misleading in the
+// first place. A row reading `blocked: B-1` said "the project owes this";
+// these say "we owe this a test", which is a different backlog with a
+// different owner.
+//
+// A row whose proof already exists in another package should cite it with
+// `provenIn` (see `proven_elsewhere.dart`) instead of carrying one of these.
 
-/// The value-level data path — the D1 GA convergence point.
-const b1 = 'blocked: B-1 (nskey data path providers) · $_unit';
-const b1CrossAtSign = 'blocked: B-1 (nskey data path providers) · $_e2e';
+/// The project landed; this scenario still needs writing, as a unit test.
+const owedUnit = 'owed: scenario not yet written · $_unit';
+
+/// The project landed; this scenario still needs writing, live.
+const owedFunctional = 'owed: scenario not yet written · $_functional';
+
+/// The project landed; this scenario still needs writing, cross-atSign.
+const owedE2e = 'owed: scenario not yet written · $_e2e';
 
 /// Migration machinery + disallowLegacyEncryption flag.
 const r1 = 'blocked: R-1 (scheme negotiation + flag) · $_unit';
@@ -51,7 +66,7 @@ const b2 = 'blocked: B-2 (nskey rotation + revocation) · $_functional';
 // ---------------------------------------------------------------------------
 
 /// Substrate wired into AtClient + server wake-up + key-package-in-request.
-const ss2 = 'blocked: SS-2 (substrate wired into AtClient) · $_functional';
+
 
 // ---------------------------------------------------------------------------
 // Off the critical path — retrofit, onboarding

@@ -17,6 +17,7 @@ import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
 import 'blockers.dart';
+import 'proven_elsewhere.dart';
 
 void main() {
   group('A3 · self data', () {
@@ -103,7 +104,7 @@ void main() {
       //       the __ssenv push and reads; an app_2-only client is refused the
       //       app_1 private (server-gated); requestSecret is the pull backstop.
       fail('not implemented');
-    }, skip: ss4);
+    }, skip: owedFunctional);
 
     test('UC-A3.3 · self write with no namespace key has no PQ fallback', () {
       // GIVEN @alice pq-native; alice1 wants self data but no
@@ -120,8 +121,12 @@ void main() {
       //       re-encrypting them is R-1's explicit migration. Rare in practice:
       //       a client mints for its preference namespace and its rw namespaces
       //       at init.
-      fail('not implemented');
-    }, skip: b1);
+          provenIn(
+        'tests/at_functional_test/test/nskey_data_path_e2e_test.dart',
+        'a write to a namespace with no nskey fails, saying which',
+        proves: 'cold start throws NamespaceKeyUnavailableException naming the atSign and namespace, with the readiness query and the opt-in legacy fallback covered alongside it',
+      );
+});
 
     test('UC-A3.4 · self notification carrying an encrypted value', () {
       // GIVEN @alice pq-native; alice1, alice2 PQ; alice2 running a monitor.
@@ -132,6 +137,6 @@ void main() {
       //       queued notification on later delivery; a signal-only notification
       //       needs no decryption and is unaffected.
       fail('not implemented');
-    }, skip: b1);
+    }, skip: owedUnit);
   });
 }

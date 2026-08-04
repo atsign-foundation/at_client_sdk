@@ -20,7 +20,7 @@ void main() {
       //       primary path once a holder is online, with requestSecret as the
       //       backstop.
       fail('not implemented');
-    }, skip: ss4);
+    }, skip: owedFunctional);
 
     test('UC-B5.2 · reading legacy history after retrofit', () {
       // GIVEN alice1 retrofitted; the old legacy enrollment aged out; the legacy
@@ -30,7 +30,7 @@ void main() {
       //       providerId routes per value. PQ retrofit NEVER makes old data
       //       unreadable.
       fail('not implemented');
-    }, skip: b1);
+    }, skip: owedUnit);
 
     test('UC-B5.3 · two enrollments race to create the signing root', () {
       // GIVEN alice1 and alice3 both reach the create step with pq_signing_root
@@ -39,6 +39,6 @@ void main() {
       // THEN  exactly one wins; the other gets "already exists" and falls
       //       through to REQUEST. No orphaned data (readiness not yet flipped).
       fail('not implemented');
-    }, skip: ss4);
+    }, skip: owedFunctional);
   });
 }

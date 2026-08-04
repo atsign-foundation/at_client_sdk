@@ -7,31 +7,28 @@ inline, skipped with the project that must land before it can go green.
 **This is the progress bar for D1.** The catalogue is the target; this directory
 is how far we've got.
 
-> ⚠️ **The count is currently wrong, in two fixable ways — audited 2026-08-03,
-> not yet acted on.** Treat the number as a floor, not a measure.
+> **The two counting faults audited 2026-08-03 were fixed 2026-08-04**, and the
+> suite now reads **5 of 40** scenario rows green, up from 1. (The runner's own
+> count is higher — it includes `catalogue_test.dart`'s three guards, which are
+> not scenarios. That gap is why the old "4 of 43" figure was itself wrong in
+> the optimistic direction while everything else under-counted.)
 >
-> 1. **This suite cannot see the layers that prove most of the scenarios.**
->    `catalogue_test.dart` runs inside `at_client`'s unit suite, so it can never
->    observe `tests/at_functional_test` or `tests/at_end2end_test` — and roughly
->    half the rows target those. A scenario proven live can never turn its own
->    row green.
-> 2. **`blockers.dart` has gone stale.** Three rows still read
->    `blocked: SS-2`, which is complete; seven read `blocked: SS-4`, which is
->    about half done. The mechanism for this is documented in `blockers.dart`
->    itself — delete a constant when its project lands and the analyzer points
->    at everything it unblocked — but nobody has run it.
+> 1. **A row proven in another package can now be claimed.** `provenIn`
+>    (`proven_elsewhere.dart`) cites the live test that establishes a row and
+>    asserts it is still there. It does not re-run the proof — this suite runs
+>    inside `at_client`'s unit tests and can never reach the functional or e2e
+>    packages — but a renamed or deleted live test now turns the citing row red
+>    instead of letting its evidence vanish unnoticed.
+> 2. **`blockers.dart` no longer names landed projects.** SS-2, SS-4 and B-1
+>    have landed, so their 21 rows are no longer *blocked*. Most are not yet
+>    *proven* either, and that is a different backlog: they now carry
+>    `owed: scenario not yet written`. Conflating "the project owes this" with
+>    "we owe this a test" is what made the old number misleading in both
+>    directions at once. Four of the 21 already had a live proof and now cite
+>    it — A2.1, A3.3, A4.1, A4.4 — leaving **17** genuinely owed a test.
 >
-> Against the branch as of 2026-08-03 the suite reads **4 of 43**, while the
-> live packs actually prove around **8–9 rows plus 2 invariants**: A3.1, A3.3,
-> A4.1, A4.4, partial A5, advertised-keys-signed-and-verified,
-> nskey-not-enumerable, the SS-2 key-package chain, and substrate delivery.
->
-> **And one row is worse than mis-counted: UC-A2.1 is *not* met even though its
-> blocking project reads complete.** It claims nothing in the conveyance path is
-> RSA-wrapped. The key package and secret conveyance landed, but the reversed
-> approval direction did not — the approver still does not encapsulate
-> `apkamSymmetricKey` to the enrollee's key package, so that wrap is still RSA.
-> A stale blocker is exactly how a gap like that stays invisible.
+> **The number is still a floor, and now says why.** A row is green only when
+> something in this repo asserts it — inline, or by citation.
 
 ```
 dart test test/acceptance --concurrency=1
@@ -71,17 +68,17 @@ below), plus 9 cross-cutting invariants.
 | Cluster                       | Scenarios                        | Blocked on   |
 |-------------------------------|----------------------------------|--------------|
 | A1 · PQ-native onboard        | A1.1                             | ON-1         |
-| A2 · enrollments              | A2.1, A2.2, A2.3                 | SS-2, SS-4   |
-| A3 · self data                | A3.1 ✅, A3.2, A3.3, A3.4         | B-1, SS-4    |
-| A4 · shared data              | A4.1, A4.2, A4.3, A4.4           | B-1          |
+| A2 · enrollments              | A2.1 ✅, A2.2, A2.3               | owed         |
+| A3 · self data                | A3.1 ✅, A3.3 ✅, A3.2, A3.4       | owed         |
+| A4 · shared data              | A4.1 ✅, A4.4 ✅, A4.2, A4.3       | owed         |
 | A5 · rotation & revocation    | A5.1(a), A5.1(b), A5.2, A5.3     | B-2          |
 | B0 · atServer prerequisite    | B0.1                             | RF-SRV       |
 | B1 · retrofit                 | B1.1, B1.2, B1.3                 | RF-2b        |
 | B2 · retirement & lockout     | B2.1, B2.2                       | RF-SRV       |
 | B3 · mixed-PQ intra-atSign    | B3.1, B3.2                       | R-1          |
 | B4 · mixed-PQ cross-atSign    | B4.1, B4.2, B4.3, B4.4           | R-1, ON-1    |
-| B5 · retrofit edge cases      | B5.1, B5.2, B5.3                 | SS-4, B-1    |
-| cross-cutting invariants      | 9                                | B-1, R-1, SS-2, SS-4 |
+| B5 · retrofit edge cases      | B5.1, B5.2, B5.3                 | owed         |
+| cross-cutting invariants      | 9                                | owed, R-1    |
 
 Note that **A5.1 is split into (a) and (b)** here where the catalogue writes it
 as one use case with two When/Then pairs. They are different levers with
@@ -92,11 +89,14 @@ separately.
 
 ## The shape of the problem this exposes
 
-Sorting by blocker shows why D1 has felt slow. B-1 alone gates **11 of the 40**
-rows, and no data-path row goes green until **B-1** (XL) and **SS-4** (L–XL)
-land, so the programme had no demonstrable increment in its centre. (The rows
-rooted on RF-SRV — B0 and B2 — do not depend on either, and can move in
-parallel.)
+Sorting by blocker showed why D1 felt slow for so long: B-1 alone gated **11 of
+the 40** rows, and no data-path row could go green until **B-1** (XL) and
+**SS-4** (L–XL) landed, so the programme had no demonstrable increment in its
+centre. Both have now landed, and owed rows gate **17 of the 40** — the same
+rows, re-labelled from "waiting on a project" to "waiting on a test". That is a
+smaller problem with a different owner, and it is the honest description of
+where the burn-down now stands. (The rows rooted on RF-SRV — B0 and B2 — never
+depended on either, and can still move in parallel.)
 
 Two things followed, both now recorded in
 [`implementation-plan.md`](../../../../docs/projects/pq/implementation-plan.md):
