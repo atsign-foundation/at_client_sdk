@@ -1,4 +1,16 @@
 ## 3.14.1
+- feat: `benchmark/crypto_bench.dart` — the durable perf instrument the PQ work
+  is meant to be measured by, rather than reasoned about. Run it with
+  `dart run benchmark/crypto_bench.dart [--iterations N] [--json]`. It reports
+  three groups on three **different bases** and deliberately does not combine
+  them: per record (AES-256-GCM vs the legacy AES-256-CTR path, what every
+  put/get pays once a content key exists), per (owner, namespace) conveyance
+  (X-Wing `pqSeal`/`pqOpen` vs RSA-2048 wrap — paid once, then covering every
+  record in scope), and per authentication (the ML-DSA-65 ↔ RSA-2048 signature
+  swap, paid per connection). A single "PQ is N% slower" figure across them
+  would be arithmetic on incomparable denominators. Medians and p90s, not
+  means, and the harness's own loop overhead is reported rather than silently
+  subtracted.
 - fix: key material conveyed to an enrollment now reaches its keyfile.
   `collectConveyedKeyMaterial` runs at client start and is what
   `NskeyPrivateFiling` was always missing: its only entry point was a
