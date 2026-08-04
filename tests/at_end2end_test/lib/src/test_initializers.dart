@@ -25,9 +25,15 @@ class TestSuiteInitializer {
     return _singleton;
   }
 
+  /// Brings [atSign] up on [manager], defaulting to the process-wide singleton.
+  ///
+  /// Pass a dedicated manager to keep this atSign's client alive alongside
+  /// another's — see `ConcurrentClients`. The singleton stops the outgoing
+  /// client on every switch, so two atSigns cannot both be live under it.
   Future<void> testInitializer(String atSign, String namespace, String authType,
       {bool enableInitialSync = true,
-      AtClientPreference? atClientPreference}) async {
+      AtClientPreference? atClientPreference,
+      AtClientManager? manager}) async {
     try {
       logger.info(
           'testInitialized called for $atSign $namespace $authType $enableInitialSync $atClientPreference');
@@ -66,7 +72,7 @@ class TestSuiteInitializer {
       atClientPreference ??=
           TestPreferences.getInstance().getPreference(atSign);
       // Create the atClientManager for the atSign
-      var atClientManager = await AtClientManager.getInstance()
+      var atClientManager = await (manager ?? AtClientManager.getInstance())
           .setCurrentAtSign(atSign, namespace, atClientPreference,
               atChops: atChops,
               enrollmentId: atAuthResponse?.atAuthKeys?.enrollmentId);
@@ -75,8 +81,9 @@ class TestSuiteInitializer {
           .setEncryptionKeys(atClientManager.atClient, atSign);
 
       if (enableInitialSync) {
-        await E2ESyncService.getInstance()
-            .syncData(atClientManager.atClient.syncService);
+        await E2ESyncService.getInstance().syncData(
+            atClientManager.atClient.syncService,
+            atSign: atSign);
       }
 
       // verify if the public key is in the local secondary

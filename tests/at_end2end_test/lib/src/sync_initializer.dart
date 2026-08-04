@@ -36,11 +36,16 @@ class E2ESyncService {
   /// Returns when the local secondary has caught up to the remote
   /// secondary's commit id as observed by the first sync event after
   /// this call. Times out after [timeout].
+  /// [atSign] is a log label only. It is a parameter rather than a lookup
+  /// because reading it off the singleton crashes any caller whose client
+  /// belongs to a dedicated `AtClientManager` (see `ConcurrentClients`) — and
+  /// crashing a sync over a label would be an absurd way to lose a test.
   Future<void> syncData(
     SyncService syncSvc, {
+    String? atSign,
     Duration timeout = const Duration(minutes: 2),
   }) async {
-    final atSign = AtClientManager.getInstance().atClient.getCurrentAtSign();
+    atSign ??= _currentAtSignOrNull();
     _logger.info('syncData starting for $atSign');
     try {
       await syncSvc.waitUntilCaughtUp(timeout: timeout);
@@ -48,6 +53,15 @@ class E2ESyncService {
     } on TimeoutException catch (e) {
       _logger.warning('syncData timed out for $atSign: ${e.message}');
       rethrow;
+    }
+  }
+
+  /// The singleton's current atSign, or null when it holds no client.
+  static String? _currentAtSignOrNull() {
+    try {
+      return AtClientManager.getInstance().atClient.getCurrentAtSign();
+    } on StateError {
+      return null;
     }
   }
 
