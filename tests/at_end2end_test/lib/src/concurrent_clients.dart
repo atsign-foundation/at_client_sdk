@@ -50,8 +50,11 @@ class ConcurrentClients {
       throw ArgumentError.value(
           secondAtSign,
           'secondAtSign',
-          'must differ from firstAtSign — AtClientImpl caches by atSign, so '
-              'one atSign cannot be two concurrently live clients');
+          'must differ from firstAtSign — AtClientImpl caches by '
+              '(atSign, enrollmentId), and these clients carry no enrollment '
+              'id, so one atSign here cannot be two concurrently live '
+              'clients. Two ENROLLMENTS of one atSign can: see '
+              'enrolled_client.dart');
     }
 
     final firstManager = AtClientManager(firstAtSign);

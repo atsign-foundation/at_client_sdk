@@ -1,4 +1,24 @@
 ## 3.14.1
+- fix: `AtClientImpl`'s client cache is keyed by `(atSign, enrollmentId)` rather
+  than the atSign alone. A client authenticated as one enrollment is a different
+  principal from one authenticated as another, or as the atSign's own keys — a
+  different APKAM keypair, different granted namespaces, and the atServer
+  answers different verbs for it. Keying on the atSign alone silently handed
+  every caller the first client built for that atSign, so two enrollments of one
+  atSign could not exist in a process: they were `identical`, and the enrollment
+  id never reached the connection because the remote secondary was already set.
+  A null enrollment id keeps the bare atSign as the key, so the common case —
+  a client using the atSign's own keys — is unchanged.
+- feat (experimental): `PqSigningRoot.requestPrivateIfAbsent` asks the atSign's
+  other enrollments for the signing-root private, and runs at client start. An
+  enrollment that was offline when it was approved had no route to the root at
+  all: it is atSign-level and carries no namespace, so it never rides the
+  `enroll:listns` fan-out, and it is immutable and never rotates, so nothing can
+  mint a replacement. It broadcasts and returns rather than waiting — this runs
+  on every launch, and the answer is filed by the arrival path whenever a holder
+  comes online. Three guards, cheapest first: already holds it, no enrollment id
+  (such a client cannot enumerate holders and would mint rather than ask), not
+  fully privileged.
 - feat: the SDK now supplies a crypto config when an app names none, and that
   default reads the nskey data path while still writing legacy
   (`CryptoConfig.readsNskeyWritesLegacy`). The asymmetry is the point: a record
