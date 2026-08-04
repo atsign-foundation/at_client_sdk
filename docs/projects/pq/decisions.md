@@ -2119,7 +2119,8 @@ edge case, and the walk must climb.
 | 1 | **A root link lives in its own `appMetadata` field** (`apskRootLink`), beside `apskChainLink`. A verifier looks for it first and never disambiguates: the field name already determines which algorithm to verify with and where the key comes from. A discriminator inside one field would make one shape mean two things, and the two are not variants of each other — see [24.1](#241-two-things-the-design-does-not-get-to-choose) |
 | 2 | **The root signs every *fully privileged* enrollment's `_apsk`** — exactly the set that holds the root private, so exactly the set that could produce such a signature anyway. Not one anchor: [22's ruling 8](#22-ss-4-when-a-namespace-key-is-minted-and-what-must-be-true-first-2026-08-03) makes a revoked signer break the chain below it, so a single anchor means one revocation leaves every enrollment on the atSign unanchored until a holder re-signs. Redundancy here is cheap and the failure it prevents is total |
 | 3 | **The walk returns a graded result, not a boolean:** anchored to root / chained but unanchored / unsigned. A bare `_apsk` is explicitly tolerated during the changeover, so a boolean forces every caller either to reject enrollments that are valid today or to lose the distinction that will matter once the changeover ends. The caller owns the policy; the walk reports what it found |
-| 4 | **A root holder writes its own root link and conveys the others'** — the same parent-signs/child-publishes arrangement as [23](#23-uc-a21-reversing-the-enrollment-key-exchange-2026-08-04), and for the same reason: `_apsk` takes writes only from its own enrollment's connection. The minter can write its own immediately, because at mint it holds both the private and the record |
+| 4 | **Root links are self-signed, never conveyed.** [18.2](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) already puts the root *private* in every fully privileged enrollment, and by ruling 2 those are exactly the enrollments that get a root link — so each can sign its own, and `_apsk`'s writes-only-from-its-own-connection rule stops being an obstacle rather than needing to be worked around. **This corrects the ruling as first written**, which specified the parent-signs/child-publishes conveyance of [23](#23-uc-a21-reversing-the-enrollment-key-exchange-2026-08-04) for a case self-signing simply does not have |
+| 5 | **A holder signs at mint, and every start re-checks.** The minter signs itself at mint, holding both the private and its own record at that moment. Every start then fills any gap, and that is what makes the retro case work without a migration: an enrollment that was privileged *before* the root existed anchors itself the next time it runs. One rule covers the minter, a privileged peer that predates the root, one approved after it, one approved by a non-root-holding approver, and a root minted late |
 
 ### 24.3 No atSign is bound into a link payload, and why that is safe
 
@@ -2131,10 +2132,16 @@ be decoration that later reads as load-bearing.
 
 ### 24.4 Owed
 
-**When a root link is produced is not settled here.** The minter signing itself at mint is
-obvious; what is not is the retro path — an enrollment that was fully privileged before the
-root existed, or a privileged peer that has never been conveyed one. Neither blocks the
-walk, which reports *chained but unanchored* for exactly that state.
+**Self-signing reaches only the minter until the root private is conveyed.** Rulings 4 and 5
+rest on [18.2](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) having put the
+private in every fully privileged enrollment, and that conveyance is **not built** — it sits
+on SS-4's owed list beside "a losing enrollment pulling it". Until it lands, one enrollment
+can anchor itself and the rest read *chained but unanchored*, which is the honest answer
+rather than a broken one, but it is not the end state.
+
+**A privilege re-check belongs on the self-sign path.** An enrollment signs a root link only
+if it is fully privileged, not merely because it holds the private. The two should never
+diverge, and checking keeps ruling 2's invariant true if they ever do.
 
 **Key-transparency publication mechanics remain un-grilled** (when a root is submitted, and
 what a client does if the log is unreachable at mint). Out of scope here: it concerns what
