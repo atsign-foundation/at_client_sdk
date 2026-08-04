@@ -751,6 +751,9 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     }
     int shared = 0;
     for (final secret in secretStore.listSecrets()) {
+      if (isPerEnrollmentSecretName(secret.name)) {
+        continue;
+      }
       if (approvedNamespaces != null &&
           !SecretStore.namespaceAuthorizes(
               approvedNamespaces, secret.namespace)) {
@@ -761,6 +764,27 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     }
     return shared;
   }
+
+  /// Prefix marking a secret addressed to **one** enrollment.
+  ///
+  /// Distinct from the general `__` reserved space, and the distinction
+  /// matters: [SecretStore.putIfNewer] accepts reserved names precisely so
+  /// system secrets — namespace rotation keys among them — flow between a
+  /// client's enrollments, and a newly approved device needs those. What must
+  /// not flow is material addressed to a single enrollment: its own
+  /// `apkamSymmetricKey`, its own approval-chain link.
+  static const String perEnrollmentSecretPrefix = '__en.';
+
+  /// Whether [name] is addressed to one enrollment, and so must never be
+  /// forwarded on.
+  ///
+  /// A received secret is stored like any other, which is what makes this
+  /// necessary rather than merely tidy: an enrollment conveyed its own key
+  /// material holds it in the same store [shareAllSecretsWith] iterates, so
+  /// without this the next enrollment it approves would be handed the previous
+  /// one's. Forwarding is never right for these, whatever the namespace says.
+  static bool isPerEnrollmentSecretName(String name) =>
+      name.startsWith(perEnrollmentSecretPrefix);
 
   /// Pushes one [secret] to every key package registered for its namespace
   /// (minus this client). This is the mint/rotation push: it enumerates the

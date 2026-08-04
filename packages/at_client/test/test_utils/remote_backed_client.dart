@@ -16,11 +16,18 @@ import 'mocks.dart';
 /// one — one map backs both — so a test that cares about routing has to assert
 /// the routing directly rather than the result.
 ///
+/// [remoteMetadata] is opt-in because most callers only care about values.
+/// Supply one — shared by every client in the test, exactly as [remoteData] is
+/// — when the behaviour under test writes or reads `Metadata`; without it a
+/// `get` returns an [AtValue] with none, and an assertion about metadata would
+/// fail for want of a fixture rather than for want of the feature.
+///
 /// Callers must `registerFallbackValue(AtKey())` in `setUpAll`.
 MockAtClient buildRemoteBackedMockClient({
   required String atSign,
   required String enrollmentId,
   required Map<String, String> remoteData,
+  Map<String, Metadata>? remoteMetadata,
 }) {
   final atClient = MockAtClient();
   when(() => atClient.atChops).thenReturn(
@@ -36,8 +43,9 @@ MockAtClient buildRemoteBackedMockClient({
 
   when(() => atClient.put(any(), any(),
       putRequestOptions: any(named: 'putRequestOptions'))).thenAnswer((inv) {
-    remoteData[inv.positionalArguments[0].toString()] =
-        inv.positionalArguments[1];
+    final atKey = inv.positionalArguments[0] as AtKey;
+    remoteData[atKey.toString()] = inv.positionalArguments[1];
+    remoteMetadata?[atKey.toString()] = atKey.metadata;
     return Future.value(true);
   });
 
@@ -47,7 +55,9 @@ MockAtClient buildRemoteBackedMockClient({
     if (value == null) {
       throw AtKeyNotFoundException('$keyString not found');
     }
-    return Future.value(AtValue()..value = value);
+    return Future.value(AtValue()
+      ..value = value
+      ..metadata = remoteMetadata?[keyString]);
   }
 
   when(() => atClient.get(any(),

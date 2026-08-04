@@ -22,10 +22,11 @@ import 'package:meta/meta.dart' show experimental;
 /// The reserved [Secret] name under which an approver conveys a new
 /// enrollment's `apkamSymmetricKey`.
 ///
-/// Namespaced into the substrate's reserved space rather than an app's, so it
-/// can never collide with a secret an application shares.
+/// Carries the per-enrollment prefix, so it is never forwarded to the next
+/// enrollment this one approves — it is addressed to exactly one device.
 @experimental
-const String enrollmentApkamSymmetricKeySecretName = '__apkamSymmetricKey';
+const String enrollmentApkamSymmetricKeySecretName =
+    '${PairwiseSecretSharing.perEnrollmentSecretPrefix}apkamSymmetricKey';
 
 final AtSignLogger _logger = AtSignLogger('EnrollmentSymmetricKey');
 

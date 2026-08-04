@@ -117,6 +117,40 @@ void main() {
             'envelope the enrollment authenticates and can decrypt nothing');
   });
 
+  test('a received per-enrollment secret is never forwarded on', () async {
+    final approver = buildMockClient('approver-1');
+    final sharing = AtClientSecretSharing.forClient(approver);
+    await sharing.register();
+
+    // Model what an enrollment holds after being conveyed its own key
+    // material: it lands in the very store shareAllSecretsWith iterates,
+    // because putIfNewer accepts reserved names so that system secrets can
+    // flow between a client's enrollments at all.
+    await sharing.secretStore.putSecret(
+        Secret(
+            namespace: 'buzz',
+            name: enrollmentApkamSymmetricKeySecretName,
+            value: 'this-enrollment-only'),
+        allowReservedName: true);
+    await sharing.secretStore.putSecret(
+        Secret(namespace: 'buzz', name: 'app-secret', value: 'shareable'));
+
+    final recipient =
+        AtClientSecretSharing.forClient(buildMockClient('enrollee-2'));
+    final shared = await sharing.shareAllSecretsWith(
+        await recipient.register(),
+        approvedNamespaces: {'buzz': 'rw'});
+
+    // The count is the observable, not the envelope bodies: those are sealed,
+    // so grepping them for the secret's plaintext would pass whether or not it
+    // was forwarded.
+    expect(shared, 1,
+        reason: 'the app secret goes and the per-enrollment one does not — '
+            'material addressed to a single enrollment must not reach the '
+            'next one it approves, and the namespace check alone would let it '
+            'through since both live in buzz');
+  });
+
   test('the guard does not fire when there is nothing to convey', () async {
     final approver = buildMockClient('approver-1');
     // Same enrollment, except it wrapped its own key: the legacy path, where
