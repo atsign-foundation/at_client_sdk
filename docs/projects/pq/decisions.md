@@ -2130,18 +2130,23 @@ signature made under alice's keys fails there. Cross-atSign replay is already cl
 where the verifier looks, and a field asserting what the lookup already establishes would
 be decoration that later reads as load-bearing.
 
-### 24.4 Owed
+### 24.4 Built since, and what is still owed
 
-**Self-signing reaches only the minter until the root private is conveyed.** Rulings 4 and 5
-rest on [18.2](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) having put the
-private in every fully privileged enrollment, and that conveyance is **not built** — it sits
-on SS-4's owed list beside "a losing enrollment pulling it". Until it lands, one enrollment
-can anchor itself and the rest read *chained but unanchored*, which is the honest answer
-rather than a broken one, but it is not the end state.
+Both of the gaps this section first recorded are closed, and are kept here rather than
+deleted because each was the reason a ruling above reads as it does.
 
-**A privilege re-check belongs on the self-sign path.** An enrollment signs a root link only
-if it is fully privileged, not merely because it holds the private. The two should never
-diverge, and checking keeps ruling 2's invariant true if they ever do.
+~~*Self-signing reaches only the minter until the root private is conveyed.*~~ **Built.** A
+fully privileged enrollment is conveyed the private at approval — under a per-enrollment name,
+so `shareAllSecretsWith` cannot forward it to a namespace-scoped peer — and files it into
+`AtKeys` at start. Live-covered, including the check that the atServer really grants
+`*` + `__manage`, without which the privilege gate would have been tested against two
+identical cases.
+
+~~*A privilege re-check belongs on the self-sign path.*~~ **Built**, and the ordering turned
+out to matter: possession is checked **before** privilege, because reading the private is a
+local `AtKeys` read while establishing privilege costs a round trip. Checking privilege first
+would make every client at every start pay for a question almost none of them can act on.
+Holding the private is still not sufficient — the granted namespaces decide.
 
 **Key-transparency publication mechanics remain un-grilled** (when a root is submitted, and
 what a client does if the log is unreachable at mint). Out of scope here: it concerns what
