@@ -10,6 +10,9 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:at_client/src/service/enrollment_service_impl.dart'
+    show EnrollmentServiceImpl;
+
 import 'test_utils.dart';
 
 /// The approval chain against a live atServer.
@@ -26,9 +29,17 @@ void main() {
   late String atSign;
   const namespace = 'buzz';
 
+  late InMemoryAtKeysIo keysIo;
+
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    final manager = await TestUtils.initAtClient(atSign, namespace);
+    // The approver conveys the root private out of `atClient.atKeysIo`, so a
+    // client built without one could never hold it and any assertion about
+    // conveyance would be about the harness rather than the code.
+    keysIo = InMemoryAtKeysIo();
+    await keysIo.write(atSign, AtKeys());
+    final manager =
+        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo);
     atClient = manager.atClient;
     await AtClientSecretSharing.forClient(atClient).register();
   });
@@ -80,17 +91,14 @@ void main() {
 
   test('an atSign anchors itself to its own signing root, and the walk sees it',
       () async {
-    final io = InMemoryAtKeysIo();
-    await io.write(atSign, AtKeys());
-
-    // Mints if this run's atServer has no root yet, and anchors this
-    // enrollment either way on the next call below.
-    await PqSigningRoot(atClient, keysIo: io)
+    // Mints if this run's atServer has no root yet, into the very AtKeysIo the
+    // client holds — so the approval tests below find a private to convey.
+    await PqSigningRoot(atClient, keysIo: keysIo)
         .mintIfAbsent(isFullyPrivileged: true);
 
     final sharing = AtClientSecretSharing.forClient(atClient);
     await PqSigningChain.publishOwnRootLink(atClient,
-        isFullyPrivileged: () async => true, keysIo: io);
+        isFullyPrivileged: () async => true, keysIo: keysIo);
 
     final link =
         await PqSigningChain.readRootLink(atClient, sharing.enrollmentId);
@@ -106,6 +114,70 @@ void main() {
         reason: 'the walk fetches the published root and checks the ML-DSA '
             'signature against it, so this exercises the real record rather '
             'than an in-memory copy. Reason if not: ${result.reason}');
+  });
+
+  /// Enrols and approves with [namespaces], returning the kpid it advertised
+  /// and the number of envelopes sealed to it.
+  Future<({String kpid, int envelopes, Map<String, dynamic>? granted})>
+      enrolApproveAndCount(Map<String, String> namespaces) async {
+    final otp = (await atClient.getOTP()).response;
+    Map<String, dynamic>? built;
+    final build = enrollmentKeyPackageBuilder(atSign);
+
+    final response = await AtEnrollment.create().submit(
+      AtEnrollmentRequest(
+        atSign: atSign,
+        appName: namespace,
+        deviceName: 'priv-${Uuid().v4().hashCode}',
+        namespaces: namespaces,
+        otp: otp,
+        // pq mode so the approver mints the symmetric key. On the legacy path
+        // it would RSA-decrypt whatever the decision carries, and this test has
+        // no enrollee running to have produced one.
+        keyExchangeMode: EnrollmentKeyExchangeMode.pq,
+        metadataBuilder: (keysIo) async => built = await build(keysIo),
+        apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
+      ),
+      AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort),
+    );
+
+    await atClient.enrollmentService!.approve(
+        EnrollmentRequestDecision.approved(
+      atSign: atSign,
+      enrollmentId: response.enrollmentId,
+      apkamSymmetricKey: AtBytes.fromString(''),
+    ));
+
+    final payload = (built!['keyPackage'] as Map)['payload'] as Map;
+    final kpid = ((payload['keys'] as List).single as Map)['kid'] as String;
+    final granted = (await atClient.enrollmentService!.fetchEnrollmentRequests())
+        .where((e) => e.enrollmentId == response.enrollmentId)
+        .firstOrNull
+        ?.namespace;
+    final envelopes = await atClient.getAtKeys(
+        regex: '.*\\.$kpid\\.__ssenv\\..*', useRemoteAtServer: true);
+    return (kpid: kpid, envelopes: envelopes.length, granted: granted);
+  }
+
+  test('the root private reaches a privileged enrollment and no other',
+      () async {
+    final privileged = await enrolApproveAndCount(
+        {'*': 'rw', '__manage': 'rw', namespace: 'rw'});
+    final scoped = await enrolApproveAndCount({namespace: 'rw'});
+
+    // Checked, not assumed: if the atServer trimmed the grant, the approver
+    // would classify it as scoped and the comparison below would be between
+    // two identical cases while still reading green.
+    expect(EnrollmentServiceImpl.isFullyPrivileged(privileged.granted), isTrue,
+        reason: 'the atServer has to have granted * and __manage for this to '
+            'be a test of the privilege gate at all');
+    expect(EnrollmentServiceImpl.isFullyPrivileged(scoped.granted), isFalse);
+
+    expect(privileged.envelopes, scoped.envelopes + 1,
+        reason: 'the root vouches for every enrollment on the atSign, so only '
+            'the fully privileged class receives its private — and the '
+            'approver held one throughout, so the difference is the gate '
+            'rather than there having been nothing to send');
   });
 
   test('approving conveys a chain link alongside the symmetric key', () async {

@@ -5,6 +5,7 @@ import 'package:at_functional_test/src/at_keys_initializer.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 import 'package:crypto/crypto.dart';
+import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_client/at_client.dart';
 
 import 'package:at_demo_data/at_demo_data.dart';
@@ -51,14 +52,24 @@ class TestUtils {
     return digest.toString();
   }
 
+  /// [atKeysIo] is threaded through for tests of anything that reads key
+  /// material from `AtClient.atKeysIo` — the signing root's private half is the
+  /// first. Without one that getter is null, so such a test would assert
+  /// against a client structurally unable to hold the key and pass or fail for
+  /// reasons having nothing to do with the code under test.
+  ///
+  /// Supplying it also forces `setCurrentAtSign` past its same-atSign
+  /// short-circuit, which checks for exactly these override arguments — so it
+  /// reaches the client rather than being dropped on an already-current atSign.
   static Future<AtClientManager> initAtClient(
       String currentAtSign, String namespace,
-      {AtClientPreference? preference}) async {
+      {AtClientPreference? preference, AtKeysIo? atKeysIo}) async {
     AtSignLogger.root_level = 'shout';
     preference ??= TestUtils.getPreference(currentAtSign);
     final encryptionKeysLoader = AtEncryptionKeysLoader.getInstance();
     var atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, preference,
+        atKeysIo: atKeysIo,
         atChops: encryptionKeysLoader.createAtChopsFromDemoKeys(currentAtSign));
     // Set the preferences again because (1) setCurrentAtSign might do nothing
     // because currentAtSign is the same, and (2) some other test may have messed
