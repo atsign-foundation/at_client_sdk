@@ -2257,13 +2257,38 @@ The awaited call that never returns is
 with **no matching `DONE`** anywhere in the run, while the same call taken from the ordinary
 get path logs both.
 
-### 26.2 Why it hangs is not yet established
+### 26.2 Where it stops, and the ordering that probably explains it
 
-The mechanism is open. What is known is that the call runs *inside* the monitor's dispatch
-path — `_streamListeners.forEach`'s callback is `async` and awaits the transform — and that the
-same call completes normally off that path. The conveyance record has not synced to bob at that
-instant (the `__ck` notification arrives ~27ms *after* the data notification), so the `get`
-must go remote, which is the step that does not come back.
+Probing `AtLookupImpl._process` either side of both its blocking points separates lock
+contention from an unanswered read. It is the read:
+
+```
+14:38:57.003188  _process want-lock  lookup:all:6ed8bc85db4e7878.__ck.e2e_test@alice
+14:38:57.003245  _process got-lock   lookup:all:6ed8bc85db4e7878.__ck.e2e_test@alice
+14:38:57.003373  _process sent, reading …
+                 (no read-done, ever)
+14:38:57.022759  batch:[… update:…:@bob:6ed8bc85db4e7878.__ck.e2e_test@alice …]   ← alice, 19ms LATER
+```
+
+The lock is acquired immediately, so nothing is contending. The command goes out and
+`messageListener.read()` never returns.
+
+The ordering in the last line is the thing to explain first. It is a `lookup:` — bob asking his
+own atServer to resolve a record owned by **alice** — and alice has not pushed that record yet.
+Her sync `batch:` carrying the very `__ck` bob is asking for goes out 19ms *after* he asks for
+it. So the most economical hypothesis is that the cross-server resolution of a record that does
+not exist yet does not fail promptly, and the client has no timeout of its own to fall back on.
+
+That is a hypothesis, not a conclusion. What is established is the exact call, that it is the
+read rather than the lock, and that the record is genuinely absent at that instant. What is not
+established is what the far side does with the request — that needs the atServer's view, not the
+client's.
+
+The wider design point stands whatever the mechanism turns out to be: the notify path conveys a
+content key and announces the record that needs it **in the same instant**, over two independent
+transports — the conveyance rides sync, the announcement rides the monitor — with no ordering
+between them. The receive path then resolves the key inline, inside the monitor's dispatch. A
+receiver arriving before the conveyance is the ordinary case here, not the rare one.
 
 This is the hazard the tree rule about `Stream.listen` `onData` staying synchronous describes,
 one level up: an `await` inside per-event processing that needs the network.
