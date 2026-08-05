@@ -17,12 +17,19 @@ import 'package:crypton/crypton.dart';
 class RsaSigningAlgo implements AtSignatureAlgorithm {
   final HashingAlgoType _hashingAlgoType;
   final int _keySize;
+  final String _name;
+
+  @override
+  String get name => _name;
 
   RsaSigningAlgo(
       {HashingAlgoType hashingAlgoType = HashingAlgoType.sha256,
       int keySize = 2048})
       : _hashingAlgoType = hashingAlgoType,
-        _keySize = keySize;
+        _keySize = keySize,
+        _name = keySize == 2048
+            ? SigningAlgoType.rsa2048.name
+            : SigningAlgoType.rsa4096.name;
 
   /// Generate a fresh RSA key pair of [keySize] bits.
   @override

@@ -1,6 +1,7 @@
 import 'dart:ffi';
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/ffi/openssl_ffi_bindings.dart';
 import 'package:ffi/ffi.dart';
@@ -23,7 +24,7 @@ final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
   final DynamicLibrary _lib;
 
   @override
-  String get name => mlDsa65AlgorithmName;
+  String get name => SigningAlgoType.mldsa65.name;
 
   late final EvpPkeyCtxNewFromNameDart _ctxNewFromName;
   late final EvpPkeyCtxFreeDart _ctxFree;

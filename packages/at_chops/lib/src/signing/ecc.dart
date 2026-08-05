@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:crypto/crypto.dart';
 import 'package:ecdsa/ecdsa.dart' as ecdsa;
@@ -14,7 +15,8 @@ import 'package:elliptic/elliptic.dart' as elliptic;
 /// - signatures are 64-byte compact `R ‖ S`
 class EccSigningAlgo implements AtSignatureAlgorithm {
   final elliptic.Curve _curve = elliptic.getSecp256r1();
-
+  @override
+  String get name => SigningAlgoType.eccSecp256r1.name;
   EccSigningAlgo();
 
   /// Generate a fresh secp256r1 key pair.

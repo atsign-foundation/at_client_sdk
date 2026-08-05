@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:better_cryptography/better_cryptography.dart';
 
@@ -13,7 +14,8 @@ import 'package:better_cryptography/better_cryptography.dart';
 /// - signatures are 64 bytes
 class Ed25519SigningAlgo implements AtSignatureAlgorithm {
   final _algorithm = Ed25519();
-
+  @override
+  String get name => SigningAlgoType.ed25519.name;
   Ed25519SigningAlgo();
 
   /// Generate a fresh Ed25519 key pair.
