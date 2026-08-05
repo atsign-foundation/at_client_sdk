@@ -22,16 +22,18 @@ void main() {
       }
     });
 
-    test('encapsulate/decapsulate round-trip within the FFI instance',
-        () async {
+    setUp(() {
       if (lib == null) {
         fail('libcrypto not available on this host');
       }
       if (!mlKemSupported) {
         fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
       }
+    });
 
-      final algo = MlKem768FfiAlgo.fromLib(lib);
+    test('encapsulate/decapsulate round-trip within the FFI instance',
+        () async {
+      final algo = MlKem768FfiAlgo.fromLib(lib!);
       final kp = await algo.generateKeyPair();
       try {
         final enc = await algo.encapsulate(kp.publicKey);
@@ -46,18 +48,11 @@ void main() {
 
     test('FFI sender can encapsulate against a pure-Dart-generated public key',
         () async {
-      if (lib == null) {
-        fail('libcrypto not available on this host');
-      }
-      if (!mlKemSupported) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
-      }
-
       final MlKem768KeyPair kp = await MlKem768KeyPair.generate();
       final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
       final Uint8List priv = base64Decode(kp.atPrivateKey.privateKey);
 
-      final ffiAlgo = MlKem768FfiAlgo.fromLib(lib);
+      final ffiAlgo = MlKem768FfiAlgo.fromLib(lib!);
       final enc = await ffiAlgo.encapsulate(pub);
 
       // Recipient must use pure-Dart impl — FFI handles are non-serializable.
@@ -74,15 +69,7 @@ void main() {
 
       test('matches the pure-Dart public key for the same 64-byte seed',
           () async {
-        if (lib == null) {
-          fail('libcrypto not available on this host');
-        }
-        if (!mlKemSupported) {
-          fail(
-              'libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
-        }
-
-        final ffiAlgo = MlKem768FfiAlgo.fromLib(lib);
+        final ffiAlgo = MlKem768FfiAlgo.fromLib(lib!);
         final ffiKp = await ffiAlgo.generateKeyPair(seed);
         final pureKp = await MlKem768PureDartAlgo.instance.generateKeyPair(seed);
         try {
@@ -94,15 +81,7 @@ void main() {
 
       test('encapsulate/decapsulate round-trip with a seeded key pair',
           () async {
-        if (lib == null) {
-          fail('libcrypto not available on this host');
-        }
-        if (!mlKemSupported) {
-          fail(
-              'libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
-        }
-
-        final ffiAlgo = MlKem768FfiAlgo.fromLib(lib);
+        final ffiAlgo = MlKem768FfiAlgo.fromLib(lib!);
         final kp = await ffiAlgo.generateKeyPair(seed);
         try {
           final enc = await ffiAlgo.encapsulate(kp.publicKey);
@@ -115,15 +94,7 @@ void main() {
       });
 
       test('rejects a seed that is not 64 bytes', () async {
-        if (lib == null) {
-          fail('libcrypto not available on this host');
-        }
-        if (!mlKemSupported) {
-          fail(
-              'libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
-        }
-
-        final ffiAlgo = MlKem768FfiAlgo.fromLib(lib);
+        final ffiAlgo = MlKem768FfiAlgo.fromLib(lib!);
         expect(
           () => ffiAlgo.generateKeyPair(Uint8List(32)),
           throwsA(isA<ArgumentError>()),
@@ -133,28 +104,14 @@ void main() {
 
     test('encapsulate throws ArgumentError for a wrong-length public key',
         () async {
-      if (lib == null) {
-        fail('libcrypto not available on this host');
-      }
-      if (!mlKemSupported) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
-      }
-
-      final algo = MlKem768FfiAlgo.fromLib(lib);
+      final algo = MlKem768FfiAlgo.fromLib(lib!);
       final Uint8List badPub = Uint8List(MlKem768Sizes.publicKeyBytes - 1);
       expect(() => algo.encapsulate(badPub), throwsA(isA<ArgumentError>()));
     });
 
     test('decapsulate throws ArgumentError for a wrong-length ciphertext',
         () async {
-      if (lib == null) {
-        fail('libcrypto not available on this host');
-      }
-      if (!mlKemSupported) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
-      }
-
-      final algo = MlKem768FfiAlgo.fromLib(lib);
+      final algo = MlKem768FfiAlgo.fromLib(lib!);
       final kp = await algo.generateKeyPair();
       try {
         final Uint8List badCt = Uint8List(MlKem768Sizes.ciphertextBytes + 1);
@@ -167,14 +124,7 @@ void main() {
 
     test('decapsulate throws ArgumentError for a wrong-length secret-key '
         'handle', () async {
-      if (lib == null) {
-        fail('libcrypto not available on this host');
-      }
-      if (!mlKemSupported) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
-      }
-
-      final algo = MlKem768FfiAlgo.fromLib(lib);
+      final algo = MlKem768FfiAlgo.fromLib(lib!);
       final kp = await algo.generateKeyPair();
       try {
         final enc = await algo.encapsulate(kp.publicKey);

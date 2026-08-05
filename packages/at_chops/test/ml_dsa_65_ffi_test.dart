@@ -23,15 +23,17 @@ void main() {
       }
     });
 
-    test('FFI keygen/sign/verify round-trip', () async {
+    setUp(() {
       if (lib == null) {
         fail('libcrypto not available on this host');
       }
       if (!mlDsaSupported) {
         fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
       }
+    });
 
-      final algo = MlDsa65FfiAlgo.fromLib(lib);
+    test('FFI keygen/sign/verify round-trip', () async {
+      final algo = MlDsa65FfiAlgo.fromLib(lib!);
       final kp = await algo.generateKeyPair();
 
       expect(kp.publicKey.length, equals(1952));
@@ -49,18 +51,11 @@ void main() {
     });
 
     test('Interop A: pure-Dart keygen → FFI sign → pure-Dart verify', () async {
-      if (lib == null) {
-        fail('libcrypto not available on this host');
-      }
-      if (!mlDsaSupported) {
-        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
-      }
-
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
       final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
 
-      final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib);
+      final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib!);
       final Uint8List message =
           Uint8List.fromList('cross-backend signing'.codeUnits);
       final Uint8List sig = await ffiAlgo.signBytes(message, secretKey: sk);
@@ -71,14 +66,7 @@ void main() {
     });
 
     test('Interop B: FFI keygen → pure-Dart sign → FFI verify', () async {
-      if (lib == null) {
-        fail('libcrypto not available on this host');
-      }
-      if (!mlDsaSupported) {
-        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
-      }
-
-      final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib);
+      final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib!);
       final kp = await ffiAlgo.generateKeyPair();
 
       final Uint8List message =
@@ -92,14 +80,7 @@ void main() {
     });
 
     test('FFI verify returns false for tampered message', () async {
-      if (lib == null) {
-        fail('libcrypto not available on this host');
-      }
-      if (!mlDsaSupported) {
-        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
-      }
-
-      final algo = MlDsa65FfiAlgo.fromLib(lib);
+      final algo = MlDsa65FfiAlgo.fromLib(lib!);
       final kp = await algo.generateKeyPair();
 
       final Uint8List message = Uint8List.fromList('original'.codeUnits);
@@ -114,14 +95,7 @@ void main() {
 
     test('signBytes throws AtSigningException for a short secret key',
         () async {
-      if (lib == null) {
-        fail('libcrypto not available on this host');
-      }
-      if (!mlDsaSupported) {
-        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
-      }
-
-      final algo = MlDsa65FfiAlgo.fromLib(lib);
+      final algo = MlDsa65FfiAlgo.fromLib(lib!);
       final Uint8List message = Uint8List.fromList('data'.codeUnits);
       final Uint8List shortSk = Uint8List(MlDsa65Sizes.secretKeyBytes - 1);
 
@@ -132,14 +106,7 @@ void main() {
     test(
         'signBytes throws AtSigningException for an over-long secret key '
         '(same contract as the pure-Dart backend)', () async {
-      if (lib == null) {
-        fail('libcrypto not available on this host');
-      }
-      if (!mlDsaSupported) {
-        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
-      }
-
-      final algo = MlDsa65FfiAlgo.fromLib(lib);
+      final algo = MlDsa65FfiAlgo.fromLib(lib!);
       final Uint8List message = Uint8List.fromList('data'.codeUnits);
       final Uint8List longSk = Uint8List(MlDsa65Sizes.secretKeyBytes + 1);
 
@@ -150,14 +117,7 @@ void main() {
     test(
         'verifyBytes returns false (never throws) for a wrong-length public key',
         () async {
-      if (lib == null) {
-        fail('libcrypto not available on this host');
-      }
-      if (!mlDsaSupported) {
-        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
-      }
-
-      final algo = MlDsa65FfiAlgo.fromLib(lib);
+      final algo = MlDsa65FfiAlgo.fromLib(lib!);
       final kp = await algo.generateKeyPair();
       final Uint8List message = Uint8List.fromList('data'.codeUnits);
       final Uint8List sig =
@@ -173,14 +133,7 @@ void main() {
     test(
         'verifyBytes returns false (never throws) for a wrong-length signature',
         () async {
-      if (lib == null) {
-        fail('libcrypto not available on this host');
-      }
-      if (!mlDsaSupported) {
-        fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
-      }
-
-      final algo = MlDsa65FfiAlgo.fromLib(lib);
+      final algo = MlDsa65FfiAlgo.fromLib(lib!);
       final kp = await algo.generateKeyPair();
       final Uint8List message = Uint8List.fromList('data'.codeUnits);
 
