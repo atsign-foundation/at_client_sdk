@@ -19,8 +19,11 @@ import 'dart:io';
 /// lock older than [staleAfter] is broken and retaken. That is safe here
 /// because the critical section is a handful of file operations — a healthy
 /// holder is done in milliseconds, and one that has held for thirty seconds
-/// is dead. The lock file carries the holder's pid and acquisition time for
-/// diagnosis, not for correctness.
+/// is dead. Breaking claims the file by rename before deleting, so a breaker
+/// racing a faster breaker cannot delete the fresh lock that replaced the
+/// corpse. The lock file's content (pid + acquisition time) doubles as the
+/// holder's release token: a holder whose lock was broken while it ran finds
+/// someone else's content at release and leaves it in place.
 class AtKeysFileLock {
   /// The file the lock protects; the lock file sits beside it.
   final String protectedPath;
@@ -47,15 +50,15 @@ class AtKeysFileLock {
 
   /// Runs [action] holding the lock, releasing it however [action] exits.
   Future<T> synchronized<T>(Future<T> Function() action) async {
-    await _acquire();
+    final token = await _acquire();
     try {
       return await action();
     } finally {
-      _release();
+      _release(token);
     }
   }
 
-  Future<void> _acquire() async {
+  Future<String> _acquire() async {
     final deadline = DateTime.now().add(timeout);
     final parent = File(lockPath).parent;
     if (!parent.existsSync()) {
@@ -66,17 +69,15 @@ class AtKeysFileLock {
         // The atomic step: an O_EXCL create fails if the file exists, so
         // exactly one contender wins however many race.
         final sink = await File(lockPath).create(exclusive: true);
-        await sink.writeAsString(
-            '$pid ${DateTime.now().toUtc().toIso8601String()}\n');
-        return;
+        final token = '$pid ${DateTime.now().toUtc().toIso8601String()}\n';
+        await sink.writeAsString(token);
+        return token;
       } on FileSystemException {
         // Held by someone. Stale?
         try {
           final stat = File(lockPath).statSync();
           if (DateTime.now().difference(stat.modified) > staleAfter) {
-            // Presumed dead. Delete and contend again — the exclusive create
-            // above stays the only way in, so two breakers cannot both win.
-            File(lockPath).deleteSync();
+            _breakStale();
             continue;
           }
         } on FileSystemException {
@@ -94,9 +95,34 @@ class AtKeysFileLock {
     }
   }
 
-  void _release() {
+  /// Breaks a lock whose mtime says its holder is dead.
+  ///
+  /// Deleting by path would be wrong: between our staleness check and the
+  /// delete, a faster breaker may have broken the same corpse and a fresh
+  /// holder acquired — a bare delete would then evict the fresh holder and
+  /// let two contenders into the critical section. Renaming claims exactly
+  /// one file, so re-checking the claimed file's age tells us which one we
+  /// got: the corpse (delete it) or a live holder's lock (put it straight
+  /// back and queue behind it).
+  void _breakStale() {
+    final claimPath =
+        '$lockPath.breaking.$pid.${DateTime.now().microsecondsSinceEpoch}';
+    final claimed = File(lockPath).renameSync(claimPath);
+    if (DateTime.now().difference(claimed.statSync().modified) > staleAfter) {
+      claimed.deleteSync();
+    } else {
+      claimed.renameSync(lockPath);
+    }
+  }
+
+  void _release(String token) {
     try {
-      File(lockPath).deleteSync();
+      final lockFile = File(lockPath);
+      if (lockFile.readAsStringSync() == token) {
+        lockFile.deleteSync();
+      }
+      // Someone else's content means our lock was broken as stale and a new
+      // holder has since acquired — deleting here would evict them.
     } on FileSystemException {
       // Already gone — a stale-breaker took it. The next holder's exclusive
       // create still serialises correctly.

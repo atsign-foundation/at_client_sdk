@@ -85,6 +85,42 @@ void main() {
             'every future run of every app sharing the keyfile');
   });
 
+  test("release leaves a lock that is no longer the holder's own", () async {
+    // While A holds, a stale-breaker (from A's point of view: A stalled past
+    // staleAfter) breaks the lock and B acquires. A's release must not evict B.
+    final lockFile = File('$protected.lock');
+    await AtKeysFileLock(protected).synchronized(() async {
+      // Simulate the break plus B's acquisition by replacing the content.
+      await lockFile.writeAsString('another-holder\n');
+    });
+
+    expect(lockFile.existsSync(), isTrue,
+        reason: "a holder whose lock was broken while it ran must not delete "
+            "the new holder's lock on exit — that eviction lets a third "
+            'contender into the critical section alongside the new holder');
+    expect(await lockFile.readAsString(), 'another-holder\n');
+  });
+
+  test('breaking a stale lock leaves no rename residue beside the keyfile',
+      () async {
+    final leftover = File('$protected.lock');
+    await leftover.create(recursive: true);
+    await leftover
+        .setLastModified(DateTime.now().subtract(const Duration(minutes: 5)));
+
+    await AtKeysFileLock(protected, timeout: const Duration(seconds: 2))
+        .synchronized(() async {});
+
+    final residue = dir
+        .listSync()
+        .map((e) => e.path)
+        .where((p) => p.contains('.breaking.'))
+        .toList();
+    expect(residue, isEmpty,
+        reason: 'the break claims the corpse by rename and must delete the '
+            'claimed file, not accumulate siblings beside the keyfile');
+  });
+
   test(
       'a fresh lock held by a live process is waited on, then times out '
       'loudly', () async {

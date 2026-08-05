@@ -10,7 +10,12 @@
   corruption. Several CLI apps sharing one keyfile is the ordinary
   deployment, not an edge. A lock older than 30s is presumed abandoned and
   broken (a crashed holder must not deadlock every later run); acquisition
-  waits up to 10s and then fails loudly, naming the lock file.
+  waits up to 10s and then fails loudly, naming the lock file. Breaking claims
+  the stale file by rename and re-checks its age before deleting — a bare
+  delete could evict a fresh lock that replaced the corpse between the
+  staleness check and the delete — and the lock file's content doubles as the
+  holder's release token, so a holder whose lock was broken while it ran
+  cannot delete its successor's lock on exit.
 - feat: `AtEnrollmentRequest.keyExchangeMode` — an `EnrollmentKeyExchangeMode`
   choosing how the enrollment's `apkamSymmetricKey` travels. `legacy` (the
   default) is today's behaviour unchanged: the enrollee generates the key and
