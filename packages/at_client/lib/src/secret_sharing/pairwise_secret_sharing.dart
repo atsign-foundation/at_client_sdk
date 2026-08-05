@@ -153,6 +153,23 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// key package of the request's namespace).
   SecretRequestPolicy? answerSecretRequests;
 
+  /// Decides whether the enrollment behind a request may be handed a
+  /// per-enrollment (`__en.`-prefixed) secret — the class that includes the
+  /// signing-root private, the key that vouches for every enrollment on the
+  /// atSign.
+  ///
+  /// Namespace authorization, which is all the answer path otherwise checks,
+  /// is the wrong bar for these: any enrollment approved for the namespace
+  /// clears it, and per-enrollment material must not go to "any enrollment".
+  ///
+  /// Null — the default — **fails closed**: per-enrollment secrets are never
+  /// served on request. `AtClientSecretSharing` wires the production
+  /// resolver, which reads the requester's enrollment record off the
+  /// atServer and requires full privilege (`rw` on `*` and `__manage`) —
+  /// the record, not anything the requester asserts about itself.
+  Future<bool> Function(String requesterEnrollmentId)?
+      perEnrollmentSecretRequestGate;
+
   /// Anti-storm floor: the same (requester, secret-name) is answered at most
   /// once per this interval. A burst of duplicate requests collapses to one
   /// share.
@@ -597,10 +614,28 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     final want = (received.payload['want'] as List?)?.cast<String>().toSet();
     final namePrefix = received.payload['namePrefix'] as String?;
     final now = DateTime.now();
-    for (final secret in secretStore.listSecrets(
-        namespace: received.appNamespace, namePrefix: namePrefix)) {
+    // Resolved at most once per inbound request, not per matching secret —
+    // it costs a round trip to the enrollment record.
+    bool? requesterMayTakePerEnrollment;
+    for (final secret in _candidatesFor(received, want, namePrefix)) {
       if (want != null && !want.contains(secret.name)) {
         continue;
+      }
+      if (isPerEnrollmentSecretName(secret.name)) {
+        final gate = perEnrollmentSecretRequestGate;
+        requesterMayTakePerEnrollment ??=
+            gate != null && await gate(received.fromEnrollmentId);
+        if (!requesterMayTakePerEnrollment) {
+          // Warning, not finer: a refused serve must be attributable, or a
+          // legitimate privileged puller's failure presents as "the holder
+          // never answered" and gets blamed on the wrong side.
+          logger.warning('Not serving ${secret.name} to enrollment '
+              '${received.fromEnrollmentId} (kpid ${received.fromKpid}): '
+              'per-enrollment secrets are served only to fully privileged '
+              'enrollments${gate == null ? ', and no privilege resolver is '
+                  'wired on this sharing instance' : ''}');
+          continue;
+        }
       }
       final rateKey = '${received.fromKpid}:${secret.name}';
       final last = _lastAnsweredRequest[rateKey];
@@ -610,6 +645,41 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       _lastAnsweredRequest[rateKey] = now;
       await shareSecretWith(requester, secret);
     }
+  }
+
+  /// The store entries an inbound request may be answered from.
+  ///
+  /// Namespace-scoped, as every ordinary secret is — a request rides one app
+  /// namespace and is answered from that namespace's material.
+  ///
+  /// The exception is **explicitly named per-enrollment secrets**, which are
+  /// addressed to an *enrollment* rather than to a namespace. The signing-root
+  /// private is the case that matters: it is atSign-level and carries no
+  /// namespace of its own, so a holder can only file it under some namespace
+  /// it happens to run in. Two privileged enrollments of one atSign
+  /// belonging to different apps therefore never match — the holder primed
+  /// under its namespace, the requester asks in its own — and the pull that
+  /// is the only route to an unrotatable, immutable key would silently never
+  /// be answered. Named secrets only: a prefix or bare request still cannot
+  /// sweep another namespace's material.
+  ///
+  /// Widening the search does not widen who is served: the privilege gate
+  /// above decides that, and it is stricter for exactly these names.
+  Iterable<Secret> _candidatesFor(
+      ReceivedEnvelope received, Set<String>? want, String? namePrefix) {
+    final scoped = secretStore.listSecrets(
+        namespace: received.appNamespace, namePrefix: namePrefix);
+    final crossNamespaceNames =
+        want?.where(isPerEnrollmentSecretName).toSet() ?? const <String>{};
+    if (crossNamespaceNames.isEmpty) return scoped;
+
+    final seen = scoped.map((s) => (s.namespace, s.name)).toSet();
+    return [
+      ...scoped,
+      ...secretStore.listSecrets().where((s) =>
+          crossNamespaceNames.contains(s.name) &&
+          !seen.contains((s.namespace, s.name))),
+    ];
   }
 
   /// Envelope keys currently addressed to [kpid] in [appNamespace], read from

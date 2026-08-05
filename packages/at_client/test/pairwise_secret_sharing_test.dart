@@ -701,6 +701,139 @@ void main() {
       expect(sharerA.secretStore.getSecret('myapp', '__rk.1.deadbeef'), isNull);
     });
 
+    group('per-enrollment secrets on the request path', () {
+      const rootName =
+          '${PairwiseSecretSharing.perEnrollmentSecretPrefix}pqSigningRoot';
+
+      setUp(() async {
+        // B holds the atSign's signing-root private, primed into its store
+        // the way a privileged holder's start does.
+        await sharerB.secretStore.putSecret(
+            Secret(namespace: 'myapp', name: rootName, value: 'ROOTPRIVATE'),
+            allowReservedName: true);
+      });
+
+      test('with no privilege resolver wired, the request is never answered',
+          () async {
+        // sharerB is a bare mixin composition: perEnrollmentSecretRequestGate
+        // is null, which must FAIL CLOSED.
+        expect(
+            await sharerA
+                .requestSecretsFromNamespace('myapp', names: [rootName]),
+            1);
+        expect(await sharerB.sweepOnce(), 1); // request consumed
+        expect(await sharerA.sweepOnce(), 0,
+            reason: 'namespace authorization is the only other check on this '
+                'path, and ANY enrollment approved for the namespace clears '
+                'it — per-enrollment material must not be servable on that '
+                'bar alone, so a sharing with no resolver serves none of it');
+        expect(sharerA.secretStore.getSecret('myapp', rootName), isNull);
+      });
+
+      test('a requester the resolver rejects is refused', () async {
+        final consulted = <String>[];
+        sharerB.perEnrollmentSecretRequestGate = (enrollmentId) async {
+          consulted.add(enrollmentId);
+          return false;
+        };
+
+        await sharerA.requestSecretsFromNamespace('myapp', names: [rootName]);
+        expect(await sharerB.sweepOnce(), 1);
+        expect(await sharerA.sweepOnce(), 0);
+        expect(sharerA.secretStore.getSecret('myapp', rootName), isNull);
+        expect(consulted, ['enroll-a'],
+            reason: 'the refusal must be the resolver\'s answer about THIS '
+                'requester — a gate that never ran would refuse identically, '
+                'and this test would pass on a broken serve path');
+      });
+
+      test(
+          'a holder answers a named per-enrollment secret it filed under a '
+          'DIFFERENT namespace', () async {
+        // The shape this exists for: the signing root is atSign-level and
+        // carries no namespace, so a holder files it under whichever app
+        // namespace it happens to run in. Two privileged enrollments of one
+        // atSign belonging to different apps would otherwise never match.
+        //
+        // A name the group's setUp did NOT seed under 'myapp', so the only
+        // copy in B's store is the other namespace's. Reusing the seeded name
+        // would let the ordinary namespace-scoped lookup answer and the test
+        // would pass with this widening reverted.
+        const crossName =
+            '${PairwiseSecretSharing.perEnrollmentSecretPrefix}crossNsProbe';
+        await sharerB.secretStore.putSecret(
+            Secret(
+                namespace: 'someotherapp',
+                name: crossName,
+                value: 'ROOTPRIVATE'),
+            allowReservedName: true);
+        expect(sharerB.secretStore.getSecret('myapp', crossName), isNull,
+            reason: 'the precondition that makes this a cross-namespace test '
+                'at all');
+        sharerB.perEnrollmentSecretRequestGate = (_) async => true;
+
+        await sharerA.requestSecretsFromNamespace('myapp', names: [crossName]);
+        expect(await sharerB.sweepOnce(), 1);
+        expect(await sharerA.sweepOnce(), greaterThan(0),
+            reason: 'the root is the one key that can never be re-minted, and '
+                'this pull is the only route to it — a namespace mismatch '
+                'must not silently swallow the request');
+        expect(
+            sharerA.secretStore
+                .listSecrets()
+                .where((s) => s.name == crossName)
+                .map((s) => s.value),
+            contains('ROOTPRIVATE'));
+      });
+
+      test(
+          'the cross-namespace reach is limited to NAMED per-enrollment '
+          'secrets', () async {
+        // A boundary assertion rather than a differential: it holds before
+        // and after the widening, which is exactly the point — the widening
+        // must not have moved this line. An ordinary secret in another
+        // namespace stays out of reach, and so does a per-enrollment one that
+        // was not asked for by name.
+        await sharerB.secretStore.putSecret(
+            Secret(
+                namespace: 'someotherapp',
+                name: '__rk.1.elsewhere',
+                value: 'OTHERAPPKEY'),
+            allowReservedName: true);
+        await sharerB.secretStore.putSecret(
+            Secret(
+                namespace: 'someotherapp',
+                name: '${PairwiseSecretSharing.perEnrollmentSecretPrefix}other',
+                value: 'OTHERAPPEN'),
+            allowReservedName: true);
+        sharerB.perEnrollmentSecretRequestGate = (_) async => true;
+
+        await sharerA.requestSecretsFromNamespace('myapp', namePrefix: '__');
+        expect(await sharerB.sweepOnce(), 1);
+        await sharerA.sweepOnce();
+        final got = sharerA.secretStore.listSecrets().map((s) => s.value);
+        expect(got, isNot(contains('OTHERAPPKEY')),
+            reason: 'a namespace boundary is still a boundary — this widening '
+                'is for atSign-level material asked for BY NAME, not a way to '
+                'sweep another app\'s secrets');
+        expect(got, isNot(contains('OTHERAPPEN')));
+      });
+
+      test('a requester the resolver accepts is served', () async {
+        sharerB.perEnrollmentSecretRequestGate =
+            (enrollmentId) async => enrollmentId == 'enroll-a';
+
+        await sharerA.requestSecretsFromNamespace('myapp', names: [rootName]);
+        expect(await sharerB.sweepOnce(), 1);
+        expect(await sharerA.sweepOnce(), 1);
+        expect(sharerA.secretStore.getSecret('myapp', rootName)!.value,
+            'ROOTPRIVATE',
+            reason: 'the gate restricts, it does not disable: the pull is '
+                'the one heal an enrollment that missed the approve-time '
+                'conveyance has');
+      });
+    });
+
     test('requestSecret convenience resolves the single named secret',
         () async {
       await sharerB.secretStore.putSecret(

@@ -1,9 +1,12 @@
+import 'package:at_auth/at_auth.dart' show AtEnrollment;
 import 'package:at_client/at_client.dart' show AtClient;
 import 'package:at_client/src/mixins/apkam_signing.dart';
 import 'package:at_client/src/mixins/envelope_signing.dart';
 import 'package:at_client/src/secret_sharing/key_package_registration.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart';
+import 'package:at_client/src/service/enrollment_service_impl.dart'
+    show EnrollmentServiceImpl;
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
@@ -90,5 +93,19 @@ class AtClientSecretSharing
       cacheExpiry: Duration(minutes: 5),
       resetOnLookup: true,
     ),
-  });
+  }) {
+    perEnrollmentSecretRequestGate = _requesterIsFullyPrivileged;
+  }
+
+  /// The production gate for per-enrollment secret requests: the requester's
+  /// enrollment record — the server's word, not the requester's — must grant
+  /// `rw` on both `*` and `__manage`.
+  Future<bool> _requesterIsFullyPrivileged(String requesterEnrollmentId) async {
+    final theirs = (await EnrollmentServiceImpl(atClient, AtEnrollment.create())
+            .fetchEnrollmentRequests())
+        .where((e) => e.enrollmentId == requesterEnrollmentId)
+        .firstOrNull
+        ?.namespace;
+    return EnrollmentServiceImpl.isFullyPrivileged(theirs);
+  }
 }
