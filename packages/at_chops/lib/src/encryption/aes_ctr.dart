@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/at_iv.dart';
 import 'package:at_chops/src/padding/pkcs7.dart';
@@ -33,6 +34,9 @@ final class AesCtrEncryptionAlgo implements SymmetricEncryptionAlgorithm {
   final int keyLengthBytes;
 
   final AesCtr _aesCtr;
+
+  @override
+  String get name => EncryptionAlgoType.aesctr.name;
 
   PaddingAlgorithm paddingAlgo = PKCS7Padding(PaddingParams()..blockSize = 16);
 

@@ -1,6 +1,7 @@
 import 'dart:ffi';
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/at_iv.dart';
 import 'package:at_chops/src/ffi/openssl_ffi_bindings.dart';
@@ -36,6 +37,11 @@ final class AesGcm256FfiAlgo implements SymmetricEncryptionAlgorithm {
   late final EvpEncryptFinalExDart _encryptFinalEx;
   late final EvpDecryptFinalExDart _decryptFinalEx;
   late final EvpCipherCtxCtrlDart _ctxCtrl;
+
+  /// Same identifier as [AesGcm256EncryptionAlgo]: one algorithm, two
+  /// backends — a caller sees the backend choice, a protocol must not.
+  @override
+  String get name => EncryptionAlgoType.aesgcm256.name;
 
   AesGcm256FfiAlgo.fromLib(this._lib) {
     _evpAes256Gcm = _lib.lookupFunction<EvpAes256GcmNative, EvpAes256GcmDart>(

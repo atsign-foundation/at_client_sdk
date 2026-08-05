@@ -15,6 +15,8 @@ import 'package:at_chops/src/hashing/types.dart';
 /// caller must own it. For data written before IVs were set, pass
 /// [InitialisationVector.legacy].
 abstract class SymmetricEncryptionAlgorithm {
+  String get name;
+
   /// Generate a fresh key of the length this algorithm requires.
   ///
   /// The length is the implementation's own — AES-256-GCM always returns 32
@@ -34,6 +36,8 @@ abstract class SymmetricEncryptionAlgorithm {
 /// Interface for asymmetric encryption algorithms. Key material is passed per
 /// call. Check [RsaEncryptionAlgo] for sample implementation.
 abstract class ASymmetricEncryptionAlgorithm {
+  String get name;
+
   /// Encrypt [plainData] with [publicKey]
   Uint8List encrypt(Uint8List plainData, Uint8List publicKey);
 
@@ -49,15 +53,14 @@ abstract class ASymmetricEncryptionAlgorithm {
 /// silently transpose same-typed byte arguments (the published 3.3.0 FFI
 /// backend took `(secretKey, data)`; a positional reorder would keep
 /// compiling while binding arguments to the wrong slots).
-abstract interface class AtSignatureAlgorithm {
+abstract class AtSignatureAlgorithm {
   /// Stable identifier for this algorithm — a downstream protocol's wire,
   /// record, or keystore identifier for this signature type (e.g. at_server's
   /// FROM/POL handshake tags its cookie and published-key record with this).
   ///
-  /// Not [SigningAlgoType.name]: that enum is the deprecated `AtChops`
-  /// compatibility path's vocabulary and is unrelated to this interface —
-  /// `SigningAlgoType.mldsa65.name` is `'mldsa65'`, not this algorithm's
-  /// [name] here, and the two must not be assumed interchangeable.
+  /// This *is* [SigningAlgoType.name] — the enum's constants are spelled to
+  /// be the identifier, so there is no second vocabulary to translate
+  /// between. Implementations return `SigningAlgoType.<value>.name`.
   String get name;
 
   /// Generate a fresh signing key pair.
@@ -75,6 +78,8 @@ abstract interface class AtSignatureAlgorithm {
 
 /// Interface for hashing data. Refer [Md5HashingAlgo] for sample implementation.
 abstract class AtHashingAlgorithm<K, V> {
+  String get name;
+
   /// Hashes the passed data
   FutureOr<V> hash(K data, {covariant HashParams? hashParams});
 }
@@ -86,6 +91,8 @@ abstract class AtHashingAlgorithm<K, V> {
 /// recipient's public key, the recipient via [decapsulate] using their
 /// secret key and the ciphertext sent by the sender.
 abstract class AtKemAlgorithm {
+  String get name;
+
   /// Generate a fresh key pair from a secure random source.
   ///
   /// Deterministic (seeded) generation is deliberately not part of this

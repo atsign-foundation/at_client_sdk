@@ -2,6 +2,7 @@ import 'dart:ffi';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/ffi/openssl_ffi_bindings.dart';
 import 'package:ffi/ffi.dart';
@@ -49,6 +50,10 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
   late final EvpPkeyFromdataInitDart _fromdataInit;
   late final EvpPkeyFromdataDart _fromdata;
   late final CryptoFreeDart _cryptoFree;
+
+  /// Same identifier as [MlKem768PureDartAlgo]: one KEM, two backends.
+  @override
+  String get name => KemAlgoType.mlkem768.name;
 
   MlKem768FfiAlgo.fromLib(this._lib) {
     _ctxNewFromName = _lib.lookupFunction<EvpPkeyCtxNewFromNameNative,

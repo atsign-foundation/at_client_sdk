@@ -14,6 +14,8 @@ final class _FixedKem implements AtKemAlgorithm {
   final Uint8List _ct;
   _FixedKem(this._ss, this._ct);
   @override
+  String get name => 'fixed-kem-test-double';
+  @override
   Future<({Uint8List publicKey, Uint8List secretKey})>
       generateKeyPair() async =>
           throw UnsupportedError('not used in this test');

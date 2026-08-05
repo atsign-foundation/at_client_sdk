@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' show Random;
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/encryption/ml_kem_768_pure_dart.dart';
 import 'package:at_chops/src/encryption/x25519_pure_dart_algo.dart';
@@ -32,6 +33,9 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
   static const XWingPureDartAlgo instance = XWingPureDartAlgo._();
 
   const XWingPureDartAlgo._();
+
+  @override
+  String get name => KemAlgoType.xwing.name;
 
   static const int seedLength = 32;
   static const int publicKeyLength = 1216;

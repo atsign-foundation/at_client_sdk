@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 // ignore: implementation_imports
 import 'package:pqcrypto/src/algos/kyber/kem.dart' show KyberLevel;
@@ -16,6 +17,9 @@ final class MlKem768PureDartAlgo implements AtKemAlgorithm {
   static const MlKem768PureDartAlgo instance = MlKem768PureDartAlgo._();
 
   const MlKem768PureDartAlgo._();
+
+  @override
+  String get name => KemAlgoType.mlkem768.name;
 
   // pqcrypto's KyberKem object — ML-KEM-768 / kyber768 security level.
   static final KyberKem _kem = KyberKem(KyberLevel.kem768);

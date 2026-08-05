@@ -3,6 +3,7 @@ import 'dart:ffi';
 import 'dart:math' show Random;
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/encryption/ml_kem_768_ffi.dart';
 import 'package:at_chops/src/encryption/x25519_ffi_algo.dart';
@@ -34,6 +35,10 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
   XWingFfiAlgo.fromLib(DynamicLibrary lib)
       : _mlKem = MlKem768FfiAlgo.fromLib(lib),
         _x25519 = X25519FfiAlgo.fromLib(lib);
+
+  /// Same identifier as [XWingPureDartAlgo]: one KEM, two backends.
+  @override
+  String get name => KemAlgoType.xwing.name;
 
   static const int seedLength = 32;
   static const int publicKeyLength = 1216;

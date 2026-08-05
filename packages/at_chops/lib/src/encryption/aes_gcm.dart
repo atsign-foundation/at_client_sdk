@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/at_iv.dart';
 import 'package:at_chops/src/secure_random.dart';
@@ -30,6 +31,9 @@ final class AesGcm256EncryptionAlgo implements SymmetricEncryptionAlgorithm {
   static final crypto.AesGcm _aesGcm = crypto.AesGcm.with256bits();
 
   AesGcm256EncryptionAlgo();
+
+  @override
+  String get name => EncryptionAlgoType.aesgcm256.name;
 
   /// Generate a fresh [keyLength]-byte AES-256 key.
   @override

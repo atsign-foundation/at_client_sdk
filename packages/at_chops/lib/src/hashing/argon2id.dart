@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/hashing/types.dart';
 import 'package:cryptography/cryptography.dart';
@@ -14,6 +15,9 @@ import 'package:cryptography/cryptography.dart';
 /// The class uses the `cryptography` package's `Argon2id` algorithm for deriving
 /// a key from a password and encodes the result into a Base64 string.
 class Argon2idHashingAlgo implements AtHashingAlgorithm<String, String> {
+  @override
+  String get name => HashingAlgoType.argon2id.name;
+
   /// Hashes a given password using the Argon2id algorithm.
   ///
   /// The [password] parameter is required, and it represents the password or
