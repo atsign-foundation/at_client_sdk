@@ -3056,7 +3056,11 @@ next runs" is latency, not availability.
   real only for a device upgrading after the app went active-PQ: the standard E2EE
   new-device experience.
 - **Must-dos, not problems:** each device presents a distinct `(appName, deviceName)`
-  (the atServer refuses a duplicate approved pair); the new enrollment id lands **in
+  — client-side discipline, not server-enforced:
+  [42](#42-the-to-define-list-ruled-2026-08-05) item 1 exempts the APKAM
+  self-enrollment branch from the duplicate refusal, since a retrofit legitimately
+  keeps its own name, so distinctness is what lets an owner tell one device's
+  enrollment from another's in `enroll:list`; and the new enrollment id lands **in
   the keyfile that already holds the legacy material** — a fresh keyfile silently
   violates [37](#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05).
 - **Largely moot:** pre-split conveyance exposure — enrollment 1 is legacy, so the PQ
@@ -3139,6 +3143,9 @@ What the 2026-08-05 re-examination deliberately leaves **defined as needing
 definition** — the boundary between ruled and open. Each item names its owner-project
 where one exists.
 
+**Ruled the same day** — [42](#42-the-to-define-list-ruled-2026-08-05) records the
+ruling on every item; this list stays as the index of what each owner project owes.
+
 1. **RF-SRV verb wire shape** (the ruling in [§5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)
    plus [40](#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)'s
    constraints, as protocol: request fields, response, error cases). → RF-SRV.
@@ -3167,3 +3174,196 @@ where one exists.
     work; being prototyped 2026-08-05.
 12. **AtKeys advisory-lock design** — lock file vs `flock`, staleness, scope of the
     critical section. → at_auth; being prototyped 2026-08-05.
+
+## 42. The to-define list, ruled (2026-08-05)
+
+Every item in [41](#41-the-to-define-list-2026-08-05) was ruled in one sitting, each
+grounded first in the built code (read for the purpose, with file:line evidence) and
+then in the rulings it descends from. Owner projects are unchanged — what follows is
+what each project now implements rather than designs. The review also found three
+defects the list didn't know about: the duplicate-enrollment check refuses every
+scenario-3 retrofit (item 1); the AtKeys lock's stale-break can admit two holders,
+and its release could evict a successor (item 12); and the built expiry cap wrote
+its ttl against the wrong anchor, silently extending the grace by the enrollment's
+age (item 3, found while landing the sliding ruling). All the fixes land with this
+ruling, each with a differential test.
+
+1. **Wire shape: frozen as built, plus two server deltas.** The verb stays
+   `enroll:request:<json>`, discriminated solely by the connection's authType being
+   APKAM — no new token. Mandatory: `appName`, `deviceName`, `apkamPublicKey`, and
+   (new ruling) a non-empty `namespaces`. Optional: `signingAlgo`, `metadata`
+   (carrying the key package), `apkamKeysExpiryDuration` (absent = inherit the
+   parent's), `encryptedAPKAMSymmetricKey` (absent = legacy material conveys
+   client-side per [40](#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)).
+   Response `{enrollmentId, status:'approved'}`; the errors are the four
+   UnAuthorizedException refusals (no connection enrollmentId; parent missing or
+   expired; parent unapproved; escalation) plus the throttle. The second delta: the
+   `(appName, deviceName)` duplicate check is skipped on the APKAM branch, since a
+   retrofit keeps its own name and scenario-3 siblings share one — the uniqueness
+   property among approved enrollments ends here by design. at_server_spec gets the
+   three-branch table (unauthenticated+OTP → pending; CRAM → approved root;
+   APKAM → approved subset child).
+
+2. **Revocation cascades eagerly, and revocation has two modes.** The parent link
+   lives where the spike put it: `parentEnrollmentId` on the enrollment record, set
+   only by self-enrollment. `enroll:revoke` in its default (compromise) mode
+   enumerates enrollments, collects descendants transitively, marks each revoked,
+   and drops each one's live connections — the existing per-id mechanics, applied
+   over the walk. A lazy ancestor check at authentication was ruled out
+   structurally: expired enrollments are deleted on encounter, so a dangling parent
+   link cannot distinguish benign expiry from revocation. Unrevoke restores only the
+   named enrollment. Item 6 adds the second mode — **retire**, no cascade, for
+   planned migration off a shared keyfile; without it, retiring a cloned parent
+   would kill the legitimate children each clone spawned. No authorisation delta:
+   subset grants mean the parent's revoker is authorised for every descendant
+   (record that property in the implementing commit's body). `parentEnrollmentId`
+   is also exposed in `enroll:fetch` and `enroll:list`, so an owner can see what a
+   stolen keyfile spawned.
+
+3. **The cap slides.** [§5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s
+   formula — min(now + grace, the enrollment's own expiry) — is applied on every
+   sibling retrofit against the enrollment's pre-cap expiry, not folded into the
+   previously capped ttl. The built min-fold made the first retrofit fix the
+   deadline forever, which is [40](#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)'s
+   stranding case arriving on schedule for any fleet that trickles. Sliding, the
+   legacy credential dies one grace period after the *last* clone upgrades — the
+   only finite policy that tracks the observable signal, a sibling still existing
+   and upgrading. `apkamSelfEnrollmentGraceHours` is ratified at 720. Stranding
+   past the window costs one OTP re-enrollment and KF-1 already specifies detecting
+   it; the theft remedy is revocation (item 2), never the cap. Landing the sliding
+   change found a third defect: a written ttl anchors at the write
+   (`expiresAt = now + ttl` in the metadata builder), so the built
+   `(now − createdAt) + grace` formula extended the cap by the enrollment's whole
+   age — invisible to the spike's unit test because its parent was seconds old.
+   The re-arm writes the grace as-is and re-derives "its own expiry" from
+   `apkamKeysExpiryDuration`, since the record's current ttl is the earlier cap,
+   not the enrollment's own posture. Landed on the spike; the min-fold, the
+   posture bound, and both item-1 deltas are each pinned by a test proven red
+   against the pre-fix handler.
+
+4. **The chain sweep's runner is whichever fully privileged client next starts** —
+   exactly what is built — and there is deliberately no dedicated sweep actor. On
+   an atSign where no privileged client ever appears again, chained-but-unanchored
+   is the accepted steady state per
+   [38.3](#383-scenario-3s-problem-taxonomy-so-nobody-re-derives-it):
+   defence-in-depth the verifiers already tolerate, not function. No CLI mandate,
+   no server nudge. RF-SRV gains a requirement instead: the spawn moment runs under
+   the parent credential, so it signs and conveys the child's chain link whenever
+   that credential can sign one — the mirror of the approve-time conveyance — and
+   scoped enrollments are born anchored, leaving the sweep as a repair for links a
+   legacy approver could never sign.
+
+5. **Last-holder-lost recovery is explicit rotation, and history stays lost.**
+   Never automatic: store-and-forward cannot distinguish "no holder exists" from
+   "holder offline", so a failed pull must not trigger a re-mint. Privilege is rw
+   on the namespace — the bar the atServer's write gate on `public:__nskey.<ns>`
+   already enforces. Records whose CKs were sealed only to the lost generation stay
+   unreadable (rotation replaces the key; it does not decrypt the past), except on
+   clients whose persisted CK cache holds the unwrapped CK. The API is B-2's rotate
+   lever — mintAndPublish on an existing namespace is already rotation — with no
+   dedicated recovery surface. nskeys only: the signing root never rotates, so a
+   lost root is permanent and the tolerance of unsigned `_apsk` is the designed
+   degradation.
+
+6. **Clones share fate.** B-2 rotation and revocation assume an enrollment id may
+   have any number of live holders, cryptographically indistinguishable:
+   `enroll:revoke` cuts every clone, and `excludeEnrollmentIds` excludes every
+   clone or none. B-2 never promises to unwind what one clone holds — only what
+   the enrollment id holds. Per-device revocability exists only where each device
+   holds its own enrollment id; RF-SRV is the path there, and the compromise recipe
+   is: each legitimate device self-enrols its own id, then the shared id is retired
+   (item 2's non-cascading mode) and the nskey rotated excluding it.
+
+7. **Enrollment 1 retires by ageing out; revoke is for compromise.** The upgrade
+   guide's five points: retirement is of the enrollment-1 *id*, not the keyfile —
+   retrofit adds the new enrollment to the same `.atKeys` file, which keeps the
+   legacy material
+   ([37](#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)),
+   and the upgraded file becomes the backup. Timing: nothing to do; the grace cap
+   retires it one window after the last retrofit (item 3). Never `enroll:revoke`
+   as cleanup, since revocation cascades to every retrofitted child — this narrows
+   [§5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s "(or an
+   explicit enroll:revoke)" aside to the compromise case, where cascading is the
+   point. A straggler past the window gets a loud auth failure, not data loss;
+   recovery is a copied upgraded keyfile or a fresh OTP enrollment. Once the
+   upgraded keyfile is archived, destroy pre-PQ `.atKeys` copies — they hold the
+   legacy encryption private (harvest-relevant) and, until the cap elapses, a live
+   credential.
+
+8. **The in-place rsa→mldsa65 `_apsk` upgrade: no, ratified.**
+   [39](#39-_apsk-rides-the-same-two-stage-ladder-2026-08-05)'s reasoning stands,
+   and the code adds one more: `_apsk` is a verbatim copy of the enrollment
+   record's key and PKAM is record-authoritative
+   ([34](#34-pkam-is-record-authoritative-and-the-no-rsa-row-reads-narrower-than-it-looks-2026-08-04)),
+   so rewriting the published value alone desynchronises the verify key from the
+   credential PKAM checks — the upgrade would have to rewrite the enrollment record
+   too, strictly more state mutation under the same missing authorisation rule.
+   RF-SRV reaches the identical end state with mechanics already ruled.
+
+9. **The tagged `_apsk` format: frozen as built.** A bare value is an rsa2048 key
+   exactly as published today; a value starting `{` is JSON with required string
+   fields `signingAlgo` (a SigningAlgoType name) and `publicKey` (base64 of the raw
+   key for mldsa65), optional informational `v: 1` (the parser never reads it; bump
+   only on incompatible change), unknown fields tolerated, unknown algorithm
+   refused loudly. The old-parser failure mode is fail-closed and proven: every
+   pre-PQ verifier base64-decodes the value, which throws FormatException on JSON
+   (asserted in apsk_two_format_test.dart). The atServer composes the tagged form
+   from the enrollment record's (apkamPublicKey, signingAlgo) at publish time,
+   keeping the record PKAM reads the single source. NoPorts, before any of its
+   enrollments publish tagged: srvd's two ESCR verify sites are hardwired to RSA
+   and fail loudly on a tagged value — fail-closed but service-breaking, so relays
+   adopt the two-format parser first, ecosystem-wide. No other NoPorts path parses
+   the value (checked: the sk-URI plumbing and the namespace check are
+   format-independent).
+
+10. **Stop-minting: one tri-state flag, next-major-after-R-2 at the earliest,
+    repair-on-first-demand.** The flag is `bool? mintLegacyMaterial` on
+    AtOnboardingRequest in at_auth — minting happens at onboarding, before an
+    AtClient exists, so AtClientPreference is the wrong home. null resolves to the
+    release default: true through at_client 4.x, false from the stop release;
+    explicit true/false is the app's call either way. ON-1 implements this flag as
+    its legacy-interop deliverable. The stop release is the next major after R-2 —
+    5.0.0 at the earliest — cut when the ecosystem criteria are met: every
+    first-party downstream's last published major writes PQ by default, and B-3
+    phase 3's server tolerance is deployed across atServer implementations. The
+    criteria gate; the number does not. Repair is on-first-demand, scoped to
+    app-initiated operations that cannot proceed without legacy material — never a
+    background sweep — minting the legacy keypair and selfEncryptionKey, publishing
+    `public:publickey`, and conveying the self key over the substrate exactly as
+    nskey privates convey, serialised by an immutable-create lock mirroring
+    `_nskeylock`. Safe precisely because nothing was written under it, and its
+    existence is what makes stopping early recoverable rather than a one-way door.
+
+11. **The self-heal's trigger points are the built four.** (1) The start-time
+    sweep — hydrate the answering store from AtKeys, then pull the *current*
+    generation only if its private is absent. (2) The read-path on-miss pull — an
+    exact-kid broadcast for any own generation a decrypt names, once per generation
+    per process; this is
+    [38](#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)'s "older
+    on demand". (3) The approve-time push of all held generations for the approved
+    namespaces. (4) The mint-time push. Live-proven in
+    nskey_self_heal_live_test.dart, and 38.1's no-callers finding is discharged.
+    Moved to B-2 explicitly: the rotation initiator (nothing in production calls
+    mintAndPublish for an existing namespace), rotation-time conveyance of the new
+    generation, and threading excludeEnrollmentIds into the nskey pull/answer paths
+    after a revocation — the substrate parameter exists and neither nskey call site
+    passes it. The substrate's namePrefix support stays capability, not a trigger.
+
+12. **The AtKeys lock ratifies on all three axes, with one named fix.** O_EXCL
+    sidecar lock-file over flock — it serialises intra-process too (fcntl locks are
+    per-process), survives Dart re-opening fds inside the section, and stays
+    breakable on Windows since no handle is held open. 30s mtime staleness with
+    delete-and-recontend, plus the 10s loud timeout — no permanent wedge, tested.
+    The critical section is write and the whole flush read-validate-write, reads
+    unlocked — temp+rename means a reader never sees a torn file, and the lock
+    incidentally serialises the fixed-name .tmp/.bak siblings. The fixes, a
+    condition of this ratification and landed with it: (a) the stale-break's
+    unconditional delete was a TOCTOU — a breaker could delete a *contender's*
+    fresh lock, admitting two holders, exactly when contenders pile up at the
+    staleness threshold after a crash. The break now claims the file by rename
+    and re-checks the claimed file's age: the corpse is deleted, and a live lock
+    claimed in a rare race with a faster breaker is put straight back. (b) Release
+    had the same shape one step later: a holder whose lock was broken as stale
+    deleted the *successor's* lock by bare path on exit. The lock file's content
+    (pid + acquisition time) is now the holder's release token — release deletes
+    only its own. Both carry tests (at_auth 153 green).

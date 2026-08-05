@@ -826,7 +826,7 @@ taken now because nothing written under the old form exists outside the spike.
 | **BOTH test packs' rails are pointed away from CI's image and must be reverted before any PR.** `tests/at_functional_test/test/docker-compose.yaml` **and** `tests/at_end2end_test/test/docker-compose.yaml` use a locally built `at_virtual_env:local`, and both `runLocal.sh`s have `docker compose pull` disabled — **four files, uncommitted, deliberate**. The published `virtualenv:vip` does **not** store `EnrollParams.metadata`, so the key-package path cannot be tested against it at all. The e2e pair was swapped 2026-08-04 when the two-enrollment rows needed it; the entry previously named only the functional pair, which would have shipped the e2e swap unnoticed. Before opening a client PR: confirm vip has been promoted, revert all four, and re-run both packs against it | `at_functional_test`, `at_end2end_test` |
 | **A PQ-capable client cannot tell a legacy atServer from an old peer.** Against an atServer that drops `EnrollParams.metadata`, the key package vanishes silently and the approver reads absence — which [decisions.md 20](decisions.md#20-ss-2-how-the-key-package-reaches-an-enrollment-and-how-conveyance-fires-2026-08-03) ruling 2 treats as *ordinary*, because it also means "an older client". So conveyance no-ops fleet-wide with nothing saying why. UC-B0.1 requires aborting cleanly and logging the reason; `info` returns only a version string, with no feature list to check | **RF-SRV** / UC-B0.1 |
 | **Parity across every atServer implementation for the `mldsa65` verify branch.** At least one rejects `signingAlgo:mldsa65` while *parsing* the command, so a PQ client meets an invalid-syntax error rather than an authentication failure. It already stores `signingAlgo` but never reads it, and carries no ML-DSA support — a dependency decision, not an edit | **SS-3** |
-| **D1 GA critical path, re-derived 2026-08-05 after the three-scenario re-examination** ([decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)–[41](decisions.md#41-the-to-define-list-2026-08-05)). **R-1 is DELIVERED, shrunk to D1-D**: `disallowLegacyEncryption` landed 2026-08-05; the marker/negotiation half was built, proven at three layers, and removed the same day; C3 deferred unbuilt. **Newly ON the GA path:** **SH-1** (M, key-material self-heal — the conveyance hole meant an enrollment created after a mint was stranded; in progress 2026-08-05) and **RF-SRV** (L, server self-enroll — every scenario's "upgrade the enrollment", was mis-filed off-path). **Re-timed:** ON-1 mints/publishes legacy material by default (decisions 37); R-2 keeps the flag flip but loses phase-4 stop-existing to a later ecosystem-gated release; B-3 phase 3's client-side stop likewise. Remaining on the GA path: **SH-1**, **RF-SRV**, **B-2** (L, + two rulings owed from the to-define list), **ON-1** (M), **R-2** (M), **S-3** (L). The to-define list ([decisions 41](decisions.md#41-the-to-define-list-2026-08-05)) is the authoritative open-questions ledger — 12 items with owners | plan |
+| **D1 GA critical path, re-derived 2026-08-05 after the three-scenario re-examination** ([decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)–[41](decisions.md#41-the-to-define-list-2026-08-05)). **R-1 is DELIVERED, shrunk to D1-D**: `disallowLegacyEncryption` landed 2026-08-05; the marker/negotiation half was built, proven at three layers, and removed the same day; C3 deferred unbuilt. **Newly ON the GA path:** **SH-1** (M, key-material self-heal — the conveyance hole meant an enrollment created after a mint was stranded; in progress 2026-08-05) and **RF-SRV** (L, server self-enroll — every scenario's "upgrade the enrollment", was mis-filed off-path). **Re-timed:** ON-1 mints/publishes legacy material by default (decisions 37); R-2 keeps the flag flip but loses phase-4 stop-existing to a later ecosystem-gated release; B-3 phase 3's client-side stop likewise. Remaining on the GA path: **SH-1**, **RF-SRV**, **B-2** (L, + two rulings owed from the to-define list), **ON-1** (M), **R-2** (M), **S-3** (L). The to-define list ([decisions 41](decisions.md#41-the-to-define-list-2026-08-05)) is the authoritative open-questions ledger — 12 items with owners; **all 12 ruled 2026-08-05** ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05)), so the definitions now land in their owner projects as implementation | plan |
 | **D1 GA critical path, re-derived 2026-08-04 against pub.dev and the skip counts.** Complete: P-*, S-1/S-2, SS-1a/1b/1c, **SS-2**, **SS-3**, **SS-4** (bar key transparency, parked), **B-1** incl. all chunks. Remaining on the GA path: **R-1** (L, migration machinery + `disallowLegacyEncryption` + strict mode), **B-2** (L, nskey rotation + revocation), **ON-1** (M, PQ-native greenfield onboarding), **R-2** (M, the 4.0.0 flag flip), and **S-3** (L, updatable `.atKeys`/keychain). Off the GA path: the **RF-\*** retrofit trio. Referenced only: D2-1. Separate track: IS-1. Publish gates verified against pub.dev the same day — at_client 3.14.1/3.14.0, at_commons 5.14.0/5.13.0, at_chops 3.4.2/3.4.1, at_auth 3.4.0/3.3.0 (so the old at_auth `3.3.0-rc1`→stable gate is **closed**) | plan |
 | **`at_auth` 3.4.0 is open and unpublished**, and at_client now depends on `AtEnrollmentRequest.metadataBuilder`. Same masking as the at_commons row below: workspace resolution hides it, so a green build says nothing | `at_auth` |
 | ~~`at_end2end_test` has not been run since at_auth's surface changed~~ — **run 2026-08-04, green at 41 with no skips**, the same count as 2026-08-03. So neither at_auth's added surface (`EnrollmentKeyExchangeMode`, `apkamSymmetricKeyResolver`, `approvedWithMintedKey`, the grown `AtEnrollmentResponse`/`EnrollmentRequestDecision`) nor the arrival-path work regressed it — the latter mattering because that commit added work to `AtClientImpl`'s init, which every e2e test drives. All four rails now verified together: `at_client` 825/39 skipped, functional 113, e2e 43, `at_client_flutter` analyze clean | `at_end2end_test` |
@@ -978,9 +978,12 @@ CRAM, not legacy PKAM) with a new enrollmentId and **no OTP**, the server (1) va
 namespaces are a **subset** of the authenticating enrollment's (reject escalation); (2) **auto-approves**
 (model on the CRAM branch's state=approved / skipCommit-pubkey / set-enrollmentId mechanics **without** its
 `__manage`+`*`:rw grant); (3) **copies** the authenticating enrollment's expiry (or null=never) to the new
-enrollment; (4) **caps** the old enrollment's expiry to `min(now + serverConfig grace, old's existing
-expiry)` **without removing it**; (5) stores/returns `EnrollParams.metadata` (per SS-1a/b). New
-`at_secondary_config` grace-duration knob (alongside `enrollmentExpiryInHours`).
+enrollment; (4) **caps** the old enrollment's expiry to `min(now + serverConfig grace, its own posture's
+expiry)` **without removing it** — the cap **re-arms on every sibling retrofit** (ruled in
+[decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05) item 3, landed on the spike), so the
+legacy credential retires one grace period after the *last* clone upgrades; (5) stores/returns
+`EnrollParams.metadata` (per SS-1a/b). New `at_secondary_config` grace-duration knob (alongside
+`enrollmentExpiryInHours`), ratified at 720h.
 **Acceptance → [acceptance.md](acceptance.md):** authed `enroll:request` (new id, no OTP) → auto-approved (no
 pending notification), key package stored; escalating namespaces → `UnAuthorized`; the new enrollment
 inherits the old's expiry; the old enrollment's ttl is capped (record still present, still authenticates
@@ -991,11 +994,20 @@ requester-keyed subset check at request time, the expiry copy + old-enrollment t
 **2026-08-05 additions ([decisions 40](decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)):**
 the child records its **parent** enrollment and revocation **cascades** to
 descendants (a stolen keyfile must not spawn a survivor); distinct
-`(appName, deviceName)` required per cloned device; the new enrollment id lands in
-the keyfile that already holds the legacy material; and the **expiry-cap grace vs
-cloned-keyfile laggards is to-define item 3** — neither a short grace (strands
-clones) nor an infinite one (never retires the legacy credential) is silently
-assumed.
+`(appName, deviceName)` per cloned device is *client-side guidance* (RF-2b) — the
+server deliberately does **not** refuse duplicates on the APKAM branch; the new
+enrollment id lands in the keyfile that already holds the legacy material.
+**Ruled 2026-08-05 ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05)
+items 1-4, landed on the spike where noted):** wire shape frozen as built plus two
+deltas (duplicate check skipped on the APKAM branch; `namespaces` mandatory
+non-empty) — both landed; the expiry cap **re-arms** per sibling retrofit at
+**720h** — landed; revocation gets **two modes** (revoke-compromised cascades
+eagerly over `parentEnrollmentId`; retire does not, for planned migration off a
+shared keyfile), unrevoke is non-cascading, and `parentEnrollmentId` is exposed in
+`enroll:fetch`/`enroll:list` — the walk is still to implement; and the spawn
+moment **signs and conveys the child's chain link** whenever the parent credential
+can, so scoped enrollments are born anchored (new requirement, mirrors the
+approve-time conveyance).
 **coversD1:** D1-F retrofit (server); legacy retirement via expiry + revoke.
 
 ### RF-2b — at_client: mint PQ (ML-DSA) APKAM + key package, then authenticated auto-approved self-retrofit `enroll:request` · at_client, tests · L
@@ -1087,16 +1099,23 @@ privileged client signs approval-chain links for enrollments that lack them
 private with **no re-mint** (functional, live); the sweep anchors a
 scoped enrollment approved by a legacy parent; unit coverage for all four wires.
 **Effort:** M.
-**Watch-outs:** the pull's trigger points and generation interplay are
-to-define item 11 ([decisions 41](decisions.md#41-the-to-define-list-2026-08-05)) —
-build start-time + on-miss now, leave rotation-generation policy to B-2.
+**Watch-outs:** the pull's trigger points are **ruled**
+([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05) item 11): the
+built four (start-time current-generation, on-miss exact-kid, approve-time push of
+all held generations, mint-time push) ARE the definition; the rotation initiator,
+rotation-time conveyance, and `excludeEnrollmentIds` threading move to B-2.
 
 ### B-2 — nskey rotation + revocation (CK rotation = coarse FS, nskey-keypair rotation = PCS) · at_client · L
 **Goal:** the two rotation levers + revocation composition — the **D1 GA** rotation slice.
 **Builds on:** B-1 + SH-1 + **(RF-1 + SS-3)** for the per-enrollment substrate fan-out (1:1:1). ⚠️ **depends
 on RF-1+SS-3, NOT the full RF-2** (Open decision #C) — so **D1 GA does not wait on the auth retrofit**.
-Also owed from [decisions 41](decisions.md#41-the-to-define-list-2026-08-05): the last-holder-lost ruling
-(item 5) and the cloned-after-upgrade-keyfile ruling (item 6).
+Implements four rulings from [decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05):
+last-holder-lost recovery = explicit rotation, rw-on-namespace, history stays lost (item 5); clones share
+fate — revoke cuts every clone, exclude excludes every clone or none, per-device revocability only via
+RF-SRV re-enrollment (item 6); plus the three pieces moved out of the self-heal (item 11): the **rotation
+initiator** (nothing in production calls `mintAndPublish` for an existing namespace), rotation-time
+conveyance of the new generation, and threading `excludeEnrollmentIds` into the nskey pull/answer paths
+after a revocation.
 **Deliverables → [design.md](design.md)** (rotation/revocation levers): **B5a** CK rotation (O(1), on
 ordinary sync, delete old `__ck` + evict; default RETAIN, FS-mode is the delete+evict knob); **B5b**
 nskey-keypair rotation (O(n) PCS / per-APKAM revocation: take `_nskeylock.<ns>@<owner>`, mint a new nskey
@@ -1142,9 +1161,12 @@ at CRAM onboarding mint a **PQ (ML-DSA) APKAM** keypair (no RSA APKAM required f
 auth); immutable-create `public:pqpublickey@<atSign>`; **and still mint the legacy
 RSA encryption keypair + `selfEncryptionKey`, and publish `public:publickey` — by
 default**. Whether this atSign will need legacy is determined by the apps that
-adopt it, unknowable at onboarding. The **legacy-interop flag becomes an opt-OUT**
-(set → PQ-only, no RSA `public:publickey`, no legacy material); a future release
-flips the default the other way.
+adopt it, unknowable at onboarding. The **legacy-interop flag becomes an opt-OUT**,
+named by [decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05)
+item 10: **`bool? mintLegacyMaterial` on `AtOnboardingRequest`** in at_auth
+(minting happens at onboarding, before an AtClient exists). `null` resolves to the
+release default — true through at_client 4.x, false from the stop release; explicit
+false → PQ-only, no RSA `public:publickey`, no legacy material.
 **Acceptance → [acceptance.md](acceptance.md):** UC-A1.1 (PQ-native onboard:
 APKAM=pq, pqpublickey immutable, KP registered, legacy material present and
 published by default); UC-B4.2 (legacy-peer interop works by default in both
@@ -1161,8 +1183,13 @@ The legacy provider itself **stays** (reads forever). **B7 phase 4 ("stop genera
 `selfEncryptionKey`, drop it from the AtKeys model") is NO LONGER a 4.0 action** —
 [decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05):
 legacy material is retained until the *ecosystem* is PQ, so the stop is a later,
-ecosystem-gated release with opt-out-by-default semantics (to-define item 10), not a
-version number.
+ecosystem-gated release — ruled in
+[decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05) item 10: the
+next major after this one (5.0.0 at the earliest), cut only when every first-party
+downstream's last published major writes PQ by default and the server tolerance for
+absent legacy fields is deployed everywhere, with `mintLegacyMaterial` resolving
+null→false from that release and **repair-on-first-demand** making an early stop
+recoverable.
 **Acceptance → [acceptance.md](acceptance.md):** flag-true → every write PQ, legacy-only recipient refused,
 legacy read still works (UC-B5.2); full unit/functional/e2e green.
 **▶ at_client 4.0.0.**
