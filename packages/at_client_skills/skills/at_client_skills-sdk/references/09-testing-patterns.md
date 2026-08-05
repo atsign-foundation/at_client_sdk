@@ -43,7 +43,7 @@ final collection = collectionWithInjectedNotifications<T>(
 );
 ```
 
-Use this to test how your service reacts to incoming cross-atSign notifications.
+Use this to test how your service reacts to incoming cross-atsign notifications.
 
 ### `collectionWithInjectedDataEvents` — `EventSource.data` path
 

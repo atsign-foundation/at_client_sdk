@@ -179,9 +179,9 @@ await collection.delete(item, cascade: true);
 
 ---
 
-## 9. `EventSource.both` Fires Twice for Cross-atSign Writes
+## 9. `EventSource.both` Fires Twice for Cross-atsign Writes
 
-**Problem:** With `EventSource.both` (the default), a cross-atSign write
+**Problem:** With `EventSource.both` (the default), a cross-atsign write
 surfaces on both the `data` path (via SyncService) and the `notifs` path
 (via NotificationService). The same change fires two `CItemUpdated` events —
 no automatic deduplication.

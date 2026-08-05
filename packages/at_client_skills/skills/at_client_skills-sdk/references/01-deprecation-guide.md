@@ -101,13 +101,14 @@ await collection.delete(item);
 
 ## Deprecated Packages
 
-| Package                 | Status        | Use instead                                               |
-| ----------------------- | ------------- | --------------------------------------------------------- |
-| `at_common_flutter`     | ⛔ DEPRECATED | `at_client_flutter`                                       |
-| `at_backupkey_flutter`  | ⛔ DEPRECATED | Copy `at_client_flutter` backup-key snippet into your app |
-| `at_invitation_flutter` | ⛔ DEPRECATED | Copy `at_client_flutter` invitation snippet into your app |
-| `at_sync_ui_flutter`    | ⛔ DEPRECATED | Avoid; being removed                                      |
-| `at_theme_flutter`      | ⛔ DEPRECATED | Avoid; being removed                                      |
+| Package                 | Status          | Use instead                                               |
+| ----------------------- | --------------- | --------------------------------------------------------- |
+| `at_common_flutter`     | ⛔ DEPRECATED   | `at_client_flutter`                                       |
+| `at_onboarding_flutter` | ⛔ DISCONTINUED | `at_client_flutter`                                       |
+| `at_backupkey_flutter`  | ⛔ DEPRECATED   | Copy `at_client_flutter` backup-key snippet into your app |
+| `at_invitation_flutter` | ⛔ DEPRECATED   | Copy `at_client_flutter` invitation snippet into your app |
+| `at_sync_ui_flutter`    | ⛔ DEPRECATED   | Avoid; being removed                                      |
+| `at_theme_flutter`      | ⛔ DEPRECATED   | Avoid; being removed                                      |
 
 ### at_common_flutter
 
@@ -115,6 +116,14 @@ The `at_common_flutter` package's own README states: _"Deprecated in favour of
 `at_client_flutter`."_ Do not add `at_common_flutter` to `pubspec.yaml`.
 Existing code
 using it should migrate to `at_client_flutter` equivalents.
+
+### at_onboarding_flutter
+
+**Discontinued.** pub.dev marks this package discontinued and names
+`at_client_flutter` as its replacement. Do not add `at_onboarding_flutter` to
+`pubspec.yaml`. Onboarding and authentication belong to the `at_client_flutter`
+dialogs — see [05-flutter-auth.md](05-flutter-auth.md) for all four flows (CRAM
+activation, `.atKeys` file, device keychain, APKAM enrolment).
 
 ### at_backupkey_flutter
 

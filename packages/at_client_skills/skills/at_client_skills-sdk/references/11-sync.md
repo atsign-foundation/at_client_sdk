@@ -1,6 +1,6 @@
 # Sync & Sync Lifecycle
 
-`AtCollection<T>` reads are **local-only**; every write and every cross-atSign
+`AtCollection<T>` reads are **local-only**; every write and every cross-atsign
 delivery (shares, updates, read receipts, `watch()` re-emits) depends on
 `SyncService`. Two things a real app must get right: **scope sync to your
 namespace**, and understand the **asynchronous lifecycle**.
@@ -10,8 +10,8 @@ namespace**, and understand the **asynchronous lifecycle**.
 ## 1. Scope sync to your namespace (`syncRegex`) — required
 
 By default `AtClientPreference.syncRegex` is `null`, which means sync covers the
-atSign's **entire** keystore — including keys left over from other apps and
-namespaces on the same atSign. On any atSign that has been used by more than one
+atsign's **entire** keystore — including keys left over from other apps and
+namespaces on the same atsign. On any atsign that has been used by more than one
 app, a single dangling/undeletable key from an unrelated namespace aborts the
 whole sync round with:
 
@@ -54,7 +54,7 @@ or decryption — it only excludes other apps' unrelated keys.
   periodic full-sync reconciles a *missed* live notification (the app was
   backgrounded, the monitor was reconnecting, or the recipient was offline when
   the change was made). Lower it (e.g. `1`) so a change made on another device
-  or atSign still surfaces within a minute even when the live push didn't land.
+  or atsign still surfaces within a minute even when the live push didn't land.
 
 ---
 

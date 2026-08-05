@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "I'm building a Flutter app and want to store todos that can be shared with other users. Which packages do I need and how do I create a todo?",
-      "expected_output": "Recommends at_client and at_client_flutter. Shows atClient.collection<Todo>() with fromJson/typeTag, then collection.create(obj: todo, sharedWith: {'@bob'.toAtsign()}). Does NOT suggest AtCollectionModel. Ideally also points to the canonical Flutter todos example app (packages/at_client_flutter/examples/todos/)."
+      "expected_output": "Recommends at_client_flutter as the SINGLE dependency, noting it re-exports at_client so adding both is unnecessary. Shows atClient.collection<Todo>() with fromJson/typeTag, then collection.create(obj: todo, sharedWith: {'@bob'.toAtsign()}). Does NOT suggest AtCollectionModel. Ideally also points to the canonical Flutter todos example app (packages/at_client_flutter/examples/todos/)."
     },
     {
       "id": 2,
@@ -13,7 +13,7 @@
     },
     {
       "id": 3,
-      "prompt": "My Flutter app needs to let users sign in with their atSign. What's the flow for an existing user who has a .atKeys file?",
+      "prompt": "My Flutter app needs to let users sign in with their atsign. What's the flow for an existing user who has a .atKeys file?",
       "expected_output": "Shows Flow 2: AtKeysFileDialog.show() then PkamDialog.show() with request and backupKeys. Includes _setupAtClient(AtRootDomain, AuthResponse) which calls AtClientManager.getInstance().setCurrentAtSign()."
     },
     {
@@ -28,7 +28,7 @@
     },
     {
       "id": 6,
-      "prompt": "I'm building a real-time dashboard that receives Docker container stats from another atSign every 2 seconds. Should I use AtCollection or something else?",
+      "prompt": "I'm building a real-time dashboard that receives Docker container stats from another atsign every 2 seconds. Should I use AtCollection or something else?",
       "expected_output": "Recommends Notifications + SQLite (not AtCollection) for high-frequency telemetry. Explains AtCollection is for discrete, addressable records. References the dockerstats pattern."
     },
     {
@@ -48,17 +48,17 @@
     },
     {
       "id": 10,
-      "prompt": "How do I set up APKAM enrollment so a user can add a new device to their existing atSign?",
+      "prompt": "How do I set up APKAM enrollment so a user can add a new device to their existing atsign?",
       "expected_output": "Shows Flow 4: AtSignSelectionDialog.show() then ApkamActivationDialog.show() with atSign, rootDomain, appName, deviceName, namespaces. Then PkamDialog.show(). Includes _setupAtClient() post-auth."
     },
     {
       "id": 11,
       "prompt": "I'm using at_client in my app and I already have existing data stored with atClient.put() / atClient.get(). Can I migrate to AtCollection without breaking anything?",
-      "expected_output": "Acknowledges that migration guide is coming in skill v2.0. Explains that AtCollection and raw put/get use the same underlying atServer keystore but with different key naming conventions. Advises caution until migration guide is available."
+      "expected_output": "Acknowledges that no migration guide exists yet and that a future skill release will add one — a specific version number is NOT required. Explains that AtCollection and raw put/get use the same underlying atServer keystore but with different key naming conventions. Advises caution until a migration guide is available."
     },
     {
       "id": 12,
-      "prompt": "How do I send a notification to another atSign from my Dart app?",
+      "prompt": "How do I send a notification to another atsign from my Dart app?",
       "expected_output": "Shows atClient.notificationService.send(to:, namespace:, body:, expiration:); body is typically JSON-encoded and send returns the notification id. Mentions the recipient subscribes via notificationService.subscribe(regex:, shouldDecrypt:). May point to the packages/at_client/example/bin/notifications.dart example. Does NOT use raw atClient.put/get for messaging."
     },
     {
@@ -73,8 +73,8 @@
     },
     {
       "id": 15,
-      "prompt": "My Flutter app using AtCollection shares data with another atSign, but nothing syncs — SyncService stays inProgress and shared items never arrive. How do I debug this?",
-      "expected_output": "Treats a stuck-inProgress SyncService as a wedged sync and DIAGNOSES it rather than assuming a single cause. Explains the common cause is unscoped sync: with AtClientPreference.syncRegex unset, sync covers the atSign's ENTIRE keystore, so one unrelated/dangling key from another app or namespace can abort the whole round (e.g. 'key not found : <key> does not exist in keystore'). Recommends scoping syncRegex to the app's namespace. Notes the atServer always syncs a small set regardless of the regex (shared_key reserved keys, the encryption public key, and namespace-less public: keys), and that scoping still works because the sync regex is an unanchored substring match — so your own namespace's cached: copies match anyway; sharing and decryption are unaffected. Also frames that reads are local-only, writes sync in the background, and completion is observed via SyncProgressListener (not the deprecated sync(onDone:))."
+      "prompt": "My Flutter app using AtCollection shares data with another atsign, but nothing syncs — SyncService stays inProgress and shared items never arrive. How do I debug this?",
+      "expected_output": "Treats a stuck-inProgress SyncService as a wedged sync and DIAGNOSES it rather than assuming a single cause. Explains the common cause is unscoped sync: with AtClientPreference.syncRegex unset, sync covers the atsign's ENTIRE keystore, so one unrelated/dangling key from another app or namespace can abort the whole round (e.g. 'key not found : <key> does not exist in keystore'). Recommends scoping syncRegex to the app's namespace. Notes the atServer always syncs a small set regardless of the regex (shared_key reserved keys, the encryption public key, and namespace-less public: keys), and that scoping still works because the sync regex is an unanchored substring match — so your own namespace's cached: copies match anyway; sharing and decryption are unaffected. Also frames that reads are local-only, writes sync in the background, and completion is observed via SyncProgressListener (not the deprecated sync(onDone:))."
     },
     {
       "id": 16,
@@ -83,13 +83,43 @@
     },
     {
       "id": 17,
-      "prompt": "I want a user to edit an item that another atSign shared with them, but calling update() on it throws ArgumentError. How should collaborative editing work?",
-      "expected_output": "Explains AtCollection is owner-writes-only: update/updateSharedWith/delete throw ArgumentError when item.owner is not the current atSign, so you cannot edit another atSign's item in place. The model is additive: each atSign owns what it creates, and sharing grants a readable copy, not write access. To model contribution, the peer creates their own item and shares it back; reading a received item works but mutating it does not."
+      "prompt": "I want a user to edit an item that another atsign shared with them, but calling update() on it throws ArgumentError. How should collaborative editing work?",
+      "expected_output": "Explains AtCollection is owner-writes-only, naming ALL THREE enforcing methods — update, updateSharedWith, and delete — and that each throws ArgumentError when the item's owner is not the current atsign, so a received item cannot be edited in place. Explains that sharedWith grants a readable copy, not write access. Shows the additive pattern in current API terms: the contributing atsign calls create(obj: ..., sharedWith: {...}) on its OWN collection and the original owner reads that item; reading a received item works but mutating it does not. Must stay on the current AtCollection<T> API — an answer that is conceptually right about ownership but routes the contribution through the deprecated AtCollectionModel, a .save() call, or raw atClient.put() does NOT pass."
     },
     {
       "id": 18,
-      "prompt": "My Flutter app fails to authenticate an atSign with SecondaryNotFoundException: 'No entry in atDirectory for @alice'. What does this mean and how do I fix it?",
-      "expected_output": "Explains the atSign isn't activated/registered — its atServer address isn't in the atDirectory yet (or the atSign string is mistyped). An atSign must be activated once (via CRAM onboarding / Flow 1, an onboarding app, or the registrar) before existing-keys / keychain / APKAM login can resolve it. Fix: activate the atSign first, then authenticate; also verify the atSign is spelled correctly."
+      "prompt": "My Flutter app fails to authenticate an atsign with SecondaryNotFoundException: 'No entry in atDirectory for @alice'. What does this mean and how do I fix it?",
+      "expected_output": "Explains that the atDirectory is the atServer address registry and this atsign has no atServer registered in it, so the lookup fails before authentication is attempted. Distinguishes TWO causes with different fixes: the atsign was never activated, or the atsign string is mistyped. States that activation happens ONCE and must precede the existing-keys, keychain, and APKAM login flows, none of which can resolve an unactivated atsign. For in-app activation, uses the CRAM flow this SDK ships — AtSignSelectionDialog from at_client_flutter plus a RegistrarService from at_auth configured with a registrar URL and API key — or defers activation to an onboarding app or the registrar. Recommending the discontinued at_onboarding_flutter package does NOT pass."
+    },
+    {
+      "id": 19,
+      "prompt": "Process A writes a coordination value with atClient.put() and process B (a different atsign) immediately reads it with get() but sees nothing. How do I make the write and the read hit the atServer directly instead of waiting for sync?",
+      "expected_output": "Identifies the WRITE as the problem: with the default AtClientPreference.remoteLocalPref = RemoteLocalPref.localOnly, put lands on the local secondary and reaches the atServer later via background sync. Fix: put with putRequestOptions: PutRequestOptions()..useRemoteAtServer = true. Notes B's read of another atsign's (non-cached:) key is already a remote lookup by definition; if a stale cached: copy interferes, GetRequestOptions()..bypassCache = true forces a fresh read from the owner's atServer (and GetRequestOptions()..useRemoteAtServer = true covers same-atsign read-your-write). May mention the client-wide alternative remoteLocalPref = RemoteLocalPref.remoteOnly. Notes remote ops cost a round-trip / fail offline and are for coordination or read-your-write cases — AtCollection data stays on the default synced path (collections take no per-operation options; they follow the client-wide preference)."
+    },
+    {
+      "id": 20,
+      "prompt": "I'm generating the pubspec.yaml for a new atPlatform Flutter app. What version should I pin at_client and at_client_flutter to?",
+      "expected_output": "Advises NOT to hardcode a version constraint. Says to run `dart pub add at_client_flutter` (which re-exports at_client) and let pub resolve the latest compatible release. Explains pinned constraints go stale and cause resolution conflicts, and that stability comes from a fixed typeTag string literal, not a pinned SDK version."
+    },
+    {
+      "id": 21,
+      "prompt": "I have an agent running as @server and apps running as other atsigns that need to send it a request and get a computed answer back. What's the right way to build this request/response flow?",
+      "expected_output": "Recommends AtRpc/AtRpcClient (exported from at_client) rather than hand-rolled notification plumbing or raw put/get polling. Client side: AtRpcClient(serverAtsign:, atClient:, baseNameSpace:, domainNameSpace:) and await client.call(payload) which returns the success response payload. Server side: AtRpc.server(..., requestHandler:, allowList:, allowAll:, enableRequestMutex:) then rpc.start(). Mentions allowList filtering, that AtRpcResp has only ack/nack static helpers (success/error use the main constructor), and that durable results belong in an AtCollection."
+    },
+    {
+      "id": 22,
+      "prompt": "I run three instances of the same agent under one atsign for redundancy, and every task gets processed three times. How do I make exactly one instance handle each task?",
+      "expected_output": "Shows the immutable-mutex race: an AtKey with Metadata()..immutable = true and a ttl, written with PutRequestOptions()..useRemoteAtServer = true. States that the LOSING put() THROWS (it does not return false) with no typed exception — detect contention by checking the error text for 'immutable', as AtRpc._tryAcquireSessionMutex does. Mentions TTL auto-release, that AtRpc.server(enableRequestMutex: true) packages this for RPC responders, the stateless alternative (ServiceFactoryWithNoOpSyncService from at_cli_commons, NOT at_client), and that each instance needs its own hiveStoragePath/commitLogPath."
+    },
+    {
+      "id": 23,
+      "prompt": "I'm writing a headless Dart daemon (no Flutter, no UI) that authenticates with a .atKeys file and then uses collections and notifications. What's the simplest way to set up the AtClient?",
+      "expected_output": "Recommends CLIBase.fromCommandLineArgs(args) from at_cli_commons — one line that handles arg parsing, .atKeys loading, and PKAM auth, returning a ready AtClient. Shows adding at_client and at_cli_commons. May cite the collections_todos.dart example (packages/at_client/example/bin/). Does NOT hand-roll AtOnboardingService/keyfile parsing or use Flutter dialog classes."
+    },
+    {
+      "id": 24,
+      "prompt": "I'm adding atsign sign-in to my Flutter app and found at_onboarding_flutter on pub.dev. Is that the package I should be using for the onboarding screens?",
+      "expected_output": "Says no — at_onboarding_flutter is discontinued and at_client_flutter is its named replacement. Directs the developer to the at_client_flutter auth dialogs instead (AtSignSelectionDialog, AtKeysFileDialog, ApkamActivationDialog, PkamDialog), and notes at_client_flutter is the single dependency needed since it re-exports at_client. Does NOT present at_onboarding_flutter as usable, and does NOT hedge by suggesting either package would work."
     }
   ]
 }
