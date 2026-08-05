@@ -1,12 +1,18 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
-import 'package:at_client/src/client/at_client_impl.dart';
+import 'package:at_client/src/crypto/nskey/pq_signing_root.dart'
+    show PqSigningRoot;
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
     show enrollmentKeyPackageBuilder;
+import 'package:at_client/src/service/enrollment_service_impl.dart'
+    show EnrollmentServiceImpl;
 import 'package:at_commons/at_commons.dart' show AtClientException;
+import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
+
+final _logger = AtSignLogger('selfRetrofit');
 
 /// Runs the whole PQ self-retrofit and hands back a manager whose current
 /// client runs under the NEW enrollment.
@@ -32,6 +38,19 @@ import 'package:meta/meta.dart' show experimental;
 /// The legacy enrollment keeps authenticating until the atServer's expiry
 /// cap retires it — the retrofit caps it, never deletes it — so a failure
 /// anywhere in this sequence leaves the legacy client fully usable.
+///
+/// **A fully privileged retrofit also runs the signing-root step in-flow.**
+/// The retrofit is auto-approved by the atServer with no approver client in
+/// the loop, so nothing conveys the root to it the way an approve does — its
+/// only routes are to mint (no root published yet) or to be given the private
+/// by another holder (the every-start pull, already built). The mint half has
+/// to happen here: when the atSign publishes no root, the switched-to
+/// enrollment mints and publishes it, files both halves in the same keyfile,
+/// and anchors itself. Privilege is read off the atServer's enrollment
+/// record, never the namespaces this call requested. A scoped retrofit skips
+/// the step entirely. A root-step failure does not fail the retrofit — the
+/// enrollment is live and usable without it, and re-running [selfRetrofit]
+/// (idempotent per keyfile) retries the step.
 @experimental
 Future<AtClientManager> selfRetrofit({
   required AtAuthSession session,
@@ -62,9 +81,14 @@ Future<AtClientManager> selfRetrofit({
   // Authenticate under the new enrollment: the retrofit response's session
   // is the legacy one, and only authenticate() mints a session carrying the
   // new id (with the ML-DSA chops and algorithm resolved from the keyfile).
-  final auth = await AtAuth.create().authenticate(
-      AtAuthRequest(session.atSign, atKeysIo: session.atKeysIo)
+  final auth = await AtAuth.create()
+      .authenticate(AtAuthRequest(session.atSign, atKeysIo: session.atKeysIo)
         ..enrollmentId = response.enrollmentId
+        // Carried through deliberately: the switched-to client's start-time
+        // self-heal — the signing-root pull, the nskey pulls, the store
+        // hydration — all key off its namespace, and a client built without
+        // one runs none of them while looking perfectly healthy.
+        ..namespace = session.namespace ?? preference.namespace
         ..rootDomain = session.rootDomain);
   if (auth.isSuccessful != true || auth.session == null) {
     throw AtClientException.message(
@@ -72,6 +96,28 @@ Future<AtClientManager> selfRetrofit({
         'authenticate; the legacy client is untouched');
   }
 
-  return await (manager ?? AtClientManager.getInstance())
+  final switched = await (manager ?? AtClientManager.getInstance())
       .fromAuthSession(auth.session!, preference);
+
+  // The signing-root step (in-flow, privileged only): mint if the atSign
+  // publishes no root yet. Inside its own guard because the retrofit itself
+  // has already succeeded — the client is live and stays returned — and a
+  // root minted later heals nothing worse than a delay.
+  try {
+    final client = switched.atClient;
+    final granted = (await EnrollmentServiceImpl(client, AtEnrollment.create())
+            .fetchEnrollmentRequests())
+        .where((e) => e.enrollmentId == response.enrollmentId)
+        .firstOrNull
+        ?.namespace;
+    if (EnrollmentServiceImpl.isFullyPrivileged(granted)) {
+      await PqSigningRoot(client, keysIo: session.atKeysIo)
+          .mintIfAbsent(isFullyPrivileged: true);
+    }
+  } catch (e) {
+    _logger.warning('The retrofit of ${session.atSign} succeeded but its '
+        'signing-root step did not; rerunning selfRetrofit retries it: $e');
+  }
+
+  return switched;
 }
