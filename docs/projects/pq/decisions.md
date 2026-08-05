@@ -36,6 +36,25 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [20. SS-2: how the key package reaches an enrollment, and how conveyance fires (2026-08-03)](#20-ss-2-how-the-key-package-reaches-an-enrollment-and-how-conveyance-fires-2026-08-03) — *resolves two blockers that made the SS-2 design unimplementable as written*
 - [21. SS-3: where key material lives, and what the substrate stops storing (2026-08-03)](#21-ss-3-where-key-material-lives-and-what-the-substrate-stops-storing-2026-08-03) — *removes SS-3's durable `SecretStorePersistence` backend rather than building it*
 - [22. SS-4: when a namespace key is minted, and what must be true first (2026-08-03)](#22-ss-4-when-a-namespace-key-is-minted-and-what-must-be-true-first-2026-08-03) — *mint at init, publish once the private is durable; builds the signing chain but defers the APKAM keypair swap*
+- [23. UC-A2.1: reversing the enrollment key exchange (2026-08-04)](#23-uc-a21-reversing-the-enrollment-key-exchange-2026-08-04)
+- [24. How the approval chain terminates at the root (2026-08-04)](#24-how-the-approval-chain-terminates-at-the-root-2026-08-04)
+- [25. The substrate's arrival path had never run (2026-08-04)](#25-the-substrates-arrival-path-had-never-run-2026-08-04)
+- [26. UC-A4.4: a conveyance that loses the race to its own announcement (2026-08-04)](#26-uc-a44-a-conveyance-that-loses-the-race-to-its-own-announcement-2026-08-04)
+- [27. The era default: read the new scheme everywhere, write it once (2026-08-04)](#27-the-era-default-read-the-new-scheme-everywhere-write-it-once-2026-08-04)
+- [28. The PQ performance budget, measured (2026-08-04)](#28-the-pq-performance-budget-measured-2026-08-04)
+- [29. UC-A3.2 describes a mint trigger that was never built (2026-08-04)](#29-uc-a32-describes-a-mint-trigger-that-was-never-built-2026-08-04)
+- [30. UC-B5.1's pull backstop has no initiator (2026-08-04)](#30-uc-b51s-pull-backstop-has-no-initiator-2026-08-04)
+- [31. The root-pull initiator, and what it did not settle (2026-08-04)](#31-the-root-pull-initiator-and-what-it-did-not-settle-2026-08-04)
+- [32. The two-enrollment fixture: what works and what does not (2026-08-04)](#32-the-two-enrollment-fixture-what-works-and-what-does-not-2026-08-04)
+- [33. Keying the client cache by (atSign, enrollmentId) (2026-08-04)](#33-keying-the-client-cache-by-atsign-enrollmentid-2026-08-04)
+- [34. PKAM is record-authoritative, and the no-RSA row reads narrower than it looks (2026-08-04)](#34-pkam-is-record-authoritative-and-the-no-rsa-row-reads-narrower-than-it-looks-2026-08-04)
+- [35. The owed-a-test backlog reached zero (2026-08-04)](#35-the-owed-a-test-backlog-reached-zero-2026-08-04)
+- [36. The rollout is the app's decision: capability markers built, examined, and removed (2026-08-05)](#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05) — *supersedes Decision #2 and §16's marker consequence; the migration is two app releases*
+- [37. Legacy key material is retained until the ecosystem is PQ, not the atSign (2026-08-05)](#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05) — *reverses Decision #1's default; onboarding keeps cutting legacy keys; RSA APKAM kept on upgrade*
+- [38. Key material self-heals: mint-if-absent, else pull (2026-08-05)](#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05) — *Decision #4's push had no callers; the scenario-3 taxonomy; the AtKeys lock*
+- [39. `_apsk` rides the same two-stage ladder (2026-08-05)](#39-_apsk-rides-the-same-two-stage-ladder-2026-08-05) — *3.x publishes as today and learns the new form; 4.x new enrollments publish self-describing mldsa65*
+- [40. RF-SRV is the mechanism the whole model stands on (2026-08-05)](#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05) — *moves onto the GA critical path; revocation must cascade*
+- [41. The to-define list (2026-08-05)](#41-the-to-define-list-2026-08-05) — *the ruled/open boundary, 12 items with owners*
 
 ---
 
@@ -384,13 +403,19 @@ The four numbered rulings referenced across the UC catalogue and project sequenc
 formalised here as binding entries (they already existed as scattered asides and
 timeline rows).
 
-- **Decision #1 — legacy-peer interop is opt-in.** A new PQ-native atSign onboards
-  PQ-only by default: no RSA `public:publickey` is published. A `legacy-interop`
-  config flag (default OFF) publishes the RSA pubkey so legacy peers can send
-  inbound. (Drives ON-1, UC-B4.2.)
-- **Decision #2 — PQ-readiness is marked per `(atSign, namespace)`.** The
-  capability marker and the readiness flip are scoped to a namespace of an atSign,
-  not the whole atSign; scheme selection is per-destination. (Drives R-1, UC-B3.2.)
+- **Decision #1 — legacy-peer interop is opt-in.** ***Default REVERSED by
+  [37](#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)
+  (2026-08-05):*** a new atSign now publishes its RSA `public:publickey` **by
+  default**, and the `legacy-interop` flag is an early opt-*out*; a future release
+  flips the default back. Original text: a new PQ-native atSign onboards PQ-only by
+  default — no RSA `public:publickey` published; the flag (default OFF) opts in.
+  (Drives ON-1, UC-B4.2.)
+- **Decision #2 — PQ-readiness is marked per `(atSign, namespace)`.** ***SUPERSEDED
+  by [36](#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)
+  (2026-08-05):*** there is no readiness marker and no flip — the rollout is the
+  app's decision, made by which build it ships. Original text: the capability marker
+  and the readiness flip are scoped to a namespace of an atSign, not the whole
+  atSign; scheme selection is per-destination.
 - **Decision #3 — PQ-APKAM keyfile storage: copyable AtKeys file by default
   (2026-06-24).** The PQ APKAM signing keypair + X-Wing key-package private are
   stored in the copyable `.atKeys` file by default (portable, dev/test-clean — a
@@ -403,7 +428,10 @@ timeline rows).
   secret delivery is `pushSecretToNamespaceMembers` at mint/rotation and
   `shareAllSecretsWithEnrollment` at approve time; `requestSecret` (pull) is the
   correctness backstop for a client that missed a push. Push and pull are dual
-  facets of one substrate. (Drives UC-A2.x, UC-B5.1.)
+  facets of one substrate. (Drives UC-A2.x, UC-B5.1.) ***Status check 2026-08-05
+  ([38](#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)): the ruling
+  stands, but neither the approve-time push nor the nskey pull had ever been wired to
+  a caller — the self-heal work is what makes this decision true in code.***
 
 ### Resolved
 
@@ -1243,20 +1271,26 @@ says more than today's code can vary independently. That is the safe direction: 
 they ever decouple, the id already distinguishes them, whereas a suite-level token
 (`at/nskey/atPQv1`) would have to be re-cut. The cost is a longer string.
 
-**Consequence for negotiation — the capability marker becomes a set.** A boolean
+**Consequence for negotiation — the capability marker becomes a set.** ***REMOVED by
+[36](#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)
+(2026-08-05): there is no capability marker — the rollout is the app's decision, and
+the SDK never negotiates a scheme. The provider-id ruling in this entry stands in
+full; only this marker consequence is dead.*** Original text: a boolean
 "ready / not-ready" per `(atSign, namespace)` cannot express *which* schemes a fleet
 supports, so it cannot survive a second PQ scheme. The B3 marker therefore advertises
 the **set of provider ids** the fleet supports, and a writer picks the best id present
 in **every** required reader's set. Ready/not-ready becomes the degenerate case —
-"is the PQ pair in the set". This is **R-1**'s to build; recorded here so it is not
-re-derived later.
+"is the PQ pair in the set". This was R-1's to build — built 2026-08-05, examined
+against the three-scenario model the same day, and removed.
 
 **Timing.** Free now and expensive later: nothing has been written under the bare
 `at/nskey`, so the rename costs a constant and a doc sweep. Once a record exists it
 costs a migration.
 
 **Implementation status.** The id and the family constant are **B-1b** (done). The
-marker-as-a-set is **R-1**. Mechanics: `design.md` sections 1.2 and 1.5.
+marker-as-a-set was **R-1**'s, and is removed with the marker
+([36](#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)).
+Mechanics: `design.md` sections 1.2 and 1.5.
 
 
 ---
@@ -2494,6 +2528,10 @@ never executing — the failure mode that has already bitten this branch twice.
 
 ## 30. UC-B5.1's pull backstop has no initiator (2026-08-04)
 
+> **2026-08-05:** [38](#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)
+> found this was the general condition, not a root-specific gap — the nskey privates
+> had no pull initiator either, and neither approve-time push had a caller.
+
 Picking up UC-B5.1 — *"offline enrollment pulls the signing root later"* — found that the row
 cannot be tested because half of what it describes is not built. Recorded here rather than
 worked around, and the row is re-labelled from *owed a test* to *blocked*.
@@ -2809,3 +2847,301 @@ It first tracked B-1's share of the rows, then the owed-a-test count. Both reach
 guard pinned to a number that can no longer change silently stops guarding. It now tracks the
 rows blocked on a project, which is the figure that moves as projects land. Re-point it again
 when that one bottoms out rather than deleting it.
+
+---
+
+## 36. The rollout is the app's decision: capability markers built, examined, and removed (2026-08-05)
+
+R-1 was built as designed — the per-`(atSign, namespace)` capability marker
+(`public:__capability.<ns>@<atSign>`, an APKAM-signed envelope carrying the **set** of
+provider ids, per [16](#16-a-provider-id-names-every-algorithm-a-reader-needs-code-for-2026-08-02)),
+per-destination scheme negotiation ("write only what every required reader supports"),
+an operator readiness flip, and marker publication wired into start-up seeding. It went
+green at every layer: unit, functional against a live atServer, and a two-atSign e2e in
+which a declared readiness flipped a real `put` from legacy to the nskey data path.
+**It was then removed the same day, on a re-examination of the model it served.** This
+entry records both the model and why working code lost the argument.
+
+### 36.1 The model, from three scenarios
+
+- **Scenario 1 — three apps, two atSigns, separate keyfiles.** The unit of migration is
+  the **app**, and an app is an **enrollment**: its own AtKeys, its own APKAM keypair,
+  its own namespaces. Apps upgrade independently and never have to agree. "Per
+  `(atSign, namespace)`" therefore means *per app*, not a slice of an atSign-wide
+  fleet — and there is no atSign-wide operator to flip anything, only each app's
+  developer deciding when to ship.
+- **Scenario 2 — several CLI apps sharing one AtKeys file (one enrollment).** Changes
+  nothing about the model. It adds two operational requirements: the enrollment upgrade
+  must be **additive including the APKAM keypair** (an ML-DSA swap would lock the
+  co-tenant apps out of *auth* the moment the first app upgrades), and the keyfile
+  needs an **inter-process lock** around read-modify-write
+  ([38.4](#384-the-atkeys-file-needs-a-lock-not-just-a-detector)).
+- **Scenario 3 — one keyfile cloned to several devices (one enrollment id).** Each
+  device upgrades individually: enrollment 1 spawns enrollments 2, 3, 4. The problems
+  this surfaces are catalogued in [38](#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)
+  and [40](#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05); none of
+  them is a readiness problem.
+
+**The migration is two app releases.** (1) Rebuild on the final 3.x — the app is now
+*capable*: reads every scheme, mints and publishes its namespace keys, still writes
+legacy. (2) Rebuild on 4.x — the app now *uses* PQ. **The SDK never decides to write
+PQ; the app tells it to** (explicitly via `AtClientPreference.crypto`, or implicitly by
+riding the 4.x default). The one discipline the model asks of an app developer: roll
+out the capability build before shipping the active build. That is a release-ordering
+rule, not machinery.
+
+### 36.2 Why the marker lost
+
+1. **The release ladder is the readiness signal.** Within an app, "can my installs
+   read PQ" is answered by which build they run, and the developer's own rollout data
+   answers that better than a marker any single client publishes by assertion.
+2. **The marker could not see the deciding fact anyway.** What makes a record readable
+   to an enrollment is whether the substrate has delivered the nskey private to it —
+   per enrollment, unobservable from any fleet-level record.
+3. **Cross-atSign, cold start already gates.** A namespace never used by a PQ-capable
+   client has no published nskey, so a PQ write toward it fails by name
+   (`NamespaceKeyUnavailableException`). Within a namespace, cross-atSign traffic is
+   between installs of the *same app* — there are no strangers who could see an
+   advertised key and write PQ into someone else's namespace, so early nskey
+   publication is harmless.
+4. **The residue is the app's problem — ruled explicitly.** A recipient running mixed
+   installs of one app (one updated, one not) can have its stale install locked out of
+   *inbound* PQ data. A marker would not fix it: the stale install is already locked
+   out of everything written since the nskey appeared, and the remedy — update the
+   app — is the developer's either way.
+5. **Since the SDK never chooses PQ, negotiation had no consumer.** Its cost was a
+   permanent public API, a signed record per `(atSign, namespace)`, a fetch+cache on
+   the write path, and a walk-up intersection that coupled apps the model holds
+   independent.
+
+**Removed, not kept inert:** the marker, `CryptoRollout`, `SchemeNegotiation`,
+`CryptoConfig.preferredProviderId`, `RequiresReaderSupport`, and the seeding hook.
+**Kept:** `disallowLegacyEncryption` (below) and the cold-start refusal with its
+opt-in legacy fallback — now the only write-path gate, and the right one.
+`disallowLegacyEncryption` survives because it serves the app-decides model directly:
+it is how an app *states* "never write legacy", per client, checked at selection and
+again at encryption, with legacy reads and `shouldEncrypt=false` untouched.
+
+**Supersedes:** Decision #2 (readiness marked per `(atSign, namespace)`) and
+[16](#16-a-provider-id-names-every-algorithm-a-reader-needs-code-for-2026-08-02)'s
+"the capability marker becomes a set" consequence (the *provider-id* ruling in 16
+stands — ids still name every algorithm a reader needs code for, and records still
+route by their stamped id forever). Design.md §1.8's C1/C2/C3 are rewritten
+accordingly; D1-D stands, built.
+
+### 36.3 What the build was worth (kept as lessons, not code)
+
+- A per-client cached object must not capture at construction a collaborator that an
+  app or test can replace later — the negotiator pinned its capability view at first
+  write (during start-up, before any test could inject one) and a declared readiness
+  then moved nothing for a full cache window while every diagnostic said the marker
+  was fresh. Cache the client-scoped object; resolve its collaborators per call.
+- The ring that mints must be the ring the client's config resolves through, and
+  seeding without durable filing publishes a key whose private only the seeding
+  object holds — both hit live before any unit test could see them, twice.
+- The two-atSign e2e asserted what the sender could *see* of the recipient, not only
+  what it wrote — which is what made a one-run diagnosis of the Expando pinning
+  possible. Assert the input to a decision, not just the decision.
+
+## 37. Legacy key material is retained until the ecosystem is PQ, not the atSign (2026-08-05)
+
+**Whether an atSign has legacy history is determined by whether the apps using it are
+fully PQ — not by whether the atSign is new.** An atSign is shared by its apps; its
+key material must serve the union of their needs; and that union is unknowable at
+onboarding, because a still-legacy app may adopt the atSign tomorrow.
+
+**Therefore, for an as-yet-undefined period:**
+
+- **First-enrollment onboarding continues to cut the legacy encryption keypair and the
+  symmetric self-encryption key** — even for an atSign that intends to be PQ-native.
+- **`enroll:approve` continues to convey both to every new enrollment**, including
+  PQ-only enrollments that may never use them.
+- **An enrollment upgrade keeps the RSA APKAM keypair alongside the new material**
+  (scenario 2: a shared keyfile whose APKAM was swapped rather than extended locks
+  every co-tenant app out of authentication).
+- **A new atSign publishes its RSA `public:publickey` by default**, so legacy peers
+  can send inbound. The legacy-interop flag becomes an early **opt-out**. *This
+  reverses Decision #1's default* (was: PQ-only by default, flag opts in). Ratified
+  2026-08-05.
+
+The asymmetry that justifies all four: an unused keypair costs a few hundred bytes in
+a keyfile; a missing one is an app that cannot function on that atSign at all — or a
+peer that cannot reach it.
+
+**The exit is a future release that stops by default unless asked**, flipping these
+defaults once the ecosystem has moved (this re-times R-2's "stop generating
+`selfEncryptionKey`" and B-3 phase 3's approve-relaxation: the *server-side tolerance*
+for absence can land early, but the *client-side stop* is gated on the ecosystem, not
+on a version number). Noted for that release, not built now: stopping need not be a
+one-way door — minting legacy material *late* is safe precisely when nothing was ever
+written under it, and the substrate can convey a late-minted self key to existing
+enrollments exactly as it conveys nskey privates. Stop-by-default plus
+repair-on-first-demand beats waiting for a certainty that never arrives.
+
+## 38. Key material self-heals: mint-if-absent, else pull (2026-08-05)
+
+The ruling, stated as the invariant every enrollment follows at start:
+
+1. **nskeys:** an upgraded enrollment **mints** the nskey for an authorised namespace
+   if none exists (the `_nskeylock` immutable create already serialises racing
+   enrollments); if one exists, it **requests the private parts** over the substrate.
+   Not "from whoever created it": the request broadcasts to every key package
+   registered for the namespace, and **any current holder answers** — the creator may
+   be long gone. A joiner needs the **current generation** to write; older generations
+   are pulled on demand for history (the request supports exact names and a prefix).
+2. **Signing root:** a **fully privileged** enrollment mints it if absent, else pulls
+   the private (`requestPrivateIfAbsent`, built). The create-once race self-heals with
+   a one-launch delay: the loser's refused create is logged, and the every-start pull
+   picks the private up next launch. A *scoped* enrollment neither mints nor pulls the
+   root — correct, it is not entitled to hold it.
+3. **The chain sweep:** every enrollment publishes its own `_apsk`, but the
+   approval-chain **link** binding an `_apsk` to the signing root can only be signed
+   by a fully-privileged holder — and in the cloned-keyfile world an enrollment's
+   approver is often the legacy enrollment 1, which can never sign one. So a
+   fully-privileged client **sweeps** enrollments lacking links and signs links for
+   them. Until it runs, *chained-but-unanchored is a legitimate steady state*, costing
+   defence-in-depth (verifiers tolerate an unsigned `_apsk`), not function.
+
+### 38.1 The finding that forced this: Decision #4's push never ran
+
+Decision #4 names `pushSecretToNamespaceMembers` at mint and
+`shareAllSecretsWithEnrollment` at approve as the steady state, with `requestSecret`
+as backstop. As of 2026-08-05, verified by grep: **`shareAllSecretsWithEnrollment` has
+no callers. `conveyHeldPrivatesTo` (the nskey-specific approve-time push) has no
+callers. `requestSecretsFromNamespace` has exactly one production caller — the signing
+root's pull.** So the only route by which an nskey private ever reached an enrollment
+was the mint-time push, to whoever held a key package at that instant. Any enrollment
+created after the mint got nothing, and a PQ record met `no nskey private held for …`
+with no request, no retry, no recovery. Not a scenario-3 exotic: this is the ordinary
+second device. Same shape as [30](#30-uc-b51s-pull-backstop-has-no-initiator-2026-08-04) —
+a mechanism with no initiator passing every unit test — one layer down and more
+consequential, because this private reads the data.
+
+### 38.2 The pull is safe by construction (verified before relying on it)
+
+The substrate's answer path already resolves the requester's kpid to a key package
+**authorised for the request's namespace** (defence in depth over the atServer's own
+delivery gate), consults an app policy hook, rate-caps per (requester, name), and
+jitters answers so N holders collapse to one. Both directions are store-and-forward
+through the atServer — no two devices need be up at once, so "heals when each device
+next runs" is latency, not availability.
+
+### 38.3 Scenario 3's problem taxonomy (so nobody re-derives it)
+
+- **Transient, self-healing:** late devices acquiring key material — and usually
+  *invisible*, because at capability-upgrade time the app still writes legacy and the
+  clone inherits the legacy keys, so there is nothing it cannot read. The window is
+  real only for a device upgrading after the app went active-PQ: the standard E2EE
+  new-device experience.
+- **Must-dos, not problems:** each device presents a distinct `(appName, deviceName)`
+  (the atServer refuses a duplicate approved pair); the new enrollment id lands **in
+  the keyfile that already holds the legacy material** — a fresh keyfile silently
+  violates [37](#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05).
+- **Largely moot:** pre-split conveyance exposure — enrollment 1 is legacy, so the PQ
+  secrets conveyed to it before the split number zero. A keyfile cloned *after* an
+  upgrade is a different act; unwinding what a clone holds is B-2 rotation's business.
+- **Handled by judgement, not machinery:** retiring enrollment 1. A too-early
+  retirement is a loud auth failure on the straggler, not silent data loss — the same
+  reason [36](#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)
+  rejects mechanising readiness. Guidance belongs in the upgrade docs.
+
+### 38.4 The AtKeys file needs a lock, not just a detector
+
+`FileAtKeysIo.flush` is atomic (write-temp-then-rename) and *detects* regressions
+(`validateMapUpdate` refuses a candidate that drops existing material) — but two
+processes that both read before either writes both pass validation, and the second
+rename silently discards the first's addition. The severe case is a conveyed nskey
+private that appears filed and is not: records that can never be read, presenting
+weeks later. Scenario 2 makes concurrent access the normal case, so the
+read-validate-write gets an inter-process advisory lock.
+
+## 39. `_apsk` rides the same two-stage ladder (2026-08-05)
+
+Apps sign and verify with `_apsk` **today** — NoPorts most prominently — so the
+per-enrollment signing key is itself a two-stage rollout, ruled 2026-08-05:
+
+- **Final 3.x (capability): the published `_apsk` value stays exactly as it is now** —
+  a bare RSA public key string — while the *code* learns to understand a new
+  self-describing format when it meets one.
+- **4.x: new enrollments publish the self-describing form** (ML-DSA-65).
+- The new form must be **unmistakable to an old parser**: a consumer expecting a bare
+  RSA key must fail loudly on it, never mis-read it.
+
+The finding that makes stage one real work rather than a no-op: the envelope's
+`signingAlgo`/`hashingAlgo` fields are **decorative today**. `signEnvelope` signs RSA
+regardless of the `signingAlgo` it is handed, and `verifyEnvelope` never reads the
+field at all — it always verifies RSA. Stage one is therefore: verify branches on the
+recorded algorithm, and `_apsk` parsing accepts both forms.
+
+**In-place rsa→mldsa65 upgrade of an existing enrollment's signing key: recommended
+NO, on the to-define list pending ratification** ([41](#41-the-to-define-list-2026-08-05)).
+It would rewrite approved enrollment state server-side and need a who-may rule,
+while the enrollment-upgrade path ([40](#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05))
+reaches the same end state with mechanics that exist, and revocation of the old id as
+cleanup. One mechanism, not two.
+
+## 40. RF-SRV is the mechanism the whole model stands on (2026-08-05)
+
+**"Upgrade the enrollment" — the verb every scenario conjugates — does not exist in
+the atServer.** [Section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)
+ruled its shape in June (fresh, self-spawned, auto-approved enrollment; grants a
+subset of the parent's; no OTP on an authenticated APKAM connection), and the plan
+filed it off the GA path as "retrofit". The three scenarios invert that: without
+self-enrollment, the only upgrade path is a human approving from another device,
+which breaks "each app upgrades itself, on its own schedule" completely. **RF-SRV
+moves onto the D1 GA critical path**, and every "transient, self-healing" claim in
+[38](#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05) is conditional
+on it existing.
+
+Constraints beyond §5's ruling, from the scenario-3 examination:
+
+- **Revocation must cascade.** Self-enrollment makes enrollments a parent/child
+  graph. A stolen keyfile can spawn a child before the theft is noticed; if revoking
+  the parent leaves the child alive, the feature defeats revocation. The child
+  records its parent; revoking a parent revokes descendants. (The approval chain
+  already models parenthood for signing; the server's revocation must honour it too.)
+- **Legacy material conveys client-side.** The requester generates its own new
+  keypair, so it seals the legacy encryption keypair + self key to its own new key
+  package; `encryptedDefaultSelfEncryptionKey` is satisfiable without the server
+  holding anything.
+- **§5's expiry cap is in tension with scenario 3 and needs re-ratifying.** §5 caps
+  the old enrollment to `min(now + grace, expiry)` on retrofit — but scenario 3's
+  devices upgrade on schedules measured in whenever-they-next-run. A short grace
+  strands laggard clones; an infinite one never retires the legacy credential. On
+  the to-define list; not silently overridden in either direction.
+- A protocol seam: client, commons, and every atServer implementation land together.
+
+## 41. The to-define list (2026-08-05)
+
+What the 2026-08-05 re-examination deliberately leaves **defined as needing
+definition** — the boundary between ruled and open. Each item names its owner-project
+where one exists.
+
+1. **RF-SRV verb wire shape** (the ruling in [§5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)
+   plus [40](#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)'s
+   constraints, as protocol: request fields, response, error cases). → RF-SRV.
+2. **The revocation-cascade mechanics** — where the parent link lives on the
+   enrollment record, and how revoke walks it. → RF-SRV + atServer.
+3. **§5's expiry cap vs scenario-3 laggards** — grace length, or cap-on-retrofit vs
+   cap-on-operator-action. → RF-SRV.
+4. **Who runs the chain sweep** for an atSign whose apps are all scoped enrollments —
+   the atSign's own keys are privileged by construction, but that keyfile lives in a
+   drawer. → chain-sweep work ([38](#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05).3).
+5. **Last-holder-lost recovery** — the published nskey exists, no live enrollment
+   holds the private, `mintIfAbsent` correctly refuses. Presumably: rotate and accept
+   that history is unreadable; needs saying as a ruling. → B-2.
+6. **Keyfile cloned after upgrade vs revocation** — what rotation must assume about
+   clones sharing one enrollment id. → B-2.
+7. **Enrollment-1 retirement guidance** (docs, not machinery). → upgrade guide.
+8. **In-place rsa→mldsa65 `_apsk` upgrade: ratify the "no"** in
+   [39](#39-_apsk-rides-the-same-two-stage-ladder-2026-08-05). → RF-2b.
+9. **The exact self-describing `_apsk` format** (tagged JSON shape, field names,
+   old-parser failure mode — coordinate with NoPorts before freezing). → RF-2b.
+10. **The stop-minting-legacy release** — opt-out semantics, default-flip timing,
+    and the optional late-mint repair path
+    ([37](#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)). → R-2/B-3 re-scope.
+11. **nskey pull trigger points** — start-time sweep vs on-miss vs both, and the
+    generation/rotation interplay (current-to-write, older-on-demand). → self-heal
+    work; being prototyped 2026-08-05.
+12. **AtKeys advisory-lock design** — lock file vs `flock`, staleness, scope of the
+    critical section. → at_auth; being prototyped 2026-08-05.
