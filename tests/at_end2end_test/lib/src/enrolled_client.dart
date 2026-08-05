@@ -80,6 +80,11 @@ class EnrolledClient {
 /// never went through the conveyance under test, which is the one thing these
 /// tests are supposed to exercise.
 ///
+/// [namespaces] overrides the grants requested, which defaults to `rw` on
+/// [namespace] alone. Pass `{'*': 'rw', '__manage': 'rw', …}` for a fully
+/// privileged enrollment — the class entitled to hold the signing root, and
+/// the only one a holder will serve per-enrollment material to.
+///
 /// The approval is issued **before** `waitForApproval` is awaited. Both sides
 /// run in this one process, so waiting first would deadlock — nothing else is
 /// scheduled to approve.
@@ -91,6 +96,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
   required String rootDomain,
   required int rootPort,
   String? deviceName,
+  Map<String, String>? namespaces,
 }) async {
   final otp = (await approver.getOTP()).response;
 
@@ -110,7 +116,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
       session: session,
       appName: namespace,
       deviceName: deviceName ?? 'enrolled-${Uuid().v4().hashCode}',
-      namespaces: {namespace: 'rw'},
+      namespaces: namespaces ?? {namespace: 'rw'},
       otp: otp,
       // pq mode, so the approver mints the symmetric key and seals it to the
       // advertised key package. On the legacy path it would RSA-wrap it, which
