@@ -1,4 +1,19 @@
 ## 3.4.0
+- feat: `AtSelfEnrollmentRequest` — the client half of the PQ self-retrofit.
+  Submitted on an APKAM-authenticated connection with no OTP, it mints an
+  ML-DSA-65 APKAM keypair (at most once per keyfile, serialised by an
+  advisory lock sized for the network round trip), sends `enroll:request`
+  with `signingAlgo:mldsa65` and the key package as metadata, and on the
+  auto-approved response persists the new enrollment's material into the
+  SAME keyfile as typed materials under the new enrollment id — the legacy
+  flat fields untouched, so the original enrollment keeps authenticating
+  until the atServer's expiry cap retires it.
+- feat: `AtKeys.toAtChopsForEnrollment` and
+  `AtKeys.signingAlgorithmForEnrollment` — AtChops built from an
+  enrollment's typed signing material (sharing the keyfile's flat
+  encryption keys), and `AtAuthImpl.authenticate` resolves them
+  automatically: authenticating with a retrofitted enrollment's id
+  ML-DSA-signs PKAM with no caller-supplied algorithm.
 - fix: `FileAtKeysIo.write`/`flush` take an inter-process advisory lock
   (`<keyfile>.lock`, O_EXCL create) around the whole read-validate-write.
   The rename inside was already atomic and `validateMapUpdate` already

@@ -275,6 +275,67 @@ class AtKeys {
     };
   }
 
+  /// AtChops for [enrollmentId]'s typed signing material, sharing the
+  /// keyfile's flat encryption and self-encryption keys.
+  ///
+  /// This is how a second enrollment held in the same keyfile — a
+  /// self-retrofit's, whose APKAM keypair lives in the typed `keys` section
+  /// under its own enrollment id while the flat fields keep carrying the
+  /// original enrollment's — becomes able to authenticate at all;
+  /// [toAtChops] reads only the flat fields and cannot see it.
+  ///
+  /// The signing keypair rides the String-typed pkam slot as base64 of the
+  /// raw key bytes. A caller authenticating over at_lookup must also set
+  /// `signingAlgoType` to what [signingAlgorithmForEnrollment] reports, or
+  /// the signature is produced by the wrong routine.
+  AtChops toAtChopsForEnrollment(String enrollmentId) {
+    final materials = keysForEnrollment(enrollmentId);
+    final privateSigning = materials
+        .where((m) =>
+            m.keyPartType == CryptographicKeyType.privateSigning &&
+            m.status == KeyPartStatus.active)
+        .firstOrNull;
+    final publicVerification = materials
+        .where((m) =>
+            m.keyPartType == CryptographicKeyType.publicVerification &&
+            m.status == KeyPartStatus.active)
+        .firstOrNull;
+    if (privateSigning == null || publicVerification == null) {
+      throw AtKeyNotFoundException(
+          'AtKeys holds no active signing keypair for enrollment '
+          '$enrollmentId');
+    }
+
+    final atChopsKeys = AtChopsKeys.create(
+        AtEncryptionKeyPair.create(
+          defaultEncryptionPublicKey?.toString() ?? '',
+          defaultEncryptionPrivateKey?.toString() ?? '',
+        ),
+        AtPkamKeyPair.create(publicVerification.bytes.toString(),
+            privateSigning.bytes.toString()));
+    if (defaultSelfEncryptionKey != null) {
+      atChopsKeys.selfEncryptionKey =
+          AESKey(defaultSelfEncryptionKey!.toString());
+    }
+    return AtChopsImpl(atChopsKeys);
+  }
+
+  /// The signing algorithm of [enrollmentId]'s active privateSigning
+  /// material, or null when the enrollment has no typed signing material
+  /// this build recognises (a legacy flat-fields enrollment reports null:
+  /// its RSA keypair lives in the flat fields, not the typed section).
+  SigningAlgoType? signingAlgorithmForEnrollment(String enrollmentId) {
+    final material = keysForEnrollment(enrollmentId)
+        .where((m) =>
+            m.keyPartType == CryptographicKeyType.privateSigning &&
+            m.status == KeyPartStatus.active)
+        .firstOrNull;
+    if (material == null) return null;
+    return SigningAlgoType.values
+        .where((a) => a.name == material.keyAlgorithmType)
+        .firstOrNull;
+  }
+
   @Deprecated('legacy, please use addKey to add additional keys.')
   AtKeys copyWith(AtKeys other) {
     var keys = AtKeys()

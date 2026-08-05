@@ -10,7 +10,10 @@ import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
+import 'package:at_auth/src/keys/io/file_io.dart';
+import 'package:at_auth/src/keys/io/file_lock.dart';
 import 'package:at_auth/src/keys/io/memory_io.dart';
+import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -50,6 +53,9 @@ class AtEnrollmentImpl implements AtEnrollment {
       case AtEnrollmentRequest _:
         atEnrollmentResponse =
             await _handleAtEnrollmentRequest(enrollmentRequest, atLookUp);
+      case AtSelfEnrollmentRequest _:
+        atEnrollmentResponse =
+            await _handleSelfEnrollmentRequest(enrollmentRequest, atLookUp);
       default:
         _addProgress('enrollment', 'Invalid Enrollment request received',
             ProgressEventType.error);
@@ -91,12 +97,13 @@ class AtEnrollmentImpl implements AtEnrollment {
   /// and additive, so a request without it is a valid request, and the
   /// alternative is failing an enrollment over an optional payload.
   Future<Map<String, dynamic>?> _buildMetadata(
-      AtEnrollmentRequest request, AtKeys keys) async {
-    final builder = request.metadataBuilder;
+      FutureOr<Map<String, dynamic>?> Function(AtKeysIo keysIo)? builder,
+      String atSign,
+      AtKeys keys) async {
     if (builder == null) return null;
 
     final keysIo = InMemoryAtKeysIo();
-    await keysIo.write(request.atSign, keys);
+    await keysIo.write(atSign, keys);
     try {
       return await builder(keysIo);
     } catch (e, st) {
@@ -129,8 +136,10 @@ class AtEnrollmentImpl implements AtEnrollment {
       ..defaultEncryptionPublicKey =
           AtBytes.fromString(defaultEncryptionPublicKey);
 
-    final Map<String, dynamic>? metadata =
-        await _buildMetadata(atEnrollmentRequest, atAuthKeys);
+    final Map<String, dynamic>? metadata = await _buildMetadata(
+        atEnrollmentRequest.metadataBuilder,
+        atEnrollmentRequest.atSign,
+        atAuthKeys);
 
     // A key package is advertised in every mode — it is also how an approver
     // seals this atSign's existing secrets to the new device — so its presence
@@ -204,6 +213,153 @@ class AtEnrollmentImpl implements AtEnrollment {
         // legacy one already holds its own.
         apkamSymmetricKeyResolver:
             isPq ? atEnrollmentRequest.apkamSymmetricKeyResolver : null);
+  }
+
+  /// Handles an APKAM-authenticated self-enrollment (the PQ retrofit).
+  ///
+  /// Serialised per keyfile by [_serializedPerKeyfile], whose critical
+  /// section spans the whole check → mint → submit → persist sequence, so
+  /// two processes sharing one keyfile cannot both mint.
+  ///
+  /// Idempotent per keyfile: when the keyfile already holds an active
+  /// ML-DSA-65 signing material under some enrollment id, that enrollment is
+  /// returned and nothing is minted or submitted. A crash after the request
+  /// lands but before the keyfile is written leaves an orphan approved
+  /// enrollment server-side whose private nobody holds — unusable and
+  /// revocable, and a rerun spawns a fresh enrollment.
+  Future<AtEnrollmentResponse> _handleSelfEnrollmentRequest(
+      AtSelfEnrollmentRequest request, AtLookUp atLookUp) async {
+    if (request.namespaces.isEmpty) {
+      throw AtEnrollmentException(
+          'a self-enrollment must request at least one namespace: the child '
+          'holds exactly what it names, and the atServer refuses an empty '
+          'set');
+    }
+    final keysIo = request.session.atKeysIo;
+    if (keysIo is! WrittenAtKeysIo) {
+      throw AtEnrollmentException(
+          'a self-enrollment persists the new enrollment into the keyfile; '
+          'the session must carry a writable AtKeysIo');
+    }
+
+    return await _serializedPerKeyfile(keysIo, request.atSign, () async {
+      final existing = await keysIo.read(request.atSign);
+      final alreadyRetrofitted = existing.keys
+          .where((m) =>
+              m.keyAlgorithmType == KeyAlgorithmType.mlDsa65 &&
+              m.keyPartType == CryptographicKeyType.privateSigning &&
+              m.status == KeyPartStatus.active &&
+              m.enrollmentId != null)
+          .firstOrNull;
+      if (alreadyRetrofitted != null) {
+        _logger.info('keyfile already holds a PQ enrollment '
+            '(${alreadyRetrofitted.enrollmentId}); not minting another');
+        return AtEnrollmentResponse(
+            alreadyRetrofitted.enrollmentId!, EnrollmentStatus.approved,
+            atSign: request.atSign,
+            rootDomain: request.rootDomain,
+            atAuthKeys: existing,
+            session: request.session);
+      }
+
+      final mlDsaKeyPair = await MlDsa65KeyPair.generate();
+
+      // Built before the request so a metadataBuilder can be handed the
+      // APKAM keypair it must sign with; only enrollmentId is missing, and
+      // only the atServer can supply it.
+      final constructionKeys = AtKeys()
+        ..apkamPublicKey =
+            AtBytes.fromString(mlDsaKeyPair.atPublicKey.publicKey)
+        ..apkamPrivateKey =
+            AtBytes.fromString(mlDsaKeyPair.atPrivateKey.privateKey)
+        ..defaultEncryptionPublicKey = existing.defaultEncryptionPublicKey;
+
+      final metadata = await _buildMetadata(
+          request.metadataBuilder, request.atSign, constructionKeys);
+
+      // No otp and no encryptedAPKAMSymmetricKey: the connection's APKAM
+      // authentication is the whole authority, and the keyfile already holds
+      // every secret an approver would otherwise convey.
+      final enrollVerbBuilder = EnrollVerbBuilder()
+        ..appName = request.appName
+        ..deviceName = request.deviceName
+        ..apkamPublicKey = mlDsaKeyPair.atPublicKey.publicKey
+        ..signingAlgo = SigningAlgoType.mldsa65.name
+        ..namespaces = request.namespaces
+        ..apkamKeysExpiryDuration = request.apkamKeysExpiryDuration
+        ..metadata = metadata;
+
+      // auth:true so a dropped connection re-authenticates as the parent
+      // enrollment rather than reconnecting unauthenticated — the atServer
+      // discriminates this path solely by the connection's authType.
+      final serverResponse =
+          await _executeEnrollCommand(enrollVerbBuilder, atLookUp, auth: true);
+      final enrollJson = jsonDecode(serverResponse);
+      final String newEnrollmentId = enrollJson[AtConstants.enrollmentId];
+      final enrollStatus = getEnrollStatusFromString(enrollJson['status']);
+      if (enrollStatus != EnrollmentStatus.approved) {
+        throw AtEnrollmentException(
+            'expected the self-enrollment to be auto-approved; the atServer '
+            'returned status "${enrollJson['status']}"');
+      }
+
+      // Persist into the SAME keyfile: the new credentials land as typed
+      // materials tagged with the new enrollment id, while the legacy flat
+      // fields — frozen by the keyfile's never-lose contract — keep carrying
+      // the original enrollment's.
+      final now = DateTime.now().toUtc();
+      existing.addKey(AtKeysMaterial(
+          keyId: 'apkam:$newEnrollmentId',
+          enrollmentId: newEnrollmentId,
+          keyPartType: CryptographicKeyType.privateSigning,
+          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+          bytes: AtBytes.fromString(mlDsaKeyPair.atPrivateKey.privateKey),
+          createdAt: now));
+      existing.addKey(AtKeysMaterial(
+          keyId: 'apkam:$newEnrollmentId',
+          enrollmentId: newEnrollmentId,
+          keyPartType: CryptographicKeyType.publicVerification,
+          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+          bytes: AtBytes.fromString(mlDsaKeyPair.atPublicKey.publicKey),
+          createdAt: now));
+      // Whatever the metadataBuilder filed (the X-Wing key package's two
+      // halves), re-tagged with the enrollment id it now belongs to.
+      for (final material in constructionKeys.keys) {
+        existing.addKey(AtKeysMaterial(
+            keyId: material.keyId,
+            enrollmentId: newEnrollmentId,
+            keyPartType: material.keyPartType,
+            keyAlgorithmType: material.keyAlgorithmType,
+            bytes: material.bytes,
+            operations: material.operations,
+            createdAt: material.createdAt,
+            status: material.status));
+      }
+      await keysIo.flush(request.atSign.toAtsign(), existing);
+
+      return AtEnrollmentResponse(newEnrollmentId, enrollStatus,
+          atSign: request.atSign,
+          rootDomain: request.rootDomain,
+          atAuthKeys: existing,
+          session: request.session);
+    });
+  }
+
+  /// Serialises the whole self-enrollment per keyfile. The critical section
+  /// spans a network round trip, so it gets its own lock file and a
+  /// staleness threshold sized for one — not the keyfile lock's
+  /// milliseconds-scale settings (that lock still guards the flush inside).
+  /// A non-file [AtKeysIo] (tests, custom stores) runs unserialised: it is
+  /// process-local by construction.
+  Future<T> _serializedPerKeyfile<T>(
+      AtKeysIo keysIo, String atSign, Future<T> Function() action) {
+    if (keysIo is FileAtKeysIo) {
+      return AtKeysFileLock('${keysIo.filePath!(atSign)}.retrofit',
+              timeout: const Duration(seconds: 30),
+              staleAfter: const Duration(minutes: 2))
+          .synchronized(action);
+    }
+    return action();
   }
 
   @override
@@ -550,9 +706,10 @@ class AtEnrollmentImpl implements AtEnrollment {
   }
 
   Future<String> _executeEnrollCommand(
-      EnrollVerbBuilder enrollVerbBuilder, AtLookUp atLookUp) async {
-    var enrollResult =
-        await atLookUp.executeCommand(enrollVerbBuilder.buildCommand());
+      EnrollVerbBuilder enrollVerbBuilder, AtLookUp atLookUp,
+      {bool auth = false}) async {
+    var enrollResult = await atLookUp
+        .executeCommand(enrollVerbBuilder.buildCommand(), auth: auth);
     if (enrollResult == null ||
         enrollResult.isEmpty ||
         enrollResult.startsWith('error:')) {

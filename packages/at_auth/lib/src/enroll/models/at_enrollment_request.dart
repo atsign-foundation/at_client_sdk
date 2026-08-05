@@ -154,6 +154,53 @@ class AtEnrollmentRequest extends EnrollmentRequest {
         );
 }
 
+/// An APKAM-authenticated self-enrollment: the request an already-enrolled
+/// client submits to spawn a FRESH enrollment for itself — the client half of
+/// the PQ retrofit (`at_client_sdk` `docs/projects/pq/decisions.md` 5, 40,
+/// 42 item 1). No OTP and no human approval: the connection's existing
+/// approved enrollment is the whole authority, and the atServer auto-approves
+/// a subset of its grants.
+///
+/// The submission must ride an APKAM-authenticated [AtLookUp] — the atServer
+/// discriminates this path solely by the connection's authType. On the
+/// auto-approved response, the freshly minted ML-DSA-65 APKAM keypair (and
+/// whatever typed material the [metadataBuilder] filed, such as the X-Wing
+/// key package) is persisted into the SAME keyfile that holds the legacy
+/// material, as typed materials tagged with the new enrollment id. The
+/// legacy flat fields are untouched, so the original enrollment keeps
+/// authenticating until the atServer's expiry cap retires it.
+class AtSelfEnrollmentRequest extends EnrollmentRequest {
+  /// The authenticated session whose keyfile self-enrolls. Its
+  /// [AtAuthSession.atKeysIo] is both the source of the existing material
+  /// and the destination of the new enrollment's, which is why it is
+  /// required rather than optional here.
+  final AtAuthSession session;
+
+  /// The grants the new enrollment requests. Must be non-empty (the atServer
+  /// refuses an empty set) and a subset of the authenticated enrollment's
+  /// (anything more is refused as escalation).
+  Map<String, String> namespaces;
+
+  /// The new enrollment's key-expiry posture. Absent, the atServer inherits
+  /// the parent enrollment's.
+  Duration? apkamKeysExpiryDuration;
+
+  /// See [AtEnrollmentRequest.metadataBuilder]. For a self-enrollment the
+  /// handed keys carry the freshly minted ML-DSA-65 APKAM keypair, so a
+  /// builder that signs with it must sign mldsa65 — e.g.
+  /// `enrollmentKeyPackageBuilder(atSign, signingAlgo: SigningAlgoType.mldsa65)`.
+  FutureOr<Map<String, dynamic>?> Function(AtKeysIo keysIo)? metadataBuilder;
+
+  AtSelfEnrollmentRequest({
+    required this.session,
+    required super.appName,
+    required super.deviceName,
+    required this.namespaces,
+    this.apkamKeysExpiryDuration,
+    this.metadataBuilder,
+  }) : super(atSign: session.atSign, rootDomain: session.rootDomain);
+}
+
 /// The FirstEnrollmentRequest represents an enrollment request when onboarding (activating) an atSign.
 ///
 /// Upon submitting the [FirstEnrollmentRequest], an APKAM key pair and an encryption key pair are generated, and an enrollment
