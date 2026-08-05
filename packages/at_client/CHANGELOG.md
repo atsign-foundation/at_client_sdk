@@ -1,4 +1,10 @@
 ## 3.14.1
+- feat (experimental): `signEnvelope` signs ML-DSA-65 when asked
+  (`signingAlgo: mldsa65`, key material as base64 of the raw keys), pairing
+  the mldsa65 verify branch `verifyEnvelope` already carried; and
+  `enrollmentKeyPackageBuilder` gains a `signingAlgo` parameter so a
+  self-retrofit's key package is signed by the freshly minted ML-DSA APKAM
+  keypair the enrollment will authenticate with.
 - feat (experimental): the nskey privates **self-heal** — mint if none exists,
   else pull from any current holder. Before this, the only delivery was the
   mint-time push to whoever held a key package at that instant, so an

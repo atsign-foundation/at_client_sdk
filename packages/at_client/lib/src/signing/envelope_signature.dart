@@ -73,9 +73,23 @@ Map<String, Object?> signEnvelope(
 }) {
   final String signableText = signableTextOf(payload, toEncodable: toEncodable);
 
-  final algo = RsaSigningAlgo(
-      RsaKeyPair.create(keys.publicKey, keys.privateKey), hashingAlgo);
-  final signature = base64Encode(algo.sign(utf8.encode(signableText)));
+  final String signature;
+  switch (signingAlgo) {
+    case SigningAlgoType.rsa2048:
+      final algo = RsaSigningAlgo(
+          RsaKeyPair.create(keys.publicKey, keys.privateKey), hashingAlgo);
+      signature = base64Encode(algo.sign(utf8.encode(signableText)));
+    case SigningAlgoType.mldsa65:
+      // [keys] carries base64 of the raw ML-DSA-65 keys; ML-DSA signs the
+      // message directly, so [hashingAlgo] plays no part (the envelope still
+      // records it for shape stability).
+      signature = base64Encode(MlDsa65PureDartAlgo.signBytesSync(
+          utf8.encode(signableText),
+          secretKey: base64Decode(keys.privateKey)));
+    default:
+      throw ArgumentError.value(
+          signingAlgo, 'signingAlgo', 'no envelope signing support');
+  }
 
   return {
     'payload': payload,

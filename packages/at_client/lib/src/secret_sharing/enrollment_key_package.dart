@@ -7,7 +7,7 @@ import 'package:at_auth/at_auth.dart'
         AtKeysMaterial,
         CryptographicKeyType,
         KeyAlgorithmType;
-import 'package:at_chops/at_chops.dart' show XWingPureDartAlgo;
+import 'package:at_chops/at_chops.dart' show SigningAlgoType, XWingPureDartAlgo;
 import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
@@ -38,10 +38,17 @@ import 'package:meta/meta.dart' show experimental;
 ///   does, and a reader injects it back. So the envelope omits the claim
 ///   rather than guessing at it; a verifier's authority is the signature
 ///   checking out against that record's own `_apsk`.
+///
+/// [signingAlgo] names the algorithm of the APKAM keypair the handed
+/// `AtKeys` carries, and therefore how the envelope is signed: `rsa2048`
+/// (the default, today's OTP flow) or `mldsa65` for a self-retrofit, whose
+/// freshly minted ML-DSA keypair rides the same flat fields as base64 of
+/// the raw keys.
 @experimental
 Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
   String atSign, {
   DateTime? createdAt,
+  SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
 }) {
   return (AtKeysIo keysIo) async {
     final AtKeys keys = await keysIo.read(atSign);
@@ -94,6 +101,7 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
           publicKey: apkamPublicKey.toString(),
           privateKey: apkamPrivateKey.toString(),
         ),
+        signingAlgo: signingAlgo,
       ),
     };
   };

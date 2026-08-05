@@ -101,6 +101,37 @@ void main() {
       await verifyEnvelope(await mlDsaEnvelope(), signerPublicKey: apsk);
     });
 
+    test('signEnvelope signs ML-DSA when asked, and the result verifies',
+        () async {
+      final envelope = signEnvelope(payload,
+          keys: ApkamSigningKeys(
+              publicKey: base64Encode(mlDsaPair.publicKey),
+              privateKey: base64Encode(mlDsaPair.secretKey)),
+          enrollmentId: 'enroll-pq',
+          signingAlgo: SigningAlgoType.mldsa65);
+      expect(envelope['signingAlgo'], 'mldsa65');
+      expect(base64Decode(envelope['signature'] as String).length, 3309,
+          reason: 'an ML-DSA-65 signature is 3309 bytes — an RSA-sized '
+              'signature here means the sign dispatch ignored signingAlgo');
+
+      final apsk = encodeTaggedApsk(
+          signingAlgo: SigningAlgoType.mldsa65,
+          publicKey: base64Encode(mlDsaPair.publicKey));
+      await verifyEnvelope(envelope, signerPublicKey: apsk);
+
+      envelope['payload'] = 'a different text';
+      await expectLater(() => verifyEnvelope(envelope, signerPublicKey: apsk),
+          throwsA(isA<AtSigningVerificationException>()));
+    });
+
+    test('signEnvelope refuses an algorithm it has no signing code for', () {
+      expect(
+          () => signEnvelope(payload,
+              keys: ApkamSigningKeys(publicKey: 'x', privateKey: 'y'),
+              signingAlgo: SigningAlgoType.ecc_secp256r1),
+          throwsA(isA<ArgumentError>()));
+    });
+
     test('a tampered ML-DSA envelope fails', () async {
       final apsk = encodeTaggedApsk(
           signingAlgo: SigningAlgoType.mldsa65,
