@@ -114,9 +114,7 @@ void main() {
           throwsA(isA<AtSigningException>()));
     });
 
-    test(
-        'verifyBytes returns false (never throws) for a wrong-length public key',
-        () async {
+    test('verifyBytes returns false for a wrong-length public key', () async {
       final algo = MlDsa65FfiAlgo.fromLib(lib!);
       final kp = await algo.generateKeyPair();
       final Uint8List message = Uint8List.fromList('data'.codeUnits);
@@ -130,9 +128,7 @@ void main() {
       expect(ok, isFalse);
     });
 
-    test(
-        'verifyBytes returns false (never throws) for a wrong-length signature',
-        () async {
+    test('verifyBytes returns false for a wrong-length signature', () async {
       final algo = MlDsa65FfiAlgo.fromLib(lib!);
       final kp = await algo.generateKeyPair();
       final Uint8List message = Uint8List.fromList('data'.codeUnits);
@@ -140,6 +136,41 @@ void main() {
       final Uint8List badSig = Uint8List(MlDsa65Sizes.signatureBytes + 1);
       final bool ok = await algo.verifyBytes(message,
           signature: badSig, publicKey: kp.publicKey);
+
+      expect(ok, isFalse);
+    });
+
+    // The two wrong-length cases above never reach OpenSSL — the length gate
+    // rejects them first. These two do, and pin the boundary that lets
+    // verifyBytes carry no catch-all: attacker-controlled bytes of the right
+    // length must come back as `false`, while a StateError means the backend
+    // itself failed.
+    test('verifyBytes returns false for a right-length garbage public key',
+        () async {
+      final algo = MlDsa65FfiAlgo.fromLib(lib!);
+      final kp = await algo.generateKeyPair();
+      final Uint8List message = Uint8List.fromList('data'.codeUnits);
+      final Uint8List sig =
+          await algo.signBytes(message, secretKey: kp.secretKey);
+
+      final Uint8List garbagePub = Uint8List.fromList(List<int>.generate(
+          MlDsa65Sizes.publicKeyBytes, (int i) => (i * 7 + 13) % 256));
+      final bool ok = await algo.verifyBytes(message,
+          signature: sig, publicKey: garbagePub);
+
+      expect(ok, isFalse);
+    });
+
+    test('verifyBytes returns false for a right-length garbage signature',
+        () async {
+      final algo = MlDsa65FfiAlgo.fromLib(lib!);
+      final kp = await algo.generateKeyPair();
+      final Uint8List message = Uint8List.fromList('data'.codeUnits);
+
+      final Uint8List garbageSig = Uint8List.fromList(List<int>.generate(
+          MlDsa65Sizes.signatureBytes, (int i) => (i * 11 + 29) % 256));
+      final bool ok = await algo.verifyBytes(message,
+          signature: garbageSig, publicKey: kp.publicKey);
 
       expect(ok, isFalse);
     });

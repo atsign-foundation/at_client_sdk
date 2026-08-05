@@ -27,6 +27,11 @@ import 'package:ffi/ffi.dart';
 /// supports ML-DSA-65 and falls back to pure-Dart otherwise. Construct via
 /// [MlDsa65FfiAlgo.fromLib] only to pin a specific [DynamicLibrary]
 /// (e.g. loaded via `tryLoadLibCrypto`).
+///
+/// [fromLib] does not probe the library — pinning one that lacks ML-DSA-65
+/// (OpenSSL < 3.5) fails lazily, as a [StateError] from the first
+/// [generateKeyPair]/[signBytes]/[verifyBytes] call. Gate on
+/// `libCryptoSupportsMlDsa65` if you pin the library yourself.
 final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
   final DynamicLibrary _lib;
 
@@ -151,24 +156,27 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
 
   /// Verify [signature] over [message] against the raw 1952-byte [publicKey].
   ///
-  /// Never throws — returns `false` for malformed or attacker-controlled
-  /// input (wrong-length key/signature, or any lower-level OpenSSL failure
-  /// while loading/verifying), matching the pure-Dart backend's contract.
+  /// Returns `false` for malformed or attacker-controlled input (wrong-length
+  /// or garbage key/signature), matching the pure-Dart backend's contract —
+  /// OpenSSL reports a signature mismatch as a return code, not an error.
+  ///
+  /// Throws [StateError] when OpenSSL itself cannot perform the operation —
+  /// most commonly a libcrypto build without ML-DSA-65 (added to the default
+  /// provider in OpenSSL 3.5). That is a misconfiguration, not a forged
+  /// signature, and swallowing it as `false` would make the two
+  /// indistinguishable. Gate on `libCryptoSupportsMlDsa65` before
+  /// [MlDsa65FfiAlgo.fromLib], or use `AtPqc.mlDsa65`, which already does.
   @override
   Future<bool> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
     if (!MlDsa65Sizes.hasValidVerifyLengths(publicKey, signature)) {
       return false;
     }
+    final Pointer<EVP_PKEY> pkey = _loadPublicKey(publicKey);
     try {
-      final Pointer<EVP_PKEY> pkey = _loadPublicKey(publicKey);
-      try {
-        return _verify(pkey, message, signature);
-      } finally {
-        _pkeyFree(pkey);
-      }
-    } catch (_) {
-      return false;
+      return _verify(pkey, message, signature);
+    } finally {
+      _pkeyFree(pkey);
     }
   }
 
