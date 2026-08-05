@@ -9,9 +9,16 @@ import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
     show PqSigningChain;
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart'
     show PqSigningRoot;
+import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart'
+    show NskeyPrivateFiling;
+import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
+    show NskeySeeding;
 import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
     show enrollmentApkamSymmetricKeySecretName;
 import 'package:at_commons/at_builders.dart';
+import 'package:at_utils/at_logger.dart' show AtSignLogger;
+
+final _logger = AtSignLogger('EnrollmentServiceImpl');
 
 class EnrollmentServiceImpl implements EnrollmentService {
   final AtClient _atClient;
@@ -166,6 +173,35 @@ class EnrollmentServiceImpl implements EnrollmentService {
               name: PqSigningRoot.secretName,
               value: base64Encode(private),
             ));
+      }
+    }
+
+    // The nskey privates for the approved namespaces, read from AtKeys rather
+    // than the in-memory store the next call shares from. The store is a
+    // transit buffer: after a restart it holds nothing, so an approver relying
+    // on it alone conveys a new enrollment none of the privates without which
+    // it cannot read the very namespaces it was just approved for — the
+    // conveyance hole of decisions.md 38. Best-effort like the chain link: an
+    // enrollment this misses heals itself by pulling at its next start.
+    final keysIo = _atClient.atKeysIo;
+    if (keysIo != null) {
+      try {
+        final filing = NskeyPrivateFiling(keysIo: keysIo, atSign: atSign);
+        final sent = await NskeySeeding(
+          atClient: _atClient,
+          ring: PublishedNskeyKeyRing(_atClient, privateFiling: filing),
+          sharing: sharing,
+          privateFiling: filing,
+        ).conveyHeldPrivatesTo(
+            keyPackage, enrollment.namespace?.keys ?? const []);
+        if (sent > 0) {
+          _logger.info('Conveyed $sent held nskey private(s) to enrollment '
+              '${enrollment.enrollmentId}');
+        }
+      } catch (e) {
+        _logger.warning('Could not convey held nskey privates to enrollment '
+            '${enrollment.enrollmentId}; it can pull them at its next start: '
+            '$e');
       }
     }
 

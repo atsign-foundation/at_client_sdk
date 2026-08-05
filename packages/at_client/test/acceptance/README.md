@@ -8,8 +8,12 @@ inline, skipped with the project that must land before it can go green.
 is how far we've got.
 
 > **The two counting faults audited 2026-08-03 were fixed 2026-08-04**, and
-> all seventeen owed rows are now discharged, and **R-1** has since landed the
-> scheme-negotiation rows. The suite reads **28 of 40**
+> all seventeen owed rows are now discharged. R-1 then landed its
+> scheme-negotiation rows — and the 2026-08-05 re-examination **removed the
+> marker/negotiation machinery** (`decisions.md` 36), so the B3, B4 and
+> readiness-invariant rows were re-proven against the app-decides model: the
+> two-release ladder asserted directly, the B4 rows cited to the live
+> cold-start and data-path tests. The suite reads **28 of 40**
 > scenario rows green, up from 1 before the repair and 5 after it. (The runner's own count
 > is higher — it includes `catalogue_test.dart`'s three guards, which are not
 > scenarios. That gap is why the old "4 of 43" figure was itself wrong in the
@@ -76,8 +80,8 @@ catalogue executable-but-skipped turns an 800-line document into a count.
   the target layer. Keep the placeholder here until the real assertion exists
   somewhere, so the count stays honest.
 - A constant names a scenario's **first** gate, so a project that is only ever a
-  *later* gate has none — RF-2c's e2e orchestration sits behind RF-SRV, RF-2b and
-  R-1 on the B clusters, and unblocks nothing on its own.
+  *later* gate has none — RF-2c's e2e orchestration sits behind RF-SRV and RF-2b
+  on the B clusters, and unblocks nothing on its own.
 - `catalogue_test.dart` is the one test here that is not skipped. It fails if a
   use case loses its scenario, if a blocker constant guards nothing, or if the
   counts below drift from the tests. Fix the count in the same PR.

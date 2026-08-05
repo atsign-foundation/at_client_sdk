@@ -1,9 +1,14 @@
-/// B3 · Mixed-PQ within one atSign.
+/// B3 · Mixed-PQ within one atSign — the two-release ladder itself.
 ///
-/// Catalogue: `docs/projects/pq/acceptance.md` section 10.
+/// Catalogue: `docs/projects/pq/acceptance.md` section 10 (rewritten 2026-08-05
+/// for the app-decides model, `decisions.md` 36). There is no readiness marker
+/// and no negotiation: what an install writes is decided by which build it
+/// runs, and these rows assert the two builds' contracts at the one decision
+/// point every put and notify share.
 library;
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -12,22 +17,16 @@ import '../test_utils/mocks.dart';
 void main() {
   const alice = '@alice';
   const namespace = 'app_1.my_apps';
-  const pqPair = {nskeyCryptoProviderId, symmetricAesGcmCryptoProviderId};
 
   setUpAll(() => registerFallbackValue(AtKey()));
 
-  /// `alice1` — an upgraded client: it reads the post-quantum path and writes
-  /// whatever negotiation says its atSign's fleet can read.
-  ({MockAtClient atClient, PublishedCapabilities markers}) alice1() {
+  MockAtClient clientWith(CryptoConfig config) {
     final atClient = MockAtClient();
     when(() => atClient.getCurrentAtSign()).thenReturn(alice);
     atClient.getPreferences()
       ..namespace = namespace
-      ..crypto =
-          CryptoConfig.readsNskeyWritesLegacy(keyRing: InMemoryNskeyKeyRing());
-    final markers = PublishedCapabilities(atClient);
-    PublishedCapabilities.setForClient(atClient, markers);
-    return (atClient: atClient, markers: markers);
+      ..crypto = config;
+    return atClient;
   }
 
   AtKey selfKey(String name) => AtKey()
@@ -35,70 +34,78 @@ void main() {
     ..namespace = namespace
     ..sharedBy = alice;
 
-  /// The notification frame for a self notification — same key shape, same
-  /// selection path. The row says "applies to put AND notify alike", and the
-  /// two share exactly one decision point, so asserting the decision covers
-  /// both without pretending a mock notification proves delivery.
-  AtKey selfNotificationKey() => selfKey('heartbeat');
-
   group('B3 · mixed-PQ within one atSign', () {
     test(
-        'UC-B3.1 · an upgraded enrollment still writes legacy for an '
-        'un-upgraded sibling', () async {
-      // GIVEN alice1 is PQ (holds the nskey and signing-root privates), alice2 is
-      //       still legacy-only; @alice readiness = n-r.
+        'UC-B3.1 · a capability-stage enrollment reads PQ but still writes '
+        'legacy', () {
+      // GIVEN alice1 runs the app's capability build (era default: PQ
+      //       providers registered, defaultProviderId legacy); a sibling
+      //       install may still be on the previous build.
       // WHEN  alice1 puts or notifies a self key both must read.
-      // THEN  alice1 writes/notifies LEGACY — the scheme alice2 can read — until
-      //       readiness flips. Migration invariant: write only what every reader
-      //       supports. Applies to put AND notify alike.
-      final c = alice1();
-      c.markers.seed(alice, namespace, {legacyCryptoProviderId});
+      // THEN  alice1 writes/notifies LEGACY. Writing PQ is the ACTIVE
+      //       release's decision, never the capability build's — which is what
+      //       makes the capability build safe to roll out everywhere first.
+      final atClient = clientWith(
+          CryptoConfig.readsNskeyWritesLegacy(keyRing: InMemoryNskeyKeyRing()));
 
       expect(
-          await CryptoRuntime(c.atClient)
-              .negotiatedProviderIdFor(null, atKey: selfKey('treaty')),
+          CryptoRuntime.providerIdFor(atClient, null, atKey: selfKey('treaty')),
           legacyCryptoProviderId,
-          reason: 'alice1 can read the post-quantum path and would rather '
-              'write it — the marker is what stops it, because alice2 cannot');
+          reason: 'this client can READ the post-quantum path — the ladder is '
+              'what stops it writing one, not a capability it lacks');
       expect(
-          await CryptoRuntime(c.atClient)
-              .negotiatedProviderIdFor(null, atKey: selfNotificationKey()),
+          CryptoRuntime.providerIdFor(atClient, null,
+              atKey: selfKey('heartbeat')),
           legacyCryptoProviderId,
-          reason: 'put and notify alike: a notification alice2 cannot decrypt '
-              'is as lost as a record it cannot read');
+          reason: 'put and notify share this one decision point, so this '
+              'covers both: a notification an old install cannot decrypt is '
+              'as lost as a record it cannot read');
+
+      // The "reads PQ" half, stated as the registered set rather than assumed:
+      // both PQ providers resolve, so a record arriving stamped with either id
+      // routes. The decrypt itself is proven by the data-path suites.
+      final config = CryptoConfig.forClient(atClient);
+      expect(config.lookup(nskeyCryptoProviderId), isNotNull);
+      expect(config.lookup(symmetricAesGcmCryptoProviderId), isNotNull);
     });
 
-    test('UC-B3.2 · readiness flips once all @alice enrollments are PQ',
-        () async {
-      // GIVEN all @alice enrollments now PQ; the operator (or auto-detect)
-      //       flips readiness to ready.
+    test(
+        'UC-B3.2 · the app\'s active release flips self data to the nskey '
+        'path', () {
+      // GIVEN the app ships its active build (4.x default, or an explicit
+      //       AtClientPreference.crypto); every install has run the capability
+      //       build first (the release-ordering discipline).
       // WHEN  alice1 writes/notifies self data.
-      // THEN  self data goes via the nskey data path — at/nskey conveys the CK
-      //       and at/symmetric/AES/GCM encrypts the data; the data is never
-      //       encapsulated directly to the nskey. No @alice
-      //       enrollment loses access.
-      final c = alice1();
-      c.markers.seed(alice, namespace, {legacyCryptoProviderId, ...pqPair});
+      // THEN  self data goes via the nskey data path — the CK is conveyed by
+      //       at/nskey and the data encrypted by at/symmetric/AES/GCM; the
+      //       data is never encapsulated directly to the nskey. Capability-
+      //       stage installs read it (reads are universal).
+      final atClient =
+          clientWith(CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()));
 
       expect(
-          await CryptoRuntime(c.atClient)
-              .negotiatedProviderIdFor(null, atKey: selfKey('treaty')),
+          CryptoRuntime.providerIdFor(atClient, null, atKey: selfKey('treaty')),
           symmetricAesGcmCryptoProviderId,
-          reason: 'the flip is the marker, not a new build: the same client '
-              'that wrote legacy a moment ago now writes the data path');
+          reason: 'the flip is the app\'s release, nothing else: same SDK, '
+              'same key material, different build default');
       expect(
-          await CryptoRuntime(c.atClient)
-              .negotiatedProviderIdFor(null, atKey: selfNotificationKey()),
+          CryptoRuntime.providerIdFor(atClient, null,
+              atKey: selfKey('heartbeat')),
           symmetricAesGcmCryptoProviderId);
 
-      // The data is encrypted under a content key and never encapsulated to
-      // the nskey directly: the value routes to at/symmetric/AES/GCM, and
-      // at/nskey is reached only by the conveyance, which asks for it by name.
+      // The data value routes to the symmetric provider; at/nskey is reached
+      // only by the conveyance, which asks for it by name — the data is never
+      // encapsulated to the nskey directly.
       expect(
-          await CryptoRuntime(c.atClient).negotiatedProviderIdFor(
-              nskeyCryptoProviderId,
+          CryptoRuntime.providerIdFor(atClient, nskeyCryptoProviderId,
               atKey: selfKey('ck7.__ck')),
           nskeyCryptoProviderId);
+
+      // And the round trip a capability-stage sibling performs on this data is
+      // the data-path suites' business, proven live:
+      // `nskey_data_path_e2e_test.dart` (functional) and
+      // `era_default_read_test.dart` (e2e) — a client with no config at all
+      // opens what an active client sealed.
     });
   });
 }

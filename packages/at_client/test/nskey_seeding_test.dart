@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
@@ -15,8 +13,6 @@ class MockAtLookupImpl extends Mock implements AtLookUp {}
 
 class MockEnrollmentService extends Mock implements EnrollmentService {}
 
-class MockCryptoRollout extends Mock implements CryptoRollout {}
-
 /// Which namespaces a client seeds at start.
 ///
 /// This decides how much of the fleet ends up with keys before the PQ flag
@@ -28,19 +24,10 @@ void main() {
 
   setUpAll(() => registerFallbackValue(AtKey()));
 
-  late MockCryptoRollout rollout;
-
-  setUp(() {
-    rollout = MockCryptoRollout();
-    when(() => rollout.publishNotReadyIfAbsent(any()))
-        .thenAnswer((_) async => true);
-  });
-
   NskeySeeding seeding(
       {String? enrollmentId,
       String? preferenceNamespace,
-      Map<String, dynamic>? enrollmentNamespaces,
-      PublishedNskeyKeyRing? ring}) {
+      Map<String, dynamic>? enrollmentNamespaces}) {
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
     final lookUp = MockAtLookupImpl();
@@ -62,9 +49,7 @@ void main() {
             ]);
 
     return NskeySeeding(
-        atClient: atClient,
-        ring: ring ?? PublishedNskeyKeyRing(atClient),
-        rollout: rollout);
+        atClient: atClient, ring: PublishedNskeyKeyRing(atClient));
   }
 
   test('a legacy client seeds the one namespace it can name', () async {
@@ -97,40 +82,6 @@ void main() {
     // path is experimental, so the default is off and the release that wants
     // fleet-wide seeding turns it on deliberately.
     expect(AtClientPreference().seedNamespaceKeys, isFalse);
-  });
-
-  group('the capability marker', () {
-    test('is published for a namespace that already has a key', () async {
-      final atClient = MockAtClient();
-      when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
-      final ring = PublishedNskeyKeyRing(atClient)
-        ..rememberOwn(atSign, 'wavi',
-            (nskeyKid: 'kid-1', publicKey: Uint8List.fromList([1, 2, 3])));
-
-      await seeding(preferenceNamespace: 'wavi', ring: ring).seed();
-
-      verify(() => rollout.publishNotReadyIfAbsent('wavi')).called(1);
-    });
-
-    test('is published even when minting the key fails', () async {
-      // The mint has no atServer to write to here, so it throws. Seeding is
-      // best-effort per namespace, and what must survive that is the marker:
-      // an atSign nobody can negotiate with is one nobody ever writes
-      // post-quantum to, so a partly-failed seed still has to leave it
-      // negotiable.
-      await seeding(preferenceNamespace: 'wavi').seed();
-
-      verify(() => rollout.publishNotReadyIfAbsent('wavi')).called(1);
-    });
-
-    test('is published for every namespace an enrollment grants', () async {
-      await seeding(
-          enrollmentId: 'enroll-a',
-          enrollmentNamespaces: {'wavi': 'rw', 'buzz': 'r'}).seed();
-
-      verify(() => rollout.publishNotReadyIfAbsent('wavi')).called(1);
-      verify(() => rollout.publishNotReadyIfAbsent('buzz')).called(1);
-    });
   });
 
   test('a wildcard enrollment seeds nothing at start', () async {

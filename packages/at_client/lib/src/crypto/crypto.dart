@@ -24,12 +24,6 @@ export 'package:at_client/src/crypto/nskey/pq_signing_chain.dart';
 export 'package:at_client/src/crypto/nskey/pq_signing_root.dart';
 export 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
 export 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
-// The rollout controls are public for the same reason: the readiness flip is
-// an operator action, so the class that performs it has to be reachable from
-// outside the SDK.
-export 'package:at_client/src/crypto/rollout/capability_marker.dart';
-export 'package:at_client/src/crypto/rollout/crypto_rollout.dart';
-export 'package:at_client/src/crypto/rollout/scheme_negotiation.dart';
 
 /// The id of the built-in legacy (pre-pluggable) encryption scheme — the
 /// default provider and the fallback for records with no `appMetadata`.
@@ -67,33 +61,15 @@ class CryptoConfig {
   /// the same config can back any client that reuses this preference.
   final List<CryptoProvider> providers;
 
-  /// The scheme this config would rather write, once the destination's fleet
-  /// advertises that it can read it.
-  ///
-  /// This is what lets adoption be negotiated instead of released: a client
-  /// ships with [defaultProviderId] legacy and this set to the post-quantum
-  /// data path, writes legacy to every destination that has not declared
-  /// readiness, and starts writing post-quantum to each one the moment it does
-  /// — with no new build, no flag day, and no destination left a record it
-  /// cannot open. Null means never promote: whatever [defaultProviderId] says
-  /// is what goes out.
-  ///
-  /// Negotiation can only ever pick a scheme *this* client is configured for;
-  /// it reads a destination's marker to decide, never to be told what to
-  /// register.
-  final String? preferredProviderId;
-
   const CryptoConfig({
     required this.defaultProviderId,
     this.providers = const [],
-    this.preferredProviderId,
   });
 
   /// Legacy-only — the default for un-migrated apps.
   const CryptoConfig.legacy()
       : defaultProviderId = legacyCryptoProviderId,
-        providers = const [],
-        preferredProviderId = null;
+        providers = const [];
 
   /// The nskey data path: application data under `at/symmetric/AES/GCM`, content
   /// keys conveyed by `at/nskey`, and the CK manager that mints one the first
@@ -139,10 +115,6 @@ class CryptoConfig {
     final cache = ContentKeyCache();
     return CryptoConfig(
       defaultProviderId: defaultProviderId,
-      // Both shapes want the same thing once a destination is ready. That is
-      // the entire difference between them: `readsNskeyWritesLegacy` waits for
-      // the marker, `nskey` does not.
-      preferredProviderId: symmetricAesGcmCryptoProviderId,
       providers: [
         NskeyProvider(keyRing: keyRing, cache: cache),
         SymmetricAesGcmProvider(
@@ -311,26 +283,6 @@ abstract interface class PreparesWrites {
 abstract interface class HandlesSelectively {
   /// Whether this provider can encrypt [atKey].
   bool canHandle(AtKey atKey);
-}
-
-/// Implemented by a [CryptoProvider] whose values need *more than this
-/// provider* registered at the reader to be opened.
-///
-/// Scheme negotiation asks a destination which provider ids its fleet can
-/// resolve, and writes the best scheme every required reader supports. That
-/// question is only answerable per-value if the writer knows what a value under
-/// a given scheme actually costs a reader — and it is not always the one id the
-/// value is stamped with. An `at/symmetric/AES/GCM` value cites a content key
-/// that arrives in a separate `at/nskey/...` conveyance record: a reader with
-/// the first and not the second sees the value and can never open it.
-///
-/// Separate from [CryptoProvider] so adding it breaks no existing
-/// `implements CryptoProvider`; the SDK assumes `{id}` for providers that do
-/// not implement it.
-abstract interface class RequiresReaderSupport {
-  /// Every provider id a reader must have registered to open a value this
-  /// provider wrote. Includes this provider's own [CryptoProvider.id].
-  Set<String> get readerRequirements;
 }
 
 /// Implemented by a [CryptoProvider] whose ability to encrypt for a destination

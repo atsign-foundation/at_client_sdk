@@ -19,18 +19,15 @@ void main() {
 
   setUpAll(() => registerFallbackValue(AtKey()));
 
-  /// A client that refuses legacy encryption, with a seeded capability view.
-  ({StrictMockAtClient atClient, PublishedCapabilities markers})
-      strictClient() {
+  /// A client that refuses legacy encryption. Its crypto config decides what
+  /// it *would* write; the flag decides what it may.
+  StrictMockAtClient strictClient({CryptoConfig? crypto}) {
     final atClient = StrictMockAtClient();
     when(() => atClient.getCurrentAtSign()).thenReturn(alice);
     atClient.getPreferences()
       ..namespace = namespace
-      ..crypto =
-          CryptoConfig.readsNskeyWritesLegacy(keyRing: InMemoryNskeyKeyRing());
-    final markers = PublishedCapabilities(atClient);
-    PublishedCapabilities.setForClient(atClient, markers);
-    return (atClient: atClient, markers: markers);
+      ..crypto = crypto ?? const CryptoConfig.legacy();
+    return atClient;
   }
 
   AtKey sharedKey() => AtKey()
@@ -40,38 +37,55 @@ void main() {
     ..sharedWith = bob;
 
   group('what it refuses', () {
-    test('a destination only legacy can reach', () async {
-      final c = strictClient();
-      c.markers.seed(bob, namespace, {legacyCryptoProviderId});
+    test('a client configured to write legacy', () {
+      final atClient = strictClient();
 
-      await expectLater(
-          () => CryptoRuntime(c.atClient)
-              .negotiatedProviderIdFor(null, atKey: sharedKey()),
+      expect(
+          () => CryptoRuntime.providerIdFor(atClient, null, atKey: sharedKey()),
           throwsA(isA<LegacyEncryptionRefusedException>()),
-          reason: 'a legacy-only recipient is refused, never silently written '
-              'in a scheme that can be harvested now and opened later');
+          reason: 'the era default writes legacy, and under the flag that is '
+              'refused at selection — before anything is composed or in '
+              'flight');
     });
 
-    test('an explicitly requested legacy write', () async {
-      final c = strictClient();
+    test('an explicitly requested legacy write', () {
+      final atClient = strictClient(
+          crypto: CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()));
 
-      await expectLater(
-          () => CryptoRuntime(c.atClient).negotiatedProviderIdFor(
-              legacyCryptoProviderId,
+      expect(
+          () => CryptoRuntime.providerIdFor(atClient, legacyCryptoProviderId,
               atKey: sharedKey()),
           throwsA(isA<LegacyEncryptionRefusedException>()),
-          reason: 'an explicit request is honoured over negotiation, but not '
+          reason: 'an explicit request is honoured over the default, but not '
               'over the flag — the flag is the guarantee');
     });
 
+    test('a key the PQ provider declines, whose fallback is legacy', () {
+      final atClient = strictClient(
+          crypto: CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()));
+      // No namespace: the nskey path is (owner, namespace)-scoped and declines
+      // it, so the defaulted id falls back to legacy — which the flag refuses.
+      final internalKey = AtKey()
+        ..key = 'shared_key.bob'
+        ..sharedBy = alice
+        ..metadata = (Metadata()..namespaceAware = false);
+
+      expect(
+          () => CryptoRuntime.providerIdFor(atClient, null, atKey: internalKey),
+          throwsA(isA<LegacyEncryptionRefusedException>()),
+          reason: 'the decline-fallback is a legacy write like any other; '
+              'letting it through would make the guarantee leak through '
+              'every namespace-less internal record');
+    });
+
     test('a write that reaches encryption still routed to legacy', () async {
-      final c = strictClient();
+      final atClient = strictClient();
       final key = sharedKey()
         ..metadata.appMetadata =
             AppMetadata(providerId: legacyCryptoProviderId);
 
       await expectLater(
-          () => CryptoRuntime(c.atClient).encryptForPut(key, 'secret'),
+          () => CryptoRuntime(atClient).encryptForPut(key, 'secret'),
           throwsA(isA<LegacyEncryptionRefusedException>()),
           reason: 'the second check is the point every encrypting write passes '
               'through, so the guarantee does not rest on each call path '
@@ -79,30 +93,28 @@ void main() {
     });
 
     test('a notification that reaches encryption routed to legacy', () async {
-      final c = strictClient();
+      final atClient = strictClient();
       final key = sharedKey()
         ..metadata.appMetadata =
             AppMetadata(providerId: legacyCryptoProviderId);
 
       await expectLater(
-          () => CryptoRuntime(c.atClient).encryptForNotification(key, 'hi'),
+          () => CryptoRuntime(atClient).encryptForNotification(key, 'hi'),
           throwsA(isA<AtException>()));
     });
 
-    test('the error names the record', () async {
-      final c = strictClient();
-      c.markers.seed(bob, namespace, {legacyCryptoProviderId});
+    test('the error names the record', () {
+      final atClient = strictClient();
 
-      await expectLater(
-          () => CryptoRuntime(c.atClient)
-              .negotiatedProviderIdFor(null, atKey: sharedKey()),
+      expect(
+          () => CryptoRuntime.providerIdFor(atClient, null, atKey: sharedKey()),
           throwsA(predicate((e) => '$e'.contains('note'))));
     });
   });
 
   group('what it leaves alone', () {
     test('reading a legacy record', () async {
-      final c = strictClient();
+      final atClient = strictClient();
       final key = AtKey()
         ..key = 'note'
         ..namespace = namespace
@@ -114,26 +126,20 @@ void main() {
       // no shared key, no atChops. What matters is that the refusal is NOT the
       // failure: history has to keep opening.
       await expectLater(
-          () => CryptoRuntime(c.atClient).decryptForGet(key, 'ciphertext'),
+          () => CryptoRuntime(atClient).decryptForGet(key, 'ciphertext'),
           throwsA(isNot(isA<LegacyEncryptionRefusedException>())),
           reason: 'upgrading only ever adds read capability — a client that '
               'refused legacy reads would lose its own history');
     });
 
-    test('a post-quantum write to a ready destination', () async {
-      final c = strictClient();
-      c.markers.seed(bob, namespace, {
-        legacyCryptoProviderId,
-        nskeyCryptoProviderId,
-        symmetricAesGcmCryptoProviderId
-      });
+    test('a post-quantum write', () {
+      final atClient = strictClient(
+          crypto: CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()));
 
-      expect(
-          await CryptoRuntime(c.atClient)
-              .negotiatedProviderIdFor(null, atKey: sharedKey()),
+      expect(CryptoRuntime.providerIdFor(atClient, null, atKey: sharedKey()),
           symmetricAesGcmCryptoProviderId,
           reason: 'control: the flag refuses one scheme, it does not refuse '
-              'writing');
+              'writing — an app that writes the PQ path is untouched');
     });
   });
 

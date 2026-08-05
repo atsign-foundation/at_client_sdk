@@ -1,6 +1,11 @@
-/// B4 · Mixed-PQ across atSigns.
+/// B4 · Mixed-PQ across atSigns — the cold-start gate, cross-atSign.
 ///
-/// Catalogue: `docs/projects/pq/acceptance.md` section 11.
+/// Catalogue: `docs/projects/pq/acceptance.md` section 11 (rewritten 2026-08-05
+/// for the app-decides model, `decisions.md` 36). Within a namespace,
+/// cross-atSign traffic is between installs of the same app, so "mixed" means
+/// the same app at different stages on the two sides — and the SDK's whole
+/// contribution is refusing by name when the destination has no key, taking
+/// legacy only on explicit opt-in, and never substituting a scheme silently.
 library;
 
 import 'package:test/test.dart';
@@ -9,70 +14,84 @@ import 'blockers.dart';
 import 'proven_elsewhere.dart';
 
 void main() {
-  /// The three rows below are one live scenario, because they are one *put*
-  /// sequence: what alice writes to bob, what she writes for herself in the
-  /// same breath, and what changes when bob declares readiness. Splitting them
-  /// across three live tests would mean three two-atSign set-ups proving the
-  /// same three decisions.
-  const crossAtSignFlip = 'tests/at_end2end_test/test/'
-      'capability_negotiation_test.dart';
-  const crossAtSignFlipTest = 'UC-B4.1/B4.3/B4.4';
-
   group('B4 · mixed-PQ across atSigns', () {
-    test('UC-B4.1 · PQ-ready @alice shares with legacy @bob', () {
-      // GIVEN @alice PQ-ready; @bob legacy (only RSA publickey), bob
-      //       readiness = n-r.
-      // WHEN  alice1 shares or notifies @bob:<k>.app_1.my_apps@alice.
-      // THEN  alice writes LEGACY to bob — a per-value symmetric key RSA-wrapped
-      //       inline onto the data (the monolithic legacy model) — gated by
-      //       bob's n-r readiness. A PQ self-copy via the nskey data path for
-      //       alice's own enrollments is allowed INDEPENDENTLY. No write bob
-      //       can't read.
-      provenIn(crossAtSignFlip, crossAtSignFlipTest,
-          proves: 'bob publishes a namespace key AND a not-ready marker, so '
-              'alice could seal to him and does not: the record comes back '
-              'stamped legacy, and the marker is the only thing that made it '
-              'so');
+    test('UC-B4.1 · active-PQ alice shares toward a bob with no namespace key',
+        () {
+      // GIVEN alice's install is active; bob's has never run the capability
+      //       build, so public:__nskey.<ns>@bob does not exist.
+      // WHEN  alice1 shares or notifies @bob:<k>.<ns>@alice.
+      // THEN  the write fails cold start BY NAME, unless the app opted into
+      //       allowLegacyCryptoFallback — in which case it goes out legacy,
+      //       stamped as such on the record. Never a silent downgrade.
+      provenIn('tests/at_end2end_test/test/nskey_recipient_not_ready_test.dart',
+          'UC-A4.2: a share to a recipient with no namespace key fails, naming ',
+          proves: 'an active-PQ alice writing toward a bob who never enabled '
+              'the namespace is refused with an exception naming @bob and the '
+              'namespace — cross-atSign, against two live atServers, on a '
+              'run-unique namespace so the absence is genuine');
+      provenIn('tests/at_functional_test/test/nskey_data_path_e2e_test.dart',
+          'with the escape hatch opened, the write goes out under legacy',
+          proves: 'the explicit opt-in arm: with allowLegacyCryptoFallback set '
+              'the same cold-start write proceeds under legacy and the record '
+              'is stamped legacy — the downgrade is visible, never silent');
     });
 
     test('UC-B4.2 · legacy @alice receives from PQ @bob (the interop question)',
         () {
-      // GIVEN @alice legacy (no pq_signing_root, no nskey); @bob PQ-native.
-      // WHEN  bob1 shares with @alice.
-      // THEN  bob must encapsulate in a scheme alice can read — legacy RSA to
-      //       alice's public:publickey@alice, which exists ONLY if alice enabled
-      //       the legacy-interop flag (default off). Test outcome: a PQ-native
-      //       atSign is PQ-only by default, so a legacy-peer send to it is
-      //       UNSUPPORTED unless that flag is on.
+      // GIVEN @alice legacy (no pq_signing_root, no nskeys); @bob PQ-native.
+      // WHEN  bob's app shares with @alice (and a legacy app on @alice shares
+      //       with @bob).
+      // THEN  interop works BY DEFAULT in both directions, because legacy
+      //       material outlives the atSign's own migration (decisions 37):
+      //       toward alice via the explicit legacy fallback to her publickey;
+      //       toward bob because even a PQ-native onboard publishes
+      //       public:publickey by default. Only the opt-out refuses it.
       fail('not implemented');
     }, skip: on1CrossAtSign);
 
-    test('UC-B4.3 · partially-upgraded @alice shares with @bob', () {
-      // GIVEN @alice mixed (alice1 PQ, alice2 legacy); @bob PQ-ready.
+    test(
+        'UC-B4.3 · mid-rollout @alice (one install active, one old) shares '
+        'with @bob', () {
+      // GIVEN alice's app is mid-rollout: alice1 active, alice2 an old
+      //       pre-capability build; bob's side holds the namespace key.
       // WHEN  alice1 shares/notifies @bob.
-      // THEN  the write TOWARD BOB may take the nskey data path (bob is ready),
-      //       but alice's SELF-COPY must stay legacy (alice2 can't read PQ)
-      //       until @alice readiness flips. Two directions, two schemes, one
-      //       put/notify.
-      provenIn(crossAtSignFlip, crossAtSignFlipTest,
-          proves: 'with bob ready and alice not, the same client writes the '
-              'nskey data path toward bob and legacy for its own self record — '
-              'the two negotiations are separate and only the record\'s own '
-              'readers decide it');
+      // THEN  the write takes the nskey data path. alice2 not being able to
+      //       read PQ records is the release-ordering discipline violated —
+      //       the app developer's failure mode, explicitly not the SDK's to
+      //       detect (decisions 36). What the SDK guarantees: alice2's own
+      //       legacy writes still work, nothing becomes unreadable to anyone,
+      //       and alice2's upgrade is purely additive.
+      provenIn('tests/at_end2end_test/test/nskey_cross_atsign_test.dart',
+          'alice shares with bob, and bob reads it with his own nskey private',
+          proves: 'the active install\'s cross-atSign write takes the nskey '
+              'data path against a live pair — the half of the row the SDK '
+              'owns');
+      provenIn('packages/at_client/test/acceptance/cross_cutting_test.dart',
+          'reads are universal',
+          proves: 'the additive-upgrade guarantee: a client that gains the PQ '
+              'providers still routes every legacy record, so nothing alice2 '
+              'wrote or will read is lost by anyone upgrading around it');
     });
 
-    test('UC-B4.4 · @bob finishes upgrading, shared flips to PQ', () {
-      // GIVEN @bob was legacy; now all bob enrollments are PQ and bob
-      //       readiness = ready.
+    test(
+        'UC-B4.4 · bob\'s install reaches capability, alice\'s shares flip '
+        'to PQ', () {
+      // GIVEN bob's install runs the capability build for the first time and
+      //       mints/publishes his namespace key; alice's install is active.
       // WHEN  alice1 next shares/notifies @bob.
-      // THEN  alice writes via the nskey data path to bob; the legacy path is no
-      //       longer used toward bob.
-      provenIn(crossAtSignFlip, crossAtSignFlipTest,
-          proves:
-              'bob declares readiness mid-test and alice\'s next put to him '
-              'is at/symmetric/AES/GCM citing a conveyed content key — which '
-              'bob then opens with his own nskey private, so the flip is '
-              'correct and not merely different');
+      // THEN  alice's next ensureCurrent re-plookup finds the advertisement
+      //       and the write goes via the nskey data path — cold start ends for
+      //       bob with no action from alice.
+      provenIn('tests/at_end2end_test/test/nskey_cross_atsign_test.dart',
+          'alice shares with bob, and bob reads it with his own nskey private',
+          proves: 'with bob\'s key published, alice\'s write is discovered by '
+              'plookup, sealed to bob\'s advertised generation, and bob opens '
+              'it with his own private — the post-flip steady state, live');
+      provenIn('packages/at_client/test/cold_start_test.dart',
+          'says yes once the destination has published a key',
+          proves: 'the flip\'s mechanism: the same query that said no answers '
+              'yes the moment the key exists, with no state held on alice\'s '
+              'side to invalidate');
     });
   });
 }

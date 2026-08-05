@@ -48,9 +48,10 @@ const _e2e = 'layer: tests/at_end2end_test';
 // therefore gone. Every remaining constant below names a project that has not
 // landed.
 //
-// R-1 has landed too, and its constants are gone with it: the B3 and
-// cross-cutting rows are asserted here, and the B4 rows are cited to a live
-// two-atSign test in `tests/at_end2end_test`.
+// R-1's constants are gone too — first because it landed, then because its
+// marker half was REMOVED by the app-decides model (decisions.md 36): the B3
+// and cross-cutting rows assert the two-release ladder directly, and the B4
+// rows cite the cold-start and data-path live tests.
 
 /// The two rotation levers + revocation composition.
 const b2 = 'blocked: B-2 (nskey rotation + revocation) · $_functional';

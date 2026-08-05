@@ -223,9 +223,7 @@ class AtClientPreference {
   /// whatever this says.
   bool allowLegacyCryptoFallback = false;
 
-  /// Whether this client performs the rollout actions at start: publishing the
-  /// capability marker for each namespace it is authorised for, and minting
-  /// and publishing the namespace keys.
+  /// Whether this client mints and publishes namespace keys at start.
   ///
   /// Seeding is a **rollout** action, not a crypto-path one, which is why it
   /// is its own knob rather than following [crypto]. The release sequence has
@@ -234,13 +232,7 @@ class AtClientPreference {
   /// everywhere; gating it on the PQ path being active would seed nothing
   /// until the very moment seeding stopped being useful.
   ///
-  /// The marker rides the same knob because it is the same step seen from the
-  /// other side of a write: the key is what a sender seals to, the marker is
-  /// what tells that sender whether it may. It goes up saying **legacy only**
-  /// — an upgraded client cannot speak for its siblings — and stays that way
-  /// until an operator declares readiness through `CryptoRollout`.
-  ///
-  /// Off by default while the data path is experimental — both publish a
+  /// Off by default while the data path is experimental — minting publishes a
   /// permanent, discoverable record on the atSign, which is not something to
   /// start doing behind an app's back.
   bool seedNamespaceKeys = false;

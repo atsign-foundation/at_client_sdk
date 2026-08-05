@@ -32,8 +32,8 @@ class NotificationRequestTransformer
     _resolveNamespace(notificationParams);
 
     if (_shouldRouteThroughProvider(notificationParams)) {
-      final providerId = await CryptoRuntime(_atClient).negotiatedProviderIdFor(
-          notificationParams.cryptoProviderId,
+      final providerId = CryptoRuntime.providerIdFor(
+          _atClient, notificationParams.cryptoProviderId,
           atKey: notificationParams.atKey);
       notificationParams.atKey.metadata.appMetadata ??=
           AppMetadata(providerId: providerId);

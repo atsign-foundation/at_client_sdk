@@ -527,6 +527,14 @@ class AtClientImpl implements AtClient {
           privateFiling: keysIo == null
               ? null
               : NskeyPrivateFiling(keysIo: keysIo, atSign: _atSign),
+          // The read path's self-heal (decisions.md 38): a miss on an own
+          // generation broadcasts a pull, so a record that arrived before its
+          // key stops being permanently unreadable and becomes merely early.
+          // Only when the answer has somewhere durable to land.
+          requestConveyance: keysIo == null
+              ? null
+              : (namespace, secretName) => AtClientSecretSharing.forClient(this)
+                  .requestSecretsFromNamespace(namespace, names: [secretName]),
         ),
       ),
     );
@@ -605,6 +613,37 @@ class AtClientImpl implements AtClient {
       _logger.warning('Could not ask for the signing root private for '
           '$_atSign; this enrollment stays unanchored and the next start '
           'retries: $e, $st');
+    }
+    try {
+      // Ask for any nskey privates this enrollment is entitled to and does
+      // not hold — the pull half of the self-heal invariant (decisions.md 38).
+      // An enrollment created after a namespace was minted missed the
+      // mint-time push, and this is its route to the key; without it the
+      // namespace reads as one this client can never open. Guarded on the
+      // keysIo because the answer must have somewhere durable to land.
+      final filingIo = _atKeysIo;
+      if (filingIo != null) {
+        final filing = NskeyPrivateFiling(keysIo: filingIo, atSign: _atSign);
+        final seeding = NskeySeeding(
+          atClient: this,
+          ring: PublishedNskeyKeyRing(this, privateFiling: filing),
+          privateFiling: filing,
+        );
+        final sharing = AtClientSecretSharing.forClient(this);
+        // Supply side first: prime the in-memory store with what this client
+        // holds durably, so IT can answer other enrollments' pulls — the
+        // store is a transit buffer and a restart empties it.
+        await seeding.hydrateStoreFromFiling(sharing);
+        final asked = await seeding.requestMissingPrivates(sharing);
+        if (asked.isNotEmpty) {
+          _logger.info('Asked other enrollments for the nskey private(s) of '
+              '${asked.join(', ')}; answers are filed as they arrive');
+        }
+      }
+    } catch (e, st) {
+      _logger.warning('Could not request missing nskey privates for '
+          '$_atSign; the affected namespaces stay unreadable until the next '
+          'start retries: $e, $st');
     }
     try {
       // Anchoring is attempted before the chain link because it is the better
@@ -1242,17 +1281,10 @@ class AtClientImpl implements AtClient {
     var options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
     if (!atKey.metadata.isPublic && options.shouldEncrypt) {
       try {
-        // Decided once, here, and carried to the transformer on the options.
-        // Negotiation reads the destination's capability marker, so letting the
-        // transformer resolve the provider independently would both cost a
-        // second decision and allow the two to disagree — the pre-pass would
-        // convey a content key for a scheme the write then did not use.
-        final providerId = await CryptoRuntime(this)
-            .negotiatedProviderIdFor(options.cryptoProviderId, atKey: atKey);
-        options = _copyOptionsWithProvider(options, providerId);
         await CryptoRuntime(this).prepareForPut(
           atKey,
-          providerId,
+          CryptoRuntime.providerIdFor(this, options.cryptoProviderId,
+              atKey: atKey),
           // Any record the provider writes here is one this write will cite, so
           // it has to travel the same route this write does.
           useRemoteAtServer: options.useRemoteAtServer,
@@ -1464,19 +1496,10 @@ class AtClientImpl implements AtClient {
 
   static PutRequestOptions _copyOptionsForLegacyFallback(
           PutRequestOptions options) =>
-      _copyOptionsWithProvider(options, legacyCryptoProviderId);
-
-  /// [options] with the scheme this write settled on, as a copy.
-  ///
-  /// A copy because the caller's own options object must not be rewritten, and
-  /// because the no-options case shares one static default instance across
-  /// every write in the process.
-  static PutRequestOptions _copyOptionsWithProvider(
-          PutRequestOptions options, String providerId) =>
       PutRequestOptions()
         ..useRemoteAtServer = options.useRemoteAtServer
         ..shouldEncrypt = options.shouldEncrypt
-        ..cryptoProviderId = providerId;
+        ..cryptoProviderId = legacyCryptoProviderId;
 
   void _validateDefaultCryptoProvider() {
     final config = CryptoConfig.forClient(this);

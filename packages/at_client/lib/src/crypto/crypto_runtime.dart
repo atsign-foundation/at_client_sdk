@@ -1,7 +1,6 @@
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
-import 'package:at_client/src/crypto/rollout/scheme_negotiation.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -68,7 +67,14 @@ class CryptoRuntime {
       {AtKey? atKey}) {
     final config = CryptoConfig.forClient(atClient);
     final id = requested ?? config.defaultProviderId;
-    if (atKey == null || id == legacyProviderId) return id;
+    if (atKey == null) return id;
+    if (id == legacyProviderId) {
+      refuseLegacyIfDisallowed(atClient, atKey, id,
+          because: requested != null
+              ? 'it was requested explicitly'
+              : 'this client is configured to write legacy');
+      return id;
+    }
 
     final provider = config.lookup(id);
     if (provider is HandlesSelectively &&
@@ -78,6 +84,9 @@ class CryptoRuntime {
             'Crypto provider "$id" cannot handle ${atKey.key} — it was '
             'requested explicitly, so no fallback was applied.');
       }
+      refuseLegacyIfDisallowed(atClient, atKey, legacyProviderId,
+          because: 'the configured provider "$id" cannot handle this key, and '
+              'the fallback is legacy');
       _logger.finer(
           'default provider "$id" declined ${atKey.key}; using $legacyProviderId');
       return legacyProviderId;
@@ -85,53 +94,26 @@ class CryptoRuntime {
     return id;
   }
 
-  /// The provider id a write to [atKey] should go out under, once the
-  /// destination's advertised capabilities have been taken into account.
-  ///
-  /// This is [providerIdFor] plus the migration invariant: write only what
-  /// every required reader supports. It is asynchronous because deciding needs
-  /// the destination's capability marker, which is fetched and cached per
-  /// destination rather than per write.
-  ///
-  /// **An explicitly requested id is never negotiated.** The caller named a
-  /// scheme, and quietly substituting another is how you end up believing data
-  /// is post-quantum when it is not. It is also what keeps the data path
-  /// working: a content-key conveyance is routed explicitly to `at/nskey`, and
-  /// negotiating *that* record down to legacy would break the very write it
-  /// exists to serve.
-  Future<String> negotiatedProviderIdFor(String? requested,
-      {required AtKey atKey}) async {
-    final configured = providerIdFor(_atClient, requested, atKey: atKey);
-    final selected = requested != null
-        ? configured
-        : await SchemeNegotiation.forClient(_atClient)
-            .select(atKey, configured);
-    refuseLegacyIfDisallowed(atKey, selected,
-        because: requested != null
-            ? 'it was requested explicitly'
-            : 'no post-quantum scheme reaches this destination');
-    return selected;
-  }
-
-  /// Throw if [providerId] is the legacy provider and this client set
+  /// Throw if [providerId] is the legacy provider and [atClient] set
   /// [AtClientPreference.disallowLegacyEncryption].
   ///
-  /// Called at selection time, where the error is actionable and nothing is in
-  /// flight, **and** again at encryption time. The second is not redundant: it
-  /// is the point every encrypting write passes through however the id was
-  /// chosen, so the guarantee does not depend on each call path having
-  /// remembered to ask.
-  void refuseLegacyIfDisallowed(AtKey atKey, String providerId,
+  /// Called at selection time ([providerIdFor]), where the error is actionable
+  /// and nothing is in flight, **and** again at encryption time. The second is
+  /// not redundant: it is the point every encrypting write passes through
+  /// however the id was chosen, so the guarantee does not depend on each call
+  /// path having remembered to ask.
+  static void refuseLegacyIfDisallowed(
+      AtClient atClient, AtKey atKey, String providerId,
       {required String because}) {
     if (providerId != legacyProviderId) return;
-    if (_atClient.getPreferences()?.disallowLegacyEncryption != true) return;
+    if (atClient.getPreferences()?.disallowLegacyEncryption != true) return;
     throw LegacyEncryptionRefusedException(atKey.key, because);
   }
 
   Future<String> encryptForPut(AtKey atKey, dynamic value) async {
     try {
       final provider = _provider(atKey, 'put');
-      refuseLegacyIfDisallowed(atKey, provider.id,
+      refuseLegacyIfDisallowed(_atClient, atKey, provider.id,
           because: 'the write reached encryption still routed to legacy');
       final ciphertext =
           await provider.encrypt(_context(), atKey, _requireString(value));
@@ -151,7 +133,7 @@ class CryptoRuntime {
   Future<String> encryptForNotification(AtKey atKey, dynamic value) async {
     try {
       final provider = _provider(atKey, 'notify');
-      refuseLegacyIfDisallowed(atKey, provider.id,
+      refuseLegacyIfDisallowed(_atClient, atKey, provider.id,
           because: 'the notification reached encryption still routed to '
               'legacy');
       final ciphertext =

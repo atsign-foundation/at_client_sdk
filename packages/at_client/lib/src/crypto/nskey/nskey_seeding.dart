@@ -1,9 +1,9 @@
+import 'dart:async' show unawaited;
 import 'dart:convert' show base64Encode;
 
 import 'package:at_client/at_client.dart' show AtClient;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
-import 'package:at_client/src/crypto/rollout/crypto_rollout.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/key_package.dart' show KeyPackage;
@@ -41,18 +41,12 @@ class NskeySeeding {
   /// than a value held only in this call.
   final NskeyPrivateFiling? privateFiling;
 
-  /// Publishes the capability marker alongside the namespace key. Both are
-  /// rollout actions for the same namespace list, so they share the one round
-  /// trip that establishes it.
-  final CryptoRollout rollout;
-
   NskeySeeding({
     required this.atClient,
     required this.ring,
     this.sharing,
     this.privateFiling,
-    CryptoRollout? rollout,
-  }) : rollout = rollout ?? CryptoRollout(atClient);
+  });
 
   /// The namespaces this client should hold a key for.
   ///
@@ -91,17 +85,8 @@ class NskeySeeding {
   static bool _isSeedable(String namespace) =>
       namespace != '*' && namespace != '__manage' && namespace.isNotEmpty;
 
-  /// Advertises this atSign as not-ready, then mints and publishes for every
-  /// authorised namespace that has no key yet, conveying each new private.
-  /// Returns the namespaces minted.
-  ///
-  /// The two halves are the same rollout step seen from the two sides of a
-  /// write: the key is what a *sender* seals to, the marker is what tells that
-  /// sender whether it may. Publishing the key without the marker leaves the
-  /// atSign readable-to but never negotiated-with; publishing the marker
-  /// without the key would advertise a scheme with nothing to seal to. They
-  /// also share the round trip that establishes which namespaces this client is
-  /// authorised for, which is the expensive part.
+  /// Mints and publishes for every authorised namespace that has no key yet,
+  /// then conveys each new private. Returns the namespaces minted.
   Future<Set<String>> seed() async {
     final owner = atClient.getCurrentAtSign();
     if (owner == null) return const {};
@@ -109,11 +94,6 @@ class NskeySeeding {
     final minted = <String>{};
     for (final namespace in await authorisedNamespaces()) {
       try {
-        // Before the `continue` below, because a namespace whose key already
-        // exists may still have no marker — and an atSign nobody can negotiate
-        // with is one nobody ever writes post-quantum to.
-        await rollout.publishNotReadyIfAbsent(namespace);
-
         if (await ring.currentPublic(owner, namespace) != null) continue;
         final advertisement = await ring.mintAndPublish(namespace);
         minted.add(namespace);
@@ -126,6 +106,115 @@ class NskeySeeding {
       }
     }
     return minted;
+  }
+
+  /// Primes the in-memory secret store with the nskey privates this client
+  /// holds durably, so the request-answer path can serve them.
+  ///
+  /// The pull's answering side reads the SECRET STORE, and the store is a
+  /// transit buffer: in memory, empty after every restart. Without this, a
+  /// holder that had restarted since the mint held the private in AtKeys and
+  /// answered requests with nothing — the self-heal's whole supply side gone,
+  /// invisibly, the moment the minting process exited. (Found by the live
+  /// two-enrollment test, not by any unit test: the unit fixtures put secrets
+  /// straight into the store, which is exactly the state a restart destroys.)
+  ///
+  /// Idempotent: nskey privates are immutable per generation, so re-priming
+  /// the same name is a no-op under `putIfNewer`. Returns how many were
+  /// primed.
+  Future<int> hydrateStoreFromFiling(PairwiseSecretSharing sharing) async {
+    final filing = privateFiling;
+    if (filing == null) return 0;
+
+    int hydrated = 0;
+    for (final namespace in await authorisedNamespaces()) {
+      try {
+        final held = await filing.readAllFor(namespace);
+        for (final entry in held.entries) {
+          sharing.secretStore.putIfNewer(Secret(
+            namespace: namespace,
+            name: '${NskeyPrivateFiling.secretNamePrefix}${entry.key}',
+            value: base64Encode(entry.value),
+          ));
+          hydrated++;
+        }
+      } catch (e) {
+        _logger
+            .warning('Could not prime held nskey privates for $namespace: $e');
+      }
+    }
+    return hydrated;
+  }
+
+  /// Pulls the nskey privates this enrollment is entitled to and does not
+  /// hold, from whichever enrollments currently do.
+  ///
+  /// The other half of the self-heal ruling (`decisions.md` 38): [seed] mints
+  /// when no key exists; this asks when one does. It is what heals an
+  /// enrollment that missed the mint-time push — a device approved after the
+  /// namespace was minted, a clone upgrading late — and it runs at client
+  /// start, unconditionally on any client that can file the answer, because
+  /// "created after the mint" is the ordinary second device and not an edge.
+  ///
+  /// Broadcast to the namespace's key packages, not addressed to the minter:
+  /// any current holder answers, and the creator may be long gone. Both legs
+  /// are store-and-forward, so nothing needs two devices up at once. When an
+  /// answer arrives while this client still runs it is filed immediately;
+  /// one that arrives later is filed by the next start's sweep.
+  ///
+  /// Returns the namespaces a request went out for.
+  Future<Set<String>> requestMissingPrivates(
+      PairwiseSecretSharing sharing) async {
+    final owner = atClient.getCurrentAtSign();
+    final filing = privateFiling;
+    if (owner == null || filing == null) return const {};
+
+    final asked = <String>{};
+    for (final namespace in await authorisedNamespaces()) {
+      try {
+        final advertised = await ring.currentPublic(owner, namespace);
+        // No published key is cold start — minting's business, not pulling's.
+        if (advertised == null) continue;
+        if (await ring.privateHalf(owner, namespace, advertised.nskeyKid) !=
+            null) {
+          continue;
+        }
+
+        final name =
+            '${NskeyPrivateFiling.secretNamePrefix}${advertised.nskeyKid}';
+        final sent =
+            await sharing.requestSecretsFromNamespace(namespace, names: [name]);
+        if (sent == 0) {
+          _logger.info('Wanted the nskey private for $owner:$namespace but '
+              'found no other key package to ask; the next start retries');
+          continue;
+        }
+        asked.add(namespace);
+
+        // File the answer the moment it lands, so the heal completes within
+        // this run rather than at the next start. Unawaited: a holder may be
+        // offline for days, and this client's start (and this sweep) must not
+        // wait on that.
+        unawaited(sharing
+            .waitForSecret(namespace, name, timeout: const Duration(minutes: 5))
+            .then((secret) => filing.file(secret))
+            .then((filed) {
+          if (filed) {
+            _logger.info(
+                'Healed the nskey private for $owner:$namespace from another '
+                'enrollment');
+          }
+        }).catchError((Object e) {
+          _logger.info('No holder answered for $owner:$namespace within the '
+              'wait; a later answer is filed at the next start ($e)');
+        }));
+      } catch (e) {
+        // One namespace failing must not stop the others, matching [seed].
+        _logger.warning(
+            'Could not request the nskey private for $owner:$namespace: $e');
+      }
+    }
+    return asked;
   }
 
   /// Sends every nskey private this client holds for [approvedNamespaces] to

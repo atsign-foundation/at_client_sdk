@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -154,9 +155,35 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     this.advertisementStaleGrace = const Duration(minutes: 15),
     NskeyMintLock? mintLock,
     this.privateFiling,
+    Future<void> Function(String namespace, String secretName)?
+        requestConveyance,
   })  : verifier = verifier ?? ApkamSignedAdvertisedKeys(_atClient),
         mintLock = mintLock ?? NskeyMintLock(_atClient),
+        _requestConveyance = requestConveyance,
         _signer = AtClientEnvelopeSigner(_atClient);
+
+  /// Broadcasts a pull request for a missing own-atSign private, when
+  /// [privateHalf] comes up empty for a generation this atSign has published.
+  ///
+  /// This is the read path's half of the self-heal ruling
+  /// (`docs/projects/pq/decisions.md` 38): a value can arrive before the
+  /// private that opens it — a new enrollment that missed the mint-time push
+  /// is the ordinary case, not an edge — and the reader asks rather than
+  /// failing forever. The request is store-and-forward: any current holder
+  /// answers when it next runs, the answer is filed by the arrival path, and
+  /// the next read finds it.
+  ///
+  /// Injectable so tests observe the ask without a live substrate; null wires
+  /// the real one lazily (constructing it eagerly would pull the substrate
+  /// into every fixture that only ever reads).
+  final Future<void> Function(String namespace, String secretName)?
+      _requestConveyance;
+
+  /// Generations already asked for, so a burst of failed reads collapses to
+  /// one broadcast. Per instance and never expiring: the answer is filed
+  /// durably when it arrives, and a fresh client (or the next start) asks
+  /// again if it never did.
+  final Set<String> _askedConveyance = {};
 
   /// Serialises minting between this atSign's own enrollments.
   final NskeyMintLock mintLock;
@@ -348,7 +375,34 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     final filed = await privateFiling?.read(namespace, nskeyKid);
     if (filed != null) {
       _ownPrivates[_generation(owner, namespace, nskeyKid)] = filed;
+      return filed;
     }
-    return filed;
+
+    // A generation of our own atSign that we do not hold: ask the other
+    // enrollments for it rather than failing forever. Fire-and-forget — the
+    // caller still gets its miss (and its typed error), and the answer is
+    // filed by the arrival path so a later read finds it.
+    _askForMissingPrivate(namespace, nskeyKid);
+    return null;
+  }
+
+  void _askForMissingPrivate(String namespace, String nskeyKid) {
+    final ask = _requestConveyance;
+    if (ask == null) return;
+    // One broadcast per generation per instance: every conveyance of a synced
+    // backlog fails through here in a burst, and N identical requests buy
+    // nothing the first did not.
+    if (!_askedConveyance.add(_generation('own', namespace, nskeyKid))) return;
+
+    final secretName = '${NskeyPrivateFiling.secretNamePrefix}$nskeyKid';
+    unawaited(ask(namespace, secretName).then((_) {
+      _logger.info('Asked the other enrollments for the nskey private '
+          '$namespace:$nskeyKid; the answer is filed when a holder replies');
+    }).catchError((Object e) {
+      // Retried naturally: the next instance (or the next start's sweep) asks
+      // again, and the miss itself is already surfacing as a typed error.
+      _logger.info('Could not request the missing nskey private for '
+          '$namespace:$nskeyKid: $e');
+    }));
   }
 }

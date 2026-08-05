@@ -88,14 +88,14 @@ void main() {
       expect(config.lookup(symmetricAesGcmCryptoProviderId), isNotNull);
     });
 
-    test('writes are gated by reader readiness', () async {
-      // A value/notification is only written in a scheme EVERY required reader
-      // supports; otherwise legacy (3.x), or REFUSED under
-      // disallowLegacyEncryption = true.
-      //
-      // All three arms against one client, varying only what the destination
-      // advertises — so a green result cannot come from a fixture that could
-      // never have written the post-quantum path in the first place.
+    test('no silent scheme substitution, in either direction', () async {
+      // The SDK never chooses post-quantum behind the app's back — writing PQ
+      // is the app's release decision — and never downgrades behind its back
+      // either: an explicit provider id is honoured or thrown, never
+      // substituted, and under disallowLegacyEncryption a legacy-only path is
+      // REFUSED, never quietly written legacy. (Replaces "writes gated by
+      // reader readiness" — decisions.md 36; the cold-start refusal's own rows
+      // are UC-A3.3/UC-A4.2.)
       const bob = '@bob';
       const namespace = 'app_1.my_apps';
 
@@ -105,47 +105,46 @@ void main() {
         ..sharedBy = '@alice'
         ..sharedWith = bob;
 
-      final client = MockAtClient();
-      client.getPreferences()
+      // Arm 1 — never promoted: the capability build writes legacy however
+      // much it can read, whatever any destination has published.
+      final capability = MockAtClient();
+      capability.getPreferences()
         ..namespace = namespace
         ..crypto = CryptoConfig.readsNskeyWritesLegacy(
             keyRing: InMemoryNskeyKeyRing());
-      final markers = PublishedCapabilities(client);
-      PublishedCapabilities.setForClient(client, markers);
-
-      markers.seed(bob, namespace, {legacyCryptoProviderId});
-      expect(
-          await CryptoRuntime(client)
-              .negotiatedProviderIdFor(null, atKey: toBob()),
+      expect(CryptoRuntime.providerIdFor(capability, null, atKey: toBob()),
           legacyCryptoProviderId,
-          reason: 'a fleet that reads only legacy is written only legacy');
+          reason: 'this client resolves both PQ providers — the ladder, not a '
+              'missing capability, is what keeps its writes legacy');
 
-      markers.seed(bob, namespace, {
-        legacyCryptoProviderId,
-        nskeyCryptoProviderId,
-        symmetricAesGcmCryptoProviderId
-      });
+      // Arm 2 — never demoted: the active build writes the data path, and no
+      // external state is consulted that could quietly say otherwise.
+      final active = MockAtClient();
+      active.getPreferences()
+        ..namespace = namespace
+        ..crypto = CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing());
+      expect(CryptoRuntime.providerIdFor(active, null, atKey: toBob()),
+          symmetricAesGcmCryptoProviderId);
+
+      // Arm 3 — an explicit request is honoured or thrown, never substituted:
+      // the nskey path cannot serve a namespace-less key, and quietly writing
+      // legacy instead is how data gets believed PQ when it is not.
+      final internalKey = AtKey()
+        ..key = 'shared_key.bob'
+        ..sharedBy = '@alice'
+        ..metadata = (Metadata()..namespaceAware = false);
       expect(
-          await CryptoRuntime(client)
-              .negotiatedProviderIdFor(null, atKey: toBob()),
-          symmetricAesGcmCryptoProviderId,
-          reason: 'and one that reads the post-quantum pair is written it — '
-              'the two arms differ only in the marker');
+          () => CryptoRuntime.providerIdFor(active, nskeyCryptoProviderId,
+              atKey: internalKey),
+          throwsA(isA<AtEncryptionException>()));
 
-      // The third arm: the same legacy-only destination, under a client that
-      // was told never to write legacy. Refused, not downgraded.
+      // Arm 4 — refused, not downgraded: a client that said "never write
+      // legacy" gets the refusal, not a quiet legacy write.
       final strict = StrictMockAtClient();
       strict.getPreferences()
         ..namespace = namespace
-        ..crypto = CryptoConfig.readsNskeyWritesLegacy(
-            keyRing: InMemoryNskeyKeyRing());
-      final strictMarkers = PublishedCapabilities(strict);
-      PublishedCapabilities.setForClient(strict, strictMarkers);
-      strictMarkers.seed(bob, namespace, {legacyCryptoProviderId});
-
-      await expectLater(
-          () => CryptoRuntime(strict)
-              .negotiatedProviderIdFor(null, atKey: toBob()),
+        ..crypto = const CryptoConfig.legacy();
+      expect(() => CryptoRuntime.providerIdFor(strict, null, atKey: toBob()),
           throwsA(isA<LegacyEncryptionRefusedException>()));
     });
 
