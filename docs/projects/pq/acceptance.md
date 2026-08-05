@@ -96,7 +96,7 @@ per keyfile/install):
 | `publickey`   | legacy RSA encryption pubkey published?                                                               |
 | `pq_signing_root` | atSign-level user-owned **signing** root published (immutable)?                                   |
 | `nskey.ns`    | namespace `ns` nskey state: `—` (never used, so no nskey) · `<kid>` (minted and published at `public:__nskey.<ns>@owner`; the kid names the current generation) |
-| `ready`       | PQ-readiness marker, **per (atSign, namespace)** (+ an atSign-level marker for the signing root): `n-r` · `ready` |
+| `stage`       | The **app's release stage** for the namespace ([`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)): `legacy` (pre-capability build) · `cap` (capability build — reads everything, writes legacy) · `active` (writes PQ). Replaces the removed per-`(atSign, namespace)` readiness marker: there is no published readiness state, only what build each install runs. |
 
 **Key objects** (shapes defined in `design.md`; named here for test wiring):
 
@@ -195,10 +195,16 @@ once in `design.md`; UCs below reference them by name.
      (private half stays in the keyfile; **not** published).
   5. Persist AtKeys (PQ APKAM private + signing-root private + key-package private).
   6. **Verify**: re-authenticate using the PQ APKAM key (proves the server accepts PQ auth).
-  7. Legacy interop (config flag, **default off**): publish `public:publickey@alice`
-     (RSA) **only if enabled**, for legacy-peer inbound.
+  7. **Legacy material is still cut and published, by default**
+     ([`decisions.md` 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05),
+     reversing the original Decision #1 default): mint the legacy RSA encryption
+     keypair + `selfEncryptionKey`, and publish `public:publickey@alice` — whether
+     this atSign will need legacy is determined by the apps that adopt it, which is
+     unknowable here. The legacy-interop flag is an early **opt-out** for a caller
+     that knows better; a future release flips the default.
 - **Then:**
-  - `alice1.APKAM = pq` and it authenticates via PQ APKAM; no RSA APKAM key required.
+  - `alice1.APKAM = pq` and it authenticates via PQ APKAM; no RSA APKAM key
+    required *for auth*.
   - `public:pq_signing_root@alice` exists, is immutable (a second create is
     **rejected**, which is what prevents two privileged enrollments minting two
     roots), and `alice1.root⁻¹ = ✓`.
@@ -206,13 +212,12 @@ once in `design.md`; UCs below reference them by name.
     ever.
   - `alice1.KP = ✓`, registered in E1's record (not published; discoverable only via
     `enroll:listns`).
-  - **No `selfEncryptionKey` minted** — self data uses the nskey data path. There is
-    no cold-start fallback to an atSign-level key; a namespace with no nskey simply
-    has no PQ path.
-  - Readiness may be `ready` (no legacy enrollments exist).
-  - **Legacy `publickey@alice` is absent by default** (flag off → a legacy peer's
-    send is unsupported, see [UC-B4.2](#112-uc-b42--legacy-alice-receives-from-pq-bob-the-interop-question)).
-    With the flag on it is present.
+  - `selfEncryptionKey` exists but the PQ data path never touches it — self data
+    uses the nskey path. There is no cold-start fallback to an atSign-level key; a
+    namespace with no nskey simply has no PQ path.
+  - **Legacy `publickey@alice` is present by default** (a legacy peer's send works
+    out of the box, see [UC-B4.2](#112-uc-b42--legacy-alice-receives-from-pq-bob-the-interop-question));
+    with the opt-out flag set it is absent and a legacy peer's send is unsupported.
 
 | enr | APKAM | root⁻¹ | nskey⁻¹ | KP |
 |-----|-------|--------|---------|----|
@@ -391,7 +396,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - With the legacy fallback opted in (final 3.x only), the write proceeds under
     `legacy` instead, and once the namespace's nskey exists every **subsequent**
     write uses it. Records already written under the fallback stay legacy; re-encrypting
-    them is R-1's explicit migration, never a side effect of a `put`.
+    them is an explicit migration (B-3's lazy re-encrypt), never a side effect of a `put`.
   - In practice this case is rare, because a client mints for its preference namespace
     and its `rw` namespaces at init — so a namespace it writes to normally has a key
     before the first write.
@@ -439,7 +444,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 - **Given:** `@alice`, `@bob` pq-native; `@bob` published
   `public:__nskey.app_1.my_apps@bob` when he first used the namespace;
-  `bob1`, `bob2` hold its private; `@bob` readiness `ready`.
+  `bob1`, `bob2` hold its private; the app is at stage `active` on both sides.
 - **When:** `alice1` does `put @bob:<k>.app_1.my_apps@alice` (shouldEncrypt).
 - **Steps:**
   1. `plookup` `public:__nskey.app_1.my_apps@bob`, verify its APKAM signature, and note
@@ -497,7 +502,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 ### 5.4 UC-A4.4 — Cross-atSign notification (encrypted value)
 
 - **Given:** `@alice`, `@bob` pq-native; `@bob` published `public:__nskey.app_1.my_apps@bob`
-  (or `public:pq_signing_root@bob` fallback); `@bob` readiness `ready`; `bob1` running a monitor.
+  (or `public:pq_signing_root@bob` fallback); the app at stage `active` on both
+  sides; `bob1` running a monitor.
 - **When:** `alice1` `notify`s `@bob` with an encrypted value.
 - **Steps:**
   1. Encrypt the value under a CK (`at/symmetric/AES/GCM`, cited by `ckKid`); convey
@@ -509,8 +515,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   4. `bob1` routes by `providerId`, decapsulates, decrypts; `bob2` likewise.
 - **Then:**
   - The value decrypts on every authorised bob enrollment with the same routing as a shared put.
-  - Negotiation gates the notification scheme on **bob's** readiness (a legacy bob →
-    legacy notification — UC-B4.1).
+  - The notification scheme is the sending **app's** decision, exactly as a put's
+    ([UC-B4.1](#111-uc-b41--active-pq-alice-shares-toward-a-bob-with-no-namespace-key)):
+    toward a bob with no published nskey the write fails cold start or takes the
+    explicit legacy fallback — never a silent downgrade.
   - Offline-then-online bob still decrypts the queued notification (key held, or
     pulled if it arrived meanwhile).
   - `appMetadata` is present on the notification frame; signal-only notifications are unaffected.
@@ -631,7 +639,9 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
      `public:pq_signing_root@alice` → **wins** → hold the private and convey it to the
      other fully privileged enrollments. A namespace-scoped enrollment skips this step
      entirely and proceeds without a root ([UC-B5.3](#123-uc-b53--two-enrollments-race-to-create-pq_signing_root)).
-  6. When the roster holds the key, flip readiness (or leave `n-r` until siblings retrofit).
+  6. The enrollment now holds its key material. Writing PQ remains the **app's
+     release decision** — there is no readiness state to flip
+     ([`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)).
 - **Then:**
   - `alice1.APKAM = pq` on the fresh auto-approved enrollment; PQ auth works.
   - `public:pq_signing_root@alice` created; `alice1.root⁻¹ = ✓`; `alice1` serves the private to other fully privileged enrollments on request.
@@ -689,74 +699,132 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 
 ## 10. B3 · Mixed-PQ within one atSign
 
-### 10.1 UC-B3.1 — Upgraded enrollment must still write legacy for an un-upgraded sibling
+> **Rewritten 2026-08-05** around the app-decides model
+> ([`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)):
+> there is no readiness marker and no negotiation. "Mixed within one atSign" means
+> different **apps** at different stages (which never interact — they cannot read
+> each other's namespaces) or one app's **installs** mid-rollout (the developer's
+> release-ordering discipline). What the SDK must guarantee is the two-release
+> ladder itself: the capability build reads everything and writes legacy; the
+> active build writes PQ; nothing ever changes scheme silently.
 
-- **Given:** `alice1` is PQ (`APKAM = pq`, holds the nskey/`pq_signing_root` privates),
-  `alice2` still legacy-only; `@alice` readiness `n-r`.
+### 10.1 UC-B3.1 — A capability-stage enrollment reads PQ but still writes legacy
+
+- **Given:** `alice1` runs the app's **capability** build (era default: registered
+  PQ providers, holds/mints the nskey, `defaultProviderId` legacy); a sibling
+  install may still be on the previous build.
 - **When:** `alice1` puts or notifies a self key both must read.
-- **Then:** `alice1` writes/notifies **legacy** (the scheme `alice2` can read) until
-  readiness flips — migration invariant "write only what every reader supports"; no
-  self data/notification is unreadable by `alice2`. (Applies to **put and notify** alike.)
+- **Then:** `alice1` writes/notifies **legacy**. Writing PQ is the *active*
+  release's decision, never the capability build's — which is exactly what makes
+  the capability build safe to roll out everywhere first. (Applies to **put and
+  notify** alike; a notification an old install cannot decrypt is as lost as a
+  record it cannot read.)
 
-### 10.2 UC-B3.2 — Readiness flips once all `@alice` enrollments are PQ
+### 10.2 UC-B3.2 — The app's active release flips self data to the nskey path
 
-- **Given:** all `@alice` enrollments now PQ; operator (or auto-detect) flips readiness `ready`.
+- **Given:** the app ships its **active** build (4.x default, or an explicit
+  `AtClientPreference.crypto`); every install has run the capability build first
+  (the developer's release-ordering discipline).
 - **When:** `alice1` writes/notifies self data.
 - **Then:** self data goes via the **nskey data path** — `at/nskey` conveys the CK
-  sealed to the nskey (`recipientKind: nskey`) and `at/symmetric/AES/GCM` encrypts the
-  data; the data is never encapsulated directly to the nskey. No `@alice` enrollment
+  sealed to the nskey (`recipientKind: nskey`) and `at/symmetric/AES/GCM` encrypts
+  the data; the data is never encapsulated directly to the nskey. Capability-stage
+  installs read it (reads are universal), so no install that followed the ladder
   loses access.
 
-| enr | APKAM | data-reads                 | data-writes                            |
-|-----|-------|----------------------------|----------------------------------------|
-| E1  | pq    | legacy + nskey data path   | legacy (until ready) → nskey data path |
-| E2  | rsa   | legacy                     | legacy                                 |
+| install | stage  | data-reads               | data-writes          |
+|---------|--------|--------------------------|----------------------|
+| E1      | active | legacy + nskey data path | nskey data path      |
+| E2      | cap    | legacy + nskey data path | legacy               |
 
-- **Cross-ref:** `decisions.md` ([Decision #2](decisions.md#numbered-rulings-14) readiness per `(atSign, namespace)`);
-  `design.md` (migration philosophy, capability negotiation).
-- **Impl/verify:** **R-1** (scheme negotiation) + **RF-2c**.
+- **Cross-ref:**
+  [`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)
+  (the two-release model) and
+  [27](decisions.md#27-the-era-default-read-the-new-scheme-everywhere-write-it-once-2026-08-04)
+  (the era default that *is* the capability stage);
+  `design.md` §1.8.
+- **Impl/verify:** the era default + data path (**built**; unit
+  `crypto_era_default_test`, e2e `era_default_read_test`) + **RF-2c**.
 
 ## 11. B4 · Mixed-PQ across atSigns
 
-### 11.1 UC-B4.1 — PQ-ready `@alice` shares with legacy `@bob`
+> **Rewritten 2026-08-05.** Within a namespace, cross-atSign traffic is between
+> installs of the **same app** — there are no strangers — so "mixed across
+> atSigns" means the same app at different stages on the two sides. The SDK's
+> whole contribution is the **cold-start gate**: refuse by name when the
+> destination has no key, take legacy only on explicit opt-in, never substitute a
+> scheme silently
+> ([`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)).
 
-- **Given:** `@alice` PQ-ready; `@bob` legacy (only `publickey` RSA), bob readiness `n-r`.
+### 11.1 UC-B4.1 — Active-PQ `alice` shares toward a `bob` with no namespace key
+
+- **Given:** alice's install is at stage `active`; bob's install has never run the
+  capability build, so `public:__nskey.app_1.my_apps@bob` does not exist. Bob's
+  atSign holds a `public:publickey` (the retained-by-default legacy material,
+  [`decisions.md` 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
 - **When:** `alice1` shares or notifies `@bob:<k>.app_1.my_apps@alice`.
-- **Then:** alice writes **legacy** to bob — a per-value symmetric key RSA-wrapped
-  inline onto the data, AES-256 under it (the monolithic legacy model) — to bob's
-  `publickey`, gated by bob's `n-r` readiness. A PQ self-copy via the nskey data path
-  for alice's own authorised enrollments is allowed **independently**. No write/
-  notification bob can't read.
+- **Then:** the write **fails cold start by name**
+  (`NamespaceKeyUnavailableException(@bob, app_1.my_apps)`), unless the app opted
+  into `allowLegacyCryptoFallback` — in which case it goes out **legacy** to bob's
+  `publickey` (per-value symmetric key RSA-wrapped inline, the monolithic legacy
+  model), and the *first write after bob's key appears* is PQ with no flag to
+  flip. A PQ self-copy for alice's own scope proceeds **independently** either
+  way. Never a silent downgrade: the app chose the fallback or the app sees the
+  refusal.
 
 ### 11.2 UC-B4.2 — Legacy `@alice` receives from PQ `@bob` (the interop question)
 
-- **Given:** `@alice` legacy (no `pq_signing_root`); `@bob` PQ-native.
-- **When:** `bob1` shares with `@alice`.
-- **Then:** bob must encapsulate in a scheme alice can read → **legacy RSA to alice's
-  `public:publickey@alice`**, which exists only if alice enabled the legacy-interop
-  flag (default off). **Test outcome:** a PQ-native atSign is PQ-only by default, so a
-  legacy-peer send to it is **unsupported unless** that flag is on.
-- **Cross-ref:** `decisions.md` ([Decision #1](decisions.md#numbered-rulings-14) legacy interop ruling).
+- **Given:** `@alice` legacy (no `pq_signing_root`, no nskeys — a pre-PQ atSign);
+  `@bob` PQ-native.
+- **When:** `bob1`'s app shares with `@alice` (and, in the reverse direction, a
+  legacy app on `@alice` shares with `@bob`).
+- **Then:** **interop works by default in both directions**, because legacy
+  material outlives the atSign's own migration
+  ([`decisions.md` 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)):
+  toward alice, bob's app uses the explicit legacy fallback to
+  `public:publickey@alice`; toward bob, alice's legacy app finds
+  `public:publickey@bob` because even a PQ-native onboard publishes it by
+  default. **Test outcome (reversed from the original Decision #1):** a
+  legacy-peer send is **supported by default**; only an atSign that set the
+  legacy-interop **opt-out** refuses it — deliberately, and loudly.
+- **Cross-ref:** [Decision #1](decisions.md#numbered-rulings-14) (original ruling,
+  default reversed by
+  [37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
 
-### 11.3 UC-B4.3 — Partially-upgraded `@alice` (alice1 PQ, alice2 legacy) shares with `@bob`
+### 11.3 UC-B4.3 — Mid-rollout `@alice` (one install active, one still old) shares with `@bob`
 
-- **Given:** `@alice` mixed; `@bob` PQ-ready.
+- **Given:** alice's app is mid-rollout: `alice1` runs the active build, `alice2`
+  an old pre-capability build; bob's side holds the namespace key.
 - **When:** `alice1` shares/notifies `@bob`.
-- **Then:** the write toward `@bob` may take the **nskey data path** (bob is ready),
-  but alice's **self-copy** must be legacy (alice2 can't read PQ) until `@alice`
-  readiness flips. Two directions, two schemes, one `put`/`notify`.
+- **Then:** the write toward `@bob` takes the **nskey data path**, and alice's
+  **self-copy** does too — which `alice2` cannot read. That is the
+  release-ordering discipline violated (`active` shipped before the capability
+  build reached every install), and it is the **app developer's** failure mode,
+  not the SDK's to detect: the remedy is updating `alice2`, and everything
+  written stays readable to it the moment it is
+  ([`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05).2 item 4).
+  What the SDK guarantees: `alice2`'s *own* writes still work (legacy), nothing
+  it wrote becomes unreadable to anyone, and its upgrade is purely additive.
 
-### 11.4 UC-B4.4 — `@bob` finishes upgrading → shared flips to PQ
+### 11.4 UC-B4.4 — Bob's install reaches capability → alice's shares flip to PQ
 
-- **Given:** `@bob` was legacy; now all bob enrollments PQ and bob readiness `ready`.
+- **Given:** bob's install runs the capability build for the first time: it
+  mints/publishes `public:__nskey.app_1.my_apps@bob` (or pulls the private if the
+  key exists, [`decisions.md` 38](decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)).
+  Alice's install is at stage `active`.
 - **When:** `alice1` next shares/notifies `@bob`.
-- **Then:** alice writes via the **nskey data path** to bob — `at/nskey` conveys the CK
-  sealed to bob's published nskey (`recipientKind: nskey`) and `at/symmetric/AES/GCM`
-  encrypts the data; the legacy path is no longer used toward bob.
+- **Then:** alice's next `ensureCurrent` re-`plookup` finds bob's advertisement,
+  and the write goes via the **nskey data path** — `at/nskey` conveys the CK
+  sealed to bob's published nskey (`recipientKind: nskey`),
+  `at/symmetric/AES/GCM` encrypts the data. Cold start (or the fallback, if
+  opted-in) ends for bob **without any action from alice**: the recipient's key
+  appearing is the whole trigger.
 
-- **Cross-ref:** `decisions.md` ([Decision #1](decisions.md#numbered-rulings-14) legacy interop); `roadmap.md`
-  (mixed-scheme + migration philosophy).
-- **Impl/verify:** **R-1** + **RF-2c**; harness `tests/at_end2end_test`.
+- **Cross-ref:** `design.md` §1.6 (cold start), §1.8 (the two-release model);
+  `roadmap.md` (migration philosophy).
+- **Impl/verify:** cold start + fallback (**built**; unit `cold_start_test`, e2e
+  `nskey_recipient_not_ready_test`, `nskey_cross_atsign_test`) + **RF-2c** for
+  the retrofit-driven live orchestration; harness `tests/at_end2end_test`.
 
 ## 12. B5 · Retrofit edge cases
 
@@ -788,7 +856,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 - **When:** both attempt the immutable create.
 - **Then:** exactly one wins; the other gets "already exists" and falls through to
   *request*, discarding the key material it generated rather than retrying the create.
-  No orphaned data (readiness not yet flipped). The root never rotates, so a split
+  No orphaned data (nothing was written under the discarded key). The root never rotates, so a split
   root would be unrecoverable — immutability is what makes this a benign race rather
   than a permanent fork of the trust chain.
 
@@ -803,9 +871,16 @@ These invariants are testable against **every** UC above:
 
 - **Reads are universal.** A client decrypts anything ever written to it (all
   providers retained); upgrading only ever **adds** read-capability.
-- **Writes gated by reader readiness.** A value/notification is only written in a
-  scheme **every** required reader supports; otherwise legacy (3.x) or **refused**
-  under `disallowLegacyEncryption = true`.
+- **No silent scheme substitution, in either direction.** The SDK never chooses
+  post-quantum behind the app's back (writing PQ is the app's release decision —
+  a capability-stage client writes legacy however much it can read), and never
+  downgrades behind its back either: a PQ write to a keyless destination is
+  refused **by name**, legacy is reachable only via the explicit
+  `allowLegacyCryptoFallback` opt-in, an explicitly requested provider id is
+  never substituted, and under `disallowLegacyEncryption = true` a legacy-only
+  destination is **refused**, never quietly written legacy.
+  *(Replaces "writes gated by reader readiness", 2026-08-05 —
+  [`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05).)*
 - **`appMetadata.providerId` is authoritative**, names every algorithm a reader needs
   code for ([`decisions.md`](decisions.md) section 16), and is present on **stored keys,
   notification frames and `lookup` responses alike**. The lookup clause is not
@@ -875,7 +950,7 @@ Every UC cluster runs against one or more of four test layers:
 | **at_chops vectors**               | KEM / seal / ML-DSA primitives (X-Wing encap/decap, pqSeal/pqOpen, `mldsa65` verify). Baseline already on trunk — see below. |
 | **at_client `dart test`**          | data-path providers (`at/nskey`, `at/symmetric/AES/GCM`), CK cache, round-trip equality. Run with `--concurrency=1`. |
 | **`tests/at_functional_test` runLocal.sh** | same-atSign self keys, enroll / `listns` round-trip, `__ssenv` delivery; `docker compose down` before each run; cap runs at 180000 ms. |
-| **`tests/at_end2end_test`**        | cross-atSign shares/notifications, retrofit, readiness flip.                             |
+| **`tests/at_end2end_test`**        | cross-atSign shares/notifications, retrofit, the capability→active transition.           |
 
 **Baseline (already shipped, not pending work).** The primitive layer is published:
 **#1930** (M0 crypto seam) and **#1993 / at_chops 3.3.0** (`pqSeal`/`pqOpen`), with
@@ -910,7 +985,7 @@ restates project IDs, and only as a coverage map):
 |---------------------------------------------------------------------------------|---------------------------------|
 | A1.1 (PQ-native onboard, [Decision #1](decisions.md#numbered-rulings-14), B4.2) | **ON-1**                        |
 | A2.x / A3.x / A4.x / A5.x                                                       | **SS-2, SS-4, B-1, B-2, RF-2b** |
-| B0.x / B1.x / B2.x / B3.x / B4.x / B5.x                                         | **RF-2c** (retrofit) + **R-1** (scheme negotiation) + **RF-SRV** (server auto-approve) |
+| B0.x / B1.x / B2.x / B3.x / B4.x / B5.x                                         | **RF-2c** (retrofit) + **RF-SRV** (server self-enroll — on the GA critical path per [`decisions.md` 40](decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)); B3.x/B4.x data-path halves are built (R-1's surviving scope) |
 
 Project names follow the `implementation-plan.md` scheme (RF-SRV / RF-2b /
 RF-2c).
