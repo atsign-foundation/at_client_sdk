@@ -15,6 +15,7 @@ export 'src/algorithm/hashing/hkdf.dart';
 export 'src/algorithm/hashing/sha.dart';
 export 'src/algorithm/hashing/argon2id.dart';
 export 'src/algorithm/hashing/md5.dart';
+export 'src/algorithm/pkam_mldsa65_signing_algo.dart';
 export 'src/algorithm/pkam_signing_algo.dart';
 export 'src/algorithm/signing/ecc.dart';
 export 'src/algorithm/signing/ed25519.dart';

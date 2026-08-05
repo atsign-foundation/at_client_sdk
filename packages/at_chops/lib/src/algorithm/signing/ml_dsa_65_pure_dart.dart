@@ -46,15 +46,27 @@ final class MlDsa65PureDartAlgo
   @override
   Future<Uint8List> signBytes(Uint8List message,
       {required Uint8List secretKey}) async {
-    return MlDsa.sign(secretKey, message, DilithiumParams.mlDsa65);
+    return signBytesSync(message, secretKey: secretKey);
   }
 
   /// Verify [signature] over [message] against [publicKey] (raw 1952 bytes).
   @override
   Future<bool> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
-    return MlDsa.verify(publicKey, message, signature, DilithiumParams.mlDsa65);
+    return verifyBytesSync(message, signature: signature, publicKey: publicKey);
   }
+
+  /// Synchronous [signBytes]. The pure-Dart computation is synchronous —
+  /// this exposes it to callers that cannot await, such as the PKAM signing
+  /// dispatch and envelope signing.
+  static Uint8List signBytesSync(Uint8List message,
+          {required Uint8List secretKey}) =>
+      MlDsa.sign(secretKey, message, DilithiumParams.mlDsa65);
+
+  /// Synchronous [verifyBytes].
+  static bool verifyBytesSync(Uint8List message,
+          {required Uint8List signature, required Uint8List publicKey}) =>
+      MlDsa.verify(publicKey, message, signature, DilithiumParams.mlDsa65);
 
   // ── AtSigningAlgorithm (deprecated stateful path) ───────────────────────
 

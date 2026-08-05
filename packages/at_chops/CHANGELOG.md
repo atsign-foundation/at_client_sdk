@@ -1,4 +1,13 @@
 ## 3.4.2
+- feat: `PkamMlDsa65SigningAlgo` — synchronous ML-DSA-65 PKAM signing and
+  verification, and `AtChopsImpl`'s pkam dispatch now honours
+  `signingAlgoType: mldsa65`. Until now the pkam branch signed RSA regardless
+  of the requested algorithm, so a client could never produce a genuine
+  ML-DSA PKAM signature; the key material rides the existing String-typed
+  `AtPkamKeyPair` slot as base64 of the raw keys. The mldsa65 *verification*
+  branch also switches to the synchronous class — it previously returned
+  `MlDsa65PureDartAlgo`, whose `Future<bool>` verify was stored unawaited in
+  the bool-typed result.
 - fix: `pqOpen` honours its documented contract when the KEM rejects the input.
   A wrong-length recipient secret key or KEM ciphertext reaches `decapsulate`,
   which raises an `ArgumentError` — that sat outside the guard, so a caller
