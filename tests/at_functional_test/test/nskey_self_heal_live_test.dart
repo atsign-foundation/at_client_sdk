@@ -2,6 +2,8 @@
 // point of this file.
 // ignore_for_file: experimental_member_use
 
+import 'dart:typed_data';
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
@@ -46,7 +48,13 @@ void main() {
   // (appName, deviceName) pair that already has one approved.
   final runId = DateTime.now().microsecondsSinceEpoch;
 
-  Future<EnrolledClient> enrol(String device) => enrolAndAuthenticate(
+  /// [atKeysIo] is the client's OWN keyfile, so the test observes exactly what
+  /// the client's start-time self-heal files. With two separate stores the
+  /// client's own sweep can consume an answer and file it where the test is
+  /// not looking, and the assertion reads a null meaning "somebody else got
+  /// there first".
+  Future<EnrolledClient> enrol(String device, {AtKeysIo? atKeysIo}) =>
+      enrolAndAuthenticate(
         approver: approver,
         atSign: atSign,
         namespace: namespace,
@@ -54,28 +62,26 @@ void main() {
         rootDomain: 'vip.ve.atsign.zone',
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',
+        atKeysIo: atKeysIo,
       );
 
   test('an enrollment that missed the mint pulls the private from a holder',
       () async {
-    final holder = await enrol('nskey-holder');
-    final seeker = await enrol('nskey-seeker');
-    expect(seeker.enrollmentId, isNot(holder.enrollmentId),
-        reason: 'two distinct enrollments, or the request is a client asking '
-            'itself, which the substrate declines — green for the refusal '
-            'rather than the answer');
-
-    final holderSharing = AtClientSecretSharing.forClient(holder.client);
-    final seekerSharing = AtClientSecretSharing.forClient(seeker.client);
-    await holderSharing.register();
-    await seekerSharing.register();
-
-    // The holder mints and publishes — the wave the seeker "missed". (Both
-    // enrollments already exist here, so the mint-time push does reach the
-    // seeker's key package as an envelope; the seeker never sweeps it into
-    // its store, which is exactly the missed-push state a late device is in.)
+    // The holder exists and mints BEFORE the seeker does — which is the
+    // scenario ("the wave the seeker missed") and also what keeps the test
+    // honest. Every client runs the same self-heal from its own start, and a
+    // start-time sweep consumes and DELETES the requests it finds; a holder
+    // that started before the namespace existed has an empty store and would
+    // eat the seeker's request while answering nothing. In production that
+    // holder restarts with the private in its keyfile and primes it; here,
+    // ordering the mint first is the equivalent.
     final holderIo = InMemoryAtKeysIo();
     await holderIo.write(atSign, AtKeys());
+    final holder = await enrol('nskey-holder', atKeysIo: holderIo);
+
+    final holderSharing = AtClientSecretSharing.forClient(holder.client);
+    await holderSharing.register();
+
     final holderFiling = NskeyPrivateFiling(keysIo: holderIo, atSign: atSign);
     final holderRing =
         PublishedNskeyKeyRing(holder.client, privateFiling: holderFiling);
@@ -85,10 +91,18 @@ void main() {
     expect(holderPrivate, isNotNull,
         reason: 'the holder must itself hold what it will be asked for');
 
-    // The seeker's view: the published generation exists, the private does
-    // not. Both checked, so the heal below provably has work to do.
     final seekerIo = InMemoryAtKeysIo();
     await seekerIo.write(atSign, AtKeys());
+    final seeker = await enrol('nskey-seeker', atKeysIo: seekerIo);
+    expect(seeker.enrollmentId, isNot(holder.enrollmentId),
+        reason: 'two distinct enrollments, or the request is a client asking '
+            'itself, which the substrate declines — green for the refusal '
+            'rather than the answer');
+    final seekerSharing = AtClientSecretSharing.forClient(seeker.client);
+    await seekerSharing.register();
+
+    // The seeker's view: the published generation exists, the private does
+    // not. Both checked, so the heal below provably has work to do.
     final seekerFiling = NskeyPrivateFiling(keysIo: seekerIo, atSign: atSign);
     final seekerRing =
         PublishedNskeyKeyRing(seeker.client, privateFiling: seekerFiling);
@@ -151,5 +165,61 @@ void main() {
     // rotated would strand every peer holding the old advertisement.
     expect((await seekerRing.currentPublic(atSign, namespace))?.nskeyKid,
         advertisement.nskeyKid);
+  });
+
+  test(
+      'a client START primes what it holds, so it can answer without anyone '
+      'driving it', () async {
+    // The test above drives `hydrateStoreFromFiling` by hand, which proves the
+    // mechanism and NOT that anything calls it. This proves the call: a client
+    // built the way production builds one primes its own store during its own
+    // construction, before the sweep that would otherwise consume other
+    // enrollments' requests and answer them with nothing.
+    //
+    // On an atSign this file has not built a client for, and with the private
+    // seeded BEFORE that first construction. Both matter: `AtClientImpl`
+    // caches by `(atSign, enrollmentId)`, so a second client for a principal
+    // is the first one handed back and its construction never runs again; and
+    // an enrollment's own approval rewrites its keyfile, which would discard
+    // anything seeded beforehand. A holder restarting with material already
+    // in its keyfile is the production shape this reproduces.
+    final other = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    final startIo = InMemoryAtKeysIo();
+    final seeded = AtKeys();
+    const kid = 'startprime0000';
+    final bytes = Uint8List.fromList(List<int>.generate(32, (i) => i));
+    seeded.addKey(AtKeysMaterial(
+      keyId: NskeyPrivateFiling.keyIdFor(namespace, kid),
+      keyPartType: CryptographicKeyType.privateDecapsulation,
+      keyAlgorithmType: KeyAlgorithmType.xWing,
+      bytes: AtBytes(bytes),
+      createdAt: DateTime.now().toUtc(),
+    ));
+    await startIo.write(other, seeded);
+
+    final manager =
+        await TestUtils.initAtClient(other, namespace, atKeysIo: startIo);
+
+    final sharing = AtClientSecretSharing.forClient(manager.atClient);
+    final wanted = '${NskeyPrivateFiling.secretNamePrefix}$kid';
+    var primed = sharing.secretStore
+        .listSecrets(namespace: namespace)
+        .any((s) => s.name == wanted);
+    for (var i = 0; i < 40 && !primed; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      primed = sharing.secretStore
+          .listSecrets(namespace: namespace)
+          .any((s) => s.name == wanted);
+    }
+
+    expect(primed, isTrue,
+        reason: 'start must prime the store from what the keyfile holds. A '
+            'holder that does not is deaf to every pull — and worse than '
+            'deaf, because its start-time sweep consumes and DELETES the '
+            'requests it cannot answer, so the requester loses its broadcast '
+            'too. It must also work WITHOUT asking the atServer which '
+            'namespaces this enrollment holds: that lookup needs services the '
+            'client has not been given yet at construction time, and its '
+            'failure is swallowed as "nothing to prime"');
   });
 }

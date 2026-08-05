@@ -78,6 +78,11 @@ class EnrolledClient {
 /// The approval is issued **before** `waitForApproval` is awaited. Both sides
 /// run in this one process, so waiting first would deadlock — nothing else is
 /// scheduled to approve.
+///
+/// [namespaces] overrides the grants requested, which defaults to `rw` on
+/// [namespace] alone. Pass `{'*': 'rw', '__manage': 'rw', …}` for a fully
+/// privileged enrollment — the class entitled to hold the signing root, and
+/// the only one a holder will serve per-enrollment material to.
 Future<EnrolledClient> enrolAndAuthenticate({
   required AtClient approver,
   required String atSign,
@@ -86,6 +91,8 @@ Future<EnrolledClient> enrolAndAuthenticate({
   required String rootDomain,
   required int rootPort,
   String? deviceName,
+  Map<String, String>? namespaces,
+  AtKeysIo? atKeysIo,
 }) async {
   final otp = (await approver.getOTP()).response;
 
@@ -94,7 +101,14 @@ Future<EnrolledClient> enrolAndAuthenticate({
     rootDomain: AtRootDomain(rootDomain, rootPort),
     // In memory: these keys exist for the length of one test, and writing them
     // to disk would leave a file the next run's onboarding refuses to overwrite.
-    atKeysIo: InMemoryAtKeysIo(),
+    //
+    // Pass [atKeysIo] to share one keyfile with the test. That matters
+    // whenever the test observes key material the CLIENT's own start-time
+    // self-heal also files: with two stores, whichever sweep wins consumes
+    // the envelope and files it where the other side is not looking, and the
+    // test reads a null that means "somebody else got there first" rather
+    // than "it never arrived".
+    atKeysIo: atKeysIo ?? InMemoryAtKeysIo(),
   );
 
   Map<String, dynamic>? built;
@@ -105,7 +119,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
       session: session,
       appName: namespace,
       deviceName: deviceName ?? 'enrolled-${Uuid().v4().hashCode}',
-      namespaces: {namespace: 'rw'},
+      namespaces: namespaces ?? {namespace: 'rw'},
       otp: otp,
       // pq mode, so the approver mints the symmetric key and seals it to the
       // advertised key package. On the legacy path it would RSA-wrap it, which

@@ -71,9 +71,12 @@ void main() {
     if (existing == null) {
       final builder = UpdateVerbBuilder()
         ..atKey = PqSigningRoot(atClient).keyFor(atSign)
+        // Valid base64, though not a real key — mintIfAbsent's absence check
+        // decodes whatever record it finds, and a value it cannot decode
+        // would turn every later mint on this atSign into a parse error.
         ..value = jsonEncode({
           'v': PqSigningRoot.currentVersion,
-          'keys': ['the-first-root'],
+          'keys': [base64Encode(utf8.encode('the-first-root'))],
           'successor': null,
         });
       await atClient.getRemoteSecondary()!.executeVerb(builder, sync: true);
@@ -142,18 +145,18 @@ void main() {
   test('the enrollment that loses the create does not mint a second root',
       () async {
     // The atServer guard above is only half the story. What the losing CLIENT
-    // does with the refusal is the other half: it must return empty-handed so
-    // its caller knows to request the root from a holder. A loser that treated
-    // the refusal as an error to retry, or that minted its own, would produce
-    // exactly the split-root state the immutability is there to prevent.
+    // does is the other half: it must return empty-handed — and holding
+    // nothing — so its caller knows to request the root from a holder. A
+    // loser that treated the loss as an error to retry, or that minted its
+    // own, would produce exactly the split-root state the immutability is
+    // there to prevent; one that kept a filed private would read as "already
+    // holding the root" forever and never ask.
     //
-    // Both calls run against the same live atSign, so whichever of them finds
-    // the record absent creates it and the other meets the refusal — the same
-    // race two enrollments run, without needing two of them.
-    // The private is filed BEFORE the record is published — a published root
-    // whose private did not survive can never be replaced — so the key store
-    // has to be usable or the attempt fails before it ever reaches the
-    // atServer, and this would be testing the fixture.
+    // Against a live atSign with a root already published, the loss is met at
+    // the absence check — nothing reaches the atServer and nothing is filed.
+    // The narrower true race, where two mints both find the record absent and
+    // one meets the refusal, is unit-covered with the refusal mocked; the
+    // refusal itself is what the test above watches the live atServer issue.
     final loserKeys = InMemoryAtKeysIo();
     await loserKeys.write(atSign, AtKeys());
     final root = PqSigningRoot(atClient, keysIo: loserKeys);
@@ -171,6 +174,11 @@ void main() {
             'every later signature to a key the atSign never accepted');
     expect(await publishedRoot(), before,
         reason: 'and it must not have disturbed the published record');
+    expect(await root.privateHalf(atSign), isNull,
+        reason: 'the loser must hold nothing afterwards: an active private '
+            'here would satisfy the pull\'s "already holding it" guard, and '
+            'the one heal a loser has — being given the real private by a '
+            'holder — would never fire');
 
     // A namespace-scoped enrollment must not even attempt it — the root
     // vouches for every enrollment, so minting it is not a scoped operation.
