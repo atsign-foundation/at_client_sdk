@@ -43,6 +43,13 @@
   eviction, which is what makes coarse forward secrecy fleet-wide rather than
   local to the deleting client. It is bounded by eviction *reachability*: a
   device that never resyncs keeps its copy.
+- fix (experimental): an envelope whose signer has **no readable `_apsk`** is
+  now skipped instead of failing the whole enrollment. The skip caught only
+  `AtSigningVerificationException`, but an absent `_apsk` arrives as a thrown
+  AT0015 and a malformed one throws out of base64 — so the revoked-enrollment
+  case the code documents as its intended skip instead killed
+  `waitForApproval`, and one stale envelope from a revoked enrollment could
+  fail every later enrollment that scanned past it.
 - chore: `SyncServiceImpl.progressListeners()` (`@visibleForTesting`) — the
   SDK now registers a listener of its own, so a bare
   `syncProgressListenerSize()` no longer says anything about which app

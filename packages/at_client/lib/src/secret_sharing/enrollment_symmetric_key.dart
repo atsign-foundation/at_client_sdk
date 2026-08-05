@@ -166,7 +166,15 @@ Future<String?> _openIfSymmetricKey(
   // APKAM signature authenticates who sent them.
   try {
     await _verifyAgainstApsk(atLookUp, signedEnvelope, atSign);
-  } on AtSigningVerificationException catch (e) {
+  } catch (e) {
+    // Every way this can fail is a reason to skip THIS envelope, and none of
+    // them is a reason to fail the enrollment. The typed refusal is only one
+    // of them: an absent `_apsk` arrives as a thrown AT0015, and a malformed
+    // one throws a FormatException out of base64 — both from the same single
+    // operation, verifying this envelope's signature, and both previously
+    // escaping to kill the whole approval. A revoked enrollment produces the
+    // first, so one stale envelope of its making would fail every later
+    // enrollment that scanned past it.
     _logger.warning('Envelope $envelopeKey failed signature verification, so '
         'it is not from an approved enrollment of $atSign; skipping: $e');
     return null;
@@ -211,9 +219,10 @@ Future<String?> _openIfSymmetricKey(
 /// published for the signing enrollment.
 ///
 /// A revoked enrollment's `_apsk` has been moved out from under this address
-/// by the atServer, so the lookup finds nothing and verification fails — which
-/// is the intended outcome, and the reason no separate revocation check is
-/// needed here.
+/// by the atServer, so the lookup fails and with it the verification — which is
+/// the intended outcome, and the reason no separate revocation check is needed
+/// here. It fails by **throwing**, not by returning null, which is why the
+/// caller's skip has to catch more than the typed refusal.
 Future<void> _verifyAgainstApsk(
   AtLookUp atLookUp,
   Map signedEnvelope,
@@ -225,6 +234,10 @@ Future<void> _verifyAgainstApsk(
         'Envelope names no enrollment, so there is no _apsk to check its '
         'signature against');
   }
+  // An absent `_apsk` does not come back null: the atServer answers AT0015 and
+  // `AtLookupImpl` throws it. That is the revoked-enrollment case this doc
+  // comment describes, and the caller treats a throw from here the same way it
+  // treats the refusal below — see the skip in [_openIfSymmetricKey].
   final String? response = await atLookUp.executeCommand(
       'llookup:public:_apsk.$claimed.a.__e$atSign\n',
       auth: true);

@@ -239,13 +239,37 @@ class NskeyRotation {
           'cannot revoke $enrollmentId: this client has no enrollment service');
     }
 
+    // Named before anything is attempted, because the two halves of this
+    // composition ask for DIFFERENT privileges and only one of them is
+    // obvious. Rotating needs `rw` on the namespace — the bar the atServer
+    // already enforces on the advertisement write, and a scoped enrollment
+    // clears it. Revoking needs `__manage`, and a client without it also
+    // cannot *enumerate* enrollments: `enroll:list` returns it only its own
+    // record. So the missing privilege would otherwise surface as "no
+    // enrollment <id> to revoke", which reads as a wrong id and sends the
+    // caller looking in the wrong place entirely.
+    final callerEnrollmentId =
+        atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
+    final all = await service.fetchEnrollmentRequests();
+    if (callerEnrollmentId != null && callerEnrollmentId.isNotEmpty) {
+      final me =
+          all.where((e) => e.enrollmentId == callerEnrollmentId).firstOrNull;
+      if (!'${me?.namespace?['__manage'] ?? ''}'.contains('w')) {
+        throw StateError(
+            'enrollment $callerEnrollmentId cannot revoke $enrollmentId on '
+            '$owner: revocation needs rw on __manage, which this enrollment '
+            'was not granted. Nothing was revoked and nothing was rotated. '
+            '(Rotating alone needs only rw on the namespace — see '
+            'rotateNamespaceKey.)');
+      }
+    }
+
     final Set<String> rotatable;
     if (namespaces != null) {
       rotatable = namespaces.where(isRotatable).toSet();
     } else {
-      final target = (await service.fetchEnrollmentRequests())
-          .where((e) => e.enrollmentId == enrollmentId)
-          .firstOrNull;
+      final target =
+          all.where((e) => e.enrollmentId == enrollmentId).firstOrNull;
       if (target == null) {
         throw StateError(
             'no enrollment $enrollmentId on $owner to revoke — nothing was '

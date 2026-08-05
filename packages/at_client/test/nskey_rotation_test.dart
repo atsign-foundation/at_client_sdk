@@ -267,13 +267,22 @@ void main() {
     ({MockEnrollmentService service, List<String> order}) enrollmentService(
         MockAtClient atClient,
         {Map<String, dynamic>? grants,
-        List<String>? order}) {
+        List<String>? order,
+        Map<String, dynamic> callerGrants = const {
+          '*': 'rw',
+          '__manage': 'rw'
+        }}) {
       final service = MockEnrollmentService();
       final trace = order ?? <String>[];
       when(() => atClient.enrollmentService).thenReturn(service);
       when(() => service.fetchEnrollmentRequests(
               enrollmentListParams: any(named: 'enrollmentListParams')))
           .thenAnswer((_) async => [
+                // The caller's own record. The atServer always returns it, and
+                // it is what says whether this client may revoke at all.
+                Enrollment()
+                  ..enrollmentId = 'enroll-a'
+                  ..namespace = callerGrants,
                 Enrollment()
                   ..enrollmentId = 'enroll-b'
                   ..namespace = grants ?? {namespace: 'rw'}
@@ -378,6 +387,33 @@ void main() {
           throwsA(isA<StateError>()));
       expect(c.trace, isEmpty);
       expect(s.pushes, isEmpty);
+    });
+
+    test('a caller without __manage is refused, and revokes nothing', () async {
+      final c = client();
+      final filer = await filing();
+      final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
+      await ring.mintAndPublish(namespace);
+      c.trace.clear();
+      final s = sharing();
+      enrollmentService(c.client,
+          order: c.trace, callerGrants: {namespace: 'rw'});
+      final rotation = NskeyRotation(
+          atClient: c.client,
+          ring: ring,
+          privateFiling: filer,
+          sharing: s.sharing);
+
+      await expectLater(rotation.revokeEnrollmentAndRotate('enroll-b'),
+          throwsA(isA<StateError>()));
+      expect(c.trace, isEmpty);
+      expect(s.pushes, isEmpty,
+          reason: 'the two halves ask for different privileges and only one is '
+              'obvious: rotating needs rw on the namespace, revoking needs '
+              '__manage. Without it the atServer also returns only this '
+              'client\'s OWN enrollment record, so the failure would surface '
+              'as "no enrollment <id> to revoke" and send the caller looking '
+              'for a wrong id');
     });
   });
 }
