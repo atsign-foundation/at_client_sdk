@@ -750,9 +750,11 @@ cleanly with a pre-flight query and an opt-in legacy escape hatch, and nested na
 resolve by walking up with `appMetadata.ns` / `ckNs` on the wire — covered multi-segment in
 both live suites, which previously used single-segment namespaces only.
 `packages/at_client` green at
-**825 passing / 39 skipped**, `tests/at_functional_test` at **113**,
-`tests/at_end2end_test` at **43** with no skips (all four re-run together
-2026-08-04). Also green: `at_auth` 147, `at_chops` 211, `at_commons` 505.
+**894 passing / 12 skipped**, `tests/at_functional_test` at **126**,
+`tests/at_end2end_test` at **46** with no skips (all re-run together
+2026-08-05, after the app-decides pivot and the SH-1 self-heal landed). Also
+green: `at_auth` 151, at_secondary_server 856 (the RF-SRV spike branch),
+`at_chops` 211, `at_commons` 505.
 
 *Proven live (functional suite, `tests/at_functional_test`):* self put/get round-trip
 through the whole pipeline including the pre-pass, the conveyance record and key
