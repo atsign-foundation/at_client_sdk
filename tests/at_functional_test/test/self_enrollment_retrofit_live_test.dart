@@ -10,6 +10,7 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show verifyEnvelope;
 import 'package:at_demo_data/at_demo_data.dart' show aesKeyMap, encryptionPrivateKeyMap;
@@ -187,15 +188,45 @@ void main() {
     // statsNotification stream is the trigger-free signal — it arrives
     // every ~15s once the monitor is listening, which is only possible
     // after that socket's PKAM succeeded.
-    final firstNotification = client.notificationService
+    final notifications = client.notificationService as NotificationServiceImpl;
+    final firstNotification = notifications
         .subscribe(shouldDecrypt: false)
-        .first
-        .timeout(const Duration(seconds: 45));
+        .firstWhere((n) => n.key.contains('rf2cmon'))
+        .timeout(const Duration(seconds: 40));
+
+    // Listener first, trigger second, await third — but the listener that
+    // matters is the SERVER's. `subscribe()` returns ~50ms before the
+    // monitor's own socket has connected, PKAMed and written `monitor:`,
+    // and the monitor asks for no backlog (`lastNotificationTime: null`),
+    // so anything the atServer creates in that window is unrecoverable.
+    // Registering the client-side stream is NOT the same as the atServer
+    // knowing this client is listening.
+    if (notifications.monitor.currentState !=
+        NotificationListenerState.listening) {
+      await notifications.monitor.currentStateStream
+          .firstWhere((s) => s == NotificationListenerState.listening)
+          .timeout(const Duration(seconds: 30));
+    }
+
+    final pingKey = AtKey()
+      ..key = 'rf2cmon-${Uuid().v4().hashCode}'
+      ..namespace = namespace
+      ..sharedBy = atSign
+      ..sharedWith = atSign;
+    final notifyResult = await atClient.notificationService
+        .notify(NotificationParams.forUpdate(pingKey, value: 'ping'));
+    expect(notifyResult.notificationStatusEnum,
+        NotificationStatusEnum.delivered,
+        reason: 'atClientException being null does NOT mean delivered — the '
+            'status switch has no default arm and the atServer never says '
+            '"undelivered", so an errored notification returns silently');
+
     final received = await firstNotification;
-    expect(received.id, isNotNull,
-        reason: 'a notification delivered through the monitor means its '
-            'socket PKAMed with the ML-DSA key — the monitor reads its '
-            'algorithm from the client, not the preference');
+    expect(received.key, contains('rf2cmon'),
+        reason: 'the retrofitted, SCOPED enrollment receives notifications '
+            'for its own namespace over a monitor its ML-DSA key '
+            'authenticated — sender is the owner client, receiver is this '
+            'one, so this is a genuine cross-client delivery');
 
     // Envelope signing: what this client signs verifies against the tagged
     // _apsk the atServer serves for its enrollment — wrapAndSign must have

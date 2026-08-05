@@ -3527,27 +3527,54 @@ code path does it.
   returned `null` into a non-nullable getter and failed only at RUNTIME.
   `dart analyze` was clean throughout. Grep for `Mock implements <Type>`
   when adding a member to `<Type>`, before running anything.
-- **Open, narrowed: a self-notification did not reach a scoped enrollment's
-  monitor.** The monitor authenticates with genuine ML-DSA and streams
-  (captured: `pkam:signingAlgo:mldsa65:...` → `data:success`, then
-  statsNotifications flowing), and the sender reported no exception — but a
-  `notify` from the owner client for a key in the enrollment's own
-  namespace never arrived. The live test asserts only what the run
-  demonstrates (delivery through the monitor, which requires that socket's
-  PKAM to have succeeded).
+- **RESOLVED — it was my test, not the product. `subscribe()` returning is
+  not the atServer knowing you are listening.** A `notify` from the owner
+  client, for a key in the retrofitted enrollment's own namespace, never
+  reached that enrollment's monitor. There is no delivery bug: the scoped
+  ML-DSA enrollment receives self-notifications correctly, proven by
+  re-running the identical test with the trigger deferred until the monitor
+  reports `NotificationListenerState.listening` — the ping arrives, status
+  `delivered`.
 
-  **The obvious suspect is eliminated.** `MonitorVerbHandler._sendNotification`
-  gates delivery on `isAuthorized(..., atKey: notification.notification)` and
-  drops a failure by bare `return` — no log at any level — so it looked like
-  the cause. It is not: a probe pins the gate permitting exactly what it
-  should, the enrollment's own namespace through and a foreign namespace
-  refused (at_server `enrollment_notification_delivery_test.dart`, kept as
-  regression coverage). Whatever drops the notification is upstream —
-  creation, or the notification manager's dispatch. **Two things worth
-  fixing regardless of cause:** that silent `return` violates the
-  dropped-event rule (an event dropped in a dispatch loop logs at `warning`,
-  naming what was dropped and for whom), and it is precisely why this
-  presents as "the sender didn't send". Also note the trap it set for the
-  investigation: statsNotifications arriving proves the monitor socket
-  authenticated, and nothing more — it is not evidence that ordinary
-  notifications reach that enrollment.
+  The race, from the captured timeline: the test's `subscribe()` logged at
+  `17:54:18.697970`; the monitor's own socket then had to connect and PKAM,
+  so `monitor:selfNotifications` was not written until `17:54:18.750550`
+  — **52.58 ms later**, and the notify was issued inside that window. The
+  monitor also asks for no backlog (`monitor started, last notification
+  time: null`, because the runner wipes local Hive), so
+  `monitor_verb_handler.dart`'s replay is skipped and a notification created
+  in that window is **unrecoverable on that socket**. The live test now
+  waits on `Monitor.currentStateStream` before triggering.
+
+  **Three things this cost, worth carrying:**
+  1. The [[feedback_listener_before_trigger]] rule needs sharpening for the
+     Atsign Protocol: registering the client-side stream is *not* the
+     registration that matters. The monitor is a separate socket that must
+     connect and authenticate first, and `subscribe()` gives no signal for
+     it — `Monitor.currentStateStream` reaching `listening` is the real one.
+  2. **`atClientException == null` does not mean delivered.**
+     `_waitForAndHandleFinalNotificationSendStatus`'s switch has arms for
+     `delivered` and `undelivered` and no default, while the atServer's
+     vocabulary is `delivered|errored|queued|expired` — so an *errored*
+     notification returns silently. The assertion I added to prove the
+     sender had sent proved nothing; the test now asserts
+     `notificationStatusEnum == delivered`.
+  3. **statsNotifications arriving prove the monitor socket authenticated
+     and nothing more.** Reading them as "the stream is healthy" is what
+     made a receiver-side absence look like a sender-side failure.
+
+  Two real defects surfaced on the way, both fixed and worth keeping:
+  `MonitorVerbHandler._sendNotification` dropped an unauthorized
+  notification by bare `return` with no log at any level (now `warning`,
+  per the dropped-event rule — and its absence is exactly why this
+  investigation had nothing to read); and the at_server probe
+  `enrollment_notification_delivery_test.dart` pins the authorization gate
+  permitting the enrollment's own namespace and refusing a foreign one.
+
+  **Instrument caveat that nearly derailed this:** the notify verb appears
+  nowhere in either captured log, and that carries NO information.
+  `TestUtils.initAtClient` pins `AtSignLogger.root_level = 'shout'`, and
+  `AtSignLogger` copies the level once into a *detached* logger at
+  construction — so flipping the root level later is retroactively inert
+  for every already-built object. Concluding "the owner never sent it" from
+  that absence would have been wrong.

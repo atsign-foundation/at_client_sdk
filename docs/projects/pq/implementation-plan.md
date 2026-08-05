@@ -1062,8 +1062,10 @@ staleness is discharged by construction (a switch builds a NEW
 one). **Still owed here:** the UC-B1.x e2e rows themselves — the signing-root
 step in-flow (privileged mint/convey vs request+verify, scoped skip), two
 clones reaching distinct ids, the capped legacy enrollment observed ageing
-out — plus the open finding that a self-notification did not reach a scoped
-enrollment's monitor (decisions 44.3).
+out. (The self-notification finding is **resolved** — a race in the test, not
+a delivery bug: the scoped ML-DSA enrollment receives its own namespace's
+notifications correctly once the trigger waits for the monitor to be
+listening. See [decisions 44.3](decisions.md#443-two-findings-from-the-live-run).)
 **coversD1:** D1-F end-to-end (retrofit via fresh enrollment).
 
 ---
