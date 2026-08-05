@@ -15,27 +15,27 @@ dart pub add at_client_flutter at_auth path_provider
 
 ---
 
-## Prerequisite: the atSign must be activated
+## Prerequisite: the atsign must be activated
 
-Before any of these flows can authenticate, the atSign must be **activated** —
+Before any of these flows can authenticate, the atsign must be **activated** —
 its atServer must be registered in the **atDirectory** (the atServer address
 registry). Activation happens once, via Flow 1 (CRAM) below or an onboarding
 app / the registrar.
 
-Authenticating an atSign that isn't activated (or a typo) fails lookup with:
+Authenticating an atsign that isn't activated (or a typo) fails lookup with:
 
 ```text
 SecondaryNotFoundException: No entry in atDirectory for @alice
 ```
 
-That means the atSign has no atServer registered yet — activate it first (Flow
+That means the atsign has no atServer registered yet — activate it first (Flow
 1), then Flows 2–4 (existing keys / keychain / APKAM) will resolve it.
 
 ---
 
-## Flow 1: New atSign — CRAM Activation (first-time only)
+## Flow 1: New atsign — CRAM Activation (first-time only)
 
-Use when a developer wants to activate a brand-new atSign for a user.
+Use when a developer wants to activate a brand-new atsign for a user.
 Requires a `RegistrarService` configured with a registrar URL and API key.
 
 ```dart
@@ -107,7 +107,7 @@ Future<void> loginWithFile(BuildContext context) async {
 > `macos/Runner/Release.entitlements`:
 >
 > ```xml
-> <!-- Connect to the atServer (required by every atSign app) -->
+> <!-- Connect to the atServer (required by every atsign app) -->
 > <key>com.apple.security.network.client</key>
 > <true/>
 > <!-- Pick the .atKeys file via AtKeysFileDialog / file_picker -->
@@ -119,13 +119,20 @@ Future<void> loginWithFile(BuildContext context) async {
 > file-access entitlement `AtKeysFileDialog` throws
 > `PlatformException(ENTITLEMENT_NOT_FOUND, ...)` when picking the file.
 > macOS only — iOS and Android need neither.
+>
+> Add `com.apple.security.network.server` (to **both** Debug and Release) only
+> when the app opens a *listening* socket — e.g. it embeds NoPorts/`npt`
+> tunnels, which bind a local port. Plain `at_client` traffic is outbound-only
+> and needs just `network.client`. (Flutter's default
+> `DebugProfile.entitlements` already includes `network.server` for the debug
+> VM service — that alone doesn't mean your app needs it in Release.)
 
 ---
 
 ## Flow 3: Device Keychain (Returning User)
 
-Use for fast re-login on a device that has already onboarded an atSign.
-Reads existing atSigns from the device keychain (iOS Keychain /
+Use for fast re-login on a device that has already onboarded an atsign.
+Reads existing atsigns from the device keychain (iOS Keychain /
 Android Keystore).
 
 ```dart
@@ -166,7 +173,7 @@ Future<void> loginWithKeychain(BuildContext context) async {
 
 ## Flow 4: APKAM — New Device Enrollment
 
-Use when a user wants to add a new device to an existing atSign.
+Use when a user wants to add a new device to an existing atsign.
 The manager device (another phone already authenticated) must approve
 the enrollment.
 
@@ -251,7 +258,7 @@ Future<void> _setupAtClient(
 | `rootPort` | `int` | atServer root port (from `authRequest.rootDomain.rootPort`) |
 
 **Strongly recommended:** set `..syncRegex = '<your namespace>'` (shown above).
-Without it, sync covers the atSign's entire keystore and can wedge — see
+Without it, sync covers the atsign's entire keystore and can wedge — see
 [references/11-sync.md](11-sync.md).
 
 **Important:** Use `atChops` and `atLookUp` from the `response` (not freshly

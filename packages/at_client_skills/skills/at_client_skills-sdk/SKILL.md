@@ -3,12 +3,15 @@ name: at_client_skills-sdk
 description: >
   Use this skill when a developer is building a Dart or Flutter app that
   depends on at_client or at_client_flutter from pub.dev, stores or shares
-  data via the Atsign Protocol, needs onboarding (CRAM new-atSign, atKeys
+  data via the Atsign Protocol, needs onboarding (CRAM new-atsign, atKeys
   file, keychain, APKAM) or APKAM enrollment, or asks about AtCollection<T>,
   CItem<T>, Query<T>, sub-collections, event streams, read receipts, wherePath
   typed predicates, or watchWithTree deep hierarchies. Also use when the
   developer asks how to send or receive notifications via NotificationService,
-  which pub.dev packages to add, how to unit-test without a live atServer, or
+  how to do request/response RPC between atsigns (AtRpc), how to run headless
+  agents or CLIs (CLIBase) or coordinate multiple agent instances, how to read
+  or write directly against the remote atServer (useRemoteAtServer), which
+  pub.dev packages to add, how to unit-test without a live atServer, or
   whether to use AtCollection vs notifications+SQLite. Warns
   against deprecated AtCollectionModel, at_common_flutter, at_backupkey_flutter,
   at_invitation_flutter, at_sync_ui_flutter, and at_theme_flutter.
@@ -16,8 +19,8 @@ license: BSD-3-Clause
 compatibility: Claude Code and any agentskills.io-compatible agent.
 user-invocable: true
 metadata:
-  version: "1.2.0"
-  last_modified: "Tue, 07 Jul 2026 00:00:00 GMT"
+  version: "1.3.0"
+  last_modified: "Tue, 28 Jul 2026 00:00:00 GMT"
 ---
 
 # atsign-dart-sdk Skill
@@ -60,7 +63,7 @@ for the full migration table from old to new API.
 
 ## 2. Package Map
 
-Install with `dart pub add` — it pins the latest compatible version for you:
+Install with `dart pub add` — it resolves the latest compatible version:
 
 | Use case                     | packages to add                                            |
 | ---------------------------- | ---------------------------------------------------------- |
@@ -70,8 +73,15 @@ Install with `dart pub add` — it pins the latest compatible version for you:
 | APKAM / custom auth flows    | `at_client` or `at_client_flutter`, plus `at_auth`         |
 | Raw cryptographic operations | `at_client` or `at_client_flutter`, plus `at_chops`        |
 
-**Never add:** `at_common_flutter`, `at_backupkey_flutter`,
+**Never add:** `at_common_flutter`, `at_onboarding_flutter` (discontinued — use
+the `at_client_flutter` auth dialogs), `at_backupkey_flutter`,
 `at_invitation_flutter`, `at_sync_ui_flutter`, `at_theme_flutter`
+
+> **Never hardcode version constraints** for `at_client` / `at_client_flutter`
+> (e.g. `at_client: ^3.11.0`) in `pubspec.yaml` or generated templates — run
+> `dart pub add` and let pub choose. Pinned constraints go stale between SDK
+> releases and cause resolution conflicts; stability comes from a fixed
+> `typeTag` string literal (§3), not a fixed SDK version.
 
 Read [references/06-package-map.md](references/06-package-map.md) for
 per-use-case checklists and the full list of in-migration packages to avoid.
@@ -106,7 +116,7 @@ final todos = await atClient.collection<Todo>(
 | Value                | Events seen                                                   |
 | -------------------- | ------------------------------------------------------------- |
 | `EventSource.data`   | All local keystore mutations (requires `SyncService` running) |
-| `EventSource.notifs` | Cross-atSign writes via notification pipeline only            |
+| `EventSource.notifs` | Cross-atsign writes via notification pipeline only            |
 | `EventSource.both`   | Both sources; same change may fire twice (no dedup); default  |
 
 Read [references/02-atcollection-api.md](references/02-atcollection-api.md) for
@@ -139,7 +149,7 @@ await todos.delete(item);                    // throws StateError if has sub-ite
 await todos.delete(item, cascade: true);     // removes self-owned descendants first
 ```
 
-> **Ownership model:** `AtCollection` is **owner-writes-only** — an atSign can
+> **Ownership model:** `AtCollection` is **owner-writes-only** — an atsign can
 > only mutate items it owns. `update` / `updateSharedWith` / `delete` throw
 > `ArgumentError` on an item whose `owner` isn't you. Collaboration is
 > **additive**: sharing grants the recipient a *readable* copy, not write
@@ -334,11 +344,11 @@ AtClientManager.getInstance().reset();  // logout
 ```
 
 Read [references/05-flutter-auth.md](references/05-flutter-auth.md) for all 4
-flows (including Flow 1: CRAM new-atSign and Flow 4: APKAM enrollment) with
+flows (including Flow 1: CRAM new-atsign and Flow 4: APKAM enrollment) with
 complete code.
 
 > **Sync setup:** set `AtClientPreference.syncRegex = '<your namespace>'` —
-> without it, sync covers the atSign's whole keystore and can wedge, so shares
+> without it, sync covers the atsign's whole keystore and can wedge, so shares
 > and updates never propagate. Reads are local; writes sync in the background.
 > See [references/11-sync.md](references/11-sync.md).
 
@@ -433,7 +443,89 @@ and MockAtClient stubs.
 
 ---
 
-## 14. Deprecated — Do Not Use
+## 14. RPC — Request/Response Between Atsigns
+
+For "call another atsign and get an answer back" (actions and queries — not
+data), use `AtRpc`/`AtRpcClient` from `at_client`:
+
+```dart
+// Requester — call() sends, awaits the success response, returns its payload
+final client = AtRpcClient(serverAtsign: '@server', atClient: atClient,
+    baseNameSpace: 'my_app', domainNameSpace: 'route_planning');
+final answer = await client.call({'from': 'A', 'to': 'B'});
+
+// Responder — handler's return value is sent back; thrown errors become nacks
+final rpc = AtRpc.server(atClient: atClient, baseNameSpace: 'my_app',
+    domainNameSpace: 'route_planning', requestHandler: handleRequest,
+    allowList: {'@requester'.toAtsign()}, allowAll: false,
+    enableRequestMutex: false);
+rpc.start();
+```
+
+Requests from atsigns not on `allowList` are discarded before your handler
+runs. Persist durable results via `AtCollection<T>`, not RPC payloads.
+
+Read [references/13-rpc.md](references/13-rpc.md) when implementing
+request/response between atsigns — response types, retries, expiry, and the
+multi-instance mutex.
+
+---
+
+## 15. Headless Agents & Multi-Instance Coordination
+
+Authenticate a UI-less process (agent, daemon, CLI) in one line with
+`CLIBase` from `at_cli_commons`:
+
+```dart
+final AtClient atClient =
+    (await CLIBase.fromCommandLineArgs(args, namespace: 'my_app')).atClient;
+```
+
+- **Every process needs its own `hiveStoragePath`/`commitLogPath`** — shared
+  hive paths collide and throw. Use
+  `Directory.systemTemp.createTempSync('agent_')` per instance.
+- **Multiple instances of one agent** coordinate via an immutable-mutex race
+  (`Metadata()..immutable = true` + remote put; the **losing `put()` throws** —
+  there is no typed exception, inspect the message for `'immutable'`), or run
+  stateless with `ServiceFactoryWithNoOpSyncService` (from `at_cli_commons`,
+  NOT `at_client`) + remote operations.
+
+Read [references/14-multi-agent.md](references/14-multi-agent.md) when
+building headless agents, daemons, or anything that runs more than one
+instance.
+
+---
+
+## 16. Remote vs Local atServer Operations
+
+By default (`AtClientPreference.remoteLocalPref = RemoteLocalPref.localOnly`)
+`put`/`get`/`delete` hit the **local** secondary and sync in the background —
+the right default for app data. (Reading another atsign's non-`cached:` key is
+always a remote lookup.) For coordination keys and read-your-write
+consistency, target the cloud secondary per operation:
+
+```dart
+await atClient.put(key, value,
+    putRequestOptions: PutRequestOptions()..useRemoteAtServer = true);
+await atClient.get(key,
+    getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+await atClient.get(key,   // force-refresh another atsign's key past caches
+    getRequestOptions: GetRequestOptions()..bypassCache = true);
+```
+
+`AtCollection<T>` takes no per-operation options — collection ops follow the
+client-wide `remoteLocalPref` (set `RemoteLocalPref.remoteOnly` to route the
+whole client, collections included, to the remote atServer). Remote ops cost a
+round-trip and fail offline; scope per-operation overrides to infrastructure
+keys (give those a distinct key-name prefix within your app's namespace, e.g.
+`lock.`).
+
+Read [references/12-remote-atserver.md](references/12-remote-atserver.md) when
+an operation must see or produce server-side truth immediately.
+
+---
+
+## 17. Deprecated — Do Not Use
 
 | Avoid                                                                                                                                                        | Use instead                                      |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
@@ -450,7 +542,7 @@ for the full migration table from old `AtCollectionModel` patterns to
 
 ---
 
-## 15. Canonical Examples & Future Scope
+## 18. Canonical Examples & Future Scope
 
 - `packages/at_client/example/bin/collections_domain_objects.dart`
 - `packages/at_client/example/bin/collections_subcollections.dart`
