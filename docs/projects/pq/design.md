@@ -404,8 +404,11 @@ raised by `CkManager.ensureCurrent` — the *pre-pass*, before anything is in fl
 which is what leaves the caller free to reroute. `CryptoRuntime.isReadyFor` asks the
 same question in advance. The recipient's first use of the namespace mints and
 publishes its nskey, and the sender's next re-`plookup` at `ensureCurrent` sees it. A
-strict-mode seal-and-hold alternative is a policy toggle (D1-C, see
-[`roadmap.md`](roadmap.md)).
+strict-mode seal-and-hold alternative was considered and **deferred, not built** —
+it needs a durable outbox (where a pending write lives, when it retries, what a
+rotation does to it), and no consumer has asked for more than the named refusal
+plus the opt-in fallback
+([`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)).
 
 **Binary-safe.** Seal/open **bytes** and honour `isBinary`; never round-trip binary
 through `utf8.encode(plaintext.toString())`, which corrupts it.
@@ -483,44 +486,68 @@ decoupled from namespace authorisation. See [`roadmap.md`](roadmap.md) /
 
 ### 1.8 Migration, rollout & the `disallowLegacyEncryption` flag (D1-C / D1-D)
 
-The nskey data path coexists with legacy and is adopted by **negotiation + a gated
-rollout** — no flag day. (Sequencing: `R-1` lands this machinery + the flag
-default-`false` in 3.x; `R-2` flips the default `true` in 4.0 — see
-[`implementation-plan.md`](implementation-plan.md); the rationale/timeline is in
-[`decisions.md`](decisions.md).)
+> **Rewritten 2026-08-05.** The original C1/C2/C3 here specified a readiness
+> marker, per-destination scheme negotiation and per-namespace strict-mode
+> toggles. All three were removed by
+> [`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)
+> — the marker/negotiation half was **built, proven live, and then removed** when
+> the three-scenario examination showed the model it served was wrong. This
+> section now records the model that replaced it.
 
-**Capability tiers — what a build gets for what effort.**
-- *Rebuild only* → a **universal reader** + back-compat writer: decrypts anything
-  ever written (legacy or nskey) and keeps writing legacy. Upgrading only ever
-  **adds** read capability — a rebuilt client never loses access.
-- *Set `disallowLegacyEncryption`* → a **PQ writer/recipient**.
-- *Write code* → override the per-destination defaults.
+The nskey data path coexists with legacy and is adopted **per app, by the app's own
+two releases** — no flag day, no negotiation, no readiness machinery. **The unit of
+migration is the app, and an app is an enrollment**: its own AtKeys, its own APKAM
+keypair, its own namespaces. Apps migrate independently and never have to agree.
 
-**C1 — readiness-marker lifecycle.** A per-`(atSign, namespace)` marker is published
-**not-ready** on upgrade and flips **ready** when the namespace's fleet is upgraded.
-The flip is **operator-declared** (one config/policy call — the primary lever)
-and/or **auto-detected** ("no legacy client has checked in recently"); the SDK warns
-on a flip while a recent legacy check-in exists. The flip is the **only operator
-judgement call** — flipping while a legacy reader still runs is the one way to break
-a reader. 
+**The two releases.**
+1. **Capability (final 3.x).** Rebuild only → a **universal reader** + back-compat
+   writer: reads anything ever written (legacy or nskey), upgrades its enrollment
+   ([§2.5](#25-the-authenticated-self-retrofit-flow-fresh-auto-approved-enrollment)),
+   mints/publishes its namespace keys or pulls their privates
+   ([`decisions.md` 38](decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)),
+   and **keeps writing legacy**. Upgrading only ever **adds** read capability — a
+   rebuilt client never loses access. This build must be **rolled out before** the
+   next one ships: that release-ordering discipline is the one thing the model asks
+   of an app developer, and it replaces every piece of removed machinery.
+2. **Active use (4.x, or an explicit `AtClientPreference.crypto`).** The app now
+   writes the nskey data path. **The SDK never decides to write PQ — the app tells
+   it to**, implicitly by riding the 4.x default or explicitly by naming a config.
 
-**C2 — per-destination negotiation (behaviour-neutral by default).** The marker
-advertises the **set of provider ids** the fleet supports, and the sender writes the
-best id present in **every** required reader's set — including, for self copies, its
-own. Ready/not-ready is the degenerate case of that set ("is the PQ pair in it"); a
-boolean cannot survive a second PQ scheme, which is why the set is the durable form
-([`decisions.md`](decisions.md) section 16). Absent a shared PQ id, the sender falls
-back to legacy. A
-bare rebuild **reads** all schemes but keeps **writing legacy** until the marker
-flips — a zero-risk soak. `appMetadata.providerId` on each stored value **and** on
-the notification frame tells the recipient which provider opens it; **reads are
-universal** regardless of the writer's scheme.
+`appMetadata.providerId` on each stored value **and** on the notification frame
+tells the recipient which provider opens it; **reads are universal** regardless of
+the writer's scheme. The only write-path gate is **cold start**
+([§1.6](#16-the-uniform-data-flow--cold-start--resolutionordering)): a destination
+with no published nskey for the namespace is refused by name, with
+`allowLegacyCryptoFallback` as the explicit escape hatch.
 
-**C3 — strict-mode toggles (per-namespace, simple-code tier).** Refuse legacy
-fallback; cold-start policy (**seal-and-hold** vs error vs notify —
-[§1.6](#16-the-uniform-data-flow--cold-start--resolutionordering)); custom rotation triggers.
+**Mixed cases, settled** (full taxonomy:
+[`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)–38):
+- *Sibling apps* (`app1.my_apps` legacy, `app2.my_apps` active-PQ) coexist freely —
+  atServer suffix authorisation means neither reads the other, and nskey resolution
+  walking **up** only ever lands on ancestors whose holders could already read
+  through the server. The crypto gate never widens past the transport gate.
+- *A vendor app authorised at the parent* (`my_apps`) is a genuine reader of both
+  children: if it is still legacy while a child goes active-PQ, it loses access to
+  the child's new records. Same vendor, same release call — sequence the parent
+  app's capability build first.
+- *Mixed installs of one app* (one updated, one not) on the recipient side: the
+  app developer's release discipline, explicitly not the SDK's to detect
+  (ruled 2026-08-05).
+- *Two apps sharing exactly one namespace*: that developer's problem, well upstream
+  of encryption.
 
-**D1-D — the `disallowLegacyEncryption` flag.** A flag on `AtClientPreference`:
+**Legacy key material is retained until the ecosystem is PQ, not the atSign**
+([`decisions.md` 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
+Onboarding keeps cutting the legacy encryption keypair + self-encryption key;
+`enroll:approve` keeps conveying both; an enrollment upgrade keeps the RSA APKAM
+keypair alongside the new material (a shared keyfile whose APKAM was *swapped*
+locks its co-tenant apps out of auth); and a new atSign publishes its RSA
+`public:publickey` by default. A future release stops all of this by default,
+unless asked.
+
+**D1-D — the `disallowLegacyEncryption` flag** *(built, 2026-08-05 — the surviving
+strict-mode control, and the app-decides model's own voice: it is how an app states
+"never write legacy")*. A flag on `AtClientPreference`:
 - **Final at `AtClient` construction (immutable)** — no mid-run flipping, no setter.
 - **Default `false` in 3.x → `true` in 4.0** (the cutover is `R-2`).
 - Means literally: **never write *new* data using the legacy provider for
@@ -625,6 +652,21 @@ For a **keypair secret** conveyed over the substrate
 correspondence against the (signed) published public half — a useful secondary check,
 subordinate to the signature.
 
+**The `_apsk` two-stage ladder (2026-08-05,
+[`decisions.md` 39](decisions.md#39-_apsk-rides-the-same-two-stage-ladder-2026-08-05)).**
+"Self-describes enough to verify" is the *destination*, not the present: as of
+2026-08-05 the envelope's `signingAlgo` field is decorative — `signEnvelope` signs
+RSA regardless and `verifyEnvelope` never reads it. And apps (NoPorts) sign and
+verify with `_apsk` today, so the key itself migrates on the same two-release
+ladder as everything else: the **final 3.x** publishes the `_apsk` value exactly as
+now (a bare RSA public key string) while its verify learns to branch on the
+recorded algorithm and to parse a new **self-describing, tagged** `_apsk` form;
+**4.x new enrollments** publish that form (ML-DSA-65). The tagged form must be
+unmistakable to an old bare-RSA parser — fail loudly, never mis-read. In-place
+rsa→mldsa65 upgrade of an existing enrollment's signing key is recommended against
+(the enrollment-upgrade path reaches the same end state with mechanics that exist);
+ratification is on the to-define list.
+
 **Trust nuance.** The signature is verified against `_apsk`, which the atServer serves —
 so it authenticates against a rogue *insider* enrollment (under an honest server) but
 **not** against a malicious atServer *operator*, which controls both the signature key
@@ -712,6 +754,18 @@ carrying the requester's *own* `kpid` so responders know where to seal the answe
 A holder serves with `shareSecretWith(keyPackage, Secret)` (`pqSeal` back to the
 carried `kpid`); the requester `waitForSecret` resolves on the first valid
 response, verifies, and stores. (`pairwise_secret_sharing.dart:479,454,497`.)
+
+**The start-time self-heal invariant (2026-08-05,
+[`decisions.md` 38](decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)).**
+What every enrollment does with these primitives at client start: for each
+authorised namespace, **mint the nskey if none exists, else pull the private
+parts** — from *any* current holder, not "the creator", who may be long gone
+(current generation to write; older generations on demand for history). A fully
+privileged enrollment does the same for the signing root. This is the ruling that
+turns Decision #4 from prose into an invariant: as found on 2026-08-05, neither
+approve-time push (`shareAllSecretsWithEnrollment`, `conveyHeldPrivatesTo`) had a
+caller and the nskey privates had no pull initiator, so the *only* delivery was
+the mint-time push and every enrollment created after a mint was stranded.
 
 **`pushSecretToNamespaceMembers(Secret, {exclude})` (push).** Verb → seal once per
 key package → `put` the `__ssenv` envelope → wake-up notify. This is the
@@ -916,6 +970,36 @@ ever published — which matters more here than anywhere else, since the root ne
 rotates and two roots would be unrecoverable. Two populations **never** run this
 retrofit: a new atSign is PQ-native at onboarding; a new (post-PQ) privileged
 enrollment receives the root *pushed* by the approver. F-section build detail (F1–F6) in [§6](#6-implementation-notes--file-level-pointers-consolidated).
+
+**2026-08-05 additions
+([`decisions.md` 40](decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)).**
+This flow is **on the D1 GA critical path**: it is the "upgrade the enrollment"
+verb every migration scenario conjugates, and it does not exist server-side yet.
+Constraints beyond the ruling above:
+
+- **Revocation must cascade.** Self-enrollment makes enrollments a parent/child
+  graph; a stolen keyfile can spawn a child before the theft is noticed, and a
+  child that survives its parent's revocation defeats revocation. The new
+  enrollment records its parent; revoking a parent revokes descendants.
+- **Legacy material conveys client-side.** The requester generates its own new
+  keypair, so it seals the legacy encryption keypair + self-encryption key to its
+  own new key package — `encryptedDefaultSelfEncryptionKey` is satisfiable with no
+  server involvement. The new enrollment id lands **in the keyfile that already
+  holds the legacy material**, never a fresh file
+  ([`decisions.md` 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
+- **Distinct `(appName, deviceName)` per device** — the atServer refuses a
+  duplicate approved pair, so cloned keyfiles must differentiate before they
+  retrofit.
+- **The expiry cap needs re-ratifying** against the cloned-keyfile scenario: a
+  short grace strands laggard clones that upgrade on their own schedules; an
+  infinite one never retires the legacy credential. On the to-define list
+  ([`decisions.md` 41](decisions.md#41-the-to-define-list-2026-08-05)); neither
+  direction is silently assumed here.
+- **Step 4's pull is the *normal* path, not a backstop**, whenever the approver is
+  the legacy parent enrollment (which holds nothing to push). Store-and-forward in
+  both directions, so "heals when each device next runs" is latency, not
+  availability
+  ([`decisions.md` 38](decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)).
 
 ---
 
