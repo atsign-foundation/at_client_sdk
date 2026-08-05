@@ -576,13 +576,11 @@ class PqSigningChain {
   static Future<Uint8List?> _rootPublicKey(
       AtClient atClient, String atSign) async {
     try {
-      final value = await atClient.get(
-        AtKey.fromString('public:${PqSigningRoot.recordName}$atSign'),
-        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
-      );
-      final record = jsonDecode(value.value as String) as Map;
-      return base64Decode((record['keys'] as List).first as String);
+      return await PqSigningRoot.publishedPublicKey(atClient, atSign);
     } catch (e) {
+      // Verification wants one answer — "nothing to check against" — for
+      // absent and unreadable alike; the distinction matters only to code
+      // that mints or retires on it.
       _logger.info('No readable signing root for $atSign: $e');
       return null;
     }

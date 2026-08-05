@@ -1,11 +1,13 @@
 import 'dart:convert';
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
+import 'package:at_chops/at_chops.dart'
+    show MlDsa65PureDartAlgo, SigningAlgoType;
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
+import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
@@ -24,6 +26,8 @@ class MockAtLookUp extends Mock implements AtLookUp {}
 
 class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
 
+class FakeAtKey extends Fake implements AtKey {}
+
 /// The atSign's root of trust.
 ///
 /// Every property here is about the same thing: the record is immutable and
@@ -35,10 +39,14 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(FakeUpdateVerbBuilder());
+    registerFallbackValue(FakeAtKey());
   });
 
   ({MockAtClient client, List<UpdateVerbBuilder> published}) client(
-      {bool createRefused = false, String? enrollmentId = 'enrollment-1'}) {
+      {bool createRefused = false,
+      String? enrollmentId = 'enrollment-1',
+      Uint8List? publishedRoot,
+      bool rootUnreadable = false}) {
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
     // The signing-root pull reads the enrollment id off the lookup to tell an
@@ -49,6 +57,23 @@ void main() {
     final published = <UpdateVerbBuilder>[];
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
+    // The published-record read: confirmed absent unless the fixture holds
+    // one, unreadable when asked to be.
+    when(() => atClient.get(any(),
+        getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
+      if (rootUnreadable) {
+        throw AtLookUpException('AT0011', 'the record cannot be read');
+      }
+      if (publishedRoot == null) {
+        throw KeyNotFoundException('public:pq_signing_root$atSign not found');
+      }
+      return Future.value(AtValue()
+        ..value = jsonEncode({
+          'v': 1,
+          'keys': [base64Encode(publishedRoot)],
+          'successor': null,
+        }));
+    });
     when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
         .thenAnswer((inv) async {
       final builder = inv.positionalArguments[0] as UpdateVerbBuilder;
@@ -121,17 +146,423 @@ void main() {
             'chance this atSign gets');
   });
 
-  test('losing the create is not an error', () async {
+  test('losing the create is not an error, and retires the losing pair',
+      () async {
     final c = client(createRefused: true);
+    final io = await keysIo();
+    final root = PqSigningRoot(c.client, keysIo: io);
+
+    expect(await root.mintIfAbsent(isFullyPrivileged: true), isNull,
+        reason: 'the atServer refusing a second create IS the create-once '
+            'guarantee working — this client waits to be given the root '
+            'rather than treating it as a failure');
+
+    expect(await root.privateHalf(atSign), isNull,
+        reason: 'the losing pair corresponds to nothing any verifier ever '
+            'saw. Left active it would read as "already holding the root" '
+            'forever — the pull\'s cheapest guard — and block the one heal '
+            'a loser has');
+    final materials = (await io.read(atSign)).keys;
+    expect(materials, isNotEmpty,
+        reason: 'key material is never removed, only retired — the losing '
+            'bytes stay in the file, marked dead');
+    expect(materials.map((m) => m.status).toSet(), {KeyPartStatus.dead});
+
+    // The heal the retirement re-opens: with nothing active held, the pull
+    // asks the namespace again.
+    final broadcast = _RecordingSharing();
+    final asked = await root.requestPrivateIfAbsent(
+      isFullyPrivileged: () async => true,
+      sharing: broadcast,
+      namespace: 'buzz',
+    );
+    expect(asked, greaterThan(0),
+        reason: 'this is what the rollback exists for: a loser that still '
+            'reads as holding the root never asks, and the root is immutable '
+            'and never rotates, so nothing else would ever repair it');
+  });
+
+  group('when the publish call fails but its outcome is unknown', () {
+    // The refusal of a second create and a dropped connection on a write that
+    // LANDED throw the same way, and they need opposite handling. Getting the
+    // second one wrong is unrecoverable: retiring the pair for a root this
+    // client did publish leaves the atSign with an immutable, non-rotating
+    // record whose private nobody holds.
+
+    test('a create that actually landed is kept, not retired', () async {
+      // The record the failed call wrote is whatever key this mint generates,
+      // so serve it back by capturing what was published.
+      final atClient = MockAtClient();
+      final secondary = MockRemoteSecondary();
+      final lookup = MockAtLookUp();
+      when(() => secondary.atLookUp).thenReturn(lookup);
+      when(() => lookup.enrollmentId).thenReturn('enrollment-1');
+      when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
+      when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
+      String? publishedValue;
+      when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
+          .thenAnswer((inv) async {
+        publishedValue =
+            (inv.positionalArguments[0] as UpdateVerbBuilder).value;
+        // Landed, then the connection died before the ack.
+        throw AtLookUpException('AT0011', 'connection closed');
+      });
+      when(() => atClient.get(any(),
+          getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
+        if (publishedValue == null) {
+          throw KeyNotFoundException('not found');
+        }
+        return Future.value(AtValue()..value = publishedValue);
+      });
+
+      final io = await keysIo();
+      final root = PqSigningRoot(atClient, keysIo: io);
+
+      final minted = await root.mintIfAbsent(isFullyPrivileged: true);
+
+      expect(minted, isNotNull,
+          reason: 'the record IS published and this client holds its private, '
+              'so it is the minter — reporting a loss here would tell the '
+              'caller the opposite of what happened');
+      expect(await root.privateHalf(atSign), isNotNull,
+          reason: 'and the private must survive: the root is immutable and '
+              'never rotates, so retiring it would brick the atSign for good');
+    });
+
+    test('an unreadable record after a failed publish keeps the pair',
+        () async {
+      final atClient = MockAtClient();
+      final secondary = MockRemoteSecondary();
+      final lookup = MockAtLookUp();
+      when(() => secondary.atLookUp).thenReturn(lookup);
+      when(() => lookup.enrollmentId).thenReturn('enrollment-1');
+      when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
+      when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
+      var reads = 0;
+      when(() => atClient.get(any(),
+          getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
+        reads++;
+        // The absence check at the start of the mint succeeds; the
+        // reconciliation read after the failed publish does not.
+        if (reads == 1) throw KeyNotFoundException('not found');
+        throw AtLookUpException('AT0011', 'cannot read');
+      });
+      when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
+          .thenAnswer((_) async =>
+              throw AtLookUpException('AT0011', 'connection closed'));
+
+      final io = await keysIo();
+      final root = PqSigningRoot(atClient, keysIo: io);
+
+      expect(await root.mintIfAbsent(isFullyPrivileged: true), isNull,
+          reason: 'it cannot claim to have minted what it cannot confirm');
+      expect(await root.privateHalf(atSign), isNotNull,
+          reason: 'but it must NOT retire on an unknown outcome: a later '
+              'start reconciles the held pair against the record, and '
+              'retiring a private whose record landed cannot be undone');
+    });
+  });
+
+  test('a published root means no mint, with nothing generated or stored',
+      () async {
+    final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+    final c = client(publishedRoot: pair.publicKey);
     final io = await keysIo();
 
     expect(
         await PqSigningRoot(c.client, keysIo: io)
             .mintIfAbsent(isFullyPrivileged: true),
-        isNull,
-        reason: 'the atServer refusing a second create IS the create-once '
-            'guarantee working — this client waits to be given the root '
-            'rather than treating it as a failure');
+        isNull);
+    expect(c.published, isEmpty,
+        reason: 'a create against an existing immutable record would be '
+            'refused anyway; checking first keeps the common late-arrival '
+            'case from filing a pair only to retire it');
+    expect((await io.read(atSign)).keys, isEmpty);
+  });
+
+  test('an unreadable root record aborts the mint rather than racing it',
+      () async {
+    final c = client(rootUnreadable: true);
+    final io = await keysIo();
+
+    await expectLater(
+        PqSigningRoot(c.client, keysIo: io)
+            .mintIfAbsent(isFullyPrivileged: true),
+        throwsA(isA<AtLookUpException>()),
+        reason: 'absent and unreadable are different answers, and with an '
+            'immutable record at stake a client that cannot tell them apart '
+            'must not guess');
+    expect(c.published, isEmpty);
+    expect((await io.read(atSign)).keys, isEmpty);
+  });
+
+  test(
+      'a held private that does not correspond to the published root is '
+      'retired, and the real one can then be filed', () async {
+    final minted = await MlDsa65PureDartAlgo().generateKeyPair();
+    final poisoned = await MlDsa65PureDartAlgo().generateKeyPair();
+    final c = client(publishedRoot: minted.publicKey);
+    final io = await keysIo();
+    final root = PqSigningRoot(c.client, keysIo: io);
+
+    // The pre-rollback loser's state: an active private filed by a lost
+    // create, corresponding to nothing published.
+    expect(await root.store(atSign, poisoned.secretKey), isTrue);
+
+    expect(await root.mintIfAbsent(isFullyPrivileged: true), isNull);
+    expect(await root.privateHalf(atSign), isNull,
+        reason: 'reconciling against the published record is the only event '
+            'that can ever notice this state — the poisoned bytes sign '
+            'probes happily, they just verify against nothing anyone '
+            'published');
+
+    // The heal: the real private now files beside the dead slot…
+    expect(
+        await root.file(
+            atSign,
+            Secret(
+                namespace: 'buzz',
+                name: PqSigningRoot.secretName,
+                value: base64Encode(minted.secretKey))),
+        isTrue);
+    // …and is what readers see.
+    expect(await root.privateHalf(atSign), minted.secretKey);
+  });
+
+  test('a crash between filing and publishing republishes the held pair',
+      () async {
+    final c = client();
+
+    // The state a crash between filing and publishing leaves behind: both
+    // halves filed and active, nothing published. Built directly — the crash
+    // itself cannot be staged through the API, which is rather the point.
+    final freshIo = await keysIo();
+    final held = await MlDsa65PureDartAlgo().generateKeyPair();
+    final keys = await freshIo.read(atSign);
+    final createdAt = DateTime.now().toUtc();
+    keys.addKey(AtKeysMaterial(
+      keyId: PqSigningRoot.keyId,
+      keyPartType: CryptographicKeyType.privateSigning,
+      keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+      bytes: AtBytes(held.secretKey),
+      createdAt: createdAt,
+    ));
+    keys.addKey(AtKeysMaterial(
+      keyId: PqSigningRoot.keyId,
+      keyPartType: CryptographicKeyType.publicVerification,
+      keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+      bytes: AtBytes(held.publicKey),
+      createdAt: createdAt,
+    ));
+    await freshIo.flush(atSign.toAtsign(), keys);
+
+    final republished = await PqSigningRoot(c.client, keysIo: freshIo)
+        .mintIfAbsent(isFullyPrivileged: true);
+
+    expect(republished, held.publicKey,
+        reason: 'minting a fresh pair here would publish a public whose '
+            'private was discarded — an immutable record nobody holds the '
+            'key to, permanently. The held pair is the only safe thing to '
+            'publish');
+    final record = jsonDecode(c.published.single.value!) as Map;
+    expect((record['keys'] as List).single, base64Encode(held.publicKey));
+    expect((await freshIo.read(atSign)).keys, hasLength(2),
+        reason: 'recovery publishes what is already filed — it must not '
+            'add or replace material');
+  });
+
+  test(
+      'a held private with no public half and no record is retired, '
+      'and a fresh root minted', () async {
+    final c = client();
+    final io = await keysIo();
+    final root = PqSigningRoot(c.client, keysIo: io);
+
+    // The pre-both-halves file shape: a private alone, nothing published.
+    final orphan = await MlDsa65PureDartAlgo().generateKeyPair();
+    expect(await root.store(atSign, orphan.secretKey), isTrue);
+
+    final minted = await root.mintIfAbsent(isFullyPrivileged: true);
+
+    expect(minted, isNotNull);
+    expect(minted, isNot(orphan.publicKey),
+        reason: 'the orphan\'s public half cannot be derived from its '
+            'private, so it cannot be republished; nothing was ever '
+            'published for it, so no verifier ever accepted anything '
+            'against it and a fresh mint loses nothing');
+    final active = await root.privateHalf(atSign);
+    expect(active, isNotNull);
+    expect(active, isNot(orphan.secretKey));
+  });
+
+  group('reconciling a held private against the published root', () {
+    test('a private that corresponds to nothing published is retired',
+        () async {
+      final minted = await MlDsa65PureDartAlgo().generateKeyPair();
+      final poisoned = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c = client(publishedRoot: minted.publicKey);
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+      expect(await root.store(atSign, poisoned.secretKey), isTrue);
+
+      expect(await root.reconcileHeldPrivate(atSign), isTrue);
+      expect(await root.privateHalf(atSign), isNull,
+          reason: 'while it stays active nothing repairs it: the pull\'s '
+              'cheapest guard reads "already holding it" so this enrollment '
+              'never asks, and a correct private conveyed to it would be '
+              'dropped by store() for the same reason');
+
+      // And the repair it re-opens actually works.
+      expect(
+          await root.file(
+              atSign,
+              Secret(
+                  namespace: 'buzz',
+                  name: PqSigningRoot.secretName,
+                  value: base64Encode(minted.secretKey))),
+          isTrue);
+      expect(await root.privateHalf(atSign), minted.secretKey);
+    });
+
+    test('the corresponding private is left alone', () async {
+      final minted = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c = client(publishedRoot: minted.publicKey);
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+      await root.store(atSign, minted.secretKey);
+
+      expect(await root.reconcileHeldPrivate(atSign), isFalse);
+      expect(await root.privateHalf(atSign), minted.secretKey,
+          reason: 'the ordinary case is a holder holding the right key, and '
+              'retiring it would destroy the atSign\'s only copy');
+    });
+
+    test('with no root published, a held private is left alone', () async {
+      final held = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c = client();
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+      await root.store(atSign, held.secretKey);
+
+      expect(await root.reconcileHeldPrivate(atSign), isFalse);
+      expect(await root.privateHalf(atSign), isNotNull,
+          reason: 'a private filed before its record is published is the '
+              'ordinary crash-recovery state — the mint files durably first '
+              'on purpose, and that pair is exactly what recovery republishes');
+    });
+
+    test('an unreadable record retires nothing', () async {
+      final held = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c = client(rootUnreadable: true);
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+      await root.store(atSign, held.secretKey);
+
+      expect(await root.reconcileHeldPrivate(atSign), isFalse);
+      expect(await root.privateHalf(atSign), isNotNull,
+          reason: 'an unreadable record is no evidence at all, and retiring '
+              'the atSign\'s root private cannot be undone');
+    });
+  });
+
+  group('filing an arriving private', () {
+    test('garbage that cannot be the root private is refused', () async {
+      final minted = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c = client(publishedRoot: minted.publicKey);
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+
+      expect(
+          await root.file(
+              atSign,
+              Secret(
+                  namespace: 'buzz',
+                  name: PqSigningRoot.secretName,
+                  value: base64Encode(List<int>.filled(32, 7)))),
+          isFalse,
+          reason: 'the root is immutable and never rotates, so filing the '
+              'wrong bytes sticks forever — and a 32-byte buffer cannot '
+              'sign anything the published root verifies');
+      expect((await io.read(atSign)).keys, isEmpty);
+    });
+
+    test('a real key that is not the root private is refused', () async {
+      final minted = await MlDsa65PureDartAlgo().generateKeyPair();
+      final other = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c = client(publishedRoot: minted.publicKey);
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+
+      expect(
+          await root.file(
+              atSign,
+              Secret(
+                  namespace: 'buzz',
+                  name: PqSigningRoot.secretName,
+                  value: base64Encode(other.secretKey))),
+          isFalse,
+          reason: 'shape is not correspondence: a well-formed ML-DSA key '
+              'that signs valid signatures is still the wrong key if the '
+              'published root does not verify them');
+      expect(await root.privateHalf(atSign), isNull);
+    });
+
+    test('the corresponding private is filed', () async {
+      final minted = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c = client(publishedRoot: minted.publicKey);
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+
+      expect(
+          await root.file(
+              atSign,
+              Secret(
+                  namespace: 'buzz',
+                  name: PqSigningRoot.secretName,
+                  value: base64Encode(minted.secretKey))),
+          isTrue);
+      expect(await root.privateHalf(atSign), minted.secretKey);
+    });
+
+    test('with no root published, nothing is filed', () async {
+      final other = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c = client();
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+
+      expect(
+          await root.file(
+              atSign,
+              Secret(
+                  namespace: 'buzz',
+                  name: PqSigningRoot.secretName,
+                  value: base64Encode(other.secretKey))),
+          isFalse,
+          reason: 'a private with no published record has nothing to '
+              'correspond to — the minter publishes before conveying, so an '
+              'arrival in this state is wrong by construction');
+      expect((await io.read(atSign)).keys, isEmpty);
+    });
+
+    test('an unreadable record defers filing rather than guessing', () async {
+      final other = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c = client(rootUnreadable: true);
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+
+      expect(
+          await root.file(
+              atSign,
+              Secret(
+                  namespace: 'buzz',
+                  name: PqSigningRoot.secretName,
+                  value: base64Encode(other.secretKey))),
+          isFalse,
+          reason: 'refusing is safe: the keyfile stays without a root '
+              'private, so the every-start pull asks again and a later '
+              'answer heals it — filing unverified bytes would stick');
+      expect((await io.read(atSign)).keys, isEmpty);
+    });
   });
 
   group('requesting the private when this enrollment has none', () {
