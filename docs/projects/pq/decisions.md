@@ -3367,3 +3367,101 @@ ruling, each with a differential test.
     deleted the *successor's* lock by bare path on exit. The lock file's content
     (pid + acquisition time) is now the holder's release token — release deletes
     only its own. Both carry tests (at_auth 153 green).
+
+## 43. RF-2b lands, and what the first genuine ML-DSA PKAM found (2026-08-05)
+
+The client half of the self-retrofit is built, and the first live ML-DSA PKAM
+authentication ever attempted found three defects underneath machinery that had
+read as complete for weeks. Proven end-to-end on the wire the same day:
+`self_enrollment_retrofit_live_test.dart` drives no-OTP auto-approve, one
+keyfile carrying both enrollments, PKAM under the new id with a genuine
+ML-DSA signature (record-authoritative, so the pass is proof), the tagged
+`_apsk` published by the atServer, the client-signed key package verifying
+against it, and mint-once reuse.
+
+### 43.1 The built shape
+
+- **`AtSelfEnrollmentRequest`** (at_auth): APKAM-authenticated no-OTP
+  submission — mint ML-DSA-65 keypair → metadataBuilder (the key package,
+  signed mldsa65 by the NEW keypair) → `enroll:request` with
+  `signingAlgo:mldsa65` → on `approved`, persist into the SAME keyfile.
+  The whole check → mint → submit → persist span is serialised per keyfile by
+  its own advisory lock (`<keyfile>.retrofit.lock`, staleness sized for a
+  network round trip — the keyfile lock's milliseconds-scale settings still
+  guard the flush inside). Mint-once is the check inside that lock: an
+  existing active ML-DSA signing material under any enrollment id is reused,
+  never re-minted — [design.md's "if the keyfile already carries a PQ APKAM
+  keypair use it"](design.md), now code. Accepted crash window: dying between
+  the server's approval and the flush leaves an orphan approved enrollment
+  whose private nobody holds — unusable, revocable, and a rerun spawns a
+  fresh one.
+- **The keyfile**: the new enrollment's material lands as typed materials
+  under keyId **`apkam:<enrollmentId>`** (privateSigning +
+  publicVerification, mldsa65) plus the key package's X-Wing halves re-tagged
+  with the new id; the legacy flat fields are byte-frozen by the never-lose
+  contract, which is what forces — correctly — the two-enrollments-one-file
+  shape. `AtKeys.toAtChopsForEnrollment` / `signingAlgorithmForEnrollment`
+  resolve an enrollment's chops and algorithm from the typed section, and
+  `AtAuthImpl.authenticate` threads them automatically: authenticating with
+  the new id ML-DSA-signs with no caller-supplied algorithm anywhere.
+- **at_chops 3.4.2**: `PkamMlDsa65SigningAlgo` (synchronous, keys ride the
+  String-typed pkam slot as base64 raw) and the pkam sign dispatch honours
+  `signingAlgoType: mldsa65`; `signEnvelope` gains the mldsa65 branch its
+  verify half already had. **The atServer** composes the tagged `_apsk` from
+  the enrollment record's `(apkamPublicKey, signingAlgo)` at publish time
+  for any non-rsa2048 algorithm ([42](#42-the-to-define-list-ruled-2026-08-05)
+  item 9's server clause), bare stays frozen for rsa2048.
+- **Deferred to RF-2c**: Monitor `signingAlgoType` threading (the monitor
+  connection still reads `AtClientPreference`), the `(AtClient,
+  enrollmentId)` kpid staleness
+  ([20.3](#20-ss-2-how-the-key-package-reaches-an-enrollment-and-how-conveyance-fires-2026-08-03)),
+  and the orchestration that turns UC-B1.x's full scenarios green.
+
+### 43.2 Three defects under a green surface
+
+1. **The atServer had never actually verified an ML-DSA signature.** It
+   resolves the published at_chops (3.3.0), whose verification dispatch has
+   no mldsa65 branch at all — an mldsa65 input fell through to the RSA
+   verifier, which died parsing the raw ML-DSA key as ASN.1, surfacing as
+   AT0010. Every existing "mldsa65 verify" test asserted record storage or
+   enum mapping; nothing had ever driven a genuine signature through
+   `processVerb`, so the first real caller — the retrofit live test — found
+   it. The fourth no-caller mechanism on this branch, hours after the rule
+   about them entered CLAUDE.md. Fixed: at_server's `pubspec_overrides.yaml`
+   paths at_chops to the workspace 3.4.2 (floor bumped; remove when it
+   publishes — and note the melos-managed overrides file REPLACES pubspec
+   `dependency_overrides` wholesale, which silently discarded the first
+   attempt), and the VE build mounts both repos so the override resolves
+   in-container. `apkam_self_enrollment_test.dart` now drives a genuine
+   ML-DSA `processVerb` round trip with a tampered-signature control.
+2. **at_chops' own mldsa verification branch was async-poisoned.** 3.4.1's
+   dispatch returned `MlDsa65PureDartAlgo`, whose `Future<bool>` verify was
+   stored unawaited in the bool-typed result. Fixed in 3.4.2: the
+   synchronous class serves both the sign and verify dispatch.
+3. **Record-authoritative had a hole exactly where it mattered.**
+   `recordSigningAlgo ?? wireClaim` let the wire claim pick the verify
+   routine for every enrollment predating the `signingAlgo` field — which is
+   every legacy enrollment, the population record-authoritativeness exists to
+   protect. The hole was invisible while at_chops had no mldsa routine to
+   mis-pick: the claim fell through to RSA by accident, and the
+   record-authoritative functional test passed on that accident. With a real
+   mldsa routine wired, the lying claim started failing legitimate RSA
+   enrollments — caught by the same live suite. Fixed: on the APKAM branch an
+   absent record algorithm resolves to rsa2048 explicitly (the handler's own
+   comment already claimed this); the wire fallback survives only for legacy
+   no-enrollment PKAM, which may honestly present `ecc_secp256r1`. This
+   closes the gap in [34](#34-pkam-is-record-authoritative-and-the-no-rsa-row-reads-narrower-than-it-looks-2026-08-04)'s
+   hardening story, and the unit control is the legacy-claim test beside the
+   ML-DSA round trip.
+
+### 43.3 Proof inventory and one harness lesson
+
+Rails after landing, all green: at_chops **219**, at_auth **160**, at_client
+**896**, at_secondary_server **863**, functional **128** live. The harness
+lesson, re-learned the expensive way: CRAM onboarding is one-shot **per
+recycled virtualenv across the whole suite run**, not per file —
+`enrollment_test.dart` already consumes both dedicated CRAM atSigns, so a
+second file CRAM-onboarding either of them fails whichever runs later. The
+retrofit test builds its pre-PQ precondition from an ordinary OTP enrollment
+on firstAtSign instead (approve with the demo keys, write the keyfile
+directly), which consumes no one-shot state at all.

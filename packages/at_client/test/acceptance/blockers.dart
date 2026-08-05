@@ -59,17 +59,23 @@ const b2 = 'blocked: B-2 (nskey rotation + revocation) · $_functional';
 // ---------------------------------------------------------------------------
 // Retrofit + onboarding. RF-SRV moved ONTO the GA critical path 2026-08-05
 // (decisions.md 40) — every migration scenario conjugates "upgrade the
-// enrollment", and that verb is RF-SRV's. A server-side spike exists
-// (at_server branch gkc-pq-rfsrv-spike); these rows stay blocked until the
-// client half (RF-2b) can drive it end to end.
+// enrollment", and that verb is RF-SRV's. The server half is spiked
+// (at_server branch gkc-pq-rfsrv-spike, wire shape frozen by decisions.md 42
+// item 1) and RF-2b's client half landed 2026-08-05 with live coverage
+// (tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart:
+// no-OTP auto-approve, ML-DSA PKAM under the new id, mint-once, tagged
+// _apsk). The B1 rows stay skipped because their THEN clauses also demand
+// the signing-root interplay and clone orchestration — RF-2c's e2e, not the
+// submit path.
 // ---------------------------------------------------------------------------
 
 /// atServer authenticated self-retrofit enroll (auto-approve + expiry cap).
 /// On the GA critical path per decisions.md 40.
 const rfSrv = 'blocked: RF-SRV (server self-retrofit enroll) · $_e2e';
 
-/// Client mints PQ APKAM + key package, then self-retrofits.
-const rf2b = 'blocked: RF-2b (PQ-APKAM mint + self-retrofit) · $_e2e';
+/// The retrofit's remaining half: RF-2c orchestration (root interplay,
+/// clone flows, switch-over) — RF-2b's mint + self-retrofit landed.
+const rf2b = 'blocked: RF-2c (retrofit orchestration; RF-2b landed) · $_e2e';
 
 /// PQ-native greenfield onboarding + legacy-interop flag.
 const on1 = 'blocked: ON-1 (PQ-native onboarding) · $_functional';

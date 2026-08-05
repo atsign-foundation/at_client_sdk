@@ -992,14 +992,17 @@ Constraints beyond the ruling above:
   server involvement. The new enrollment id lands **in the keyfile that already
   holds the legacy material**, never a fresh file
   ([`decisions.md` 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
-- **Distinct `(appName, deviceName)` per device** — the atServer refuses a
-  duplicate approved pair, so cloned keyfiles must differentiate before they
-  retrofit.
-- **The expiry cap needs re-ratifying** against the cloned-keyfile scenario: a
-  short grace strands laggard clones that upgrade on their own schedules; an
-  infinite one never retires the legacy credential. On the to-define list
-  ([`decisions.md` 41](decisions.md#41-the-to-define-list-2026-08-05)); neither
-  direction is silently assumed here.
+- **Distinct `(appName, deviceName)` per device** — client-side discipline,
+  not server-enforced: the duplicate refusal is deliberately skipped on the
+  APKAM self-enrollment branch, since a retrofit legitimately keeps its own
+  name ([`decisions.md` 42](decisions.md#42-the-to-define-list-ruled-2026-08-05)
+  item 1). Distinctness is what lets an owner tell one device's enrollment
+  from another's in `enroll:list`.
+- **The expiry cap is ruled and landed**: it RE-ARMS on every sibling
+  retrofit (one grace period after the *last* clone upgrades, never past the
+  enrollment's own posture), grace ratified at 720h
+  ([`decisions.md` 42](decisions.md#42-the-to-define-list-ruled-2026-08-05)
+  item 3).
 - **Step 4's pull is the *normal* path, not a backstop**, whenever the approver is
   the legacy parent enrollment (which holds nothing to push). Store-and-forward in
   both directions, so "heals when each device next runs" is latency, not
