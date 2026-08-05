@@ -1497,6 +1497,14 @@ class SyncServiceImpl implements SyncService {
     return _syncProgressListeners.length;
   }
 
+  /// The registered listeners, so a test can say *which* ones survived rather
+  /// than only how many. The count alone stopped meaning "the app's listeners"
+  /// once the SDK began registering one of its own — the content-key eviction
+  /// that makes a deleted conveyance evict everywhere.
+  @visibleForTesting
+  List<SyncProgressListener> progressListeners() =>
+      List.unmodifiable(_syncProgressListeners);
+
   @override
   void removeAllProgressListeners() {
     _syncProgressListeners.clear();

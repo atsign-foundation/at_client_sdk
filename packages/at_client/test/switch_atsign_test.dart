@@ -62,10 +62,18 @@ void main() {
       atClientManager.atClient.syncService
           .addProgressListener(BobSyncProgressListener());
       expect(atClientManager.atClient.getCurrentAtSign(), bobAtSign);
-      expect(
+      // By identity rather than by count. The SDK registers a listener of its
+      // own on every sync service now — the content-key eviction that makes a
+      // deleted conveyance evict everywhere — so a bare count no longer says
+      // anything about whose app listeners survived the switch, which is what
+      // this test is actually about.
+      final listeners =
           (atClientManager.atClient.syncService as SyncServiceImpl)
-              .syncProgressListenerSize(),
-          1);
+              .progressListeners();
+      expect(listeners.whereType<BobSyncProgressListener>(), hasLength(1));
+      expect(listeners.whereType<AliceSyncProgressListener>(), isEmpty,
+          reason: 'the previous atSign\'s listener must not carry over — it '
+              'would be handed the new atSign\'s sync events');
     });
   });
 }

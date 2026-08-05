@@ -834,6 +834,58 @@ void main() {
       });
     });
 
+    group('the revocation guard', () {
+      // What makes a rotation's exclusion hold. Excluding an enrollment from
+      // the push is worth nothing on its own — it can ask any other holder
+      // for the successor private and get it — so the serve side has to
+      // refuse it too. It does, and the thing it honours is the atServer's
+      // roster rather than any list a client remembers: `enroll:listns`
+      // returns approved enrollments only, so revocation is what every
+      // holder sees, including ones that never heard of the rotation.
+      const successor = '__nskey.gen2';
+
+      setUp(() async {
+        await sharerB.secretStore.putSecret(
+            Secret(namespace: 'myapp', name: successor, value: 'SUCCESSOR'),
+            allowReservedName: true);
+      });
+
+      test('a holder refuses a requester the roster no longer lists', () async {
+        // The request goes out while A is still approved — a revoked
+        // enrollment cannot authenticate, so the envelope it left behind is
+        // the realistic shape, not one it sends afterwards.
+        expect(
+            await sharerA
+                .requestSecretsFromNamespace('myapp', names: [successor]),
+            1);
+
+        // After the request is written and before it is swept — so a serve
+        // path that consulted a roster cached from send time would answer,
+        // and this would pass for the wrong reason.
+        directory.revoke('enroll-a');
+
+        expect(await sharerB.sweepOnce(), 1,
+            reason: 'B still consumes the request envelope — it declines to '
+                'answer it');
+        expect(await sharerA.sweepOnce(), 0);
+        expect(sharerA.secretStore.getSecret('myapp', successor), isNull,
+            reason: 'otherwise a revoke-then-rotate would be undone by the '
+                'self-heal: the excluded enrollment pulls the very generation '
+                'the rotation cut it off from, from a holder that has no idea '
+                'a rotation happened');
+      });
+
+      test('and serves the same request while it is still listed', () async {
+        // The control arm. Without it the refusal above is equally explained
+        // by a serve path that answers nobody.
+        await sharerA.requestSecretsFromNamespace('myapp', names: [successor]);
+        expect(await sharerB.sweepOnce(), 1);
+        expect(await sharerA.sweepOnce(), 1);
+        expect(sharerA.secretStore.getSecret('myapp', successor)!.value,
+            'SUCCESSOR');
+      });
+    });
+
     test('requestSecret convenience resolves the single named secret',
         () async {
       await sharerB.secretStore.putSecret(

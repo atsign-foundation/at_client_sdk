@@ -64,11 +64,13 @@ void main() {
     InMemoryNskeyKeyRing ring,
     ContentKeyCache cache,
     List<AtKey> written,
+    List<AtKey> deleted,
     List<String?> providerIds,
     List<bool?> routings,
     InMemoryCkPointer pointer,
     CkManager Function(ContentKeyCache) coldManager,
-  }) client({int failWrites = 0}) {
+    void Function() failNextWrite,
+  }) client({int failWrites = 0, bool failDeletes = false}) {
     var writesLeftToFail = failWrites;
     final cache = ContentKeyCache();
     final ring = InMemoryNskeyKeyRing();
@@ -88,6 +90,7 @@ void main() {
     // key instead would leave it unable to tell which generation to open.
     final conveyedKeys = <String, AtKey>{};
     final written = <AtKey>[];
+    final deleted = <AtKey>[];
     final providerIds = <String?>[];
     final routings = <bool?>[];
 
@@ -119,6 +122,22 @@ void main() {
         writesLeftToFail--;
         throw SecondaryConnectException('conveyance write failed');
       }
+      return true;
+    });
+
+    when(() => mockAtClient.delete(any(),
+            isDedicated: any(named: 'isDedicated'),
+            deleteRequestOptions: any(named: 'deleteRequestOptions')))
+        .thenAnswer((inv) async {
+      final key = inv.positionalArguments[0] as AtKey;
+      if (failDeletes) {
+        throw SecondaryConnectException('conveyance delete failed');
+      }
+      deleted.add(key);
+      // The record is gone from the store too, so a reader can no longer
+      // recover the CK it carried — which is the whole point of deleting it.
+      conveyed.remove(key.toString());
+      conveyedKeys.remove(key.toString());
       return true;
     });
 
@@ -155,8 +174,10 @@ void main() {
         return CkManager(cache: c, keyRing: ring, pointer: pointer);
       },
       written: written,
+      deleted: deleted,
       providerIds: providerIds,
       routings: routings,
+      failNextWrite: () => writesLeftToFail = 1,
     );
   }
 
@@ -494,6 +515,126 @@ void main() {
           isFalse,
           reason: 'these providers hold per-atSign state; sharing one set '
               'across atSigns would cross their content keys');
+    });
+  });
+
+  group('rotateContentKey', () {
+    test('cuts a successor and leaves the superseded conveyance in place',
+        () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+      final superseded = c.cache.current(owner, namespace)!;
+
+      final rotated =
+          await c.manager.rotateContentKey(c.context, selfValue('treaty'));
+
+      expect(rotated.ckKid, isNot(superseded.ckKid));
+      expect(c.cache.current(owner, namespace)!.ckKid, rotated.ckKid,
+          reason: 'new writes encrypt under the successor');
+      expect(c.deleted, isEmpty,
+          reason: 'retaining the old conveyance is the DEFAULT: it is what '
+              'lets a late-joining enrollment read history, which is the '
+              'legacy-like behaviour most apps expect');
+      expect(c.cache.get(owner, namespace, superseded.ckKid), isNotNull,
+          reason: 'and data written under it still decrypts');
+    });
+
+    test('deleteSuperseded removes the old conveyance and evicts the key',
+        () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+      final superseded = c.cache.current(owner, namespace)!;
+
+      await c.manager.rotateContentKey(c.context, selfValue('treaty'),
+          deleteSuperseded: true);
+
+      expect(c.deleted.map((k) => k.key), ['${superseded.ckKid}.__ck'],
+          reason: 'the record carrying the old CK is what makes it '
+              'unwrappable — the nskey private cannot help once no sealed '
+              'copy survives');
+      expect(c.cache.get(owner, namespace, superseded.ckKid), isNull,
+          reason: 'and this client must stop using the copy it already '
+              'unwrapped, or the deletion closes off nobody');
+    });
+
+    test('deletes only after the successor is durable', () async {
+      // A conveyance write that fails must leave the old CK alone. Deleting
+      // first would strand the destination with no readable past AND no key
+      // to write the next value under.
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+      final superseded = c.cache.current(owner, namespace)!;
+      c.failNextWrite();
+
+      await expectLater(
+          c.manager.rotateContentKey(c.context, selfValue('treaty'),
+              deleteSuperseded: true),
+          throwsA(isA<SecondaryConnectException>()));
+
+      expect(c.deleted, isEmpty);
+      expect(c.cache.current(owner, namespace)!.ckKid, superseded.ckKid,
+          reason: 'the destination keeps a working key');
+    });
+
+    test('a delete that fails is loud, and the successor still stands',
+        () async {
+      final c = client(failDeletes: true);
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+      final superseded = c.cache.current(owner, namespace)!;
+
+      final rotated = await c.manager.rotateContentKey(
+          c.context, selfValue('treaty'),
+          deleteSuperseded: true);
+
+      expect(rotated.ckKid, isNot(superseded.ckKid),
+          reason: 'writes are correct from here on; what was not achieved is '
+              'the forward secrecy, and that is a log, not an exception that '
+              'would roll back a good rotation');
+      expect(c.cache.current(owner, namespace)!.ckKid, rotated.ckKid);
+    });
+
+    test('supersedes the CK a previous process cut, read off the pointer',
+        () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+      final superseded = c.cache.current(owner, namespace)!;
+
+      // A restart: a fresh cache and manager, with only the pointer surviving.
+      final coldCache = ContentKeyCache();
+      final cold = c.coldManager(coldCache);
+
+      await cold.rotateContentKey(c.context, selfValue('treaty'),
+          deleteSuperseded: true);
+
+      expect(c.deleted.map((k) => k.key), ['${superseded.ckKid}.__ck'],
+          reason: 'without the pointer a rotation from a freshly started '
+              'client supersedes nothing and leaves the old conveyance live — '
+              'the FS it was asked for silently not done');
+    });
+
+    test('a destination with no published nskey cannot be rotated', () async {
+      final c = client();
+
+      await expectLater(
+          c.manager.rotateContentKey(c.context, sharedValue('treaty')),
+          throwsA(isA<NamespaceKeyUnavailableException>()),
+          reason: 'there is nothing to seal the successor to, and unlike a '
+              'write there is no legacy path to reroute a rotation onto');
     });
   });
 

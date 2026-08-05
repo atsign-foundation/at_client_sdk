@@ -95,7 +95,91 @@ class CkManager {
 
     // Either there is no CK for this destination, or the one we have was sealed
     // to a generation the destination has since rotated away from.
-    //
+    await _cutAndConvey(context, valueKey, owner, ckNs, advertised.nskeyKid,
+        useRemoteAtServer: useRemoteAtServer);
+  }
+
+  /// Rotates the content key for the destination [valueKey] addresses: cuts a
+  /// fresh CK, conveys it, and makes it what new writes encrypt under.
+  ///
+  /// **The cheap forward-secrecy lever, and the only one that reaches data
+  /// already written.** It is O(1) — one conveyance record, which every
+  /// authorised client unwraps with the namespace nskey private it already
+  /// holds — and it rides ordinary sync rather than the per-enrollment
+  /// substrate. Rotating the nskey *keypair* is the other lever entirely: it
+  /// costs one conveyance per enrollment, buys post-compromise security, and
+  /// leaves every earlier CK readable. Conflating them is the mistake
+  /// `design.md` §1.7 spends its first paragraph on.
+  ///
+  /// [deleteSuperseded] is the forward-secrecy knob, and **default off** is a
+  /// deliberate policy rather than caution: retaining the superseded `__ck`
+  /// record is what lets a late-joining enrollment read history, which is the
+  /// legacy-like behaviour most apps expect. Turning it on deletes the record
+  /// that carries the old CK, and from then on nothing can unwrap it — the
+  /// nskey private cannot help, because no sealed copy of that CK survives.
+  /// Data written under it becomes undecryptable **by design**.
+  ///
+  /// What it does not reach: a client that already decapsulated the old CK
+  /// holds the plaintext key in memory or in its own cache, and only observing
+  /// the deletion evicts it. So coarse forward secrecy is bounded by eviction
+  /// *reachability* — a client that never resyncs keeps reading. The deletion
+  /// is the trusted-computing base, not a guarantee about every device.
+  ///
+  /// Returns the CK new writes now use.
+  Future<ContentKey> rotateContentKey(
+    CryptoContext context,
+    AtKey valueKey, {
+    bool deleteSuperseded = false,
+    bool? useRemoteAtServer,
+  }) async {
+    final owner = valueKey.sharedWith ?? valueKey.sharedBy;
+    final namespace = valueKey.namespace;
+    if (owner == null || owner.isEmpty || namespace == null) {
+      throw AtKeyException(
+          'cannot rotate a content key for a record with no owner or '
+          'namespace: $valueKey');
+    }
+
+    final advertised = await resolver.resolve(owner, namespace);
+    if (advertised == null) {
+      // Nothing to seal the successor to. Distinct from the write path only in
+      // that there is no legacy fallback to offer here — a rotation is not a
+      // write the app can reroute.
+      throw NamespaceKeyUnavailableException(owner, namespace);
+    }
+    final ckNs = advertised.namespace;
+
+    // Read before the successor displaces it. The pointer is consulted as well
+    // as the cache because the process that cut the superseded CK may have
+    // been a different one — a rotation from a freshly started client would
+    // otherwise supersede nothing and leave the old conveyance in place.
+    final superseded = cache.current(owner, ckNs)?.ckKid ??
+        (await pointer?.read(context.atClient, owner, ckNs))?.ckKid;
+
+    final ck = await _cutAndConvey(
+        context, valueKey, owner, ckNs, advertised.nskeyKid,
+        useRemoteAtServer: useRemoteAtServer);
+
+    if (deleteSuperseded && superseded != null && superseded != ck.ckKid) {
+      // After the successor is durable, never before: a client whose write
+      // failed between the two would otherwise be left with the old CK deleted
+      // and no new one — every value written under the old key unreadable and
+      // nothing to write the next one under.
+      await _deleteConveyance(context, valueKey, owner, ckNs, superseded);
+    }
+    return ck;
+  }
+
+  /// Cuts a fresh CK for `(owner, ckNs)`, conveys it sealed to [nskeyKid], and
+  /// promotes it to current.
+  Future<ContentKey> _cutAndConvey(
+    CryptoContext context,
+    AtKey valueKey,
+    String owner,
+    String ckNs,
+    String nskeyKid, {
+    bool? useRemoteAtServer,
+  }) async {
     // The conveyance routes to at/nskey, whose encrypt seals the CK and caches
     // it. That write needs no preparation of its own, which is what stops this
     // recursing.
@@ -116,9 +200,35 @@ class CkManager {
     // as the current key: the guard above would then skip conveying on every
     // retry, and every value written afterwards would cite a CK that was never
     // sent. The write throws on failure, so this is not reached.
-    cache.putAsCurrent(owner, ckNs, ck, advertised.nskeyKid);
-    await pointer?.write(
-        context.atClient, owner, ckNs, ck.ckKid, advertised.nskeyKid);
+    cache.putAsCurrent(owner, ckNs, ck, nskeyKid);
+    await pointer?.write(context.atClient, owner, ckNs, ck.ckKid, nskeyKid);
+    return ck;
+  }
+
+  /// Deletes the conveyance record carrying [ckKid] and drops the key from
+  /// this client's cache.
+  ///
+  /// Both halves matter and neither is sufficient: deleting the record stops
+  /// anyone unwrapping the CK again, and evicting stops *this* client from
+  /// going on using the copy it has already unwrapped. Other clients evict when
+  /// they observe the deletion syncing, which is what makes eviction a
+  /// fleet-wide property rather than a local one.
+  Future<void> _deleteConveyance(CryptoContext context, AtKey valueKey,
+      String owner, String ckNs, String ckKid) async {
+    try {
+      await context.atClient.delete(
+          SymmetricAesGcmProvider.conveyanceKeyFor(valueKey, ckKid, ckNs));
+      cache.evict(owner, ckNs, ckKid);
+    } catch (e) {
+      // Loud: forward secrecy was asked for and not delivered. The successor
+      // is in place, so writes are correct from here on — but the old key is
+      // still unwrappable by anyone who can read the record, and a caller that
+      // believes it rotated for FS has to know it did not.
+      _logger.severe('Rotated the content key for $owner:$ckNs but could NOT '
+          'delete the superseded conveyance $ckKid, so data written under it '
+          'remains decryptable by anyone who can read that record — the '
+          'forward secrecy this rotation was for has not been achieved: $e');
+    }
   }
 
   /// Re-adopts the CK this sender was last writing under for `(owner, ckNs)`,

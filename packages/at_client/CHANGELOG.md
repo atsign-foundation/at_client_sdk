@@ -23,6 +23,30 @@
   holder is offline", so a failed pull must not re-mint; recovering a
   namespace whose last private-holder is lost is an explicit rotation, and the
   records sealed to the lost generation stay unreadable.
+- feat (experimental): **content-key rotation** — the cheap forward-secrecy
+  lever, and the only one that reaches data already written.
+  `CkManager.rotateContentKey` cuts a fresh CK and conveys it (O(1): one
+  record, unwrapped by every client with the namespace's nskey private).
+  `deleteSuperseded: true` then deletes the record carrying the old CK, after
+  the successor is durable and never before, so nothing can unwrap it again —
+  data written under it becomes undecryptable **by design**. Default off:
+  retaining the conveyance is what lets a late-joining enrollment read
+  history. A delete that fails is logged at `severe` and does not roll back a
+  good rotation, because writes are correct from there on and what was lost is
+  the forward secrecy, which the caller has to be told about.
+- feat (experimental): a client now **evicts a cached content key when it
+  observes that key's conveyance record being deleted** (`ContentKeyEviction`,
+  registered on the client's sync service). Deleting the record stops anyone
+  unwrapping the CK again but says nothing about clients that already did —
+  they hold the plaintext and would go on reading the data the deletion was
+  meant to close off. Sync carries the deletion; this turns arrival into
+  eviction, which is what makes coarse forward secrecy fleet-wide rather than
+  local to the deleting client. It is bounded by eviction *reachability*: a
+  device that never resyncs keeps its copy.
+- chore: `SyncServiceImpl.progressListeners()` (`@visibleForTesting`) — the
+  SDK now registers a listener of its own, so a bare
+  `syncProgressListenerSize()` no longer says anything about which app
+  listeners survived an atSign switch.
 - feat (experimental): the self-retrofit runs the **signing-root step in
   flow**. A fully privileged retrofit — privilege read off the atServer's
   enrollment record, never the grants the call requested — mints and

@@ -15,6 +15,7 @@ import 'package:meta/meta.dart' show visibleForTesting;
 // CHANGELOG tells callers to catch, unreachable through the package barrel.
 export 'package:at_client/src/crypto/nskey/ck_manager.dart';
 export 'package:at_client/src/crypto/nskey/content_key.dart';
+export 'package:at_client/src/crypto/nskey/content_key_eviction.dart';
 export 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart';
 export 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 export 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
@@ -171,6 +172,22 @@ class CryptoConfig {
   @visibleForTesting
   static CryptoConfig? eraDefaultFor(AtClient atClient) =>
       _eraDefaults[atClient];
+
+  /// The content-key cache this config's nskey providers share, or null for a
+  /// config that has none (the legacy set, or a caller's own providers).
+  ///
+  /// The cache is deliberately not a field: [_nskeySet] builds one and hands
+  /// it to both providers precisely so they cannot drift apart, and exposing a
+  /// settable copy alongside them would reintroduce the drift. This reads it
+  /// back from the provider that owns it, for the one caller that has to reach
+  /// it from outside — the sync listener that evicts a content key when its
+  /// conveyance record is deleted.
+  ContentKeyCache? get contentKeyCache {
+    for (final provider in providers) {
+      if (provider is NskeyProvider) return provider.cache;
+    }
+    return null;
+  }
 
   /// The configured provider with [id], or null if none matches.
   ///

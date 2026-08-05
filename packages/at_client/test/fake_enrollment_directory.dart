@@ -48,4 +48,13 @@ class FakeEnrollmentDirectory implements EnrollmentDirectory {
       {String access = 'rw'}) {
     _nsAccess.putIfAbsent(namespace, () => {})[enrollmentId] = access;
   }
+
+  /// Drops [enrollmentId] from every namespace roster, modelling
+  /// `enroll:revoke` — the atServer's `enroll:listns` returns **approved**
+  /// enrollments only, so a revoked one stops appearing to anybody.
+  void revoke(String enrollmentId) {
+    for (final access in _nsAccess.values) {
+      access.remove(enrollmentId);
+    }
+  }
 }

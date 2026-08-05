@@ -190,6 +190,19 @@ class AtClientImpl implements AtClient {
   set syncService(SyncService syncService) {
     _syncService = syncService;
     _finalizer.attach(_syncService!, 'SyncService for $_atSign');
+
+    // Coarse forward secrecy's eviction trigger. Deleting a content key's
+    // conveyance record stops anyone unwrapping that key again, but every
+    // client that already unwrapped it holds the plaintext and would go on
+    // reading data the deletion was meant to close off. Sync is what carries
+    // the deletion to them, so this is where it becomes an eviction.
+    //
+    // Registered here rather than where the providers are built, because that
+    // runs during construction and the sync service does not exist yet.
+    final cache = CryptoConfig.forClient(this).contentKeyCache;
+    if (cache != null) {
+      syncService.addProgressListener(ContentKeyEviction(cache, _atSign));
+    }
   }
 
   @override
