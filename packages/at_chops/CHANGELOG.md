@@ -1,3 +1,6 @@
+## 3.5.0
+- feat: add `RsaSignatureAlgorithm`, deprecating the old RsaSigningAlgorithm which implements the deprecated signing type.
+
 ## 3.4.1
 - fix: export `Argon2idHashingAlgo` and `Md5HashingAlgo` from the main `at_chops.dart` barrel so callers can use all supported hashing algorithms through the public package import.
 
