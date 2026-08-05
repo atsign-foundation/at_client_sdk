@@ -4,7 +4,11 @@ import 'dart:typed_data';
 import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/ffi/openssl_ffi_bindings.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:ffi/ffi.dart';
+import 'package:meta/meta.dart';
+
+import '../ffi/openssl_loader.dart';
 
 /// ML-DSA-65 (FIPS 204) digital signature backed by OpenSSL 3 via Dart FFI.
 ///
@@ -42,7 +46,14 @@ final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
   late final EvpDigestVerifyInitDart _digestVerifyInit;
   late final EvpDigestVerifyDart _digestVerify;
 
-  MlDsa65FfiAlgo.fromLib(this._lib) {
+  MlDsa65FfiAlgo.fromLib(this._lib,
+      {@visibleForTesting bool Function(DynamicLibrary) supportsMlDsa65 =
+          libCryptoSupportsMlDsa65}) {
+    if (!supportsMlDsa65(_lib)) {
+      throw AtSigningException(
+          'this libcrypto build does not provide ML-DSA-65 — use '
+          'MlDsa65PureDartAlgo, or AtPqc.mlDsa65 to auto-select');
+    }
     _ctxNewFromName = _lib.lookupFunction<EvpPkeyCtxNewFromNameNative,
         EvpPkeyCtxNewFromNameDart>('EVP_PKEY_CTX_new_from_name');
     _ctxFree = _lib.lookupFunction<EvpPkeyCtxFreeNative, EvpPkeyCtxFreeDart>(

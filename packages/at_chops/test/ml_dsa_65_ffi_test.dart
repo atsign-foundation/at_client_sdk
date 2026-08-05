@@ -5,6 +5,9 @@ import 'dart:ffi';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops_ffi.dart';
+// `show`: at_commons exports its own StringBuffer, which would shadow
+// dart:core's and break the loadedPath argument below.
+import 'package:at_commons/at_commons.dart' show AtSigningException;
 import 'package:test/test.dart';
 
 void main() {
@@ -29,7 +32,7 @@ void main() {
       }
 
       final algo = MlDsa65FfiAlgo.fromLib(lib);
-      expect(algo.name, equals('ml-dsa-65'),
+      expect(algo.name, equals('mldsa65'),
           reason: 'must match MlDsa65PureDartAlgo.name — a downstream '
               'protocol sees one identifier regardless of backend');
       final kp = await algo.generateKeyPair();
@@ -109,6 +112,17 @@ void main() {
       final bool ok = await algo.verifyBytes(tampered,
           signature: sig, publicKey: kp.publicKey);
       expect(ok, isFalse);
+    });
+
+    test(
+        'fromLib throws AtSigningException when the injected probe reports '
+        'no ML-DSA-65 support — runs on every host, no libcrypto required', () {
+      final DynamicLibrary probedLib = lib ?? DynamicLibrary.process();
+
+      expect(
+          () =>
+              MlDsa65FfiAlgo.fromLib(probedLib, supportsMlDsa65: (_) => false),
+          throwsA(isA<AtSigningException>()));
     });
   });
 }
