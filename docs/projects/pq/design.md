@@ -605,7 +605,7 @@ wired the substrate into `AtClient`, `enroll:listns` is driven in production by
 consumer layers — nskey minting/seeding, the `pq_signing_root` lifecycle with its
 pull initiator, the key-material self-heal — are built
 ([`decisions.md` 38](decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)).
-Still genuinely absent: the PQ APKAM mint + retrofit client half, RF-2b/RF-2c.
+RF-2b and RF-2c's switch-over landed 2026-08-05 ([decisions 43](decisions.md#43-rf-2b-lands-and-what-the-first-genuine-ml-dsa-pkam-found-2026-08-05)–[44](decisions.md#44-rf-2c-the-switch-over-and-what-it-cost-to-make-a-client-pq-2026-08-05)). Still genuinely absent: RF-2c's UC-B1.x e2e rows.
 The full built/gap inventory with `file:line` evidence is in
 [§6](#6-implementation-notes--file-level-pointers-consolidated).)*
 
@@ -655,18 +655,19 @@ subordinate to the signature.
 
 **The `_apsk` two-stage ladder (2026-08-05,
 [`decisions.md` 39](decisions.md#39-_apsk-rides-the-same-two-stage-ladder-2026-08-05)).**
-"Self-describes enough to verify" is the *destination*, not the present: as of
-2026-08-05 the envelope's `signingAlgo` field is decorative — `signEnvelope` signs
-RSA regardless and `verifyEnvelope` never reads it. And apps (NoPorts) sign and
+"Self-describes enough to verify" is **live as of 2026-08-05**: `signEnvelope`
+branches on `signingAlgo` and `wrapAndSign` passes the client's resolved
+algorithm, while `verifyEnvelope` reads the published key's own declaration,
+which is authoritative over the envelope's claim. And apps (NoPorts) sign and
 verify with `_apsk` today, so the key itself migrates on the same two-release
 ladder as everything else: the **final 3.x** publishes the `_apsk` value exactly as
 now (a bare RSA public key string) while its verify learns to branch on the
 recorded algorithm and to parse a new **self-describing, tagged** `_apsk` form;
-**4.x new enrollments** publish that form (ML-DSA-65). The tagged form must be
+an enrollment publishes that form whenever its RECORDED `signingAlgo` is not `rsa2048` — the discriminator is the enrollment record, not the client's major version, and it is live in 3.x today (at_server composes the tagged value at publish time). The tagged form must be
 unmistakable to an old bare-RSA parser — fail loudly, never mis-read. In-place
 rsa→mldsa65 upgrade of an existing enrollment's signing key is recommended against
 (the enrollment-upgrade path reaches the same end state with mechanics that exist);
-ratification is on the to-define list.
+ratified 2026-08-05: [decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05) item 8 ratifies the "no" on an in-place rsa→mldsa65 upgrade, and item 9 freezes the tagged format.
 
 **Trust nuance.** The signature is verified against `_apsk`, which the atServer serves —
 so it authenticates against a rogue *insider* enrollment (under an honest server) but
@@ -859,7 +860,7 @@ bound to its stored algo.
 **ML-DSA APKAM auth is retained** (PQ-safe authentication):
 
 - **at_chops** — the `mldsa65` `SigningAlgoType` member ALREADY ships
-  (`algo_type.dart:10`); add only the `mldsa65` branch in `_getVerificationAlgorithm`
+  (`algo_type.dart:10`); add the `mldsa65` branch in `_getVerificationAlgorithm`
   (`at_chops_impl.dart:284`) returning the existing `MlDsa65PureDartAlgo` /
   `MlDsa65FfiAlgo` ([§3](#3-subsystem-c--at_chops-pq-primitives)).
 - **at_commons** — widen the pkam `signingAlgo` alternation for an ML-DSA literal
@@ -979,7 +980,9 @@ enrollment receives the root *pushed* by the approver. F-section build detail (F
 **2026-08-05 additions
 ([`decisions.md` 40](decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)).**
 This flow is **on the D1 GA critical path**: it is the "upgrade the enrollment"
-verb every migration scenario conjugates, and it does not exist server-side yet.
+verb every migration scenario conjugates. Its server half is **built** on the
+at_server spike (self-enroll + subset check + sliding expiry cap + tagged
+`_apsk`); the revocation cascade is the piece still owed.
 Constraints beyond the ruling above:
 
 - **Revocation must cascade.** Self-enrollment makes enrollments a parent/child

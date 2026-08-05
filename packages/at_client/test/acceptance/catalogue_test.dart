@@ -75,13 +75,17 @@ void main() {
   test('the README row counts match the scenarios', () {
     final source = allScenarioSource();
     final rows = RegExp(r'\btest\(').allMatches(source).length;
-    // Tracks the rows still BLOCKED on a project. This has been re-pointed
-    // twice, each time at whatever number was actually moving: first B-1's
-    // share, then the owed-a-test backlog. Both reached zero, and a guard
-    // pinned to a number that cannot change silently stops guarding. Every
-    // remaining skip names a project, so this is the figure that moves as
-    // projects land.
-    final blocked = RegExp(r'skip: \w+\)').allMatches(source).length;
+    // Tracks the rows still SKIPPED. This has been re-pointed twice, each
+    // time at whatever number was actually moving: first B-1's share, then
+    // the owed-a-test backlog. Both reached zero, and a guard pinned to a
+    // number that cannot change silently stops guarding.
+    //
+    // It asserts "skipped", not "blocked", because skipped is what it can
+    // measure: the constant's LABEL (`blocked:` vs `owed:`) lives in
+    // blockers.dart and is not visible here. Conflating the two is the exact
+    // error decisions.md 35 caught, so the README states the split in prose
+    // and this guard holds the total honest.
+    final skipped = RegExp(r'skip: \w+\)').allMatches(source).length;
     final text = readme.readAsStringSync();
 
     final total = RegExp(r'\*\*(\d+) rows\*\*').firstMatch(text);
@@ -90,16 +94,16 @@ void main() {
     expect(int.parse(total![1]!), rows,
         reason: 'README.md says ${total[1]} rows; there are $rows');
 
-    final blockedStated =
-        RegExp(r'\*\*(\d+) of the (\d+)\*\* rows are blocked').firstMatch(text);
-    expect(blockedStated, isNotNull,
-        reason: 'README.md must state the blocked share as '
-            '"**N of the M** rows are blocked on a project"');
-    expect(int.parse(blockedStated![1]!), blocked,
-        reason: 'README.md says ${blockedStated[1]} blocked rows; there are '
-            '$blocked. Landing a project changes this — update the README '
+    final skippedStated =
+        RegExp(r'\*\*(\d+) of the (\d+)\*\* rows are skipped').firstMatch(text);
+    expect(skippedStated, isNotNull,
+        reason: 'README.md must state the skipped share as '
+            '"**N of the M** rows are skipped"');
+    expect(int.parse(skippedStated![1]!), skipped,
+        reason: 'README.md says ${skippedStated[1]} skipped rows; there are '
+            '$skipped. Landing a project changes this — update the README '
             'with it');
-    expect(int.parse(blockedStated[2]!), rows);
+    expect(int.parse(skippedStated[2]!), rows);
   });
 }
 

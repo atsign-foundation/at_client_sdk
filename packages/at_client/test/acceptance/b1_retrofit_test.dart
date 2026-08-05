@@ -26,7 +26,7 @@ void main() {
       //       legacy encryption key is retained so history stays readable. No
       //       re-onboarding.
       fail('not implemented');
-    }, skip: rf2b);
+    }, skip: owedB1);
 
     test('UC-B1.2 · second install on a copied keyfile (alice1c)', () {
       // GIVEN after B1.1; pq_signing_root exists; alice1c is a clone of E1's pre-PQ
@@ -38,7 +38,7 @@ void main() {
       //       under E1), then requests the signing-root private, verifies
       //       public/private correspondence, and stores.
       fail('not implemented');
-    }, skip: rf2b);
+    }, skip: owedB1);
 
     test('UC-B1.3 · third client on a different enrollment (alice3, E2)', () {
       // GIVEN after B1.1; alice3 on E2 with its own legacy RSA APKAM;
@@ -48,6 +48,6 @@ void main() {
       //       for NAMESPACED secrets — a restricted E2 receives only its
       //       authorised subset of nskey keys.
       fail('not implemented');
-    }, skip: rf2b);
+    }, skip: owedB1);
   });
 }

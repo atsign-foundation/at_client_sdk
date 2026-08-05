@@ -80,8 +80,10 @@ catalogue executable-but-skipped turns an 800-line document into a count.
   the target layer. Keep the placeholder here until the real assertion exists
   somewhere, so the count stays honest.
 - A constant names a scenario's **first** gate, so a project that is only ever a
-  *later* gate has none — RF-2c's e2e orchestration sits behind RF-SRV and RF-2b
-  on the B clusters, and unblocks nothing on its own.
+  *later* gate has none. The target moves: RF-2c's e2e rows sat behind R-1,
+  RF-2b and RF-SRV until all three landed (2026-08-05), at which point RF-2c
+  became their first gate — and, since its only remaining deliverable IS those
+  rows, they became `owed:` rather than `blocked:`.
 - `catalogue_test.dart` is the one test here that is not skipped. It fails if a
   use case loses its scenario, if a blocker constant guards nothing, or if the
   counts below drift from the tests. Fix the count in the same PR.
@@ -99,7 +101,7 @@ below), plus 9 cross-cutting invariants.
 | A4 · shared data              | A4.1 ✅, A4.2 ✅, A4.3 ✅, A4.4 ✅  | —            |
 | A5 · rotation & revocation    | A5.1(a), A5.1(b), A5.2, A5.3     | B-2          |
 | B0 · atServer prerequisite    | B0.1                             | RF-SRV       |
-| B1 · retrofit                 | B1.1, B1.2, B1.3                 | RF-2b        |
+| B1 · retrofit                 | B1.1, B1.2, B1.3                 | owed: e2e    |
 | B2 · retirement & lockout     | B2.1, B2.2                       | RF-SRV       |
 | B3 · mixed-PQ intra-atSign    | B3.1 ✅, B3.2 ✅                    | —            |
 | B4 · mixed-PQ cross-atSign    | B4.1 ✅, B4.2, B4.3 ✅, B4.4 ✅     | ON-1         |
@@ -121,10 +123,12 @@ the 40** rows, and no data-path row could go green until **B-1** (XL) and
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**Nothing is owed a test any more.** **12 of the 40** rows are blocked on a
-project that has not landed — B-2, RF-SRV, RF-2b, ON-1 — and nothing else
-is skipped, so
-`blockers.dart` now contains only real project gates. That is a much more
+**12 of the 40** rows are skipped. Nine are *blocked* on a project that has
+not landed — B-2, RF-SRV, ON-1 — and three (the B1 retrofit rows) are *owed a
+test*: RF-2b and RF-2c's switch-over both landed 2026-08-05, so what those
+rows need is the e2e coverage itself, not another project. The guard asserts
+the skipped total, which is what it can measure; the blocked/owed split lives
+in `blockers.dart`'s labels and in this sentence. That is a much more
 useful ledger than the one this started as: grep a project id and you get
 exactly the scenarios it will turn green.
 
