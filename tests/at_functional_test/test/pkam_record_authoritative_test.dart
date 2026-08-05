@@ -24,11 +24,12 @@ import 'test_utils.dart';
 ///
 /// **How this is tested, and why it is the only way.** The client API cannot
 /// express the mismatch: `AtLookupImpl.signingAlgoType` drives *both* the
-/// signature it produces and the value it puts on the wire, so setting it to
-/// `mldsa65` would make at_chops attempt an ML-DSA signature with an RSA key
-/// and fail on this side, never reaching the atServer. So the `pkam:` command
-/// is built by hand — always signing RSA with the enrollment's real keypair,
-/// varying only the algorithm *claimed*.
+/// signature the at_chops pkam dispatch produces and the value it puts on
+/// the wire, so the two never diverge through the API — setting `mldsa65`
+/// with an RSA keypair fails on this side in base64/ML-DSA key handling,
+/// never reaching the atServer with an RSA signature under an mldsa65 claim.
+/// So the `pkam:` command is built by hand — always signing RSA with the
+/// enrollment's real keypair, varying only the algorithm *claimed*.
 ///
 /// The two arms therefore differ in exactly one byte-range of one command, and
 /// the outcome is the discriminator:

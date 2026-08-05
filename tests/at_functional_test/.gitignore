@@ -11,3 +11,4 @@ pubspec.lock
 
 test/testData/@srie.atKeys
 test/testData/@sachin.atKeys
+test/testData/rf2b-legacy@*.atKeys
