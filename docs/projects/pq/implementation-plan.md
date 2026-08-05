@@ -750,12 +750,13 @@ cleanly with a pre-flight query and an opt-in legacy escape hatch, and nested na
 resolve by walking up with `appMetadata.ns` / `ckNs` on the wire — covered multi-segment in
 both live suites, which previously used single-segment namespaces only.
 `packages/at_client` green at
-**901 passing / 12 skipped**, `tests/at_functional_test` at **129**,
-`tests/at_end2end_test` at **46** with no skips (all re-run together
-2026-08-05, after the to-define ratifications, RF-2b and RF-2c's
-switch-over landed). Also green: `at_auth` 160, at_secondary_server **865**
-(the RF-SRV spike branch, resolving the workspace at_chops 3.4.2 via
-`pubspec_overrides.yaml`), `at_chops` 219, `at_commons` 505.
+**919 passing / 7 skipped**, `tests/at_functional_test` at **131**,
+`tests/at_end2end_test` at **50** with no skips (all re-run together
+2026-08-05, after the to-define ratifications, RF-2b, RF-2c's switch-over and
+RF-2c's UC-B1.x/B2.x rows landed). Also green: `at_auth` 160,
+at_secondary_server **867** (the RF-SRV spike branch, resolving the workspace
+at_chops 3.4.2 via `pubspec_overrides.yaml`), `at_chops` 219,
+`at_commons` 505. The acceptance burn-down reads **33 of 40**.
 
 *Proven live (functional suite, `tests/at_functional_test`):* self put/get round-trip
 through the whole pipeline including the pre-pass, the conveyance record and key
@@ -1021,9 +1022,9 @@ AtChops resolution threaded through `authenticate`. Live-proven end to end in
 `self_enrollment_retrofit_live_test.dart`. Landing it surfaced and fixed three
 defects (the atServer had never verified a genuine ML-DSA signature; at_chops'
 mldsa verify was async-poisoned; record-authoritative fell through to the wire
-claim for pre-field enrollments). Remaining here → RF-2c: Monitor
+claim for pre-field enrollments). What was handed on to RF-2c — Monitor
 signingAlgoType threading, the (AtClient, enrollmentId) kpid staleness, and the
-UC-B1.x scenario orchestration.
+UC-B1.x scenario orchestration — has since landed there in full.
 **Deliverables → [design.md](design.md)** (PQ-APKAM mint + self-retrofit): the client (authenticated with
 its pre-PQ keypair) mints — once per keyfile under a host-local lock — an ML-DSA signing keypair + X-Wing
 enc keypair, builds the key package, and submits `enroll:request` with a **new enrollmentId** on the
@@ -1052,20 +1053,29 @@ enrollment authenticates; previously shared secrets stay openable; the old enrol
 once its capped expiry elapses (or after `enroll:revoke`) — **not** via an in-place key delete;
 seal-once-reaches-every-host; revoke/expire-one-host; sync-less wake-up.
 **Effort:** L.
-**PARTLY LANDED 2026-08-05** ([decisions 44](decisions.md#44-rf-2c-the-switch-over-and-what-it-cost-to-make-a-client-pq-2026-08-05)):
-the switch-over itself is built and live-proven — `selfRetrofit(...)` runs
-submit → re-authenticate → switch, and `AtClient.signingAlgoType` (resolved
-from the keyfile) now reaches the verb connection, the monitor, sync, and
-`wrapAndSign`; key-package adoption is enrollment-scoped. The 20.3 kpid
-staleness is discharged by construction (a switch builds a NEW
-`(atSign, enrollmentId)` client; the enrollment never changes under a live
-one). **Still owed here:** the UC-B1.x e2e rows themselves — the signing-root
-step in-flow (privileged mint/convey vs request+verify, scoped skip), two
-clones reaching distinct ids, the capped legacy enrollment observed ageing
-out. (The self-notification finding is **resolved** — a race in the test, not
-a delivery bug: the scoped ML-DSA enrollment receives its own namespace's
-notifications correctly once the trigger waits for the monitor to be
-listening. See [decisions 44.3](decisions.md#443-two-findings-from-the-live-run).)
+**LANDED 2026-08-05** ([decisions 44](decisions.md#44-rf-2c-the-switch-over-and-what-it-cost-to-make-a-client-pq-2026-08-05)
+for the switch-over, [45](decisions.md#45-the-retrofit-rows-and-the-five-defects-the-first-end-to-end-run-found-2026-08-05)
+for the rows): `selfRetrofit(...)` runs submit → re-authenticate → switch, and
+`AtClient.signingAlgoType` (resolved from the keyfile) reaches the verb
+connection, the monitor, sync, and `wrapAndSign`; key-package adoption is
+enrollment-scoped. The 20.3 kpid staleness is discharged by construction (a
+switch builds a NEW `(atSign, enrollmentId)` client; the enrollment never
+changes under a live one). The **UC-B1.x and UC-B2.x e2e rows are green** —
+`tests/at_end2end_test/test/retrofit_e2e_test.dart` and
+`retrofit_retirement_e2e_test.dart`: the signing-root step in-flow (privileged
+mint, clone request+verify, scoped skip), two clones of one pre-PQ keyfile
+reaching distinct enrollment ids, and the capped legacy enrollment refused with
+`AT0028` while an un-retrofitted sibling still authenticates. Writing them
+found five defects, all fixed with differential tests — the retrofit never
+minted a root; no holder could answer a pull after a restart; the start-time
+sweep destroyed the requests it could not yet answer; a scoped enrollment could
+be handed the signing root; and a conveyed root private was filed unchecked.
+(The self-notification finding from 44 is **resolved** — a race in the test,
+not a delivery bug. See [decisions 44.3](decisions.md#443-two-findings-from-the-live-run).)
+**Still owed against this project: nothing.** UC-B0.1 (a PQ client aborting
+against a *legacy* atServer) stays skipped and is blocked on the **harness** —
+no suite here can build an atServer image without the retrofit verbs — so
+re-scope or waive it as UC-A3.2 was.
 **coversD1:** D1-F end-to-end (retrofit via fresh enrollment).
 
 ---

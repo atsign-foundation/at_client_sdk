@@ -1,4 +1,75 @@
 ## 3.14.1
+- feat (experimental): the self-retrofit runs the **signing-root step in
+  flow**. A fully privileged retrofit — privilege read off the atServer's
+  enrollment record, never the grants the call requested — mints and
+  publishes `public:pq_signing_root@<atSign>` when the atSign has none, and
+  anchors itself to it. It has to happen here: the retrofit is auto-approved
+  by the atServer with no approver client in the loop, so nothing else would
+  ever give a retrofitted enrollment a root. A scoped retrofit skips the
+  step, and a failure in it does not fail the retrofit.
+- fix (experimental): a **holder can now answer** a signing-root or nskey
+  pull after a restart. Both are answered out of an in-memory secret store
+  that a restart empties, and nothing re-primed it, so the pull broadcast to
+  holders none of which could reply. The supply side (`hydrateStore` for the
+  root, `hydrateStoreFromFiling` for nskeys) now runs at start — and, the
+  second half of the same defect, runs **before** the start-time sweep
+  rather than after it: a sweep consumes and deletes the requests it finds
+  and answers them from that store, so hydrating afterwards destroyed
+  exactly the requests it was meant to serve.
+- fix (experimental): **per-enrollment secrets are no longer served on
+  namespace authorization alone.** The signing-root private travels under a
+  reserved `__en.` name, and the answer path checked only that the requester
+  was approved for the namespace — a bar any enrollment clears — so a
+  namespace-scoped enrollment could ask for the key that vouches for every
+  enrollment on the atSign and be handed it. `PairwiseSecretSharing`
+  `perEnrollmentSecretRequestGate` decides instead, failing closed when
+  unset; `AtClientSecretSharing` wires the resolver that requires the
+  requester's enrollment record to grant `rw` on `*` and `__manage`.
+- fix (experimental): a conveyed signing-root private is **verified against
+  the published root** before it is filed — it signs a probe the record's
+  public half must verify. Previously any bytes were stored, and with the
+  record immutable and the root never rotating, wrong bytes stuck for good.
+- fix (experimental): a **failed publish of the signing root is no longer read
+  as a lost create.** The refusal of a second create and a dropped connection
+  on a write that landed throw identically; the catch now reads the record to
+  tell them apart, keeps the pair when the published key is its own, and —
+  when the record cannot be read at all — keeps the pair and logs at `severe`
+  rather than retiring on an unknown outcome. Retiring the private for a root
+  this client did publish would leave the atSign with an immutable,
+  non-rotating record nobody holds the key to.
+- fix (experimental): the signing-root pull works **across app namespaces**.
+  The root is atSign-level and carries no namespace, but a holder files it in
+  its store under whichever namespace it runs in, and the answer path listed
+  the store filtered by the requester's namespace — so two privileged
+  enrollments of one atSign in different apps never matched and the request was
+  silently never answered. Explicitly named per-enrollment secrets are now
+  answerable from any namespace the holder holds them in; a prefix or bare
+  request still cannot reach another app's material.
+- fix (experimental): every start now **reconciles a held signing-root private
+  against the published record** and retires one that corresponds to nothing.
+  Such a private is not inert: it satisfies the pull's "already holding it"
+  guard so the enrollment never asks, makes `store` drop a correct private
+  conveyed to it, gets signed into the chain link, and is offered to other
+  enrollments. The reconciliation existed only inside the mint, which runs
+  once per keyfile — so the "a later start reconciles it" the logs promise is
+  now true.
+- fix (experimental): the holder's start-time priming reads the **keyfile**
+  rather than asking the atServer which namespaces this enrollment is
+  authorised for. That lookup goes through `enrollmentService`, which
+  `AtClientManager` wires only after client construction and whose getter
+  throws until then — so for every APKAM-enrolled client the priming silently
+  did nothing. What a holder can answer with is what it holds.
+- fix (experimental): the loser of the signing-root create no longer keeps
+  the private it filed before publishing. Left active it satisfied the pull's
+  "already holding it" guard forever, so the one heal a loser has could never
+  fire; it is now retired (dead, never removed), as is a held private that
+  does not correspond to a published root. Both halves of a minted pair are
+  filed, so a crash between filing and publishing republishes the held pair
+  instead of minting a fresh one over a private nobody could match.
+- fix (experimental): `selfRetrofit` carries the session's namespace onto the
+  re-authentication, so the switched-to client's start-time self-heal — the
+  root pull, the nskey pulls, the store hydration — actually runs. Without
+  it a retrofitted client did none of them while looking healthy.
 - feat (experimental): the self-retrofit orchestration. `selfRetrofit(...)`
   runs submit → re-authenticate → switch, handing back a manager whose
   current client runs under the new ML-DSA enrollment as a NEW

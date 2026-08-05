@@ -61,28 +61,24 @@ const b2 = 'blocked: B-2 (nskey rotation + revocation) · $_functional';
 // ---------------------------------------------------------------------------
 // Retrofit + onboarding. RF-SRV moved ONTO the GA critical path 2026-08-05
 // (decisions.md 40) — every migration scenario conjugates "upgrade the
-// enrollment", and that verb is RF-SRV's. The server half is spiked
-// (at_server branch gkc-pq-rfsrv-spike, wire shape frozen by decisions.md 42
-// item 1) and RF-2b's client half landed 2026-08-05 with live coverage
-// (tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart:
-// no-OTP auto-approve, ML-DSA PKAM under the new id, mint-once, tagged
-// _apsk). The B1 rows stay skipped because their THEN clauses also demand
-// the signing-root interplay and clone orchestration — RF-2c's e2e, not the
-// submit path.
+// enrollment", and that verb is RF-SRV's.
+//
+// The B1 and B2 rows went green 2026-08-05 (decisions.md 45): RF-2b's submit
+// half is proven in the functional pack, and the retrofit e2e rows prove the
+// signing-root step in-flow, two clones reaching distinct enrollment ids, and
+// the capped legacy enrollment refused with AT0028 while an un-retrofitted
+// sibling still authenticates. `owedB1` is gone with them.
+//
+// UC-B0.1 keeps `rfSrv`, and it is the only row that does: it is the one
+// scenario that needs an atServer WITHOUT the retrofit verbs to abort
+// cleanly against, and no harness in this repo provides a legacy server
+// image. That is a harness gap, not an unlanded project — re-scope or waive
+// it the way UC-A3.2 was.
 // ---------------------------------------------------------------------------
 
 /// atServer authenticated self-retrofit enroll (auto-approve + expiry cap).
 /// On the GA critical path per decisions.md 40.
 const rfSrv = 'blocked: RF-SRV (server self-retrofit enroll) · $_e2e';
-
-/// RF-2b landed 2026-08-05 (decisions.md 43) and RF-2c's switch-over with it
-/// (decisions.md 44: `selfRetrofit`, the per-enrollment signing algorithm
-/// threaded to every connection, enrollment-scoped key-package adoption).
-/// What these rows still need is the e2e coverage itself.
-const owedB1 = 'owed: the UC-B1.x e2e rows — signing-root in-flow '
-    '(privileged mint/convey vs request+verify; a scoped enrollment skips '
-    'it), two clones of one pre-PQ keyfile reaching DISTINCT enrollment ids, '
-    'and the capped legacy enrollment observed ageing out · $_e2e';
 
 /// PQ-native greenfield onboarding + legacy-interop flag.
 const on1 = 'blocked: ON-1 (PQ-native onboarding) · $_functional';

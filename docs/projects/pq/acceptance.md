@@ -677,6 +677,11 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
   ruling).
 - **Impl/verify (B1.x):** **RF-SRV** (server auto-approve), **RF-2b** (client
   mint+request), **RF-2c** (orchestration); harness `tests/at_end2end_test` runLocal.sh.
+  **All three green 2026-08-05** — `tests/at_end2end_test/test/retrofit_e2e_test.dart`
+  drives the signing-root step in-flow (privileged mint, clone request+verify,
+  scoped skip) and the two clones reaching distinct enrollment ids; the submit
+  half is `tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart`.
+  See [`decisions.md` 45](decisions.md#45-the-retrofit-rows-and-the-five-defects-the-first-end-to-end-run-found-2026-08-05).
 
 ## 9. B2 · Legacy retirement & lockout
 
@@ -700,7 +705,15 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
   UC-B2.1 applies. (Bypass open during the window — explicit trade-off.)
 
 - **Cross-ref:** `decisions.md` (retirement ruling); `design.md` (expiry copy/cap).
-- **Impl/verify:** **RF-SRV** + **RF-2c**.
+- **Impl/verify:** **RF-SRV** + **RF-2c**. **Both green 2026-08-05** —
+  `tests/at_end2end_test/test/retrofit_retirement_e2e_test.dart`, on the one
+  atSign whose atServer `runLocal.sh` gives a zero-hour
+  `apkamSelfEnrollmentGraceHours` (720h is the ratified default, and a row
+  cannot wait a month). The un-upgraded copy is refused with `AT0028 …
+  expired or invalid`; a sibling legacy enrollment that never retrofitted
+  still authenticates in the same run, and the same test against the default
+  grace shows the copy authenticating normally — so the window is what
+  decides, not the retrofit alone.
 
 ## 10. B3 · Mixed-PQ within one atSign
 

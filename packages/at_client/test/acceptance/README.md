@@ -13,7 +13,9 @@ is how far we've got.
 > marker/negotiation machinery** (`decisions.md` 36), so the B3, B4 and
 > readiness-invariant rows were re-proven against the app-decides model: the
 > two-release ladder asserted directly, the B4 rows cited to the live
-> cold-start and data-path tests. The suite reads **28 of 40**
+> cold-start and data-path tests. The retrofit rows followed on 2026-08-05
+> (`decisions.md` 45): the B1 trio and both B2 rows are now cited to live e2e
+> coverage. The suite reads **33 of 40**
 > scenario rows green, up from 1 before the repair and 5 after it. (The runner's own count
 > is higher — it includes `catalogue_test.dart`'s three guards, which are not
 > scenarios. That gap is why the old "4 of 43" figure was itself wrong in the
@@ -101,8 +103,8 @@ below), plus 9 cross-cutting invariants.
 | A4 · shared data              | A4.1 ✅, A4.2 ✅, A4.3 ✅, A4.4 ✅  | —            |
 | A5 · rotation & revocation    | A5.1(a), A5.1(b), A5.2, A5.3     | B-2          |
 | B0 · atServer prerequisite    | B0.1                             | RF-SRV       |
-| B1 · retrofit                 | B1.1, B1.2, B1.3                 | owed: e2e    |
-| B2 · retirement & lockout     | B2.1, B2.2                       | RF-SRV       |
+| B1 · retrofit                 | B1.1 ✅, B1.2 ✅, B1.3 ✅           | —            |
+| B2 · retirement & lockout     | B2.1 ✅, B2.2 ✅                    | —            |
 | B3 · mixed-PQ intra-atSign    | B3.1 ✅, B3.2 ✅                    | —            |
 | B4 · mixed-PQ cross-atSign    | B4.1 ✅, B4.2, B4.3 ✅, B4.4 ✅     | ON-1         |
 | B5 · retrofit edge cases      | B5.1 ✅, B5.2 ✅, B5.3 ✅           | —            |
@@ -123,10 +125,15 @@ the 40** rows, and no data-path row could go green until **B-1** (XL) and
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**12 of the 40** rows are skipped. Nine are *blocked* on a project that has
-not landed — B-2, RF-SRV, ON-1 — and three (the B1 retrofit rows) are *owed a
-test*: RF-2b and RF-2c's switch-over both landed 2026-08-05, so what those
-rows need is the e2e coverage itself, not another project. The guard asserts
+**7 of the 40** rows are skipped, and all seven are *blocked* on a project
+that has not landed — B-2, ON-1 — with one exception that is worth naming
+separately: **UC-B0.1** is labelled `RF-SRV` but is really blocked on the
+*harness*. It needs a PQ-capable client to abort cleanly against an atServer
+that has none of the retrofit verbs, and no suite here can produce a legacy
+atServer image to run it against. Re-scope or waive it the way UC-A3.2 was,
+rather than leaving it looking like it is waiting on code that already
+exists. Nothing is *owed a test*: the last such rows, the B1 trio, were
+discharged 2026-08-05 by the retrofit e2e coverage. The guard asserts
 the skipped total, which is what it can measure; the blocked/owed split lives
 in `blockers.dart`'s labels and in this sentence. That is a much more
 useful ledger than the one this started as: grep a project id and you get

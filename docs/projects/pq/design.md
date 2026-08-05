@@ -939,10 +939,15 @@ sequence in [`acceptance.md`](acceptance.md).)
    its existing expiry)` WITHOUT removing it**. The old enrollment ages out on the
    expiry timer; it is not deleted in place.
 4. The new client **registers** its key package (already carried in step 1's
-   `EnrollParams.metadata` — no post-enrollment write), then **pulls** the signing
-   root (if fully privileged) + the namespace nskey privates over the substrate ([§2.2](#22-secretstore-push--pull-primitives)), **verifies
+   `EnrollParams.metadata` — no post-enrollment write), then acquires the signing
+   root — **minting it in-flow if fully privileged and the atSign publishes none,
+   otherwise pulling it** — plus the namespace nskey privates over the substrate ([§2.2](#22-secretstore-push--pull-primitives)), **verifies
    correspondence**, and stores them in the local keystore (the extended `AtKeys`,
    via its injected `AtKeysIo`, [§4](#4-subsystem-d--structural-design-cryptoprovider-seam-atkeysatkeysio--key-stores-wasm-barrel)).
+   The mint belongs to this flow and not to client start: the retrofit is
+   auto-approved by the atServer with no approver client in the loop, so the
+   approve-time conveyance that gives an ordinary new privileged enrollment its
+   root never fires for a retrofitted one.
 
 **Each cloned pre-PQ keyfile retrofits to its OWN distinct `enrollmentId`** (1:1:1).
 A keyfile copied onto a second host mints its own single, *different* PQ APKAM
@@ -983,6 +988,27 @@ This flow is **on the D1 GA critical path**: it is the "upgrade the enrollment"
 verb every migration scenario conjugates. Its server half is **built** on the
 at_server spike (self-enroll + subset check + sliding expiry cap + tagged
 `_apsk`); the revocation cascade is the piece still owed.
+
+**As built, and where the code had drifted from this section
+([`decisions.md` 45](decisions.md#45-the-retrofit-rows-and-the-five-defects-the-first-end-to-end-run-found-2026-08-05)).**
+Three sentences above described behaviour that did not exist until the e2e rows
+were written, which is worth recording because the design was right and the
+implementation had quietly diverged from it:
+
+- *"seeds it as the conveyable root secret, and serves it on request"* — the
+  serving side had no seed. A holder answers out of an in-memory store a restart
+  empties, and nothing re-primed it, so no holder could answer a pull. Now
+  primed at start, and **before** the start-time sweep, because that sweep
+  consumes the requests it would answer.
+- *"to the other fully privileged enrollments only"* — the answer path checked
+  namespace authorization only, which any enrollment approved for the namespace
+  clears. The privilege gate is real now, and fails closed.
+- *"verifies public/private correspondence, and stores"* — filing stored
+  whatever arrived. It now signs a probe the published root must verify.
+
+Also: a loser of the create **retires the pair it filed before publishing**.
+Left active it satisfied the pull's "do I already hold it?" guard forever,
+which is the one heal a loser has.
 Constraints beyond the ruling above:
 
 - **Revocation must cascade.** Self-enrollment makes enrollments a parent/child

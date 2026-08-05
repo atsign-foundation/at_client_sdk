@@ -55,6 +55,11 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [39. `_apsk` rides the same two-stage ladder (2026-08-05)](#39-_apsk-rides-the-same-two-stage-ladder-2026-08-05) — *3.x publishes as today and learns the new form; 4.x new enrollments publish self-describing mldsa65*
 - [40. RF-SRV is the mechanism the whole model stands on (2026-08-05)](#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05) — *moves onto the GA critical path; revocation must cascade*
 - [41. The to-define list (2026-08-05)](#41-the-to-define-list-2026-08-05) — *the ruled/open boundary, 12 items with owners*
+- [42. The to-define list, ruled (2026-08-05)](#42-the-to-define-list-ruled-2026-08-05) — *all 12 ruled; the 720h grace and the tagged `_apsk` format frozen*
+- [43. RF-2b lands, and what the first genuine ML-DSA PKAM found (2026-08-05)](#43-rf-2b-lands-and-what-the-first-genuine-ml-dsa-pkam-found-2026-08-05) — *3 defects under machinery that had read as complete for weeks*
+- [44. RF-2c: the switch-over, and what it cost to make a client PQ (2026-08-05)](#44-rf-2c-the-switch-over-and-what-it-cost-to-make-a-client-pq-2026-08-05) — *5 places the enrollment's algorithm and identity failed to travel*
+- [45. The retrofit rows, and the five defects the first end-to-end run found (2026-08-05)](#45-the-retrofit-rows-and-the-five-defects-the-first-end-to-end-run-found-2026-08-05) — *B1/B2 green; the pull had no answerer, no gate and no correspondence check*
+- [46. RFC 9180, and where the design's version hatches are (2026-08-05)](#46-rfc-9180-and-where-the-designs-version-hatches-are-2026-08-05) — *pqSeal stays custom until D2; two signed payloads carry no version, and the signing root is unrewritable*
 
 ---
 
@@ -3578,3 +3583,421 @@ code path does it.
   construction — so flipping the root level later is retroactively inert
   for every already-built object. Concluding "the owner never sent it" from
   that absence would have been wrong.
+
+## 45. The retrofit rows, and the five defects the first end-to-end run found (2026-08-05)
+
+UC-B1.1/B1.2/B1.3 and UC-B2.1/B2.2 are green, proven live in
+`tests/at_end2end_test/test/retrofit_e2e_test.dart` and
+`retrofit_retirement_e2e_test.dart`. The burn-down reads **33 of 40**.
+
+The rows are what RF-2c owed. Writing them found **five defects**, none of which
+any unit suite could have shown, because each is about what two enrollments and
+a live atServer do to each other in sequence.
+
+### 45.1 The signing-root step now runs in the retrofit flow
+
+`PqSigningRoot.mintIfAbsent` had **no production caller** — only tests. The
+retrofit is auto-approved by the atServer with no approver client in the loop,
+so the approve-time conveyance that gives an ordinary new enrollment its root
+never fires for it. A privileged retrofit could therefore complete, look
+entirely healthy, and leave the atSign with no root at all.
+
+`selfRetrofit` now resolves privilege from the atServer's enrollment record
+after the switch-over and mints if the atSign publishes none. Inside its own
+guard: the retrofit has already succeeded by then and the client is returned
+either way.
+
+### 45.2 The pull had nobody who could answer it
+
+`requestPrivateIfAbsent` broadcasts to the namespace's key packages, and a
+holder answers **out of its in-memory secret store** — which a restart empties.
+Nothing ever re-primed that store with the root private a holder had filed
+durably, so after any restart every holder was deaf and the request went out
+to a world that could not reply. `PqSigningRoot.hydrateStore` is the supply
+side, wired at start.
+
+### 45.3 And the one sweep every client performs destroyed the requests
+
+Worse, and only visible once 45.2 was fixed: client start swept **before** it
+hydrated. A sweep consumes and *deletes* the envelopes it finds — pull requests
+included — and answers them from the store. A holder that hydrated afterwards
+was therefore guaranteed to destroy precisely the requests it was meant to
+serve, and the requester, having spent its broadcast, waited for an answer that
+no longer had anything to arrive from. The same ordering applied to the nskey
+self-heal, whose `hydrateStoreFromFiling` sat after the same sweep.
+
+Both supply sides now run first, in `_hydrateHeldSecretsForAnswering`, before
+anything sweeps.
+
+This is the sharpest lesson of the day, and it is a **generalisation of the
+listener-before-trigger rule to store-and-forward**: when a request and the
+material that answers it arrive through the same consuming sweep, the order
+of *preparation* against *consumption* is a correctness property, not a
+detail. It cost two e2e runs to find, and the tell was that the mechanism
+worked perfectly when driven by hand in a different order.
+
+### 45.4 Nothing stopped a scoped enrollment being handed the root
+
+The answer path authorized requesters at **namespace** level only — the bar any
+enrollment approved for the namespace clears. The signing-root private travels
+as an ordinary secret under a reserved `__en.` name, so a namespace-scoped
+enrollment could ask for the key that vouches for every enrollment on the
+atSign and be served it. The requester-side guard that refuses to *ask* is a
+courtesy; a modified client omits it.
+
+`PairwiseSecretSharing.perEnrollmentSecretRequestGate` now decides. It **fails
+closed** when unset, and `AtClientSecretSharing` wires the production resolver,
+which reads the requester's enrollment record off the atServer and requires
+full privilege. The pre-existing functional pull test was conveying the root to
+a scoped enrollment and passing; it now uses privileged enrollments and carries
+a scoped-refusal arm.
+
+### 45.5 A conveyed root private was filed without being checked
+
+`PqSigningRoot.file` stored whatever bytes arrived. A 32-byte buffer was filed
+byte-for-byte and read back as "the root private" — and with the record
+immutable and the root never rotating, that sticks. Filing now signs a probe
+with the arriving private and verifies it against the published root, and
+refuses on mismatch (safe: the keyfile stays empty, so the next start asks
+again and a correct answer heals it). Two shapes of wrong key are covered — a
+garbage buffer and a well-formed ML-DSA key that simply is not this one.
+
+### 45.6 A create-race loser kept a private that corresponded to nothing
+
+The mint files its private *before* publishing, deliberately. But the loser of
+the immutable create was leaving that private filed and **active**, so the
+pull's cheapest guard — "do I already hold it?" — answered yes forever and the
+one heal a loser has could never fire. `mintIfAbsent` now retires the losing
+pair (dead, not removed: `AtKeys` never removes material), and reconciles a
+held private that does not correspond to a published root the same way. Two
+more shapes fell out of writing it: a crash between filing and publishing now
+republishes the **held** pair rather than minting a fresh one over a private
+nobody could match, and both halves are filed so that recovery is possible at
+all.
+
+### 45.6b A failed publish is not evidence of a lost create
+
+Also from the adversarial review, and the most dangerous thing it found. The
+loser-retirement of 45.6 hung off the publish call's exception — but a throw
+there says the *call* failed, not what the atServer did. The refusal of a second
+create and a dropped connection on a write that **landed** throw identically,
+and they need opposite handling. Retiring the pair in the second case leaves the
+atSign with an immutable, non-rotating record whose private nobody holds:
+unrecoverable, and caused by the recovery code.
+
+The catch now asks the record instead of guessing. Published key equals this
+client's → the write landed, keep the pair and anchor. Somebody else's, or none
+→ genuinely lost, retire. **Cannot read it → keep the pair and say so at
+`severe`**, because a later start can reconcile a held pair against the record
+while a retired private cannot be un-retired.
+
+This is the "never widen a `try` across an operation boundary" rule in its
+sharpest form: the failure of the *report* was being read as the failure of the
+*operation*, and the handler for one destroyed the other's state.
+
+### 45.6c The pull could never cross an app namespace
+
+The signing root is atSign-level and carries no namespace — the design says so
+in three places — but a holder can only file it in its store *under* some
+namespace, and the answer path listed the store filtered by the requester's app
+namespace. So two privileged enrollments of one atSign belonging to different
+apps never matched: the holder primed under its namespace, the requester asked
+in its own, and the pull that is the only route to an unrotatable key was
+silently never answered. (Every test had both sides in one namespace, which is
+why nothing caught it.)
+
+Explicitly **named** per-enrollment secrets are now answerable from any
+namespace the holder holds them in. Named only: a prefix or bare request still
+cannot reach another app's material, and *who* is served is unchanged — the
+privilege gate above decides that, and it is stricter for exactly these names.
+
+### 45.7 Server: a retrofitted child inherited an expiry it never enforced
+
+The APKAM self-enrollment branch stored `apkamKeysExpiryDuration` in the
+enrollment's JSON while writing **no ttl on the record**, so a child inheriting
+a one-hour key-expiry posture never physically expired. A deployment's expiry
+policy silently became immortality at the moment of upgrade. Fixed to mirror the
+ordinary approve path, red-first.
+
+### 45.7b And a child could state an expiry that outlived its parent
+
+Found by the adversarial review over the diff, and the sharpest thing in this
+section: `verifyNoEscalation` guards **namespaces**, and nothing guarded
+**time**. `apkamKeysExpiryInMillis` came off the wire and was honoured verbatim,
+so on the one enrollment path with no human in the loop, a stolen keyfile whose
+enrollment was deliberately bound to an hour could self-enroll a child stating
+`0` — the keystore's *never expires* — and walk away with a permanent
+credential. A negative value did the same by a different route: the metadata
+builder skips a negative ttl entirely, leaving `expiresAt` null. And the
+immortal child, its own recorded posture now zero, would never re-enter
+`_capEnrollmentExpiry`'s `ownMs > 0` branch when it later became a parent, so
+the whole lineage escaped the bound the original credential was issued under.
+
+A stated posture may now only **narrow** the parent's. Clamped rather than
+refused, so a client asking for longer without knowing is corrected instead of
+broken, and logged at `warning` because it is a request that was not honoured.
+
+Worth stating plainly: writing the child's ttl (45.7) is what made expiry
+*enforced* rather than merely recorded, and enforcing a requester-controlled
+value is what turned a dormant gap into a live one. The fix belongs with it.
+
+### 45.8 The harness: watching a cap age out
+
+UC-B2's rows need a capped enrollment to actually elapse, and the ratified grace
+is 720 hours. `runLocal.sh` now gives **one atSign** — `fourthAtSign` — a
+zero-hour `apkamSelfEnrollmentGraceHours` by replacing its secondary's shared
+`config` symlink with a private copy and restarting that one program. Per
+secondary rather than the container-wide env var, because at grace 0 a retrofit
+kills its parent within a millisecond and the B1 clone rows need a parent that
+survives its sibling's retrofit.
+
+The row is a **differential on both axes**: a sibling legacy enrollment that
+never retrofits still authenticates in the same run (so the lockout is the cap,
+not the environment), and the same test against the default grace shows the
+un-upgraded copy authenticating normally (so the window is what decides). The
+refusal is asserted as `AT0028 … expired or invalid` by name rather than as any
+throw.
+
+### 45.6d "A later start reconciles it" was a promise nothing kept
+
+The completeness critic's finding, and the one that closes 45.6b's loop. All
+three recovery arms lived inside `mintIfAbsent`, whose only production caller
+is the retrofit — a once-per-keyfile flow. So the severe log that says *"a
+later start reconciles it against the record"* named a start path that did no
+such thing, and the state it describes is self-entrenching: a private
+corresponding to nothing published satisfies the pull's cheapest guard so the
+enrollment never asks; `store` treats it as already-held and drops a correct
+private conveyed to it; the chain link gets signed with it; and — once
+hydration landed — it is *offered to other enrollments*, spending their
+broadcast on bytes their own check then rejects.
+
+`reconcileHeldPrivate` now runs on the ordinary start path, before hydration.
+A mint happens once per keyfile; a start happens every time, which is where a
+heal belongs.
+
+### 45.6e The keyfile, not the enrollment record, decides what a holder primes
+
+Fixing 45.3 broke it in a way only the review caught: the reorder put
+hydration *before* `AtClientManager` wires `enrollmentService`, whose getter
+**throws** until then. `authorisedNamespaces` swallows that and reports "no
+authorised namespaces", so for every APKAM-enrolled client the nskey supply
+side primed nothing — silently, on every start — and the sweep that followed
+went straight back to destroying requests it could not answer. The fix that
+had just landed was inert for the population it mattered most to.
+
+Priming now reads the **keyfile** (`NskeyPrivateFiling.readAll`, parsing the
+`nskey.<namespace>.<kid>` key id). No round trip, no service dependency, no
+ordering to get wrong — and it is the more correct question anyway: what a
+holder can answer with is what it *holds*, not what it is *authorised for*.
+
+Two lessons worth keeping. **A getter that throws is a control-flow edge**,
+and one swallowed two layers up is invisible: this failed silently in exactly
+the population it was written for. And **fixing an ordering bug is itself an
+ordering change** — the fix inherited the class of problem it removed.
+
+### 45.9 The review found five of the ten
+
+Five defects came out of writing the rows; **five more came out of an
+adversarial review over the finished diff** — the expiry escalation (45.7b),
+the publish-ambiguity brick (45.6b), the cross-namespace pull (45.6c), the
+unreachable reconciliation (45.6d) and the inert hydration (45.6e). All five
+are in code written that same day, all five were reachable in production, and
+none was a style note.
+
+Three of the five are in **recovery** paths, which is the pattern worth
+carrying: code that runs only when something has already gone wrong gets the
+least exercise and does the most damage. Two more, 45.6d and 45.6e, are the
+same shape one level up — *the fix for a defect carried the defect's own
+class*: a heal with no caller, and an ordering fix with an ordering bug.
+
+The review also caught two **tests that proved nothing**. The first
+cross-namespace test reused a secret name the group's `setUp` had already
+seeded under the requester's namespace, so the ordinary lookup answered and it
+passed with the fix reverted. The negative-expiry server test read a missing
+ttl as `?? 0` and so passed for the absence it was pinning against. Both were
+caught only because the red proof was actually *run* rather than assumed —
+which is the whole value of the rule.
+
+### 45.10 What is still owed
+
+**UC-B0.1** — a PQ-capable client aborting cleanly against a *legacy* atServer —
+remains the one skipped retrofit row, and it is blocked on the **harness**, not
+on RF-SRV: no suite here can produce an atServer image without the retrofit
+verbs. Re-scope or waive it, the way UC-A3.2 was; leaving it labelled `RF-SRV`
+reads as waiting on code that already exists.
+
+## 46. RFC 9180, and where the design's version hatches are (2026-08-05)
+
+Writing the at_java hand-off deck put a sentence on a slide — `pqSeal` is not
+RFC 9180 HPKE, it is an Atsign-internal envelope with a custom key schedule —
+and that raised two questions. Should we move to RFC 9180 now, and is anything
+else here homegrown where a standard exists? For the constructions the answer is
+that they can wait. For the *versioning around them* it is that two signed
+payloads carry no version at all, and one record can never be rewritten.
+
+This entry records the analysis. No code changed.
+
+### 46.1 pqSeal stays custom, and D2 is when we revisit it
+
+Two escape hatches exist and both are real. `ver` is the envelope's first byte,
+checked before anything else, and an unknown value raises a typed
+`versionMismatch` rather than a garbled decrypt; `_suiteLabelFor(version)` then
+domain-separates the key schedule per version, so a `0x02` construction cannot
+be confused with a `0x01` one even if the dispatch were wrong. Above that,
+`appMetadata.providerId` names every algorithm a reader needs code for
+([16](#16-a-provider-id-names-every-algorithm-a-reader-needs-code-for-2026-08-02)),
+so a different construction can arrive as a different provider id and coexist
+per value, with reads staying universal.
+
+Against moving now: the prize is interop with off-the-shelf HPKE, and it does
+not exist for this ciphersuite yet. X-Wing needs an HPKE KEM id *and* library
+support in both Dart and Java, and without both, "use the standard" means
+hand-writing HPKE's key schedule in two languages, which is the same bespoke
+code with a specification attached. (I have not verified the current CFRG and
+IANA position; check it before D2 rather than assuming either way.) We also use
+exactly one mode — Base, single-shot, a fresh encapsulation per message — so
+HPKE's psk modes, sequence numbers, `base_nonce ^ seq`, exporter secrets and
+multi-message contexts buy nothing here. And X-Wing's own combiner is
+`SHA3-256(ss_M || ss_X || ct_X || pk_X || label)`
+(`x_wing_pure_dart.dart:172`), so `ct` and `pk` are already bound, which is what
+DHKEM's `kem_context` gives HPKE.
+
+For moving eventually: reviewability. "RFC 9180 Base mode, KEM=X-Wing,
+KDF=HKDF-SHA256, AEAD=AES-256-GCM" is a sentence an auditor checks, where an
+HPKE-shaped custom schedule is one they have to read line by line. **D2 forces
+the question anyway**, since MLS uses HPKE natively and `at/pqmls` brings an
+HPKE implementation into the tree regardless. Aligning D1's seal to it at that
+point is consolidation rather than migration, which is why D2 is the trigger.
+
+D1 therefore keeps `pqSeal`, and `ver = 0x02` is reserved for an RFC 9180
+encoding.
+
+One thing a standard would have given us free, and has not: a committed
+cross-language test-vector file that at_java conforms to. Not built.
+
+### 46.2 The versioning audit
+
+| Structure | Carries a version? | Replaceable later? |
+|---|---|---|
+| `pqSeal` envelope | `ver` byte + a per-version suite label | yes, as `0x02` |
+| `SecretEnvelope` | `v` and `suite` | yes, but see [46.4](#464-the-sealing-suite-is-stamped-not-negotiated) |
+| `KeyPackage` payload | `v`, plus `keys[].alg` | yes |
+| Approval-chain link payload | `v` | yes |
+| Tagged `_apsk` value | `v` | yes |
+| A value's `appMetadata` | `providerId` names the algorithms | yes, per value |
+| **Signed-envelope wrapper** | **none** | see [46.3](#463-the-signed-envelope-signs-re-encoded-json) |
+| **nskey advertisement payload** | **none** | see [46.3](#463-the-signed-envelope-signs-re-encoded-json) |
+| `pq_signing_root` record | `v` and a reserved `successor` | **no** — see [46.5](#465-the-signing-root-is-the-only-one-way-door) |
+
+### 46.3 The signed envelope signs re-encoded JSON
+
+`signEnvelope` returns `{payload, signature, hashingAlgo, signingAlgo,
+enrollmentId?}`, and `verifyEnvelope` re-derives the signed bytes with
+`signableTextOf(envelope['payload'])`, which is `jsonEncode` of the *decoded*
+payload. So the signature covers non-canonical JSON, and it holds only while one
+serialiser sits on both ends. The code says as much itself: stable "because Dart
+maps preserve insertion order through a `jsonEncode`/`jsonDecode` round trip".
+Java offers no such guarantee across libraries — Gson HTML-escapes `<`, `>`,
+`&`, `=` and `'` by default, and number formatting and non-ASCII escaping vary
+by library and configuration. This is the class of defect that passes every Dart
+test and fails on the first cross-language envelope.
+
+Two things soften it. `signableTextOf` already signs a `String` payload as-is,
+so a JWS-shaped payload (base64url of the canonical bytes) would verify under
+today's verifier with no change to the signing code; and the two-release model
+already carries a shape change of this kind. What it does not carry is the
+consumers: `ApkamSignedAdvertisedKeys.verify` requires `envelope['payload']` to
+be a `Map` and rejects a `String`, so an old reader fails at the parse rather
+than at the signature.
+
+The standard answers are **JWS (RFC 7515)**, which removes canonicalisation from
+the problem by signing the encoded bytes, and **JCS (RFC 8785)** where the JSON
+has to stay readable.
+
+The defect underneath is narrower than the canonicalisation question, and worse:
+neither the wrapper nor the nskey advertisement payload carries a version, so a
+reader has nothing to dispatch on if the construction changes. Every other
+signed payload in the design carries one. Adding `v` costs one line today and a
+coordinated two-SDK release once at_java is in the field.
+
+### 46.4 The sealing suite is stamped, not negotiated
+
+The sender always stamps `SecretSharingAlgos.xWingHpke`
+(`pairwise_secret_sharing.dart:255`) and a receiver checks membership and skips
+with a `warning` when it cannot open the suite (`:454`). A key package
+advertises `keys[].alg` but not which *suites* its holder can open, so a sender
+has no way to discover that. A second suite therefore needs every reader
+upgraded first, which the two-release model handles, so suite agility here is a
+release-ordering property rather than a negotiated one. Worth knowing, because
+the presence of a `suite` field reads like more agility than there is. If we
+want it negotiated, the place is a `suites` list beside `keys[]` in the key
+package, and the key-package format is what at_java is about to fix in a second
+implementation.
+
+### 46.5 The signing root is the only one-way door
+
+`public:pq_signing_root@<atSign>` is immutable and never rotates. Its value
+carries `v: 1` and a reserved `successor`, but the record cannot be rewritten,
+so the version field cannot save it: a later reader can *detect* a v1 root, and
+nobody can *replace* one. `successor` is the only migration path and it is
+unimplemented ([18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)).
+
+The format also disagrees with its own documentation. The code publishes
+`{"v":1,"keys":["<base64>"],"successor":null}` (`pq_signing_root.dart:208-211`)
+and reads it back as `base64Decode((record['keys'] as List).first as String)`
+(`:108`), while `acceptance.md`'s key-objects section documents `keys` as
+`[{"alg":"ml-dsa-65","pub":"<base64>"}]`. The one structure that can never be
+rewritten is the one whose shape the docs and the code disagree about.
+
+Recycled virtualenv roots are disposable, so nothing is lost yet. The moment a
+root is published on an atSign we do not recycle, the shape is permanent.
+Settling which of the two forms is correct is the only item here with a
+deadline.
+
+### 46.6 The rest of the sweep, homegrown against standardised
+
+Read rather than assumed:
+
+- **HKDF-SHA256** (`hkdf.dart`) is RFC 5869 extract-then-expand, and its
+  empty-salt shortcut is genuinely HMAC-equivalent to the RFC's zero-filled
+  default.
+- **X-Wing** follows `draft-connolly-cfrg-xwing-kem-10`, combiner and SHAKE-256
+  seed expansion included. It is a CFRG draft rather than an RFC, and drafts
+  have changed the combiner between versions, so interop is pinned to draft-10
+  and a draft advance is a `ver = 0x02` event. X-Wing is also not a
+  NIST-approved construction, which would matter to a FIPS requirement; recorded
+  so it is a known choice rather than a later discovery.
+- **ML-KEM-768** (FIPS 203), **ML-DSA-65** (FIPS 204), **X25519** (RFC 7748),
+  **AES-256-GCM** (SP 800-38D), **SHA-3 / SHAKE-256** (FIPS 202) and
+  **Argon2id** (RFC 9106) are all standard.
+- **Legacy AES-256-CTR falls back to a 16-byte zero IV** when none is supplied
+  (`encryption_util.dart:15-22`, and `aes.dart`'s `_getIVFromBytes`, both
+  carrying the same "from the bad old days when we weren't setting IVs"
+  comment). Under a long-lived `selfEncryptionKey`, two records sharing that IV
+  share a keystream. It is legacy and being retired, and how much live data
+  still carries a null `ivNonce` is worth measuring, since for some audiences it
+  is a stronger argument for the D1 migration than the quantum one. PKCS7
+  padding on a stream cipher is pointless and leaks length granularity.
+- **MD5** survives as the `pubKeyCS` checksum
+  (`legacy_encryption.dart:70-72`), already paralleled by a SHA-512
+  `pubKeyHash`. It retires with the legacy provider.
+- **Base2e15** is a homegrown binary-to-text encoding rather than crypto, and
+  at_java has to reproduce it byte-exactly.
+- **The kid derivations** are truncated SHA-256, a convention rather than a
+  standard, and sound as used: collisions are refused rather than overwritten
+  (`content_key.dart`). The defect there is consistency, not strength —
+  `ckKid` and `nskeyKid` hash raw bytes while `kpid` hashes the base64 *string*
+  (`key_package.dart:29`).
+
+### 46.7 What this entry does not rule
+
+Per the rule that a ledger ruling names a mechanism only once its differential
+test is green, the above records defects and intent, not fixes. Four items are
+open with no code written:
+
+1. the signing root's `keys[]` shape, the only one with a deadline;
+2. a `v` on the signed-envelope wrapper and on the nskey advertisement payload;
+3. whether the envelope construction moves to JWS or JCS, which can wait behind
+   (2), since the version field is what makes that choice reversible;
+4. a `suites` list on the key package, cheap now for the same reason as (2) and
+   safe to defer if we accept release-ordering agility.
