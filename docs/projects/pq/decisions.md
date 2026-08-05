@@ -3527,13 +3527,27 @@ code path does it.
   returned `null` into a non-nullable getter and failed only at RUNTIME.
   `dart analyze` was clean throughout. Grep for `Mock implements <Type>`
   when adding a member to `<Type>`, before running anything.
-- **Open, not resolved: a self-notification did not reach a scoped
-  enrollment's monitor.** The monitor authenticates with genuine ML-DSA and
-  streams (captured: `pkam:signingAlgo:mldsa65:...` → `data:success`, then
+- **Open, narrowed: a self-notification did not reach a scoped enrollment's
+  monitor.** The monitor authenticates with genuine ML-DSA and streams
+  (captured: `pkam:signingAlgo:mldsa65:...` → `data:success`, then
   statsNotifications flowing), and the sender reported no exception — but a
   `notify` from the owner client for a key in the enrollment's own
   namespace never arrived. The live test asserts only what the run
   demonstrates (delivery through the monitor, which requires that socket's
-  PKAM to have succeeded); whether enrollment-scoped notification routing
-  drops self-notifications is unexamined and owed a look before RF-2c's
-  UC-B1.x rows can claim notification coverage.
+  PKAM to have succeeded).
+
+  **The obvious suspect is eliminated.** `MonitorVerbHandler._sendNotification`
+  gates delivery on `isAuthorized(..., atKey: notification.notification)` and
+  drops a failure by bare `return` — no log at any level — so it looked like
+  the cause. It is not: a probe pins the gate permitting exactly what it
+  should, the enrollment's own namespace through and a foreign namespace
+  refused (at_server `enrollment_notification_delivery_test.dart`, kept as
+  regression coverage). Whatever drops the notification is upstream —
+  creation, or the notification manager's dispatch. **Two things worth
+  fixing regardless of cause:** that silent `return` violates the
+  dropped-event rule (an event dropped in a dispatch loop logs at `warning`,
+  naming what was dropped and for whom), and it is precisely why this
+  presents as "the sender didn't send". Also note the trap it set for the
+  investigation: statsNotifications arriving proves the monitor socket
+  authenticated, and nothing more — it is not evidence that ordinary
+  notifications reach that enrollment.
