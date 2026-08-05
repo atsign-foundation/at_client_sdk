@@ -3,7 +3,7 @@ import 'package:test/test.dart';
 
 /// Tripwire tests: [KeyAlgorithmType] and [CryptographicKeyType] values are
 /// persisted in `.atKeys` files and enrollment payloads already on disk and
-/// on the wire across the atProtocol ecosystem. These tests pin the exact
+/// on the wire across the Atsign Protocol ecosystem. These tests pin the exact
 /// string literal for every existing token so an accidental rename, re-case,
 /// or "cleanup" fails CI immediately instead of silently orphaning key
 /// material written with the old value. Do NOT update an expected value to
@@ -49,10 +49,8 @@ void main() {
       expect(CryptographicKeyType.privateDecryption, 'privateDecryption');
       expect(CryptographicKeyType.publicVerification, 'publicVerification');
       expect(CryptographicKeyType.privateSigning, 'privateSigning');
-      expect(
-          CryptographicKeyType.publicEncapsulation, 'publicEncapsulation');
-      expect(
-          CryptographicKeyType.privateDecapsulation, 'privateDecapsulation');
+      expect(CryptographicKeyType.publicEncapsulation, 'publicEncapsulation');
+      expect(CryptographicKeyType.privateDecapsulation, 'privateDecapsulation');
       expect(CryptographicKeyType.publicKeyAgreement, 'publicKeyAgreement');
       expect(CryptographicKeyType.privateKeyAgreement, 'privateKeyAgreement');
     });

@@ -16,7 +16,7 @@ import 'package:at_commons/at_commons.dart';
 ///
 /// **Do not change any existing value below.** These strings are persisted
 /// in `.atKeys` files and enrollment payloads already sitting on disk and on
-/// the wire across the atProtocol ecosystem (this client, other at_client
+/// the wire across the Atsign Protocol ecosystem (this client, other at_client
 /// implementations, atServer). Renaming or re-casing one — even to fix a
 /// typo — orphans every key material that was already written with the old
 /// value: readers keyed on the old string stop recognizing it, and it fails
