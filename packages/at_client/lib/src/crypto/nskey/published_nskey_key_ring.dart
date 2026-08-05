@@ -241,6 +241,51 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
         'published no advertisement yet');
   }
 
+  /// Rotates `(currentAtSign, namespace)` onto a fresh generation: mints the
+  /// next keypair, **overwrites** the published advertisement with it, and
+  /// keeps every private this client already held.
+  ///
+  /// Retention is by construction rather than by policy — privates are filed
+  /// per `nskeyKid` and nothing removes them — which is what keeps retained
+  /// `__ck` records sealed to an earlier generation readable. Rotation
+  /// replaces the key; it does not decrypt or re-encrypt the past.
+  ///
+  /// Differs from [mintAndPublish] in one way, and it is the way that matters:
+  /// **losing the mint lock is a failure here, not a resolution.** A cold-start
+  /// mint that loses the race adopts the winner's key and is done — the atSign
+  /// has a key, which is all that was wanted. A rotation that adopts what it
+  /// finds has rotated nothing while reporting success, leaving the enrollment
+  /// the caller was rotating away from holding the live generation. Since
+  /// rotation is the revocation lever, that failure is silent *and* is the one
+  /// case where silence costs exactly what the operation was for.
+  ///
+  /// Rotating a namespace with no published key throws for the same reason: it
+  /// is a cold-start mint wearing a rotation's name, and a caller that meant to
+  /// supersede a generation should hear that there was none.
+  Future<NskeyAdvertisement> rotate(String namespace) async {
+    final owner = _atClient.getCurrentAtSign()!;
+    final superseded = await currentPublic(owner, namespace);
+    if (superseded == null) {
+      throw StateError(
+          'nothing to rotate for $owner:$namespace — no nskey is published '
+          'there, so this is a cold-start mint rather than a rotation');
+    }
+
+    final rotated = await mintLock.withLock(
+        owner, namespace, () => _mint(owner, namespace));
+    if (rotated == null) {
+      throw StateError(
+          'another enrollment holds the mint lock for $owner:$namespace, so '
+          'this rotation did not happen; retry once it releases. Reporting '
+          'success here would leave the excluded enrollment holding the live '
+          'generation');
+    }
+    _logger.info('Rotated $owner:$namespace from ${superseded.nskeyKid} to '
+        '${rotated.nskeyKid}; the superseded private is retained so records '
+        'sealed to it still open');
+    return rotated;
+  }
+
   Future<NskeyAdvertisement> _mint(String owner, String namespace) async {
     final pair = await XWingKeyPair.generate();
     final advertisement = (

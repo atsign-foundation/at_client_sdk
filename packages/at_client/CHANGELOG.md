@@ -1,4 +1,28 @@
 ## 3.14.1
+- feat (experimental): **nskey-keypair rotation and the revocation it composes
+  with** — the post-compromise-security lever, deliberately not the
+  forward-secrecy one. `PublishedNskeyKeyRing.rotate` mints the next
+  generation and overwrites the published advertisement; `NskeyRotation`
+  (`NskeyRotation.forClient(atClient)`) adds the conveyance, carrying the
+  successor private to the namespace's other enrollments and skipping any the
+  caller excludes. Every earlier private is retained by construction, so
+  retained `__ck` records sealed to a superseded generation still open —
+  rotation replaces the key, it does not decrypt or re-encrypt the past.
+  Losing the mint lock **fails** a rotation rather than adopting what it
+  finds, which is the one difference from the cold-start mint that matters: a
+  rotation reporting success without rotating leaves the excluded enrollment
+  holding the live generation.
+- feat (experimental): `NskeyRotation.revokeEnrollmentAndRotate` — revoke,
+  then rotate every namespace the enrollment could read, excluding it. The
+  **ordering is the enforcement**: revoking first drops the enrollment out of
+  `enroll:listns`, so by the time any rotation runs it is absent from every
+  roster and refused at every serve, including pulls answered by holders that
+  never heard of the operation. Rotate first and the same enrollment could
+  pull the successor from another holder in the gap. Rotation is never
+  automatic — store-and-forward cannot tell "no holder exists" from "the
+  holder is offline", so a failed pull must not re-mint; recovering a
+  namespace whose last private-holder is lost is an explicit rotation, and the
+  records sealed to the lost generation stay unreadable.
 - feat (experimental): the self-retrofit runs the **signing-root step in
   flow**. A fully privileged retrofit — privilege read off the atServer's
   enrollment record, never the grants the call requested — mints and
