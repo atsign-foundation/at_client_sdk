@@ -234,5 +234,5 @@ Future<void> _verifyAgainstApsk(
         'No _apsk published for $atSign enrollment $claimed, so its signature '
         'cannot be checked');
   }
-  verifyEnvelope(signedEnvelope, signerPublicKey: publicKey);
+  await verifyEnvelope(signedEnvelope, signerPublicKey: publicKey);
 }

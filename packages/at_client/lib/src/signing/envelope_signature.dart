@@ -16,10 +16,16 @@
 /// `RsaKeyPair`, which take their key material directly.
 library;
 
-import 'dart:convert' show base64Decode, base64Encode, jsonEncode, utf8;
+import 'dart:convert'
+    show base64Decode, base64Encode, jsonDecode, jsonEncode, utf8;
 
 import 'package:at_chops/at_chops.dart'
-    show HashingAlgoType, RsaKeyPair, RsaSigningAlgo, SigningAlgoType;
+    show
+        HashingAlgoType,
+        MlDsa65PureDartAlgo,
+        RsaKeyPair,
+        RsaSigningAlgo,
+        SigningAlgoType;
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 
 /// The APKAM key material an envelope signature needs. The public half is
@@ -80,27 +86,128 @@ Map<String, Object?> signEnvelope(
   };
 }
 
+/// A parsed `_apsk` value: which algorithm the key is for, and the key itself.
+///
+/// The published record comes in two forms, and the migration between them is
+/// the same two-release ladder as everything else
+/// (`docs/projects/pq/decisions.md` 39):
+///
+/// - **Bare (today, and everything the final 3.x publishes):** the RSA public
+///   key string exactly as `_apsk` has always carried it. Parsed as
+///   [SigningAlgoType.rsa2048].
+/// - **Tagged (what 4.x's new enrollments publish):** a JSON object
+///   `{"v": 1, "signingAlgo": "mldsa65", "publicKey": "<base64>"}`. The shape
+///   is deliberately unmistakable to an old bare-RSA parser — a consumer that
+///   base64-decodes it as an RSA key fails loudly, never mis-reads it.
+class ParsedApsk {
+  final SigningAlgoType signingAlgo;
+
+  /// The key material: the bare RSA string for [SigningAlgoType.rsa2048], or
+  /// base64 of the raw ML-DSA-65 public key for [SigningAlgoType.mldsa65].
+  final String publicKey;
+
+  const ParsedApsk({required this.signingAlgo, required this.publicKey});
+}
+
+/// Parses a fetched `_apsk` value, bare or tagged.
+///
+/// Throws [AtSigningVerificationException] on a tagged value that names an
+/// algorithm this build has no code for — the reader must fail loudly rather
+/// than guess, because a guessed algorithm turns a key mismatch into silent
+/// acceptance of whatever the server sent.
+ParsedApsk parseApskValue(String value) {
+  final trimmed = value.trim();
+  if (!trimmed.startsWith('{')) {
+    // The bare legacy form: an RSA public key string, as published today.
+    return ParsedApsk(signingAlgo: SigningAlgoType.rsa2048, publicKey: trimmed);
+  }
+
+  final Map<String, dynamic> tagged;
+  try {
+    tagged = jsonDecode(trimmed) as Map<String, dynamic>;
+  } on FormatException catch (e) {
+    throw AtSigningVerificationException(
+        'the _apsk value looks tagged but is not valid JSON: ${e.message}');
+  }
+  final algoName = tagged['signingAlgo'];
+  final publicKey = tagged['publicKey'];
+  if (algoName is! String || publicKey is! String) {
+    throw AtSigningVerificationException(
+        'a tagged _apsk must carry signingAlgo and publicKey');
+  }
+  final algo =
+      SigningAlgoType.values.where((a) => a.name == algoName).firstOrNull;
+  if (algo == null) {
+    throw AtSigningVerificationException(
+        'the _apsk names signing algorithm "$algoName", which this build has '
+        'no code for — refusing to verify rather than guessing');
+  }
+  return ParsedApsk(signingAlgo: algo, publicKey: publicKey);
+}
+
+/// Encodes the tagged, self-describing `_apsk` form.
+///
+/// Nothing in 3.x publishes this — the final 3.x keeps the bare form exactly
+/// as it is, because apps sign and verify against `_apsk` today and their
+/// parsers expect it. This exists so the read side can be tested against the
+/// format 4.x's new enrollments will publish, and so the format has exactly
+/// one definition.
+String encodeTaggedApsk(
+        {required SigningAlgoType signingAlgo, required String publicKey}) =>
+    jsonEncode(
+        {'v': 1, 'signingAlgo': signingAlgo.name, 'publicKey': publicKey});
+
 /// Verifies an envelope produced by [signEnvelope] against
-/// [signerPublicKey] — the APKAM public key the signer's enrollment published
-/// at its `_apsk`.
+/// [signerPublicKey] — the `_apsk` value the signer's enrollment published,
+/// in either its bare or its tagged form.
+///
+/// **The key's own declaration is authoritative** over the envelope's
+/// `signingAlgo` claim, matching PKAM's record-authoritative rule
+/// (`docs/projects/pq/decisions.md` 34): a tagged key names its algorithm and
+/// the envelope must agree; a bare key is RSA by definition, so an envelope
+/// claiming otherwise fails against it. Either way, a lie about `signingAlgo`
+/// fails the verify — it can never select a weaker routine than the published
+/// key calls for.
 ///
 /// Throws [AtSigningVerificationException] if the signature does not check
 /// out. Verification needs no keypair of its own: the public key is the whole
 /// input, which is why this works on a client holding no keys at all.
-void verifyEnvelope(
+Future<void> verifyEnvelope(
   Map envelope, {
   required String signerPublicKey,
   Object? Function(Object? nonEncodable)? toEncodable,
-}) {
-  final hashingAlgo = HashingAlgoType.values.byName(envelope['hashingAlgo']);
+}) async {
+  final parsed = parseApskValue(signerPublicKey);
+  final claimed = envelope['signingAlgo'];
+  if (claimed is String && claimed != parsed.signingAlgo.name) {
+    throw AtSigningVerificationException(
+        'the envelope claims signingAlgo "$claimed" but the published _apsk '
+        'is a ${parsed.signingAlgo.name} key — refusing the mismatch rather '
+        'than letting the claim choose the routine');
+  }
   final String signableText =
       signableTextOf(envelope['payload'], toEncodable: toEncodable);
 
-  final ok = RsaSigningAlgo(null, hashingAlgo).verify(
-    utf8.encode(signableText),
-    base64Decode(envelope['signature']),
-    publicKey: signerPublicKey,
-  );
+  final bool ok;
+  switch (parsed.signingAlgo) {
+    case SigningAlgoType.mldsa65:
+      ok = await MlDsa65PureDartAlgo().verifyBytes(
+        utf8.encode(signableText),
+        signature: base64Decode(envelope['signature']),
+        publicKey: base64Decode(parsed.publicKey),
+      );
+    case SigningAlgoType.rsa2048:
+      final hashingAlgo =
+          HashingAlgoType.values.byName(envelope['hashingAlgo']);
+      ok = RsaSigningAlgo(null, hashingAlgo).verify(
+        utf8.encode(signableText),
+        base64Decode(envelope['signature']),
+        publicKey: parsed.publicKey,
+      );
+    default:
+      throw AtSigningVerificationException(
+          'no verify routine for ${parsed.signingAlgo.name}');
+  }
   if (!ok) {
     throw AtSigningVerificationException(
         'Signature verification failed using public key $signerPublicKey');

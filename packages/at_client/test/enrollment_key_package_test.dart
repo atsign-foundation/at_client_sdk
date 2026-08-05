@@ -96,7 +96,8 @@ void main() {
 
     // _apsk is populated by the atServer from the record's apkamPublicKey, so
     // this is the key a verifier will actually check against.
-    verifyEnvelope(envelope, signerPublicKey: apkam.atPublicKey.publicKey);
+    await verifyEnvelope(envelope,
+        signerPublicKey: apkam.atPublicKey.publicKey);
   });
 
   test('a tampered package fails that verification', () async {
@@ -118,7 +119,7 @@ void main() {
     ];
     envelope['payload'] = payload;
 
-    expect(
+    await expectLater(
       () => verifyEnvelope(envelope,
           signerPublicKey: apkam.atPublicKey.publicKey),
       throwsA(isA<AtSigningVerificationException>()),

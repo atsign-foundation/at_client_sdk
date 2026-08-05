@@ -110,7 +110,7 @@ mixin EnvelopeSigning on ApkamSigning {
 
     final pk = await getApkamPublicKey(signerAtSign, id);
     try {
-      verifyEnvelope(envelope, signerPublicKey: pk);
+      await verifyEnvelope(envelope, signerPublicKey: pk);
     } on AtSigningVerificationException {
       throw AtSigningVerificationException(
           'Signature verification failed using public key for '
