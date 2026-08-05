@@ -50,7 +50,8 @@ Future<int> collectConveyedKeyMaterial(AtClient atClient, AtKeysIo keysIo,
   if (atSign == null) return 0;
 
   final sharing = AtClientSecretSharing.forClient(atClient);
-  bindKeyPackageToAtKeys(sharing, keysIo: keysIo, atSign: atSign);
+  bindKeyPackageToAtKeys(sharing,
+      keysIo: keysIo, atSign: atSign, enrollmentId: atClient.enrollmentId);
   await sharing.register();
   await sharing.sweepOnce(fromRemote: true);
 

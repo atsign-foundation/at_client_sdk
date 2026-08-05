@@ -33,19 +33,24 @@ final _logger = AtSignLogger('KeyPackagePersistence');
 /// from the enrollment record, it rides `enroll:request`, and there is no
 /// post-enrollment write path. Generating one and filing it would mutate the
 /// user's keyfile at startup to produce an address nobody can learn.
+/// [enrollmentId] scopes the adoption to this client's own enrollment: a
+/// retrofitted keyfile serves two principals, and each must adopt its OWN
+/// package, never its co-tenant's — see [keyPackageMaterial].
 @experimental
 void bindKeyPackageToAtKeys(
   KeyPackageRegistration registration, {
   required AtKeysIo keysIo,
   required String atSign,
+  String? enrollmentId,
 }) {
   final Atsign owner = atSign.toAtsign();
-  registration.loadApkamKeys ??= () => _load(keysIo, owner);
+  registration.loadApkamKeys ??= () => _load(keysIo, owner, enrollmentId);
 }
 
 /// The X-Wing enc seed [atSign]'s keyfile holds for its key package, or null
 /// if it holds none.
-Future<PersistedApkamKeys?> _load(AtKeysIo keysIo, Atsign atSign) async {
+Future<PersistedApkamKeys?> _load(
+    AtKeysIo keysIo, Atsign atSign, String? enrollmentId) async {
   final AtKeys keys;
   try {
     keys = await keysIo.read(atSign);
@@ -55,7 +60,7 @@ Future<PersistedApkamKeys?> _load(AtKeysIo keysIo, Atsign atSign) async {
     return null;
   }
 
-  final material = keyPackageMaterial(keys);
+  final material = keyPackageMaterial(keys, enrollmentId: enrollmentId);
   if (material == null) return null;
   _logger.info('Adopted the key package $atSign already holds '
       '(kpid ${material.keyId})');
@@ -72,10 +77,19 @@ Future<PersistedApkamKeys?> _load(AtKeysIo keysIo, Atsign atSign) async {
 /// public half being published on the atServer rather than kept here.
 ///
 /// The newest wins if a keyfile somehow carries more than one. 1:1:1 says
-/// there is exactly one, and picking deterministically is what keeps a client
-/// that violates it from changing identity between restarts.
+/// there is exactly one PER ENROLLMENT, and picking deterministically is what
+/// keeps a client that violates it from changing identity between restarts.
+///
+/// [enrollmentId] scopes the selection: a retrofitted keyfile carries the
+/// legacy enrollment's package (untagged — filed before materials carried
+/// enrollment ids) alongside the new enrollment's (tagged with its id).
+/// A client adopts its own tagged package first, falls back to an untagged
+/// one, and NEVER adopts a package tagged for a different enrollment —
+/// newest-wins across the whole file would hand a legacy client restarting
+/// on the shared keyfile the PQ enrollment's kpid, an address its own
+/// enrollment record never advertised.
 @experimental
-AtKeysMaterial? keyPackageMaterial(AtKeys keys) {
+AtKeysMaterial? keyPackageMaterial(AtKeys keys, {String? enrollmentId}) {
   final publicIds = {
     for (final m in keys.keys)
       if (m.keyPartType == CryptographicKeyType.publicEncapsulation &&
@@ -86,8 +100,14 @@ AtKeysMaterial? keyPackageMaterial(AtKeys keys) {
       .where((m) =>
           m.keyPartType == CryptographicKeyType.privateDecapsulation &&
           m.keyAlgorithmType == KeyAlgorithmType.xWing &&
-          publicIds.contains(m.keyId))
+          publicIds.contains(m.keyId) &&
+          (m.enrollmentId == null || m.enrollmentId == enrollmentId))
       .toList()
     ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-  return candidates.firstOrNull;
+  if (enrollmentId != null) {
+    final own =
+        candidates.where((m) => m.enrollmentId == enrollmentId).firstOrNull;
+    if (own != null) return own;
+  }
+  return candidates.where((m) => m.enrollmentId == null).firstOrNull;
 }

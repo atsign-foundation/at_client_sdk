@@ -52,11 +52,14 @@ mixin EnvelopeSigning on ApkamSigning {
       // [ApkamSigning.publishPublicSigningKey] publishes, so verifiers can
       // check the signature against the per-enrollment _apsk key. (Signing
       // with the atSign-wide encryption keypair would use a key that is NOT
-      // the published one.)
+      // the published one.) The algorithm is the client's resolved one: a
+      // self-retrofit's ML-DSA enrollment must sign mldsa65, or every
+      // envelope is refused against the tagged _apsk its record published.
       return signEnvelope(
         payload,
         keys: signingKeys,
         enrollmentId: enrollmentId,
+        signingAlgo: atClient.signingAlgoType,
         toEncodable: toEncodable,
       );
     } on Object catch (e, st) {

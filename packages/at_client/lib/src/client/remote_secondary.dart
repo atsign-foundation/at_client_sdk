@@ -32,11 +32,17 @@ class RemoteSecondary implements Secondary {
     atLookUp.atChops = value;
   }
 
+  /// [signingAlgoType] overrides the preference's PKAM signing algorithm —
+  /// the per-enrollment resolution for a self-retrofit's ML-DSA enrollment,
+  /// whose algorithm is a property of the enrollment record, not of the
+  /// preference object (one preference can serve clients on two enrollments
+  /// of one atSign with different algorithms).
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey,
       AtChops? atChops,
       AtLookUp? atLookUp,
-      String? enrollmentId}) {
+      String? enrollmentId,
+      SigningAlgoType? signingAlgoType}) {
     _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
@@ -55,9 +61,10 @@ class RemoteSecondary implements Secondary {
             secureSocketConfig: secureSocketConfig,
             clientConfig: _getClientConfig());
     this.atLookUp.enrollmentId = enrollmentId;
+    final resolvedSigningAlgo = signingAlgoType ?? preference.signingAlgoType;
     logger.finer(
-        'signingAlgoType: ${preference.signingAlgoType} hashingAlgoType: ${preference.hashingAlgoType}');
-    this.atLookUp.signingAlgoType = preference.signingAlgoType;
+        'signingAlgoType: $resolvedSigningAlgo hashingAlgoType: ${preference.hashingAlgoType}');
+    this.atLookUp.signingAlgoType = resolvedSigningAlgo;
     this.atLookUp.hashingAlgoType = preference.hashingAlgoType;
     this.atLookUp.atChops = atChops;
   }

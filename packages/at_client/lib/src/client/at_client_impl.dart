@@ -248,6 +248,14 @@ class AtClientImpl implements AtClient {
   @override
   String? enrollmentId;
 
+  SigningAlgoType? _resolvedSigningAlgoType;
+
+  @override
+  SigningAlgoType get signingAlgoType =>
+      _resolvedSigningAlgoType ??
+      _preference?.signingAlgoType ??
+      SigningAlgoType.rsa2048;
+
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
 
@@ -467,6 +475,7 @@ class AtClientImpl implements AtClient {
       atLookUp: atLookUp,
       privateKey: _preference!.privateKey,
       enrollmentId: enrollmentId,
+      signingAlgoType: signingAlgoType,
     );
 
     // Using ??= because we may be injecting an EncryptionService
@@ -1451,6 +1460,18 @@ class AtClientImpl implements AtClient {
     // socket — parity with the AtChops auth used to inject.
     if (_atKeysIo != null) {
       final keys = await _atKeysIo!.read(atSign);
+      // A typed-material enrollment (a self-retrofit's) authenticates with
+      // its own signing keypair and algorithm; the flat fields keep carrying
+      // the original enrollment's RSA credentials, so reading them here
+      // would sign PKAM with the wrong key under this client's enrollment
+      // id. Mirrors AtAuthImpl.authenticate's resolution.
+      final id = enrollmentId;
+      final typedAlgo =
+          id == null ? null : keys.signingAlgorithmForEnrollment(id);
+      if (typedAlgo != null) {
+        _resolvedSigningAlgoType = typedAlgo;
+        return keys.toAtChopsForEnrollment(id!);
+      }
       return keys.toAtChops();
     }
     AtEncryptionKeyPair? atEncryptionKeyPair;

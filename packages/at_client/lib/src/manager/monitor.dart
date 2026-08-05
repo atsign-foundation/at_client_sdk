@@ -65,6 +65,13 @@ class Monitor {
 
   final AtChops? atChops;
 
+  /// The PKAM signing algorithm for this monitor's connection. Defaults to
+  /// the preference's value; a self-retrofit's ML-DSA enrollment passes its
+  /// resolved algorithm, since the monitor re-authenticates on every
+  /// (re)connect and a wrong algorithm fails each one against the
+  /// record-authoritative atServer.
+  late final SigningAlgoType signingAlgoType;
+
   final String? enrollmentId;
 
   final int newLineCodeUnit = 10;
@@ -100,7 +107,9 @@ class Monitor {
     required this.getLastNotificationTime,
     this.connectDelays = defaultConnectDelays,
     MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
+    SigningAlgoType? signingAlgoType,
   }) {
+    this.signingAlgoType = signingAlgoType ?? atClientPreference.signingAlgoType;
     logger = AtSignLogger('Monitor ($atSign)');
     logger.finer('enrollmentId: $enrollmentId');
     this.monitorOutboundConnectionFactory =
@@ -382,14 +391,14 @@ class Monitor {
     }
 
     final atSigningInput = AtSigningInput(fromResponse.response)
-      ..signingAlgoType = atClientPreference.signingAlgoType
+      ..signingAlgoType = signingAlgoType
       ..hashingAlgoType = atClientPreference.hashingAlgoType
       ..signingMode = AtSigningMode.pkam;
 
     var signingResult = atChops!.sign(atSigningInput);
 
     var pkamBuilder = PkamVerbBuilder()
-      ..signingAlgo = atClientPreference.signingAlgoType.name
+      ..signingAlgo = signingAlgoType.name
       ..hashingAlgo = atClientPreference.hashingAlgoType.name
       ..enrollmentlId = enrollmentId
       ..signature = signingResult.result;

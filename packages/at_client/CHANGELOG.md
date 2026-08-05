@@ -1,4 +1,18 @@
 ## 3.14.1
+- feat (experimental): the self-retrofit orchestration. `selfRetrofit(...)`
+  runs submit → re-authenticate → switch, handing back a manager whose
+  current client runs under the new ML-DSA enrollment as a NEW
+  `(atSign, enrollmentId)`-keyed instance — the enrollment never changes
+  under a live client, so per-client caches cannot go stale (the deferred
+  kpid-staleness item, discharged by construction). `AtClient.signingAlgoType`
+  is resolved from the keyfile's typed material and threaded to every
+  connection the client owns — verb (`RemoteSecondary` takes a resolved
+  override instead of clobbering with the preference), monitor, and sync —
+  and `wrapAndSign` signs with it, so a retrofitted client's envelopes
+  verify against the tagged `_apsk` its record published. Key-package
+  adoption is enrollment-scoped: on a retrofitted keyfile each principal
+  adopts its OWN package (its tagged one first, the untagged pre-id-era one
+  as fallback, never a co-tenant's).
 - feat (experimental): `signEnvelope` signs ML-DSA-65 when asked
   (`signingAlgo: mldsa65`, key material as base64 of the raw keys), pairing
   the mldsa65 verify branch `verifyEnvelope` already carried; and

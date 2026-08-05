@@ -139,7 +139,9 @@ class SyncServiceImpl implements SyncService {
       bool warmStartSync = true}) async {
     remoteSecondary ??= RemoteSecondary(
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
-        atChops: atClient.atChops, enrollmentId: atClient.enrollmentId);
+        atChops: atClient.atChops,
+        enrollmentId: atClient.enrollmentId,
+        signingAlgoType: atClient.signingAlgoType);
     final syncService = SyncServiceImpl._(atClient, remoteSecondary);
     await syncService.statsServiceListener();
     syncService._startPeriodicSyncTimer();
