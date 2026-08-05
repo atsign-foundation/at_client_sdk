@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_iv.dart';
 import 'package:at_chops/src/algorithm/hashing/types.dart';
 import 'package:at_chops/src/key/keys.dart';
@@ -71,33 +70,7 @@ abstract class AtSigningAlgorithm {
 /// silently transpose same-typed byte arguments (the published 3.3.0 FFI
 /// backend took `(secretKey, data)`; a positional reorder would keep
 /// compiling while binding arguments to the wrong slots).
-abstract class AtSignatureAlgorithm {
-  /// Const so `extends` subtypes (e.g. a `const`-constructed test double)
-  /// can chain a const super call.
-  const AtSignatureAlgorithm();
-
-  /// Stable, free-form identifier for this algorithm — a downstream
-  /// protocol's wire, record, or keystore identifier for this signature type
-  /// (e.g. at_server's FROM/POL handshake tags its cookie and published-key
-  /// record with this). Not grammar-constrained: at_chops owns the spelling.
-  ///
-  /// Implementations that have no reason to diverge should simply return
-  /// [signingAlgoType]'s `name` (see [MlDsa65FfiAlgo]). The getter stays
-  /// separate from [signingAlgoType] because enum member names are
-  /// Dart-identifier-constrained (no hyphens, can't start with a digit) — a
-  /// future backend needing a wire spelling the enum can't express can
-  /// override this one independently.
-  String get name;
-
-  /// The `pkam:`/envelope wire tuple's identifier for this algorithm.
-  ///
-  /// Typed as [SigningAlgoType] rather than [String] because that verb (and
-  /// `at_client`'s signed-envelope `signingAlgo` field) accepts only the
-  /// enum's `name` spellings — a free-form string would surface as an
-  /// atServer syntax error at authentication time, or fail
-  /// `SigningAlgoType.values.byName` on the reading side.
-  SigningAlgoType get signingAlgoType;
-
+abstract interface class AtSignatureAlgorithm {
   /// Generate a fresh signing key pair.
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair();
 
@@ -113,15 +86,6 @@ abstract class AtSignatureAlgorithm {
 
 /// Interface for hashing data. Refer [DefaultHash] for sample implementation.
 abstract class AtHashingAlgorithm<K, V> {
-  /// The `pkam:`/envelope wire tuple's `hashingAlgo` identifier for this
-  /// algorithm (`envelope['hashingAlgo']` in `at_client`'s signed-envelope
-  /// format, `PublicKeyHash.hashingAlgo`) — the same spelling as
-  /// [HashingAlgoType.name] for the corresponding enum value (e.g.
-  /// `SHA256HashingAlgo().name == HashingAlgoType.sha256.name`), so an
-  /// algorithm instance can report the identifier a caller would otherwise
-  /// have to track separately.
-  String get name;
-
   /// Hashes the passed data
   FutureOr<V> hash(K data, {covariant HashParams? hashParams});
 }

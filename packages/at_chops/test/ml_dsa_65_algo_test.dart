@@ -9,20 +9,6 @@ import 'package:test/test.dart';
 
 void main() {
   group('ML-DSA-65 pure-Dart', () {
-    test('name mirrors signingAlgoType.name', () {
-      final algo = MlDsa65PureDartAlgo();
-      expect(algo.name, equals('mldsa65'));
-      expect(algo.name, equals(algo.signingAlgoType.name));
-    });
-
-    test('signingAlgoType is the pkam:/envelope wire tuple identifier', () {
-      final algo = MlDsa65PureDartAlgo();
-      expect(algo.signingAlgoType, equals(SigningAlgoType.mldsa65));
-      expect(algo.signingAlgoType.name, equals('mldsa65'),
-          reason: 'the pkam: verb and at_client envelope signingAlgo field '
-              'round-trip this through SigningAlgoType.values.byName');
-    });
-
     test('instance generateKeyPair produces FIPS 204 key sizes', () async {
       // Pins the generateKeyPair conversion from a static method to an
       // instance method (required to implement AtSignatureAlgorithm).
@@ -140,9 +126,7 @@ void main() {
           throwsA(isA<AtSigningException>()));
     });
 
-    test(
-        'signBytes throws AtSigningException for an over-long secret key '
-        '(previously: silently truncated and signed the wrong key material)',
+    test('signBytes throws AtSigningException for an over-long secret key',
         () async {
       final algo = MlDsa65PureDartAlgo();
       final Uint8List message = Uint8List.fromList('data'.codeUnits);

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/spec/ml_dsa_65_spec.dart';
 import 'package:at_chops/src/algorithm/spec/output_length.dart';
@@ -21,17 +20,11 @@ import 'package:pqcrypto/pqcrypto.dart';
 /// retained for compatibility with the published 3.3.0 surface and for
 /// `AtChopsImpl`'s signing/verification dispatch; it is deprecated — new
 /// code should pass key material per call.
-final class MlDsa65PureDartAlgo extends AtSignatureAlgorithm
-    implements AtSigningAlgorithm {
+final class MlDsa65PureDartAlgo
+    implements AtSigningAlgorithm, AtSignatureAlgorithm {
   Uint8List? _secretKey;
 
   MlDsa65PureDartAlgo();
-
-  @override
-  String get name => SigningAlgoType.mldsa65.name;
-
-  @override
-  SigningAlgoType get signingAlgoType => SigningAlgoType.mldsa65;
 
   @Deprecated('Pass the secret key to signBytes instead.')
   set secretKey(Uint8List value) => _secretKey = value;

@@ -2,15 +2,12 @@ import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
-import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
-import 'package:at_chops/src/algorithm/ffi/openssl_loader.dart';
 import 'package:at_chops/src/algorithm/spec/ml_dsa_65_spec.dart';
 import 'package:at_chops/src/algorithm/spec/output_length.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:ffi/ffi.dart';
-import 'package:meta/meta.dart';
 
 /// ML-DSA-65 (FIPS 204) digital signature backed by OpenSSL 3 via Dart FFI.
 ///
@@ -29,23 +26,11 @@ import 'package:meta/meta.dart';
 /// Prefer [AtPqc.mlDsa65], which auto-resolves to this backend when libcrypto
 /// supports ML-DSA-65 and falls back to pure-Dart otherwise. Construct via
 /// [MlDsa65FfiAlgo.fromLib] only to pin a specific [DynamicLibrary]
-/// (e.g. loaded via [tryLoadLibCrypto]).
-///
-/// [fromLib] throws [AtSigningException] when the supplied [DynamicLibrary]
-/// does not provide ML-DSA-65 — probed once at construction via
-/// [libCryptoSupportsMlDsa65], so a misconfigured libcrypto fails loudly
-/// instead of every [verifyBytes] silently returning `false`.
-final class MlDsa65FfiAlgo extends AtSignatureAlgorithm
-    implements AtSigningAlgorithm {
+/// (e.g. loaded via `tryLoadLibCrypto`).
+final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
   final DynamicLibrary _lib;
 
   Uint8List? _secretKey;
-
-  @override
-  String get name => SigningAlgoType.mldsa65.name;
-
-  @override
-  SigningAlgoType get signingAlgoType => SigningAlgoType.mldsa65;
 
   @Deprecated('Pass the secret key to signBytes instead.')
   set secretKey(Uint8List value) => _secretKey = value;
@@ -66,19 +51,7 @@ final class MlDsa65FfiAlgo extends AtSignatureAlgorithm
   late final EvpDigestVerifyInitDart _digestVerifyInit;
   late final EvpDigestVerifyDart _digestVerify;
 
-  /// Throws [AtSigningException] if [lib] does not provide ML-DSA-65 (probed
-  /// via [supportsMlDsa65], which defaults to [libCryptoSupportsMlDsa65]).
-  ///
-  /// [supportsMlDsa65] is injectable so tests can force the failure path
-  /// without needing a host whose libcrypto actually lacks ML-DSA-65.
-  MlDsa65FfiAlgo.fromLib(this._lib,
-      {@visibleForTesting bool Function(DynamicLibrary) supportsMlDsa65 =
-          libCryptoSupportsMlDsa65}) {
-    if (!supportsMlDsa65(_lib)) {
-      throw AtSigningException(
-          'this libcrypto build does not provide ML-DSA-65 — use '
-          'MlDsa65PureDartAlgo, or AtPqc.mlDsa65 to auto-select');
-    }
+  MlDsa65FfiAlgo.fromLib(this._lib) {
     _ctxNewFromName = _lib.lookupFunction<EvpPkeyCtxNewFromNameNative,
         EvpPkeyCtxNewFromNameDart>('EVP_PKEY_CTX_new_from_name');
     _ctxFree = _lib.lookupFunction<EvpPkeyCtxFreeNative, EvpPkeyCtxFreeDart>(
