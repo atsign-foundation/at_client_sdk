@@ -1,4 +1,16 @@
 ## 3.4.0
+- fix: `FileAtKeysIo.write`/`flush` take an inter-process advisory lock
+  (`<keyfile>.lock`, O_EXCL create) around the whole read-validate-write.
+  The rename inside was already atomic and `validateMapUpdate` already
+  *detects* a candidate that drops existing key material — but two processes
+  sharing one `.atKeys` file that both read before either writes both pass
+  validation, and the second rename silently discards the first's addition.
+  The severe case is a conveyed namespace-key private that appears filed and
+  is not: records that can never be read, presenting weeks later as
+  corruption. Several CLI apps sharing one keyfile is the ordinary
+  deployment, not an edge. A lock older than 30s is presumed abandoned and
+  broken (a crashed holder must not deadlock every later run); acquisition
+  waits up to 10s and then fails loudly, naming the lock file.
 - feat: `AtEnrollmentRequest.keyExchangeMode` — an `EnrollmentKeyExchangeMode`
   choosing how the enrollment's `apkamSymmetricKey` travels. `legacy` (the
   default) is today's behaviour unchanged: the enrollee generates the key and

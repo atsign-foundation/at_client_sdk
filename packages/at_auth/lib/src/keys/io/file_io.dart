@@ -5,6 +5,7 @@ import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
+import 'package:at_auth/src/keys/io/file_lock.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -34,32 +35,43 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   @override
   Future write(String atsign, AtKeys atKeys) async {
     final file = File(filePath!(atsign));
-    if (file.existsSync()) {
-      throw AtKeysFileOverwriteException(
-          'Tried writing ${file.path}, but failed since it already exists');
-    }
+    await AtKeysFileLock(file.path).synchronized(() async {
+      if (file.existsSync()) {
+        throw AtKeysFileOverwriteException(
+            'Tried writing ${file.path}, but failed since it already exists');
+      }
 
-    await _writeAtRestDocument(file, await _encodeAtRest(atKeys, atsign));
+      await _writeAtRestDocument(file, await _encodeAtRest(atKeys, atsign));
+    });
   }
 
   @override
   Future<void> flush(Atsign atsign, AtKeys atKeys) async {
     final file = File(filePath!(atsign));
-    final document = await _encodeAtRest(atKeys, atsign);
+    // The whole read-validate-write under one inter-process lock. The rename
+    // inside is already atomic and `validateMapUpdate` already DETECTS a
+    // candidate that drops material — but two processes that both read before
+    // either writes both pass validation, and the second rename silently
+    // discards the first's addition. Several CLI apps sharing one keyfile is
+    // the ordinary deployment, not an edge (`at_client_sdk`
+    // docs/projects/pq/decisions.md 38.4).
+    await AtKeysFileLock(file.path).synchronized(() async {
+      final document = await _encodeAtRest(atKeys, atsign);
 
-    if (!file.existsSync()) {
+      if (!file.existsSync()) {
+        await _writeAtRestDocument(file, document);
+        return;
+      }
+
+      assurance.validateMapUpdate(
+        existing: await _readAtRestDocument(file),
+        candidate: document,
+      );
+      // Keep the previous state recoverable as .bak. A copy, not a rename, so
+      // the live keyfile exists at every instant of the flush.
+      await file.copy('${file.path}.bak');
       await _writeAtRestDocument(file, document);
-      return;
-    }
-
-    assurance.validateMapUpdate(
-      existing: await _readAtRestDocument(file),
-      candidate: document,
-    );
-    // Keep the previous state recoverable as .bak. A copy, not a rename, so
-    // the live keyfile exists at every instant of the flush.
-    await file.copy('${file.path}.bak');
-    await _writeAtRestDocument(file, document);
+    });
   }
 
   Future<Map<String, dynamic>> _encodeAtRest(
