@@ -750,12 +750,12 @@ cleanly with a pre-flight query and an opt-in legacy escape hatch, and nested na
 resolve by walking up with `appMetadata.ns` / `ckNs` on the wire — covered multi-segment in
 both live suites, which previously used single-segment namespaces only.
 `packages/at_client` green at
-**896 passing / 12 skipped**, `tests/at_functional_test` at **128**,
+**901 passing / 12 skipped**, `tests/at_functional_test` at **129**,
 `tests/at_end2end_test` at **46** with no skips (all re-run together
-2026-08-05, after the to-define ratifications and RF-2b landed). Also
-green: `at_auth` 160, at_secondary_server 863 (the RF-SRV spike branch,
-resolving the workspace at_chops 3.4.2 via `pubspec_overrides.yaml`),
-`at_chops` 219, `at_commons` 505.
+2026-08-05, after the to-define ratifications, RF-2b and RF-2c's
+switch-over landed). Also green: `at_auth` 160, at_secondary_server 863
+(the RF-SRV spike branch, resolving the workspace at_chops 3.4.2 via
+`pubspec_overrides.yaml`), `at_chops` 219, `at_commons` 505.
 
 *Proven live (functional suite, `tests/at_functional_test`):* self put/get round-trip
 through the whole pipeline including the pre-pass, the conveyance record and key
@@ -1052,6 +1052,18 @@ enrollment authenticates; previously shared secrets stay openable; the old enrol
 once its capped expiry elapses (or after `enroll:revoke`) — **not** via an in-place key delete;
 seal-once-reaches-every-host; revoke/expire-one-host; sync-less wake-up.
 **Effort:** L.
+**PARTLY LANDED 2026-08-05** ([decisions 44](decisions.md#44-rf-2c-the-switch-over-and-what-it-cost-to-make-a-client-pq-2026-08-05)):
+the switch-over itself is built and live-proven — `selfRetrofit(...)` runs
+submit → re-authenticate → switch, and `AtClient.signingAlgoType` (resolved
+from the keyfile) now reaches the verb connection, the monitor, sync, and
+`wrapAndSign`; key-package adoption is enrollment-scoped. The 20.3 kpid
+staleness is discharged by construction (a switch builds a NEW
+`(atSign, enrollmentId)` client; the enrollment never changes under a live
+one). **Still owed here:** the UC-B1.x e2e rows themselves — the signing-root
+step in-flow (privileged mint/convey vs request+verify, scoped skip), two
+clones reaching distinct ids, the capped legacy enrollment observed ageing
+out — plus the open finding that a self-notification did not reach a scoped
+enrollment's monitor (decisions 44.3).
 **coversD1:** D1-F end-to-end (retrofit via fresh enrollment).
 
 ---

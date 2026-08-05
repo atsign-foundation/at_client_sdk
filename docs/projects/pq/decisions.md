@@ -3465,3 +3465,75 @@ second file CRAM-onboarding either of them fails whichever runs later. The
 retrofit test builds its pre-PQ precondition from an ordinary OTP enrollment
 on firstAtSign instead (approve with the demo keys, write the keyfile
 directly), which consumes no one-shot state at all.
+
+## 44. RF-2c: the switch-over, and what it cost to make a client PQ (2026-08-05)
+
+RF-2b proved a retrofitted enrollment could *authenticate*. RF-2c makes it a
+working **client** — and the gap between those two was five separate places
+where the enrollment's algorithm and identity failed to travel.
+
+### 44.1 The five, and the one rule behind them
+
+The algorithm is a property of the **enrollment record**, not of the
+preference object: one process can hold clients on two enrollments of one
+atSign with different algorithms, so anything reading
+`AtClientPreference.signingAlgoType` for a per-enrollment decision is wrong
+by construction. `AtClient.signingAlgoType` is now resolved once from the
+keyfile's typed material (mirroring `AtAuthImpl.authenticate`) and threaded
+outward:
+
+1. **`_createAtChops`** built the LEGACY enrollment's chops from the flat
+   fields for any client, including one created with the retrofitted id —
+   so it would have signed PKAM with the wrong key under the right id, and
+   the record-authoritative atServer refuses that. Now branches on
+   `signingAlgorithmForEnrollment`.
+2. **`RemoteSecondary`** stamped `preference.signingAlgoType` onto the
+   AtLookUp *unconditionally*, clobbering even a correctly-configured
+   injected one (which is what at_auth hands over on the reuse path). Now
+   takes a resolved override.
+3. **`Monitor`** read the preference directly and had no algorithm input at
+   all. It re-authenticates on every reconnect, so this was a permanent
+   failure, not a first-connect one. Now takes the client's resolved
+   algorithm; `SyncServiceImpl`'s third connection likewise.
+4. **`wrapAndSign`** never passed a `signingAlgo`, so every runtime envelope
+   (key package, nskey advertisement, conveyance, chain link) went out
+   RSA-signed while the enrollment's published `_apsk` was tagged mldsa65 —
+   refused by every verifier, loudly. Now signs with the client's algorithm.
+5. **Key-package adoption** was newest-wins across the whole keyfile,
+   ignoring `enrollmentId`. A retrofitted keyfile serves two principals, so
+   a legacy client restarting on it would have adopted the PQ enrollment's
+   kpid — an address its own record never advertised. Now
+   enrollment-scoped: own tagged package first, untagged pre-id-era one as
+   fallback, never a co-tenant's.
+
+### 44.2 The kpid staleness, discharged by construction
+
+[20.3](#20-ss-2-how-the-key-package-reaches-an-enrollment-and-how-conveyance-fires-2026-08-03)'s
+deferred item asked what happens to per-client caches when the enrollment
+changes under a live client. The answer RF-2c adopts: **it never does.**
+`selfRetrofit` switches by building a NEW client under the
+`(atSign, enrollmentId)` cache key, so every per-client cache starts fresh
+for the new identity and nothing is re-keyed in place. This is now the
+documented invariant rather than a fix — the alternative (mutating
+`atLookUp.enrollmentId` on a live client) is what 20.3 warned about and no
+code path does it.
+
+### 44.3 Two findings from the live run
+
+- **A concrete member added to an abstract class is invisible to
+  `Mock implements` — at compile time.** `AtClient.signingAlgoType` has a
+  default in the spec, but `implements` erases bodies and mocktail satisfies
+  the interface through `noSuchMethod`, so 14 mocks across the unit suite
+  returned `null` into a non-nullable getter and failed only at RUNTIME.
+  `dart analyze` was clean throughout. Grep for `Mock implements <Type>`
+  when adding a member to `<Type>`, before running anything.
+- **Open, not resolved: a self-notification did not reach a scoped
+  enrollment's monitor.** The monitor authenticates with genuine ML-DSA and
+  streams (captured: `pkam:signingAlgo:mldsa65:...` → `data:success`, then
+  statsNotifications flowing), and the sender reported no exception — but a
+  `notify` from the owner client for a key in the enrollment's own
+  namespace never arrived. The live test asserts only what the run
+  demonstrates (delivery through the monitor, which requires that socket's
+  PKAM to have succeeded); whether enrollment-scoped notification routing
+  drops self-notifications is unexamined and owed a look before RF-2c's
+  UC-B1.x rows can claim notification coverage.
