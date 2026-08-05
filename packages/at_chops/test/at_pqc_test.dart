@@ -28,12 +28,6 @@ void main() {
       }
     });
 
-    test('AtPqc.mlDsa65 reports mldsa65 whichever backend resolved', () {
-      // Both backends must agree on the wire identifier — a caller holding
-      // AtPqc.mlDsa65 has no way to know which one it got.
-      expect(AtPqc.mlDsa65.signingAlgoType, equals(SigningAlgoType.mldsa65));
-    });
-
     test('AtPqc.aesGcm256 is FFI when supported, else pure', () {
       final AESKey key = AESKey.generate(32);
       if (aesGcmFfi) {

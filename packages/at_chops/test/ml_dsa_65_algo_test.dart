@@ -19,14 +19,6 @@ void main() {
       expect(await algo.verifyBytes(message, signature: sig, publicKey: kp.publicKey), isTrue);
     });
 
-    test('signingAlgoType is mldsa65, spelled as the atServer expects', () {
-      expect(MlDsa65PureDartAlgo().signingAlgoType,
-          equals(SigningAlgoType.mldsa65));
-      // The pkam verb regex in at_commons accepts only this literal spelling,
-      // so a rename of the enum member must fail here rather than at auth time.
-      expect(MlDsa65PureDartAlgo().signingAlgoType.name, equals('mldsa65'));
-    });
-
     test('sign/verify round-trip yields true', () async {
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);

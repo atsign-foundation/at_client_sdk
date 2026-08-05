@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_iv.dart';
 import 'package:at_chops/src/algorithm/hashing/types.dart';
 import 'package:at_chops/src/key/keys.dart';
@@ -72,16 +71,6 @@ abstract class AtSigningAlgorithm {
 /// backend took `(secretKey, data)`; a positional reorder would keep
 /// compiling while binding arguments to the wrong slots).
 abstract interface class AtSignatureAlgorithm {
-  /// Wire identifier for this algorithm.
-  ///
-  /// This is the value that goes on the wire, not a display name: the `pkam:`
-  /// verb and the signed-envelope `signingAlgo` field accept only
-  /// [SigningAlgoType] `name` spellings, so an implementation must report the
-  /// enum member matching what [signBytes] actually produces. Reporting the
-  /// wrong member mislabels the signature and the peer selects the wrong
-  /// algorithm to verify it with.
-  SigningAlgoType get signingAlgoType;
-
   /// Generate a fresh signing key pair.
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair();
 
@@ -97,19 +86,6 @@ abstract interface class AtSignatureAlgorithm {
 
 /// Interface for hashing data. Refer [DefaultHash] for sample implementation.
 abstract class AtHashingAlgorithm<K, V> {
-  /// Wire identifier for this algorithm.
-  ///
-  /// This is the value that goes on the wire, not a display name: the `pkam:`
-  /// verb's `hashingAlgo` field and the atKey `hashingAlgo` metadata accept
-  /// only [HashingAlgoType] `name` spellings, so an implementation must report
-  /// the enum member matching what [hash] actually computes.
-  ///
-  /// Reporting a member does not make it valid everywhere — [HashingAlgoType]
-  /// is wider than any single verb's grammar (`pkam:` accepts only `sha256`
-  /// and `sha512`). Whether a given algorithm is allowed in a given position
-  /// remains the caller's concern.
-  HashingAlgoType get hashingAlgoType;
-
   /// Hashes the passed data
   FutureOr<V> hash(K data, {covariant HashParams? hashParams});
 }

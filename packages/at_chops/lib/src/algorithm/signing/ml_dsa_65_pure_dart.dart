@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:pqcrypto/pqcrypto.dart';
@@ -39,9 +38,6 @@ final class MlDsa65PureDartAlgo
   }
 
   // ── AtSignatureAlgorithm ────────────────────────────────────────────────
-
-  @override
-  SigningAlgoType get signingAlgoType => SigningAlgoType.mldsa65;
 
   /// Sign [message] with [secretKey] (raw 4032-byte secret key).
   ///
