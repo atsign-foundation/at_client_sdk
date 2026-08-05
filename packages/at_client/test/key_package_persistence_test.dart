@@ -148,4 +148,49 @@ void main() {
             'on the atServer, not kept here, and that is what tells the two '
             'apart');
   });
+
+  test(
+      'a retrofitted keyfile: each principal adopts its OWN package, never '
+      'its co-tenant\'s', () async {
+    // The shape a self-retrofit leaves behind: the legacy enrollment's
+    // package untagged (filed before materials carried enrollment ids) and
+    // the PQ enrollment's tagged with its id — the tagged one newer.
+    final keys = AtKeys();
+    final legacyPair = await XWingPureDartAlgo.instance.generateKeyPair();
+    final legacyKpid = PackageKey.computeKid(base64Encode(legacyPair.publicKey));
+    final pqPair = await XWingPureDartAlgo.instance.generateKeyPair();
+    final pqKpid = PackageKey.computeKid(base64Encode(pqPair.publicKey));
+    final older = DateTime.now().toUtc().subtract(const Duration(days: 30));
+    final newer = DateTime.now().toUtc();
+    for (final (kpid, pair, id, at) in [
+      (legacyKpid, legacyPair, null, older),
+      (pqKpid, pqPair, 'pq-enrollment-1', newer),
+    ]) {
+      keys.addKey(AtKeysMaterial(
+          keyId: kpid,
+          enrollmentId: id,
+          keyPartType: CryptographicKeyType.publicEncapsulation,
+          keyAlgorithmType: KeyAlgorithmType.xWing,
+          bytes: AtBytes(pair.publicKey),
+          createdAt: at));
+      keys.addKey(AtKeysMaterial(
+          keyId: kpid,
+          enrollmentId: id,
+          keyPartType: CryptographicKeyType.privateDecapsulation,
+          keyAlgorithmType: KeyAlgorithmType.xWing,
+          bytes: AtBytes(pair.secretKey),
+          createdAt: at));
+    }
+
+    expect(keyPackageMaterial(keys, enrollmentId: 'pq-enrollment-1')!.keyId,
+        pqKpid);
+    expect(keyPackageMaterial(keys)!.keyId, legacyKpid,
+        reason: 'newest-wins across the whole file would hand a legacy '
+            'client restarting on the shared keyfile the PQ enrollment\'s '
+            'kpid — an address its own enrollment record never advertised');
+    expect(keyPackageMaterial(keys, enrollmentId: 'some-other-id')!.keyId,
+        legacyKpid,
+        reason: 'a package tagged for a different enrollment is never '
+            'adopted; the untagged pre-id-era package is the fallback');
+  });
 }

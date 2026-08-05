@@ -12,6 +12,7 @@
 // `ttb` (and `ttl`), not `availableAt`/`expiresAt` directly.
 
 import 'dart:io';
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
@@ -19,7 +20,10 @@ import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-class _MockAtClient extends Mock implements AtClient {}
+class _MockAtClient extends Mock implements AtClient {
+  @override
+  SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
+}
 
 void main() {
   final storageDir = '${Directory.current.path}/test/hive_avail';

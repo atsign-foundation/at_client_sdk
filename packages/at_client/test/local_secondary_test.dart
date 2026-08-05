@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
@@ -72,7 +73,10 @@ class MockSecondaryKeyStore extends Mock
       const Stream.empty();
 }
 
-class MockAtClientImpl extends Mock implements AtClientImpl {}
+class MockAtClientImpl extends Mock implements AtClientImpl {
+  @override
+  SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
+}
 
 void main() {
   var storageDir = '${Directory.current.path}/test/hive';

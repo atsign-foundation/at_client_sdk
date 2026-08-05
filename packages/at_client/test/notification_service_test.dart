@@ -32,6 +32,9 @@ class MockLocalSecondary extends Mock implements LocalSecondary {
 
 class MockAtClientImpl extends Mock implements AtClientImpl {
   @override
+  SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
+
+  @override
   String? getCurrentAtSign() {
     return '@alice';
   }

@@ -27,6 +27,13 @@ class FakeCryptoProvider extends Fake implements CryptoProvider {}
 class MockAtClientManager extends Mock implements AtClientManager {}
 
 class MockAtClient extends Mock implements AtClient {
+  // The real spec getter has a concrete rsa2048 default; `implements` erases
+  // it, and an unstubbed mocktail getter returns null into a non-nullable
+  // type. Restore the default here so every existing test keeps the real
+  // class's behaviour.
+  @override
+  SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
+
   // A stable, mutable preference (matching the real getPreferences(), which
   // returns the live instance) so tests can set `.crypto` to inject a
   // CryptoConfig that CryptoRuntime resolves against.
@@ -48,9 +55,15 @@ class StrictMockAtClient extends Mock implements AtClient {
 
   @override
   AtClientPreference getPreferences() => _preference;
+
+  @override
+  SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
 }
 
-class MockAtClientImpl extends Mock implements AtClientImpl {}
+class MockAtClientImpl extends Mock implements AtClientImpl {
+  @override
+  SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
+}
 
 /// `AtKeysIo` is `sealed`, but that only restricts direct subtyping of the
 /// base — `WrittenAtKeysIo` is an ordinary `abstract class`, so extending it

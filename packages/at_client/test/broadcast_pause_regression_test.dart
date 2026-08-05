@@ -24,6 +24,7 @@
 // they are delivered in arrival order.
 
 import 'dart:async';
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 
 import 'package:at_client/at_client.dart';
 // ignore: implementation_imports
@@ -32,7 +33,10 @@ import 'package:at_client/src/listener/at_sign_change_listener.dart'
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-class _MockAtClient extends Mock implements AtClient {}
+class _MockAtClient extends Mock implements AtClient {
+  @override
+  SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
+}
 
 class _MockNotificationService extends Mock implements NotificationService {}
 
