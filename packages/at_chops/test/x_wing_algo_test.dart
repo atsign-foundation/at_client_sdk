@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_chops/src/algorithm/spec/ml_kem_768_spec.dart';
 import 'package:test/test.dart';
 
 import 'x_wing_test_vectors.dart';
@@ -120,6 +121,37 @@ void main() {
               Uint8List(32), Uint8List(33), Uint8List(32), Uint8List(1216)),
           throwsA(isA<StateError>().having((e) => e.message, 'message',
               contains('X25519 shared secret component'))));
+    });
+  });
+
+  group('_assemblePublicKey / _assembleCiphertext offsets', () {
+    // Distinct fill values so a swapped-setRange or offset-shift bug can't
+    // slip past the equality checks below.
+    final mlKemPublicKey = Uint8List(MlKem768Sizes.publicKeyBytes)
+      ..fillRange(0, MlKem768Sizes.publicKeyBytes, 0xAA);
+    final x25519Public = Uint8List(32)..fillRange(0, 32, 0xBB);
+    final ctM = Uint8List(MlKem768Sizes.ciphertextBytes)
+      ..fillRange(0, MlKem768Sizes.ciphertextBytes, 0xAA);
+    final ctX = Uint8List(32)..fillRange(0, 32, 0xBB);
+
+    test(
+        'correct-length inputs assemble the public key with components at '
+        'the right offsets', () {
+      final publicKey =
+          algo.assemblePublicKeyForTesting(mlKemPublicKey, x25519Public);
+      expect(publicKey.length, XWingPureDartAlgo.publicKeyLength);
+      expect(
+          publicKey.sublist(0, MlKem768Sizes.publicKeyBytes), mlKemPublicKey);
+      expect(publicKey.sublist(MlKem768Sizes.publicKeyBytes), x25519Public);
+    });
+
+    test(
+        'correct-length inputs assemble the ciphertext with components at '
+        'the right offsets', () {
+      final ciphertext = algo.assembleCiphertextForTesting(ctM, ctX);
+      expect(ciphertext.length, XWingPureDartAlgo.ciphertextLength);
+      expect(ciphertext.sublist(0, MlKem768Sizes.ciphertextBytes), ctM);
+      expect(ciphertext.sublist(MlKem768Sizes.ciphertextBytes), ctX);
     });
   });
 }

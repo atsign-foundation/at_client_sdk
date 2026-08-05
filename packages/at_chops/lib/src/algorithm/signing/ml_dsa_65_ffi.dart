@@ -5,10 +5,12 @@ import 'dart:typed_data';
 import 'package:at_chops/src/algorithm/algo_type.dart';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/algorithm/ffi/openssl_loader.dart';
 import 'package:at_chops/src/algorithm/spec/ml_dsa_65_spec.dart';
 import 'package:at_chops/src/algorithm/spec/output_length.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:ffi/ffi.dart';
+import 'package:meta/meta.dart';
 
 /// ML-DSA-65 (FIPS 204) digital signature backed by OpenSSL 3 via Dart FFI.
 ///
@@ -28,6 +30,11 @@ import 'package:ffi/ffi.dart';
 /// supports ML-DSA-65 and falls back to pure-Dart otherwise. Construct via
 /// [MlDsa65FfiAlgo.fromLib] only to pin a specific [DynamicLibrary]
 /// (e.g. loaded via [tryLoadLibCrypto]).
+///
+/// [fromLib] throws [AtSigningException] when the supplied [DynamicLibrary]
+/// does not provide ML-DSA-65 — probed once at construction via
+/// [libCryptoSupportsMlDsa65], so a misconfigured libcrypto fails loudly
+/// instead of every [verifyBytes] silently returning `false`.
 final class MlDsa65FfiAlgo extends AtSignatureAlgorithm
     implements AtSigningAlgorithm {
   final DynamicLibrary _lib;
@@ -59,37 +66,54 @@ final class MlDsa65FfiAlgo extends AtSignatureAlgorithm
   late final EvpDigestVerifyInitDart _digestVerifyInit;
   late final EvpDigestVerifyDart _digestVerify;
 
-  MlDsa65FfiAlgo.fromLib(this._lib) {
+  /// Throws [AtSigningException] if [lib] does not provide ML-DSA-65 (probed
+  /// via [supportsMlDsa65], which defaults to [libCryptoSupportsMlDsa65]).
+  ///
+  /// [supportsMlDsa65] is injectable so tests can force the failure path
+  /// without needing a host whose libcrypto actually lacks ML-DSA-65.
+  MlDsa65FfiAlgo.fromLib(this._lib,
+      {@visibleForTesting bool Function(DynamicLibrary) supportsMlDsa65 =
+          libCryptoSupportsMlDsa65}) {
+    if (!supportsMlDsa65(_lib)) {
+      throw AtSigningException(
+          'this libcrypto build does not provide ML-DSA-65 — use '
+          'MlDsa65PureDartAlgo, or AtPqc.mlDsa65 to auto-select');
+    }
     _ctxNewFromName = _lib.lookupFunction<EvpPkeyCtxNewFromNameNative,
         EvpPkeyCtxNewFromNameDart>('EVP_PKEY_CTX_new_from_name');
     _ctxFree = _lib.lookupFunction<EvpPkeyCtxFreeNative, EvpPkeyCtxFreeDart>(
         'EVP_PKEY_CTX_free');
-    _pkeyFree = _lib.lookupFunction<EvpPkeyFreeNative, EvpPkeyFreeDart>(
-        'EVP_PKEY_free');
-    _keygenInit = _lib.lookupFunction<EvpPkeyKeygenInitNative,
-        EvpPkeyKeygenInitDart>('EVP_PKEY_keygen_init');
+    _pkeyFree = _lib
+        .lookupFunction<EvpPkeyFreeNative, EvpPkeyFreeDart>('EVP_PKEY_free');
+    _keygenInit =
+        _lib.lookupFunction<EvpPkeyKeygenInitNative, EvpPkeyKeygenInitDart>(
+            'EVP_PKEY_keygen_init');
     _keygen = _lib.lookupFunction<EvpPkeyKeygenNative, EvpPkeyKeygenDart>(
         'EVP_PKEY_keygen');
-    _getRawPublicKey = _lib.lookupFunction<EvpPkeyGetRawKeyNative,
-        EvpPkeyGetRawKeyDart>('EVP_PKEY_get_raw_public_key');
-    _getRawPrivateKey = _lib.lookupFunction<EvpPkeyGetRawKeyNative,
-        EvpPkeyGetRawKeyDart>('EVP_PKEY_get_raw_private_key');
+    _getRawPublicKey =
+        _lib.lookupFunction<EvpPkeyGetRawKeyNative, EvpPkeyGetRawKeyDart>(
+            'EVP_PKEY_get_raw_public_key');
+    _getRawPrivateKey =
+        _lib.lookupFunction<EvpPkeyGetRawKeyNative, EvpPkeyGetRawKeyDart>(
+            'EVP_PKEY_get_raw_private_key');
     _newRawPrivateKeyEx = _lib.lookupFunction<EvpPkeyNewRawPrivateKeyExNative,
         EvpPkeyNewRawPrivateKeyExDart>('EVP_PKEY_new_raw_private_key_ex');
     _newRawPublicKeyEx = _lib.lookupFunction<EvpPkeyNewRawPublicKeyExNative,
         EvpPkeyNewRawPublicKeyExDart>('EVP_PKEY_new_raw_public_key_ex');
-    _mdCtxNew = _lib.lookupFunction<EvpMdCtxNewNative, EvpMdCtxNewDart>(
-        'EVP_MD_CTX_new');
+    _mdCtxNew = _lib
+        .lookupFunction<EvpMdCtxNewNative, EvpMdCtxNewDart>('EVP_MD_CTX_new');
     _mdCtxFree = _lib.lookupFunction<EvpMdCtxFreeNative, EvpMdCtxFreeDart>(
         'EVP_MD_CTX_free');
-    _digestSignInit = _lib.lookupFunction<EvpDigestSignInitNative,
-        EvpDigestSignInitDart>('EVP_DigestSignInit');
+    _digestSignInit =
+        _lib.lookupFunction<EvpDigestSignInitNative, EvpDigestSignInitDart>(
+            'EVP_DigestSignInit');
     _digestSign = _lib.lookupFunction<EvpDigestSignNative, EvpDigestSignDart>(
         'EVP_DigestSign');
-    _digestVerifyInit = _lib.lookupFunction<EvpDigestVerifyInitNative,
-        EvpDigestVerifyInitDart>('EVP_DigestVerifyInit');
-    _digestVerify = _lib
-        .lookupFunction<EvpDigestVerifyNative, EvpDigestVerifyDart>(
+    _digestVerifyInit =
+        _lib.lookupFunction<EvpDigestVerifyInitNative, EvpDigestVerifyInitDart>(
+            'EVP_DigestVerifyInit');
+    _digestVerify =
+        _lib.lookupFunction<EvpDigestVerifyNative, EvpDigestVerifyDart>(
             'EVP_DigestVerify');
   }
 
@@ -248,7 +272,9 @@ final class MlDsa65FfiAlgo extends AtSignatureAlgorithm
     try {
       final Pointer<EVP_PKEY> pkey =
           _newRawPrivateKeyEx(nullptr, algName, nullptr, buf, keyBytes.length);
-      if (pkey == nullptr) throw StateError('EVP_PKEY_new_raw_private_key_ex failed');
+      if (pkey == nullptr) {
+        throw StateError('EVP_PKEY_new_raw_private_key_ex failed');
+      }
       return pkey;
     } finally {
       calloc.free(buf);
@@ -263,7 +289,9 @@ final class MlDsa65FfiAlgo extends AtSignatureAlgorithm
     try {
       final Pointer<EVP_PKEY> pkey =
           _newRawPublicKeyEx(nullptr, algName, nullptr, buf, keyBytes.length);
-      if (pkey == nullptr) throw StateError('EVP_PKEY_new_raw_public_key_ex failed');
+      if (pkey == nullptr) {
+        throw StateError('EVP_PKEY_new_raw_public_key_ex failed');
+      }
       return pkey;
     } finally {
       calloc.free(buf);
@@ -304,8 +332,7 @@ final class MlDsa65FfiAlgo extends AtSignatureAlgorithm
     }
   }
 
-  bool _verify(
-      Pointer<EVP_PKEY> pkey, Uint8List data, Uint8List signature) {
+  bool _verify(Pointer<EVP_PKEY> pkey, Uint8List data, Uint8List signature) {
     final Pointer<EVP_MD_CTX> ctx = _mdCtxNew();
     if (ctx == nullptr) throw StateError('EVP_MD_CTX_new failed');
     try {

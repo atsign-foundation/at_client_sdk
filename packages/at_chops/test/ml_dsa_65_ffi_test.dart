@@ -45,10 +45,12 @@ void main() {
 
       final Uint8List message =
           Uint8List.fromList('Hello ML-DSA-65 FFI'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, secretKey: kp.secretKey);
+      final Uint8List sig =
+          await algo.signBytes(message, secretKey: kp.secretKey);
       expect(sig.length, equals(3309));
 
-      final bool ok = await algo.verifyBytes(message, signature: sig, publicKey: kp.publicKey);
+      final bool ok = await algo.verifyBytes(message,
+          signature: sig, publicKey: kp.publicKey);
       expect(ok, isTrue);
     });
 
@@ -69,8 +71,8 @@ void main() {
           Uint8List.fromList('cross-backend signing'.codeUnits);
       final Uint8List sig = await ffiAlgo.signBytes(message, secretKey: sk);
 
-      final bool ok =
-          await MlDsa65PureDartAlgo().verifyBytes(message, signature: sig, publicKey: pub);
+      final bool ok = await MlDsa65PureDartAlgo()
+          .verifyBytes(message, signature: sig, publicKey: pub);
       expect(ok, isTrue);
     });
 
@@ -87,10 +89,11 @@ void main() {
 
       final Uint8List message =
           Uint8List.fromList('cross-backend verification'.codeUnits);
-      final Uint8List sig =
-          await MlDsa65PureDartAlgo().signBytes(message, secretKey: kp.secretKey);
+      final Uint8List sig = await MlDsa65PureDartAlgo()
+          .signBytes(message, secretKey: kp.secretKey);
 
-      final bool ok = await ffiAlgo.verifyBytes(message, signature: sig, publicKey: kp.publicKey);
+      final bool ok = await ffiAlgo.verifyBytes(message,
+          signature: sig, publicKey: kp.publicKey);
       expect(ok, isTrue);
     });
 
@@ -106,14 +109,17 @@ void main() {
       final kp = await algo.generateKeyPair();
 
       final Uint8List message = Uint8List.fromList('original'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, secretKey: kp.secretKey);
+      final Uint8List sig =
+          await algo.signBytes(message, secretKey: kp.secretKey);
 
       final Uint8List tampered = Uint8List.fromList('tampered'.codeUnits);
-      final bool ok = await algo.verifyBytes(tampered, signature: sig, publicKey: kp.publicKey);
+      final bool ok = await algo.verifyBytes(tampered,
+          signature: sig, publicKey: kp.publicKey);
       expect(ok, isFalse);
     });
 
-    test('signBytes throws AtSigningException for a short secret key', () async {
+    test('signBytes throws AtSigningException for a short secret key',
+        () async {
       if (lib == null) {
         fail('libcrypto not available on this host');
       }
@@ -147,7 +153,8 @@ void main() {
           throwsA(isA<AtSigningException>()));
     });
 
-    test('verifyBytes returns false (never throws) for a wrong-length public key',
+    test(
+        'verifyBytes returns false (never throws) for a wrong-length public key',
         () async {
       if (lib == null) {
         fail('libcrypto not available on this host');
@@ -159,7 +166,8 @@ void main() {
       final algo = MlDsa65FfiAlgo.fromLib(lib);
       final kp = await algo.generateKeyPair();
       final Uint8List message = Uint8List.fromList('data'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, secretKey: kp.secretKey);
+      final Uint8List sig =
+          await algo.signBytes(message, secretKey: kp.secretKey);
 
       final Uint8List badPub = Uint8List(MlDsa65Sizes.publicKeyBytes - 1);
       final bool ok =
@@ -168,7 +176,19 @@ void main() {
       expect(ok, isFalse);
     });
 
-    test('verifyBytes returns false (never throws) for a wrong-length signature',
+    test(
+        'fromLib throws AtSigningException when the injected probe reports '
+        'no ML-DSA-65 support — runs on every host, no libcrypto required', () {
+      final DynamicLibrary probedLib = lib ?? DynamicLibrary.process();
+
+      expect(
+          () =>
+              MlDsa65FfiAlgo.fromLib(probedLib, supportsMlDsa65: (_) => false),
+          throwsA(isA<AtSigningException>()));
+    });
+
+    test(
+        'verifyBytes returns false (never throws) for a wrong-length signature',
         () async {
       if (lib == null) {
         fail('libcrypto not available on this host');

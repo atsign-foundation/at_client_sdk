@@ -195,10 +195,7 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
   @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
       Uint8List publicKey) async {
-    if (publicKey.length != MlKem768Sizes.publicKeyBytes) {
-      throw ArgumentError.value(publicKey.length, 'publicKey',
-          'ML-KEM-768 public key must be ${MlKem768Sizes.publicKeyBytes} bytes');
-    }
+    MlKem768Sizes.validatePublicKey(publicKey);
     final Pointer<EVP_PKEY> pubKeyPtr = _importPublicKey(publicKey);
     try {
       final Pointer<EVP_PKEY_CTX> ctx = _ctxNew(pubKeyPtr, nullptr);
@@ -251,10 +248,7 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
   @override
   Future<Uint8List> decapsulate(
       Uint8List secretKey, Uint8List ciphertext) async {
-    if (ciphertext.length != MlKem768Sizes.ciphertextBytes) {
-      throw ArgumentError.value(ciphertext.length, 'ciphertext',
-          'ML-KEM-768 ciphertext must be ${MlKem768Sizes.ciphertextBytes} bytes');
-    }
+    MlKem768Sizes.validateCiphertext(ciphertext);
     final int handle = _decodeHandle(secretKey);
     final Pointer<EVP_PKEY>? pkey = _keys[handle];
     if (pkey == null) throw StateError('Unknown ML-KEM-768 key handle');
@@ -311,6 +305,8 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
       }
       final Uint8List bytes = Uint8List.fromList(ppub.value.asTypedList(len));
       _cryptoFree(ppub.value.cast(), nullptr, 0);
+      checkOutputLength(bytes.length, MlKem768Sizes.publicKeyBytes,
+          operation: 'ML-KEM-768 generateKeyPair', label: 'public key');
       return bytes;
     } finally {
       calloc.free(ppub);
@@ -387,9 +383,11 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
   /// ML-DSA-65 backend had for its secret key before it was fixed).
   static int _decodeHandle(Uint8List bytes) {
     if (bytes.length != _handleLength) {
-      throw ArgumentError.value(bytes.length, 'secretKey',
+      throw ArgumentError.value(
+          bytes.length,
+          'secretKey',
           'ML-KEM-768 (FFI) secret key must be the $_handleLength-byte '
-          'handle returned by generateKeyPair');
+              'handle returned by generateKeyPair');
     }
     int h = 0;
     for (int i = 0; i < _handleLength; i++) {

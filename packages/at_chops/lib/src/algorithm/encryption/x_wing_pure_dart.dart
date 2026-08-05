@@ -61,13 +61,29 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
       [Uint8List? seed]) async {
     seed ??= _randomSeed();
     final _Expanded expanded = await _expand(seed);
-    checkOutputLength(expanded.mlKemPublicKey.length, _mlKemPublicKeyLength,
-        operation: 'ML-KEM-768 generateKeyPair', label: 'public key');
-    final Uint8List publicKey = Uint8List(publicKeyLength)
-      ..setRange(0, _mlKemPublicKeyLength, expanded.mlKemPublicKey)
-      ..setRange(_mlKemPublicKeyLength, publicKeyLength, expanded.x25519Public);
+    final Uint8List publicKey =
+        _assemblePublicKey(expanded.mlKemPublicKey, expanded.x25519Public);
     return (publicKey: publicKey, secretKey: Uint8List.fromList(seed));
   }
+
+  /// `pk_M || pk_X`. The fixed offsets below (`0..1184`, `1184..1216`) assume
+  /// the ML-KEM-768 component is exactly [_mlKemPublicKeyLength] bytes — same
+  /// reasoning as [_combine]'s.
+  Uint8List _assemblePublicKey(
+      Uint8List mlKemPublicKey, Uint8List x25519Public) {
+    checkOutputLength(mlKemPublicKey.length, _mlKemPublicKeyLength,
+        operation: 'ML-KEM-768 generateKeyPair', label: 'public key');
+    return Uint8List(publicKeyLength)
+      ..setRange(0, _mlKemPublicKeyLength, mlKemPublicKey)
+      ..setRange(_mlKemPublicKeyLength, publicKeyLength, x25519Public);
+  }
+
+  /// Exposes [_assemblePublicKey] to prove its ML-KEM-768 public-key length
+  /// guard is wired to the correct constant — not a production entry point.
+  @visibleForTesting
+  Uint8List assemblePublicKeyForTesting(
+          Uint8List mlKemPublicKey, Uint8List x25519Public) =>
+      _assemblePublicKey(mlKemPublicKey, x25519Public);
 
   @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
@@ -107,8 +123,6 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
     final (ciphertext: ctM, sharedSecret: ssM) = await MlKem768PureDartAlgo
         .instance
         .encapsulate(mlKemPublic, mlKemRandomness);
-    checkOutputLength(ctM.length, _mlKemCiphertextLength,
-        operation: 'ML-KEM-768 encapsulate', label: 'ciphertext');
 
     final crypto.SimpleKeyPair ephemeral =
         await _x25519.newKeyPairFromSeed(ephemeralX25519Secret);
@@ -117,14 +131,29 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
     final Uint8List ssX = await X25519PureDartAlgo.instance
         .dh(ephemeralX25519Secret, x25519Public);
 
-    final Uint8List ciphertext = Uint8List(ciphertextLength)
-      ..setRange(0, _mlKemCiphertextLength, ctM)
-      ..setRange(_mlKemCiphertextLength, ciphertextLength, ctX);
+    final Uint8List ciphertext = _assembleCiphertext(ctM, ctX);
     return (
       ciphertext: ciphertext,
       sharedSecret: _combine(ssM, ssX, ctX, x25519Public),
     );
   }
+
+  /// `ct_M || ct_X`. The fixed offsets below (`0..1088`, `1088..1120`) assume
+  /// the ML-KEM-768 component is exactly [_mlKemCiphertextLength] bytes —
+  /// same reasoning as [_combine]'s.
+  Uint8List _assembleCiphertext(Uint8List ctM, Uint8List ctX) {
+    checkOutputLength(ctM.length, _mlKemCiphertextLength,
+        operation: 'ML-KEM-768 encapsulate', label: 'ciphertext');
+    return Uint8List(ciphertextLength)
+      ..setRange(0, _mlKemCiphertextLength, ctM)
+      ..setRange(_mlKemCiphertextLength, ciphertextLength, ctX);
+  }
+
+  /// Exposes [_assembleCiphertext] to prove its ML-KEM-768 ciphertext length
+  /// guard is wired to the correct constant — not a production entry point.
+  @visibleForTesting
+  Uint8List assembleCiphertextForTesting(Uint8List ctM, Uint8List ctX) =>
+      _assembleCiphertext(ctM, ctX);
 
   @override
   Future<Uint8List> decapsulate(
