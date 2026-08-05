@@ -1,5 +1,6 @@
 import 'dart:async' show unawaited;
 import 'dart:convert' show base64Encode;
+import 'dart:typed_data' show Uint8List;
 
 import 'package:at_client/at_client.dart' show AtClient;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
@@ -127,20 +128,26 @@ class NskeySeeding {
     if (filing == null) return 0;
 
     int hydrated = 0;
-    for (final namespace in await authorisedNamespaces()) {
-      try {
-        final held = await filing.readAllFor(namespace);
-        for (final entry in held.entries) {
-          sharing.secretStore.putIfNewer(Secret(
-            namespace: namespace,
-            name: '${NskeyPrivateFiling.secretNamePrefix}${entry.key}',
-            value: base64Encode(entry.value),
-          ));
-          hydrated++;
-        }
-      } catch (e) {
-        _logger
-            .warning('Could not prime held nskey privates for $namespace: $e');
+    // Off the keyfile, not off the enrollment record. What a holder can answer
+    // with is what it HOLDS; asking the atServer which namespaces it is
+    // authorised for would add a round trip, and — because this runs during
+    // client construction, before the manager has wired the enrollment
+    // service — would fail and silently prime nothing.
+    final Map<String, Map<String, Uint8List>> held;
+    try {
+      held = await filing.readAll();
+    } catch (e) {
+      _logger.warning('Could not read held nskey privates to prime them: $e');
+      return 0;
+    }
+    for (final namespace in held.keys) {
+      for (final entry in held[namespace]!.entries) {
+        sharing.secretStore.putIfNewer(Secret(
+          namespace: namespace,
+          name: '${NskeyPrivateFiling.secretNamePrefix}${entry.key}',
+          value: base64Encode(entry.value),
+        ));
+        hydrated++;
       }
     }
     return hydrated;

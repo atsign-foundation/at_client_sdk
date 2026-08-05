@@ -586,6 +586,22 @@ class AtClientImpl implements AtClient {
   /// private had arrived.
   Future<void> _fileConveyedKeysAndAnchor() async {
     final keysIo = _atKeysIo;
+    // The SUPPLY side runs first, before anything sweeps. The one sweep every
+    // client performs at start consumes and DELETES the envelopes it finds,
+    // including other enrollments' pull requests — and it answers them out of
+    // this in-memory store, which a restart empties. Hydrated afterwards, that
+    // sweep is guaranteed to destroy every request waiting for this holder
+    // while holding nothing to answer them with, and the requester's only
+    // recourse is to ask again and lose the next one the same way.
+    if (keysIo != null) {
+      try {
+        await _hydrateHeldSecretsForAnswering(keysIo);
+      } catch (e, st) {
+        _logger.warning('Could not prime what $_atSign holds for answering '
+            'other enrollments; their pulls go unanswered until the next '
+            'start retries: $e, $st');
+      }
+    }
     if (keysIo != null) {
       try {
         await collectConveyedKeyMaterial(this, keysIo);
@@ -639,10 +655,8 @@ class AtClientImpl implements AtClient {
           privateFiling: filing,
         );
         final sharing = AtClientSecretSharing.forClient(this);
-        // Supply side first: prime the in-memory store with what this client
-        // holds durably, so IT can answer other enrollments' pulls — the
-        // store is a transit buffer and a restart empties it.
-        await seeding.hydrateStoreFromFiling(sharing);
+        // The supply side already ran, before the sweep that answers with it
+        // (see _hydrateHeldSecretsForAnswering).
         final asked = await seeding.requestMissingPrivates(sharing);
         if (asked.isNotEmpty) {
           _logger.info('Asked other enrollments for the nskey private(s) of '
@@ -689,6 +703,50 @@ class AtClientImpl implements AtClient {
           'enrollments stay unanchored, which verifiers tolerate, and the '
           'next privileged start retries: $e, $st');
     }
+  }
+
+  /// Primes the in-memory secret store with the key material this client
+  /// holds durably, so it can **answer** other enrollments' pull requests.
+  ///
+  /// Must run before anything sweeps: a sweep consumes and deletes the
+  /// requests it finds and answers them from this store, so a holder that
+  /// hydrates afterwards destroys exactly the requests it was supposed to
+  /// serve. The store is in-memory by design and a restart empties it, which
+  /// is why this is a re-prime on every start rather than a one-off.
+  Future<void> _hydrateHeldSecretsForAnswering(AtKeysIo keysIo) async {
+    final sharing = AtClientSecretSharing.forClient(this);
+    await NskeySeeding(
+      atClient: this,
+      ring: PublishedNskeyKeyRing(this,
+          privateFiling: NskeyPrivateFiling(keysIo: keysIo, atSign: _atSign)),
+      privateFiling: NskeyPrivateFiling(keysIo: keysIo, atSign: _atSign),
+    ).hydrateStoreFromFiling(sharing);
+
+    // The signing root, which is atSign-level and so has no namespace of its
+    // own: it is offered under the client's namespace, because that is where
+    // requesters ask. Cheap check first — holding nothing settles it without
+    // the round trip that resolving privilege costs, and that is every client
+    // but the rare privileged one.
+    final askIn = _preference?.namespace;
+    if (askIn == null || askIn.isEmpty) return;
+    final root = PqSigningRoot(this, keysIo: keysIo);
+    if (await root.privateHalf(_atSign) == null) return;
+
+    // Before offering it, check it is the right key. A private that
+    // corresponds to nothing published — the residue of a create this client
+    // lost, or of a crash — otherwise blocks its own repair forever: it
+    // satisfies the pull's "already holding it" guard, so this enrollment
+    // never asks, and it would be served to enrollments that asked, spending
+    // their broadcast on bytes their own check then rejects. This is the
+    // "a later start reconciles it" the mint's severe log promises, and it is
+    // promised HERE because a mint is once per keyfile while a start is
+    // every time.
+    if (await root.reconcileHeldPrivate(_atSign)) return;
+
+    // A scoped enrollment should not be holding this at all; one that somehow
+    // does must not go on to offer it to others.
+    if (!await _resolveFullPrivilege()) return;
+    await root.hydrateStore(sharing, askIn);
   }
 
   /// Whether this client's enrollment holds `rw` on both `*` and `__manage`.

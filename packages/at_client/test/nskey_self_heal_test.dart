@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
@@ -191,6 +190,102 @@ void main() {
     });
   });
 
+  group('the supply side (NskeySeeding.hydrateStoreFromFiling)', () {
+    /// A client whose enrollment service is not yet wired — which is every
+    /// client during its own construction, and construction is exactly when
+    /// this runs.
+    MockAtClient enrolledClientMidConstruction() {
+      final atClient = MockAtClient();
+      final secondary = MockRemoteSecondary();
+      final lookUp = MockAtLookupImpl();
+      when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
+      when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
+      when(() => secondary.atLookUp).thenReturn(lookUp);
+      when(() => lookUp.enrollmentId).thenReturn('enrollment-1');
+      when(() => atClient.getPreferences())
+          .thenReturn(AtClientPreference()..namespace = namespace);
+      // `AtClientManager` wires this only after construction returns, and the
+      // real getter throws until then.
+      when(() => atClient.enrollmentService)
+          .thenThrow(StateError('EnrollmentService has not yet been set'));
+      return atClient;
+    }
+
+    test('primes what the keyfile holds, without the enrollment service',
+        () async {
+      final atClient = enrolledClientMidConstruction();
+      final held = await filing();
+      final kid = nskeyKidOf(pair.publicKeyBytes);
+      await held.store(
+          namespace: namespace, nskeyKid: kid, private: pair.privateKeyBytes);
+
+      final sharing = _RecordingStoreSharing();
+      final primed = await NskeySeeding(
+              atClient: atClient,
+              ring: PublishedNskeyKeyRing(atClient, privateFiling: held),
+              privateFiling: held)
+          .hydrateStoreFromFiling(sharing);
+
+      expect(primed, 1,
+          reason: 'a holder answers pull requests out of this in-memory '
+              'store, which a restart empties. Resolving "which namespaces am '
+              'I authorised for" needs the enrollment service — unavailable '
+              'here, and its failure is swallowed — so priming must come off '
+              'the KEYFILE: what a holder can answer with is what it holds');
+      expect(
+          sharing.secretStore
+              .listSecrets(namespace: namespace)
+              .map((s) => s.name),
+          contains('${NskeyPrivateFiling.secretNamePrefix}$kid'));
+    });
+
+    test('primes every namespace the keyfile holds, not just the client\'s',
+        () async {
+      final atClient = enrolledClientMidConstruction();
+      final held = await filing();
+      final other = await XWingKeyPair.generate();
+      final kid = nskeyKidOf(pair.publicKeyBytes);
+      final otherKid = nskeyKidOf(other.publicKeyBytes);
+      await held.store(
+          namespace: namespace, nskeyKid: kid, private: pair.privateKeyBytes);
+      await held.store(
+          namespace: 'second.my_apps',
+          nskeyKid: otherKid,
+          private: other.privateKeyBytes);
+
+      final sharing = _RecordingStoreSharing();
+      expect(
+          await NskeySeeding(
+                  atClient: atClient,
+                  ring: PublishedNskeyKeyRing(atClient, privateFiling: held),
+                  privateFiling: held)
+              .hydrateStoreFromFiling(sharing),
+          2,
+          reason: 'a multi-segment namespace must survive the round trip '
+              'through the AtKeys key id, which is `nskey.<ns>.<kid>` — the '
+              'kid never contains a dot, the namespace often does');
+      expect(
+          sharing.secretStore
+              .listSecrets(namespace: 'second.my_apps')
+              .map((s) => s.name),
+          contains('${NskeyPrivateFiling.secretNamePrefix}$otherKid'));
+    });
+
+    test('holding nothing primes nothing', () async {
+      final atClient = enrolledClientMidConstruction();
+      final held = await filing();
+      final sharing = _RecordingStoreSharing();
+      expect(
+          await NskeySeeding(
+                  atClient: atClient,
+                  ring: PublishedNskeyKeyRing(atClient, privateFiling: held),
+                  privateFiling: held)
+              .hydrateStoreFromFiling(sharing),
+          0);
+      expect(sharing.secretStore.listSecrets(), isEmpty);
+    });
+  });
+
   group('the on-miss pull (PublishedNskeyKeyRing)', () {
     test('a miss on an own generation fires the injected ask, once', () async {
       final atClient = client();
@@ -246,4 +341,11 @@ void main() {
       expect(asked, isEmpty);
     });
   });
+}
+
+/// A sharing double with a real [SecretStore], for asserting what priming put
+/// there rather than that a method was called.
+class _RecordingStoreSharing extends Fake implements PairwiseSecretSharing {
+  @override
+  final SecretStore secretStore = SecretStore();
 }

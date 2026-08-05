@@ -184,6 +184,42 @@ class NskeyPrivateFiling {
   /// superseded key is still readable, and only its own private opens it. A
   /// client given the current generation alone could read nothing written
   /// before the last rotation.
+  /// Every private this keyfile holds, grouped by namespace: `{namespace:
+  /// {nskeyKid: private}}`.
+  ///
+  /// Reads only the keyfile — no atServer round trip and no enrollment lookup.
+  /// That matters for the one caller that runs during client construction:
+  /// asking the atServer which namespaces this enrollment is authorised for
+  /// needs services the client has not been given yet, and what a holder can
+  /// *answer* with is what it holds, not what it is authorised for.
+  Future<Map<String, Map<String, Uint8List>>> readAll() async {
+    const prefix = 'nskey.';
+    final AtKeys keys;
+    try {
+      keys = await keysIo.read(atSign);
+    } catch (e) {
+      _logger.finer('No nskey privates held ($e)');
+      return const {};
+    }
+    final held = <String, Map<String, Uint8List>>{};
+    for (final material in keys.keys) {
+      if (material.keyPartType != CryptographicKeyType.privateDecapsulation ||
+          !material.keyId.startsWith(prefix)) {
+        continue;
+      }
+      // `nskey.<namespace>.<kid>`, and a namespace may itself contain dots —
+      // the kid is a truncated hash and never does, so the LAST dot is the
+      // boundary.
+      final rest = material.keyId.substring(prefix.length);
+      final cut = rest.lastIndexOf('.');
+      if (cut <= 0) continue;
+      held.putIfAbsent(
+              rest.substring(0, cut), () => {})[rest.substring(cut + 1)] =
+          Uint8List.fromList(material.bytes.bytes);
+    }
+    return held;
+  }
+
   Future<Map<String, Uint8List>> readAllFor(String namespace) async {
     final prefix = keyIdFor(namespace, '');
     try {
