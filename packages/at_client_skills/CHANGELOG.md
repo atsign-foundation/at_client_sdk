@@ -1,5 +1,27 @@
 # Changelog — at_client_skills
 
+## 1.3.0 — 2026-07-31
+
+- Document RPC between atsigns — `AtRpc` / `AtRpcClient` request/response
+  (new `references/13-rpc.md`).
+- Document headless agents and multi-instance coordination — `CLIBase` auth,
+  per-process storage paths, the immutable-mutex pattern, and stateless
+  scaling with `ServiceFactoryWithNoOpSyncService`
+  (new `references/14-multi-agent.md`).
+- Document remote vs local atServer operations — client-wide
+  `remoteLocalPref`, per-operation `useRemoteAtServer`, and `bypassCache`
+  (new `references/12-remote-atserver.md`).
+- Document the rule to never pin `at_client` / `at_client_flutter` versions —
+  install with `dart pub add` instead.
+- Clarify the macOS `network.server` entitlement is only needed when the app
+  opens a listening socket (e.g. NoPorts tunnels).
+- Add `noports_core` and `at_stream` (pre-release) to the package map.
+- Document that `at_onboarding_flutter` is discontinued — use `at_client_flutter`.
+- Add evals covering the new content, and tighten the owner-writes-only and
+  activation evals.
+- Document the `skills` CLI prerequisite and the full install steps in the
+  README.
+
 ## 1.2.0 — 2026-07-07
 
 - Document sync scoping (`syncRegex`) and the sync lifecycle
