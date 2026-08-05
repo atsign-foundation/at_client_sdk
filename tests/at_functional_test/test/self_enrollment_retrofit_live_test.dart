@@ -10,6 +10,8 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show verifyEnvelope;
 import 'package:at_demo_data/at_demo_data.dart' show aesKeyMap, encryptionPrivateKeyMap;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -149,6 +151,62 @@ void main() {
     expect(ok, true,
         reason: 'signer and published verify key must be the same keypair on '
             'the real wire, or every advertised-key verification fails');
+  });
+
+  test(
+      'selfRetrofit switches to a working client: verb connection, monitor, '
+      'and envelope signing all run under the ML-DSA enrollment',
+      timeout: const Timeout(Duration(seconds: 90)), () async {
+    final session = await legacySession();
+    final manager = await selfRetrofit(
+        session: session,
+        preference: TestUtils.getPreference(atSign),
+        appName: 'rf2b-app',
+        deviceName: 'rf2c-${Uuid().v4().hashCode}',
+        namespaces: {namespace: 'rw'},
+        // A dedicated manager keeps the owner client live alongside — the
+        // proven ConcurrentClients shape for two enrollments of one atSign.
+        manager: AtClientManager(atSign));
+
+    final client = manager.atClient;
+    expect(client.enrollmentId, isNotNull);
+    expect(client.enrollmentId, isNot(session.enrollmentId));
+    expect(client.signingAlgoType, SigningAlgoType.mldsa65,
+        reason: 'resolved from the keyfile\'s typed material — the '
+            'preference still says rsa2048');
+
+    // Verb connection: an authenticated command under the new enrollment.
+    // Record-authoritative, so a pass means the connection PKAMed ML-DSA.
+    final scanResult =
+        await client.getRemoteSecondary()!.executeCommand('scan\n', auth: true);
+    expect(scanResult, startsWith('data:'));
+
+    // Monitor: it opens its OWN socket and re-authenticates on every
+    // (re)connect, so anything arriving over it proves ITS ML-DSA auth
+    // independently of the verb connection above. The atServer's own
+    // statsNotification stream is the trigger-free signal — it arrives
+    // every ~15s once the monitor is listening, which is only possible
+    // after that socket's PKAM succeeded.
+    final firstNotification = client.notificationService
+        .subscribe(shouldDecrypt: false)
+        .first
+        .timeout(const Duration(seconds: 45));
+    final received = await firstNotification;
+    expect(received.id, isNotNull,
+        reason: 'a notification delivered through the monitor means its '
+            'socket PKAMed with the ML-DSA key — the monitor reads its '
+            'algorithm from the client, not the preference');
+
+    // Envelope signing: what this client signs verifies against the tagged
+    // _apsk the atServer serves for its enrollment — wrapAndSign must have
+    // signed ML-DSA, or the verify refuses the algorithm mismatch.
+    final sharing = AtClientSecretSharing.forClient(client);
+    final envelope = await sharing.wrapAndSign('rf2c-proof');
+    final apsk = (await client.getRemoteSecondary()!.executeCommand(
+            'llookup:public:_apsk.${client.enrollmentId}.a.__e$atSign\n',
+            auth: true))!
+        .replaceFirst('data:', '');
+    await verifyEnvelope(envelope, signerPublicKey: apsk);
   });
 
   test('mint-once per keyfile: a rerun reuses the PQ enrollment', () async {

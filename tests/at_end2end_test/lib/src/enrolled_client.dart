@@ -29,26 +29,12 @@ import 'package:uuid/uuid.dart';
 /// with its own `enrollmentId`, its own APKAM keypair, and its own key
 /// package.
 ///
-/// **It does not work yet, and the obstacle is structural rather than a wiring
-/// slip.** `AtClientImpl` caches client instances **keyed by atSign alone**, so
-/// every call here returns the *same* object as the approver's client:
-/// `identical(enrolled.client, approver)` is `true`, and two enrollments of the
-/// same atSign are `identical` to each other. `setCurrentAtSign` short-circuits
-/// or reuses, and `_remoteSecondary ??=` keeps the connection that instance was
-/// built with — so `enrollmentId` never reaches the `AtLookUp`, which is why
-/// `enroll:listns` is refused.
-///
-/// This is the `(owner, id)` rule the rest of the codebase follows, missing
-/// from the client cache: identity there is the atSign, not the atSign *and*
-/// the enrollment. `ConcurrentClients` in `at_end2end_test` solves the adjacent
-/// problem — two different *atSigns* — with one `AtClientManager` each; that is
-/// not this problem, because a second manager still resolves to the same cached
-/// client when the atSign matches.
-///
-/// Making this work needs one of: a client cache scoped by
-/// `(atSign, enrollmentId)`; driving the second enrollment through `AtLookUp`
-/// alone rather than a full `AtClient`; or a second process. That is a decision
-/// about `AtClientImpl`, not a fixture detail.
+/// This works because `AtClientImpl` caches clients by
+/// `(atSign, enrollmentId)` — the `(owner, id)` rule applied to the client
+/// cache — so a second enrollment of one atSign is a genuinely separate
+/// client with its own connection carrying its own enrollment id. Use one
+/// `AtClientManager` per client (the public constructor), never
+/// `getInstance().setCurrentAtSign`, which would stop the other client.
 class EnrolledClient {
   /// The enrolled client, authenticated as [enrollmentId].
   final AtClient client;
