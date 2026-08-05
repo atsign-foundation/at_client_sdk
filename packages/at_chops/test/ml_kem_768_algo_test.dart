@@ -46,9 +46,8 @@ void main() {
       expect(bad.length, equals(32));
     });
 
-    test(
-        'encapsulate throws ArgumentError for a too-short public key '
-        '(our validation, not just pqcrypto\'s)', () async {
+    test('encapsulate throws ArgumentError for a too-short public key',
+        () async {
       final Uint8List badPub = Uint8List(MlKem768Sizes.publicKeyBytes - 1);
       expect(
           () => MlKem768PureDartAlgo.instance.encapsulate(badPub),
@@ -56,9 +55,8 @@ void main() {
               (e) => e.message, 'message', contains('ML-KEM-768 public key'))));
     });
 
-    test(
-        'encapsulate throws ArgumentError for a too-long public key '
-        '(our validation, not just pqcrypto\'s)', () async {
+    test('encapsulate throws ArgumentError for a too-long public key',
+        () async {
       final Uint8List badPub = Uint8List(MlKem768Sizes.publicKeyBytes + 1);
       expect(
           () => MlKem768PureDartAlgo.instance.encapsulate(badPub),
@@ -66,9 +64,8 @@ void main() {
               (e) => e.message, 'message', contains('ML-KEM-768 public key'))));
     });
 
-    test(
-        'decapsulate throws ArgumentError for a wrong-length ciphertext '
-        '(our validation, not just pqcrypto\'s)', () async {
+    test('decapsulate throws ArgumentError for a wrong-length ciphertext',
+        () async {
       final MlKem768KeyPair kp = await MlKem768KeyPair.generate();
       final Uint8List priv = base64Decode(kp.atPrivateKey.privateKey);
       final Uint8List badCt = Uint8List(MlKem768Sizes.ciphertextBytes + 1);
@@ -79,9 +76,8 @@ void main() {
               (e) => e.message, 'message', contains('ML-KEM-768 ciphertext'))));
     });
 
-    test(
-        'decapsulate throws ArgumentError for a wrong-length secret key '
-        '(our validation, not just pqcrypto\'s)', () async {
+    test('decapsulate throws ArgumentError for a wrong-length secret key',
+        () async {
       // secretKey length is checked before ciphertext is touched, so a
       // same-length dummy ciphertext suffices — no real encapsulate() needed.
       final Uint8List badSecretKey = Uint8List(2399);

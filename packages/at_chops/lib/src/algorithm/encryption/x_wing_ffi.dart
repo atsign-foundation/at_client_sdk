@@ -1,16 +1,12 @@
 import 'dart:async';
 import 'dart:ffi';
-import 'dart:math' show Random;
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/encryption/ml_kem_768_ffi.dart';
 import 'package:at_chops/src/algorithm/encryption/x25519_ffi_algo.dart';
 import 'package:at_chops/src/algorithm/spec/ml_kem_768_spec.dart';
-import 'package:at_chops/src/algorithm/spec/output_length.dart';
 import 'package:at_chops/src/algorithm/spec/x_wing_spec.dart';
-import 'package:meta/meta.dart';
-import 'package:pointycastle/digests/sha3.dart';
 import 'package:pointycastle/digests/shake.dart';
 
 /// X-Wing hybrid post-quantum/traditional KEM (draft-connolly-cfrg-xwing-kem-10)
@@ -47,10 +43,6 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
   static const int _mlKemPublicKeyLength = MlKem768Sizes.publicKeyBytes;
   static const int _mlKemCiphertextLength = MlKem768Sizes.ciphertextBytes;
 
-  /// `XWingLabel`: the ASCII bytes of `\.//^\`.
-  static final Uint8List _label =
-      Uint8List.fromList([0x5c, 0x2e, 0x2f, 0x2f, 0x5e, 0x5c]);
-
   /// Generate an X-Wing key pair.
   ///
   /// Returns `(publicKey: 1216 bytes, secretKey: 32 bytes)` — the secret key IS
@@ -60,35 +52,16 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
   @override
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair(
       [Uint8List? seed]) async {
-    seed ??= _randomSeed();
+    seed ??= XWingSizes.randomSeed();
     final _Expanded e = await _expand(seed);
     try {
       final Uint8List publicKey =
-          _assemblePublicKey(e.mlKemKeyPair.publicKey, e.x25519Public);
+          XWingSizes.assemblePublicKey(e.mlKemKeyPair.publicKey, e.x25519Public);
       return (publicKey: publicKey, secretKey: Uint8List.fromList(seed));
     } finally {
       _mlKem.releaseKeyPair(e.mlKemKeyPair);
     }
   }
-
-  /// `pk_M || pk_X`. The fixed offsets below (`0..1184`, `1184..1216`) assume
-  /// the ML-KEM-768 component is exactly [_mlKemPublicKeyLength] bytes — same
-  /// reasoning as [_combine]'s.
-  Uint8List _assemblePublicKey(
-      Uint8List mlKemPublicKey, Uint8List x25519Public) {
-    checkOutputLength(mlKemPublicKey.length, _mlKemPublicKeyLength,
-        operation: 'ML-KEM-768 generateKeyPair', label: 'public key');
-    return Uint8List(publicKeyLength)
-      ..setRange(0, _mlKemPublicKeyLength, mlKemPublicKey)
-      ..setRange(_mlKemPublicKeyLength, publicKeyLength, x25519Public);
-  }
-
-  /// Exposes [_assemblePublicKey] to prove its ML-KEM-768 public-key length
-  /// guard is wired to the correct constant — not a production entry point.
-  @visibleForTesting
-  Uint8List assemblePublicKeyForTesting(
-          Uint8List mlKemPublicKey, Uint8List x25519Public) =>
-      _assemblePublicKey(mlKemPublicKey, x25519Public);
 
   @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
@@ -107,29 +80,12 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
     final Uint8List ctX = ephemeral.publicKey;
     final Uint8List ssX = await _x25519.dh(ephemeral.privateKey, x25519Public);
 
-    final Uint8List ciphertext = _assembleCiphertext(ctM, ctX);
+    final Uint8List ciphertext = XWingSizes.assembleCiphertext(ctM, ctX);
     return (
       ciphertext: ciphertext,
-      sharedSecret: _combine(ssM, ssX, ctX, x25519Public),
+      sharedSecret: XWingSizes.combineSharedSecret(ssM, ssX, ctX, x25519Public),
     );
   }
-
-  /// `ct_M || ct_X`. The fixed offsets below (`0..1088`, `1088..1120`) assume
-  /// the ML-KEM-768 component is exactly [_mlKemCiphertextLength] bytes —
-  /// same reasoning as [_combine]'s.
-  Uint8List _assembleCiphertext(Uint8List ctM, Uint8List ctX) {
-    checkOutputLength(ctM.length, _mlKemCiphertextLength,
-        operation: 'ML-KEM-768 encapsulate', label: 'ciphertext');
-    return Uint8List(ciphertextLength)
-      ..setRange(0, _mlKemCiphertextLength, ctM)
-      ..setRange(_mlKemCiphertextLength, ciphertextLength, ctX);
-  }
-
-  /// Exposes [_assembleCiphertext] to prove its ML-KEM-768 ciphertext length
-  /// guard is wired to the correct constant — not a production entry point.
-  @visibleForTesting
-  Uint8List assembleCiphertextForTesting(Uint8List ctM, Uint8List ctX) =>
-      _assembleCiphertext(ctM, ctX);
 
   @override
   Future<Uint8List> decapsulate(
@@ -150,7 +106,7 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
       final Uint8List ssM =
           await _mlKem.decapsulate(e.mlKemKeyPair.secretKey, ctM);
       final Uint8List ssX = await _x25519.dh(e.x25519Secret, ctX);
-      return _combine(ssM, ssX, ctX, e.x25519Public);
+      return XWingSizes.combineSharedSecret(ssM, ssX, ctX, e.x25519Public);
     } finally {
       _mlKem.releaseKeyPair(e.mlKemKeyPair);
     }
@@ -179,40 +135,6 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
       x25519Secret: skX,
       x25519Public: pkX,
     );
-  }
-
-  /// `SHA3-256(ss_M || ss_X || ct_X || pk_X || XWingLabel)`.
-  ///
-  /// Shared choke point for both [encapsulate] and [decapsulate] — the fixed
-  /// offsets below (`0..32`, `32..64`) assume `ssM`/`ssX` are each exactly 32
-  /// bytes; checking it here covers both call sites in one place.
-  Uint8List _combine(
-      Uint8List ssM, Uint8List ssX, Uint8List ctX, Uint8List pkX) {
-    checkOutputLength(ssM.length, MlKem768Sizes.sharedSecretBytes,
-        operation: 'X-Wing', label: 'ML-KEM-768 shared secret component');
-    checkOutputLength(ssX.length, XWingSizes.x25519ComponentLength,
-        operation: 'X-Wing', label: 'X25519 shared secret component');
-    final Uint8List input =
-        Uint8List(ssM.length + ssX.length + ctX.length + pkX.length + 6)
-          ..setRange(0, 32, ssM)
-          ..setRange(32, 64, ssX)
-          ..setRange(64, 96, ctX)
-          ..setRange(96, 128, pkX)
-          ..setRange(128, 134, _label);
-    return SHA3Digest(256).process(input);
-  }
-
-  /// Exposes [_combine] to prove its `ssM`/`ssX` length guards are wired to
-  /// the correct constants — not a production entry point.
-  @visibleForTesting
-  Uint8List combineForTesting(
-          Uint8List ssM, Uint8List ssX, Uint8List ctX, Uint8List pkX) =>
-      _combine(ssM, ssX, ctX, pkX);
-
-  Uint8List _randomSeed() {
-    final Random random = Random.secure();
-    return Uint8List.fromList(
-        List<int>.generate(seedLength, (_) => random.nextInt(256)));
   }
 }
 

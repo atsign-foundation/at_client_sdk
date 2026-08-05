@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_chops/src/algorithm/spec/ml_kem_768_spec.dart';
+import 'package:at_chops/src/algorithm/spec/x_wing_spec.dart';
 import 'package:test/test.dart';
 
 import 'x_wing_test_vectors.dart';
@@ -109,7 +110,7 @@ void main() {
     // test alone can't tell them apart; these prove the wiring directly.
     test('wrong-length ssM is rejected against the ML-KEM-768 label', () {
       expect(
-          () => algo.combineForTesting(
+          () => XWingSizes.combineSharedSecret(
               Uint8List(31), Uint8List(32), Uint8List(32), Uint8List(1216)),
           throwsA(isA<StateError>().having((e) => e.message, 'message',
               contains('ML-KEM-768 shared secret component'))));
@@ -117,7 +118,7 @@ void main() {
 
     test('wrong-length ssX is rejected against the X25519 label', () {
       expect(
-          () => algo.combineForTesting(
+          () => XWingSizes.combineSharedSecret(
               Uint8List(32), Uint8List(33), Uint8List(32), Uint8List(1216)),
           throwsA(isA<StateError>().having((e) => e.message, 'message',
               contains('X25519 shared secret component'))));
@@ -138,7 +139,7 @@ void main() {
         'correct-length inputs assemble the public key with components at '
         'the right offsets', () {
       final publicKey =
-          algo.assemblePublicKeyForTesting(mlKemPublicKey, x25519Public);
+          XWingSizes.assemblePublicKey(mlKemPublicKey, x25519Public);
       expect(publicKey.length, XWingPureDartAlgo.publicKeyLength);
       expect(
           publicKey.sublist(0, MlKem768Sizes.publicKeyBytes), mlKemPublicKey);
@@ -148,7 +149,7 @@ void main() {
     test(
         'correct-length inputs assemble the ciphertext with components at '
         'the right offsets', () {
-      final ciphertext = algo.assembleCiphertextForTesting(ctM, ctX);
+      final ciphertext = XWingSizes.assembleCiphertext(ctM, ctX);
       expect(ciphertext.length, XWingPureDartAlgo.ciphertextLength);
       expect(ciphertext.sublist(0, MlKem768Sizes.ciphertextBytes), ctM);
       expect(ciphertext.sublist(MlKem768Sizes.ciphertextBytes), ctX);

@@ -165,10 +165,8 @@ void main() {
       }
     });
 
-    test(
-        'decapsulate throws ArgumentError for a wrong-length secret-key '
-        'handle (previously: an unguarded index read threw RangeError for '
-        'a too-short handle)', () async {
+    test('decapsulate throws ArgumentError for a wrong-length secret-key '
+        'handle', () async {
       if (lib == null) {
         fail('libcrypto not available on this host');
       }
