@@ -115,18 +115,24 @@ The file-partition/track detail and the `CryptoConfig`/`CryptoRuntime` mechanics
                                           │
                 P-3 pqpublickey key ──→ SS-4 nskey mint + pqpublickey lifecycle
                                           │
-   ═══ CRITICAL PATH TO D1 GA ═══         ▼
-                            B-1 the nskey DATA PATH (providers + marker + cold-start)
+   ═══ CRITICAL PATH TO D1 GA (re-derived 2026-08-05, decisions 36-41) ═══
+                            B-1 the nskey DATA PATH (providers + cold-start)
                                           │
-                            R-1 migration machinery + disallowLegacyEncryption flag (default false)
+                            R-1 → shrunk to disallowLegacyEncryption (DELIVERED);
+                                  markers/negotiation built then REMOVED (decisions 36)
+                                          │
+                            SH-1 key-material self-heal (nskey pull + approve-push + chain sweep)
+                                          │
+              RF-SRV server self-enroll ──┤   ◀── every scenario's "upgrade the enrollment" (decisions 40)
                                           │
                             B-2 nskey rotation + revocation (B5/B6)  ◀── RF-1 + SS-3 (fan-out only)
                                           ▼
-                         ▶ at_client 3.14.x = D1 GA (rebuild = reader, one flag = PQ writer)
+                         ▶ at_client 3.14.x = D1 GA (rebuild = reader; the app's 4.x release = PQ writer)
 
    Off the GA critical path (parallel):
-     RF-SRV server self-retrofit enroll → RF-2b PQ-APKAM mint + self-retrofit → RF-2c upgrade + e2e   (RF-1 confirm)
-     B-3 selfEncryptionKey retirement (phases 1-3, needs at_server)     ON-1 PQ-native onboarding + legacy-interop flag
+     RF-2b PQ-APKAM mint + self-retrofit → RF-2c upgrade + e2e   (RF-1 confirm)
+     B-3 selfEncryptionKey retirement (RE-TIMED by decisions 37: client-side stop is ecosystem-gated)
+     ON-1 PQ-native onboarding (publickey published by DEFAULT per decisions 37)
      S-5 at_auth 4.0 WASM split → S-6 consumer bumps          D2-1 at/pqmls carve + D1-E (D2)
      KF-1 .atKeys-at-rest protection + backup/restore (builds on S-3)
      IS-1 inter-server PQ auth (FROM/POL: swap challenge signature RSA→ML-DSA-65, PR #2683) — no KEM, no cert; builds on published at_chops 3.4.x (ungated)
@@ -733,7 +739,9 @@ proceeds against a test fixture that supplies the nskey private directly (see th
   recipient and the namespace, and a pre-flight query answers the same question first; legacy is
   reachable only by explicit opt-in. The recipient's first *use* of the namespace mints and publishes
   its nskey (via SS-4), and the sender's next `ensureCurrent` re-`plookup` picks it up.
-  (Seal-and-hold is a per-namespace policy toggle delivered in **R-1**.)
+  (Seal-and-hold was considered for R-1 and **deferred, not built** — no consumer
+  asked for more than the named refusal + explicit fallback;
+  [decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05).)
 
 **Spike state (branch `gkc-pq-d1-spike`, 2026-08-04).** The data path is built, and
 **both the self-data and the cross-atSign directions work end to end against a live
@@ -816,6 +824,7 @@ taken now because nothing written under the old form exists outside the spike.
 | **BOTH test packs' rails are pointed away from CI's image and must be reverted before any PR.** `tests/at_functional_test/test/docker-compose.yaml` **and** `tests/at_end2end_test/test/docker-compose.yaml` use a locally built `at_virtual_env:local`, and both `runLocal.sh`s have `docker compose pull` disabled — **four files, uncommitted, deliberate**. The published `virtualenv:vip` does **not** store `EnrollParams.metadata`, so the key-package path cannot be tested against it at all. The e2e pair was swapped 2026-08-04 when the two-enrollment rows needed it; the entry previously named only the functional pair, which would have shipped the e2e swap unnoticed. Before opening a client PR: confirm vip has been promoted, revert all four, and re-run both packs against it | `at_functional_test`, `at_end2end_test` |
 | **A PQ-capable client cannot tell a legacy atServer from an old peer.** Against an atServer that drops `EnrollParams.metadata`, the key package vanishes silently and the approver reads absence — which [decisions.md 20](decisions.md#20-ss-2-how-the-key-package-reaches-an-enrollment-and-how-conveyance-fires-2026-08-03) ruling 2 treats as *ordinary*, because it also means "an older client". So conveyance no-ops fleet-wide with nothing saying why. UC-B0.1 requires aborting cleanly and logging the reason; `info` returns only a version string, with no feature list to check | **RF-SRV** / UC-B0.1 |
 | **Parity across every atServer implementation for the `mldsa65` verify branch.** At least one rejects `signingAlgo:mldsa65` while *parsing* the command, so a PQ client meets an invalid-syntax error rather than an authentication failure. It already stores `signingAlgo` but never reads it, and carries no ML-DSA support — a dependency decision, not an edit | **SS-3** |
+| **D1 GA critical path, re-derived 2026-08-05 after the three-scenario re-examination** ([decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)–[41](decisions.md#41-the-to-define-list-2026-08-05)). **R-1 is DELIVERED, shrunk to D1-D**: `disallowLegacyEncryption` landed 2026-08-05; the marker/negotiation half was built, proven at three layers, and removed the same day; C3 deferred unbuilt. **Newly ON the GA path:** **SH-1** (M, key-material self-heal — the conveyance hole meant an enrollment created after a mint was stranded; in progress 2026-08-05) and **RF-SRV** (L, server self-enroll — every scenario's "upgrade the enrollment", was mis-filed off-path). **Re-timed:** ON-1 mints/publishes legacy material by default (decisions 37); R-2 keeps the flag flip but loses phase-4 stop-existing to a later ecosystem-gated release; B-3 phase 3's client-side stop likewise. Remaining on the GA path: **SH-1**, **RF-SRV**, **B-2** (L, + two rulings owed from the to-define list), **ON-1** (M), **R-2** (M), **S-3** (L). The to-define list ([decisions 41](decisions.md#41-the-to-define-list-2026-08-05)) is the authoritative open-questions ledger — 12 items with owners | plan |
 | **D1 GA critical path, re-derived 2026-08-04 against pub.dev and the skip counts.** Complete: P-*, S-1/S-2, SS-1a/1b/1c, **SS-2**, **SS-3**, **SS-4** (bar key transparency, parked), **B-1** incl. all chunks. Remaining on the GA path: **R-1** (L, migration machinery + `disallowLegacyEncryption` + strict mode), **B-2** (L, nskey rotation + revocation), **ON-1** (M, PQ-native greenfield onboarding), **R-2** (M, the 4.0.0 flag flip), and **S-3** (L, updatable `.atKeys`/keychain). Off the GA path: the **RF-\*** retrofit trio. Referenced only: D2-1. Separate track: IS-1. Publish gates verified against pub.dev the same day — at_client 3.14.1/3.14.0, at_commons 5.14.0/5.13.0, at_chops 3.4.2/3.4.1, at_auth 3.4.0/3.3.0 (so the old at_auth `3.3.0-rc1`→stable gate is **closed**) | plan |
 | **`at_auth` 3.4.0 is open and unpublished**, and at_client now depends on `AtEnrollmentRequest.metadataBuilder`. Same masking as the at_commons row below: workspace resolution hides it, so a green build says nothing | `at_auth` |
 | ~~`at_end2end_test` has not been run since at_auth's surface changed~~ — **run 2026-08-04, green at 41 with no skips**, the same count as 2026-08-03. So neither at_auth's added surface (`EnrollmentKeyExchangeMode`, `apkamSymmetricKeyResolver`, `approvedWithMintedKey`, the grown `AtEnrollmentResponse`/`EnrollmentRequestDecision`) nor the arrival-path work regressed it — the latter mattering because that commit added work to `AtClientImpl`'s init, which every e2e test drives. All four rails now verified together: `at_client` 825/39 skipped, functional 113, e2e 43, `at_client_flutter` analyze clean | `at_end2end_test` |
@@ -896,14 +905,16 @@ the nskey private over the substrate, and the fixture is deleted the moment SS-4
 the split: it produces the program's **first green acceptance scenario** (UC-A3.1) without waiting for the
 substrate. Nothing downstream of `B-1b` may depend on the fixture.
 
-**Where the B3 capability marker lands.** `providerId` on stored values comes with `B-1a`/`B-1b`;
-per-destination scheme selection with `B-1d` (the first chunk with a non-self destination); `providerId` on
-the notification frame with `B-1e`. The marker's own publish/not-ready/flip lifecycle is **R-1** (C1), not a
-B-1 chunk.
+**Where the B3 capability marker lands.** *(Historical — the marker was removed by
+[decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05).)*
+`providerId` on stored values comes with `B-1a`/`B-1b`; `providerId` on
+the notification frame with `B-1e`. The marker's own lifecycle was R-1's, was built
+there, and was removed with it.
 
 **Acceptance → [acceptance.md](acceptance.md):** self + shared round-trips byte-exact for text and binary;
-UC-A3.1, UC-A3.3 (self cold-start fails, distinctly), UC-A4.1/A4.2/A4.3; B3 mixed-fleet (nskey only when readers'
-marker ready, else legacy); UC-A3.4 / UC-A4.4 (providerId travels on the notification frame). Each chunk
+UC-A3.1, UC-A3.3 (self cold-start fails, distinctly), UC-A4.1/A4.2/A4.3; B3 per the rewritten catalogue
+(capability stage writes legacy, active stage writes the data path); UC-A3.4 / UC-A4.4 (providerId travels
+on the notification frame). Each chunk
 carries the scenarios listed against it in the chunk table.
 **Effort:** XL — the one project above the ~1–3 PR norm, hence the five-chunk breakdown (~M each).
 **Watch-outs:** `recipientKind` has exactly one member, `nskey`, used for self and inbound alike — one key
@@ -920,7 +931,14 @@ cache) are **different atSigns** on any inbound record — conflating them is wh
 
 ## 7. Phase RF — existing-client retrofit (RF-1, RF-SRV, RF-2b, RF-2c)
 
-Off the D1-GA critical path; required for retrofitting existing clients. The substrate facts (pull/push
+> **Re-positioned 2026-08-05
+> ([decisions 40](decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)):
+> RF-SRV is ON the D1-GA critical path.** The three-scenario model's "each app
+> upgrades its own enrollment, on its own schedule" conjugates this verb in every
+> scenario, and without it the only upgrade path is a human approving from another
+> device. RF-2b/RF-2c remain the client orchestration that rides it.
+
+The substrate facts (pull/push
 are dual facets) are stated once in [section 5](#5-phase-ss--secret-sharing-substrate-ss-1a-ss-1b-ss-1c-ss-2-ss-3-ss-4)
 — not re-explained here.
 
@@ -968,6 +986,14 @@ until the cap elapses); both suites.
 **Effort:** L.
 **Watch-outs:** net-new is the `apkam`-authType auto-approve branch (NOT the CRAM `*`:rw grant), the
 requester-keyed subset check at request time, the expiry copy + old-enrollment ttl cap, and the config knob.
+**2026-08-05 additions ([decisions 40](decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)):**
+the child records its **parent** enrollment and revocation **cascades** to
+descendants (a stolen keyfile must not spawn a survivor); distinct
+`(appName, deviceName)` required per cloned device; the new enrollment id lands in
+the keyfile that already holds the legacy material; and the **expiry-cap grace vs
+cloned-keyfile laggards is to-define item 3** — neither a short grace (strands
+clones) nor an infinite one (never retires the legacy credential) is silently
+assumed.
 **coversD1:** D1-F retrofit (server); legacy retirement via expiry + revoke.
 
 ### RF-2b — at_client: mint PQ (ML-DSA) APKAM + key package, then authenticated auto-approved self-retrofit `enroll:request` · at_client, tests · L
@@ -986,14 +1012,17 @@ namespaces ⊆ the authenticating enrollment's.
 **Effort:** L.
 **coversD1:** D1-F (PQ-APKAM via fresh auto-approved enrollment).
 
-### RF-2c — at_client: retrofit orchestration (old enrollment ages out) + readiness flip + full e2e · at_client, tests · L
-**Goal:** the orchestration + readiness flip + end-to-end retrofit, with the old enrollment ageing out.
+### RF-2c — at_client: retrofit orchestration (old enrollment ages out) + full e2e · at_client, tests · L
+**Goal:** the orchestration + end-to-end retrofit, with the old enrollment ageing out.
 **Builds on:** RF-2b, RF-SRV, SS-4, SS-2.
 **Deliverables → [design.md](design.md)** (retrofit orchestration): authenticate with the pre-PQ keypair →
-RF-2b self-retrofit → switch the client to the new enrollmentId's `.atKeys`. The old enrollment **ages out**
-via the RF-SRV expiry cap (or an explicit `enroll:revoke`); keep the legacy **encryption** key for reads.
-PQ-readiness flip after the new enrollment authenticates. One key package per enrollment (1:1:1).
-**Acceptance → [acceptance.md](acceptance.md):** (e2e `@ce2e*`) readiness flips only after the new ML-DSA
+RF-2b self-retrofit → switch the client to the new enrollmentId's `.atKeys` — the **same file**, which keeps
+the legacy encryption keypair, `selfEncryptionKey` **and the RSA APKAM**
+([decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
+The old enrollment **ages out**
+via the RF-SRV expiry cap (or an explicit `enroll:revoke`). There is no readiness
+flip — writing PQ remains the app's release decision. One key package per enrollment (1:1:1).
+**Acceptance → [acceptance.md](acceptance.md):** (e2e `@ce2e*`) the new ML-DSA
 enrollment authenticates; previously shared secrets stay openable; the old enrollment stops authenticating
 once its capped expiry elapses (or after `enroll:revoke`) — **not** via an in-place key delete;
 seal-once-reaches-every-host; revoke/expire-one-host; sync-less wake-up.
@@ -1009,32 +1038,63 @@ The forward-secrecy/rotation levers and the `disallowLegacyEncryption` flag sema
 [design.md](design.md); the high-level 3.x-off / 4.x-on trajectory is in [roadmap.md](roadmap.md); the
 rotation-policy ruling is in [decisions.md](decisions.md).
 
-### R-1 — migration machinery + `disallowLegacyEncryption` flag (default false) + strict-mode · at_client · L
-**Goal:** the readiness lifecycle, scheme-negotiation default, and the PQ-write flag.
+### R-1 — `disallowLegacyEncryption` flag (default false) · at_client · ✅ DELIVERED 2026-08-05, scope shrunk
+**Goal (as delivered):** the PQ-write flag — how an app *states* "never write legacy".
 **Builds on:** B-1.
-**Deliverables → [design.md](design.md)** (migration machinery + flag semantics): **C1** readiness-marker
-lifecycle (publish not-ready on upgrade; flip ready when the fleet is upgraded — **operator-declared
-primary**; auto-detect optional); **C2** behaviour-neutral default (rebuild reads all, keeps writing legacy
-until the flag flips); **C3** strict-mode toggles incl. cold-start seal-and-hold; **D1-D** the
-`disallowLegacyEncryption` flag on `AtClientPreference` — final at construction (immutable), **default
-false**, SHOUT at creation when false, governs only legacy-provider *encryption* (legacy read +
-`shouldEncrypt=false` unaffected); cold-start PQ fallback (`at/nskey` to root) must **not** trip the refusal.
-Additive within 3.x.
-**Acceptance → [acceptance.md](acceptance.md):** negotiation matrix (write only what every reader supports,
-else legacy, else refuse when flag true); flag=true → every write `providerId ∈ {at/nskey,
-at/symmetric/AES/GCM}`, legacy-only recipient → refused, legacy read still works, flag immutable;
-UC-B3.x/B4.x/B5.2 at the scheme-selection layer with a seeded marker/nskey state (full e2e of B3.x/B4.x
-defers to RF-2c).
-**Effort:** L.
-**Watch-outs:** the readiness flip is the only operator judgement call (warn on a recent legacy check-in).
-Operator-declared readiness is the primary signal; auto-detect is optional. Don't bump the version pre-publish
-(fold under the in-progress at_client heading).
-**coversD1:** D1-C + D1-D D1/D2 / WP7.
+**What happened to the rest** ([decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)):
+**C1** (readiness-marker lifecycle) and **C2** (per-destination negotiation) were
+**built, proven at three layers including a live two-atSign flip, and removed the
+same day** — the three-scenario examination showed the rollout is the app's
+decision, made by which build it ships, and the SDK never chooses a scheme. **C3**
+(per-namespace strict mode + seal-and-hold) was deferred unbuilt: no consumer asked
+for more than the named cold-start refusal plus the explicit fallback.
+**Delivered:** **D1-D** — `disallowLegacyEncryption` on `AtClientPreference`, final
+at construction (immutable, constructor parameter), **default false**, SHOUT at
+creation when false, governs only legacy-provider *encryption* (legacy read +
+`shouldEncrypt=false` + public-key signing unaffected), checked at selection *and*
+at encryption, and it wins over `allowLegacyCryptoFallback` (a cold start under the
+flag is refused, not reached under legacy). Additive within 3.x.
+**Acceptance:** flag=true → legacy-only destination **refused** never downgraded,
+explicit legacy request refused, legacy read still works, flag immutable —
+`disallow_legacy_encryption_test.dart` + the rewritten cross-cutting invariant.
+**coversD1:** D1-D. (D1-C's migration story is now [decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)'s
+two-release ladder + SH-1's self-heal, not machinery.)
+
+### SH-1 — key-material self-heal: nskey pull initiator + approve-time push + chain sweep · at_client · M *(in progress 2026-08-05)*
+**Goal:** make [decisions 38](decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)'s
+invariant true in code — every enrollment converges on the key material it is
+entitled to, with no human step and no ordering luck.
+**Builds on:** SS-2/SS-3/SS-4 (the substrate + filing are all built; this is wiring
+with tests, the same shape as the root-pull initiator in decisions 31).
+**Why it exists:** neither of Decision #4's push methods
+(`shareAllSecretsWithEnrollment`, `conveyHeldPrivatesTo`) had a caller, and the
+nskey privates had no pull initiator — the only delivery was the mint-time push, so
+every enrollment created after a mint was stranded (`no nskey private held`) with
+nothing to retry. The ordinary second device hits this, not just the cloned-keyfile
+scenario.
+**Deliverables:** (a) start-time pull — for each authorised namespace whose
+published nskey generation this client lacks, `requestSecretsFromNamespace` for the
+private (any holder answers; store-and-forward both ways); (b) on-miss request in
+the `at/nskey` decrypt path — fire the pull, rethrow the typed exception, so a
+mid-run arrival heals without a restart; (c) approve-time push — the approver
+conveys its held nskey privates for the approved namespaces
+(`conveyHeldPrivatesTo`, finally called); (d) the **chain sweep** — a fully
+privileged client signs approval-chain links for enrollments that lack them
+([decisions 38](decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05).3).
+**Acceptance:** a second enrollment that missed the mint-time push acquires the
+private with **no re-mint** (functional, live); the sweep anchors a
+scoped enrollment approved by a legacy parent; unit coverage for all four wires.
+**Effort:** M.
+**Watch-outs:** the pull's trigger points and generation interplay are
+to-define item 11 ([decisions 41](decisions.md#41-the-to-define-list-2026-08-05)) —
+build start-time + on-miss now, leave rotation-generation policy to B-2.
 
 ### B-2 — nskey rotation + revocation (CK rotation = coarse FS, nskey-keypair rotation = PCS) · at_client · L
 **Goal:** the two rotation levers + revocation composition — the **D1 GA** rotation slice.
-**Builds on:** B-1 + R-1 + **(RF-1 + SS-3)** for the per-enrollment substrate fan-out (1:1:1). ⚠️ **depends
+**Builds on:** B-1 + SH-1 + **(RF-1 + SS-3)** for the per-enrollment substrate fan-out (1:1:1). ⚠️ **depends
 on RF-1+SS-3, NOT the full RF-2** (Open decision #C) — so **D1 GA does not wait on the auth retrofit**.
+Also owed from [decisions 41](decisions.md#41-the-to-define-list-2026-08-05): the last-holder-lost ruling
+(item 5) and the cloned-after-upgrade-keyfile ruling (item 6).
 **Deliverables → [design.md](design.md)** (rotation/revocation levers): **B5a** CK rotation (O(1), on
 ordinary sync, delete old `__ck` + evict; default RETAIN, FS-mode is the delete+evict knob); **B5b**
 nskey-keypair rotation (O(n) PCS / per-APKAM revocation: take `_nskeylock.<ns>@<owner>`, mint a new nskey
@@ -1055,43 +1115,58 @@ mixed-scheme / cold-start / revoke+rotate-exclude; e2e at_talk chat scenario. **
 ### B-3 — selfEncryptionKey + shared_key.* retirement, phases 1-3 · at_client, **at_secondary_server**, at_auth · L
 **Goal:** retire the legacy self-encryption key (a distinct project from B-2's rotation work).
 **Builds on:** B-2.
-**Deliverables → [design.md](design.md)** (selfEncryptionKey retirement): **Phase 1** stop using
+**Deliverables → [design.md](design.md)** (selfEncryptionKey retirement, **re-timed by
+[decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)**):
+**Phase 1** stop using
 selfEncryptionKey for new writes (default → nskey path); **phase 2** lazy re-encrypt on touch (+ optional
 background sweep, per-atSign progress observable); **phase 3** stop conveying it — ⚠️ needs an **at_server
-change**: `enroll:approve` currently *mandates* `encryptedDefaultSelfEncryptionKey`; relax to optional,
-sequenced **after** phase 2. (Phase 4 stop-existing is **R-2**.)
+change**: `enroll:approve` currently *mandates* `encryptedDefaultSelfEncryptionKey`; relax to optional. The
+**server-side tolerance can land early**, but the **client-side stop is
+ecosystem-gated, not version-gated**: clients keep minting and conveying legacy
+material until the stop-by-default release (to-define item 10). (Phase 4
+stop-existing is that release's, **no longer R-2's**.)
 **Acceptance → [acceptance.md](acceptance.md):** a touched legacy value lazily re-encrypts (providerId
 legacy → at/symmetric/AES/GCM); migration progress query; a post-migration `enroll:approve` omits the self
 key and the enrollee onboards without it.
 **Effort:** L.
 **coversD1:** D1-B B7 phases 1-3.
 
-### ON-1 — PQ-native greenfield onboarding + legacy-interop flag · at_client, at_client_flutter · M  *(critic gap — UC-A1.1)*
+### ON-1 — PQ-native greenfield onboarding + legacy-interop opt-out · at_client, at_client_flutter · M  *(critic gap — UC-A1.1; amended by decisions 37)*
 **Goal:** a brand-new atSign onboards PQ-native (the root of Part-A coverage).
-**Builds on:** RF-2b (PQ-APKAM mint) + SS-4 (pqpublickey) + R-1 (readiness).
-**Deliverables → [design.md](design.md)** (PQ-native onboarding): at CRAM onboarding mint a **PQ (ML-DSA)
-APKAM** keypair (no RSA APKAM required for auth); immutable-create `public:pqpublickey@<atSign>`; no
-`selfEncryptionKey` minted (self data uses the nskey path); readiness can be **ready** (no legacy APKAM
-exists); a **legacy-interop config flag** (default off → PQ-only, no RSA `public:publickey`) that, when
-enabled, publishes the RSA pubkey for legacy-peer inbound.
-**Acceptance → [acceptance.md](acceptance.md):** UC-A1.1 (PQ-native onboard: APKAM=pq, pqpublickey
-immutable, readiness ready, KP registered); UC-B4.2 (legacy peer ↔ PQ atSign resolves only via the flag);
-default PQ-only onboarding has no RSA pubkey.
+**Builds on:** RF-2b (PQ-APKAM mint) + SS-4 (pqpublickey).
+**Deliverables → [design.md](design.md)** (PQ-native onboarding, **amended by
+[decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)**):
+at CRAM onboarding mint a **PQ (ML-DSA) APKAM** keypair (no RSA APKAM required for
+auth); immutable-create `public:pqpublickey@<atSign>`; **and still mint the legacy
+RSA encryption keypair + `selfEncryptionKey`, and publish `public:publickey` — by
+default**. Whether this atSign will need legacy is determined by the apps that
+adopt it, unknowable at onboarding. The **legacy-interop flag becomes an opt-OUT**
+(set → PQ-only, no RSA `public:publickey`, no legacy material); a future release
+flips the default the other way.
+**Acceptance → [acceptance.md](acceptance.md):** UC-A1.1 (PQ-native onboard:
+APKAM=pq, pqpublickey immutable, KP registered, legacy material present and
+published by default); UC-B4.2 (legacy-peer interop works by default in both
+directions; only the opt-out refuses it).
 **Effort:** M.
-**coversD1:** Catalogue Part-A root + Decision #1 / UC-B4.2.
+**coversD1:** Catalogue Part-A root + Decision #1 as amended by decisions 37 / UC-B4.2.
 
-### R-2 — at_client 4.0.0: flip `disallowLegacyEncryption` default to true + selfEncryptionKey stop-existing · at_client · M
+### R-2 — at_client 4.0.0: flip `disallowLegacyEncryption` default to true · at_client · M  *(re-timed by decisions 37)*
 **Goal:** PQ-safe on every write path by default (the final cutover).
-**Builds on:** R-1 + B-2 + RF-2c + S-6. **Gated on the ecosystem floor** (last published downstream versions).
-**Deliverables → [design.md](design.md)** (the v4 flip + B7 phase 4): flip the default to **true** (SHOUT if
-re-enabled false); **B7 phase 4** — onboarding no longer generates `selfEncryptionKey`, drop it from the
-AtKeys model; general dead-code removal (deprecated methods; the `package:encrypt` files deleted-not-migrated).
-The legacy provider itself **stays** (reads forever).
+**Builds on:** B-2 + RF-2c + S-6 (R-1's flag is delivered). **Gated on the ecosystem floor** (last published downstream versions).
+**Deliverables → [design.md](design.md)** (the v4 flip): flip the default to **true** (SHOUT if
+re-enabled false); general dead-code removal (deprecated methods; the `package:encrypt` files deleted-not-migrated).
+The legacy provider itself **stays** (reads forever). **B7 phase 4 ("stop generating
+`selfEncryptionKey`, drop it from the AtKeys model") is NO LONGER a 4.0 action** —
+[decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05):
+legacy material is retained until the *ecosystem* is PQ, so the stop is a later,
+ecosystem-gated release with opt-out-by-default semantics (to-define item 10), not a
+version number.
 **Acceptance → [acceptance.md](acceptance.md):** flag-true → every write PQ, legacy-only recipient refused,
-legacy read still works (UC-B5.2); new atSign has no selfEncryptionKey; full unit/functional/e2e green.
+legacy read still works (UC-B5.2); full unit/functional/e2e green.
 **▶ at_client 4.0.0.**
 **Effort:** M.
 **Watch-outs:** different major / different time from at_auth 4.0 (S-5). Don't remove the legacy provider.
+Don't stop minting legacy material — that is the later release's flip, not this one's.
 **coversD1:** D1-D D3 + D1-B B7 phase 4.
 
 ---
@@ -1154,7 +1229,7 @@ locally **and** in CI — these floor bumps must be made **explicitly**, not inf
 build.
 
 ### (b) Critical path to D1 GA
-`#1930(done) → P-1 + S-2 → SS-1a → SS-1b → SS-1c → SS-2 → SS-3 → SS-4 (+ P-3) → B-1 → R-1 → B-2`
+`#1930(done) → P-1 + S-2 → SS-1a → SS-1b → SS-1c → SS-2 → SS-3 → SS-4 (+ P-3) → B-1 → R-1(delivered) → SH-1 + RF-SRV → B-2`
 (D1 GA: rebuild = universal reader, one flag = PQ writer, opt-in rotation).
 **Branch state (2026-08-04):** `gkc-pq-d1-spike` is **68 commits ahead of `origin/trunk` and 2 behind**;
 both of those two are docs-only (the wasm-port plan, [#2118](https://github.com/atsign-foundation/at_client_sdk/pull/2118)),
@@ -1218,14 +1293,14 @@ Single authoritative map of D1 items, workstreams, and use cases to projects.
 | D1-B B1-B4 (data path) | B-1, chunks B-1a…B-1e (+ key material SS-4) |
 | D1-B B5/B6 (rotation/revocation) | B-2 |
 | D1-B B7 (selfEncryptionKey retirement) | B-3 (phases 1-3), R-2 (phase 4) |
-| D1-C / D1-D (migration, flag, versioning) | R-1, R-2 |
+| D1-C / D1-D (migration, flag, versioning) | R-1 (D1-D delivered; D1-C = the decisions-36 ladder + SH-1), R-2 |
 | D1-F substrate baseline | SS-0 (PR #2037) |
 | D1-F DEP1-DEP4 | SS-1b, SS-2, SS-3 |
 | D1-F retrofit | RF-SRV, RF-2b, RF-2c (RF-1 confirm) — retirement via expiry + revoke (1:1:1; no per-key-delete project) |
 | D1-E (at/pqmls shape) | D2-1 (D2) |
 | UC-A1.1 PQ-native onboard + Decision #1 / UC-B4.2 | ON-1 |
 | UC-A2.x / A3.x / A4.x / A5.x | SS-4, B-1, B-2, RF-2b |
-| UC-B0.x..B5.x | RF-2c (retrofit) + R-1 (scheme negotiation) |
+| UC-B0.x..B5.x | RF-2c (retrofit) + RF-SRV (critical path per decisions 40); B3/B4 data-path halves built |
 
 See [acceptance.md](acceptance.md) for the full UC catalogue; [decisions.md](decisions.md) records the D1-F
 sub-item coverage rulings.
