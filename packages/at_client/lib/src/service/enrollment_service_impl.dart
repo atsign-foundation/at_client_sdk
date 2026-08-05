@@ -209,6 +209,87 @@ class EnrollmentServiceImpl implements EnrollmentService {
         approvedNamespaces: enrollment.namespace);
   }
 
+  /// Signs and conveys approval-chain links for approved enrollments that
+  /// lack one — the chain sweep of `decisions.md` 38.3.
+  ///
+  /// A scoped enrollment can never anchor itself (not fully privileged —
+  /// correctly), and its approver is often the legacy parent enrollment,
+  /// which can sign nothing. Left alone, *chained-but-unanchored is its
+  /// permanent state*, costing the defence-in-depth the chain exists for. A
+  /// fully privileged client is the one party that can repair that, so it
+  /// sweeps: every approved enrollment with a discoverable key package and no
+  /// published link gets one signed and conveyed. The enrollment stamps it
+  /// onto its own `_apsk` at its next start (`publishPendingLink`) — this
+  /// client cannot stamp it directly, because `_apsk` accepts writes only
+  /// from its own enrollment's connection, and that restriction is the very
+  /// guarantee the chain hangs off.
+  ///
+  /// The caller is responsible for privilege: a link signed by an unanchored
+  /// enrollment adds a hop without reaching the root. Returns how many links
+  /// were conveyed.
+  Future<int> sweepUnanchoredEnrollments() async {
+    final sharing = AtClientSecretSharing.forClient(_atClient);
+    if (!sharing.isRegistered) {
+      // Sealing a conveyance stamps this client's own key package id, so an
+      // unregistered sweeper cannot convey anything it signs.
+      _logger.info('Not sweeping chain links: this client has no registered '
+          'key package to seal conveyances from');
+      return 0;
+    }
+    final ownEnrollmentId =
+        _atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
+
+    final approved = await fetchEnrollmentRequests(
+        enrollmentListParams: EnrollmentListRequestParam()
+          ..enrollmentListFilter = [EnrollmentStatus.approved]);
+
+    int conveyed = 0;
+    for (final enrollment in approved) {
+      final id = enrollment.enrollmentId;
+      if (id == null || id == ownEnrollmentId) continue;
+      try {
+        // Already vouched for, either way: a chain link, or a direct root
+        // anchor (a privileged enrollment that holds the root needs no hop).
+        if (await PqSigningChain.readLink(_atClient, id) != null) continue;
+        if (await PqSigningChain.readRootLink(_atClient, id) != null) continue;
+
+        // No key package, no conveyance channel: a legacy enrollment cannot
+        // receive a link and has no PQ key for one to vouch for.
+        final advertised = enrollment.metadata?['keyPackage'];
+        if (advertised == null) continue;
+        final (keyPackage, status) = await verifyAdvertisedKeyPackage(
+          advertised,
+          signer: AtClientEnvelopeSigner(_atClient),
+          signerAtSign: _atClient.getCurrentAtSign()!,
+          enrollmentId: id,
+        );
+        if (keyPackage == null || status == KeyPackageStatus.rejected) {
+          continue;
+        }
+
+        final link = await PqSigningChain.signLinkFor(_atClient, sharing, id);
+        if (link == null) continue;
+        await sharing.shareSecretWith(
+            keyPackage,
+            Secret(
+              namespace: _conveyanceNamespaceFor(enrollment),
+              name: PqSigningChain.linkSecretName,
+              value: PqSigningChain.encodeLink(link),
+            ));
+        conveyed++;
+      } catch (e) {
+        // One enrollment failing must not stop the sweep; it is retried at
+        // every privileged start.
+        _logger.warning('Could not sweep a chain link for enrollment $id: $e');
+      }
+    }
+    if (conveyed > 0) {
+      _logger.info('Swept chain links to $conveyed unanchored enrollment(s); '
+          'each stamps its own _apsk at its next start');
+    }
+    return conveyed;
+  }
+
   /// Whether [namespaces] grant `rw` on both `*` and `__manage` — the class
   /// that may hold the signing root ([decisions.md 18.2][]).
   ///

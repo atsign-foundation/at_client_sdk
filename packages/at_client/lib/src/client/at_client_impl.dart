@@ -663,6 +663,23 @@ class AtClientImpl implements AtClient {
           'the enrollment stays unsigned, which verifiers tolerate, and the '
           'next start retries: $e, $st');
     }
+    try {
+      // The chain sweep (decisions.md 38.3): a fully privileged client signs
+      // and conveys links for approved enrollments that lack one. A scoped
+      // enrollment cannot anchor itself and its approver may be a legacy
+      // enrollment that can sign nothing, so without this sweep
+      // chained-but-unanchored is a permanent state rather than a transient.
+      // Gated on privilege here rather than inside, because a link signed by
+      // an unanchored sweeper adds a hop without reaching the root.
+      if (await _resolveFullPrivilege()) {
+        await EnrollmentServiceImpl(this, AtEnrollment.create())
+            .sweepUnanchoredEnrollments();
+      }
+    } catch (e, st) {
+      _logger.warning('The chain sweep failed for $_atSign; unanchored '
+          'enrollments stay unanchored, which verifiers tolerate, and the '
+          'next privileged start retries: $e, $st');
+    }
   }
 
   /// Whether this client's enrollment holds `rw` on both `*` and `__manage`.
