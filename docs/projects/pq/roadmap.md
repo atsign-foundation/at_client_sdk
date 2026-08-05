@@ -191,10 +191,11 @@ Existing apps are all on legacy. The migration must let **each client upgrade
 independently** (rebuild on its own schedule) while staying compatible with
 peers — and with other clients of its own atSign — that have not yet upgraded.
 The M0 provider seam is what makes this work; the whole plan is one invariant
-plus a gated rollout. (The rollout *machinery* — the readiness-marker lifecycle,
-the negotiation layer, the flag semantics — lives in
-[`design.md`](design.md) and is sequenced as `R-1`/`R-2` in
-[`implementation-plan.md`](implementation-plan.md).)
+plus **each app's own two releases** — capability, then active use. (There is no
+rollout *machinery*: the readiness-marker/negotiation layer was built and removed
+2026-08-05 —
+[`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05);
+the two-release model + the flag semantics live in [`design.md`](design.md) §1.8.)
 
 **The seam lets schemes coexist per value, so the sender encrypts in the scheme
 the recipient can decrypt** — discovered from what the recipient publishes:
@@ -216,9 +217,10 @@ read-capability; the risk is writing too *new*, never reading too *old*.
 **The versioning contract**, conceptually, is one construction-time flag —
 `disallowLegacyEncryption` on `AtClientPreference`:
 
-- **default `false` in 3.x** = "PQ when it can, legacy when it must" — a 3.x
-  client is PQ-*capable* but stays legacy-*compatible*, writing legacy only when
-  a reader isn't yet PQ-ready;
+- **default `false` in 3.x** = "PQ when the app says so, legacy otherwise" — a
+  3.x client is PQ-*capable* but stays legacy-*compatible*; which scheme it
+  writes is its app's release decision, and the cold-start refusal (plus the
+  explicit fallback) is the only per-destination gate;
 - **default `true` in 4.0** = "PQ — refuse rather than write legacy";
 - **final at construction** (no mid-run flipping), and the SDK **SHOUTs at
   startup when it is `false`** so a client permitting legacy writes is never
@@ -236,24 +238,28 @@ detail and the capabilities-by-code-change-level table live in
 [`implementation-plan.md`](implementation-plan.md)):
 
 0. **Baseline** — all legacy.
-1. **Rebuild, behaviour-neutral (the soak)** — adds the PQ providers + provider
-   routing on *read*, keeps *writing* legacy; a zero-risk, client-by-client
-   deploy.
-2. **Publish the namespace `nskey` + capability marker** — the first upgraded
-   client mints the namespace `nskey` and publishes its public half immediately at
-   `public:__nskey.<ns>@alice`, its private conveyed per-APKAM over the substrate;
-   the per-`(atSign, namespace)` capability marker goes up **not-ready**; writes
-   still legacy.
-3. **Flip readiness** — once an atSign's namespace fleet is fully upgraded, mark
-   it ready; new writes to/from that atSign's namespace switch to the `nskey`
-   data path automatically, per-destination.
-4. **Both ends ready ⇒ end-to-end D1** — once both atSigns are ready, the pair
-   runs the `nskey` data path both directions; a mixed pair stays legacy *in
-   that direction only*.
-5. **Retire legacy, then the v4 default flip** — lazy re-encrypt on touch, stop
-   conveying `selfEncryptionKey`, then `at_client 4.0` flips the
-   `disallowLegacyEncryption` default to `true` (legacy *reads* and the legacy
-   provider remain).
+1. **The app's capability release (final 3.x — the soak).** Rebuild only: adds
+   the PQ providers + provider routing on *read*, upgrades the app's enrollment,
+   mints the namespace `nskey` (publishing its public half immediately at
+   `public:__nskey.<ns>@alice`, the private conveyed per-APKAM over the
+   substrate) or self-heals the private from a holder — and keeps *writing*
+   legacy. A zero-risk, install-by-install deploy, and the one discipline of the
+   whole migration: **this build reaches every install before the next one
+   ships**.
+2. **The app's active release (4.x, or an explicit config).** The app now writes
+   the `nskey` data path. The SDK never makes this decision — the app's build
+   does. Cross-atSign, a write toward a peer whose install has not reached
+   capability fails **cold start by name** (or takes the explicit legacy
+   fallback); the peer's key appearing is what ends that, with no action on the
+   sender's side.
+3. **Both ends capable ⇒ end-to-end D1** — the pair runs the `nskey` data path
+   both directions; a mixed pair stays legacy *in that direction only*, by the
+   app's own choice of fallback.
+4. **Retire legacy, then the v4 default flip** — lazy re-encrypt on touch, then
+   `at_client 4.0` flips the `disallowLegacyEncryption` default to `true`
+   (legacy *reads* and the legacy provider remain). Minting/conveying legacy key
+   material stops only in a later, **ecosystem-gated** release
+   ([`decisions.md` 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
 
 In short: **3.x defaults to "PQ when it can, legacy when it must"; 4.x defaults
 to "PQ — refuse rather than write legacy" — overridable either way, but never
@@ -327,8 +333,11 @@ provider through to the pq-mls engine).
 primitives & the enrollment-conveyance key) → **Phase S** (structural enablers:
 the key stores and the WASM-readiness split) → **Phase SS** (the per-APKAM
 secret-sharing substrate) → **Phase B** (the `nskey` data path) → **Phase R**
-(rollout, the readiness lifecycle, and the versioning flag) — with, off the
-critical path, **Phase RF** (the existing-client retrofit), the
+(rollout: the `disallowLegacyEncryption` flag, the key-material self-heal, and
+the server self-enroll — the readiness lifecycle was removed,
+[`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)) —
+with, off the critical path, **Phase RF's client half** (the retrofit
+orchestration), the
 `selfEncryptionKey` retirement, PQ-native onboarding, and the **D2** carve. The
 critical-path shape to GA is **seam → primitives → substrate → data path →
 rollout → rotation** (D1 GA), with the v4 default flip as the final gated

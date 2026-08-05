@@ -1,4 +1,14 @@
 ## 3.14.1
+- feat (experimental): `AtClientPreference.disallowLegacyEncryption` (default
+  false; 4.0 flips it). A client that sets it never encrypts **new** data with
+  the legacy provider: it takes a post-quantum path or refuses the write, so a
+  destination only legacy can reach is refused rather than silently written in a
+  scheme that can be harvested now and opened later. Legacy **reads** are always
+  available, `shouldEncrypt = false` is unaffected, and public keys are signed
+  rather than encrypted and unaffected too. `allowLegacyCryptoFallback` does not
+  survive it — the two switches say opposite things and this one wins. Final at
+  construction: a flag governing what a client may write must not be flippable
+  mid-run. While it is false, every client creation says so at SHOUT.
 - fix: `AtClientImpl`'s client cache is keyed by `(atSign, enrollmentId)` rather
   than the atSign alone. A client authenticated as one enrollment is a different
   principal from one authenticated as another, or as the atSign's own keys — a
