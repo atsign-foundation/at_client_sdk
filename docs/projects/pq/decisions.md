@@ -77,8 +77,10 @@ framing:
   2026-06-30).
 - **Retrofit is a fresh, self-spawned, auto-approved enrollment** — not a
   mutation of the existing one ([section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)).
-- **One `nskey` keypair per (atSign, namespace)** — lazily published; the former
-  self/public nskey pair is collapsed to one ([section 11](#11-single-nskey-per-namespace-lazily-published-2026-06-30),
+- **One `nskey` keypair per (atSign, namespace)** — published **eagerly at mint**
+  (the original lazy publication was superseded by
+  [section 13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02));
+  the former self/public nskey pair is collapsed to one ([section 11](#11-single-nskey-per-namespace-lazily-published-2026-06-30),
   2026-06-30).
 
 **Lane boundaries (do not restate here):**
@@ -378,7 +380,9 @@ Each cloned pre-PQ keyfile retrofits to its **own distinct `enrollmentId`**
 
 **Cross-refs:** the authenticated self-retrofit flow + expiry copy/cap and the
 at_chops ML-DSA mint are in `design.md`; the projects (RF-SRV server half, RF-2b
-mint+request, RF-2c orchestration + readiness flip) are in
+mint+request, RF-2c orchestration — *its former "readiness flip" deliverable was
+removed with the readiness model,
+[36](#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)*) are in
 `implementation-plan.md`; the retrofit e2e is in `acceptance.md`.
 
 **Rewrite target (see [section 8](#8-stale-source-reconciliation-note)):** the
@@ -480,7 +484,12 @@ timeline rows).
   `public:pq_signing_root@<atSign>`: its **name + create-once contract** ahead of SS-4's
   create/seed/serve/pull lifecycle. (Lifecycle mechanics → `design.md`; project
   gating → `implementation-plan.md`.)
-- **#C — keep D1 GA off the auth retrofit (B-2 dep).** B-2 needs RF-2 only for the
+- **#C — keep D1 GA off the auth retrofit (B-2 dep).** ***Partially INVERTED by
+  [40](#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)
+  (2026-08-05): RF-SRV — the retrofit's server half — is now ON the GA critical
+  path, because "upgrade the enrollment" is the mechanism the app-decides model
+  stands on. What survives of #C: B-2 still does not wait on the CLIENT
+  retrofit orchestration (RF-2b/RF-2c).*** Original: B-2 needs RF-2 only for the
   per-APKAM revocation/exclude fan-out — satisfy that with **RF-1 + SS-3**, not
   the full RF-2c upgrade orchestration, or D1 GA waits on the retrofit
   (contradicting the design). Confirm B6's fan-out is satisfiable from RF-1+SS-3
@@ -519,7 +528,11 @@ Execution rulings from the plan-vs-code review (post-review); each is binding.
   atServer/atDirectory (post-D1 the payload is already E2E PQ-safe; residual
   exposure is verb-level metadata the atServer sees anyway) and the atDirectory
   itself (holds no ciphertext). Both may be revisited separately; neither gates D1.
-- **Readiness flip: operator-primary at GA, auto-detect fast-follow.** R-1 ships
+- **Readiness flip: operator-primary at GA, auto-detect fast-follow.**
+  ***SUPERSEDED by
+  [36](#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)
+  (2026-08-05): there is no readiness state, no flip and no auto-detect — the
+  rollout is the app's decision, made by which build it ships.*** Original: R-1 ships
   operator-declared readiness as the primary lever (a recorded usability-bar
   exemption: it is a one-time migration action, not a steady-state per-use task).
   Auto-detect is a scheduled fast-follow with pinned criteria: readiness auto-flips
@@ -1141,7 +1154,10 @@ X-Wing operation per generation and degrades silently with every rotation.
   structurally identical to the CK cache, and for the same reason.
 - **Cold-start survives but narrows sharply**: `recipientKind: root-pqpublickey` is now
   reached only when the recipient has never used the namespace *at all*, rather than
-  whenever they have never sent in it.
+  whenever they have never sent in it. *(Withdrawn by
+  [18](#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03): the root became
+  a signing key, nothing encapsulates to it, and cold start now simply fails —
+  `recipientKind` has exactly one member, `nskey`.)*
 - Namespace-existence privacy rests on the `public:_` scan-hiding rule. That is a
   **core, guaranteed property of the Atsign Protocol**, not an assumption this design
   makes — `_apsk` already depends on it. A **functional**-suite regression test covers it
@@ -1457,7 +1473,10 @@ rather than recovery.
 With the root out of the key-transport business, cold-start has no PQ target. The ruling
 is that it **fails**, and legacy RSA is reached only by explicit opt-in. Once an nskey is
 available it is used from then on, forward-only; re-encrypting records already written
-under the legacy fallback is R-1's explicit migration and never a side effect of a `put`,
+under the legacy fallback is an explicit migration (B-3's lazy re-encrypt — R-1
+delivered no migration machinery,
+[36](#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05))
+and never a side effect of a `put`,
 which would put an unbounded scan-and-rewrite inside a write pre-pass.
 
 The hard failure is safe because of the release sequence, which is the point of the whole
@@ -1568,8 +1587,11 @@ longer any way to seal to an atSign that has never touched it, because that is e
 the cold-start KEM did.
 
 The invitation case therefore has no PQ answer: sending someone something in an app they
-have never installed works in final 3.x only through the opt-in legacy fallback, and stops
-working at 4.x. We should document that as a property rather than solve it by
+have never installed works only through the opt-in legacy fallback, which 4.x's
+default (`disallowLegacyEncryption` true) disables — an app that deliberately
+re-enables legacy writes re-opens it, per
+[36](#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)'s
+app-decides rule. We should document that as a property rather than solve it by
 reintroducing an atSign-level KEM under a different name.
 
 ---

@@ -129,7 +129,8 @@ void main() {
       //       error. With the legacy fallback opted in (final 3.x only) the
       //       write proceeds under legacy, and every SUBSEQUENT write uses the
       //       nskey once it exists; records already written stay legacy, and
-      //       re-encrypting them is R-1's explicit migration. Rare in practice:
+      //       re-encrypting them is an explicit migration (B-3's lazy
+      //       re-encrypt; R-1 delivered no migration machinery). Rare in practice:
       //       a client mints for its preference namespace and its rw namespaces
       //       at init.
       provenIn(

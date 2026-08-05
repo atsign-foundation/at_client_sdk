@@ -116,7 +116,8 @@ void main() {
       //       absent.
       // WHEN  both attempt the immutable create.
       // THEN  exactly one wins; the other gets "already exists" and falls
-      //       through to REQUEST. No orphaned data (readiness not yet flipped).
+      //       through to REQUEST. No orphaned data (nothing was written under
+      //       the discarded key).
       provenIn(
         'tests/at_functional_test/test/pq_signing_root_create_once_test.dart',
         'the enrollment that loses the create does not mint a second root',

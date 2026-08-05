@@ -57,10 +57,15 @@ const _e2e = 'layer: tests/at_end2end_test';
 const b2 = 'blocked: B-2 (nskey rotation + revocation) · $_functional';
 
 // ---------------------------------------------------------------------------
-// Off the critical path — retrofit, onboarding
+// Retrofit + onboarding. RF-SRV moved ONTO the GA critical path 2026-08-05
+// (decisions.md 40) — every migration scenario conjugates "upgrade the
+// enrollment", and that verb is RF-SRV's. A server-side spike exists
+// (at_server branch gkc-pq-rfsrv-spike); these rows stay blocked until the
+// client half (RF-2b) can drive it end to end.
 // ---------------------------------------------------------------------------
 
 /// atServer authenticated self-retrofit enroll (auto-approve + expiry cap).
+/// On the GA critical path per decisions.md 40.
 const rfSrv = 'blocked: RF-SRV (server self-retrofit enroll) · $_e2e';
 
 /// Client mints PQ APKAM + key package, then self-retrofits.

@@ -13,7 +13,8 @@ void main() {
         () {
       // GIVEN @alice, @bob pq-native; @bob published
       //       public:__nskey.app_1.my_apps@bob when he first used the namespace;
-      //       bob1, bob2 hold its private; @bob readiness = ready.
+      //       bob1, bob2 hold its private; the app is at stage active on
+      //       both sides.
       // WHEN  alice1 does put @bob:<k>.app_1.my_apps@alice (shouldEncrypt).
       // THEN  bob's clients decapsulate bob's CK record with bob's nskey private
       //       and read; alice's clients decapsulate the self-copy's CK — a
@@ -77,11 +78,14 @@ void main() {
 
     test('UC-A4.4 · cross-atSign notification carrying an encrypted value', () {
       // GIVEN @alice, @bob pq-native; @bob published his nskey for the
-      //       namespace; @bob readiness ready; bob1 on a monitor.
+      //       namespace; the app at stage active on both sides; bob1 on a
+      //       monitor.
       // WHEN  alice1 notifies @bob with an encrypted value.
       // THEN  the value decrypts on every authorised bob enrollment with the
-      //       same routing as a shared put; negotiation gates the notification
-      //       scheme on BOB's readiness; offline-then-online bob still decrypts
+      //       same routing as a shared put; the notification scheme is the
+      //       sending APP's decision exactly as a put's (toward a keyless bob
+      //       it fails cold start or takes the explicit fallback — never a
+      //       silent downgrade); offline-then-online bob still decrypts
       //       the queued notification; appMetadata is present on the frame;
       //       signal-only notifications are unaffected.
       provenIn(

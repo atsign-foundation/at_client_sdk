@@ -250,8 +250,11 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      trust-on-first-use gated by a person approving a named device.
   3. `alice1` approves E2; the server records `alice2`'s single `apkamPublicKey` +
      `signingAlgo` + key package + metadata for E2, and populates E2's `_apsk` from
-     the enrollment record — where the value is a **root-signed envelope** rather
-     than a bare key, signed by `alice1` with the signing root at approval time.
+     the enrollment record — the **bare key value, exactly as today**
+     ([`decisions.md` 39](decisions.md#39-_apsk-rides-the-same-two-stage-ladder-2026-08-05)).
+     What chains it to the root is the **approval-chain link** `alice1` signs and
+     conveys, which E2 stamps onto its own `_apsk` metadata at first run — the
+     value itself is untouched, because apps parse it.
   4. `alice1` conveys the secrets E2 is authorised for:
      - the **signing-root private** rides the approval bundle (wrapped under
        `apkamSymmetricKey`) **only if E2 is itself fully privileged**; a
@@ -268,9 +271,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - `alice2.APKAM = pq`, `nskey.app_1.my_apps@alice⁻¹ = ✓`,
     `nskey.app_2.my_apps@alice⁻¹ = ✗`, key package registered. `root⁻¹ = ✗` for a
     namespace-scoped E2 — the root is held only by fully privileged enrollments.
-  - E2's `_apsk` value verifies against the signing root, so a reader can chain an
-    advertised key back to the atSign's own anchor rather than to whatever the
-    atServer served.
+  - E2's `_apsk` carries a chain link that `verifyChain` walks to the signing
+    root, so a reader can chain an advertised key back to the atSign's own
+    anchor rather than to whatever the atServer served — the `_apsk` **value**
+    stays the bare key apps already parse.
   - `alice2` authenticates PQ and decrypts `@alice`'s `app_1.my_apps` self data; an
     `app_2.my_apps` key request is refused.
   - E2's APKAM key is a distinct, individually-revocable record.
@@ -501,9 +505,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 ### 5.4 UC-A4.4 — Cross-atSign notification (encrypted value)
 
-- **Given:** `@alice`, `@bob` pq-native; `@bob` published `public:__nskey.app_1.my_apps@bob`
-  (or `public:pq_signing_root@bob` fallback); the app at stage `active` on both
-  sides; `bob1` running a monitor.
+- **Given:** `@alice`, `@bob` pq-native; `@bob` published
+  `public:__nskey.app_1.my_apps@bob` (there is no root fallback — nothing
+  encapsulates to the signing root); the app at stage `active` on both sides;
+  `bob1` running a monitor.
 - **When:** `alice1` `notify`s `@bob` with an encrypted value.
 - **Steps:**
   1. Encrypt the value under a CK (`at/symmetric/AES/GCM`, cited by `ckKid`); convey
@@ -836,9 +841,11 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 - **Then:** `pq_signing_root` is root (no namespace), so it has **no**
   `enroll:listns` push — its `requestSecret` for `pq_signing_root@alice⁻¹` is
   the steady-state path, answered by any online holder (persists until one answers).
-  Namespaced `nskey` privates `alice2` missed during its offline window arrive by the
-  **push** primary path once a holder is online (`enroll:listns` + `__ssenv`),
-  with `requestSecret` as the backstop. (Pull = `requestSecret` and push =
+  Namespaced `nskey` privates `alice2` missed while offline arrive by **its own
+  pull at next start** ([`decisions.md` 38](decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)
+  — an enrollment created or offline after the mint missed the push, so pulling
+  is its normal path, not a backstop), answered store-and-forward by any current
+  holder whenever that holder next runs. (Pull = `requestSecret` and push =
   `pushSecretToNamespaceMembers` are dual facets of one substrate — see `design.md`.)
 
 ### 12.2 UC-B5.2 — Reading legacy history after retrofit
@@ -985,7 +992,7 @@ restates project IDs, and only as a coverage map):
 |---------------------------------------------------------------------------------|---------------------------------|
 | A1.1 (PQ-native onboard, [Decision #1](decisions.md#numbered-rulings-14), B4.2) | **ON-1**                        |
 | A2.x / A3.x / A4.x / A5.x                                                       | **SS-2, SS-4, B-1, B-2, RF-2b** |
-| B0.x / B1.x / B2.x / B3.x / B4.x / B5.x                                         | **RF-2c** (retrofit) + **RF-SRV** (server self-enroll — on the GA critical path per [`decisions.md` 40](decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)); B3.x/B4.x data-path halves are built (R-1's surviving scope) |
+| B0.x / B1.x / B2.x / B3.x / B4.x / B5.x                                         | **RF-2c** (retrofit) + **RF-SRV** (server self-enroll — on the GA critical path per [`decisions.md` 40](decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)); the B3.x/B4.x data-path halves are built (B-1 + the decisions-36 ladder; R-1's surviving scope is the `disallowLegacyEncryption` flag) |
 
 Project names follow the `implementation-plan.md` scheme (RF-SRV / RF-2b /
 RF-2c).

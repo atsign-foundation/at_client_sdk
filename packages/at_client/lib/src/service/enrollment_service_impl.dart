@@ -297,7 +297,7 @@ class EnrollmentServiceImpl implements EnrollmentService {
   /// decides who receives the key that vouches for every enrollment on the
   /// atSign.
   ///
-  /// [decisions.md 18.2]: ../../../../docs/projects/pq/decisions.md
+  /// [decisions.md 18.2]: ../../../../../docs/projects/pq/decisions.md
   static bool isFullyPrivileged(Map<String, dynamic>? namespaces) {
     if (namespaces == null) return false;
     bool grantsWrite(String ns) => '${namespaces[ns] ?? ''}'.contains('w');

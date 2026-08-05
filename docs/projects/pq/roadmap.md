@@ -232,9 +232,8 @@ read-capability; the risk is writing too *new*, never reading too *old*.
 `shouldEncrypt=false` carve-out — are in [`design.md`](design.md); only the
 high-level 3.x-off / 4.x-on trajectory belongs here.)
 
-**The rollout trajectory at a glance** (one line per step; the operator-facing
-detail and the capabilities-by-code-change-level table live in
-[`design.md`](design.md), the sequencing in
+**The rollout trajectory at a glance** (one line per step; the two-release
+model's detail lives in [`design.md`](design.md) §1.8, the sequencing in
 [`implementation-plan.md`](implementation-plan.md)):
 
 0. **Baseline** — all legacy.
@@ -285,8 +284,11 @@ The promises, at a high level:
   the client key load/save plumbing all ship default implementations.
 - **Old data stays readable forever; migration is lazy** — the seam routes per
   value by `appMetadata`, re-encryption is on-touch, there is never a flag-day.
-- **Backwards-compatible, per-destination rollout** — feature discovery gates new
-  behaviour per peer; an old peer silently keeps the legacy path.
+- **Backwards-compatible rollout** — reads are universal, and which scheme an
+  app writes is its own release decision; the only per-destination gate is the
+  cold-start refusal with its explicit legacy fallback
+  ([`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)).
+  An old peer keeps the legacy path by never having published a namespace key.
 - **Safety is automatic** — a duplicate same-identity launch forks or refuses
   deterministically rather than corrupting state.
 - **For NoPorts the target is zero user-visible delta** — same commands, args,

@@ -127,8 +127,11 @@ Notes:
   `at/nskey` record" means `at/nskey/*`.
 - **This is what makes an algorithm change rollable.** Reads stay universal — a
   reader registers every scheme it supports and values route by their own id, so
-  retired schemes keep opening forever. The id lets a *writer* decide whether a
-  recipient can read a scheme rather than guess. `at/nskey/MLKEM1024/AES/GCM` and
+  retired schemes keep opening forever, and coexisting schemes need no flag day.
+  (*Which* scheme is written is the app's release decision — the SDK never
+  chooses one per destination,
+  [`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05).)
+  `at/nskey/MLKEM1024/AES/GCM` and
   `at/symmetric/AES/SIV` each coexist with today's; old values keep their tag.
 - The same X-Wing sealing also conveys nskey *privates* in Layer 1, but those ride
   the substrate as transport and are **not** value-level `at/nskey/*` records
@@ -596,17 +599,15 @@ write were reworked out via #2043, per decision #F / OQ9). The **server verb has
 landed** too (at_server #2685, merged 2026-07-07, plus #2687 / #2696 / #2698 /
 #2710).
 
-Still absent: the substrate is **not yet wired into AtClient** (SS-2,
-[#2085](https://github.com/atsign-foundation/at_client_sdk/issues/2085)), and no
-production call site drives `enroll:listns` — so although the client-side parser and
-its advertised-key verification landed on the spike branch (SS-1c,
-[#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084)), nothing has
-exercised either against a live verb. The
-**consumer layers** — nskey minting, `pq_signing_root` lifecycle (SS-4,
-[#2087](https://github.com/atsign-foundation/at_client_sdk/issues/2087)), PQ APKAM
-mint + retrofit (RF-2b/RF-2c) — are unbuilt. The full built/gap inventory with
-`file:line` evidence is in
-[§6](#6-implementation-notes--file-level-pointers-consolidated).
+*(The "still absent" list that stood here dated 2026-07-20 is discharged: SS-2
+wired the substrate into `AtClient`, `enroll:listns` is driven in production by
+`VerbEnrollmentDirectory` and exercised live by both harness suites, and the
+consumer layers — nskey minting/seeding, the `pq_signing_root` lifecycle with its
+pull initiator, the key-material self-heal — are built
+([`decisions.md` 38](decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)).
+Still genuinely absent: the PQ APKAM mint + retrofit client half, RF-2b/RF-2c.
+The full built/gap inventory with `file:line` evidence is in
+[§6](#6-implementation-notes--file-level-pointers-consolidated).)*
 
 ### 2.1 kpid addressing, __ssenv envelope, sign/verify
 
@@ -683,9 +684,11 @@ package** — `KeyPackageRegistration.signedKeyPackagePayload` produces the sign
 for `metadata.keyPackage`, and `VerbEnrollmentDirectory` verifies it against the
 advertising enrollment's `_apsk` before sealing, rejecting a package that is unsigned,
 tampered, signed by a different enrollment, or merely claiming to be that enrollment's.
-Remaining gaps: the key-package path has no **live** coverage until SS-2 wires
-`enroll:request`, and the public/private correspondence check for a conveyed keypair
-secret is still pending.)*
+Remaining gaps, updated 2026-08-05: none of the two that stood here — SS-2 wired
+`enroll:request` (live coverage: `enrollment_key_package_e2e_test.dart` and the
+signing-root pull pair), and the correspondence check is built
+(`NskeyPrivateFiling._corresponds`, refusing a private that does not derive the
+published public half).)*
 
 `file:line` evidence: `pqSeal`/`pqOpen` of `__ssenv` (`pairwise_secret_sharing.dart:191,398,99`;
 `pq_hpke.dart:80`); sign + verify-before-decrypt (`envelope_signing.dart:74,152`;
@@ -738,8 +741,10 @@ verify precedes open at `pairwise_secret_sharing.dart:366`); kpid addressing
 - **The signing root is the no-namespace exception** — it has no namespace to gate
   on. Unlike the legacy default encryption private key it is **not** served to every
   non-revoked enrollment: only fully privileged ones (`rw` on `*` **and** `__manage`)
-  hold it, because only they may mint it. *(Current gap: this serve branch is not yet
-  implemented — `grep pq_signing_root` in `secret_sharing/` = 0.)*
+  hold it, because only they may mint it. *(Built: `PqSigningRoot` mints, serves
+  to privileged requesters, and pulls via `requestPrivateIfAbsent` at every
+  start — [`decisions.md` 31](decisions.md#31-the-root-pull-initiator-and-what-it-did-not-settle-2026-08-04) and
+  [38](decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05).)*
 - **`namespaceAuthorizes`** — suffix/`*` match mirroring the atServer rule
   (`secret_store.dart:169`).
 - **No-holder-online** → the request persists on the secondary; a holder answers
@@ -1345,15 +1350,17 @@ for both the published `nskey` (`PublishedNskeyKeyRing` / `ApkamSignedAdvertised
 proven cross-atSign live) and the key package
 (`KeyPackageRegistration.signedKeyPackagePayload` / `VerbEnrollmentDirectory`), so the
 authenticity decision of [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify) holds —
-but the key-package half is **unit-only** until SS-2 [#2085] wires `enroll:request`, so
-nothing has driven it against a live `enroll:listns`. The
-public/private correspondence check is likewise missing
-(`pairwise_secret_sharing.dart:360-407`); the signing root's
-no-namespace serve exception is missing (`grep pq_signing_root` = 0); durable storage
-is deferred (in-memory `SecretStore` + a pluggable persistence hook,
-`secret_store.dart:62`; the extended `AtKeys`/`AtKeysIo` runtime persistence not
-wired); anti-storm is a plain rate cap
-without jitter (`:539`, SS-3 [#2086]). `pushSecretToNamespaceMembers` is untested.
+and as of 2026-08-05 the key-package half is driven live too (SS-2 wired
+`enroll:request`; `enrollment_key_package_e2e_test.dart` and the signing-root
+pull pair exercise `enroll:listns` against a live atServer). Discharged since
+this inventory was written: the public/private correspondence check
+(`NskeyPrivateFiling._corresponds`), the signing root's no-namespace serve +
+pull (`PqSigningRoot`), durable key material (`AtKeys` filing via
+`collectConveyedKeyMaterial` + the store hydration of
+[`decisions.md` 38](decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)),
+and answer jitter (`requestAnswerJitter`). Still true: the `SecretStore` itself
+is an in-memory transit buffer by design
+([`decisions.md` 21](decisions.md#21-ss-3-where-key-material-lives-and-what-the-substrate-stops-storing-2026-08-03)).
 `VerbEnrollmentDirectory` was reworked to the flat, single-key, `enroll:listns`,
 no-write-path model (singular signed `metadata.keyPackage`, no format-keyed map) via
 #2043 before SS-0 merged — the retired nested `apkam[]` parse and `enroll:metadata`

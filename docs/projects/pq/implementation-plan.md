@@ -693,7 +693,7 @@ feeder** into the data path.
 
 ## 6. Phase B — the nskey data path (B-1, the D1 centrepiece)
 
-### B-1 — at/nskey + at/symmetric/AES/GCM providers, capability marker, negotiation, cold-start · at_client · XL
+### B-1 — at/nskey + at/symmetric/AES/GCM providers + cold-start · at_client · XL *(title's former "capability marker, negotiation" scope removed by [decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05))*
 **Goal:** the value-level data path — the **D1 GA convergence point**.
 **Builds on:** #1930 (seam) + P-1 (`pqSeal`) + S-2 (`CryptoContext.keys`) + **SS-4** (nskey key material) + P-3. *The substrate delivers the privates; this delivers the providers.*
 ⚠️ **The SS-4 prerequisite holds for `B-1c` onward** — `B-1a` needs no nskey material at all, and `B-1b`
@@ -728,11 +728,11 @@ proceeds against a test fixture that supplies the nskey private directly (see th
   member to that would break every external `implements CryptoProvider`, the shipped example included).
   Recursion terminates because the conveyance is routed explicitly to `at/nskey`, which does not
   implement `PreparesWrites` — pinned by a test, not left as an argument.
-- **B3 capability marker:** per-`(atSign,namespace)`, advertising the **set of provider ids** the
-  fleet supports rather than a boolean — a boolean cannot express *which* schemes are readable and so
-  cannot survive a second PQ scheme ([decisions.md](decisions.md) section 16). Initially the set holds
-  only `legacy`; per-destination selection picks the best id present in every required reader's set;
-  `providerId` on stored values **and** notification frames.
+- **B3 capability marker:** *(REMOVED by
+  [decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)
+  — no marker, no per-destination selection; the app's build decides what it
+  writes.)* What survives of this bullet: `providerId` on stored values **and**
+  notification frames, and section 16's provider-id ruling itself.
 - **B4 cold-start:** when the recipient has never used the namespace, so there is no
   `public:__nskey.<ns>@<recipient>`, the write **fails** — the atSign-level key is a signing root and
   cannot receive an encapsulation, so there is no PQ target to fall back to. The refusal names the
@@ -846,7 +846,7 @@ taken now because nothing written under the old form exists outside the spike.
 | ~~The notify **receive** half has no live coverage~~ — **closed 2026-08-04.** It did need harness work rather than a test, and the lever was `AtClientManager`'s public constructor: one manager per atSign, each owning its own client, `notificationService` and `syncService`, with `AtClientImpl`'s cache keyed by atSign so two *different* atSigns never collide. `ConcurrentClients` (`lib/src/concurrent_clients.dart`) plus `concurrent_notify_test.dart` now show a monitor on bob receiving and **decrypting** what alice sent, live — the existing `notify_test.dart` had worked around the limitation by switching atSigns and polling `notifyList`, which reads the atServer's queue and exercises neither the monitor nor decryption. Negative control run: reinstating the singleton fails with `@alice stopped=true` from `open`'s own guard. **The constraint to respect:** while a `ConcurrentClients` is open, nothing may call `getInstance().setCurrentAtSign` for either atSign — the cached `AtClientImpl` would be handed a fresh `notificationService`, and the symptom is a subscription that never fires, which reads as a product defect | `at_end2end_test` |
 | ~~Rename the atSign-level key in code, delete the `root-pqpublickey` variant~~ — **done.** `NskeyRecipientKind` has one member; no Dart source says `pqpublickey`; the cold-start throw now states why there is no PQ target rather than promising a fallback | **B-1c** |
 | ~~Enrollment approval reverses direction~~ — **done.** It needed the atServer after all, though far less of it than "multi-repo seam" implied: the *return* leg rides the existing substrate with no verb change, but the atServer made `encryptedAPKAMSymmetricKey` mandatory on `enroll:request`, so an enrollee that wraps nothing could not send a valid request. That check now yields to an advertised key package and stays mandatory otherwise | **SS-2** |
-| `_apsk`'s published value becomes a root-signed envelope rather than a bare key, carried in the enrollment record the atServer already copies. Verifiers accept a bare key as unsigned during transition | **SS-1c** |
+| ~~`_apsk`'s published value becomes a root-signed envelope rather than a bare key~~ — **re-ruled 2026-08-05 by [decisions 39](decisions.md#39-_apsk-rides-the-same-two-stage-ladder-2026-08-05):** the final 3.x publishes the bare value EXACTLY as today (apps parse it), while verify learns the tagged self-describing form 4.x enrollments will publish — built (`parseApskValue`/`verifyEnvelope`) | **RF-2b** |
 | ~~Open an in-progress version in `at_chops` and `at_commons`~~ — **done.** at_chops **3.4.2** and at_commons **5.14.0** are open and unpublished; fold further entries under those headings | `at_chops` / `at_commons` |
 | ~~`_addMetadataToBuilder` is a hand-rolled copier~~ — **done.** `Metadata.copy()` (at_commons 5.14.0) is the canonical converter; the notify path copies wholesale and then clears the few fields a sender must not assert, so a field added upstream travels by default. at_client's floor is `^5.14.0` | `at_commons` |
 
@@ -1211,7 +1211,7 @@ out of scope here** — see [roadmap.md](roadmap.md) for the D2 trajectory.
 | 4  | `at_auth`           | minor `3.2.0 → 3.3.0` **(3.3.0-rc1 published 2026-07-17; stable pending)** | S-1 | additive: extend `AtKeys` in place (deprecate legacy); `AtKeysIo` runtime persistence; `InMemoryAtKeysIo`. ⚠️ **the rc1 → stable promotion is an open gate** — S-6 and SS-2's at_auth work need a stable 3.3.0 to pin against; timing unresolved |
 | 5  | `at_auth`           | **major `3.3.0 → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
 | 6  | `at_client`         | minor `3.14.x → 3.15.x`       | S-2…B-2    | `at_auth ^4.0.0`; `CryptoContext.keys`; nskey data path; rotation. **= D1 GA**. ⚠️ **3.13.0 and 3.14.0 both published 2026-07-17** (3.14.0 carries the SS-0 substrate as an experimental surface), so the GA slot has moved off 3.14.x — re-derive the target minor at execution against pub.dev. ⚠️ **S-2's `CryptoContext.keys` (#2076) is on trunk but unreleased** — it merged after 3.14.0 published, so the next at_client release is the first that carries it |
-| 7  | `at_client`         | **major `3.15.x → 4.0.0`**    | R-2        | flip `disallowLegacyEncryption` default → true; selfEncryptionKey stop-existing; dead-code removal |
+| 7  | `at_client`         | **major `3.15.x → 4.0.0`**    | R-2        | flip `disallowLegacyEncryption` default → true; dead-code removal. *(selfEncryptionKey stop-existing moved to a later ecosystem-gated release, [decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05))* |
 | 8  | `at_onboarding_cli` | minor `1.16.0 → 1.17.0`       | S-6        | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; explicit injection. 1.16.0 published 2026-07-17, so 1.17.0 is a clean next slot |
 | 9  | `at_client_flutter` | minor `1.1.4 → 1.2.0`         | S-6        | `at_auth ^4.0.0`; `file_picker` imports `at_auth_io.dart` |
 | 10 | `at_cli_commons`    | minor (constraint bump)       | S-6        | consumes the new `at_onboarding_cli` / `at_client` (transitive at_auth) |
@@ -1235,8 +1235,8 @@ build.
 both of those two are docs-only (the wasm-port plan, [#2118](https://github.com/atsign-foundation/at_client_sdk/pull/2118)),
 so the drift carries no code-merge risk today.
 
-**Everything up to and including SS-3 is landed as of 2026-08-03** (SS-1c/SS-2/SS-3 on `gkc-pq-d1-spike`, plus [at_server#2736](https://github.com/atsign-foundation/at_server/pull/2736) for SS-3's server half). **`SS-4`'s signing chain landed 2026-08-04** — mint, root-private conveyance, self-anchoring and the graded walk, all live-covered. What remains of SS-4 is the nskey `CryptoConfig` wiring at init and key-transparency publication, so **`B-1` is what the path now waits on**, and it gates the final 3.x release.
-**Off-path (parallel):** `RF-SRV → RF-2b → RF-2c` (RF-1 confirm), `B-3`, `ON-1`, `S-5 → S-6`, `D2-1`, `KF-1`
+**Everything up to and including SS-3 is landed as of 2026-08-03** (SS-1c/SS-2/SS-3 on `gkc-pq-d1-spike`, plus [at_server#2736](https://github.com/atsign-foundation/at_server/pull/2736) for SS-3's server half). **`SS-4`'s signing chain landed 2026-08-04** — mint, root-private conveyance, self-anchoring and the graded walk, all live-covered. **B-1 landed too, and R-1 was delivered 2026-08-05 as the flag alone** ([decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)); the path now waits on **SH-1 + RF-SRV → B-2** — RF-SRV moved ON-path per [decisions 40](decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05).
+**Off-path (parallel):** `RF-2b → RF-2c` (RF-1 confirm), `B-3`, `ON-1`, `S-5 → S-6`, `D2-1`, `KF-1`
 (builds on S-3), and the final `R-2`.
 
 ### (c) Waves / parallelism
@@ -1292,7 +1292,7 @@ Single authoritative map of D1 items, workstreams, and use cases to projects.
 | D1-A (PQ primitives, enrollment key) | P-1, P-2, P-3 |
 | D1-B B1-B4 (data path) | B-1, chunks B-1a…B-1e (+ key material SS-4) |
 | D1-B B5/B6 (rotation/revocation) | B-2 |
-| D1-B B7 (selfEncryptionKey retirement) | B-3 (phases 1-3), R-2 (phase 4) |
+| D1-B B7 (selfEncryptionKey retirement) | B-3 (phases 1-3); phase 4 = the later ecosystem-gated release ([decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)), no longer R-2 |
 | D1-C / D1-D (migration, flag, versioning) | R-1 (D1-D delivered; D1-C = the decisions-36 ladder + SH-1), R-2 |
 | D1-F substrate baseline | SS-0 (PR #2037) |
 | D1-F DEP1-DEP4 | SS-1b, SS-2, SS-3 |

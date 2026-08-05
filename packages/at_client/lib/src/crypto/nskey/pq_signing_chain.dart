@@ -31,7 +31,7 @@ import 'package:meta/meta.dart' show experimental;
 /// its own record on first run. Until the child runs, verifiers see a bare key,
 /// which the transition rule already tolerates.
 ///
-/// [decisions.md 22.2b]: ../../../../../docs/projects/pq/decisions.md
+/// [decisions.md 22.2b]: ../../../../../../docs/projects/pq/decisions.md
 /// How far up the approval chain a verifier got.
 ///
 /// Graded rather than boolean because a bare `_apsk` is deliberately tolerated

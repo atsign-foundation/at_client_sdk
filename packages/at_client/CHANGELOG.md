@@ -1,4 +1,33 @@
 ## 3.14.1
+- feat (experimental): the nskey privates **self-heal** — mint if none exists,
+  else pull from any current holder. Before this, the only delivery was the
+  mint-time push to whoever held a key package at that instant, so an
+  enrollment created after the mint (the ordinary second device) met
+  `no nskey private held` with no request, no retry and no recovery. Now: at
+  every client start, a client that can file the answer asks the namespace's
+  other enrollments for any published generation it lacks, files the answer
+  into `AtKeys` the moment it lands, and primes its own in-memory store from
+  `AtKeys` so *it* can answer others — the answer path serves from the store,
+  which is empty after every restart, so a holder that had restarted answered
+  with nothing (found by the live two-enrollment test; no unit fixture could
+  see it). A read that misses an own generation fires the same ask, once per
+  generation. And approval now conveys the approver's *held* privates read
+  from `AtKeys`, not just whatever the transit store happens to hold.
+- feat (experimental): the **chain sweep** — a fully privileged client signs
+  and conveys approval-chain links for approved enrollments that lack one. A
+  scoped enrollment cannot anchor itself and its approver may be a legacy
+  enrollment that can sign nothing, so unanchored was a permanent state, not a
+  transient. The enrollment stamps the conveyed link onto its own `_apsk` at
+  its next start; the sweep is convergent and runs at privileged client start.
+- feat (experimental): envelope verification honours the signing algorithm.
+  The envelope's `signingAlgo` field was decorative — verify always ran RSA.
+  It now branches, with the *published key's own declaration* authoritative
+  over the envelope's claim: `_apsk` values parse in both forms — the bare RSA
+  string published today (unchanged, and everything 3.x publishes), and the
+  tagged self-describing JSON form 4.x enrollments will publish
+  (`{"v":1,"signingAlgo":"mldsa65","publicKey":…}`), which is deliberately
+  unmistakable to an old bare-RSA parser. A lie about `signingAlgo` fails the
+  verify; an algorithm this build has no code for is refused by name.
 - feat (experimental): `AtClientPreference.disallowLegacyEncryption` (default
   false; 4.0 flips it). A client that sets it never encrypts **new** data with
   the legacy provider: it takes a post-quantum path or refuses the write, so a
