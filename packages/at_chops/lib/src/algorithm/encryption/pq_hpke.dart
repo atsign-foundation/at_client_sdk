@@ -5,6 +5,7 @@ import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/at_iv.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:meta/meta.dart' show visibleForTesting;
 
 import '../hashing/hkdf.dart';
 import 'aes_gcm.dart';
@@ -160,6 +161,28 @@ Future<Uint8List> pqOpen(
     throw PqOpenException(
         PqOpenFailure.authFailure, 'AEAD authentication failed');
   }
+}
+
+/// The AEAD key and nonce [pqSeal] derives from a KEM shared secret — the
+/// `atPQv1-base` key schedule, exposed so a conformance suite can check it
+/// directly.
+///
+/// A second implementation that disagrees here produces envelopes this one
+/// cannot open, and the failure arrives as an AEAD authentication error that
+/// says nothing about which side is wrong. Comparing the schedule's own output
+/// turns that into a one-line diff.
+///
+/// [version] selects the suite label, so a caller can check a version this
+/// build still reads but no longer emits. See
+/// `docs/projects/pq/seal-spec.md` and `test/vectors/pq_seal_v1.json`.
+@visibleForTesting
+({Uint8List key, Uint8List nonce}) pqSealDeriveKeyAndNonce(
+  Uint8List sharedSecret, {
+  Uint8List? info,
+  int version = _envelopeVersion,
+}) {
+  final dk = _deriveKeyAndNonce(sharedSecret, version, info);
+  return (key: dk.key, nonce: dk.nonce);
 }
 
 // ── internals ───────────────────────────────────────────────────────────────

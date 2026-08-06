@@ -1,4 +1,21 @@
 ## 3.4.2
+- docs: **`docs/projects/pq/seal-spec.md`** — a byte-level specification of the
+  `atPQv1-base` seal, written so a second implementation can be built from it
+  without reading the Dart. Validated by reimplementing its key schedule from
+  the document text alone, using `package:crypto`'s HMAC rather than this
+  package's HKDF, and matching all 15 committed vectors.
+- test: **`test/vectors/pq_seal_v1.json`** — cross-implementation conformance
+  vectors for the seal: 15 key-schedule rows and 80 envelopes across both
+  production contexts, an absent and a zero-length `info`, a non-ASCII one,
+  with and without `aad`, at plaintext lengths 0/1/44/1000. Plus the negative
+  arm, without which every row would pass on an implementation that ignored
+  `info` and `aad` entirely. **These are self-generated** — nobody publishes
+  vectors for an Atsign-internal construction — so they attest that two
+  implementations agree and nothing more, which the fixture says of itself.
+- feat: `pqSealDeriveKeyAndNonce`, `@visibleForTesting`, exposes the
+  `atPQv1-base` key schedule so a conformance suite can compare it directly. A
+  schedule mismatch otherwise surfaces only as an AEAD authentication failure,
+  which says nothing about which side is wrong.
 - test: **ML-DSA-65 conformance against NIST's ACVP vectors** (FIPS 204). Until
   now `ml_dsa_65_algo_test.dart` asserted key and signature lengths and that a
   signature round-trips, which two wrong implementations agreeing with each
