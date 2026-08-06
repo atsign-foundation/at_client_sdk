@@ -1518,8 +1518,11 @@ first of the three.
 ### 14.3 JWS or JCS for the signed envelope
 
 **RULED 2026-08-06 → JWS Flattened JSON Serialization, `b64=true`**
-([decisions 48.8](decisions.md#488-what-this-entry-does-not-rule)). Still
-waits behind 14.2, since the version field is what makes the choice reversible.
+([decisions 48.8](decisions.md#488-what-this-entry-does-not-rule)). Its
+prerequisite 14.2 landed in `3c2eddbe6`; the staged plan is written and lives in
+`untracked/2026-08-06-JWS-MIGRATION-PLAN.md` — all 7 payload consumers named
+with what each requires, the two encoders, the 6 test files to sweep, and the
+staging.
 
 Why it became the cheapest standards adoption in the design rather than the
 most marginal: RFC 9964 (Proposed Standard, May 2026) registers `ML-DSA-65` as
@@ -1535,6 +1538,13 @@ are removing. `canonical_json` on pub.dev is a trap, being OLPC Canonical JSON
 under a Google publisher badge. `b64=false` is rejected too: it does not
 deliver the `llookup` readability that is its only appeal, and its mandatory
 `crit` forfeits off-the-shelf verification.
+
+One measured trap worth carrying here rather than only in the plan, since it
+inverts the obvious expectation: Dart's `base64Decode` requires padding and JWS
+base64url is unpadded, so a **256-byte RSA-2048 signature (342 chars, len%4=2)
+always throws** while a **3309-byte ML-DSA-65 signature (4412 chars, len%4=0)
+always decodes**. A naive migration therefore fails on every classical envelope
+and succeeds on every PQ one. Use `base64Url.decode(base64.normalize(s))`.
 
 ### 14.4 A `suites` list on the key package
 
