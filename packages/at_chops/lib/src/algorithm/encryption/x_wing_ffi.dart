@@ -9,8 +9,13 @@ import 'package:at_chops/src/algorithm/encryption/x25519_ffi_algo.dart';
 import 'package:pointycastle/digests/sha3.dart';
 import 'package:pointycastle/digests/shake.dart';
 
-/// X-Wing hybrid post-quantum/traditional KEM (draft-connolly-cfrg-xwing-kem-10)
+/// X-Wing hybrid post-quantum/traditional KEM (IANA HPKE KEM id `0x647A`)
 /// backed by OpenSSL 3 via Dart FFI.
+///
+/// See [XWingPureDartAlgo] for which document to cite and why. This backend
+/// carries its own copy of the combiner and the SHAKE-256 seed expansion, so
+/// it is checked against the published `0x647A` vectors in its own right —
+/// the pure-Dart/FFI interop tests would pass with both backends wrong.
 ///
 /// X-Wing has no native OpenSSL primitive, so this composes [MlKem768FfiAlgo]
 /// (ML-KEM-768) and [X25519FfiAlgo] (X25519). The seed expansion (SHAKE-256)

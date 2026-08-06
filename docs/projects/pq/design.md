@@ -1058,9 +1058,20 @@ Constraints beyond the ruling above:
 
 The providers and the substrate seal through one audited PQ primitive.
 
-**X-Wing KEM** (`draft-connolly-cfrg-xwing-kem-10`): ML-KEM-768 + X25519 with the
-SHA3-256 combiner; 32-byte seed secret keys expanded via SHAKE-256. Vector-verified
-byte-exact against the draft's Appendix C vectors (incl. derandomized encapsulation).
+**X-Wing KEM** (IANA HPKE KEM id `0x647A`): ML-KEM-768 + X25519 with the
+SHA3-256 combiner; 32-byte seed secret keys expanded via SHAKE-256.
+Vector-verified byte-exact against the **IETF HPKE working group's** published
+`0x647A` vectors, across all three operations — key generation, derandomised
+encapsulation and decapsulation — in both the pure-Dart and OpenSSL FFI
+backends. Go 1.26's `crypto/hpke.MLKEM768X25519()` vendors the same vector file,
+so it is an independent oracle for these bytes.
+
+The construction originates in `draft-connolly-cfrg-xwing-kem`, an Independent
+Submission CFRG never adopted, which expires 2026-09-03 — cite it for history
+only. `draft-irtf-cfrg-concrete-hybrid-kems` section 4.2 states that its
+`MLKEM768-X25519` "is identical to the X-Wing construction". The IANA row still
+reads *X-Wing*; the rename to `MLKEM768-X25519` is requested by
+`draft-ietf-hpke-pq` and has not been effected.
 **ON TRUNK** (`at_chops 3.3.0`, published 2026-06-23).
 
 **`pqSeal` / `pqOpen`** — the one audited PQ public-key-encryption primitive:

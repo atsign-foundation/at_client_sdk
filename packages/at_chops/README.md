@@ -9,7 +9,7 @@ data signing, key agreement, and hashing that can be leveraged by client applica
 - Data signing and verification for public data in the Atsign Protocol
 - Post-quantum digital signatures: ML-DSA-65 (FIPS 204) — pure-Dart and OpenSSL FFI backends
 - Post-quantum key encapsulation: ML-KEM-768 (FIPS 203) — pure-Dart and OpenSSL FFI backends
-- Hybrid PQ/classical KEM: X-Wing (X25519 + ML-KEM-768, draft-connolly-cfrg-xwing-kem-10)
+- Hybrid PQ/classical KEM: X-Wing (X25519 + ML-KEM-768, IANA HPKE KEM id 0x647A)
 - Elliptic-curve key agreement: X25519 — pure-Dart and OpenSSL FFI backends
 - Serializable key-pair generation helpers for RSA, X25519, ML-KEM-768, ML-DSA-65, and X-Wing
 - Hashing: SHA-256, SHA-512, MD5, Argon2id

@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops_ffi.dart';
 import 'package:test/test.dart';
 
+import 'hpke_wg_kem_vectors.dart';
 import 'x_wing_test_vectors.dart';
 
 void main() {
@@ -59,6 +60,28 @@ void main() {
       final ss = await ffi.decapsulate(seed, ct);
       expect(ss, equals(expectedSs));
     });
+
+    // The FFI backend carries its own copy of the combiner and the SHAKE-256
+    // seed expansion in Dart, so it needs its own conformance check against
+    // the published vectors. The interop tests below only prove the two
+    // backends agree with each other, which they would do while both wrong.
+    for (final (i, v) in hpkeWgKem0x647aVectors.indexed) {
+      test('FFI reproduces HPKE WG vector $i (kdf ${v.kdfId})', () async {
+        if (lib == null) {
+          fail('libcrypto not available on this host');
+        }
+        if (!mlKemSupported) {
+          fail(
+              'libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
+        }
+
+        final ffi = XWingFfiAlgo.fromLib(lib);
+        final kp = await ffi.generateKeyPair(v.skRm);
+        expect(toHex(kp.publicKey), toHex(v.pkRm));
+        final ss = await ffi.decapsulate(v.skRm, v.enc);
+        expect(toHex(ss), toHex(v.sharedSecret));
+      });
+    }
 
     test('FFI encapsulate/decapsulate round-trip agrees on the shared secret',
         () async {

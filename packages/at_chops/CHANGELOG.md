@@ -1,4 +1,23 @@
 ## 3.4.2
+- test: X-Wing now conforms to the **IETF HPKE working group's** published
+  vectors for IANA HPKE KEM id `0x647A`, not only to
+  `draft-connolly-cfrg-xwing-kem-10`'s Appendix C. Both published rows are
+  checked across all three operations — key generation from the seed,
+  derandomised encapsulation, and decapsulation — in both the pure-Dart and
+  OpenSSL FFI backends. The FFI backend gets its own rows because it carries a
+  second copy of the combiner and the SHAKE-256 seed expansion, and the
+  existing interop tests would pass with both backends wrong in the same way.
+  This matters because the draft is an Independent Submission CFRG never
+  adopted, it expires 2026-09-03, and its own Appendix C is marked TODO by its
+  authors, so it was the weakest citation available for the construction.
+  No production code changed.
+- docs: X-Wing is cited by its IANA HPKE KEM id `0x647A` rather than by the
+  expiring draft, with the naming caveat recorded: the registry row still reads
+  *X-Wing*, and the rename to `MLKEM768-X25519` requested by
+  `draft-ietf-hpke-pq` has not been effected. Also records the **Bouncy Castle
+  1.81 floor** for anyone implementing this in Java — 1.78 to 1.80 feed the
+  combiner label first rather than last and derive a different shared secret,
+  which surfaces as an opaque AEAD failure rather than a key error.
 - feat: `PkamMlDsa65SigningAlgo` — synchronous ML-DSA-65 PKAM signing and
   verification, and `AtChopsImpl`'s pkam dispatch now honours
   `signingAlgoType: mldsa65`. Until now the pkam branch signed RSA regardless

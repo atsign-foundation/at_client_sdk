@@ -13,7 +13,7 @@ class SecretSharingAlgos {
   SecretSharingAlgos._();
 
   /// X-Wing hybrid post-quantum/traditional KEM
-  /// (draft-connolly-cfrg-xwing-kem-10; X25519 + ML-KEM-768). A key package's
+  /// (IANA HPKE KEM id `0x647A`; X25519 + ML-KEM-768). A key package's
   /// advertised key is an X-Wing public key; a sender encapsulates to it.
   /// IND-CCA holds if either component survives, so confidentiality is
   /// harvest-now-decrypt-later resistant.

@@ -11,7 +11,34 @@ import 'package:pointycastle/digests/sha3.dart';
 import 'package:pointycastle/digests/shake.dart';
 
 /// X-Wing: general-purpose hybrid post-quantum/traditional KEM combining
-/// X25519 and ML-KEM-768, per draft-connolly-cfrg-xwing-kem-10.
+/// X25519 and ML-KEM-768. Registered at **IANA HPKE KEM id `0x647A`**.
+///
+/// ## Which document to cite
+///
+/// The construction originates in `draft-connolly-cfrg-xwing-kem`, an
+/// Independent Submission that CFRG never adopted and that expires on
+/// 2026-09-03; cite it for history only. The identity that does not lapse is
+/// the IANA code point, plus the CFRG research-group document
+/// `draft-irtf-cfrg-concrete-hybrid-kems` section 4.2, which states that its
+/// `MLKEM768-X25519` "is identical to the X-Wing construction" and retains the
+/// same combiner label for compatibility.
+///
+/// The IANA registry row still reads **X-Wing** (referencing
+/// `draft-connolly-cfrg-xwing-kem-06`). `draft-ietf-hpke-pq` *requests* the
+/// rename to `MLKEM768-X25519`, and that request has not been effected, so the
+/// code point should not be described as registered under the new name.
+///
+/// Conformance is checked against the IETF HPKE working group's published
+/// `0x647A` vectors — see `test/hpke_wg_kem_vectors.dart`. Go's standard
+/// library vendors the same file, so `crypto/hpke.MLKEM768X25519()` is an
+/// independent oracle for these bytes.
+///
+/// Interop note for other implementations: Bouncy Castle has carried X-Wing
+/// since 1.78, but releases 1.78 to 1.80 feed the combiner label **first**
+/// rather than last and so derive a different shared secret from the same
+/// inputs. **1.81 is the floor.** Since X-Wing rejects implicitly, getting this
+/// wrong surfaces as an opaque AEAD authentication failure rather than a key
+/// error.
 ///
 /// - secret (decapsulation) key: a 32-byte seed, expanded on use via
 ///   SHAKE-256 into the ML-KEM-768 (d, z) and the X25519 secret key
