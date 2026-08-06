@@ -1,4 +1,19 @@
 ## 3.4.2
+- feat: `MlKem1024PureDartAlgo` — pure ML-KEM-1024 (FIPS 203), the no-hybrid
+  KEM option. It exists for its citation rather than its strength: used alone it
+  is the only public-key encryption path here whose specification chain contains
+  **no draft at all** (FIPS 203, SP 800-227 §4.3, SP 800-56C), where every
+  hybrid has its combiner specified only in an IETF draft. It is also CNSA
+  2.0's mandated parameter set, and CNSA 2.0 treats hybrids as non-compliant.
+  What it gives up is the classical hedge, which covers exactly one scenario —
+  ML-KEM falling to *classical* cryptanalysis before a quantum computer exists.
+  No new primitive was needed: pqcrypto's Kyber is parameterised, and
+  `KyberLevel.kem1024` is FIPS 203's k=4 set.
+- test: checked against the IETF HPKE working group's published vector for KEM
+  `0x0042` — the 64-byte d||z seed derives the published 1568-byte
+  encapsulation key, decapsulation reproduces the published shared secret, and
+  derandomised encapsulation reproduces the published ciphertext. Third-party
+  bytes, mirrored by Go's standard library.
 - feat: **RFC 9180 HPKE Base mode as `pqSeal` version `0x02`** — the real
   thing, not a shape borrowed from it. Suite: KEM `0x647A` (X-Wing /
   MLKEM768-X25519), KDF `0x0001` (HKDF-SHA256), AEAD `0x0003`
