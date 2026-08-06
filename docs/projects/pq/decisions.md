@@ -4386,7 +4386,9 @@ test is green, the JWS and RFC 9180 migrations are **decided but not landed**,
 and this entry records the decision and the constraints rather than a
 mechanism:
 
-- **JWS Flattened JSON Serialization, `b64=true`.** RFC 9964 (Proposed
+- **JWS Flattened JSON Serialization, `b64=true`** — plan written
+  (`untracked/2026-08-06-JWS-MIGRATION-PLAN.md`), implementation deferred.
+ RFC 9964 (Proposed
   Standard, May 2026) registers `ML-DSA-65` as a JOSE `alg`, and our signature
   is already conformant to it — pure ML-DSA, empty context, now pinned by test.
   The RSA arm already emits exactly the `RS256` bytes. JCS is **rejected**:
@@ -4396,7 +4398,8 @@ mechanism:
   Google-published, and silently divergent. `b64=false` is rejected too: it
   does not deliver the readability that is its only appeal, and its mandatory
   `crit` forfeits off-the-shelf verification.
-- **RFC 9180 as `ver = 0x02`, at ChaCha20-Poly1305.** Ruled by Gary over
+- **RFC 9180 as `ver = 0x02`, at ChaCha20-Poly1305** — **LANDED** `f3cfda4d4`;
+  see [48.9](#489-rfc-9180-landed-and-what-it-settled). Ruled by Gary over
   AES-256-GCM because the HPKE WG's published `0x647A` vectors are
   ChaCha-only — there is no AES-GCM row at this KEM — so ChaCha gives an exact
   published KAT with no audit footnote. `aad` is unused at every production
@@ -4414,3 +4417,40 @@ mechanism:
   at_client's functions, so a migration here does not break it — but "nobody
   has this shape deployed" is wrong, and it is a separately-owned second
   migration to name rather than discover.
+
+### 48.9 RFC 9180 landed, and what it settled
+
+`f3cfda4d4`. The suite is
+
+> RFC 9180 Base mode, KEM `0x647A` (X-Wing / MLKEM768-X25519), KDF `0x0001`
+> (HKDF-SHA256), AEAD `0x0003` (ChaCha20-Poly1305).
+
+Version `0x01` is unchanged and remains the default, so nothing on the wire
+moves until a caller asks for `0x02` — which is what the write-side selector
+(`1688ed69d`) exists for.
+
+**The schedule matched the working group's published bytes on the first run**,
+written from the specification: `key`, `base_nonce`, `exporter_secret`, and all
+10 published encryptions. That is the direct answer to
+[46.1](#461-pqseal-stays-custom-and-d2-is-when-we-revisit-it)'s "the same
+bespoke code with a specification attached". The code is about the same size
+either way. Only one version has a referee, and three red proofs show the
+referee bites: perturbing the mode byte, the `psk_id_hash` label, or one byte of
+`suite_id` each turns the vector tests red.
+
+Two things worth keeping:
+
+- **The versions are separated, not merely labelled.** Relabelling a `0x02`
+  envelope as `0x01` fails to open, and so does the reverse — asserted rather
+  than assumed. `0x01`'s domain separation is its `atPQv1-base` suite label;
+  `0x02`'s is the `suite_id` inside every labelled derivation, so
+  `_suiteLabelFor` does not apply to it and raises if asked.
+- **Three tests that used `0x02` as their stand-in for "unsupported" had to
+  move to `0xff`.** Their failures were the new code behaving correctly, not a
+  regression — worth naming because a version-number placeholder is exactly the
+  kind of test fixture that silently stops testing what it says.
+
+The framing is shared, so everything after the 3-byte header is exactly RFC
+9180's `enc || ct`. The Atsign part is a frame around a conformant payload,
+which is the relationship TLS and MLS have to the constructions they carry, and
+it is worth describing that way rather than claiming bare RFC 9180 on the wire.

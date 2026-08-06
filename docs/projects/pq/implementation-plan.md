@@ -1553,12 +1553,12 @@ release-ordering agility instead — **except** that it is now a prerequisite
 for the RFC 9180 move at `ver = 0x02`, since it is what makes that a
 sender-side decision rather than a fleet-wide readers-upgrade-first migration.
 
-### 14.5 A write-side envelope version selector in at_chops
+### 14.5 A write-side envelope version selector in at_chops — DONE
 
-`_envelopeVersion` is a global const in `pq_hpke.dart` with no per-call
-override, so at_chops cannot emit `0x01` to old readers and `0x02` to new ones.
-The read side already dispatches on the version byte before parsing anything
-else; only the write side is missing. Blocks the RFC 9180 move.
+Landed in `1688ed69d`: `pqSeal` takes a `version`, and `pqSealDefaultVersion` /
+`pqSealSupportedVersions` are public. It was the blocker on the RFC 9180 move,
+which landed at `f3cfda4d4` as `ver = 0x02`
+([decisions 48.9](decisions.md#489-rfc-9180-landed-and-what-it-settled)).
 
 ### 14.6 The enrollment record's `metadata.keyPackage` is a one-way door
 
