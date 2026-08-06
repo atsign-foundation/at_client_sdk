@@ -1,4 +1,30 @@
 ## 3.4.0
+- fix: the `.atKeys` passphrase envelope derives its AES key from a random
+  per-file salt. It previously passed **the passphrase itself** as the Argon2id
+  salt, so derivation was deterministic — two users who chose the same
+  passphrase got the same key, and one precomputation table served all of them.
+  Argon2's memory-hardness still charged an attacker per guess, but the
+  property that makes salting worth doing was absent. New envelopes carry
+  `v: 1`, a 16-byte random `salt` and a `kdfParams` object, and use OWASP's
+  current Argon2id floor (m=19456 KiB, t=2, p=1) rather than the old
+  m=10000/t=2/p=2. Measured on an M-series Mac: 68.5ms against the old
+  configuration's 18.4ms, so about 3.7x the work per guess for an unlock nobody
+  will notice.
+- **Compatibility:** envelopes without a `v` field keep the old derivation
+  exactly, including its UTF-16 `codeUnits` salt, so every key file already
+  written still opens. Those files cannot be rewritten from here, since the
+  passphrase belongs to the user, so an individual file migrates when its owner
+  next sets a passphrase. Note the converse: a file written by this version
+  does **not** open in an older client. `encode` takes
+  `legacyUnsaltedDerivation: true` for callers that must produce one that does.
+- fix: `kdfParams` is read back off the file rather than assumed, so the
+  Argon2id cost can be raised again later without orphaning files written now.
+  The old format recorded no cost at all, which is why its parameters could
+  never be changed.
+- fix: a version 1 envelope can only be written with Argon2id. The `md5`,
+  `sha256` and `sha512` arms are a single unsalted pass and give a passphrase
+  almost no protection; they are still accepted on read so nobody is locked out
+  of an existing file.
 - feat: `AtSelfEnrollmentRequest` — the client half of the PQ self-retrofit.
   Submitted on an APKAM-authenticated connection with no OTP, it mints an
   ML-DSA-65 APKAM keypair (at most once per keyfile, serialised by an

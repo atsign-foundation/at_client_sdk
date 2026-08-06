@@ -1,4 +1,15 @@
 ## 3.4.2
+- fix: `ArgonHashParams.salt` — Argon2id derivation takes a real salt.
+  `Argon2idHashingAlgo.hash` passed the password's own UTF-16 code units as the
+  Argon2id nonce, so derivation was deterministic in the passphrase and the
+  salt carried no entropy of its own. It still falls back to that when `salt`
+  is null, because key files already written derived their keys that way and
+  would otherwise become undecryptable — but the fallback is now documented as
+  a compatibility path rather than a design.
+- feat: `ArgonHashParams.owaspMinimum` carries OWASP's current Argon2id floor
+  (m=19456 KiB, t=2, p=1). The defaults on `ArgonHashParams` stay at
+  m=10000/t=2/p=2, which is below that floor, because they are pinned by every
+  file already written rather than chosen.
 - test: X-Wing now conforms to the **IETF HPKE working group's** published
   vectors for IANA HPKE KEM id `0x647A`, not only to
   `draft-connolly-cfrg-xwing-kem-10`'s Appendix C. Both published rows are
