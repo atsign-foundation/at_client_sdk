@@ -126,6 +126,39 @@ void main() {
     });
   });
 
+  group('the write-side version selector', () {
+    // Until this existed the emitted version was a global constant, so
+    // introducing a new construction meant flipping it fleet-wide: there was
+    // no way to emit the old version to peers that had not upgraded and the
+    // new one to peers that had. The read side always dispatched on the
+    // version byte; only the write side could not choose.
+    late Uint8List pk;
+    setUpAll(() async {
+      pk = (await kem.generateKeyPair()).publicKey;
+    });
+
+    test('the default is the version the read side expects', () {
+      expect(pqSealDefaultVersion, 0x01);
+      expect(pqSealSupportedVersions, contains(pqSealDefaultVersion));
+    });
+
+    test('asking for the current version explicitly emits it', () async {
+      final e = await pqSeal(kem, pk, Uint8List.fromList([1, 2, 3]),
+          version: pqSealDefaultVersion);
+      expect(e[0], pqSealDefaultVersion);
+    });
+
+    test('asking for a version this build cannot open is refused', () async {
+      // Emitting it would produce an envelope nobody can read, since its suite
+      // label exists nowhere — a silent write failure discovered only on the
+      // first read attempt, potentially by someone else.
+      await expectLater(
+        pqSeal(kem, pk, Uint8List.fromList([1]), version: 0x02),
+        throwsA(isA<PqSealException>()),
+      );
+    });
+  });
+
   group('the context binding is real', () {
     // The negative arm. Without it every test above would pass on an
     // implementation that ignored info and aad entirely, since the sealer and

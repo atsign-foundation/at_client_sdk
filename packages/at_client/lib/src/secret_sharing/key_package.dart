@@ -93,13 +93,46 @@ class KeyPackage {
   final DateTime createdAt;
   final List<PackageKey> keys;
 
+  /// The sealing suites this package's holder can **open**, strongest first.
+  ///
+  /// `keys[].alg` says which KEM key a sender encapsulates to; it does not say
+  /// which envelope construction the holder can unwrap. Without this a sender
+  /// has no way to discover that, so it stamps the one suite it knows and a
+  /// second suite can only be introduced by upgrading every reader first —
+  /// release-ordering agility rather than negotiated agility.
+  ///
+  /// Absent on packages written before this field existed, and
+  /// [legacySuites] is what those meant.
+  final List<String> suites;
+
+  /// What a key package with no `suites` field is taken to support.
+  ///
+  /// Exactly the one suite that existed when such packages were written. It
+  /// must never grow: adding to it would claim, on behalf of holders that
+  /// never said so, that they can open something they cannot.
+  static const List<String> legacySuites = [SecretSharingAlgos.xWingHpke];
+
   KeyPackage({
     required this.enrollmentId,
     this.apkamId,
     required this.createdAt,
     required this.keys,
+    this.suites = SecretSharingAlgos.suites,
     this.v = currentVersion,
   });
+
+  /// The first suite in [senderSuites] order (strongest first) that this
+  /// package's holder can also open, or null if there is no overlap.
+  ///
+  /// A sender with no overlap must not fall back to stamping its own
+  /// preference: the holder would receive an envelope it cannot unwrap, and
+  /// the failure would arrive as an opaque AEAD error on the far side.
+  String? bestSuiteFor(List<String> senderSuites) {
+    for (final suite in senderSuites) {
+      if (suites.contains(suite)) return suite;
+    }
+    return null;
+  }
 
   /// The addressing token for this key package: the [kid] of its
   /// enc-use key (the X-Wing public key a sender seals to). Null if the
@@ -125,7 +158,7 @@ class KeyPackage {
   /// only. [enrollmentId] / [apkamId] are carried by the enclosing verb
   /// structure (the enrollment and its APKAM-keypair entry), not repeated here.
   Map<String, Object?> toJson() =>
-      payloadFor(createdAt: createdAt, keys: keys, v: v);
+      payloadFor(createdAt: createdAt, keys: keys, suites: suites, v: v);
 
   /// The same payload as [toJson], for a package whose enrollment does not
   /// exist yet.
@@ -137,12 +170,14 @@ class KeyPackage {
   static Map<String, Object?> payloadFor({
     required DateTime createdAt,
     required List<PackageKey> keys,
+    List<String> suites = SecretSharingAlgos.suites,
     int v = currentVersion,
   }) =>
       {
         'v': v,
         'createdAt': createdAt.toUtc().toIso8601String(),
         'keys': keys.map((k) => k.toJson()).toList(),
+        'suites': suites,
       };
 
   /// Parses a stored key-package [payload] (from `metadata.keyPackage`),
@@ -167,12 +202,20 @@ class KeyPackage {
     if (v is! int || createdAt is! String || keys is! List) {
       throw FormatException('KeyPackage: malformed payload $payload');
     }
+    // Absent means a package written before the field existed, which supports
+    // exactly what was available then. A non-String entry is dropped rather
+    // than throwing, matching how unknown `keys` entries are handled: a newer
+    // writer may name suites this build has never heard of.
+    final declared = payload['suites'];
     return KeyPackage(
       v: v,
       enrollmentId: enrollmentId,
       apkamId: apkamId,
       createdAt: DateTime.parse(createdAt),
       keys: keys.map(PackageKey.fromJson).whereType<PackageKey>().toList(),
+      suites: declared is List
+          ? declared.whereType<String>().toList()
+          : legacySuites,
     );
   }
 }

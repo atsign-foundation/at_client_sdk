@@ -1,4 +1,15 @@
 ## 3.14.1
+- feat: `KeyPackage.suites` — the sealing suites a package's holder can
+  **open**, strongest first, with `bestSuiteFor` for the sender to negotiate
+  against. `keys[].alg` says which KEM key to encapsulate to; it never said
+  which envelope construction the holder could unwrap, so a sender stamped the
+  one suite it knew and a second suite could only arrive by upgrading every
+  reader first. A package with no `suites` field means exactly the one suite
+  that existed when it was written (`KeyPackage.legacySuites`), which must
+  never grow — enrollment key packages are write-once, so that reading is
+  permanent for those enrollments. No overlap returns null rather than falling
+  back to the sender's own preference, which would hand the holder an envelope
+  it cannot unwrap and surface as an opaque AEAD error on the far side.
 - feat: the signed-envelope wrapper and the nskey advertisement payload each
   carry a version field. They were the only two signed structures in the PQ
   design without one, so a reader had nothing to dispatch on if the

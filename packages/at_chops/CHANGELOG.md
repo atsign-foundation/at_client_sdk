@@ -1,4 +1,12 @@
 ## 3.4.2
+- feat: `pqSeal` takes a `version`, and `pqSealDefaultVersion` /
+  `pqSealSupportedVersions` are public. The emitted version was a private
+  constant, so there was no way to emit one construction to peers that had not
+  upgraded and another to peers that had — introducing a new construction meant
+  flipping a global and breaking every reader at once. The read side always
+  dispatched on the version byte; only the write side could not choose. A
+  version this build cannot open is refused rather than emitted, since such an
+  envelope carries a suite label that exists nowhere and nobody could read it.
 - docs: **`docs/projects/pq/seal-spec.md`** — a byte-level specification of the
   `atPQv1-base` seal, written so a second implementation can be built from it
   without reading the Dart. Validated by reimplementing its key schedule from

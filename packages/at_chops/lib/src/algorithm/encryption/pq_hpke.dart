@@ -26,13 +26,22 @@ import 'aes_gcm.dart';
 /// step provides context binding ([info]) and AEAD key/nonce derivation —
 /// not randomness extraction.
 
-/// Version emitted by [pqSeal]. Bump this when introducing a new construction.
-const int _envelopeVersion = 0x01;
+/// The version [pqSeal] emits when the caller does not choose one.
+///
+/// Raising this is a **fleet-wide** decision, not a local one: every reader has
+/// to understand the new version before any writer emits it, and a sealer has
+/// no way to discover what its recipients can open. Prefer passing
+/// `pqSeal(version:)` from a caller that knows — the key package's advertised
+/// suites, say — over changing the default.
+const int pqSealDefaultVersion = 0x01;
 
-/// All versions [pqOpen] can decrypt. Add new versions here alongside their
-/// suite label in [_suiteLabelFor]; do not remove old ones until all peers
-/// have upgraded past them.
-const Set<int> _supportedVersions = {0x01};
+/// All versions [pqOpen] can decrypt, and therefore all [pqSeal] will emit.
+///
+/// Add new versions here alongside their suite label in [_suiteLabelFor]; do
+/// not remove old ones until every peer has upgraded past them, because a
+/// removed version turns records already written into permanent
+/// [PqOpenFailure.versionMismatch] failures.
+const Set<int> pqSealSupportedVersions = {0x01};
 
 const int _gcmNonceLen = AesGcm256EncryptionAlgo.nonceLength;
 const int _gcmTagLen = AesGcm256EncryptionAlgo.tagLength;
@@ -77,6 +86,14 @@ class PqOpenException implements Exception {
 /// [aad] is authenticated-but-not-encrypted associated data. Both must be
 /// supplied identically to [pqOpen] or opening fails.
 ///
+/// [version] selects the construction to emit, and must be one of
+/// [pqSealSupportedVersions]. It exists so a sealer that knows what its
+/// recipient can open — from the suites its key package advertises — can choose
+/// per call. Without it, introducing a new construction would mean flipping a
+/// global constant and breaking every reader that had not upgraded yet, since
+/// there would be no way to emit the old version to old peers and the new one
+/// to new peers at the same time.
+///
 /// Returns the serialized wire envelope (raw bytes).
 Future<Uint8List> pqSeal(
   AtKemAlgorithm xwing,
@@ -84,10 +101,18 @@ Future<Uint8List> pqSeal(
   Uint8List plaintext, {
   Uint8List? info,
   Uint8List? aad,
+  int version = pqSealDefaultVersion,
 }) async {
+  if (!pqSealSupportedVersions.contains(version)) {
+    // Refused rather than emitted: an envelope this build cannot open is one
+    // nobody can, since it would carry a suite label that exists nowhere.
+    throw PqSealException(
+        'cannot seal at version 0x${version.toRadixString(16)} — this build '
+        'supports ${pqSealSupportedVersions.map((v) => '0x${v.toRadixString(16)}').join(', ')}');
+  }
+
   final enc = await xwing.encapsulate(recipientPublicKey);
-  final _DerivedKey dk =
-      _deriveKeyAndNonce(enc.sharedSecret, _envelopeVersion, info);
+  final _DerivedKey dk = _deriveKeyAndNonce(enc.sharedSecret, version, info);
 
   // body = gcmCipherText || tag(16), per AesGcm256EncryptionAlgo's wire format.
   final Uint8List body = await AesGcm256EncryptionAlgo(_aesKey(dk.key)).encrypt(
@@ -98,7 +123,7 @@ Future<Uint8List> pqSeal(
 
   // envelope: ver(1) || ctLen(2,BE) || kemCt || gcmCipherText || tag(16)
   final out = BytesBuilder(copy: false);
-  out.addByte(_envelopeVersion);
+  out.addByte(version);
   out.addByte((enc.ciphertext.length >> 8) & 0xff);
   out.addByte(enc.ciphertext.length & 0xff);
   out.add(enc.ciphertext);
@@ -124,7 +149,7 @@ Future<Uint8List> pqOpen(
         PqOpenFailure.malformedEnvelope, 'envelope shorter than header');
   }
   final int ver = envelope[0];
-  if (!_supportedVersions.contains(ver)) {
+  if (!pqSealSupportedVersions.contains(ver)) {
     throw PqOpenException(PqOpenFailure.versionMismatch,
         'unsupported envelope version 0x${ver.toRadixString(16)}');
   }
@@ -179,7 +204,7 @@ Future<Uint8List> pqOpen(
 ({Uint8List key, Uint8List nonce}) pqSealDeriveKeyAndNonce(
   Uint8List sharedSecret, {
   Uint8List? info,
-  int version = _envelopeVersion,
+  int version = pqSealDefaultVersion,
 }) {
   final dk = _deriveKeyAndNonce(sharedSecret, version, info);
   return (key: dk.key, nonce: dk.nonce);

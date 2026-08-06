@@ -138,6 +138,74 @@ void main() {
       expect(pkg.bestKeyFor(['something-else']), isNull);
     });
 
+    test('a package with no suites means the one that existed before the field',
+        () {
+      // Every key package written before 2026-08-06 carries no `suites`, and
+      // enrollment key packages are write-once — they are never rewritten — so
+      // this reading is permanent for those enrollments, not transitional.
+      //
+      // Note this assertion cannot fail today: `legacySuites` and this build's
+      // suites are the same single value, so a build that ignored the absent
+      // field entirely would also pass. It becomes discriminating the moment a
+      // second suite is added, which is exactly when getting it wrong would
+      // start claiming, on an old holder's behalf, that it can open something
+      // it cannot.
+      final pkg = KeyPackage.fromPayload({
+        'v': 1,
+        'createdAt': '2026-06-11T00:00:00.000Z',
+        'keys': [
+          {'kid': 'k1', 'use': 'enc', 'alg': 'x-wing', 'pub': 'p'},
+        ],
+      }, enrollmentId: 'enroll-x');
+
+      expect(pkg.suites, KeyPackage.legacySuites);
+      expect(pkg.bestSuiteFor(SecretSharingAlgos.suites),
+          SecretSharingAlgos.xWingHpke);
+    });
+
+    test('a declared suites list is what the sender negotiates against', () {
+      final pkg = KeyPackage.fromPayload({
+        'v': 1,
+        'createdAt': '2026-06-11T00:00:00.000Z',
+        'keys': [
+          {'kid': 'k1', 'use': 'enc', 'alg': 'x-wing', 'pub': 'p'},
+        ],
+        // A holder that has upgraded past this build, plus an entry this build
+        // has never heard of — kept, because it is the holder's claim about
+        // itself, not ours.
+        'suites': ['x-wing-hpke-v2', SecretSharingAlgos.xWingHpke, 7],
+      }, enrollmentId: 'enroll-x');
+
+      expect(pkg.suites, ['x-wing-hpke-v2', SecretSharingAlgos.xWingHpke],
+          reason: 'non-String entries are dropped the same way malformed key '
+              'entries are, rather than throwing');
+      expect(pkg.bestSuiteFor(['x-wing-hpke-v2', SecretSharingAlgos.xWingHpke]),
+          'x-wing-hpke-v2',
+          reason: 'the sender\'s order decides, strongest first');
+      expect(pkg.bestSuiteFor([SecretSharingAlgos.xWingHpke]),
+          SecretSharingAlgos.xWingHpke);
+    });
+
+    test('no overlap is null rather than a guess', () {
+      // Stamping the sender's own preference anyway would hand the holder an
+      // envelope it cannot unwrap, and the failure would surface as an opaque
+      // AEAD error on the far side rather than a refusal here.
+      final pkg = KeyPackage.fromPayload({
+        'v': 1,
+        'createdAt': '2026-06-11T00:00:00.000Z',
+        'keys': <Object?>[],
+        'suites': ['x-wing-hpke-v9'],
+      }, enrollmentId: 'enroll-x');
+
+      expect(pkg.bestSuiteFor(SecretSharingAlgos.suites), isNull);
+    });
+
+    test('what gets written declares this build\'s suites', () {
+      final payload = KeyPackage.payloadFor(
+          createdAt: DateTime.utc(2026), keys: const []);
+      expect(payload['suites'], SecretSharingAlgos.suites);
+    });
+
     test('malformed payload throws FormatException', () {
       expect(() => KeyPackage.fromPayload({'v': 'one'}, enrollmentId: 'e'),
           throwsA(isA<FormatException>()));
