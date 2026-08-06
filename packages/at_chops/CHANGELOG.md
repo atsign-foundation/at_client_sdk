@@ -1,4 +1,27 @@
 ## 3.4.2
+- test: **ML-DSA-65 conformance against NIST's ACVP vectors** (FIPS 204). Until
+  now `ml_dsa_65_algo_test.dart` asserted key and signature lengths and that a
+  signature round-trips, which two wrong implementations agreeing with each
+  other would also satisfy — and ML-DSA-65 authenticates every PQ enrollment.
+  70 published vectors now run: 25 keyGen (the seed reproduces the published
+  keypair byte-exactly), 15 deterministic sigGen (the signature bytes
+  themselves, since with the hedging value fixed at zero the signature is a
+  pure function of key, message and context), 15 hedged sigGen, and 15 sigVer
+  carrying **both arms** — NIST's own negative cases, each naming what was
+  corrupted. Filtered to ML-DSA-65 and the external/pure interface, which is
+  all this package implements; nothing was dropped for size, and the exclusions
+  are listed in the fixture's `_provenance` object.
+- test: three further tests pin that at_chops signs and verifies with an
+  **empty context string**, which is what RFC 9964 requires of the ML-DSA JOSE
+  algorithms. The context is the one FIPS 204 parameter at_chops fixes rather
+  than passes through, so getting it wrong would produce signatures no RFC 9964
+  verifier accepts while every round-trip test here stayed green.
+- test: **X25519 conformance against RFC 7748** — section 6.1's Diffie-Hellman
+  vector, including deriving each published public key from its private key
+  against the base point, and section 5.2's raw scalar-multiplication vectors,
+  which exercise clamping and the ladder independently of any key-pair
+  convention. The existing tests only checked that two generated key pairs
+  agreed with each other.
 - fix: `ArgonHashParams.salt` — Argon2id derivation takes a real salt.
   `Argon2idHashingAlgo.hash` passed the password's own UTF-16 code units as the
   Argon2id nonce, so derivation was deterministic in the passphrase and the
