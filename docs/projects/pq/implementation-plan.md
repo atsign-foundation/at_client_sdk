@@ -31,6 +31,7 @@ given/when/then here.
 - [11. Coverage map (D1 package / UC → project)](#11-coverage-map-d1-package--uc--project)
 - [12. Open decisions pointer & verification provenance](#12-open-decisions-pointer--verification-provenance)
 - [13. Phase IS — inter-server PQ authentication (IS-1)](#13-phase-is--inter-server-pq-authentication-is-1)
+- [14. Backlog — carried items with no owning project](#14-backlog--carried-items-with-no-owning-project)
 
 ---
 
@@ -1460,3 +1461,58 @@ way, so a re-published key takes effect on the next handshake with no rotation m
 re-introduce a KEM, cert, or tag: the UUID challenge the swapped signature covers is the entire freshness
 mechanism, and the TLS session already secures the channel.
 
+---
+
+## 14. Backlog — carried items with no owning project
+
+Small, real, and homeless: none is big enough to be a project, and each would
+otherwise live only inside a `decisions.md` section nobody greps. Ruled in
+[decisions 46](decisions.md#46-rfc-9180-and-where-the-designs-version-hatches-are-2026-08-05);
+tracked here so they are visible from the plan.
+
+**Only the first has a deadline, and the deadline is not a date.**
+
+### 14.1 The signing root's `keys[]` shape — DEADLINE: the first root we keep
+
+The code and the catalogue disagree about the shape of the one record in the
+system that can never be rewritten.
+
+| | shape |
+|---|---|
+| Published + parsed by `pq_signing_root.dart` (`:208-211`, `:108`) | `{"v":1,"keys":["<base64>"],"successor":null}` |
+| Documented by [acceptance.md](acceptance.md) and [decisions 46.5](decisions.md#465-the-signing-root-is-the-only-one-way-door) | `keys: [{"alg":"ml-dsa-65","pub":"<base64>"}]` |
+
+`public:pq_signing_root@<atSign>` is an **immutable create-once** record that
+never rotates ([decisions 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)).
+The `v` field lets a later reader *detect* a v1 root; it does not let anyone
+*replace* one. `successor` is the only migration path and is unimplemented.
+
+So the deadline is a **state, not a date**: every root published so far lives on
+a recycled virtualenv and is disposable, and the shape becomes permanent the
+first time a root lands on an atSign we do not recycle — a developer's own
+atSign, a pilot, anything long-lived. After that, whichever form is chosen the
+other one is wrong forever on those atSigns.
+
+Deciding needs no code and takes minutes; **do it before the next long-lived
+atSign runs a privileged PQ client**, not before a release. The bare-base64
+form is what ships and is smaller; the tagged form is what every other key
+structure here uses (`_apsk`, the key package) and is the only one that can
+carry a second algorithm. Whichever wins, the loser's document changes in the
+same commit as the decision.
+
+### 14.2 A version on the two signed payloads
+
+The signed-envelope wrapper and the nskey advertisement payload carry no
+version field. Both records ARE rewritable, so this is cheap insurance rather
+than a deadline — but it is the hatch that makes 14.3 reversible, so it goes
+first of the three.
+
+### 14.3 JWS or JCS for the signed envelope
+
+Whether the envelope construction moves to a standard. Waits behind 14.2,
+since the version field is what makes the choice reversible.
+
+### 14.4 A `suites` list on the key package
+
+Cheap now for the same reason as 14.2, and safe to defer if we accept
+release-ordering agility instead.

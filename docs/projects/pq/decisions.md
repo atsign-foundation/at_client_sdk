@@ -3994,9 +3994,13 @@ Read rather than assumed:
 
 Per the rule that a ledger ruling names a mechanism only once its differential
 test is green, the above records defects and intent, not fixes. Four items are
-open with no code written:
+open with no code written, and they are **tracked in
+[`implementation-plan.md` §14](implementation-plan.md#14-backlog--carried-items-with-no-owning-project)**
+so they are visible from the plan rather than only from here:
 
-1. the signing root's `keys[]` shape, the only one with a deadline;
+1. the signing root's `keys[]` shape, the only one with a deadline — and the
+   deadline is a *state*, not a date: the shape freezes the first time a root
+   lands on an atSign nobody recycles;
 2. a `v` on the signed-envelope wrapper and on the nskey advertisement payload;
 3. whether the envelope construction moves to JWS or JCS, which can wait behind
    (2), since the version field is what makes that choice reversible;
