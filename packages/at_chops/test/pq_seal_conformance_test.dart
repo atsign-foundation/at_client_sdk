@@ -153,8 +153,73 @@ void main() {
       // label exists nowhere — a silent write failure discovered only on the
       // first read attempt, potentially by someone else.
       await expectLater(
-        pqSeal(kem, pk, Uint8List.fromList([1]), version: 0x02),
+        pqSeal(kem, pk, Uint8List.fromList([1]), version: 0xff),
         throwsA(isA<PqSealException>()),
+      );
+    });
+  });
+
+  group('ver 0x02 — RFC 9180 through pqSeal', () {
+    late Uint8List sk;
+    late Uint8List pk;
+    setUpAll(() async {
+      final kp = await kem.generateKeyPair();
+      sk = kp.secretKey;
+      pk = kp.publicKey;
+    });
+
+    final pt = Uint8List.fromList(utf8.encode('a conveyed content key'));
+    final info = Uint8List.fromList(utf8.encode('at_client/nskey/v1:app@a'));
+    final aad = Uint8List.fromList(utf8.encode('bound'));
+
+    test('round-trips, and stamps its own version', () async {
+      final e = await pqSeal(kem, pk, pt, info: info, aad: aad, version: 0x02);
+      expect(e[0], 0x02);
+      expect(await pqOpen(kem, sk, e, info: info, aad: aad), pt);
+    });
+
+    test('its ciphertext differs from ver 0x01 over the same inputs', () async {
+      // Not a strong claim on its own — fresh encapsulation alone would make
+      // them differ. It is here to catch the version byte being stamped
+      // without the construction actually changing.
+      final v1 = await pqSeal(kem, pk, pt, info: info, version: 0x01);
+      final v2 = await pqSeal(kem, pk, pt, info: info, version: 0x02);
+      expect(v1[0], 0x01);
+      expect(v2[0], 0x02);
+      expect(v1.length, v2.length,
+          reason: 'both are X-Wing with a 16-byte tag, so the framing is the '
+              'same size — only the schedule and AEAD differ');
+    });
+
+    test('a v2 envelope relabelled as v1 fails to open, and vice versa',
+        () async {
+      // The real check that the two constructions are separated. If the
+      // version byte only selected a label and the derivation were shared,
+      // relabelling would still open.
+      final v2 = await pqSeal(kem, pk, pt, info: info, version: 0x02);
+      final asV1 = Uint8List.fromList(v2)..[0] = 0x01;
+      await expectLater(
+        pqOpen(kem, sk, asV1, info: info),
+        throwsA(isA<PqOpenException>()
+            .having((e) => e.reason, 'reason', PqOpenFailure.authFailure)),
+      );
+
+      final v1 = await pqSeal(kem, pk, pt, info: info, version: 0x01);
+      final asV2 = Uint8List.fromList(v1)..[0] = 0x02;
+      await expectLater(
+        pqOpen(kem, sk, asV2, info: info),
+        throwsA(isA<PqOpenException>()
+            .having((e) => e.reason, 'reason', PqOpenFailure.authFailure)),
+      );
+    });
+
+    test('the info binding holds under v2 too', () async {
+      final e = await pqSeal(kem, pk, pt, info: info, version: 0x02);
+      await expectLater(
+        pqOpen(kem, sk, e,
+            info: Uint8List.fromList(utf8.encode('a different context'))),
+        throwsA(isA<PqOpenException>()
+            .having((e) => e.reason, 'reason', PqOpenFailure.authFailure)),
       );
     });
   });
@@ -189,7 +254,7 @@ void main() {
     });
 
     test('an unknown version is refused before anything is parsed', () {
-      final e = _hex(v['envelope'] as String)..[0] = 0x02;
+      final e = _hex(v['envelope'] as String)..[0] = 0xff;
       expect(
         () => pqOpen(kem, _hex(v['recipientSeed'] as String), e,
             info: _optHex(v['info']), aad: _optHex(v['aad'])),

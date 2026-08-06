@@ -1,13 +1,27 @@
-# The `atPQv1-base` seal
+# The seal: `atPQv1-base` and RFC 9180
 
 Byte-level specification of the public-key encryption `pqSeal`/`pqOpen`
 implement. Written so a second implementation can be built from this document
 alone, without reading the Dart.
 
-Conformance vectors: `packages/at_chops/test/vectors/pq_seal_v1.json`, run by
-`packages/at_chops/test/pq_seal_conformance_test.dart`.
+**Two constructions, selected by the envelope's first byte.**
 
-## What this is, and what it is not
+| `ver` | What | Attested by |
+|---|---|---|
+| `0x01` | `atPQv1-base` — HPKE-shaped, Atsign-internal | our own vectors only |
+| `0x02` | RFC 9180 Base mode, KEM `0x647A`, HKDF-SHA256, ChaCha20-Poly1305 | the IETF HPKE working group's published vectors |
+
+Most of this document specifies `0x01`, because it is the one nobody else
+describes. [Version 0x02](#version-0x02--rfc-9180) is at the end and is short,
+for the same reason in reverse: it is RFC 9180, so the RFC is the specification
+and what matters here is which suite and which framing.
+
+Conformance vectors: `packages/at_chops/test/vectors/pq_seal_v1.json` (v1, run
+by `pq_seal_conformance_test.dart`) and
+`test/vectors/hpke_wg_0x647a_chacha.json` (v2, run by
+`rfc9180_hpke_test.dart`).
+
+## What version 0x01 is, and what it is not
 
 `atPQv1-base` is an Atsign-internal envelope. It reuses RFC 9180 HPKE's
 *shape* — a KEM, a KDF and an AEAD, with the KDF binding a caller-supplied
@@ -18,7 +32,8 @@ library to interoperate.
 The one place that distinction gets lost is the phrase "HPKE" in code comments
 and dartdoc. Where this construction is meant, say `atPQv1-base` or
 "HPKE-style"; an overclaim costs more credibility than a custom construction
-honestly labelled.
+plainly labelled. Version `0x02` is the one that may be called HPKE without
+qualification.
 
 The primitives are standard and separately attested. The composition — the
 suite label, the two derivation labels, the empty salt, the concatenation
@@ -183,8 +198,42 @@ construction arrives as a typed refusal rather than a garbled decrypt. Above
 it, `appMetadata.providerId` names every algorithm a reader needs code for, so
 a different construction can coexist per value with reads staying universal.
 
-`ver = 0x02` is reserved for an RFC 9180 encoding. Two things to know before
-using it. The suite label must change with the version, or the two
-constructions share derived keys. And there is currently no **write-side**
-version selector: `_envelopeVersion` is a single constant, so at_chops cannot
-emit `0x01` to old readers and `0x02` to new ones until one is added.
+## Version 0x02 — RFC 9180
+
+`ver = 0x02` is **implemented**, and it is the real RFC 9180 rather than a
+shape borrowed from it:
+
+> RFC 9180 Base mode, KEM `0x647A` (X-Wing / MLKEM768-X25519), KDF `0x0001`
+> (HKDF-SHA256), AEAD `0x0003` (ChaCha20-Poly1305).
+
+That sentence is checkable, which is the entire reason for it. The key schedule
+is §5.1 verbatim — `LabeledExtract`/`LabeledExpand` with `suite_id` inside every
+label — and it reproduces the IETF HPKE working group's published `key`,
+`base_nonce` and `exporter_secret` for that suite, along with all 10 of its
+published encryptions. Those bytes are not ours; Go 1.26's `crypto/hpke`
+vendors the same file.
+
+**ChaCha20-Poly1305 rather than AES-256-GCM**, and the reason is evidence
+rather than preference: the working group publishes `0x647A` vectors only at
+AEAD `0x0003`. AES-GCM would mean shipping a suite with no published end-to-end
+vector — "passes the IETF vectors except the AEAD arm" — and the FIPS story
+that might have justified it is unavailable anyway, since X25519 key agreement
+has no approved path and this hybrid is unclaimable under FIPS whatever AEAD
+sits on top. `aad` is unused at every production call site and both AEADs are
+Nk=32/Nn=12, so it was a free parameter.
+
+Framing is unchanged: `ver || ctLen || enc || ct || tag`. Everything after the
+3-byte header is exactly RFC 9180's `enc || ct`, so the Atsign part is a
+3-byte frame around a conformant payload — the same relationship TLS and MLS
+have to the constructions they carry.
+
+Two properties worth stating because they are what keep the versions apart.
+Version `0x01`'s domain separation is its `atPQv1-base` suite label; version
+`0x02`'s is the `suite_id` inside every labelled extract and expand, so
+`_suiteLabelFor` does not apply to it and raises if asked. And relabelling an
+envelope from one version to the other fails to open in both directions, which
+is asserted rather than assumed.
+
+`pqSeal` takes a `version`, so a sender that knows what its recipient can open
+— from the `suites` its key package advertises — chooses per call. Emitting a
+version this build cannot open is refused rather than written.

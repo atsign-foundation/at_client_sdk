@@ -132,7 +132,9 @@ void main() {
     test('unsupported version → versionMismatch', () async {
       final kp = await xwing.generateKeyPair();
       final envelope = await pqSeal(xwing, kp.publicKey, _utf8('payload'));
-      final bad = Uint8List.fromList(envelope)..[0] = 0x02;
+      // 0xff rather than 0x02: 0x02 is RFC 9180 and is now supported, so using
+      // it here would test the AEAD rather than the version check.
+      final bad = Uint8List.fromList(envelope)..[0] = 0xff;
       expect(() => pqOpen(xwing, kp.secretKey, bad),
           _opensWith(PqOpenFailure.versionMismatch));
     });

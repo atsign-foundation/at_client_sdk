@@ -22,6 +22,8 @@ export 'src/algorithm/signing/ed25519.dart';
 export 'src/algorithm/signing/ml_dsa_65_pure_dart.dart';
 export 'src/algorithm/signing/rsa.dart';
 export 'src/algorithm/encryption/pq_hpke.dart';
+export 'src/algorithm/encryption/chacha20_poly1305.dart';
+export 'src/algorithm/encryption/rfc9180_hpke.dart';
 export 'src/at_chops_base.dart';
 export 'src/at_chops_impl.dart';
 

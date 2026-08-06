@@ -9,6 +9,8 @@ import 'package:meta/meta.dart' show visibleForTesting;
 
 import '../hashing/hkdf.dart';
 import 'aes_gcm.dart';
+import 'chacha20_poly1305.dart';
+import 'rfc9180_hpke.dart';
 
 /// HPKE-*style* authenticated public-key encryption over an X-Wing KEM.
 ///
@@ -41,7 +43,7 @@ const int pqSealDefaultVersion = 0x01;
 /// not remove old ones until every peer has upgraded past them, because a
 /// removed version turns records already written into permanent
 /// [PqOpenFailure.versionMismatch] failures.
-const Set<int> pqSealSupportedVersions = {0x01};
+const Set<int> pqSealSupportedVersions = {0x01, 0x02};
 
 const int _gcmNonceLen = AesGcm256EncryptionAlgo.nonceLength;
 const int _gcmTagLen = AesGcm256EncryptionAlgo.tagLength;
@@ -51,8 +53,13 @@ const int _gcmTagLen = AesGcm256EncryptionAlgo.tagLength;
 Uint8List _suiteLabelFor(int version) => switch (version) {
       0x01 => Uint8List.fromList('atPQv1-base'.codeUnits),
       _ => throw ArgumentError(
-          'no suite label for version 0x${version.toRadixString(16)}'),
+          'no suite label for version 0x\${version.toRadixString(16)} — '
+          'version 0x02 is RFC 9180, whose domain separation is the suite_id '
+          'inside every labelled extract and expand, not a label of ours'),
     };
+
+/// The RFC 9180 ciphersuite `ver = 0x02` emits.
+const HpkeSuite _v2Suite = HpkeSuite.xWingHkdfSha256ChaCha20Poly1305;
 
 /// Why a [pqOpen] call failed.
 ///
@@ -114,12 +121,15 @@ Future<Uint8List> pqSeal(
   final enc = await xwing.encapsulate(recipientPublicKey);
   final _DerivedKey dk = _deriveKeyAndNonce(enc.sharedSecret, version, info);
 
-  // body = gcmCipherText || tag(16), per AesGcm256EncryptionAlgo's wire format.
-  final Uint8List body = await AesGcm256EncryptionAlgo(_aesKey(dk.key)).encrypt(
-    plaintext,
-    iv: InitialisationVector(dk.nonce),
-    aad: aad ?? const <int>[],
-  );
+  // body = ciphertext || tag(16) in both versions.
+  final Uint8List body = version == 0x02
+      ? await const ChaCha20Poly1305Algo().encrypt(plaintext,
+          key: dk.key, nonce: dk.nonce, aad: aad ?? const <int>[])
+      : await AesGcm256EncryptionAlgo(_aesKey(dk.key)).encrypt(
+          plaintext,
+          iv: InitialisationVector(dk.nonce),
+          aad: aad ?? const <int>[],
+        );
 
   // envelope: ver(1) || ctLen(2,BE) || kemCt || gcmCipherText || tag(16)
   final out = BytesBuilder(copy: false);
@@ -177,11 +187,14 @@ Future<Uint8List> pqOpen(
   final _DerivedKey dk = _deriveKeyAndNonce(ss, ver, info);
 
   try {
-    return await AesGcm256EncryptionAlgo(_aesKey(dk.key)).decrypt(
-      gcmBody,
-      iv: InitialisationVector(dk.nonce),
-      aad: aad ?? const <int>[],
-    );
+    return ver == 0x02
+        ? await const ChaCha20Poly1305Algo().decrypt(gcmBody,
+            key: dk.key, nonce: dk.nonce, aad: aad ?? const <int>[])
+        : await AesGcm256EncryptionAlgo(_aesKey(dk.key)).decrypt(
+            gcmBody,
+            iv: InitialisationVector(dk.nonce),
+            aad: aad ?? const <int>[],
+          );
   } on AtDecryptionException {
     throw PqOpenException(
         PqOpenFailure.authFailure, 'AEAD authentication failed');
@@ -222,6 +235,13 @@ class _DerivedKey {
 /// for [version] and the caller's [info]. Two HKDF labels (`0x01`/`0x02`) keep
 /// key and nonce independent.
 _DerivedKey _deriveKeyAndNonce(Uint8List ss, int version, Uint8List? info) {
+  if (version == 0x02) {
+    // RFC 9180 Base mode, verbatim. Checked against the IETF HPKE working
+    // group's published vectors in test/rfc9180_hpke_test.dart — bytes nobody
+    // here produced, which is the difference between this version and 0x01.
+    final ks = hpkeKeyScheduleBase(_v2Suite, ss, info: info);
+    return _DerivedKey(ks.key, ks.baseNonce);
+  }
   final Uint8List suiteInfo =
       _concat([_suiteLabelFor(version), info ?? Uint8List(0)]);
   final Uint8List key = HkdfSha256.deriveKey(ss,

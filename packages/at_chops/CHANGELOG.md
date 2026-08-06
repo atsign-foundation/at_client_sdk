@@ -1,4 +1,20 @@
 ## 3.4.2
+- feat: **RFC 9180 HPKE Base mode as `pqSeal` version `0x02`** — the real
+  thing, not a shape borrowed from it. Suite: KEM `0x647A` (X-Wing /
+  MLKEM768-X25519), KDF `0x0001` (HKDF-SHA256), AEAD `0x0003`
+  (ChaCha20-Poly1305). The key schedule is RFC 9180 section 5.1 verbatim, with
+  `LabeledExtract`/`LabeledExpand` and the `suite_id` inside every label, and
+  it reproduces the IETF HPKE working group's published `key`, `base_nonce` and
+  `exporter_secret` for that suite plus all 10 of its published encryptions —
+  bytes nobody here produced. Version `0x01` (`atPQv1-base`) is unchanged and
+  stays the default; nothing on the wire moves until a caller asks for `0x02`.
+- feat: `ChaCha20Poly1305Algo` (RFC 8439), keyed and nonced per call.
+  ChaCha20-Poly1305 rather than AES-256-GCM because it is the only AEAD the
+  HPKE working group publishes `0x647A` vectors for, so this suite has an exact
+  published KAT rather than an audit footnote.
+- feat: `HkdfSha256.extract` and `HkdfSha256.expand` as separate operations.
+  RFC 9180's key schedule derives several outputs from one PRK, and the fused
+  `deriveKey` would re-extract per output and produce unrelated keys.
 - feat: `pqSeal` takes a `version`, and `pqSealDefaultVersion` /
   `pqSealSupportedVersions` are public. The emitted version was a private
   constant, so there was no way to emit one construction to peers that had not
