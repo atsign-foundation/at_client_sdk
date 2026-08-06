@@ -1,6 +1,10 @@
+import 'dart:convert' show utf8;
+
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show ApkamSigningKeys, signEnvelope;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:mocktail/mocktail.dart';
@@ -59,6 +63,9 @@ void main() {
 
   String pkamPublicKey(AtChops atChops) =>
       atChops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
+
+  String pkamPrivateKey(AtChops atChops) =>
+      atChops.atChopsKeys.atPkamKeyPair!.atPrivateKey.privateKey;
 
   setUpAll(() {
     registerFallbackValue(AtKey());
@@ -138,6 +145,87 @@ void main() {
       await expectLater(
           verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign),
           throwsA(isA<AtSigningVerificationException>()));
+    });
+  });
+
+  group('the hashingAlgo claim cannot choose the routine', () {
+    // `hashingAlgo` sits outside the signature, exactly like `signingAlgo`,
+    // so it is an unsigned field naming a cryptographic routine. The
+    // signingAlgo half was already pinned against the published _apsk; this
+    // half resolved straight through `HashingAlgoType.values.byName`.
+    //
+    // The concrete defect that fixes is narrower than it first looks, and the
+    // last test in this group records the bound: `byName` throws
+    // `ArgumentError` for a name outside the enum and a type error for a
+    // missing field, so a malformed envelope escaped as an exception no caller
+    // was told to catch. It was never a hash downgrade — `RsaSigningAlgo`
+    // implements sha256 and sha512 only, and refuses the rest at both ends.
+    test('MD5 cannot be signed under in the first place', () {
+      // Worth pinning, because it is what bounds the whole finding. An
+      // MD5-signed envelope is not constructible with this stack:
+      // RsaSigningAlgo.sign supports sha256 and sha512 and throws on anything
+      // else. So the unsigned hashingAlgo field was never a downgrade — only a
+      // way to pick a routine that then refuses. The allowlist above is
+      // defence in depth, and it stops the refusal depending on a switch
+      // statement two packages away.
+      expect(
+        () => RsaSigningAlgo(
+                RsaKeyPair.create(
+                    pkamPublicKey(atChopsA), pkamPrivateKey(atChopsA)),
+                HashingAlgoType.md5)
+            .sign(utf8.encode('x')),
+        throwsA(isA<AtSigningException>()),
+      );
+    });
+
+    test('an unknown hashingAlgo fails verification rather than escaping',
+        () async {
+      // `byName` threw ArgumentError for this, which is not the documented
+      // failure type and escaped past callers catching the documented one.
+      final envelope = await signerA.wrapAndSign({'amount': 10});
+      envelope['hashingAlgo'] = 'sha3-512';
+      stubApskGet(atClientB, pkamPublicKey(atChopsA));
+
+      await expectLater(
+          verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign),
+          throwsA(isA<AtSigningVerificationException>()));
+    });
+
+    test('a missing hashingAlgo fails verification rather than escaping',
+        () async {
+      // And this was a type error, for the same reason.
+      final envelope = await signerA.wrapAndSign({'amount': 10});
+      envelope.remove('hashingAlgo');
+      stubApskGet(atClientB, pkamPublicKey(atChopsA));
+
+      await expectLater(
+          verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign),
+          throwsA(isA<AtSigningVerificationException>()));
+    });
+
+    test('sha512 is still accepted, so the allowlist is not just sha256', () {
+      // Without this the two tests above would also pass on a build that
+      // refused every hash but the default.
+      expect(
+        () => signEnvelope('x',
+            keys: ApkamSigningKeys(
+                publicKey: pkamPublicKey(atChopsA),
+                privateKey: pkamPrivateKey(atChopsA)),
+            hashingAlgo: HashingAlgoType.sha512),
+        returnsNormally,
+      );
+    });
+
+    test('signing under a hash the verifier refuses is itself refused', () {
+      // Otherwise a caller can mint a well-formed envelope nobody can check.
+      expect(
+        () => signEnvelope('x',
+            keys: ApkamSigningKeys(
+                publicKey: pkamPublicKey(atChopsA),
+                privateKey: pkamPrivateKey(atChopsA)),
+            hashingAlgo: HashingAlgoType.md5),
+        throwsA(isA<AtSigningVerificationException>()),
+      );
     });
   });
 

@@ -1,4 +1,17 @@
 ## 3.14.1
+- fix: `verifyEnvelope` checks the envelope's `hashingAlgo` against an
+  allowlist instead of resolving it straight to a routine. `hashingAlgo` is not
+  covered by the signature, so it is an unsigned field naming a cryptographic
+  routine — the same shape as `signingAlgo`, which was already pinned against
+  the published `_apsk`. Concretely this converts two escapes into the
+  documented `AtSigningVerificationException`: `HashingAlgoType.values.byName`
+  threw `ArgumentError` for a name outside the enum and a type error when the
+  field was absent, neither of which callers are told to catch. It is **not** a
+  hash-downgrade fix — `RsaSigningAlgo` implements sha256 and sha512 only and
+  refuses everything else at both ends, so an MD5-signed envelope was never
+  constructible. `signEnvelope` now refuses to sign under a hash the verifier
+  will not accept, so nobody can mint a well-formed envelope that is
+  permanently uncheckable.
 - feat (experimental): **nskey-keypair rotation and the revocation it composes
   with** — the post-compromise-security lever, deliberately not the
   forward-secrecy one. `PublishedNskeyKeyRing.rotate` mints the next

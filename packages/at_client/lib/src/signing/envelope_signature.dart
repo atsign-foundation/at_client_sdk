@@ -71,6 +71,10 @@ Map<String, Object?> signEnvelope(
   SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
   Object? Function(Object? nonEncodable)? toEncodable,
 }) {
+  // Refuse to sign under a hash the verifier will not accept, so nobody can
+  // produce an envelope that is well-formed and permanently uncheckable.
+  _verifiableHashingAlgo(hashingAlgo.name);
+
   final String signableText = signableTextOf(payload, toEncodable: toEncodable);
 
   final String signature;
@@ -183,9 +187,55 @@ String encodeTaggedApsk(
 /// fails the verify — it can never select a weaker routine than the published
 /// key calls for.
 ///
+/// The same rule applies to `hashingAlgo`, which the envelope also names and
+/// the signature also does not cover. It is checked against an allowlist rather
+/// than resolved straight to a routine — `HashingAlgoType` carries `md5`, and
+/// an unsigned field must not be able to select a broken hash.
+///
 /// Throws [AtSigningVerificationException] if the signature does not check
 /// out. Verification needs no keypair of its own: the public key is the whole
 /// input, which is why this works on a client holding no keys at all.
+/// The hashes an envelope is allowed to name.
+///
+/// `HashingAlgoType` also carries `md5` and `argon2id`. MD5's collision
+/// resistance is broken and Argon2id is a password KDF rather than a signature
+/// hash, so neither belongs under a signature — and this field is not covered
+/// by the signature, which makes it an unauthenticated input selecting a
+/// cryptographic routine.
+///
+/// Nothing produces anything but `sha256` today: `wrapAndSign` never passes
+/// `hashingAlgo`, and neither does the key-package signer, so both take
+/// [signEnvelope]'s default. `sha512` is allowed because it is a legitimate
+/// signature hash a future producer might reasonably choose.
+const Set<HashingAlgoType> _verifiableHashingAlgos = {
+  HashingAlgoType.sha256,
+  HashingAlgoType.sha512,
+};
+
+/// Resolves the envelope's `hashingAlgo` claim, refusing anything outside
+/// [_verifiableHashingAlgos].
+///
+/// Also the reason this is a function rather than a `byName` call: `byName`
+/// throws `ArgumentError` for an unknown name and a type error for a null one,
+/// so a malformed envelope escaped as an uncaught error instead of the
+/// documented [AtSigningVerificationException].
+HashingAlgoType _verifiableHashingAlgo(Object? claimed) {
+  if (claimed is! String) {
+    throw AtSigningVerificationException(
+        'the envelope names no hashingAlgo, so there is no way to know which '
+        'hash its signature covers');
+  }
+  final algo =
+      HashingAlgoType.values.where((a) => a.name == claimed).firstOrNull;
+  if (algo == null || !_verifiableHashingAlgos.contains(algo)) {
+    throw AtSigningVerificationException(
+        'the envelope claims hashingAlgo "$claimed", which is not one this '
+        'build will verify a signature under — refusing rather than letting '
+        'an unsigned field choose the routine');
+  }
+  return algo;
+}
+
 Future<void> verifyEnvelope(
   Map envelope, {
   required String signerPublicKey,
@@ -211,8 +261,7 @@ Future<void> verifyEnvelope(
         publicKey: base64Decode(parsed.publicKey),
       );
     case SigningAlgoType.rsa2048:
-      final hashingAlgo =
-          HashingAlgoType.values.byName(envelope['hashingAlgo']);
+      final hashingAlgo = _verifiableHashingAlgo(envelope['hashingAlgo']);
       ok = RsaSigningAlgo(null, hashingAlgo).verify(
         utf8.encode(signableText),
         base64Decode(envelope['signature']),
