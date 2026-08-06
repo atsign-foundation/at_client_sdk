@@ -22,10 +22,17 @@ abstract final class KeyAlgorithmType {
   static const String mlKem768 = 'mlkem768';
   static const String mlDsa65 = 'mldsa65';
 
-  /// X-Wing hybrid KEM (ML-KEM-768 + X25519) — the KEM used for APKAM key
-  /// packages and nskey keypairs. The atSign-level `pq_signing_root` is not on
-  /// this list: it is ML-DSA-65, a signing key with nothing to encapsulate to.
+  /// X-Wing hybrid KEM (ML-KEM-768 + X25519) — one of the two KEMs an APKAM
+  /// key package or nskey keypair may use. The atSign-level `pq_signing_root`
+  /// is not on this list: it is ML-DSA-65, a signing key with nothing to
+  /// encapsulate to.
   static const String xWing = 'xwing';
+
+  /// Pure ML-KEM-1024 (FIPS 203) — the other, for deployments that need key
+  /// establishment with no non-FIPS component and no hybrid combiner. Which of
+  /// the two an atSign uses is its own configuration; a holder's key package
+  /// and nskey advertisement say which they hold.
+  static const String mlKem1024 = 'mlkem1024';
 
   /// The tokens this version knows about. For warn-level tooling only —
   /// never reject a value for not being in this set.
@@ -36,6 +43,7 @@ abstract final class KeyAlgorithmType {
     ed25519,
     x25519,
     mlKem768,
+    mlKem1024,
     mlDsa65,
     xWing,
   };

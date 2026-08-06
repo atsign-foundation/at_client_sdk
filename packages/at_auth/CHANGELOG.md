@@ -1,4 +1,7 @@
 ## 3.4.0
+- feat: `KeyAlgorithmType.mlKem1024` — the key-material token for pure
+  ML-KEM-1024 privates, alongside `xWing`. Additive, and the enum was already
+  an open string set whose contract is never to reject an unknown value.
 - fix: the `.atKeys` passphrase envelope derives its AES key from a random
   per-file salt. It previously passed **the passphrase itself** as the Argon2id
   salt, so derivation was deterministic — two users who chose the same

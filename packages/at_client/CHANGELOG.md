@@ -1,4 +1,11 @@
 ## 3.14.1
+- feat: `SecretSharingAlgos` names the second key-establishment option
+  (`ml-kem-1024`) alongside the hybrid, with a sealing suite for each and the
+  mapping between a suite and the `pqSeal` envelope version it produces. The
+  KEM fixes the suite — nothing can seal ML-KEM-1024 to a hybrid encapsulation
+  key or the reverse — so a recipient's advertised `alg` is what decides the
+  construction a sender uses. `keyAlgos` and `suites` become ordered sender
+  preferences rather than single entries.
 - feat: `KeyPackage.suites` — the sealing suites a package's holder can
   **open**, strongest first, with `bestSuiteFor` for the sender to negotiate
   against. `keys[].alg` says which KEM key to encapsulate to; it never said
