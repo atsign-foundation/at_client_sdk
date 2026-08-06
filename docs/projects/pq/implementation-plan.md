@@ -1148,8 +1148,19 @@ built four (start-time current-generation, on-miss exact-kid, approve-time push 
 all held generations, mint-time push) ARE the definition; the rotation initiator,
 rotation-time conveyance, and `excludeEnrollmentIds` threading move to B-2.
 
-### B-2 — nskey rotation + revocation (CK rotation = coarse FS, nskey-keypair rotation = PCS) · at_client · L
+### B-2 — nskey rotation + revocation (CK rotation = coarse FS, nskey-keypair rotation = PCS) · at_client · L — **LANDED 2026-08-06**
 **Goal:** the two rotation levers + revocation composition — the **D1 GA** rotation slice.
+**Landed** on `gkc-pq-d1-spike` ([decisions 47](decisions.md#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06)):
+`PublishedNskeyKeyRing.rotate` + `NskeyRotation` (B5b, with rotation-time
+conveyance and `excludeEnrollmentIds`), `NskeyRotation.revokeEnrollmentAndRotate`
+(B6, revoke-first because **the ordering is the enforcement** — an exclusion
+alone is a courtesy at the rotating client), `CkManager.rotateContentKey` +
+`ContentKeyEviction` (B5a, the delete-and-evict FS lever, wired on every
+client's sync service). Two defects found in the enrollment path on the way
+(a thrown AT0015 and a malformed `_apsk` both escaped a skip that documented
+itself as covering them), and one privilege distinction the first live run
+forced: rotating needs `rw` on the namespace, revoking needs `__manage`.
+All four UC-A5.x rows green. Rails: at_client 967 unit, functional 137, e2e 50.
 **Builds on:** B-1 + SH-1 + **(RF-1 + SS-3)** for the per-enrollment substrate fan-out (1:1:1). ⚠️ **depends
 on RF-1+SS-3, NOT the full RF-2** (Open decision #C) — so **D1 GA does not wait on the auth retrofit**.
 Implements four rulings from [decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05):
@@ -1301,13 +1312,13 @@ locally **and** in CI — these floor bumps must be made **explicitly**, not inf
 build.
 
 ### (b) Critical path to D1 GA
-`#1930(done) → P-1 + S-2 → SS-1a → SS-1b → SS-1c → SS-2 → SS-3 → SS-4 (+ P-3) → B-1 → R-1(delivered) → SH-1(done) + RF-SRV(server done) + RF-2b(done) → B-2`
+`#1930(done) → P-1 + S-2 → SS-1a → SS-1b → SS-1c → SS-2 → SS-3 → SS-4 (+ P-3) → B-1 → R-1(delivered) → SH-1(done) + RF-SRV(server done) + RF-2b(done) → B-2(done) → ON-1 + R-2 + S-3`
 (D1 GA: rebuild = universal reader, one flag = PQ writer, opt-in rotation).
 **Branch state (2026-08-04):** `gkc-pq-d1-spike` is **68 commits ahead of `origin/trunk` and 2 behind**;
 both of those two are docs-only (the wasm-port plan, [#2118](https://github.com/atsign-foundation/at_client_sdk/pull/2118)),
 so the drift carries no code-merge risk today.
 
-**Everything up to and including SS-3 is landed as of 2026-08-03** (SS-1c/SS-2/SS-3 on `gkc-pq-d1-spike`, plus [at_server#2736](https://github.com/atsign-foundation/at_server/pull/2736) for SS-3's server half). **`SS-4`'s signing chain landed 2026-08-04** — mint, root-private conveyance, self-anchoring and the graded walk, all live-covered. **B-1 landed too, and R-1 was delivered 2026-08-05 as the flag alone** ([decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)); **SH-1, RF-SRV's server half, RF-2b and RF-2c's switch-over all landed 2026-08-05** ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05)–[44](decisions.md#44-rf-2c-the-switch-over-and-what-it-cost-to-make-a-client-pq-2026-08-05)), so the path now waits on **B-2**, with two named residuals: RF-SRV's revocation cascade (server) and RF-2c's UC-B1.x e2e rows.
+**Everything up to and including SS-3 is landed as of 2026-08-03** (SS-1c/SS-2/SS-3 on `gkc-pq-d1-spike`, plus [at_server#2736](https://github.com/atsign-foundation/at_server/pull/2736) for SS-3's server half). **`SS-4`'s signing chain landed 2026-08-04** — mint, root-private conveyance, self-anchoring and the graded walk, all live-covered. **B-1 landed too, and R-1 was delivered 2026-08-05 as the flag alone** ([decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)); **SH-1, RF-SRV's server half, RF-2b and RF-2c's switch-over all landed 2026-08-05** ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05)–[44](decisions.md#44-rf-2c-the-switch-over-and-what-it-cost-to-make-a-client-pq-2026-08-05)), and **B-2 landed 2026-08-06** ([decisions 47](decisions.md#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06)) with all four UC-A5.x rows green, so the path now waits on **ON-1**, **R-2** and **S-3**. RF-2c's UC-B1.x e2e rows are done; the one named residual left is RF-SRV's revocation cascade (server) — `parentEnrollmentId` is stored but `enroll:revoke` does not yet walk descendants ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05) item 2).
 **Off-path (parallel):** `RF-2b → RF-2c` (RF-1 confirm), `B-3`, `ON-1`, `S-5 → S-6`, `D2-1`, `KF-1`
 (builds on S-3), and the final `R-2`.
 

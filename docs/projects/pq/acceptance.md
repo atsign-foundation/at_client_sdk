@@ -583,7 +583,21 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 - **Cross-ref:** `decisions.md` (FS levers, Decision #F); `design.md`
   (forward-secrecy / rotation levers, nskey-keypair rotation).
-- **Impl/verify (A5.x):** **B-2**.
+- **Impl/verify (A5.x):** **B-2** — landed 2026-08-06
+  ([decisions 47](decisions.md#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06)).
+  A5.1(a) is proven live by `tests/at_functional_test/test/content_key_rotation_live_test.dart`
+  (both positions of the retention knob); A5.1(b), A5.2 and A5.3 by
+  `tests/at_functional_test/test/nskey_rotation_live_test.dart`.
+  **One clarification the live run forced, and it belongs in this catalogue
+  rather than only in the code:** "excluded at **both** discovery+push and the
+  `requestSecret` pull serve" (UC-A5.2) is achieved by the **revocation**, not
+  by `excludeEnrollmentIds`. A still-approved enrollment is still a member of
+  the namespace, so it asks any holder for the generation it can see published
+  and is answered — the exclusion set stops one client pushing and cannot bind
+  a holder that has only the atServer's word to go on. That is why
+  `revokeEnrollmentAndRotate` revokes first: `enroll:listns` returns approved
+  enrollments only, so the revoke is what removes it from every roster and
+  every serve at once.
 
 ---
 

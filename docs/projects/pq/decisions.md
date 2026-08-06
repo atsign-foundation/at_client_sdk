@@ -60,6 +60,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [44. RF-2c: the switch-over, and what it cost to make a client PQ (2026-08-05)](#44-rf-2c-the-switch-over-and-what-it-cost-to-make-a-client-pq-2026-08-05) — *5 places the enrollment's algorithm and identity failed to travel*
 - [45. The retrofit rows, and the five defects the first end-to-end run found (2026-08-05)](#45-the-retrofit-rows-and-the-five-defects-the-first-end-to-end-run-found-2026-08-05) — *B1/B2 green; the pull had no answerer, no gate and no correspondence check*
 - [46. RFC 9180, and where the design's version hatches are (2026-08-05)](#46-rfc-9180-and-where-the-designs-version-hatches-are-2026-08-05) — *pqSeal stays custom until D2; two signed payloads carry no version, and the signing root is unrewritable*
+- [47. B-2 lands: two levers, and the difference between excluding and revoking (2026-08-06)](#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06) — *nskey-keypair rotation vs content-key rotation; an exclusion is a courtesy and the revoke is the enforcement*
 
 ---
 
@@ -4001,3 +4002,189 @@ open with no code written:
    (2), since the version field is what makes that choice reversible;
 4. a `suites` list on the key package, cheap now for the same reason as (2) and
    safe to defer if we accept release-ordering agility.
+
+## 47. B-2 lands: two levers, and the difference between excluding and revoking (2026-08-06)
+
+The rotation slice is built. Both levers existed on paper and one of them
+existed in code as an accident — calling `mintAndPublish` twice on a namespace
+IS a rotation — but nothing in production ever called it that way, nothing
+carried the successor to the surviving enrollments, and no caller could say
+which enrollment to leave out. The forward-secrecy lever did not exist at all.
+
+### 47.1 The two levers, kept apart on purpose
+
+`design.md` §1.7 spends its first paragraph insisting B5a and B5b are not
+substitutes, and the code now says so in two class names rather than one.
+
+**`NskeyRotation` (B5b)** mints the next nskey keypair, overwrites
+`public:__nskey.<ns>`, and pushes the successor private to the namespace's
+other enrollments minus an excluded set. It denies an enrollment the keys
+protecting data written from now on. It costs one conveyance per enrollment and
+it reaches nothing already written: every earlier private is retained by
+construction — privates are filed per `nskeyKid` and nothing removes them — so
+retained `__ck` records sealed to a superseded generation still open.
+
+**`CkManager.rotateContentKey` (B5a)** cuts a fresh content key and, with
+`deleteSuperseded`, deletes the conveyance record carrying the old one. That is
+the only operation in the system that makes already-written data unreadable:
+the nskey private cannot help once no sealed copy of that CK survives. O(1),
+one record, on ordinary sync rather than the substrate.
+
+Two orderings carry B5a's correctness, and both were red-proven. The delete
+happens **after** the successor is durable — deleting first and then failing the
+conveyance write would leave the destination with no readable past AND no key
+to write the next value under, the one state worse than not rotating. And the
+superseded `ckKid` is read from the **current-CK pointer** as well as the cache,
+because the process that cut it may not be this one; without that a rotation
+from a freshly started client supersedes nothing, leaves the old conveyance
+live, and reports a forward secrecy it did not deliver.
+
+A delete that fails is `severe` and does not roll back the rotation. Writes are
+correct from there on; what was lost is the forward secrecy, and a caller that
+believes it rotated for FS has to hear that it did not.
+
+### 47.2 Deleting the record is half of it; eviction is the other half
+
+Deleting the conveyance stops anyone unwrapping that CK *again*. It says nothing
+about the clients that already did: they hold the plaintext key in their own
+caches and would go on reading the very data the deletion was meant to close
+off. Sync is what carries the deletion to them, so `ContentKeyEviction` turns a
+`remoteToLocal` DELETE of a conveyance record into a cache eviction, and
+`AtClientImpl` registers it on every sync service it is given.
+
+That is what makes coarse forward secrecy a fleet-wide property rather than a
+property of the deleting client alone — bounded, exactly as the design says, by
+eviction **reachability**: a device that never resyncs keeps its copy. That
+residual is named, not solved.
+
+One parsing note worth keeping: the conveyance key is split on its `.__ck.`
+marker, never through `AtKey.fromString`, which cuts at the **last** dot.
+`abc.__ck.app_1.my_apps@alice` parses back with namespace `my_apps`, and
+evicting under that would miss the entry and leave the CK live — a silent
+failure of the security property, with the delete looking successful.
+
+### 47.3 Losing the mint lock fails a rotation; it resolves a mint
+
+`PublishedNskeyKeyRing.rotate` differs from `mintAndPublish` in one way and it
+is the way that matters. A cold-start mint that loses the race adopts the
+winner's key and is done: the atSign has a key, which is all that was wanted. A
+rotation that adopts what it finds has rotated **nothing** while reporting
+success — and since rotation is the revocation lever, the enrollment it was
+excluding is left holding the live generation. Rotating a namespace with no
+published key is refused for the same reason: that is a cold-start mint wearing
+a rotation's name.
+
+### 47.4 An exclusion is a courtesy; the revoke is the enforcement
+
+This is the ruling the live run forced, and it corrects an assumption the first
+version of the e2e test was written on.
+
+`excludeEnrollmentIds` stops **this** client pushing to the named enrollments.
+It cannot stop another holder answering their pull, because a holder honours
+only what the atServer tells it, and the atServer's signal for "this enrollment
+gets nothing" is revocation — not a list one client happens to be holding. A
+still-approved enrollment is still a member of the namespace, so it asks any
+holder for the generation it can see published and is answered. Exclusion alone
+is a courtesy in exactly the sense `shareAllSecretsWith`'s namespace filter is.
+
+So `revokeEnrollmentAndRotate` revokes **first**, and the ordering is the
+enforcement rather than a preference. Revoking drops the enrollment out of
+`enroll:listns` — `getEnrollmentsForNamespace` returns approved enrollments only
+— so by the time any rotation runs it is absent from every roster and refused at
+every serve, including pulls answered by holders that never heard of the
+operation. Rotate first and the same enrollment can request the successor from
+another holder in the gap, undoing the rotation it was the point of.
+
+A namespace that fails to rotate is `severe` and the rest are still attempted:
+the revoke has already landed by then, and abandoning the remainder leaves the
+atSign in the worst of both states — an enrollment cut off from the server but
+still holding every live namespace key it had.
+
+This implements [42](#42-the-to-define-list-ruled-2026-08-05) items 5
+(last-holder-lost recovery is an explicit rotation, history stays lost) and 6
+(clones share fate: an enrollment id may have any number of cryptographically
+indistinguishable holders, so revoke cuts every clone and exclude excludes every
+clone or none), plus the three pieces item 11 moved here — the rotation
+initiator, rotation-time conveyance, and `excludeEnrollmentIds` reaching the
+nskey paths.
+
+### 47.5 The two privileges are different, and the failure said the wrong thing
+
+Found by the first live run, not by any unit test. **Rotating** needs `rw` on
+the namespace — the bar the atServer already enforces on the advertisement
+write, and a scoped device enrollment clears it. **Revoking** needs `__manage`,
+and a client without `__manage` also cannot *enumerate* enrollments:
+`enroll:list` returns it only its own record.
+
+So a scoped caller's `revokeEnrollmentAndRotate` failed with *"no enrollment
+&lt;id&gt; to revoke"* — which reads as a wrong id and sends the caller looking
+in entirely the wrong place. The composition now names the missing privilege
+before it attempts anything, and reports that nothing was revoked and nothing
+rotated.
+
+### 47.6 Two defects in the enrollment path, both from the same shape
+
+`_openIfSymmetricKey` documents that "every rejection is a skip rather than a
+throw", and its `_verifyAgainstApsk` doc says a revoked enrollment's missing
+`_apsk` is the intended skip. Neither was true. The skip caught only
+`AtSigningVerificationException`, and:
+
+1. an **absent** `_apsk` comes back as a thrown AT0015, not as null — so the
+   revoked-enrollment case the doc describes killed the whole approval instead
+   of skipping one envelope;
+2. a **malformed** `_apsk` throws `FormatException` out of `base64Decode`, with
+   the same result.
+
+Both escaped to fail `waitForApproval` outright. Since a revoked enrollment
+produces the first, one stale envelope of its making could fail every later
+enrollment that scanned past it — a failure that only appears on an atSign where
+something has been revoked, which is why it survived until B-2 revoked anything.
+The skip now catches everything from that one operation, and the second defect
+was found by the *control arm* of the test written for the first.
+
+### 47.7 What the live run cost, and the two tests that were lying
+
+Three findings, all from running rather than reading.
+
+**The suite failures were the tests polluting a shared identity.** The rotation
+file created eight enrollments on `@alice🛠` and revoked one. Every
+`enroll:listns` walks the whole roster, and a revoked enrollment's `_apsk` is
+deleted for good — so the file passed alone and took two unrelated files down
+inside the full run, one of them by timeout. Moved to `@bob🛠`, which is what
+the package's own rule about one-shot server-side state already says.
+
+**Two assertions were asserting a race.** The first version claimed the excluded
+enrollment got nothing and passed once; the second claimed it got the successor
+and passed once. Both were true only on timing, because whether a background
+self-heal pull completes inside a test is not a property. The exclusion is now
+asserted where it is deterministic — the roster the push enumerates, with the
+unexcluded control arm — and the serve side is pinned at unit level, where a
+holder demonstrably refuses a requester the roster no longer lists and serves
+the same request while it is still listed.
+
+**And the roster is polled, with a bound.** `enroll:listns` is served through the
+atServer's enrollment cache, and a roster read taken *before* the revoke — which
+the control arm deliberately takes — was observed still stale on the first read
+after it. The poll is bounded so this stays an assertion: if the roster never
+catches up, the test is red and names a real defect, because a revoked
+enrollment other holders still see is one they will still push secrets to.
+
+### 47.8 Proof inventory
+
+Twenty-one red proofs run against the pre-fix code, not assumed: the lock-loss
+adoption, the cold-start guard, the exclusion reaching the roster query, the
+revoke-before-rotate ordering, conveying without reading the durable copy back,
+revoking an unknown enrollment, abandoning the remaining namespaces after one
+fails, falling back to in-memory key storage, the `__manage` guard, deleting
+before the successor is durable, deleting without evicting, a failed delete
+rolling back the rotation, the missing pointer fallback, the eviction listener's
+direction and `commitOp` guards, the last-dot key split, the listener never
+being registered, and the narrow catch in the enrollment path.
+
+Rails: at_client **967** unit, functional **137**, e2e **50**.
+
+One test outside B-2 had to change. `switch_atsign_test` asserted the sync
+service held exactly **one** progress listener after an atSign switch, using the
+count as a proxy for "the previous atSign's listeners were cleared". The SDK now
+registers one of its own, so the count stopped meaning that; the test names the
+listeners it expects and the one it does not.

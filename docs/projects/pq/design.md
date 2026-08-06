@@ -472,6 +472,20 @@ the revoked enrollment (`excludeEnrollmentIds`, B5b); (3) optional history
 re-encrypt (expensive — D2). A revoked enrollment, excluded from a rotation, cannot
 read post-rotation data.
 
+> **As built (2026-08-06,
+> [`decisions.md` 47](decisions.md#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06)):
+> the order of (1) and (2) is the enforcement, not a preference.** An
+> `excludeEnrollmentIds` set stops the *rotating client* pushing; it cannot bind
+> another holder, which honours only what the atServer tells it. A
+> still-approved enrollment therefore pulls the successor from whichever holder
+> answers first, and the exclusion is undone. Revoking first removes it from
+> `enroll:listns` — approved enrollments only — so every roster and every serve
+> refuses it at once, including on holders that never heard of the rotation.
+> `NskeyRotation.revokeEnrollmentAndRotate` is that composition. Note also that
+> the two halves need **different** privileges: rotating is gated on `rw` for
+> the namespace (the atServer's own bar on the advertisement write), revoking on
+> `__manage`.
+
 **Cross-atSign FS is bilateral.** For self data the owner is both endpoints — she
 cuts the CK and owns the authoritative conveyance + cache, so she forward-secures
 unilaterally. For inbound, the sender (`@bob`) cuts the CK on **his** cadence and

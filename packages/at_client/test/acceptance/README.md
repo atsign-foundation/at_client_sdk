@@ -15,7 +15,8 @@ is how far we've got.
 > two-release ladder asserted directly, the B4 rows cited to the live
 > cold-start and data-path tests. The retrofit rows followed on 2026-08-05
 > (`decisions.md` 45): the B1 trio and both B2 rows are now cited to live e2e
-> coverage. The suite reads **33 of 40**
+> coverage. **B-2 landed 2026-08-06** (`decisions.md` 47), taking the four A5
+> rotation and revocation rows with it. The suite reads **37 of 40**
 > scenario rows green, up from 1 before the repair and 5 after it. (The runner's own count
 > is higher — it includes `catalogue_test.dart`'s three guards, which are not
 > scenarios. That gap is why the old "4 of 43" figure was itself wrong in the
@@ -101,7 +102,7 @@ below), plus 9 cross-cutting invariants.
 | A2 · enrollments              | A2.1 ✅, A2.2 ✅, A2.3 ✅           | —            |
 | A3 · self data                | A3.1 ✅, A3.2 ✅, A3.3 ✅, A3.4 ✅  | —            |
 | A4 · shared data              | A4.1 ✅, A4.2 ✅, A4.3 ✅, A4.4 ✅  | —            |
-| A5 · rotation & revocation    | A5.1(a), A5.1(b), A5.2, A5.3     | B-2          |
+| A5 · rotation & revocation    | A5.1(a) ✅, A5.1(b) ✅, A5.2 ✅, A5.3 ✅ | —            |
 | B0 · atServer prerequisite    | B0.1                             | RF-SRV       |
 | B1 · retrofit                 | B1.1 ✅, B1.2 ✅, B1.3 ✅           | —            |
 | B2 · retirement & lockout     | B2.1 ✅, B2.2 ✅                    | —            |
@@ -125,8 +126,8 @@ the 40** rows, and no data-path row could go green until **B-1** (XL) and
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**7 of the 40** rows are skipped, and all seven are *blocked* on a project
-that has not landed — B-2, ON-1 — with one exception that is worth naming
+**3 of the 40** rows are skipped, and all three are *blocked* on a project
+that has not landed — ON-1 — with one exception that is worth naming
 separately: **UC-B0.1** is labelled `RF-SRV` but is really blocked on the
 *harness*. It needs a PQ-capable client to abort cleanly against an atServer
 that has none of the retrofit verbs, and no suite here can produce a legacy

@@ -53,11 +53,6 @@ const _e2e = 'layer: tests/at_end2end_test';
 // and cross-cutting rows assert the two-release ladder directly, and the B4
 // rows cite the cold-start and data-path live tests.
 
-// --- Critical path to D1 GA ---
-
-/// The two rotation levers + revocation composition.
-const b2 = 'blocked: B-2 (nskey rotation + revocation) · $_functional';
-
 // ---------------------------------------------------------------------------
 // Retrofit + onboarding. RF-SRV moved ONTO the GA critical path 2026-08-05
 // (decisions.md 40) — every migration scenario conjugates "upgrade the
