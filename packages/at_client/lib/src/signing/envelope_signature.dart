@@ -28,6 +28,18 @@ import 'package:at_chops/at_chops.dart'
         SigningAlgoType;
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 
+/// The version stamped on the signed-envelope wrapper.
+///
+/// The wrapper carried none until 2026-08-06, so a reader had nothing to
+/// dispatch on if the construction changed — and it is due to change, since
+/// the envelope is moving to JWS Flattened JSON Serialization. This field is
+/// what makes that move reversible.
+///
+/// It is **not** covered by the signature, because only `payload` is. Treat it
+/// as a parsing hint rather than an authenticated claim; the JWS shape puts
+/// the equivalent in the protected header, where it is signed.
+const int signedEnvelopeVersion = 1;
+
 /// The APKAM key material an envelope signature needs. The public half is
 /// what a verifier fetches from the signer's `_apsk`; the private half signs.
 class ApkamSigningKeys {
@@ -96,6 +108,7 @@ Map<String, Object?> signEnvelope(
   }
 
   return {
+    'v': signedEnvelopeVersion,
     'payload': payload,
     'signature': signature,
     'hashingAlgo': hashingAlgo.name,

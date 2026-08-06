@@ -5,6 +5,8 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show signedEnvelopeVersion;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -50,12 +52,13 @@ void main() {
   /// it was asked to do. [lockAlreadyHeld] makes the mint lock's immutable
   /// create fail, which is how the atServer reports that another enrollment
   /// holds it.
-  ({MockAtClient client, List<String> trace}) client(
+  ({MockAtClient client, List<String> trace, List<String> published}) client(
       {bool lockAlreadyHeld = false}) {
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
     final lookUp = MockAtLookupImpl();
     final trace = <String>[];
+    final published = <String>[];
 
     when(() => atClient.atChops).thenReturn(AtChopsImpl(
         AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
@@ -84,11 +87,12 @@ void main() {
           }
         } else if (key.startsWith('__nskey')) {
           trace.add('publish:${builder.atKey.namespace}');
+          published.add(builder.value as String);
         }
       }
       return 'data:1';
     });
-    return (client: atClient, trace: trace);
+    return (client: atClient, trace: trace, published: published);
   }
 
   Future<NskeyPrivateFiling> filing() async {
@@ -125,6 +129,22 @@ void main() {
       Uint8List.fromList(List<int>.generate(32, (i) => 200 - i));
 
   group('the rotation lever', () {
+    test('the published advertisement carries a payload version', () async {
+      // The reader accepts a payload with no `v` as the pre-2026-08-06 shape,
+      // so nothing would notice the writer dropping it — which is precisely
+      // why the writer needs its own assertion rather than a round trip.
+      final c = client();
+      final ring =
+          PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+
+      await ring.mintAndPublish(namespace);
+
+      expect(c.published, hasLength(1));
+      final envelope = jsonDecode(c.published.single) as Map<String, dynamic>;
+      expect((envelope['payload'] as Map)['v'], nskeyAdvertisementVersion);
+      expect(envelope['v'], signedEnvelopeVersion);
+    });
+
     test('publishes a fresh generation and keeps the superseded private',
         () async {
       final c = client();

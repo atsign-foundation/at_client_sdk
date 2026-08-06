@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show signedEnvelopeVersion;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -247,6 +249,47 @@ void main() {
       await expectLater(
           PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
           throwsA(isA<AtSigningVerificationException>()));
+    });
+
+    test('an advertisement with no version is still read, as the old shape',
+        () async {
+      // Everything published before 2026-08-06 carries no `v`, and those
+      // records live on peers' atServers until each owner next rotates. A
+      // reader that required the field would stop resolving them.
+      final c = client(
+          payload: await bobSigner.wrapAndSignAndJsonEncode({
+        'nskeyKid': nskeyKidOf(bobKey.publicKeyBytes),
+        'publicKey': base64Encode(bobKey.publicKeyBytes),
+      }));
+
+      final advertised =
+          await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace);
+      expect(advertised?.publicKey, bobKey.publicKeyBytes);
+    });
+
+    test('the signed wrapper carries its own version', () async {
+      // Separately from whatever payload it wraps — the two version each
+      // other's shape independently, which is what lets the wrapper move to
+      // JWS without touching any payload.
+      final envelope = await bobSigner.wrapAndSign({'anything': 1});
+      expect(envelope['v'], signedEnvelopeVersion);
+    });
+
+    test('a payload version this build has no code for is refused', () async {
+      // Refusing beats reading it as v1: a later version's fields might mean
+      // something else, and sealing to a key resolved from a misread payload
+      // is not recoverable.
+      final c = client(
+          payload: await bobSigner.wrapAndSignAndJsonEncode({
+        'v': nskeyAdvertisementVersion + 1,
+        'nskeyKid': nskeyKidOf(bobKey.publicKeyBytes),
+        'publicKey': base64Encode(bobKey.publicKeyBytes),
+      }));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>().having(
+              (e) => '$e', 'message', contains('no code for'))));
     });
 
     test('an unsigned advertisement is rejected, not accepted bare', () async {

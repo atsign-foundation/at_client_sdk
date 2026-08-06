@@ -42,6 +42,15 @@ abstract class AdvertisedKeyVerifier {
   Future<NskeyAdvertisement> verify(String owner, String payload);
 }
 
+/// The version stamped on the nskey advertisement payload.
+///
+/// The payload carried none until 2026-08-06, which left a reader nothing to
+/// dispatch on if the construction changed — every other signed payload in the
+/// design carries one. The record IS rewritable (a rotation overwrites it), so
+/// this is cheap insurance rather than a deadline, and it is the hatch that
+/// makes moving the envelope to JWS reversible.
+const int nskeyAdvertisementVersion = 1;
+
 /// Verifies an advertisement's APKAM signature against the `_apsk` public key
 /// that the signing enrollment published under [owner]'s atSign.
 ///
@@ -96,6 +105,18 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
           'the advertised nskey for $owner has a signature over a payload that '
           'is not an advertisement');
     }
+    // Absent means the pre-2026-08-06 shape, which is this one without the
+    // field — accept it. A version this build has no code for is refused
+    // rather than read as if it were v1, because the fields it would go on to
+    // parse might mean something else entirely.
+    final version = advertised['v'];
+    if (version != null && version != nskeyAdvertisementVersion) {
+      throw AtSigningVerificationException(
+          'the advertised nskey for $owner declares payload version $version, '
+          'which this build has no code for — refusing rather than reading it '
+          'as version $nskeyAdvertisementVersion');
+    }
+
     final publicKey =
         Uint8List.fromList(base64Decode(advertised['publicKey'] as String));
     final nskeyKid = advertised['nskeyKid'] as String;
@@ -318,6 +339,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
 
     await _signer.publishPublicSigningKey();
     final payload = await _signer.wrapAndSignAndJsonEncode({
+      'v': nskeyAdvertisementVersion,
       'nskeyKid': advertisement.nskeyKid,
       'publicKey': base64Encode(advertisement.publicKey),
     });

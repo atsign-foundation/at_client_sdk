@@ -1,4 +1,18 @@
 ## 3.14.1
+- feat: the signed-envelope wrapper and the nskey advertisement payload each
+  carry a version field. They were the only two signed structures in the PQ
+  design without one, so a reader had nothing to dispatch on if the
+  construction changed — and it is about to, since the envelope is moving to
+  JWS Flattened JSON Serialization. `signedEnvelopeVersion` and
+  `nskeyAdvertisementVersion` are what make that reversible.
+  Adding them is a **one-release** change rather than the usual two-release
+  ladder: no reader in the system rejects unknown or extra fields, confirmed
+  across the whole suite. On the read side an advertisement payload with no
+  `v` is still accepted as the older shape, because records published before
+  this live on peers' atServers until each owner next rotates; a version this
+  build has no code for is refused rather than read as v1, since a later
+  version's fields might mean something else and sealing to a key resolved
+  from a misread payload is not recoverable.
 - fix: `verifyEnvelope` checks the envelope's `hashingAlgo` against an
   allowlist instead of resolving it straight to a routine. `hashingAlgo` is not
   covered by the signature, so it is an unsigned field naming a cryptographic
