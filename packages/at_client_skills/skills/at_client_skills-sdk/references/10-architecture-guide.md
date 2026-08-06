@@ -13,7 +13,7 @@ Both patterns are valid and complementary — a single app can use both at once.
 | -------------------- | ------------------------------------------------ | -------------------------------------------- |
 | **Data shape**       | Discrete typed records                           | High-frequency telemetry / event streams     |
 | **Persistence**      | Synced to atServer; available across devices     | Local only; accumulated from notifications   |
-| **Sharing model**    | Per-item, shared with named atSigns              | One publisher → many subscribers             |
+| **Sharing model**    | Per-item, shared with named atsigns              | One publisher → many subscribers             |
 | **Query needs**      | Rich queries, reactive watches, sub-collections  | Time-window aggregates, GROUP BY, charting   |
 | **Volume**           | Low–medium (hundreds to thousands of items)      | High (per-second metrics, logs, traces)      |
 | **Sync requirement** | Yes — SyncService keeps devices consistent       | No — notifications are fire-and-forget       |
@@ -177,3 +177,24 @@ Is volume > ~10 writes/second sustained?
 Do you need both persistent records AND a live metric stream?
 └─ Both patterns in the same app
 ```
+
+---
+
+## Beyond data: actions, tunnels, and large files
+
+The two patterns above cover *data*. Three interaction shapes fall outside
+them:
+
+- **"Call another atsign and get an answer back"** (actions/queries — "plan
+  this route", "what's your status?") → `AtRpc` / `AtRpcClient`. Read
+  [13-rpc.md](13-rpc.md) when implementing request/response. Durable results
+  still belong in an `AtCollection`, written by the responder.
+- **Raw TCP to a remote machine** (SSH, VNC, existing socket protocols) →
+  NoPorts (`noports_core`): E2E encrypted tunnels with zero open listening
+  ports. Not a data pattern — a connectivity one.
+- **Bulk file transfer** (payloads too large for a notification or item
+  value): encrypt the file client-side, upload the ciphertext to any web file
+  service, then share the URL + decryption key with the recipient as a normal
+  encrypted item (e.g. a `FileHandle` record in an `AtCollection`). The
+  recipient downloads and decrypts locally. The platform never sees plaintext,
+  and the atServer never carries the bulk bytes.
