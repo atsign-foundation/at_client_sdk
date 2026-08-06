@@ -125,4 +125,67 @@ void main() {
       );
     });
   });
+
+  group('the ML-KEM-1024 suite (KEM 0x0042, HKDF-SHA384, AES-256-GCM)', () {
+    // The no-hybrid option. Its KDF is SHA-384, for which RFC 5869 publishes
+    // no vectors — so this group is HkdfSha384's only third-party attestation,
+    // exercised through the key schedule end to end.
+    final w = jsonDecode(File('test/vectors/hpke_wg_0x0042_mlkem1024.json')
+        .readAsStringSync()) as Map;
+    const suite = HpkeSuite.mlKem1024HkdfSha384Aes256Gcm;
+
+    test('the vector is the suite we would emit', () {
+      expect(w['mode'], 0);
+      expect(w['kem_id'], suite.kemId);
+      expect(w['kdf_id'], suite.kdfId);
+      expect(w['aead_id'], suite.aeadId);
+      expect(_toHex(suite.suiteId), w['suite_id']);
+    });
+
+    test('the key schedule reproduces key, base_nonce and exporter', () {
+      final ks = hpkeKeyScheduleBase(suite, _hex(w['shared_secret'] as String),
+          info: _hex(w['info'] as String));
+      expect(_toHex(ks.key), w['key']);
+      expect(_toHex(ks.baseNonce), w['base_nonce']);
+      expect(_toHex(ks.exporterSecret), w['exporter_secret'],
+          reason: 'a 48-byte exporter, which is what makes this the SHA-384 '
+              'arm rather than SHA-256 with a different label');
+    });
+
+    test('driven end to end from the KEM rather than the published secret',
+        () async {
+      final kp = await MlKem1024PureDartAlgo.instance
+          .generateKeyPair(_hex(w['skRm'] as String));
+      final ss = await MlKem1024PureDartAlgo.instance
+          .decapsulate(kp.secretKey, _hex(w['enc'] as String));
+      final ks =
+          hpkeKeyScheduleBase(suite, ss, info: _hex(w['info'] as String));
+      expect(_toHex(ks.key), w['key']);
+    });
+
+    test('the AEAD decrypts the published encryptions', () async {
+      for (final e in (w['encryptions'] as List).cast<Map>()) {
+        final pt = await AesGcm256EncryptionAlgo(
+                AESKey(base64Encode(_hex(w['key'] as String))))
+            .decrypt(_hex(e['ct'] as String),
+                iv: InitialisationVector(_hex(e['nonce'] as String)),
+                aad: _hex(e['aad'] as String));
+        expect(_toHex(pt), e['pt']);
+      }
+    });
+
+    test('the SHA-256 suite derives different keys from the same secret', () {
+      // Without this, a build whose KDF dispatch ignored kdf_id and always used
+      // SHA-256 would still pass every test above that starts from the
+      // published shared secret, because suite_id alone would change the
+      // output. This pins that the KDF itself differs.
+      final ss = _hex(w['shared_secret'] as String);
+      final a = hpkeKeyScheduleBase(suite, ss);
+      final b =
+          hpkeKeyScheduleBase(HpkeSuite.xWingHkdfSha256ChaCha20Poly1305, ss);
+      expect(a.exporterSecret, hasLength(48));
+      expect(b.exporterSecret, hasLength(32));
+      expect(_toHex(a.key), isNot(_toHex(b.key)));
+    });
+  });
 }

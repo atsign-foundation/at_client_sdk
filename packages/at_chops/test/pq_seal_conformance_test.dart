@@ -224,6 +224,53 @@ void main() {
     });
   });
 
+  group('ver 0x03 — pure ML-KEM-1024 through pqSeal', () {
+    // The no-hybrid option end to end. Its KEM is a different algorithm with
+    // different sizes, so this also pins that the framing's ctLen is genuinely
+    // read from the encapsulation rather than assumed to be X-Wing's 1120.
+    const mlkem = MlKem1024PureDartAlgo.instance;
+    late Uint8List sk;
+    late Uint8List pk;
+    setUpAll(() async {
+      final kp = await mlkem.generateKeyPair();
+      sk = kp.secretKey;
+      pk = kp.publicKey;
+    });
+
+    final pt = Uint8List.fromList(utf8.encode('a conveyed content key'));
+    final info = Uint8List.fromList(utf8.encode('at_client/nskey/v1:app@a'));
+
+    test('round-trips and frames a 1568-byte ciphertext', () async {
+      final e = await pqSeal(mlkem, pk, pt, info: info, version: 0x03);
+      expect(e[0], 0x03);
+      expect((e[1] << 8) | e[2], MlKem1024PureDartAlgo.ciphertextLength);
+      expect(await pqOpen(mlkem, sk, e, info: info), pt);
+    });
+
+    test('the info binding holds', () async {
+      final e = await pqSeal(mlkem, pk, pt, info: info, version: 0x03);
+      await expectLater(
+        pqOpen(mlkem, sk, e,
+            info: Uint8List.fromList(utf8.encode('a different context'))),
+        throwsA(isA<PqOpenException>()
+            .having((e) => e.reason, 'reason', PqOpenFailure.authFailure)),
+      );
+    });
+
+    test('relabelling it as the hybrid version fails to open', () async {
+      // The two RFC 9180 versions differ only by suite, and suite_id enters
+      // every labelled derivation — so this proves the suite is actually
+      // selected by the version byte rather than the version being cosmetic.
+      final e = await pqSeal(mlkem, pk, pt, info: info, version: 0x03);
+      final asV2 = Uint8List.fromList(e)..[0] = 0x02;
+      await expectLater(
+        pqOpen(mlkem, sk, asV2, info: info),
+        throwsA(isA<PqOpenException>()
+            .having((e) => e.reason, 'reason', PqOpenFailure.authFailure)),
+      );
+    });
+  });
+
   group('the context binding is real', () {
     // The negative arm. Without it every test above would pass on an
     // implementation that ignored info and aad entirely, since the sealer and

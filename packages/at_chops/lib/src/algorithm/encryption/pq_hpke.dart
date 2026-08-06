@@ -43,7 +43,7 @@ const int pqSealDefaultVersion = 0x01;
 /// not remove old ones until every peer has upgraded past them, because a
 /// removed version turns records already written into permanent
 /// [PqOpenFailure.versionMismatch] failures.
-const Set<int> pqSealSupportedVersions = {0x01, 0x02};
+const Set<int> pqSealSupportedVersions = {0x01, 0x02, 0x03};
 
 const int _gcmNonceLen = AesGcm256EncryptionAlgo.nonceLength;
 const int _gcmTagLen = AesGcm256EncryptionAlgo.tagLength;
@@ -58,8 +58,16 @@ Uint8List _suiteLabelFor(int version) => switch (version) {
           'inside every labelled extract and expand, not a label of ours'),
     };
 
-/// The RFC 9180 ciphersuite `ver = 0x02` emits.
+/// The RFC 9180 ciphersuite `ver = 0x02` emits — the hybrid.
 const HpkeSuite _v2Suite = HpkeSuite.xWingHkdfSha256ChaCha20Poly1305;
+
+/// The RFC 9180 ciphersuite `ver = 0x03` emits — pure ML-KEM-1024, no hybrid.
+///
+/// A separate version rather than a suite field on the wire because the KEM is
+/// already fixed by the recipient's advertised key: nothing can seal
+/// ML-KEM-1024 to a hybrid encapsulation key or the reverse. The version byte
+/// therefore names the whole suite, and an opener needs no other input.
+const HpkeSuite _v3Suite = HpkeSuite.mlKem1024HkdfSha384Aes256Gcm;
 
 /// Why a [pqOpen] call failed.
 ///
@@ -235,11 +243,13 @@ class _DerivedKey {
 /// for [version] and the caller's [info]. Two HKDF labels (`0x01`/`0x02`) keep
 /// key and nonce independent.
 _DerivedKey _deriveKeyAndNonce(Uint8List ss, int version, Uint8List? info) {
-  if (version == 0x02) {
-    // RFC 9180 Base mode, verbatim. Checked against the IETF HPKE working
-    // group's published vectors in test/rfc9180_hpke_test.dart — bytes nobody
-    // here produced, which is the difference between this version and 0x01.
-    final ks = hpkeKeyScheduleBase(_v2Suite, ss, info: info);
+  if (version == 0x02 || version == 0x03) {
+    // RFC 9180 Base mode, verbatim. Both suites are checked against the IETF
+    // HPKE working group's published vectors in test/rfc9180_hpke_test.dart —
+    // bytes nobody here produced, which is the difference between these
+    // versions and 0x01.
+    final ks = hpkeKeyScheduleBase(version == 0x03 ? _v3Suite : _v2Suite, ss,
+        info: info);
     return _DerivedKey(ks.key, ks.baseNonce);
   }
   final Uint8List suiteInfo =

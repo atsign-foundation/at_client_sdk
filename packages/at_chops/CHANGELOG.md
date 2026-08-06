@@ -1,4 +1,16 @@
 ## 3.4.2
+- feat: `pqSeal` version `0x03` — RFC 9180 Base mode at the **pure
+  ML-KEM-1024** suite (KEM `0x0042`, KDF `0x0002` HKDF-SHA384, AEAD `0x0002`
+  AES-256-GCM). The no-hybrid option, and the only published HPKE suite for that
+  KEM at a 256-bit AEAD, so it comes with a third-party end-to-end vector rather
+  than a self-generated one. It is also the combination CNSA 2.0 names.
+  A separate version rather than a suite field on the wire because the KEM is
+  already fixed by the recipient advertised key — nothing can seal ML-KEM-1024
+  to a hybrid encapsulation key or the reverse — so the version byte names the
+  whole suite and an opener needs no other input.
+- feat: `HkdfSha384` and `HmacSha384`. RFC 5869 publishes vectors for SHA-256
+  and SHA-1 only, so this is attested through the HPKE `0x0042` key-schedule
+  vector end to end, including its 48-byte exporter secret.
 - feat: `MlKem1024PureDartAlgo` — pure ML-KEM-1024 (FIPS 203), the no-hybrid
   KEM option. It exists for its citation rather than its strength: used alone it
   is the only public-key encryption path here whose specification chain contains

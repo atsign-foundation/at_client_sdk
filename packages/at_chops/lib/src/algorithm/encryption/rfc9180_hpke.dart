@@ -72,6 +72,24 @@ class HpkeSuite {
     nh: 32,
   );
 
+  /// ML-KEM-1024 alone + HKDF-SHA384 + AES-256-GCM: the no-hybrid option.
+  ///
+  /// This is the only published HPKE suite for KEM `0x0042` at a 256-bit AEAD,
+  /// so it is the one that comes with a third-party end-to-end vector. It is
+  /// also the combination CNSA 2.0 names — ML-KEM-1024 with SHA-384 and
+  /// AES-256.
+  ///
+  /// `nh` is 48 here rather than 32, because the exporter secret is a full
+  /// KDF output and this KDF is SHA-384.
+  static const mlKem1024HkdfSha384Aes256Gcm = HpkeSuite(
+    kemId: 0x0042,
+    kdfId: 0x0002,
+    aeadId: 0x0002,
+    nk: 32,
+    nn: 12,
+    nh: 48,
+  );
+
   /// `suite_id = "HPKE" || I2OSP(kem_id, 2) || I2OSP(kdf_id, 2) ||
   /// I2OSP(aead_id, 2)` (RFC 9180 §5.1).
   Uint8List get suiteId => Uint8List.fromList([
@@ -110,11 +128,21 @@ Uint8List labeledExtract(
   Uint8List salt,
   String label,
   Uint8List ikm,
-) =>
-    HkdfSha256.extract(
-      _cat([_hpkeV1, suite.suiteId, label.codeUnits, ikm]),
-      salt: salt,
-    );
+) {
+  final labeled = _cat([_hpkeV1, suite.suiteId, label.codeUnits, ikm]);
+  return switch (suite.kdfId) {
+    _kdfHkdfSha256 => HkdfSha256.extract(labeled, salt: salt),
+    _kdfHkdfSha384 => HkdfSha384.extract(labeled, salt: salt),
+    _ => throw ArgumentError(
+        'no HPKE KDF for id 0x\${suite.kdfId.toRadixString(16)}'),
+  };
+}
+
+/// IANA HPKE KDF id `0x0001`.
+const int _kdfHkdfSha256 = 0x0001;
+
+/// IANA HPKE KDF id `0x0002`.
+const int _kdfHkdfSha384 = 0x0002;
 
 /// RFC 9180 §4: `LabeledExpand(prk, label, info, L)`.
 ///
@@ -127,18 +155,21 @@ Uint8List labeledExpand(
   String label,
   Uint8List info,
   int length,
-) =>
-    HkdfSha256.expand(
-      prk,
-      info: _cat([
-        [(length >> 8) & 0xff, length & 0xff],
-        _hpkeV1,
-        suite.suiteId,
-        label.codeUnits,
-        info,
-      ]),
-      length: length,
-    );
+) {
+  final labeled = _cat([
+    [(length >> 8) & 0xff, length & 0xff],
+    _hpkeV1,
+    suite.suiteId,
+    label.codeUnits,
+    info,
+  ]);
+  return switch (suite.kdfId) {
+    _kdfHkdfSha256 => HkdfSha256.expand(prk, info: labeled, length: length),
+    _kdfHkdfSha384 => HkdfSha384.expand(prk, info: labeled, length: length),
+    _ => throw ArgumentError(
+        'no HPKE KDF for id 0x\${suite.kdfId.toRadixString(16)}'),
+  };
+}
 
 /// RFC 9180 §5.1 `KeySchedule` in Base mode (`mode = 0x00`).
 ///

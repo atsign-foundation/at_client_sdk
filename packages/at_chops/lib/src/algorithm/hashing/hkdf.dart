@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart' show Hmac, sha256;
+import 'package:crypto/crypto.dart' show Hmac, sha256, sha384;
 
 /// HMAC-SHA256 (RFC 2104). The keyed-hash primitive HKDF is built on; also
 /// usable directly for MACs. Wraps `package:crypto` so consumers depend only
@@ -81,6 +81,52 @@ class HkdfSha256 {
     var counter = 1;
     while (out.length < length) {
       t = HmacSha256.compute(prk, Uint8List.fromList([...t, ...ctx, counter]));
+      out.addAll(t);
+      counter++;
+    }
+    return Uint8List.fromList(out.sublist(0, length));
+  }
+}
+
+/// HMAC-SHA384 (RFC 2104). The keyed-hash primitive [HkdfSha384] is built on.
+class HmacSha384 {
+  /// `HMAC-SHA384(key, data)` -> 48 raw bytes.
+  static Uint8List compute(Uint8List key, Uint8List data) =>
+      Uint8List.fromList(Hmac(sha384, key).convert(data).bytes);
+}
+
+/// HKDF-SHA384 (RFC 5869) — the same extract-then-expand construction as
+/// [HkdfSha256] at a 48-byte hash.
+///
+/// Present because it is the KDF in the only published HPKE suite for
+/// ML-KEM-1024 (IANA KDF id `0x0002`, alongside KEM `0x0042` and AES-256-GCM),
+/// and because CNSA 2.0 specifies SHA-384 alongside ML-KEM-1024. Using
+/// HKDF-SHA256 there would mean a suite with no third-party vector.
+///
+/// RFC 5869 publishes test vectors for SHA-256 and SHA-1 only, so this is
+/// attested instead by the HPKE working group's `0x0042` key-schedule vector,
+/// which exercises it end to end — see `test/rfc9180_hpke_test.dart`.
+class HkdfSha384 {
+  /// SHA-384 output size in bytes.
+  static const int hashLen = 48;
+
+  /// RFC 5869 Extract: `PRK = HMAC-SHA384(salt, ikm)`.
+  static Uint8List extract(Uint8List ikm, {Uint8List? salt}) =>
+      HmacSha384.compute(salt ?? Uint8List(0), ikm);
+
+  /// RFC 5869 Expand, truncated to [length].
+  static Uint8List expand(Uint8List prk,
+      {Uint8List? info, required int length}) {
+    if (length < 1 || length > 255 * hashLen) {
+      throw ArgumentError.value(length, 'length',
+          'HKDF-SHA384 length must be in 1..${255 * hashLen}');
+    }
+    final ctx = info ?? Uint8List(0);
+    final out = <int>[];
+    var t = <int>[];
+    var counter = 1;
+    while (out.length < length) {
+      t = HmacSha384.compute(prk, Uint8List.fromList([...t, ...ctx, counter]));
       out.addAll(t);
       counter++;
     }
