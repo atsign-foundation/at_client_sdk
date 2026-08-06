@@ -61,6 +61,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [45. The retrofit rows, and the five defects the first end-to-end run found (2026-08-05)](#45-the-retrofit-rows-and-the-five-defects-the-first-end-to-end-run-found-2026-08-05) — *B1/B2 green; the pull had no answerer, no gate and no correspondence check*
 - [46. RFC 9180, and where the design's version hatches are (2026-08-05)](#46-rfc-9180-and-where-the-designs-version-hatches-are-2026-08-05) — *pqSeal stays custom until D2; two signed payloads carry no version, and the signing root is unrewritable*
 - [47. B-2 lands: two levers, and the difference between excluding and revoking (2026-08-06)](#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06) — *nskey-keypair rotation vs content-key rotation; an exclusion is a courtesy and the revoke is the enforcement*
+- [48. The standards question reopened, and what the check found (2026-08-06)](#48-the-standards-question-reopened-and-what-the-check-found-2026-08-06) — *3 of 46.1's 4 premises are false; the vectors are the deliverable, not the migration; `.atKeys` salted its derivation with the passphrase*
 
 ---
 
@@ -3840,6 +3841,17 @@ This entry records the analysis. No code changed.
 
 ### 46.1 pqSeal stays custom, and D2 is when we revisit it
 
+> **AMENDED 2026-08-06.** This entry asked for its own homework — *"I have not
+> verified the current CFRG and IANA position; check it before D2"* — and the
+> check was done. **Three of the four premises below are false**, and the
+> "same bespoke code with a specification attached" line does not survive being
+> tested. The paragraphs are left as written, because a ledger that quietly
+> rewrites itself is worth less than one that shows its corrections; read
+> [48](#48-the-standards-question-reopened-and-what-the-check-found-2026-08-06)
+> for what is actually true, and do not re-derive a conclusion from the reasons
+> below. The one thing this entry got right and acted on is at the end of it:
+> the missing cross-language vector file, now built.
+
 Two escape hatches exist and both are real. `ver` is the envelope's first byte,
 checked before anything else, and an unknown value raises a typed
 `versionMismatch` rather than a garbled decrypt; `_suiteLabelFor(version)` then
@@ -3875,6 +3887,11 @@ encoding.
 
 One thing a standard would have given us free, and has not: a committed
 cross-language test-vector file that at_java conforms to. Not built.
+
+> **BUILT 2026-08-06** (`4ae02e319`) — `docs/projects/pq/seal-spec.md` and
+> `packages/at_chops/test/vectors/pq_seal_v1.json`. This sentence was the most
+> useful thing in the entry, and [48.5](#485-the-vectors-are-the-deliverable-not-the-migration)
+> argues it should have been the conclusion rather than a closing aside.
 
 ### 46.2 The versioning audit
 
@@ -4192,3 +4209,208 @@ service held exactly **one** progress listener after an atSign switch, using the
 count as a proxy for "the previous atSign's listeners were cleared". The SDK now
 registers one of its own, so the count stopped meaning that; the test names the
 listeners it expects and the one it does not.
+
+## 48. The standards question reopened, and what the check found (2026-08-06)
+
+Gary reopened [46](#46-rfc-9180-and-where-the-designs-version-hatches-are-2026-08-05)
+with a framing that changes the objective function rather than the facts:
+
+> ANYTHING non-standard that a bunch of non-cryptographers like me do will be
+> regarded dubiously; but at least if we're just implementing a standard, it can
+> be verified correct or not.
+
+So the test is not "is this secure" — assume competent review says it is — but
+"can somebody who does not trust us check it". Everything below is scored on
+that. The ruling is to move on all three of RFC 9180, the KEM citation and JWS,
+and to fix the `.atKeys` derivation ahead of GA.
+
+### 48.1 Three of 46.1's four premises are false
+
+46.1 asked for this check explicitly and it was overdue.
+
+| Premise in 46.1 | What the check found |
+|---|---|
+| "X-Wing needs an HPKE KEM id" | **False.** IANA registers it at `0x647A`, and has since draft-06. |
+| "…*and* library support in both Dart and Java" | **Half false.** at_java already pins Bouncy Castle 1.84, whose jar carries `org/bouncycastle/pqc/crypto/xwing/` *and* `org/bouncycastle/crypto/hpke/` with a pluggable-KEM constructor. Java writes no primitive code. Dart genuinely has nothing — that leg stands. |
+| "…hand-writing HPKE's key schedule in two languages" | **False.** One language, and about 70 lines. |
+| "D2 forces the question anyway" | **False as scoped.** D2-1 is the v1 epoch engine and explicitly not MLS; HPKE arrives at M6, behind M4 and M5, with no design written. "Wait for D2" is an indefinite deferral, not a short one. |
+
+The conclusion (defer the seal) may still stand on scheduling grounds. The
+stated reasons do not, which is worse than no entry — a future reader
+re-derives the wrong conclusion from them.
+
+### 48.2 "The same bespoke code with a specification attached" does not survive testing
+
+That line is 46.1's argument against moving, and it treats "code we wrote" as
+the unit of trust. The unit is the triple of *specification, vectors,
+implementation*, and adopting a standard replaces two of the three with
+somebody else's.
+
+Tested rather than argued, twice independently: RFC 9180 base mode written from
+the spec in about 70 lines reproduced the IETF HPKE working group's published
+`key`, `base_nonce` and `exporter_secret` on the first run, and a deliberate
+one-byte error in the mode field turned it red. Against that, both `pqSeal`
+"known-answer vectors" in `pq_hpke_test.dart` are goldens this implementation
+produced — the file says so at `:172-177` — so they can only ever prove we have
+not drifted from ourselves.
+
+The part of the original phrasing worth keeping: a specification **without**
+vectors really is close to nothing. The thing to buy is the vectors.
+
+### 48.3 The KEM was already conformant; the citation was the problem
+
+`draft-connolly-cfrg-xwing-kem` is an unadopted Independent Submission that
+**expires 2026-09-03**, and its Appendix C is titled "Test vectors # TODO:
+replace with test vectors that re-use ML-KEM, X25519 values". It was the
+weakest citation available for the construction, and OpenJDK has already
+refused an X-Wing contribution on exactly that ground.
+
+The bytes were never in doubt. Three independent IETF work streams — CFRG's
+hybrid-KEM drafts, the HPKE working group, and LAMPS composite KEM — converged
+on the same combiner shape, `draft-irtf-cfrg-concrete-hybrid-kems` section 4.2
+says its `MLKEM768-X25519` "is identical to the X-Wing construction", and the
+combiner has not changed since draft-05. at_chops' **unchanged** X-Wing
+reproduces the working group's published `0x647A` vectors across all three
+operations, in both backends. Landed in `24b997224`.
+
+Two things that must never be written down wrongly:
+
+- **The IANA row still reads "X-Wing"**, referencing draft-06. The rename to
+  `MLKEM768-X25519` is *requested* by `draft-ietf-hpke-pq` and has not been
+  effected. Claiming the registered name is `MLKEM768-X25519` is falsifiable in
+  one click by exactly the reviewer this exercise targets.
+- **Bouncy Castle 1.81 is a hard floor.** Releases 1.78 to 1.80 carry X-Wing but
+  feed the combiner label first rather than last, deriving a different shared
+  secret. Because X-Wing rejects implicitly, the symptom is an opaque AEAD
+  failure, not a key error.
+
+### 48.4 Not switching the KEM, and the FIPS story it cannot buy
+
+The enrollment key package is write-once, so old enrollments' advertised keys
+are frozen and senders must keep X-Wing whatever we choose. "Switch to
+X25519MLKEM768" and "switch to plain ML-KEM-768" are both really "support a
+second KEM", at the price of a migration that retires nothing.
+
+And migrating the seal to RFC 9180 does **not** open a FIPS gate: X25519 key
+agreement has no approved path in the SP 800-56 series, so X-Wing is
+unclaimable under FIPS whatever sits on top of it. If a FIPS-facing buyer ever
+appears the answer is a second suite selected by provider id, and
+`MLKEM768-P256` is already registered at HPKE `0x0050`. Do not let the RFC 9180
+question be sold on a story it cannot deliver.
+
+CNSA 2.0 is deliberately absent from this entry. `media.defense.gov` returns
+HTTP 403 to automated fetching for both the FAQ and the algorithms PDF, so
+every CNSA claim available is secondary. Recorded so nobody re-burns the
+attempt, and so no CNSA sentence goes into this ledger as a quotation.
+
+### 48.5 The vectors are the deliverable, not the migration
+
+A migration buys a standard's *name*; a vector file buys a runnable *check*.
+The asymmetry is decisive here because our own tree has already run the
+experiment. The tagged `_apsk` shape **carried a version field** — it did
+everything [46.2](#462-the-versioning-audit)'s table asks for — and it still
+forked across two atServer implementations inside a week, with the divergent
+side's own documentation asserting a conformance that was false. A version
+field did not catch it. A specification would not have, since the specification
+was a Dart function. An audit is structurally silent on it, because an audit
+attests one implementation at one point in time. A vector file turns red on the
+next build.
+
+So the evidence layer went first, and all of it is landed:
+
+| What | Where |
+|---|---|
+| X-Wing against the HPKE WG's `0x647A` vectors, 3 operations, both backends | `24b997224` |
+| ML-DSA-65 against 70 NIST ACVP vectors, including NIST's own negative cases | `e11585254` |
+| X25519 against RFC 7748 sections 5.2 and 6.1 | `e11585254` |
+| `atPQv1-base` byte-level spec + 95 conformance rows | `4ae02e319` |
+
+ML-DSA-65 is worth calling out: it authenticates every PQ enrollment and had
+**no** conformance evidence at all, only length and round-trip assertions.
+
+`seal-spec.md` closes the gap 46.1 named and left open. It was validated the
+only way a specification can be — reimplementing its key schedule from the
+document text alone, with a different HMAC, matching all 15 vectors. A
+specification nobody has built from is a claim, not a document.
+
+### 48.6 The `.atKeys` derivation was worse than anything in the question
+
+Nobody in the original three-way question was looking at the file that holds
+every key. `Argon2idHashingAlgo` passed `nonce: password.codeUnits` — **the
+passphrase was its own salt**. Derivation was deterministic, so two users who
+chose the same passphrase got the same AES key and one precomputation table
+served all of them. Around it: parameters below the OWASP floor, a UTF-16 salt
+where every other hashing arm encodes UTF-8, an unauthenticated CTR cipher, and
+a reader that took its KDF from the file and accepted `md5`.
+
+Ruled urgent and landed ahead of GA in `cc4ac7026`. Version 1 envelopes carry
+`v`, a random salt and a `kdfParams` object at OWASP's floor; envelopes without
+`v` keep the old derivation exactly, including the UTF-16 salt, because the
+passphrase belongs to the user and nothing here can rewrite those files. The
+converse is a real break and is called out: a file written now does not open in
+an older client.
+
+Measured, warmed to exclude JIT: 68.5ms against the old configuration's 18.4ms,
+about 3.7x the work per guess. The first measurement said the change was free
+and was wrong — an unwarmed run reads 74ms old against 70ms new.
+
+### 48.7 Two corrections to findings, both mine
+
+Both are recorded because the failure mode is the point of the whole exercise.
+
+**The `hashingAlgo` hole was overstated.** It was reported, and I repeated it,
+as algorithm-confusion letting an unsigned field select MD5. `RsaSigningAlgo`
+implements sha256 and sha512 only and refuses everything else at *both* ends,
+so an MD5-signed envelope was never constructible. The real defect is narrower:
+`byName` threw `ArgumentError` for an unknown name and a type error for a
+missing field, so malformed envelopes escaped past every
+`on AtSigningVerificationException` guard. Fixed in `3bba6142a`; the allowlist
+is defence in depth, and the commit says so.
+
+**Two of my own tests had collapsed arms.** The first `.atKeys` suite passed
+all 15 with the salt entirely ignored — the envelope writes a `salt` field that
+does nothing and every round trip agrees, because both sides ignore it equally.
+Only a derivation-level test sees through it. And the first `hashingAlgo` tests
+passed before *and* after the fix, because relabelling a sha256 envelope as md5
+fails on signature mismatch either way. Reading `rsa.dart` to build a real
+differential is what surfaced the overstatement above.
+
+Settled while there, because it decides the JWS `alg` mapping: **no producer
+anywhere passes a non-default `hashingAlgo`**. Every envelope in the system is
+RSA+SHA-256, which is JOSE `RS256` exactly.
+
+### 48.8 What this entry does not rule
+
+Per the rule that a ledger ruling names a mechanism only once its differential
+test is green, the JWS and RFC 9180 migrations are **decided but not landed**,
+and this entry records the decision and the constraints rather than a
+mechanism:
+
+- **JWS Flattened JSON Serialization, `b64=true`.** RFC 9964 (Proposed
+  Standard, May 2026) registers `ML-DSA-65` as a JOSE `alg`, and our signature
+  is already conformant to it — pure ML-DSA, empty context, now pinned by test.
+  The RSA arm already emits exactly the `RS256` bytes. JCS is **rejected**:
+  there is no RFC 8785 package on pub.dev, so it means hand-writing an
+  ECMAScript-number-formatting canonicaliser, which is the thing we are trying
+  to remove. `canonical_json` on pub.dev is a trap — it is OLPC Canonical JSON,
+  Google-published, and silently divergent. `b64=false` is rejected too: it
+  does not deliver the readability that is its only appeal, and its mandatory
+  `crit` forfeits off-the-shelf verification.
+- **RFC 9180 as `ver = 0x02`, at ChaCha20-Poly1305.** Ruled by Gary over
+  AES-256-GCM because the HPKE WG's published `0x647A` vectors are
+  ChaCha-only — there is no AES-GCM row at this KEM — so ChaCha gives an exact
+  published KAT with no audit footnote. `aad` is unused at every production
+  call site and both AEADs are Nk=32/Nn=12, so it was a free parameter.
+- Two blockers must clear first: `_envelopeVersion` is a global const with **no
+  write-side version selector**, and `suites` on the key package
+  ([plan 14.4](implementation-plan.md#144-a-suites-list-on-the-key-package)) is
+  what makes the move a sender-side decision rather than a fleet-wide
+  readers-first migration.
+- The **enrollment record's `metadata.keyPackage` is a signed envelope written
+  only by `enroll:request` and never afterwards**, so its wrapper shape is a
+  one-way door alongside the signing root. 46 does not list it; it should.
+- NoPorts carries its own copy of the envelope shape in
+  `noports_core/lib/src/common/validation_utils.dart`. It does not import
+  at_client's functions, so a migration here does not break it — but "nobody
+  has this shape deployed" is wrong, and it is a separately-owned second
+  migration to name rather than discover.

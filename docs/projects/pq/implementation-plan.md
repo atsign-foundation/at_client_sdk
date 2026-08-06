@@ -1467,10 +1467,18 @@ mechanism, and the TLS session already secures the channel.
 
 Small, real, and homeless: none is big enough to be a project, and each would
 otherwise live only inside a `decisions.md` section nobody greps. Ruled in
-[decisions 46](decisions.md#46-rfc-9180-and-where-the-designs-version-hatches-are-2026-08-05);
+[decisions 46](decisions.md#46-rfc-9180-and-where-the-designs-version-hatches-are-2026-08-05)
+and revisited in
+[decisions 48](decisions.md#48-the-standards-question-reopened-and-what-the-check-found-2026-08-06);
 tracked here so they are visible from the plan.
 
-**Only the first has a deadline, and the deadline is not a date.**
+**Two have deadlines, and neither is a date.** 14.1 freezes the first time a
+signing root lands on an atSign nobody recycles. 14.6 freezes per enrollment,
+the first time one is created that matters — and 14.3 has to be settled before
+that, because the shape it rules is the one 14.6 freezes.
+
+The rest are cheap while at_java has no PQ code and expensive afterwards, which
+as of 2026-08-06 has not started.
 
 ### 14.1 The signing root's `keys[]` shape — DEADLINE: the first root we keep
 
@@ -1509,10 +1517,60 @@ first of the three.
 
 ### 14.3 JWS or JCS for the signed envelope
 
-Whether the envelope construction moves to a standard. Waits behind 14.2,
-since the version field is what makes the choice reversible.
+**RULED 2026-08-06 → JWS Flattened JSON Serialization, `b64=true`**
+([decisions 48.8](decisions.md#488-what-this-entry-does-not-rule)). Still
+waits behind 14.2, since the version field is what makes the choice reversible.
+
+Why it became the cheapest standards adoption in the design rather than the
+most marginal: RFC 9964 (Proposed Standard, May 2026) registers `ML-DSA-65` as
+an IANA JOSE `alg`, our ML-DSA is already conformant to it (pure, empty
+context, now pinned by test), and the RSA arm already emits exactly the
+`RS256` bytes. Adopting it re-labels a container around cryptography that
+already conforms. It also signs `alg` and `enrollmentId`, which sit outside
+the signature today.
+
+JCS is rejected: there is no RFC 8785 package on pub.dev, so it means
+hand-writing an ECMAScript-number-formatting canonicaliser — the exact risk we
+are removing. `canonical_json` on pub.dev is a trap, being OLPC Canonical JSON
+under a Google publisher badge. `b64=false` is rejected too: it does not
+deliver the `llookup` readability that is its only appeal, and its mandatory
+`crit` forfeits off-the-shelf verification.
 
 ### 14.4 A `suites` list on the key package
 
 Cheap now for the same reason as 14.2, and safe to defer if we accept
-release-ordering agility instead.
+release-ordering agility instead — **except** that it is now a prerequisite
+for the RFC 9180 move at `ver = 0x02`, since it is what makes that a
+sender-side decision rather than a fleet-wide readers-upgrade-first migration.
+
+### 14.5 A write-side envelope version selector in at_chops
+
+`_envelopeVersion` is a global const in `pq_hpke.dart` with no per-call
+override, so at_chops cannot emit `0x01` to old readers and `0x02` to new ones.
+The read side already dispatches on the version byte before parsing anything
+else; only the write side is missing. Blocks the RFC 9180 move.
+
+### 14.6 The enrollment record's `metadata.keyPackage` is a one-way door
+
+It is a signed envelope, and it is written only by `enroll:request` and never
+afterwards — `enroll_verb_handler.dart` persists `enrollParams.metadata` in the
+new-enrollment branch alone. A reader that cannot parse a frozen wrapper
+returns `KeyPackageStatus.unsupported`, and that enrollment can then never
+receive a sealed conveyance; the only remedy is to delete and re-enrol the
+device.
+
+So it belongs on the one-way-door list beside the signing root
+([14.1](#141-the-signing-roots-keys-shape--deadline-the-first-root-we-keep)),
+and 14.3's wrapper shape has to be settled before enrolments that matter are
+created. [decisions 46](decisions.md#46-rfc-9180-and-where-the-designs-version-hatches-are-2026-08-05)
+does not list it.
+
+### 14.7 NoPorts carries its own copy of the envelope shape
+
+`sshnoports/packages/dart/noports_core/lib/src/common/validation_utils.dart`
+produces the same `{payload, signature, hashingAlgo, signingAlgo}` shape with
+the same re-encoding behaviour. It does not import at_client's functions — it
+signs with the encryption keypair and fetches `getRemotePK` rather than
+`_apsk` — so a migration here does not break it. But "nobody has this shape
+deployed" is wrong, and if the pitch becomes "our envelopes are RFC 7515" then
+NoPorts is a separately-owned second migration to name rather than discover.
