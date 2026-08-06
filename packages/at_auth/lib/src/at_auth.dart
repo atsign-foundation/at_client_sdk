@@ -1,5 +1,5 @@
 import 'package:at_auth/src/at_auth_impl.dart';
-import 'package:at_auth/src/auth/apkam_signing.dart';
+import 'package:at_auth/src/auth/apkam_signing_scheme.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
@@ -32,20 +32,27 @@ abstract interface class AtAuth {
 
   /// The APKAM signing scheme every connection this instance builds will
   /// authenticate with.
-  ApkamSigning get signing;
+  ApkamSigningScheme get signing;
 
   /// Creates an [AtAuth].
   ///
-  /// No connection is supplied: at_lookup binds its PKAM key at construction,
-  /// so the connection cannot exist until the keys have been read or minted.
-  /// Each call builds its own, signing with [signing] — the caller's choice,
-  /// not something inferred from the keys, since a keyset minted by
-  /// [AtKeys.generate] carries both a classical and a post-quantum APKAM key.
+  /// The type of authentication is controlled by [signing]: it selects both the
+  /// algorithm the PKAM handshake signs with and which APKAM private key is read
+  /// out of the keys. That is the caller's choice, not something inferred from
+  /// the material — [AtKeys.generate] mints both a classical and a post-quantum
+  /// APKAM key, so a keyset cannot express which one an atServer expects.
+  ///
+  /// A connection cannot be supplied: at_lookup binds its PKAM key at
+  /// construction, so it cannot exist until the keys have been read or minted,
+  /// and an activation needs a second one signing with a key that did not exist
+  /// when the first was built. [atLookUpFactory] takes over building all of
+  /// them; left null, they are built according to [signing].
   factory AtAuth.create({
     RetryOptions? options,
-    ApkamSigning signing = ApkamSigning.legacy,
+    ApkamSigningScheme signing = ApkamSigningScheme.legacy,
     CramAuthenticator? cramAuthenticator,
     PkamAuthenticator? pkamAuthenticator,
+    AtLookUpFactory? atLookUpFactory,
     AtEnrollment Function(AtLookUp)? enrollmentFactory,
   }) {
     return AtAuthImpl(
@@ -53,6 +60,7 @@ abstract interface class AtAuth {
       signing: signing,
       cramAuthenticator: cramAuthenticator,
       pkamAuthenticator: pkamAuthenticator,
+      atLookUpFactory: atLookUpFactory,
       enrollmentFactory: enrollmentFactory,
     );
   }
@@ -60,8 +68,7 @@ abstract interface class AtAuth {
   /// Authenticates an atsign to its atServer with PKAM.
   ///
   /// The keys always come from [atKeysIo] — an [AtKeysIo] implementation over a
-  /// file, keychain, or memory. To authenticate with keys you already hold, put
-  /// them in an [InMemoryAtKeysIo].
+  /// file, keychain, or memory.
   ///
   /// [enrollmentId] selects the enrollment to authenticate as; when null the
   /// enrollmentId stored in the keys is used.

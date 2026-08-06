@@ -12,7 +12,7 @@ void main() {
     test('builds a CRAM-only connection when there are no keys', () {
       // Activation starts before any key material exists. The connection still
       // has to be constructible — it just cannot PKAM.
-      for (final signing in ApkamSigning.values) {
+      for (final signing in ApkamSigningScheme.values) {
         expect(() => buildAtLookUp(signing, alice, rootDomain, null),
             returnsNormally,
             reason: '$signing');
@@ -22,8 +22,8 @@ void main() {
     test('carries the enrollmentId onto the connection', () {
       // at_lookup 4 takes enrollmentId at construction and exposes it read-only;
       // it is the default the pkam verb is stamped with.
-      final lookUp = buildAtLookUp(
-          ApkamSigning.legacy, alice, rootDomain, legacyAtKeys(atsign: alice),
+      final lookUp = buildAtLookUp(ApkamSigningScheme.legacy, alice, rootDomain,
+          legacyAtKeys(atsign: alice),
           enrollmentId: 'enroll-42');
 
       expect(lookUp.enrollmentId, 'enroll-42');
@@ -31,7 +31,7 @@ void main() {
 
     test('legacy signs with the RSA apkamPrivateKey', () {
       expect(
-          () => buildAtLookUp(ApkamSigning.legacy, alice, rootDomain,
+          () => buildAtLookUp(ApkamSigningScheme.legacy, alice, rootDomain,
               legacyAtKeys(atsign: alice)),
           returnsNormally);
     });
@@ -42,7 +42,7 @@ void main() {
 
       expect(
           () => buildAtLookUp(
-              ApkamSigning.postQuantum, alice, rootDomain, pqOnly),
+              ApkamSigningScheme.postQuantum, alice, rootDomain, pqOnly),
           returnsNormally);
     });
 
@@ -52,20 +52,21 @@ void main() {
       // back would authenticate as an identity the caller did not ask for.
       final pqOnly = await AtKeys.generate(alice, mintLegacy: false);
       expect(
-          () => buildAtLookUp(ApkamSigning.legacy, alice, rootDomain, pqOnly),
+          () => buildAtLookUp(
+              ApkamSigningScheme.legacy, alice, rootDomain, pqOnly),
           throwsA(isA<AtAuthenticationException>()));
 
       final legacyOnly = legacyAtKeys(atsign: alice);
       expect(
           () => buildAtLookUp(
-              ApkamSigning.postQuantum, alice, rootDomain, legacyOnly),
+              ApkamSigningScheme.postQuantum, alice, rootDomain, legacyOnly),
           throwsA(isA<AtAuthenticationException>()));
     });
 
     test('a keyset with no APKAM private key at all is rejected', () {
       expect(
-          () => buildAtLookUp(
-              ApkamSigning.legacy, alice, rootDomain, AtKeys(atsign: alice)),
+          () => buildAtLookUp(ApkamSigningScheme.legacy, alice, rootDomain,
+              AtKeys(atsign: alice)),
           throwsA(isA<AtAuthenticationException>()));
     });
 
@@ -74,7 +75,7 @@ void main() {
       // inferred from the material — both answers would be defensible.
       final both = await AtKeys.generate(alice);
 
-      for (final signing in ApkamSigning.values) {
+      for (final signing in ApkamSigningScheme.values) {
         expect(() => buildAtLookUp(signing, alice, rootDomain, both),
             returnsNormally,
             reason: '$signing');
@@ -82,14 +83,47 @@ void main() {
     });
   });
 
+  group('ApkamSigningScheme.lookUpFactory', () {
+    // The fallback when a caller injects no AtLookUpFactory. Asserted here
+    // rather than through authenticate(), which would need a network.
+    test('applies its own scheme to the keys it is handed', () async {
+      final legacyOnly = legacyAtKeys(atsign: alice);
+      final pqOnly = await AtKeys.generate(alice, mintLegacy: false);
+
+      expect(
+          () => ApkamSigningScheme.legacy
+              .lookUpFactory(alice, rootDomain, legacyOnly),
+          returnsNormally);
+      expect(
+          () => ApkamSigningScheme.postQuantum
+              .lookUpFactory(alice, rootDomain, pqOnly),
+          returnsNormally);
+
+      // Same rejection as buildAtLookUp — the factory is that function curried
+      // with the scheme, not a laxer path to a connection.
+      expect(
+          () => ApkamSigningScheme.legacy
+              .lookUpFactory(alice, rootDomain, pqOnly),
+          throwsA(isA<AtAuthenticationException>()));
+    });
+
+    test('passes the enrollmentId through', () {
+      final lookUp = ApkamSigningScheme.legacy.lookUpFactory(
+          alice, rootDomain, legacyAtKeys(atsign: alice),
+          enrollmentId: 'enroll-42');
+
+      expect(lookUp.enrollmentId, 'enroll-42');
+    });
+  });
+
   group('AtAuth.create', () {
     test('defaults to the classical scheme every atServer verifies today', () {
-      expect(AtAuth.create().signing, ApkamSigning.legacy);
+      expect(AtAuth.create().signing, ApkamSigningScheme.legacy);
     });
 
     test('takes the scheme from the caller', () {
-      expect(AtAuth.create(signing: ApkamSigning.postQuantum).signing,
-          ApkamSigning.postQuantum);
+      expect(AtAuth.create(signing: ApkamSigningScheme.postQuantum).signing,
+          ApkamSigningScheme.postQuantum);
     });
   });
 }

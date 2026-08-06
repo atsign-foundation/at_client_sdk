@@ -72,9 +72,9 @@ void main() {
   /// Fresh mocks plus the stubs every test in either group needs: a reachable
   /// atServer of [atStatus] and a closeable AtLookup.
   ///
-  /// [AtAuthImpl.lookUpOverride] is the test seam: at_auth builds its own
-  /// AtLookUp from the keys it reads, so a test substitutes the construction
-  /// rather than injecting a connection.
+  /// `atLookUpFactory` is the seam: at_auth builds its own AtLookUp from the
+  /// keys it reads, so a test substitutes the construction rather than injecting
+  /// a connection.
   void buildAtAuth({required AtStatus atStatus, RetryOptions? retryOptions}) {
     mockAtLookUp = MockAtLookUp();
     mockPkamAuthenticator = MockPkamAuthenticator();
@@ -90,11 +90,11 @@ void main() {
       pkamAuthenticator: mockPkamAuthenticator,
       atServerStatus: mockAtServerStatus,
       enrollmentFactory: (_) => mockAtEnrollment,
+      atLookUpFactory: (_, __, keys, {enrollmentId}) {
+        builtLookUps.add((keys: keys, enrollmentId: enrollmentId));
+        return mockAtLookUp;
+      },
     );
-    atAuth.lookUpOverride = (keys, enrollmentId) {
-      builtLookUps.add((keys: keys, enrollmentId: enrollmentId));
-      return mockAtLookUp;
-    };
     atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
     atAuth.probeSocket = (host, port) async {};
   }

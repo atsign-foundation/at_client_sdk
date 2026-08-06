@@ -4,7 +4,7 @@ library;
 export 'src/at_auth.dart';
 // The options AtAuth.create takes: the APKAM signing scheme, the two
 // authenticators, and the retry policy.
-export 'src/auth/apkam_signing.dart';
+export 'src/auth/apkam_signing_scheme.dart';
 export 'src/auth/cram_authenticator.dart';
 export 'src/auth/pkam_authenticator.dart';
 export 'src/auth/retry_options.dart';

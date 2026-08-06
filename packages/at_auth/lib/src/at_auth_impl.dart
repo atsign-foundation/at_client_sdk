@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
-import 'package:at_auth/src/auth/apkam_signing.dart';
+import 'package:at_auth/src/auth/apkam_signing_scheme.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
@@ -62,7 +62,7 @@ class AtAuthImpl implements AtAuth {
   PkamAuthenticator? pkamAuthenticator;
 
   @override
-  final ApkamSigning signing;
+  final ApkamSigningScheme signing;
 
   /// Builds the [AtEnrollment] for a connection. Deferred because enrollment
   /// needs a connection, and the connection needs the keys.
@@ -80,11 +80,10 @@ class AtAuthImpl implements AtAuth {
   @visibleForTesting
   Future<void> Function(String host, int port)? probeSocket;
 
-  /// Substitutes the connection every call would otherwise build, so a test can
-  /// exercise the flow without a network. Production code leaves this null and
-  /// goes through [buildAtLookUp].
-  @visibleForTesting
-  AtLookUp Function(AtKeys? keys, String? enrollmentId)? lookUpOverride;
+  /// Builds every connection this instance authenticates on. at_lookup binds its
+  /// PKAM key at construction, so a connection cannot exist until the keys have
+  /// been read or minted — which is why this is a factory and not a connection.
+  final AtLookUpFactory _lookUpFactory;
 
   AtLookUp? _atLookUp;
 
@@ -93,22 +92,25 @@ class AtAuthImpl implements AtAuth {
 
   AtAuthImpl({
     required this.retryOptions,
-    this.signing = ApkamSigning.legacy,
+    this.signing = ApkamSigningScheme.legacy,
     this.cramAuthenticator,
     this.pkamAuthenticator,
     this.atServerStatus,
     AtEnrollment Function(AtLookUp)? enrollmentFactory,
-  }) : enrollmentFactory = enrollmentFactory ?? AtEnrollment.create;
+    AtLookUpFactory? atLookUpFactory,
+  })  : enrollmentFactory = enrollmentFactory ?? AtEnrollment.create,
+        _lookUpFactory = atLookUpFactory ?? signing.lookUpFactory;
 
+  /// The single construction point: every connection an operation here runs over
+  /// comes from here, so a caller substituting [_lookUpFactory] substitutes all
+  /// of them.
   AtLookUp _lookUpFor(
     Atsign atsign,
     AtRootDomain rootDomain,
     AtKeys? keys,
     String? enrollmentId,
   ) =>
-      lookUpOverride?.call(keys, enrollmentId) ??
-      buildAtLookUp(signing, atsign, rootDomain, keys,
-          enrollmentId: enrollmentId);
+      _lookUpFactory(atsign, rootDomain, keys, enrollmentId: enrollmentId);
 
   /// Authenticate using PKAM.
   ///
@@ -224,6 +226,7 @@ class AtAuthImpl implements AtAuth {
     AtRootDomain rootDomain,
     AtKeysIo atKeysIo,
     String cramSecret, {
+    bool mintLegacy = true,
     bool autoCompleteActivation = true,
     String appName = FirstEnrollmentRequest.defaultAppName,
     String deviceName = FirstEnrollmentRequest.defaultDeviceName,
@@ -275,7 +278,7 @@ class AtAuthImpl implements AtAuth {
       );
 
       //2. generate key pairs
-      AtKeys atKeys = await AtKeys.generate(atsign);
+      AtKeys atKeys = await AtKeys.generate(atsign, mintLegacy: mintLegacy);
 
       //3. send onboarding enrollment over the CRAM connection, which is what
       // makes the atServer auto-approve it

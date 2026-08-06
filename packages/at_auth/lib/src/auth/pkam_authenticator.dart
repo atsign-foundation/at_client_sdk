@@ -7,7 +7,7 @@ class PkamAuthenticator {
   /// Authenticates [atsign] over [atLookup] using PKAM.
   ///
   /// The signing key and algorithm are bound into [atLookup] at construction —
-  /// see `buildAtLookUp`, which applies the caller's `ApkamSigning` choice — so
+  /// see `buildAtLookUp`, which applies the caller's `ApkamSigningScheme` choice — so
   /// nothing is passed here.
   ///
   /// Completes normally on success and throws [UnAuthenticatedException] on any

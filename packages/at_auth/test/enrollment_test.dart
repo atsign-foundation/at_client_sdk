@@ -203,11 +203,13 @@ void main() {
           'data:${jsonEncode(await serverHeldKey(selfEncryptionKey, apkamSymmetricKey))}');
     });
 
-    AtEnrollmentImpl buildEnrollment() => AtEnrollmentImpl(requesterLookUp)
-      ..lookUpOverride = (keys, enrollmentId) {
-        factoryKeys.add(keys);
-        return enrollmentLookUp;
-      };
+    AtEnrollmentImpl buildEnrollment() => AtEnrollmentImpl(
+          requesterLookUp,
+          atLookUpFactory: (_, __, keys, {enrollmentId}) {
+            factoryKeys.add(keys);
+            return enrollmentLookUp;
+          },
+        );
 
     test('PKAMs on its own connection, built from the pending APKAM keys',
         () async {

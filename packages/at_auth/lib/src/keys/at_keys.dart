@@ -60,10 +60,10 @@ final class AtKeys {
   ///
   /// **`mintLegacy: false` is not yet proven end to end.** A post-quantum-only
   /// keyset authenticates as far as this package is concerned — under
-  /// `ApkamSigning.postQuantum` it signs PKAM with ML-DSA-65 — but whether the
+  /// `ApkamSigningScheme.postQuantum` it signs PKAM with ML-DSA-65 — but whether the
   /// atServer verifies that signature is a server-side question, not settled
   /// here. It also cannot authenticate at all under the default
-  /// `ApkamSigning.legacy`. Leave [mintLegacy] at its default unless you are
+  /// `ApkamSigningScheme.legacy`. Leave [mintLegacy] at its default unless you are
   /// specifically exercising the PQ material.
   static Future<AtKeys> generate(
     Atsign atsign, {
@@ -309,7 +309,7 @@ final class AtKeys {
 
   /// Deprecated in favour of typed material ([AtKeysMaterial] via [addKey] /
   /// [getKey]), but **still required** and therefore not removable yet: PKAM
-  /// signs with [apkamPrivateKey] under the default `ApkamSigning.legacy`,
+  /// signs with [apkamPrivateKey] under the default `ApkamSigningScheme.legacy`,
   /// `FileAtKeysIo`
   /// self-encrypts four of these fields at rest, and enrollment reads
   /// [apkamSymmetricKey] / [defaultEncryptionPrivateKey] /

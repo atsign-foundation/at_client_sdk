@@ -47,15 +47,28 @@ throwing is the success signal**, and failure throws
 - **`AtAuth` builds its own `AtLookUp`; `AtAuth.create` no longer takes one.**
   at_lookup 4.0.0 binds its PKAM key and signing algorithm at construction and
   keeps them immutable, so the connection cannot exist until the keys have been
-  read or minted — which means authentication has to own that step.
-  `atEnrollmentBase:` likewise becomes `enrollmentFactory:`.
+  read or minted — which means authentication has to own that step. An
+  activation needs a second connection besides, signing with a key that did not
+  exist when the first was built. `atEnrollmentBase:` likewise becomes
+  `enrollmentFactory:`.
+- **`atLookUpFactory:` on `AtAuth.create` and `AtEnrollment.create` takes over
+  that construction.** A single `AtLookUpFactory` —
+  `AtLookUp Function(Atsign, AtRootDomain, AtKeys?, {String? enrollmentId})` —
+  builds every connection at_auth authenticates on, so substituting it
+  substitutes all of them. Left null it defaults to
+  `ApkamSigningScheme.lookUpFactory`, which is `buildAtLookUp` curried with the
+  chosen scheme. A connection the factory returns belongs to at_auth, which closes it
+  when the operation fails or finishes with it.
+
+  This replaces the `AtAuthImpl.lookUpOverride` and
+  `AtEnrollmentImpl.lookUpOverride` `@visibleForTesting` fields, both removed.
 - **The APKAM signing scheme is a constructor option, not something inferred
-  from key material.** `AtAuth.create({ApkamSigning signing})` and
+  from key material.** `AtAuth.create({ApkamSigningScheme signing})` and
   `AtEnrollment.create(atLookUp, {signing})`, defaulting to
-  `ApkamSigning.legacy` (RSA-2048/SHA-256, `AtLookUp.legacy`);
-  `ApkamSigning.postQuantum` selects ML-DSA-65 (`AtLookUp.pq`). `AtKeys.generate`
-  mints both a classical and a post-quantum APKAM key, so the material cannot
-  express which one an atServer expects — that is a property of the deployment,
+  `ApkamSigningScheme.legacy` (RSA-2048/SHA-256, `AtLookUp.legacy`);
+  `ApkamSigningScheme.postQuantum` selects ML-DSA-65 (`AtLookUp.pq`).
+  `AtKeys.generate` mints both a classical and a post-quantum APKAM key, so the
+  material cannot express which one an atServer expects — that is a property of the deployment,
   and the application owns it. A keyset that cannot satisfy the chosen scheme
   throws `AtAuthenticationException` rather than falling back to the other one,
   which would authenticate as an identity the caller did not ask for.
@@ -97,7 +110,7 @@ throwing is the success signal**, and failure throws
   `CramAuthenticator` no longer downcasts to `AtLookupImpl`, which at_lookup 4
   does not export.
 - **`RetryOptions`, `CramAuthenticator`, `PkamAuthenticator`, `KeyIds`,
-  `ApkamSigning` and `buildAtLookUp` are now exported** from
+  `ApkamSigningScheme` and `buildAtLookUp` are now exported** from
   `package:at_auth/at_auth.dart`. Most were public parameter and field types
   that consumers could not name.
 - **`AtKeysMaterial.bytes` is a `Uint8List`, not an `AtBytes`.** base64 is a
@@ -164,12 +177,12 @@ is untouched by all of it — it stays readable *and* writable, and the six lega
   too unless `mintLegacy: false`). This is the onboarding key-minting entry
   point, now a static factory on the type it returns rather than a separate
   helper class. A `mintLegacy: false` keyset can authenticate under
-  `ApkamSigning.postQuantum`, but whether the atServer verifies an ML-DSA-65
-  signature is not settled here — leave the default unless you are exercising
+  `ApkamSigningScheme.postQuantum`, but whether the atServer verifies an
+  ML-DSA-65 signature is not settled here — leave the default unless you are exercising
   the PQ material.
-- `ApkamSigning` and `buildAtLookUp(...)` — the signing scheme a caller selects
-  and the connection builder that applies it, pulling the matching key from an
-  `AtKeys`.
+- `ApkamSigningScheme` and `buildAtLookUp(...)` — the signing scheme a caller
+  selects and the connection builder that applies it, pulling the matching key
+  from an `AtKeys`.
 
 ### Migration
 

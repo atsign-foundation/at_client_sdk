@@ -59,7 +59,9 @@ void main(List<String> args) async {
     // Once the approving app approves, waitForApproval completes those keys with
     // the material held by the atServer and writes them through atKeysIo. It
     // PKAMs on its own connection, built from the APKAM keypair minted above —
-    // atLookUp was constructed before that keypair existed.
+    // atLookUp was constructed before that keypair existed. Pass
+    // `atLookUpFactory:` to AtEnrollment.create to build that connection
+    // yourself.
     await atEnrollmentBase.waitForApproval(
         atsign, rootDomain, atKeysIo, pending);
     print('approved: keys written for $atsign');

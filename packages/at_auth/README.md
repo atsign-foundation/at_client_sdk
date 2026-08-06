@@ -35,16 +35,31 @@ cannot exist until the keys have been read or minted.
 Which scheme it signs with is the **caller's** choice, passed once:
 
 ```dart
-AtAuth.create(signing: ApkamSigning.postQuantum);   // default: ApkamSigning.legacy
+// default: ApkamSigningScheme.legacy
+AtAuth.create(signing: ApkamSigningScheme.postQuantum);
 ```
 
-`ApkamSigning.legacy` is RSA-2048/SHA-256 (`AtLookUp.legacy`) and
-`ApkamSigning.postQuantum` is ML-DSA-65 (`AtLookUp.pq`). It is deliberately not
-inferred from the keys: `AtKeys.generate` mints both a classical and a
-post-quantum APKAM key, so the material cannot express which one an atServer
-expects — that is a property of the deployment. A keyset that cannot satisfy the
-chosen scheme is an error, not a silent fall back to the other one.
+`ApkamSigningScheme.legacy` is RSA-2048/SHA-256 (`AtLookUp.legacy`) and
+`ApkamSigningScheme.postQuantum` is ML-DSA-65 (`AtLookUp.pq`). It is
+deliberately not inferred from the keys: `AtKeys.generate` mints both a
+classical and a post-quantum APKAM key, so the material cannot express which one
+an atServer expects — that is a property of the deployment. A keyset that cannot
+satisfy the chosen scheme is an error, not a silent fall back to the other one.
 `AtEnrollment.create(atLookUp, signing:)` takes the same option.
+
+`signing` picks the **default** way connections are built. To build them
+yourself — a custom `SecureSocketConfig`, a proxy, a substitute in a test — pass
+an `AtLookUpFactory` instead, and it is used for every connection at_auth
+authenticates on:
+
+```dart
+AtAuth.create(
+  atLookUpFactory: (atsign, rootDomain, keys, {enrollmentId}) => /* ... */,
+);
+```
+
+at_auth closes the connections the factory hands it, so don't return one the
+caller still needs.
 
 ## The atSign lifecycle
 

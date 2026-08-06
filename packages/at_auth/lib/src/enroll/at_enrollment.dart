@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:at_auth/src/auth/apkam_signing.dart';
+import 'package:at_auth/src/auth/apkam_signing_scheme.dart';
 import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
@@ -26,13 +26,25 @@ abstract class AtEnrollment {
   /// authenticated.
   AtLookUp get atLookUp;
 
-  /// The APKAM signing scheme [waitForApproval] authenticates the new
-  /// enrollment with. The caller's choice, not inferred from key material.
-  ApkamSigning get signing;
+  /// The APKAM signing scheme the default [AtLookUpFactory] authenticates the
+  /// new enrollment with. The caller's choice, not inferred from key material.
+  ApkamSigningScheme get signing;
 
-  factory AtEnrollment.create(AtLookUp lookUp,
-      {ApkamSigning signing = ApkamSigning.legacy}) {
-    return AtEnrollmentImpl(lookUp, signing: signing);
+  /// [lookUp] is the caller's own connection, which every operation here runs
+  /// over except [waitForApproval] — that one PKAMs as the *pending enrollment*,
+  /// so it needs a connection built from key material that did not exist when
+  /// [lookUp] was constructed. [atLookUpFactory] takes over building it;
+  /// left null, it is built signing with [signing].
+  factory AtEnrollment.create(
+    AtLookUp lookUp, {
+    ApkamSigningScheme signing = ApkamSigningScheme.legacy,
+    AtLookUpFactory? atLookUpFactory,
+  }) {
+    return AtEnrollmentImpl(
+      lookUp,
+      signing: signing,
+      atLookUpFactory: atLookUpFactory,
+    );
   }
 
   Stream<ProgressEvent> get progressStream;

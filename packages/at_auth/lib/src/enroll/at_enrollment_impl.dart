@@ -2,9 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:meta/meta.dart';
-
-import 'package:at_auth/src/auth/apkam_signing.dart';
+import 'package:at_auth/src/auth/apkam_signing_scheme.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
@@ -30,14 +28,18 @@ class AtEnrollmentImpl implements AtEnrollment {
   final AtLookUp atLookUp;
 
   @override
-  final ApkamSigning signing;
+  final ApkamSigningScheme signing;
 
-  /// Substitutes the connection [waitForApproval] would otherwise build, so a
-  /// test can exercise the flow without a network.
-  @visibleForTesting
-  AtLookUp Function(AtKeys keys, String enrollmentId)? lookUpOverride;
+  /// Builds the connection [waitForApproval] PKAMs the pending enrollment on.
+  /// [atLookUp] cannot serve that: it belongs to whoever submitted the request
+  /// and was constructed before the APKAM keypair existed.
+  final AtLookUpFactory _lookUpFactory;
 
-  AtEnrollmentImpl(this.atLookUp, {this.signing = ApkamSigning.legacy});
+  AtEnrollmentImpl(
+    this.atLookUp, {
+    this.signing = ApkamSigningScheme.legacy,
+    AtLookUpFactory? atLookUpFactory,
+  }) : _lookUpFactory = atLookUpFactory ?? signing.lookUpFactory;
 
   final StreamController<ProgressEvent> _progressStreamController =
       StreamController<ProgressEvent>.broadcast();
@@ -290,10 +292,12 @@ class AtEnrollmentImpl implements AtEnrollment {
 
     // PKAM as the pending enrollment, not as whoever owns [atLookUp]: this is
     // the first connection that can sign with the APKAM key minted at submit.
-    final enrollmentLookUp =
-        lookUpOverride?.call(pending.atKeys, pending.enrollmentId) ??
-            buildAtLookUp(signing, atsign, rootDomain, pending.atKeys,
-                enrollmentId: pending.enrollmentId);
+    final enrollmentLookUp = _lookUpFactory(
+      atsign,
+      rootDomain,
+      pending.atKeys,
+      enrollmentId: pending.enrollmentId,
+    );
 
     await _waitForPkamAuthSuccess(
       atsign,
