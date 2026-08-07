@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
-import 'package:better_cryptography/better_cryptography.dart';
+import 'package:cryptography/cryptography.dart';
 
 /// Ed25519 (RFC 8032) digital signatures.
 ///

@@ -1,22 +1,18 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:encrypt/encrypt.dart';
+import 'package:at_chops/src/secure_random.dart';
 
 class InitialisationVector {
   late Uint8List ivBytes;
   InitialisationVector(this.ivBytes);
 
-  static InitialisationVector random(int length) {
-    final iv = IV.fromSecureRandom(length);
-    return InitialisationVector(iv.bytes);
-  }
+  static InitialisationVector random(int length) =>
+      InitialisationVector(secureRandomBytes(length));
 
-  static InitialisationVector legacy() {
-    return InitialisationVector(IV(Uint8List(16)).bytes);
-  }
+  @Deprecated('use .random() in favour')
+  static InitialisationVector legacy() => InitialisationVector(Uint8List(16));
 
-  static InitialisationVector fromBase64(String ivBase64) {
-    final iv = IV.fromBase64(ivBase64);
-    return InitialisationVector(iv.bytes);
-  }
+  static InitialisationVector fromBase64(String ivBase64) =>
+      InitialisationVector(base64Decode(ivBase64));
 }

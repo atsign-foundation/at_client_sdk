@@ -1,14 +1,16 @@
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart' show Hmac, sha256;
+import 'package:pointycastle/api.dart' show KeyParameter;
+import 'package:pointycastle/digests/sha256.dart';
+import 'package:pointycastle/macs/hmac.dart';
 
 /// HMAC-SHA256 (RFC 2104). The keyed-hash primitive HKDF is built on; also
-/// usable directly for MACs. Wraps `package:crypto` so consumers depend only
-/// on at_chops for keyed hashing.
+/// usable directly for MACs. Wraps pointycastle so consumers depend only on
+/// at_chops for keyed hashing.
 class HmacSha256 {
   /// `HMAC-SHA256(key, data)` → 32 raw bytes.
   static Uint8List compute(Uint8List key, Uint8List data) =>
-      Uint8List.fromList(Hmac(sha256, key).convert(data).bytes);
+      (HMac.withDigest(SHA256Digest())..init(KeyParameter(key))).process(data);
 }
 
 /// HKDF-SHA256 (RFC 5869): extract-then-expand key derivation.

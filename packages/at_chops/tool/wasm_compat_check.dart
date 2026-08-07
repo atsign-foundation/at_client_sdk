@@ -7,15 +7,24 @@
 //
 // The symbols below are touched so tree-shaking does not eliminate the reachable
 // graph, exercising the transitive crypto dependencies that matter for WASM:
-// better_cryptography (Ed25519), cryptography + pointycastle (X-Wing), pqcrypto
-// (ML-DSA), and encrypt (IV generation).
+// pointycastle (AES, RSA + ASN.1, ECDSA, Argon2id, digests, Fortuna), cryptography
+// (Ed25519, X25519) and pqcrypto (ML-DSA, ML-KEM). Argon2id is here specifically
+// because pointycastle picks its implementation by conditional import — the
+// Register64 one off dart:io — so only a real WASM build proves that path
+// compiles.
 import 'package:at_chops/at_chops.dart';
 
 void main() {
   final symbols = <Object>[
+    AesCtrEncryptionAlgo(32),
+    AesGcm256EncryptionAlgo(),
+    RsaEncryptionAlgo(),
+    RsaSigningAlgo(),
+    EccSigningAlgo(),
     Ed25519SigningAlgo(),
     XWingPureDartAlgo.instance,
     MlDsa65PureDartAlgo(),
+    Argon2idHashingAlgo(),
     Md5HashingAlgo(),
     SHA256HashingAlgo(),
     InitialisationVector.random(12),

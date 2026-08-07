@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/hashing/types.dart';
-import 'package:cryptography/cryptography.dart';
+import 'package:pointycastle/key_derivators/api.dart';
+import 'package:pointycastle/key_derivators/argon2.dart';
 
 /// A class that implements the Argon2id hashing algorithm for password hashing.
 ///
@@ -12,8 +14,8 @@ import 'package:cryptography/cryptography.dart';
 /// algorithm, which is a memory-hard, CPU-intensive key derivation function
 /// suitable for password hashing and encryption key derivation.
 ///
-/// The class uses the `cryptography` package's `Argon2id` algorithm for deriving
-/// a key from a password and encodes the result into a Base64 string.
+/// The class uses pointycastle's `Argon2BytesGenerator` for deriving a key from
+/// a password and encodes the result into a Base64 string.
 class Argon2idHashingAlgo implements AtHashingAlgorithm<String, String> {
   @override
   String get name => HashingAlgoType.argon2id.name;
@@ -42,15 +44,22 @@ class Argon2idHashingAlgo implements AtHashingAlgorithm<String, String> {
   @override
   Future<String> hash(String password, {ArgonHashParams? hashParams}) async {
     hashParams ??= ArgonHashParams();
-    final argon2id = Argon2id(
-        parallelism: hashParams.parallelism,
-        memory: hashParams.memory,
+    // The salt is the password's UTF-16 code units while the secret is its
+    // UTF-8 encoding. Those two disagree above U+00FF, and every atKeys
+    // passphrase envelope in the field was derived with exactly that pairing,
+    // so it is load-bearing rather than an oversight to tidy up.
+    final generator = Argon2BytesGenerator()
+      ..init(Argon2Parameters(
+        Argon2Parameters.ARGON2_id,
+        Uint8List.fromList(password.codeUnits),
+        desiredKeyLength: hashParams.hashLength,
         iterations: hashParams.iterations,
-        hashLength: hashParams.hashLength);
+        memory: hashParams.memory,
+        lanes: hashParams.parallelism,
+        version: Argon2Parameters.ARGON2_VERSION_13,
+      ));
 
-    SecretKey secretKey = await argon2id.deriveKeyFromPassword(
-        password: password, nonce: password.codeUnits);
-
-    return Base64Encoder().convert(await secretKey.extractBytes());
+    return Base64Encoder()
+        .convert(generator.process(Uint8List.fromList(utf8.encode(password))));
   }
 }

@@ -2,9 +2,21 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
-import 'package:crypto/crypto.dart';
-import 'package:ecdsa/ecdsa.dart' as ecdsa;
-import 'package:elliptic/elliptic.dart' as elliptic;
+import 'package:at_chops/src/secure_random.dart';
+import 'package:pointycastle/api.dart'
+    show
+        KeyParameter,
+        ParametersWithRandom,
+        PrivateKeyParameter,
+        PublicKeyParameter;
+import 'package:pointycastle/digests/sha256.dart';
+import 'package:pointycastle/ecc/api.dart';
+import 'package:pointycastle/ecc/curves/secp256r1.dart';
+import 'package:pointycastle/key_generators/api.dart';
+import 'package:pointycastle/key_generators/ec_key_generator.dart';
+import 'package:pointycastle/macs/hmac.dart';
+import 'package:pointycastle/random/fortuna_random.dart';
+import 'package:pointycastle/signers/ecdsa_signer.dart';
 
 /// ECDSA over secp256r1 (P-256) with SHA-256 digests.
 ///
@@ -13,19 +25,33 @@ import 'package:elliptic/elliptic.dart' as elliptic;
 /// - `secretKey`: the 32-byte big-endian private scalar
 /// - `publicKey`: the uncompressed SEC1 point (65 bytes: `0x04 ‖ X ‖ Y`)
 /// - signatures are 64-byte compact `R ‖ S`
+///
+/// Nonces are derived per RFC 6979, so signing is deterministic: the same
+/// (key, message) always yields the same signature, and a weak platform RNG
+/// cannot leak the private key through a repeated nonce.
 class EccSigningAlgo implements AtSignatureAlgorithm {
-  final elliptic.Curve _curve = elliptic.getSecp256r1();
+  /// Both halves of a compact signature, and the private scalar, are exactly
+  /// this wide — the curve's order is 256 bits.
+  static const int _scalarLength = 32;
+
+  final ECDomainParameters _domain = ECCurve_secp256r1();
+
   @override
   String get name => SigningAlgoType.eccSecp256r1.name;
+
   EccSigningAlgo();
 
   /// Generate a fresh secp256r1 key pair.
   @override
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair() async {
-    final privateKey = _curve.generatePrivateKey();
+    final random = FortunaRandom()..seed(KeyParameter(secureRandomBytes(32)));
+    final generator = ECKeyGenerator()
+      ..init(ParametersWithRandom(ECKeyGeneratorParameters(_domain), random));
+
+    final keyPair = generator.generateKeyPair();
     return (
-      publicKey: _hexToBytes(privateKey.publicKey.toHex()),
-      secretKey: Uint8List.fromList(privateKey.bytes),
+      publicKey: keyPair.publicKey.Q!.getEncoded(false),
+      secretKey: _encodeScalar(keyPair.privateKey.d!),
     );
   }
 
@@ -34,9 +60,18 @@ class EccSigningAlgo implements AtSignatureAlgorithm {
   @override
   Future<Uint8List> signBytes(Uint8List message,
       {required Uint8List secretKey}) async {
-    final privateKey = elliptic.PrivateKey.fromBytes(_curve, secretKey);
-    final signature = ecdsa.signature(privateKey, _sha256(message));
-    return Uint8List.fromList(signature.toCompact());
+    // The HMAC-SHA256 argument is what selects RFC 6979 nonce derivation; it
+    // must use the same digest as the one hashing the message.
+    final signer = ECDSASigner(SHA256Digest(), HMac.withDigest(SHA256Digest()))
+      ..init(
+          true,
+          PrivateKeyParameter<ECPrivateKey>(
+              ECPrivateKey(_decodeScalar(secretKey), _domain)));
+
+    final signature = signer.generateSignature(message) as ECSignature;
+    return Uint8List(_scalarLength * 2)
+      ..setRange(0, _scalarLength, _encodeScalar(signature.r))
+      ..setRange(_scalarLength, _scalarLength * 2, _encodeScalar(signature.s));
   }
 
   /// Verify the 64-byte compact [signature] over [message] against the
@@ -44,26 +79,34 @@ class EccSigningAlgo implements AtSignatureAlgorithm {
   @override
   Future<bool> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
-    final pubKey = elliptic.PublicKey.fromHex(_curve, _bytesToHex(publicKey));
-    final eccSignature = ecdsa.Signature.fromCompact(signature);
-    return ecdsa.verify(pubKey, _sha256(message), eccSignature);
+    final signer = ECDSASigner(SHA256Digest())
+      ..init(
+          false,
+          PublicKeyParameter<ECPublicKey>(
+              ECPublicKey(_domain.curve.decodePoint(publicKey), _domain)));
+
+    return signer.verifySignature(
+        message,
+        ECSignature(_decodeScalar(signature.sublist(0, _scalarLength)),
+            _decodeScalar(signature.sublist(_scalarLength))));
   }
 
-  List<int> _sha256(Uint8List data) => sha256.convert(data).bytes;
-
-  static Uint8List _hexToBytes(String hex) {
-    final result = Uint8List(hex.length ~/ 2);
-    for (var i = 0; i < result.length; i++) {
-      result[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
+  /// [value] as [_scalarLength] big-endian bytes, zero-padded on the left.
+  static Uint8List _encodeScalar(BigInt value) {
+    final out = Uint8List(_scalarLength);
+    var remaining = value;
+    for (var i = _scalarLength - 1; i >= 0; i--) {
+      out[i] = (remaining & BigInt.from(0xff)).toInt();
+      remaining = remaining >> 8;
     }
-    return result;
+    return out;
   }
 
-  static String _bytesToHex(Uint8List bytes) {
-    final buffer = StringBuffer();
+  static BigInt _decodeScalar(Uint8List bytes) {
+    var value = BigInt.zero;
     for (final byte in bytes) {
-      buffer.write(byte.toRadixString(16).padLeft(2, '0'));
+      value = (value << 8) | BigInt.from(byte);
     }
-    return buffer.toString();
+    return value;
   }
 }

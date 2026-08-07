@@ -5,10 +5,13 @@ import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/at_iv.dart';
 import 'package:at_chops/src/secure_random.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:cryptography/cryptography.dart' as crypto;
+import 'package:pointycastle/api.dart'
+    show AEADParameters, InvalidCipherTextException, KeyParameter;
+import 'package:pointycastle/block/aes.dart';
+import 'package:pointycastle/block/modes/gcm.dart';
 
 /// AES-256-GCM authenticated encryption (AEAD), backed by pure-Dart
-/// (`package:cryptography`).
+/// pointycastle.
 ///
 /// Unlike [AesCtrEncryptionAlgo] (AES-CTR, unauthenticated), GCM output is
 /// authenticated: tampering with the ciphertext, tag or nonce makes
@@ -28,9 +31,17 @@ final class AesGcm256EncryptionAlgo implements SymmetricEncryptionAlgorithm {
   static const int nonceLength = 12;
   static const int tagLength = 16;
 
-  static final crypto.AesGcm _aesGcm = crypto.AesGcm.with256bits();
-
   AesGcm256EncryptionAlgo();
+
+  /// GCM appends the [tagLength]-byte tag on encryption and strips-and-checks
+  /// it on decryption, which is the `ciphertext || tag` wire format already.
+  GCMBlockCipher _cipher(
+          bool forEncryption, Uint8List key, Uint8List nonce, List<int> aad) =>
+      GCMBlockCipher(AESEngine())
+        ..init(
+            forEncryption,
+            AEADParameters(KeyParameter(key), tagLength * 8, nonce,
+                Uint8List.fromList(aad)));
 
   @override
   String get name => EncryptionAlgoType.aesgcm256.name;
@@ -51,13 +62,7 @@ final class AesGcm256EncryptionAlgo implements SymmetricEncryptionAlgorithm {
           'AES-256-GCM requires a $nonceLength-byte nonce; '
           'use InitialisationVector.random($nonceLength)');
     }
-    final crypto.SecretBox box = await _aesGcm.encrypt(
-      plainData,
-      secretKey: crypto.SecretKey(key),
-      nonce: iv.ivBytes.toList(),
-      aad: aad,
-    );
-    return Uint8List.fromList(box.cipherText + box.mac.bytes);
+    return _cipher(true, key, iv.ivBytes, aad).process(plainData);
   }
 
   @override
@@ -76,19 +81,9 @@ final class AesGcm256EncryptionAlgo implements SymmetricEncryptionAlgorithm {
       throw AtDecryptionException(
           'AES-256-GCM input shorter than the $tagLength-byte tag');
     }
-    final Uint8List cipherText =
-        encryptedData.sublist(0, encryptedData.length - tagLength);
-    final Uint8List tag =
-        encryptedData.sublist(encryptedData.length - tagLength);
     try {
-      final List<int> plain = await _aesGcm.decrypt(
-        crypto.SecretBox(cipherText,
-            nonce: iv.ivBytes.toList(), mac: crypto.Mac(tag)),
-        secretKey: crypto.SecretKey(key),
-        aad: aad,
-      );
-      return Uint8List.fromList(plain);
-    } on crypto.SecretBoxAuthenticationError {
+      return _cipher(false, key, iv.ivBytes, aad).process(encryptedData);
+    } on InvalidCipherTextException {
       throw AtDecryptionException(
           'AES-256-GCM authentication failed: data was tampered with or the '
           'wrong key/nonce was used');

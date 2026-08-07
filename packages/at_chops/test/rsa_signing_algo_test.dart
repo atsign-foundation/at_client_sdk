@@ -65,6 +65,19 @@ void main() {
               e.toString().contains(
                   'Hashing algo HashingAlgoType.md5 is invalid/not supported'))));
     });
+    test('Test rsa verification - md5 hashing algo not supported', () async {
+      final rsaSigningAlgo =
+          RsaSigningAlgo(hashingAlgoType: HashingAlgoType.md5);
+      final (:secretKey, :publicKey) = await rsaSigningAlgo.generateKeyPair();
+      expect(
+          () => rsaSigningAlgo.verifyBytes(message,
+              signature: secretKey, publicKey: publicKey),
+          throwsA(predicate((e) =>
+              e is AtSigningVerificationException &&
+              e
+                  .toString()
+                  .contains('Invalid hashing algo HashingAlgoType.md5'))));
+    });
     test('Test invalid rsa verification - verify with a different public key',
         () async {
       final rsaSigningAlgo = RsaSigningAlgo();

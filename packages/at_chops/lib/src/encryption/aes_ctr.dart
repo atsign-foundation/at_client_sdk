@@ -7,10 +7,11 @@ import 'package:at_chops/src/padding/pkcs7.dart';
 import 'package:at_chops/src/padding/types.dart';
 import 'package:at_chops/src/secure_random.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:better_cryptography/better_cryptography.dart';
+import 'package:pointycastle/api.dart' show KeyParameter, ParametersWithIV;
+import 'package:pointycastle/block/aes.dart';
+import 'package:pointycastle/stream/ctr.dart';
 
-/// AES-CTR encryption (unauthenticated), backed by pure-Dart
-/// (`package:better_cryptography`).
+/// AES-CTR encryption (unauthenticated), backed by pure-Dart pointycastle.
 ///
 /// The key length is fixed at construction — 16 bytes for AES-128, 24 for
 /// AES-192, 32 for AES-256 — and every key passed to [encrypt]/[decrypt] must
@@ -33,8 +34,6 @@ final class AesCtrEncryptionAlgo implements SymmetricEncryptionAlgorithm {
   /// The AES key length in bytes this instance is configured for: 16, 24 or 32.
   final int keyLengthBytes;
 
-  final AesCtr _aesCtr;
-
   @override
   String get name => EncryptionAlgoType.aesctr.name;
 
@@ -45,15 +44,20 @@ final class AesCtrEncryptionAlgo implements SymmetricEncryptionAlgorithm {
   Uint8List generateKey() => secureRandomBytes(keyLengthBytes);
 
   /// Throws [AtEncryptionException] if [keyLengthBytes] is not 16, 24 or 32.
-  AesCtrEncryptionAlgo(this.keyLengthBytes)
-      : _aesCtr = switch (keyLengthBytes) {
-          16 => AesCtr.with128bits(macAlgorithm: MacAlgorithm.empty),
-          24 => AesCtr.with192bits(macAlgorithm: MacAlgorithm.empty),
-          32 => AesCtr.with256bits(macAlgorithm: MacAlgorithm.empty),
-          _ => throw AtEncryptionException(
-              'Invalid AES key length $keyLengthBytes. '
-              'Valid lengths are 16/24/32 bytes'),
-        };
+  AesCtrEncryptionAlgo(this.keyLengthBytes) {
+    if (keyLengthBytes != 16 && keyLengthBytes != 24 && keyLengthBytes != 32) {
+      throw AtEncryptionException('Invalid AES key length $keyLengthBytes. '
+          'Valid lengths are 16/24/32 bytes');
+    }
+  }
+
+  /// CTR is a stream mode: the same keystream both encrypts and decrypts, so
+  /// this one cipher serves both directions.
+  static Uint8List _applyKeystream(
+          Uint8List data, Uint8List key, Uint8List iv) =>
+      (CTRStreamCipher(AESEngine())
+            ..init(true, ParametersWithIV(KeyParameter(key), iv)))
+          .process(data);
 
   @override
   Future<Uint8List> encrypt(Uint8List plainData, Uint8List key,
@@ -66,13 +70,8 @@ final class AesCtrEncryptionAlgo implements SymmetricEncryptionAlgorithm {
       throw AtEncryptionException(
           'AES-CTR requires an $ivLength-byte IV; got ${iv.ivBytes.length} bytes');
     }
-    final secretKey = await _aesCtr.newSecretKeyFromBytes(key);
-    final secretBox = await _aesCtr.encrypt(
-      paddingAlgo.addPadding(plainData),
-      secretKey: secretKey,
-      nonce: iv.ivBytes,
-    );
-    return Uint8List.fromList(secretBox.cipherText);
+    return _applyKeystream(
+        Uint8List.fromList(paddingAlgo.addPadding(plainData)), key, iv.ivBytes);
   }
 
   @override
@@ -86,11 +85,8 @@ final class AesCtrEncryptionAlgo implements SymmetricEncryptionAlgorithm {
       throw AtDecryptionException(
           'AES-CTR requires an $ivLength-byte IV; got ${iv.ivBytes.length} bytes');
     }
-    final secretKey = await _aesCtr.newSecretKeyFromBytes(key);
-    final decryptedWithPadding = await _aesCtr.decrypt(
-      SecretBox(encryptedData, nonce: iv.ivBytes, mac: Mac.empty),
-      secretKey: secretKey,
-    );
+    final decryptedWithPadding =
+        _applyKeystream(encryptedData, key, iv.ivBytes);
     return Uint8List.fromList(paddingAlgo.removePadding(decryptedWithPadding));
   }
 }
