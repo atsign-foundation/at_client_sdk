@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
@@ -66,6 +67,27 @@ final class MlKem1024PureDartAlgo implements AtKemAlgorithm {
       [Uint8List? seed]) async {
     final (Uint8List pk, Uint8List sk) = _kem.generateKeyPair(seed);
     return (publicKey: pk, secretKey: sk);
+  }
+
+  @override
+  Uint8List newSeed() {
+    final Random random = Random.secure();
+    return Uint8List.fromList(
+        List<int>.generate(seedLength, (_) => random.nextInt(256)));
+  }
+
+  /// The pair [seed] produces — and the only correct way to recover an
+  /// ML-KEM-1024 key from storage, because [generateKeyPair]'s `secretKey` is
+  /// the 3168-byte expanded decapsulation key and nothing derives the public
+  /// half back out of it.
+  @override
+  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
+      Uint8List seed) {
+    if (seed.length != seedLength) {
+      throw ArgumentError.value(seed.length, 'seed',
+          'ML-KEM-1024 seed must be $seedLength bytes (d || z)');
+    }
+    return generateKeyPair(seed);
   }
 
   /// Encapsulate a fresh shared secret against [publicKey].

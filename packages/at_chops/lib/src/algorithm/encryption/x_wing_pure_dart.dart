@@ -92,6 +92,18 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
   }
 
   @override
+  Uint8List newSeed() => _randomSeed();
+
+  /// The pair [seed] produces. For X-Wing this is the same call as
+  /// [generateKeyPair] with a seed — the secret key IS the seed — but callers
+  /// that do not name the backend must go through here, because that identity
+  /// does not hold for ML-KEM.
+  @override
+  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
+          Uint8List seed) =>
+      generateKeyPair(seed);
+
+  @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
       Uint8List publicKey) async {
     final ephemeral = await _x25519.newKeyPair();

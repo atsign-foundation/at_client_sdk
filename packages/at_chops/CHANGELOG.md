@@ -1,4 +1,24 @@
-## 3.4.2
+## 3.5.0
+- feat: `AtKemAlgorithm.newSeed` and `AtKemAlgorithm.keyPairFromSeed` — one way
+  to persist and recover a KEM key that means the same thing on every backend.
+  `generateKeyPair`'s `secretKey` does not: X-Wing's **is** its 32-byte seed,
+  ML-KEM's is the expanded decapsulation key (3168 bytes at ML-KEM-1024) that no
+  seeded call reproduces, and the FFI backends' is an opaque process-lifetime
+  handle. Nothing in the type system distinguishes them, so code written against
+  X-Wing persists recoverable bytes by accident and the identical code persists
+  unrecoverable ones for ML-KEM. Storing the seed and re-deriving through
+  `keyPairFromSeed` is correct everywhere, which is what lets a caller hold a
+  key for a KEM chosen by configuration rather than named in source.
+  The seed *length* stays off the interface deliberately — `newSeed` produces a
+  valid one and `keyPairFromSeed` rejects an invalid one, so a caller has no use
+  for it — while concrete classes keep their own `seedLength` for callers that
+  do name a backend. `MlKem768PureDartAlgo` and `MlKem768FfiAlgo` gain
+  `seedLength` to match the other three.
+  **Note for implementers:** these are abstract members on a public interface,
+  so any code outside this package that `implements AtKemAlgorithm` must add
+  them. That is what makes this a minor rather than a patch release. All six
+  implementations in this repository are `final class … implements` and were
+  caught at compile time.
 - feat: `pqSeal` version `0x03` — RFC 9180 Base mode at the **pure
   ML-KEM-1024** suite (KEM `0x0042`, KDF `0x0002` HKDF-SHA384, AEAD `0x0002`
   AES-256-GCM). The no-hybrid option, and the only published HPKE suite for that

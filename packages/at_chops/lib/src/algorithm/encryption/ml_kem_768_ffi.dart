@@ -136,6 +136,24 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
     }
   }
 
+  /// FIPS 203's `d || z`.
+  static const int seedLength = 64;
+
+  @override
+  Uint8List newSeed() => Uint8List.fromList(
+      List<int>.generate(seedLength, (_) => _rng.nextInt(256)));
+
+  /// The pair [seed] produces.
+  ///
+  /// The seed round-trips, but the `secretKey` this returns is still the
+  /// opaque handle described in the class docs — only the seed is persistable.
+  /// A caller holding this key across restarts stores [seed] and calls here
+  /// again on the next start.
+  @override
+  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
+          Uint8List seed) =>
+      _generateKeyPairFromSeed(seed);
+
   Future<({Uint8List publicKey, Uint8List secretKey})> _generateKeyPairFromSeed(
       Uint8List seed) async {
     if (seed.length != 64) {

@@ -74,6 +74,17 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
   }
 
   @override
+  Uint8List newSeed() => _randomSeed();
+
+  /// The pair [seed] produces. Unlike [MlKem768FfiAlgo], this backend's secret
+  /// key is the seed itself rather than an OpenSSL handle, so a key recovered
+  /// here does survive a restart.
+  @override
+  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
+          Uint8List seed) =>
+      generateKeyPair(seed);
+
+  @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
       Uint8List publicKey) async {
     if (publicKey.length != publicKeyLength) {

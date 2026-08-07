@@ -99,13 +99,37 @@ abstract class AtHashingAlgorithm<K, V> {
 abstract class AtKemAlgorithm {
   /// Generate a fresh key pair from a secure random source.
   ///
-  /// Deterministic (seeded) generation is deliberately not part of this
-  /// interface: seed length and format are backend-specific (e.g. a 32-byte
-  /// X-Wing seed vs a 64-byte ML-KEM `d || z`), so a caller holding an
-  /// [AtKemAlgorithm] cannot supply a valid seed without knowing the
-  /// concrete backend. Backends that support it take an optional seed on
-  /// the concrete class.
+  /// The `secretKey` returned here is what [decapsulate] takes, which is **not
+  /// always what a caller should persist**: for X-Wing it is the 32-byte seed,
+  /// but for ML-KEM it is the expanded decapsulation key, and for the FFI
+  /// backends it is an opaque process-lifetime handle. A caller that has to
+  /// keep a key across restarts wants [newSeed] and [keyPairFromSeed], which
+  /// mean the same thing on every backend.
   FutureOr<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair();
+
+  /// A fresh seed drawn from a secure random source, of whatever length this
+  /// backend's [keyPairFromSeed] takes.
+  ///
+  /// The length is deliberately not on this interface. It is backend-specific
+  /// (32 bytes for X-Wing, 64 for ML-KEM's `d || z`) and a caller has no use
+  /// for it: this makes a valid one, and [keyPairFromSeed] rejects an invalid
+  /// one. Concrete classes expose their own `seedLength` for the callers that
+  /// do name a backend.
+  Uint8List newSeed();
+
+  /// Deterministically regenerate the key pair that [seed] produces.
+  ///
+  /// **This is the pair a stored key should be recovered through.** Persisting
+  /// [generateKeyPair]'s `secretKey` is correct only where that key IS its own
+  /// seed; nothing round-trips an expanded ML-KEM decapsulation key back to a
+  /// public half, and an FFI handle does not outlive the process. Persisting
+  /// the seed and re-deriving here is correct for every backend, and it is the
+  /// only form in which a caller can hold a key for a KEM it does not name.
+  ///
+  /// Throws [ArgumentError] if [seed] is not this backend's seed length —
+  /// pass [newSeed]'s result and it never is.
+  FutureOr<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
+      Uint8List seed);
 
   /// Encapsulate a fresh shared secret against [publicKey].
   ///

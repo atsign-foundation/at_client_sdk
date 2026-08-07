@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
@@ -19,6 +20,30 @@ final class MlKem768PureDartAlgo implements AtKemAlgorithm {
 
   // pqcrypto's KyberKem object — ML-KEM-768 / kyber768 security level.
   static final KyberKem _kem = KyberKem(KyberLevel.kem768);
+
+  /// FIPS 203's `d || z`, the form both `draft-ietf-hpke-pq` and
+  /// `draft-ietf-jose-pqc-kem` persist a private key in.
+  static const int seedLength = 64;
+
+  @override
+  Uint8List newSeed() {
+    final Random random = Random.secure();
+    return Uint8List.fromList(
+        List<int>.generate(seedLength, (_) => random.nextInt(256)));
+  }
+
+  /// The pair [seed] produces — the only correct way to recover this key from
+  /// storage, since [generateKeyPair]'s 2400-byte `secretKey` does not yield
+  /// the public half back.
+  @override
+  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
+      Uint8List seed) {
+    if (seed.length != seedLength) {
+      throw ArgumentError.value(seed.length, 'seed',
+          'ML-KEM-768 seed must be $seedLength bytes (d || z)');
+    }
+    return generateKeyPair(seed);
+  }
 
   /// Generate a fresh ML-KEM-768 key pair.
   ///
