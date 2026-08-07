@@ -1,4 +1,30 @@
 ## 3.14.1
+- feat: `AtClientPreference.keyEstablishmentAlgo` — which key-establishment
+  algorithm this atSign **mints and advertises**. Two options, and the choice
+  belongs to a deployment rather than to a message: the ML-KEM-768 + X25519
+  hybrid (the default), which keeps a classical hedge but has its combiner
+  specified only in an IETF draft; or pure ML-KEM-1024, whose specification
+  chain contains no draft at all and which is CNSA 2.0's mandated parameter
+  set. It does **not** restrict who this client can talk to — a sender always
+  follows what the recipient advertised, and every build produces and opens
+  both suites — so an atSign configured for ML-KEM-1024 still seals to a
+  hybrid peer, because the peer's key is the peer's decision. Configuration
+  rather than negotiation because SP 800-227 §4.6.3 names the downgrade
+  attacks that per-message choice invites. Changing it re-keys nothing already
+  published: an atSign moves options by rotating, which is the only moment an
+  advertised algorithm can change.
+- feat: `SecretSharingAlgos.kemFor` and `kemForSuite` — the algorithm id a
+  record states, resolved to the implementation that realises it. Pure-Dart
+  backends specifically, because the FFI ones return an opaque
+  process-lifetime handle as an ML-KEM secret key and every key reached
+  through here has to survive a restart. Both X-Wing suites map to one KEM:
+  they differ in key schedule and AEAD, not in decapsulation. An id this build
+  does not implement returns null rather than a default — sealing under a
+  guessed KEM produces a record only the recipient ever discovers is broken.
+- feat: `SecretSharingAlgos` is exported from the main `at_client.dart` barrel
+  as well as `at_client_mixins.dart`. A preference on the main barrel whose
+  values could only be named by importing the experimental secret-sharing
+  library is a knob most apps would never find.
 - feat: `SecretSharingAlgos` names the second key-establishment option
   (`ml-kem-1024`) alongside the hybrid, with a sealing suite for each and the
   mapping between a suite and the `pqSeal` envelope version it produces. The

@@ -236,6 +236,38 @@ class AtClientPreference {
   /// permanent, discoverable record on the atSign, which is not something to
   /// start doing behind an app's back.
   bool seedNamespaceKeys = false;
+
+  /// Which key-establishment algorithm this atSign **mints and advertises** —
+  /// an id from [SecretSharingAlgos.keyAlgos].
+  ///
+  /// Two options, and the choice is a deployment's rather than a message's:
+  ///
+  /// - [SecretSharingAlgos.xWing] (the default) — the ML-KEM-768 + X25519
+  ///   hybrid, which keeps a classical hedge covering exactly one scenario:
+  ///   ML-KEM falling to *classical* cryptanalysis before a quantum computer
+  ///   exists. Its combiner is specified only in an IETF draft.
+  /// - [SecretSharingAlgos.mlKem1024] — FIPS 203 alone, no combiner and no
+  ///   draft anywhere in its specification chain, which is what answers a
+  ///   "FIPS-approved algorithms only" questionnaire. It is also CNSA 2.0's
+  ///   mandated parameter set, and CNSA 2.0 treats hybrids as non-compliant.
+  ///
+  /// **This does not restrict who this client can talk to.** It decides what
+  /// this atSign publishes; a *sender* always follows what the recipient
+  /// advertised, and every build can produce and open both suites. An atSign
+  /// configured for ML-KEM-1024 still seals to a hybrid peer, because refusing
+  /// would leave the two unable to communicate while protecting nothing — the
+  /// peer's key is the peer's decision.
+  ///
+  /// **Configuration rather than negotiation, and the reason is NIST's.**
+  /// SP 800-227 §4.6.3 warns that composite schemes "introduce additional
+  /// choices in protocols, which could also introduce vulnerabilities (e.g. in
+  /// the form of downgrade attacks)". Each atSign advertises one KEM and there
+  /// is no per-message negotiation to attack.
+  ///
+  /// Changing it does not re-key anything already published. Keys are minted
+  /// per generation, so an atSign moves to the other option by rotating —
+  /// which is the only moment the advertised algorithm can change.
+  String keyEstablishmentAlgo = SecretSharingAlgos.xWing;
 }
 
 /// Default preference on how to handle get, put and delete requests with

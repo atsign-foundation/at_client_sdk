@@ -1,3 +1,5 @@
+import 'package:at_chops/at_chops.dart'
+    show AtKemAlgorithm, MlKem1024PureDartAlgo, XWingPureDartAlgo;
 import 'package:meta/meta.dart' show experimental;
 
 /// Registry of the algorithm identifiers used in per-APKAM key packages and
@@ -127,6 +129,35 @@ class SecretSharingAlgos {
         if (openable.contains(suite)) suite
     ];
   }
+
+  /// The KEM implementation a key-establishment algorithm id names.
+  ///
+  /// Pure-Dart backends specifically. The FFI ones return an opaque
+  /// process-lifetime handle as an ML-KEM secret key, and every key reached
+  /// through here has to survive a restart.
+  ///
+  /// Null for an id this build does not implement, so a caller cannot guess:
+  /// encapsulating under the wrong KEM produces a record the recipient can
+  /// never open, and the failure would surface on their side as an AEAD error
+  /// with nothing to point at.
+  static AtKemAlgorithm? kemFor(String keyAlgo) => switch (keyAlgo) {
+        xWing => XWingPureDartAlgo.instance,
+        mlKem1024 => MlKem1024PureDartAlgo.instance,
+        _ => null,
+      };
+
+  /// The KEM that opens an envelope produced under [suite].
+  ///
+  /// The receive path's counterpart to [kemFor]: `pqOpen` reads the version
+  /// byte itself, but the KEM instance is the caller's to supply, and an
+  /// envelope sealed under one KEM handed to the other fails as an
+  /// indistinguishable AEAD error. Both X-Wing suites map to the same KEM —
+  /// they differ in key schedule and AEAD, not in decapsulation.
+  static AtKemAlgorithm? kemForSuite(String suite) => switch (suite) {
+        xWingHpke || xWingRfc9180 => XWingPureDartAlgo.instance,
+        mlKem1024Rfc9180 => MlKem1024PureDartAlgo.instance,
+        _ => null,
+      };
 
   /// The `use` value for key-package keys whose purpose is establishing
   /// content keys (KEM encapsulation).

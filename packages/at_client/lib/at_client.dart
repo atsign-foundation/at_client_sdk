@@ -16,6 +16,11 @@ export 'package:at_client/src/manager/at_client_manager.dart';
 export 'package:at_client/src/preference/at_client_preference.dart';
 export 'package:at_client/src/response/at_notification.dart';
 export 'package:at_client/src/response/enrollment.dart';
+// The algorithm ids only, not the rest of the (experimental) secret-sharing
+// surface: `AtClientPreference.keyEstablishmentAlgo` takes one of them, and a
+// preference on the main barrel whose values are only nameable through
+// `at_client_mixins.dart` is a knob most apps would never find.
+export 'package:at_client/src/secret_sharing/algo_ids.dart';
 export 'package:at_client/src/rpc/at_rpc.dart';
 export 'package:at_client/src/rpc/at_rpc_types.dart';
 export 'package:at_client/src/service/enrollment_service.dart';
