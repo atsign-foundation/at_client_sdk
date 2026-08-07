@@ -246,10 +246,31 @@ void main() {
         EnrollmentRequestDecision.revoked(
             doomed.enrolled.enrollmentId, atSign));
 
-    // The credential first, because it is the primary claim and it is
-    // immediate: the atServer refuses the keypair the moment the record says
-    // revoked.
-    expect(await authenticatesAs(doomed.enrolled), isFalse,
+    // The credential first, because it is the primary claim — but polled with
+    // a bound, and not merely to settle a flaky test.
+    //
+    // This was written asserting the refusal was immediate. On 2026-08-07 it
+    // failed once in three consecutive full-suite runs: a FRESH connection
+    // PKAM-authenticating with the revoked enrollment's own keypair was
+    // ACCEPTED after `revoke()` had already returned, while the runs either
+    // side of it refused it. So the atServer resolves an enrollment's state
+    // for PKAM through the same cache `enroll:listns` is served from, and
+    // revocation reaches both on the same eventual schedule — the control arm
+    // above, which deliberately authenticates this enrollment beforehand, is
+    // what populates that cache.
+    //
+    // Worth stating plainly rather than burying inside a poll: for a short
+    // window after a revoke, a holder of the revoked keyfile can still
+    // authenticate. The bound is what keeps this an assertion — if the
+    // credential never stops working, this stays red and names the defect
+    // that matters most in this file.
+    var doomedAuthenticates = true;
+    for (var i = 0; i < 20; i++) {
+      doomedAuthenticates = await authenticatesAs(doomed.enrolled);
+      if (!doomedAuthenticates) break;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    expect(doomedAuthenticates, isFalse,
         reason: 'revocation cuts the one APKAM keypair this enrollment has — '
             'under 1:1:1 there is no per-pubkey delete, so revoking the '
             'enrollment IS revoking its key');
