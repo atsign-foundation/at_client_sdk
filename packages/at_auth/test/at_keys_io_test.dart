@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/src/auth/apkam_signing_scheme.dart';
+import 'package:at_auth/src/auth/at_auth_scheme.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
@@ -216,14 +216,14 @@ void main() {
         final tempPath = '${tempDir.path}/@alice_key.atKeys';
         final fileAtKeysIo = FileAtKeysIo(filePath: (_) => tempPath);
         final atKeys = AtKeys(atsign: atsign);
-        await ApkamSigningScheme.postQuantum.mintKeys(atKeys);
+        await AtAuthScheme.postQuantum.mintKeys(atKeys);
         await fileAtKeysIo.write(atsign, atKeys);
 
         final reread = await fileAtKeysIo.read(atsign);
-        expect(ApkamSigningScheme.postQuantum.requireApkamPrivateKey(reread),
-            ApkamSigningScheme.postQuantum.requireApkamPrivateKey(atKeys));
-        expect(ApkamSigningScheme.postQuantum.requireApkamPublicKey(reread),
-            ApkamSigningScheme.postQuantum.requireApkamPublicKey(atKeys));
+        expect(AtAuthScheme.postQuantum.requireApkamPrivateKey(reread),
+            AtAuthScheme.postQuantum.requireApkamPrivateKey(atKeys));
+        expect(AtAuthScheme.postQuantum.requireApkamPublicKey(reread),
+            AtAuthScheme.postQuantum.requireApkamPublicKey(atKeys));
         expect(reread.apkamPrivateKey, isNull);
       } finally {
         await tempDir.delete(recursive: true);

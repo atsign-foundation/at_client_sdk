@@ -22,14 +22,14 @@ AtKeys legacyAtKeys({Atsign? atsign}) {
 }
 
 /// A keyset carrying only post-quantum material — the shape
-/// `ApkamSigningScheme.postQuantum` mints and nothing else.
+/// `AtAuthScheme.postQuantum` mints and nothing else.
 ///
 /// The counterpart to [legacyAtKeys]: between them the two cover "has one
 /// scheme's key, not the other's", which is what most scheme-dispatch tests
 /// are really asking about.
 Future<AtKeys> pqAtKeys({Atsign? atsign}) async {
   final keys = AtKeys(atsign: atsign ?? '@alice'.toAtsign());
-  await ApkamSigningScheme.postQuantum.mintKeys(keys);
+  await AtAuthScheme.postQuantum.mintKeys(keys);
   return keys;
 }
 

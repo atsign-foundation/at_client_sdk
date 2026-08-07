@@ -56,22 +56,31 @@ throwing is the success signal**, and failure throws
   `AtLookUp Function(Atsign, AtRootDomain, AtKeys?, {String? enrollmentId})` —
   builds every connection at_auth authenticates on, so substituting it
   substitutes all of them. Left null it defaults to
-  `ApkamSigningScheme.lookUpFactory`, which is `buildAtLookUp` curried with the
+  `AtAuthScheme.lookUpFactory`, which is `buildAtLookUp` curried with the
   chosen scheme. A connection the factory returns belongs to at_auth, which closes it
   when the operation fails or finishes with it.
 
   This replaces the `AtAuthImpl.lookUpOverride` and
   `AtEnrollmentImpl.lookUpOverride` `@visibleForTesting` fields, both removed.
-- **The APKAM signing scheme is a constructor option, not something inferred
-  from key material.** `AtAuth.create({ApkamSigningScheme signing})` and
-  `AtEnrollment.create(atLookUp, {signing})`, defaulting to
-  `ApkamSigningScheme.legacy` (RSA-2048/SHA-256, `AtLookUp.legacy`);
-  `ApkamSigningScheme.postQuantum` selects ML-DSA-65 (`AtLookUp.pq`).
+- **The at_auth scheme is a constructor option, not something inferred
+  from key material.** `AtAuth.create({AtAuthScheme scheme})` and
+  `AtEnrollment.create(atLookUp, {scheme})`, defaulting to
+  `AtAuthScheme.legacy` (RSA-2048/SHA-256, `AtLookUp.legacy`);
+  `AtAuthScheme.postQuantum` selects ML-DSA-65 (`AtLookUp.pq`).
   `AtKeys.generate` mints both a classical and a post-quantum APKAM key, so the
   material cannot express which one an atServer expects — that is a property of the deployment,
   and the application owns it. A keyset that cannot satisfy the chosen scheme
   throws `AtAuthenticationException` rather than falling back to the other one,
   which would authenticate as an identity the caller did not ask for.
+- **`AtAuthScheme` is a sealed class, not a Dart enum.** The singleton
+  spelling remains (`AtAuthScheme.legacy`,
+  `AtAuthScheme.postQuantum`), but enum-specific APIs such as
+  `AtAuthScheme.values`, `.name`, `is Enum` and enum exhaustiveness no
+  longer apply.
+- **`AtAuth.signing` / `AtEnrollment.signing` and the `signing:` constructor
+  parameter are now `scheme` / `scheme:`.** The scheme controls the broader
+  at_auth behavior derived from the caller's choice, not only the PKAM signing
+  algorithm.
 - **`AtAuth.atLookUp` is now a nullable getter** holding the connection the most
   recent successful call authenticated — this is how a void-returning call still
   hands its connection forward. It is null before the first success and after a
@@ -110,7 +119,7 @@ throwing is the success signal**, and failure throws
   `CramAuthenticator` no longer downcasts to `AtLookupImpl`, which at_lookup 4
   does not export.
 - **`RetryOptions`, `CramAuthenticator`, `PkamAuthenticator`, `KeyIds`,
-  `ApkamSigningScheme` and `buildAtLookUp` are now exported** from
+  `AtAuthScheme` and `buildAtLookUp` are now exported** from
   `package:at_auth/at_auth.dart`. Most were public parameter and field types
   that consumers could not name.
 - **`AtKeysMaterial.bytes` is a `Uint8List`, not an `AtBytes`.** base64 is a
@@ -177,24 +186,26 @@ is untouched by all of it — it stays readable *and* writable, and the six lega
   too unless `mintLegacy: false`). This is the onboarding key-minting entry
   point, now a static factory on the type it returns rather than a separate
   helper class. A `mintLegacy: false` keyset can authenticate under
-  `ApkamSigningScheme.postQuantum`, but whether the atServer verifies an
+  `AtAuthScheme.postQuantum`, but whether the atServer verifies an
   ML-DSA-65 signature is not settled here — leave the default unless you are exercising
   the PQ material.
-- `ApkamSigningScheme` and `buildAtLookUp(...)` — the signing scheme a caller
-  selects and the connection builder that applies it, pulling the matching key
-  from an `AtKeys`.
-- **`ApkamSigningScheme` owns the algorithm end to end**: `signatureAlgorithm`
-  (the at_chops signer), `signingAlgo` (the `rsa2048`/`mldsa65` wire token),
-  `mintKeys(AtKeys)` and `requirePqApkamPublicKey`/`requirePqApkamPrivateKey`.
-  One scheme now drives the keypair an enrollment mints, where in the keyset it
-  lands, and the key PKAM later signs with — they can no longer disagree.
+- `AtAuthScheme` and `buildAtLookUp(...)` — the auth scheme a caller selects
+  and the connection builder that applies it, pulling the matching key from an
+  `AtKeys`.
+- **`AtAuthScheme` owns the derived auth behavior end to end**:
+  `signatureAlgorithm` (the at_chops signer), `signingAlgo` (the
+  `rsa2048`/`mldsa65` wire token), `mintKeys(AtKeys)` and
+  `requireApkamPublicKey`/`requireApkamPrivateKey`. One scheme now drives the
+  keypair an enrollment mints, where in the keyset it lands, and the key PKAM
+  later signs with — they can no longer disagree.
   `mintKeys` delegates its post-quantum arm to
-  `AtKeys.generatePQEnrollmentPackage`, so an enrollment-minted keyset and an
-  activation-minted one carry identical material.
+  `AtKeys.generatePQEnrollmentPackage`, so an enrollment-minted keyset keeps
+  its APKAM signing key under the same keyId while keeping its X-Wing material
+  under the enrollment keypackage keyId.
 - `ApkamKeyConveyance` with its default `RsaKeyConveyance` — how an
   enrollment's `apkamSymmetricKey` reaches its approver, injectable on
   `AtEnrollment.create(atLookUp, conveyance:)`. Deliberately an axis *separate*
-  from `ApkamSigningScheme`: ML-DSA signs and X-Wing encapsulates, and one
+  from `AtAuthScheme`: ML-DSA signs and X-Wing encapsulates, and one
   keypair cannot do both. The wire bytes are unchanged.
 
 

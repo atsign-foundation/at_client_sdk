@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
-import 'package:at_auth/src/auth/apkam_signing_scheme.dart';
+import 'package:at_auth/src/auth/at_auth_scheme.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
@@ -61,12 +61,12 @@ class AtAuthImpl implements AtAuth {
   PkamAuthenticator? pkamAuthenticator;
 
   @override
-  final ApkamSigningScheme signing;
+  final AtAuthScheme scheme;
 
   /// Builds the [AtEnrollment] for a connection. Deferred because enrollment
   /// needs a connection, and the connection needs the keys.
   ///
-  /// The default passes [signing] on: an enrollment that stamped a different
+  /// The default passes [scheme] on: an enrollment that stamped a different
   /// scheme than the one this instance signs with would enroll a key the
   /// atServer then refuses to verify PKAM against.
   final AtEnrollment Function(AtLookUp) enrollmentFactory;
@@ -95,15 +95,15 @@ class AtAuthImpl implements AtAuth {
 
   AtAuthImpl({
     required this.retryOptions,
-    this.signing = ApkamSigningScheme.legacy,
+    this.scheme = AtAuthScheme.legacy,
     this.cramAuthenticator,
     this.pkamAuthenticator,
     this.atServerStatus,
     AtEnrollment Function(AtLookUp)? enrollmentFactory,
     AtLookUpFactory? atLookUpFactory,
   })  : enrollmentFactory = enrollmentFactory ??
-            ((lookUp) => AtEnrollment.create(lookUp, signing: signing)),
-        _lookUpFactory = atLookUpFactory ?? signing.lookUpFactory;
+            ((lookUp) => AtEnrollment.create(lookUp, scheme: scheme)),
+        _lookUpFactory = atLookUpFactory ?? scheme.lookUpFactory;
 
   /// The single construction point: every connection an operation here runs over
   /// comes from here, so a caller substituting [_lookUpFactory] substitutes all
@@ -166,7 +166,7 @@ class AtAuthImpl implements AtAuth {
     _logger.finer('Authenticating atSign: $atsign using PKAM '
         '(enrollmentId: $enrollmentId)');
     pkamAuthenticator ??= PkamAuthenticator();
-    // The signing key is bound into the connection here — this is the only
+    // The scheme key is bound into the connection here — this is the only
     // place the keys just read reach the PKAM handshake.
     final lookUp = _lookUpFor(atsign, rootDomain,
         atKeys: atKeys, enrollmentId: enrollmentId);
@@ -425,7 +425,7 @@ class AtAuthImpl implements AtAuth {
     // signs with, so it comes from the same scheme — and goes out base64, which
     // is what AtBytes.toString() gives (a raw Uint8List would stringify to
     // "[48, 130, …]").
-    final apkamPublicKey = signing.requireApkamPublicKey(atKeys);
+    final apkamPublicKey = scheme.requireApkamPublicKey(atKeys);
     _logger.finer('apkamPublicKey: $apkamPublicKey');
 
     AtEnrollmentResponse? atEnrollmentResponse;

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_auth/src/auth/apkam_signing_scheme.dart';
+import 'package:at_auth/src/auth/at_auth_scheme.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/apkam_key_conveyance.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
@@ -19,7 +19,6 @@ import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:meta/meta.dart';
 
-import '../keys/serialization/key_ids.dart';
 import 'models/namespace_permission.dart';
 
 /// A concrete implementation of [AtEnrollment] for managing enrollments.
@@ -31,7 +30,7 @@ class AtEnrollmentImpl implements AtEnrollment {
   final AtLookUp atLookUp;
 
   @override
-  final ApkamSigningScheme signing;
+  final AtAuthScheme scheme;
 
   /// Builds the connection [waitForApproval] PKAMs the pending enrollment on.
   /// [atLookUp] cannot serve that: it belongs to whoever submitted the request
@@ -42,11 +41,11 @@ class AtEnrollmentImpl implements AtEnrollment {
 
   AtEnrollmentImpl(
     this.atLookUp, {
-    this.signing = ApkamSigningScheme.legacy,
+    this.scheme = AtAuthScheme.legacy,
     AtLookUpFactory? atLookUpFactory,
     ApkamKeyConveyance? conveyance,
-  })  : _lookUpFactory = atLookUpFactory ?? signing.lookUpFactory,
-        _conveyance = conveyance ?? signing.conveyance;
+  })  : _lookUpFactory = atLookUpFactory ?? scheme.lookUpFactory,
+        _conveyance = conveyance ?? scheme.conveyance;
 
   final StreamController<ProgressEvent> _progressStreamController =
       StreamController<ProgressEvent>.broadcast();
@@ -74,7 +73,7 @@ class AtEnrollmentImpl implements AtEnrollment {
       ..appName = appName ?? 'firstApp'
       ..deviceName = deviceName ?? 'firstDevice'
       ..apkamPublicKey = apkamPublicKey
-      ..signingAlgo = signing.signingAlgo;
+      ..signingAlgo = scheme.signingAlgo;
 
     String? serverResponse =
         await _executeEnrollCommand(enrollVerbBuilder, atLookUp);
@@ -103,8 +102,8 @@ class AtEnrollmentImpl implements AtEnrollment {
   ///   - sharedSecret is apkam symmetricKey
   ///   - send payload to @alice
   ///
-  /// This method is fully functional regardless of `ApkamSigningScheme`,
-  /// so if we end up defaulting to `ApkamSigningScheme.legacy` or `pq`,
+  /// This method is fully functional regardless of `AtAuthScheme`,
+  /// so if we end up defaulting to `AtAuthScheme.legacy` or `pq`,
   /// no functionality will need to change
   @override
   Future<AtEnrollmentResponse> enroll({
@@ -118,7 +117,7 @@ class AtEnrollmentImpl implements AtEnrollment {
   }) async {
     AtKeys pendingKeys = AtKeys(atsign: atsign);
     // mint fresh apkamKeyPair
-    await signing.mintKeys(pendingKeys);
+    await scheme.mintKeys(pendingKeys);
 
     // The atsign's *own* published key — the recipient the symmetric key is
     // conveyed to. Not to be confused with the APKAM public key this enrollment
@@ -139,8 +138,8 @@ class AtEnrollmentImpl implements AtEnrollment {
       ..appName = appName
       ..deviceName = deviceName
       ..encryptedAPKAMSymmetricKey = encryptedSymmetricKey // null on pq
-      ..apkamPublicKey = signing.requireApkamPublicKey(pendingKeys).toString()
-      ..signingAlgo = signing.signingAlgo
+      ..apkamPublicKey = scheme.requireApkamPublicKey(pendingKeys).toString()
+      ..signingAlgo = scheme.signingAlgo
       ..otp = otp.value
       ..namespaces = Map.fromEntries(
           namespaces.map((p) => MapEntry(p.namespace, p.toString())))
@@ -157,10 +156,10 @@ class AtEnrollmentImpl implements AtEnrollment {
     pendingKeys
       ..enrollmentId = enrollJson[AtConstants.enrollmentId]
       ..apkamSymmetricKey = AtBytes(conveyedKey.sharedSecret);
-    if (signing == ApkamSigningScheme.legacy) {
+    if (scheme.storesPublishedPublicKey) {
       // Under legacy the published key *is* the atsign's default encryption
       // public key, so the keyset can keep it. Under postQuantum it is an
-      // X-Wing keypackage, which has no business in a legacy RSA field.
+      // X-Wing public key, which has no business in a legacy RSA field.
       pendingKeys.defaultEncryptionPublicKey =
           AtBytes.fromString(publishedPublicKey);
     }
@@ -211,23 +210,15 @@ class AtEnrollmentImpl implements AtEnrollment {
     //legacy for aes
     InitialisationVector? selfKeyIv;
 
-    switch (signing) {
-      case ApkamSigningScheme.legacy:
-        selfKeyIv = InitialisationVector.random(16);
-        encryptedDefaultEncryptionPrivateKey = await _aesEncrypt(
-            encryptionPrivateKey, apkamSymmetricKey.bytes, privateKeyIv);
-        encryptedDefaultSelfEncryptionKey = await _aesEncrypt(
-            selfEncryptionKey, apkamSymmetricKey.bytes, selfKeyIv);
-      case ApkamSigningScheme.postQuantum:
-        throw UnimplementedError(
-            'not implemented yet, requires enroll:approve to hold the xwing public key on the at_server');
-      // final bytes = await AesGcm256EncryptionAlgo().encrypt(
-      //   encryptionPrivateKey.bytes,
-      //   apkamSymmetricKey.bytes,
-      //   iv: privateKeyIv,
-      // );
-      // encryptedDefaultEncryptionPrivateKey = base64Encode(bytes.toList());
+    if (scheme == AtAuthScheme.postQuantum) {
+      throw UnimplementedError(
+          'not implemented yet, requires enroll:approve to hold the xwing public key on the at_server');
     }
+    selfKeyIv = InitialisationVector.random(16);
+    encryptedDefaultEncryptionPrivateKey = await _aesEncrypt(
+        encryptionPrivateKey, apkamSymmetricKey.bytes, privateKeyIv);
+    encryptedDefaultSelfEncryptionKey = await _aesEncrypt(
+        selfEncryptionKey, apkamSymmetricKey.bytes, selfKeyIv);
 
     EnrollVerbBuilder builder = EnrollVerbBuilder()
       ..operation = EnrollOperationEnum.approve
@@ -445,13 +436,9 @@ class AtEnrollmentImpl implements AtEnrollment {
     AtLookUp lookup,
     String atsign,
   ) async {
-    String name = switch (signing) {
-      ApkamSigningScheme.legacy => KeyIds.publishedLegacyPublicKey,
-      ApkamSigningScheme.postQuantum => KeyIds.publishedPqPublicKey,
-    };
     LookupVerbBuilder builder = LookupVerbBuilder()
       ..atKey = (AtKey()
-        ..key = name
+        ..key = scheme.publishedPublicKeyName
         ..sharedBy = atsign);
     String? lookupResult = await lookup.executeVerb(builder);
     if (lookupResult == null || lookupResult.isEmpty) {

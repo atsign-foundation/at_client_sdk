@@ -7,8 +7,7 @@ import 'package:at_commons/at_commons.dart';
 /// Conveys an enrollment's `apkamSymmetricKey` from the enrollee that mints it
 /// to the approver that must re-encrypt the atsign's keys under it.
 ///
-/// This is deliberately **not** driven by `ApkamSigningScheme`. Signing and
-/// conveyance are independent axes: ML-DSA (signature) and X-Wing (KEM) are
+/// Signing conveyance are independent axes: ML-DSA (signature) and X-Wing (KEM) are
 /// distinct primitives, and one keypair cannot both authenticate and be
 /// encapsulated to — which is why an enrollment carries two keypairs, not one.
 /// A post-quantum PKAM key therefore says nothing about how the symmetric key

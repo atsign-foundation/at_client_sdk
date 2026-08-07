@@ -12,6 +12,11 @@ import 'package:test/test.dart';
 
 import 'test_utils/at_keys.dart';
 
+const allAuthSchemes = [
+  AtAuthScheme.legacy,
+  AtAuthScheme.postQuantum,
+];
+
 class MockAtLookUp extends Mock implements AtLookUp {}
 
 class MockAtEnrollment extends Mock implements AtEnrollment {}
@@ -75,7 +80,7 @@ void main() {
   void buildAtAuth(
       {required AtStatus atStatus,
       RetryOptions? retryOptions,
-      ApkamSigningScheme signing = ApkamSigningScheme.legacy}) {
+      AtAuthScheme scheme = AtAuthScheme.legacy}) {
     mockAtLookUp = MockAtLookUp();
     mockPkamAuthenticator = MockPkamAuthenticator();
     mockAtServerStatus = MockAtServerStatus();
@@ -87,7 +92,7 @@ void main() {
     when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
     atAuth = AtAuthImpl(
       retryOptions: retryOptions ?? RetryOptions.defaultRetryOptions,
-      signing: signing,
+      scheme: scheme,
       pkamAuthenticator: mockPkamAuthenticator,
       atServerStatus: mockAtServerStatus,
       enrollmentFactory: (_) => mockAtEnrollment,
@@ -101,16 +106,16 @@ void main() {
   }
 
   group('AtAuthImpl.enrollmentFactory', () {
-    test('the default builds an enrollment signing the same scheme', () {
+    test('the default builds an enrollment with the same scheme', () {
       // An enrollment stamping a different scheme than at_auth signs with
       // would enroll a key the atServer then refuses to verify PKAM against.
-      for (final signing in ApkamSigningScheme.values) {
+      for (final scheme in allAuthSchemes) {
         final atAuth = AtAuthImpl(
           retryOptions: RetryOptions.defaultRetryOptions,
-          signing: signing,
+          scheme: scheme,
         );
 
-        expect(atAuth.enrollmentFactory(MockAtLookUp()).signing, signing);
+        expect(atAuth.enrollmentFactory(MockAtLookUp()).scheme, scheme);
       }
     });
   });
@@ -344,7 +349,7 @@ void main() {
       expect(builtLookUps.last.enrollmentId, 'abc123');
     });
 
-    test('Test onboard enrolls the public key of its signing scheme', () async {
+    test('Test onboard enrolls the public key of its auth scheme', () async {
       // The key enrolled must be the one PKAM then signs with. Under the default
       // legacy scheme that is the flat RSA field of the keyset just minted —
       // which is also the keyset the second connection was built from.
@@ -371,7 +376,7 @@ void main() {
               serverStatus: ServerStatus.teapot,
               rootStatus: RootStatus.found,
               atSignStatus: AtSignStatus.teapot),
-          signing: ApkamSigningScheme.postQuantum);
+          scheme: AtAuthScheme.postQuantum);
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
       stubSuccessfulOnboarding();
@@ -382,7 +387,7 @@ void main() {
       final mintedKeys = builtLookUps.last.keys!;
       expect(
           capturedFirstEnrollment().apkamPublicKey,
-          ApkamSigningScheme.postQuantum
+          AtAuthScheme.postQuantum
               .requireApkamPublicKey(mintedKeys)
               .toString());
     });
@@ -409,7 +414,7 @@ void main() {
               serverStatus: ServerStatus.teapot,
               rootStatus: RootStatus.found,
               atSignStatus: AtSignStatus.teapot),
-          signing: ApkamSigningScheme.postQuantum);
+          scheme: AtAuthScheme.postQuantum);
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
       stubSuccessfulOnboarding();

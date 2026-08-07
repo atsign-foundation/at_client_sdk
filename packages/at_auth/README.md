@@ -32,31 +32,34 @@ client creation rather than opening and PKAM-ing a second one.
 signing algorithm at construction and keeps them immutable, so the connection
 cannot exist until the keys have been read or minted.
 
-Which scheme it signs with is the **caller's** choice, passed once:
+Which auth scheme it uses is the **caller's** choice, passed once:
 
 ```dart
-// default: ApkamSigningScheme.legacy
-AtAuth.create(signing: ApkamSigningScheme.postQuantum);
+// default: AtAuthScheme.legacy
+AtAuth.create(scheme: AtAuthScheme.postQuantum);
 ```
 
-`ApkamSigningScheme.legacy` is RSA-2048/SHA-256 (`AtLookUp.legacy`) and
-`ApkamSigningScheme.postQuantum` is ML-DSA-65 (`AtLookUp.pq`). It is
+`AtAuthScheme.legacy` is RSA-2048/SHA-256 (`AtLookUp.legacy`) and
+`AtAuthScheme.postQuantum` is ML-DSA-65 (`AtLookUp.pq`). It is
 deliberately not inferred from the keys: `AtKeys.generate` mints both a
 classical and a post-quantum APKAM key, so the material cannot express which one
 an atServer expects — that is a property of the deployment. A keyset that cannot
 satisfy the chosen scheme is an error, not a silent fall back to the other one.
-`AtEnrollment.create(atLookUp, signing:)` takes the same option.
+`AtEnrollment.create(atLookUp, scheme:)` takes the same option.
+`AtAuthScheme` is a sealed class with singleton constants, not a Dart
+enum.
 
-The scheme drives the whole signing side, not just the connection: it mints the
-APKAM keypair an enrollment submits, decides where in the keyset that keypair
-lands, supplies the public key the enroll verb carries, and stamps the verb's
-`signingAlgo` so the atServer records which algorithm to verify PKAM with. How
-an enrollment's `apkamSymmetricKey` reaches its approver is a *separate* axis —
-ML-DSA signs and X-Wing encapsulates, and one keypair cannot do both — so it is
-chosen independently via `AtEnrollment.create(atLookUp, conveyance:)`, which
-defaults to `RsaKeyConveyance`.
+The scheme drives the whole auth behavior, not just the connection: it mints
+the APKAM keypair an enrollment submits, decides where in the keyset that
+keypair lands, supplies the public key the enroll verb carries, and stamps the
+verb's `signingAlgo` so the atServer records which algorithm to verify PKAM
+with. How an enrollment's `apkamSymmetricKey` reaches its approver is a
+*separate* axis — ML-DSA signs and X-Wing encapsulates, and one keypair cannot
+do both — so it is chosen independently via
+`AtEnrollment.create(atLookUp, conveyance:)`, which defaults to
+`RsaKeyConveyance`.
 
-`signing` picks the **default** way connections are built. To build them
+`scheme` picks the **default** way connections are built. To build them
 yourself — a custom `SecureSocketConfig`, a proxy, a substitute in a test — pass
 an `AtLookUpFactory` instead, and it is used for every connection at_auth
 authenticates on:

@@ -35,9 +35,8 @@ void main() {
     // encapsulates, and one keypair cannot do both — but each scheme still has
     // a default pairing. `sealed` is what makes this switch exhaustive.
     test('legacy wraps under RSA, postQuantum encapsulates under X-Wing', () {
-      expect(ApkamSigningScheme.legacy.conveyance, isA<RsaKeyConveyance>());
-      expect(
-          ApkamSigningScheme.postQuantum.conveyance, isA<XWingKeyConveyance>());
+      expect(AtAuthScheme.legacy.conveyance, isA<RsaKeyConveyance>());
+      expect(AtAuthScheme.postQuantum.conveyance, isA<XWingKeyConveyance>());
     });
   });
 
@@ -156,7 +155,7 @@ void main() {
     });
 
     test('takes the injected conveyance over the scheme\'s default', () async {
-      // X-Wing conveyance under the *legacy* signing scheme: the two axes are
+      // X-Wing conveyance under the *legacy* auth scheme: the two axes are
       // chosen independently, so this pairing has to be reachable.
       final keyPair = await XWingPureDartAlgo.instance.generateKeyPair();
       stubPublishedPublicKey(base64Encode(keyPair.publicKey));

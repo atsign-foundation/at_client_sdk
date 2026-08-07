@@ -51,7 +51,7 @@ final class AtKeys {
   }
 
   /// Mints a brand-new key set for [atsign] — the post-quantum material
-  /// (ML-DSA-65 for APKAM signing, X-Wing for encryption) always, and the
+  /// (ML-DSA-65 for APKAM scheme, X-Wing for encryption) always, and the
   /// legacy RSA/AES fields too unless [mintLegacy] is false.
   ///
   /// Nothing here touches the atServer: the caller is responsible for
@@ -60,10 +60,10 @@ final class AtKeys {
   ///
   /// **`mintLegacy: false` is not yet proven end to end.** A post-quantum-only
   /// keyset authenticates as far as this package is concerned — under
-  /// `ApkamSigningScheme.postQuantum` it signs PKAM with ML-DSA-65 — but whether the
+  /// `AtAuthScheme.postQuantum` it signs PKAM with ML-DSA-65 — but whether the
   /// atServer verifies that signature is a server-side question, not settled
   /// here. It also cannot authenticate at all under the default
-  /// `ApkamSigningScheme.legacy`. Leave [mintLegacy] at its default unless you are
+  /// `AtAuthScheme.legacy`. Leave [mintLegacy] at its default unless you are
   /// specifically exercising the PQ material.
   static Future<AtKeys> generate(
     Atsign atsign, {
@@ -81,14 +81,14 @@ final class AtKeys {
     return keys;
   }
 
-  /// The post-quantum half of [generate], on its own: the ML-DSA-65 APKAM
-  /// keypair and the X-Wing encryption keypair, ready to be added to an
-  /// [AtKeys].
+  /// The post-quantum enrollment package: the ML-DSA-65 APKAM keypair and the
+  /// enrollment-scoped X-Wing keypackage, ready to be added to an [AtKeys].
   ///
   /// This is what an enrollment mints for itself
-  /// (`ApkamSigningScheme.mintKeys`), so a keyset minted at enrollment time and
-  /// one minted at activation time carry the same material under the same
-  /// `keyId`s.
+  /// (`AtAuthScheme.mintKeys`). Its APKAM scheme material uses the same
+  /// keyId as activation, while its X-Wing material uses [KeyIds.keyPackageXWing]
+  /// because it belongs to an enrollment keypackage, not the atsign's global
+  /// X-Wing key.
   ///
   /// [enrollmentId] is null when the atServer has not allocated one yet, which
   /// is the case at enrollment-submit time.
@@ -389,7 +389,7 @@ final class AtKeys {
 
   /// Deprecated in favour of typed material ([AtKeysMaterial] via [addKey] /
   /// [getKey]), but **still required** and therefore not removable yet: PKAM
-  /// signs with [apkamPrivateKey] under the default `ApkamSigningScheme.legacy`,
+  /// signs with [apkamPrivateKey] under the default `AtAuthScheme.legacy`,
   /// `FileAtKeysIo`
   /// self-encrypts four of these fields at rest, and enrollment reads
   /// [apkamSymmetricKey] / [defaultEncryptionPrivateKey] /
@@ -398,7 +398,7 @@ final class AtKeys {
   /// travel, not an available replacement.
   static const _legacyFieldDeprecation =
       'legacy flat-file key material: prefer typed AtKeysMaterial (addKey/'
-      'getKey) for new material. Still load-bearing for PKAM signing, at-rest '
+      'getKey) for new material. Still load-bearing for PKAM scheme, at-rest '
       'self-encryption and enrollment, so it cannot be removed yet.';
 
   @Deprecated(_legacyFieldDeprecation)

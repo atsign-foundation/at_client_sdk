@@ -2,9 +2,9 @@
 library;
 
 export 'src/at_auth.dart';
-// The options AtAuth.create takes: the APKAM signing scheme, the two
+// The options AtAuth.create takes: the at_auth scheme, the two
 // authenticators, and the retry policy.
-export 'src/auth/apkam_signing_scheme.dart';
+export 'src/auth/at_auth_scheme.dart';
 export 'src/auth/cram_authenticator.dart';
 export 'src/auth/pkam_authenticator.dart';
 export 'src/auth/retry_options.dart';
@@ -15,7 +15,7 @@ export 'src/keys/serialization/key_ids.dart';
 // Contains method related to submit, approve and deny an enrollment.
 export 'src/enroll/at_enrollment.dart';
 // How an enrollment's apkamSymmetricKey reaches its approver — an axis
-// independent of the APKAM signing scheme.
+// independent of the at_auth scheme.
 export 'src/enroll/apkam_key_conveyance.dart';
 // Contains fields related to enrollment response received from the secondary server
 export 'src/enroll/models/at_enrollment_response.dart';

@@ -1,5 +1,5 @@
 import 'package:at_auth/src/at_auth_impl.dart';
-import 'package:at_auth/src/auth/apkam_signing_scheme.dart';
+import 'package:at_auth/src/auth/at_auth_scheme.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
@@ -30,26 +30,27 @@ abstract interface class AtAuth {
 
   Stream<ProgressEvent> get progressStream;
 
-  /// The APKAM signing scheme every connection this instance builds will
-  /// authenticate with.
-  ApkamSigningScheme get signing;
+  /// The auth scheme every connection this instance builds will authenticate
+  /// with.
+  AtAuthScheme get scheme;
 
   /// Creates an [AtAuth].
   ///
-  /// The type of authentication is controlled by [signing]: it selects both the
-  /// algorithm the PKAM handshake signs with and which APKAM private key is read
-  /// out of the keys. That is the caller's choice, not something inferred from
-  /// the material — [AtKeys.generate] mints both a classical and a post-quantum
-  /// APKAM key, so a keyset cannot express which one an atServer expects.
+  /// Authentication behavior is controlled by [scheme]: it selects the PKAM
+  /// signing algorithm, which APKAM key material is read or minted, and which
+  /// enrollment-time defaults are used. That is the caller's choice, not
+  /// something inferred from the material — [AtKeys.generate] mints both a
+  /// classical and a post-quantum APKAM key, so a keyset cannot express which
+  /// one an atServer expects.
   ///
   /// A connection cannot be supplied: at_lookup binds its PKAM key at
   /// construction, so it cannot exist until the keys have been read or minted,
-  /// and an activation needs a second one signing with a key that did not exist
-  /// when the first was built. [atLookUpFactory] takes over building all of
-  /// them; left null, they are built according to [signing].
+  /// and an activation needs a second one that signs with a key that did not
+  /// exist when the first was built. [atLookUpFactory] takes over building all of
+  /// them; left null, they are built according to [scheme].
   factory AtAuth.create({
     RetryOptions? options,
-    ApkamSigningScheme signing = ApkamSigningScheme.legacy,
+    AtAuthScheme scheme = AtAuthScheme.legacy,
     CramAuthenticator? cramAuthenticator,
     PkamAuthenticator? pkamAuthenticator,
     AtLookUpFactory? atLookUpFactory,
@@ -57,7 +58,7 @@ abstract interface class AtAuth {
   }) {
     return AtAuthImpl(
       retryOptions: options ?? RetryOptions.defaultRetryOptions,
-      signing: signing,
+      scheme: scheme,
       cramAuthenticator: cramAuthenticator,
       pkamAuthenticator: pkamAuthenticator,
       atLookUpFactory: atLookUpFactory,

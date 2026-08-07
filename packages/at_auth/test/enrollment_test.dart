@@ -15,6 +15,11 @@ import 'package:at_demo_data/at_demo_data.dart';
 
 import 'test_utils/at_keys.dart';
 
+const allAuthSchemes = [
+  AtAuthScheme.legacy,
+  AtAuthScheme.postQuantum,
+];
+
 class MockAtLookUp extends Mock implements AtLookUp {}
 
 class MockLookupVerbBuilder extends Fake implements LookupVerbBuilder {}
@@ -248,7 +253,7 @@ void main() {
     });
   });
 
-  group('the enrolled key follows the signing scheme', () {
+  group('the enrolled key follows the auth scheme', () {
     late AtLookUp requesterLookUp;
     late AtLookUp enrollmentLookUp;
     late List<String> enrollCommands;
@@ -282,10 +287,9 @@ void main() {
           .thenAnswer((_) async => 'data:$base64PublicKey');
     }
 
-    AtEnrollmentImpl buildEnrollment(ApkamSigningScheme signing) =>
-        AtEnrollmentImpl(
+    AtEnrollmentImpl buildEnrollment(AtAuthScheme scheme) => AtEnrollmentImpl(
           requesterLookUp,
-          signing: signing,
+          scheme: scheme,
           atLookUpFactory: (_, __, keys, {enrollmentId}) {
             factoryKeys.add(keys);
             return enrollmentLookUp;
@@ -309,16 +313,16 @@ void main() {
         enrollCommands.single.substring(enrollCommands.single.indexOf('{')));
 
     test('stamps the scheme on the enroll verb', () async {
-      for (final signing in ApkamSigningScheme.values) {
+      for (final scheme in allAuthSchemes) {
         enrollCommands.clear();
-        stubPublishedPublicKey(signing == ApkamSigningScheme.legacy
+        stubPublishedPublicKey(scheme == AtAuthScheme.legacy
             ? encryptionPublicKeyMap[atSign]!
             : base64Encode((await XWingPureDartAlgo.instance.generateKeyPair())
                 .publicKey));
 
-        await submit(buildEnrollment(signing));
+        await submit(buildEnrollment(scheme));
 
-        expect(enrollParams()['signingAlgo'], signing.signingAlgo,
+        expect(enrollParams()['signingAlgo'], scheme.signingAlgo,
             reason: 'the atServer is told which algorithm to verify with');
       }
     });
@@ -328,14 +332,11 @@ void main() {
       stubPublishedPublicKey(base64Encode(
           (await XWingPureDartAlgo.instance.generateKeyPair()).publicKey));
 
-      final response =
-          await submit(buildEnrollment(ApkamSigningScheme.postQuantum))
-              as PendingEnrollment;
+      final response = await submit(buildEnrollment(AtAuthScheme.postQuantum))
+          as PendingEnrollment;
 
       expect(
-          ApkamSigningScheme.postQuantum
-              .requireApkamPublicKey(response.atKeys)
-              .bytes,
+          AtAuthScheme.postQuantum.requireApkamPublicKey(response.atKeys).bytes,
           isNotEmpty);
       expect(response.atKeys.apkamPublicKey, isNull,
           reason: 'a PQ enrollment mints no legacy keypair');
@@ -352,7 +353,7 @@ void main() {
       final published = encryptionPublicKeyMap[atSign]!;
       stubPublishedPublicKey(published);
 
-      final response = await submit(buildEnrollment(ApkamSigningScheme.legacy))
+      final response = await submit(buildEnrollment(AtAuthScheme.legacy))
           as PendingEnrollment;
 
       expect(enrollParams()['apkamPublicKey'],
@@ -371,14 +372,13 @@ void main() {
       stubPublishedPublicKey(base64Encode(
           (await XWingPureDartAlgo.instance.generateKeyPair()).publicKey));
 
-      final response =
-          await submit(buildEnrollment(ApkamSigningScheme.postQuantum))
-              as PendingEnrollment;
+      final response = await submit(buildEnrollment(AtAuthScheme.postQuantum))
+          as PendingEnrollment;
 
       expect(response.atKeys.defaultEncryptionPublicKey, isNull);
       expect(
           enrollParams()['apkamPublicKey'],
-          ApkamSigningScheme.postQuantum
+          AtAuthScheme.postQuantum
               .requireApkamPublicKey(response.atKeys)
               .toString());
     });
@@ -390,7 +390,7 @@ void main() {
       stubPublishedPublicKey(base64Encode(
           (await XWingPureDartAlgo.instance.generateKeyPair()).publicKey));
 
-      final enrollment = buildEnrollment(ApkamSigningScheme.postQuantum);
+      final enrollment = buildEnrollment(AtAuthScheme.postQuantum);
       final pending = await submit(enrollment) as PendingEnrollment;
 
       final symmetricKey = pending.atKeys.apkamSymmetricKey.toString();
@@ -411,7 +411,7 @@ void main() {
       // keypair that was never minted.
       expect(factoryKeys, hasLength(1));
       expect(
-          ApkamSigningScheme.postQuantum
+          AtAuthScheme.postQuantum
               .requireApkamPrivateKey(factoryKeys.single!)
               .bytes,
           isNotEmpty);
@@ -421,13 +421,13 @@ void main() {
     test('waitForApproval rejects a keyset minted for the other scheme',
         () async {
       stubPublishedPublicKey(encryptionPublicKeyMap[atSign]!);
-      final pending = await submit(buildEnrollment(ApkamSigningScheme.legacy))
+      final pending = await submit(buildEnrollment(AtAuthScheme.legacy))
           as PendingEnrollment;
 
       // No injected factory here: the rejection is the default factory's, and
       // injecting one would bypass exactly the check under test.
-      final pqEnrollment = AtEnrollmentImpl(requesterLookUp,
-          signing: ApkamSigningScheme.postQuantum);
+      final pqEnrollment =
+          AtEnrollmentImpl(requesterLookUp, scheme: AtAuthScheme.postQuantum);
 
       expect(
           () async => await pqEnrollment.waitForApproval(
@@ -516,16 +516,15 @@ void main() {
       expect(response.enrollStatus, EnrollmentStatus.approved);
     });
 
-    test('takes the caller\'s names and stamps the signing scheme', () async {
-      await AtEnrollmentImpl(cramLookUp,
-              signing: ApkamSigningScheme.postQuantum)
+    test('takes the caller\'s names and stamps the auth scheme', () async {
+      await AtEnrollmentImpl(cramLookUp, scheme: AtAuthScheme.postQuantum)
           .firstEnrollment('cHVi', appName: 'wavi', deviceName: 'pixel');
 
       expect(enrollParams()['appName'], 'wavi');
       expect(enrollParams()['deviceName'], 'pixel');
       expect(enrollParams()['apkamPublicKey'], 'cHVi');
-      expect(enrollParams()['signingAlgo'],
-          ApkamSigningScheme.postQuantum.signingAlgo);
+      expect(
+          enrollParams()['signingAlgo'], AtAuthScheme.postQuantum.signingAlgo);
     });
   });
 }
