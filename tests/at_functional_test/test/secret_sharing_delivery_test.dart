@@ -3,6 +3,8 @@
 // of this file, so the annotation has nothing to tell us here.
 // ignore_for_file: experimental_member_use
 
+import 'dart:convert' show base64Decode, jsonDecode;
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_functional_test/src/config_util.dart';
@@ -64,6 +66,35 @@ void main() {
     expect(remote, hasLength(1),
         reason: 'sendEnvelope writes remote-first precisely so that anything '
             'the wake-up reaches can find the envelope already there');
+  });
+
+  test('the negotiated construction is what actually reaches the atServer',
+      () async {
+    // The unit suite proves the negotiation picks RFC 9180 for a peer that
+    // advertises it and falls back for one that does not. What it cannot show
+    // is that the chosen version is the one on the wire — its fixture backs
+    // local and remote with a single map. Read the envelope back off the
+    // atServer and look at the byte.
+    final sender = await newParty();
+    final recipient = await newParty();
+
+    await sender.sendEnvelope(recipient.myKeyPackage, namespace, {'n': 1});
+
+    final remote = await atClient.getAtKeys(
+        regex: '.*\\.${recipient.kpid}\\.__ssenv\\..*',
+        useRemoteAtServer: true);
+    final value = await atClient.get(remote.single,
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+    final payload =
+        jsonDecode(value.value as String)['payload'] as Map<String, dynamic>;
+
+    expect(payload['suite'], SecretSharingAlgos.xWingRfc9180,
+        reason: 'both parties are this build, so both advertise the RFC 9180 '
+            'suite and the negotiation must settle on it');
+    expect(base64Decode(payload['sealed'] as String).first, 0x02,
+        reason: 'and the declared suite must agree with the version byte the '
+            'recipient will dispatch on — a mismatch opens as an AEAD '
+            'failure that names neither side');
   });
 
   test(
