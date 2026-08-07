@@ -136,30 +136,29 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
   @override
   String get id => nskeyProviderIdFor(keyAlgo) ?? nskeyCryptoProviderId;
 
-  /// The `pqSeal` version this provider emits.
+  /// The strongest `pqSeal` construction both this provider and the
+  /// destination can handle, or null if there is no overlap.
   ///
-  /// **X-Wing stays at `0x01` deliberately, where the envelope substrate moved
-  /// to `0x02`.** The difference is not inconsistency, it is what the two
-  /// paths can discover about their reader.
+  /// The advertisement's `suites` list is what makes this a negotiation rather
+  /// than a guess. Without it a writer could only ever raise the version by
+  /// flag day: every conveyance already written stays readable, but a reader
+  /// on a build that predates the new construction would find new ones
+  /// unopenable, with nothing having told the writer to hold off. An
+  /// advertisement published before the field existed declares
+  /// [legacyNskeySuites], so those owners keep receiving `0x01` — which is
+  /// exactly what they can open.
   ///
-  /// A secret envelope is sealed to a key package, which carries a `suites`
-  /// list saying what its holder can open — so a sender knows whether RFC 9180
-  /// is safe and falls back when it is not. An nskey advertisement carries no
-  /// such field: it names a KEM and nothing about constructions. So there is
-  /// nobody to ask, and raising the version here would be the fleet-wide flag
-  /// day `pqSealDefaultVersion` warns about — every conveyance already written
-  /// stays readable, but a reader on a build that predates `0x02` would find
-  /// new ones unopenable, with no signal that told the writer to hold off.
-  ///
-  /// ML-KEM-1024 has no such history: `0x03` is the only construction that has
-  /// ever existed for it, so nothing can be stranded by using it.
-  ///
-  /// Moving X-Wing to `0x02` needs the advertisement to gain a `suites` list
-  /// first, the way the key package did.
-  int get _sealVersion => switch (keyAlgo) {
-        SecretSharingAlgos.mlKem1024 => 0x03,
-        _ => pqSealDefaultVersion,
-      };
+  /// No overlap is a refusal, not a fallback to this build's preference: the
+  /// owner would get a conveyance it cannot unwrap, and the failure would
+  /// surface on their side as an AEAD error naming nothing.
+  int? _sealVersionFor(NskeyAdvertisement advertised) {
+    for (final suite in SecretSharingAlgos.openableSuitesFor(keyAlgo)) {
+      if (advertised.suites.contains(suite)) {
+        return SecretSharingAlgos.sealVersionFor(suite);
+      }
+    }
+    return null;
+  }
 
   /// Binds the HPKE key schedule to the conveyance's owner and namespace, so an
   /// envelope sealed for one namespace cannot be opened as another's.
@@ -190,12 +189,21 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
           '$nskeyOwner:$namespace advertises a ${advertised.alg} nskey, '
           'which $id cannot seal to');
     }
+    final int? version = _sealVersionFor(advertised);
+    if (version == null) {
+      throw AtEncryptionException(
+          '$nskeyOwner:$namespace advertises a ${advertised.alg} nskey opening '
+          '${advertised.suites}, and $id produces '
+          '${SecretSharingAlgos.openableSuitesFor(keyAlgo)} — no shared '
+          'construction, so nothing is sealed rather than sealing something '
+          'they cannot open');
+    }
     final envelope = await pqSeal(
       _kem,
       advertised.publicKey,
       ck.bytes,
       info: _info(_recordOwnerOf(atKey), namespace),
-      version: _sealVersion,
+      version: version,
     );
 
     atKey.metadata.appMetadata = AppMetadata(

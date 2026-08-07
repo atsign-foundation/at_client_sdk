@@ -109,6 +109,8 @@ void main() {
         nskeyKid: nskeyKidOf(real.publicKeyBytes),
         publicKey: real.publicKeyBytes,
         alg: SecretSharingAlgos.xWing,
+            suites: SecretSharingAlgos.openableSuitesFor(
+                SecretSharingAlgos.xWing)
       ),
     );
 
@@ -137,6 +139,8 @@ void main() {
         nskeyKid: nskeyKidOf(real.publicKeyBytes),
         publicKey: real.publicKeyBytes,
         alg: SecretSharingAlgos.xWing,
+            suites: SecretSharingAlgos.openableSuitesFor(
+                SecretSharingAlgos.xWing)
       ),
     );
 

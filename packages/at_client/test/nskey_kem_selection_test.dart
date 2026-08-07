@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_commons.dart' show AtEncryptionException;
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
@@ -61,21 +62,67 @@ void main() {
       expect(base64Decode(wire).first, 0x03);
     });
 
-    test('the hybrid keeps its own id and stays at ver 0x01', () async {
-      // Deliberately NOT 0x02, unlike the secret-sharing envelope. An nskey
-      // advertisement carries no `suites` list, so a writer cannot discover
-      // whether the holder understands a newer construction — raising it here
-      // would be a flag day. The two arms differ in both fields, which is what
-      // makes this pair meaningful rather than decorative.
+    test('the hybrid negotiates RFC 9180 with an owner that advertises it',
+        () async {
       final (provider, _) = await providerFor(SecretSharingAlgos.xWing);
-      final ck = ContentKey(Uint8List.fromList(List<int>.generate(32, (i) => i)));
+      final ck =
+          ContentKey(Uint8List.fromList(List<int>.generate(32, (i) => i)));
       final atKey = conveyanceKey();
 
       final wire = await provider.encrypt(context, atKey, ck.toBase64());
 
       expect(provider.id, nskeyCryptoProviderId);
       expect(atKey.metadata.appMetadata?.providerId, nskeyCryptoProviderId);
-      expect(base64Decode(wire).first, 0x01);
+      expect(base64Decode(wire).first, 0x02);
+    });
+
+    test('and falls back for an owner whose advertisement predates suites',
+        () async {
+      // The arm that makes the one above safe. Same key, same KEM — the only
+      // difference is what the advertisement says it can open, which is what a
+      // `suites` list exists to carry. Without this the version could only be
+      // raised by upgrading every reader first.
+      final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final pair = await kem.keyPairFromSeed(kem.newSeed());
+      final ring = _FixedRing((
+        nskeyKid: nskeyKidOf(pair.publicKey),
+        publicKey: pair.publicKey,
+        alg: SecretSharingAlgos.xWing,
+        suites: legacyNskeySuites,
+      ), pair.secretKey);
+      final provider = NskeyProvider(
+          keyRing: ring,
+          cache: ContentKeyCache(),
+          keyAlgo: SecretSharingAlgos.xWing);
+      final ck = ContentKey(Uint8List(32));
+      final atKey = conveyanceKey();
+
+      final wire = await provider.encrypt(context, atKey, ck.toBase64());
+
+      expect(base64Decode(wire).first, 0x01,
+          reason: 'an owner that never claimed RFC 9180 must not be sent it — '
+              'the conveyance would be unopenable and nothing would say why');
+      expect(await provider.decrypt(context, atKey, wire), ck.toBase64());
+    });
+
+    test('no shared construction is a refusal, not a guess', () async {
+      final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final pair = await kem.keyPairFromSeed(kem.newSeed());
+      final ring = _FixedRing((
+        nskeyKid: nskeyKidOf(pair.publicKey),
+        publicKey: pair.publicKey,
+        alg: SecretSharingAlgos.xWing,
+        suites: const ['x-wing-hpke-v99'],
+      ), pair.secretKey);
+      final provider = NskeyProvider(
+          keyRing: ring,
+          cache: ContentKeyCache(),
+          keyAlgo: SecretSharingAlgos.xWing);
+
+      await expectLater(
+          provider.encrypt(
+              context, conveyanceKey(), ContentKey(Uint8List(32)).toBase64()),
+          throwsA(isA<AtEncryptionException>()));
     });
 
     for (final keyAlgo in SecretSharingAlgos.keyAlgos) {
@@ -150,4 +197,24 @@ void main() {
       expect(config.contentKeyCache, same(providers.first.cache));
     });
   });
+}
+
+/// A ring serving one fixed advertisement, so a test can state exactly what an
+/// owner claims — including shapes `InMemoryNskeyKeyRing` derives rather than
+/// accepts, such as an advertisement written before `suites` existed.
+class _FixedRing implements NskeyKeyRing {
+  final NskeyAdvertisement _advertised;
+  final Uint8List _secretKey;
+
+  _FixedRing(this._advertised, this._secretKey);
+
+  @override
+  Future<NskeyAdvertisement?> currentPublic(
+          String owner, String namespace) async =>
+      _advertised;
+
+  @override
+  Future<Uint8List?> privateHalf(
+          String owner, String namespace, String nskeyKid) async =>
+      nskeyKid == _advertised.nskeyKid ? _secretKey : null;
 }

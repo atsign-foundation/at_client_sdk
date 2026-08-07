@@ -199,7 +199,9 @@ void main() {
       ring.rememberOwn(alice, namespace, (
         nskeyKid: nskeyKidOf(bobKey.publicKeyBytes),
         publicKey: bobKey.publicKeyBytes,
-        alg: SecretSharingAlgos.xWing
+        alg: SecretSharingAlgos.xWing,
+            suites: SecretSharingAlgos.openableSuitesFor(
+                SecretSharingAlgos.xWing)
       ));
 
       expect((await ring.currentPublic(alice, namespace))?.nskeyKid,

@@ -15,7 +15,17 @@ typedef NskeyAdvertisement = ({
   String nskeyKid,
   Uint8List publicKey,
   String alg,
+  List<String> suites,
 });
+
+/// What an advertisement carrying no `suites` field is taken to support.
+///
+/// Exactly the one construction that existed when such advertisements were
+/// written. It must never grow: adding to it would claim, on behalf of owners
+/// that never said so, that they can open something they cannot — and unlike a
+/// key package, an advertisement is fetched by *senders*, who act on the claim
+/// immediately.
+const List<String> legacyNskeySuites = [SecretSharingAlgos.xWingHpke];
 
 /// The id of an nskey generation — a SHA-256 prefix of its public half, so it is
 /// derivable by anyone holding the key and identical for every party that uses it.
@@ -113,8 +123,12 @@ class InMemoryNskeyKeyRing implements NskeyKeyRing {
     String keyAlgo = SecretSharingAlgos.xWing,
   }) {
     final kid = nskeyKidOf(publicKey);
-    _current[_scope(owner, namespace)] =
-        (nskeyKid: kid, publicKey: publicKey, alg: keyAlgo);
+    _current[_scope(owner, namespace)] = (
+      nskeyKid: kid,
+      publicKey: publicKey,
+      alg: keyAlgo,
+      suites: SecretSharingAlgos.openableSuitesFor(keyAlgo),
+    );
     return kid;
   }
 

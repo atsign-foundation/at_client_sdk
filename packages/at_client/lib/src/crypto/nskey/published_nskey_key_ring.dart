@@ -143,7 +143,19 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
           'the advertised nskey for $owner names a kid that is not the digest '
           'of the key it carries');
     }
-    return (nskeyKid: nskeyKid, publicKey: publicKey, alg: declaredAlg);
+    // Absent means the pre-suites shape, which supported exactly the one
+    // construction that existed then. Entries this build does not know are
+    // kept — the list is the OWNER's statement about what it can open, and a
+    // newer owner may name a construction we simply do not use yet.
+    final declaredSuites = advertised['suites'];
+    return (
+      nskeyKid: nskeyKid,
+      publicKey: publicKey,
+      alg: declaredAlg,
+      suites: declaredSuites is List
+          ? declaredSuites.whereType<String>().toList()
+          : legacyNskeySuites,
+    );
   }
 }
 
@@ -344,6 +356,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
       nskeyKid: nskeyKidOf(pair.publicKey),
       publicKey: pair.publicKey,
       alg: keyAlgo,
+      // Derived from the key, never stated from the build's own list: what
+      // this generation can open is fixed by the KEM it is a key for.
+      suites: SecretSharingAlgos.openableSuitesFor(keyAlgo),
     );
 
     final advertisementKey = nskeyAdvertisementKey(owner, namespace);
@@ -378,6 +393,10 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
       // Without this a sender has an opaque byte string and no way to tell
       // which KEM it belongs to.
       'alg': keyAlgo,
+      // And without this it cannot tell which *construction* the owner can
+      // unwrap, so a new one could only ever arrive by upgrading every reader
+      // first — release-ordering agility rather than negotiated agility.
+      'suites': advertisement.suites,
     });
 
     // Straight to the atServer first: an advertisement is only useful once a

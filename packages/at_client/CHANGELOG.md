@@ -15,16 +15,19 @@
   the destination's advertised algorithm, and every read routes by the id the
   record already carries — so a conveyance written under either KEM keeps
   opening, with no flag day.
-- **The nskey path deliberately does NOT move X-Wing to `ver 0x02`**, though
-  the secret-sharing envelope did. The two differ in what they can discover
-  about their reader: an envelope is sealed to a key package carrying a
-  `suites` list, so a sender knows whether RFC 9180 is safe and falls back when
-  it is not; an nskey advertisement names a KEM and nothing about
-  constructions, so there is nobody to ask. Raising it there would strand
-  readers on builds that predate `0x02` with no signal that told the writer to
-  hold off. ML-KEM-1024 conveys at `0x03` because that is the only construction
-  it has ever had. Moving X-Wing needs the advertisement to gain a `suites`
-  list first.
+- feat: the advertisement also carries a `suites` list — what the owner of that
+  generation can **open** — so the conveyance version is negotiated rather than
+  fixed. A sender picks the strongest construction both sides handle: a modern
+  X-Wing owner now receives `ver 0x02` (RFC 9180) where it received `0x01`, an
+  advertisement published before the field existed declares
+  `legacyNskeySuites` and keeps receiving `0x01`, and ML-KEM-1024 conveys at
+  `0x03`. No shared construction is a refusal rather than a fallback to the
+  sender's own preference.
+  Without this the version could only ever be raised by a flag day: every
+  conveyance already written stays readable, but an owner on a build predating
+  the new construction would find new ones unopenable, with nothing having told
+  the writer to hold off. It is the same mechanism `KeyPackage.suites` gives
+  the secret-sharing envelope, and it is why both paths can move now.
 - fix: an nskey private is persisted as its **seed**, with the algorithm
   alongside, and expanded to a decapsulation key on the way out
   (`NskeyKeyRing.privateHalf` now returns what `pqOpen` takes, which is what it

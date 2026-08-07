@@ -123,7 +123,9 @@ void main() {
     final advertisement = (
       nskeyKid: nskeyKidOf(seed),
       publicKey: seed,
-      alg: SecretSharingAlgos.xWing
+      alg: SecretSharingAlgos.xWing,
+            suites: SecretSharingAlgos.openableSuitesFor(
+                SecretSharingAlgos.xWing)
     );
     ring.rememberOwn(atSign, namespace, advertisement);
     return advertisement;

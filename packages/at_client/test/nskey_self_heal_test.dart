@@ -80,7 +80,9 @@ void main() {
           (
             nskeyKid: kid,
             publicKey: pair.publicKeyBytes,
-            alg: SecretSharingAlgos.xWing
+            alg: SecretSharingAlgos.xWing,
+            suites: SecretSharingAlgos.openableSuitesFor(
+                SecretSharingAlgos.xWing)
           ));
 
       final sharing = MockPairwiseSecretSharing();
@@ -115,7 +117,9 @@ void main() {
           (
             nskeyKid: kid,
             publicKey: pair.publicKeyBytes,
-            alg: SecretSharingAlgos.xWing
+            alg: SecretSharingAlgos.xWing,
+            suites: SecretSharingAlgos.openableSuitesFor(
+                SecretSharingAlgos.xWing)
           ));
 
       final sharing = MockPairwiseSecretSharing();
@@ -162,7 +166,9 @@ void main() {
           (
             nskeyKid: kid,
             publicKey: pair.publicKeyBytes,
-            alg: SecretSharingAlgos.xWing
+            alg: SecretSharingAlgos.xWing,
+            suites: SecretSharingAlgos.openableSuitesFor(
+                SecretSharingAlgos.xWing)
           ));
 
       final sharing = MockPairwiseSecretSharing();
@@ -201,7 +207,9 @@ void main() {
           (
             nskeyKid: kid,
             publicKey: pair.publicKeyBytes,
-            alg: SecretSharingAlgos.xWing
+            alg: SecretSharingAlgos.xWing,
+            suites: SecretSharingAlgos.openableSuitesFor(
+                SecretSharingAlgos.xWing)
           ));
       final sharing = MockPairwiseSecretSharing();
 

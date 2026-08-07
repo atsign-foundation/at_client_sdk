@@ -143,6 +143,8 @@ void main() {
       nskeyKid: nskeyKidOf(winner.publicKeyBytes),
       publicKey: winner.publicKeyBytes,
       alg: SecretSharingAlgos.xWing,
+            suites: SecretSharingAlgos.openableSuitesFor(
+                SecretSharingAlgos.xWing)
     ));
 
     final adopted = await ring.mintAndPublish(namespace);
