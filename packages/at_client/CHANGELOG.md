@@ -1,4 +1,29 @@
 ## 3.14.1
+- feat: a sender follows the recipient's advertised construction instead of
+  stamping the only one it knows. `sendEnvelope` takes the KEM from the
+  recipient key's `alg`, the suite from the strongest entry both sides list
+  (`KeyPackage.bestSuiteFor`, which until now had no production caller), and
+  the `pqSeal` version from that suite. The candidate suites are narrowed to
+  the chosen key's own KEM first, so a suite can never be picked that the key
+  cannot decapsulate.
+  **This moves the wire.** Two clients that both advertise RFC 9180 now
+  exchange `ver 0x02` envelopes where they exchanged `0x01`. A peer whose key
+  package predates the `suites` field still receives `0x01`, because an absent
+  field means exactly the one suite that existed when it was written — which
+  is what lets the construction change without upgrading every reader first.
+  No mutually supported suite is a refusal, not a guess: sealing under this
+  client's own preference would hand the recipient an envelope it cannot
+  unwrap, and the failure would surface on their side as an opaque AEAD error.
+- feat: the receive paths resolve the KEM from the envelope's declared suite
+  rather than assuming X-Wing — `pairwise_secret_sharing` and
+  `enrollment_symmetric_key`. `pqOpen` reads the version byte itself, but the
+  KEM instance is the caller's to supply, and a hybrid envelope decapsulated
+  with ML-KEM fails indistinguishably from a tampered one. Resolving the KEM
+  also replaces the separate membership test against
+  `SecretSharingAlgos.suites`:
+  one lookup instead of two lists that have to agree, where a suite in the list
+  but absent from the mapping would pass the guard and then have nothing to
+  open with.
 - feat: `AtClientPreference.keyEstablishmentAlgo` — which key-establishment
   algorithm this atSign **mints and advertises**. Two options, and the choice
   belongs to a deployment rather than to a message: the ML-KEM-768 + X25519

@@ -5,7 +5,7 @@ import 'dart:convert'
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_chops/at_chops.dart'
-    show PqOpenException, XWingPureDartAlgo, pqOpen, pqSeal;
+    show AtKemAlgorithm, PqOpenException, pqOpen, pqSeal;
 import 'package:at_client/at_client.dart'
     show
         AtKey,
@@ -238,21 +238,48 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
           '${SecretSharingAlgos.keyAlgos})');
     }
 
-    // X-Wing HPKE: pqSeal encapsulates to the recipient's published key and
-    // wraps the payload (AEAD over an HKDF key schedule) into one envelope —
-    // nothing secret travels except that sealed envelope.
+    // Everything about the construction comes from the RECIPIENT, not from
+    // this client's own configuration. Which KEM this atSign mints is its own
+    // business; what it seals to is decided by the key the recipient published
+    // and the suites that recipient says it can open.
+    //
+    // The candidate list is narrowed to the chosen key's own KEM first, so a
+    // suite can never be picked that the key cannot decapsulate — the two are
+    // separate fields in the key package and a holder may advertise more than
+    // one KEM.
+    final AtKemAlgorithm? kem = SecretSharingAlgos.kemFor(recipientKey.alg);
+    final String? suite =
+        to.bestSuiteFor(SecretSharingAlgos.openableSuitesFor(recipientKey.alg));
+    final int? version =
+        suite == null ? null : SecretSharingAlgos.sealVersionFor(suite);
+    if (kem == null || suite == null || version == null) {
+      // Refused rather than sealed under this client's own preference: the
+      // recipient would get an envelope it cannot unwrap, and the failure
+      // would surface on their side as an opaque AEAD error with nothing to
+      // point at.
+      throw StateError(
+          'No mutually supported construction for key package '
+          '${to.enrollmentId}/${to.apkamId}: it advertises a '
+          '${recipientKey.alg} key opening ${to.suites}, and this client '
+          'produces ${SecretSharingAlgos.suites}');
+    }
+
+    // pqSeal encapsulates to the recipient's published key and wraps the
+    // payload (AEAD over the suite's key schedule) into one envelope — nothing
+    // secret travels except that sealed envelope.
     final Uint8List sealed = await pqSeal(
-      XWingPureDartAlgo.instance,
+      kem,
       base64Decode(recipientKey.pub),
       Uint8List.fromList(utf8.encode(jsonEncode(payload))),
       info: sealInfo,
+      version: version,
     );
 
     final envelope = SecretEnvelope(
       fromKpid: kpid,
       fromEnrollmentId: enrollmentId,
       toKpid: recipientKey.kid,
-      suite: SecretSharingAlgos.xWingHpke,
+      suite: suite,
       kid: recipientKey.kid,
       sealed: base64Encode(sealed),
     );
@@ -451,7 +478,13 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
           'enrollment ${envelope.fromEnrollmentId}; skipping');
       return null;
     }
-    if (!SecretSharingAlgos.suites.contains(envelope.suite)) {
+    // Resolving the KEM doubles as the support check. Testing membership of
+    // `SecretSharingAlgos.suites` separately would be a second list that has
+    // to agree with this one, and a suite present in that list but absent
+    // here would pass the guard and then have no KEM to open with.
+    final AtKemAlgorithm? kem =
+        SecretSharingAlgos.kemForSuite(envelope.suite);
+    if (kem == null) {
       logger.warning('Envelope $envelopeKey uses unsupported sealing suite '
           '${envelope.suite}; skipping');
       return null;
@@ -462,6 +495,11 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       return null;
     }
 
+    // pqOpen reads the envelope's version byte itself, but the KEM instance is
+    // this caller's to supply and the two must agree — a hybrid envelope
+    // decapsulated with ML-KEM fails indistinguishably from a tampered one.
+    // The suite is what names it, which is why the envelope carries it.
+    //
     // pqOpen's AEAD authenticates: tampering, a wrong-recipient
     // decapsulation, or mismatched `info` all surface as a PqOpenException.
     // It is deterministic — retrying cannot help — so a failure leaves the
@@ -469,7 +507,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     final Uint8List plaintext;
     try {
       plaintext = await pqOpen(
-        XWingPureDartAlgo.instance,
+        kem,
         xWingSeed,
         base64Decode(envelope.sealed),
         info: sealInfo,

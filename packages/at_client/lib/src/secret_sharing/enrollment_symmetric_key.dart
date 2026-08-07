@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart'
     show AtKeys, AtKeysMaterial, CryptographicKeyType, KeyAlgorithmType;
-import 'package:at_chops/at_chops.dart' show XWingPureDartAlgo, pqOpen;
+import 'package:at_chops/at_chops.dart' show AtKemAlgorithm, pqOpen;
 import 'package:at_commons/at_builders.dart' show ScanVerbBuilder;
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
@@ -188,16 +188,20 @@ Future<String?> _openIfSymmetricKey(
     return null;
   }
 
+  // The suite names the KEM, and resolving it is also the support check —
+  // a separate membership test against `SecretSharingAlgos.suites` would be a
+  // second list that has to agree with this one.
+  final AtKemAlgorithm? kem = SecretSharingAlgos.kemForSuite(envelope.suite);
   if (envelope.toKpid != kpid ||
       signedEnvelope['enrollmentId'] != envelope.fromEnrollmentId ||
-      !SecretSharingAlgos.suites.contains(envelope.suite)) {
+      kem == null) {
     return null;
   }
 
   final Uint8List plaintext;
   try {
     plaintext = await pqOpen(
-      XWingPureDartAlgo.instance,
+      kem,
       seed,
       base64Decode(envelope.sealed),
       info: PairwiseSecretSharing.sealInfo,

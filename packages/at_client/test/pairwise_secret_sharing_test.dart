@@ -292,6 +292,68 @@ void main() {
       await expectLater(sharerA.sendEnvelope(futureOnly, 'myapp', {'a': 1}),
           throwsA(isA<StateError>()));
     });
+
+    /// The construction the sender actually emitted: the envelope's declared
+    /// suite, and the `pqSeal` version byte that leads its wire form.
+    ({String suite, int version}) sentConstruction(String kpid) {
+      final key = remoteData.keys
+          .singleWhere((k) => k.contains('.$kpid.__ssenv.'));
+      final payload =
+          jsonDecode(remoteData[key]!)['payload'] as Map<String, dynamic>;
+      return (
+        suite: payload['suite'] as String,
+        version: base64Decode(payload['sealed'] as String).first,
+      );
+    }
+
+    test('negotiates RFC 9180 with a peer whose package says it opens it',
+        () async {
+      await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'a': 1});
+
+      final sent = sentConstruction(sharerB.kpid);
+      expect(sent.suite, SecretSharingAlgos.xWingRfc9180);
+      expect(sent.version, 0x02,
+          reason: 'the suite and the version byte must agree — the recipient '
+              'opens by the version and this client accepts by the suite');
+    });
+
+    test('falls back to the original construction for a peer that predates it',
+        () async {
+      // Same X-Wing key, so the only thing that differs between these two
+      // arms is what the package says it can open. That is the whole point of
+      // the `suites` field: without it a second construction could only be
+      // introduced by upgrading every reader first.
+      final legacyPeer = KeyPackage.fromPayload({
+        'v': 1,
+        'createdAt': DateTime.now().toUtc().toIso8601String(),
+        'keys': sharerB.myKeyPackage.keys.map((k) => k.toJson()).toList(),
+        // no `suites` — written before the field existed
+      }, enrollmentId: sharerB.enrollmentId);
+      expect(legacyPeer.suites, KeyPackage.legacySuites);
+
+      await sharerA.sendEnvelope(legacyPeer, 'myapp', {'a': 1});
+
+      final sent = sentConstruction(sharerB.kpid);
+      expect(sent.suite, SecretSharingAlgos.xWingHpke);
+      expect(sent.version, 0x01,
+          reason: 'a peer that never claimed RFC 9180 must not be sent it — '
+              'it would reject the suite and the payload would be lost');
+    });
+
+    test('refuses rather than guessing when nothing is mutually supported',
+        () async {
+      // Stamping this client's own preference anyway would hand the recipient
+      // an envelope it cannot unwrap, and the failure would surface on their
+      // side as an opaque AEAD error.
+      final noOverlap = KeyPackage(
+        enrollmentId: 'enroll-x',
+        createdAt: DateTime.now().toUtc(),
+        keys: sharerB.myKeyPackage.keys,
+        suites: const ['x-wing-hpke-v99'],
+      );
+      await expectLater(sharerA.sendEnvelope(noOverlap, 'myapp', {'a': 1}),
+          throwsA(isA<StateError>()));
+    });
   });
 
   group('sweepOnce', () {
