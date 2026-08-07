@@ -142,6 +142,7 @@ void main() {
     ring.rememberOwn(atSign, namespace, (
       nskeyKid: nskeyKidOf(winner.publicKeyBytes),
       publicKey: winner.publicKeyBytes,
+      alg: SecretSharingAlgos.xWing,
     ));
 
     final adopted = await ring.mintAndPublish(namespace);

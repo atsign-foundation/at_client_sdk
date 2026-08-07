@@ -1,15 +1,17 @@
 import 'dart:convert' show base64Decode;
 import 'dart:typed_data' show Uint8List;
 
-import 'package:at_chops/at_chops.dart' show XWingPureDartAlgo;
 import 'package:at_auth/at_auth.dart'
     show
         AtKeys,
         AtKeysIo,
         AtKeysMaterial,
         CryptographicKeyType,
-        KeyAlgorithmType,
         WrittenAtKeysIo;
+import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
+    show NskeyAdvertisement;
+import 'package:at_client/src/secret_sharing/algo_ids.dart'
+    show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
@@ -56,8 +58,10 @@ class NskeyPrivateFiling {
   final AtKeysIo keysIo;
   final String atSign;
 
-  /// The published public half for `(namespace, nskeyKid)`, used to check that
-  /// an arriving private actually corresponds to the key peers are sealing to.
+  /// The published generation for `(namespace, nskeyKid)`, used to check that
+  /// an arriving seed actually corresponds to the key peers are sealing to —
+  /// and to learn which KEM it is a seed for, since the seed arrives as bare
+  /// bytes and 32 or 64 of them are valid for one KEM or the other.
   ///
   /// A secondary check, subordinate to the signature that already
   /// authenticated the envelope — but a cheap one, and the only thing that
@@ -65,13 +69,13 @@ class NskeyPrivateFiling {
   /// the wrong generation, or a truncation. Filing that would leave the client
   /// believing it can open a namespace it cannot, and the failure would
   /// surface later, on data, as corruption rather than as a bad key.
-  final Future<Uint8List?> Function(String namespace, String nskeyKid)?
-      publishedPublicKey;
+  final Future<NskeyAdvertisement?> Function(String namespace, String nskeyKid)?
+      publishedGeneration;
 
   NskeyPrivateFiling({
     required this.keysIo,
     required String atSign,
-    this.publishedPublicKey,
+    this.publishedGeneration,
   }) : atSign = atSign.toAtsign();
 
   /// Files every conveyed nskey private waiting in the secret store. Returns
@@ -107,42 +111,66 @@ class NskeyPrivateFiling {
           'it opens');
       return false;
     }
-    final private = Uint8List.fromList(base64Decode(secret.value));
-    if (!await _corresponds(secret.namespace, nskeyKid, private)) return false;
+    final seed = Uint8List.fromList(base64Decode(secret.value));
+    final advertised = await _publishedFor(secret.namespace, nskeyKid);
+    // An arriving seed carries no algorithm of its own, so the advertisement
+    // is what names it. With no advertisement to consult, the hybrid is the
+    // only thing it could be: nothing else was ever conveyed.
+    final keyAlgo = advertised?.alg ?? SecretSharingAlgos.xWing;
+    if (!await _corresponds(secret.namespace, nskeyKid, seed, keyAlgo,
+        advertised)) {
+      return false;
+    }
 
     return store(
       namespace: secret.namespace,
       nskeyKid: nskeyKid,
-      private: private,
+      seed: seed,
+      keyAlgo: keyAlgo,
       createdAt: secret.createdAt,
     );
   }
 
-  /// Whether [private] derives the public half published for
-  /// `(namespace, nskeyKid)`. True when no lookup was supplied — the check is
-  /// secondary, and refusing everything for want of it would be worse than
-  /// not making it.
-  Future<bool> _corresponds(
-      String namespace, String nskeyKid, Uint8List private) async {
-    final lookup = publishedPublicKey;
-    if (lookup == null) return true;
-
-    final Uint8List? published;
+  /// The published generation, or null when there is no lookup or it fails.
+  Future<NskeyAdvertisement?> _publishedFor(
+      String namespace, String nskeyKid) async {
+    final lookup = publishedGeneration;
+    if (lookup == null) return null;
     try {
-      published = await lookup(namespace, nskeyKid);
+      return await lookup(namespace, nskeyKid);
     } catch (e) {
       _logger.info('Could not fetch the published nskey for '
-          '$namespace:$nskeyKid to check correspondence, so filing on the '
-          'signature alone: $e');
-      return true;
+          '$namespace:$nskeyKid: $e');
+      return null;
     }
-    if (published == null) return true;
+  }
 
-    // An X-Wing secret key IS its seed, so the public half derives from it
-    // exactly.
-    final derived =
-        (await XWingPureDartAlgo.instance.generateKeyPair(private)).publicKey;
-    if (_sameBytes(derived, published)) return true;
+  /// Whether [seed] derives the public half published for
+  /// `(namespace, nskeyKid)`. True when nothing was published to compare
+  /// against — the check is secondary, and refusing everything for want of it
+  /// would be worse than not making it.
+  Future<bool> _corresponds(String namespace, String nskeyKid, Uint8List seed,
+      String keyAlgo, NskeyAdvertisement? advertised) async {
+    if (advertised == null) return true;
+
+    final kem = SecretSharingAlgos.kemFor(keyAlgo);
+    if (kem == null) {
+      _logger.severe('Refusing the nskey seed for $namespace:$nskeyKid — it '
+          'is advertised as "$keyAlgo", which this build cannot expand');
+      return false;
+    }
+
+    // The seed re-derives the whole pair, so the public half comes back
+    // exactly — for either KEM.
+    final Uint8List derived;
+    try {
+      derived = (await kem.keyPairFromSeed(seed)).publicKey;
+    } on ArgumentError catch (e) {
+      _logger.severe('Refusing the nskey seed for $namespace:$nskeyKid — it is '
+          'not a valid $keyAlgo seed: $e');
+      return false;
+    }
+    if (_sameBytes(derived, advertised.publicKey)) return true;
 
     _logger.severe('Refusing the nskey private for $namespace:$nskeyKid — it '
         'does not derive the published public half, so filing it would leave '
@@ -159,8 +187,9 @@ class NskeyPrivateFiling {
     return true;
   }
 
-  /// The nskey private for `(namespace, nskeyKid)`, or null if this client
-  /// does not hold it.
+  /// The **decapsulation key** for `(namespace, nskeyKid)`, or null if this
+  /// client does not hold it — expanded from the stored seed, ready for
+  /// `pqOpen`.
   ///
   /// Read from `AtKeys` rather than from memory, so it survives the restart
   /// that is the whole reason for filing it there.
@@ -170,7 +199,30 @@ class NskeyPrivateFiling {
       final material = keys.getKey(keyIdFor(namespace, nskeyKid),
           CryptographicKeyType.privateDecapsulation);
       if (material == null) return null;
-      return Uint8List.fromList(material.bytes.bytes);
+      final keyAlgo =
+          SecretSharingAlgos.keyAlgoForMaterial(material.keyAlgorithmType);
+      final kem = keyAlgo == null ? null : SecretSharingAlgos.kemFor(keyAlgo);
+      if (kem == null) {
+        // Filed by a newer client under a KEM this build cannot expand. The
+        // namespace reads as one this client cannot open, which is the truth.
+        _logger.info('The nskey seed for $namespace:$nskeyKid is a '
+            '"${material.keyAlgorithmType}" key this build cannot expand');
+        return null;
+      }
+      try {
+        return (await kem.keyPairFromSeed(
+                Uint8List.fromList(material.bytes.bytes)))
+            .secretKey;
+      } on ArgumentError catch (e) {
+        // Held, but not a usable seed for the algorithm it is filed under.
+        // Loud, because it is indistinguishable from holding nothing at every
+        // caller above — the namespace simply reads as unopenable — and the
+        // cause is a keyfile this client will never repair on its own.
+        _logger.severe('The nskey material filed for $namespace:$nskeyKid '
+            'under "${material.keyAlgorithmType}" is not a valid seed for it, '
+            'so this namespace cannot be opened: $e');
+        return null;
+      }
     } catch (e) {
       _logger.finer('No nskey private for $namespace:$nskeyKid ($e)');
       return null;
@@ -238,7 +290,14 @@ class NskeyPrivateFiling {
     }
   }
 
-  /// Stores an nskey private this client either minted or was conveyed.
+  /// Stores an nskey **seed** this client either minted or was conveyed.
+  ///
+  /// The seed, not the decapsulation key: they are the same bytes for X-Wing
+  /// but not for ML-KEM, whose decapsulation key is expanded and cannot be
+  /// turned back into a public half. [read] expands it again on the way out.
+  ///
+  /// [keyAlgo] is stored with it because the bytes alone do not identify a
+  /// KEM — 32 and 64 bytes are both valid seeds for one of them.
   ///
   /// The minting path calls this **before publishing the public half**: a
   /// published key whose private did not survive leaves every sender sealing
@@ -247,7 +306,8 @@ class NskeyPrivateFiling {
   Future<bool> store({
     required String namespace,
     required String nskeyKid,
-    required Uint8List private,
+    required Uint8List seed,
+    String keyAlgo = SecretSharingAlgos.xWing,
     DateTime? createdAt,
   }) async {
     final AtKeys keys;
@@ -266,11 +326,18 @@ class NskeyPrivateFiling {
       return false;
     }
 
+    final materialAlgo = SecretSharingAlgos.materialAlgoFor(keyAlgo);
+    if (materialAlgo == null) {
+      _logger.severe('Refusing to file an nskey seed for $namespace:$nskeyKid '
+          'under unknown algorithm "$keyAlgo" — it could not be expanded back '
+          'into a usable key');
+      return false;
+    }
     keys.addKey(AtKeysMaterial(
       keyId: keyId,
       keyPartType: CryptographicKeyType.privateDecapsulation,
-      keyAlgorithmType: KeyAlgorithmType.xWing,
-      bytes: AtBytes(private),
+      keyAlgorithmType: materialAlgo,
+      bytes: AtBytes(seed),
       createdAt: createdAt ?? DateTime.now().toUtc(),
     ));
 

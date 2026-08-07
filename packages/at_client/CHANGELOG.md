@@ -1,4 +1,40 @@
 ## 3.14.1
+- feat: the nskey advertisement names its key-establishment algorithm, and the
+  conveyance path follows it. `NskeyAdvertisement` and `ResolvedNskey` carry
+  `alg`, the published payload carries `alg`, and `PublishedNskeyKeyRing` mints
+  under `AtClientPreference.keyEstablishmentAlgo`. An advertisement without the
+  field reads as the hybrid — which is what every one published before this was,
+  by construction, since no other KEM existed. One that names an algorithm this
+  build cannot encapsulate to is **refused rather than guessed at**: a sender
+  cannot tell an X-Wing encapsulation key from an ML-KEM one by looking, and
+  getting it wrong produces a conveyance the owner can never open.
+- feat: a second conveyance provider id, `at/nskey/MLKEM1024/AES/GCM`, exactly
+  as `nskeyCryptoProviderId`'s own documentation anticipated. Both are
+  registered on every client regardless of what this atSign mints, because a
+  *recipient's* KEM is the recipient's choice; `CkManager` routes a write by
+  the destination's advertised algorithm, and every read routes by the id the
+  record already carries — so a conveyance written under either KEM keeps
+  opening, with no flag day.
+- **The nskey path deliberately does NOT move X-Wing to `ver 0x02`**, though
+  the secret-sharing envelope did. The two differ in what they can discover
+  about their reader: an envelope is sealed to a key package carrying a
+  `suites` list, so a sender knows whether RFC 9180 is safe and falls back when
+  it is not; an nskey advertisement names a KEM and nothing about
+  constructions, so there is nobody to ask. Raising it there would strand
+  readers on builds that predate `0x02` with no signal that told the writer to
+  hold off. ML-KEM-1024 conveys at `0x03` because that is the only construction
+  it has ever had. Moving X-Wing needs the advertisement to gain a `suites`
+  list first.
+- fix: an nskey private is persisted as its **seed**, with the algorithm
+  alongside, and expanded to a decapsulation key on the way out
+  (`NskeyKeyRing.privateHalf` now returns what `pqOpen` takes, which is what it
+  always meant). Byte-identical for X-Wing; for ML-KEM the decapsulation key is
+  expanded and cannot be turned back into a public half, so filing it would
+  have left the generation unopenable after a restart. The correspondence check
+  on an arriving private re-derives through the advertised KEM rather than
+  assuming X-Wing — `NskeyPrivateFiling.publishedPublicKey` becomes
+  `publishedGeneration` and hands back the whole advertisement, since a seed
+  arrives as bare bytes and 32 or 64 of them are valid for one KEM or the other.
 - feat: a client mints and advertises the KEM its deployment configured.
   `KeyPackageRegistration` and `enrollmentKeyPackageBuilder` take the algorithm
   from `AtClientPreference.keyEstablishmentAlgo` (the builder as an explicit

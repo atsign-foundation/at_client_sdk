@@ -96,7 +96,7 @@ class CkManager {
     // Either there is no CK for this destination, or the one we have was sealed
     // to a generation the destination has since rotated away from.
     await _cutAndConvey(context, valueKey, owner, ckNs, advertised.nskeyKid,
-        useRemoteAtServer: useRemoteAtServer);
+        keyAlgo: advertised.alg, useRemoteAtServer: useRemoteAtServer);
   }
 
   /// Rotates the content key for the destination [valueKey] addresses: cuts a
@@ -158,7 +158,7 @@ class CkManager {
 
     final ck = await _cutAndConvey(
         context, valueKey, owner, ckNs, advertised.nskeyKid,
-        useRemoteAtServer: useRemoteAtServer);
+        keyAlgo: advertised.alg, useRemoteAtServer: useRemoteAtServer);
 
     if (deleteSuperseded && superseded != null && superseded != ck.ckKid) {
       // After the successor is durable, never before: a client whose write
@@ -178,6 +178,7 @@ class CkManager {
     String owner,
     String ckNs,
     String nskeyKid, {
+    required String keyAlgo,
     bool? useRemoteAtServer,
   }) async {
     // The conveyance routes to at/nskey, whose encrypt seals the CK and caches
@@ -188,7 +189,11 @@ class CkManager {
       SymmetricAesGcmProvider.conveyanceKeyFor(valueKey, ck.ckKid, ckNs),
       ck.toBase64(),
       putRequestOptions: PutRequestOptions()
-        ..cryptoProviderId = nskeyCryptoProviderId
+        // The destination's advertised KEM decides which conveyance provider
+        // writes this, and the id is what routes the record back to the same
+        // one on every future read.
+        ..cryptoProviderId =
+            nskeyProviderIdFor(keyAlgo) ?? nskeyCryptoProviderId
         // The value about to be written cites this record, so it must not
         // outrun it. A remote-only value paired with a local-first conveyance
         // reaches the recipient before its key does.

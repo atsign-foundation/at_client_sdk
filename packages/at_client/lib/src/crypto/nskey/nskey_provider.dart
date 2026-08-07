@@ -5,6 +5,8 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/content_key.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
+import 'package:at_client/src/secret_sharing/algo_ids.dart'
+    show SecretSharingAlgos;
 import 'package:at_commons/at_commons.dart';
 
 /// Wire id of the CK-conveyance provider.
@@ -17,12 +19,30 @@ import 'package:at_commons/at_commons.dart';
 /// That is what makes an algorithm change graceful rather than a flag day: a
 /// reader registers every scheme it supports, values route by their own id so
 /// old ones never stop opening, and a writer can *decide* whether a recipient
-/// can read a scheme instead of guessing. A future
-/// `at/nskey/MLKEM1024/AES/GCM` coexists with this one.
+/// can read a scheme instead of guessing.
+/// [mlKemNskeyCryptoProviderId] is the second one, and it coexists with this
+/// one exactly as this doc anticipated.
 const String nskeyCryptoProviderId = 'at/nskey/XWING/AES/GCM';
+
+/// Wire id of the CK-conveyance provider for the **no-hybrid** KEM.
+///
+/// The second id the [nskeyCryptoProviderId] doc anticipated, and the reason
+/// it is a second id rather than a field: a record routes back to its provider
+/// by this string on every read, so a conveyance sealed under either KEM keeps
+/// opening for as long as its id resolves — no flag day, and no reader that
+/// has to guess.
+const String mlKemNskeyCryptoProviderId = 'at/nskey/MLKEM1024/AES/GCM';
 
 /// The role prefix every CK-conveyance scheme shares, whatever its algorithms.
 const String nskeyProviderFamily = 'at/nskey';
+
+/// The provider id that conveys a content key sealed to a [keyAlgo] nskey, or
+/// null for an algorithm this build cannot seal to.
+String? nskeyProviderIdFor(String keyAlgo) => switch (keyAlgo) {
+      SecretSharingAlgos.xWing => nskeyCryptoProviderId,
+      SecretSharingAlgos.mlKem1024 => mlKemNskeyCryptoProviderId,
+      _ => null,
+    };
 
 /// Which key class a CK was sealed to.
 ///
@@ -73,8 +93,8 @@ class NamespaceKeyUnavailableException extends AtEncryptionException {
 /// Layer 2 of the nskey data path: conveys a symmetric content key.
 ///
 /// A value routed here **is** a sealed CK — the `<ckKid>.__ck.<ns>@<owner>`
-/// record. [encrypt] takes the CK's base64 bytes and returns the X-Wing
-/// `pqSeal` envelope; [decrypt] opens it with the namespace's nskey private and
+/// record. [encrypt] takes the CK's base64 bytes and returns the `pqSeal`
+/// envelope; [decrypt] opens it with the namespace's nskey private and
 /// caches the CK, so the `at/symmetric/AES/GCM` provider can resolve it by
 /// `ckKid` when the data value arrives.
 ///
@@ -83,13 +103,22 @@ class NamespaceKeyUnavailableException extends AtEncryptionException {
 class NskeyProvider implements CryptoProvider, HandlesSelectively {
   final NskeyKeyRing keyRing;
   final ContentKeyCache cache;
-  final AtKemAlgorithm _xwing;
+
+  /// The key-establishment algorithm this instance conveys under. One instance
+  /// per KEM, each with its own [id], so a record routes back to the one that
+  /// can open it.
+  final String keyAlgo;
+
+  final AtKemAlgorithm _kem;
 
   NskeyProvider({
     required this.keyRing,
     required this.cache,
-    AtKemAlgorithm? xwing,
-  }) : _xwing = xwing ?? XWingPureDartAlgo.instance;
+    this.keyAlgo = SecretSharingAlgos.xWing,
+    AtKemAlgorithm? kem,
+  })  : _kem = kem ??
+            SecretSharingAlgos.kemFor(keyAlgo) ??
+            XWingPureDartAlgo.instance;
 
   /// The nskey data path is scoped to `(owner, namespace)` throughout — the key
   /// ring, the CK cache and the HPKE binding all take a namespace — so a key
@@ -105,7 +134,32 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
       !atKey.isLocal && atKey.namespace != null && atKey.namespace!.isNotEmpty;
 
   @override
-  String get id => nskeyCryptoProviderId;
+  String get id => nskeyProviderIdFor(keyAlgo) ?? nskeyCryptoProviderId;
+
+  /// The `pqSeal` version this provider emits.
+  ///
+  /// **X-Wing stays at `0x01` deliberately, where the envelope substrate moved
+  /// to `0x02`.** The difference is not inconsistency, it is what the two
+  /// paths can discover about their reader.
+  ///
+  /// A secret envelope is sealed to a key package, which carries a `suites`
+  /// list saying what its holder can open — so a sender knows whether RFC 9180
+  /// is safe and falls back when it is not. An nskey advertisement carries no
+  /// such field: it names a KEM and nothing about constructions. So there is
+  /// nobody to ask, and raising the version here would be the fleet-wide flag
+  /// day `pqSealDefaultVersion` warns about — every conveyance already written
+  /// stays readable, but a reader on a build that predates `0x02` would find
+  /// new ones unopenable, with no signal that told the writer to hold off.
+  ///
+  /// ML-KEM-1024 has no such history: `0x03` is the only construction that has
+  /// ever existed for it, so nothing can be stranded by using it.
+  ///
+  /// Moving X-Wing to `0x02` needs the advertisement to gain a `suites` list
+  /// first, the way the key package did.
+  int get _sealVersion => switch (keyAlgo) {
+        SecretSharingAlgos.mlKem1024 => 0x03,
+        _ => pqSealDefaultVersion,
+      };
 
   /// Binds the HPKE key schedule to the conveyance's owner and namespace, so an
   /// envelope sealed for one namespace cannot be opened as another's.
@@ -127,11 +181,21 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     }
 
     final ck = ContentKey.fromBase64(plaintext);
+    if (advertised.alg != keyAlgo) {
+      // The destination advertises the other KEM, so its conveyance belongs to
+      // the other provider. CkManager routes by the advertised algorithm, so
+      // reaching here means a conveyance was addressed directly to the wrong
+      // one — sealing anyway would produce a record nobody can open.
+      throw AtEncryptionException(
+          '$nskeyOwner:$namespace advertises a ${advertised.alg} nskey, '
+          'which $id cannot seal to');
+    }
     final envelope = await pqSeal(
-      _xwing,
+      _kem,
       advertised.publicKey,
       ck.bytes,
       info: _info(_recordOwnerOf(atKey), namespace),
+      version: _sealVersion,
     );
 
     atKey.metadata.appMetadata = AppMetadata(
@@ -189,7 +253,7 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     final Uint8List ckBytes;
     try {
       ckBytes = await pqOpen(
-        _xwing,
+        _kem,
         private,
         Uint8List.fromList(base64Decode(ciphertext)),
         info: _info(_recordOwnerOf(atKey), namespace),

@@ -75,7 +75,13 @@ void main() {
           PublishedNskeyKeyRing(atClient, privateFiling: await filing());
       final kid = nskeyKidOf(pair.publicKeyBytes);
       ring.rememberOwn(
-          atSign, namespace, (nskeyKid: kid, publicKey: pair.publicKeyBytes));
+          atSign,
+          namespace,
+          (
+            nskeyKid: kid,
+            publicKey: pair.publicKeyBytes,
+            alg: SecretSharingAlgos.xWing
+          ));
 
       final sharing = MockPairwiseSecretSharing();
       when(() => sharing.requestSecretsFromNamespace(any(),
@@ -101,10 +107,16 @@ void main() {
       final held = await filing();
       final kid = nskeyKidOf(pair.publicKeyBytes);
       await held.store(
-          namespace: namespace, nskeyKid: kid, private: pair.privateKeyBytes);
+          namespace: namespace, nskeyKid: kid, seed: pair.privateKeyBytes);
       final ring = PublishedNskeyKeyRing(atClient, privateFiling: held);
       ring.rememberOwn(
-          atSign, namespace, (nskeyKid: kid, publicKey: pair.publicKeyBytes));
+          atSign,
+          namespace,
+          (
+            nskeyKid: kid,
+            publicKey: pair.publicKeyBytes,
+            alg: SecretSharingAlgos.xWing
+          ));
 
       final sharing = MockPairwiseSecretSharing();
 
@@ -145,7 +157,13 @@ void main() {
       final ring = PublishedNskeyKeyRing(atClient, privateFiling: fileStore);
       final kid = nskeyKidOf(pair.publicKeyBytes);
       ring.rememberOwn(
-          atSign, namespace, (nskeyKid: kid, publicKey: pair.publicKeyBytes));
+          atSign,
+          namespace,
+          (
+            nskeyKid: kid,
+            publicKey: pair.publicKeyBytes,
+            alg: SecretSharingAlgos.xWing
+          ));
 
       final sharing = MockPairwiseSecretSharing();
       when(() => sharing.requestSecretsFromNamespace(any(),
@@ -178,7 +196,13 @@ void main() {
       final ring = PublishedNskeyKeyRing(atClient);
       final kid = nskeyKidOf(pair.publicKeyBytes);
       ring.rememberOwn(
-          atSign, namespace, (nskeyKid: kid, publicKey: pair.publicKeyBytes));
+          atSign,
+          namespace,
+          (
+            nskeyKid: kid,
+            publicKey: pair.publicKeyBytes,
+            alg: SecretSharingAlgos.xWing
+          ));
       final sharing = MockPairwiseSecretSharing();
 
       expect(
@@ -217,7 +241,7 @@ void main() {
       final held = await filing();
       final kid = nskeyKidOf(pair.publicKeyBytes);
       await held.store(
-          namespace: namespace, nskeyKid: kid, private: pair.privateKeyBytes);
+          namespace: namespace, nskeyKid: kid, seed: pair.privateKeyBytes);
 
       final sharing = _RecordingStoreSharing();
       final primed = await NskeySeeding(
@@ -247,11 +271,11 @@ void main() {
       final kid = nskeyKidOf(pair.publicKeyBytes);
       final otherKid = nskeyKidOf(other.publicKeyBytes);
       await held.store(
-          namespace: namespace, nskeyKid: kid, private: pair.privateKeyBytes);
+          namespace: namespace, nskeyKid: kid, seed: pair.privateKeyBytes);
       await held.store(
           namespace: 'second.my_apps',
           nskeyKid: otherKid,
-          private: other.privateKeyBytes);
+          seed: other.privateKeyBytes);
 
       final sharing = _RecordingStoreSharing();
       expect(
@@ -327,7 +351,7 @@ void main() {
       final held = await filing();
       final kid = nskeyKidOf(pair.publicKeyBytes);
       await held.store(
-          namespace: namespace, nskeyKid: kid, private: pair.privateKeyBytes);
+          namespace: namespace, nskeyKid: kid, seed: pair.privateKeyBytes);
       final asked = <(String, String)>[];
       final ring = PublishedNskeyKeyRing(
         atClient,

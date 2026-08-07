@@ -5,6 +5,8 @@ import 'package:at_client/src/crypto/nskey/content_key.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 import 'package:at_client/src/crypto/nskey/nskey_provider.dart';
 import 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
+import 'package:at_client/src/secret_sharing/algo_ids.dart'
+    show SecretSharingAlgos;
 import 'package:at_commons/at_commons.dart';
 import 'package:meta/meta.dart' show visibleForTesting;
 
@@ -118,7 +120,20 @@ class CryptoConfig {
     return CryptoConfig(
       defaultProviderId: defaultProviderId,
       providers: [
-        NskeyProvider(keyRing: keyRing, cache: cache),
+        // One conveyance provider per key-establishment algorithm, each with
+        // its own wire id. Reads route by the id the record carries, so a
+        // conveyance written under either KEM keeps opening; writes are routed
+        // by CkManager from the destination's advertised algorithm. Both are
+        // registered on every client regardless of what this atSign mints,
+        // because a *recipient's* KEM is the recipient's choice.
+        NskeyProvider(
+            keyRing: keyRing,
+            cache: cache,
+            keyAlgo: SecretSharingAlgos.xWing),
+        NskeyProvider(
+            keyRing: keyRing,
+            cache: cache,
+            keyAlgo: SecretSharingAlgos.mlKem1024),
         SymmetricAesGcmProvider(
           cache: cache,
           ckManager: CkManager(cache: cache, keyRing: keyRing),

@@ -1,9 +1,21 @@
 import 'dart:typed_data';
 
+import 'package:at_client/src/secret_sharing/algo_ids.dart'
+    show SecretSharingAlgos;
 import 'package:crypto/crypto.dart' show sha256;
 
-/// A published nskey generation: the public half and the kid naming it.
-typedef NskeyAdvertisement = ({String nskeyKid, Uint8List publicKey});
+/// A published nskey generation: the public half, the kid naming it, and the
+/// key-establishment algorithm it is a key for.
+///
+/// [alg] is an id from [SecretSharingAlgos.keyAlgos]. It is not decorative: a
+/// sender cannot tell an X-Wing encapsulation key from an ML-KEM one by
+/// looking — they are both opaque byte strings — and encapsulating under the
+/// wrong KEM produces a conveyance the owner can never open.
+typedef NskeyAdvertisement = ({
+  String nskeyKid,
+  Uint8List publicKey,
+  String alg,
+});
 
 /// The id of an nskey generation — a SHA-256 prefix of its public half, so it is
 /// derivable by anyone holding the key and identical for every party that uses it.
@@ -40,8 +52,13 @@ abstract class NskeyKeyRing {
   /// post-quantum target and the write fails unless legacy is opted into.
   Future<NskeyAdvertisement?> currentPublic(String owner, String namespace);
 
-  /// The private half this client holds for a *named generation* of
-  /// `(owner, namespace)`.
+  /// The **decapsulation key** this client holds for a *named generation* of
+  /// `(owner, namespace)` — what `pqOpen` takes, ready to use.
+  ///
+  /// Not the persisted seed. The two are the same bytes for X-Wing but not for
+  /// ML-KEM, whose decapsulation key is expanded from its seed, so an
+  /// implementation that stores seeds expands here rather than making every
+  /// caller know which it holds.
   ///
   /// Null when this client is not authorised for the namespace, or has not yet
   /// received that generation. Holding none at all leaves the value undecryptable
@@ -78,8 +95,11 @@ class InMemoryNskeyKeyRing implements NskeyKeyRing {
     String namespace, {
     required Uint8List publicKey,
     required Uint8List privateKey,
+    String keyAlgo = SecretSharingAlgos.xWing,
   }) {
-    final kid = seedPublicOnly(owner, namespace, publicKey: publicKey);
+    final kid =
+        seedPublicOnly(owner, namespace,
+            publicKey: publicKey, keyAlgo: keyAlgo);
     _private[_generation(owner, namespace, kid)] = privateKey;
     return kid;
   }
@@ -90,9 +110,11 @@ class InMemoryNskeyKeyRing implements NskeyKeyRing {
     String owner,
     String namespace, {
     required Uint8List publicKey,
+    String keyAlgo = SecretSharingAlgos.xWing,
   }) {
     final kid = nskeyKidOf(publicKey);
-    _current[_scope(owner, namespace)] = (nskeyKid: kid, publicKey: publicKey);
+    _current[_scope(owner, namespace)] =
+        (nskeyKid: kid, publicKey: publicKey, alg: keyAlgo);
     return kid;
   }
 

@@ -7,6 +7,8 @@ import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 import 'package:at_client/src/crypto/nskey/nskey_mint_lock.dart';
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
+import 'package:at_client/src/secret_sharing/algo_ids.dart'
+    show SecretSharingAlgos;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -117,6 +119,19 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
           'as version $nskeyAdvertisementVersion');
     }
 
+    // Absent means the pre-2026-08-07 shape, which was X-Wing by construction
+    // — it was the only KEM that existed. An algorithm this build cannot
+    // resolve is refused rather than guessed at: encapsulating under the wrong
+    // KEM produces a conveyance the owner can never open, and the failure
+    // would surface on their side with nothing to point at.
+    final declaredAlg = advertised['alg'] ?? SecretSharingAlgos.xWing;
+    if (declaredAlg is! String ||
+        SecretSharingAlgos.kemFor(declaredAlg) == null) {
+      throw AtSigningVerificationException(
+          'the advertised nskey for $owner names key-establishment algorithm '
+          '"$declaredAlg", which this build cannot encapsulate to');
+    }
+
     final publicKey =
         Uint8List.fromList(base64Decode(advertised['publicKey'] as String));
     final nskeyKid = advertised['nskeyKid'] as String;
@@ -128,7 +143,7 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
           'the advertised nskey for $owner names a kid that is not the digest '
           'of the key it carries');
     }
-    return (nskeyKid: nskeyKid, publicKey: publicKey);
+    return (nskeyKid: nskeyKid, publicKey: publicKey, alg: declaredAlg);
   }
 }
 
@@ -308,10 +323,27 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
   }
 
   Future<NskeyAdvertisement> _mint(String owner, String namespace) async {
-    final pair = await XWingKeyPair.generate();
+    final String keyAlgo =
+        _atClient.getPreferences()?.keyEstablishmentAlgo ??
+            SecretSharingAlgos.xWing;
+    final AtKemAlgorithm? kem = SecretSharingAlgos.kemFor(keyAlgo);
+    if (kem == null) {
+      throw StateError(
+          'cannot mint an nskey for $owner:$namespace under "$keyAlgo" — this '
+          'build has no implementation for it. Supported: '
+          '${SecretSharingAlgos.keyAlgos}');
+    }
+
+    // The SEED is what is filed and what everything re-derives from; for
+    // ML-KEM the decapsulation key is expanded and cannot be turned back into
+    // a public half, so filing it would leave the generation unopenable after
+    // a restart.
+    final Uint8List seed = kem.newSeed();
+    final pair = await kem.keyPairFromSeed(seed);
     final advertisement = (
-      nskeyKid: nskeyKidOf(pair.publicKeyBytes),
-      publicKey: pair.publicKeyBytes,
+      nskeyKid: nskeyKidOf(pair.publicKey),
+      publicKey: pair.publicKey,
+      alg: keyAlgo,
     );
 
     final advertisementKey = nskeyAdvertisementKey(owner, namespace);
@@ -328,7 +360,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
       final stored = await filing.store(
         namespace: namespace,
         nskeyKid: advertisement.nskeyKid,
-        private: pair.privateKeyBytes,
+        seed: seed,
+        keyAlgo: keyAlgo,
       );
       if (!stored) {
         throw StateError(
@@ -342,6 +375,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
       'v': nskeyAdvertisementVersion,
       'nskeyKid': advertisement.nskeyKid,
       'publicKey': base64Encode(advertisement.publicKey),
+      // Without this a sender has an opaque byte string and no way to tell
+      // which KEM it belongs to.
+      'alg': keyAlgo,
     });
 
     // Straight to the atServer first: an advertisement is only useful once a
@@ -360,7 +396,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
 
     _ownCurrent[_scope(owner, namespace)] = advertisement;
     _ownPrivates[_generation(owner, namespace, advertisement.nskeyKid)] =
-        pair.privateKeyBytes;
+        pair.secretKey;
     return advertisement;
   }
 

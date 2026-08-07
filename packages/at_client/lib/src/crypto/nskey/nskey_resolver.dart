@@ -9,6 +9,7 @@ typedef ResolvedNskey = ({
   String namespace,
   String nskeyKid,
   List<int> publicKey,
+  String alg,
 });
 
 /// Finds which level of a nested namespace holds the nskey to seal to.
@@ -61,6 +62,7 @@ class NskeyResolver {
           namespace: candidate,
           nskeyKid: hit.nskeyKid,
           publicKey: hit.publicKey,
+          alg: hit.alg,
         );
       }
       _missedAt[_scope(owner, candidate)] = DateTime.now();

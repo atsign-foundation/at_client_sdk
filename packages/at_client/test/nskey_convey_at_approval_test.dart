@@ -101,7 +101,7 @@ void main() {
     final pair = await XWingKeyPair.generate();
     final kid = nskeyKidOf(pair.publicKeyBytes);
     await NskeyPrivateFiling(keysIo: approverIo, atSign: atSign).store(
-        namespace: namespace, nskeyKid: kid, private: pair.privateKeyBytes);
+        namespace: namespace, nskeyKid: kid, seed: pair.privateKeyBytes);
     await AtClientSecretSharing.forClient(approver).register();
 
     stubPendingEnrollment(approver, advertised);

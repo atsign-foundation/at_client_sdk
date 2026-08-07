@@ -122,7 +122,7 @@ void main() {
       // MockAtClient's getPreferences() is concrete and returns a stable,
       // mutable instance — the same shape as the real one, so setting the
       // knob here is what an app does.
-      client.getPreferences()!.keyEstablishmentAlgo = keyAlgo;
+      client.getPreferences().keyEstablishmentAlgo = keyAlgo;
       return TestRegistrant(client)..directory = FakeEnrollmentDirectory();
     }
 

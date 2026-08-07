@@ -61,7 +61,7 @@ Future<int> collectConveyedKeyMaterial(AtClient atClient, AtKeysIo keysIo,
   return NskeyPrivateFiling(
     keysIo: keysIo,
     atSign: atSign,
-    publishedPublicKey: (namespace, nskeyKid) async {
+    publishedGeneration: (namespace, nskeyKid) async {
       // Only the current generation can be checked this way, and an arriving
       // private is often an older one — that is ordinary, and the filer treats
       // an absent public half as "no opinion" rather than a rejection. What
@@ -73,7 +73,7 @@ Future<int> collectConveyedKeyMaterial(AtClient atClient, AtKeysIo keysIo,
         namespace,
       );
       if (advertised == null || advertised.nskeyKid != nskeyKid) return null;
-      return advertised.publicKey;
+      return advertised;
     },
   ).filePending(held);
 }

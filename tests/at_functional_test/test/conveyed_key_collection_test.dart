@@ -35,7 +35,11 @@ void main() {
   late String atSign;
   const namespace = 'wavi';
 
-  final privateBytes = Uint8List.fromList(List<int>.generate(64, (i) => i));
+  // A real 32-byte X-Wing seed, not arbitrary bytes: what is filed is a seed
+  // now, and NskeyPrivateFiling.read expands it into the decapsulation key the
+  // caller actually uses. Arbitrary bytes read back as null, correctly — they
+  // are not a key for anything.
+  final privateBytes = Uint8List.fromList(List<int>.generate(32, (i) => i));
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];

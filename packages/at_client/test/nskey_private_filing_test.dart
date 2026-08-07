@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
+    show nskeyKidOf;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:test/test.dart';
 
@@ -103,7 +105,11 @@ void main() {
     final filer = NskeyPrivateFiling(
       keysIo: io,
       atSign: atSign,
-      publishedPublicKey: (_, __) async => real.publicKeyBytes,
+      publishedGeneration: (_, __) async => (
+        nskeyKid: nskeyKidOf(real.publicKeyBytes),
+        publicKey: real.publicKeyBytes,
+        alg: SecretSharingAlgos.xWing,
+      ),
     );
 
     // Genuinely signed by this atSign, and genuinely an nskey private — just
@@ -127,7 +133,11 @@ void main() {
     final filer = NskeyPrivateFiling(
       keysIo: io,
       atSign: atSign,
-      publishedPublicKey: (_, __) async => real.publicKeyBytes,
+      publishedGeneration: (_, __) async => (
+        nskeyKid: nskeyKidOf(real.publicKeyBytes),
+        publicKey: real.publicKeyBytes,
+        alg: SecretSharingAlgos.xWing,
+      ),
     );
 
     expect(

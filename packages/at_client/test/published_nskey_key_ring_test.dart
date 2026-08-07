@@ -198,7 +198,8 @@ void main() {
       // Stand in for mintAndPublish, which needs a remote secondary.
       ring.rememberOwn(alice, namespace, (
         nskeyKid: nskeyKidOf(bobKey.publicKeyBytes),
-        publicKey: bobKey.publicKeyBytes
+        publicKey: bobKey.publicKeyBytes,
+        alg: SecretSharingAlgos.xWing
       ));
 
       expect((await ring.currentPublic(alice, namespace))?.nskeyKid,
