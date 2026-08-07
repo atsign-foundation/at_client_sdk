@@ -144,12 +144,11 @@ void main() {
       // enrollment key packages are write-once — they are never rewritten — so
       // this reading is permanent for those enrollments, not transitional.
       //
-      // Note this assertion cannot fail today: `legacySuites` and this build's
-      // suites are the same single value, so a build that ignored the absent
-      // field entirely would also pass. It becomes discriminating the moment a
-      // second suite is added, which is exactly when getting it wrong would
-      // start claiming, on an old holder's behalf, that it can open something
-      // it cannot.
+      // This became discriminating when the second and third suites landed:
+      // `legacySuites` is one value and this build supports three, so a build
+      // that ignored the absent field would now claim, on an old holder's
+      // behalf, that it can open two constructions that did not exist when its
+      // key package was written.
       final pkg = KeyPackage.fromPayload({
         'v': 1,
         'createdAt': '2026-06-11T00:00:00.000Z',
@@ -200,10 +199,65 @@ void main() {
       expect(pkg.bestSuiteFor(SecretSharingAlgos.suites), isNull);
     });
 
-    test('what gets written declares this build\'s suites', () {
+    test('what gets written declares what the advertised keys can open', () {
+      // The two arms differ in exactly one input — the KEM the advertised key
+      // names — and no suite appears in both. Anything that derived `suites`
+      // from the build's own list instead would produce the identical
+      // three-suite answer for both, so this fails loudly if the derivation is
+      // reintroduced.
+      final xWingPayload = KeyPackage.payloadFor(
+        createdAt: DateTime.utc(2026),
+        keys: [
+          PackageKey(
+              use: SecretSharingAlgos.useEnc,
+              alg: SecretSharingAlgos.xWing,
+              pub: 'p'),
+        ],
+      );
+      expect(xWingPayload['suites'],
+          [SecretSharingAlgos.xWingRfc9180, SecretSharingAlgos.xWingHpke],
+          reason: 'an X-Wing private opens both X-Wing constructions — the '
+              'difference between them is the key schedule and the AEAD, not '
+              'the decapsulation');
+      expect(xWingPayload['suites'],
+          isNot(contains(SecretSharingAlgos.mlKem1024Rfc9180)),
+          reason: 'and nothing it holds can open an ML-KEM-1024 envelope');
+
+      final mlKemPayload = KeyPackage.payloadFor(
+        createdAt: DateTime.utc(2026),
+        keys: [
+          PackageKey(
+              use: SecretSharingAlgos.useEnc,
+              alg: SecretSharingAlgos.mlKem1024,
+              pub: 'p'),
+        ],
+      );
+      expect(mlKemPayload['suites'], [SecretSharingAlgos.mlKem1024Rfc9180]);
+      expect(mlKemPayload['suites'],
+          isNot(contains(SecretSharingAlgos.xWingRfc9180)));
+    });
+
+    test('a package advertising no key claims no suite', () {
+      // Rather than the build's whole list. This is the shape the enrollment
+      // record freezes, and a holder with nothing to decapsulate with can open
+      // nothing whatever this build supports.
       final payload = KeyPackage.payloadFor(
           createdAt: DateTime.utc(2026), keys: const []);
-      expect(payload['suites'], SecretSharingAlgos.suites);
+      expect(payload['suites'], isEmpty);
+    });
+
+    test('an unrecognised key algorithm contributes no suite', () {
+      // Fails closed: a holder must not have a suite claimed on its behalf on
+      // the strength of a key this build cannot identify, because a sender
+      // acts on the claim and the failure lands on the holder.
+      final payload = KeyPackage.payloadFor(
+        createdAt: DateTime.utc(2026),
+        keys: [
+          PackageKey(
+              use: SecretSharingAlgos.useEnc, alg: 'kyber-1024-v9', pub: 'p'),
+        ],
+      );
+      expect(payload['suites'], isEmpty);
     });
 
     test('malformed payload throws FormatException', () {

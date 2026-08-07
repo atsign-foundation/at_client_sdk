@@ -85,11 +85,48 @@ class SecretSharingAlgos {
   /// The KEM fixes the suite: nothing can seal ML-KEM-1024 to an X-Wing
   /// encapsulation key or the reverse, so a recipient's advertised `alg` is
   /// what decides which construction a sender uses.
+  ///
+  /// This is the *preferred* suite for that KEM — what a sender picks when it
+  /// has a free choice. [openableSuitesFor] is the wider set the same key can
+  /// unwrap, which is what a holder advertises.
   static String? suiteForKeyAlgo(String keyAlgo) => switch (keyAlgo) {
         xWing => xWingRfc9180,
         mlKem1024 => mlKem1024Rfc9180,
         _ => null,
       };
+
+  /// Every suite a holder of a [keyAlgo] key can **open**, in [suites] order.
+  ///
+  /// Wider than [suiteForKeyAlgo] because a KEM key opens every construction
+  /// built on that KEM, not only the one a sender would choose: an X-Wing
+  /// private unwraps both the RFC 9180 suite and the original `atPQv1-base`
+  /// one, since the difference between them is the key schedule and the AEAD,
+  /// not the decapsulation.
+  ///
+  /// An unrecognised [keyAlgo] yields nothing rather than everything. A holder
+  /// must never claim a suite on the strength of a key this build cannot
+  /// identify — the claim would be acted on by a sender, and the failure would
+  /// arrive on the holder's side as an AEAD error.
+  static List<String> openableSuitesFor(String keyAlgo) => switch (keyAlgo) {
+        xWing => const [xWingRfc9180, xWingHpke],
+        mlKem1024 => const [mlKem1024Rfc9180],
+        _ => const [],
+      };
+
+  /// The suites a holder advertising [keyAlgos] can open, deduplicated and in
+  /// [suites] order (strongest first).
+  ///
+  /// This is what a key package's `suites` field must be derived from. Stating
+  /// the build's whole [suites] list instead would claim, on behalf of a holder
+  /// that advertises one KEM, that it can open constructions built on the
+  /// other — and nothing it holds can.
+  static List<String> openableSuitesForAll(Iterable<String> keyAlgos) {
+    final openable = keyAlgos.expand(openableSuitesFor).toSet();
+    return [
+      for (final suite in suites)
+        if (openable.contains(suite)) suite
+    ];
+  }
 
   /// The `use` value for key-package keys whose purpose is establishing
   /// content keys (KEM encapsulation).

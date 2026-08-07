@@ -103,6 +103,13 @@ class KeyPackage {
   ///
   /// Absent on packages written before this field existed, and
   /// [legacySuites] is what those meant.
+  ///
+  /// Derived from [keys] when the caller does not state it, never from the
+  /// build's own [SecretSharingAlgos.suites]. That list is what this client can
+  /// *produce and open given the right key*; what this package's holder can
+  /// open is fixed by the keys it actually advertises. Defaulting to the former
+  /// made a package advertising one KEM claim it could unwrap constructions
+  /// built on the other.
   final List<String> suites;
 
   /// What a key package with no `suites` field is taken to support.
@@ -112,13 +119,33 @@ class KeyPackage {
   /// never said so, that they can open something they cannot.
   static const List<String> legacySuites = [SecretSharingAlgos.xWingHpke];
 
-  KeyPackage({
+  /// [suites] defaults to what [keys] can open — see the field's own doc for
+  /// why that is not the same as what this build supports.
+  factory KeyPackage({
+    required String enrollmentId,
+    String? apkamId,
+    required DateTime createdAt,
+    required List<PackageKey> keys,
+    List<String>? suites,
+    int v = currentVersion,
+  }) =>
+      KeyPackage._(
+        enrollmentId: enrollmentId,
+        apkamId: apkamId,
+        createdAt: createdAt,
+        keys: keys,
+        suites: suites ??
+            SecretSharingAlgos.openableSuitesForAll(keys.map((k) => k.alg)),
+        v: v,
+      );
+
+  KeyPackage._({
     required this.enrollmentId,
-    this.apkamId,
+    required this.apkamId,
     required this.createdAt,
     required this.keys,
-    this.suites = SecretSharingAlgos.suites,
-    this.v = currentVersion,
+    required this.suites,
+    required this.v,
   });
 
   /// The first suite in [senderSuites] order (strongest first) that this
@@ -167,17 +194,22 @@ class KeyPackage {
   /// assigned an enrollment id, so there is no [KeyPackage] to build it from.
   /// Nothing is lost by that: the id was never part of the payload — the
   /// enrollment record carries it, and [fromPayload] injects it back on read.
+  /// [suites] defaults to what [keys] can actually open. It is the payload the
+  /// enrollment record freezes — `metadata.keyPackage` is written by
+  /// `enroll:request` and never again — so an overstated claim here cannot be
+  /// corrected for the life of that enrollment.
   static Map<String, Object?> payloadFor({
     required DateTime createdAt,
     required List<PackageKey> keys,
-    List<String> suites = SecretSharingAlgos.suites,
+    List<String>? suites,
     int v = currentVersion,
   }) =>
       {
         'v': v,
         'createdAt': createdAt.toUtc().toIso8601String(),
         'keys': keys.map((k) => k.toJson()).toList(),
-        'suites': suites,
+        'suites': suites ??
+            SecretSharingAlgos.openableSuitesForAll(keys.map((k) => k.alg)),
       };
 
   /// Parses a stored key-package [payload] (from `metadata.keyPackage`),

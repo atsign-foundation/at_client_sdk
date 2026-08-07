@@ -17,6 +17,19 @@
   permanent for those enrollments. No overlap returns null rather than falling
   back to the sender's own preference, which would hand the holder an envelope
   it cannot unwrap and surface as an opaque AEAD error on the far side.
+- fix: a key package's `suites` is derived from the keys it advertises, not
+  from the list this build supports. `SecretSharingAlgos.suites` is what this
+  client can produce and open *given the right key*; what a package's holder
+  can open is fixed by the keys it actually carries. Once that list grew past
+  one entry the two stopped meaning the same thing, and a package advertising
+  a single X-Wing key began claiming it could unwrap ML-KEM-1024 envelopes —
+  which nothing it holds can. Enrollment key packages are write-once, so the
+  claim froze into the enrollment record. An X-Wing key now yields both X-Wing
+  constructions (same decapsulation; only the key schedule and AEAD differ),
+  an ML-KEM-1024 key yields the ML-KEM-1024 one, and a key whose algorithm
+  this build does not recognise yields none — a sender acts on the claim, so
+  it fails closed rather than open. `SecretSharingAlgos.openableSuitesFor` and
+  `openableSuitesForAll` expose the mapping.
 - feat: the signed-envelope wrapper and the nskey advertisement payload each
   carry a version field. They were the only two signed structures in the PQ
   design without one, so a reader had nothing to dispatch on if the
