@@ -429,4 +429,51 @@ void main() {
       );
     });
   });
+
+  group('AtKeys promoteKey', () {
+    AtKeys keysWith(KeyPartStatus status) => AtKeys(
+          atsign: '@alice'.toAtsign(),
+          keysList:
+              rsaKeyPair('pair').map((m) => m.withStatus(status)).toList(),
+        );
+
+    test('promotes every material of a pending group to active', () {
+      for (final pending in [
+        KeyPartStatus.pendingEnrollment,
+        KeyPartStatus.pendingCramDeletion,
+      ]) {
+        final atKeys = keysWith(pending);
+
+        atKeys.promoteKey('pair');
+
+        expect(atKeys.keysForKeyId('pair').map((m) => m.status),
+            everyElement(KeyPartStatus.active),
+            reason: '$pending');
+      }
+    });
+
+    test('refuses to promote a key that is not pending', () {
+      // Regression: the guard read `status != pendingEnrollment || status !=
+      // pendingCramDeletion`, a tautology — every status satisfied it, so
+      // promoteKey could never do anything but throw.
+      for (final settled in [
+        KeyPartStatus.active,
+        KeyPartStatus.retired,
+        KeyPartStatus.dead,
+      ]) {
+        final atKeys = keysWith(settled);
+
+        expect(() => atKeys.promoteKey('pair'), throwsA(isA<ArgumentError>()),
+            reason: '$settled');
+        expect(atKeys.keysForKeyId('pair').map((m) => m.status),
+            everyElement(settled));
+      }
+    });
+
+    test('throws for an unknown keyId', () {
+      final atKeys = keysWith(KeyPartStatus.pendingEnrollment);
+
+      expect(() => atKeys.promoteKey('nope'), throwsA(isA<ArgumentError>()));
+    });
+  });
 }

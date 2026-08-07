@@ -156,11 +156,10 @@ class AtEnrollmentResponse extends AtEnrollmentRecord {
   }
 }
 
-/// The result of submitting an [AtEnrollmentRequest]: the server's verdict plus
-/// the key material that `AtEnrollment.waitForApproval` needs to finish the
-/// handshake.
+/// The result of `AtEnrollment.enroll`: the server's verdict plus the key
+/// material that `AtEnrollment.waitForApproval` needs to finish the handshake.
 ///
-/// [atKeys] holds only what `submit` could mint locally — the APKAM keypair and
+/// [atKeys] holds only what `enroll` could mint locally — the APKAM keypair and
 /// the APKAM symmetric key. The rest (the default encryption private key and
 /// the self encryption key) exists on the atServer, encrypted under that
 /// symmetric key, and is fetched and merged in by `waitForApproval`, which then

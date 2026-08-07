@@ -3,10 +3,10 @@ import 'package:at_auth/src/auth/apkam_signing_scheme.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
-import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
+import 'package:meta/meta.dart';
 
 import 'auth/retry_options.dart';
 import 'keys/at_keys.dart';
@@ -100,9 +100,10 @@ abstract interface class AtAuth {
     AtRootDomain rootDomain,
     AtKeysIo atKeysIo,
     String cramSecret, {
+    bool mintLegacy = true,
     bool autoCompleteActivation = true,
-    String appName = FirstEnrollmentRequest.defaultAppName,
-    String deviceName = FirstEnrollmentRequest.defaultDeviceName,
+    @visibleForTesting String? appName,
+    @visibleForTesting String? deviceName,
   });
 
   /// - Update the encryption public key on the atServer

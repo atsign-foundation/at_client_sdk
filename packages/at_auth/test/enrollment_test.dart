@@ -8,11 +8,12 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:crypton/crypton.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'package:at_demo_data/at_demo_data.dart';
+
+import 'test_utils/at_keys.dart';
 
 class MockAtLookUp extends Mock implements AtLookUp {}
 
@@ -59,17 +60,17 @@ void main() {
                   'status': 'pending'
                 })}'));
 
-    AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
-        atsign: alice,
-        appName: 'wavi',
-        deviceName: 'pixel',
-        otp: 'A123FE',
-        namespaces: [
-          NamespacePermission(namespace: 'wavi', read: true, write: true)
-        ]);
-
     AtEnrollmentResponse atEnrollmentResponse =
-        await atEnrollmentServiceImpl.enroll(enrollmentRequest);
+        await atEnrollmentServiceImpl.enroll(
+      atsign: alice,
+      rootDomain: AtRootDomain.atsignDomain,
+      appName: 'wavi',
+      deviceName: 'pixel',
+      otp: testOtp(),
+      namespaces: [
+        NamespacePermission(namespace: 'wavi', read: true, write: true)
+      ],
+    );
 
     expect(atEnrollmentResponse.enrollmentId, '123');
     expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
@@ -82,16 +83,18 @@ void main() {
         reason: 'the atServer only releases this at approval');
   });
 
-  group('A group of tests related EnrollmentRequestDecision', () {
+  group('approve / deny', () {
     test('A test to verify the approve enrollment', () async {
       String encryptionPublicKey = encryptionPublicKeyMap[atSign]!;
       String encryptionPrivateKey = encryptionPrivateKeyMap[atSign]!;
       String selfEncryptionKey = aesKeyMap[atSign]!;
-      String apkamSymmetricKey = apkamSymmetricKeyMap[atSign]!;
 
-      String encryptedAPKAMSymmetricKey =
-          RSAPublicKey.fromString(encryptionPublicKey)
-              .encrypt(apkamSymmetricKey);
+      // What the atServer relays to the approver is whatever the *enrollee's*
+      // conveyance wrapped — raw symmetric-key bytes under RSA, not the base64
+      // text of them. Produce it the same way rather than by hand, so the
+      // fixture cannot drift from what enroll() actually sends.
+      final conveyed = await const RsaKeyConveyance()
+          .wrap(AtBytes.fromString(encryptionPublicKey));
 
       // The approver's own keys, reached the way everything else reaches keys:
       // through an AtKeysIo.
@@ -104,22 +107,21 @@ void main() {
       AtLookUp mockAtLookUp = MockAtLookUp();
       AtEnrollment atEnrollmentBase = AtEnrollmentImpl(mockAtLookUp);
 
-      when(() =>
-          mockAtLookUp.executeCommand(any(that: startsWith('enroll:approve')),
-              auth: true)).thenAnswer((_) => Future.value('data:${jsonEncode({
-                'status': 'approved',
-                'enrollmentId': '4be2d358-074d-4e3b-99f3-64c4da01532f'
-              })}'));
+      // approve goes out as a VerbBuilder, unlike deny/revoke which build their
+      // own command string.
+      when(() => mockAtLookUp.executeVerb(any(that: isA<EnrollVerbBuilder>())))
+          .thenAnswer((_) => Future.value('data:${jsonEncode({
+                    'status': 'approved',
+                    'enrollmentId': '4be2d358-074d-4e3b-99f3-64c4da01532f'
+                  })}'));
 
-      EnrollmentRequestDecision enrollmentRequestDecision =
-          EnrollmentRequestDecision.approved(
-        enrollmentId: '4be2d358-074d-4e3b-99f3-64c4da01532f',
-        apkamSymmetricKey: AtBytes.fromString(encryptedAPKAMSymmetricKey),
-        atsign: alice,
+      AtEnrollmentResponse atEnrollmentResponse =
+          await atEnrollmentBase.approve(
+        alice,
+        approverIo,
+        '4be2d358-074d-4e3b-99f3-64c4da01532f',
+        AtBytes(conveyed.cipher),
       );
-
-      AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase
-          .approve(alice, approverIo, enrollmentRequestDecision);
 
       expect(atEnrollmentResponse.enrollmentId,
           '4be2d358-074d-4e3b-99f3-64c4da01532f');
@@ -136,13 +138,7 @@ void main() {
 
       expect(
           () async => await atEnrollmentBase.approve(
-              alice,
-              emptyIo,
-              EnrollmentRequestDecision.approved(
-                enrollmentId: 'enroll-1',
-                apkamSymmetricKey: AtBytes.fromString('c2VjcmV0'),
-                atsign: alice,
-              )),
+              alice, emptyIo, 'enroll-1', AtBytes.fromString('c2VjcmV0')),
           throwsA(isA<AtAuthenticationException>()));
     });
 
@@ -157,12 +153,8 @@ void main() {
                     'enrollmentId': '4be2d358-074d-4e3b-99f3-64c4da01532f'
                   })}'));
 
-      EnrollmentRequestDecision enrollmentRequestDecision =
-          EnrollmentRequestDecision.denied(
-              '4be2d358-074d-4e3b-99f3-64c4da01532f', alice);
-
       AtEnrollmentResponse atEnrollmentResponse =
-          await atEnrollmentBase.deny(enrollmentRequestDecision);
+          await atEnrollmentBase.deny('4be2d358-074d-4e3b-99f3-64c4da01532f');
 
       expect(atEnrollmentResponse.enrollmentId,
           '4be2d358-074d-4e3b-99f3-64c4da01532f');
@@ -256,6 +248,195 @@ void main() {
     });
   });
 
+  group('the enrolled key follows the signing scheme', () {
+    late AtLookUp requesterLookUp;
+    late AtLookUp enrollmentLookUp;
+    late List<String> enrollCommands;
+    late List<AtKeys?> factoryKeys;
+
+    setUp(() {
+      requesterLookUp = MockAtLookUp();
+      enrollmentLookUp = MockAtLookUp();
+      enrollCommands = [];
+      factoryKeys = [];
+
+      when(() =>
+              requesterLookUp.executeCommand(any(that: startsWith('enroll:'))))
+          .thenAnswer((invocation) async {
+        enrollCommands.add(invocation.positionalArguments.first as String);
+        return 'data:${jsonEncode({
+              'enrollmentId': 'enroll-9',
+              'status': 'pending'
+            })}';
+      });
+      when(() => enrollmentLookUp.pkamAuthenticate(enrollmentId: 'enroll-9'))
+          .thenAnswer((_) async => true);
+    });
+
+    /// The public key `enroll` looks up on the atServer to convey the APKAM
+    /// symmetric key to. Which one depends on the scheme's conveyance, not on
+    /// its signing algorithm: RSA wraps, X-Wing encapsulates.
+    void stubPublishedPublicKey(String base64PublicKey) {
+      when(() => requesterLookUp
+              .executeVerb(any(that: LookUpVerbBuilderMatcher())))
+          .thenAnswer((_) async => 'data:$base64PublicKey');
+    }
+
+    AtEnrollmentImpl buildEnrollment(ApkamSigningScheme signing) =>
+        AtEnrollmentImpl(
+          requesterLookUp,
+          signing: signing,
+          atLookUpFactory: (_, __, keys, {enrollmentId}) {
+            factoryKeys.add(keys);
+            return enrollmentLookUp;
+          },
+        );
+
+    Future<AtEnrollmentResponse> submit(AtEnrollmentImpl enrollment) =>
+        enrollment.enroll(
+          atsign: alice,
+          rootDomain: AtRootDomain.atsignDomain,
+          appName: 'wavi',
+          deviceName: 'pixel',
+          otp: testOtp(),
+          namespaces: [
+            NamespacePermission(namespace: 'wavi', read: true, write: true)
+          ],
+        );
+
+    /// The enroll verb's params, as the atServer would parse them.
+    Map<String, dynamic> enrollParams() => jsonDecode(
+        enrollCommands.single.substring(enrollCommands.single.indexOf('{')));
+
+    test('stamps the scheme on the enroll verb', () async {
+      for (final signing in ApkamSigningScheme.values) {
+        enrollCommands.clear();
+        stubPublishedPublicKey(signing == ApkamSigningScheme.legacy
+            ? encryptionPublicKeyMap[atSign]!
+            : base64Encode((await XWingPureDartAlgo.instance.generateKeyPair())
+                .publicKey));
+
+        await submit(buildEnrollment(signing));
+
+        expect(enrollParams()['signingAlgo'], signing.signingAlgo,
+            reason: 'the atServer is told which algorithm to verify with');
+      }
+    });
+
+    test('a postQuantum enrollment mints ML-DSA and no legacy keypair',
+        () async {
+      stubPublishedPublicKey(base64Encode(
+          (await XWingPureDartAlgo.instance.generateKeyPair()).publicKey));
+
+      final response =
+          await submit(buildEnrollment(ApkamSigningScheme.postQuantum))
+              as PendingEnrollment;
+
+      expect(
+          ApkamSigningScheme.postQuantum
+              .requireApkamPublicKey(response.atKeys)
+              .bytes,
+          isNotEmpty);
+      expect(response.atKeys.apkamPublicKey, isNull,
+          reason: 'a PQ enrollment mints no legacy keypair');
+    });
+
+    test(
+        'enrolls the APKAM public key it minted, not the atsign\'s published '
+        'key', () async {
+      // Two different keys are in play and they are easy to confuse: the
+      // atsign's published key is the *recipient* the symmetric key is conveyed
+      // to, while the enroll verb's apkamPublicKey is the key the atServer will
+      // verify this enrollment's PKAM signatures with. Sending the former would
+      // record a key the enrollment can never sign with.
+      final published = encryptionPublicKeyMap[atSign]!;
+      stubPublishedPublicKey(published);
+
+      final response = await submit(buildEnrollment(ApkamSigningScheme.legacy))
+          as PendingEnrollment;
+
+      expect(enrollParams()['apkamPublicKey'],
+          response.atKeys.apkamPublicKey.toString());
+      expect(enrollParams()['apkamPublicKey'], isNot(published));
+      // Legacy still keeps the published key: under this scheme it really is
+      // the atsign's default encryption public key.
+      expect(response.atKeys.defaultEncryptionPublicKey.toString(), published);
+    });
+
+    test(
+        'a postQuantum enrollment keeps the X-Wing keypackage out of the '
+        'legacy encryption field', () async {
+      // Under postQuantum the published key is an X-Wing keypackage, not an RSA
+      // encryption key, so it has no business in defaultEncryptionPublicKey.
+      stubPublishedPublicKey(base64Encode(
+          (await XWingPureDartAlgo.instance.generateKeyPair()).publicKey));
+
+      final response =
+          await submit(buildEnrollment(ApkamSigningScheme.postQuantum))
+              as PendingEnrollment;
+
+      expect(response.atKeys.defaultEncryptionPublicKey, isNull);
+      expect(
+          enrollParams()['apkamPublicKey'],
+          ApkamSigningScheme.postQuantum
+              .requireApkamPublicKey(response.atKeys)
+              .toString());
+    });
+
+    test('a postQuantum enrollment completes end to end', () async {
+      // enroll mints ML-DSA under KeyIds.apkamPQ and waitForApproval builds its
+      // connection from that same material — the two agreeing is what makes a
+      // PQ enrollment completable at all.
+      stubPublishedPublicKey(base64Encode(
+          (await XWingPureDartAlgo.instance.generateKeyPair()).publicKey));
+
+      final enrollment = buildEnrollment(ApkamSigningScheme.postQuantum);
+      final pending = await submit(enrollment) as PendingEnrollment;
+
+      final symmetricKey = pending.atKeys.apkamSymmetricKey.toString();
+      when(() => requesterLookUp.executeCommand(any(
+          that:
+              contains('default_enc_private_key')))).thenAnswer((_) async =>
+          'data:${jsonEncode(await serverHeldKey(encryptionPrivateKeyMap[atSign]!, symmetricKey))}');
+      when(() => requesterLookUp.executeCommand(
+          any(
+              that: contains('default_self_enc_key')))).thenAnswer((_) async =>
+          'data:${jsonEncode(await serverHeldKey(aesKeyMap[atSign]!, symmetricKey))}');
+
+      await enrollment.waitForApproval(
+          alice, AtRootDomain.atsignDomain, EphemeralAtKeysIo(), pending,
+          logProgress: false);
+
+      // The keys handed to the factory were the ML-DSA ones, not a legacy
+      // keypair that was never minted.
+      expect(factoryKeys, hasLength(1));
+      expect(
+          ApkamSigningScheme.postQuantum
+              .requireApkamPrivateKey(factoryKeys.single!)
+              .bytes,
+          isNotEmpty);
+      expect(factoryKeys.single!.apkamPrivateKey, isNull);
+    });
+
+    test('waitForApproval rejects a keyset minted for the other scheme',
+        () async {
+      stubPublishedPublicKey(encryptionPublicKeyMap[atSign]!);
+      final pending = await submit(buildEnrollment(ApkamSigningScheme.legacy))
+          as PendingEnrollment;
+
+      // No injected factory here: the rejection is the default factory's, and
+      // injecting one would bypass exactly the check under test.
+      final pqEnrollment = AtEnrollmentImpl(requesterLookUp,
+          signing: ApkamSigningScheme.postQuantum);
+
+      expect(
+          () async => await pqEnrollment.waitForApproval(
+              alice, AtRootDomain.atsignDomain, EphemeralAtKeysIo(), pending,
+              logProgress: false),
+          throwsA(isA<AtAuthenticationException>()));
+    });
+  });
+
   group('AtEnrollmentResponse toJson / fromJson', () {
     test('toJson includes enrollmentId and enrollStatus only', () {
       final response =
@@ -302,29 +483,49 @@ void main() {
     });
   });
 
-  group('AtEnrollmentRequest', () {
-    test('defaults rootDomain to the Atsign atDirectory', () {
-      final request = AtEnrollmentRequest(
-        atsign: alice,
-        appName: 'wavi',
-        deviceName: 'pixel',
-        otp: 'A123FE',
-        namespaces: [
-          NamespacePermission(namespace: 'wavi', read: true, write: true)
-        ],
-      );
+  group('firstEnrollment', () {
+    late AtLookUp cramLookUp;
+    late List<String> enrollCommands;
 
-      expect(request.atsign, alice);
-      expect(request.rootDomain, AtRootDomain.atsignDomain);
+    setUp(() {
+      cramLookUp = MockAtLookUp();
+      enrollCommands = [];
+      when(() => cramLookUp.executeCommand(any(that: startsWith('enroll:'))))
+          .thenAnswer((invocation) async {
+        enrollCommands.add(invocation.positionalArguments.first as String);
+        return 'data:${jsonEncode({
+              'enrollmentId': 'enroll-1',
+              'status': 'approved'
+            })}';
+      });
     });
 
-    test('FirstEnrollmentRequest names the activation enrollment by default',
-        () {
-      final request =
-          FirstEnrollmentRequest(atsign: alice, apkamPublicKey: 'cHVi');
+    Map<String, dynamic> enrollParams() => jsonDecode(
+        enrollCommands.single.substring(enrollCommands.single.indexOf('{')));
 
-      expect(request.appName, FirstEnrollmentRequest.defaultAppName);
-      expect(request.deviceName, FirstEnrollmentRequest.defaultDeviceName);
+    test('names the activation enrollment by default', () async {
+      // The atServer reserves these two names for the enrollment an activation
+      // creates; they used to be constants on the deleted FirstEnrollmentRequest
+      // and are now the parameter defaults.
+      final response =
+          await AtEnrollmentImpl(cramLookUp).firstEnrollment('cHVi');
+
+      expect(enrollParams()['appName'], 'firstApp');
+      expect(enrollParams()['deviceName'], 'firstDevice');
+      expect(response.enrollmentId, 'enroll-1');
+      expect(response.enrollStatus, EnrollmentStatus.approved);
+    });
+
+    test('takes the caller\'s names and stamps the signing scheme', () async {
+      await AtEnrollmentImpl(cramLookUp,
+              signing: ApkamSigningScheme.postQuantum)
+          .firstEnrollment('cHVi', appName: 'wavi', deviceName: 'pixel');
+
+      expect(enrollParams()['appName'], 'wavi');
+      expect(enrollParams()['deviceName'], 'pixel');
+      expect(enrollParams()['apkamPublicKey'], 'cHVi');
+      expect(enrollParams()['signingAlgo'],
+          ApkamSigningScheme.postQuantum.signingAlgo);
     });
   });
 }

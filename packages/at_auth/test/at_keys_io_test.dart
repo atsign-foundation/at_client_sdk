@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_auth/src/auth/apkam_signing_scheme.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
@@ -200,6 +201,30 @@ void main() {
           File(tempPath).parent.listSync().whereType<File>().toList(),
           hasLength(1),
         );
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('Test a keyset with no legacy APKAM key survives a write/read',
+        () async {
+      // A postQuantum enrollment mints only ML-DSA material, so the keyfile it
+      // persists has none of the four legacy fields FileAtKeysIo self-encrypts
+      // at rest. The connection built on the way back out has to find its key.
+      final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
+      try {
+        final tempPath = '${tempDir.path}/@alice_key.atKeys';
+        final fileAtKeysIo = FileAtKeysIo(filePath: (_) => tempPath);
+        final atKeys = AtKeys(atsign: atsign);
+        await ApkamSigningScheme.postQuantum.mintKeys(atKeys);
+        await fileAtKeysIo.write(atsign, atKeys);
+
+        final reread = await fileAtKeysIo.read(atsign);
+        expect(ApkamSigningScheme.postQuantum.requireApkamPrivateKey(reread),
+            ApkamSigningScheme.postQuantum.requireApkamPrivateKey(atKeys));
+        expect(ApkamSigningScheme.postQuantum.requireApkamPublicKey(reread),
+            ApkamSigningScheme.postQuantum.requireApkamPublicKey(atKeys));
+        expect(reread.apkamPrivateKey, isNull);
       } finally {
         await tempDir.delete(recursive: true);
       }

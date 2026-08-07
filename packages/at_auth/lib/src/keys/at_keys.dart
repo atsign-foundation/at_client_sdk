@@ -81,6 +81,56 @@ final class AtKeys {
     return keys;
   }
 
+  /// The post-quantum half of [generate], on its own: the ML-DSA-65 APKAM
+  /// keypair and the X-Wing encryption keypair, ready to be added to an
+  /// [AtKeys].
+  ///
+  /// This is what an enrollment mints for itself
+  /// (`ApkamSigningScheme.mintKeys`), so a keyset minted at enrollment time and
+  /// one minted at activation time carry the same material under the same
+  /// `keyId`s.
+  ///
+  /// [enrollmentId] is null when the atServer has not allocated one yet, which
+  /// is the case at enrollment-submit time.
+  static Future<List<AtKeysMaterial>> generatePQEnrollmentPackage(
+    Atsign atsign,
+    String? enrollmentId,
+  ) async {
+    List<AtKeysMaterial> list = [];
+    final mldsa = await MlDsa65PureDartAlgo().generateKeyPair();
+    list.add(AtKeysMaterial(
+      keyId: KeyIds.apkamPQ,
+      keyPartType: CryptographicKeyType.publicVerification,
+      keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+      bytes: mldsa.publicKey,
+      createdAt: DateTime.timestamp(),
+    ));
+    list.add(AtKeysMaterial(
+      keyId: KeyIds.apkamPQ,
+      keyPartType: CryptographicKeyType.privateSigning,
+      keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+      bytes: mldsa.secretKey,
+      createdAt: DateTime.timestamp(),
+    ));
+
+    final xwing = await XWingPureDartAlgo.instance.generateKeyPair();
+    list.add(AtKeysMaterial(
+      keyId: KeyIds.keyPackageXWing,
+      keyPartType: CryptographicKeyType.publicEncryption,
+      keyAlgorithmType: KeyAlgorithmType.xWing,
+      bytes: xwing.publicKey,
+      createdAt: DateTime.timestamp(),
+    ));
+    list.add(AtKeysMaterial(
+      keyId: KeyIds.keyPackageXWing,
+      keyPartType: CryptographicKeyType.privateDecryption,
+      keyAlgorithmType: KeyAlgorithmType.xWing,
+      bytes: xwing.secretKey,
+      createdAt: DateTime.timestamp(),
+    ));
+    return list;
+  }
+
   static Future<List<AtKeysMaterial>> _generatePqKeys() async {
     List<AtKeysMaterial> list = [];
     final mldsa = await MlDsa65PureDartAlgo().generateKeyPair();
@@ -149,6 +199,36 @@ final class AtKeys {
     const AtKeysAssurance().validateAddKey(existing: keys, candidate: material);
     _materialsByKeyId.putIfAbsent(
         material.keyId, () => {})[material.keyPartType] = material;
+  }
+
+  /// Marks every material of [keyId] as [KeyPartStatus.active] — the promotion
+  /// that happens once the atServer has accepted the key the material was
+  /// waiting on ([KeyPartStatus.pendingEnrollment] or
+  /// [KeyPartStatus.pendingCramDeletion]).
+  ///
+  /// The counterpart of [retireKey]: this is the one transition that moves a
+  /// status *forward into* active, so it is the only way out of a pending
+  /// state. Promoting anything else throws, as does an unknown [keyId].
+  void promoteKey(String keyId) {
+    final byType = _materialsByKeyId[keyId];
+    if (byType == null) {
+      throw ArgumentError.value(keyId, 'keyId', 'AtKeys has no such keyId');
+    }
+    const promotable = {
+      KeyPartStatus.pendingEnrollment,
+      KeyPartStatus.pendingCramDeletion,
+    };
+    for (final material in byType.values) {
+      if (!promotable.contains(material.status)) {
+        throw ArgumentError.value(
+          material.status,
+          'status',
+          'cannot move a non-pending key status to active',
+        );
+      }
+    }
+    byType
+        .updateAll((_, material) => material.withStatus(KeyPartStatus.active));
   }
 
   /// Marks every material of [keyId] as [to] ([KeyPartStatus.retired] by

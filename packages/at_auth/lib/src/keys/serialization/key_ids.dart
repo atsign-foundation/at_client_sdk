@@ -25,6 +25,9 @@ abstract final class KeyIds {
   // pq id's
   static const String apkamPQ = 'apkam/mldsa65';
   static const String globalXWing = 'atsign/xwing';
+  static const String keyPackageXWing = 'keypackage/xwing';
+  static const String publishedPqPublicKey = 'pqpublickey';
+  static const String publishedLegacyPublicKey = 'publicKey';
   // all legacy
   static const String apkamPublicKey = 'aesPkamPublicKey';
   static const String apkamPrivateKey = 'aesPkamPrivateKey';

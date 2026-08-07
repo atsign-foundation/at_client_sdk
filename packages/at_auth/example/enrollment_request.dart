@@ -39,21 +39,20 @@ void main(List<String> args) async {
 
     AtEnrollment atEnrollmentBase = AtEnrollment.create(atLookUp);
 
-    // New app sending enrollment request to server:
-    AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
-        atsign: atsign,
-        appName: 'buzz',
-        deviceName: 'pixel',
-        namespaces: [
-          NamespacePermission(namespace: 'buzz', read: true, write: true)
-        ],
-        otp: argResults['otp']);
-
-    // Submitting an AtEnrollmentRequest yields a PendingEnrollment: the
-    // server's verdict plus the APKAM keys minted locally, which waitForApproval
-    // needs to finish the handshake.
-    final pending =
-        await atEnrollmentBase.enroll(enrollmentRequest) as PendingEnrollment;
+    // New app sending enrollment request to server. Submitting yields a
+    // PendingEnrollment: the server's verdict plus the APKAM keys minted
+    // locally, which waitForApproval needs to finish the handshake.
+    final pending = await atEnrollmentBase.enroll(
+      atsign: atsign,
+      rootDomain: rootDomain,
+      appName: 'buzz',
+      deviceName: 'pixel',
+      namespaces: [
+        NamespacePermission(namespace: 'buzz', read: true, write: true)
+      ],
+      otp: Otp.fromDuration(
+          value: argResults['otp'], duration: const Duration(minutes: 5)),
+    ) as PendingEnrollment;
     print('submitted ${pending.enrollmentId} (${pending.enrollStatus.name})');
 
     // Once the approving app approves, waitForApproval completes those keys with

@@ -6,7 +6,6 @@ import 'package:at_auth/src/at_auth.dart';
 import 'package:at_auth/src/auth/apkam_signing_scheme.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
-import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
@@ -66,6 +65,10 @@ class AtAuthImpl implements AtAuth {
 
   /// Builds the [AtEnrollment] for a connection. Deferred because enrollment
   /// needs a connection, and the connection needs the keys.
+  ///
+  /// The default passes [signing] on: an enrollment that stamped a different
+  /// scheme than the one this instance signs with would enroll a key the
+  /// atServer then refuses to verify PKAM against.
   final AtEnrollment Function(AtLookUp) enrollmentFactory;
 
   @override
@@ -98,7 +101,8 @@ class AtAuthImpl implements AtAuth {
     this.atServerStatus,
     AtEnrollment Function(AtLookUp)? enrollmentFactory,
     AtLookUpFactory? atLookUpFactory,
-  })  : enrollmentFactory = enrollmentFactory ?? AtEnrollment.create,
+  })  : enrollmentFactory = enrollmentFactory ??
+            ((lookUp) => AtEnrollment.create(lookUp, signing: signing)),
         _lookUpFactory = atLookUpFactory ?? signing.lookUpFactory;
 
   /// The single construction point: every connection an operation here runs over
@@ -106,11 +110,11 @@ class AtAuthImpl implements AtAuth {
   /// of them.
   AtLookUp _lookUpFor(
     Atsign atsign,
-    AtRootDomain rootDomain,
-    AtKeys? keys,
+    AtRootDomain rootDomain, {
+    AtKeys? atKeys,
     String? enrollmentId,
-  ) =>
-      _lookUpFactory(atsign, rootDomain, keys, enrollmentId: enrollmentId);
+  }) =>
+      _lookUpFactory(atsign, rootDomain, atKeys, enrollmentId: enrollmentId);
 
   /// Authenticate using PKAM.
   ///
@@ -164,7 +168,8 @@ class AtAuthImpl implements AtAuth {
     pkamAuthenticator ??= PkamAuthenticator();
     // The signing key is bound into the connection here — this is the only
     // place the keys just read reach the PKAM handshake.
-    final lookUp = _lookUpFor(atsign, rootDomain, atKeys, enrollmentId);
+    final lookUp = _lookUpFor(atsign, rootDomain,
+        atKeys: atKeys, enrollmentId: enrollmentId);
     try {
       // Throws UnAuthenticatedException on failure; reaching past this call
       // means PKAM succeeded.
@@ -228,8 +233,8 @@ class AtAuthImpl implements AtAuth {
     String cramSecret, {
     bool mintLegacy = true,
     bool autoCompleteActivation = true,
-    String appName = FirstEnrollmentRequest.defaultAppName,
-    String deviceName = FirstEnrollmentRequest.defaultDeviceName,
+    String? appName,
+    String? deviceName,
   }) async {
     _progress(
       "onboarding",
@@ -247,7 +252,7 @@ class AtAuthImpl implements AtAuth {
     try {
       await validateAtServer(atsign, rootDomain, onboarding: true);
       cramAuthenticator ??= CramAuthenticator();
-      cramLookUp = _lookUpFor(atsign, rootDomain, null, null);
+      cramLookUp = _lookUpFor(atsign, rootDomain);
       try {
         // Throws UnAuthenticatedException on failure.
         await cramAuthenticator!.authenticate(
@@ -290,8 +295,8 @@ class AtAuthImpl implements AtAuth {
         rootDomain,
         atKeys,
         cramLookUp,
-        appName,
-        deviceName,
+        appName: appName,
+        deviceName: deviceName,
       );
       atKeys.enrollmentId = enrollmentIdFromServer;
 
@@ -301,8 +306,12 @@ class AtAuthImpl implements AtAuth {
 
       //4. Do pkam auth on a connection built from the key we just minted
       pkamAuthenticator ??= PkamAuthenticator();
-      pkamLookUp =
-          _lookUpFor(atsign, rootDomain, atKeys, enrollmentIdFromServer);
+      pkamLookUp = _lookUpFor(
+        atsign,
+        rootDomain,
+        atKeys: atKeys,
+        enrollmentId: enrollmentIdFromServer,
+      );
       try {
         // Throws UnAuthenticatedException on failure.
         await pkamAuthenticator!.authenticate(atsign, pkamLookUp,
@@ -408,26 +417,27 @@ class AtAuthImpl implements AtAuth {
     Atsign atsign,
     AtRootDomain rootDomain,
     AtKeys atKeys,
-    AtLookUp cramLookUp,
-    String appName,
-    String deviceName,
-  ) async {
-    _logger.finer('apkamPublicKey: ${atKeys.apkamPublicKey}');
-
-    FirstEnrollmentRequest request = FirstEnrollmentRequest(
-      atsign: atsign,
-      rootDomain: rootDomain,
-      appName: appName,
-      deviceName: deviceName,
-      apkamPublicKey: atKeys.apkamPublicKey!.toString(),
-    );
+    AtLookUp cramLookUp, {
+    String? appName,
+    String? deviceName,
+  }) async {
+    // The key enrolled has to be the one the PKAM connection built below then
+    // signs with, so it comes from the same scheme — and goes out base64, which
+    // is what AtBytes.toString() gives (a raw Uint8List would stringify to
+    // "[48, 130, …]").
+    final apkamPublicKey = signing.requireApkamPublicKey(atKeys);
+    _logger.finer('apkamPublicKey: $apkamPublicKey');
 
     AtEnrollmentResponse? atEnrollmentResponse;
     try {
       atEnrollmentResponse =
-          await enrollmentFactory(cramLookUp).enroll(request);
+          await enrollmentFactory(cramLookUp).firstEnrollment(
+        apkamPublicKey.toString(),
+        appName: appName,
+        deviceName: deviceName,
+      );
     } on AtEnrollmentException catch (e, s) {
-      _progress("onboarding", "Enrollment failed for atSign: ${request.atsign}",
+      _progress("onboarding", "Enrollment failed for atSign: $atsign",
           ProgressEventType.error,
           error: e, stackTrace: s);
       Error.throwWithStackTrace(

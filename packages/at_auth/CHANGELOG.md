@@ -14,9 +14,9 @@
   implementation. `flush` stays on `WrittenAtKeysIo`; `append`/`retire`/
   `dispose` stay on `InMemoryAtKeysIo`.
 - **`appName`/`deviceName` are named parameters on `AtAuth.onboard`** (same
-  `'firstApp'`/`'firstDevice'` defaults, now
-  `FirstEnrollmentRequest.defaultAppName`/`defaultDeviceName`) instead of mutable
-  fields on a request object settable only by cascade after construction.
+  `'firstApp'`/`'firstDevice'` defaults, now applied by
+  `AtEnrollment.firstEnrollment`) instead of mutable fields on a request object
+  settable only by cascade after construction.
 - **`enrollmentId` is a structural field of the typed-keys document**, alongside
   `version`/`atsign`/`keys` — read and written explicitly rather than carried in
   the legacy flat payload. The on-disk bytes are unchanged; what changes is that
@@ -183,6 +183,20 @@ is untouched by all of it — it stays readable *and* writable, and the six lega
 - `ApkamSigningScheme` and `buildAtLookUp(...)` — the signing scheme a caller
   selects and the connection builder that applies it, pulling the matching key
   from an `AtKeys`.
+- **`ApkamSigningScheme` owns the algorithm end to end**: `signatureAlgorithm`
+  (the at_chops signer), `signingAlgo` (the `rsa2048`/`mldsa65` wire token),
+  `mintKeys(AtKeys)` and `requirePqApkamPublicKey`/`requirePqApkamPrivateKey`.
+  One scheme now drives the keypair an enrollment mints, where in the keyset it
+  lands, and the key PKAM later signs with — they can no longer disagree.
+  `mintKeys` delegates its post-quantum arm to
+  `AtKeys.generatePQEnrollmentPackage`, so an enrollment-minted keyset and an
+  activation-minted one carry identical material.
+- `ApkamKeyConveyance` with its default `RsaKeyConveyance` — how an
+  enrollment's `apkamSymmetricKey` reaches its approver, injectable on
+  `AtEnrollment.create(atLookUp, conveyance:)`. Deliberately an axis *separate*
+  from `ApkamSigningScheme`: ML-DSA signs and X-Wing encapsulates, and one
+  keypair cannot do both. The wire bytes are unchanged.
+
 
 ### Migration
 

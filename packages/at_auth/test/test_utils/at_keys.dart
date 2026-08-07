@@ -21,6 +21,23 @@ AtKeys legacyAtKeys({Atsign? atsign}) {
     ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
 }
 
+/// A keyset carrying only post-quantum material — the shape
+/// `ApkamSigningScheme.postQuantum` mints and nothing else.
+///
+/// The counterpart to [legacyAtKeys]: between them the two cover "has one
+/// scheme's key, not the other's", which is what most scheme-dispatch tests
+/// are really asking about.
+Future<AtKeys> pqAtKeys({Atsign? atsign}) async {
+  final keys = AtKeys(atsign: atsign ?? '@alice'.toAtsign());
+  await ApkamSigningScheme.postQuantum.mintKeys(keys);
+  return keys;
+}
+
+/// The OTP an enrollment submits with. The value is arbitrary — the atServer is
+/// mocked in every test here — but it has to be an [Otp], not a String.
+Otp testOtp([String value = 'A123FE']) =>
+    Otp.fromDuration(value: value, duration: const Duration(minutes: 5));
+
 final _defaultCreatedAt = DateTime.utc(2024, 1, 1);
 
 AtKeysMaterial symmetricKey(

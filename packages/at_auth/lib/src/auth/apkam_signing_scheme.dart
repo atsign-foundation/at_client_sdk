@@ -1,11 +1,12 @@
-import 'dart:typed_data';
-
+import 'package:at_auth/src/enroll/apkam_key_conveyance.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_auth/src/keys/serialization/key_ids.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:meta/meta.dart';
 
 /// Builds the [AtLookUp] an authentication runs over.
 ///
@@ -38,9 +39,7 @@ enum ApkamSigningScheme {
   /// atServer verifies today.
   legacy,
 
-  /// ML-DSA-65 (FIPS 204), signed with the [KeyIds.apkamPQ] private material.
-  /// Hashing is intrinsic to the scheme, so no separate hashing algorithm is
-  /// declared on the wire.
+  @experimental
   postQuantum;
 
   /// The [AtLookUpFactory] used when a caller injects none — every connection
@@ -54,6 +53,93 @@ enum ApkamSigningScheme {
             keys,
             enrollmentId: enrollmentId,
           );
+
+  ApkamKeyConveyance get conveyance => switch (this) {
+        ApkamSigningScheme.legacy => RsaKeyConveyance(),
+        ApkamSigningScheme.postQuantum => XWingKeyConveyance(),
+      };
+
+  /// The at_chops algorithm this scheme signs PKAM with — the single source for
+  /// the keypair [mintKeys] generates, the [signingAlgo] the enroll and
+  /// pkam verbs are stamped with, and the `keyAlgorithmType` the minted material
+  /// records.
+  AtSignatureAlgorithm get signatureAlgorithm => switch (this) {
+        ApkamSigningScheme.legacy => RsaSigningAlgo(),
+        ApkamSigningScheme.postQuantum => MlDsa65PureDartAlgo(),
+      };
+
+  /// How this scheme names itself on the wire — `rsa2048` or `mldsa65`. The
+  /// same token the enroll verb's `signingAlgo` carries and an [AtKeysMaterial]
+  /// records as its `keyAlgorithmType`, so an enrollment record and the key
+  /// material it was minted from cannot disagree.
+  String get signingAlgo => signatureAlgorithm.signingAlgoType.name;
+
+  /// The APKAM public key this scheme enrolls, from where that scheme keeps it:
+  /// the legacy flat field, or the [KeyIds.apkamPQ] verification material.
+  ///
+  /// This is what goes on the enroll verb, so it must be the counterpart of
+  /// [requireApkamPrivateKey] — the atServer verifies with this key the
+  /// signature PKAM makes with that one.
+  AtBytes requireApkamPublicKey(AtKeys keys) {
+    final key = switch (this) {
+      // ignore: deprecated_member_use_from_same_package
+      ApkamSigningScheme.legacy => keys.apkamPublicKey,
+      ApkamSigningScheme.postQuantum =>
+        _pqApkamKey(keys, CryptographicKeyType.publicVerification),
+    };
+    return key ?? (throw _missingApkamKey(keys, 'public'));
+  }
+
+  /// The APKAM private key this scheme signs PKAM with — see
+  /// [requireApkamPublicKey] for the half the atServer holds.
+  ///
+  /// Never falls back to the other scheme's key: that would authenticate as an
+  /// identity the caller did not ask for.
+  AtBytes requireApkamPrivateKey(AtKeys keys) {
+    final key = switch (this) {
+      // ignore: deprecated_member_use_from_same_package
+      ApkamSigningScheme.legacy => keys.apkamPrivateKey,
+      ApkamSigningScheme.postQuantum =>
+        _pqApkamKey(keys, CryptographicKeyType.privateSigning),
+    };
+    return key ?? (throw _missingApkamKey(keys, 'private'));
+  }
+
+  AtBytes? _pqApkamKey(AtKeys keys, String keyPartType) {
+    final material = keys.getKey(KeyIds.apkamPQ, keyPartType);
+    return material == null ? null : AtBytes(material.bytes);
+  }
+
+  AtAuthenticationException _missingApkamKey(AtKeys keys, String half) =>
+      AtAuthenticationException(
+          'The keys for ${keys.atsign} carry no $name APKAM $half key');
+
+  /// Mints a fresh APKAM keypair for this scheme and writes it into [keys], in
+  /// the place [buildAtLookUp] reads it back from.
+  ///
+  /// Only the APKAM material: nothing else in [keys] is touched, so this can
+  /// complete a keyset that already carries its encryption material.
+  ///
+  /// The post-quantum arm delegates to [AtKeys.generatePQEnrollmentPackage] —
+  /// the same package [AtKeys.generate] mints — so the two cannot drift on
+  /// which `keyId` or `keyPartType` the material lands under.
+  Future<void> mintKeys(AtKeys keys) async {
+    switch (this) {
+      case ApkamSigningScheme.legacy:
+        final keyPair = await signatureAlgorithm.generateKeyPair();
+        // ignore: deprecated_member_use_from_same_package
+        keys.apkamPublicKey = AtBytes(keyPair.publicKey);
+        // ignore: deprecated_member_use_from_same_package
+        keys.apkamPrivateKey = AtBytes(keyPair.secretKey);
+      case ApkamSigningScheme.postQuantum:
+        for (final material in await AtKeys.generatePQEnrollmentPackage(
+          keys.atsign,
+          keys.enrollmentId,
+        )) {
+          keys.addKey(material);
+        }
+    }
+  }
 }
 
 /// Builds the [AtLookUp] an authentication runs over, signing with [signing]
@@ -76,37 +162,15 @@ AtLookUp buildAtLookUp(
   AtKeys? keys, {
   String? enrollmentId,
 }) {
-  final pkamPrivateKey = keys == null ? null : _pkamPrivateKey(signing, keys);
+  final pkamPrivateKey =
+      keys == null ? null : signing.requireApkamPrivateKey(keys).bytes;
 
-  return switch (signing) {
-    ApkamSigningScheme.legacy => AtLookUp.legacy(
-        atsign,
-        rootDomain.rootDomain,
-        rootDomain.rootPort,
-        pkamPrivateKey: pkamPrivateKey,
-        enrollmentId: enrollmentId,
-      ),
-    ApkamSigningScheme.postQuantum => AtLookUp.pq(
-        atsign,
-        rootDomain.rootDomain,
-        rootDomain.rootPort,
-        pkamPrivateKey: pkamPrivateKey,
-        enrollmentId: enrollmentId,
-      ),
-  };
-}
-
-Uint8List _pkamPrivateKey(ApkamSigningScheme signing, AtKeys keys) {
-  final key = switch (signing) {
-    // ignore: deprecated_member_use_from_same_package
-    ApkamSigningScheme.legacy => keys.apkamPrivateKey?.bytes,
-    ApkamSigningScheme.postQuantum =>
-      keys.getKey(KeyIds.apkamPQ, CryptographicKeyType.privateSigning)?.bytes,
-  };
-  if (key == null) {
-    throw AtAuthenticationException(
-        'The keys for ${keys.atsign} carry no ${signing.name} APKAM private '
-        'key to authenticate with');
-  }
-  return key;
+  return AtLookUp.create(
+    atsign,
+    rootDomain.rootDomain,
+    rootDomain.rootPort,
+    signingAlgo: signing.signatureAlgorithm,
+    pkamPrivateKey: pkamPrivateKey,
+    enrollmentId: enrollmentId,
+  );
 }

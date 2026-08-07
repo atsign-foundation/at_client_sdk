@@ -1,16 +1,17 @@
 import 'dart:async';
 
 import 'package:at_auth/src/auth/apkam_signing_scheme.dart';
+import 'package:at_auth/src/enroll/apkam_key_conveyance.dart';
 import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
-import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
-import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
 import 'package:at_auth/src/enroll/models/otp.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
+import 'package:meta/meta.dart';
 
 import '../keys/io/at_keys_io.dart';
+import 'models/namespace_permission.dart';
 
 /// An abstract class for submitting and managing the enrollment requests.
 abstract class AtEnrollment {
@@ -35,15 +36,20 @@ abstract class AtEnrollment {
   /// so it needs a connection built from key material that did not exist when
   /// [lookUp] was constructed. [atLookUpFactory] takes over building it;
   /// left null, it is built signing with [signing].
+  ///
+  /// [conveyance] carries the `apkamSymmetricKey` to the approver. It is chosen
+  /// independently of [signing] — see [ApkamKeyConveyance].
   factory AtEnrollment.create(
     AtLookUp lookUp, {
     ApkamSigningScheme signing = ApkamSigningScheme.legacy,
     AtLookUpFactory? atLookUpFactory,
+    ApkamKeyConveyance conveyance = const RsaKeyConveyance(),
   }) {
     return AtEnrollmentImpl(
       lookUp,
       signing: signing,
       atLookUpFactory: atLookUpFactory,
+      conveyance: conveyance,
     );
   }
 
@@ -51,25 +57,41 @@ abstract class AtEnrollment {
 
   /// Submits an enrollment request over [atLookUp].
   ///
-  /// [FirstEnrollmentRequest] is the activation case, submitted over a
-  /// CRAM-authenticated connection. Because no app exists yet to approve it, the
-  /// atServer auto-approves it and grants the `__manage` namespace, making it
-  /// the administrator enrollment that approves every later request. `AtAuth`
-  /// sends this one itself during [AtAuth.onboard].
+  /// This is every request after activation: it mints an APKAM keypair scoped
+  /// to the namespaces it asks for, and returns a [PendingEnrollment] the
+  /// caller hands to [waitForApproval]. Access is limited to those namespaces
+  /// once an administrator app approves it.
   ///
-  /// [AtEnrollmentRequest] is every subsequent request: it mints an APKAM
-  /// keypair scoped to the namespaces it asks for, and returns a
-  /// [PendingEnrollment] the caller hands to [waitForApproval]. Access is
-  /// limited to those namespaces once an administrator app approves it.
+  /// The activation case is [firstEnrollment], not this one.
   ///
   /// See `example/enrollment_request.dart` for the full flow.
-  Future<AtEnrollmentResponse> enroll(EnrollmentRequest enrollmentRequest);
+  Future<AtEnrollmentResponse> enroll({
+    required Atsign atsign,
+    required AtRootDomain rootDomain,
+    required String appName,
+    required String deviceName,
+    required Otp otp,
+    required List<NamespacePermission> namespaces,
+    Duration? apkamKeysExpiryDuration,
+  });
+
+  /// The activation enrollment, submitted over a CRAM-authenticated connection.
+  ///
+  /// Because no app exists yet to approve it, the atServer auto-approves it and
+  /// grants the `__manage` namespace, making it the administrator enrollment
+  /// that approves every later request. `AtAuth` sends this one itself during
+  /// [AtAuth.onboard].
+  @internal
+  Future<AtEnrollmentResponse> firstEnrollment(
+    String apkamPublicKey, {
+    String? appName,
+    String? deviceName,
+  });
 
   /// Approves an enrollment request.
   ///
-  /// The `enrollmentId` and its `encryptedAPKAMSymmetricKey` arrive in the
-  /// notification of the request and go in via
-  /// [EnrollmentRequestDecision.approved].
+  /// [enrollmentId] and [encryptedApkamSymmetricKey] arrive in the notification
+  /// of the request.
   ///
   /// [atsign] and [atKeysIo] identify the *approving* app and supply its own key
   /// material: the encryption private key decrypts the enrollee's APKAM
@@ -79,25 +101,25 @@ abstract class AtEnrollment {
   Future<AtEnrollmentResponse> approve(
     Atsign atsign,
     AtKeysIo atKeysIo,
-    EnrollmentRequestDecision enrollmentRequestDecision,
+    String enrollmentId,
+    AtBytes encryptedApkamSymmetricKey,
   );
 
   /// Denies an enrollment request, over [atLookUp].
   ///
-  /// Unlike [approve], denial needs no key material — build the decision with
-  /// [EnrollmentRequestDecision.denied].
+  /// Unlike [approve], denial needs no key material.
   Future<AtEnrollmentResponse> deny(
-    EnrollmentRequestDecision enrollmentRequestDecision,
+    String enrollmentId,
   );
 
   /// Revokes an approved enrollment over [atLookUp], closing its active
   /// connections and making it unusable.
   ///
-  /// Build the decision with [EnrollmentRequestDecision.revoked]; as for [deny],
-  /// no key material is needed.
+  /// As for [deny], no key material is needed.
   Future<AtEnrollmentResponse> revoke(
-    EnrollmentRequestDecision enrollmentRequestDecision,
-  );
+    String enrollmentId, {
+    bool force = false,
+  });
 
   /// Lists all enrollments.
   ///
