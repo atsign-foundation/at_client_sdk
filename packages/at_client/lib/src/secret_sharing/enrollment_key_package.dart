@@ -1,13 +1,13 @@
 import 'dart:convert' show base64Encode;
+import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart'
     show
         AtKeys,
         AtKeysIo,
         AtKeysMaterial,
-        CryptographicKeyType,
-        KeyAlgorithmType;
-import 'package:at_chops/at_chops.dart' show SigningAlgoType, XWingPureDartAlgo;
+        CryptographicKeyType;
+import 'package:at_chops/at_chops.dart' show AtKemAlgorithm, SigningAlgoType;
 import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
@@ -44,11 +44,21 @@ import 'package:meta/meta.dart' show experimental;
 /// (the default, today's OTP flow) or `mldsa65` for a self-retrofit, whose
 /// freshly minted ML-DSA keypair rides the same flat fields as base64 of
 /// the raw keys.
+///
+/// [keyEstablishmentAlgo] is the KEM the enrollment's encapsulation key is
+/// minted under — pass `AtClientPreference.keyEstablishmentAlgo`. It is an
+/// explicit parameter rather than something read from a preference because
+/// this function has no client and cannot have one: it runs before the
+/// enrollment exists. **It is also frozen at this call.** The key package
+/// rides `enroll:request` and `metadata.keyPackage` is never rewritten, so
+/// this decides the enrollment's KEM for its whole life; changing it later
+/// takes effect only on a new enrollment.
 @experimental
 Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
   String atSign, {
   DateTime? createdAt,
   SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
+  String keyEstablishmentAlgo = SecretSharingAlgos.xWing,
 }) {
   return (AtKeysIo keysIo) async {
     final AtKeys keys = await keysIo.read(atSign);
@@ -61,8 +71,25 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
           '$atSign, so the key package cannot be signed');
     }
 
-    final xWing = await XWingPureDartAlgo.instance.generateKeyPair();
-    final String pub = base64Encode(xWing.publicKey);
+    final AtKemAlgorithm? kem = SecretSharingAlgos.kemFor(keyEstablishmentAlgo);
+    final String? materialAlgo =
+        SecretSharingAlgos.materialAlgoFor(keyEstablishmentAlgo);
+    if (kem == null || materialAlgo == null) {
+      throw StateError(
+          'enrollmentKeyPackageBuilder: no implementation for '
+          '"$keyEstablishmentAlgo". This is the one moment an enrollment\'s '
+          'encapsulation target can be set — there is no post-enrollment write '
+          '— so it fails rather than quietly minting something else. '
+          'Supported: ${SecretSharingAlgos.keyAlgos}');
+    }
+
+    // The SEED is what is filed, not the secret key. They are the same 32
+    // bytes for X-Wing, but ML-KEM's secret key is an expanded decapsulation
+    // key that nothing turns back into a public half — a keyfile holding one
+    // could never recover the package it was filed for.
+    final Uint8List seed = kem.newSeed();
+    final pair = await kem.keyPairFromSeed(seed);
+    final String pub = base64Encode(pair.publicKey);
     final String kpid = PackageKey.computeKid(pub);
     final DateTime now = createdAt ?? DateTime.now().toUtc();
 
@@ -71,15 +98,15 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
     keys.addKey(AtKeysMaterial(
       keyId: kpid,
       keyPartType: CryptographicKeyType.publicEncapsulation,
-      keyAlgorithmType: KeyAlgorithmType.xWing,
-      bytes: AtBytes(xWing.publicKey),
+      keyAlgorithmType: materialAlgo,
+      bytes: AtBytes(pair.publicKey),
       createdAt: now,
     ));
     keys.addKey(AtKeysMaterial(
       keyId: kpid,
       keyPartType: CryptographicKeyType.privateDecapsulation,
-      keyAlgorithmType: KeyAlgorithmType.xWing,
-      bytes: AtBytes(xWing.secretKey),
+      keyAlgorithmType: materialAlgo,
+      bytes: AtBytes(seed),
       createdAt: now,
     ));
 
@@ -88,7 +115,7 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
       keys: [
         PackageKey(
           use: SecretSharingAlgos.useEnc,
-          alg: SecretSharingAlgos.xWing,
+          alg: keyEstablishmentAlgo,
           pub: pub,
         ),
       ],

@@ -53,7 +53,7 @@ void main() {
       ..directory = directory;
     if (seed != null) {
       registrant.loadApkamKeys =
-          () async => PersistedApkamKeys(xWingSeed: base64Encode(seed));
+          () async => PersistedApkamKeys(encSeed: base64Encode(seed));
     }
     return registrant;
   }
@@ -100,7 +100,7 @@ void main() {
       expect(saved, isNotNull);
       // the persisted seed deterministically re-derives the registered key
       final rederived = await XWingPureDartAlgo.instance
-          .generateKeyPair(base64Decode(saved!.xWingSeed));
+          .generateKeyPair(base64Decode(saved!.encSeed));
       expect(base64Encode(rederived.publicKey),
           keyPackage.bestKeyFor(SecretSharingAlgos.keyAlgos)!.pub);
     });
@@ -113,6 +113,94 @@ void main() {
       await r1.register();
       await r2.register();
       expect(r1.kpid, r2.kpid); // same seed -> same enc keypair -> same kpid
+    });
+  });
+
+  group('the configured KEM decides what is minted', () {
+    TestRegistrant registrantFor(String keyAlgo) {
+      final client = buildMockClient('enroll-a');
+      // MockAtClient's getPreferences() is concrete and returns a stable,
+      // mutable instance — the same shape as the real one, so setting the
+      // knob here is what an app does.
+      client.getPreferences()!.keyEstablishmentAlgo = keyAlgo;
+      return TestRegistrant(client)..directory = FakeEnrollmentDirectory();
+    }
+
+    test('the hybrid is what an unconfigured client mints', () async {
+      final pkg = await registrantFor(SecretSharingAlgos.xWing).register();
+      final encKey = pkg.bestKeyFor(SecretSharingAlgos.keyAlgos)!;
+
+      expect(encKey.alg, SecretSharingAlgos.xWing);
+      expect(base64Decode(encKey.pub),
+          hasLength(XWingPureDartAlgo.publicKeyLength));
+      expect(pkg.suites, [
+        SecretSharingAlgos.xWingRfc9180,
+        SecretSharingAlgos.xWingHpke,
+      ]);
+    });
+
+    test('a client configured for ML-KEM-1024 mints and advertises it',
+        () async {
+      final registrant = registrantFor(SecretSharingAlgos.mlKem1024);
+      final pkg = await registrant.register();
+      final encKey = pkg.bestKeyFor(SecretSharingAlgos.keyAlgos)!;
+
+      expect(registrant.encKeyAlgo, SecretSharingAlgos.mlKem1024);
+      expect(encKey.alg, SecretSharingAlgos.mlKem1024);
+      expect(base64Decode(encKey.pub),
+          hasLength(MlKem1024PureDartAlgo.publicKeyLength),
+          reason: '1568 bytes against the hybrid\'s 1216 — the two arms are '
+              'not even the same shape');
+      expect(pkg.suites, [SecretSharingAlgos.mlKem1024Rfc9180],
+          reason: 'and it must not claim the X-Wing constructions, which '
+              'nothing it holds can decapsulate');
+    });
+
+    test('the persisted seed re-derives an ML-KEM package', () async {
+      // The trap the seed contract exists for. ML-KEM's `secretKey` is the
+      // 3168-byte expanded decapsulation key and cannot be fed back as a
+      // seed, so persisting it — which is correct for X-Wing, where the two
+      // are the same bytes — would leave this key unrecoverable at the next
+      // start, and the client would answer at a kpid nobody writes to.
+      final registrant = registrantFor(SecretSharingAlgos.mlKem1024);
+      PersistedApkamKeys? saved;
+      registrant.saveApkamKeys = (keys) async => saved = keys;
+      final pkg = await registrant.register();
+
+      expect(saved!.keyAlgo, SecretSharingAlgos.mlKem1024,
+          reason: 'the algorithm travels with the seed: 32 and 64 bytes are '
+              'both valid seeds for some backend, so the bytes alone do not '
+              'say which');
+      expect(base64Decode(saved!.encSeed),
+          hasLength(MlKem1024PureDartAlgo.seedLength));
+
+      final rederived = await MlKem1024PureDartAlgo.instance
+          .keyPairFromSeed(base64Decode(saved!.encSeed));
+      expect(base64Encode(rederived.publicKey),
+          pkg.bestKeyFor(SecretSharingAlgos.keyAlgos)!.pub);
+    });
+
+    test('a loaded key keeps its own algorithm whatever the preference says',
+        () async {
+      // The kpid is the address peers already seal to, and it is frozen in an
+      // enrollment record that is never rewritten. Re-minting under a newly
+      // configured KEM would move this client to an address nobody writes to.
+      final registrant = registrantFor(SecretSharingAlgos.mlKem1024);
+      registrant.loadApkamKeys = () async => PersistedApkamKeys(
+          encSeed: base64Encode(seedA), keyAlgo: SecretSharingAlgos.xWing);
+
+      final pkg = await registrant.register();
+
+      expect(registrant.configuredKeyAlgo, SecretSharingAlgos.mlKem1024);
+      expect(registrant.encKeyAlgo, SecretSharingAlgos.xWing);
+      expect(pkg.bestKeyFor(SecretSharingAlgos.keyAlgos)!.pub,
+          base64Encode(publicKeyA));
+    });
+
+    test('an unimplemented algorithm fails rather than minting something else',
+        () async {
+      await expectLater(registrantFor('kyber-1024-v9').register(),
+          throwsA(isA<StateError>()));
     });
   });
 

@@ -1,4 +1,32 @@
 ## 3.14.1
+- feat: a client mints and advertises the KEM its deployment configured.
+  `KeyPackageRegistration` and `enrollmentKeyPackageBuilder` take the algorithm
+  from `AtClientPreference.keyEstablishmentAlgo` (the builder as an explicit
+  parameter — it runs before the enrollment exists and has no client), stamp it
+  on the advertised key, and let `suites` derive from it. So an atSign set to
+  `ml-kem-1024` advertises a 1568-byte ML-KEM key claiming only
+  `ml-kem-1024-rfc9180-v1`, and peers seal to it at `ver 0x03`.
+  **A key that already exists keeps its own algorithm**, whatever the
+  preference later says: the kpid is the address peers seal to and it is frozen
+  in an enrollment record that is never rewritten, so re-minting would move the
+  client to an address nobody writes to. Changing the preference takes effect
+  on the next enrollment.
+- fix: the enc keypair is persisted as its **seed** rather than its secret key,
+  and the seed now travels with the algorithm that produced it. The two are the
+  same 32 bytes for X-Wing — so existing keyfiles are unaffected — but ML-KEM's
+  secret key is a 3168-byte expanded decapsulation key that nothing turns back
+  into a public half, so storing it would have left the key unrecoverable at
+  the next start. 32 and 64 bytes are both valid seeds for *some* backend, so
+  the bytes alone cannot say which, hence `PersistedApkamKeys.keyAlgo`
+  (`xWingSeed` is renamed `encSeed`, and `xWingPublicKey`/`xWingSeed` on the
+  mixin become `encPublicKey`/`encSecretKey` — the latter is now the
+  decapsulation key, derived at `register()` time, not the seed).
+- fix: the key-package lookups accept any key-establishment algorithm this
+  build implements rather than X-Wing alone —
+  `keyPackageMaterial` and the enrollment-time symmetric-key resolver. An
+  X-Wing-only filter would have made an ML-KEM-minted keyfile invisible, and
+  the client would then mint a fresh key and answer at a kpid its enrollment
+  never advertised, so nothing addressed to it could arrive.
 - feat: a sender follows the recipient's advertised construction instead of
   stamping the only one it knows. `sendEnvelope` takes the KEM from the
   recipient key's `alg`, the suite from the strongest entry both sides list

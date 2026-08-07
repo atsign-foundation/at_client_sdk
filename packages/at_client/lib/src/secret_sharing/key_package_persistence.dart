@@ -5,8 +5,9 @@ import 'package:at_auth/at_auth.dart'
         AtKeys,
         AtKeysIo,
         AtKeysMaterial,
-        CryptographicKeyType,
-        KeyAlgorithmType;
+        CryptographicKeyType;
+import 'package:at_client/src/secret_sharing/algo_ids.dart'
+    show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/key_package_registration.dart'
     show KeyPackageRegistration, PersistedApkamKeys;
 import 'package:at_commons/atsign.dart' show Atsign, AtsignString;
@@ -62,9 +63,14 @@ Future<PersistedApkamKeys?> _load(
 
   final material = keyPackageMaterial(keys, enrollmentId: enrollmentId);
   if (material == null) return null;
-  _logger.info('Adopted the key package $atSign already holds '
+  // Non-null by construction: keyPackageMaterial only returns material whose
+  // algorithm token this build recognises.
+  final keyAlgo =
+      SecretSharingAlgos.keyAlgoForMaterial(material.keyAlgorithmType)!;
+  _logger.info('Adopted the $keyAlgo key package $atSign already holds '
       '(kpid ${material.keyId})');
-  return PersistedApkamKeys(xWingSeed: base64Encode(material.bytes.bytes));
+  return PersistedApkamKeys(
+      encSeed: base64Encode(material.bytes.bytes), keyAlgo: keyAlgo);
 }
 
 /// The private half of the key package in [keys], or null.
@@ -90,16 +96,24 @@ Future<PersistedApkamKeys?> _load(
 /// enrollment record never advertised.
 @experimental
 AtKeysMaterial? keyPackageMaterial(AtKeys keys, {String? enrollmentId}) {
+  // Any key-establishment algorithm this build implements, not X-Wing alone:
+  // an atSign configured for ML-KEM-1024 files its package under that token,
+  // and an X-Wing-only filter would make it invisible — the client would then
+  // mint a fresh key and answer at a kpid its enrollment never advertised, so
+  // nothing addressed to it could ever arrive.
+  bool isKeyEstablishment(AtKeysMaterial m) =>
+      SecretSharingAlgos.keyAlgoForMaterial(m.keyAlgorithmType) != null;
+
   final publicIds = {
     for (final m in keys.keys)
       if (m.keyPartType == CryptographicKeyType.publicEncapsulation &&
-          m.keyAlgorithmType == KeyAlgorithmType.xWing)
+          isKeyEstablishment(m))
         m.keyId
   };
   final candidates = keys.keys
       .where((m) =>
           m.keyPartType == CryptographicKeyType.privateDecapsulation &&
-          m.keyAlgorithmType == KeyAlgorithmType.xWing &&
+          isKeyEstablishment(m) &&
           publicIds.contains(m.keyId) &&
           (m.enrollmentId == null || m.enrollmentId == enrollmentId))
       .toList()

@@ -508,7 +508,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     try {
       plaintext = await pqOpen(
         kem,
-        xWingSeed,
+        encSecretKey,
         base64Decode(envelope.sealed),
         info: sealInfo,
       );

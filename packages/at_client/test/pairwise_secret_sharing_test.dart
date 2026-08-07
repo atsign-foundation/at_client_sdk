@@ -205,7 +205,7 @@ void main() {
           // Future.delayed. The suppression it enables is asserted directly.
           ..requestAnswerJitter = Duration.zero;
     sharer.loadApkamKeys =
-        () async => PersistedApkamKeys(xWingSeed: base64Encode(seed));
+        () async => PersistedApkamKeys(encSeed: base64Encode(seed));
     return sharer;
   }
 
@@ -338,6 +338,52 @@ void main() {
       expect(sent.version, 0x01,
           reason: 'a peer that never claimed RFC 9180 must not be sent it — '
               'it would reject the suite and the payload would be lost');
+    });
+
+    test('two ML-KEM-1024 clients exchange the no-hybrid construction',
+        () async {
+      // The whole chain under the other KEM: mint, advertise, negotiate, seal,
+      // and open. Nothing here names X-Wing, and nothing here could pass by
+      // falling back to it — a 1568-byte ML-KEM key cannot produce a 0x02
+      // envelope, and an X-Wing decapsulation of a 0x03 one fails.
+      TestSharer mlKemSharer(String enrollmentId, Uint8List seed) {
+        final client = buildMockClient(enrollmentId);
+        when(() => client.getPreferences()).thenReturn(AtClientPreference()
+          ..keyEstablishmentAlgo = SecretSharingAlgos.mlKem1024);
+        final sharer = TestSharer(client)
+          ..directory = directory
+          ..requestAnswerJitter = Duration.zero;
+        sharer.loadApkamKeys = () async => PersistedApkamKeys(
+            encSeed: base64Encode(seed),
+            keyAlgo: SecretSharingAlgos.mlKem1024);
+        return sharer;
+      }
+
+      // ML-KEM seeds are the 64-byte d||z, not X-Wing's 32.
+      final mlSeedA =
+          Uint8List.fromList(List<int>.generate(64, (i) => 100 + i));
+      final mlSeedB =
+          Uint8List.fromList(List<int>.generate(64, (i) => 164 + i));
+      final senderML = mlKemSharer('enroll-ml-a', mlSeedA);
+      final recipientML = mlKemSharer('enroll-ml-b', mlSeedB);
+      directory.seed('enroll-ml-a', await senderML.register());
+      directory.seed('enroll-ml-b', await recipientML.register());
+
+      expect(recipientML.encKeyAlgo, SecretSharingAlgos.mlKem1024);
+
+      final received = <ReceivedEnvelope>[];
+      final sub = recipientML.receivedEnvelopes.listen(received.add);
+      addTearDown(sub.cancel);
+
+      await senderML
+          .sendEnvelope(recipientML.myKeyPackage, 'myapp', {'hello': 'pq'});
+
+      final sent = sentConstruction(recipientML.kpid);
+      expect(sent.suite, SecretSharingAlgos.mlKem1024Rfc9180);
+      expect(sent.version, 0x03);
+
+      expect(await recipientML.sweepOnce(), 1);
+      expect(received.single.payload, {'hello': 'pq'});
     });
 
     test('refuses rather than guessing when nothing is mutually supported',

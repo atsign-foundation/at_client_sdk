@@ -114,8 +114,10 @@ void main() {
     await expectLater(
         resolve(AtKeys(), lookupWith(signer: 'anyone')),
         throwsA(isA<StateError>().having((e) => '$e', 'message',
-            contains('no X-Wing decapsulation private key'))),
+            contains('no key-establishment decapsulation private key'))),
         reason: 'nothing sealed to this enrollment could be opened, and '
-            'polling for half a minute to say so helps nobody');
+            'polling for half a minute to say so helps nobody. The message '
+            'names no single KEM because the lookup accepts any this build '
+            'implements — an enrollment minted under either is openable here');
   });
 }

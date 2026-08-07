@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart'
-    show AtKeys, AtKeysMaterial, CryptographicKeyType, KeyAlgorithmType;
+    show AtKeys, AtKeysMaterial, CryptographicKeyType;
 import 'package:at_chops/at_chops.dart' show AtKemAlgorithm, pqOpen;
 import 'package:at_commons/at_builders.dart' show ScanVerbBuilder;
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
@@ -59,7 +59,7 @@ Future<String> Function(AtKeys, AtLookUp) enrollmentApkamSymmetricKeyResolver(
   Duration pollInterval = const Duration(seconds: 2),
 }) {
   return (AtKeys keys, AtLookUp atLookUp) async {
-    final (kpid, seed) = _keyPackageHalves(keys);
+    final (kpid, secretKey, keyAlgo) = await _keyPackageHalves(keys);
 
     // This never waits for the human. By the time it runs, waitForApproval's
     // PKAM loop has already succeeded, which means the approval has happened —
@@ -76,7 +76,7 @@ Future<String> Function(AtKeys, AtLookUp) enrollmentApkamSymmetricKeyResolver(
     while (true) {
       for (final envelopeKey in await _envelopeKeys(atLookUp, kpid)) {
         final String? value = await _openIfSymmetricKey(
-            atLookUp, envelopeKey, atSign, kpid, seed);
+            atLookUp, envelopeKey, atSign, kpid, secretKey, keyAlgo);
         if (value != null) {
           _logger.info('Collected the conveyed apkamSymmetricKey from '
               '$envelopeKey');
@@ -95,22 +95,32 @@ Future<String> Function(AtKeys, AtLookUp) enrollmentApkamSymmetricKeyResolver(
   };
 }
 
-/// This enrollment's key-package id and the X-Wing secret key that opens
-/// anything sealed to it.
-(String, Uint8List) _keyPackageHalves(AtKeys keys) {
+/// This enrollment's key-package id, the decapsulation key that opens anything
+/// sealed to it, and which KEM that key belongs to.
+///
+/// The keyfile stores the **seed**, not the decapsulation key: they are the
+/// same bytes for X-Wing but not for ML-KEM, whose decapsulation key is
+/// expanded and which no seeded call reproduces from. So the seed is expanded
+/// here, once, rather than handed to `pqOpen` as if it were the key.
+Future<(String, Uint8List, String)> _keyPackageHalves(AtKeys keys) async {
   final AtKeysMaterial? private = keys.keys
       .where((m) =>
           m.keyPartType == CryptographicKeyType.privateDecapsulation &&
-          m.keyAlgorithmType == KeyAlgorithmType.xWing)
+          SecretSharingAlgos.keyAlgoForMaterial(m.keyAlgorithmType) != null)
       .firstOrNull;
   if (private == null) {
     throw StateError(
-        'These AtKeys hold no X-Wing decapsulation private key, so nothing '
-        'sealed to this enrollment could be opened. A pq enrollment request '
-        'must have advertised a key package built by '
-        'enrollmentKeyPackageBuilder, which files both halves here.');
+        'These AtKeys hold no key-establishment decapsulation private key, so '
+        'nothing sealed to this enrollment could be opened. A pq enrollment '
+        'request must have advertised a key package built by '
+        'enrollmentKeyPackageBuilder, which files both halves here. '
+        'Supported: ${SecretSharingAlgos.keyAlgos}');
   }
-  return (private.keyId, Uint8List.fromList(private.bytes.bytes));
+  final keyAlgo =
+      SecretSharingAlgos.keyAlgoForMaterial(private.keyAlgorithmType)!;
+  final pair = await SecretSharingAlgos.kemFor(keyAlgo)!
+      .keyPairFromSeed(Uint8List.fromList(private.bytes.bytes));
+  return (private.keyId, pair.secretKey, keyAlgo);
 }
 
 /// Every envelope key addressed to [kpid], across every namespace this
@@ -149,7 +159,8 @@ Future<String?> _openIfSymmetricKey(
   String envelopeKey,
   String atSign,
   String kpid,
-  Uint8List seed,
+  Uint8List secretKey,
+  String keyAlgo,
 ) async {
   final Map signedEnvelope;
   try {
@@ -194,7 +205,12 @@ Future<String?> _openIfSymmetricKey(
   final AtKemAlgorithm? kem = SecretSharingAlgos.kemForSuite(envelope.suite);
   if (envelope.toKpid != kpid ||
       signedEnvelope['enrollmentId'] != envelope.fromEnrollmentId ||
-      kem == null) {
+      kem == null ||
+      // The suite's KEM must be the one this key package's key belongs to.
+      // A sender that picked the other one produced something [secretKey]
+      // cannot decapsulate, and passing it to pqOpen anyway would report an
+      // AEAD failure rather than the addressing mistake it is.
+      !identical(kem, SecretSharingAlgos.kemFor(keyAlgo))) {
     return null;
   }
 
@@ -202,7 +218,7 @@ Future<String?> _openIfSymmetricKey(
   try {
     plaintext = await pqOpen(
       kem,
-      seed,
+      secretKey,
       base64Decode(envelope.sealed),
       info: PairwiseSecretSharing.sealInfo,
     );

@@ -1,3 +1,4 @@
+import 'package:at_auth/at_auth.dart' show KeyAlgorithmType;
 import 'package:at_chops/at_chops.dart'
     show AtKemAlgorithm, MlKem1024PureDartAlgo, XWingPureDartAlgo;
 import 'package:meta/meta.dart' show experimental;
@@ -156,6 +157,32 @@ class SecretSharingAlgos {
   static AtKemAlgorithm? kemForSuite(String suite) => switch (suite) {
         xWingHpke || xWingRfc9180 => XWingPureDartAlgo.instance,
         mlKem1024Rfc9180 => MlKem1024PureDartAlgo.instance,
+        _ => null,
+      };
+
+  /// The `AtKeysMaterial.keyAlgorithmType` token a keyfile names [keyAlgo] by.
+  ///
+  /// A keyfile has its own vocabulary — `xwing`, `mlkem1024` — deliberately
+  /// shared with the pkam/enrollment `signingAlgo` literals rather than with
+  /// these protocol ids. This and [keyAlgoForMaterial] are the only places the
+  /// two meet.
+  static String? materialAlgoFor(String keyAlgo) => switch (keyAlgo) {
+        xWing => KeyAlgorithmType.xWing,
+        mlKem1024 => KeyAlgorithmType.mlKem1024,
+        _ => null,
+      };
+
+  /// The protocol id for a keyfile's `keyAlgorithmType` token, or null if this
+  /// build does not know that token.
+  ///
+  /// Null is how a key-package lookup tells a key it can use from one it
+  /// cannot: `keyAlgorithmType` is an open string by contract — a keyfile
+  /// written by a newer client round-trips values this build has never seen —
+  /// so an unknown token means "not mine", not "malformed".
+  static String? keyAlgoForMaterial(String materialAlgo) =>
+      switch (materialAlgo) {
+        KeyAlgorithmType.xWing => xWing,
+        KeyAlgorithmType.mlKem1024 => mlKem1024,
         _ => null,
       };
 
