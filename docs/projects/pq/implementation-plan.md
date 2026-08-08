@@ -25,7 +25,7 @@ given/when/then here.
 - [5. Phase SS — Secret-sharing substrate (SS-1a, SS-1b, SS-1c, SS-2, SS-3, SS-4)](#5-phase-ss--secret-sharing-substrate-ss-1a-ss-1b-ss-1c-ss-2-ss-3-ss-4)
 - [6. Phase B — the nskey data path (B-1, the D1 centrepiece)](#6-phase-b--the-nskey-data-path-b-1-the-d1-centrepiece)
 - [7. Phase RF — existing-client retrofit (RF-1, RF-SRV, RF-2b, RF-2c)](#7-phase-rf--existing-client-retrofit-rf-1-rf-srv-rf-2b-rf-2c)
-- [8. Phase R/B — rollout, rotation, retirement & versioning (R-1, B-2, B-3, ON-1, R-2)](#8-phase-rb--rollout-rotation-retirement--versioning-r-1-b-2-b-3-on-1-r-2)
+- [8. Phase R/B — rollout, rotation, retirement & versioning (R-1, SH-1, B-2, KE-1, B-3, ON-1, R-2)](#8-phase-rb--rollout-rotation-retirement--versioning-r-1-sh-1-b-2-ke-1-b-3-on-1-r-2)
 - [9. Phase D2 — referenced only (D2-1, out of D1 GA)](#9-phase-d2--referenced-only-d2-1-out-of-d1-ga)
 - [10. Cross-cutting: publish gates, critical path, waves/parallelism, testing](#10-cross-cutting-publish-gates-critical-path-wavesparallelism-testing)
 - [11. Coverage map (D1 package / UC → project)](#11-coverage-map-d1-package--uc--project)
@@ -39,7 +39,8 @@ given/when/then here.
 
 This is the unified, plan-level backlog for D1. The project ids used throughout — `P-1/P-2/P-3`,
 `S-1`/`S-2`/`S-3`/`S-5`/`S-6`, `SS-1a/b/c`/`SS-2`/`SS-3`/`SS-4`, `B-1`, `RF-1`/`RF-SRV`/`RF-2b`/`RF-2c`,
-`R-1`/`R-2`, `B-2`/`B-3`, `ON-1`, `D2-1` — name the work as it lands in dependency order. Each project
+`R-1`/`R-2`, `SH-1`, `B-2`/`B-3`, `KE-1`, `KF-1`, `ON-1`, `IS-1`, `D2-1` — name the work as it lands in
+dependency order. Each project
 entry is plan-altitude: a one-line Goal, what it **builds on**, a pointer to its deliverables in
 [design.md](design.md), a pointer to its acceptance tests in [acceptance.md](acceptance.md), an effort
 size, watch-outs, and a `coversD1` line tying it back to the D1 workstreams.
@@ -127,6 +128,9 @@ The file-partition/track detail and the `CryptoConfig`/`CryptoRuntime` mechanics
               RF-SRV server self-enroll ──┤   ◀── every scenario's "upgrade the enrollment" (decisions 40)
                                           │
                             B-2 nskey rotation + revocation (B5/B6)  ◀── RF-1 + SS-3 (fan-out only)
+                                          │
+                            KE-1 selectable KEM + negotiated construction  ◀── at_chops 3.5.0 (UNPUBLISHED)
+                                  (moves the wire 0x01→0x02; ML-KEM-1024 at 0x03)
                                           ▼
                          ▶ at_client 3.14.x = D1 GA (rebuild = reader; the app's 4.x release = PQ writer)
 
@@ -1081,7 +1085,7 @@ re-scope or waive it as UC-A3.2 was.
 
 ---
 
-## 8. Phase R/B — rollout, rotation, retirement & versioning (R-1, B-2, B-3, ON-1, R-2)
+## 8. Phase R/B — rollout, rotation, retirement & versioning (R-1, SH-1, B-2, KE-1, B-3, ON-1, R-2)
 
 **Stated once:** at_auth 4.0 (S-5) is a **different major at a different time** from at_client 4.0 (R-2).
 The forward-secrecy/rotation levers and the `disallowLegacyEncryption` flag semantics live in
@@ -1188,6 +1192,52 @@ mixed-scheme / cold-start / revoke+rotate-exclude; e2e at_talk chat scenario. **
 **Watch-outs:** don't conflate the levers (CK rotation does NOT ride the per-APKAM substrate).
 **coversD1:** D1-B B5/B6.
 
+### KE-1 — a selectable KEM and a negotiated construction · at_chops, at_client, at_auth · L — **LANDED 2026-08-07**
+**Goal:** make the key-establishment algorithm a **deployment choice** and the sealing construction a
+**negotiated** one, so the wire can move without a flag day and a FIPS-facing deployment has an answer.
+**Landed** on `gkc-pq-d1-spike`, `6a85fad05`…`f3e5b3686`
+([decisions 50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)):
+`AtKemAlgorithm.newSeed`/`keyPairFromSeed` + `MlKem1024PureDartAlgo` + `pqSeal ver 0x03`
+(**at_chops 3.5.0**, unpublished); `SecretSharingAlgos` gains `ml-kem-1024`, both RFC 9180 suites,
+`sealVersionFor`/`suiteForKeyAlgo`/`openableSuitesFor`/`kemFor`/`kemForSuite`, and joins the **main
+barrel**; `AtClientPreference.keyEstablishmentAlgo` is read by `KeyPackageRegistration` and
+`enrollmentKeyPackageBuilder`; `sendEnvelope` seals under the **recipient's** `alg` at the strongest
+suite both sides list; `NskeyAdvertisement`/`ResolvedNskey` carry `alg` **and** `suites` and
+`PublishedNskeyKeyRing` mints under the preference; `at/nskey/MLKEM1024/AES/GCM` is the second
+conveyance provider id, registered on every client whatever this atSign mints. `at_auth` gains
+`KeyAlgorithmType.mlKem1024` (additive — that enum's documented contract is never to reject an unknown
+value). Rails: at_client **1012** unit, at_chops **465**, functional **138**, e2e **50**.
+**Builds on:** B-1 (the conveyance path it re-versions), SS-2/SS-3 (the key package it negotiates
+against), SS-4 (the nskey it advertises), and plan-backlog
+[14.5](#145-a-write-side-envelope-version-selector-in-at_chops--done) (the write-side version selector).
+Not on B-2 — but it lands after it, and rotation is the **only** moment an atSign's advertised algorithm
+can change, so the two are read together.
+**Deliverables → [design.md](design.md)** (advertised-key shapes; the seal's versions live in
+[seal-spec.md](seal-spec.md)): the nskey advertisement gains `alg` + `suites`; the key package gains
+`suites` **derived from its own `keys[]`**; the sender resolves KEM-from-`alg`, suite-from-intersection,
+`pqSeal` version from suite; both receive paths resolve the KEM from the envelope's declared suite rather
+than assuming the hybrid; keys are persisted as **seeds** with the algorithm alongside
+(`PersistedApkamKeys.encSeed` + `keyAlgo`) and expanded on the way out.
+**Acceptance → [acceptance.md](acceptance.md):** UC-A2.4 (the configured KEM is what an enrollment mints
+and advertises, and an existing key keeps its own), UC-A3.5 (the nskey advertisement names its KEM and
+what it can open), UC-A4.5 (the sender follows the recipient, not its own preference), UC-A4.6 (an absent
+`suites` means exactly the construction that existed when it was written), UC-A4.7 (no shared construction
+is a refusal). The live wire assertion — that the negotiated version is the version on the atServer — is
+`tests/at_functional_test/test/secret_sharing_delivery_test.dart`.
+**Effort:** L.
+**Watch-outs:** **at_chops 3.5.0 is unpublished and is a MINOR, not a patch** — `newSeed`/`keyPairFromSeed`
+are abstract members on the exported `AtKemAlgorithm`, so any external `implements` breaks; at_client's
+floor is already `^3.5.0` and workspace resolution masks that from every local build. A published
+`suites`/`legacy…Suites` constant **must never grow** — an advertisement is fetched by senders who act on
+the claim immediately. And an enrollment's KEM is frozen at `enroll:request`
+([14.6](#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)): changing the preference takes
+effect on the next enrollment, never on this one.
+**coversD1:** D1-A (a second KEM primitive + `ver 0x03`) and D1-B (the conveyance and envelope paths
+negotiate their construction); discharges plan backlog
+[14.2](#142-a-version-on-the-two-signed-payloads--done),
+[14.4](#144-a-suites-list-on-the-key-package--done) and
+[14.5](#145-a-write-side-envelope-version-selector-in-at_chops--done).
+
 ### B-3 — selfEncryptionKey + shared_key.* retirement, phases 1-3 · at_client, **at_secondary_server**, at_auth · L
 **Goal:** retire the legacy self-encryption key (a distinct project from B-2's rotation work).
 **Builds on:** B-2.
@@ -1279,7 +1329,13 @@ out of scope here** — see [roadmap.md](roadmap.md) for the D2 trajectory.
 ## 10. Cross-cutting: publish gates, critical path, waves/parallelism, testing
 
 ### (a) Publish gates
-- `at_chops` (P-1, P-2) and `at_commons` (SS-1a) publish **before** `at_server`/consumers bump pins.
+- `at_chops` (P-1, P-2, **KE-1**) and `at_commons` (SS-1a) publish **before** `at_server`/consumers bump pins.
+- ⚠️ **`at_chops` is at 3.5.0 in-tree and unpublished** (KE-1). It is a **MINOR, not a patch**:
+  `newSeed`/`keyPairFromSeed` are **abstract members added to the exported `AtKemAlgorithm`**, so any
+  external `implements AtKemAlgorithm` stops compiling. Every implementation in this repository is a
+  `final class … implements` and was caught at compile time; nothing outside gets that. at_client's floor
+  is already `^3.5.0`, which workspace resolution satisfies from source — so this gate is invisible to
+  every local and CI build and must be discharged explicitly before the at_client D1 GA publish.
 - `at_auth` is split **additive-3.3.0** (S-1; 3.2.0 was consumed by the network-timeout release) then **breaking-4.0.0** (S-5) so the `AtKeys`/`AtKeysIo`
   extend-in-place bakes before the barrel cut.
 - `at_client` stays **minor 3.14.x** through D1 GA; the v4 flip (R-2) is the final gated cutover.
@@ -1291,14 +1347,15 @@ out of scope here** — see [roadmap.md](roadmap.md) for the D2 trajectory.
 |----|---------------------|-------------------------------|------------|-----|
 | 1  | `at_chops`          | minor `3.2.1 → 3.3.0` **(published 2026-06-23, done)** | P-1    | stateless functional core + HPKE `pqSeal`/`pqOpen`; `@Deprecated AtChopsImpl` shim |
 | 2  | `at_chops`          | minor `3.3.0 → 3.4.0` **(published 2026-07-17, done)** | P-2 | #2030 (`at_chops_ffi` barrel + `AtPqc` + `AtSignatureAlgorithm`) landed the 3.4.0 bump on trunk 2026-07-03 (+ #2046); P-2's `mldsa65` verify branch (#2056, 07-06) and #2039 (AES-GCM FFI, 07-09) folded into the same slot, which then published. Minor under the one-time semver exemption ([decisions.md](decisions.md) 2026-07-03) |
-| 3  | `at_commons`        | minor `5.11.0 → 5.12.0` **(published 2026-07-04, done)** | SS-1a | `EnrollParams.metadata` + `signingAlgo`; flattened `listns`; pkam `mldsa65` literal. *(at_commons has since published 5.13.0, 2026-07-17, outside this program.)* |
-| 4  | `at_auth`           | minor `3.2.0 → 3.3.0` **(3.3.0-rc1 published 2026-07-17; stable pending)** | S-1 | additive: extend `AtKeys` in place (deprecate legacy); `AtKeysIo` runtime persistence; `InMemoryAtKeysIo`. ⚠️ **the rc1 → stable promotion is an open gate** — S-6 and SS-2's at_auth work need a stable 3.3.0 to pin against; timing unresolved |
-| 5  | `at_auth`           | **major `3.3.0 → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
-| 6  | `at_client`         | minor `3.14.x → 3.15.x`       | S-2…B-2    | `at_auth ^4.0.0`; `CryptoContext.keys`; nskey data path; rotation. **= D1 GA**. ⚠️ **3.13.0 and 3.14.0 both published 2026-07-17** (3.14.0 carries the SS-0 substrate as an experimental surface), so the GA slot has moved off 3.14.x — re-derive the target minor at execution against pub.dev. ⚠️ **S-2's `CryptoContext.keys` (#2076) is on trunk but unreleased** — it merged after 3.14.0 published, so the next at_client release is the first that carries it |
-| 7  | `at_client`         | **major `3.15.x → 4.0.0`**    | R-2        | flip `disallowLegacyEncryption` default → true; dead-code removal. *(selfEncryptionKey stop-existing moved to a later ecosystem-gated release, [decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05))* |
-| 8  | `at_onboarding_cli` | minor `1.16.0 → 1.17.0`       | S-6        | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; explicit injection. 1.16.0 published 2026-07-17, so 1.17.0 is a clean next slot |
-| 9  | `at_client_flutter` | minor `1.1.4 → 1.2.0`         | S-6        | `at_auth ^4.0.0`; `file_picker` imports `at_auth_io.dart` |
-| 10 | `at_cli_commons`    | minor (constraint bump)       | S-6        | consumes the new `at_onboarding_cli` / `at_client` (transitive at_auth) |
+| 3  | `at_chops`          | minor `3.4.2 → 3.5.0` **(in-tree, UNPUBLISHED)** | KE-1 | `AtKemAlgorithm.newSeed` + `keyPairFromSeed`; `MlKem1024PureDartAlgo`; `pqSeal ver 0x03` (RFC 9180 at KEM `0x0042` / HKDF-SHA384 / AES-256-GCM). ⚠️ **MINOR because the two seed methods are abstract members on the exported `AtKemAlgorithm`** — an external `implements` must add them. at_client already pins `^3.5.0`, and workspace resolution hides the gap |
+| 4  | `at_commons`        | minor `5.11.0 → 5.12.0` **(published 2026-07-04, done)** | SS-1a | `EnrollParams.metadata` + `signingAlgo`; flattened `listns`; pkam `mldsa65` literal. *(at_commons has since published 5.13.0, 2026-07-17, outside this program.)* |
+| 5  | `at_auth`           | minor `3.2.0 → 3.3.0` **(3.3.0-rc1 published 2026-07-17; stable pending)** | S-1 | additive: extend `AtKeys` in place (deprecate legacy); `AtKeysIo` runtime persistence; `InMemoryAtKeysIo`. ⚠️ **the rc1 → stable promotion is an open gate** — S-6 and SS-2's at_auth work need a stable 3.3.0 to pin against; timing unresolved. KE-1's additive `KeyAlgorithmType.mlKem1024` rides whichever at_auth slot is open |
+| 6  | `at_auth`           | **major `3.3.0 → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
+| 7  | `at_client`         | minor `3.14.x → 3.15.x`       | S-2…B-2, KE-1 | `at_auth ^4.0.0`; `CryptoContext.keys`; nskey data path; rotation; the selectable KEM. **= D1 GA**. ⚠️ **3.13.0 and 3.14.0 both published 2026-07-17** (3.14.0 carries the SS-0 substrate as an experimental surface), so the GA slot has moved off 3.14.x — re-derive the target minor at execution against pub.dev. ⚠️ **S-2's `CryptoContext.keys` (#2076) is on trunk but unreleased** — it merged after 3.14.0 published, so the next at_client release is the first that carries it. ⚠️ **gated on row 3** — this release cannot go out against an unpublished `at_chops 3.5.0` |
+| 8  | `at_client`         | **major `3.15.x → 4.0.0`**    | R-2        | flip `disallowLegacyEncryption` default → true; dead-code removal. *(selfEncryptionKey stop-existing moved to a later ecosystem-gated release, [decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05))* |
+| 9  | `at_onboarding_cli` | minor `1.16.0 → 1.17.0`       | S-6        | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; explicit injection. 1.16.0 published 2026-07-17, so 1.17.0 is a clean next slot |
+| 10 | `at_client_flutter` | minor `1.1.4 → 1.2.0`         | S-6        | `at_auth ^4.0.0`; `file_picker` imports `at_auth_io.dart` |
+| 11 | `at_cli_commons`    | minor (constraint bump)       | S-6        | consumes the new `at_onboarding_cli` / `at_client` (transitive at_auth) |
 
 **Dependency-floor bumps (at_client's own pins).** at_client's constraints on trunk are `at_chops ^3.0.0`
 and `at_commons ^5.9.0`; both floors rise during D1:
@@ -1307,19 +1364,24 @@ and `at_commons ^5.9.0`; both floors rise during D1:
 |---------------|---------------------|----------|-----|
 | `at_chops`    | `^3.0.0 → ^3.3.0`   | SS-0     | the substrate baseline needs the published `pqSeal`/`pqOpen` (3.3.0) — landed with #2037 |
 | `at_commons`  | `^5.9.0 → ^5.12.0`  | SS-1c    | the flat `listns` grammar + `EnrollParams.metadata` (5.12.0) |
+| `at_chops`    | `^3.3.0 → ^3.5.0`   | KE-1     | the first at_client call to `newSeed`/`keyPairFromSeed` — **raised in the same commit as the first use** (`042fea1d9`), because workspace resolution would otherwise let a consumer resolve an older sibling and get a package that does not compile |
 
 ⚠️ Workspace resolution wires `at_chops`/`at_commons` as path deps, so a too-low floor still resolves green
 locally **and** in CI — these floor bumps must be made **explicitly**, not inferred from a passing workspace
 build.
 
 ### (b) Critical path to D1 GA
-`#1930(done) → P-1 + S-2 → SS-1a → SS-1b → SS-1c → SS-2 → SS-3 → SS-4 (+ P-3) → B-1 → R-1(delivered) → SH-1(done) + RF-SRV(server done) + RF-2b(done) → B-2(done) → ON-1 + R-2 + S-3`
+`#1930(done) → P-1 + S-2 → SS-1a → SS-1b → SS-1c → SS-2 → SS-3 → SS-4 (+ P-3) → B-1 → R-1(delivered) → SH-1(done) + RF-SRV(server done) + RF-2b(done) → B-2(done) → KE-1(done) → ON-1 + R-2 + S-3`
 (D1 GA: rebuild = universal reader, one flag = PQ writer, opt-in rotation).
+**KE-1 sits on the path rather than beside it** for one reason only: it moved the wire. Two modern peers
+now exchange `ver 0x02` where they exchanged `0x01`, and an enrollment's KEM is frozen at
+`enroll:request`, so every enrollment created after KE-1 and before GA carries the shape GA ships. It also
+put an **unpublished `at_chops 3.5.0`** in front of the at_client GA publish (row 3 of the table above).
 **Branch state (2026-08-04):** `gkc-pq-d1-spike` is **68 commits ahead of `origin/trunk` and 2 behind**;
 both of those two are docs-only (the wasm-port plan, [#2118](https://github.com/atsign-foundation/at_client_sdk/pull/2118)),
 so the drift carries no code-merge risk today.
 
-**Everything up to and including SS-3 is landed as of 2026-08-03** (SS-1c/SS-2/SS-3 on `gkc-pq-d1-spike`, plus [at_server#2736](https://github.com/atsign-foundation/at_server/pull/2736) for SS-3's server half). **`SS-4`'s signing chain landed 2026-08-04** — mint, root-private conveyance, self-anchoring and the graded walk, all live-covered. **B-1 landed too, and R-1 was delivered 2026-08-05 as the flag alone** ([decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)); **SH-1, RF-SRV's server half, RF-2b and RF-2c's switch-over all landed 2026-08-05** ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05)–[44](decisions.md#44-rf-2c-the-switch-over-and-what-it-cost-to-make-a-client-pq-2026-08-05)), and **B-2 landed 2026-08-06** ([decisions 47](decisions.md#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06)) with all four UC-A5.x rows green, so the path now waits on **ON-1**, **R-2** and **S-3**. RF-2c's UC-B1.x e2e rows are done; the one named residual left is RF-SRV's revocation cascade (server) — `parentEnrollmentId` is stored but `enroll:revoke` does not yet walk descendants ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05) item 2).
+**Everything up to and including SS-3 is landed as of 2026-08-03** (SS-1c/SS-2/SS-3 on `gkc-pq-d1-spike`, plus [at_server#2736](https://github.com/atsign-foundation/at_server/pull/2736) for SS-3's server half). **`SS-4`'s signing chain landed 2026-08-04** — mint, root-private conveyance, self-anchoring and the graded walk, all live-covered. **B-1 landed too, and R-1 was delivered 2026-08-05 as the flag alone** ([decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)); **SH-1, RF-SRV's server half, RF-2b and RF-2c's switch-over all landed 2026-08-05** ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05)–[44](decisions.md#44-rf-2c-the-switch-over-and-what-it-cost-to-make-a-client-pq-2026-08-05)), and **B-2 landed 2026-08-06** ([decisions 47](decisions.md#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06)) with all four UC-A5.x rows green. **KE-1 landed 2026-08-07** ([decisions 50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)) — the selectable KEM, the negotiated construction, and plan-backlog 14.2/14.4/14.5 discharged — so the path now waits on **ON-1**, **R-2** and **S-3**. RF-2c's UC-B1.x e2e rows are done; two named residuals are left: RF-SRV's revocation cascade (server) — `parentEnrollmentId` is stored but `enroll:revoke` does not yet walk descendants ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05) item 2) — and the **at_chops 3.5.0 publish** that KE-1 put in front of the GA release.
 **Off-path (parallel):** `RF-2b → RF-2c` (RF-1 confirm), `B-3`, `ON-1`, `S-5 → S-6`, `D2-1`, `KF-1`
 (builds on S-3), and the final `R-2`.
 
@@ -1352,7 +1414,8 @@ per-UC harness and given/when/then live in [acceptance.md](acceptance.md).
 
 ### (e) Conformance
 Every PQ-touching PR — in **at_client_sdk** OR any **atServer implementation** — must cite a **project id**
-from this plan (`P-1`, `P-2`, `P-3`, `S-*`, `SS-*`, `KF-1`, `B-*`, `R-*`, `RF-*`, `ON-1`, `D2-1`) **or** a
+from this plan (`P-1`, `P-2`, `P-3`, `S-*`, `SH-1`, `SS-*`, `KF-1`, `KE-1`, `B-*`, `R-*`, `RF-*`, `ON-1`,
+`IS-1`, `D2-1`) **or** a
 documented out-of-program status (e.g. "tracked in the NoPorts repo, out of this plan's lane"). Each PR must
 also conform to the **current** [decisions.md](decisions.md) rulings: reviewers **reject** a PR that
 implements a superseded ruling (e.g. the pre-decision-#F multi-key record, an `enroll:metadata` write path,
@@ -1373,9 +1436,10 @@ Single authoritative map of D1 items, workstreams, and use cases to projects.
 | D1-S S5 (CryptoContext.keys) | S-2 |
 | D1-S S6 (consumer bumps) | S-6 |
 | D1-S keyfile-at-rest + backup/restore (new scope) | KF-1 |
-| D1-A (PQ primitives, enrollment key) | P-1, P-2, P-3 |
+| D1-A (PQ primitives, enrollment key) | P-1, P-2, P-3, KE-1 (the second KEM + `ver 0x03`) |
 | D1-B B1-B4 (data path) | B-1, chunks B-1a…B-1e (+ key material SS-4) |
 | D1-B B5/B6 (rotation/revocation) | B-2 |
+| Key-establishment selectability + construction negotiation (`suites`) | KE-1 |
 | D1-B B7 (selfEncryptionKey retirement) | B-3 (phases 1-3); phase 4 = the later ecosystem-gated release ([decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)), no longer R-2 |
 | D1-C / D1-D (migration, flag, versioning) | R-1 (D1-D delivered; D1-C = the decisions-36 ladder + SH-1), R-2 |
 | D1-F substrate baseline | SS-0 (PR #2037) |
@@ -1384,6 +1448,7 @@ Single authoritative map of D1 items, workstreams, and use cases to projects.
 | D1-E (at/pqmls shape) | D2-1 (D2) |
 | UC-A1.1 PQ-native onboard + Decision #1 / UC-B4.2 | ON-1 |
 | UC-A2.x / A3.x / A4.x / A5.x | SS-4, B-1, B-2, RF-2b |
+| UC-A2.4 / A3.5 / A4.5 / A4.6 / A4.7 (KEM + construction selection) | KE-1 |
 | UC-B0.x..B5.x | RF-2c (retrofit) + RF-SRV (critical path per decisions 40); B3/B4 data-path halves built |
 
 See [acceptance.md](acceptance.md) for the full UC catalogue; [decisions.md](decisions.md) records the D1-F
@@ -1480,6 +1545,13 @@ that, because the shape it rules is the one 14.6 freezes.
 The rest are cheap while at_java has no PQ code and expensive afterwards, which
 as of 2026-08-06 has not started.
 
+**Three are now DONE** — 14.2, 14.4 and 14.5, all absorbed by **KE-1**
+([decisions 50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)).
+They are kept here rather than deleted because each names a hatch the wire now
+depends on, and a reader asking "why can the construction change without a flag
+day" needs to find the answer where the question was recorded. The live items
+are 14.1, 14.3, 14.6 and 14.7.
+
 ### 14.1 The signing root's `keys[]` shape — DEADLINE: the first root we keep
 
 The code and the catalogue disagree about the shape of the one record in the
@@ -1508,12 +1580,12 @@ structure here uses (`_apsk`, the key package) and is the only one that can
 carry a second algorithm. Whichever wins, the loser's document changes in the
 same commit as the decision.
 
-### 14.2 A version on the two signed payloads
+### 14.2 A version on the two signed payloads — DONE
 
-The signed-envelope wrapper and the nskey advertisement payload carry no
-version field. Both records ARE rewritable, so this is cheap insurance rather
-than a deadline — but it is the hatch that makes 14.3 reversible, so it goes
-first of the three.
+Landed in `3c2eddbe6`: the signed-envelope wrapper and the nskey advertisement
+payload both carry a version field. Both records ARE rewritable, so this was
+cheap insurance rather than a deadline — but it is the hatch that makes 14.3
+reversible, which is why it went first of the three.
 
 ### 14.3 JWS or JCS for the signed envelope
 
@@ -1546,12 +1618,21 @@ always throws** while a **3309-byte ML-DSA-65 signature (4412 chars, len%4=0)
 always decodes**. A naive migration therefore fails on every classical envelope
 and succeeds on every PQ one. Use `base64Url.decode(base64.normalize(s))`.
 
-### 14.4 A `suites` list on the key package
+### 14.4 A `suites` list on the key package — DONE
 
-Cheap now for the same reason as 14.2, and safe to defer if we accept
-release-ordering agility instead — **except** that it is now a prerequisite
-for the RFC 9180 move at `ver = 0x02`, since it is what makes that a
-sender-side decision rather than a fleet-wide readers-upgrade-first migration.
+Landed in `1688ed69d`, corrected in `c9f8580da`, and given its first production
+reader in `827e2526d` (all **KE-1**). It is what makes the construction a
+sender-side decision rather than a fleet-wide readers-upgrade-first migration,
+so `ver = 0x02` now goes to a peer that says it can open it and `0x01` to one
+whose package predates the field. The same mechanism was then given to the
+nskey advertisement in `f3e5b3686`, which is what let the conveyance path move
+too.
+
+The correction is the part worth keeping: the field defaulted to
+`SecretSharingAlgos.suites`, so widening that list made every package claim a
+construction its key cannot decapsulate. A published list must be derived from
+the **keys** a package advertises, never from what the build supports — see
+[decisions 50.5](decisions.md#505-the-defect-a-widened-list-planted-before-anything-read-it).
 
 ### 14.5 A write-side envelope version selector in at_chops — DONE
 

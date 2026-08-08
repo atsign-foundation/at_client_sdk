@@ -95,5 +95,126 @@ void main() {
             'providerId is read off the notification frame bob\'s monitor delivered, and the value decrypts through the nskey route',
       );
     });
+
+    test('UC-A4.5 · the sender follows the recipient, not its own preference',
+        () {
+      // GIVEN @alice's deployment is configured for ml-kem-1024; @bob
+      //       advertises an X-Wing key package and nskey.
+      // WHEN  alice1 shares with @bob.
+      // THEN  the seal is under X-WING, to bob's key. Alice's configuration
+      //       decides what @alice is a RECIPIENT for and nothing about who she
+      //       can send to. Symmetrically a hybrid-configured @bob seals to an
+      //       ML-KEM-1024 @alice at ver 0x03; every build produces and opens
+      //       both. Refusing would leave two atSigns unable to communicate
+      //       while the peer's key stayed exactly as strong as it was — the
+      //       peer's key is the peer's decision. The KEM itself is CONFIGURED
+      //       per atSign and never negotiated per message, which is the
+      //       downgrade surface SP 800-227 4.6.3 warns about; what is
+      //       negotiated is the construction (UC-A4.6).
+      provenIn(
+        'packages/at_client/test/pairwise_secret_sharing_test.dart',
+        'two ML-KEM-1024 clients exchange the no-hybrid construction',
+        proves: 'the whole chain under the second KEM — two clients configured '
+            'for ml-kem-1024 mint, advertise, negotiate, seal and open at ver '
+            '0x03. Paired with the negotiation arms in the same group, which '
+            'run against an X-Wing recipient, it establishes that the '
+            'RECIPIENT\'s advertised alg is what selects the KEM: the same '
+            'sender code reaches a different construction purely by who it is '
+            'sealing to.',
+      );
+      provenIn(
+        'packages/at_client/test/kem_selection_test.dart',
+        'the two KEMs are not interchangeable',
+        proves: 'why following the recipient is not a preference but a '
+            'requirement — an envelope sealed under one KEM and opened with '
+            'the other fails, so a sender that used its own configured KEM '
+            'against a peer advertising the other would write a record the '
+            'recipient can never open. "defaults to the hybrid" and "takes the '
+            'no-hybrid option, and it resolves" pin the knob itself.',
+      );
+    });
+
+    test('UC-A4.6 · the construction is negotiated from suites', () {
+      // GIVEN two recipients holding the SAME X-Wing key, differing only in
+      //       what their advertised record claims: one lists
+      //       x-wing-rfc9180-v1, the other's record predates the suites field.
+      // WHEN  alice1 seals to each.
+      // THEN  the peer that lists RFC 9180 receives ver 0x02 and the peer whose
+      //       record predates the field receives ver 0x01, because an absent
+      //       field means EXACTLY the one construction that existed when it was
+      //       written. The payload's declared suite and the envelope's version
+      //       byte agree — the declared suite is what a receiver accepts on and
+      //       the version byte is what it dispatches the KEM on, and a
+      //       disagreement opens as an AEAD failure naming neither side. The
+      //       candidates are narrowed to the chosen key's own KEM BEFORE the
+      //       intersection, so a suite the key cannot decapsulate can never be
+      //       selected. Unrecognised entries survive a parse, because the list
+      //       is the holder's statement about itself. This is what moved the
+      //       wire from 0x01 to 0x02 with no readers-upgrade-first migration.
+      provenIn(
+        'packages/at_client/test/pairwise_secret_sharing_test.dart',
+        'negotiates RFC 9180 with a peer whose package says it opens it',
+        proves: 'the upper arm. Its pair, "falls back to the original '
+            'construction for a peer that predates it", is asserted against '
+            'the SAME X-Wing key, so the only thing differing between the two '
+            'arms is what the package claims — two arms differing in key AND '
+            'claim would prove nothing about the claim.',
+      );
+      provenIn(
+        'tests/at_functional_test/test/secret_sharing_delivery_test.dart',
+        'the negotiated construction is what actually reaches the atServer',
+        proves: 'that the negotiated version is the version ON THE WIRE, which '
+            'the unit arms structurally cannot show: their fixture backs local '
+            'storage and the atServer with a single map. This reads the '
+            'envelope back off a live atServer and looks at the bytes — the '
+            'payload declares x-wing-rfc9180-v1 and the sealed blob\'s first '
+            'byte is 0x02. Under the previous behaviour the assertion is '
+            'false, so it is a differential against the change itself.',
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'a package with no suites means the one that existed before the field',
+        proves: 'the absent-field default is read as exactly the single '
+            'construction that predates it, and "a declared suites list is '
+            'what the sender negotiates against" shows a stated list overrides '
+            'the derivation on parse — the field is the holder\'s statement '
+            'about itself, so a newer holder may name a suite this build has '
+            'never heard of.',
+      );
+    });
+
+    test('UC-A4.7 · no mutually supported construction is a refusal', () {
+      // GIVEN a recipient whose advertised record names only constructions this
+      //       build does not implement (or no key it can encapsulate to).
+      // WHEN  alice1 tries to seal to it.
+      // THEN  the operation is REFUSED and nothing is written. Sealing under
+      //       the sender's own preference would hand the recipient an envelope
+      //       it cannot unwrap, and the failure would land on THEIR side as an
+      //       opaque AEAD error with nothing to point at — every AEAD-level
+      //       failure collapses to one outcome by design, so a guess is
+      //       unattributable by construction. One level up, where the choice is
+      //       per member rather than per write, the same rule reads as
+      //       skipped-not-fatal: a member with no mutually supported key is
+      //       skipped and every other member still receives its copy.
+      provenIn(
+        'packages/at_client/test/pairwise_secret_sharing_test.dart',
+        'refuses rather than guessing when nothing is mutually supported',
+        proves: 'the per-write arm — no overlap raises rather than falling '
+            'back to the sender\'s own suite, and nothing is written. '
+            '"pushSecretToNamespaceMembers skips it and still reaches the '
+            'rest" holds the fan-out arm, where one unusable advertisement '
+            'must not cost the rest of the roster theirs.',
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'no overlap is null rather than a guess',
+        proves: 'the decision underneath both arms: bestSuiteFor returns '
+            'nothing rather than a default, so every caller has to handle the '
+            'no-overlap case explicitly instead of inheriting a silent '
+            'fallback. "an id this build does not implement is null, not a '
+            'guess" in kem_selection_test.dart is the same rule one layer '
+            'down, at the algorithm id.',
+      );
+    });
   });
 }

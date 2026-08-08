@@ -62,6 +62,8 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [46. RFC 9180, and where the design's version hatches are (2026-08-05)](#46-rfc-9180-and-where-the-designs-version-hatches-are-2026-08-05) — *pqSeal stays custom until D2; two signed payloads carry no version, and the signing root is unrewritable*
 - [47. B-2 lands: two levers, and the difference between excluding and revoking (2026-08-06)](#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06) — *nskey-keypair rotation vs content-key rotation; an exclusion is a courtesy and the revoke is the enforcement*
 - [48. The standards question reopened, and what the check found (2026-08-06)](#48-the-standards-question-reopened-and-what-the-check-found-2026-08-06) — *3 of 46.1's 4 premises are false; the vectors are the deliverable, not the migration; `.atKeys` salted its derivation with the passphrase*
+- [49. Two KEMs by configuration, and the downgrade gap that stays open (2026-08-06)](#49-two-kems-by-configuration-and-the-downgrade-gap-that-stays-open-2026-08-06) — *the second option answers a FIPS questionnaire; configuration rather than negotiation, because per-message choice is a downgrade surface*
+- [50. Two KEMs by configuration, one construction by negotiation (2026-08-07)](#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07) — *the knob is a preference not a `CryptoConfig` field; the sender follows the recipient; `suites` is what moves the wire without a flag day*
 
 ---
 
@@ -4406,7 +4408,7 @@ mechanism:
   call site and both AEADs are Nk=32/Nn=12, so it was a free parameter.
 - Two blockers must clear first: `_envelopeVersion` is a global const with **no
   write-side version selector**, and `suites` on the key package
-  ([plan 14.4](implementation-plan.md#144-a-suites-list-on-the-key-package)) is
+  ([plan 14.4](implementation-plan.md#144-a-suites-list-on-the-key-package--done)) is
   what makes the move a sender-side decision rather than a fleet-wide
   readers-first migration.
 - The **enrollment record's `metadata.keyPackage` is a signed envelope written
@@ -4454,3 +4456,260 @@ The framing is shared, so everything after the 3-byte header is exactly RFC
 9180's `enc || ct`. The Atsign part is a frame around a conformant payload,
 which is the relationship TLS and MLS have to the constructions they carry, and
 it is worth describing that way rather than claiming bare RFC 9180 on the wire.
+
+## 49. Two KEMs by configuration, and the downgrade gap that stays open (2026-08-06)
+
+The ruling is **two KEMs, selected by deployment configuration**, across both
+the secret-sharing substrate and the nskey encapsulations:
+
+| Option | Components | Citation |
+|---|---|---|
+| Hybrid, as today | ML-KEM-768 (FIPS 203) + X25519 (RFC 7748) | combiner in `draft-irtf-cfrg-concrete-hybrid-kems`, CFRG-**adopted** |
+| Pure **ML-KEM-1024** | FIPS 203 only, no combiner | FIPS 203 + SP 800-227 §4.3 + SP 800-56C — **no draft at all** |
+
+The second exists to answer a "FIPS-approved algorithms only" questionnaire and
+CNSA 2.0, which per NSA's own IETF profile drafts mandates ML-KEM-1024 and makes
+hybrids **non-compliant** in TLS. The first keeps the classical hedge, which
+covers exactly one scenario: ML-KEM falling to *classical* cryptanalysis before
+a quantum computer exists. X25519 contributes nothing against a quantum
+adversary, since it is Shor-broken — state that correctly or a reviewer will.
+
+**MLKEM768-P256 was considered and rejected on implementability.**
+`package:cryptography`'s `DartEcdh` throws `UnimplementedError` — there is no
+pure-Dart P-256 ECDH. Choosing it would mean hand-writing constant-time ECDH on
+a general-purpose curve library, adding rolled-our-own key agreement in order to
+remove a draft citation. Its combiner also lives in the same CFRG draft as the
+hybrid's, so it buys approved *components* and not an approved *construction*.
+
+**Configuration, not negotiation, and the reason is NIST's.** SP 800-227 §4.6.3
+warns that composite schemes "introduce additional choices in protocols, which
+could also introduce vulnerabilities (e.g., in the form of *downgrade
+attacks*)". So each atSign advertises one KEM and senders use what the recipient
+advertises. There is no per-message negotiation to attack.
+
+**The gap this leaves, recorded because it was accepted rather than missed.**
+Configuration-not-negotiation removes the *protocol* downgrade surface, but it
+relocates the question rather than closing it: the advertisement is what carries
+the algorithm, so the property now rests entirely on an advertisement being
+authentic. A separate hardening item — strengthening the PKAM
+challenge-response, tracked outside this ledger and landing with its own fix —
+is what closes the remaining path to presenting a client with an advertisement
+of someone else's choosing. Until it lands, the downgrade SP 800-227 names is
+not fully out of reach. Accepted for now, and it is the reason that item stops
+being deferrable before release rather than after.
+
+**Landed** as KE-1 on 2026-08-07 — see
+[section 50](#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07),
+which records what building it settled and where this entry's expectations held
+or moved. This section is the ruling; 50 is the landing.
+
+## 50. Two KEMs by configuration, one construction by negotiation (2026-08-07)
+
+The two-KEM option ruled on 2026-08-06 is built and wired, across `at_chops`,
+`at_client` and `at_auth`, in `6a85fad05`…`f3e5b3686`. This entry records what
+building it settled — the rulings that were only reachable once there were two
+KEMs in the tree rather than one.
+
+The shape, stated once:
+
+| | |
+|---|---|
+| Hybrid, the default | X-Wing (ML-KEM-768 + X25519), IANA HPKE KEM `0x647A` |
+| No-hybrid option | ML-KEM-1024 (FIPS 203), IANA HPKE KEM `0x0042` |
+| Constructions on the hybrid | `x-wing-hpke-v1` (`ver 0x01`), `x-wing-rfc9180-v1` (`ver 0x02`) |
+| Construction on ML-KEM-1024 | `ml-kem-1024-rfc9180-v1` (`ver 0x03`, HKDF-SHA384 + AES-256-GCM) |
+
+`0x03`'s parameters are not a free choice. KEM `0x0042` has exactly two
+published HPKE rows and only one at a 256-bit AEAD, so HKDF-SHA384 is what buys
+a third-party end-to-end vector instead of a self-generated one — and it is the
+combination CNSA 2.0 names, which is the market the no-hybrid option exists
+for. `MLKEM768-P256` was the other candidate and was rejected on
+implementability: `package:cryptography`'s `DartEcdh` throws
+`UnimplementedError`, so choosing it meant hand-writing constant-time key
+agreement on a general-purpose curve library in order to remove a draft
+citation.
+
+### 50.1 The knob is `AtClientPreference.keyEstablishmentAlgo`, not a `CryptoConfig` field
+
+The obvious home for "which KEM does this atSign use" is the pluggable-crypto
+config, beside the providers it parameterises. It cannot live there, and the
+reason is ordering rather than taste.
+
+- **An app cannot build the nskey `CryptoConfig` before its client exists.**
+  `PublishedNskeyKeyRing` takes the `AtClient`, and production constructs one in
+  seven places — `AtClientImpl` (four), `NskeyRotation`,
+  `EnrollmentServiceImpl`, `ConveyedKeyCollection`. A knob an app must set
+  *before* `AtClientImpl` finishes initialising cannot be carried by an object
+  that needs the finished client to exist.
+- **The KEM has to reach a top-level function with no client at all.**
+  `enrollmentKeyPackageBuilder` runs during `enroll:request`, before the
+  enrollment it is minting for exists, so it takes the algorithm as an explicit
+  parameter. Nothing resolvable from a client is reachable there.
+
+So it sits on `AtClientPreference`, beside `seedNamespaceKeys`, for the same
+reason that one does: it is a **rollout** choice, not a crypto-path one. What
+routes a *record* is still `appMetadata.providerId`
+([16](#16-a-provider-id-names-every-algorithm-a-reader-needs-code-for-2026-08-02)),
+and that is unchanged — the preference decides what this deployment *mints*,
+never what it can read.
+
+**A key that already exists keeps its own algorithm, whatever the preference
+later says.** The kpid is the address peers seal to and it is frozen in an
+enrollment record that is never rewritten
+([14.6](implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)),
+so re-minting under a newly configured KEM would move the client to an address
+nobody writes to — it would scan for envelopes being sent somewhere else.
+Changing the preference takes effect on the next enrollment, and the mismatch
+is logged rather than silently resolved.
+
+### 50.2 The sender follows the recipient, so configuring a KEM restricts nobody
+
+An atSign configured for ML-KEM-1024 still seals to a hybrid peer, and the
+reverse. Every build produces and opens both, and the recipient's advertised
+`alg` is what decides — so the configuration says what *this* atSign is a
+recipient for, and nothing about who it can talk to.
+
+Refusing the other option would leave two atSigns unable to communicate while
+protecting nothing: the peer's key is the peer's decision, and a sender that
+declined to encapsulate to it would not make that key any stronger.
+
+This is why `sendEnvelope` had to change at all. It already selected the
+recipient's key **by** algorithm and then discarded the algorithm, stamping
+`x-wing-hpke-v1` at the default version whatever the key package said — the
+decision existed and was thrown away.
+
+### 50.3 The KEM is configured; the *construction* is negotiated
+
+These are different questions and they get different mechanisms. Collapsing
+them — "the peer tells us what it wants and we do that" — is what SP 800-227
+warns against, and keeping them apart is what makes the wire movable:
+
+- **Which KEM** is configuration. SP 800-227 section 4.6.3 warns that composite
+  schemes "introduce additional choices in protocols, which could also
+  introduce vulnerabilities (e.g. in the form of downgrade attacks)". Each
+  atSign advertises one KEM, per generation, and there is no per-message
+  negotiation of it to attack.
+- **Which construction over that KEM** is negotiated, because it has to be. A
+  KEM key opens every construction built on that KEM — an X-Wing private
+  unwraps both `0x01` and `0x02`, since the difference is the key schedule and
+  the AEAD, not the decapsulation — so the holder's capability genuinely varies
+  with its build, and only the holder can state it.
+
+The statement is a `suites` list, on both advertised-key surfaces:
+`KeyPackage.suites` for the secret-sharing envelope, and the nskey
+advertisement's own for the CK conveyance. A sender takes the strongest entry
+both sides list and derives the `pqSeal` version from it. That is what let the
+wire move from `0x01` to `0x02` between modern peers **without a flag day** —
+which is the whole reason
+[14.4](implementation-plan.md#144-a-suites-list-on-the-key-package--done) was on
+the backlog.
+
+Three rules the lists obey, each preventing a specific failure:
+
+- **An absent list means exactly the one construction that existed when such a
+  record was written**, and that constant must never grow. Widening it would
+  claim, on behalf of holders that never said so, that they can open something
+  they cannot. The nskey advertisement's copy is the sharper case: a key
+  package is read by the *owner's* own enrollments, an advertisement is fetched
+  by **senders**, who act on the claim immediately.
+- **The published list is derived from the key, not stated from this build's
+  supported set.** What a key can open is fixed by the key. Defaulting to
+  `SecretSharingAlgos.suites` is what produced the defect in
+  [50.5](#505-the-defect-a-widened-list-planted-before-anything-read-it).
+- **On parse, entries this build does not know are kept.** The list is the
+  holder's statement about itself, and a newer holder may name a construction
+  we do not implement yet.
+
+**No mutually supported construction is a refusal, not a guess.** Sealing under
+the sender's own preference would hand the recipient an envelope it cannot
+unwrap, and the failure would land on *their* side as an opaque AEAD error with
+nothing to point at — the same asymmetry that makes an overstated `suites` list
+dangerous.
+
+### 50.4 One seed contract, and why at_chops 3.5.0 is a minor
+
+`generateKeyPair`'s `secretKey` does not mean the same thing on every backend
+and nothing in the type system says so. X-Wing's **is** its 32-byte seed.
+ML-KEM-1024's is the 3168-byte expanded decapsulation key, which no seeded call
+reproduces and which cannot be fed back as a seed. The FFI backends' is an
+opaque handle into an OpenSSL registry that does not outlive the process.
+
+The consequence is that code written against X-Wing persists recoverable bytes
+**by accident**, and the identical code persists unrecoverable ones for ML-KEM
+— with no compile error and no failure until a restart, at which point every
+record sealed to that key is unopenable. That is the exact hazard a
+configuration-selected KEM creates: the source no longer names which backend it
+is holding.
+
+So `AtKemAlgorithm` gains `newSeed()` and `keyPairFromSeed()`, and every
+persisted key in at_client is filed as its **seed** with the algorithm
+alongside — `PersistedApkamKeys.encSeed` + `keyAlgo`, and the nskey private
+likewise. 32 and 64 bytes are both valid seeds for *some* backend, so the bytes
+alone cannot say which. `NskeyKeyRing.privateHalf` now returns the decapsulation
+key — what `pqOpen` takes, which is what it always meant — and expands on the
+way out. Byte-identical for X-Wing, so existing keyfiles are untouched.
+
+The seed *length* deliberately stays off the interface: it is backend-specific,
+and a caller has no use for it once `newSeed` produces a valid one and
+`keyPairFromSeed` rejects an invalid one.
+
+**3.5.0 rather than 3.4.2, and the reason is the interface, not the size of the
+change.** These are abstract members on an exported interface, so any external
+`implements AtKemAlgorithm` must add them. All six implementations in this
+repository are `final class … implements`, so every one was a compile error
+rather than a silent runtime hole — but nothing outside gets that treatment,
+which is what makes it a minor.
+
+### 50.5 The defect: a widened list, planted before anything read it
+
+`KeyPackage.suites` defaulted to `SecretSharingAlgos.suites`, which was correct
+while that list held exactly one entry. `80b6f9e13` widened it to three and
+swept only `algo_ids.dart`, so from that commit a package advertising a single
+X-Wing key also declared it could open `ml-kem-1024-rfc9180-v1` — a
+construction nothing it holds can decapsulate.
+
+Nothing acted on the claim at the time: `bestSuiteFor` had no production caller
+and the sender still stamped one suite unconditionally. It mattered because the
+**next** commit made the sender honour it, and because `metadata.keyPackage` is
+written by `enroll:request` and never again — the claim freezes for the life of
+an enrollment, so any key package minted in that window carries it permanently.
+
+Worth keeping as a shape rather than an incident: a default that is correct for
+a single-element list becomes a lie the moment the list grows, and the
+blast-radius sweep for "widen an enum/list" has to include every **default**
+that reads it, not only every `switch`.
+
+### 50.6 An atServer revocation-visibility lag, found by bounding an assertion
+
+The roster half of the revocation test already polled, because `enroll:listns`
+is served through an enrollment cache observed stale on the first read after a
+revoke. The credential half asserted the refusal was immediate. It is not.
+
+On 2026-08-07 it failed once in three consecutive full-suite runs: a fresh
+connection PKAM-authenticating with the revoked enrollment's **own** keypair was
+accepted after `revoke()` had returned, while the runs either side refused it.
+Same mechanism as the roster — the control arm above deliberately authenticates
+that enrollment beforehand, which is what populates the cache the PKAM path
+then reads.
+
+So the credential is polled with the same bound, and the bound is what keeps it
+an assertion: if the keypair never stops working, the test stays red. **The
+property is the atServer's, not this client's** — a holder of a revoked keyfile
+can still authenticate for a short window after `enroll:revoke` returns, and
+that is worth a look on the server side rather than only a poll on ours. It
+does not weaken [47](#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06)'s
+ruling that the revoke is the enforcement; it bounds how quickly that
+enforcement becomes visible.
+
+### 50.7 What this cost, and what it did not
+
+Landed with rails green at every commit boundary: at_client **1012** unit,
+at_chops **465**, functional **138**, e2e **50**.
+
+Two things it deliberately did not do. It did **not** re-key anything already
+published — keys are minted per generation, so an atSign moves to the other
+option by rotating, which is the only moment an advertised algorithm can
+change. And it did **not** make the KEM a per-message choice: the version byte
+names the whole suite precisely because the KEM is already fixed by the
+recipient's advertised key, so an opener needs no input beyond the byte it
+already reads first.

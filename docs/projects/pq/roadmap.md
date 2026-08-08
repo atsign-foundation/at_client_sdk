@@ -54,10 +54,19 @@ deliverable: harvest-now-decrypt-later capture is a present-day threat, and PQ
 confidentiality is the defence.
 
 D1 does **not** require MLS. It is reached by routing every encryption path
-through pluggable PQ providers — **X-Wing hybrid KEM (ML-KEM-768 + X25519)** for
-key transport, **AES-256-GCM** for data — publishing a PQ enrollment-conveyance
-key, then making the **`nskey` data path** the default for both self and shared
-data and retiring the classical-only `selfEncryptionKey` and `shared_key.*`.
+through pluggable PQ providers — a post-quantum **KEM** for key transport,
+**AES-256-GCM** for data — publishing a PQ enrollment-conveyance key, then
+making the **`nskey` data path** the default for both self and shared data and
+retiring the classical-only `selfEncryptionKey` and `shared_key.*`.
+
+**Two KEMs, chosen per deployment.** The default is the **X-Wing hybrid
+(ML-KEM-768 + X25519)**, which keeps a hedge against ML-KEM falling to
+*classical* cryptanalysis. The alternative is **pure ML-KEM-1024**, selected by
+`AtClientPreference.keyEstablishmentAlgo` — it exists for its citation rather
+than its strength, being the only option here whose specification chain contains
+no draft, and the parameter set CNSA 2.0 mandates. Neither restricts who an
+atSign can talk to: a sender follows whatever the recipient advertised, and
+every build produces and opens both.
 
 D1's data path is the **`nskey` data path** — `at/nskey` conveys a symmetric
 content key (CK) and `at/symmetric/AES/GCM` encrypts the data under it — **not**
@@ -121,11 +130,14 @@ built-in legacy provider:
 - **`at/symmetric/AES/GCM`** encrypts the data (AES-256-GCM) under that CK,
   citing it by `ckKid`.
 
-An **`nskey` is an asymmetric X-Wing KEM keypair you encapsulate symmetric CKs
-to** — it never encrypts application data directly. Per `(atSign, namespace)`
-there is **one** `nskey` keypair, and it is the recipient key for *both*
-directions: Alice encapsulates her **own** CKs to it for self data, and external
-senders encapsulate CKs to it when sharing with her.
+An **`nskey` is an asymmetric KEM keypair you encapsulate symmetric CKs to** —
+it never encrypts application data directly. Per `(atSign, namespace)` there is
+**one** `nskey` keypair, under whichever KEM that atSign's deployment
+configured, and it is the recipient key for *both* directions: Alice
+encapsulates her **own** CKs to it for self data, and external senders
+encapsulate CKs to it when sharing with her. Its published advertisement names
+its algorithm, because a sender cannot tell one encapsulation key from another
+by looking and getting it wrong writes a record Alice can never open.
 
 - The **private half** lives in each of Alice's `<ns>`-authorised clients,
   conveyed per-APKAM as a secret over the shared substrate. It is a KEM private:
@@ -151,7 +163,7 @@ What D1 closes vs legacy, at **zero developer-visible change**:
 
 | Legacy weakness | D1 (the `nskey` data path) |
 |---|---|
-| Not PQ-safe (RSA-2048) | **Closed** — X-Wing hybrid KEM |
+| Not PQ-safe (RSA-2048) | **Closed** — X-Wing hybrid KEM by default, pure ML-KEM-1024 by configuration |
 | Crypto broader than transport (one key spans all namespaces) | **Closed** — per-namespace keypair mirrors enrollment authorization |
 | `selfEncryptionKey` sits still forever, conveyed to every enrollment | **Closed** — per-namespace, **rotatable**; per-namespace blast radius, not atSign-wide |
 | No per-device revocation granularity | **Closed** — per-APKAM future-data revocation: rotate the `nskey` keypair excluding the revoked keypair |
@@ -319,8 +331,8 @@ provider through to the pq-mls engine).
 | Milestone | Capability added | Why it matters |
 |---|---|---|
 | **M0 · Pluggable crypto seam** | Per-value `CryptoProvider` routing via `appMetadata`; legacy + new schemes coexist | The migration machinery — old data readable forever, new schemes drop in as providers, no flag-day. Everything rides this seam. **Landed** (Wave-0). |
-| **M1 · PQ primitives** | X-Wing hybrid KEM, AES-256-GCM, HKDF in at_chops; PQ enrollment-conveyance pubkey | The PQ/hybrid building blocks; closes the last harvest-now-decrypt-later hole (enrollment); the crypto-agile base. **Primitives landed and published** (`at_chops` 3.3.0 + 3.4.0, incl. ML-DSA-65 verify dispatch and the AES-GCM FFI backend); the enrollment-conveyance pubkey (P-3) is the remaining piece. |
-| **M2 · Per-APKAM identity / substrate** | Each APKAM keypair carries an X-Wing key package; the per-APKAM secret-sharing substrate beneath the `nskey` data path | The substrate that conveys `nskey` privates per-APKAM (D1) and underpins `at/pqmls` (D2); per-APKAM granularity + revocability. **In progress** — the substrate baseline (SS-0) and the atServer discovery verb (SS-1b) landed 2026-07-17 and 2026-07-07; wiring it to the live verbs and into AtClient is SS-1c/SS-2. |
+| **M1 · PQ primitives** | X-Wing hybrid KEM and pure ML-KEM-1024, AES-256-GCM, HKDF in at_chops; PQ enrollment-conveyance pubkey | The PQ/hybrid building blocks; closes the last harvest-now-decrypt-later hole (enrollment); the crypto-agile base. **Primitives landed and published** (`at_chops` 3.3.0 + 3.4.0, incl. ML-DSA-65 verify dispatch and the AES-GCM FFI backend); the enrollment-conveyance pubkey (P-3) is the remaining piece. ⚠️ **`at_chops` 3.5.0 — the second KEM, `pqSeal ver 0x03`, and the seed contract — is in-tree and NOT yet published** (KE-1). |
+| **M2 · Per-APKAM identity / substrate** | Each APKAM keypair carries a key package naming its own KEM; the per-APKAM secret-sharing substrate beneath the `nskey` data path | The substrate that conveys `nskey` privates per-APKAM (D1) and underpins `at/pqmls` (D2); per-APKAM granularity + revocability. **In progress** — the substrate baseline (SS-0) and the atServer discovery verb (SS-1b) landed 2026-07-17 and 2026-07-07; wiring it to the live verbs and into AtClient is SS-1c/SS-2. |
 | **M3 · the `nskey` data path** | `at/nskey` conveys the CK + `at/symmetric/AES/GCM` encrypts the data, as D1's default self **and** shared encryption; coarse FS via CK rotation; per-APKAM future-data revocation + PCS via `nskey`-keypair rotation; retires `selfEncryptionKey`/`shared_key.*` | **Completes Deliverable 1** — PQ-safe self + shared messaging, no group machinery in the app's face. |
 | **M4 · `at/pqmls` intra-atSign groups (D2)** | `SecureGroup` v1 epoch engine; per-APKAM leaves; two-lever rotation | First forward-secure (intra-atSign) group encryption; the stable interface MLS later swaps under. |
 | **M5 · `at/pqmls` cross-atSign groups + Group Delivery Service (D2)** | `(pair, namespace)`-scoped groups; the ciphertext-only Group Delivery Service (wake-then-pull, ordering/catch-up/retention) | First cross-atSign group encryption + the delivery service that makes *large* groups scale; precursor to NoPorts sessions. |

@@ -312,8 +312,46 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   a client-side refusal alone. `alice3` can read/write `app_1.my_apps` but not `app_2.my_apps`.
 - **Cross-ref:** `decisions.md` ([Decision #4](decisions.md#numbered-rulings-14) push-at-approve + pull backstop);
   `design.md` (the substrate enroll flow, `__ssenv` envelope, `shareAllSecretsWithEnrollment`).
-- **Impl/verify (A2.x):** projects **SS-2 / SS-4** + **RF-2b**; harness
+
+### 3.4 UC-A2.4 — The key package advertises the KEM the deployment configured
+
+- **Given:** `@alice` pq-native; the deployment running `alice4` sets
+  `AtClientPreference.keyEstablishmentAlgo = ml-kem-1024` (the default is the X-Wing
+  hybrid). `enrollmentKeyPackageBuilder` takes it as an **explicit parameter** — it runs
+  before the enrollment exists and has no client to read a preference from.
+- **When:** `alice4` requests an enrollment (as [UC-A2.1](#31-uc-a21--new-enrollment-approved-by-an-online-enrollment-pq-safe-enrollapprove)),
+  minting the key package that rides `enroll:request`.
+- **Then:**
+  - the advertised key is a **1568-byte ML-KEM-1024** encapsulation key rather than a
+    1216-byte X-Wing one — the two arms differ in **shape**, not only in a label, which
+    is what makes the assertion worth making;
+  - `keys[].alg = ml-kem-1024` and `suites = [ml-kem-1024-rfc9180-v1]` **only**. A
+    package never claims a construction its own key cannot decapsulate; a sender acts on
+    the claim, so an overstatement surfaces on the holder's side as an opaque AEAD error;
+  - a peer sealing to it uses `pqSeal ver 0x03`;
+  - the private is filed as its **64-byte seed** with the algorithm alongside, and
+    re-derives the same kpid after a restart. Filing the 3168-byte expanded decapsulation
+    key instead leaves the enrollment unopenable at the next start, with no error at the
+    moment the mistake is made.
+- **Then (an existing key keeps its own algorithm):** a client whose keyfile already
+  holds a key package **does not re-mint** under a newly configured KEM. The kpid is the
+  address peers seal to and `metadata.keyPackage` is written by `enroll:request` and
+  never again, so re-minting would move the client to an address nobody writes to — it
+  would scan for envelopes being sent somewhere else. The mismatch is **logged**, not
+  silently resolved, and the new preference takes effect on the next enrollment.
+- **Then (an unimplemented algorithm fails the mint):** it does not quietly mint the
+  other one. This is the single moment an enrollment's encapsulation target can be set,
+  and there is no post-enrollment write to correct it with.
+- **Cross-ref:** [`decisions.md` 50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)
+  (why the knob is a preference and not a `CryptoConfig` field);
+  [`implementation-plan.md` 14.6](implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)
+  (the one-way door this freezes against).
+
+- **Impl/verify (A2.x):** projects **SS-2 / SS-4** + **RF-2b**, and **KE-1** for
+  UC-A2.4; harness
   `tests/at_functional_test` runLocal.sh (enroll/approve round-trip, `__ssenv` delivery).
+  UC-A2.4 is a unit row — the shapes it asserts are decided entirely client-side, before
+  anything reaches an atServer.
 
 ## 4. A3 · E2EE within one atSign (self data) + self notification
 
@@ -434,9 +472,46 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - Offline `alice2`: the queued notification still decrypts on later delivery (key still held).
   - A signal-only notification (no value) needs no decryption and is unaffected.
 
+### 4.5 UC-A3.5 — The published nskey advertisement names its KEM and what it can open
+
+- **Given:** `@alice` pq-native; `alice1` authorised for `app_1.my_apps`; the deployment
+  configured for one of the two key-establishment algorithms.
+- **When:** `alice1` mints and publishes the namespace key (as
+  [UC-A3.2](#42-uc-a32--a-client-mints-and-publishes-the-nskey-for-each-namespace-it-is-authorised-for)).
+- **Then:**
+  - the APKAM-signed advertisement carries **`alg` and `suites`** beside
+    `{v, nskeyKid, publicKey}`. `alg` is not decorative: a sender cannot tell an X-Wing
+    encapsulation key from an ML-KEM one by looking — both are opaque byte strings — and
+    encapsulating under the wrong KEM produces a conveyance the owner can never open;
+  - a CK conveyance into that namespace is sealed under the KEM `alg` names and stamped
+    with the matching provider id, `at/nskey/XWING/AES/GCM` or
+    `at/nskey/MLKEM1024/AES/GCM`. **Both providers are registered on every client**
+    whatever this atSign itself mints, because a *recipient's* KEM is the recipient's
+    choice; writes route by the destination's advertised algorithm and reads route by the
+    id the record already carries, so conveyances written under either keep opening and
+    there is no flag day;
+  - an advertisement with **no `alg`** reads as the hybrid — which is what every one
+    published before the field existed was, by construction, since no other KEM existed.
+    One naming an algorithm this build cannot encapsulate to is **refused, not guessed
+    at**;
+  - the correspondence check on an arriving private re-derives the public half **through
+    the advertised KEM** rather than assuming X-Wing. A seed arrives as bare bytes, and 32
+    or 64 of them are valid for one KEM or the other, so the bytes alone cannot say which.
+- **Then (the version is negotiated, not fixed):** `suites` says which sealing
+  constructions the owner can **open**, which `alg` does not determine — a KEM key opens
+  every construction built on that KEM. A modern X-Wing owner therefore receives
+  `ver 0x02`, an owner whose advertisement predates the field declares the one
+  construction that existed when it was written and keeps receiving `ver 0x01`, and
+  ML-KEM-1024 receives `ver 0x03`. That absent-field default **must never grow**: unlike
+  a key package, an advertisement is fetched by *senders*, who act on the claim
+  immediately.
+- **Cross-ref:** [`decisions.md` 50.3](decisions.md#503-the-kem-is-configured-the-construction-is-negotiated);
+  [`seal-spec.md`](seal-spec.md) (the three versions and what each is attested by).
+
 - **Cross-ref:** `design.md` (nskey data path: 3 layers / 3 providers, CK model, the
   nskey + its eager publication).
-- **Impl/verify (A3.x):** **SS-4** (mints) + **B-1** (data path); harness at_chops
+- **Impl/verify (A3.x):** **SS-4** (mints) + **B-1** (data path), and **KE-1** for
+  UC-A3.5; harness at_chops
   vectors (KEM/seal) + at_client `dart test` round-trip for the data path, **plus**
   `tests/at_functional_test` runLocal.sh for UC-A3.2's per-enrollment nskey push and
   its server-gated `__ssenv` refusal ("an `app_2.my_apps`-only client is refused the
@@ -528,9 +603,80 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     pulled if it arrived meanwhile).
   - `appMetadata` is present on the notification frame; signal-only notifications are unaffected.
 
+### 5.5 UC-A4.5 — A sender follows the recipient's advertised algorithm, not its own preference
+
+- **Given:** `@alice`'s deployment is configured for `ml-kem-1024`; `@bob` published an
+  **X-Wing** nskey and advertises an X-Wing key package.
+- **When:** `alice1` shares `@bob:<k>.app_1.my_apps@alice`.
+- **Then:**
+  - the CK is sealed **under X-Wing**, to bob's key, at the strongest construction both
+    sides list. Alice's configuration decides what `@alice` is a *recipient* for and
+    nothing about who she can send to;
+  - symmetrically, a hybrid-configured `@bob` seals to an ML-KEM-1024 `@alice` at
+    `ver 0x03`. Every build produces and opens both;
+  - **refusing would protect nothing.** It would leave two atSigns unable to communicate
+    while the peer's key stayed exactly as strong as it was — the peer's key is the
+    peer's decision.
+- **Then (the KEM is configured, never negotiated):** each atSign advertises **one** KEM
+  per generation, and rotation is the only moment that can change. There is no
+  per-message KEM negotiation to attack, which is what SP 800-227 section 4.6.3 warns
+  about when a protocol introduces additional choices ("could also introduce
+  vulnerabilities (e.g. in the form of downgrade attacks)"). What *is* negotiated is the
+  construction over that KEM — [UC-A4.6](#56-uc-a46--the-construction-is-negotiated-from-suites-and-an-absent-list-means-the-original).
+
+### 5.6 UC-A4.6 — The construction is negotiated from `suites`, and an absent list means the original
+
+- **Given:** two recipients holding the **same X-Wing key**, differing only in what their
+  advertised record claims: one lists `x-wing-rfc9180-v1`, the other's record predates the
+  `suites` field entirely.
+- **When:** `alice1` seals to each.
+- **Then:**
+  - the peer that lists RFC 9180 receives `pqSeal ver 0x02`; the peer whose record
+    predates the field receives `ver 0x01`, because an absent field means **exactly the
+    one construction that existed when it was written**;
+  - the payload's declared suite and the envelope's version byte **agree**. Both matter,
+    and separately — the declared suite is what a receiver accepts on, the version byte
+    is what it dispatches the KEM on, and a disagreement between them opens as an AEAD
+    failure that names neither side;
+  - the candidate suites are narrowed to the **chosen key's own KEM** before the
+    intersection, so a suite can never be selected that the key cannot decapsulate:
+    `alg` and `suites` are separate fields and a holder may advertise more than one KEM;
+  - on parse, entries this build does not recognise are **kept**. The list is the
+    holder's statement about itself, and a newer holder may name a construction we do not
+    implement yet.
+- **Then (this is what moves the wire without a flag day):** two clients that both
+  advertise RFC 9180 now exchange `0x02` where they exchanged `0x01`, with no
+  readers-upgrade-first migration. That is the whole reason the field exists.
+- **Verification note:** both arms must be asserted against the **same** key, so the only
+  thing differing between them is what the record claims. Two arms that differ in key
+  *and* claim prove nothing about the claim.
+
+### 5.7 UC-A4.7 — No mutually supported construction is a refusal, not a guess
+
+- **Given:** a recipient whose advertised record names only constructions this build does
+  not implement (or a key package with no key this build can encapsulate to).
+- **When:** `alice1` tries to seal to it.
+- **Then:**
+  - the operation is **refused** and nothing is written. Sealing under the sender's own
+    preference would hand the recipient an envelope it cannot unwrap, and the failure
+    would land on **their** side as an opaque AEAD error with nothing to point at —
+    every AEAD-level failure collapses to one outcome by design
+    ([`seal-spec.md`](seal-spec.md)), so a guess is unattributable by construction;
+  - the same rule holds one level up, where the choice is per member rather than per
+    write: in a namespace fan-out a member with no mutually supported key is **skipped,
+    not fatal**, and every other member still receives its copy. One unusable
+    advertisement must not cost the rest of the roster theirs.
+
 - **Cross-ref:** `design.md` (the nskey + its eager publication, bilateral
-  inbound forward-secrecy); `decisions.md` (forward-secrecy rationale).
-- **Impl/verify (A4.x):** **B-1** + **SS-4**; harness `tests/at_end2end_test` (cross-atSign).
+  inbound forward-secrecy); `decisions.md` (forward-secrecy rationale, and
+  [50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)
+  for the KEM/construction split).
+- **Impl/verify (A4.x):** **B-1** + **SS-4**, and **KE-1** for UC-A4.5/A4.6/A4.7; harness
+  `tests/at_end2end_test` (cross-atSign). The negotiation itself is unit-provable, but
+  **that the negotiated version is the version on the wire is not** — a fixture backing
+  local storage and the atServer with one map cannot show it. That assertion is live, in
+  `tests/at_functional_test/test/secret_sharing_delivery_test.dart`, reading the envelope
+  back off the atServer and looking at the first byte.
 
 ## 6. A5 · Rotation & revocation (new world)
 
@@ -1019,6 +1165,7 @@ restates project IDs, and only as a coverage map):
 |---------------------------------------------------------------------------------|---------------------------------|
 | A1.1 (PQ-native onboard, [Decision #1](decisions.md#numbered-rulings-14), B4.2) | **ON-1**                        |
 | A2.x / A3.x / A4.x / A5.x                                                       | **SS-2, SS-4, B-1, B-2, RF-2b** |
+| A2.4 / A3.5 / A4.5 / A4.6 / A4.7 (KEM selection + construction negotiation)      | **KE-1**                        |
 | B0.x / B1.x / B2.x / B3.x / B4.x / B5.x                                         | **RF-2c** (retrofit) + **RF-SRV** (server self-enroll — on the GA critical path per [`decisions.md` 40](decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)); the B3.x/B4.x data-path halves are built (B-1 + the decisions-36 ladder; R-1's surviving scope is the `disallowLegacyEncryption` flag) |
 
 Project names follow the `implementation-plan.md` scheme (RF-SRV / RF-2b /

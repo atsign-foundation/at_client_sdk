@@ -4,22 +4,34 @@ Byte-level specification of the public-key encryption `pqSeal`/`pqOpen`
 implement. Written so a second implementation can be built from this document
 alone, without reading the Dart.
 
-**Two constructions, selected by the envelope's first byte.**
+**Three constructions, selected by the envelope's first byte.**
 
 | `ver` | What | Attested by |
 |---|---|---|
 | `0x01` | `atPQv1-base` — HPKE-shaped, Atsign-internal | our own vectors only |
 | `0x02` | RFC 9180 Base mode, KEM `0x647A`, HKDF-SHA256, ChaCha20-Poly1305 | the IETF HPKE working group's published vectors |
+| `0x03` | RFC 9180 Base mode, KEM `0x0042`, HKDF-SHA384, AES-256-GCM | the IETF HPKE working group's published vectors |
+
+`0x02` and `0x03` differ in their **KEM**, and that is why they are separate
+versions rather than one version carrying a suite field. Nothing can seal
+ML-KEM-1024 to a hybrid encapsulation key or the reverse, so the KEM is already
+fixed by whichever key the recipient advertised — the version byte therefore
+names the whole suite, and an opener needs no input beyond the byte it already
+reads first.
 
 Most of this document specifies `0x01`, because it is the one nobody else
-describes. [Version 0x02](#version-0x02--rfc-9180) is at the end and is short,
-for the same reason in reverse: it is RFC 9180, so the RFC is the specification
-and what matters here is which suite and which framing.
+describes. [Version 0x02](#version-0x02--rfc-9180) and
+[version 0x03](#version-0x03--rfc-9180-without-the-hybrid) are at the end and
+are short, for the same reason in reverse: they are RFC 9180, so the RFC is the
+specification and what matters here is which suite and which framing.
 
-Conformance vectors: `packages/at_chops/test/vectors/pq_seal_v1.json` (v1, run
-by `pq_seal_conformance_test.dart`) and
-`test/vectors/hpke_wg_0x647a_chacha.json` (v2, run by
-`rfc9180_hpke_test.dart`).
+Conformance vectors, all under `packages/at_chops/test/vectors/`:
+
+| File | Covers | Run by |
+|---|---|---|
+| `pq_seal_v1.json` | `ver 0x01`, self-generated | `pq_seal_conformance_test.dart` |
+| `hpke_wg_0x647a_chacha.json` | `ver 0x02`, the HPKE WG's published `0x647A` rows | `rfc9180_hpke_test.dart` |
+| `hpke_wg_0x0042_mlkem1024.json` | `ver 0x03`, the HPKE WG's published `0x0042` rows | `rfc9180_hpke_test.dart`, `ml_kem_1024_test.dart` |
 
 ## What version 0x01 is, and what it is not
 
@@ -48,10 +60,13 @@ is why the vector file exists.
 | KDF | HKDF-SHA256 (RFC 5869) |
 | AEAD | AES-256-GCM (SP 800-38D), 12-byte nonce, 16-byte tag |
 
-The KEM is a parameter of `pqSeal` rather than fixed by the construction, but
-X-Wing is the only one used in production and the only one the vectors cover.
-Its sizes: 32-byte seed secret key, 1216-byte public key, 1120-byte
-ciphertext, 32-byte shared secret.
+The KEM is a parameter of `pqSeal` rather than fixed by the construction, and at
+`ver 0x01` X-Wing is the only one used in production and the only one the
+vectors cover. Its sizes: 32-byte seed secret key, 1216-byte public key,
+1120-byte ciphertext, 32-byte shared secret. (ML-KEM-1024 is in production too,
+but only under [`ver 0x03`](#version-0x03--rfc-9180-without-the-hybrid) — there
+is no ML-KEM `atPQv1-base` envelope and there never was one, so `0x01` is
+X-Wing's alone.)
 
 ## Wire format
 
@@ -198,6 +213,21 @@ construction arrives as a typed refusal rather than a garbled decrypt. Above
 it, `appMetadata.providerId` names every algorithm a reader needs code for, so
 a different construction can coexist per value with reads staying universal.
 
+**Which version a sender emits is negotiated, not fixed.** `pqSeal` takes the
+version from its caller, and every advertised recipient key in the Atsign
+Protocol — the enrollment key package and the published nskey advertisement —
+carries a `suites` list naming the constructions its holder can **open**. A
+sender picks the strongest entry both sides list and maps it to a version. That
+is what lets `0x02` replace `0x01` between two modern peers while a peer whose
+advertisement predates the field keeps receiving `0x01`, with no fleet-wide
+upgrade in between. An absent list means exactly the one construction that
+existed when that record was written, and must never be read as more.
+
+No mutually supported construction is a **refusal**, not a fallback to the
+sender's own preference: an envelope the recipient cannot unwrap surfaces on
+*their* side as an authentication failure that names nothing, which is the one
+outcome this document's error model deliberately cannot distinguish.
+
 ## Version 0x02 — RFC 9180
 
 `ver = 0x02` is **implemented**, and it is the real RFC 9180 rather than a
@@ -237,3 +267,55 @@ is asserted rather than assumed.
 `pqSeal` takes a `version`, so a sender that knows what its recipient can open
 — from the `suites` its key package advertises — chooses per call. Emitting a
 version this build cannot open is refused rather than written.
+
+## Version 0x03 — RFC 9180 without the hybrid
+
+`ver = 0x03` is **implemented**. The suite is
+
+> RFC 9180 Base mode, KEM `0x0042` (ML-KEM-1024), KDF `0x0002` (HKDF-SHA384),
+> AEAD `0x0002` (AES-256-GCM).
+
+It exists for its **citation** rather than its strength. Used alone, ML-KEM-1024
+is the only key establishment here whose specification chain contains no draft
+at all — FIPS 203 for the KEM, SP 800-227 section 4.3 for feeding its shared
+secret to a key-derivation function, SP 800-56C for the derivation — where every
+hybrid's *combiner* is specified only in an IETF draft. It is also CNSA 2.0's
+mandated parameter set, and CNSA 2.0 treats hybrids as non-compliant.
+
+What it gives up is the hedge against ML-KEM falling to **classical**
+cryptanalysis before a quantum computer exists. It loses nothing against a
+quantum adversary, since a hybrid's traditional half is Shor-broken anyway.
+State that in that order or a reviewer will correct it.
+
+**The KDF and AEAD are not a free choice.** KEM `0x0042` has exactly two
+published HPKE rows and only one at a 256-bit AEAD, so HKDF-SHA384 is what buys
+a third-party end-to-end vector instead of a self-generated one. It is also the
+combination CNSA 2.0 names — ML-KEM-1024 with SHA-384 and AES-256 — which is the
+market this version exists for.
+
+Sizes, for a port: 64-byte seed (`d || z`), 1568-byte encapsulation key,
+1568-byte ciphertext, 32-byte shared secret. Note that a 1568-byte `ctLen` is
+larger than X-Wing's 1120, which is worth a round trip of its own: it pins that
+an implementation reads `ctLen` from the KEM output rather than assuming a
+constant.
+
+**The private is persisted as the 64-byte seed, never as the secret key.**
+ML-KEM-1024's secret key is a 3168-byte expanded decapsulation key that no
+seeded call reproduces and that nothing turns back into a public half. Two
+independent IETF documents settle the question in favour of the seed. An
+implementation that stores the expanded key has a working system until its first
+restart, at which point every record sealed to that key is unopenable — with no
+error at the moment the mistake is made.
+
+Framing and error behaviour are exactly `0x01`'s and `0x02`'s:
+`ver || ctLen || enc || ct || tag`, with everything after the 3-byte header
+being RFC 9180's `enc || ct`. Relabelling a `0x03` envelope as `0x02` fails to
+open, which proves the version byte selects the suite rather than describing it.
+
+One thing a port must not get wrong: **HKDF-SHA384, not SHA-256**. RFC 5869
+publishes vectors for SHA-256 and SHA-1 only, so this KDF has no standalone
+attestation — its evidence is the `0x0042` key schedule end to end, where `key`,
+`base_nonce` and the 48-byte exporter secret all reproduce the working group's
+published bytes. A build whose KDF dispatch ignored `kdf_id` and always used
+SHA-256 would produce a different key from the same shared secret, and nothing
+but that end-to-end check would say so.

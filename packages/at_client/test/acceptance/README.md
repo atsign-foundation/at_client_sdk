@@ -16,7 +16,10 @@ is how far we've got.
 > cold-start and data-path tests. The retrofit rows followed on 2026-08-05
 > (`decisions.md` 45): the B1 trio and both B2 rows are now cited to live e2e
 > coverage. **B-2 landed 2026-08-06** (`decisions.md` 47), taking the four A5
-> rotation and revocation rows with it. The suite reads **37 of 40**
+> rotation and revocation rows with it, and **KE-1 landed 2026-08-07**
+> (`decisions.md` 50), *adding* five rows — A2.4, A3.5, A4.5, A4.6, A4.7 — all
+> green on arrival, because the project that added them is the project that
+> proved them. The suite reads **42 of 45**
 > scenario rows green, up from 1 before the repair and 5 after it. (The runner's own count
 > is higher — it includes `catalogue_test.dart`'s three guards, which are not
 > scenarios. That gap is why the old "4 of 43" figure was itself wrong in the
@@ -93,15 +96,15 @@ catalogue executable-but-skipped turns an 800-line document into a count.
 
 ## The catalogue
 
-**40 rows** — the catalogue's 30 use cases become 31 scenarios (UC-A5.1 splits,
+**45 rows** — the catalogue's 35 use cases become 36 scenarios (UC-A5.1 splits,
 below), plus 9 cross-cutting invariants.
 
 | Cluster                       | Scenarios                        | Blocked on   |
 |-------------------------------|----------------------------------|--------------|
 | A1 · PQ-native onboard        | A1.1                             | ON-1         |
-| A2 · enrollments              | A2.1 ✅, A2.2 ✅, A2.3 ✅           | —            |
-| A3 · self data                | A3.1 ✅, A3.2 ✅, A3.3 ✅, A3.4 ✅  | —            |
-| A4 · shared data              | A4.1 ✅, A4.2 ✅, A4.3 ✅, A4.4 ✅  | —            |
+| A2 · enrollments              | A2.1 ✅, A2.2 ✅, A2.3 ✅, A2.4 ✅  | —            |
+| A3 · self data                | A3.1 ✅, A3.2 ✅, A3.3 ✅, A3.4 ✅, A3.5 ✅ | —      |
+| A4 · shared data              | A4.1 ✅, A4.2 ✅, A4.3 ✅, A4.4 ✅, A4.5 ✅, A4.6 ✅, A4.7 ✅ | — |
 | A5 · rotation & revocation    | A5.1(a) ✅, A5.1(b) ✅, A5.2 ✅, A5.3 ✅ | —            |
 | B0 · atServer prerequisite    | B0.1                             | RF-SRV       |
 | B1 · retrofit                 | B1.1 ✅, B1.2 ✅, B1.3 ✅           | —            |
@@ -121,12 +124,12 @@ separately.
 ## The shape of the problem this exposes
 
 Sorting by blocker showed why D1 felt slow for so long: B-1 alone gated **11 of
-the 40** rows, and no data-path row could go green until **B-1** (XL) and
+the 45** rows, and no data-path row could go green until **B-1** (XL) and
 **SS-4** (L–XL) landed, so the programme had no demonstrable increment in its
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**3 of the 40** rows are skipped, and all three are *blocked* on a project
+**3 of the 45** rows are skipped, and all three are *blocked* on a project
 that has not landed — ON-1 — with one exception that is worth naming
 separately: **UC-B0.1** is labelled `RF-SRV` but is really blocked on the
 *harness*. It needs a PQ-capable client to abort cleanly against an atServer

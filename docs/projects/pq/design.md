@@ -12,6 +12,7 @@ companion to four sibling docs (see the orientation table in [section 0](#0-scop
 - [1. Subsystem A — D1 nskey data path](#1-subsystem-a--d1-nskey-data-path)
 - [2. Subsystem B — the secret-sharing substrate (WP-SS)](#2-subsystem-b--the-secret-sharing-substrate-wp-ss)
 - [3. Subsystem C — at_chops PQ primitives](#3-subsystem-c--at_chops-pq-primitives)
+  - [3.1 What the standards check established](#31-what-the-standards-check-established)
 - [4. Subsystem D — structural design (CryptoProvider seam, AtKeys/AtKeysIo & key stores, WASM barrel)](#4-subsystem-d--structural-design-cryptoprovider-seam-atkeysatkeysio--key-stores-wasm-barrel)
 - [5. Subsystem E — worked design walkthroughs (NoPorts, at_talk)](#5-subsystem-e--worked-design-walkthroughs-noports-at_talk)
 - [6. Implementation notes & file-level pointers (consolidated)](#6-implementation-notes--file-level-pointers-consolidated)
@@ -155,9 +156,9 @@ content-key kids. Working names marked.
 
 | Object | Shape | Published? | Who holds the private | Role |
 |---|---|---|---|---|
-| **nskey** | `public:__nskey.app_1.my_apps@alice` — written at mint, **mutable**, APKAM-signed `{nskeyKid, publicKey}` | published from mint; **unscannable** (single `_`) but served on an exact `plookup`, cross-atSign | Alice's authorised clients (private conveyed via substrate) | Alice encapsulates **her own** CKs to it; external senders encapsulate CKs to it |
+| **nskey** | `public:__nskey.app_1.my_apps@alice` — written at mint, **mutable**, APKAM-signed `{v, nskeyKid, publicKey, alg, suites}` | published from mint; **unscannable** (single `_`) but served on an exact `plookup`, cross-atSign | Alice's authorised clients (private conveyed via substrate) | Alice encapsulates **her own** CKs to it; external senders encapsulate CKs to it |
 | **nskey mint/rotate lock** *(working)* | `_nskeylock.app_1.my_apps@alice` (self key, immutable create, short ttl) | no | n/a | serialises create and rotate between the owner's own enrollments |
-| **CK conveyance** *(working)* | `<ckKid>.__ck.app_1.my_apps@alice` (self key) | no | n/a (it *is* a sealed CK) | `at/nskey` value: `X-Wing-seal(ck)` to the nskey named by `nskeyKid` |
+| **CK conveyance** *(working)* | `<ckKid>.__ck.app_1.my_apps@alice` (self key) | no | n/a (it *is* a sealed CK) | `at/nskey` value: `pqSeal(ck)` to the nskey named by `nskeyKid`, under the KEM that nskey's `alg` names |
 | **data value** | `<key>.app_1.my_apps@alice` | no | n/a | `at/symmetric/AES/GCM`: AES-GCM under a CK, cites `ckKid` |
 | **substrate envelope** *(working)* | `<msgId>.<kpid>.__ssenv.app_1.my_apps@alice` (self key) | no | n/a | Layer-1 plumbing: `pqSeal(nskey private)` to key package `kp` |
 | **APKAM key package** | per [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify) | (enrollment record) | the APKAM keypair | recipient unit for Layer-1 |
@@ -196,15 +197,36 @@ enrollment — [§2](#2-subsystem-b--the-secret-sharing-substrate-wp-ss), decisi
 nskey private, received per-APKAM over the substrate.
 
 **B1 build detail (one nskey keypair per namespace).** Per-`(atSign, namespace)` there
-is **one** X-Wing nskey keypair. Its private is **minted as a fresh random keypair
+is **one** nskey keypair, under the KEM this deployment configured
+(`AtClientPreference.keyEstablishmentAlgo` — X-Wing by default, ML-KEM-1024 the
+no-hybrid option). Its private is **minted as a fresh random keypair
 and distributed per-APKAM over the substrate** (sealed to each authorised
 enrollment's key package) — it is **never derived from a shared seed** ([`decisions.md`](decisions.md) §11).
 The public half is published **eagerly** — written at mint, always, to
 `public:__nskey.<ns>@<atSign>` as an **APKAM-signed envelope** carrying
-`{nskeyKid, publicKey}`, verified against the publishing enrollment's `_apsk` exactly
+`{v, nskeyKid, publicKey, alg, suites}`, verified against the publishing enrollment's
+`_apsk` exactly
 as a key package is (see *Advertised-key authenticity*,
 [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify)). There is no owner-only stage
 and no promotion step ([`decisions.md`](decisions.md) §13).
+
+**`alg` and `suites` on the advertisement, and why both are needed.** `alg` names the
+key-establishment algorithm the published key **is a key for**: a sender cannot tell an
+X-Wing encapsulation key from an ML-KEM one by looking — both are opaque byte strings —
+and encapsulating under the wrong KEM produces a conveyance the owner can never open.
+An advertisement carrying no `alg` reads as the hybrid, which is what every one
+published before the field existed was by construction; one naming an algorithm this
+build cannot encapsulate to is **refused rather than guessed at**. `suites` names the
+sealing **constructions the owner can open**, which `alg` does not determine — a KEM key
+opens every construction built on that KEM, and which of those the holder implements
+depends on its build. The sender takes the strongest entry both sides list and derives
+the `pqSeal` version from it, so the conveyance version is negotiated rather than
+fixed: a modern X-Wing owner receives `0x02`, one whose advertisement predates the
+field receives `0x01`, ML-KEM-1024 receives `0x03`, and no overlap is a refusal. The
+published list is derived from **the generation's own KEM**, never from what this build
+supports, and the absent-field default must never grow — unlike a key package, an
+advertisement is fetched by *senders*, who act on the claim immediately. See
+[`decisions.md` 50.3](decisions.md#503-the-kem-is-configured-the-construction-is-negotiated).
 
 ### 1.4 the nskey and the signing root
 
@@ -838,10 +860,30 @@ Old clients tolerate an absent `metadata` (the discovery element simply omits it
 
 The key package sits at a **singular `metadata.keyPackage`** (1:1:1 — one enrollment,
 one key package; **no format-keyed `keyPackages` map** — key/suite agility already
-lives inside the package via `keys[].alg` + `KeyPackage.v`). Its value is the
+lives inside the package via `keys[].alg`, `KeyPackage.suites` and `KeyPackage.v`). Its
+value is the
 **APKAM-signed envelope** wrapping the key-package payload (see *Advertised-key
 authenticity*, [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify)); the server
 stores and returns it opaquely and has no opinion on its contents.
+
+The payload is `{v, createdAt, keys: [{kid, use, alg, pub}], suites: [...]}`.
+`keys[].alg` says which KEM key a sender encapsulates to; **`suites` says which sealing
+constructions the holder can open**, which is a different question — an X-Wing private
+unwraps both X-Wing constructions, since they differ in key schedule and AEAD and not
+in decapsulation. `suites` is what makes moving the construction a **sender-side**
+decision rather than a fleet-wide readers-upgrade-first migration: `sendEnvelope`
+narrows the candidates to the chosen key's own KEM, intersects with the package's list,
+and derives the `pqSeal` version from the winner. Three rules it obeys, each preventing
+a named failure — the published list is derived from the package's **own keys** (a list
+derived from what the build supports made a package advertising one KEM claim it could
+open constructions built on the other); an **absent** list means exactly the one suite
+that existed before the field and must never be widened; and on parse, entries this
+build does not recognise are **kept**, because the field is the holder's statement about
+itself. `metadata.keyPackage` is written by `enroll:request` and never again
+([plan 14.6](implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)),
+so whatever it claims is frozen for the life of the enrollment — which is why an
+overstatement is a defect and not a cosmetic one
+([`decisions.md` 50.5](decisions.md#505-the-defect-a-widened-list-planted-before-anything-read-it)).
 
 **atServer build points** (verb spec; effort **L** — full DEP1 spec in
 [§6](#6-implementation-notes--file-level-pointers-consolidated)):
@@ -1110,6 +1152,57 @@ direction reverses rather than adding an atSign-level KEM key: the **approver** 
 tail. There is no atSign-level encapsulation target — `public:pq_signing_root@alice`
 signs only ([§1.4](#14-the-nskey-and-the-signing-root)). **No server change** beyond
 ferrying the request tail.
+
+### 3.1 What the standards check established
+
+Established by a full check against primary sources on 2026-08-06, and recorded
+here rather than in the decisions ledger because these are **standing facts
+about the standards landscape**, not rulings — they constrain what any future
+construction here may claim, and several of them corrected entries that had
+been written from assumption. Re-derive none of this without a primary source:
+
+- **No finalized standard specifies any PQ KEM inside HPKE.** Confirmed by a
+  full RFC-index search with a positive control: one HPKE RFC (9180, DHKEM
+  only), zero PQ ones. So no HPKE-based option — `0x0041`, `0x0042`, `0x0050`
+  or `0x647A` — can be described as standards-finalized.
+- **[`decisions.md` 48.4](decisions.md#484-not-switching-the-kem-and-the-fips-story-it-cannot-buy)
+  is too strong and is corrected here.** X25519's absence from SP 800-56A does **not**
+  by itself make the composite unapprovable: SP 800-227 §4.6.2 approves the
+  combiner "if at least one shared secret is generated from... an approved KEM",
+  and the other component may be "generated in some other (not necessarily
+  approved) manner". What actually closes the FIPS door is **CMVP module
+  validation**, which a pure-Dart implementation can never obtain.
+- **SP 800-227 §4.6 names X-Wing** as its worked example of a PQ/T hybrid and
+  cites the X-Wing paper as the authority for why naive combiners fail. The
+  construction is not disreputable in NIST's eyes — it is simply not approved.
+- **X-Wing's combiner is not SP 800-227's.** The approved `KeyCombineCCA_H`
+  takes seven inputs (`K1, K2, c1, c2, ek1, ek2, domain_sep`); X-Wing supplies
+  four, omitting `ct_M` and `ek_M`. Any claim that it is "a few bytes away" from
+  approval is unsupported and must not be written into a specification —
+  Appendix D records that the final SP deliberately moved away from prescribing
+  concatenation at all.
+- **`draft-irtf-cfrg-concrete-hybrid-kems` is CFRG-adopted**, not an individual
+  submission. Its §4.2 states MLKEM768-X25519 "is identical to the X-Wing
+  construction", which is the citation the hybrid should use rather than the
+  expiring `draft-connolly-cfrg-xwing-kem`.
+- **Consistency check on our own reasoning:** RFC 9180 was being marked down as
+  "IRTF Informational" while RFC 9106 (Argon2id) was treated as a clean
+  citation. They are the same status class. Apply one standard to both.
+- **What reviewers actually score**, from reading published NCC Group, Cure53
+  and Least Authority reports rather than assuming: in that corpus a
+  non-standard algorithm was **never** a High or Critical. A missing
+  *specification* scored Medium; self-produced test vectors were a finding
+  (Cure53 MON-01-004); weak KDF parameters scored Low. That is the evidence
+  behind spending the remaining weeks on specification, third-party vectors and
+  the forgery rather than on further algorithm churn.
+
+Two consequences the rest of this document depends on. **No HPKE-based option
+can be described as standards-finalized**, so `pqSeal`'s `ver 0x02` and `0x03`
+are "RFC 9180 Base mode at a suite whose KEM code point is registered but
+draft-specified", never "standard HPKE". And **FIPS is closed to us by CMVP
+rather than by algorithm choice**, so adopting ML-KEM-1024 alone buys an
+approved-algorithms answer to a questionnaire, not a validated module — state it
+that way or a reviewer will.
 
 ---
 

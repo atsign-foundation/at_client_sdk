@@ -85,5 +85,49 @@ void main() {
             'ungranted namespace is never put on the wire in the first place',
       );
     });
+
+    test('UC-A2.4 · the key package advertises the configured KEM', () {
+      // GIVEN the deployment running alice4 sets
+      //       AtClientPreference.keyEstablishmentAlgo = ml-kem-1024, where the
+      //       default is the X-Wing hybrid.
+      // WHEN  alice4 requests an enrollment, minting the key package that rides
+      //       enroll:request.
+      // THEN  the advertised key is a 1568-byte ML-KEM-1024 encapsulation key
+      //       rather than a 1216-byte X-Wing one — the arms differ in SHAPE,
+      //       not only in a label — keys[].alg names ml-kem-1024 and suites
+      //       claims ml-kem-1024-rfc9180-v1 alone, so the package never claims
+      //       a construction its own key cannot decapsulate. The private is
+      //       filed as its 64-byte SEED with the algorithm alongside and
+      //       re-derives the same kpid after a restart; filing the 3168-byte
+      //       expanded decapsulation key would leave the enrollment unopenable
+      //       at the next start, with no error when the mistake is made. A key
+      //       that already exists keeps its own algorithm whatever the
+      //       preference later says, because the kpid is the address peers seal
+      //       to and metadata.keyPackage is never rewritten. An algorithm this
+      //       build does not implement fails the mint rather than quietly
+      //       minting the other one.
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'a client configured for ML-KEM-1024 mints and advertises it',
+        proves: 'the mint under the preference, asserted on the key LENGTH '
+            '(1568 against the hybrid\'s 1216) as well as the declared alg, so '
+            'the two arms cannot pass by agreeing on a label alone. Its '
+            'siblings in the same group carry the rest of the row: "the '
+            'persisted seed re-derives an ML-KEM package" (restart '
+            'recoverability), "a loaded key keeps its own algorithm whatever '
+            'the preference says" (the frozen kpid), and "an unimplemented '
+            'algorithm fails rather than minting something else".',
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'what gets written declares what the advertised keys can open',
+        proves: 'the suites list is DERIVED from the package\'s own keys, not '
+            'stated from what this build supports — the distinction that '
+            'stops a package advertising one KEM from claiming it can open '
+            'constructions built on the other. "a package advertising no key '
+            'claims no suite" and "an unrecognised key algorithm contributes '
+            'no suite" hold the failing-closed direction.',
+      );
+    });
   });
 }

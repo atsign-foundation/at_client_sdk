@@ -221,6 +221,51 @@ void main() {
               '2, every signal notification is attempting a decryption of '
               'nothing');
     });
+
+    test('UC-A3.5 · the nskey advertisement names its KEM and what it opens',
+        () {
+      // GIVEN alice1 authorised for app_1.my_apps; the deployment configured
+      //       for one of the two key-establishment algorithms.
+      // WHEN  alice1 mints and publishes the namespace key (as UC-A3.2).
+      // THEN  the signed advertisement carries alg AND suites beside
+      //       {v, nskeyKid, publicKey}. alg is not decorative: a sender cannot
+      //       tell an X-Wing encapsulation key from an ML-KEM one by looking,
+      //       and encapsulating under the wrong KEM produces a conveyance the
+      //       owner can never open. A conveyance is sealed under the KEM alg
+      //       names and stamped with the matching provider id; BOTH ids are
+      //       registered on every client whatever this atSign mints, because a
+      //       recipient's KEM is the recipient's choice — writes route by the
+      //       destination's advertised algorithm, reads by the id the record
+      //       already carries, so neither KEM's conveyances stop opening and
+      //       there is no flag day. An advertisement with no alg reads as the
+      //       hybrid, which is what every one published before the field was by
+      //       construction; one naming an algorithm this build cannot
+      //       encapsulate to is refused, not guessed at. suites then makes the
+      //       conveyance VERSION negotiated: 0x02 for an owner that lists RFC
+      //       9180, 0x01 for one whose advertisement predates the field, 0x03
+      //       for ML-KEM-1024, and a refusal when nothing overlaps.
+      provenIn(
+        'packages/at_client/test/nskey_kem_selection_test.dart',
+        'ML-KEM-1024 conveys under its own provider id at ver 0x03',
+        proves: 'the write side end to end — the destination\'s advertised alg '
+            'selects the provider id and the seal version, asserted on the '
+            'envelope\'s first byte rather than on a label. Its siblings carry '
+            'the negotiation arms ("the hybrid negotiates RFC 9180 with an '
+            'owner that advertises it" against "and falls back for an owner '
+            'whose advertisement predates suites", both against the same key) '
+            'and the refusals ("no shared construction is a refusal, not a '
+            'guess"; "a provider will not seal to the other KEM").',
+      );
+      provenIn(
+        'packages/at_client/test/nskey_kem_selection_test.dart',
+        'both ids resolve on every client',
+        proves: 'the no-flag-day property: every client registers a conveyance '
+            'provider for BOTH KEMs whatever it mints itself, and the two ids '
+            'are distinct so reads route apart while sharing one content-key '
+            'cache. Without this a recipient choosing the other KEM would be '
+            'unreachable from anyone who had not also switched.',
+      );
+    });
   });
 }
 
