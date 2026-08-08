@@ -45,7 +45,12 @@ void main() {
       {bool createRefused = false,
       String? enrollmentId = 'enrollment-1',
       Uint8List? publishedRoot,
-      bool rootUnreadable = false}) {
+      bool rootUnreadable = false,
+      // The tagged form is what every root published from now on carries, so
+      // it is what the fixture serves. Roots minted before the shape was
+      // settled carry bare base64 and can never be rewritten, which is the
+      // arm `bareLegacyRootShape` covers.
+      bool bareLegacyRootShape = false}) {
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
     // The signing-root pull reads the enrollment id off the lookup to tell an
@@ -69,7 +74,15 @@ void main() {
       return Future.value(AtValue()
         ..value = jsonEncode({
           'v': 1,
-          'keys': [base64Encode(publishedRoot)],
+          'keys': [
+            if (bareLegacyRootShape)
+              base64Encode(publishedRoot)
+            else
+              {
+                'alg': PqSigningRoot.rootKeyAlgo,
+                'pub': base64Encode(publishedRoot)
+              }
+          ],
           'successor': null,
         }));
     });
@@ -279,6 +292,26 @@ void main() {
     expect((await io.read(atSign)).keys, isEmpty);
   });
 
+  test('a root published before the shape was settled is still read',
+      () async {
+    // The bare-base64 form was what shipped before the tagged shape was
+    // ruled. The record is immutable create-once and `successor` is
+    // unimplemented, so those roots can never be rewritten — a reader that
+    // stopped accepting them would lock those atSigns out of their own root
+    // permanently.
+    final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+    final c = client(publishedRoot: pair.publicKey, bareLegacyRootShape: true);
+    final io = await keysIo();
+
+    expect(
+        await PqSigningRoot(c.client, keysIo: io)
+            .mintIfAbsent(isFullyPrivileged: true),
+        isNull,
+        reason: 'the bare root was found, so nothing is minted — reading it '
+            'as absent would mint a SECOND root for an atSign that has one');
+    expect(c.published, isEmpty);
+  });
+
   test('an unreadable root record aborts the mint rather than racing it',
       () async {
     final c = client(rootUnreadable: true);
@@ -364,7 +397,11 @@ void main() {
             'key to, permanently. The held pair is the only safe thing to '
             'publish');
     final record = jsonDecode(c.published.single.value!) as Map;
-    expect((record['keys'] as List).single, base64Encode(held.publicKey));
+    expect((record['keys'] as List).single,
+        {'alg': PqSigningRoot.rootKeyAlgo, 'pub': base64Encode(held.publicKey)},
+        reason: 'the published shape is tagged, not bare base64: this record '
+            'is immutable create-once, so the form is permanent on every '
+            'atSign that keeps a root');
     expect((await freshIo.read(atSign)).keys, hasLength(2),
         reason: 'recovery publishes what is already filed — it must not '
             'add or replace material');

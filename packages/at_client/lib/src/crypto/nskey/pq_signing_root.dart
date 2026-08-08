@@ -72,6 +72,14 @@ class PqSigningRoot {
   /// one rather than guessed at.
   static const int currentVersion = 1;
 
+  /// The algorithm a root key is published under, in the hyphenated form the
+  /// rest of the advertised-key vocabulary uses (`x-wing`, `ml-kem-1024`).
+  ///
+  /// Not in `SecretSharingAlgos`: that registry names key-*establishment*
+  /// algorithms, and the root is a signing key that nothing ever encapsulates
+  /// to.
+  static const String rootKeyAlgo = 'ml-dsa-65';
+
   final AtClient atClient;
   final AtKeysIo? keysIo;
 
@@ -105,7 +113,30 @@ class PqSigningRoot {
       return null;
     }
     final record = jsonDecode(value.value as String) as Map;
-    return base64Decode((record['keys'] as List).first as String);
+    return _publicKeyFrom(record);
+  }
+
+  /// The root's public half, from either shape of `keys[]`.
+  ///
+  /// A v1 root is `[{"alg":"ml-dsa-65","pub":"<base64>"}]`. Bare-base64
+  /// entries are read too, because roots in that form were published before
+  /// the shape was settled and the record can never be rewritten — a reader
+  /// that refused them would permanently lock those atSigns out of their own
+  /// signing root. Nothing writes the bare form any more.
+  ///
+  /// An entry naming an algorithm this build cannot verify with is skipped
+  /// rather than returned: handing back bytes that will be verified under the
+  /// wrong routine fails later, further away, and looks like a bad signature.
+  static Uint8List? _publicKeyFrom(Map record) {
+    final entries = record['keys'];
+    if (entries is! List) return null;
+    for (final entry in entries) {
+      if (entry is String) return base64Decode(entry);
+      if (entry is Map && entry['alg'] == rootKeyAlgo) {
+        return base64Decode(entry['pub'] as String);
+      }
+    }
+    return null;
   }
 
   /// Mints and publishes the root if this atSign has none, filing both halves
@@ -207,7 +238,15 @@ class PqSigningRoot {
             ..atKey = keyFor(atSign)
             ..value = jsonEncode({
               'v': currentVersion,
-              'keys': [base64Encode(publicKey)],
+              // Tagged rather than bare base64: this record is immutable
+              // create-once and `successor` is unimplemented, so the shape is
+              // permanent on every atSign that keeps a root. Naming the
+              // algorithm is what every other advertised key here does
+              // (`_apsk`, the key package), and it is the only form that can
+              // ever carry a second one.
+              'keys': [
+                {'alg': rootKeyAlgo, 'pub': base64Encode(publicKey)}
+              ],
               'successor': null,
             }),
           sync: true);
