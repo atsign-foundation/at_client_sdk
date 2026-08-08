@@ -1318,6 +1318,22 @@ the legacy-interop opt-out is honoured at activation but leaves an atSign that
 cannot write a public record at all.
 **Still owed:** the `at_client_flutter` / `at_onboarding_cli` call sites that
 would make PQ-native the activation an end user actually gets.
+
+⚠️ **The CLI cannot be done with a flag, and the half-measure is worse than
+nothing** (examined 2026-08-08). `AtOnboardingPreference` already carries
+`signingAlgoType` and `AtOnboardingServiceImpl` already threads it into
+`_atLookUp` — but *not* into the `AtOnboardingRequest`, so setting it today
+gives the broken combination: at_lookup signing PKAM with ML-DSA against an RSA
+APKAM. Threading it into the request alone would be worse still: the activation
+would mint an ML-DSA APKAM with **no key package and no signing root**, and
+`metadata.keyPackage` is written by the `enroll:request` that creates the record
+and never again — so that atSign could never be repaired, only abandoned. A CLI
+PQ activation therefore needs all three of `signingAlgoType`,
+`metadataBuilder: enrollmentKeyPackageBuilder(...)` and a post-activation
+`PqSigningRoot(...).mintIfAbsent(isFullyPrivileged: true)`, which is
+`pqNativeOnboard`'s body against the CLI's own `autoCompleteActivation: false`
+flow. And it needs a live test before it is believed — this repo has no CRAM
+harness for `at_onboarding_cli`, so that is the first thing the work builds.
 **Goal:** a brand-new atSign onboards PQ-native (the root of Part-A coverage).
 **Builds on:** RF-2b (PQ-APKAM mint) + SS-4 (pqpublickey).
 **Deliverables → [design.md](design.md)** (PQ-native onboarding, **amended by

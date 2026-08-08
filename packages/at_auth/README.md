@@ -168,21 +168,46 @@ three layers, outermost first:
 In memory, `AtKeys` always holds plaintext; all three layers are applied
 and peeled exclusively by `FileAtKeysIo`.
 
-Persistence has two verbs:
+Persistence has three verbs:
 
 - `write(atsign, atKeys)` — create-only initial persist (fresh onboard);
   throws if the file already exists.
-- `flush(atsign, atKeys)` — persist the current in-memory state (e.g.
-  after `AtKeys.addKey` or `AtKeys.retireKey`). If the file exists,
-  `flush` first validates that nothing it holds would be lost (key
-  material is never removed — a key's `status` may only move forward,
+- `update(atsign, mutate)` — **the one to reach for when adding key
+  material.** It reads, applies your mutation and persists as a single
+  operation, holding the keyfile lock across all three steps. The callback
+  returns whether anything changed, so finding the material already there
+  costs no write:
+
+  ```dart
+  await atKeysIo.update(atSign.toAtsign(), (keys) {
+    if (keys.getKey(keyId, CryptographicKeyType.privateDecapsulation) != null) {
+      return false; // already filed; nothing to write
+    }
+    keys.addKey(material);
+    return true;
+  });
+  ```
+
+- `flush(atsign, atKeys)` — persist the current in-memory state. If the
+  file exists, `flush` first validates that nothing it holds would be lost
+  (key material is never removed — a key's `status` may only move forward,
   `active` → `retired` → `dead`), then rewrites it; flushing a legacy
   file upgrades it in place to a typed-keys document. If the file does
   not exist, `flush` creates it.
 
-Both verbs write atomically (write-to-temp + rename), so a crash mid-write
-can never truncate the keyfile, and a `flush` over an existing file first
-preserves the previous state as `<file>.bak` alongside it.
+**Do not hand-roll `read` → mutate → `flush`.** Those three steps
+interleave: two callers running concurrently both read the same state, and
+the second's `flush` presents a candidate missing the first's addition.
+`flush` is right to refuse it — nothing may be lost — so what you get is a
+thrown assurance exception and one addition silently gone. Preventing that
+is what `update` is for, and the lock it takes serialises coroutines inside
+one process as well as separate processes. For the same reason `update`
+must never be nested, and `flush` must not be called from inside one: the
+lock is not reentrant.
+
+All three verbs write atomically (write-to-temp + rename), so a crash
+mid-write can never truncate the keyfile, and a rewrite over an existing
+file first preserves the previous state as `<file>.bak` alongside it.
 
 ## Where to go next
 

@@ -170,11 +170,23 @@ The PKAM / APKAM dialogs accept a `KeychainAtKeysIo` instance as a
 backup target so successful logins automatically populate the keychain
 for next time.
 
+`KeychainAtKeysIo` is a full `WrittenAtKeysIo`: as well as `read` and
+`write` it implements `flush`, and inherits `update`. That matters because
+the post-quantum paths add key material to the store as they run — a
+namespace key's private half, the atSign's signing-root private — and on
+Flutter this is the *default* store. Use `update` for any addition, never a
+hand-rolled `read` → mutate → `flush`; see
+[at_auth's note on why](../at_auth/README.md#the-atkeys-file-format).
+
+`write` is create-only, like every other `WrittenAtKeysIo`: it throws
+`AtKeysFileOverwriteException` if the atSign already has an entry. To
+persist a change to keys that are already stored, use `flush` or `update`.
+
 Windows apps additionally need:
 
 ```yaml
 dependencies:
-  biometric_storage: ^4.1.3
+  biometric_storage: ^5.0.1
 ```
 
 Direct usage is rare, but when you need it:
@@ -184,7 +196,7 @@ final keychainStorage = KeychainStorage();
 
 AtKeys? alice = await keychainStorage.getAtsign('@alice');
 List<String> stored = await keychainStorage.getAllAtsigns();
-await keychainStorage.appendAtKeysToKeychain(atKeys);
+await keychainStorage.appendAtKeysToKeychain(keys: atKeys);
 await keychainStorage.removeAtsignFromKeychain('@alice');
 ```
 
