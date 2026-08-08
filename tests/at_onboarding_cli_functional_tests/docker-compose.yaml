@@ -1,7 +1,11 @@
-version: '2'
+# The image defaults to the PUBLISHED one so CI is right without setting
+# anything. A local run that needs a build the registry does not have yet opts
+# in with VIRTUALENV_IMAGE=at_virtual_env:local — the post-quantum activation
+# test needs an atServer that verifies ML-DSA PKAM, which the published image
+# has lagged throughout this branch. Same pattern as the e2e pack's compose.
 services:
   virtualenv:
-    image: atsigncompany/virtualenv:vip
+    image: ${VIRTUALENV_IMAGE:-atsigncompany/virtualenv:vip}
     ports:
       - "127.0.0.1:6379:6379"
       - "64:64"

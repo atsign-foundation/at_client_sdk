@@ -1,6 +1,14 @@
 
 Please read these instructions before adding new/modifying onboarding functional tests
 
+* **Never let a test write to `~/.atsign/keys`.** That directory holds a developer's
+  live personal keyfiles, and it is what `at_onboarding_cli` falls back to whenever
+  `AtOnboardingPreference.atKeysFilePath` is left null or `auth_cli` is invoked
+  without `-k`. Get every keyfile path from `testKeysFile()` in
+  `test/utils/test_keys_dir.dart`; it returns a path under `test/.tmp_keys/`, which
+  is emptied when a run starts, so an aborted run cannot fail the next one with
+  "Keys file already exists".
+
 * If a secondary server is started with demo atsigns and pkam/encryption keys loaded,onboard will
   return an exception since the server is already in activated state.
 * In order to test onboard, we need a server with only cram key available

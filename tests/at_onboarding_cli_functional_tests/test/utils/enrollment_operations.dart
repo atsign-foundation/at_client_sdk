@@ -6,6 +6,8 @@ import 'package:at_client/at_client.dart';
 
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 
+import 'test_keys_dir.dart';
+
 /// Contains methods that perform common enrollment operations like getOtp, approve, etc.
 ///
 /// Each method requires an atKeysFile that has authorization to perform operations
@@ -125,9 +127,9 @@ class EnrollmentOperations {
     return AtOnboardingPreference()
       ..commitLogPath = '$storageDir/commitLog/$atsign/1'
       ..hiveStoragePath = '$storageDir/hive/$atsign/1'
-      ..atKeysFilePath = '$storageDir/keys/${atsign}_key.atKeys'
       ..rootDomain = 'vip.ve.atsign.zone'
       ..cramSecret = cramKey
-      ..atKeysFilePath = atKeysFilePath;
+      // A null here would fall through to the home directory's real keys dir.
+      ..atKeysFilePath = atKeysFilePath ?? testKeysFile(atsign);
   }
 }

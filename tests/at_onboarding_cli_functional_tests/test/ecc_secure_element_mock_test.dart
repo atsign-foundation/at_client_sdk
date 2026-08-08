@@ -11,6 +11,7 @@ import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'utils/at_chops_secure_element_mock.dart';
 import 'package:at_auth/at_auth.dart' as at_auth;
 import 'utils/onboarding_service_impl_override.dart';
+import 'utils/test_keys_dir.dart';
 
 void main(){
 }
@@ -76,12 +77,12 @@ AtOnboardingPreference getPreferences(String atSign) {
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..hiveStoragePath = 'test/storage/hive'
     ..namespace = 'wavi'
-    ..downloadPath = 'test/storage/files'
+    ..downloadPath = testKeysDir
     ..isLocalStoreRequired = true
     ..commitLogPath = 'storage/commitLog'
     ..rootDomain = 'vip.ve.atsign.zone'
     ..fetchOfflineNotifications = true
-    ..atKeysFilePath = 'test/storage/files/$atSign' + '_key.atKeys'
+    ..atKeysFilePath = testKeysFile(atSign)
     ..signingAlgoType = SigningAlgoType.ecc_secp256r1
     ..hashingAlgoType = HashingAlgoType.sha256
     ..authMode = PkamAuthMode.sim

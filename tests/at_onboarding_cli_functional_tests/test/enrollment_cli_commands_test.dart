@@ -9,6 +9,8 @@ import 'package:at_onboarding_cli/src/cli/auth_cli.dart' as auth_cli;
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
+import 'utils/test_keys_dir.dart';
+
 /// An [AtOnboardingService] binds to the enrollment it last authenticated as:
 /// it holds an [AtLookUp] whose connection the atServer has bound to that
 /// enrollment. The atServer refuses a `__manage` key fetch whose enrollment id
@@ -19,9 +21,10 @@ import 'package:test/test.dart';
 /// authentication gets a fresh one — see [authenticateWithApkamKeys].
 void main() {
   String atSign = '@sitaram🛠';
-  String apkamKeysFilePath = 'storage/keys/@sitaram-apkam.atKeys';
+  String masterKeysFilePath = testKeysFile(atSign);
+  String apkamKeysFilePath = testKeysFile(atSign, suffix: 'apkam');
   String passwordProtectedKeysFilePath =
-      'storage/keys/@sitaram-apkam-password-protected.atKeys';
+      testKeysFile(atSign, suffix: 'apkam-password-protected');
   String passPhrase = 'abcd';
   final logger = AtSignLogger('E2E Test');
 
@@ -29,8 +32,7 @@ void main() {
   setUpAll(() async {
     AtOnboardingService onboardingService = AtOnboardingServiceImpl(
         atSign,
-        getOnboardingPreference(atSign,
-            '${Platform.environment['HOME']}/.atsign/keys/${atSign}_key.atKeys')
+        getOnboardingPreference(atSign, masterKeysFilePath)
           // Fetched cram key from the at_demos repo.
           ..cramSecret = cramKeyMap[atSign]);
 
@@ -44,7 +46,9 @@ void main() {
       '-a',
       atSign,
       '-r',
-      'vip.ve.atsign.zone'
+      'vip.ve.atsign.zone',
+      '-k',
+      masterKeysFilePath
     ];
     var res = await auth_cli.wrappedMain(args);
     // Zero indicates successful completion.
@@ -86,7 +90,9 @@ void main() {
         '-r',
         'vip.ve.atsign.zone',
         '-i',
-        enrollmentId
+        enrollmentId,
+        '-k',
+        masterKeysFilePath
       ];
       var res = await auth_cli.wrappedMain(args);
       expect(res, 0);
@@ -111,7 +117,9 @@ void main() {
         '-r',
         'vip.ve.atsign.zone',
         '-i',
-        enrollmentId
+        enrollmentId,
+        '-k',
+        masterKeysFilePath
       ];
       res = await auth_cli.wrappedMain(args);
       expect(res, 0);
@@ -147,7 +155,9 @@ void main() {
         '-r',
         'vip.ve.atsign.zone',
         '-i',
-        enrollmentId
+        enrollmentId,
+        '-k',
+        masterKeysFilePath
       ];
       res = await auth_cli.wrappedMain(args);
       expect(res, 0);
@@ -187,7 +197,9 @@ void main() {
         '-r',
         'vip.ve.atsign.zone',
         '-i',
-        enrollmentId
+        enrollmentId,
+        '-k',
+        masterKeysFilePath
       ];
       var res = await auth_cli.wrappedMain(args);
       expect(res, 0);

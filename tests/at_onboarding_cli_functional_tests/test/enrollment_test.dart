@@ -11,6 +11,7 @@ import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
 import 'utils/enrollment_operations.dart';
+import 'utils/test_keys_dir.dart';
 
 var pkamPublicKey;
 var pkamPrivateKey;
@@ -201,6 +202,9 @@ void main() {
         ..cramSecret = at_demos.cramKeyMap[atSign4] ?? atSign4.substring(1)
         ..namespace =
             'wavi' // unique identifier that can be used to identify data from your app
+        // Omitting this would put the keyfile onboard() generates in the home
+        // directory's real keys dir.
+        ..atKeysFilePath = testKeysFile(atSign4)
         ..rootDomain = 'vip.ve.atsign.zone';
 
       AtOnboardingService? onboardingService_1 =
@@ -294,10 +298,6 @@ void main() {
   });
 
   group('tests to validate enrollment access control', () {
-		setUp(() async {
-			await Directory('$storageDir/keys/').create(recursive: true);
-		});
-
     test('validate enrollment only has access to approved namespaces',
         () async {
       // creates an enrollment with rw access to wavi namespace. Then validate
@@ -305,9 +305,9 @@ void main() {
       String appName = 'test_app_name';
       String deviceName = 'functional_test_1';
       Map<String, String> namespaces = {'wavi': 'rw'};
-      String masterKeysFilePath = '$storageDir/keys/${atSign6}_key.atKeys';
+      String masterKeysFilePath = testKeysFile(atSign6);
       String enrollmentAtKeysFilePath =
-          '$storageDir/keys/${atSign6}_wavi_key.atKeys';
+          testKeysFile(atSign6, suffix: 'wavi_key');
 
       AtOnboardingPreference preference = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
@@ -413,9 +413,9 @@ void main() {
       String appName = 'access_test_appname';
       String deviceName = 'functional_test_2';
       Map<String, String> namespaces = {'delta': 'r'};
-      String masterKeysFilePath = '$storageDir/keys/${atSign2}_key.atKeys';
+      String masterKeysFilePath = testKeysFile(atSign2);
       String enrollmentAtKeysFilePath =
-          '$storageDir/keys/${atSign2}_wavi_key.atKeys';
+          testKeysFile(atSign2, suffix: 'wavi_key');
 
       AtOnboardingPreference preference = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
@@ -595,8 +595,7 @@ AtOnboardingPreference getPreferenceForAuth(String atSign) {
     ..cramSecret = at_demos.cramKeyMap[atSign] ?? atSign.substring(1)
     ..namespace =
         'wavi' // unique identifier that can be used to identify data from your app
-    ..atKeysFilePath =
-        '${Platform.environment['HOME']}/.atsign/keys/${atSign}_key.atKeys'
+    ..atKeysFilePath = testKeysFile(atSign)
     ..appName = 'wavi'
     ..deviceName = 'pixel'
     ..rootDomain = 'vip.ve.atsign.zone';
@@ -609,8 +608,7 @@ AtOnboardingPreference getPreferenceForEnroll(String atSign) {
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..namespace =
         'buzz' // unique identifier that can be used to identify data from your app
-    ..atKeysFilePath =
-        '${Platform.environment['HOME']}/.atsign/keys/${atSign}_buzzkey.atKeys'
+    ..atKeysFilePath = testKeysFile(atSign, suffix: 'buzzkey')
     ..appName = 'buzz'
     ..deviceName = 'iphone'
     ..rootDomain = 'vip.ve.atsign.zone';

@@ -8,6 +8,8 @@ import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
+import 'utils/test_keys_dir.dart';
+
 /// ON-1's consumer half: `at_onboarding_cli` can activate an atSign
 /// **PQ-native**, so the capability is one an end user can actually reach.
 ///
@@ -26,8 +28,8 @@ void main() {
   AtSignLogger.root_level = 'WARNING';
 
   final String atSign = AtUtils.fixAtSign('@denise');
-  final String keysDir = '${Platform.environment['HOME']}/.atsign/keys';
-  final String keysFilePath = '$keysDir/${atSign}_key.atKeys';
+  final String keysDir = testKeysDir;
+  final String keysFilePath = testKeysFile(atSign);
 
   AtOnboardingPreference preference() => AtOnboardingPreference()
     ..rootDomain = 'vip.ve.atsign.zone'

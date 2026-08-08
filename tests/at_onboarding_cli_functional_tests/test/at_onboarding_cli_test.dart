@@ -10,8 +10,12 @@ import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
 import 'utils/onboarding_service_impl_override.dart';
+import 'utils/test_keys_dir.dart';
 
-final String atKeysFilePath = '${Platform.environment['HOME']}/.atsign/keys';
+/// Where at_onboarding_cli falls back to when `atKeysFilePath` is null. Only
+/// ever compared against — nothing in this package writes there, see
+/// [testKeysDir].
+final String defaultAtKeysDir = '${Platform.environment['HOME']}/.atsign/keys';
 Map<String, bool> keysCreatedMap = {};
 
 void main() {
@@ -92,7 +96,8 @@ void main() {
       AtOnboardingPreference preference = getPreferences(atSign);
       preference.atKeysFilePath = null;
       AtOnboardingServiceImpl(atSign, preference);
-      expect(preference.atKeysFilePath, '$atKeysFilePath/${atSign}_key.atKeys');
+      expect(
+          preference.atKeysFilePath, '$defaultAtKeysDir/${atSign}_key.atKeys');
     });
 
     tearDown(() async {
@@ -222,7 +227,11 @@ void main() {
         '-c',
         at_demos.cramKeyMap[atSign]!,
         '-r',
-        'vip.ve.atsign.zone'
+        'vip.ve.atsign.zone',
+        // Without -k the CLI writes the generated keyfile to the home
+        // directory's real keys dir.
+        '-k',
+        onboardingPreference.atKeysFilePath!,
       ];
       // perform activation of atSign
       await auth_cli.wrappedMain(args);
@@ -251,8 +260,8 @@ AtOnboardingPreference getPreferences(String atSign) {
     ..commitLogPath = 'storage/hive/client/commit'
     ..privateKey = null
     ..cramSecret = at_demos.cramKeyMap[atSign]
-    ..atKeysFilePath = '$atKeysFilePath/${atSign}_key.atKeys'
-    ..downloadPath = atKeysFilePath
+    ..atKeysFilePath = testKeysFile(atSign)
+    ..downloadPath = testKeysDir
     ..appName = 'wavi'
     ..deviceName = 'pixel';
 
