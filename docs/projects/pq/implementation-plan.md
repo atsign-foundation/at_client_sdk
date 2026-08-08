@@ -1563,12 +1563,14 @@ that, because the shape it rules is the one 14.6 freezes.
 The rest are cheap while at_java has no PQ code and expensive afterwards, which
 as of 2026-08-06 has not started.
 
-**Three are now DONE** — 14.2, 14.4 and 14.5, all absorbed by **KE-1**
-([decisions 50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)).
+**Four are now DONE** — 14.2, 14.4 and 14.5, all absorbed by **KE-1**
+([decisions 50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)),
+and **14.1**, ruled by **ON-1**
+([decisions 52](decisions.md#52-on-1-a-greenfield-atsign-starts-where-a-retrofit-ends-2026-08-08)).
 They are kept here rather than deleted because each names a hatch the wire now
 depends on, and a reader asking "why can the construction change without a flag
 day" needs to find the answer where the question was recorded. The live items
-are 14.1, 14.3, 14.6, 14.7 and 14.8-14.11.
+are 14.3, 14.6, 14.7 and 14.8-14.11.
 
 ### 14.1 The signing root's `keys[]` shape — DEADLINE: the first root we keep
 
@@ -1724,11 +1726,13 @@ cache in at_server. Sits beside the RF-SRV cascade residual
 
 ### 14.10 UC-B0.1 needs a legacy atServer image, or a waiver
 
-The last skipped acceptance row. It needs an atServer **without** the retrofit
-verbs to abort cleanly against, and no image in this repo provides one. That is
-a harness gap rather than an unlanded project, so it is re-scoped or waived the
-way UC-A3.2 was — a decision, not an implementation. Until then the acceptance
-suite reads 42 of 45 with 3 skipped, and the other two skips are ON-1's.
+One of the two skipped acceptance rows. It needs an atServer **without** the
+retrofit verbs to abort cleanly against, and no image in this repo provides one.
+That is a harness gap rather than an unlanded project, so it is re-scoped or
+waived the way UC-A3.2 was — a decision, not an implementation. Until then the
+acceptance suite reads **43 of 45** with 2 skipped; the other skip is
+**UC-B4.2**, which genuinely needs an e2e run (two atSigns, both directions) and
+is the last of ON-1's rows.
 
 ### 14.11 299 `deprecated_member_use` findings in at_client
 
