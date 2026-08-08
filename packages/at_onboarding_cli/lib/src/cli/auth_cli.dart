@@ -1093,7 +1093,11 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
     ..atKeysFilePath = ar[AuthCliArgs.argNameAtKeys]
     ..passPhrase = ar[AuthCliArgs.argNamePassPhrase]
     ..hashingAlgoType =
-        HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType]);
+        HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType])
+    // Only consulted at activation; `auth` resolves the algorithm from the
+    // keyfile. ArgParser has already rejected anything not in the enum.
+    ..signingAlgoType =
+        SigningAlgoType.values.byName(ar[AuthCliArgs.argNameSigningAlgoType]);
 
   final impl = AtOnboardingServiceImpl(atSign, atOnboardingPreference);
   String lastProgressEventType = '';

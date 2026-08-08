@@ -7,6 +7,8 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart'
+    show makeActivationPqNative, mintSigningRootAfterActivation;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/factory/service_factories.dart';
@@ -187,11 +189,29 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     atOnboardingRequest.retryOptions =
         RetryOptions(maxRetries: maxRetries, retryDelay: retryInterval);
-    atOnboardingRequest.atKeysIo = FileAtKeysIo(
+    final atKeysIo = FileAtKeysIo(
       filePath: atOnboardingPreference.atKeysFilePath != null
           ? (_) => atOnboardingPreference.atKeysFilePath!
           : null,
     );
+    atOnboardingRequest.atKeysIo = atKeysIo;
+
+    // A post-quantum activation is all-or-nothing, which is why it goes
+    // through one call rather than a few assignments here: an ML-DSA APKAM
+    // without a key package produces an atSign that can never be repaired,
+    // because `metadata.keyPackage` is written by the `enroll:request` that
+    // creates the enrollment record and never again.
+    // Matched on mldsa65 exactly, not on "anything but rsa2048": ecc_secp256r1
+    // is a third, classical option this package already supports, and treating
+    // it as post-quantum would silently mint an ML-DSA APKAM for a caller who
+    // asked for an elliptic-curve one.
+    final bool pqNative =
+        atOnboardingPreference.signingAlgoType == SigningAlgoType.mldsa65;
+    if (pqNative) {
+      makeActivationPqNative(atOnboardingRequest,
+          atSign: _atSign.toString(),
+          keyEstablishmentAlgo: atOnboardingPreference.keyEstablishmentAlgo);
+    }
 
     AtOnboardingResponse atOnboardingResponse = await atAuth!.onboard(
       atOnboardingRequest,
@@ -209,9 +229,37 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       if (autoCompleteActivation) {
         await completeActivation();
       }
+      if (pqNative) {
+        await _mintSigningRoot(atOnboardingResponse, atKeysIo);
+      }
     }
     _isAtsignOnboarded = atOnboardingResponse.isSuccessful;
     return _isAtsignOnboarded;
+  }
+
+  /// Creates the atSign-level signing root, which needs a client and so cannot
+  /// happen until the activation is done.
+  ///
+  /// It is created while this process still holds the **first** enrollment —
+  /// the one the atServer grants `__manage` — because that is what entitles it
+  /// to create the root at all. It does not fail the onboard: activation has
+  /// already succeeded by here, the CRAM secret is spent, and a start-time pull
+  /// or a re-run mints the root later. Reporting a live atSign as unactivated
+  /// would be much the worse outcome.
+  Future<void> _mintSigningRoot(
+      AtOnboardingResponse response, AtKeysIo atKeysIo) async {
+    final session = response.session;
+    if (session == null) {
+      logger.warning(
+          '$_atSign activated post-quantum but the activation returned no '
+          'session, so its signing root was not created here; the next start '
+          'retries it');
+      return;
+    }
+    final manager = await AtClientManager.getInstance()
+        .fromAuthSession(session, atOnboardingPreference);
+    atClient ??= manager.atClient;
+    await mintSigningRootAfterActivation(manager.atClient, atKeysIo: atKeysIo);
   }
 
   @override
@@ -674,33 +722,50 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   /// Back-up encryption keys to local secondary
   /// #TODO remove this method in future when all keys are read from AtChops
+  ///
+  /// Every field here is **optional**, and each absence is a legitimate shape
+  /// rather than a fault:
+  ///
+  /// - a PQ-native enrollment files its APKAM as typed material under the
+  ///   enrollment id and leaves the flat `apkamPublicKey`/`apkamPrivateKey`
+  ///   empty, by design — authentication resolves the algorithm and the key
+  ///   from the keyfile, so nothing reads these back for such an enrollment;
+  /// - an atSign activated with `mintLegacyMaterial: false` has no RSA
+  ///   encryption keypair and no self-encryption key at all.
+  ///
+  /// Dereferencing them unconditionally is what made a PQ-native keyfile fail
+  /// here with `Null check operator used on a null value` — after a successful
+  /// authentication, from a back-up step, which is about as far from the cause
+  /// as an error can land.
   Future<void> _persistKeysLocalSecondary(AtKeys atAuthKeys) async {
-    //backup keys into local secondary
-    bool? response = await atClient?.getLocalSecondary()?.putValue(
-        AtConstants.atPkamPublicKey, atAuthKeys.apkamPublicKey!.toString());
-    logger.finer('PkamPublicKey persist to localSecondary: status $response');
+    Future<void> persist(String name, String key, AtBytes? value) async {
+      if (value == null) {
+        logger.finer('$name absent from the keyfile; nothing to persist to '
+            'localSecondary');
+        return;
+      }
+      final response =
+          await atClient?.getLocalSecondary()?.putValue(key, value.toString());
+      logger.finer('$name persist to localSecondary: status $response');
+    }
+
+    await persist('PkamPublicKey', AtConstants.atPkamPublicKey,
+        atAuthKeys.apkamPublicKey);
     // Save the PKAM private key only when the auth mode is keyFile.
     // In SIM or other secure element modes, the private key cannot be
     // read and therefore won't be included in the keys file.
     if (atOnboardingPreference.authMode == PkamAuthMode.keysFile) {
-      response = await atClient?.getLocalSecondary()?.putValue(
-          AtConstants.atPkamPrivateKey, atAuthKeys.apkamPrivateKey!.toString());
-      logger
-          .finer('PkamPrivateKey persist to localSecondary: status $response');
+      await persist('PkamPrivateKey', AtConstants.atPkamPrivateKey,
+          atAuthKeys.apkamPrivateKey);
     }
-    response = await atClient?.getLocalSecondary()?.putValue(
+    await persist(
+        'EncryptionPublicKey',
         '${AtConstants.atEncryptionPublicKey}$_atSign',
-        atAuthKeys.defaultEncryptionPublicKey!.toString());
-    logger.finer(
-        'EncryptionPublicKey persist to localSecondary: status $response');
-    response = await atClient?.getLocalSecondary()?.putValue(
-        AtConstants.atEncryptionPrivateKey,
-        atAuthKeys.defaultEncryptionPrivateKey!.toString());
-    logger.finer(
-        'EncryptionPrivateKey persist to localSecondary: status $response');
-    response = await atClient?.getLocalSecondary()?.putValue(
-        AtConstants.atEncryptionSelfKey,
-        atAuthKeys.defaultSelfEncryptionKey!.toString());
+        atAuthKeys.defaultEncryptionPublicKey);
+    await persist('EncryptionPrivateKey', AtConstants.atEncryptionPrivateKey,
+        atAuthKeys.defaultEncryptionPrivateKey);
+    await persist('SelfEncryptionKey', AtConstants.atEncryptionSelfKey,
+        atAuthKeys.defaultSelfEncryptionKey);
   }
 
   @override

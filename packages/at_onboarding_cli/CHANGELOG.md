@@ -1,3 +1,23 @@
+## 1.17.0
+- feat: `onboard` can activate an atSign **post-quantum**. Pass
+  `--signingAlgoType mldsa65` (or set `AtOnboardingPreference.signingAlgoType`)
+  and the activation mints an ML-DSA-65 APKAM, advertises the first
+  enrollment's key package on the `enroll:request` that creates the record, and
+  creates the atSign-level signing root — all three, because an ML-DSA APKAM
+  without a key package produces an atSign that can never be repaired. Matched
+  on `mldsa65` exactly, so the existing `ecc_secp256r1` option is unaffected.
+  The signing root is minted after activation and does not fail the onboard: by
+  then the CRAM secret is spent, and a later start retries it.
+- fix: `authenticate` no longer throws `Null check operator used on a null
+  value` on a post-quantum keyfile. The local-secondary key back-up
+  dereferenced the flat `apkamPublicKey`/`apkamPrivateKey` fields, which a PQ
+  enrollment deliberately leaves empty (its APKAM is typed material under the
+  enrollment id), and which an atSign activated without legacy material lacks
+  entirely. It now persists whatever the keyfile actually holds.
+- fix: `--version` reports the package's actual version. `lib/src/version.dart`
+  is generated from the pubspec by `build_version` and had not been regenerated
+  since 1.15.0, so the published 1.16.0 CLI reported `1.15.0`.
+
 ## 1.16.0
 - refactor: route enrollment crypto — `sha256` hashing, AES key generation and RSA keypair generation — through at_chops (`SHA256HashingAlgo`, `AtChopsUtil.generateSymmetricKey`, `AtChopsUtil.generateAtEncryptionKeyPair`). `crypto`, `encrypt` and `crypton` are no longer imported anywhere in the package and have been dropped from `dependencies`. Byte-identical by construction.
 - feat: enrollment authorization wait can now be resumed across sessions

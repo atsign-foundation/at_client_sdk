@@ -121,6 +121,7 @@ class AuthCliArgs {
   static const argNameAutoApproveExisting = 'approve-existing';
   static const argNamePassPhrase = 'passPhrase';
   static const argNameHashingAlgoType = 'hashingAlgoType';
+  static const argNameSigningAlgoType = 'signingAlgoType';
   static const argNameMaxRetries = 'max-retries';
   static const argNameAllowBadRegistrarCerts = 'allow-bad-registrar-certs';
   static const argNameYes = 'yes';
@@ -306,6 +307,15 @@ class AuthCliArgs {
         help: 'Hashing algorithm type. Defaults to argon2id',
         mandatory: false,
         defaultsTo: HashingAlgoType.argon2id.name,
+        hide: hide);
+    // Takes effect at ACTIVATION only. Every later connection resolves the
+    // algorithm from the keyfile, so there is nothing to pass on `auth`.
+    p.addOption(argNameSigningAlgoType,
+        help: 'APKAM signing algorithm to mint at activation. mldsa65 makes '
+            'the atSign post-quantum from the start. Defaults to rsa2048',
+        mandatory: false,
+        allowed: SigningAlgoType.values.map((a) => a.name),
+        defaultsTo: SigningAlgoType.rsa2048.name,
         hide: hide);
     return p;
   }
