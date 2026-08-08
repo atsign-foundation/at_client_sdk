@@ -1904,14 +1904,21 @@ not happen" from "the thing happened and is not visible yet" — and the second
 is the more interesting story, so that is the one that gets written down. Assert
 the acknowledgement.
 
-### 14.10 UC-B0.1 needs a legacy atServer image, or a waiver
+### 14.10 UC-B0.1 needed a legacy atServer image — RESOLVED 2026-08-08
 
-One of the two skipped acceptance rows. It needs an atServer **without** the
-retrofit verbs to abort cleanly against, and no image in this repo provides one.
-That is a harness gap rather than an unlanded project, so it is re-scoped or
-waived the way UC-A3.2 was — a decision, not an implementation. It is now the
-**only** skip: UC-B4.2 went green 2026-08-08, so the acceptance suite reads
-**44 of 45**.
+It needed an atServer **without** the retrofit verbs to abort cleanly against,
+and no image in this repo provided one, so it was parked as "re-scope or waive".
+`atsigncompany/virtualenv:vip-p3.15.0` resolves it: a release-pinned tag stays
+pre-PQ for good, where `vip` gains post-quantum support and stops being a legacy
+atServer. The row is proven against the pin — see
+[acceptance.md UC-B0.1](acceptance.md#uc-b01--a-pq-capable-client-cannot-pq-upgrade-against-a-legacy-atserver)
+— and the acceptance suite is **45 of 45**, nothing skipped.
+
+Two things worth keeping. The row had carried `blocked: RF-SRV` for three days
+after RF-SRV's server half landed, because a blocker naming a *project* goes on
+being cited long after the project ships; what actually blocked it was the
+harness. And writing it found a real defect rather than merely ticking a box —
+the aborted upgrade left its own enrollment request `pending`, one per retry.
 
 ### 14.11 299 `deprecated_member_use` findings in at_client
 

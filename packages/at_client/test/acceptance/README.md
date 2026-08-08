@@ -2,7 +2,7 @@
 
 The executable form of [`docs/projects/pq/acceptance.md`](../../../../docs/projects/pq/acceptance.md).
 Every use case in that catalogue has a test here, carrying its Given/When/Then
-inline, skipped with the project that must land before it can go green.
+inline — asserted directly, or cited to the live test that asserts it.
 
 **This is the progress bar for D1.** The catalogue is the target; this directory
 is how far we've got.
@@ -23,8 +23,9 @@ is how far we've got.
 > with it: a CRAM activation is PQ-native, proven live — the ML-DSA-65 APKAM
 > re-authenticates on a fresh connection with no RSA APKAM in existence, so
 > the atServer verified an ML-DSA PKAM signature against the enrollment
-> activation created. The suite reads **43 of 45**
-> scenario rows green, up from 1 before the repair and 5 after it. (The runner's own count
+> activation created. **UC-B4.2 and UC-B0.1 followed the same day**, taking the
+> suite to **45 of 45** — every row green, up from 1 before the repair and 5
+> after it. (The runner's own count
 > is higher — it includes `catalogue_test.dart`'s three guards, which are not
 > scenarios. That gap is why the old "4 of 43" figure was itself wrong in the
 > optimistic direction while everything else under-counted.)
@@ -110,7 +111,7 @@ below), plus 9 cross-cutting invariants.
 | A3 · self data                | A3.1 ✅, A3.2 ✅, A3.3 ✅, A3.4 ✅, A3.5 ✅ | —      |
 | A4 · shared data              | A4.1 ✅, A4.2 ✅, A4.3 ✅, A4.4 ✅, A4.5 ✅, A4.6 ✅, A4.7 ✅ | — |
 | A5 · rotation & revocation    | A5.1(a) ✅, A5.1(b) ✅, A5.2 ✅, A5.3 ✅ | —            |
-| B0 · atServer prerequisite    | B0.1                             | RF-SRV       |
+| B0 · atServer prerequisite    | B0.1 ✅                           | —            |
 | B1 · retrofit                 | B1.1 ✅, B1.2 ✅, B1.3 ✅           | —            |
 | B2 · retirement & lockout     | B2.1 ✅, B2.2 ✅                    | —            |
 | B3 · mixed-PQ intra-atSign    | B3.1 ✅, B3.2 ✅                    | —            |
@@ -133,12 +134,25 @@ the 45** rows, and no data-path row could go green until **B-1** (XL) and
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**1 of the 45** rows is skipped. **UC-B0.1** is labelled `RF-SRV` but is really
-blocked on the *harness*. It needs a PQ-capable client to abort cleanly against
-an atServer that has none of the retrofit verbs, and no suite here can produce a
-legacy atServer image to run it against. Re-scope or waive it the way UC-A3.2
-was, rather than leaving it looking like it is waiting on code that already
-exists.
+**0 of the 45** rows are skipped — every scenario in the catalogue is now
+either asserted here or cited to a live test that asserts it.
+
+**UC-B0.1 was the last, and it went green 2026-08-08.** It had carried the
+label `blocked: RF-SRV` long after RF-SRV's server half landed, because nobody
+re-read it; what actually blocked it was the *harness*. The row needs an
+atServer **without** the retrofit verbs to abort against, and no image here
+provided one — until `atsigncompany/virtualenv:vip-p3.15.0`, a release-pinned
+tag that stays pre-PQ for good (`vip` itself gains post-quantum support and
+stops being a legacy atServer). The row is proven against that pin, in
+`tests/at_end2end_test/test/pq/legacy_server_abort_test.dart`, tagged
+`legacy-server` so the ordinary PQ job excludes it.
+
+Running it found a real defect, which is the argument for having written it
+rather than waived it: the abort was clean but left the enrollment request it
+had just created sitting `pending` on the server, one per retry. at_auth now
+denies it on the way out, and where it cannot — a scoped parent has no
+`__manage` — the refusal says so rather than implying the server was left
+clean.
 
 **UC-B4.2 went green 2026-08-08**, and how it did is worth keeping. It was
 labelled `blocked: ON-1 · layer: tests/at_end2end_test` on the reasoning that

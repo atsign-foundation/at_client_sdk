@@ -762,7 +762,19 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   (The atServer's immutable write is long-standing and present even here — it is
   **not** a PQ-only verb.) atServer upgrade is a hard prerequisite for Part B.
 - **Cross-ref:** `implementation-plan.md` (B0 depends on server projects SS-1b / RF-SRV).
-- **Impl/verify:** `tests/at_end2end_test`.
+- **Impl/verify:** **green live 2026-08-08** —
+  `tests/at_end2end_test/test/pq/legacy_server_abort_test.dart`, against a
+  **pinned** pre-PQ atServer (`atsigncompany/virtualenv:vip-p3.15.0`). The pin
+  is the point: `vip` gains post-quantum support and stops being a legacy
+  atServer, so a row aimed at it would go quietly meaningless. Tagged
+  `legacy-server` so the ordinary PQ job excludes it, and run by its own CI job.
+  Verified in both directions — green against the pin, red against a PQ-capable
+  image, so it cannot rot into a no-op.
+  Writing it found a defect: the abort was clean but left the enrollment
+  request it had just created `pending`, one per retry. at_auth 3.4.0 denies it
+  on the way out; where it cannot (a scoped parent has no `__manage`) the
+  refusal says so, and the second test asserts that limit rather than hiding
+  it.
 
 ## 8. B1 · Upgrade an existing (pre-PQ) atSign — the retrofit scenarios
 

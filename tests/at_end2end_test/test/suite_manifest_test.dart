@@ -89,9 +89,15 @@ void main() {
   });
 
   test('every test under test/pq/ carries the pq tag', () {
+    // Matched as "a Tags annotation containing 'pq'" rather than as the
+    // literal `@Tags(['pq'])`: a file may legitimately carry a second tag —
+    // `legacy-server` marks the one row that needs a PINNED pre-PQ atServer
+    // rather than the current image — and a literal match would reject it.
+    final tagsWithPq =
+        RegExp(r"@Tags\(\s*\[[^\]]*'pq'[^\]]*\]\s*\)", multiLine: true);
     final untagged = discovered
         .where((p) => p.startsWith('test/pq/'))
-        .where((p) => !File(p).readAsStringSync().contains("@Tags(['pq'])"))
+        .where((p) => !tagsWithPq.hasMatch(File(p).readAsStringSync()))
         .toList();
     expect(untagged, isEmpty,
         reason: 'the directory is what keeps these off the long-lived '

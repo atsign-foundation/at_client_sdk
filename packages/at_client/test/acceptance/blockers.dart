@@ -23,13 +23,14 @@ library;
 // Layers (acceptance.md section 14)
 // ---------------------------------------------------------------------------
 
-// `at_client dart test` is not among them any more: every scenario that lands
-// in this package's own unit suite is now written, so no constant names that
-// layer. The next project to block a unit row adds it back.
-// The functional layer has joined it: ON-1 was the last project blocking a
-// functional row, and UC-A1.1 now cites its live test instead. The next
-// project to block one adds the constant back.
-const _e2e = 'layer: tests/at_end2end_test';
+// Every layer's constant is gone, one project at a time. `at_client dart test`
+// went first (every unit-layer scenario is written), then the functional layer
+// (ON-1 was the last to block one, and UC-A1.1 cites its live test), and now
+// the e2e layer with `rfSrv` below. The next project to block a row declares
+// its own constant here, with the layer the finished assertion belongs in:
+//
+//   const _e2e = 'layer: tests/at_end2end_test';
+//   const someProject = 'blocked: SOME-1 (what it is) · $_e2e';
 
 // ---------------------------------------------------------------------------
 // Owed a test vs blocked on a project — the distinction this file exists for
@@ -56,27 +57,25 @@ const _e2e = 'layer: tests/at_end2end_test';
 // rows cite the cold-start and data-path live tests.
 
 // ---------------------------------------------------------------------------
-// Retrofit + onboarding. RF-SRV moved ONTO the GA critical path 2026-08-05
-// (decisions.md 40) — every migration scenario conjugates "upgrade the
-// enrollment", and that verb is RF-SRV's.
+// Nothing is blocked any more.
 //
-// The B1 and B2 rows went green 2026-08-05 (decisions.md 45): RF-2b's submit
-// half is proven in the functional pack, and the retrofit e2e rows prove the
-// signing-root step in-flow, two clones reaching distinct enrollment ids, and
-// the capped legacy enrollment refused with AT0028 while an un-retrofitted
-// sibling still authenticates. `owedB1` is gone with them.
+// This file is deliberately kept rather than deleted. Its job is to make a
+// project's unfinished scenarios greppable — `catalogue_test.dart` fails if a
+// constant here guards nothing, so a stale one cannot sit unnoticed, and the
+// next project that blocks a row declares its constant here with the layer the
+// finished assertion belongs in.
 //
-// UC-B0.1 keeps `rfSrv`, and it is the only row that does: it is the one
-// scenario that needs an atServer WITHOUT the retrofit verbs to abort
-// cleanly against, and no harness in this repo provides a legacy server
-// image. That is a harness gap, not an unlanded project — re-scope or waive
-// it the way UC-A3.2 was.
+// The last one to go was `rfSrv`, which guarded UC-B0.1. It had outlived its
+// own accuracy: RF-SRV's server half landed 2026-08-05, and what actually
+// blocked the row from then on was the HARNESS — it needs an atServer WITHOUT
+// the retrofit verbs to abort against, and no image here provided one. That
+// stopped being true when `atsigncompany/virtualenv:vip-p3.15.0` was published:
+// a release-pinned tag stays pre-PQ for good, so the row is now proven against
+// it (tests/at_end2end_test/test/pq/legacy_server_abort_test.dart, tagged
+// `legacy-server`). The lesson worth keeping is that a blocker naming a
+// PROJECT can go on being cited long after the project lands, because nobody
+// re-reads it — see decisions.md 53.1 for the same mistake about a test layer.
 // ---------------------------------------------------------------------------
-
-/// atServer authenticated self-retrofit enroll (auto-approve + expiry cap).
-/// On the GA critical path per decisions.md 40.
-const rfSrv = 'blocked: RF-SRV (server self-retrofit enroll) · $_e2e';
-
 // ON-1 is fully discharged. Its cross-atSign row, UC-B4.2, was labelled
 // `blocked: ON-1 · layer: tests/at_end2end_test` on the reasoning that only an
 // e2e run with two atSigns could show the inbound direction. The layer was

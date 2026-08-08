@@ -5,7 +5,7 @@ library;
 
 import 'package:test/test.dart';
 
-import 'blockers.dart';
+import 'proven_elsewhere.dart';
 
 void main() {
   group('B0 · atServer upgrade prerequisite', () {
@@ -18,7 +18,21 @@ void main() {
       //       EnrollParams.metadata, authenticated self-retrofit auto-approve)
       //       is unavailable, so alice1 ABORTS CLEANLY, stays legacy, mints no
       //       PQ keys, and logs why. No partial state on the server.
-      fail('not implemented');
-    }, skip: rfSrv);
+      provenIn(
+          'tests/at_end2end_test/test/pq/legacy_server_abort_test.dart',
+          'UC-B0.1: the upgrade aborts cleanly',
+          proves: 'all five clauses against a PINNED pre-PQ atServer '
+              '(vip-p3.15.0): the upgrade throws AtEnrollmentException naming '
+              'the missing auto-approve, the keyfile keeps its RSA APKAM and '
+              'gains no typed material, and the server is left with no signing '
+              'root and no pending enrollment');
+      provenIn(
+          'tests/at_end2end_test/test/pq/legacy_server_abort_test.dart',
+          'UC-B0.1: a scoped parent cannot tidy up',
+          proves: 'the limit of the cleanup, asserted rather than hidden: a '
+              'parent without __manage cannot deny its own aborted request, '
+              'and the refusal says so instead of implying the server is '
+              'clean');
+    });
   });
 }

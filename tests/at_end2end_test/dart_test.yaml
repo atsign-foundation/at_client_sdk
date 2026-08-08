@@ -40,3 +40,9 @@ tags:
   # under test/pq/ carries it, which makes `dart test test -x pq` a way to run
   # the non-PQ set over a directory rather than over this list.
   pq:
+  # The one row that needs a PINNED pre-PQ atServer rather than the current
+  # image: UC-B0.1 asserts a PQ client REFUSES to upgrade against a legacy
+  # server, so a current image would make it meaningless rather than red.
+  # `pqe2e_tests` excludes it (-x legacy-server); `legacy_server_tests` runs
+  # it alone against atsigncompany/virtualenv:vip-p3.15.0.
+  legacy-server:

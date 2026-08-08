@@ -11,6 +11,14 @@ set -euo pipefail
 #   ./runLocal.sh 26000 test/pq        # post-quantum only
 #   ./runLocal.sh 26000 test -x pq     # everything except post-quantum
 #
+# The default EXCLUDES the `legacy-server` tag, because that row (UC-B0.1)
+# wants a PINNED PRE-PQ atServer and this script defaults to the newest local
+# build. Against a post-quantum image it does not fail usefully — it stops
+# testing anything. Run it deliberately, with the pin:
+#
+#   VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip-p3.15.0 \
+#     ./runLocal.sh 26000 test/pq -t legacy-server
+#
 # The default path argument is `test`, which recurses into test/pq/ — so a bare
 # run covers both sets. CI does NOT do that: `dart_test.yaml` allowlists the
 # files a bare `dart test` may run, and the post-quantum ones are deliberately
@@ -25,7 +33,7 @@ shift || true
 # `A && B` as a bare statement under `set -e` exits the script whenever A is
 # false, so the default goes in an if.
 if [[ $# -eq 0 ]]; then
-  TEST_PATHS=("test")
+  TEST_PATHS=("test" "-x" "legacy-server")
 else
   TEST_PATHS=("$@")
 fi
