@@ -1,4 +1,28 @@
 ## 3.4.0
+- feat: a CRAM activation can be **PQ-native**. Setting
+  `AtOnboardingRequest.signingAlgoType` to `mldsa65` mints an ML-DSA-65 APKAM
+  instead of an RSA one and files it as **typed material** under the enrollment
+  id the atServer assigns, leaving the flat `apkamPublicKey`/`apkamPrivateKey`
+  fields empty. `AtAuthImpl.authenticate` already prefers the typed path, so
+  every later connection resolves the algorithm from the keyfile with nothing
+  caller-supplied anywhere.
+  Empty flat fields are the point: a reader that calls `AtKeys.toAtChops()`
+  gets a loud failure rather than an ML-DSA key signed with the RSA routine.
+  That is also why this is **opt-in** rather than the default — it is a
+  behaviour change no minor release may impose on existing consumers, and the
+  SDK's own onboarding path is what opts in.
+- feat: `AtOnboardingRequest.mintLegacyMaterial`, an **opt-out**. Null resolves
+  to true, not false: legacy material is retained until the *ecosystem* is
+  post-quantum, not until this atSign is, and whether a brand-new atSign will
+  ever need a legacy peer is decided by the apps that adopt it. Set false and
+  no RSA encryption keypair, `selfEncryptionKey` or `apkamSymmetricKey` is cut
+  and **`public:publickey` is not published** — publishing an absent key would
+  be worse than publishing nothing, since a legacy peer would encrypt to it and
+  produce ciphertext nobody can read. The CRAM secret is deleted either way.
+- feat: `AtOnboardingRequest.metadataBuilder`, so a first enrollment can
+  advertise a key package. `metadata.keyPackage` is written by the request that
+  creates the enrollment record and never again, so activation is the only
+  moment it can be set at all.
 - feat: `FirstEnrollmentRequest` carries `signingAlgo` and `metadataBuilder`,
   so the enrollment CRAM onboarding submits can be PQ-native from activation
   rather than only after a retrofit. `signingAlgo` defaults to `rsa2048` and an

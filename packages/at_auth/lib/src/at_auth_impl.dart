@@ -15,6 +15,8 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
+import 'package:at_auth/src/keys/onboarding_mint.dart';
+import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
@@ -232,20 +234,42 @@ class AtAuthImpl implements AtAuth {
       );
     }
     //2. generate key pairs
+    OnboardingMint? mint;
     if (atOnboardingRequest.atKeys != null) {
       _atAuthKeys = atOnboardingRequest.atKeys!;
     } else {
       //2a. if there is no specified implementation we're defaulting to FileAtKeysIo with a default file path
       atOnboardingRequest.atKeysIo ??= FileAtKeysIo();
-      switch (atOnboardingRequest.atKeysIo) {
-        case WrittenAtKeysIo writtenKeys:
-          _atAuthKeys = writtenKeys.generateKeyPairs();
-        default:
-          throw AtAuthenticationException(
-              'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');
+      if (atOnboardingRequest.atKeysIo is! WrittenAtKeysIo) {
+        throw AtAuthenticationException(
+            'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');
       }
+      mint = await mintOnboardingKeys(
+          signingAlgo: atOnboardingRequest.signingAlgoType,
+          // Null resolves to the release default, not to false: legacy
+          // material is retained until the ecosystem is PQ, not until this
+          // atSign is.
+          mintLegacyMaterial: atOnboardingRequest.mintLegacyMaterial ?? true);
+      _atAuthKeys = mint.keys;
     }
-    atChops ??= _atAuthKeys.toAtChops();
+
+    // A PQ-native activation authenticates with the keypair just minted, which
+    // is not in the flat fields toAtChops() reads — and the enrollment it will
+    // be filed under does not exist yet, so toAtChopsForEnrollment() has
+    // nothing to resolve either. Build the chops from the minted halves
+    // directly, and name the algorithm: at_lookup defaults to rsa2048 and
+    // would otherwise sign an ML-DSA key with the RSA routine.
+    if (mint != null &&
+        atOnboardingRequest.signingAlgoType != SigningAlgoType.rsa2048) {
+      atChops ??= AtChopsImpl(AtChopsKeys.create(
+          null, AtPkamKeyPair.create(mint.apkamPublicKey, mint.apkamPrivateKey))
+        ..selfEncryptionKey = _atAuthKeys.defaultSelfEncryptionKey == null
+            ? null
+            : AESKey(_atAuthKeys.defaultSelfEncryptionKey!.toString()));
+      atLookUp!.signingAlgoType = atOnboardingRequest.signingAlgoType;
+    } else {
+      atChops ??= _atAuthKeys.toAtChops();
+    }
     atLookUp!.atChops = atChops;
 
     //3. send onboarding enrollment
@@ -256,6 +280,7 @@ class AtAuthImpl implements AtAuth {
       atOnboardingRequest,
       _atAuthKeys,
       atLookUp!,
+      mint,
     );
     _atAuthKeys.enrollmentId = enrollmentIdFromServer;
 
@@ -357,17 +382,34 @@ class AtAuthImpl implements AtAuth {
   @override
   Future<void> completeActivation() async {
     final encryptionPublicKey = _atAuthKeys.defaultEncryptionPublicKey;
-    UpdateVerbBuilder updateBuilder = UpdateVerbBuilder()
-      ..atKey = (AtKey()
-        ..key = 'publickey'
-        ..sharedBy = _atOnboardingRequest.atSign
-        ..metadata = (Metadata()
-          ..isPublic = true
-          ..ttr = -1))
-      ..value = encryptionPublicKey;
-    String? encryptKeyUpdateResult = await atLookUp!.executeVerb(updateBuilder);
-    _logger.info('Encryption public key update result $encryptKeyUpdateResult');
+    // Absent only when the caller opted out of legacy material. Publishing
+    // "null" would be worse than publishing nothing: a legacy peer would find
+    // a key, encrypt to it, and produce ciphertext nobody can ever read —
+    // whereas an absent publickey tells them plainly that this atSign has no
+    // legacy path.
+    if (encryptionPublicKey != null) {
+      UpdateVerbBuilder updateBuilder = UpdateVerbBuilder()
+        ..atKey = (AtKey()
+          ..key = 'publickey'
+          ..sharedBy = _atOnboardingRequest.atSign
+          ..metadata = (Metadata()
+            ..isPublic = true
+            ..ttr = -1))
+        ..value = encryptionPublicKey;
+      String? encryptKeyUpdateResult =
+          await atLookUp!.executeVerb(updateBuilder);
+      _logger
+          .info('Encryption public key update result $encryptKeyUpdateResult');
+    } else {
+      _logger.info(
+          'No encryption keypair was minted for ${_atOnboardingRequest.atSign}, '
+          'so public:publickey is not published: a legacy peer cannot send to '
+          'this atSign, which is what mintLegacyMaterial:false asks for');
+    }
 
+    // Unconditional: the CRAM secret is a one-shot activation credential and
+    // leaving it in the keystore is a live path back into the atSign,
+    // whichever material was minted.
     DeleteVerbBuilder deleteBuilder = DeleteVerbBuilder()
       ..atKey = (AtKey()..key = AtConstants.atCramSecret);
     String? deleteResponse = await atLookUp!.executeVerb(deleteBuilder);
@@ -377,14 +419,34 @@ class AtAuthImpl implements AtAuth {
   Future<String> _sendOnboardingEnrollment(
       AtOnboardingRequest atOnboardingRequest,
       AtKeys atAuthKeys,
-      AtLookUp atLookup) async {
-    _logger.finer('apkamPublicKey: ${atAuthKeys.apkamPublicKey}');
+      AtLookUp atLookup,
+      OnboardingMint? mint) async {
+    final signingAlgo = atOnboardingRequest.signingAlgoType;
+    final apkamPublicKey =
+        mint?.apkamPublicKey ?? atAuthKeys.apkamPublicKey!.toString();
+    _logger.finer('apkamPublicKey: $apkamPublicKey');
+
+    // The builder signs with the APKAM keypair and files what it mints back
+    // into the keys it is handed. Those are construction keys, not
+    // _atAuthKeys: the flat APKAM fields have to be populated for the builder
+    // to read, and on a PQ-native activation they must NOT survive into the
+    // keyfile. What the builder adds is re-tagged onto _atAuthKeys below,
+    // once the enrollment id it belongs to exists.
+    final constructionKeys = mint == null
+        ? null
+        : (AtKeys()
+          ..apkamPublicKey = AtBytes.fromString(mint.apkamPublicKey)
+          ..apkamPrivateKey = AtBytes.fromString(mint.apkamPrivateKey)
+          ..defaultEncryptionPublicKey = atAuthKeys.defaultEncryptionPublicKey);
 
     FirstEnrollmentRequest firstEnrollmentRequest = FirstEnrollmentRequest(
         atSign: atOnboardingRequest.atSign,
         appName: atOnboardingRequest.appName,
         deviceName: atOnboardingRequest.deviceName,
-        apkamPublicKey: atAuthKeys.apkamPublicKey!.toString());
+        apkamPublicKey: apkamPublicKey,
+        signingAlgo: signingAlgo,
+        metadataBuilder: atOnboardingRequest.metadataBuilder,
+        atKeys: constructionKeys);
 
     AtEnrollmentResponse? atEnrollmentResponse;
     try {
@@ -400,7 +462,61 @@ class AtAuthImpl implements AtAuth {
       throw AtAuthenticationException(
           'initial enrollment is not approved. Status from server: $enrollmentStatus \n with $atEnrollmentResponse');
     }
+
+    if (constructionKeys != null) {
+      _fileFirstEnrollmentMaterial(atAuthKeys, constructionKeys, mint!,
+          signingAlgo, enrollmentIdFromServer);
+    }
     return enrollmentIdFromServer;
+  }
+
+  /// Files the first enrollment's key material under the id the atServer just
+  /// assigned.
+  ///
+  /// A PQ-native activation's APKAM goes in as typed material — the flat
+  /// fields stay empty, so `AtAuthImpl.authenticate` resolves this enrollment
+  /// through `signingAlgorithmForEnrollment` / `toAtChopsForEnrollment` and
+  /// signs ML-DSA with no caller-supplied algorithm anywhere. An `rsa2048`
+  /// activation already wrote its APKAM to the flat fields and adds nothing
+  /// here, which is what keeps a legacy keyfile byte-identical.
+  ///
+  /// Whatever the metadataBuilder minted — the key package's two halves —
+  /// is re-tagged with the enrollment id either way. It is the only copy of
+  /// that private half in existence.
+  void _fileFirstEnrollmentMaterial(
+      AtKeys atAuthKeys,
+      AtKeys constructionKeys,
+      OnboardingMint mint,
+      SigningAlgoType signingAlgo,
+      String enrollmentId) {
+    final now = DateTime.now().toUtc();
+    if (signingAlgo != SigningAlgoType.rsa2048) {
+      atAuthKeys.addKey(AtKeysMaterial(
+          keyId: 'apkam:$enrollmentId',
+          enrollmentId: enrollmentId,
+          keyPartType: CryptographicKeyType.privateSigning,
+          keyAlgorithmType: signingAlgo.name,
+          bytes: AtBytes.fromString(mint.apkamPrivateKey),
+          createdAt: now));
+      atAuthKeys.addKey(AtKeysMaterial(
+          keyId: 'apkam:$enrollmentId',
+          enrollmentId: enrollmentId,
+          keyPartType: CryptographicKeyType.publicVerification,
+          keyAlgorithmType: signingAlgo.name,
+          bytes: AtBytes.fromString(mint.apkamPublicKey),
+          createdAt: now));
+    }
+    for (final material in constructionKeys.keys) {
+      atAuthKeys.addKey(AtKeysMaterial(
+          keyId: material.keyId,
+          enrollmentId: enrollmentId,
+          keyPartType: material.keyPartType,
+          keyAlgorithmType: material.keyAlgorithmType,
+          bytes: material.bytes,
+          operations: material.operations,
+          createdAt: material.createdAt,
+          status: material.status));
+    }
   }
 
   Future<void> _defaultProbeSocket(String host, int port) async {
