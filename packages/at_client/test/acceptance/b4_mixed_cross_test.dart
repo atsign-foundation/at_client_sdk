@@ -23,7 +23,7 @@ void main() {
       // THEN  the write fails cold start BY NAME, unless the app opted into
       //       allowLegacyCryptoFallback — in which case it goes out legacy,
       //       stamped as such on the record. Never a silent downgrade.
-      provenIn('tests/at_end2end_test/test/nskey_recipient_not_ready_test.dart',
+      provenIn('tests/at_end2end_test/test/pq/nskey_recipient_not_ready_test.dart',
           'UC-A4.2: a share to a recipient with no namespace key fails, naming ',
           proves: 'an active-PQ alice writing toward a bob who never enabled '
               'the namespace is refused with an exception naming @bob and the '
@@ -79,7 +79,7 @@ void main() {
       //       detect (decisions 36). What the SDK guarantees: alice2's own
       //       legacy writes still work, nothing becomes unreadable to anyone,
       //       and alice2's upgrade is purely additive.
-      provenIn('tests/at_end2end_test/test/nskey_cross_atsign_test.dart',
+      provenIn('tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart',
           'alice shares with bob, and bob reads it with his own nskey private',
           proves: 'the active install\'s cross-atSign write takes the nskey '
               'data path against a live pair — the half of the row the SDK '
@@ -100,7 +100,7 @@ void main() {
       // THEN  alice's next ensureCurrent re-plookup finds the advertisement
       //       and the write goes via the nskey data path — cold start ends for
       //       bob with no action from alice.
-      provenIn('tests/at_end2end_test/test/nskey_cross_atsign_test.dart',
+      provenIn('tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart',
           'alice shares with bob, and bob reads it with his own nskey private',
           proves: 'with bob\'s key published, alice\'s write is discovered by '
               'plookup, sealed to bob\'s advertised generation, and bob opens '

@@ -23,7 +23,7 @@ void main() {
       //       unauthorised @bob enrollment can neither fetch the ciphertext
       //       (server-gated) nor decrypt it.
       provenIn(
-        'tests/at_end2end_test/test/nskey_cross_atsign_test.dart',
+        'tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart',
         'alice shares with bob, and bob reads it with his own nskey private',
         proves:
             'bob opens the CK with HIS nskey private on an alice-owned record, and the same test asserts alice cannot decapsulate the CK she sealed to him',
@@ -46,7 +46,7 @@ void main() {
       //       uses or authorises the namespace his nskey is published and
       //       alice's next ensureCurrent picks it up by plookup.
       provenIn(
-        'tests/at_end2end_test/test/nskey_recipient_not_ready_test.dart',
+        'tests/at_end2end_test/test/pq/nskey_recipient_not_ready_test.dart',
         'UC-A4.2: a share to a recipient with no namespace key fails, naming',
         proves: 'against a namespace unique to the run — so @bob has genuinely '
             'never used it — the send fails with an exception naming both @bob '
@@ -64,7 +64,7 @@ void main() {
       //       authorised enrollments read the self-copy; no authorised
       //       enrollment is left unable to decrypt.
       provenIn(
-        'tests/at_end2end_test/test/nskey_multi_enrollment_test.dart',
+        'tests/at_end2end_test/test/pq/nskey_multi_enrollment_test.dart',
         'UC-A4.3: every authorised enrollment of the recipient reads the share',
         proves: 'a second, genuinely distinct APKAM enrollment of @bob — its '
             'own enrollment id, APKAM keypair and client, asserted not '
@@ -89,7 +89,7 @@ void main() {
       //       the queued notification; appMetadata is present on the frame;
       //       signal-only notifications are unaffected.
       provenIn(
-        'tests/at_end2end_test/test/concurrent_notify_test.dart',
+        'tests/at_end2end_test/test/pq/nskey_notify_test.dart',
         'UC-A4.4: providerId travels on the frame and bob decrypts by it',
         proves:
             'providerId is read off the notification frame bob\'s monitor delivered, and the value decrypts through the nskey route',

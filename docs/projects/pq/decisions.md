@@ -3596,7 +3596,7 @@ code path does it.
 ## 45. The retrofit rows, and the five defects the first end-to-end run found (2026-08-05)
 
 UC-B1.1/B1.2/B1.3 and UC-B2.1/B2.2 are green, proven live in
-`tests/at_end2end_test/test/retrofit_e2e_test.dart` and
+`tests/at_end2end_test/test/pq/retrofit_e2e_test.dart` and
 `retrofit_retirement_e2e_test.dart`. The burn-down reads **33 of 40**.
 
 The rows are what RF-2c owed. Writing them found **five defects**, none of which

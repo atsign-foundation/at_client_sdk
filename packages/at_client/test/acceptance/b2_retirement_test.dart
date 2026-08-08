@@ -22,7 +22,7 @@ void main() {
       //       was explicitly revoked) and alice1b never minted its own PQ
       //       keypair; alice1b must re-enroll.
       provenIn(
-        'tests/at_end2end_test/test/retrofit_retirement_e2e_test.dart',
+        'tests/at_end2end_test/test/pq/retrofit_retirement_e2e_test.dart',
         'UC-B2.1/B2.2: the retrofit caps its parent',
         proves:
             'a copy of the pre-PQ keyfile taken before the retrofit, and never '
@@ -43,7 +43,7 @@ void main() {
       //       the cap elapses; after the cap, UC-B2.1 applies. The bypass being
       //       open during the window is an explicit trade-off.
       provenIn(
-        'tests/at_end2end_test/test/retrofit_retirement_e2e_test.dart',
+        'tests/at_end2end_test/test/pq/retrofit_retirement_e2e_test.dart',
         'UC-B2.1/B2.2: the retrofit caps its parent',
         proves:
             'the cap IS the configured grace: that atSign\'s atServer runs a '
@@ -52,7 +52,7 @@ void main() {
             'normally — so the window is what decides, not the retrofit alone',
       );
       provenIn(
-        'tests/at_end2end_test/test/retrofit_e2e_test.dart',
+        'tests/at_end2end_test/test/pq/retrofit_e2e_test.dart',
         'UC-B1.2: a clone of the same pre-PQ keyfile gets its OWN enrollment',
         proves: 'the other half of the window: while the grace is open (the '
             'default 720h on that atSign) a sibling clone of the same keyfile '

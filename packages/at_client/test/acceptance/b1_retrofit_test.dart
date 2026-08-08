@@ -26,7 +26,7 @@ void main() {
       //       legacy encryption key is retained so history stays readable. No
       //       re-onboarding.
       provenIn(
-        'tests/at_end2end_test/test/retrofit_e2e_test.dart',
+        'tests/at_end2end_test/test/pq/retrofit_e2e_test.dart',
         'UC-B1.1: a privileged retrofit mints the signing root in-flow',
         proves:
             'the retrofit publishes public:pq_signing_root in-flow (nothing in '
@@ -44,7 +44,7 @@ void main() {
             'be refused)',
       );
       provenIn(
-        'tests/at_end2end_test/test/retrofit_retirement_e2e_test.dart',
+        'tests/at_end2end_test/test/pq/retrofit_retirement_e2e_test.dart',
         'UC-B2.1/B2.2: the retrofit caps its parent',
         proves:
             'the legacy enrollment is capped and ages out rather than being '
@@ -62,7 +62,7 @@ void main() {
       //       under E1), then requests the signing-root private, verifies
       //       public/private correspondence, and stores.
       provenIn(
-        'tests/at_end2end_test/test/retrofit_e2e_test.dart',
+        'tests/at_end2end_test/test/pq/retrofit_e2e_test.dart',
         'UC-B1.2: a clone of the same pre-PQ keyfile gets its OWN enrollment',
         proves:
             'two clones of one pre-PQ keyfile reach DISTINCT enrollment ids '
@@ -81,7 +81,7 @@ void main() {
       //       for NAMESPACED secrets — a restricted E2 receives only its
       //       authorised subset of nskey keys.
       provenIn(
-        'tests/at_end2end_test/test/retrofit_e2e_test.dart',
+        'tests/at_end2end_test/test/pq/retrofit_e2e_test.dart',
         'UC-B1.3: a scoped enrollment retrofits without touching the signing',
         proves: 'a scoped parent cannot escalate to * and __manage on the way '
             'through; its retrofit succeeds and upgrades to ML-DSA; and the '

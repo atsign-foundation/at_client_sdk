@@ -304,12 +304,12 @@ void main() {
             'live atServer, with no legacy provider involved',
       );
       provenIn(
-        'tests/at_end2end_test/test/nskey_cross_atsign_test.dart',
+        'tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart',
         'alice shares with bob, and bob reads it with his own nskey private',
         proves: 'the shared path is the same two providers across atSigns',
       );
       provenIn(
-        'tests/at_end2end_test/test/concurrent_notify_test.dart',
+        'tests/at_end2end_test/test/pq/nskey_notify_test.dart',
         'UC-A4.4: providerId travels on the frame and bob decrypts by it',
         proves: 'and the notification path routes by the same provider id',
       );
@@ -385,7 +385,7 @@ void main() {
             'key as controls, so the absence is a real absence',
       );
       provenIn(
-        'tests/at_end2end_test/test/nskey_cross_atsign_test.dart',
+        'tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart',
         'alice shares with bob, and bob reads it with his own nskey private',
         proves: 'alice resolves bob\'s published nskey across atSigns before '
             'she can seal to it, which is the cross-atSign fetch half',
@@ -427,7 +427,7 @@ void main() {
             'depend on returns the enrollments authorised for the namespace',
       );
       provenIn(
-        'tests/at_end2end_test/test/nskey_cross_atsign_test.dart',
+        'tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart',
         'alice shares with bob, and bob reads it with his own nskey private',
         proves: 'and the nskey half of the same claim on the live wire — an '
             'advertised encapsulation key verified against its signer before '

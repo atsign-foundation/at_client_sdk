@@ -1109,7 +1109,7 @@ connection, the monitor, sync, and `wrapAndSign`; key-package adoption is
 enrollment-scoped. The 20.3 kpid staleness is discharged by construction (a
 switch builds a NEW `(atSign, enrollmentId)` client; the enrollment never
 changes under a live one). The **UC-B1.x and UC-B2.x e2e rows are green** —
-`tests/at_end2end_test/test/retrofit_e2e_test.dart` and
+`tests/at_end2end_test/test/pq/retrofit_e2e_test.dart` and
 `retrofit_retirement_e2e_test.dart`: the signing-root step in-flow (privileged
 mint, clone request+verify, scoped skip), two clones of one pre-PQ keyfile
 reaching distinct enrollment ids, and the capped legacy enrollment refused with
@@ -1951,3 +1951,81 @@ Asserted, rather than merely noted, in the opt-out arm of
 `tests/at_functional_test/test/pq_legacy_interop_live_test.dart`: it expects the
 public write to fail with that exact reason, so whichever project fixes this
 gets a red test naming the row that was waiting for it.
+
+### 14.13 A passive-by-default flag: surveyed, not built
+
+The branch's default behaviour should be **passive** — a client built with a
+default `AtClientPreference` should read and route post-quantum records but
+never write one on its own initiative. Today it does write: `_apsk` publishes,
+`__ssenv` envelopes and their notifications, envelope deletes, and two kinds of
+`_apsk` `appMetadata` rewrite, on every client start.
+
+**This is NOT required to protect the cicd atServers** — that is done, by
+segregating the PQ e2e tests ([14.15](#1415-pre-pr-rails-checklist)). It was
+established empirically that no non-PQ e2e test writes PQ material: every active
+write is downstream of the client holding an `AtKeysIo`, and the e2e harness
+builds ordinary clients through `setCurrentAtSign` without one, so they log
+*"Not sweeping chain links: this client has no registered key package to seal
+conveyances from"* and do nothing. The flag is a **merge property** — it makes
+the branch inert for every existing consumer — not a pollution fix.
+
+The survey, so it is not repeated. Everything active hangs off
+`AtClientImpl._fileConveyedKeysAndAnchor()` (ungated) and `_seedNamespaceKeys()`
+(already gated by `seedNamespaceKeys`, default false). Do **not** gate the whole
+of the former: two of its steps are preconditions for *reads*, and gating them
+breaks decryption rather than quietening writes —
+- the `collectConveyedKeyMaterial` sweep is the only route by which a conveyed
+  nskey private reaches the keyfile, and
+- `bindKeyPackageToAtKeys` (one production call site, inside it) is what stops
+  the client minting a fresh enc keypair per process and advertising a `kpid`
+  its enrollment record does not name.
+
+Gate instead at the individual call sites — the signing-root request, the
+missing-private requests, both chain-link publishes, the unanchored sweep, the
+`publishPublicSigningKey` inside `register()`, the read-path
+`_askForMissingPrivate` conveyance hook — and leave `_adoptEraCryptoDefault()`
+alone, which writes nothing. Approve-side conveyance is *reactive* (it fires
+only because an enrollee advertised a key package) and should stay: refusing
+would approve a device that can decrypt nothing. Explicitly-invoked entry points
+(`pqNativeOnboard`, `selfRetrofit`, `mintSigningRootAfterActivation`) are the
+opt-in and need no gate.
+
+Blast radius if it lands: the live packs' two shared preference helpers plus one
+inline `AtOnboardingPreference` cover every test that needs it on. Watch for the
+two tests that would go **vacuously green** rather than red — the absence arms
+of `signing_root_pull_two_enrollments_test` and `nskey_rotation_live_test`.
+
+### 14.14 A client with no enrollment id is treated as fully privileged
+
+`AtClientImpl._resolveFullPrivilege()` returns **true unconditionally when
+`enrollmentId == null`**, and `ApkamSigning.enrollmentId` substitutes the
+sentinel `'primary'` when there is none. So a legacy PKAM client that happens to
+hold an `AtKeysIo` publishes `public:_apsk.primary.a.__e@<atSign>` and signs
+approval-chain links as `"primary"`.
+
+Found while surveying for [14.13](#1413-a-passive-by-default-flag-surveyed-not-built),
+and worth separating from it: a flag would *hide* this rather than resolve it.
+The question is whether an owner-keys client should be in the enrollment trust
+chain at all, and if so under what identity — `'primary'` is a name no
+enrollment record carries.
+
+### 14.15 Pre-PR rails checklist
+
+No PR opens against this branch until the published atServer image verifies
+ML-DSA PKAM (owner's call, 2026-08-08). Two things must be true by then, and
+neither is today:
+
+1. **`tests/at_functional_test/test/docker-compose.yaml` has
+   `image: at_virtual_env:local` COMMITTED** (trunk has the published image).
+   CI runs `docker compose pull`, which exits 1 on a name no registry serves, so
+   the functional job dies before any test runs. The e2e and CLI packs were
+   converted to `${VIRTUALENV_IMAGE:-atsigncompany/virtualenv:vip}` — committed
+   default published, local runs opt in — and this pack wants the same
+   treatment. Its `runLocal.sh` carries the matching pull-skip, also committed.
+2. **The `pqe2e_tests` CI job is written but UNVERIFIED.** Nothing has run it
+   end to end, because no published image supports the tests it runs. Run it
+   once the image lands, before trusting it. An image without PQ support fails
+   at authentication with a server-side
+   `AT0010-Exception: RangeError (length): Invalid value: Not in inclusive range 0..47: 48`
+   from `AtLookupImpl.pkamAuthenticate` — that signature means the image, not
+   the client.
