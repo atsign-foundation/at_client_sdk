@@ -1,4 +1,15 @@
 ## 3.14.1
+- feat: `makeActivationPqNative` and `mintSigningRootAfterActivation`, exported
+  from `at_client_mixins.dart` — the two halves of a post-quantum activation,
+  for a caller that builds its own onboarding request (`at_onboarding_cli`
+  carries retry options, a keyfile path and its own completion step, so it
+  cannot just call `pqNativeOnboard`). `pqNativeOnboard` is now those two plus
+  the CRAM onboard, so there is one definition of what "PQ-native" means rather
+  than two that can drift.
+  Stamping is deliberately all-or-nothing: setting `signingAlgoType` alone
+  mints an ML-DSA APKAM with **no key package**, and `metadata.keyPackage` is
+  written by the `enroll:request` that creates the enrollment record and never
+  again — so such an atSign could never be repaired, only abandoned.
 - fix: the signing-root and nskey-private filing paths persist through
   `AtKeysIo.update` rather than a hand-rolled `read` → mutate → `flush`. A
   client's start fires the namespace-key seeding and the conveyed-key filing as

@@ -1,17 +1,82 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
+import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart'
     show PqSigningRoot;
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
     show enrollmentKeyPackageBuilder;
+import 'package:at_client/src/secret_sharing/algo_ids.dart'
+    show SecretSharingAlgos;
 import 'package:at_commons/at_commons.dart'
     show AtClientException, AtRootDomain;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('pqNativeOnboard');
+
+/// Stamps [request] with everything that makes an activation **PQ-native**:
+/// an ML-DSA-65 APKAM, and the first enrollment's key package advertised on the
+/// `enroll:request` that creates the record.
+///
+/// Exists so that a caller with its own activation flow — `at_onboarding_cli`
+/// builds a request carrying retry options, a keyfile path and its own
+/// completion step — becomes PQ-native by one call rather than by copying three
+/// assignments. Copying them is the failure mode this prevents: setting only
+/// `signingAlgoType` mints an ML-DSA APKAM with **no key package**, and
+/// `metadata.keyPackage` is written by the `enroll:request` that creates the
+/// enrollment record and never again — so that atSign could never be repaired,
+/// only abandoned.
+///
+/// [keyEstablishmentAlgo] is read from the caller's preference rather than
+/// resolved here, because the builder runs before any client exists. It is
+/// frozen at this call for the life of the enrollment.
+///
+/// Deliberately says nothing about [AtOnboardingRequest.mintLegacyMaterial]:
+/// whether an atSign keeps legacy material is a separate decision from whether
+/// its APKAM is post-quantum, and silently resetting a caller's opt-out would
+/// be worse than making them state it.
+@experimental
+void makeActivationPqNative(
+  AtOnboardingRequest request, {
+  required String atSign,
+  String keyEstablishmentAlgo = SecretSharingAlgos.xWing,
+}) {
+  request
+    ..signingAlgoType = SigningAlgoType.mldsa65
+    ..metadataBuilder = enrollmentKeyPackageBuilder(atSign,
+        signingAlgo: SigningAlgoType.mldsa65,
+        keyEstablishmentAlgo: keyEstablishmentAlgo);
+}
+
+/// Creates the atSign-level ML-DSA-65 signing root at
+/// `public:pq_signing_root@<atSign>`, if it is not already there.
+///
+/// Runs inside its own guard, and swallows. By the time this is called the
+/// activation has already succeeded — the atSign is onboarded and usable — and
+/// a root minted later heals nothing worse than a delay, since a start-time
+/// pull and a re-run both retry it. Failing the caller over it would leave a
+/// live atSign reported as unactivated, with a CRAM secret already spent and no
+/// way to run the activation again.
+///
+/// [client] must be authenticated as the atSign's **first** enrollment, which
+/// the atServer grants `__manage` — that is what entitles it to create the root
+/// at all.
+@experimental
+Future<void> mintSigningRootAfterActivation(
+  AtClient client, {
+  required AtKeysIo atKeysIo,
+}) async {
+  try {
+    await PqSigningRoot(client, keysIo: atKeysIo)
+        .mintIfAbsent(isFullyPrivileged: true);
+  } catch (e) {
+    _logger.warning('${client.getCurrentAtSign()} activated but its '
+        'signing-root step did not complete; a start-time pull or a later '
+        'mint retries it: $e');
+  }
+}
 
 /// CRAM-activates a brand-new atSign **PQ-native** and hands back a manager
 /// whose current client runs under its first enrollment.
@@ -69,15 +134,10 @@ Future<AtClientManager> pqNativeOnboard({
     // its namespace, and a client built without one runs none of them while
     // looking perfectly healthy.
     ..namespace = preference.namespace
-    // Mints the ML-DSA APKAM and files it as typed material.
-    ..signingAlgoType = SigningAlgoType.mldsa65
-    ..mintLegacyMaterial = mintLegacyMaterial
-    // The KEM is read from the preference here rather than inside the builder
-    // because the builder runs before any client exists and cannot resolve
-    // one. It is frozen at this call for the life of the enrollment.
-    ..metadataBuilder = enrollmentKeyPackageBuilder(atSign,
-        signingAlgo: SigningAlgoType.mldsa65,
-        keyEstablishmentAlgo: preference.keyEstablishmentAlgo);
+    ..mintLegacyMaterial = mintLegacyMaterial;
+  // Mints the ML-DSA APKAM and advertises the first enrollment's key package.
+  makeActivationPqNative(request,
+      atSign: atSign, keyEstablishmentAlgo: preference.keyEstablishmentAlgo);
 
   final response =
       await (atAuth ?? AtAuth.create()).onboard(request, cramSecret);
@@ -90,13 +150,7 @@ Future<AtClientManager> pqNativeOnboard({
   final switched = await (manager ?? AtClientManager.getInstance())
       .fromAuthSession(response.session!, preference);
 
-  try {
-    await PqSigningRoot(switched.atClient, keysIo: atKeysIo)
-        .mintIfAbsent(isFullyPrivileged: true);
-  } catch (e) {
-    _logger.warning('$atSign activated but its signing-root step did not '
-        'complete; a start-time pull or a later mint retries it: $e');
-  }
+  await mintSigningRootAfterActivation(switched.atClient, atKeysIo: atKeysIo);
 
   return switched;
 }
