@@ -1,4 +1,16 @@
 ## 3.4.0
+- feat: `WrittenAtKeysIo.update(atsign, mutate)` — read, mutate and persist as
+  **one** operation, and the call an addition should now go through instead of
+  a hand-rolled `read` → mutate → `flush`. Those three steps interleave: two
+  callers running concurrently both read the same state, and the second
+  `flush` presents a candidate missing the first's addition. `flush` is right
+  to refuse it — nothing may be lost — so the outcome is a thrown assurance
+  exception and one addition silently gone. `FileAtKeysIo` holds its keyfile
+  lock across all three steps, which serialises coroutines inside one process
+  as well as separate processes; the default on the interface is
+  read/mutate/flush, no worse than the form it replaces. The mutation returns
+  whether anything changed, so a caller that finds the material already there
+  — re-delivery is the substrate's normal mode — writes nothing.
 - feat: a CRAM activation can be **PQ-native**. Setting
   `AtOnboardingRequest.signingAlgoType` to `mldsa65` mints an ML-DSA-65 APKAM
   instead of an RSA one and files it as **typed material** under the enrollment

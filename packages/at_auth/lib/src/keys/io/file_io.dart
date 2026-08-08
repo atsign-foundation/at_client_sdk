@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -55,23 +56,51 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     // discards the first's addition. Several CLI apps sharing one keyfile is
     // the ordinary deployment, not an edge (`at_client_sdk`
     // docs/projects/pq/decisions.md 38.4).
+    await AtKeysFileLock(file.path)
+        .synchronized(() => _writeValidated(file, atsign, atKeys));
+  }
+
+  /// Read, mutate and write inside **one** hold of the lock.
+  ///
+  /// [flush] alone cannot close the window this closes: a caller that reads
+  /// outside the lock and flushes inside it has already taken its snapshot by
+  /// the time the lock is acquired, so a sibling that flushed in between is
+  /// missing from its candidate and assurance refuses the write. Holding the
+  /// lock across the read is what makes the mutation see the state it is
+  /// about to replace. The lock is a lock file, so this serialises coroutines
+  /// within one process as well as separate processes — which is the case
+  /// that bites, since a client fires the namespace-key seeding and the
+  /// conveyed-key filing as sibling unawaited tasks.
+  @override
+  Future<void> update(
+      Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
+    final file = File(filePath!(atsign));
     await AtKeysFileLock(file.path).synchronized(() async {
-      final document = await _encodeAtRest(atKeys, atsign);
-
-      if (!file.existsSync()) {
-        await _writeAtRestDocument(file, document);
-        return;
-      }
-
-      assurance.validateMapUpdate(
-        existing: await _readAtRestDocument(file),
-        candidate: document,
-      );
-      // Keep the previous state recoverable as .bak. A copy, not a rename, so
-      // the live keyfile exists at every instant of the flush.
-      await file.copy('${file.path}.bak');
-      await _writeAtRestDocument(file, document);
+      final keys = await read(atsign.toString());
+      if (await mutate(keys) == false) return;
+      await _writeValidated(file, atsign, keys);
     });
+  }
+
+  /// The flush body, without the lock — so [update] can hold the lock across
+  /// its own read as well. `AtKeysFileLock` is not reentrant: calling [flush]
+  /// from inside [update] would wait on a lock this call already holds.
+  Future<void> _writeValidated(File file, Atsign atsign, AtKeys atKeys) async {
+    final document = await _encodeAtRest(atKeys, atsign);
+
+    if (!file.existsSync()) {
+      await _writeAtRestDocument(file, document);
+      return;
+    }
+
+    assurance.validateMapUpdate(
+      existing: await _readAtRestDocument(file),
+      candidate: document,
+    );
+    // Keep the previous state recoverable as .bak. A copy, not a rename, so
+    // the live keyfile exists at every instant of the flush.
+    await file.copy('${file.path}.bak');
+    await _writeAtRestDocument(file, document);
   }
 
   Future<Map<String, dynamic>> _encodeAtRest(

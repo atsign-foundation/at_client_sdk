@@ -49,6 +49,35 @@ abstract class WrittenAtKeysIo extends AtKeysIo with KeyIOMixin {
         '$runtimeType does not implement flush(); override it to support '
         'runtime persistence');
   }
+
+  /// Reads [atsign]'s keys, applies [mutate] to them, and persists the result
+  /// — as **one** operation.
+  ///
+  /// This is what a caller adding key material should use, not a hand-rolled
+  /// `read` → mutate → [flush]. Those three steps interleave: two of them
+  /// running concurrently both read the same state, and the second [flush]
+  /// presents a candidate missing the first's addition. [flush] is right to
+  /// refuse it — nothing may be lost — so the outcome is a thrown assurance
+  /// exception and one addition silently gone. A client's start does exactly
+  /// this today, firing the namespace-key seeding and the conveyed-key filing
+  /// as sibling unawaited tasks.
+  ///
+  /// Implementations backed by a lockable store take the lock across all three
+  /// steps. The default here does not — it is read/mutate/flush — which is no
+  /// worse than the hand-rolled form it replaces, and gives every store one
+  /// call to serialise later.
+  ///
+  /// [mutate] receives the freshly-read [AtKeys] and mutates it in place. It
+  /// returns whether anything changed: **false** abandons the write, which is
+  /// how a caller that finds the material already there — re-delivery is the
+  /// substrate's normal mode — avoids rewriting the store to say nothing.
+  /// Throwing from it abandons the write too.
+  Future<void> update(
+      Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
+    final keys = await read(atsign.toString());
+    if (await mutate(keys) == false) return;
+    await flush(atsign, keys);
+  }
 }
 
 /// An interface that defines methods for AtKeys that can be generated.
