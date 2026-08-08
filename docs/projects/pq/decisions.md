@@ -4731,3 +4731,93 @@ client asserts the challenge's shape before signing it, on both signing paths.
 Domain separation on the envelope side would make the two disjoint by
 construction; it needs the `signedEnvelopeVersion` hatch, so it lands with the
 PQ work rather than on trunk.
+
+## 52. ON-1: a greenfield atSign starts where a retrofit ends (2026-08-08)
+
+ON-1's client half is built. `pqNativeOnboard` CRAM-activates a brand-new
+atSign directly into the shape a retrofit would have produced, with no legacy
+generation in between — and [UC-A1.1](acceptance.md) is green against a live
+atServer on two independent fresh-virtualenv runs, taking the acceptance suite
+to **43 of 45**.
+
+### 52.1 The keyfile shape: typed-only, and the flat fields stay empty
+
+A retrofit freezes the flat `apkamPublicKey`/`apkamPrivateKey` fields because a
+legacy enrollment owns them ([43](#43-rf-2b-lands-and-what-the-first-genuine-ml-dsa-pkam-found-2026-08-05)).
+Greenfield has no such owner, so the question was open: put the ML-DSA APKAM in
+the flat fields, or leave them empty and file it only as typed material?
+
+**Typed-only.** One shape for every PQ enrollment however it was reached, so
+`signingAlgorithmForEnrollment` always answers and `AtAuthImpl.authenticate`
+resolves the algorithm from the keyfile with nothing caller-supplied anywhere.
+The alternative writes a keyfile whose flat fields hold ML-DSA bytes while every
+reader's default `signingAlgoType` is `rsa2048` — so a consumer that does not
+explicitly set the algorithm signs with the wrong routine, silently. Empty flat
+fields make that same consumer fail loudly instead, which is the point rather
+than a cost.
+
+That is also why the PQ mint is **opt-in at the at_auth layer**
+(`AtOnboardingRequest.signingAlgoType = mldsa65`) rather than the default: empty
+flat fields are a behaviour change no minor may impose on existing consumers,
+and at_auth 3.4.0 is a minor. The SDK's own onboarding path is what opts in, so
+UC-A1.1's "a CRAM onboard is PQ-native" is true of the entry point applications
+actually use.
+
+### 52.2 Legacy material is an opt-OUT, and null means true
+
+`AtOnboardingRequest.mintLegacyMaterial` resolves null to **true**, per
+[37](#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05):
+whether a brand-new atSign will ever need a legacy peer is decided by the apps
+that adopt it, which is unknowable at activation. Setting it false withholds
+`public:publickey` rather than publishing an absent key — a legacy peer would
+otherwise encrypt to it and produce ciphertext nobody can read. The CRAM secret
+is deleted either way, since it is a live path back into the atSign whatever was
+minted.
+
+The false arm also turns out to need no new at-rest machinery: `FileAtKeysIo`
+only reaches for the `selfEncryptionKey` when a legacy flat field is actually
+present, so a keyfile with none simply never asks for one.
+
+### 52.3 The signing root's shape, ruled — [14.1](implementation-plan.md#141-the-signing-roots-keys-shape--deadline-the-first-root-we-keep) closed
+
+14.1 said the deadline was "a state, not a date: before the next long-lived
+atSign runs a privileged PQ client". ON-1 **is** that state — every atSign
+activated from here keeps a root — and the live test walked straight into it,
+failing on the first run with the code publishing `keys: ["<base64>"]` where
+acceptance.md and [46.5](#465-the-signing-root-is-the-only-one-way-door) both
+specify `[{"alg":"ml-dsa-65","pub":"<base64>"}]`.
+
+**Tagged wins; the code moved and both documents stood.** It is the form every
+other advertised key here uses (`_apsk`, the key package) and the only one that
+can ever carry a second algorithm — an argument
+[50](#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)
+strengthened by making the KEM a configuration choice. The record is immutable
+create-once and `successor` is unimplemented, so this is permanent.
+
+The reader still accepts bare base64. Roots in that form were published before
+the shape was settled and **can never be rewritten**, so a reader that refused
+them would lock those atSigns out of their own root permanently. Nothing writes
+the bare form any more, and the tagged reader skips an entry naming an algorithm
+this build cannot verify with rather than handing back bytes that will be
+verified under the wrong routine.
+
+### 52.4 What the live run cost
+
+Three failures, each one assertion further in, and none of them a defect in the
+onboarding path itself — it worked on the first run. The root shape was
+[14.1](implementation-plan.md#141-the-signing-roots-keys-shape--deadline-the-first-root-we-keep)
+coming due. The other two were the test's own instrument: the atServer *throws*
+on a second immutable create rather than returning an error string, and
+`enroll:listns` requires its namespace argument and does not return
+`signingAlgo` at all — the flat response is
+`{enrollmentId, access, apkamPubKey, metadata}`, so the ML-DSA property is
+proven by the re-authentication rather than by a field.
+
+**And it needed its own atSign.** `apkamFirstAtSign` and `apkamSecondAtSign` are
+both already spent by `enrollment_test.dart`, so the first full-suite run failed
+on `cram auth failed` while the file passed alone — the one-shot-state trap
+exactly as the package's own guidance describes it. `apkamThirdAtSign`
+(`@colin`) exists for this test and is gitignored alongside the other two.
+
+Rails: at_client **1019** unit, at_auth **180**, at_chops **465**, functional
+**139**, e2e **50**.

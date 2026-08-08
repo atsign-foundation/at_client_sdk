@@ -1261,7 +1261,17 @@ key and the enrollee onboards without it.
 **Effort:** L.
 **coversD1:** D1-B B7 phases 1-3.
 
-### ON-1 — PQ-native greenfield onboarding + legacy-interop opt-out · at_client, at_client_flutter · M  *(critic gap — UC-A1.1; amended by decisions 37)*
+### ON-1 — PQ-native greenfield onboarding + legacy-interop opt-out · at_client, at_client_flutter · M — **CLIENT HALF LANDED 2026-08-08** ([decisions 52](decisions.md#52-on-1-a-greenfield-atsign-starts-where-a-retrofit-ends-2026-08-08))  *(critic gap — UC-A1.1; amended by decisions 37)*
+**Landed:** `pqNativeOnboard` (at_client) over `AtOnboardingRequest.signingAlgoType`
++ `mintLegacyMaterial` + `metadataBuilder` and a PQ-native mint (at_auth 3.4.0).
+**UC-A1.1 is green live** — the ML-DSA APKAM re-authenticates on a fresh
+connection with no RSA APKAM in existence. Backlog
+[14.1](#141-the-signing-roots-keys-shape--deadline-the-first-root-we-keep) was
+ruled in the same pass, because this is the project that makes roots permanent.
+**Still owed:** UC-B4.2's cross-atSign e2e row (a legacy peer and a PQ-native
+atSign interoperating in *both* directions — only two atSigns can show the
+inbound one), and the `at_client_flutter` / `at_onboarding_cli` call sites that
+would make PQ-native the activation an end user actually gets.
 **Goal:** a brand-new atSign onboards PQ-native (the root of Part-A coverage).
 **Builds on:** RF-2b (PQ-APKAM mint) + SS-4 (pqpublickey).
 **Deliverables → [design.md](design.md)** (PQ-native onboarding, **amended by
@@ -1376,7 +1386,7 @@ locally **and** in CI — these floor bumps must be made **explicitly**, not inf
 build.
 
 ### (b) Critical path to D1 GA
-`#1930(done) → P-1 + S-2 → SS-1a → SS-1b → SS-1c → SS-2 → SS-3 → SS-4 (+ P-3) → B-1 → R-1(delivered) → SH-1(done) + RF-SRV(server done) + RF-2b(done) → B-2(done) → KE-1(done) → ON-1 + R-2 + S-3`
+`#1930(done) → P-1 + S-2 → SS-1a → SS-1b → SS-1c → SS-2 → SS-3 → SS-4 (+ P-3) → B-1 → R-1(delivered) → SH-1(done) + RF-SRV(server done) + RF-2b(done) → B-2(done) → KE-1(done) → ON-1(client half done) → R-2 + S-3`
 (D1 GA: rebuild = universal reader, one flag = PQ writer, opt-in rotation).
 **KE-1 sits on the path rather than beside it** for one reason only: it moved the wire. Two modern peers
 now exchange `ver 0x02` where they exchanged `0x01`, and an enrollment's KEM is frozen at
@@ -1562,7 +1572,17 @@ are 14.1, 14.3, 14.6, 14.7 and 14.8-14.11.
 
 ### 14.1 The signing root's `keys[]` shape — DEADLINE: the first root we keep
 
-The code and the catalogue disagree about the shape of the one record in the
+> **RULED 2026-08-08 — tagged. Closed.** ON-1 was the state this deadline named — every atSign activated from
+here keeps a root — and ON-1's live test walked straight into it. The **tagged**
+> form won: `pq_signing_root.dart` now publishes
+> `[{"alg":"ml-dsa-65","pub":"<base64>"}]`, so the code moved and both documents
+> stood. The reader still accepts bare base64, because roots already published
+> in that form can never be rewritten. See
+> [decisions 52](decisions.md#52-on-1-a-greenfield-atsign-starts-where-a-retrofit-ends-2026-08-08).
+> The rest of this item is the reasoning that produced the ruling, kept because
+> it is the record of why the shape is permanent.
+
+The code and the catalogue disagreed about the shape of the one record in the
 system that can never be rewritten.
 
 | | shape |
