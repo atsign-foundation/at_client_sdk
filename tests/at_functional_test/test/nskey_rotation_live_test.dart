@@ -242,9 +242,37 @@ void main() {
         reason: 'the control arm: without it the absence after the revoke is '
             'equally explained by a roster that never listed it');
 
-    await operator.enrolled.client.enrollmentService!.revoke(
+    final revoked = await operator.enrolled.client.enrollmentService!.revoke(
         EnrollmentRequestDecision.revoked(
             doomed.enrolled.enrollmentId, atSign));
+
+    // Assert the acknowledgement, which this test used to discard.
+    //
+    // The revoke IS awaited all the way to the socket read, and an `error:`
+    // response would throw out of the line above — but a `data:` response
+    // whose status is anything other than `revoked` was silently accepted.
+    // Without these two lines "the credential still works" is equally
+    // explained by the revoke never having taken, and attributing it to an
+    // atServer cache is a guess. Making that distinction is the whole point:
+    // it is what turns the failure below into evidence about the atServer
+    // rather than about this test.
+    expect(revoked.enrollmentId, doomed.enrolled.enrollmentId,
+        reason: 'the atServer acknowledged a different enrollment than the '
+            'one this test then waits to see refused');
+    expect(revoked.enrollmentStatus, EnrollmentStatus.revoked,
+        reason: 'the atServer ACKed the revoke without moving the record to '
+            'revoked — so a credential that still works is the revoke not '
+            'taking, not a visibility lag');
+
+    // Put the revoked enrollment's own client down before polling.
+    //
+    // It holds a live, authenticated connection carrying this enrollment id,
+    // and the mechanism this test is probing is an atServer-side enrollment
+    // cache. Leaving it open means the test may be holding open the very
+    // thing it is waiting to see expire — and it is not what the scenario
+    // describes either: the lost-laptop case is a keyfile in someone else's
+    // hands, not a session still running.
+    await doomed.enrolled.client.stop();
 
     // The credential first, because it is the primary claim — but polled with
     // a bound, and not merely to settle a flaky test.
