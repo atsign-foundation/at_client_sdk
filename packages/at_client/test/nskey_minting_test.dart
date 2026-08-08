@@ -1,12 +1,7 @@
-import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/crypto/nskey/nskey_mint_lock.dart';
-import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
-import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
@@ -97,7 +92,7 @@ void main() {
     // Ordering, not just presence: the lock is taken, then the advertisement
     // goes out. The filing happens between them, off the wire.
     final published =
-        c.verbs.where((k) => k.key?.startsWith('__nskey') == true);
+        c.verbs.where((k) => k.key.startsWith('__nskey') == true);
     expect(published, hasLength(1));
   });
 
@@ -112,7 +107,7 @@ void main() {
 
     await expectLater(
         ring.mintAndPublish(namespace), throwsA(isA<StateError>()));
-    expect(c.verbs.where((k) => k.key?.startsWith('__nskey') == true), isEmpty,
+    expect(c.verbs.where((k) => k.key.startsWith('__nskey') == true), isEmpty,
         reason: 'the advertisement is the promise that a private exists; '
             'making it when one does not is the failure this ordering exists '
             'to prevent');
@@ -152,7 +147,7 @@ void main() {
     expect(adopted.nskeyKid, nskeyKidOf(winner.publicKeyBytes),
         reason: 'minting a second key would rotate the first out from under '
             'every peer that had already fetched it');
-    expect(c.verbs.where((k) => k.key?.startsWith('__nskey') == true), isEmpty,
+    expect(c.verbs.where((k) => k.key.startsWith('__nskey') == true), isEmpty,
         reason: 'and the loser publishes nothing at all');
   });
 }

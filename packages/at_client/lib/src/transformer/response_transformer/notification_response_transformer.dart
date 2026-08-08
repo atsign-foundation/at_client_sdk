@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 
 /// Class is responsible for decrypting the notification value/text-message data

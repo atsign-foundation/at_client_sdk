@@ -91,7 +91,7 @@ void main() {
     when(() => atClient.get(any())).thenAnswer((inv) async {
       final asked = inv.positionalArguments[0] as AtKey;
       final held = store[asked.toString()];
-      if (held == null) throw KeyNotFoundException('${asked.toString()}');
+      if (held == null) throw KeyNotFoundException(asked.toString());
       // The reader re-parses the record from its wire string, which is the
       // whole point: it is what sync and notify do, and it is where a
       // multi-segment namespace is lost.

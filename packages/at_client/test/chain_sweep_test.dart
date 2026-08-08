@@ -7,7 +7,6 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart' show AtEnrollment;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';

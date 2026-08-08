@@ -1,9 +1,5 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/crypto/crypto.dart';
-import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
-import 'package:at_client/src/crypto/nskey/nskey_provider.dart';
-import 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -99,7 +95,7 @@ void main() {
 
       // The current-CK pointer rides the same client. It is an ordinary self
       // key, not a conveyance, so it is not what this counts.
-      c.written.removeWhere((k) => k.key?.startsWith('__ckcur') == true);
+      c.written.removeWhere((k) => k.key.startsWith('__ckcur') == true);
       expect(c.written, hasLength(1),
           reason: 'a namespace-less key makes CkManager.ensureCurrent bail, so '
               'no conveyance is written and nothing can decrypt the value');

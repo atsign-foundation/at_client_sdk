@@ -142,7 +142,7 @@ class NskeySeeding {
     }
     for (final namespace in held.keys) {
       for (final entry in held[namespace]!.entries) {
-        sharing.secretStore.putIfNewer(Secret(
+        await sharing.secretStore.putIfNewer(Secret(
           namespace: namespace,
           name: '${NskeyPrivateFiling.secretNamePrefix}${entry.key}',
           value: base64Encode(entry.value),

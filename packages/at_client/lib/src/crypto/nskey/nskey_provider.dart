@@ -3,8 +3,6 @@ import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/crypto/crypto.dart';
-import 'package:at_client/src/crypto/nskey/content_key.dart';
-import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_commons/at_commons.dart';

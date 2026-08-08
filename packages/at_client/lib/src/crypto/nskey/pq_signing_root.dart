@@ -520,7 +520,10 @@ class PqSigningRoot {
     if (atSign == null) return false;
     final private = await privateHalf(atSign);
     if (private == null) return false;
-    sharing.secretStore.putIfNewer(Secret(
+    // Awaited: the in-memory map is written synchronously either way, but
+    // dropping the future would turn a persistence failure into an unhandled
+    // async error and let this report success without one.
+    await sharing.secretStore.putIfNewer(Secret(
       namespace: namespace,
       name: secretName,
       value: base64Encode(private),

@@ -1,7 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
-import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';

@@ -5,7 +5,6 @@ import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/crypto/nskey/pq_signing_root.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_commons/at_builders.dart';

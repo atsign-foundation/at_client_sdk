@@ -3,7 +3,6 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart' hide StringBuffer;
-import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';

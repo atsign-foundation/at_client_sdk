@@ -1,8 +1,5 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
-import 'package:at_client/src/util/at_client_util.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
 /// Every hand-rolled metadata converter in this package, held to one standard.

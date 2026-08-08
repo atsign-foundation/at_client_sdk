@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_commons/at_commons.dart' show AtEncryptionException;
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';

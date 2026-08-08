@@ -1,8 +1,11 @@
-// ignore: constant_identifier_names
 import 'package:at_commons/at_commons.dart';
 
-// ignore: constant_identifier_names
 enum SigningAlgoType {
+  // Not lowerCamelCase on purpose, and the ignore has to sit on this line
+  // rather than on the enum: the MEMBER NAME is the wire literal. It is what
+  // `pkam:signingAlgo:ecc_secp256r1:hashingAlgo:sha256:...` carries, so
+  // renaming it to `eccSecp256r1` would change the protocol, not the style.
+  // ignore: constant_identifier_names
   ecc_secp256r1,
   rsa2048,
   rsa4096,

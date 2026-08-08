@@ -1,12 +1,6 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/crypto/crypto_runtime.dart';
-import 'package:at_client/src/crypto/nskey/ck_manager.dart';
-import 'package:at_client/src/crypto/nskey/content_key.dart';
 import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
-import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
-import 'package:at_client/src/crypto/nskey/nskey_provider.dart';
-import 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -110,7 +104,7 @@ void main() {
       // provider, so it is ignored here entirely — these assertions are about
       // how many CKs were cut, and counting unrelated puts would make every
       // one of them a coincidence.
-      if (key.key?.startsWith('__ckcur') == true) {
+      if (key.key.startsWith('__ckcur') == true) {
         return true;
       }
       written.add(key);
@@ -340,6 +334,10 @@ void main() {
       final cold = c.coldManager(ContentKeyCache());
       final resumed =
           await c.pointer.read(c.context.atClient, owner, namespace);
+      expect(resumed, isNotNull,
+          reason: 'the control arm: the pointer is what survives the restart, '
+              'so if it held nothing the recovery below would be measuring a '
+              'cache that was never cold');
       await cold.ensureCurrent(c.context, valueKey);
 
       expect(c.written, hasLength(1),
@@ -456,7 +454,7 @@ void main() {
             inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
         // The current-CK pointer writes an ordinary self key through this
         // same client; it is not a conveyance, so it is not counted here.
-        if (key.key?.startsWith('__ckcur') == true) return true;
+        if (key.key.startsWith('__ckcur') == true) return true;
         written.add(key);
         // Mirror the pipeline: route the conveyance through the runtime, which
         // resolves at/nskey out of the very config under test.
