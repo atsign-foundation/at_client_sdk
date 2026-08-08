@@ -1,4 +1,26 @@
 ## 3.14.1
+- feat: `pqNativeOnboard` — CRAM-activate a brand-new atSign post-quantum from
+  the start, and get back a manager whose client runs under its first
+  enrollment. The greenfield counterpart of `selfRetrofit`: that upgrades an
+  atSign that already exists, this starts one in the shape a retrofit would
+  have produced, with no legacy generation in between.
+  It mints an ML-DSA-65 APKAM (filed as typed material, so the flat keyfile
+  fields stay empty and a reader that cannot handle a PQ enrollment fails
+  loudly rather than signing with the wrong routine), advertises the first
+  enrollment's key package on the `enroll:request` that creates the record —
+  the only moment `metadata.keyPackage` can be set, which is why the
+  enrollment's KEM is frozen there at whatever
+  `AtClientPreference.keyEstablishmentAlgo` says — and immutable-creates the
+  atSign's ML-DSA-65 signing root, which a first enrollment is entitled to do
+  because the atServer grants it `__manage`.
+  Legacy material and `public:publickey` are still cut **by default**: whether
+  this atSign will ever talk to a legacy peer is decided by the apps that adopt
+  it, which is unknowable at activation. `mintLegacyMaterial: false` is the
+  opt-out, and it makes a legacy peer's send unsupported.
+  The signing-root step sits inside its own guard. The activation has already
+  succeeded by then and the CRAM secret is spent, so failing the whole onboard
+  over a step a later mint retries would report a live atSign as unactivated
+  with no way to run it again.
 - feat: the nskey advertisement names its key-establishment algorithm, and the
   conveyance path follows it. `NskeyAdvertisement` and `ResolvedNskey` carry
   `alg`, the published payload carries `alg`, and `PublishedNskeyKeyRing` mints
