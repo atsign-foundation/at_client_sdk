@@ -64,6 +64,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [48. The standards question reopened, and what the check found (2026-08-06)](#48-the-standards-question-reopened-and-what-the-check-found-2026-08-06) — *3 of 46.1's 4 premises are false; the vectors are the deliverable, not the migration; `.atKeys` salted its derivation with the passphrase*
 - [49. Two KEMs by configuration, and the downgrade gap that stays open (2026-08-06)](#49-two-kems-by-configuration-and-the-downgrade-gap-that-stays-open-2026-08-06) — *the second option answers a FIPS questionnaire; configuration rather than negotiation, because per-message choice is a downgrade surface*
 - [50. Two KEMs by configuration, one construction by negotiation (2026-08-07)](#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07) — *the knob is a preference not a `CryptoConfig` field; the sender follows the recipient; `suites` is what moves the wire without a flag day*
+- [51. The `from:` challenge and a signed envelope must never share a shape (2026-08-08)](#51-the-from-challenge-and-a-signed-envelope-must-never-share-a-shape-2026-08-08) — *both are signed by the enrollment's signing key, so their shapes must stay disjoint*
 
 ---
 
@@ -4491,8 +4492,7 @@ advertises. There is no per-message negotiation to attack.
 Configuration-not-negotiation removes the *protocol* downgrade surface, but it
 relocates the question rather than closing it: the advertisement is what carries
 the algorithm, so the property now rests entirely on an advertisement being
-authentic. A separate hardening item — strengthening the PKAM
-challenge-response, tracked outside this ledger and landing with its own fix —
+authentic. [Section 51](#51-the-from-challenge-and-a-signed-envelope-must-never-share-a-shape-2026-08-08)
 is what closes the remaining path to presenting a client with an advertisement
 of someone else's choosing. Until it lands, the downgrade SP 800-227 names is
 not fully out of reach. Accepted for now, and it is the reason that item stops
@@ -4713,3 +4713,21 @@ change. And it did **not** make the KEM a per-message choice: the version byte
 names the whole suite precisely because the KEM is already fixed by the
 recipient's advertised key, so an opener needs no input beyond the byte it
 already reads first.
+
+## 51. The `from:` challenge and a signed envelope must never share a shape (2026-08-08)
+
+Per-enrollment PQC key packages are signed by the enrollment's signing key —
+the same key that signs the atServer's `from:` challenge. So the challenge and
+any to-be-signed envelope have to be shaped differently, always, or one can be
+presented in place of the other.
+
+That is the current state: a challenge is `_<uuid><atSign>:<uuid>`, and an
+envelope payload is `jsonEncode` of a map, so it ends `}`. Nothing can be both.
+
+But it holds by coincidence of two formats rather than by construction, so it
+needs assertions to keep holding. The first landed in `at_lookup` **3.6.1**
+([PR #2127](https://github.com/atsign-foundation/at_client_sdk/pull/2127)): a
+client asserts the challenge's shape before signing it, on both signing paths.
+Domain separation on the envelope side would make the two disjoint by
+construction; it needs the `signedEnvelopeVersion` hatch, so it lands with the
+PQ work rather than on trunk.
