@@ -1,4 +1,13 @@
 ## 3.14.1
+- fix: the signing-root and nskey-private filing paths persist through
+  `AtKeysIo.update` rather than a hand-rolled `read` → mutate → `flush`. A
+  client's start fires the namespace-key seeding and the conveyed-key filing as
+  two *unawaited* sibling tasks, each of which read the keyfile, added its own
+  material and flushed — so whichever flushed second presented a candidate
+  without the first's addition, assurance refused it, and that key material was
+  lost. On the file store `update` holds the keyfile lock across the read as
+  well as the write, which closes the window for coroutines in one process and
+  for separate processes alike.
 - feat: `pqNativeOnboard` — CRAM-activate a brand-new atSign post-quantum from
   the start, and get back a manager whose client runs under its first
   enrollment. The greenfield counterpart of `selfRetrofit`: that upgrades an

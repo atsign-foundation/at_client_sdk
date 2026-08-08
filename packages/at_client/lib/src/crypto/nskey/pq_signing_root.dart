@@ -336,26 +336,28 @@ class PqSigningRoot {
   Future<bool> store(String atSign, Uint8List private) async {
     final io = keysIo;
     if (io == null) return false;
+    if (io is! WrittenAtKeysIo) {
+      _logger.severe('Filed the signing root for $atSign in memory only — '
+          'this AtKeysIo cannot persist, and an immutable root cannot be '
+          'minted again');
+      return false;
+    }
     try {
-      final AtKeys keys = await io.read(atSign);
-      if (_activePrivate(keys) != null) {
+      // One read-mutate-write, not three steps: a client's start fires this
+      // and the namespace-key seeding as sibling unawaited tasks, and two
+      // read-then-flush pairs on one keyfile lose whichever addition flushes
+      // first.
+      await io.update(atSign.toAtsign(), (keys) {
+        if (_activePrivate(keys) != null) return false;
+        keys.addKey(AtKeysMaterial(
+          keyId: _freeSlot(keys),
+          keyPartType: CryptographicKeyType.privateSigning,
+          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+          bytes: AtBytes(private),
+          createdAt: DateTime.now().toUtc(),
+        ));
         return true;
-      }
-      keys.addKey(AtKeysMaterial(
-        keyId: _freeSlot(keys),
-        keyPartType: CryptographicKeyType.privateSigning,
-        keyAlgorithmType: KeyAlgorithmType.mlDsa65,
-        bytes: AtBytes(private),
-        createdAt: DateTime.now().toUtc(),
-      ));
-      if (io is WrittenAtKeysIo) {
-        await io.flush(atSign.toAtsign(), keys);
-      } else {
-        _logger.severe('Filed the signing root for $atSign in memory only — '
-            'this AtKeysIo cannot persist, and an immutable root cannot be '
-            'minted again');
-        return false;
-      }
+      });
       return true;
     } catch (e) {
       _logger.severe('Cannot store the signing root private for $atSign: $e');
@@ -649,31 +651,36 @@ class PqSigningRoot {
       String atSign, ({Uint8List publicKey, Uint8List secretKey}) pair) async {
     final io = keysIo;
     if (io == null) return null;
+    if (io is! WrittenAtKeysIo) {
+      _logger.severe('Filed the signing root for $atSign in memory only — '
+          'this AtKeysIo cannot persist, and an immutable root cannot be '
+          'minted again');
+      return null;
+    }
     try {
-      final AtKeys keys = await io.read(atSign);
-      final slot = _freeSlot(keys);
-      final createdAt = DateTime.now().toUtc();
-      keys.addKey(AtKeysMaterial(
-        keyId: slot,
-        keyPartType: CryptographicKeyType.privateSigning,
-        keyAlgorithmType: KeyAlgorithmType.mlDsa65,
-        bytes: AtBytes(pair.secretKey),
-        createdAt: createdAt,
-      ));
-      keys.addKey(AtKeysMaterial(
-        keyId: slot,
-        keyPartType: CryptographicKeyType.publicVerification,
-        keyAlgorithmType: KeyAlgorithmType.mlDsa65,
-        bytes: AtBytes(pair.publicKey),
-        createdAt: createdAt,
-      ));
-      if (io is! WrittenAtKeysIo) {
-        _logger.severe('Filed the signing root for $atSign in memory only — '
-            'this AtKeysIo cannot persist, and an immutable root cannot be '
-            'minted again');
-        return null;
-      }
-      await io.flush(atSign.toAtsign(), keys);
+      // The slot is chosen inside the update, under whatever the store holds
+      // across it: picking it from a snapshot read outside would let a sibling
+      // take the same free slot, and `addKey` refuses a duplicate keyId.
+      String? slot;
+      await io.update(atSign.toAtsign(), (keys) {
+        slot = _freeSlot(keys);
+        final createdAt = DateTime.now().toUtc();
+        keys.addKey(AtKeysMaterial(
+          keyId: slot!,
+          keyPartType: CryptographicKeyType.privateSigning,
+          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+          bytes: AtBytes(pair.secretKey),
+          createdAt: createdAt,
+        ));
+        keys.addKey(AtKeysMaterial(
+          keyId: slot!,
+          keyPartType: CryptographicKeyType.publicVerification,
+          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+          bytes: AtBytes(pair.publicKey),
+          createdAt: createdAt,
+        ));
+        return true;
+      });
       return slot;
     } catch (e) {
       _logger.severe('Cannot store the signing root pair for $atSign: $e');
@@ -686,11 +693,10 @@ class PqSigningRoot {
   /// mistaken for a key that did.
   Future<void> _retireSlot(String atSign, String slot) async {
     final io = keysIo;
-    if (io == null) return;
-    final AtKeys keys = await io.read(atSign);
-    keys.retireKey(slot, to: KeyPartStatus.dead);
-    if (io is WrittenAtKeysIo) {
-      await io.flush(atSign.toAtsign(), keys);
-    }
+    if (io is! WrittenAtKeysIo) return;
+    await io.update(atSign.toAtsign(), (keys) {
+      keys.retireKey(slot, to: KeyPartStatus.dead);
+      return true;
+    });
   }
 }

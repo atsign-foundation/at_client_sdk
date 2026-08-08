@@ -310,22 +310,6 @@ class NskeyPrivateFiling {
     String keyAlgo = SecretSharingAlgos.xWing,
     DateTime? createdAt,
   }) async {
-    final AtKeys keys;
-    try {
-      keys = await keysIo.read(atSign);
-    } catch (e) {
-      _logger.severe('Cannot file the nskey private for '
-          '$namespace:$nskeyKid — this atSign has no readable AtKeys: $e');
-      return false;
-    }
-
-    final keyId = keyIdFor(namespace, nskeyKid);
-    if (keys.getKey(keyId, CryptographicKeyType.privateDecapsulation) != null) {
-      // Re-delivery is expected: the substrate converges by re-sending, and
-      // putIfNewer already made arrival idempotent upstream.
-      return false;
-    }
-
     final materialAlgo = SecretSharingAlgos.materialAlgoFor(keyAlgo);
     if (materialAlgo == null) {
       _logger.severe('Refusing to file an nskey seed for $namespace:$nskeyKid '
@@ -333,23 +317,46 @@ class NskeyPrivateFiling {
           'into a usable key');
       return false;
     }
-    keys.addKey(AtKeysMaterial(
-      keyId: keyId,
-      keyPartType: CryptographicKeyType.privateDecapsulation,
-      keyAlgorithmType: materialAlgo,
-      bytes: AtBytes(seed),
-      createdAt: createdAt ?? DateTime.now().toUtc(),
-    ));
 
-    if (keysIo is WrittenAtKeysIo) {
-      await (keysIo as WrittenAtKeysIo).flush(atSign.toAtsign(), keys);
-    } else {
+    final keyId = keyIdFor(namespace, nskeyKid);
+    final io = keysIo;
+    if (io is! WrittenAtKeysIo) {
       // Read-only key storage: the private is usable for this process and
       // gone at restart, which is exactly the failure this exists to prevent.
       _logger.severe('Filed the nskey private for $namespace:$nskeyKid in '
           'memory only — this AtKeysIo cannot persist, so a restart will lose '
           'it and every value its content keys protect becomes unreadable');
+      return true;
     }
-    return true;
+
+    // One read-mutate-write. Read-then-flush loses whichever of this and the
+    // signing-root filing writes first — a client's start runs both as sibling
+    // unawaited tasks, and the loser's material is gone with an assurance
+    // exception logged somewhere far from here.
+    var filed = false;
+    try {
+      await io.update(atSign.toAtsign(), (keys) {
+        if (keys.getKey(keyId, CryptographicKeyType.privateDecapsulation) !=
+            null) {
+          // Re-delivery is expected: the substrate converges by re-sending,
+          // and putIfNewer already made arrival idempotent upstream.
+          return false;
+        }
+        keys.addKey(AtKeysMaterial(
+          keyId: keyId,
+          keyPartType: CryptographicKeyType.privateDecapsulation,
+          keyAlgorithmType: materialAlgo,
+          bytes: AtBytes(seed),
+          createdAt: createdAt ?? DateTime.now().toUtc(),
+        ));
+        filed = true;
+        return true;
+      });
+    } catch (e) {
+      _logger.severe('Cannot file the nskey private for '
+          '$namespace:$nskeyKid — this atSign has no writable AtKeys: $e');
+      return false;
+    }
+    return filed;
   }
 }
