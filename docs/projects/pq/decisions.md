@@ -65,6 +65,9 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [49. Two KEMs by configuration, and the downgrade gap that stays open (2026-08-06)](#49-two-kems-by-configuration-and-the-downgrade-gap-that-stays-open-2026-08-06) — *the second option answers a FIPS questionnaire; configuration rather than negotiation, because per-message choice is a downgrade surface*
 - [50. Two KEMs by configuration, one construction by negotiation (2026-08-07)](#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07) — *the knob is a preference not a `CryptoConfig` field; the sender follows the recipient; `suites` is what moves the wire without a flag day*
 - [51. The `from:` challenge and a signed envelope must never share a shape (2026-08-08)](#51-the-from-challenge-and-a-signed-envelope-must-never-share-a-shape-2026-08-08) — *both are signed by the enrollment's signing key, so their shapes must stay disjoint*
+- [52. ON-1: a greenfield atSign starts where a retrofit ends (2026-08-08)](#52-on-1-a-greenfield-atsign-starts-where-a-retrofit-ends-2026-08-08) — *typed-only keyfile, the signing root names its algorithm, and the PQ mint is opt-in at the at_auth layer*
+- [53. UC-B4.2, and what asking for no legacy material actually costs (2026-08-08)](#53-uc-b42-and-what-asking-for-no-legacy-material-actually-costs-2026-08-08) — *the row was labelled for a layer that cannot CRAM-activate; the opt-out is honoured and unusable; a pre-seeded harness key was letting two assertions pass for the wrong reason*
+- [54. S-3: the two things an updatable key store turned out to be (2026-08-08)](#54-s-3-the-two-things-an-updatable-key-store-turned-out-to-be-2026-08-08) — *read-mutate-flush loses material at every client start; the keychain could not be written to at all; the self-enc-key re-wrap has no operator and is KF-1's*
 
 ---
 
@@ -4821,3 +4824,165 @@ exactly as the package's own guidance describes it. `apkamThirdAtSign`
 
 Rails: at_client **1019** unit, at_auth **180**, at_chops **465**, functional
 **139**, e2e **50**.
+
+---
+
+## 53. UC-B4.2, and what asking for no legacy material actually costs (2026-08-08)
+
+UC-B4.2 — a legacy peer and a PQ-native atSign interoperating in **both**
+directions — is green live, taking the acceptance suite to **44 of 45** and
+discharging ON-1's last row. Three things came out of building it, and each is
+worth more than the row itself.
+
+### 53.1 The row was labelled for a layer that cannot do the thing
+
+It had been sitting as `blocked: ON-1 · layer: tests/at_end2end_test` on the
+reasoning that only two atSigns can show the inbound direction. The reasoning is
+right and the conclusion was wrong, for two reasons that a glance at the harness
+would have shown at any point in the last month:
+
+- `tests/at_end2end_test` runs in CI against **long-lived cicd atSigns**
+  (`@ce2e1`…`@ce2e4` on `root.atsign.wtf`), not against a container. A CRAM
+  secret is spent at first activation, so that pack can never activate anything
+  — and a PQ-native atSign can only be *created* by activation.
+- Its `TestSuiteInitializer` dereferences `apkamPublicKey!` and
+  `apkamSymmetricKey!`, both of which are null in every PQ-native keyfile by
+  [52.1](#521-the-keyfile-shape-typed-only-and-the-flat-fields-stay-empty). The
+  pack is structurally unable to bring a PQ-native atSign up.
+
+`tests/at_functional_test` runs against the virtualenv container in CI as well
+as locally, already holds UC-A1.1, and drives two atSigns in one file in half a
+dozen places. The row went there. **The general lesson: "which layer" is a claim
+about the harness, and a blocker constant that names one is asserting something
+checkable.** Ours had never been checked.
+
+### 53.2 The test mints all three atSigns it needs
+
+The obvious move was to borrow a demo atSign for the legacy side. Both candidates
+fail: `@alice🛠` is retrofitted, rooted and nskey-minted by four other files in
+the functional pack, and `@bob🛠` gets a signing root from
+`signing_root_pull_two_enrollments_test` and nskeys from
+`nskey_rotation_live_test`. Whether either is "pre-PQ" at the moment this row
+ran would depend on file order, which `dart test` does not promise.
+
+So the file CRAM-activates its own three: one with the default signing algorithm
+(pre-PQ), one PQ-native, one PQ-native with `mintLegacyMaterial: false`. The
+premise is then *asserted* — the pre-PQ atSign has no `pq_signing_root` and its
+keyfile fills the flat APKAM fields, against the PQ-native one as a control —
+rather than assumed. Three more one-shot CRAM atSigns are allocated to it in
+`config.yaml`, named by role rather than by position because what distinguishes
+them is what they were activated *as*.
+
+### 53.3 The opt-out is honoured, and unusable
+
+`mintLegacyMaterial: false` does exactly what it says: no RSA keypair, no
+`selfEncryptionKey`, and `completeActivation` publishes no `public:publickey`,
+logging why. Then the resulting atSign cannot publish **anything**, because every
+public write is signed with the legacy encryption private key. The `_apsk`
+anchor to the signing root and the nskey advertisement are both public writes, so
+the post-quantum path's own records are the first casualties; sync fails
+alongside them for want of a `selfEncryptionKey`.
+
+Recorded as
+[plan 14.12](implementation-plan.md#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record)
+and asserted in the test, so whichever project moves public-record signing onto
+the ML-DSA root gets a red test naming this. It matters because
+[42](#42-the-to-define-list-ruled-2026-08-05) item 10 has the release default
+resolving null→false in the major after R-2: that release cannot ship until
+public-record signing and self data are both off legacy material.
+
+### 53.4 A pre-seeded harness key was letting assertions pass for the wrong reason
+
+The virtualenv image ships **every** demo atSign with a `public:publickey`
+already installed — an untouched `@denise` has one. So `plookup:publickey@X`
+returning `data:` proves nothing about what an activation did, and two
+assertions were resting on it: the opt-out arm as first written, and UC-A1.1's
+own "a legacy peer must be able to send to a brand-new atSign out of the box",
+which would have passed even if the activation had published nothing at all.
+
+Both now assert by **value** — the published key must equal the one in the
+keyfile — which is the only form that distinguishes an activation's write from
+provisioning state. The opt-out arm additionally deletes the image's leftover
+before testing unreachability, with the reason written down: a genuinely new
+atSign has no such record, so removing it restores the condition under test
+rather than shaping it.
+
+Rails after: acceptance **44 of 45** (1 skipped, UC-B0.1, a harness gap).
+
+---
+
+## 54. S-3: the two things an updatable key store turned out to be (2026-08-08)
+
+S-3 reads as a storage-plumbing project — make the `.atKeys` file and the
+keychain updatable. Most of the plumbing was already there: the atomic
+temp+rename write, the `.bak` backup and the inter-process lock all landed with
+the lock work. What was left was not plumbing at all. It was two ways of losing
+key material and one mechanism nobody operates.
+
+### 54.1 Read-mutate-flush is the bug, and it fires at every client start
+
+`flush` takes a whole `AtKeys` and refuses a candidate that has lost anything
+the store already holds. That contract is right. What defeats it is the shape
+every consumer used around it: `read` → mutate → `flush`, with the read outside
+the write's critical section. Two of those overlapping both read the same state;
+the second presents a candidate without the first's addition; assurance refuses
+it — correctly — and one addition is gone, with an exception logged somewhere
+far from the key that vanished.
+
+The overlap is not hypothetical or rare. `AtClientImpl`'s start fires
+`_seedNamespaceKeys()` and `_fileConveyedKeysAndAnchor()` as **sibling
+unawaited tasks**, deliberately, because neither should block startup. One files
+nskey privates, the other files the signing root's private — both through their
+own read-mutate-flush on one keyfile. The material at stake is exactly the
+material whose loss is unrecoverable: a published nskey whose private did not
+survive leaves every sender sealing to something nobody can open.
+
+The fix is to make the operation the interface offers match the operation
+callers need: `WrittenAtKeysIo.update(atsign, mutate)`, with `FileAtKeysIo`
+holding the keyfile lock across the read as well as the write. Because the lock
+is a lock file, it serialises coroutines inside one process as well as separate
+processes — which is the case that bites here.
+
+Two details worth keeping. The mutation **returns whether anything changed**, so
+a caller that finds the material already there — re-delivery is how the
+substrate converges, so this is the common case — writes nothing rather than
+rewriting the store to say the same thing. And `update` must never be called
+from inside another `update`, or from a `flush` inside one: the lock is not
+reentrant, and the natural mistake is reaching for `flush` in a mutation. There
+is a test pinning that failure so it is discovered in a second rather than in
+production ten seconds later.
+
+### 54.2 The keychain was a store that could not be written to
+
+`KeychainAtKeysIo` implemented `read` and `write`, and inherited `flush` from
+the interface — where the default **throws**. On Flutter that store is the
+default, so both of the filing paths above hit `UnimplementedError` on the
+platform where they matter most. `NskeyPrivateFiling` did not even catch it.
+
+Fixing `flush` surfaced two more losses in the same class. `write` appended
+unconditionally to a list `read` scans front-to-back, so writing an atSign twice
+left the newer keys permanently unreachable behind the older ones — a silent
+loss presenting as a successful write. And an entry written by an older release
+carries its atSign under a `name` metadata key rather than `atsign`:
+`getAllAtsigns` threw a `TypeError` on one (a `String` used as a condition) and
+`removeAtsignFromKeychain` silently kept it. All three come from the same root —
+the class was written as a place to put keys once, not as a store.
+
+### 54.3 The self-encryption-key re-wrap is not built, and that is the ruling
+
+The plan's watch-out is accurate: `flush` compares the four self-encrypted
+legacy fields as **ciphertext**, because both sides of `validateMapUpdate` are
+the at-rest document. It works at all only because `generateIVLegacy()` is
+sixteen zero bytes, so re-encrypting an unchanged field under an unchanged key
+is byte-identical. Re-wrapping under a new self-encryption key changes five
+compared values at once and fails assurance.
+
+It is still not built, deliberately. **No code path anywhere changes
+`defaultSelfEncryptionKey` on an existing keyfile** — the only mutator sets it
+during enrollment approval, on a file that does not yet exist. A re-wrap today
+would be a mechanism with no party that operates it, and the rule about naming
+the operator before building the mechanism applies exactly as written. It
+belongs to the first project that needs one, which is **KF-1**: at-rest
+protection of the PQ privates, whose restore flow already needs an assurance
+override for the inverse case (an older backup over a newer keyfile). Building
+both escape hatches together, once, beats building one now on speculation.

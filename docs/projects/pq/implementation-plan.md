@@ -303,7 +303,46 @@ Open decision #E in [decisions.md](decisions.md).
 Resolve where `context.keys` is sourced at construction (overlaps S-3).
 **coversD1:** D1-S S5.
 
-### S-3 — at_client/at_auth: updatable `.atKeys`/keychain via the injected `AtKeysIo` · at_client, at_auth, at_client_flutter · L
+### S-3 — at_client/at_auth: updatable `.atKeys`/keychain via the injected `AtKeysIo` · at_client, at_auth, at_client_flutter · L — **PARTLY LANDED 2026-08-08**
+**Landed so far, and the two things it turned out to be about:**
+- **The keychain is a real store.** `KeychainAtKeysIo` implemented `read`/`write`
+  only, so `flush` fell through to the interface's throwing default — on Flutter,
+  which *defaults* to that store, filing an nskey private or a signing-root
+  private threw `UnimplementedError`. It now replaces the atSign's entry under
+  the same never-lose assurance the file store gets. Two silent-loss bugs went
+  with it: `write` appended unconditionally to a list `read` scans
+  front-to-back, so a second write left the newer keys permanently unreachable;
+  and an entry carrying its atSign under the legacy `name` metadata key threw a
+  `TypeError` from `getAllAtsigns` and survived `removeAtsignFromKeychain`.
+- **`WrittenAtKeysIo.update`** — read, mutate and persist as one operation, with
+  `FileAtKeysIo` holding its keyfile lock across all three steps. The
+  hand-rolled `read` → mutate → `flush` that every consumer used loses material
+  whenever two of them overlap, and a client's start overlaps two by
+  construction: `_seedNamespaceKeys` and `_fileConveyedKeysAndAnchor` are
+  sibling **unawaited** tasks, each reading the keyfile, adding its own material
+  and flushing. Whichever flushed second was refused by assurance — correctly —
+  and its key material was gone. `PqSigningRoot` and `NskeyPrivateFiling` are
+  migrated; the control arm proving the loss is in
+  `at_auth/test/at_keys_update_test.dart`.
+
+**Ruled: the self-encryption-key re-wrap is NOT built, because it has no
+operator.** The watch-out below is accurate — `flush` compares the four
+self-encrypted legacy fields as *ciphertext* (both sides are the at-rest
+document), and it works today only because `generateIVLegacy()` is sixteen zero
+bytes, making AES-CBC re-encryption byte-identical. A re-wrap changes five
+compared values at once and fails assurance. But **no code path anywhere changes
+`defaultSelfEncryptionKey` on an existing keyfile**: the only mutator sets it
+during enrollment approval, on a file that does not yet exist. Building the
+re-wrap now would be a mechanism with no party that operates it. It belongs to
+whichever project first needs one — **KF-1** (at-rest protection of the PQ
+privates), whose restore flow already needs an assurance override for the
+inverse case. Recorded here so it is a decision rather than an omission.
+
+**Still owed:** the migration test on a v(N-1) fixture, the keychain round-trip
+on a real device (at_client_flutter's tests mock the platform channel, and this
+repo has no integration_test harness), and the `LocalKeystoreAtKeysIo`
+existence/routing call — still "not needed at this time".
+
 **Goal:** durable, updatable key-storage homes (bootstrap→file/keychain, distributed/rotating→keystore,
 ephemeral→memory). Stores are **dumb** — convergence stays in the substrate.
 **Builds on:** S-1's extended `AtKeysIo` runtime-persistence API.
@@ -1261,16 +1300,23 @@ key and the enrollee onboards without it.
 **Effort:** L.
 **coversD1:** D1-B B7 phases 1-3.
 
-### ON-1 — PQ-native greenfield onboarding + legacy-interop opt-out · at_client, at_client_flutter · M — **CLIENT HALF LANDED 2026-08-08** ([decisions 52](decisions.md#52-on-1-a-greenfield-atsign-starts-where-a-retrofit-ends-2026-08-08))  *(critic gap — UC-A1.1; amended by decisions 37)*
+### ON-1 — PQ-native greenfield onboarding + legacy-interop opt-out · at_client, at_client_flutter · M — **ACCEPTANCE COMPLETE 2026-08-08** ([decisions 52](decisions.md#52-on-1-a-greenfield-atsign-starts-where-a-retrofit-ends-2026-08-08))  *(critic gap — UC-A1.1; amended by decisions 37)*
 **Landed:** `pqNativeOnboard` (at_client) over `AtOnboardingRequest.signingAlgoType`
 + `mintLegacyMaterial` + `metadataBuilder` and a PQ-native mint (at_auth 3.4.0).
 **UC-A1.1 is green live** — the ML-DSA APKAM re-authenticates on a fresh
 connection with no RSA APKAM in existence. Backlog
 [14.1](#141-the-signing-roots-keys-shape--deadline-the-first-root-we-keep) was
 ruled in the same pass, because this is the project that makes roots permanent.
-**Still owed:** UC-B4.2's cross-atSign e2e row (a legacy peer and a PQ-native
-atSign interoperating in *both* directions — only two atSigns can show the
-inbound one), and the `at_client_flutter` / `at_onboarding_cli` call sites that
+**UC-B4.2 followed on 2026-08-08** —
+`tests/at_functional_test/test/pq_legacy_interop_live_test.dart`, three
+self-activated atSigns, both directions and the opt-out. It landed in the
+*functional* pack rather than `tests/at_end2end_test`, because that pack runs in
+CI against long-lived cicd atSigns and so cannot CRAM-activate anything; the row
+had been labelled for the wrong layer since it was written. Running it opened
+[14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record):
+the legacy-interop opt-out is honoured at activation but leaves an atSign that
+cannot write a public record at all.
+**Still owed:** the `at_client_flutter` / `at_onboarding_cli` call sites that
 would make PQ-native the activation an end user actually gets.
 **Goal:** a brand-new atSign onboards PQ-native (the root of Part-A coverage).
 **Builds on:** RF-2b (PQ-APKAM mint) + SS-4 (pqpublickey).
@@ -1297,8 +1343,42 @@ directions; only the opt-out refuses it).
 **Goal:** PQ-safe on every write path by default (the final cutover).
 **Builds on:** B-2 + RF-2c + S-6 (R-1's flag is delivered). **Gated on the ecosystem floor** (last published downstream versions).
 **Deliverables → [design.md](design.md)** (the v4 flip): flip the default to **true** (SHOUT if
-re-enabled false); general dead-code removal (deprecated methods; the `package:encrypt` files deleted-not-migrated).
-The legacy provider itself **stays** (reads forever). **B7 phase 4 ("stop generating
+re-enabled false).
+The legacy provider itself **stays** (reads forever).
+
+⚠️ **R-2 is TWO coupled edits, not one** (established 2026-08-08). Flipping
+`AtClientPreference({this.disallowLegacyEncryption = false})` alone refuses
+**every** encrypted write, because the era default the SDK adopts at
+construction is `CryptoConfig.readsNskeyWritesLegacy`, whose `defaultProviderId`
+IS `legacy` — and `providerIdFor` refuses a legacy id under the flag. The
+suite's own `disallow_legacy_encryption_test.dart` already asserts exactly that
+failure. So the flip must move the era default to `CryptoConfig.nskey` in the
+same change;
+[decisions 27](decisions.md#27-the-era-default-read-the-new-scheme-everywhere-write-it-once-2026-08-04)
+calls that "the 4.x step", and
+`crypto.dart` says the default lives in one place and nowhere else. Even then
+local and namespace-less keys still route to legacy and are refused, because the
+AES-GCM provider declines them — so the flip needs a decision about the SDK's
+own namespace-less internal writes before it can be green.
+
+⚠️ **The "dead-code removal" bullet was wrong on both halves** and is dropped.
+(a) The two `package:encrypt` files are live production code, not leftovers:
+`encryption_util.dart` is exported from the public barrel and called from every
+`put` (IV generation), and the file's own note says the task is *migrating* to
+at_chops, not deleting — with 9 more importers inside at_chops besides. (b) All
+299 `deprecated_member_use` findings are at_client *consuming* at_chops/at_auth
+deprecations (`AtChopsKeys` 65, `AtChopsUtil` 59, `AtChopsImpl` 45, `AtChops`
+44, `AtChopsKeys.create` 38 — 251 of 299 from those five); removing at_client's
+own 75 `@Deprecated` members would move the count by zero. See
+[14.11](#1411-299-deprecated_member_use-findings-in-at_client).
+
+⚠️ **Test blast radius, before touching the default.** The shared `MockAtClient`
+holds a default-constructed `AtClientPreference`, so flipping the default turns
+every mock in the suite strict — `MockAtClient()` is constructed 61 times across
+38 files — and one cross-cutting acceptance arm asserts a capability-build mock
+resolves to `legacyCryptoProviderId`, which would then throw. Repo-wide there
+are 191 bare `AtClientPreference()` sites whose meaning changes with no site
+having been edited. **B7 phase 4 ("stop generating
 `selfEncryptionKey`, drop it from the AtKeys model") is NO LONGER a 4.0 action** —
 [decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05):
 legacy material is retained until the *ecosystem* is PQ, so the stop is a later,
@@ -1315,6 +1395,25 @@ legacy read still works (UC-B5.2); full unit/functional/e2e green.
 **Effort:** M.
 **Watch-outs:** different major / different time from at_auth 4.0 (S-5). Don't remove the legacy provider.
 Don't stop minting legacy material — that is the later release's flip, not this one's.
+**Gate, checked against pub.dev 2026-08-08 — R-2 is not startable, and not for a
+reason in this repo.** The "ecosystem floor" is not merely unpinned, it is
+structurally unreachable until the 3.x capability release ships and each
+downstream re-publishes against it:
+
+| Package | Published | Pins `at_client` | What has to happen first |
+|---|---|---|---|
+| `at_chops` | 3.4.1 | — | publish 3.5.0 (KE-1's seed API), row 3 of the publish table |
+| `at_auth` | 3.3.0 | — | publish 3.4.0 (in-tree, unpublished) |
+| `at_client` | **3.14.0** | — | publish the D1 GA minor — 3.14.0 carries none of the nskey path |
+| `at_onboarding_cli` | 1.16.0 | `^3.10.0` | re-publish against the GA minor |
+| `at_client_flutter` | 1.1.4 | `^3.11.0` | re-publish against the GA minor |
+| `at_cli_commons` | 3.1.1 | `^3.7.0` | re-publish against the GA minor |
+
+Every downstream range is `^3.x`, which **excludes 4.0.0** — so cutting the
+major today would strand all three on a client that cannot write PQ, which is
+the opposite of what the flip is for. R-2 stays last by construction; what this
+entry can be is accurate about the two edits and the blast radius, which it now
+is.
 **coversD1:** D1-D D3 + D1-B B7 phase 4.
 
 ---
@@ -1724,15 +1823,29 @@ fix, not a fix for the lag. Next step is `pkam_verb_handler` / the enrollment
 cache in at_server. Sits beside the RF-SRV cascade residual
 ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05) item 2).
 
+**Worse, 2026-08-08, and still intermittent.** Four full-suite runs in one
+session: the revoked credential kept authenticating past the client's
+**10-second** bound (20 polls × 500ms) on the **first three**, and the fourth
+was green. So the rate moved sharply — 2026-08-07 saw one failure in three, this
+session saw three in four — without the behaviour changing kind. It is not a
+regression from anything in this repo: the suite was run with that session's new
+test file removed and with it restored, in the same session, and both arms
+failed identically at the same point.
+
+Two consequences worth stating. A green functional run does **not** mean this is
+fixed, so do not read one as evidence either way. And the 10s bound is now the
+thing that decides pass or fail, which makes the rail's colour a measure of the
+atServer's cache latency rather than of the client — the argument for fixing
+`pkam_verb_handler` rather than raising the bound again.
+
 ### 14.10 UC-B0.1 needs a legacy atServer image, or a waiver
 
 One of the two skipped acceptance rows. It needs an atServer **without** the
 retrofit verbs to abort cleanly against, and no image in this repo provides one.
 That is a harness gap rather than an unlanded project, so it is re-scoped or
-waived the way UC-A3.2 was — a decision, not an implementation. Until then the
-acceptance suite reads **43 of 45** with 2 skipped; the other skip is
-**UC-B4.2**, which genuinely needs an e2e run (two atSigns, both directions) and
-is the last of ON-1's rows.
+waived the way UC-A3.2 was — a decision, not an implementation. It is now the
+**only** skip: UC-B4.2 went green 2026-08-08, so the acceptance suite reads
+**44 of 45**.
 
 ### 14.11 299 `deprecated_member_use` findings in at_client
 
@@ -1741,3 +1854,34 @@ clean outright. What remains is live use of deprecated-but-still-required APIs
 — the `AtChops` compatibility shim, `AtSigningInput`, `apkamPublicKey` — so
 clearing them means migrating call sites, which is a code change rather than a
 lint sweep and wants its own pass.
+
+### 14.12 A `mintLegacyMaterial:false` atSign cannot write a public record
+
+Found 2026-08-08 by UC-B4.2's opt-out arm, the first thing ever to activate an
+atSign that way and then use it. The opt-out works exactly as designed at
+activation — no RSA keypair is minted, no `public:publickey` is published, and
+`completeActivation` says so — but the resulting atSign cannot then publish
+anything, because **every public write is signed with the legacy encryption
+private key**
+(`put_request_transformer.dart` `_signPublicData` throws
+`AtPrivateKeyNotFoundException('Failed to sign the public data')` when it is
+absent). Two things the post-quantum path itself needs are public writes: the
+enrollment's `_apsk` anchor to the signing root, and the nskey advertisement.
+Both fail, live and logged, on an opt-out atSign. Sync fails alongside them —
+"Self encryption key is not set for current atSign" — because there is no
+`selfEncryptionKey` either.
+
+So `mintLegacyMaterial: false` is a switch that exists and is honoured but is
+**not yet a usable configuration**, which matters because
+[decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05) item 10 has
+the release default resolving null→false in the major after R-2. Closing it means public-record signing moves onto the
+ML-DSA signing root rather than the RSA encryption keypair — the same swap
+IS-1 made for inter-server auth — and self data moves off `selfEncryptionKey`
+onto the nskey path (B-3 phase 1). Neither is scheduled here; the point of this
+entry is that the stop-release cannot ship before both are, and that the
+`mintLegacyMaterial` flag must not be recommended to anyone until then.
+
+Asserted, rather than merely noted, in the opt-out arm of
+`tests/at_functional_test/test/pq_legacy_interop_live_test.dart`: it expects the
+public write to fail with that exact reason, so whichever project fixes this
+gets a red test naming the row that was waiting for it.

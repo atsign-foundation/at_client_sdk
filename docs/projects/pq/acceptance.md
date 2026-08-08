@@ -968,6 +968,17 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 - **Cross-ref:** [Decision #1](decisions.md#numbered-rulings-14) (original ruling,
   default reversed by
   [37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
+- **Impl/verify:** **green live 2026-08-08** —
+  `tests/at_functional_test/test/pq_legacy_interop_live_test.dart`, three atSigns
+  the test CRAM-activates itself: a pre-PQ one (default signing algorithm, so no
+  signing root — asserted against the PQ-native one as a control), a PQ-native
+  one, and a PQ-native one activated with `mintLegacyMaterial: false`. Inbound,
+  outbound (refused by name, then opted-in and stamped legacy, then read by the
+  peer) and the opt-out all covered. It is in the **functional** pack, not
+  `tests/at_end2end_test`: that pack runs in CI against long-lived cicd atSigns
+  and can never CRAM-activate anything. Running it turned up
+  [plan 14.12](implementation-plan.md#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record)
+  — the opt-out is not yet a usable configuration.
 
 ### 11.3 UC-B4.3 — Mid-rollout `@alice` (one install active, one still old) shares with `@bob`
 
