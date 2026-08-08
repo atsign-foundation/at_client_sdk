@@ -76,6 +76,30 @@ After Phase 2, the CRAM key is no longer usable (onboarding is
 single-shot). Use [`example/onboard.dart`](example/onboard.dart) to walk
 through it end-to-end.
 
+#### Post-quantum onboarding (opt-in)
+
+Set `AtOnboardingRequest.signingAlgoType` to `mldsa65` and step 2 mints an
+**ML-DSA-65** PKAM keypair instead of an RSA one. Two consequences are worth
+knowing before turning it on:
+
+- The APKAM is filed as **typed material** under the enrollment id, and the
+  `.atKeys` flat `apkamPublicKey`/`apkamPrivateKey` fields are left **empty**.
+  That is deliberate: `AtKeys.toAtChops()` reads only the flat fields, so a
+  tool that has not been taught about PQ enrollments fails outright instead of
+  signing an ML-DSA key with the RSA routine. `AtAuth.authenticate` resolves
+  such an enrollment on its own, via `signingAlgorithmForEnrollment` and
+  `toAtChopsForEnrollment`.
+- `AtOnboardingRequest.mintLegacyMaterial` governs the RSA encryption keypair,
+  the self-encryption key, and whether `public:publickey` is published. It is
+  an **opt-out**: leave it null and all three are still produced, because
+  whether this atSign will ever need to talk to a pre-quantum peer is decided
+  by the apps that adopt it rather than at activation. Set it false and a
+  pre-quantum peer cannot send to the atSign at all.
+
+`AtOnboardingRequest.metadataBuilder` attaches metadata to the first
+enrollment's record. It runs on the request that creates that record, whose
+metadata is never rewritten — so it is the only opportunity there will be.
+
 ### Phase 3 — Authenticate apps via APKAM (per-app scoped AtKeys)
 
 The master AtKeys are powerful — they can read anything on the atServer
