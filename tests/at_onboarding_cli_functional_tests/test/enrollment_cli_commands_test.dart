@@ -237,7 +237,13 @@ void main() {
   });
 
   tearDownAll(() {
-    Directory('storage').deleteSync(recursive: true);
+    // Keyfiles now live under test/.tmp_keys/, which the helper purges at the
+    // start of each run — so there is nothing to delete here, and `storage`
+    // is no longer created at all. Guarded rather than removed because the
+    // CLI still puts its local-secondary storage here when a preference uses
+    // a relative path.
+    final storage = Directory('storage');
+    if (storage.existsSync()) storage.deleteSync(recursive: true);
   });
 }
 
