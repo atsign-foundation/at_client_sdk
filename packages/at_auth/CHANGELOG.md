@@ -1,4 +1,14 @@
 ## 3.4.0
+- feat: `FirstEnrollmentRequest` carries `signingAlgo` and `metadataBuilder`,
+  so the enrollment CRAM onboarding submits can be PQ-native from activation
+  rather than only after a retrofit. `signingAlgo` defaults to `rsa2048` and an
+  empty metadata map is dropped before the wire, so a legacy onboard is
+  byte-unchanged. A builder additionally requires the request to carry the
+  `atKeys` being enrolled — it both reads the APKAM keypair it signs with and
+  writes the material it minted back into them, so handing it a copy would
+  advertise an encapsulation key whose private half nobody kept. That is
+  refused rather than allowed to succeed on the wire and fail on a read months
+  later.
 - feat: `KeyAlgorithmType.mlKem1024` — the key-material token for pure
   ML-KEM-1024 privates, alongside `xWing`. Additive, and the enum was already
   an open string set whose contract is never to reject an unknown value.

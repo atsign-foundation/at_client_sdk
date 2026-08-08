@@ -3,6 +3,7 @@ import 'dart:async' show FutureOr;
 import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/keys/at_keys.dart' show AtKeys;
 import 'package:at_auth/src/keys/io/at_keys_io.dart' show AtKeysIo;
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 
@@ -223,9 +224,45 @@ class AtSelfEnrollmentRequest extends EnrollmentRequest {
 /// encrypted with the APKAM symmetric key and stored into the server.
 
 class FirstEnrollmentRequest extends EnrollmentRequest {
+  /// The signing algorithm of [apkamPublicKey] — `rsa2048` for a legacy
+  /// onboard, `mldsa65` for a PQ-native one.
+  ///
+  /// It reaches the enrollment record, and the atServer composes the tagged
+  /// `_apsk` from `(apkamPublicKey, signingAlgo)` for any non-`rsa2048`
+  /// algorithm. Getting it wrong is not a degraded mode but a broken one: the
+  /// atServer would verify this enrollment's PKAM signatures with the wrong
+  /// routine, so the first enrollment could never authenticate.
+  SigningAlgoType signingAlgo;
+
+  /// See [AtEnrollmentRequest.metadataBuilder].
+  ///
+  /// For a first enrollment the handed keys carry the freshly minted APKAM
+  /// keypair — the enrollment record does not exist yet, so this is the only
+  /// moment anything can be put on it (`metadata.keyPackage` is written by the
+  /// request that creates the record and never afterwards). A PQ-native
+  /// onboard passes `enrollmentKeyPackageBuilder(atSign,
+  /// signingAlgo: SigningAlgoType.mldsa65,
+  /// keyEstablishmentAlgo: preference.keyEstablishmentAlgo)`.
+  ///
+  /// Requires [atKeys], because a builder both reads the APKAM keypair it
+  /// signs with and **writes back** the material it minted.
+  FutureOr<Map<String, dynamic>?> Function(AtKeysIo keysIo)? metadataBuilder;
+
+  /// The keys being enrolled — the same instance the caller keeps, not a copy.
+  ///
+  /// [metadataBuilder] mutates it: the key package's private half is added
+  /// here and nowhere else, so a caller that hands over a copy publishes an
+  /// encapsulation target whose private half it never kept, and every sender
+  /// seals to a key that can never be opened. Only needed when a
+  /// [metadataBuilder] is supplied.
+  AtKeys? atKeys;
+
   FirstEnrollmentRequest(
       {required super.atSign,
       required super.appName,
       required super.deviceName,
-      required super.apkamPublicKey});
+      required super.apkamPublicKey,
+      this.signingAlgo = SigningAlgoType.rsa2048,
+      this.metadataBuilder,
+      this.atKeys});
 }

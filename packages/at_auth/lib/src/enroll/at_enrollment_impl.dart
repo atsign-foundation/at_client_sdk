@@ -67,11 +67,32 @@ class AtEnrollmentImpl implements AtEnrollment {
   }
 
   /// Handles the FirstEnrollmentRequest, which is submitted when an atSign is first onboarded.
+  ///
+  /// The metadata is built here rather than by the caller for the same reason
+  /// the other two paths build it here: a builder has to be handed the APKAM
+  /// keypair it signs with, and this is the last moment before the atServer
+  /// creates the record that `metadata.keyPackage` can be written to at all.
   Future<AtEnrollmentResponse> _handleFirstEnrollmentRequest(
       FirstEnrollmentRequest enrollmentRequest, AtLookUp atLookUp) async {
+    if (enrollmentRequest.metadataBuilder != null &&
+        enrollmentRequest.atKeys == null) {
+      throw AtEnrollmentException(
+          'a FirstEnrollmentRequest with a metadataBuilder must carry the '
+          'atKeys being enrolled: the builder writes the material it minted '
+          'back into them, and a request without them would advertise a key '
+          'package whose private half nobody kept');
+    }
+
+    final Map<String, dynamic>? metadata = await _buildMetadata(
+        enrollmentRequest.metadataBuilder,
+        enrollmentRequest.atSign,
+        enrollmentRequest.atKeys ?? AtKeys());
+
     EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
       ..appName = enrollmentRequest.appName
-      ..deviceName = enrollmentRequest.deviceName;
+      ..deviceName = enrollmentRequest.deviceName
+      ..signingAlgo = enrollmentRequest.signingAlgo.name
+      ..metadata = metadata;
     enrollVerbBuilder.apkamPublicKey = enrollmentRequest.apkamPublicKey;
 
     String? serverResponse =
